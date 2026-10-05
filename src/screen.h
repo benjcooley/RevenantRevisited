@@ -10,7 +10,11 @@
 
 #include "revenant.h"
 
+#include <functional>
+#include <memory>
 #include <vector>
+
+class THudDrawable;
 
 // ****************************************************************************
 // * Retained-mode layout primitives (A.2b)                                   *
@@ -83,17 +87,17 @@ _CLASSDEF(TPane)
 class TPane
 {
   private:
-    int32_t  x, y, width, height;             // Pane's position in screen coordinates
-    int32_t  newx, newy, newwidth, newheight; // Size and position to change to on next frame
-    int32_t  oldscrollx, oldscrolly;          // Previous scroll position
-    int32_t  scrollx, scrolly;                // Current scroll position
-    int32_t  newscrollx, newscrolly;          // Next scroll position
-    TScreen* screen;                          // Screen pane is on
-    bool isopen;                              // Pane is currently active
-    bool hidden;                              // Flag set if Pane is hidden
-    bool ignoreinput;                         // To allow hidden panes to still process input
-    bool dirty;                               // Pane needs update
-    int32_t  backgroundbuffer;                // Background buffer index
+    int32_t  x = 0, y = 0, width = 0, height = 0;               // Pane's position in screen coordinates
+    int32_t  newx = 0, newy = 0, newwidth = 0, newheight = 0;   // Size and position to change to on next frame
+    int32_t  oldscrollx = 0, oldscrolly = 0;                    // Previous scroll position
+    int32_t  scrollx = 0, scrolly = 0;                          // Current scroll position
+    int32_t  newscrollx = 0, newscrolly = 0;                    // Next scroll position
+    TScreen* screen = nullptr;                // Screen pane is on
+    bool isopen = false;                      // Pane is currently active
+    bool hidden = false;                      // Flag set if Pane is hidden
+    bool ignoreinput = false;                 // To allow hidden panes to still process input
+    bool dirty = true;                        // Pane needs update
+    int32_t  backgroundbuffer = -1;           // Background buffer index
 
     // Retained-mode tree (A.2a). Non-owning — lifetime of children is managed
     // by whoever created them, matching TScreen's TPaneArray convention.
@@ -137,7 +141,7 @@ class TPane
 
    public:
 
-    TPane() {}
+    TPane() = default;
     TPane(int32_t px, int32_t py, int32_t pw, int32_t ph, bool phide = false)
       { newx = x = px; newy = y = py; newwidth = width = pw; newheight = height = ph; hidden = phide; }
       // Create pane
@@ -207,7 +211,7 @@ class TPane
       // Causes the pane to be immediately shown on the screen.  Useful for when
       // the pane contains a status or 'loading' bar that is updated during a single
       // timer tick.
-    void Draw();
+    void DrawImmediate();
       // Manually calls the Pulse(), DrawBackground(), and Animate() functions.  Useful
       // for drawing within a timer tick (like a loading bar)
     void Resize(int32_t nx, int32_t ny, int32_t nwidth, int32_t nheight)
@@ -273,6 +277,35 @@ class TPane
       // Handles processed (ASCII) keyboard presses in pane.
     virtual void Joystick(int32_t key, bool down) {}
       // Handles joystick input in pane.
+
+  // Renderer-submission drawing (docs/gameflow/ARCHITECTURE.md §4.1). The
+  // screen calls Compose() before the frame's render passes (no pass is open:
+  // refresh cached TSurfaces with the ...ToTarget primitives) and Draw()
+  // inside its HUD layer (submit DrawSurface / DrawBitmap / text). Panes still
+  // on the legacy DrawBackground/Animate path leave both empty.
+    virtual void Compose() {}
+    virtual void Draw() {}
+    void ComposeTree();
+      // Compose() children first, then this pane (visible panes only)
+    void DrawTree();
+      // Draw() this pane, then its children (visible panes only)
+
+  // Screen-wide notification (retail TPane::OnEvent, vtable +0x78), delivered
+  // by TScreen::BroadcastEvent. Codes: TScreen::SCREENEVENT_*.
+    virtual void OnScreenEvent(int32_t code, void *param) { (void)code; (void)param; }
+
+  // Ends this pane's modal run (retail: the pane closes and RunModal returns
+  // its result, pane +0x5c). The screen pops it at the start of its next tick
+  // and hands `result` to the PushModal completion.
+    void EndModal(int32_t result);
+
+  // Input routed through the pane tree: children (last added first) that
+  // contain the point (or every child for button-up), then this pane. x/y are
+  // local to this pane. Without children this is exactly MouseClick/MouseMove.
+    void RouteMouseClick(int32_t button, int32_t x, int32_t y);
+    void RouteMouseMove(int32_t button, int32_t x, int32_t y);
+    void RouteKeyPress(int32_t key, bool down);
+    void RouteCharPress(int32_t key, bool down);
 
   // Converts points in pane to points on the screen
     void PaneToScreen(int32_t panex, int32_t paney, int32_t &screenx, int32_t &screeny)
@@ -375,6 +408,13 @@ class TPane
     virtual void OnCanvasResize(int32_t newCanvasW, int32_t newCanvasH);
 };
 
+// Top-left (display pixels) of the 640x480 design canvas that retail
+// full-screen UI (title, menus, death screen) is authored against: centered in
+// the display, i.e. the identity at the default 640x480 resolution. Scaling
+// that canvas for larger Revisited resolutions is a presentation decision not
+// made yet (docs/gameflow/ARCHITECTURE.md §4.4).
+void ClassicCanvasOrigin(int32_t& x, int32_t& y);
+
 // ********************************
 // * TScreen - Game screen object *
 // ********************************
@@ -393,9 +433,8 @@ class TScreen
 {
   protected:
     TPaneArray panes;                   // Array of panes
-    int32_t exclusive[NUMEXCLUSIVEPANES];   // Current exclusive pane list or nullptr if no exclusive.
-    bool complete[NUMEXCLUSIVEPANES];   // Whether the exclusive pane is completely exclusive
-    int32_t curexclusive;                   // Current exclusive pane
+    int32_t exclusive[NUMEXCLUSIVEPANES];   // Exclusive (modal) pane indices, innermost last
+    uint32_t exclusiveflags[NUMEXCLUSIVEPANES] = {}; // MODAL_* flags per entry
     int32_t numexclusive;                   // Number of exclusive panes
     TScreen* nextscreen;                // Pointer to nextscreen
     bool firstframe;                    // True just after screen is initialized before first frame
@@ -407,6 +446,17 @@ class TScreen
   public:
     TScreen();
     virtual ~TScreen();
+
+  // Exclusive-pane flags (retail TScreen exclusive entries, +0x30). TOPONLY:
+  // only the innermost exclusive pane pulses / animates / draws (pre-release
+  // "complete exclusion"). REAPPLYEFFECTS: retail re-applies the UI blit-effect
+  // regions under the pane (0x004aacb0 mode 6); stored, not rendered yet.
+    static constexpr uint32_t MODAL_TOPONLY        = 0x010;
+    static constexpr uint32_t MODAL_REAPPLYEFFECTS = 0x100;
+
+  // Screen events (retail TScreen::OnEvent 0x00490960 forwards to every pane).
+    static constexpr int32_t SCREENEVENT_CLOSING     = 0x100;
+    static constexpr int32_t SCREENEVENT_MODALPUSHED = 0x101;
 
   // Initialization
     virtual bool Initialize() { return false; }
@@ -429,6 +479,7 @@ class TScreen
       // Sets pane to handle all input/output (for error or popup panes)
       // If complete is true then *nothing* from the other panes (including
       // Animate() and DrawBackground()) will be called during exclusive mode.
+      // (Equivalent to pushing with MODAL_TOPONLY and no completion.)
     bool SetExclusivePane(PTPane pane, bool completeexclusion = false)
         { return SetExclusivePane(FindPane(pane), completeexclusion); }
       // Sets pane to handle all input/output (for error or popup panes)
@@ -436,12 +487,27 @@ class TScreen
       // Releases exclusive pane
     void ReleaseExclusivePane(PTPane pane) { ReleaseExclusivePane(FindPane(pane)); }
       // Releases exclusive pane
-    bool InCompleteExclusion() { return (numexclusive > 0 && complete[curexclusive]); }
+    bool InCompleteExclusion() { return (numexclusive > 0 && (exclusiveflags[numexclusive - 1] & MODAL_TOPONLY)); }
       // Whether or not all i/o is stopped except for one pane
     bool FirstFrame() { return firstframe; }
       // Is this the first frame for this screen?
     void RedrawAllPanes();
       // Redraw all non-hidden panes
+
+  // Modal panes. Retail RunModal (0x0048f040) added the pane, pushed it
+  // exclusive and re-entered the frame loop until the pane closed, then
+  // returned its result. The port cannot re-enter the frame loop (sokol owns
+  // it), so the call returns immediately and `done(result)` runs on the tick
+  // after the pane calls EndModal. Same screens, order and results; see
+  // docs/gameflow/ARCHITECTURE.md §4.2. The caller initializes the pane
+  // before pushing and owns (closes / deletes) it after `done` runs.
+    using TModalDone = std::function<void(int32_t result)>;
+    bool PushModal(PTPane pane, uint32_t flags = 0, TModalDone done = nullptr);
+    [[nodiscard]] bool HasModal() const { return numexclusive > 0; }
+    [[nodiscard]] PTPane TopModal();
+
+  // Sends `code` to every pane's OnScreenEvent (retail OnEvent 0x00490960).
+    void BroadcastEvent(int32_t code, void *param = nullptr);
 
    // Next screen stuff
     void SetNextScreen(TScreen* screen) {nextscreen = screen;}
@@ -510,8 +576,23 @@ class TScreen
     virtual void OnCanvasResize(int32_t newCanvasW, int32_t newCanvasH);
 
   private:
+    friend class TPane;
+    friend class TScreenPaneLayer;
+
     bool BeginScreen();
       // Calls all pane and screen initialize functions
     void EndScreen();
       // Calls all pane and screen close functions
+    void ComposePanes();
+      // Compose phase of DrawFrame for the pane tree (no render pass open)
+    void DrawPanes();
+      // HUD-layer draw of the pane tree, called by the renderer
+    void RequestModalEnd(PTPane pane, int32_t result);
+    void ProcessModalEnds();
+      // Pops modals that called EndModal and runs their completions
+
+    struct SModalEnd { PTPane pane = nullptr; int32_t result = 0; };
+    TModalDone modaldone[NUMEXCLUSIVEPANES];  // completion per exclusive entry
+    std::vector<SModalEnd> modalends;         // EndModal requests, processed next tick
+    std::unique_ptr<THudDrawable> panelayer;  // registered with the renderer while the screen runs
 };

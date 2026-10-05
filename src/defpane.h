@@ -1,6 +1,6 @@
 // *************************************************************************
 // *                  Revenant Revisited (port) - 2026                     *
-// *  defscreen.h - data-driven DEF widget engine (TDefScreen)              *
+// *  defpane.h - DEF widget pane (TDefPane)                                *
 // *************************************************************************
 //
 // Reconstruction of Revenant's 1999 DEF widget engine: the data-driven UI
@@ -13,15 +13,21 @@
 // `data/resources.rvr`). See recon/discovered/port_status/DefWidgetEngine.md and
 // docs/ui/forensics/{Options,SaveGame,LoadGame,InGameMenu,Popup}Def_SPEC.md.
 //
-// Composition contract (docs/ui/forensics/NOMENCLATURE.md §3): the whole screen
-// is composed into one offscreen TSurface render target via the `…ToTarget`
-// primitive family, then DrawSurface'd once. No mixed swapchain/glyph path.
+// Retail DEF screens are panes: DefScreen_Open (0x00435150) initializes a
+// TButtonPane and loads the widgets into it; the game then pushes it as an
+// exclusive (modal) pane. TDefPane is that pane: it composes all its widgets
+// into one offscreen TSurface in Compose() and submits it in Draw() (the pane
+// draw contract, docs/gameflow/ARCHITECTURE.md §4.1). Panes the game builds in
+// code (title screen, death pane) use OpenChrome + AddSpriteButton instead of
+// a .def file.
 
 #pragma once
 
 #include "bitmap.h"   // PTBitmap / TBitmap
+#include "screen.h"   // TPane
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -114,6 +120,9 @@ struct SDefWidget
     bool        selected = false;                  // toggle/checkbox checked state
     bool        focused  = false;                  // EDIT has keyboard focus
     PTBitmap    fieldBitmap = nullptr;             // BITMAP bound via SetField
+    PTBitmap    faceUp    = nullptr;               // sprite BUTTON faces (AddSpriteButton):
+    PTBitmap    faceDown  = nullptr;               //   up / pressed / hover; when set they
+    PTBitmap    faceHover = nullptr;               //   replace the style's frame + label
     std::vector<std::vector<std::string>> rows;    // LISTBOX data rows
     int32_t     selrow    = -1;
     int32_t     scrolltop = 0;
@@ -125,36 +134,50 @@ struct SDefWidget
     }
 };
 
-// A DEF-driven modal screen: parsed widget tree + style table + assets,
-// rendered into an owned TSurface render target.
-class TDefScreen
+// A DEF widget pane: parsed (or code-built) widget set + style table + assets,
+// composed into an owned TSurface.
+class TDefPane : public TPane
 {
   public:
-    TDefScreen() = default;
-    ~TDefScreen();
+    TDefPane() = default;
+    ~TDefPane() override;
+    TDefPane(const TDefPane&)            = delete;
+    TDefPane& operator=(const TDefPane&) = delete;
 
-    TDefScreen(const TDefScreen&)            = delete;
-    TDefScreen& operator=(const TDefScreen&) = delete;
-
-    // Build panel `panelName` from `<defName>.def` (+ widgets.def styles), place
-    // its pane at screen (x,y) with size (w,h), and resolve the "Background"
-    // chrome from `<bgDatName>` (e.g. "ingamemenunotex.dat"). Returns false and
-    // logs if a required asset is missing. All assets resolve out of the mounted
-    // resources.rvr by name.
+    // REVSYNC: DefScreen_Open @ 0x00435150. Build panel `panelName` from
+    // `<defName>.def` (+ widgets.def styles) as a pane at display (x,y) with
+    // size (w,h); the "Background" chrome comes from `bgDatName` (e.g.
+    // "ingamemenunotex.dat"). Initializes the pane. Returns false and logs if
+    // a required asset is missing.
     bool Open(const char* defName, const char* panelName,
               int32_t x, int32_t y, int32_t w, int32_t h,
               const char* bgDatName);
-    void Close();
 
-    // Compose the whole screen into the owned RT (call once per frame before
-    // blitting Surface()). No-op until Open() succeeds.
-    void Render();
+    // Code-built pane (retail TLogoScreen 0x0053a2c0, TDeathPane 0x005339b0):
+    // chrome from `datName`, background bitmap `backgroundEntry` (may be null),
+    // widgets added with AddSpriteButton. Initializes the pane.
+    bool OpenChrome(int32_t x, int32_t y, int32_t w, int32_t h,
+                    const char* datName, const char* backgroundEntry);
 
-    [[nodiscard]] TSurface* Surface() const { return surface; }
-    [[nodiscard]] int32_t   PaneX() const { return paneX; }
-    [[nodiscard]] int32_t   PaneY() const { return paneY; }
-    [[nodiscard]] int32_t   PaneW() const { return paneW; }
-    [[nodiscard]] int32_t   PaneH() const { return paneH; }
+    // A sprite button (retail TButton(multi, name, ...) 0x0042c400): faces
+    // `<faceBase>U` (up), `<faceBase>D` (down) and `<faceBase>S` (hover) from
+    // the pane's dats, placed at the up face's registration point (-regx,-regy,
+    // pane-local). Returns false (and logs) if the up face is missing.
+    bool AddSpriteButton(const char* name, const char* faceBase);
+
+    // A completed button click. `buttonIndex` is the button's 1-based position
+    // among the pane's BUTTON widgets, the order retail RunModal results follow.
+    using TActivateHandler =
+        std::function<void(TDefPane& pane, const SDefWidget& widget, int32_t buttonIndex)>;
+    void SetOnActivate(TActivateHandler handler) { onActivate = std::move(handler); }
+
+    // TPane
+    void Close() override;
+    void Compose() override;
+    void Draw() override;
+    void MouseClick(int32_t button, int32_t x, int32_t y) override;
+    void MouseMove(int32_t button, int32_t x, int32_t y) override;
+    void KeyPress(int32_t key, bool down) override;
 
     // Data binding
     [[nodiscard]] SDefWidget* Find(const char* name);
@@ -162,15 +185,21 @@ class TDefScreen
     void SetListRows(const char* listName,
                      std::vector<std::vector<std::string>> rows);
 
-    // Input (coords are pane-local, i.e. already minus PaneX/PaneY). Returns the
-    // name of the activated widget on a completed click, else nullptr.
-    void        OnMouseDown(int32_t lx, int32_t ly);
-    const char* OnMouseUp(int32_t lx, int32_t ly);
-    void        OnMouseMove(int32_t lx, int32_t ly);
-    void        OnKey(int32_t vk, bool down);     // routed to the focused EDIT
+  protected:
+    // Subclass hooks (e.g. TOptionsPane). Default OnActivate forwards to the
+    // handler; default OnKey routes typing to the focused EDIT.
+    virtual void OnActivate(const SDefWidget& widget, int32_t buttonIndex);
+    virtual void OnKey(int32_t vk, bool down);
 
   private:
-    // --- parsing (defscreen.cpp) ---
+    void ReleaseAssets();
+    void Render();                                   // compose widgets into `surface`
+    void        OnMouseDown(int32_t lx, int32_t ly);
+    const char* OnMouseUp(int32_t lx, int32_t ly);   // name of the activated widget
+    void        OnMouseMove(int32_t lx, int32_t ly);
+    void        Activate(const char* widgetName);
+
+    // --- parsing (defpane.cpp) ---
     bool LoadDefFile(const char* name, bool collectPanels);
     void ParseStyleLine(const std::vector<std::string>& toks,
                         const std::vector<bool>& quoted);
@@ -182,11 +211,11 @@ class TDefScreen
     [[nodiscard]] const SDefStyle& ResolveStyle(EDefWidget type,
                                                 uint32_t flags) const;
 
-    // --- assets (defscreen.cpp) ---
+    // --- assets (defpane.cpp) ---
     [[nodiscard]] PTBitmap        LookupBitmap(const char* entry);
     [[nodiscard]] const SFontAtlas* FontFor(const std::string& name);
 
-    // --- rendering (defscreen.cpp) ---
+    // --- rendering (defpane.cpp) ---
     void DrawWidget(const SDefWidget& w);
     void DrawListbox(const SDefWidget& w);
     void DrawEdit(const SDefWidget& w);
@@ -195,7 +224,7 @@ class TDefScreen
                   int32_t h, uint32_t flags, const SDefColor& color,
                   const std::string& font);
 
-    // --- input helpers (defscreen.cpp) ---
+    // --- input helpers (defpane.cpp) ---
     void SelectListRow(SDefWidget& w, int32_t lx, int32_t ly);
     void SetSliderFromCursor(SDefWidget& w, int32_t lx, int32_t ly);
     bool StepSliderArrow(SDefWidget& w, int32_t lx, int32_t ly);
@@ -212,7 +241,8 @@ class TDefScreen
     std::string               bgDatName;
     PTBitmap                  background = nullptr;
     TSurface*                 surface    = nullptr;
-    int32_t paneX = 0, paneY = 0, paneW = 0, paneH = 0;
+    int32_t paneW = 0, paneH = 0;
+    TActivateHandler onActivate;
     int32_t draggingSlider = -1;                 // widget index being dragged
     bool    open  = false;
 };

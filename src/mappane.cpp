@@ -3985,7 +3985,7 @@ void TMapPane::UpdateSectors()
             if (TextBar.IsOpen() && !TextBar.IsHidden() && CurrentScreen->FrameCount() > 0)
             {
                 TextBar.Print("Loading Map... Please Wait");
-                TextBar.Draw();
+                TextBar.DrawImmediate();
                 TextBar.PutToScreen();
             }
 
@@ -3995,7 +3995,7 @@ void TMapPane::UpdateSectors()
             if (TextBar.IsOpen() && !TextBar.IsHidden() && CurrentScreen->FrameCount() > 0)
             {
                 TextBar.Print("");
-                TextBar.Draw();
+                TextBar.DrawImmediate();
                 TextBar.PutToScreen();
             }
         }

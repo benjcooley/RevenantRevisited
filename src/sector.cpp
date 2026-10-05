@@ -600,7 +600,7 @@ bool TSector::LoadPreloadSectors(int32_t level, int32_t numrects, SRect *rects)
             {
                 int32_t level = 300 * count / (maxcount * 2);
                 TextBar.SetLevels(level, level);
-                TextBar.Draw();
+                TextBar.DrawImmediate();
                 TextBar.PutToScreen();
             }
             count++;
@@ -632,7 +632,7 @@ bool TSector::LoadPreloadSectors(int32_t level, int32_t numrects, SRect *rects)
                     {
                         int32_t level = 300 * count / (maxcount * 2);
                         TextBar.SetLevels(level, level);
-                        TextBar.Draw();
+                        TextBar.DrawImmediate();
                         TextBar.PutToScreen();
                     }
                     count++;

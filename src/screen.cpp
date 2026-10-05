@@ -13,7 +13,9 @@
 #include "display.h"
 #include "mainwnd.h"
 #include "timer.h"
+#include "logging.h"
 #include "mappane.h"
+#include "renderer.h"
 #include "screen.h"
 #include "sound.h"
 #include "time.h"
@@ -362,6 +364,110 @@ void TPane::OnCanvasResize(int32_t newCanvasW, int32_t newCanvasH)
     RunLayoutPass();
 }
 
+void ClassicCanvasOrigin(int32_t& x, int32_t& y)
+{
+    x = std::max<int32_t>(0, (Display.Width()  - WIDTH)  / 2);
+    y = std::max<int32_t>(0, (Display.Height() - HEIGHT) / 2);
+}
+
+// ----------------------------------------------------------------------------
+// TPane draw contract, routing, modal end
+// ----------------------------------------------------------------------------
+
+void TPane::ComposeTree()
+{
+    if (IsHidden())
+        return;
+    for (TPane* child : children)
+        if (child)
+            child->ComposeTree();
+    Compose();
+}
+
+void TPane::DrawTree()
+{
+    if (IsHidden())
+        return;
+    Draw();
+    for (TPane* child : children)
+        if (child)
+            child->DrawTree();
+}
+
+void TPane::EndModal(int32_t result)
+{
+    if (screen)
+        screen->RequestModalEnd(this, result);
+}
+
+namespace {
+
+bool IsButtonUp(int32_t button)
+{
+    return button == MB_LEFTUP || button == MB_RIGHTUP || button == MB_MIDDLEUP;
+}
+
+}  // namespace
+
+void TPane::RouteMouseClick(int32_t button, int32_t lx, int32_t ly)
+{
+    // Children last-added first (topmost first). Like the screen's flat pane
+    // loop, every pane under the point gets the click and every pane gets
+    // button-up, so a drag that ends elsewhere still releases.
+    for (auto it = children.rbegin(); it != children.rend(); ++it)
+    {
+        TPane* child = *it;
+        if (!child || child->IsHidden() || child->IsIgnoringInput())
+            continue;
+        const int32_t cx = lx + x - child->x;
+        const int32_t cy = ly + y - child->y;
+        if (child->InPane(cx, cy) || IsButtonUp(button))
+            child->RouteMouseClick(button, cx, cy);
+    }
+    MouseClick(button, lx, ly);
+}
+
+void TPane::RouteMouseMove(int32_t button, int32_t lx, int32_t ly)
+{
+    for (auto it = children.rbegin(); it != children.rend(); ++it)
+    {
+        TPane* child = *it;
+        if (!child || child->IsHidden() || child->IsIgnoringInput())
+            continue;
+        child->RouteMouseMove(button, lx + x - child->x, ly + y - child->y);
+    }
+    MouseMove(button, lx, ly);
+}
+
+void TPane::RouteKeyPress(int32_t key, bool down)
+{
+    for (auto it = children.rbegin(); it != children.rend(); ++it)
+        if (*it && !(*it)->IsHidden() && !(*it)->IsIgnoringInput())
+            (*it)->RouteKeyPress(key, down);
+    KeyPress(key, down);
+}
+
+void TPane::RouteCharPress(int32_t key, bool down)
+{
+    for (auto it = children.rbegin(); it != children.rend(); ++it)
+        if (*it && !(*it)->IsHidden() && !(*it)->IsIgnoringInput())
+            (*it)->RouteCharPress(key, down);
+    CharPress(key, down);
+}
+
+// The screen's pane tree reaches the swapchain through one HUD drawable,
+// registered for as long as the screen runs (docs/gameflow/ARCHITECTURE.md
+// §4.1). Panes never register drawables of their own.
+class TScreenPaneLayer final : public THudDrawable
+{
+  public:
+    explicit TScreenPaneLayer(TScreen* owner) : screen(owner) {}
+    void Draw() override { screen->DrawPanes(); }
+
+  private:
+    TScreen* screen;
+};
+
 // ----------------------------------------------------------------------------
 // TScreen
 // ----------------------------------------------------------------------------
@@ -396,8 +502,20 @@ bool TScreen::BeginScreen()
     panes.Clear();
     screenframes = 0;
     for (int32_t loop = 0; loop < NUMEXCLUSIVEPANES; loop++)
+    {
         exclusive[loop] = 0;
+        exclusiveflags[loop] = 0;
+        modaldone[loop] = nullptr;
+    }
     numexclusive = 0;
+    modalends.clear();
+
+    if (Renderer)
+    {
+        if (!panelayer)
+            panelayer = std::make_unique<TScreenPaneLayer>(this);
+        Renderer->AddHud(panelayer.get(), 0.0f);
+    }
 
     return Initialize();
 }
@@ -406,13 +524,23 @@ void TScreen::EndScreen()
 {
     int32_t loop;
 
+    // Retail TScreen close (0x0048ea40) notifies every pane before teardown.
+    BroadcastEvent(SCREENEVENT_CLOSING);
+    if (Renderer && panelayer)
+        Renderer->RemoveHud(panelayer.get());
+
     Close();
 
     panes.Clear();
     screenframes = 0;
     for (loop = 0; loop < NUMEXCLUSIVEPANES; loop++)
+    {
         exclusive[loop] = 0;
+        exclusiveflags[loop] = 0;
+        modaldone[loop] = nullptr;
+    }
     numexclusive = 0;
+    modalends.clear();
 }
 
 // Copies contents of display's back buffer to the user's display immediately. (For
@@ -477,13 +605,16 @@ bool TScreen::RemovePane(PTPane pane)
 
 bool TScreen::SetExclusivePane(int32_t panenum, bool completeexclusion)
 {
-    if (!panes[panenum] || numexclusive >= NUMEXCLUSIVEPANES)
+    if (panenum < 0 || !panes[panenum] || numexclusive >= NUMEXCLUSIVEPANES)
         return false;
 
     exclusive[numexclusive] = panenum;
-    complete[numexclusive] = completeexclusion;
+    exclusiveflags[numexclusive] = completeexclusion ? MODAL_TOPONLY : 0;
+    modaldone[numexclusive] = nullptr;
     numexclusive++;
 
+    // REVSYNC: TScreen::SetExclusivePane @ 0x0048eea0 broadcasts 0x101.
+    BroadcastEvent(SCREENEVENT_MODALPUSHED, panes[panenum]);
     return true;
 }
 
@@ -495,11 +626,108 @@ void TScreen::ReleaseExclusivePane(int32_t panenum)
         if (exclusive[c] != panenum)
         {
             exclusive[pos] = exclusive[c];
+            exclusiveflags[pos] = exclusiveflags[c];
+            modaldone[pos] = std::move(modaldone[c]);
             pos++;
         }
     }
+    for (int32_t c = pos; c < numexclusive; c++)
+        modaldone[c] = nullptr;
 
     numexclusive = pos;
+}
+
+// REVSYNC: RunModal @ 0x0048f040 (AddPane + SetExclusivePane with the
+// enclosing modal's flags OR'd in). REVSYNC-DIVERGENCE: retail then re-entered
+// the frame loop (TimerLoop(1) until the pane closed) and returned the pane's
+// result; here the result goes to `done` on the tick after EndModal, because
+// sokol owns the frame loop. Player-visible behavior is the same.
+bool TScreen::PushModal(PTPane pane, uint32_t flags, TModalDone done)
+{
+    if (!pane)
+        return false;
+    if (numexclusive >= NUMEXCLUSIVEPANES)
+    {
+        log_error("[screen] PushModal: modal stack full (%d)", NUMEXCLUSIVEPANES);
+        return false;
+    }
+    const uint32_t inherited = numexclusive > 0 ? exclusiveflags[numexclusive - 1] : 0;
+    const int32_t panenum = AddPane(pane);
+    exclusive[numexclusive] = panenum;
+    exclusiveflags[numexclusive] = inherited | flags;
+    modaldone[numexclusive] = std::move(done);
+    numexclusive++;
+    BroadcastEvent(SCREENEVENT_MODALPUSHED, pane);
+    return true;
+}
+
+PTPane TScreen::TopModal()
+{
+    return numexclusive > 0 ? panes[exclusive[numexclusive - 1]] : nullptr;
+}
+
+void TScreen::RequestModalEnd(PTPane pane, int32_t result)
+{
+    for (const SModalEnd& end : modalends)
+        if (end.pane == pane)
+            return;
+    modalends.push_back({pane, result});
+}
+
+void TScreen::ProcessModalEnds()
+{
+    if (modalends.empty())
+        return;
+    std::vector<SModalEnd> ends;
+    ends.swap(modalends);
+    for (const SModalEnd& end : ends)
+    {
+        const int32_t panenum = FindPane(end.pane);
+        TModalDone done;
+        for (int32_t c = 0; c < numexclusive; c++)
+            if (exclusive[c] == panenum)
+                done = std::move(modaldone[c]);
+        if (panenum >= 0)
+        {
+            ReleaseExclusivePane(panenum);
+            RemovePane(end.pane);
+        }
+        if (done)
+            done(end.result);
+    }
+}
+
+void TScreen::BroadcastEvent(int32_t code, void* param)
+{
+    for (int32_t loop = 0; loop < panes.NumItems(); loop++)
+        if (panes.Used(loop) && panes[loop])
+            panes[loop]->OnScreenEvent(code, param);
+}
+
+void TScreen::ComposePanes()
+{
+    if (numexclusive > 0 && (exclusiveflags[numexclusive - 1] & MODAL_TOPONLY))
+    {
+        if (PTPane pane = panes[exclusive[numexclusive - 1]])
+            pane->ComposeTree();
+        return;
+    }
+    for (int32_t loop = 0; loop < panes.NumItems(); loop++)
+        if (panes.Used(loop) && panes[loop])
+            panes[loop]->ComposeTree();
+}
+
+void TScreen::DrawPanes()
+{
+    if (numexclusive > 0 && (exclusiveflags[numexclusive - 1] & MODAL_TOPONLY))
+    {
+        if (PTPane pane = panes[exclusive[numexclusive - 1]])
+            pane->DrawTree();
+        return;
+    }
+    for (int32_t loop = 0; loop < panes.NumItems(); loop++)
+        if (panes.Used(loop) && panes[loop])
+            panes[loop]->DrawTree();
 }
 
 void TScreen::RedrawAllPanes()
@@ -513,7 +741,7 @@ void TScreen::RedrawAllPanes()
         if (pane && !pane->IsHidden())
             pane->SetDirty(true);
 
-        if (complete[numexclusive - 1])
+        if ((exclusiveflags[numexclusive - 1] & MODAL_TOPONLY))
         {
             Display.Reset();
             return;
@@ -549,7 +777,7 @@ void TScreen::DrawBackground()
             pane->DrawBackground();
         }
 
-        if (complete[numexclusive - 1])
+        if ((exclusiveflags[numexclusive - 1] & MODAL_TOPONLY))
         {
             dirty = false;
             Display.Reset();
@@ -588,7 +816,7 @@ void TScreen::Pulse()
             pane->Pulse();
         }
 
-        if (complete[numexclusive - 1])
+        if ((exclusiveflags[numexclusive - 1] & MODAL_TOPONLY))
         {
             Display.Reset();
             return;
@@ -621,7 +849,7 @@ void TScreen::Animate(bool draw)
             pane->Animate(draw);
         }
 
-        if (complete[numexclusive - 1])
+        if ((exclusiveflags[numexclusive - 1] & MODAL_TOPONLY))
         {
             Display.Reset();
             return;
@@ -651,7 +879,7 @@ void TScreen::MouseClick(int32_t button, int32_t x, int32_t y)
         if (pane && !pane->IsHidden())
         {
             pane->SetClipRect();
-            pane->MouseClick(button, x - pane->GetPosX(), y - pane->GetPosY());
+            pane->RouteMouseClick(button, x - pane->GetPosX(), y - pane->GetPosY());
         }
         Display.Reset();
         return;
@@ -670,7 +898,7 @@ void TScreen::MouseClick(int32_t button, int32_t x, int32_t y)
       // send mouseup buttons to all panes, not just the owner of that screen space
         if (panes[loop]->InPane(nx, ny) ||
             (button == MB_LEFTUP || button == MB_RIGHTUP || button == MB_MIDDLEUP))
-            panes[loop]->MouseClick(button, nx, ny);
+            panes[loop]->RouteMouseClick(button, nx, ny);
     }
 
     Display.Reset();
@@ -687,7 +915,7 @@ void TScreen::MouseMove(int32_t button, int32_t x, int32_t y)
         if (pane && !pane->IsHidden())
         {
             pane->SetClipRect();
-            pane->MouseMove(button, x - pane->GetPosX(), y - pane->GetPosY());
+            pane->RouteMouseMove(button, x - pane->GetPosX(), y - pane->GetPosY());
         }
         Display.Reset();
         return;
@@ -702,7 +930,7 @@ void TScreen::MouseMove(int32_t button, int32_t x, int32_t y)
         panes[loop]->SetClipRect();
         int32_t nx = x - panes[loop]->GetPosX();
         int32_t ny = y - panes[loop]->GetPosY();
-        panes[loop]->MouseMove(button, nx, ny);
+        panes[loop]->RouteMouseMove(button, nx, ny);
     }
 
     Display.Reset();
@@ -717,7 +945,7 @@ void TScreen::KeyPress(int32_t key, bool down)
     {
         PTPane pane = panes[exclusive[numexclusive - 1]];
         if (pane && !pane->IsHidden())
-            pane->KeyPress(key, down);
+            pane->RouteKeyPress(key, down);
         Display.Reset();
         return;
     }
@@ -727,7 +955,7 @@ void TScreen::KeyPress(int32_t key, bool down)
         if (!panes.Used(loop) || panes[loop]->IsHidden() || panes[loop]->IsIgnoringInput())
             continue;
         panes[loop]->SetClipRect();
-        panes[loop]->KeyPress(key, down);
+        panes[loop]->RouteKeyPress(key, down);
     }
 
     Display.Reset();
@@ -742,7 +970,7 @@ void TScreen::CharPress(int32_t key, bool down)
     {
         PTPane pane = panes[exclusive[numexclusive - 1]];
         if (pane && !pane->IsHidden())
-            pane->CharPress(key, down);
+            pane->RouteCharPress(key, down);
         Display.Reset();
         return;
     }
@@ -752,7 +980,7 @@ void TScreen::CharPress(int32_t key, bool down)
         if (!panes.Used(loop) || panes[loop]->IsHidden() || panes[loop]->IsIgnoringInput())
             continue;
         panes[loop]->SetClipRect();
-        panes[loop]->CharPress(key, down);
+        panes[loop]->RouteCharPress(key, down);
     }
 
     Display.Reset();
@@ -830,6 +1058,10 @@ void TScreen::Tick()
     if (Closing)
         return;
 
+    // Modals that called EndModal since the last tick pop now and report
+    // their results (the port's equivalent of retail RunModal returning).
+    ProcessModalEnds();
+
     // Resize panes that asked for it before we pulse (panes may set new
     // map position in their Pulse, which depends on post-resize dims).
     for (int32_t loop = 0; loop < panes.NumItems(); loop++)
@@ -887,6 +1119,7 @@ void TScreen::DrawFrame()
     // --- Phase 1: 3D scene + screen-owned passes -------------------------
     Display.Reset();
     Animate(true);
+    ComposePanes();
 
     // --- Phase 2: Overlay2D -- legacy 2D blits land in the backbuffer ----
     // Overlay2D pass (legacy Display.Put backbuffer fallback). HUD
@@ -970,7 +1203,7 @@ void TPane::PutToScreen()
 // input will be processed, and only the Pulse(), DrawBackground(), and Animate() functions
 // are called.  The PutToScreen() function can be called immediately after this function
 // to render the results to the display.
-void TPane::Draw()
+void TPane::DrawImmediate()
 {
     if (!IsOpen() || IsHidden())
         return;
@@ -1010,5 +1243,9 @@ void TPane::DrawRestoreRect(int32_t x, int32_t y, int32_t width, int32_t height,
 
 bool TPane::IsOnScreen()
 {
+    // Children are on screen when their root pane is (only root panes are
+    // registered with a screen through AddPane).
+    if (parent)
+        return parent->IsOnScreen();
     return screen == CurrentScreen;
 }

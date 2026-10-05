@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "testmodes.h"
+#include "screen.h"
 
 #include <sokol_app.h>          // sapp_request_quit on script drain
 #include <stb_image_write.h>   // for i3ddump test mode (impl lives in framesnap.cpp)
@@ -3157,8 +3158,9 @@ namespace TestModes {
 // Defined here (in the TestModes namespace) so it can call the dispatch
 // functions directly. Fires all synthetic input events whose timestamp has
 // elapsed since the script started.
-static void InputSimTick(const char* mode)
+void InputSimTick(TScreen* screen)
 {
+    if (!screen) return;
     if (!g_inputSimActive) return;
     const double now_ms = TTime::Time() * 1000.0;
     if (g_inputSimStartMs == 0.0) g_inputSimStartMs = now_ms;
@@ -3176,7 +3178,7 @@ static void InputSimTick(const char* mode)
             // the script. Same globals the real mouse handler writes. Pass the
             // held-button mask so moves between down/up read as a drag.
             cursorx = e.x; cursory = e.y;
-            HandleMouseMove(mode, mousebutton, e.x, e.y);
+            screen->MouseMove(mousebutton, e.x, e.y);
             break;
         case MS_CLICK:
             cursorx = e.x; cursory = e.y;
@@ -3192,12 +3194,12 @@ static void InputSimTick(const char* mode)
             case MB_MIDDLEUP:   mousebutton &= ~MB_MIDDLEDOWN; break;
             default: break;
             }
-            HandleMouseClick(mode, e.button, e.x, e.y);
+            screen->MouseClick(e.button, e.x, e.y);
             break;
         case MS_KEY:
             // e.button = VK code, e.x = 1 (down) / 0 (up). Same path real keys
             // take; real keyboard is NOT gated, so synthetic + real coexist.
-            HandleKeyPress(mode, e.button, e.x != 0);
+            screen->KeyPress(e.button, e.x != 0);
             break;
         case MS_SNAP:
             // Manual filmstrip capture (--filmstrip=N,0). Captures the LAST
@@ -3240,6 +3242,11 @@ static void InputSimTick(const char* mode)
     }
 }
 
+void InputSimArm()
+{
+    InputSimStart(StartupInputScript);
+}
+
 bool InputScriptActive()
 {
     // Own the mouse only while the script still has work to do: events pending,
@@ -3260,9 +3267,6 @@ bool DumpIconsToFolder(const char* path)
 
 bool Initialize(const char* mode)
 {
-    // Arm the scripted input simulator (no-op if --input-script was not given).
-    InputSimStart(StartupInputScript);
-
     if (strcmp(mode, "blank") == 0 || strcmp(mode, "ticker") == 0)
         return true;
     if (strcmp(mode, "sector") == 0)
@@ -3434,9 +3438,6 @@ void Render(const char* mode)
     if (!Display.IsActive() || !Display.BackBuffer())
         return;
 
-    // Advance the scripted input simulator before painting so any hover/down
-    // state change is reflected in this frame (no-op without --input-script).
-    InputSimTick(mode);
 
     if (strcmp(mode, "sector") == 0)
         return g_mapRenderer.RenderFrame();
@@ -3517,8 +3518,6 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
         return HandleMouseClickUIMainMenuMode(button, x, y);
     if (strcmp(mode, "ui-death") == 0)
         return HandleMouseClickUIDeathMode(button, x, y);
-    if (IsUIDefScreenMode(mode))
-        return HandleMouseClickUIDefScreenMode(button, x, y);
     if (strcmp(mode, "ui-hud") == 0)
     {
         const SHudState& s = GetHudState();
@@ -3607,8 +3606,6 @@ void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
         return HandleMouseMoveUIMainMenuMode(x, y);
     if (strcmp(mode, "ui-death") == 0)
         return HandleMouseMoveUIDeathMode(x, y);
-    if (IsUIDefScreenMode(mode))
-        return HandleMouseMoveUIDefScreenMode(button, x, y);
     // #8 iOS-style velocity drag for the spellbook scroll
     if (strcmp(mode, "ui-spellbook") == 0)
         return HandleMouseMoveUISpellbookMode(button, x, y);
@@ -3645,10 +3642,7 @@ void HandleKeyPress(const char* mode, int32_t key, bool down)
         return;
     }
     if (IsUIDefScreenMode(mode))
-    {
-        HandleKeyPressUIDefScreenMode(key, down);
-        return;
-    }
+        return;   // keys reach the DEF pane through the screen's pane routing
     // HUD test modes that compose the sidebar / bottom-bar / six-button
     // strip receive keyboard control: V toggles sidebar, B toggles
     // bottom-bar, 1-6 select panels (per uisidebartest.h docstring).

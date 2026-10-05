@@ -1,18 +1,19 @@
 // *************************************************************************
 // *                  Revenant Revisited (port) - 2026                     *
-// *  defscreen.cpp - data-driven DEF widget engine (TDefScreen)            *
+// *  defpane.cpp - DEF widget pane (TDefPane)                              *
 // *************************************************************************
 //
 // Parses Revenant's `.def` UI layout files + the shared `widgets.def` style
 // library and renders the resulting widget tree into a TSurface. See
-// defscreen.h for the architecture and the recon citations.
+// defpane.h for the architecture and the recon citations.
 
-#include "defscreen.h"
+#include "defpane.h"
 
 #include "font.h"
 #include "logging.h"
 #include "multi.h"
 #include "renderer.h"
+#include "revdefs.h"    // MB_LEFTDOWN / MB_LEFTUP
 #include "revutils.h"   // rev_fopen
 #include "surface.h"
 
@@ -234,7 +235,7 @@ const char* TypeName(EDefWidget t)
 // Flag-expression evaluation: `<term> [| <term>]*`, term = #define symbol or
 // number. Advances `i` past the consumed terms. Stops at the next keyword.
 // =====================================================================
-uint32_t TDefScreen::EvalFlags(const std::vector<std::string>& toks, size_t& i) const
+uint32_t TDefPane::EvalFlags(const std::vector<std::string>& toks, size_t& i) const
 {
     uint32_t acc = 0;
     bool wantTerm = true;
@@ -263,7 +264,7 @@ uint32_t TDefScreen::EvalFlags(const std::vector<std::string>& toks, size_t& i) 
 // Style resolution: pick the widgets.def style for a widget's type + the
 // variant implied by its flags.
 // =====================================================================
-const SDefStyle& TDefScreen::ResolveStyle(EDefWidget type, uint32_t flags) const
+const SDefStyle& TDefPane::ResolveStyle(EDefWidget type, uint32_t flags) const
 {
     static const SDefStyle kEmpty;
     std::string variant;
@@ -389,7 +390,7 @@ void ApplyAttrs(const std::vector<std::string>& t, const std::vector<bool>& q,
 // =====================================================================
 // STYLE line: `STYLE <TYPE> [<VARIANT>] <attrs...>` -> styles["TYPE/VARIANT"].
 // =====================================================================
-void TDefScreen::ParseStyleLine(const std::vector<std::string>& toks,
+void TDefPane::ParseStyleLine(const std::vector<std::string>& toks,
                                 const std::vector<bool>& quoted)
 {
     if (toks.size() < 2) return;
@@ -418,7 +419,7 @@ void TDefScreen::ParseStyleLine(const std::vector<std::string>& toks,
 // =====================================================================
 // Widget lines inside a PANEL body [begin, end).
 // =====================================================================
-void TDefScreen::ParseWidgetLines(const std::vector<std::vector<std::string>>& lines,
+void TDefPane::ParseWidgetLines(const std::vector<std::vector<std::string>>& lines,
                                   const std::vector<std::vector<bool>>& quoted,
                                   size_t begin, size_t end)
 {
@@ -503,12 +504,12 @@ void TDefScreen::ParseWidgetLines(const std::vector<std::vector<std::string>>& l
 // File loading. widgets.def is loaded styles-only; the screen .def adds any
 // STYLE overrides + the requested panel's widgets.
 // =====================================================================
-bool TDefScreen::LoadDefFile(const char* name, bool collectPanels)
+bool TDefPane::LoadDefFile(const char* name, bool collectPanels)
 {
     const std::string raw = ReadResourceText(name);
     if (raw.empty())
     {
-        log_error("[defscreen] cannot read '%s'", name);
+        log_error("[defpane] cannot read '%s'", name);
         return false;
     }
 
@@ -564,7 +565,7 @@ bool TDefScreen::LoadDefFile(const char* name, bool collectPanels)
 // =====================================================================
 // Asset + font lookup
 // =====================================================================
-PTBitmap TDefScreen::LookupBitmap(const char* entry)
+PTBitmap TDefPane::LookupBitmap(const char* entry)
 {
     // Non-fatal name walk: TMulti::Object FatalErrors on a miss, which we can't
     // use when searching across several archives. Walk the name table directly
@@ -582,7 +583,7 @@ PTBitmap TDefScreen::LookupBitmap(const char* entry)
     return nullptr;
 }
 
-const SFontAtlas* TDefScreen::FontFor(const std::string& name)
+const SFontAtlas* TDefPane::FontFor(const std::string& name)
 {
     for (const SFontMap& fm : kFontMap)
         if (name == fm.name)
@@ -593,13 +594,16 @@ const SFontAtlas* TDefScreen::FontFor(const std::string& name)
 // =====================================================================
 // Open / Close
 // =====================================================================
-bool TDefScreen::Open(const char* defName, const char* panelName,
+bool TDefPane::Open(const char* defName, const char* panelName,
                       int32_t x, int32_t y, int32_t w, int32_t h,
                       const char* bgDatName_)
 {
-    Close();
+    ReleaseAssets();
+    if (IsOpen())
+        TPane::Close();
 
-    paneX = x; paneY = y; paneW = w; paneH = h;
+    Resize(x, y, w, h);
+    paneW = w; paneH = h;
     targetPanel = panelName ? panelName : "";
     bgDatName   = bgDatName_ ? bgDatName_ : "";
 
@@ -613,7 +617,7 @@ bool TDefScreen::Open(const char* defName, const char* panelName,
         return false;
 
     if (widgets.empty())
-        log_warn("[defscreen] panel '%s' in %s produced no widgets",
+        log_warn("[defpane] panel '%s' in %s produced no widgets",
                  targetPanel.c_str(), screenFile.c_str());
 
     // 3) Assets: the widget-chrome library + the screen's own chrome dat.
@@ -624,7 +628,7 @@ bool TDefScreen::Open(const char* defName, const char* panelName,
     }
     else
     {
-        log_error("[defscreen] widgetsnotex.dat missing");
+        log_error("[defpane] widgetsnotex.dat missing");
     }
     if (!bgDatName.empty())
     {
@@ -635,7 +639,7 @@ bool TDefScreen::Open(const char* defName, const char* panelName,
         }
         else
         {
-            log_error("[defscreen] %s missing", bgDatName.c_str());
+            log_error("[defpane] %s missing", bgDatName.c_str());
         }
     }
     background = LookupBitmap("Background");
@@ -652,13 +656,82 @@ bool TDefScreen::Open(const char* defName, const char* panelName,
     // 5) The compose-to-target render surface (default RGBA8 format).
     surface = new TSurface(paneW, paneH);
     open    = true;
-    log_info("[defscreen] opened '%s' panel '%s' %dx%d @(%d,%d): %zu widgets, bg=%s",
-             defName, targetPanel.c_str(), paneW, paneH, paneX, paneY,
+    TPane::Initialize();
+    log_info("[defpane] opened '%s' panel '%s' %dx%d @(%d,%d): %zu widgets, bg=%s",
+             defName, targetPanel.c_str(), paneW, paneH, x, y,
              widgets.size(), background ? "OK" : "MISS");
     return true;
 }
 
-void TDefScreen::Close()
+bool TDefPane::OpenChrome(int32_t x, int32_t y, int32_t w, int32_t h,
+                          const char* datName, const char* backgroundEntry)
+{
+    ReleaseAssets();
+    if (IsOpen())
+        TPane::Close();
+
+    Resize(x, y, w, h);
+    paneW = w; paneH = h;
+    targetPanel.clear();
+    bgDatName = datName ? datName : "";
+
+    TMulti* dat = bgDatName.empty() ? nullptr
+                : TMulti::LoadMulti(const_cast<char*>(bgDatName.c_str()));
+    if (!dat)
+    {
+        log_error("[defpane] %s missing", bgDatName.c_str());
+        return false;
+    }
+    archives[bgDatName] = dat;
+    bitmapDats.push_back(dat);
+    background = backgroundEntry ? LookupBitmap(backgroundEntry) : nullptr;
+    if (backgroundEntry && !background)
+        log_warn("[defpane] %s has no '%s'", bgDatName.c_str(), backgroundEntry);
+
+    surface = new TSurface(paneW, paneH);
+    open    = true;
+    TPane::Initialize();
+    log_info("[defpane] opened chrome '%s' %dx%d @(%d,%d), bg=%s",
+             bgDatName.c_str(), paneW, paneH, x, y, background ? "OK" : "MISS");
+    return true;
+}
+
+bool TDefPane::AddSpriteButton(const char* name, const char* faceBase)
+{
+    char face[64];
+    std::snprintf(face, sizeof(face), "%sU", faceBase);
+    PTBitmap up = LookupBitmap(face);
+    if (!up)
+    {
+        log_warn("[defpane] sprite button '%s': no face '%s'", name, face);
+        return false;
+    }
+    SDefWidget w;
+    w.type   = EDefWidget::Button;
+    w.name   = name ? name : faceBase;
+    w.faceUp = up;
+    std::snprintf(face, sizeof(face), "%sD", faceBase);
+    w.faceDown = LookupBitmap(face);
+    std::snprintf(face, sizeof(face), "%sS", faceBase);
+    w.faceHover = LookupBitmap(face);
+    // Retail places the sprite at its registration point: screen top-left =
+    // (-regx, -regy) (MainMenu_SPEC §4).
+    w.x = -up->regx;
+    w.y = -up->regy;
+    w.w = up->width;
+    w.h = up->height;
+    widgets.push_back(std::move(w));
+    SetDirty(true);
+    return true;
+}
+
+void TDefPane::Close()
+{
+    ReleaseAssets();
+    TPane::Close();
+}
+
+void TDefPane::ReleaseAssets()
 {
     delete surface;
     surface = nullptr;
@@ -673,12 +746,12 @@ void TDefScreen::Close()
     open = false;
 }
 
-TDefScreen::~TDefScreen() { Close(); }
+TDefPane::~TDefPane() { ReleaseAssets(); }
 
 // =====================================================================
 // Data binding / lookup
 // =====================================================================
-SDefWidget* TDefScreen::Find(const char* name)
+SDefWidget* TDefPane::Find(const char* name)
 {
     if (!name) return nullptr;
     for (SDefWidget& w : widgets)
@@ -686,7 +759,7 @@ SDefWidget* TDefScreen::Find(const char* name)
     return nullptr;
 }
 
-void TDefScreen::SetFieldBitmap(const char* field, PTBitmap bm)
+void TDefPane::SetFieldBitmap(const char* field, PTBitmap bm)
 {
     if (!field) return;
     for (SDefWidget& w : widgets)
@@ -694,7 +767,7 @@ void TDefScreen::SetFieldBitmap(const char* field, PTBitmap bm)
             w.fieldBitmap = bm;
 }
 
-void TDefScreen::SetListRows(const char* listName,
+void TDefPane::SetListRows(const char* listName,
                              std::vector<std::vector<std::string>> rows)
 {
     if (SDefWidget* w = Find(listName))
@@ -704,7 +777,7 @@ void TDefScreen::SetListRows(const char* listName,
 // =====================================================================
 // Rendering
 // =====================================================================
-void TDefScreen::DrawNineSlice(PTBitmap bm, const SDefInsets& frame,
+void TDefPane::DrawNineSlice(PTBitmap bm, const SDefInsets& frame,
                                int32_t x, int32_t y, int32_t w, int32_t h)
 {
     if (!bm || !surface) return;
@@ -717,7 +790,7 @@ void TDefScreen::DrawNineSlice(PTBitmap bm, const SDefInsets& frame,
                                                      surface->Width(), surface->Height());
 }
 
-void TDefScreen::DrawText(const std::string& text, int32_t x, int32_t y,
+void TDefPane::DrawText(const std::string& text, int32_t x, int32_t y,
                           int32_t w, int32_t h, uint32_t flags,
                           const SDefColor& color, const std::string& font)
 {
@@ -746,7 +819,7 @@ void TDefScreen::DrawText(const std::string& text, int32_t x, int32_t y,
         DrawTextToTarget(atlas, text.c_str(), x, cellY, w, h, align, r, g, b, tw, th);
 }
 
-void TDefScreen::DrawWidget(const SDefWidget& wid)
+void TDefPane::DrawWidget(const SDefWidget& wid)
 {
     const SDefStyle& st = wid.style;
     const int32_t tw = surface->Width(), th = surface->Height();
@@ -777,6 +850,16 @@ void TDefScreen::DrawWidget(const SDefWidget& wid)
         }
         case EDefWidget::Button:
         {
+            if (wid.faceUp)
+            {
+                // Sprite button (title / death screens): U, D while pressed,
+                // S while hovered (MainMenu_SPEC §6.6).
+                PTBitmap face = wid.faceUp;
+                if (wid.pressed && wid.faceDown)       face = wid.faceDown;
+                else if (wid.hovered && wid.faceHover) face = wid.faceHover;
+                Renderer->DrawBitmapToTarget(face, wid.x, wid.y, tw, th);
+                break;
+            }
             if (wid.flags & kBtnToggle)
             {
                 // Checkbox/toggle: a fixed-size icon (CheckU unchecked / CheckD
@@ -834,7 +917,7 @@ void TDefScreen::DrawWidget(const SDefWidget& wid)
     }
 }
 
-void TDefScreen::DrawListbox(const SDefWidget& w)
+void TDefPane::DrawListbox(const SDefWidget& w)
 {
     const SDefStyle& st = w.style;
     const int32_t tw = surface->Width(), th = surface->Height();
@@ -883,7 +966,7 @@ void TDefScreen::DrawListbox(const SDefWidget& w)
     }
 }
 
-void TDefScreen::DrawEdit(const SDefWidget& w)
+void TDefPane::DrawEdit(const SDefWidget& w)
 {
     const SDefStyle& st = w.style;
     if (!st.bgbitmap.empty())
@@ -900,7 +983,7 @@ void TDefScreen::DrawEdit(const SDefWidget& w)
     DrawText(txt, cx, cy, cw, ch, st.textflags | kTextVCenter, col, st.font);
 }
 
-void TDefScreen::DrawScrollbar(const SDefWidget& w)
+void TDefPane::DrawScrollbar(const SDefWidget& w)
 {
     const SDefStyle& st = w.style;
     const int32_t tw = surface->Width(), th = surface->Height();
@@ -951,7 +1034,7 @@ void TDefScreen::DrawScrollbar(const SDefWidget& w)
     }
 }
 
-void TDefScreen::Render()
+void TDefPane::Render()
 {
     if (!open || !surface) return;
 
@@ -970,7 +1053,7 @@ void TDefScreen::Render()
 // =====================================================================
 // Input
 // =====================================================================
-void TDefScreen::SelectListRow(SDefWidget& w, int32_t lx, int32_t ly)
+void TDefPane::SelectListRow(SDefWidget& w, int32_t lx, int32_t ly)
 {
     (void)lx;
     const SDefStyle& st = w.style;
@@ -983,7 +1066,7 @@ void TDefScreen::SelectListRow(SDefWidget& w, int32_t lx, int32_t ly)
         w.selrow = row;
 }
 
-void TDefScreen::SetSliderFromCursor(SDefWidget& w, int32_t lx, int32_t ly)
+void TDefPane::SetSliderFromCursor(SDefWidget& w, int32_t lx, int32_t ly)
 {
     const SDefStyle& st = w.style;
     PTBitmap up    = LookupBitmap((st.up + "U").c_str());
@@ -1012,7 +1095,7 @@ void TDefScreen::SetSliderFromCursor(SDefWidget& w, int32_t lx, int32_t ly)
     w.value = w.minval + static_cast<int32_t>(frac * (w.maxval - w.minval) + 0.5f);
 }
 
-bool TDefScreen::StepSliderArrow(SDefWidget& w, int32_t lx, int32_t ly)
+bool TDefPane::StepSliderArrow(SDefWidget& w, int32_t lx, int32_t ly)
 {
     const SDefStyle& st = w.style;
     PTBitmap up   = LookupBitmap((st.up + "U").c_str());
@@ -1033,7 +1116,7 @@ bool TDefScreen::StepSliderArrow(SDefWidget& w, int32_t lx, int32_t ly)
     return false;
 }
 
-void TDefScreen::OnMouseDown(int32_t lx, int32_t ly)
+void TDefPane::OnMouseDown(int32_t lx, int32_t ly)
 {
     draggingSlider = -1;
     for (SDefWidget& w : widgets) w.focused = false;   // a press drops EDIT focus
@@ -1059,7 +1142,7 @@ void TDefScreen::OnMouseDown(int32_t lx, int32_t ly)
     }
 }
 
-void TDefScreen::OnKey(int32_t vk, bool down)
+void TDefPane::OnKey(int32_t vk, bool down)
 {
     if (!down) return;
     SDefWidget* ed = nullptr;
@@ -1080,7 +1163,7 @@ void TDefScreen::OnKey(int32_t vk, bool down)
         ed->text.push_back(c);
 }
 
-const char* TDefScreen::OnMouseUp(int32_t lx, int32_t ly)
+const char* TDefPane::OnMouseUp(int32_t lx, int32_t ly)
 {
     draggingSlider = -1;
     const char* activated = nullptr;
@@ -1098,11 +1181,70 @@ const char* TDefScreen::OnMouseUp(int32_t lx, int32_t ly)
     return activated;
 }
 
-void TDefScreen::OnMouseMove(int32_t lx, int32_t ly)
+void TDefPane::OnMouseMove(int32_t lx, int32_t ly)
 {
     if (draggingSlider >= 0 && draggingSlider < static_cast<int32_t>(widgets.size()))
         SetSliderFromCursor(widgets[draggingSlider], lx, ly);   // drag
 
     for (SDefWidget& w : widgets)
         w.hovered = (w.type == EDefWidget::Button && !w.disabled && w.Contains(lx, ly));
+}
+
+// =====================================================================
+// TPane hooks
+// =====================================================================
+void TDefPane::Compose()
+{
+    Render();
+}
+
+void TDefPane::Draw()
+{
+    if (surface)
+        Renderer->DrawSurface(surface, GetPosX(), GetPosY());
+}
+
+void TDefPane::MouseClick(int32_t button, int32_t x, int32_t y)
+{
+    if (!open) return;
+    if (button == MB_LEFTDOWN)
+        OnMouseDown(x, y);
+    else if (button == MB_LEFTUP)
+        if (const char* name = OnMouseUp(x, y))
+            Activate(name);
+}
+
+void TDefPane::MouseMove(int32_t button, int32_t x, int32_t y)
+{
+    (void)button;
+    if (open)
+        OnMouseMove(x, y);
+}
+
+void TDefPane::KeyPress(int32_t key, bool down)
+{
+    if (open)
+        OnKey(key, down);
+}
+
+void TDefPane::Activate(const char* widgetName)
+{
+    int32_t buttonIndex = 0;
+    for (const SDefWidget& w : widgets)
+    {
+        if (w.type != EDefWidget::Button) continue;
+        ++buttonIndex;
+        if (w.name == widgetName)
+        {
+            log_info("[defpane] '%s' activated (button %d)", w.name.c_str(), buttonIndex);
+            OnActivate(w, buttonIndex);
+            return;
+        }
+    }
+}
+
+void TDefPane::OnActivate(const SDefWidget& widget, int32_t buttonIndex)
+{
+    if (onActivate)
+        onActivate(*this, widget, buttonIndex);
 }

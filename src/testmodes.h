@@ -8,6 +8,8 @@
 
 #include <cstdint>
 
+class TScreen;
+
 namespace TestModes {
 
 bool Initialize(const char* mode);
@@ -26,5 +28,11 @@ bool DumpIconsToFolder(const char* path);
 // fired its last event, handing control back to the real mouse. (Real keyboard
 // is NOT gated — the script's key events augment it, and ESC still quits.)
 bool InputScriptActive();
+
+// --input-script: armed once at boot, then pumped once per frame by AppFrame
+// into the current screen's MouseMove / MouseClick / KeyPress, so scripted
+// input takes the same path as real input on every screen.
+void InputSimArm();
+void InputSimTick(TScreen* screen);
 
 }  // namespace TestModes
