@@ -2726,11 +2726,13 @@ void TObjectInstance::ResetFlags(uint32_t newflags)
 
 // ----------------- Object Instance Statistic Functions --------------
 
+// REVSYNC: 0x00473600 -- an object stat through GetObjStat (a player's
+// modified copy), a class stat directly.
 int32_t TObjectInstance::GetStat(const char *statname) const
 {
     int32_t statid = cl->FindObjStat(statname);
     if (statid >= 0)
-        return stats[statid];
+        return GetObjStat(statid);
     statid = cl->FindStat(statname);
     if (statid >= 0)
         return cl->GetStat(objtype, statid);
@@ -2744,12 +2746,14 @@ bool TObjectInstance::HasStat(const char *statname) const
     return cl->FindObjStat(statname) >= 0 || cl->FindStat(statname) >= 0;
 }
 
+// REVSYNC: 0x004736f0 -- an object stat through SetObjStat. Not ported:
+// the stat-changed notification (vtable +0xd0) retail sends on a change.
 void TObjectInstance::SetStat(const char *statname, int32_t value)
 {
     int32_t statid = cl->FindObjStat(statname);
     if (statid >= 0)
     {
-        stats[statid] = value;
+        SetObjStat(statid, value);
         return;
     }
     statid = cl->FindStat(statname);
@@ -2791,8 +2795,8 @@ static void LocalizedName(const char *prefix, const char *name, char *buf, int32
 
 // REVSYNC: TObjectInstance::GetFieldText = retail vtable +0xc8, 0x00472f80.
 // Not ported: "statmod" (the equipped-modifier list through the player's
-// +0xec iterator) and "experience" (a character's kill value); both answer
-// "no such field", as retail does for any name it doesn't know.
+// +0xec iterator); it answers "no such field", as retail does for any name
+// it doesn't know.
 bool TObjectInstance::GetFieldText(const char *field, char *buf, int32_t buflen)
 {
     if (!field || !buf || buflen <= 0)
@@ -2812,8 +2816,16 @@ bool TObjectInstance::GetFieldText(const char *field, char *buf, int32_t buflen)
                 *c = char(tolower((unsigned char)*c));
         return true;
     }
-    if (stricmp(field, "statmod") == 0 || stricmp(field, "experience") == 0)
+    if (stricmp(field, "statmod") == 0)
         return false;
+    if (stricmp(field, "experience") == 0)
+    {
+        // What overcoming this character is worth to the main player (0x0051a5b0).
+        const int32_t value = (ObjClass() == OBJCLASS_CHARACTER && Player)
+            ? Player->KillExp(GetStat("Value")) : 0;
+        snprintf(buf, buflen, "%d", value);
+        return true;
+    }
 
     // Any other field is the object or class stat of that name.
     if (cl->FindObjStat(field) < 0 && cl->FindStat(field) < 0)

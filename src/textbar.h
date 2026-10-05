@@ -28,7 +28,7 @@ class TTextBar : public TPane
 
     virtual void DrawBackground();
 
-    void Print(char *txt, ...); // printf style output!!!
+    void Print(const char *txt, ...); // printf style output!!!
     void Clear() { text[0] = 0; SetDirty(true); }
 
     // Opponent health display functions
