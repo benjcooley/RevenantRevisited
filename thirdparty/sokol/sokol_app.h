@@ -3792,6 +3792,21 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
 }
 
+/* [RevenantRevisited] hidden: sokol quits by closing its window and letting
+   AppKit terminate the app once the last window is gone. AppKit does not do
+   that for a window that was never on screen (it never asks
+   applicationShouldTerminateAfterLastWindowClosed:), so with desc.hidden a
+   quit request would close the window and leave the app running. Terminate
+   explicitly instead; applicationWillTerminate: then runs the usual cleanup.
+   Deferred to the next run-loop pass so the window finishes closing before
+   cleanup releases it. */
+- (void)windowWillClose:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
+    if (_sapp.desc.hidden) {
+        [NSApp performSelector:@selector(terminate:) withObject:nil afterDelay:0.0];
+    }
+}
+
 - (void)windowDidResize:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
     _sapp_macos_update_dimensions();

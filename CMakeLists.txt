@@ -28,16 +28,45 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 #   ./build-asan/Revenant      # ASan runtime errors stream to stderr
 #
 # ASan overhead is ~2x runtime + ~3x memory; fine for catching crashes
-# but not what you ship.
+# but not what you ship. Symbolized reports, headless runs and lldb:
+# see docs/DEBUG_TOOLING.md.
 # ----------------------------------------------------------------------------
 option(REVENANT_ASAN "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
 if(REVENANT_ASAN)
   message(STATUS "Sanitizers: AddressSanitizer + UndefinedBehaviorSanitizer enabled")
+
+  # Check that the sanitizer runtime can start on this OS before building
+  # everything against it. A runtime older than the OS can fail inside its
+  # own initializer, before main() -- Xcode 16's on macOS 26 aborts with
+  # "CHECK failed: sanitizer_malloc_mac.inc ... asan_init_is_running".
+  # Re-checked on every configure: an OS update can break a toolchain that
+  # passed before.
+  include(CheckCSourceRuns)
+  set(CMAKE_REQUIRED_FLAGS "-fsanitize=address -fsanitize=undefined")
+  set(CMAKE_REQUIRED_LINK_OPTIONS -fsanitize=address -fsanitize=undefined)
+  unset(REVENANT_SANITIZER_RUNTIME_STARTS CACHE)
+  check_c_source_runs("int main(void) { return 0; }" REVENANT_SANITIZER_RUNTIME_STARTS)
+  unset(CMAKE_REQUIRED_FLAGS)
+  unset(CMAKE_REQUIRED_LINK_OPTIONS)
+  if(NOT REVENANT_SANITIZER_RUNTIME_STARTS)
+    message(FATAL_ERROR
+      "The AddressSanitizer runtime of ${CMAKE_C_COMPILER_ID} "
+      "${CMAKE_C_COMPILER_VERSION} (${CMAKE_C_COMPILER}) cannot start on "
+      "${CMAKE_SYSTEM_NAME} ${CMAKE_SYSTEM_VERSION}. The toolchain is probably "
+      "older than the OS: update Xcode / the Command Line Tools, then "
+      "reconfigure. See docs/DEBUG_TOOLING.md.")
+  endif()
+
   # vptr is disabled because several polymorphic effect classes
   # (TBloodEffect, TBurnEffect, TDripEffect, TPulpEffect, TParticle3DAnimator)
   # have all virtuals inline → no key function → no typeinfo emitted →
   # link error. Re-enable once those have an out-of-line virtual.
+  # -fsanitize-recover=address only makes recovery possible: ASan still
+  # stops at the first error unless the run sets
+  # ASAN_OPTIONS=halt_on_error=0, which lets one run report past a known
+  # bug (e.g. to reach shutdown).
   add_compile_options(-fsanitize=address -fsanitize=undefined -fno-sanitize=vptr
+                      -fsanitize-recover=address
                       -fno-omit-frame-pointer -fno-optimize-sibling-calls -g -O1)
   add_link_options(-fsanitize=address -fsanitize=undefined -fno-sanitize=vptr)
 endif()
