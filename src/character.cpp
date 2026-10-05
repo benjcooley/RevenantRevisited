@@ -3625,7 +3625,18 @@ bool TCharacter::Say(const char *string, int32_t wait, const char *anim, const c
         ab->wait = 2 * (int32_t)strlen(line) + 36;
     ab->loop = true;
     const int32_t ticks = ab->wait;
-    SetDesired(ab);
+
+    // Step 7 (DIALOG.md §3.1): start the say animation now -- retail's
+    // vtable 0x218 at 0x004db4d0, the port's ForceCommand -- rather than
+    // queue it as desired. A queued say waited behind whatever the speaker
+    // was doing (Kylie held each line ~40 s), or forever when that never
+    // ended (the level-46 slaves), and the script's speech wait, which wants
+    // the speaker idle in its root state, never came. A speaker who can't
+    // take it still speaks the line; the refused block, which retail leaked,
+    // is freed.
+    ForceCommand(ab);
+    if (doing != ab && desired != ab)
+        delete ab;
 
     DialogPane.AddSpeech(this, line, ticks);
     return true;
