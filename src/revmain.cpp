@@ -1745,7 +1745,7 @@ void GetParameters(int argc, char **argv)
     {
         std::string p;
         if (arg_param(cmd, "input-script", p) || arg_param(cmd, "mouse-script", p))
-            strncpyz(StartupInputScript, p.c_str(), sizeof(StartupInputScript));
+            StartupInputScript = p;
     }
 
   // SECTOR=L_X_Y — pick which sector --test=sector keeps alive and renders.
