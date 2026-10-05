@@ -4305,7 +4305,13 @@ COMMAND(CmdTimeLimit) { return CmdNotPorted("timelimit", 0x00429820, t); }
 
 // ----- owner: dialog (speech, messages, responses) -----
 
-COMMAND(CmdHideResponse) { return CmdNotPorted("hideresponse", 0x00426d40, t); }
+// REVSYNC: hideresponse @ 0x00426d40 -> 0x0047ecc0: close PlayScreen's
+// bottom drawer when it is open (DIALOG.md §1.4). No shipped script uses it.
+COMMAND(CmdHideResponse)
+{
+    PlayScreen.CloseDrawer();
+    return 0;
+}
 
 // ----- owner: savegame (load/save orchestration) -----
 
@@ -4352,15 +4358,18 @@ COMMAND(CmdEndGame)
 // bit 2) until `fadescreenin`. Both fade commands answer like a character
 // action (retail result 1): the calling script waits on the command's object
 // until its action is done, unless the line says `nowait`. `wait screenfade`
-// waits for the fade itself. Not ported: closing the play screen's buy/sell
-// drawer (drawer mode 3, `0x0047ed20` / `0x0047ecc0`), and the multiplayer
-// branch, which fades through the player's state bit 8 (`0x0051d680`).
+// waits for the fade itself. With the fade it closes the play screen's
+// drawer when that holds the shop (mode 3, `0x0047ed20` / `0x0047ecc0`). Not
+// ported: the multiplayer branch, which fades through the player's state
+// bit 8 (`0x0051d680`).
 COMMAND(CmdFadeScreenOut)
 {
     if (TScreenFade* fade = PlayScreen.Fade())
     {
         fade->FadeOut();
         DialogPane.ClearSpeech(false);
+        if (PlayScreen.Drawer() == TPlayScreen::EDrawer::BuySell)
+            PlayScreen.CloseDrawer();
     }
     if (script)
         script->SetFadeHeld(true);
@@ -4408,23 +4417,10 @@ COMMAND(CmdStopAutoMapGen) { return CmdNotPorted("samap", 0x00425420, t); }
 COMMAND(CmdSwapCDTrack) { return CmdNotPorted("swapcdtrack", 0x00428b90, t); }
 COMMAND(CmdTimeOfDay) { return CmdNotPorted("timeofday", 0x00427a80, t); }
 
-// ----- owner: deferred (buy/sell screen, multiplayer, editor tooling) -----
+// ----- owner: deferred (multiplayer, editor tooling) -----
+// (The buy/sell family is in cmd_buysell.cpp.)
 
 COMMAND(CmdBigGenerate) { return CmdNotPorted("biggenerate", 0x00426d50, t); }
-COMMAND(CmdBuySellAdd) { return CmdNotPorted("buyselladd", 0x00427500, t); }
-COMMAND(CmdBuySellAddBuyCriteria) { return CmdNotPorted("buyselladdbuycriteria", 0x00427550, t); }
-COMMAND(CmdBuySellAddBuyItem) { return CmdNotPorted("buyselladdbuyitem", 0x00427810, t); }
-COMMAND(CmdBuySellAddBuyItems) { return CmdNotPorted("buyselladdbuyitems", 0x00427860, t); }
-COMMAND(CmdBuySellAddCriteria) { return CmdNotPorted("buyselladdcriteria", 0x00427240, t); }
-COMMAND(CmdBuySellInit) { return CmdNotPorted("buysellinit", 0x00427080, t); }
-COMMAND(CmdBuySellNoGoldDialog) { return CmdNotPorted("buysellnogolddialog", 0x00427a20, t); }
-COMMAND(CmdBuySellPurchaseDialog) { return CmdNotPorted("buysellpurchasedialog", 0x00427a50, t); }
-COMMAND(CmdBuySellRemove) { return CmdNotPorted("buysellremove", 0x00427840, t); }
-COMMAND(CmdBuySellRemoveBuyCriteria) { return CmdNotPorted("buysellremovebuycriteria", 0x004276b0, t); }
-COMMAND(CmdBuySellRemoveCriteria) { return CmdNotPorted("buysellremovecriteria", 0x004273a0, t); }
-COMMAND(CmdBuySellSalesPerson) { return CmdNotPorted("buysellsalesperson", 0x004279f0, t); }
-COMMAND(CmdBuySellScreen) { return CmdNotPorted("buysellscreen", 0x00427090, t); }
-COMMAND(CmdBuySellShopType) { return CmdNotPorted("buysellshoptype", 0x00427870, t); }
 COMMAND(CmdCreateModule) { return CmdNotPorted("createmodule", 0x00428c30, t); }
 COMMAND(CmdDumpTagList) { return CmdNotPorted("dumptaglist", 0x004287c0, t); }
 COMMAND(CmdDumpTagListErrors) { return CmdNotPorted("dumptaglisterrors", 0x004288f0, t); }

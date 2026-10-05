@@ -22,6 +22,7 @@
 
 #include "revenant.h"
 #include "script.h"
+#include "buysell.h"
 #include "logging.h"
 #include "parse.h"
 #include "object.h"
@@ -257,10 +258,17 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
 // REVSYNC: 0x00492ac0
 TObjectInstance* TScript::User() const
 {
+    if (TObjectInstance* user = AliasedUser())
+        return user;
+    return Player;
+}
+
+TObjectInstance* TScript::AliasedUser() const
+{
     TObjectInstance* user = triggerer.Get();
     if (user && user->ObjClass() == OBJCLASS_PLAYER && !stricmp(useralias.c_str(), kAliasUser))
         return user;
-    return Player;
+    return nullptr;
 }
 
 // REVSYNC: 0x00492640, the prototype search. A nameless request matches any
@@ -355,8 +363,7 @@ void TScript::SetWait(EScriptWait type, TObjectInstance* object, int32_t frames)
     }
 }
 
-// REVSYNC: 0x00492d70 (single player). The buy/sell screen isn't ported,
-// so it is never in progress.
+// REVSYNC: 0x00492d70 (single player).
 bool TScript::WaitSatisfied(bool commanddone)
 {
     if (wait == EScriptWait::Frames && waitframes > 0)
@@ -422,7 +429,9 @@ bool TScript::WaitSatisfied(bool commanddone)
         return !PlayScreen.IsFading();
 
       case EScriptWait::BuySell:
-        return true;
+        // The shop is no longer in use (+0x1b0, 0x0049301d): its Exit, or
+        // the drawer closing.
+        return !BuySellPane.IsActive();
     }
     return true;
 }

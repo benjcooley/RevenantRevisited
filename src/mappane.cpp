@@ -1499,8 +1499,8 @@ TObjectInstance* TMapPane::FindObject(char *name, int32_t occurance, int32_t obj
 }
 
 // Retail drops the spoken lines and any open choices when the camera stops
-// following the player (SetCameraObject 0x004538d0, SetCameraPos 0x00453940).
-// (Retail also closes the buy/sell drawer there; not ported.)
+// following the player, and closes the play screen's drawer when it holds the
+// shop (SetCameraObject 0x004538d0, SetCameraPos 0x00453940).
 bool TMapPane::IsFollowingPlayer() const
 {
     return (centeron.flags & CENTERON_OBJ) && Player && centeron.obj == Player;
@@ -1514,10 +1514,17 @@ void TMapPane::SnapIfFollowing(const TObjectInstance* obj)
         centeron.flags |= CENTERON_SNAP;
 }
 
+void TMapPane::StopFollowingPlayer()
+{
+    DialogPane.ClearSpeech(false);
+    if (PlayScreen.Drawer() == TPlayScreen::EDrawer::BuySell)
+        PlayScreen.CloseDrawer();
+}
+
 void TMapPane::CenterOnObj(TObjectInstance* obj, uint32_t flags)
 {
     if (IsFollowingPlayer() && obj != Player)
-        DialogPane.ClearSpeech(false);
+        StopFollowingPlayer();
     centeron.obj = obj;
     centeron.flags = (flags & ~CENTERON_POS) | CENTERON_OBJ;
 }
@@ -1525,7 +1532,7 @@ void TMapPane::CenterOnObj(TObjectInstance* obj, uint32_t flags)
 void TMapPane::CenterOnPos(const S3DPoint& pos, int32_t level, uint32_t flags)
 {
     if (IsFollowingPlayer())
-        DialogPane.ClearSpeech(false);
+        StopFollowingPlayer();
     centeron.pos = pos;
     centeron.level = level;
     centeron.flags = (flags & ~CENTERON_OBJ) | CENTERON_POS;
