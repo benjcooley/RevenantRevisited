@@ -188,6 +188,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [-] | PROXIMITY, GIVE, GET, DEAD triggers: ported, but no shipped script declares one (module scripts and master.s) | 2026-10-05 |
 | [x] | Prototype variables (DATA blocks, `setprotovariable`, readers) | 2026-10-05 |
 | [x] | Commands for the opening, the doors and exits, movement (`goto*`, `face*`), `try`, `statmod`, `addat` ([forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §6) | 2026-10-05 |
+| [x] | From the NPC sweep: a `jump` or a taken choice lands as deep as its label sits (retail `Jump`: blocks no longer end at an inner IF's END and skip `CONTROL ON`/`SETCDVOLUME FULL`); a line starting with quoted text runs (`"TRAINING SWORD".DELETE`); `set` steps past its value ([forensics/SCRIPT_ENGINE.md](forensics/SCRIPT_ENGINE.md) §7, [forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §4) | 2026-10-05 |
 | [ ] | `lastattack` member (needs the combat track's attack result; Jong's training) | — |
 | [ ] | Mainline ImGui console panel (replaces threaded TConsolePane) | — |
 
@@ -206,6 +207,8 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [ ] | Retail shots S6 to settle colours, positions and hover behaviour | — |
 | [x] | The Keep's story chain plays end to end (headless, choices by key): opening; Rahul's death and Tendrick's scene (`ressexit` unlocked); DOOR1; Rand in the jail (`RandK`: looped choice, two menus, `TENDRICKSTATE = 1`); Tendrick in the throne room (`TendrickT`: four choices with loops, `Finish`, Locke to level 6); the level-6 scene (`GowE`: walks, `cast "electric bolt"`, Rand dies, fade, back to the Keep, `TENDRICKSTATE = 2`, `KeepExit` unlocked); menu saves at each step | 2026-10-05 |
 | [x] | Dialog text in Windows-1252 (`’` 0x92, `è`): the TrueType path decodes CP1252 and its atlases hold the printable repertoire ([../ui/TEXT_RENDERING.md](../ui/TEXT_RENDERING.md)) | 2026-10-05 |
+| [x] | NPC sweep (`tools/storytest`, [STORY_TESTING.md](STORY_TESTING.md) §7): the 32 forest and town DIALOG NPCs from `New Game1`, several key schedules and `MISTSTATE=6`; every block runs to its END except Jong1 (`lastattack`, T8) | 2026-10-05 |
+| [ ] | Some speakers hold the speech wait far past their line: Kylie1 (dancing, root `walk`) ~40 s a line and ~34 s for `PIVOT 50` (others 4–10 s); the slave camp's (level 46: Shegra, Slave1, Slave2, Druhgslave2 on `say`, Druhgslave3 on `try pick`) never get back to root. Suspected: the port's `Say` sets the action desired where retail calls `TryCommand` (`0x004db4d0`; DIALOG.md §6 deviation), so a say that can't start waits for the current animation; needs `TComplexObject::TryCommand` checked against retail (character/animation) | 2026-10-05 |
 
 **Exit:** Clicking an NPC brings up dialog; choice routes back to script branch.
 
