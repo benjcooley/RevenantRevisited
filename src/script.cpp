@@ -384,12 +384,18 @@ bool TScript::WaitSatisfied(bool commanddone)
 
       case EScriptWait::CharDone:
       {
+        // A complex object (a character) is done when it is back in its root
+        // state, or at the end of a loop of a looping animation; any other
+        // action holds the wait. A walk (goto) is a chain of non-looping
+        // steps, so the script waits for the arrival, not the first step.
         TObjectInstance* object = waitobject.Get();
         if (!object)
             return commanddone;
-        if (object->IsComplex() && static_cast<TComplexObject*>(object)->IsInRoot())
+        if (!object->IsComplex())
+            return object->CommandDone();
+        if (static_cast<TComplexObject*>(object)->IsInRoot())
             return true;
-        return object->CommandDone();
+        return (object->GetAniFlags() & AF_LOOPING) && object->CommandDone();
       }
 
       case EScriptWait::Say:

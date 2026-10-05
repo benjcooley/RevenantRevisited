@@ -1,0 +1,47 @@
+// TCharacter::Goto @ 0x004cedb0 -- retail disassembly (OR DH,0x10 = block flag 0x1000).
+004cedb0  SUB ESP,0xc
+004cedb3  PUSH EBX
+004cedb4  MOV EBX,dword ptr [ESP + 0x18]
+004cedb8  PUSH ESI
+004cedb9  MOV ESI,ECX
+004cedbb  LEA ECX,[ESP + 0x8]
+004cedbf  PUSH EDI
+004cedc0  MOV EDI,dword ptr [ESP + 0x1c]
+004cedc4  MOV EAX,dword ptr [ESI + 0x18]
+004cedc7  LEA EDX,[ESI + 0x10]
+004cedca  PUSH ECX
+004cedcb  PUSH EDX
+004cedcc  MOV dword ptr [ESP + 0x14],EDI
+004cedd0  MOV dword ptr [ESP + 0x18],EBX
+004cedd4  MOV dword ptr [ESP + 0x1c],EAX
+004cedd8  CALL 0x0046dc60
+004ceddd  ADD ESP,0x8
+004cede0  MOV ECX,ESI
+004cede2  PUSH EAX
+004cede3  CALL 0x004ce350
+004cede8  TEST EAX,EAX
+004cedea  JZ 0x004cee41
+004cedec  MOV EAX,dword ptr [ESI + 0xdc]
+004cedf2  MOV ECX,dword ptr [ESI + 0xe0]
+004cedf8  CMP EAX,ECX
+004cedfa  JNZ 0x004cee02
+004cedfc  MOV EAX,dword ptr [ESI + 0xd8]
+004cee02  MOV EDX,dword ptr [EAX + 0x60]
+004cee05  MOV ECX,dword ptr [ESI + 0x18]
+004cee08  OR DH,0x10
+004cee0b  MOV dword ptr [EAX + 0x38],EDI
+004cee0e  MOV dword ptr [EAX + 0x3c],EBX
+004cee11  MOV dword ptr [EAX + 0x40],ECX
+004cee14  MOV dword ptr [EAX + 0x60],EDX
+004cee17  MOV EAX,dword ptr [ESP + 0x24]
+004cee1b  TEST EAX,EAX
+004cee1d  JZ 0x004cee25
+004cee1f  MOV dword ptr [ESI + 0x288],EAX
+004cee25  PUSH EAX
+004cee26  PUSH EBX
+004cee27  PUSH EDI
+004cee28  PUSH ESI
+004cee29  MOV ECX,0x676e08
+004cee2e  CALL 0x00586680
+004cee33  POP EDI
+004cee34  POP ESI
