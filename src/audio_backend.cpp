@@ -459,6 +459,11 @@ void audio::StopSource(Source* src) {
     ma_sound_stop(&src->sound);
 }
 
+void audio::ResumeSource(Source* src) {
+    if (!src || !src->sound_inited) return;
+    ma_sound_start(&src->sound);
+}
+
 bool audio::IsPlaying(const Source* src) {
     if (!src || !src->sound_inited) return false;
     // ma_sound_is_playing wants a non-const pointer; the operation itself
