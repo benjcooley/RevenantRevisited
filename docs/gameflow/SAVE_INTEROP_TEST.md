@@ -47,6 +47,11 @@ variants at random, as retail does.
 
 ## 3. Differences to expect (all deliberate or retail behaviour)
 
+- **The test slots' thumbnails are blank** (solid magenta in `ss.bmp`):
+  `--savecycle-test` saves before the first frame is drawn, so there is no
+  picture to capture -- which is what keeps `Port Resave` comparable byte
+  for byte. Saves made in play (the menu, Quick Save) carry the game's
+  picture.
 - **Player flag `0x20` (AI)** is set in port saves, clear in retail's.
   Retail's `TObjectInstance::Load` takes that bit from the constructor,
   never from the file, so it can't change anything in retail.
