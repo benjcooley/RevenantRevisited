@@ -16,6 +16,9 @@ Answer inline (or in chat) and the owning doc gets updated.
 | S5 | Misthaven by day, `RealTimeLight=No`, Locke facing each screen diagonal | which side the character key light hits | LIGHTING_FIDELITY |
 | S6 | Note the retail ini's `NoTexOverlay`. Then: Locke's "Where am I?" (`I1LOC00`); Sardok's "Welcome back from the dead, Revenant." (`I1SAR00`); the three choices with the side panel open and closed (V); the mouse over "Who am I?" then off the list; a click on choice 3 and the next ½ s; Tendrick's first line; while choosing, Up Up Down Enter | box colours (the port reads Locke/choices as azure 60,175,255, Sardok green, Tendrick yellow), positions, Ring portrait, typeface and shadow, hover/click behaviour and sounds, slide on pick | [forensics/DIALOG.md](forensics/DIALOG.md) §4.2, §4.4 |
 | S7 | Load the port-written save slots (`Port Resave`, `Port Played`, `Port New Game`) and re-save | retail reads port saves | [SAVE_INTEROP_TEST.md](SAVE_INTEROP_TEST.md) §4 |
+| S8 | A door transition frame by frame: the KEEPIN door into the Keep (`0_1_23`) | the fade's seven cover levels, the two-tick black hold, whether the cursor is covered | [forensics/SCREEN_SYSTEM.md](forensics/SCREEN_SYSTEM.md) §2.6 |
+| S9 | Any door or teleport with music playing | whether the music dips during a screen fade | SCREEN_SYSTEM §2.6 |
+| S10 | A click and a key press during the opening, before the first line | whether it fades out and restarts without the intro (PlayScreen `+0x5dc`) | SCREEN_SYSTEM §2.6 |
 
 ## Dialog ([forensics/DIALOG.md](forensics/DIALOG.md) §7)
 
@@ -122,3 +125,17 @@ Answer inline (or in chat) and the owning doc gets updated.
 39. armor.def's `FAT %15`, `LEV n` and the trailing `%` in `Hands 15%`
     never worked as written, and `Fatigue %4` scales current fatigue.
     What were they meant to do?
+
+## Screens and fades ([forensics/SCREEN_SYSTEM.md](forensics/SCREEN_SYSTEM.md) §5)
+
+40. Death screen Restart switches back to PlayScreen with the start name
+    already cleared, so after a loaded game it falls through to a new
+    game. Intended, or did Restart reload the last save?
+41. Event code `0x103` and the pre-initialized screen `DAT_0065bb14`:
+    what were they for?
+42. In single player, a block that fades the screen out and ends without
+    fading in leaves it black (retail's `End` fades back in only for a
+    multiplayer host). Intended? (All 79 shipped pairs are balanced.)
+43. Was PlayScreen's restart flow (`+0x5dc`: stop the player's script,
+    fade out, load `newgame`, fade in) the "skip the opening" path?
+44. Was the music meant to dip with screen fades?
