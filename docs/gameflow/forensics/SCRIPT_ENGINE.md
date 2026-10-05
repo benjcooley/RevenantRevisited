@@ -163,6 +163,13 @@ Retail:
   ended on any finished animation until 2026-10-05, so a script walk
   (`goto`, `gotorelative…`) went on after its first step
   ([COMMAND_SYSTEM.md](COMMAND_SYSTEM.md) §6.5);
+- which lines run: `Continue` hands a line that starts with an identifier,
+  a keyword or quoted text (token types 4, 3, 2) to the interpreter, skips a
+  `:label` line, and reports anything else as "Bad token in trigger
+  block". The port left quoted text out until 2026-10-05, so forest.s's
+  `"TRAINING SWORD".DELETE` (MUDOKON1's ALWAYS block, line 1907, run once
+  Jong has set `EQUIPSTATE`) printed that error on the text bar instead of
+  running;
 - object names and expressions (`if`, `while`): `src/scriptvalue.cpp`,
   [COMMAND_SYSTEM.md §2.4](COMMAND_SYSTEM.md);
 - the trigger scan with the ALWAYS interrupt/resume (`+0xac`/`+0xb0`):

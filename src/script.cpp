@@ -537,7 +537,12 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
         {
             t.SkipLine();
         }
-        else if (t.Type() == TKN_IDENT || t.Type() == TKN_KEYWORD)
+        // REVSYNC: Continue @ 0x004933d0 hands a line starting with an
+        // identifier, a keyword or quoted text to the interpreter, which
+        // takes a quoted name as the context: forest.s's
+        // `"TRAINING SWORD".DELETE`. The 1998 test left quoted text out
+        // ("Bad token in trigger block").
+        else if (t.Type() == TKN_IDENT || t.Type() == TKN_KEYWORD || t.Type() == TKN_TEXT)
         {
             TraceLine(context, text + thisline);
             int32_t bits = CommandInterpreter(context, t, 0, this);  // ****** MAIN COMMAND PROCESSOR HERE *****
