@@ -49,8 +49,7 @@ TSector::TSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory)
 
 TSector::~TSector()
 {
-    if (walkmap)
-        delete walkmap;
+    delete[] walkmap;
 
     for (int32_t c = 1; c < NUMOBJSETS; c++)
         objsets[c-1].Clear();

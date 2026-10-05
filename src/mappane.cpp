@@ -79,13 +79,16 @@ inline int32_t ScreenGrid(int32_t n, int32_t s)
 
 // Fast mapindex → TObjectInstance* lookup. Holders store the integer
 // mapindex and resolve through MapPane.GetInstance() each frame (see
-// mappane.h). The map is a function-local static so it's constructed on
-// first use regardless of global-init order. Kept in sync exclusively by
+// mappane.h). Constructed on first use regardless of global-init order, and
+// never destroyed: objects deleted during static destruction (maps or
+// players a FatalError/exit path didn't shut down) still unregister here,
+// after a destructed function-local static would be gone. Same reasoning as
+// TSafeObjectBase's registry (saferef.h). Kept in sync exclusively by
 // TObjectInstance::SetMapIndex() and TObjectInstance::~TObjectInstance().
 static std::unordered_map<int32_t, TObjectInstance*>& InstMap()
 {
-    static std::unordered_map<int32_t, TObjectInstance*> m;
-    return m;
+    static auto* m = new std::unordered_map<int32_t, TObjectInstance*>();
+    return *m;
 }
 
 void TMapPane::RegisterInstance(TObjectInstance* oi, int32_t index)
@@ -1737,23 +1740,21 @@ void WalkGridToPos(int32_t x, int32_t y, S3DPoint& pos)
 // General purpose handler for transfer, extract, clear etc
 void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
 {
-    // Sector resolver: try the active 3x3 streaming window first; fall
-    // back to MapManager.CurrentMap()->FindSector for everything outside
-    // that window. The window-first ordering keeps legacy code paths
-    // that expect sectors[][] to win unchanged; the MapManager fallback
-    // covers the new "no streaming" model where the window is empty.
-    auto find_sector = [this](int32_t sx, int32_t sy) -> TSector* {
+    // Sector resolver: the walkmaps an object touches are in its own map --
+    // its own sector (which may be one no map holds, e.g. a sector an editor
+    // command loaded on its own) and the loaded sectors of its level. Not
+    // the sector window or the current map: those hold another level's
+    // sectors at the same (sx, sy) whenever the object isn't on the level
+    // being played. (The window borrows from the current map, so for
+    // objects there this is the same lookup.)
+    TSector* const own = oi ? oi->GetSector() : nullptr;
+    const TGameMap* const map = oi ? MapManager.GetCached(oi->GetLevel()) : nullptr;
+    auto find_sector = [own, map](int32_t sx, int32_t sy) -> TSector* {
         if ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY)
             return nullptr;
-        const bool in_window =
-            sx >= sectorx && sx < sectorx + SECTORWINDOWX &&
-            sy >= sectory && sy < sectory + SECTORWINDOWY;
-        if (in_window)
-            if (TSector* s = sectors[sx - sectorx][sy - sectory])
-                return s;
-        if (TGameMap* m = MapManager.CurrentMap())
-            return m->FindSector(sx, sy);
-        return nullptr;
+        if (own && own->SectorX() == sx && own->SectorY() == sy)
+            return own;
+        return map ? map->FindSector(sx, sy) : nullptr;
     };
 
     // EXTRACT mode also wants to redraw the walkmap rect as part of the
@@ -1767,8 +1768,11 @@ void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
         // walkmap-local coords; recompute here once after the stamp.
         TGameMap::StampTileWalkmap(oi, mode, find_sector);
 
+        // RedrawWalkmapRect re-stamps the neighbours from the sector window,
+        // which holds the current map's sectors only; redrawing them into
+        // another level's sector would corrupt it.
         TObjectImagery* imagery = oi ? oi->GetImagery() : nullptr;
-        if (imagery)
+        if (imagery && map && map == windowmap.Get())
         {
             int32_t w, l, h;
             imagery->GetWorldBoundBox(oi->GetState(), w, l, h);
