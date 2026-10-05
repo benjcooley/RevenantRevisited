@@ -522,10 +522,19 @@ with the hash from `0x00499e90`:
 - Adler-32 (`0x0056ff60` init 1, `0x0056ff80` update; bytes are
   sign-extended, the sums reduced mod 65521 after each 5552-byte chunk),
 - over level, sector x, sector y and object count (int32 each),
-- then, for each character or player object in the sector, its
-  `SaveObject` bytes with save flags 1|2 (a player reduces to `ff ff`; no
-  inventories);
+- then, for each character or player object in the sector in slot
+  order, its `SaveObject` bytes with save flags 1|2 (a player reduces
+  to `ff ff` at its slot; no inventories);
 - a result of 0 becomes `0xf0f0f0f0`.
+
+`Load` keeps the file's value at `TSector+0xb4`; `Save` doesn't use it,
+and no other sector function reads it (what retail reads it for is
+open). `revsave.py statehash` reproduces the stored hash of all 558
+retail-written sectors of §12 and of 4,822 of the 4,823 hashed sectors
+in the shipped Ahkuilon base map; `46_6_9.dat` ships with a value that
+matches neither its contents nor a player in any of its empty slots. The
+base map also holds 27 version-1 sectors (levels 41, 42, 43, 46), which
+have no object block sizes.
 
 ### 11.7 Thumbnail `ss.bmp`
 
@@ -556,4 +565,5 @@ last three output columns read past x = 639 into the next row.
 | 275 retail working-set sectors (levels 0, 1, 2, 6) | written by retail during play |
 
 `tools/savefmt/revsave.py dump` decodes all of them field by field with
-no bytes left over.
+no bytes left over. The port-written test slots and the retail-side
+procedure are in [SAVE_INTEROP_TEST.md](../SAVE_INTEROP_TEST.md).

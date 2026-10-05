@@ -235,6 +235,7 @@ death, quit).
 | 2c ✓ | `TGameSession`, flow/PlayScreen integration, in-game requests, stand-ins removed | `--quickstart` and title New Game: Locke L1, 25/25 HP, in the Keep resurrection chamber (filmstrip); `--savecycle-test` round trip identical |
 | 2d | `TLoadScreen` + staged steps | loading bar matches retail; filmstrip |
 | 2e | Game time and the simulation tick into the session | time and time-of-day match retail (TIME.md) |
+| 2f ✓ | Save interop: every object class streams retail's layout (player objversion 15), sector state hash, `ss.bmp` thumbnail (SAVE_GAME §11) | retail `New Game1` loaded and re-saved: `game.sav` differs only in game time and the player's AI bit, 279 of 283 sectors equal ignoring constructor-owned flags; state hashes of all 558 retail sectors and 4,822 shipped base-map sectors reproduced; a port save re-saves byte-identical. In retail (dosbox-x): pending, [SAVE_INTEROP_TEST.md](SAVE_INTEROP_TEST.md) |
 
 - `IRuntimeMode` (game/editor) stays inside `TPlayScreen`: it is a
   presentation/input policy, and editor mode decides whether the session
