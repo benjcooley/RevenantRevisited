@@ -9,18 +9,18 @@ Answer inline (or in chat) and the owning doc gets updated.
 
 | # | Shot | Settles | From |
 |---|---|---|---|
-| S1 | Opening, Locke in the pit before he moves, `RealTimeLight=No`, `EnhancedLighting=No`, 640×480 | Classic lighting 1:1 | [LIGHTING_FIDELITY.md](../LIGHTING_FIDELITY.md) |
+| S1 | **Taken 2026-10-06:** `reference/opening/05_s1_pit.png` ([RETAIL_CAPTURE.md](RETAIL_CAPTURE.md) §3). Opening, Locke in the pit before he moves, `RealTimeLight=No`, `EnhancedLighting=No`, 640×480 | Classic lighting 1:1 | [LIGHTING_FIDELITY.md](../LIGHTING_FIDELITY.md) |
 | S2 | Same, `RealTimeLight=No`, `EnhancedLighting=Yes` | character overbright and key light | LIGHTING_FIDELITY |
 | S3 | Same, `RealTimeLight=Yes`, `EnhancedLighting=Yes` (the shipped default) | the triangle-grid look players remember | LIGHTING_FIDELITY |
 | S4 | S2 settings, Locke walked from the pit toward the wall torch, one shot per character width | how lights fall off on characters | LIGHTING_FIDELITY |
 | S5 | Misthaven by day, `RealTimeLight=No`, Locke facing each screen diagonal | which side the character key light hits | LIGHTING_FIDELITY |
-| S6 | Note the retail ini's `NoTexOverlay`. Then: Locke's "Where am I?" (`I1LOC00`); Sardok's "Welcome back from the dead, Revenant." (`I1SAR00`); the three choices with the side panel open and closed (V); the mouse over "Who am I?" then off the list; a click on choice 3 and the next ½ s; Tendrick's first line; while choosing, Up Up Down Enter | box colours (the port reads Locke/choices as azure 60,175,255, Sardok green, Tendrick yellow), positions, Ring portrait, typeface and shadow, hover/click behaviour and sounds, slide on pick | [forensics/DIALOG.md](forensics/DIALOG.md) §4.2, §4.4 |
+| S6 | **Partly taken 2026-10-06** (`NoTexOverlay=No`; RETAIL_CAPTURE §3, shots 06–09: "Where am I?", Sardok's line, the choices with the side panel open, Tendrick's lines). Still wanted: the side panel closed, the hover, the click and the next ½ s, the keys. Note the retail ini's `NoTexOverlay`. Then: Locke's "Where am I?" (`I1LOC00`); Sardok's "Welcome back from the dead, Revenant." (`I1SAR00`); the three choices with the side panel open and closed (V); the mouse over "Who am I?" then off the list; a click on choice 3 and the next ½ s; Tendrick's first line; while choosing, Up Up Down Enter | box colours (the port reads Locke/choices as azure 60,175,255, Sardok green, Tendrick yellow), positions, Ring portrait, typeface and shadow, hover/click behaviour and sounds, slide on pick | [forensics/DIALOG.md](forensics/DIALOG.md) §4.2, §4.4 |
 | S7 | Load the port-written save slots (`Port Resave`, `Port Played`, `Port New Game`) and re-save | retail reads port saves | [SAVE_INTEROP_TEST.md](SAVE_INTEROP_TEST.md) §4 |
 | S8 | A door transition frame by frame: the KEEPIN door into the Keep (`0_1_23`) | the fade's seven cover levels, the two-tick black hold, whether the cursor is covered | [forensics/SCREEN_SYSTEM.md](forensics/SCREEN_SYSTEM.md) §2.6 |
 | S9 | Any door or teleport with music playing | whether the music dips during a screen fade | SCREEN_SYSTEM §2.6 |
 | S10 | A click and a key press during the opening, before the first line | whether it fades out and restarts without the intro (PlayScreen `+0x5dc`) | SCREEN_SYSTEM §2.6 |
 | S11 | Enter the Keep from outside through its gate (`keepin`, forest side) and capture the first second inside | how dark the arrival corner is (the port shows it black beside a lit hall) | [forensics/EXITS.md](forensics/EXITS.md) §7 |
-| S12 | In the Keep, open a chest and pick something up so two or three messages show over a light floor; then wait 10 s. Note `NoTexOverlay` | text bar colour (the code says gold 255,200,0), shadow, position (x 4, baseline 9, 12 px lines from the map's bottom edge), how many lines stay | [../ui/forensics/TTextBar_SPEC.md](../ui/forensics/TTextBar_SPEC.md) §7, §8 |
+| S12 | **Partly taken 2026-10-06:** "Locke entered The Keep" and the combat log over the Keep floor (RETAIL_CAPTURE §3, shots 05, 10, 11); still wanted: the 10 s wait. In the Keep, open a chest and pick something up so two or three messages show over a light floor; then wait 10 s. Note `NoTexOverlay` | text bar colour (the code says gold 255,200,0), shadow, position (x 4, baseline 9, 12 px lines from the map's bottom edge), how many lines stay | [../ui/forensics/TTextBar_SPEC.md](../ui/forensics/TTextBar_SPEC.md) §7, §8 |
 | S13 | In a played game (control on), default ini (no `NOTEXOVERLAYS`): ESC and the next ⅓ s frame by frame; the menu; Save Game with a few slots; Load Game from the menu, then Load Game on a slot and the next second; Quit Module's question; title Load Game and Options | the in-game chrome's translucency and fade, the popup's look, the list's scrollbar and selection, the in-game load's progress popup | [forensics/INGAME_MENU.md](forensics/INGAME_MENU.md) §4.2, §5, §9 |
 | S14 | In town (Misthaven), talk to Elahni (potions) with some gold, default ini: Buy Items and the panel as it opens; the mouse over the second row; a click on the first row; Buy (the gold and her line); the ↓ arrow; Exit and the next second | the shop's fonts, colours (names violet 130,13,197, hover 230,150,255, selected 200,83,255; gold and labels 255,186,0; stat lines grey), row positions, the icons; whether the bottom bar comes back after Exit | [../ui/forensics/BuySellScreen_SPEC.md](../ui/forensics/BuySellScreen_SPEC.md) §4, §8, §1 |
 | S15 | Sell Items at Elahni with potions in the pack, in a bag and in a belt pouch; then at Cronus (armor) with a worn and an unworn piece; sell one of each | which items a Sell shop lists (bags, belt pouches, worn armor), the sell prices (Value × 0.3) | BuySellScreen_SPEC §6.3, §6.4 |
@@ -203,7 +203,9 @@ Answer inline (or in chat) and the owning doc gets updated.
 55. Enter opens a "Message: " prompt in single player too: `@` lines run a
     script line on Locke and words like `alchemy` or `abracadabra` toggle
     cheats. Was that meant to ship, and should the port keep it? (Also,
-    hiding the bar runs whatever was half-typed.)
+    hiding the bar runs whatever was half-typed.) Retail 2026-10-06: it
+    works in a single-player New Game, "Locke: alreadydead" then "Cheat
+    Enabled" (RETAIL_CAPTURE §2).
 56. Line types 2 (violet) and 4 (pink) have colours but no callers. What
     were they for?
 
