@@ -360,3 +360,19 @@ Answer inline (or in chat) and the owning doc gets updated.
      its start (town.s:2677) and again at its end (2778), where every other
      block sets it back to `FULL`; after talking to her the music stays at
      half volume until the next conversation. A typo for `FULL`?
+
+## The first fight ([../gameplay/forensics/PLAYER_INPUT.md](../gameplay/forensics/PLAYER_INPUT.md))
+
+130. In your session of 2026-10-05 the Short Sword drag logged `[drag]
+     promote inv slot=5` and then neither `DROP` nor `CANCEL`. Every
+     button release the game sees during a drag ends in one of those, and
+     headless the sword now equips when dropped on the hand slot or
+     anywhere on the paper doll. Where did you let go: on the doll, on the
+     hand slot, outside the window, or after switching to another app (the
+     port ignores mouse events while it isn't the active app)? If it
+     happens again, the log lines after `promote` will say.
+131. Retail's Rahul kills an unarmed Locke in two or three minutes when
+     the player does nothing (dosbox-x capture), and the Short Sword starts
+     in the pack, not the hand. Was the first fight meant to be hard to win
+     without equipping the sword, as the lesson that items have to be
+     equipped?
