@@ -64,12 +64,13 @@ with the test notes; a save made mid-scene restores mid-scene.
 Save is refused while control is off (a cutscene or conversation), as
 retail.
 
-## 5. The Keep chain (verified 2026-10-05)
+## 5. The Keep chain (verified 2026-10-05; the fight 2026-10-06)
 
 | Stage | Start | Commands | Ends with |
 |---|---|---|---|
 | Opening | `--quickstart` | opening input (OPENING_SEQUENCE.md) | `SardokR: END`; Rahul attacks |
 | Rahul, Tendrick's scene | post-opening save | `rahul.stat health = 0` | `ressexit.stat locked=0` (~100 s) |
+| Rahul by combat | post-opening save | input: `V`, the Equip tab (605,280), drag the Short Sword (525,456) onto the paper doll (545,175), right-click boots, pants, shirt (575, 368/412/456), `Enter`, `a`/`s`/`d` every 0.7 s ([../gameplay/forensics/PLAYER_INPUT.md](../gameplay/forensics/PLAYER_INPUT.md) §7) | Rahul `combat to dead` in ~25 s, then `ressexit.stat locked=0` |
 | Rand | same, after the scene | `player.pos 6280 4338 33 2; use RandK` | `set TENDRICKSTATE=1` |
 | Tendrick | Rand save | `player.pos 11973 9645 304 2; use TendrickT` | level 6 (`GowE`), back to the Keep, `TENDRICKSTATE = 2`, `KeepExit` unlocked |
 | Keep exit | Tendrick save | `use KeepExit` | level 0, outside the gate |
