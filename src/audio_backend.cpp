@@ -158,6 +158,10 @@ bool BindSoundToBuffer(audio::Source* src) {
         src->pcm->frames,
         src->pcm->bytes,
         /*allocationCallbacks*/ nullptr);
+    // The buffer must report the PCM's own rate: config_init leaves it 0,
+    // and the engine then plays the frames at its device rate -- a 22,050 Hz
+    // voice through a 44,100 Hz device came out an octave high.
+    bcfg.sampleRate = src->pcm->sample_rate;
     if (ma_audio_buffer_init(&bcfg, &src->buffer) != MA_SUCCESS) {
         log_error("audio: ma_audio_buffer_init failed");
         return false;
