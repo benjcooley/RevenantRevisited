@@ -123,6 +123,8 @@ What's broken / stubbed:
   headless, checkpoints, and the verified story chain.
 - [SAVE_INTEROP_TEST.md](SAVE_INTEROP_TEST.md) — saves between the port
   and retail.
+- [RETAIL_CAPTURE.md](RETAIL_CAPTURE.md) — driving the shipped game in the
+  dosbox-x lab for reference shots, and the opening's reference set.
 - [forensics/](forensics/) — retail behaviour per subsystem, with
   addresses.
 

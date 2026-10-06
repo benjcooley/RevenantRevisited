@@ -204,7 +204,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 |--------|------|--------------|
 | [x] | Retail `TDialogList` (base + module tables), `say`/`choice`/`wait response`, voices paced by their length ([forensics/DIALOG.md](forensics/DIALOG.md)) | 2026-10-05 |
 | [x] | Retail floating dialog pane: speech boxes, portrait ring, choices by key or mouse | 2026-10-05 |
-| [ ] | Retail shots S6 to settle colours, positions and hover behaviour | — |
+| [~] | Retail shots S6 to settle colours, positions and hover behaviour. Taken 2026-10-06 for lines, colours and the choice list ([RETAIL_CAPTURE.md](RETAIL_CAPTURE.md) §3–4): placement, ring and colours match retail; the text sits 2 px right and 3–4 px high (cross-track: the glyph walk's baseline). Hover, click and keys still to shoot | 2026-10-06 |
 | [x] | The Keep's story chain plays end to end (headless, choices by key): opening; Rahul's death and Tendrick's scene (`ressexit` unlocked); DOOR1; Rand in the jail (`RandK`: looped choice, two menus, `TENDRICKSTATE = 1`); Tendrick in the throne room (`TendrickT`: four choices with loops, `Finish`, Locke to level 6); the level-6 scene (`GowE`: walks, `cast "electric bolt"`, Rand dies, fade, back to the Keep, `TENDRICKSTATE = 2`, `KeepExit` unlocked); menu saves at each step | 2026-10-05 |
 | [x] | Dialog text in Windows-1252 (`’` 0x92, `è`): the TrueType path decodes CP1252 and its atlases hold the printable repertoire ([../ui/TEXT_RENDERING.md](../ui/TEXT_RENDERING.md)) | 2026-10-05 |
 | [x] | NPC sweep (`tools/storytest`, [STORY_TESTING.md](STORY_TESTING.md) §7): the 32 forest and town DIALOG NPCs from `New Game1`, several key schedules and `MISTSTATE=6`; every block runs to its END except Jong1 (`lastattack`, T8) | 2026-10-05 |
@@ -323,6 +323,15 @@ These items aren't part of any single track but block others:
       text bar each define the side tabs as 52 (`kSideTabsWidth`), and the
       dialog the status bar's bottom (0x70). Retail derives the text bar's
       rect from the panes (`TPlayScreen` layout `0x0047bc50`).
+- [ ] Text baseline in the canonical glyph walk — track ui (`font.cpp`).
+      The baseline is `cellY + ` the tallest printable-ASCII glyph's rise
+      `- kGdiTopLeading (2)`, a constant calibrated on the HUD's Arial
+      fonts; GDI's DT_TOP puts it at the font's `tmAscent` (OS/2
+      `usWinAscent` scaled). For the dialog's Times New Roman 20 that puts
+      every line 3–4 px above retail and 2 px right (measured against the
+      shipped game, [RETAIL_CAPTURE.md](RETAIL_CAPTURE.md) §4). The fix is
+      the font's own ascent in place of the constant, with each panel
+      re-checked against its retail shot.
 - [~] `TPlayScreen::HideLowerPanes`/`ShowLowerPanes` are stubs with no
       callers; retail hides and shows the text bar from its drawer states
       (`0x47b874`, `0x47b8d0`, `0x47b96b`) — track ui (HUD drawers). The
