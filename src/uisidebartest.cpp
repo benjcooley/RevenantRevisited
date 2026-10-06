@@ -649,6 +649,15 @@ static int32_t HitEquipSlot(int32_t x, int32_t y)
     return HitEquipSlotRect(x, y, slot, sx, sy) ? slot : -1;
 }
 
+// The equip pane's whole rect (top slot, 188x306), the area retail's
+// button-up bounds test covers (0x005363e0: 0 <= x < w, 0 <= y < h).
+static bool InEquipPane(int32_t x, int32_t y)
+{
+    const int32_t dw     = Display.Width();
+    const int32_t pane_x = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+    return x >= pane_x && x < pane_x + kPaneW && y >= 0 && y < kTopH;
+}
+
 bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
 {
     SHudState& s = GetHudState();
@@ -670,17 +679,16 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
             return true;
         }
 
-        // Drop targets in priority order: Equip (most specific) → BarInv →
-        // Inventory grid. First one to hit wins; the manager refuses a drop
-        // the destination can't take (an item that doesn't fit the slot).
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+        // Drop targets in priority order: Equip → BarInv → Inventory grid.
+        // First one to hit wins; the manager refuses a drop the destination
+        // can't take. The equip pane takes a drop anywhere on it (retail
+        // 0x005363e0): the item goes to its own slot, not the cell under
+        // the cursor.
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP &&
+            InEquipPane(x, y))
         {
-            const int32_t es = HitEquipSlot(x, y);
-            if (es >= 0)
-            {
-                UIDragState::CompleteDrag(EDragSource::Equip, es, true);
-                return true;
-            }
+            UIDragState::CompleteDrag(EDragSource::Equip, HitEquipSlot(x, y), true);
+            return true;
         }
         if (s.bottomBarOpen)
         {
@@ -706,23 +714,28 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         return true;
     }
 
-    // ---- Right-click: Use / Open-bag (retail eventType == 5) ---------
-    if (button == MB_RIGHTDOWN)
+    // ---- Right button up on a pack item: equip it ---------------------
+    // REVSYNC: InventoryPane MouseClick 0x00538210, button 5 (right up) with
+    // nothing held: the item goes to its own equipment slot, or the text bar
+    // says EQUIPUNABLE. Not ported: a talisman of the player's goes into his
+    // Spell Pouch instead, and the item info of "stats mode"
+    // (DAT_0065c9e0, 0x005496a0).
+    if (button == MB_RIGHTUP)
     {
+        if (UIDragState::IsActive())
+            return false;
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
         {
             const int32_t slot = HitInvSlot(x, y, s.inventoryPage);
             if (slot >= 0)
             {
-                // For the test harness, any right-clicked slot is treated
-                // as a bag-open toggle. Real impl would inspect the slot's
-                // item type: bag → swap inventoryContainer; consumable →
-                // Use(); equipment → SetInventorySlot to auto-equip.
-                const int32_t was = s.inventoryContainer;
-                s.inventoryContainer = (was == slot + 1) ? 0 : (slot + 1);
-                log_info("[ui-sidebar] right-click inv slot=%d -> container=%d (was %d, %s)",
-                         slot, s.inventoryContainer, was,
-                         s.inventoryContainer == 0 ? "back to root" : "opened bag");
+                TObjectInstance* item = Player ? Player->GetInventorySlot(slot) : nullptr;
+                if (item && item->ObjClass() != OBJCLASS_TALISMAN)
+                {
+                    const bool equipped = UIDragState::EquipInOwnSlot(item);
+                    log_info("[ui-sidebar] right-click inv slot=%d '%s' -> %s",
+                             slot, item->GetName(), equipped ? "equipped" : "not equipped");
+                }
                 return true;
             }
         }

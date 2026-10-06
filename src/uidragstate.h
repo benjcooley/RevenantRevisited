@@ -112,7 +112,15 @@ bool CompleteClick();
 // Drop on (dest, dest_slot). With `commit`, an item drag moves the item in
 // the main player's inventory when the destination takes it. Either way
 // the drag state returns to idle. Returns true if the drop was committed.
+// The equip pane takes a drop anywhere on it: the item goes to its own
+// slot, so `dest_slot` is ignored for EDragSource::Equip.
 bool CompleteDrag(EDragSource dest, int32_t dest_slot, bool commit);
+
+// Equip an item of the main player's pack or belt in its own equipment
+// slot (its EqSlot stat), as a drop on the equip pane or a right click on
+// the item does. An item with no slot puts EQUIPUNABLE on the text bar.
+// Returns true if the item was equipped.
+bool EquipInOwnSlot(TObjectInstance* item);
 
 // Force-cancel the active drag (e.g. ESC pressed, mouse-up over empty
 // area, etc.). No-op when not dragging.
