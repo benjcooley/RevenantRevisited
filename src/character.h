@@ -240,12 +240,15 @@ class TCharacter : public TComplexObject
       // REVSYNC: 0x004d6000 -- silence the voice and end the say action
       // Returns whether character is talking or not
     bool IsWalkMode() { if (root && 
-        ((IsCombat() && (root->Is("combat") || root->Is("comhand"))) ||
+        ((IsCombat() && (root->Is("combat") || root->Is("hand"))) ||
         (IsBowMode() && root->Is("bow")) ||
         root->Is("walk")) ) return true; return false; }
-      // Returns whether character is in walk mode
+      // Returns whether character is in walk mode. REVSYNC: the unarmed
+      // combat roots are "hand" and "handrun" (retail 0x004cf000 reads
+      // "hand" 0x005e064c, 0x004c9790 "handrun" 0x005e0610), not 1998's
+      // "comhand" / "comhandrun".
     bool IsRunMode() { if (root && 
-        ((IsCombat() && (root->Is("combatrun") || root->Is("comhandrun"))) ||
+        ((IsCombat() && (root->Is("combatrun") || root->Is("handrun"))) ||
         (IsBowMode() && root->Is("bowrun")) ||
         root->Is("run")) ) return true; return false; }
       // Returns whether character is in run mode

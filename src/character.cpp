@@ -3859,16 +3859,14 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
     }
     else
     {
-        // Default: retail just checks `root->action == ACTION_COMBAT`
-        // and rejects on a single specific transition-state name we
-        // haven't recovered (DAT_005e0318). Until that string is
-        // identified, only enforce the action gate so we don't
-        // accidentally reject legitimate combat states.
+        // Default: the root must be a combat root, and not one still
+        // named "walk" (retail 0x4d12bf: root action 3, then Is(DAT_005e0318
+        // = "walk") rejects).
         if (!root) { note_reject("default-mode no root"); return false; }
         if (root->action != ACTION_COMBAT)
             { note_reject("default-mode !ACTION_COMBAT"); return false; }
-        // TODO retail: DAT_005e0318 transition-state reject (was guessed
-        // as "comhand" — that guess was rejecting Locke's "hand" root).
+        if (root->Is("walk"))
+            { note_reject("default-mode walk root"); return false; }
     }
 
     // CA_PLAYANIM gating (retail 0x4d12ef-0x4d1349)
