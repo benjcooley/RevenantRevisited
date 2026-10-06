@@ -1648,18 +1648,77 @@ void TPlayScreen::Joystick(int32_t key, bool down)
     TScreen::Joystick(key, down);
 }
 
-// REVSYNC: Command @ 0x0047cf40. Every command is held back while control is
-// off (the global control-off flag DAT_00666924, 0x0047d009), so none of
-// these work in a cutscene or a conversation.
-// TODO(port): the rest of the GAMECOMMAND dispatch (combat / inventory /
-// spells / dodge / leap / etc.) still lives in the game mode's HandleKey;
-// tracked alongside the player-input revival.
+// REVSYNC: Command @ 0x0047cf40, the control map's commands (a key's down
+// command, or its up command on release). Every command is held back while
+// control is off (the global control-off flag DAT_00666924, 0x0047d009), so
+// none of these work in a cutscene or a conversation. The port's command
+// numbers are the 1998 table's (playscreen.h), not retail's; each case names
+// retail's. Block and leap are held controls UpdateMove polls (retail
+// 0x0047de30), so their commands do nothing here, as in 1998.
+// TODO(port): the inventory, spell (INVOKE*), use / get and bow commands.
 void TPlayScreen::Command(GAMECOMMAND command)
 {
     if (!controlon)
         return;
     switch (command)
     {
+    case GAMECMD_COMBAT:            // 1: BeginFighting(0, ACTION_COMBAT) / EndFighting
+        if (Player)
+        {
+            if (Player->IsCombat()) Player->EndCombat();
+            else                    Player->BeginCombat();
+        }
+        break;
+    case GAMECMD_SIDEPANEL:
+        ToggleUISidebarPanel();
+        break;
+    case GAMECMD_BOTTOMPANEL:
+        // Command 5 toggles the bottom drawer: with the shop in it, that
+        // closes the shop.
+        if (Drawer() == EDrawer::BuySell)
+            CloseDrawer();
+        else
+            ToggleUIBottomPanel();
+        break;
+    case GAMECMD_MOVEDOWN:          // 0x4a / 0x4b: the run key's down and up
+    case GAMECMD_MOVEUP:
+        // The mode follows the held flags: run, else sneak, else walk.
+        // Retail's sneak is a toggle of its own (case 3, 0x004cf2e0); the
+        // port's control table is 1998's, where sneak is held like run.
+        if (Player)
+        {
+            uint32_t state, changed;
+            ControlMap.GetCommandFlags(state, changed);
+            if (state & CMDFLAG_RUN)        Player->SetRunMode();
+            else if (state & CMDFLAG_SNEAK) Player->SetSneakMode();
+            else                            Player->SetWalkMode();
+        }
+        break;
+    case GAMECMD_SWING:             // 0x21-0x23: ButtonAttack(1..3) 0x004d2480
+    case GAMECMD_THRUST:
+    case GAMECMD_CHOP:
+        if (Player)
+        {
+            const int32_t button = command - GAMECMD_SWING + 1;
+            const bool ok = Player->ButtonAttack(button);
+            log_info("[input] attack button %d -> %s", button, ok ? "started" : "refused");
+        }
+        break;
+    case GAMECMD_COMBO1:  case GAMECMD_COMBO2:  case GAMECMD_COMBO3:
+    case GAMECMD_COMBO4:  case GAMECMD_COMBO5:  case GAMECMD_COMBO6:
+    case GAMECMD_COMBO7:  case GAMECMD_COMBO8:  case GAMECMD_COMBO9:
+    case GAMECMD_COMBO10: case GAMECMD_COMBO11: case GAMECMD_COMBO12:
+        if (Player)         // 0x24-0x2f: ButtonAttack(4..15)
+            Player->Combo(command - GAMECMD_COMBO1 + 1);
+        break;
+    case GAMECMD_DODGE:
+        if (Player)
+            Player->Dodge();
+        break;
+    case GAMECMD_JUMP:
+        if (Player)
+            Player->Jump();
+        break;
     case GAMECMD_GAMEOPTIONS:       // 0x52: 0x0047e700
         ingamemenu->OpenOptions();
         break;
@@ -1702,31 +1761,18 @@ void TPlayScreen::PlayMovie(const char* path)
     movie.Open(path);           // one that can't play ends at once
 }
 
+// REVSYNC: UpdateMove = retail 0x0047de30. Each tick it reads the held
+// command flags: direction (Go / Leap), block, and, with no direction held,
+// a Stop. The movement mode is not here: run and sneak change on their
+// keys' commands (Command, GAMECMD_MOVEDOWN / MOVEUP). `changed` is not a
+// per-tick edge mask: the control map only ever ORs bits into it (retail
+// 0x0065a9c8 too), so it reads "a held control changed at some point".
 void TPlayScreen::UpdateMove()
 {
     if (!Player) return;
 
     uint32_t state, changed;
     ControlMap.GetCommandFlags(state, changed);
-
-    // Run / sneak mode toggles. The 'R' and 'S' (in sneak-mode binding)
-    // keys carry a CMDFLAG_RUN / CMDFLAG_SNEAK bit alongside their
-    // GAMECMD_MOVEDOWN dispatch -- ControlMap maintains the bit while
-    // held, and `changed` flags the bits that flipped this poll. Press
-    // edge -> swap the player's root animation to run/sneak; release
-    // edge -> swap back to walk. Both keyboard direction keys AND the
-    // mouse walk-to path then naturally pick up the new root, so
-    // hold-R + right-click runs toward the cursor, etc.
-    if (changed & CMDFLAG_RUN)
-    {
-        if (state & CMDFLAG_RUN) Player->SetRunMode();
-        else                     Player->SetWalkMode();
-    }
-    if (changed & CMDFLAG_SNEAK)
-    {
-        if (state & CMDFLAG_SNEAK) Player->SetSneakMode();
-        else                       Player->SetWalkMode();
-    }
 
     // Synthesize diagonal flags from adjacent cardinals so keyboards
     // without a Home / PgUp / End / PgDn cluster can still walk
