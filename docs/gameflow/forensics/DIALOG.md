@@ -749,6 +749,10 @@ Deviations (`REVSYNC`-noted in the code where they live):
 - **Font:** Times New Roman 20 is drawn with Tinos 20 (its metric-compatible
   open sibling of Arimo), antialiased, through the canonical glyph walk.
   Retail's GDI text was aliased; the chroma-key fringe is not reproduced.
+  Against the shipped game (2026-10-06, [../RETAIL_CAPTURE.md](../RETAIL_CAPTURE.md)
+  §4) the entries, ring and colours land where retail's do; the text sits
+  2 px right and 3–4 px high, from the glyph walk's baseline constant
+  (BURNDOWN, cross-track), and reads lighter than retail's aliased strokes.
 - **Time-based drawing.** Fades, slides and highlights step per tick as
   retail's do; each frame draws them `TTime::LegacyFrameFraction()` of the
   way into the next step. Slide positions round from that continuous value.
