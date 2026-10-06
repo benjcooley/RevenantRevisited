@@ -7,9 +7,12 @@
 
 #include "audio_backend.h"
 #include "cursor.h"
+#include "dialog.h"
 #include "invslot.h"
 #include "logging.h"
 #include "player.h"
+#include "revenant.h"   // DialogList, TextBar
+#include "textbar.h"
 
 #include <cstdlib>
 
@@ -78,16 +81,11 @@ bool CommitMove(TObjectInstance* item, EDragSource src, int32_t srcIdx,
     if (src == dst && srcIdx == dstIdx)
         return false;
 
+    // REVSYNC: TEquipPane::MouseClick 0x005363e0, button up. A held pack or
+    // belt item goes to its own slot wherever it is let go on the pane; an
+    // item held from the pane itself is just let go.
     if (dst == EDragSource::Equip)
-    {
-        if (src == EDragSource::Equip)
-        {
-            if (!player->CanEquip(item, dstIdx))
-                return false;
-            player->Equip(nullptr, srcIdx);
-        }
-        return player->Equip(item, dstIdx);
-    }
+        return src != EDragSource::Equip && EquipInOwnSlot(item);
 
     const int32_t to = CarriedSlotOf(dst, dstIdx);
     if (to < 0)
@@ -119,6 +117,29 @@ constexpr const char* kActionSound = "data/open.wav";
 
 // ---------------------------------------------------------------------------
 SUIDragState& Get() { return g_state; }
+
+// REVSYNC: the "equip it" of the equip pane's button up (0x005363e0) and the
+// inventory's right button up (0x00538210): the item's "eqslot" stat names
+// its slot; CanEquip (0x00519300), then Equip (0x005199b0). With no slot,
+// the EQUIPUNABLE line goes to the text bar. Not ported: the item's
+// class sound after equipping (0x00473a10), and the walk-root refresh
+// (SetWalkMode 0x004cf000) after equipping a light source, which needs the
+// torch roots (GetTorchRoot, TPlayer vtable +0x30c).
+bool EquipInOwnSlot(TObjectInstance* item)
+{
+    TPlayer* player = Player;
+    if (!player || !item || item->GetOwner() != player)
+        return false;
+    if (item->FindStat("EqSlot") < 0)
+    {
+        TextBar.Print("%s", DialogList.GetLine("EQUIPUNABLE"));
+        return false;
+    }
+    const int32_t slot = item->GetStat("EqSlot");
+    if ((uint32_t)slot >= NUM_EQ_SLOTS || !player->CanEquip(item, slot))
+        return false;
+    return player->Equip(item, slot);
+}
 
 bool BeginDrag(EDragSource src, int32_t slot_idx,
                TObjectInstance* item,
@@ -242,13 +263,17 @@ bool CompleteDrag(EDragSource dest, int32_t dest_slot, bool commit)
     ClearDragBitmap();
 
     // Spell-book drags carry no item; the drop target applies them.
+    TObjectInstance* const item = g_state.item.Get();
     if (commit && oldSrc != EDragSource::SpellPane)
-        commit = CommitMove(g_state.item.Get(), oldSrc, oldIdx, dest, dest_slot);
+        commit = CommitMove(item, oldSrc, oldIdx, dest, dest_slot);
 
     if (commit)
     {
+        // An equip drop lands in the item's own slot, not the cell under it.
+        const int32_t landed = (dest == EDragSource::Equip && item)
+            ? item->InventNum() - kInvSlotEquipFirst : dest_slot;
         log_info("[drag] DROP %s slot=%d -> %s slot=%d",
-                 SrcName(oldSrc), oldIdx, SrcName(dest), dest_slot);
+                 SrcName(oldSrc), oldIdx, SrcName(dest), landed);
         audio::PlayOneShot(kActionSound);
     }
     else
