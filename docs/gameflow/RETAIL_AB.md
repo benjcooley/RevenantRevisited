@@ -187,3 +187,131 @@ from the top (forest.s: 68 labels, 52M of 57M instructions) — and the
 runtime's per-write dirty-page hook costs ~70% of the wall time (forest.s
 10.8 s with it, 3.2 s without). Setup (load + CRT init + checkpoint) 10 ms.
 The port: 0.7 s for all 29.
+
+### Target 2: speech duration — done
+
+```sh
+python3 tools/retail_ab/retail_ab.py say-duration
+```
+
+**Retail side** (`say_duration.py`): the original `TCharacter::Say`
+`0x004d0610` — `DialogLine` `0x00533dd0`, the action block constructor
+`0x004da9f0`, strdup and the x87 duration arithmetic run as original code —
+on a fixture speaker (zeroed object, synthetic vtable: Health `0x1c0`
+answers 100, TryCommand `0x218` records the action block). Single player,
+PlaySpeech and ShowDialog on. Recorded boundaries: the sound player's
+FindSound `0x0049c430` (the case decides whether the voice is found), Mount
+`0x0049b650`, Play `0x0049b990`, the sample length `0x0049c640` (the case's
+milliseconds) and `DialogPane.AddSpeech` `0x00535b90`. Each case runs twice:
+voice found (with its length) and not found. Compared: the action's `wait`,
+the ticks AddSpeech gets, and `strlen` of the `DialogLine` output.
+
+**Port side**: `DialogLine` and `TCharacter::SpeechTicks` (the duration
+rule, split out of `Say` for this) on the same inputs; the voice's length
+is `audio::DecodedLengthMs` of the shipped `.mp3` — what
+`TSoundPlayer::SampleLengthMs` measures. The port runs first and retail
+gets the port's lengths: Miles (`AIL_sample_ms_position`) doesn't run in
+the emulator, so whether the port's decoded length equals Miles' is **not**
+tested here.
+
+Retail's rule, confirmed: `frames ≥ 0` wins; a voice found with length
+L > 0 gives `12 − ftol(L × 0.001f × −24.0f)` = `12 + ⌊24L/1000⌋`; else
+`2 × strlen(line) + 36`. The voice counts whenever FindSound found it, even
+if it fails to load or play.
+
+**Cases**: every `say` of the module's scripts and `master.s` /
+`multiplayer.s` (1,753 lines; every one is `say TAG` with a voiced tag, no
+frames, no quoted text, no `choice`), as 1,545 distinct inputs; a sweep of
+the voice length over 0–30,000 ms (every millisecond); and 12 edge cases
+(given frames with and without a voice, odd/even/empty/one-character
+lines, Windows-1252 bytes, brackets, a `[me]` after a high byte, 255- and
+300-character lines, a missing voice).
+
+**Results** (case set `fb7744b1…` without edges): all 1,545 shipped inputs
+and all 30,001 sweep points match, voiced and unvoiced (voice lengths 339–
+14,811 ms). Edge cases: 8 of 12 match; the other 4:
+
+- `[[me]] and [chr]`, `é[me]`: retail's `DialogLine` copies the text as is
+  (the inverted lead-byte test, DIALOG.md §3.7, and a `[` after a high byte
+  is copied as that byte's trail byte); the port substitutes and unescapes
+  (a deliberate deviation, `dialog.cpp`), so it paces such a line 12 ticks
+  shorter. No shipped line has a `[`: the shipped run is the evidence.
+- 255 and 300 characters: retail faults. `DialogLine` copies into a
+  256-byte stack buffer with no bound before its `strncpy(n − 1)`, so a line
+  of 255 bytes or more overwrites its return address. No shipped line is
+  that long. The port truncates; a retail hazard, not to copy.
+
+**Speed**: 71 cases/s (1,558 cases in 22 s, 31,557 `Say` calls with the
+sweep; ~0.7 ms per call); the port 1 s.
+
+### Target 3: dialog layout — done
+
+```sh
+python3 tools/retail_ab/retail_ab.py dialog-layout
+```
+
+**Retail side** (`dialog_layout.py`): the original pane pulse `0x005351d0`
+once per tick — every entry's pulse `0x005348f0`, the layout, the deletion
+of faded entries (original destructor `0x005343e0`, free, and the entry
+array's Remove `0x0041cb80`), the base `TButtonPane` pulse `0x00435d70` —
+and the original `Dismiss` `0x00534a40` for a case's dismiss events. The
+pane is a zeroed fixture with its entry array from the original
+TPointerArray constructor and Add; the geometry globals are the case's
+(map view `0x006668e0/e4/e8`, side tabs `0x0065be5c`, status bar
+`0x0065a8c8/d0`). Entries are 0x160-byte records from the original
+allocator, set as `AddSpeech`'s constructor call sets them (base and offset
+−10000, width 400, fade 0 toward 12, one text) with the height the port
+measured for the same texts (the retail constructor wraps with GDI fonts).
+Recorded boundary: the destructor's screen invalidate `0x004aacb0`.
+
+**Port side**: a fresh `TDialogPane` (`UseFont(nullptr, 20)`: the Dialog
+line height, texts breaking only at their `\n`), entries through the new
+`TDialogPane::AddEntry` (what `AddSpeech` and `ShowResponses` now share),
+`TDialogPane::Pulse` per tick, and each entry's `Placement()`.
+
+**Cases**: 54 timelines on the Classic geometry (640×480 map view, side
+tabs 52, status bar 0x70): for the NPC stack and the player stack, 1–8
+entries added together (the oldest leaves first: every departure restacks
+the rest), staggered by 6 ticks (arrivals push the player stack up while
+it slides), and newest-first; same-tick expiries; dismissals in the middle
+of a slide; both stacks interleaved; no-timeout entries. Heights 44–80.
+
+**Results**: every entry's lifetime, base, offset, target, 16.16 position,
+step, dismissed flag and fade are identical at every tick in all 54
+timelines (18,139 entry-ticks). The time-based presentation interpolates
+between these tick states, so it agrees with retail at tick boundaries.
+One difference (30 instants in 16 timelines): which entries still exist
+the tick after a group of neighbours fades out together. Retail's deletion
+loop (`0x005353fb`) advances its index after Remove compacts the array, so
+it deletes every other one of them per tick; the port deletes them all at
+once. They are faded out (fade 0) and hold no slot, so nothing on screen
+differs. Not ported (no visible effect).
+
+**Speed**: 51 cases/s (54 cases, 1.1 s; ~0.06 ms per entry-tick); port
+0.6 s.
+
+### What the emulator lacks for the rest (the trigger test, the command interpreter)
+
+- **The trigger test** (`0x004927b0`) reads the player (`0x00667fcc`:
+  position, name), the owner's level, the object list for CUBE
+  (`0x00452480`, every character on the owner's level) and object
+  existence (`0x00452690`). It needs fixture objects with the right
+  instance layout (name `+0x38`, position `+0x10..+0x18`, level `+0x0e`)
+  and either the map's object enumeration as a boundary or a small object
+  table; no new emulator capability, but a fixture world of a few objects.
+- **`Continue` and the run loop** (needed to settle the label-depth
+  question of target 1): the command interpreter `0x0041e8e0` runs every
+  line, so a fixture must either stub every command a block uses (as
+  recorded boundaries) or run the real ones, which touch most of the game.
+  A per-command boundary table is the practical route.
+- **The command interpreter's argument parsing** (`0x0041e8e0`): the
+  command table and each command's parse run before its effect, but the
+  effects are in the same functions; a named build that returns after the
+  parse (an assembly patch per command family) would isolate it.
+- **Speed**: the runtime tracks dirty pages with a Python callback on
+  every guest write; it is ~70% of the script-parse wall time (forest.s:
+  10.8 s with it, 3.2 s without). Unicorn 2.1's native copy-on-write
+  memory snapshot (`UC_CTL_CONTEXT_MEMORY`) would remove it, but it
+  conflicts with the runtime's VirtualAlloc mapping restore
+  (`memory.py restore_mappings`); a core change for later, with every
+  track's tests.

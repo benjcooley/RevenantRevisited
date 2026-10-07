@@ -10,10 +10,16 @@
 
 #include "retailab.h"
 
+#include "audio_backend.h"
+#include "character.h"
+#include "dialog.h"
 #include "logging.h"
 #include "parse.h"
+#include "playscreen.h"
 #include "script.h"
 #include "textencoding.h"
+
+#include <optional>
 
 #include <cctype>
 #include <cstdarg>
@@ -126,14 +132,19 @@ void WriteErrors(JsonOut& j, size_t from, size_t to = size_t(-1))
 
 // ---- Cases ---------------------------------------------------------------
 
+// One case per line, tab-separated: the name, then the target's fields.
 struct Case
 {
     std::string name;
-    std::string path;
-    std::string filename;
+    std::vector<std::string> fields;
+
+    [[nodiscard]] const std::string& Field(size_t i) const
+    {
+        static const std::string none;
+        return i < fields.size() ? fields[i] : none;
+    }
 };
 
-// One case per line: name <TAB> path <TAB> filename.
 bool ReadCases(const std::string& file, std::vector<Case>& cases)
 {
     std::ifstream in(file);
@@ -147,13 +158,19 @@ bool ReadCases(const std::string& file, std::vector<Case>& cases)
         Case c;
         std::istringstream fields(line);
         std::getline(fields, c.name, '\t');
-        std::getline(fields, c.path, '\t');
-        std::getline(fields, c.filename, '\t');
-        if (c.filename.empty())
-            c.filename = c.name;
+        for (std::string field; std::getline(fields, field, '\t');)
+            c.fields.push_back(field);
         cases.push_back(c);
     }
     return true;
+}
+
+std::string FromHex(const std::string& hex)
+{
+    std::string out;
+    for (size_t i = 0; i + 1 < hex.size(); i += 2)
+        out.push_back((char)std::stoi(hex.substr(i, 2), nullptr, 16));
+    return out;
 }
 
 bool ReadFile(const std::string& path, std::string& data)
@@ -307,17 +324,19 @@ void DumpProto(JsonOut& j, TScriptProto* proto, const std::string& source, size_
     j.End(']');
 }
 
+// Fields: path, filename.
 std::string ScriptParse(const Case& c, std::string& error)
 {
     std::string source;
-    if (!ReadFile(c.path, source))
+    if (!ReadFile(c.Field(0), source))
     {
-        error = "can't read " + c.path;
+        error = "can't read " + c.Field(0);
         return {};
     }
     std::vector<char> buffer(source.begin(), source.end());
     buffer.push_back('\0');
-    std::vector<char> filename(c.filename.begin(), c.filename.end());
+    const std::string& name = c.Field(1).empty() ? c.name : c.Field(1);
+    std::vector<char> filename(name.begin(), name.end());
     filename.push_back('\0');
 
     g_textbar.clear();
@@ -353,6 +372,216 @@ std::string ScriptParse(const Case& c, std::string& error)
             return {};
         }
     }
+    j.End(']');
+    j.End('}');
+    return j.str();
+}
+
+// ---- Target 2: how long Say holds a line ---------------------------------
+
+// What TCharacter::Say sets for one variant: the voice found with `voicems`
+// (its decoded length), or not found (0).
+void SayVariant(JsonOut& j, const char* key, int32_t frames, int32_t voicems, const char* line)
+{
+    const int32_t ticks = TCharacter::SpeechTicks(frames, voicems, line);
+    j.Key(key).Begin('{');
+    j.Field("wait", ticks);             // the say action's wait
+    j.Field("ticks", ticks);            // what DialogPane.AddSpeech gets (the same)
+    j.Field("line_len", (int32_t)strlen(line));
+    j.End('}');
+}
+
+// Fields: frames, sound name ("" = none), voice file ("" = none), text (hex),
+// and optionally a voice-length sweep "first:last:step" (ms).
+std::string SayDuration(const Case& c, std::string& error)
+{
+    const int32_t frames = std::stoi(c.Field(0));
+    const std::string& sound = c.Field(1);
+    const std::string& voicepath = c.Field(2);
+    const std::string text = FromHex(c.Field(3));
+
+    char line[256];
+    DialogLine(text.c_str(), line, sizeof(line));
+
+    // The voice's length as TSoundPlayer::SampleLengthMs measures it.
+    long long voicems = -1;
+    if (!voicepath.empty())
+    {
+        std::string bytes;
+        if (!ReadFile(voicepath, bytes))
+        {
+            error = "can't read " + voicepath;
+            return {};
+        }
+        const std::optional<uint32_t> ms =
+            audio::DecodedLengthMs(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size());
+        voicems = ms ? (long long)*ms : 0;
+    }
+
+    JsonOut j;
+    j.Begin('{');
+    j.FieldString("schema", "gameflow.sayduration.v1");
+    j.FieldString("side", "port");
+    j.FieldString("case", c.name);
+    j.Key("voice_ms");
+    if (voicems >= 0)
+        j.Value(voicems);
+    else
+        j.Null();
+    SayVariant(j, "novoice", frames, 0, line);
+    if (!sound.empty() && voicems >= 0)
+        SayVariant(j, "voice", frames, (int32_t)voicems, line);
+
+    const std::string& sweep = c.Field(4);
+    if (!sweep.empty())
+    {
+        int32_t first = 0, last = 0, step = 1;
+        if (sscanf(sweep.c_str(), "%d:%d:%d", &first, &last, &step) != 3 || step <= 0)
+        {
+            error = "bad sweep " + sweep;
+            return {};
+        }
+        j.Key("sweep").Begin('[');
+        for (int32_t ms = first; ms <= last; ms += step)
+            j.Value(TCharacter::SpeechTicks(frames, ms, line));
+        j.End(']');
+    }
+    j.End('}');
+    return j.str();
+}
+
+// ---- Target 3: the dialog pane's layout over ticks -----------------------
+
+// "Dialog": font.def height plus LEXTRA (DIALOG.md §4.2).
+constexpr int32_t kDialogLineHeight = 20;
+
+struct SLayoutEvent
+{
+    int32_t tick = 0;
+    bool add = true;
+    int32_t mode = 1;                   // add: 1 NPC, 2 player
+    int32_t life = -1;                  // add: ticks, -1 no timeout
+    std::vector<int32_t> lines;         // add: each text's line count
+    int32_t entry = 0;                  // dismiss: which (creation order)
+};
+
+// "tick:add:mode:life:n,n,...;tick:dismiss:entry;..."
+bool ParseLayoutEvents(const std::string& text, std::vector<SLayoutEvent>& events)
+{
+    std::istringstream all(text);
+    for (std::string item; std::getline(all, item, ';');)
+    {
+        std::vector<std::string> f;
+        std::istringstream parts(item);
+        for (std::string p; std::getline(parts, p, ':');)
+            f.push_back(p);
+        SLayoutEvent ev;
+        if (f.size() == 5 && f[1] == "add")
+        {
+            ev.tick = std::stoi(f[0]);
+            ev.mode = std::stoi(f[2]);
+            ev.life = std::stoi(f[3]);
+            std::istringstream counts(f[4]);
+            for (std::string n; std::getline(counts, n, ',');)
+                ev.lines.push_back(std::stoi(n));
+        }
+        else if (f.size() == 3 && f[1] == "dismiss")
+        {
+            ev.tick = std::stoi(f[0]);
+            ev.add = false;
+            ev.entry = std::stoi(f[2]);
+        }
+        else
+            return false;
+        events.push_back(ev);
+    }
+    return true;
+}
+
+// Fields: tick count, events. A fresh pane (not the game's), measuring with
+// the Dialog line height and no atlas: each text is as many lines as asked.
+std::string DialogLayout(const Case& c, std::string& error)
+{
+    const int32_t ticks = std::stoi(c.Field(0));
+    std::vector<SLayoutEvent> events;
+    if (!ParseLayoutEvents(c.Field(1), events))
+    {
+        error = "bad events " + c.Field(1);
+        return {};
+    }
+
+    TDialogPane pane;
+    pane.UseFont(nullptr, kDialogLineHeight);
+    std::vector<const TDialogEntry*> created;
+
+    JsonOut j;
+    j.Begin('{');
+    j.FieldString("schema", "gameflow.dialoglayout.v1");
+    j.FieldString("side", "port");
+    j.FieldString("case", c.name);
+    int32_t mx = 0, my = 0, mw = 0, mh = 0;
+    PlayScreen.GetMapViewRect(mx, my, mw, mh);
+    j.Key("map").Begin('[').Value(mx).Value(my).Value(mw).Value(mh).End(']');
+
+    std::vector<int32_t> heights;
+    j.Key("ticks").Begin('[');
+    for (int32_t tick = 0; tick < ticks; ++tick)
+    {
+        for (const SLayoutEvent& ev : events)
+        {
+            if (ev.tick != tick)
+                continue;
+            if (ev.add)
+            {
+                std::vector<std::string> texts;
+                for (int32_t n : ev.lines)
+                {
+                    std::string text = "line";
+                    for (int32_t i = 1; i < n; ++i)
+                        text += "\nline";
+                    texts.push_back(text);
+                }
+                const TDialogEntry& entry = pane.AddEntry(nullptr, (TDialogEntry::EMode)ev.mode, 0xffffff,
+                                                          texts, {}, ev.life);
+                created.push_back(&entry);
+                heights.push_back(entry.Height());
+            }
+            else if (ev.entry >= 0 && ev.entry < (int32_t)created.size())
+            {
+                for (const std::unique_ptr<TDialogEntry>& e : pane.Entries())
+                    if (e.get() == created[ev.entry])
+                        e->Dismiss();
+            }
+        }
+
+        pane.Pulse();
+
+        j.Begin('[');
+        for (const std::unique_ptr<TDialogEntry>& e : pane.Entries())
+        {
+            int32_t id = -1;
+            for (size_t i = 0; i < created.size(); ++i)
+                if (created[i] == e.get())
+                    id = (int32_t)i;
+            const TDialogEntry::SPlacement p = e->Placement();
+            j.Begin('{');
+            j.Field("id", id);
+            j.Field("ticksleft", p.ticksleft);
+            j.Field("basex", p.basex).Field("basey", p.basey);
+            j.Field("offx", p.offx).Field("offy", p.offy);
+            j.Field("targetx", p.targetx).Field("targety", p.targety);
+            j.Field("posx", p.posx).Field("posy", p.posy);
+            j.Field("stepx", p.stepx).Field("stepy", p.stepy);
+            j.FieldBool("dismissed", e->IsDismissed());
+            j.Field("fade", e->Fade());
+            j.End('}');
+        }
+        j.End(']');
+    }
+    j.End(']');
+    j.Key("heights").Begin('[');
+    for (int32_t h : heights)
+        j.Value(h);
     j.End(']');
     j.End('}');
     return j.str();
@@ -397,6 +626,10 @@ bool Run(int argc, char* argv[], int& exitcode)
     std::string (*dump)(const Case&, std::string&) = nullptr;
     if (target == "script-parse")
         dump = ScriptParse;
+    else if (target == "say-duration")
+        dump = SayDuration;
+    else if (target == "dialog-layout")
+        dump = DialogLayout;
     if (!dump)
     {
         fprintf(stderr, "retail-ab: unknown target '%s'\n", target.c_str());
