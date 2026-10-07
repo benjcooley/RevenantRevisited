@@ -108,12 +108,20 @@ static SMapCameraViewport ComputeMapCameraViewport(int32_t viewport_w, int32_t v
     // Higher render resolutions cover the framebuffer with that virtual view
     // instead of expanding world coverage and changing the ortho camera scale.
     // Non-4:3 modes crop one axis; they must not reveal extra world.
+    //
+    // The scale comes from the screen, not from the viewport: retail's map
+    // pane is a window onto the 640x480 screen, drawn 1:1, which the HUD's
+    // side panel and bottom bar only cover (docs/LIGHTING_FIDELITY.md §8.1).
+    // A viewport smaller than the screen (the play field) crops the view
+    // around its centre; it doesn't shrink the world into it.
     SMapCameraViewport v = {};
     if (viewport_w <= 0 || viewport_h <= 0)
         return v;
 
-    const float sx = float(viewport_w) / float(WIDTH);
-    const float sy = float(viewport_h) / float(HEIGHT);
+    const int32_t screen_w = Display.IsActive() ? Display.Width()  : viewport_w;
+    const int32_t screen_h = Display.IsActive() ? Display.Height() : viewport_h;
+    const float sx = float(screen_w) / float(WIDTH);
+    const float sy = float(screen_h) / float(HEIGHT);
     v.scale = (std::max)(0.0001f, (std::max)(sx, sy));
     v.offset_x = (float(viewport_w) - float(WIDTH) * v.scale) * 0.5f;
     v.offset_y = (float(viewport_h) - float(HEIGHT) * v.scale) * 0.5f;
