@@ -969,6 +969,10 @@ int32_t TScriptProto::ParseScript(TToken &t)
 {
     char buf[80];
     char trigname[20];
+    // A cube's corners, kept across triggers as retail's frame slots are: a
+    // cube that fails to parse is built from what the last one left (zero
+    // before the first).
+    int32_t cx1 = 0, cy1 = 0, cz1 = 0, cx2 = 0, cy2 = 0, cz2 = 0;
 
   // Clear current list of triggers (and variables) before we begin
     triggers.Clear();
@@ -1057,9 +1061,16 @@ int32_t TScriptProto::ParseScript(TToken &t)
 
             st.type = TRIGGER_CUBE;
 
+            // REVSYNC: 0x00495062 -- `CUBE [<name>|NULL] <x,y,z x,y,z>` or
+            // `CUBE [<name>|NULL] <region>`. NULL leaves the name empty; no
+            // name at all takes the prototype's. A region name instead of
+            // the corners is kept in `region` with an empty cube (retail's
+            // trigger test 0x004927b0 never reads it). The 1998 parser
+            // took NULL as a name and had no region form.
             if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
             {
-                strncpyz(st.name, t.Text(), MAXSCRIPTNAME);
+                if (!t.Is("NULL"))
+                    strncpyz(st.name, t.Text(), MAXSCRIPTNAME);
                 t.WhiteGet();
             }
             else
@@ -1068,17 +1079,23 @@ int32_t TScriptProto::ParseScript(TToken &t)
                 else st.name[0] = '\0';
             }
 
-            int32_t x1, y1, z1, x2, y2, z2;
+            if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
+            {
+                strncpyz(st.region, t.Text(), MAXSCRIPTNAME);
+                t.Get();
+            }
+            else
+            {
+                if (!Parse(t, "%i,%i,%i %i,%i,%i", &cx1, &cy1, &cz1, &cx2, &cy2, &cz2))
+                    ScriptError("Invalid cube trigger", t.LineNum());
 
-            if (!Parse(t, "%i,%i,%i %i,%i,%i", &x1, &y1, &z1, &x2, &y2, &z2))
-                ScriptError("Invalid cube trigger", t.LineNum());
-
-            st.cube.beg.x = min(x1, x2);
-            st.cube.beg.y = min(y1, y2);
-            st.cube.beg.z = min(z1, z2);
-            st.cube.end.x = max(x1, x2);
-            st.cube.end.y = max(y1, y2);
-            st.cube.end.z = max(z1, z2);
+                st.cube.beg.x = min(cx1, cx2);
+                st.cube.beg.y = min(cy1, cy2);
+                st.cube.beg.z = min(cz1, cz2);
+                st.cube.end.x = max(cx1, cx2);
+                st.cube.end.y = max(cy1, cy2);
+                st.cube.end.z = max(cz1, cz2);
+            }
         }
         else if (t.Is("ACTIVATE"))
         {
@@ -1194,6 +1211,15 @@ int32_t TScriptProto::ParseScript(TToken &t)
     free(text);
     text = newtext;
     len = bodylen;
+
+    // REVSYNC: 0x00494e20 (tail) -- the object's END ends its line.
+    t.WhiteGet();
+    if (t.Type() != TKN_RETURN)
+    {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "RETURN expected in %s:%s", filename ? filename : "(null)", t.Text());
+        ScriptError(msg, t.LineNum());
+    }
 
     t.LineGet();
 
