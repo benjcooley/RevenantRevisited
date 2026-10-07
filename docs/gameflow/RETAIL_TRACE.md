@@ -41,25 +41,33 @@ switch, so the two logs diff directly.
 
 ## 3. How
 
-- **Hook spec, not hand-written hooks.** A list of hooks (address, handler,
-  what to capture: `ecx` for `this`, stack arguments by index) generates
-  every wrapper in one build. `tools/retail_asm/function_hook.py` does one
-  fixed-message hook today; it grows into this.
-- **C runtime.** One log file opened once (`retail-trace.log` beside the
-  exe), line-buffered writes through the game's `CreateFileA` and
-  `WriteFile` imports. Formatting uses the game's own CRT `sprintf` (retail
-  links the MSVC CRT statically), so the hooks carry no printf of their own.
-  Handlers only read; they never change game state.
-- **The lab's compatibility patch.** The lab runs `Rev98.exe`, the shipped
-  exe with a 3-byte Win98 patch. The traced exe applies the same bytes and
-  ships as `C:\REVENANT\RevTrace.exe`; the shipped files are not touched.
-- **Verification.** The baseline still rebuilds byte-identical; a traced
-  build differs only in the hooks' spans and the wrapper area (the tool
-  checks this); and a guest run of the opening writes a trace whose
-  `[script]` lines match the port's for the same scene.
-- **Driving it.** `tools/retaillab/retail.py` gains `start --trace`
-  (upload and launch `RevTrace.exe`) and `trace pull` (fetch the log).
-  `tools/storytest` gains a retail/port trace diff.
+The trace runs inside the **in-process retail emulator**
+(`docs/RETAIL_AB_TESTING.md`, `tools/retail_runtime`), not the DOSBox lab:
+a named private build of the shipped exe, `function_hook.py` hooks, and the
+log captured as a virtual file. The DOSBox `RevTrace.exe` path (uploading a
+patched exe into the Win98 lab and pulling `retail-trace.log`) was a
+false start — see the note at the end of §5.
+
+- **Hook spec, not hand-written hooks.** A declarative list (address,
+  handler, what to capture: `ecx` for `this`, stack arguments by index)
+  generates every wrapper and one C translation unit in one build, added to
+  a named emulator build.
+- **C runtime.** One trace log, opened once and appended a line at a time so
+  a crash keeps what was written. Formatting uses the game's own statically
+  linked CRT `sprintf` (§5), so the handlers carry no printf of their own.
+  Every line is prefixed with the game tick (§5). Handlers only read game
+  memory; they never change game state.
+- **The hook targets** — the four addresses, the fields each handler reads,
+  the speaker-name getter, how to recover the current line from the script,
+  the CRT `sprintf`, the tick global, and which prologues relocate — are in
+  §5, confirmed from the retail decomp and ready for the named-build
+  workflow.
+- **Waiting on the emulator.** Full retail startup does not run in the
+  in-process emulator yet (`tools/retail_runtime/README.md`), so the
+  gameflow trace is blocked on that. The addresses and handler logic in §5
+  are ready to drop in once it boots.
+- **A/B through the emulator** is planned in
+  [RETAIL_AB.md](RETAIL_AB.md) (feature/gameflow, a1c3309).
 
 ## 4. Order
 
@@ -74,3 +82,25 @@ switch, so the two logs diff directly.
 The generated assembly (`recon/retail_asm/baseline`, ~160 MB) is not
 committed: `tools/retail_asm/reconstruct.py` rebuilds it from the retail
 exe. The tools and hook sources are.
+
+## 5. Hook targets, for the emulator's named-build workflow
+
+Confirmed from the retail decomp and disassembly (2026-10-07).
+
+| Line | Target | Handler reads | Prologue (stolen bytes) |
+|---|---|---|---|
+| `[dialog] <name> says: <text>` | `TCharacter::Say` `0x004d0610`, thiscall (text, frames, anim, sound) | `this`, arg0 text; skip NULL text | `mov eax,fs:[0]`, 6 bytes, relocatable |
+| `[script] <obj>: <line>` | `CommandInterpreter` `0x0041e8e0`, cdecl (context, token, abbrevlen, script) | arg0 context, arg1 token | `sub esp,0x5c; push ebx; mov ebx,[esp+0x64]`, 8 bytes, relocatable |
+| `[script] <obj>: trigger N of '<proto>' starts` | `TScript::Start` `0x00492440`, thiscall (proto, pos, priority), `ret 0xc` | `this` script, arg0 proto, arg1 pos | `push esi; mov esi,ecx; mov eax,[esi+0x48]`, 6 bytes, relocatable |
+| `[script] <obj>: trigger N ends` | `TScript::End` `0x00493e40`, thiscall | `this` script; log only if ip `+0x48` ≠ 0 | `push ecx/ebx/ebp/esi; mov esi,ecx`, 6 bytes, relocatable |
+
+None of the four prologues has relative control flow, so the stolen bytes run unchanged in a wrapper.
+
+- **Speaker / object name:** `*(char**)(obj+0x38)`, or "?" when NULL; this matches the port's `GetName()`. The context is `*(script+0x0c)`. The proto name is `*(char**)(proto+0x00)`; the field at `+0x3c` is the filename.
+- **Trigger N:** at `End`, read `*(int*)(script+0x1c)`. At `Start` that field is still stale, because the caller writes it after `Start` returns. Instead, scan the trigger records (pointer array at `proto+0x1c`, count at `+0x44`, fallback record at `+0x20`) for `rec+4 == pos`; N is `rec+0`.
+- **Line text:** the script's ip (`+0x48`) is written only when the script stops, so it cannot give the current line. Instead read the token's stream: `stream = *(token+0x0c)`, `buf = *(stream+0x08)`, `ptr = *(stream+0x10)`. Back up from `ptr` to the start of the line, trim blanks and stop at EOL; this is the port's `TraceLine`.
+- **CRT:** `sprintf` is at `0x0058b100` and returns the length; `_snprintf` is `0x0058ecbc`, `_vsnprintf` `0x0058d202`, `_output` `0x00590329`.
+- **IAT:** `CreateFileA` `0x005a30bc`, `WriteFile` `0x005a30c8`.
+- **Tick:** the 24 Hz frame counter is `*(*(u32*)0x00667fd0 + 0x48)` (CurrentScreen; incremented at `0x00491454` and `0x004917f7`).
+- **Unconfirmed:** in an emulated run, the `Say` handler produced exactly `1234 [dialog] Locke says: Where am I?`. The other three handlers were never verified in a run. A DOSBox `RevTrace.exe` booted to the title, then hung Win98 during the New Game opening; the cause was not diagnosed. `Say` logs at entry, before the health check.
+- **Diff:** `tools/retailtrace/trace_diff.py --retail <retail-trace.log> --port <revenant.log>` compares the `[script]`/`[dialog]` sequences and prints the first divergence. On the port side it reads only the TRACE `[script]` lines and the DEBUG `says:` lines.
