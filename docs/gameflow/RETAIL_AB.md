@@ -413,8 +413,10 @@ body:
 - *keep.s DalyK* (`:A`, `:B`, `:C`, `:Marker`; `:Start` is waited at):
   after the talk ends (`control on`, `SETCDVOLUME FULL`), Daly walks one
   round of his patrol -- the same route his ALWAYS block walks -- as part
-  of the conversation's block. While it runs he can't be talked to again
-  (a running block other than ALWAYS isn't replaced by a new request).
+  of the conversation's block. While it runs he can't be talked to again:
+  the block is still the one the player started, and its trigger guard
+  (the player's id at `+0x10`, set when the block started, cleared by
+  `End`) keeps every trigger of his from firing while the player exists.
   When the round ends, his interrupted ALWAYS block resumes where the
   conversation cut it (`+0xac`), so he walks one extra round before
   picking up where he was.
