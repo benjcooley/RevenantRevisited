@@ -966,12 +966,26 @@ struct helper_params {
     float4 light_dir_i;
     float4 light_col_a;
     float4 view_dir_power;
+    float4 shade;           // x: EHelperMeshShade, y: 1 = premultiply alpha
 };
 fragment float4 _main(vs_out in [[stage_in]],
                       constant helper_params& hp [[buffer(0)]],
                       texture2d<float> albedo_tex [[texture(0)]],
                       sampler smp [[sampler(0)]]) {
     float4 tex = albedo_tex.sample(smp, in.uv);
+    if (hp.shade.x > 0.5) {
+        bool lit = hp.shade.x > 1.5;
+        float a = lit ? tex.a * hp.diffuse.a : tex.a;
+        if (a < 0.01) discard_fragment();
+        float3 c = tex.rgb;
+        if (lit) {
+            float ndl_l = max(dot(normalize(in.wnormal), normalize(hp.light_dir_i.xyz)), 0.0);
+            c *= saturate(hp.emissive.rgb + hp.ambient.rgb * hp.light_col_a.w
+                          + hp.diffuse.rgb * hp.light_col_a.rgb * hp.light_dir_i.w * ndl_l);
+        }
+        if (hp.shade.y > 0.5) c *= a;
+        return float4(c, a);
+    }
     float alpha = tex.a * max(max(hp.diffuse.a, hp.ambient.a), max(hp.specular.a, hp.emissive.a));
     if (alpha < 0.01) discard_fragment();
     float3 N = normalize(in.wnormal);
@@ -1065,11 +1079,26 @@ layout(std140) uniform helper_params {
     vec4 light_dir_i;
     vec4 light_col_a;
     vec4 view_dir_power;
+    vec4 shade;             // x: EHelperMeshShade, y: 1 = premultiply alpha
 };
 uniform sampler2D albedo_tex;
 out vec4 fragColor;
 void main() {
     vec4 tex = texture(albedo_tex, v_uv);
+    if (shade.x > 0.5) {
+        bool lit = shade.x > 1.5;
+        float a = lit ? tex.a * diffuse.a : tex.a;
+        if (a < 0.01) discard;
+        vec3 c = tex.rgb;
+        if (lit) {
+            float ndl_l = max(dot(normalize(v_wnormal), normalize(light_dir_i.xyz)), 0.0);
+            c *= clamp(emissive.rgb + ambient.rgb * light_col_a.w
+                       + diffuse.rgb * light_col_a.rgb * light_dir_i.w * ndl_l, 0.0, 1.0);
+        }
+        if (shade.y > 0.5) c *= a;
+        fragColor = vec4(c, a);
+        return;
+    }
     float alpha = tex.a * max(max(diffuse.a, ambient.a), max(specular.a, emissive.a));
     if (alpha < 0.01) discard;
     vec3 N = normalize(v_wnormal);
@@ -1163,6 +1192,7 @@ cbuffer helper_params : register(b0) {
     float4 light_dir_i;
     float4 light_col_a;
     float4 view_dir_power;
+    float4 shade;           // x: EHelperMeshShade, y: 1 = premultiply alpha
 };
 Texture2D albedo_tex : register(t0);
 SamplerState smp : register(s0);
@@ -1176,6 +1206,19 @@ struct ps_in {
 };
 float4 main_ps(ps_in input) : SV_Target0 {
     float4 tex = albedo_tex.Sample(smp, input.uv);
+    if (shade.x > 0.5) {
+        bool lit = shade.x > 1.5;
+        float a = lit ? tex.a * diffuse.a : tex.a;
+        clip(a - 0.01);
+        float3 c = tex.rgb;
+        if (lit) {
+            float ndl_l = max(dot(normalize(input.wnormal), normalize(light_dir_i.xyz)), 0.0);
+            c *= saturate(emissive.rgb + ambient.rgb * light_col_a.w
+                          + diffuse.rgb * light_col_a.rgb * light_dir_i.w * ndl_l);
+        }
+        if (shade.y > 0.5) c *= a;
+        return float4(c, a);
+    }
     float alpha = tex.a * max(max(diffuse.a, ambient.a), max(specular.a, emissive.a));
     clip(alpha - 0.01);
     float3 N = normalize(input.wnormal);
@@ -1783,7 +1826,7 @@ void TRenderer::InitMeshPipeline()
     hsh.vs.uniform_blocks[0].uniforms[6].type = SG_UNIFORMTYPE_FLOAT4;
     hsh.fs.source = kHelperMeshFs;
     hsh.fs.entry  = kShaderFsEntry;
-    hsh.fs.uniform_blocks[0].size = 7 * sizeof(float) * 4;
+    hsh.fs.uniform_blocks[0].size = 8 * sizeof(float) * 4;
     hsh.fs.uniform_blocks[0].uniforms[0].name = "diffuse";
     hsh.fs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     hsh.fs.uniform_blocks[0].uniforms[1].name = "ambient";
@@ -1798,6 +1841,8 @@ void TRenderer::InitMeshPipeline()
     hsh.fs.uniform_blocks[0].uniforms[5].type = SG_UNIFORMTYPE_FLOAT4;
     hsh.fs.uniform_blocks[0].uniforms[6].name = "view_dir_power";
     hsh.fs.uniform_blocks[0].uniforms[6].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.fs.uniform_blocks[0].uniforms[7].name = "shade";
+    hsh.fs.uniform_blocks[0].uniforms[7].type = SG_UNIFORMTYPE_FLOAT4;
     hsh.fs.images[0].name         = "albedo_tex";
     hsh.fs.images[0].image_type   = SG_IMAGETYPE_2D;
     hsh.fs.images[0].sampler_type = SG_SAMPLERTYPE_FLOAT;
@@ -2645,7 +2690,7 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     const sg_range vsr = { vsu, sizeof(vsu) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vsr);
 
-    float fsu[28] = {};
+    float fsu[32] = {};
     int o = 0;
     std::memcpy(&fsu[o], s.diffuse, sizeof(s.diffuse)); o += 4;
     std::memcpy(&fsu[o], s.ambient, sizeof(s.ambient)); o += 4;
@@ -2654,6 +2699,7 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     fsu[o++] = light.dir[0]; fsu[o++] = light.dir[1]; fsu[o++] = light.dir[2]; fsu[o++] = light.intensity;
     fsu[o++] = light.color[0]; fsu[o++] = light.color[1]; fsu[o++] = light.color[2]; fsu[o++] = light.ambient;
     fsu[o++] = view_dir[0]; fsu[o++] = view_dir[1]; fsu[o++] = view_dir[2]; fsu[o++] = s.power;
+    fsu[o++] = float(s.shade); fsu[o++] = s.premultiply_alpha ? 1.0f : 0.0f; fsu[o++] = 0.0f; fsu[o++] = 0.0f;
     const sg_range fsr = { fsu, sizeof(fsu) };
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fsr);
 
