@@ -5,9 +5,10 @@
 // *************************************************************************
 //
 // The light pass's Classic model (TRenderer lighting mode 0) reproduces
-// retail's lighting: static tiles through the DLS light tables
-// (colortable.cpp / dls.cpp) and 3D meshes through T3DScene's vertex
-// lighting (3dscene.cpp). This module turns the area ambient and the
+// retail's lighting: static tiles through the DLS light tables in the MMX
+// form every MMX CPU used (colortable.cpp / dls.cpp) and 3D meshes through
+// T3DScene's vertex lighting (3dscene.cpp). This module turns the area
+// ambient (TMapPane's, gamma offset included) and the
 // lighting settings into the model's per-frame constants and resolves
 // authored light multipliers the way retail did.
 //

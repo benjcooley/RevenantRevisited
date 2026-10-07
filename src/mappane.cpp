@@ -34,7 +34,9 @@
 #include "spellpane.h"
 #include "sound.h"
 #include "logging.h"
+#include "gameoptions.h"
 
+#include <algorithm>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -2313,8 +2315,14 @@ void TMapPane::DrawDLight()
                  bitmap, DM_ALPHALIGHTEN); //, nullptr, 31 - (dlight.intensity / 8));
 }
 
+// REVSYNC: 0x00453640. Retail adds the gamma ambient offset here, so every
+// area ambient, the map's start value (map init 0x0044d5c0 inlines this
+// with light 10) and the script's ambient command carry it. FadeAmbient
+// (0x00453720) stores its target without it, as retail.
 void TMapPane::SetAmbientLight(int32_t light, bool stopfade)
 {
+    light = (std::max)(0, light + GammaAmbientOffset(GammaLevel));
+
     if (stopfade)
         totambfadeframes = totambfadesteps = 0; // Stop fading
 
