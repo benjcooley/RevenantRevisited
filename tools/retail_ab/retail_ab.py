@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 """Gameflow A/B against the shipped game's own code (docs/gameflow/RETAIL_AB.md).
 
-    retail_ab.py script-parse [--out DIR] [--all] [--port BIN] [--data DIR]
+    retail_ab.py TARGET [--out DIR] [--all] [--port BIN] [--data DIR] [--jobs N] [--case S]
 
 One command per target. It gathers every case, runs retail's original
-function in the in-process emulator (one persistent process; the fixture
-checkpoints after setup and restores per case) and the port's function
-(`Revenant --retail-ab=<target>`, one process), compares the two dumps and
-prints the first difference per case (`--all`: every difference). The report
-(DIR/report.json) records the retail build hash, the port commit, the case
-set's hash, every difference and the timing.
+function in the in-process emulator (persistent fixture processes, --jobs of
+them at once; a fixture checkpoints after setup and restores per case) and
+the port's function (`Revenant --retail-ab=<target>`, one process), compares
+the two dumps and prints the first difference per case (`--all`: every
+difference). The report (DIR/report.json) records the retail build hash, the
+port commit, the case set's hash, every difference and the timing; both
+dumps stay beside it (<target>.retail.jsonl, <target>.port.jsonl).
 
 Targets:
   script-parse   TScriptProto::ParseScript 0x00494e20 (+ TScript::Jump
                  0x00493fa0 on every label) over every shipped script and the
                  edge cases in tools/retail_ab/cases/script_parse/.
+  script-step    TScript::Continue 0x004933d0 over every trigger block and
+                 label of the same scripts (+ cases/script_step/), commands
+                 as boundaries: the lines each block runs.
+  trigger-test   the trigger test 0x004927b0 in a fixture world.
+  say-duration   TCharacter::Say 0x004d0610: how long a line holds.
+  dialog-layout  the dialog pane and entry pulses: positions and slides.
 
 Environment / defaults:
   RETAIL_RUNTIME  the emulator (main checkout tools/retail_runtime)
@@ -27,9 +34,11 @@ import argparse
 import hashlib
 import json
 import os
+import queue
 import re
 import subprocess
 import sys
+import threading
 import time
 import zipfile
 from pathlib import Path
@@ -48,8 +57,9 @@ TEXT = 'cp1252'
 # Cases
 # =====================================================================
 
-def script_cases(data: Path, workdir: Path) -> list[dict]:
-    """Every shipped script file, plus the edge cases kept in this tree.
+def script_cases(data: Path, workdir: Path, edges: str = 'script_parse') -> list[dict]:
+    """Every shipped script file, plus the edge cases kept in this tree
+    (tools/retail_ab/cases/<edges>/).
 
     Shipped: each .s in the module archive, master.s and multiplayer.s in
     resources.rvr, the loose Resources/master.s, and the demo module's
@@ -73,7 +83,7 @@ def script_cases(data: Path, workdir: Path) -> list[dict]:
     for path, prefix in ([(p, 'disk.resources') for p in sorted((data / 'Resources').glob('*.s'))] +
                          [(p, 'demo') for p in sorted((data / 'Modules' / 'Demo').glob('*.s'))]):
         add(f'{prefix}.{path.name.lower()}', path.read_bytes(), path.name, str(path))
-    for path in sorted((HERE / 'cases' / 'script_parse').glob('*.s')):
+    for path in sorted((HERE / 'cases' / edges).glob('*.s')):
         add(f'edge.{path.name}', path.read_bytes(), path.name, str(path.relative_to(REPO)))
     return cases
 
@@ -82,20 +92,54 @@ def script_cases(data: Path, workdir: Path) -> list[dict]:
 # Running both sides
 # =====================================================================
 
-def run_retail(fixture: Path, cases: list[dict]) -> tuple[dict, dict]:
+def run_retail(fixture: Path, cases: list[dict], jobs: int = 1, split=None, merge=None) -> tuple[dict, dict]:
+    """Every case through the fixture, in `jobs` processes at once.
+
+    A target with `split` hands each process a share of a case (`split(case,
+    n)` -> n sub-cases) and `merge(case, responses)` puts the shares back
+    together; otherwise a case goes whole to the next free process.
+    """
     started = time.perf_counter()
-    proc = subprocess.Popen([str(RETAIL_PY), str(fixture), str(RETAIL_EXE), '--serve'],
-                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-    hello = json.loads(proc.stdout.readline())
+    parts = []
+    for case in cases:
+        subs = split(case, jobs) if split and jobs > 1 else [case]
+        parts += [(case['name'], i, sub) for i, sub in enumerate(subs)]
+    order = queue.Queue()
+    for part in parts:
+        order.put(part)
+    responses: dict[str, dict[int, dict]] = {}
+    hellos = []
+    lock = threading.Lock()
+
+    def worker():
+        proc = subprocess.Popen([str(RETAIL_PY), str(fixture), str(RETAIL_EXE), '--serve'],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        hellos.append(json.loads(proc.stdout.readline()))
+        while True:
+            try:
+                name, index, sub = order.get_nowait()
+            except queue.Empty:
+                break
+            proc.stdin.write(json.dumps(dict(id=name, case=sub)) + '\n')
+            proc.stdin.flush()
+            response = json.loads(proc.stdout.readline())
+            with lock:
+                responses.setdefault(name, {})[index] = response
+        proc.stdin.close()
+        proc.wait(timeout=60)
+
+    threads = [threading.Thread(target=worker) for _ in range(max(1, min(jobs, len(parts))))]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
     results = {}
     for case in cases:
-        proc.stdin.write(json.dumps(dict(id=case['name'], case=case)) + '\n')
-        proc.stdin.flush()
-        response = json.loads(proc.stdout.readline())
-        results[case['name']] = response
-    proc.stdin.close()
-    proc.wait(timeout=60)
+        got = [responses[case['name']][i] for i in sorted(responses.get(case['name'], {}))]
+        results[case['name']] = merge(case, got) if split and len(got) > 1 else got[0]
+    hello = dict(hellos[0]) if hellos else {}
     hello['wall_s'] = time.perf_counter() - started
+    hello['jobs'] = len(threads)
     return hello, results
 
 
@@ -435,7 +479,279 @@ def compare_layout(case: dict, retail: dict, port: dict) -> list[dict]:
     return diffs
 
 
+# =====================================================================
+# Target 4: script-step
+# =====================================================================
+
+# The result bits that steer Continue (CMD_WAIT, DELETED, CONDTRUE/FALSE,
+# ELSE, SKIPBLOCK, LOOP, BEGIN, END, JUMP, WAITSAY); the error bits (2, 4,
+# 8, 0x10) depend on what the interpreter could resolve in each fixture.
+FLOW_BITS = 0x1 | 0x20 | 0x40 | 0x80 | 0x100 | 0x200 | 0x400 | 0x800 | 0x1000 | 0x2000 | 0x4000
+
+
+def step_cases(data: Path, workdir: Path) -> list[dict]:
+    """Every shipped script file and the stepping edge cases."""
+    return script_cases(data, workdir, edges='script_step')
+
+
+def step_split(case: dict, n: int) -> list[dict]:
+    """A file's runs, every n-th to a process (the fixture's `share`)."""
+    return [dict(case, share=[k, n]) for k in range(n)]
+
+
+def step_merge(case: dict, responses: list[dict]) -> dict:
+    """The shares back into one dump: each prototype's runs in run order."""
+    failed = next((r for r in responses if not r.get('ok')), None)
+    if failed:
+        return failed
+    merged = json.loads(json.dumps(responses[0]))
+    for other in responses[1:]:
+        for proto, more in zip(merged['result']['protos'], other['result']['protos']):
+            proto['runs'] += more['runs']
+    for proto in merged['result']['protos']:
+        proto['runs'].sort(key=lambda run: run['index'])
+    merged['result']['elapsed_ms'] = sum(r['result'].get('elapsed_ms', 0) for r in responses)
+    return merged
+
+
+class FileLines(Lines):
+    """Lines with their text, for readable sequences."""
+
+    def __init__(self, data: bytes):
+        super().__init__(data)
+        self.text = data.split(b'\n')
+
+    def number(self, offset):
+        import bisect
+        return bisect.bisect_right(self.starts, offset)
+
+    def show(self, number):
+        return f"{number}: {self.text[number - 1].decode(TEXT).strip()[:48]}"
+
+
+def step_view(proto: dict, run: dict, lines: FileLines) -> dict:
+    """One run as comparable fields; lines as file line numbers.
+
+    A line is where the interpreter was handed it: the stream position
+    after its first token (minus one: retail's tokenizer holds the next
+    character), in the prototype's text.
+    """
+    start = proto['text_start']
+
+    def at(rel):
+        return None if start is None or rel is None else lines.at(start + rel)
+
+    seq = run['lines']
+    return {
+        'start found': run['start'].get('found'),
+        'start resumes at': at(run['start'].get('ip')),
+        'start depth': run['start']['depth'],
+        'start errors': [e.rstrip('\n') for e in run['start'].get('errors', [])],
+        'lines': [lines.number(start + l['at'] - 1) for l in seq] if start is not None else None,
+        'depths': [l['depth'] for l in seq],
+        'bits': [l.get('bits', -1) & FLOW_BITS for l in seq],
+        'truncated': run['truncated'],
+        'ended': run['end']['ip'] is None,
+        'end at': at(run['end']['ip']),
+        'end depth': run['end']['depth'],
+        'waiting': run['waiting'],
+        'errors': [e.rstrip('\n') for e in run['errors']],
+        'fault': run.get('fault'),
+    }
+
+
+def compare_script_step(case: dict, retail: dict, port: dict) -> list[dict]:
+    lines = FileLines(Path(case['path']).read_bytes())
+    diffs = []
+    rp, pp = retail['protos'], port['protos']
+    if len(rp) != len(pp):
+        diffs.append(dict(where='file', line=None, field='prototype count', retail=len(rp), port=len(pp)))
+    for r, p in zip(rp, pp):
+        where = f"#{r['index']} {r['name']}"
+        if r['name'] != p['name']:
+            diffs.append(dict(where=where, line=None, field='name', retail=r['name'], port=p['name']))
+            continue
+        pruns = {run['key']: run for run in p['runs']}
+        for rrun in r['runs']:
+            prun = pruns.pop(rrun['key'], None)
+            kind = rrun['kind']
+            if prun is None:
+                diffs.append(dict(where=f"{where} {rrun['key']}", line=None, field=f'{kind} run',
+                                  retail='present', port='<absent>'))
+                continue
+            rv, pv = step_view(r, rrun, lines), step_view(p, prun, lines)
+            for key in rv:
+                if rv[key] == pv[key]:
+                    continue
+                d = dict(where=f"{where} {rrun['key']}", line=None, field=f'{kind} {key}',
+                         retail=rv[key], port=pv[key])
+                if key == 'lines' and rv[key] is not None and pv[key] is not None:
+                    a, b = rv[key], pv[key]
+                    k = next((i for i in range(min(len(a), len(b))) if a[i] != b[i]), min(len(a), len(b)))
+                    d.update(line=(a[k] if k < len(a) else b[k]), first_difference=k,
+                             retail=[lines.show(n) for n in a[k:k + 16]],
+                             port=[lines.show(n) for n in b[k:k + 16]])
+                elif key == 'depths' and len(rv[key]) == len(pv[key]):
+                    offsets = {x - y for x, y in zip(rv[key], pv[key])}
+                    if len(offsets) == 1:
+                        d.update(field=f'{kind} depths (retail - port = {offsets.pop():+d} throughout)',
+                                 retail=rv[key][:12], port=pv[key][:12])
+                diffs.append(d)
+        for key in pruns:
+            diffs.append(dict(where=f'{where} {key}', line=None, field=f"{pruns[key]['kind']} run",
+                              retail='<absent>', port='present'))
+    return diffs
+
+
+# =====================================================================
+# Target 5: trigger-test
+# =====================================================================
+
+TRIGGER_TYPES = dict(ALWAYS=1, TRIGGER=2, DIALOG=3, PROXIMITY=4, CUBE=5, ACTIVATE=6, USE=7, GIVE=8,
+                     GET=9, COMBAT=10, DEAD=11)
+CHARACTER, PLAYER_CLASS, ITEM = 12, 11, 2
+OWNER = dict(id='owner', name='Owner', **{'class': CHARACTER}, level=0, pos=[1000, 1000, 0])
+LOCKE = dict(id='player', name='Locke', **{'class': PLAYER_CLASS}, level=0, pos=[1100, 1000, 0])
+
+
+def trigger_cases(data: Path, workdir: Path) -> list[dict]:
+    """Each trigger kind over the inputs the test reads (SCRIPT_ENGINE.md §3).
+
+    A case: the trigger record, the script's request state (type, strings,
+    guard, running record), the priority Continue passes, and the world
+    (objects in enumeration order; one is the owner, one may be the player).
+    """
+    cases = []
+
+    def case(name, ttype, tname='', cube=(0, 0, 0, 0, 0, 0), dist=0, tprio=0, request=0, s1='', s2='',
+             guard='none', running=False, priority=0, objects=None, player='player', owner='owner'):
+        objects = [dict(o) for o in (objects if objects is not None else [OWNER, LOCKE])]
+        body = dict(trigger=dict(type=ttype, name=tname, cube=list(cube), dist=dist, priority=tprio),
+                    request=dict(type=request, str=s1, str2=s2, guard=guard, running=running),
+                    priority=priority, world=dict(objects=objects, player=player, owner=owner))
+        cases.append(dict(name=name, **body, sha256=hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()))
+
+    def at(obj, x, y, z=0, level=None, **extra):
+        o = dict(obj, pos=[x, y, z], **extra)
+        if level is not None:
+            o['level'] = level
+        return o
+
+    # Every type: no request, its own request, another type's request.
+    for tname, ttype in [('NONE', 0)] + sorted(TRIGGER_TYPES.items(), key=lambda kv: kv[1]) + [('TWELVE', 12)]:
+        for req in (0, ttype, 3 if ttype != 3 else 6):
+            case(f'type.{tname}.request{req}', ttype, 'Lever', request=req, s1='Lever')
+    # Priority: below the running one, equal, above; the running-trigger record.
+    for tprio, prio in ((0, 1), (1, 1), (2, 1), (-1, 0)):
+        case(f'priority.trigger{tprio}.running{prio}', 1, tprio=tprio, priority=prio)
+        case(f'priority.dialog.trigger{tprio}.running{prio}', 3, tprio=tprio, priority=prio, request=3)
+    case('running-record.always', 1, running=True)
+    # Named manual triggers: names compare without case, USE takes either string.
+    for ttype in ('TRIGGER', 'GIVE', 'GET', 'USE'):
+        n = TRIGGER_TYPES[ttype]
+        for label, tname, s1, s2 in (('same', 'Lever', 'Lever', ''), ('case', 'Lever', 'LEVER', ''),
+                                     ('other', 'Lever', 'Rope', ''), ('second', 'Lever', 'Rope', 'lever'),
+                                     ('empty-both', '', '', ''), ('empty-trigger', '', 'Lever', ''),
+                                     ('empty-request', 'Lever', '', ''),
+                                     ('long', 'ABCDEFGHIJKLMNOPQRS', 'abcdefghijklmnopqrs', '')):
+            case(f'named.{ttype}.{label}', n, tname, request=n, s1=s1, s2=s2)
+    # PROXIMITY: the player's name, the box, then dx^2 + dy^2 <= 2 dist^2.
+    for label, dx, dy, z in (('same-spot', 0, 0, 0), ('on-x-edge', 100, 0, 0), ('past-x', 101, 0, 0),
+                             ('on-y-edge', 0, -100, 0), ('past-y', 0, 101, 0), ('diag-in', 70, 70, 0),
+                             ('corner', 100, 100, 0), ('past-corner', 100, 101, 0), ('z-ignored', 0, 0, 5000),
+                             ('neg', -60, -80, 0)):
+        case(f'proximity.dist100.{label}', 4, 'Locke', dist=100,
+             objects=[OWNER, at(LOCKE, 1000 + dx, 1000 + dy, z)])
+    for label, dist, dx, dy in (('dist0-same', 0, 0, 0), ('dist0-off', 0, 1, 0), ('dist-neg', -5, 0, 0),
+                                ('big-in', 40000, 30000, 0), ('big-sum-wraps', 40000, 40000, 40000),
+                                ('big-on-edge', 32768, 32768, 0)):
+        case(f'proximity.{label}', 4, 'Locke', dist=dist, objects=[OWNER, at(LOCKE, 1000 + dx, 1000 + dy)])
+    case('proximity.name-case', 4, 'LOCKE', dist=100)
+    case('proximity.other-name', 4, 'Owner', dist=100)
+    case('proximity.empty-name', 4, '', dist=100)
+    case('proximity.no-player', 4, 'Locke', dist=100, objects=[OWNER], player=None)
+    case('proximity.requested-far', 4, 'Somebody', dist=1, request=4)
+    case('proximity.player-other-level', 4, 'Locke', dist=200, objects=[OWNER, at(LOCKE, 1100, 1000, level=1)])
+    case('proximity.guard-exists', 4, 'Locke', dist=200, guard='exists')
+    case('proximity.guard-gone', 4, 'Locke', dist=200, guard='gone')
+    # CUBE: the player by name (or "player"), inclusive on every face.
+    box = (900, 900, 0, 1200, 1200, 100)
+    for tname in ('player', 'PLAYER', 'Locke', 'locke'):
+        case(f'cube.named-{tname}.inside', 5, tname, cube=box)
+    for label, x, y, z in (('min-corner', 900, 900, 0), ('max-corner', 1200, 1200, 100), ('past-x', 1201, 1000, 0),
+                           ('below-y', 1000, 899, 0), ('above-z', 1000, 1000, 101), ('below-z', 1000, 1000, -1)):
+        case(f'cube.player.{label}', 5, 'player', cube=box, objects=[OWNER, at(LOCKE, x, y, z)])
+    case('cube.player.reversed-corners', 5, 'player', cube=(1200, 1200, 100, 900, 900, 0))
+    case('cube.player.outside-other-inside', 5, 'player', cube=(0, 0, 0, 100, 100, 100),
+         objects=[OWNER, LOCKE, at(OWNER, 50, 50, id='ogre', name='Ogre')])
+    case('cube.requested', 5, 'Locke', cube=(0, 0, 0, 1, 1, 1), request=5)
+    # CUBE, someone else: the first moving object in the cube, if a character
+    # (or player) that isn't the named object.
+    far = at(LOCKE, 5000, 5000)
+    away = at(OWNER, 3000, 3000)                # the owner, outside the cube
+    ogre = dict(id='ogre', name='Ogre', **{'class': CHARACTER}, level=0, pos=[1050, 1050, 0])
+    rat = dict(id='rat', name='Rat', **{'class': CHARACTER}, level=0, pos=[1060, 1060, 0])
+    crate = dict(id='crate', name='Crate', **{'class': ITEM}, level=0, pos=[1040, 1040, 0])
+    case('cube.other.character', 5, 'Owner', cube=box, objects=[away, far, ogre])
+    case('cube.other.owner-only', 5, 'Owner', cube=box, objects=[OWNER, far])
+    case('cube.other.owner-first', 5, 'Owner', cube=box, objects=[OWNER, ogre, far])
+    case('cube.other.owner-second', 5, 'Owner', cube=box, objects=[ogre, OWNER, far])
+    case('cube.other.unnamed', 5, '', cube=box, objects=[OWNER, far])
+    case('cube.other.named-ogre', 5, 'Ogre', cube=box, objects=[away, far, ogre, rat])
+    case('cube.other.item-first', 5, 'Owner', cube=box, objects=[away, crate, ogre, far])
+    case('cube.other.player-class', 5, 'Owner', cube=box,
+         objects=[away, far, dict(ogre, **{'class': PLAYER_CLASS}, id='player2', name='Second')])
+    case('cube.other.no-player', 5, 'Owner', cube=box, objects=[OWNER, ogre], player=None)
+    case('cube.other.no-player-owner-only', 5, 'Owner', cube=box, objects=[OWNER], player=None)
+    case('cube.other.other-level', 5, 'Owner', cube=box, objects=[away, far, dict(ogre, level=1)])
+    case('cube.other.owner-other-level', 5, 'Owner', cube=box,
+         objects=[dict(OWNER, level=1), far, dict(ogre, level=1)])
+    case('cube.other.player-other-level', 5, 'Owner', cube=box,
+         objects=[OWNER, dict(far, level=1), ogre])
+    # Whose level: retail searches the owner's, the port's map pane its
+    # window's (the player's).
+    case('cube.level.owner1-player0-ogre1', 5, 'Owner', cube=box,
+         objects=[dict(away, level=1), far, dict(ogre, level=1)])
+    case('cube.level.owner0-player1-ogre0', 5, 'Owner', cube=box,
+         objects=[away, dict(far, level=1), ogre])
+    case('cube.level.owner0-player1-ogre1', 5, 'Owner', cube=box,
+         objects=[away, dict(far, level=1), dict(ogre, level=1)])
+    case('cube.other.guard-exists', 5, 'Owner', cube=box, objects=[away, far, ogre], guard='exists')
+    case('cube.other.guard-gone', 5, 'Owner', cube=box, objects=[away, far, ogre], guard='gone')
+    # The guard after a test that fires, and after one that doesn't.
+    case('guard.always-exists', 1, guard='exists')
+    case('guard.always-gone', 1, guard='gone')
+    case('guard.dialog-unrequested-gone', 3, guard='gone')
+    return cases
+
+
+def trigger_port_fields(case: dict) -> list[str]:
+    t, r, w = case['trigger'], case['request'], case['world']
+    hx = lambda s: s.encode(TEXT).hex()
+    objects = ';'.join(f"{o['id']}|{hx(o['name'])}|{o['class']}|{o['level']}|{','.join(map(str, o['pos']))}"
+                       for o in w['objects'])
+    return [f"{t['type']}|{hx(t['name'])}|{','.join(map(str, t['cube']))}|{t['dist']}|{t['priority']}",
+            f"{r['type']}|{hx(r['str'])}|{hx(r['str2'])}|{r['guard']}|{int(r['running'])}",
+            str(case['priority']), objects, w['player'] or '', w['owner']]
+
+
+def compare_trigger(case: dict, retail: dict, port: dict) -> list[dict]:
+    diffs = []
+    for key in ('fires', 'user', 'alias', 'guard_after'):
+        if retail[key] != port.get(key):
+            diffs.append(dict(where='test', line=None, field=key, retail=retail[key], port=port.get(key),
+                              queries=retail.get('queries')))
+    return diffs
+
+
 TARGETS = {
+    'trigger-test': dict(fixture='slots/gameflow/trigger_test.py', cases=trigger_cases,
+                         compare=compare_trigger, port_fields=trigger_port_fields,
+                         unit=lambda r: 1),
+    'script-step': dict(fixture='slots/gameflow/script_step.py', cases=step_cases,
+                        compare=compare_script_step, split=step_split, merge=step_merge,
+                        port_fields=lambda c: [c['path'], c['filename']],
+                        unit=lambda r: sum(len(p['runs']) for p in r['protos'])),
     'dialog-layout': dict(fixture='slots/gameflow/dialog_layout.py', cases=layout_cases,
                           compare=compare_layout, port_first=True, retail_case=layout_retail_case,
                           port_fields=layout_port_fields,
@@ -470,6 +786,8 @@ def main():
     parser.add_argument('--data', type=Path, default=DATA)
     parser.add_argument('--all', action='store_true', help='print every difference, not the first per case')
     parser.add_argument('--case', action='append', help='only cases whose name contains this')
+    parser.add_argument('--jobs', type=int, default=max(1, (os.cpu_count() or 2) // 2),
+                        help='retail fixture processes at once (default: half the cores)')
     args = parser.parse_args()
 
     spec = TARGETS[args.target]
@@ -483,10 +801,15 @@ def main():
     if spec.get('port_first'):
         port_info, port = run_port(args.port, args.target, cases, workdir, spec['port_fields'])
         retail_cases = [spec['retail_case'](c, port.get(c['name'])) for c in cases]
-        retail_info, retail = run_retail(RUNTIME / spec['fixture'], retail_cases)
+        retail_info, retail = run_retail(RUNTIME / spec['fixture'], retail_cases, args.jobs)
     else:
-        retail_info, retail = run_retail(RUNTIME / spec['fixture'], cases)
+        retail_info, retail = run_retail(RUNTIME / spec['fixture'], cases, args.jobs,
+                                         spec.get('split'), spec.get('merge'))
         port_info, port = run_port(args.port, args.target, cases, workdir, spec['port_fields'])
+    # The retail dump beside the port's (<target>.port.jsonl), for reading
+    # a run in full.
+    (workdir / f'{args.target}.retail.jsonl').write_text(
+        ''.join(json.dumps({**response, 'id': name}) + '\n' for name, response in retail.items()))
 
     report_cases, total_diffs, matched, units = [], 0, 0, 0
     for case in cases:
@@ -521,7 +844,7 @@ def main():
     kinds: dict[str, list] = {}
     for entry in report_cases:
         for d in entry['differences']:
-            kind = re.sub(r'^(trigger|label) \S+', r'\1 *', d['field'])
+            kind = re.sub(r'^(trigger|label) \S+', r'\1 *', d['field']) if args.target == 'script-parse' else d['field']
             kinds.setdefault(kind, []).append(f"{entry['name']} {d['where']}")
     if kinds:
         print('\ndifferences by kind:')
@@ -533,13 +856,15 @@ def main():
                   retail_setup_ms=retail_info.get('setup_ms'), port_commit=git_commit(),
                   port_binary_sha256=hashlib.sha256(args.port.read_bytes()).hexdigest(),
                   case_set_sha256=case_hash, cases=len(cases), matches=matched, differences=total_diffs,
-                  units=units, retail_wall_s=retail_s, port_wall_s=port_info['wall_s'],
+                  units=units, retail_wall_s=retail_s, retail_jobs=retail_info.get('jobs'),
+                  port_wall_s=port_info['wall_s'],
                   retail_cases_per_s=len(cases) / retail_s if retail_s else None,
                   port_cases_per_s=len(cases) / port_info['wall_s'] if port_info['wall_s'] else None,
                   results=report_cases)
     (workdir / 'report.json').write_text(json.dumps(report, indent=1) + '\n')
     print(f"\n{args.target}: {len(cases)} cases, {matched} match, {total_diffs} difference(s); "
-          f"retail {retail_s:.1f} s ({report['retail_cases_per_s'] or 0:.2f} cases/s), "
+          f"retail {retail_s:.1f} s in {retail_info.get('jobs')} process(es) "
+          f"({report['retail_cases_per_s'] or 0:.2f} cases/s), "
           f"port {port_info['wall_s']:.2f} s")
     print(f"retail build {report['retail_build_sha256']}  port {report['port_commit']}  cases {case_hash[:16]}")
     print(f"report: {workdir / 'report.json'}")
