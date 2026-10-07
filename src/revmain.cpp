@@ -67,6 +67,7 @@
 #include "spell.h"
 #include "spellpane.h"
 #include "statpane.h"
+#include "retailab.h"
 #include "script.h"
 #include "textbar.h"
 #include "statusbar.h"
@@ -2397,6 +2398,12 @@ sapp_desc sokol_main(int argc, char* argv[])
 
     g_argc = argc;
     g_argv = argv;
+
+    // --retail-ab=<target>: dump a port function over a case file for the
+    // retail A/B compare, then exit; no window, no engine (retailab.h).
+    int abexit = 0;
+    if (RetailAB::Run(argc, argv, abexit))
+        std::exit(abexit);
 
     IsMMX = false;
     ApplyCommandLineResolution(argc, argv);

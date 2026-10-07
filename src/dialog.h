@@ -144,6 +144,16 @@ class TDialogEntry
     // 0 (invisible) .. kFadeTicks (fully shown).
     [[nodiscard]] int32_t Fade() const { return fade; }
     [[nodiscard]] int32_t Height() const { return height; }
+    // Where the entry is and its clock, as the last Pulse left them (retail
+    // +0x14 and +0x18..+0x44). Read by the retail A/B dump.
+    struct SPlacement
+    {
+        int32_t ticksleft, basex, basey, offx, offy, targetx, targety, posx, posy, stepx, stepy;
+    };
+    [[nodiscard]] SPlacement Placement() const
+    {
+        return {ticksleft, basex, basey, offx, offy, targetx, targety, posx, posy, stepx, stepy};
+    }
 
   private:
     static constexpr int32_t kNotPlaced = -10000;
@@ -212,6 +222,15 @@ class TDialogPane : public TButtonPane
     bool ShowResponses(TObjectInstance* player, bool controlon);
     // REVSYNC: AddSpeech @ 0x00535b90 -- `speaker` says `text` for `ticks`.
     void AddSpeech(TObjectInstance* speaker, const char *text, int32_t ticks);
+    // A new entry (a line, or the response list), laid out at the next
+    // Pulse. AddSpeech and ShowResponses decide its mode and colour.
+    TDialogEntry& AddEntry(TObjectInstance* speaker, TDialogEntry::EMode mode, uint32_t color,
+                           std::vector<std::string> texts, std::vector<std::string> labels,
+                           int32_t ticks);
+    // The font entries wrap and measure with, and its line height
+    // (Initialize: the "Dialog" font; without an atlas, texts break only
+    // at '\n' -- what the headless retail A/B uses).
+    void UseFont(const SFontAtlas* atlas, int32_t lineheight);
     // REVSYNC: SkipSpeech @ 0x00536010 -- silence and dismiss the spoken
     // lines; nothing while the choices are up.
     void SkipSpeech();

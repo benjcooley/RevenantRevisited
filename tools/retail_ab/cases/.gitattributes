@@ -1,0 +1,2 @@
+# Case inputs are byte-exact (CRLF, LF-only, 0xFF, Windows-1252): never convert.
+* -text

@@ -564,9 +564,8 @@ bool TDialogPane::Initialize()
     chosen = -1;
     committed = false;
 
-    font = FontTable ? FontTable->Atlas("Dialog") : nullptr;
     const TGenericFont* fontdef = FontTable ? FontTable->FindFont("Dialog") : nullptr;
-    lineheight = fontdef ? fontdef->height + fontdef->lextra : 0;
+    UseFont(FontTable ? FontTable->Atlas("Dialog") : nullptr, fontdef ? fontdef->height + fontdef->lextra : 0);
     if (!statusbardat)
         statusbardat = TMulti::LoadMulti(const_cast<char*>("statusbarnotex.dat"));
     ring = nullptr;
@@ -795,10 +794,8 @@ bool TDialogPane::ShowResponses(TObjectInstance* player, bool controlon)
     std::vector<std::string> lines;
     for (const std::string& tag : choicetexts)
         lines.push_back("\"" + std::string(DialogList.GetLine(tag.c_str())) + "\"");
-    entries.push_back(std::make_unique<TDialogEntry>(*this, player, TDialogEntry::EMode::Responses,
-                                                     kPlayerColor, kHighlightColor, std::move(lines),
-                                                     choicelabels, TDialogEntry::kNoTimeout));
-    responses = entries.back().get();
+    responses = &AddEntry(player, TDialogEntry::EMode::Responses, kPlayerColor, std::move(lines),
+                          choicelabels, TDialogEntry::kNoTimeout);
     log_info("[dialog] %d choice(s) shown", (int)choicelabels.size());
     return true;
 }
@@ -814,9 +811,24 @@ void TDialogPane::AddSpeech(TObjectInstance* speaker, const char *text, int32_t 
                                             : TDialogEntry::EMode::NpcSpeech;
     const uint32_t color = player ? kPlayerColor : NpcColor(speaker);
     log_debug("[dialog] %s says: %s", speaker->GetName() ? speaker->GetName() : "?", ToUtf8(text).c_str());
+    AddEntry(speaker, mode, color, std::vector<std::string>{text}, std::vector<std::string>{}, ticks);
+}
+
+// The entry construction AddSpeech and ShowResponses share (0x00533f10, then
+// appended to +0x17c): placed at the next Pulse.
+TDialogEntry& TDialogPane::AddEntry(TObjectInstance* speaker, TDialogEntry::EMode mode, uint32_t color,
+                                    std::vector<std::string> texts, std::vector<std::string> labels,
+                                    int32_t ticks)
+{
     entries.push_back(std::make_unique<TDialogEntry>(*this, speaker, mode, color, kHighlightColor,
-                                                     std::vector<std::string>{text},
-                                                     std::vector<std::string>{}, ticks));
+                                                     std::move(texts), std::move(labels), ticks));
+    return *entries.back();
+}
+
+void TDialogPane::UseFont(const SFontAtlas* atlas, int32_t height)
+{
+    font = atlas;
+    lineheight = height;
 }
 
 // REVSYNC: the speaker slots of 0x00535b90 -- a 16-entry round robin

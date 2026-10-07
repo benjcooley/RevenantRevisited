@@ -3617,12 +3617,7 @@ bool TCharacter::Say(const char *string, int32_t wait, const char *anim, const c
     // The action's copy of the line; ShowDialog off blanks it when a voice
     // speaks it (nothing draws it -- the pane always shows the line).
     ab->data = (voicems > 0 && !ShowDialog) ? nullptr : (void *)strdup(line);
-    if (wait >= 0)
-        ab->wait = wait;
-    else if (voicems > 0)
-        ab->wait = 12 + voicems * 24 / 1000;
-    else
-        ab->wait = 2 * (int32_t)strlen(line) + 36;
+    ab->wait = SpeechTicks(wait, voicems, line);
     ab->loop = true;
     const int32_t ticks = ab->wait;
 
@@ -3640,6 +3635,20 @@ bool TCharacter::Say(const char *string, int32_t wait, const char *anim, const c
 
     DialogPane.AddSpeech(this, line, ticks);
     return true;
+}
+
+// REVSYNC: 0x004d084b..0x004d08e0 (Say's duration). Retail: `12 -
+// ftol(ms * 0.001f * -24.0f)` in x87 extended precision, which truncates to
+// the same tick as the integer form here for any length under ~14 minutes;
+// a voice of length 0 paces by the text. Checked against retail by the A/B
+// (docs/gameflow/RETAIL_AB.md, say-duration).
+int32_t TCharacter::SpeechTicks(int32_t wait, int32_t voicems, const char *line)
+{
+    if (wait >= 0)
+        return wait;
+    if (voicems > 0)
+        return 12 + voicems * 24 / 1000;
+    return 2 * (int32_t)strlen(line) + 36;
 }
 
 // REVSYNC: SayIndex @ 0x004d09b0 -- dialog line `tagid`, with the voice its
