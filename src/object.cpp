@@ -3025,7 +3025,12 @@ bool TObjectInstance::PlayWave(char *soundname, int32_t nr, int32_t volume, int3
 
     int32_t id = SoundPlayer.FindSound(soundname, nr);
     if (id < 0)
+    {
+        log_trace("[sound] %s: no sound '%s'", GetName(), soundname);
         return false;
+    }
+    log_trace("[sound] %s plays %s (%d ms)", GetName(), SoundPlayer.GetRef(id)->file.c_str(),
+              SoundPlayer.SampleLengthMs(id));
     if (!SoundPlayer.Mount(id))
         return false;
     SoundPlayer.Play(id, volume, freq, &p);

@@ -333,7 +333,10 @@ bool audio::DecodeToPCM16(const uint8_t* data, size_t bytes,
         pcm.resize(at + static_cast<size_t>(got) * frame_bytes);
         if (r != MA_SUCCESS || got < kChunkFrames) break;
     }
-    if (pcm.empty()) return false;
+    // A file with a valid format and no frames decodes to no samples:
+    // Resources/sound/effects/blank.wav is such a file, the silent entry of
+    // the characters' random grunt lists (Miles loaded and played it, as
+    // nothing).
 
     format->wFormatTag      = 1;  // WAVE_FORMAT_PCM
     format->nChannels       = static_cast<uint16_t>(channels);
@@ -345,13 +348,13 @@ bool audio::DecodeToPCM16(const uint8_t* data, size_t bytes,
     return true;
 }
 
-uint32_t audio::DecodedLengthMs(const uint8_t* data, size_t bytes) {
+std::optional<uint32_t> audio::DecodedLengthMs(const uint8_t* data, size_t bytes) {
     MemoryDecoder dec(data, bytes);
     ma_uint32 channels = 0, rate = 0;
     ma_uint64 frames = 0;
     if (!dec.Format(channels, rate) ||
         ma_decoder_get_length_in_pcm_frames(&dec.decoder, &frames) != MA_SUCCESS)
-        return 0;
+        return std::nullopt;
     return static_cast<uint32_t>(frames * 1000 / rate);
 }
 

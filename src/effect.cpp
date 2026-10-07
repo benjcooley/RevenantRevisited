@@ -1130,10 +1130,28 @@ static TGenericEffectBuilder g_effect_pixie_builder("Pixie");
 static TGenericEffectBuilder g_effect_speaker_builder("speaker");
 static TGenericEffectBuilder g_effect_speaker_caps_builder("Speaker");
 
+// REVSYNC: TEffect::Pulse @ 0x004de800 (vtable 0x005a85ac slot 0x110), the
+// part every effect runs: the object pulse (animator: tag sounds; script),
+// then an effect whose imagery state doesn't loop removes itself once that
+// animation has played out (CommandDone, which NextFrame sets at its last
+// frame). A script-added effect such as the opening's gvortex lives exactly
+// one run of its animation this way. The 1998 body's SetFrame(0) is gone in
+// retail.
+// REVSYNC-DIVERGENCE: the rest of 0x004de800 isn't ported here: the start
+// delay (+0x138: animation held until it counts down), a spell effect
+// following its invoker or target (+0xe4 spell), the light fade of effects
+// with a light definition (+0xd8, whose presence also skips the removal
+// above) and the timed life (+0x130: a countdown, +0x12c, that blinks the
+// effect out over its last +0x134 ticks). Script-added effects use none.
 void TEffect::Pulse()
 {
     TObjectInstance::Pulse();
-    SetFrame(0);
+
+    if (HasAnimator() && imagery && !(imagery->GetAniFlags(GetState()) & AF_LOOPING) && CommandDone())
+    {
+        log_debug("[effect] %s: state %d played out, removed", GetName(), GetState());
+        SetFlags(OF_KILL);
+    }
     SetCommandDone(false);
 }
 
