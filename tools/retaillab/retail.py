@@ -16,6 +16,7 @@ Run with the lab's Python, from anywhere:
 docs/gameflow/RETAIL_CAPTURE.md has the recipe and the traps.
 """
 import argparse
+import json
 import os
 import sys
 import time
@@ -33,6 +34,25 @@ INI = r'C:\REVENANT\revenant.ini'
 BACKUP = r'C:\MCP\GFPRE.INI'
 SCRIPT_DIR = 'C:\\MCP\\SCRIPTS\\'
 NEW_GAME_BUTTON = (430, 162)        # title screen, 640x480
+
+# One driver at a time: `start` takes the lock, `restore` releases it. Agents
+# and sessions share the lab; a second `start` refuses instead of stealing
+# the guest from a run in progress.
+LOCK = LAB / 'gameflow-lab.lock'
+
+
+def take_lock(owner):
+    try:
+        fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        raise SystemExit(f'the lab is in use: {LOCK.read_text().strip()} '
+                         f'(remove {LOCK} only if that run is gone)')
+    with os.fdopen(fd, 'w') as f:
+        json.dump({'owner': owner, 'pid': os.getppid(), 'since': time.strftime('%Y-%m-%d %H:%M:%S')}, f)
+
+
+def release_lock():
+    LOCK.unlink(missing_ok=True)
 
 # Closes retail (game or editor) through Alt+F4 and waits for its window to go.
 LUA_CLOSE = r'''
@@ -168,8 +188,9 @@ def type_prompt(control, text, scratch, attempts=30):
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest='cmd', required=True)
-    s = sub.add_parser('start', help='close the editor, apply INI overrides, launch the game')
+    s = sub.add_parser('start', help='take the lab, close the editor, apply INI overrides, launch the game')
     s.add_argument('set', nargs='*', help='[Options] overrides, KEY=VALUE')
+    s.add_argument('--owner', default=os.environ.get('USER', 'gameflow'), help='who holds the lab (shown to others)')
     sub.add_parser('restore', help='close the game, restore the INI, relaunch the editor')
     sub.add_parser('newgame', help='click New Game on the title screen')
     s = sub.add_parser('key', help='press keys one at a time (keyboard-map.json names)')
@@ -185,9 +206,11 @@ def main():
 
     if a.cmd == 'start':
         overrides = dict(kv.split('=', 1) for kv in a.set)
+        take_lock(a.owner)
         print(run_lua(LUA_START, {'set': overrides}, 'gf_start'))
     elif a.cmd == 'restore':
         print(run_lua(LUA_RESTORE, {}, 'gf_restore'))
+        release_lock()
     elif a.cmd == 'newgame':
         x, y = NEW_GAME_BUTTON
         run_lua(LUA_CLICK, {'x': x, 'y': y}, 'gf_click')
