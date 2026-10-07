@@ -137,6 +137,20 @@ struct S3DImageryIcons
 
 #define OBJ3D_RENDERED  0x80000000  // Used internally to indicate if object was rendered
 
+// Retail draw blend modes for I3D objects. A "blendcont" tag names one for
+// every object of its state (parsed by 0x00405770, applied by 0x00405940);
+// the draw sets the matching render states (0x00417d60). "Lit" modes
+// modulate the texture by the object's fixed-function lighting; the others
+// draw the texture alone. The lowest set mode bit wins.
+inline constexpr uint32_t BLEND3D_NORMAL   = 0x01;  // "normal": opaque, lit, back faces culled
+inline constexpr uint32_t BLEND3D_ALPHA    = 0x02;  // "alpha": texture alpha blend
+inline constexpr uint32_t BLEND3D_LITALPHA = 0x04;  // "litalpha": alpha blend, lit
+inline constexpr uint32_t BLEND3D_ADD      = 0x08;  // "add": ONE, ONE
+inline constexpr uint32_t BLEND3D_LITADD   = 0x10;  // "litadd": ONE, ONE, lit
+inline constexpr uint32_t BLEND3D_ALPHAADD = 0x20;  // "alphaadd": SRCALPHA, ONE
+inline constexpr uint32_t BLEND3D_NOZCHECK = 0x40;  // the "...z" names: no depth test
+inline constexpr uint32_t BLEND3D_ZWRITE   = 0x80;  // writes depth (no tag sets it)
+
 _STRUCTDEF(S3DAnimObj)
 struct S3DAnimObj
 {
@@ -192,6 +206,7 @@ class T3DImagery : public TObjectImagery
     T3DTexArray textures;
     T3DObjArray objects;
     T3DTagArray tags;
+    std::vector<uint32_t> stateblend;     // Draw blend per state from its "blendcont" tag (BLEND3D_*; 0 = none)
 
     int32_t numframes;                    // Mesh/Ani/Icon/etc. arrays
     SMotionData **motion;
@@ -228,6 +243,12 @@ class T3DImagery : public TObjectImagery
       // Deletes 3D objects from the given mesh pointer
     bool MeshInitialized() const { return meshinitialized; }
     virtual bool Restore();
+
+  private:
+    void ResolveStateBlends();
+      // Fills stateblend from the "blendcont" tags
+
+  public:
 
   // GENERAL NOTE: T3DImagery is instantiated once per imagery file and shared
   // by every T3DAnimator built from it.  Vertices, faces, objects, materials,
@@ -316,6 +337,10 @@ class T3DImagery : public TObjectImagery
     int32_t NumTags() const { return tags.NumItems(); }
     S3DTag* GetTag(int32_t tagnum) { return &(tags[tagnum]); }
     char* FindTag(const char* name, int32_t state, int32_t frame = -1, int32_t* foundstate = nullptr, int32_t* foundframe = nullptr);
+    [[nodiscard]] uint32_t StateBlend(int32_t state) const
+      { return (state >= 0 && size_t(state) < stateblend.size()) ? stateblend[size_t(state)] : 0; }
+      // The draw blend (BLEND3D_*) the objects of this state take from a
+      // "blendcont" tag; 0 when the state has none
 
     virtual bool GetZ(TObjectInstance* oi, TSurface* surface) { return true; }
     virtual bool AlwaysOnTop(TObjectInstance* oi) { return true; }
