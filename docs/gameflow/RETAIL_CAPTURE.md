@@ -34,6 +34,8 @@ $P tools/retaillab/retail.py record stop                          # prints the A
 $P tools/retaillab/retail.py restore                              # closes the game, restores the INI, relaunches the editor
 ```
 
+`start` takes the lab (`~/RevenantRetailLab/gameflow-lab.lock`, naming
+`--owner`) and refuses while another run holds it; `restore` releases it.
 `start` keeps the lab's original INI in `C:\MCP\GFPRE.INI` and doesn't
 overwrite that copy on later starts; `restore` writes it back. Retail
 rewrites its INI on exit, so always end with `restore`.
