@@ -168,6 +168,7 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
     if (st->priority < curpriority)
         return false;
 
+    TObjectInstance* const player = triggerworld ? triggerworld->MainPlayer() : Player;
     bool fires = false;
     switch (st->type)
     {
@@ -196,17 +197,17 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
       case TRIGGER_PROXIMITY:
         if (newtrigger == TRIGGER_PROXIMITY)
             fires = true;
-        else if (Player && !stricmp(st->name, Player->GetName()))
+        else if (player && !stricmp(st->name, player->GetName()))
         {
             // Box first, then dx² + dy² ≤ 2·dist².
             const S3DPoint here = context->Pos();
-            const S3DPoint there = Player->Pos();
+            const S3DPoint there = player->Pos();
             const int32_t dx = here.x - there.x;
             const int32_t dy = here.y - there.y;
             if (std::abs(dx) <= st->dist && std::abs(dy) <= st->dist &&
                 dx * dx + dy * dy <= 2 * st->dist * st->dist)
             {
-                triggerer = Player;
+                triggerer = player;
                 useralias = kAliasUser;
                 fires = true;
             }
@@ -216,16 +217,17 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
       case TRIGGER_CUBE:
         if (newtrigger == TRIGGER_CUBE)
             fires = true;
-        else if (Player && (!stricmp(st->name, "player") || !stricmp(st->name, Player->GetName())))
+        else if (player && (!stricmp(st->name, "player") || !stricmp(st->name, player->GetName())))
         {
-            if (st->cube.In(Player->Pos()))
+            if (st->cube.In(player->Pos()))
             {
-                triggerer = Player;
+                triggerer = player;
                 useralias = kAliasUser;
                 fires = true;
             }
         }
-        else if (TObjectInstance* inside = MapPane.ObjectInCube(&st->cube, OBJSET_MOVING))
+        else if (TObjectInstance* inside = triggerworld ? triggerworld->ObjectInCube(&st->cube, OBJSET_MOVING)
+                                                        : MapPane.ObjectInCube(&st->cube, OBJSET_MOVING))
         {
             // A character or player in the cube that isn't the named object
             // (an unnamed cube carries its own prototype's name, so its owner
@@ -544,8 +546,12 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
         // ("Bad token in trigger block").
         else if (t.Type() == TKN_IDENT || t.Type() == TKN_KEYWORD || t.Type() == TKN_TEXT)
         {
+            if (stepobserver)
+                stepobserver->BeforeLine(*this, (int32_t)s.GetPos());
             TraceLine(context, text + thisline);
             int32_t bits = CommandInterpreter(context, t, 0, this);  // ****** MAIN COMMAND PROCESSOR HERE *****
+            if (stepobserver)
+                stepobserver->AfterLine(*this, bits);
 
             if (bits & CMD_DELETED)
                 return;
