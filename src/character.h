@@ -149,6 +149,10 @@ class TCharacter : public TComplexObject
       // (anim is override for animation to play when saying, nullptr is "say")
       // Tag indicates that the say command is a index tag into the DialogList
       // list of dialog lines.  The tag will also be used to play the dialog wave file.
+    [[nodiscard]] static int32_t SpeechTicks(int32_t wait, int32_t voicems, const char *line);
+      // How long Say holds a line, in ticks (DIALOG.md §3.2): `wait` when
+      // given (>= 0), else the voice's length, else the line's (`line` is
+      // DialogLine's output).
     bool SayTag(int32_t tagid, int32_t wait = -1, const char *anim = nullptr);
       // Says something given a dialog tag id number
     bool SayTag(const char *tag, int32_t wait = -1, const char *anim = nullptr);

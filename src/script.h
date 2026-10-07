@@ -56,9 +56,10 @@
 #define MAXTRIGGERS 32
 
 // REVSYNC: SScriptTrigger from retail (cls_TScriptProto_ParseScript_494e20.cpp).
-//   Field order: type(4) pos(4) name[20] cube(S3DRect, 24) dist(4) priority(4) = 60 bytes,
-//   stored in a TVirtualArray on TScriptProto. ParseScript zeroes 0x50 bytes from
-//   aiStack_36c — the inline buffer is rounded up but the live struct is 60.
+//   The 0x50-byte record (AddTrigger 0x00497f60 copies 0x50): type +0x00,
+//   pos +0x04, name[20] +0x08, cube +0x1c, dist +0x34, priority +0x38 (the
+//   trigger test compares it), region[20] +0x3c. Confirmed by the retail A/B
+//   (docs/gameflow/RETAIL_AB.md, script-parse).
 _STRUCTDEF(SScriptTrigger)
 struct SScriptTrigger
 {
@@ -68,6 +69,7 @@ struct SScriptTrigger
     S3DRect  cube      = {};
     int32_t  dist      = 0;
     int32_t  priority  = 0;
+    char     region[MAXSCRIPTNAME] = {};    // retail +0x3c: `CUBE <name> <region>`
 };
 
 typedef TVirtualArray<SScriptTrigger, 0, 4> TTriggerArray;
@@ -240,6 +242,11 @@ class TScript
     // A block is running (retail: the ip at +0x48 is set). `priority` holds
     // retail's script flags (+0x4c, SCRIPT_PAUSED), not a running state.
     [[nodiscard]] bool Running() const { return ip != kNotRunning; }
+    // The next line to run, an offset into the current prototype's text
+    // (retail +0x48 holds a pointer into it), or -1 when idle; and the block
+    // depth (+0xa4). Read by the retail A/B dump (retailab.cpp).
+    [[nodiscard]] int32_t Ip() const { return ip; }
+    [[nodiscard]] int32_t Depth() const { return depth; }
 
     // REVSYNC: 0x00492640 -- asks for a manual trigger (TRIGGER, DIALOG,
     // ACTIVATE, USE, GIVE, GET, COMBAT, DEAD), which starts at the next

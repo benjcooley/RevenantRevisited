@@ -1,0 +1,6 @@
+OBJECT Unfinished
+BEGIN
+	DIALOG
+	BEGIN
+		CONTROL OFF
+	END
