@@ -38,6 +38,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 struct tWAVEFORMATEX;   // sound.h's WAVEFORMATEX
@@ -88,14 +89,16 @@ void UnpauseAll();
 // Decodes a whole encoded file held in memory (WAV, MP3 or Ogg Vorbis) to
 // interleaved signed 16-bit PCM at the file's own rate and channel count.
 // `format` receives the PCM WAVEFORMATEX that CreateSourceFromPCM takes.
-// Returns false if the data can't be decoded.
+// Returns false if the data can't be decoded. A file with no frames
+// decodes (true) to an empty `pcm`.
 bool DecodeToPCM16(const uint8_t* data, size_t bytes,
                    tWAVEFORMATEX* format, std::vector<uint8_t>& pcm);
 
 // Length of an encoded file held in memory, in milliseconds: its PCM frame
 // count * 1000 / its sample rate, truncated. MP3 counts every frame
-// (no encoder-delay trim). 0 if the data can't be decoded.
-uint32_t DecodedLengthMs(const uint8_t* data, size_t bytes);
+// (no encoder-delay trim). Empty if the data can't be decoded; 0 for a
+// file with no frames.
+std::optional<uint32_t> DecodedLengthMs(const uint8_t* data, size_t bytes);
 
 // ---- Source (one decoded SFX, possibly with one playing voice) ----------
 

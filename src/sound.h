@@ -201,7 +201,7 @@ class TSoundPlayer
         // Stop a playing, mounted sound
     int32_t SampleLengthMs(int32_t id);
         // Length of the sound in milliseconds, decoded from its file (cached);
-        // 0 if it can't be decoded. Needs no audio output.
+        // 0 if it can't be decoded or has no samples. Needs no audio output.
 
   // Sound name functions (has to search sound list every time, but easier to use)
     bool Mount(const char *n, int32_t nr = -1) { return Mount(FindSound(n, nr)); }
