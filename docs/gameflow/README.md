@@ -125,6 +125,8 @@ What's broken / stubbed:
   and retail.
 - [RETAIL_CAPTURE.md](RETAIL_CAPTURE.md) — driving the shipped game in the
   dosbox-x lab for reference shots, and the opening's reference set.
+- [RETAIL_AB.md](RETAIL_AB.md) — retail's own functions run in the
+  in-process emulator against the port's on the same inputs; the A/B plan.
 - [RETAIL_TRACE.md](RETAIL_TRACE.md) — the shipped exe rebuilt with hooks
   that write the port's trace format, for line-by-line retail diffs.
 - [forensics/](forensics/) — retail behaviour per subsystem, with
