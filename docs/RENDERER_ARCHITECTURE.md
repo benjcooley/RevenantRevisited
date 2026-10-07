@@ -261,7 +261,9 @@ purpose:
 `SetLightingMode(0)` selects the Classic (retail) model, whose inputs come
 from `SetClassicLightModel` (computed by `classiclighting.cpp`); it lights
 tiles and meshes differently, keyed by the G-buffer normal target's alpha
-(1 tile, 0 mesh). See [LIGHTING_FIDELITY.md](LIGHTING_FIDELITY.md).
+(1 tile, 0 mesh). A submission whose id carries `kObjFlagSelfLit` (retail's
+`ANIIM_LIT` imagery, drawn after lighting) shows its albedo unlit in every
+mode. See [LIGHTING_FIDELITY.md](LIGHTING_FIDELITY.md).
 
 **Point lights (rebuild each frame)** -- `ClearPointLights`,
 `AddRetailPointLight(wx,wy,wz,radius,r,g,b,multiplier)` for authored map

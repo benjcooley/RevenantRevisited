@@ -96,6 +96,9 @@ _CLASSDEF(TSurface)
 // click-pick reads the same pixel and masks them off.
 constexpr uint32_t kObjFlagSelected = 1u << 31;
 constexpr uint32_t kObjFlagHovered  = 1u << 30;
+// The surface shows its own colours, unlit: retail drew it after the light
+// transfer (a 2D imagery state with ANIIM_LIT). The light pass tests it.
+constexpr uint32_t kObjFlagSelfLit  = 1u << 29;
 constexpr uint32_t kObjIdMask       = 0x0FFFFFFFu;
 constexpr uint32_t kObjFlagMask     = 0xF0000000u;
 

@@ -112,6 +112,14 @@ void main() {
     }
     float cast_shadow = (shadow.w > 0.5) ? texture(shadow_tex, v_uv).r : 1.0;
     surface_light s = shade_surface(alb.rgb, W, N, is_mesh, ao, cast_shadow);
+    // kObjFlagSelfLit (bit 0x20 of the id's top byte): imagery retail drew
+    // after the light transfer keeps its own colours.
+    {
+        ivec2 its = textureSize(id_tex, 0);
+        ivec2 ip  = clamp(ivec2(v_uv * vec2(its)), ivec2(0), its - 1);
+        if ((uint(texelFetch(id_tex, ip, 0).a * 255.0 + 0.5) & 0x20u) != 0u)
+            s.lit = alb.rgb;
+    }
     if (vm == 4) { frag_color = vec4(s.points, 1.0); return; }
     if (vm == 6) { frag_color = vec4(vec3(s.sun_shadow), 1.0); return; }
     frag_color = vec4(s.lit, 1.0);
