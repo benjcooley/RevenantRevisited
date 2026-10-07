@@ -437,17 +437,28 @@ struct SMeshSubmit
 // SetMaterialTransparency 0x004d82a0) and alpha-blended otherwise.
 inline constexpr float kOpaqueMeshAlpha = 0.999f;
 
+// How a transparent mesh forms its color before blending.
+//   Material   -- tex*diffuse*(ambient + light*N.L) + specular + emissive
+//                 (the helper-object look).
+//   Texture    -- the texture alone.
+//   TextureLit -- the texture modulated by fixed-function vertex lighting,
+//                 saturate(emissive + ambient*A + diffuse*light*N.L), the way
+//                 a D3D MODULATE stage combines them; alpha is tex.a*diffuse.a.
+enum class EHelperMeshShade : uint8_t { Material = 0, Texture = 1, TextureLit = 2 };
+
 struct SHelperMeshSubmit
 {
-    MeshHandle mesh;
-    float      world[16];
+    MeshHandle mesh = 0;
+    float      world[16] = {};
     bool       shadow_plane = false;
-    bool       additive_blend = false;
-    float      diffuse[4];
-    float      ambient[4];
-    float      specular[4];
-    float      emissive[4];
-    float      power;
+    bool       additive_blend = false;   // ONE, ONE; otherwise SRC_ALPHA, ONE_MINUS_SRC_ALPHA
+    EHelperMeshShade shade = EHelperMeshShade::Material;
+    bool       premultiply_alpha = false; // color *= alpha first: SRC_ALPHA, ONE under additive_blend
+    float      diffuse[4] = {};
+    float      ambient[4] = {};
+    float      specular[4] = {};
+    float      emissive[4] = {};
+    float      power = 0.0f;
     float      sort_depth = 0.0f;
 };
 
