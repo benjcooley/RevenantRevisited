@@ -8,6 +8,7 @@
 #include "ctrlmap.h"      // TControlMap / SControlEntry / KEYSPERCODE
 #include "gameoptions.h"  // the settings the pane edits, SaveOptions
 #include "logging.h"
+#include "mappane.h"      // MapPane: OK re-sets the ambient with the gamma offset
 #include "playscreen.h"   // InitDefaultControlMap()
 #include "revenant.h"     // ControlMap, AutoBeginCombat, PlaySpeech, ViolenceLevel, EnhancedLighting
 #include "sound.h"        // ApplyMusicVolume / ApplyEffectsVolume, level ranges
@@ -172,9 +173,12 @@ void TOptionsPane::OnActivate(const SDefWidget& widget, int32_t buttonIndex)
     TDefPane::OnActivate(widget, buttonIndex);
 }
 
-// REVSYNC: 0x0053aa90 event 3000 "ok" -- retail's order. Retail's gamma ramp
-// (0x004a98f0) and the map ambient's gamma offset (0x00453640) are not
-// ported (OPTIONS.md §9).
+// REVSYNC: 0x0053aa90 event 3000 "ok" -- retail's order. Retail sets the
+// display gamma ramp (0x004a98f0) here; the port has none (OPTIONS.md §9).
+// It then re-sets the map ambient through SetAmbientLight (0x00453640),
+// which adds the gamma offset to an ambient that already carries it, so
+// each OK brightens the map until the area ambient is next set (question 93,
+// kept as retail).
 void TOptionsPane::Apply()
 {
     RealTimeLight    = values.realTimeLight;
@@ -188,6 +192,7 @@ void TOptionsPane::Apply()
     ApplyMusicVolume(MusicVolume);
     EffectsVolume    = values.effects;
     GammaLevel       = values.gamma;
+    MapPane.SetAmbientLight(MapPane.GetAmbientLight());
     ApplyEffectsVolume(EffectsVolume);
     CombatFace       = values.combatFace;
     SaveOptions();
