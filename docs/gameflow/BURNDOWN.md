@@ -74,7 +74,7 @@ reads.
 | [x] | Retail options pane (`options.def`, `TOptionsPane`) opens from the title and in game and returns; the key list and rebinding | 2026-10-05 |
 | [x] | Toggles and sliders bound to the settings as retail: copies on open, the music level live, OK applies and saves `[Options]` (retail keys, `%d` / `Yes`/`No`) and `[Controls]`, Cancel drops them; rebinds held until OK; `[Options]` read at boot (`ReadOptions`, `src/gameoptions.*`) and saved at shutdown; music / effects levels on the audio groups | 2026-10-05 |
 | [x] | `[Controls]` read when the control map is built (it never was, so OK overwrote the player's bindings with the port's table) | 2026-10-05 |
-| [ ] | Gamma on screen: the display ramp and the ambient offset in `TMapPane::SetAmbientLight` (OPTIONS.md §7.11) — renderer / lighting owner, after shot S16 and question 92 | — |
+| [x] | Gamma on screen: the ambient offset in `TMapPane::SetAmbientLight` and OK's re-set, as retail; no display ramp, which the retail captures show has no effect (OPTIONS.md §7.11, §9; LIGHTING_FIDELITY.md §2.5, §8; question 92) | 2026-10-07 |
 | [ ] | Combat reads `CombatFace` and `NoCombatResults` (gameplay track; OPTIONS.md §7.4, §7.7) | — |
 | [ ] | DEF slider: a track click pages by the slider's page size, as retail (DEF engine; OPTIONS.md §8) | — |
 | [ ] | The control table → retail's (`0x005d5500`: order, defaults, entries), so a missing `[Controls]` gives retail's keys | — |

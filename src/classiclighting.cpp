@@ -16,12 +16,16 @@
 
 namespace {
 
-// ---- DLS light table (colortable.cpp SetLightColor; retail FUN_0041da10)
-// A 5-bit colour channel c5 enters the table as clr = 8 * c5, so a table
-// factor of 1/8 is identity: normalised gain = 8 * factor.
-constexpr double kTableColorScale   = 8.0;
-constexpr double kMultiplierScale   = 20.0;  // multiplierscale  @0x5c6e68
-constexpr double kAmbientMultiplier = 1.0;   // AmbientMultiplier @0x5c6e70
+// ---- DLS light table, MMX form (colortable.cpp SetLightColor; retail
+// FUN_0041da10 fills MMXLightTable @0x00635144). Every CPU with MMX (all
+// from 1997 on) transfers through it (FUN_0043d1f0 -> FUN_0043c860): a
+// multiplier byte M per channel, and a 5-bit colour channel c5 becomes
+// min(255, c5 * M) >> 3, so a byte of 8 is identity and the gain is M / 8.
+constexpr double  kMmxTableScale     = 80.0;  // mmxclr @0x5a3a28
+constexpr double  kMultiplierScale   = 20.0;  // multiplierscale  @0x5c6e68
+constexpr double  kAmbientMultiplier = 1.0;   // AmbientMultiplier @0x5c6e70
+constexpr double  kMultiplierByteMax = 255.0; // @0x5a3a20
+constexpr double  kIdentityByte      = 8.0;   // >> 3 in the transfer
 
 // ---- T3DScene (3dscene.cpp; retail FUN_00414310 / FUN_004143d0 /
 //      FUN_00412db0 / FUN_00411b70 / FUN_00411eb0)
@@ -49,16 +53,20 @@ SClassicLightModel ComputeClassicLightModel(int32_t amblight, const SColor &ambc
     const int32_t chan_in[3] = { ambcolor.red, ambcolor.green, ambcolor.blue };
     const int32_t chan_max = (std::max)({ chan_in[0], chan_in[1], chan_in[2] });
 
-    // ---- Static tiles: SetLightColor builds
-    //   out = clr*a*(A/255)*AmbientMultiplier + clr*l*(1 - A/255)*(I/63)*(mult/20)
-    // with a and l scaled so their largest channel is 1.
+    // ---- Static tiles: SetLightColor builds each MMX multiplier byte as
+    //   M = int(min(255, 80*l*(1 - A/255)*(I/63)*(mult/20) + int(min(255, 80*a*(A/255)*AmbientMultiplier))))
+    // with a and l scaled so their largest channel is 1. The ambient byte is
+    // truncated on its own, before the light is added; the light pass adds
+    // the light term and truncates again.
     const double ambient_fraction = double(ambient) / 255.0;
     for (int32_t i = 0; i < 3; ++i)
     {
         const double a = chan_max > 0 ? double(chan_in[i]) / double(chan_max) : 0.0;
-        m.tile_ambient[i] = float(kTableColorScale * a * ambient_fraction * kAmbientMultiplier);
+        const double ambient_byte =
+            std::floor((std::min)(kMmxTableScale * a * ambient_fraction * kAmbientMultiplier, kMultiplierByteMax));
+        m.tile_ambient[i] = float(ambient_byte / kIdentityByte);
     }
-    m.tile_gain_per_mult = float(kTableColorScale * (1.0 - ambient_fraction) / kMultiplierScale);
+    m.tile_gain_per_mult = float(kMmxTableScale * (1.0 - ambient_fraction) / kMultiplierScale / kIdentityByte);
 
     // ---- 3D meshes. Every light input is divided by the overbright scale s
     // and the texture stage multiplies it back; integer steps as retail.
@@ -106,5 +114,9 @@ SClassicLightModel ComputeClassicLightModel(int32_t amblight, const SColor &ambc
     for (int32_t i = 0; i < 3; ++i)
         m.mesh_dir_to_light[i] = float(-kDirLightTravel[i] / len);
     m.mesh_overbright = float(s);
+    // LightAffectObject (0x00415c70) adds an object's nearest map lights only
+    // when RealTimeLight is on; under RealTimeLight=No a 3D object gets the
+    // ambient and the key light alone.
+    m.mesh_map_lights = kClassicRealTimeLight;
     return m;
 }

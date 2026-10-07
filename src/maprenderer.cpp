@@ -108,12 +108,20 @@ static SMapCameraViewport ComputeMapCameraViewport(int32_t viewport_w, int32_t v
     // Higher render resolutions cover the framebuffer with that virtual view
     // instead of expanding world coverage and changing the ortho camera scale.
     // Non-4:3 modes crop one axis; they must not reveal extra world.
+    //
+    // The scale comes from the screen, not from the viewport: retail's map
+    // pane is a window onto the 640x480 screen, drawn 1:1, which the HUD's
+    // side panel and bottom bar only cover (docs/LIGHTING_FIDELITY.md §8.1).
+    // A viewport smaller than the screen (the play field) crops the view
+    // around its centre; it doesn't shrink the world into it.
     SMapCameraViewport v = {};
     if (viewport_w <= 0 || viewport_h <= 0)
         return v;
 
-    const float sx = float(viewport_w) / float(WIDTH);
-    const float sy = float(viewport_h) / float(HEIGHT);
+    const int32_t screen_w = Display.IsActive() ? Display.Width()  : viewport_w;
+    const int32_t screen_h = Display.IsActive() ? Display.Height() : viewport_h;
+    const float sx = float(screen_w) / float(WIDTH);
+    const float sy = float(screen_h) / float(HEIGHT);
     v.scale = (std::max)(0.0001f, (std::max)(sx, sy));
     v.offset_x = (float(viewport_w) - float(WIDTH) * v.scale) * 0.5f;
     v.offset_y = (float(viewport_h) - float(HEIGHT) * v.scale) * 0.5f;
@@ -818,6 +826,28 @@ static bool UploadTileBitmap(PTBitmap bm,
     return true;
 }
 
+// The still bitmap a 2D (animation) imagery shows for a state, or nullptr
+// when the imagery isn't 2D or the state is out of range.
+static TBitmap* StateStillBitmap(TObjectImagery* img, int32_t state)
+{
+    SImageryHeader* hdr = img ? img->GetHeader() : nullptr;
+    SImageryBody* body = img ? img->GetBody() : nullptr;
+    if (!hdr || !body || hdr->imageryid != OBJIMAGE_ANIMATION)
+        return nullptr;
+    if (state < 0 || state >= hdr->numstates)
+        return nullptr;
+    return static_cast<TBitmap*>(reinterpret_cast<SAnimImageryBody*>(body)->states[state].still);
+}
+
+// Index of the resident tile texture made from bm, or -1.
+static int32_t FindSectorBitmap(const std::vector<SSectorTileTex>& cache, const TBitmap* bm)
+{
+    for (size_t t = 0; t < cache.size(); ++t)
+        if (cache[t].bm_key == bm)
+            return int32_t(t);
+    return -1;
+}
+
 static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
                                  std::unordered_map<PTBitmap, int32_t>& by_bitmap,
                                  PTBitmap bm,
@@ -1025,6 +1055,25 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
     {
         if (!ctx.show_tiles || !ctx.tile_assets) return;
         if (!ctx.show_gizmos && (oi->IsLight() || oi->ObjClass() == OBJCLASS_HELPER)) return;
+        // Retail's map draw skips OF_INVISIBLE objects (GetUpdateObjs'
+        // CHECK_INVIS) and, outside the editor, OF_EDITOR ones
+        // (DrawUnlitObjects 0x00456cc0 tests flag 0x100).
+        if (!ctx.show_gizmos && (oi->GetFlags() & (OF_INVISIBLE | OF_EDITOR))) return;
+        // Retail draws a 2D imagery state in the unlit pass, lit by the DLS
+        // lights, when it has ANIIM_UNLIT, and after the light transfer, in
+        // its own colours, when it has ANIIM_LIT (TAnimImagery::DrawUnlit /
+        // DrawLit, 1998 animimage.cpp; a state with both ends up lit, one
+        // with neither isn't drawn). The resurrection pit's Elevator
+        // platform is ANIIM_LIT. Effects keep their own path.
+        if (oi->ObjClass() != OBJCLASS_EFFECT)
+            if (TObjectImagery* img = oi->GetImagery())
+            {
+                const uint32_t image_flags = img->GetImageFlags(oi->GetState());
+                if (!(image_flags & (ANIIM_LIT | ANIIM_UNLIT)) && !ctx.show_gizmos)
+                    return;
+                if (image_flags & ANIIM_LIT)
+                    obj_id |= kObjFlagSelfLit;
+            }
         const auto& tex = (*ctx.tile_assets)[asset_idx];
         const SRendererImagePairInfo* image_pair = Renderer ? Renderer->ImagePairInfo(tex.image_pair) : nullptr;
         const S3DPoint rel = {world_pos.x - ctx.sectorCameraWorld.x, world_pos.y - ctx.sectorCameraWorld.y, world_pos.z};
@@ -2385,16 +2434,19 @@ void TMapRenderer::RebuildForCurrentMap()
                 continue;
             }
 
-            if (oi->ObjClass() != OBJCLASS_TILE) continue;
+            // Retail draws every map object through its imagery, whatever
+            // its class: DrawUnlitObjects (0x00456cc0) draws each object
+            // GetUpdateObjs (0x0045f800, flags 0x3f) collects. Exits (the
+            // Keep's resurrection-pit Elevator), containers and items lying
+            // on the map therefore draw like tiles. Invisible and editor-only
+            // objects are filtered per frame in Submit, as retail filters
+            // them per update.
             ++total_tiles;
             if (hdr->imageryid != OBJIMAGE_ANIMATION) { ++non_2d; continue; }
-            auto* ab = (SAnimImageryBody*)body;
             if (st < 0 || st >= hdr->numstates) { ++bad_state; continue; }
-            PTBitmap bm = (TBitmap*)ab->states[st].still;
+            TBitmap* bm = StateStillBitmap(img, st);
             if (!bm) { ++no_still; continue; }
-            int32_t tex_idx = -1;
-            for (size_t t = 0; t < s.sectorTileTex.size(); ++t)
-                if (s.sectorTileTex[t].bm_key == bm) { tex_idx = (int32_t)t; break; }
+            int32_t tex_idx = FindSectorBitmap(s.sectorTileTex, bm);
             if (tex_idx < 0)
             {
                 SSectorTileTex t = {};
@@ -2717,6 +2769,17 @@ void TMapRenderer::RenderFrame()
             if (TObjectImagery* img = oi->GetImagery())
             {
                 const int32_t st = oi->GetState();
+                // A chest opening or a door's state change shows the new
+                // state's still, as the imagery draw does in retail.
+                if (st != old_state)
+                    if (TBitmap* bm = StateStillBitmap(img, st))
+                    {
+                        int32_t tex_idx = FindSectorBitmap(s.sectorTileTex, bm);
+                        if (tex_idx < 0)
+                            tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
+                        if (tex_idx >= 0)
+                            inst.asset_idx = tex_idx;
+                    }
                 inst.regx = img->GetRegX(st);
                 inst.regy = img->GetRegY(st);
                 inst.regz = img->GetRegZ(st);

@@ -21,12 +21,20 @@
 
 extern int32_t MusicVolume;       // MusicVolume: music level; 0..0x60 is heard (ApplyMusicVolume)
 extern int32_t EffectsVolume;     // EffectsVolume: sound effects level, 0..0x7f
-extern int32_t GammaLevel;        // GammaLevel, 0..4: kept and saved, not rendered (OPTIONS.md §9)
+extern int32_t GammaLevel;        // GammaLevel, 0..4: the map ambient offset (GammaAmbientOffset); no display ramp (OPTIONS.md §9)
 extern bool    RealTimeLight;     // RealTimeLight: kept and saved; Classic renders the RealTimeLight=No image
 extern bool    CombatFace;        // CombatFace: kept and saved; the combat code doesn't read it yet
 extern bool    NoCombatResults;   // NoCombatResults: kept and saved; combat results aren't printed yet
 extern bool    NoGameSpeedLimit;  // "Limit Game Speed" unchecked; this session only, never saved;
                                   // the port's simulation always runs on the 24 Hz tick
+
+// The ambient light GammaLevel adds to every map ambient: retail's
+// TMapPane::SetAmbientLight (0x00453640) stores light + (GammaLevel * 5 - 10) * 2,
+// floored at 0. Level 2 adds nothing, 3 adds 10, 4 adds 20. OPTIONS.md §7.11.
+[[nodiscard]] constexpr int32_t GammaAmbientOffset(int32_t gamma_level)
+{
+    return (gamma_level * 5 - 10) * 2;
+}
 
 // REVSYNC: ReadOptions @ 0x00484ae0 -- the [Options] keys that have a port
 // owner, each written back (a missing key gets its default), then the music

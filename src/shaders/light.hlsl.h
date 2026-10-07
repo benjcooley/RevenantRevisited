@@ -110,6 +110,15 @@ float4 main_ps(vs_out in_) : SV_Target0 {
     }
     float cast_shadow = (shadow.w > 0.5) ? shadow_tex.Sample(smp, in_.uv).r : 1.0;
     surface_light s = shade_surface(alb.rgb, W, N, is_mesh, ao, cast_shadow);
+    // kObjFlagSelfLit (bit 0x20 of the id's top byte): imagery retail drew
+    // after the light transfer keeps its own colours.
+    {
+        uint iw, ih;
+        id_tex.GetDimensions(iw, ih);
+        int2 ip = int2(min(uint(in_.uv.x * float(iw)), iw - 1), min(uint(in_.uv.y * float(ih)), ih - 1));
+        if ((uint(id_tex.Load(int3(ip, 0)).a * 255.0 + 0.5) & 0x20u) != 0u)
+            s.lit = alb.rgb;
+    }
     if (vm == 4) return float4(s.points, 1.0);
     if (vm == 6) return float4(s.sun_shadow, s.sun_shadow, s.sun_shadow, 1.0);
     return float4(s.lit, 1.0);

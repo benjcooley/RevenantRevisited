@@ -24,7 +24,7 @@ Answer inline (or in chat) and the owning doc gets updated.
 | S13 | In a played game (control on), default ini (no `NOTEXOVERLAYS`): ESC and the next ⅓ s frame by frame; the menu; Save Game with a few slots; Load Game from the menu, then Load Game on a slot and the next second; Quit Module's question; title Load Game and Options | the in-game chrome's translucency and fade, the popup's look, the list's scrollbar and selection, the in-game load's progress popup | [forensics/INGAME_MENU.md](forensics/INGAME_MENU.md) §4.2, §5, §9 |
 | S14 | In town (Misthaven), talk to Elahni (potions) with some gold, default ini: Buy Items and the panel as it opens; the mouse over the second row; a click on the first row; Buy (the gold and her line); the ↓ arrow; Exit and the next second | the shop's fonts, colours (names violet 130,13,197, hover 230,150,255, selected 200,83,255; gold and labels 255,186,0; stat lines grey), row positions, the icons; whether the bottom bar comes back after Exit | [../ui/forensics/BuySellScreen_SPEC.md](../ui/forensics/BuySellScreen_SPEC.md) §4, §8, §1 |
 | S15 | Sell Items at Elahni with potions in the pack, in a bag and in a belt pouch; then at Cronus (armor) with a worn and an unworn piece; sell one of each | which items a Sell shop lists (bags, belt pouches, worn armor), the sell prices (Value × 0.3) | BuySellScreen_SPEC §6.3, §6.4 |
-| S16 | One spot in the Keep hall, Locke standing still, `RealTimeLight=No`, fullscreen: one shot each at Gamma 0, 2 and 4 (set in Options, OK, then wait for the area ambient to settle — or restart between shots, since each OK adds the offset again) | whether the gamma ramp is in effect under dosbox-x / the GOG wrapper, and how much the ambient offset brightens the floor | [forensics/OPTIONS.md](forensics/OPTIONS.md) §7.11 |
+| S16 | One spot in the Keep hall, Locke standing still, `RealTimeLight=No`, fullscreen: one shot each at Gamma 0, 2 and 4 (set in Options, OK, then wait for the area ambient to settle — or restart between shots, since each OK adds the offset again) | Partly settled 2026-10-07 from the opening captures: under dosbox-x the ramp has no effect (the HUD doesn't change), and the ambient offset is in effect (S1 renders at ambient 14 at level 3). Still open: the GOG wrapper (dgVoodoo) and levels 0, 2, 4 | [forensics/OPTIONS.md](forensics/OPTIONS.md) §7.11, [../LIGHTING_FIDELITY.md](../LIGHTING_FIDELITY.md) §8 |
 | S17 | In a played game, ESC → Load Game → a slot on another level → Load Game, frame by frame until control returns; then the same for a slot on the same level | the popup's look, the bar's colour and steps (80 after the save is read, then the sector fill, closing at 80%), what stands behind it, whether the world moves while the popup fades in and out, whether the dialog vanishes at once | [forensics/INGAME_MENU.md](forensics/INGAME_MENU.md) §5.1, §9 |
 
 ## Dialog ([forensics/DIALOG.md](forensics/DIALOG.md) §7)
@@ -255,11 +255,20 @@ Answer inline (or in chat) and the owning doc gets updated.
     five ramps darken the midtones (level 4 only a little, level 2 like a
     1.8 power curve), and the shipped ini says `GammaLevel = 4`, so the
     shipped look was the level-4 ramp plus 20 ambient. Was that the intended
-    picture, and did the ramp take effect on the hardware of the time? The
-    port renders neither yet (shot S16).
+    picture, and did the ramp take effect on the hardware of the time?
+    *2026-10-07:* the port now renders the ambient offset, as retail. It
+    renders no ramp: in the dosbox-x captures the ramp never takes effect
+    (the HUD is pixel-identical before and after the Options pane), and
+    the Classic look is matched to those captures (LIGHTING_FIDELITY.md
+    §8). If the ramp was part of the intended picture on real cards, it
+    could come back as a Revisited option.
 93. Each Options OK re-applies the gamma offset to the current ambient,
     which already includes it, so pressing OK repeatedly at level 3 or 4
-    brightens the area until its ambient is next set. A bug?
+    brightens the area until its ambient is next set. A bug? *2026-10-07:*
+    seen in the shipped game: in the opening capture session the pane
+    opened and closed through OK several times, and the Keep got brighter
+    each time while the HUD stayed the same (`opening-20261006-run2.avi`,
+    about 8:56, 10:03, 10:28, 11:58; OPTIONS.md §7.11). The port keeps it.
 
 ## Camera and control ([forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §4)
 

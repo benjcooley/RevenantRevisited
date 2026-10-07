@@ -118,6 +118,14 @@ fragment float4 _main(vs_out in [[stage_in]],
     }
     float cast_shadow = (p.shadow.w > 0.5) ? shadow_tex.sample(smp, in.uv).r : 1.0;
     surface_light s = shade_surface(alb.rgb, W, N, is_mesh, ao, cast_shadow, p);
+    // kObjFlagSelfLit (bit 0x20 of the id's top byte): imagery retail drew
+    // after the light transfer keeps its own colours.
+    {
+        uint2 ip = uint2(min(uint(in.uv.x * float(id_tex.get_width())),  id_tex.get_width()  - 1),
+                         min(uint(in.uv.y * float(id_tex.get_height())), id_tex.get_height() - 1));
+        if ((uint(id_tex.read(ip).a * 255.0 + 0.5) & 0x20u) != 0u)
+            s.lit = alb.rgb;
+    }
     if (vm == 4) return float4(s.points, 1.0);
     if (vm == 6) return float4(float3(s.sun_shadow), 1.0);
     float3 col = s.lit;
