@@ -3266,7 +3266,7 @@ void TRenderer::PackLightUniforms(float* u) const
     u[o++] = float(retail_count);
     u[o++] = light.retail_modern_gain_per_mult;
     u[o++] = light.retail_modern_range_scale;
-    u[o++] = 0.0f;
+    u[o++] = cl.mesh_map_lights ? 1.0f : 0.0f;
     assert(o == kLightUniformFloats);
 }
 

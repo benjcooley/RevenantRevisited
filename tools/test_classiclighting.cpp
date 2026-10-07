@@ -4,13 +4,14 @@
 // *       test_classiclighting.cpp - Classic (retail) light model         *
 // *************************************************************************
 //
-// Pins ComputeClassicLightModel to the retail light-table and T3DScene
+// Pins ComputeClassicLightModel to the retail MMX light-table and T3DScene
 // arithmetic derived in docs/LIGHTING_FIDELITY.md. Expected values are
 // worked by hand from the retail formulas, not read back from the code.
 // Run via build/test_classiclighting after build.
 // *************************************************************************
 
 #include "../src/classiclighting.h"
+#include "../src/gameoptions.h"
 #include "../src/graphics.h"
 #include "../src/renderer.h"
 
@@ -32,25 +33,45 @@ SClassicLightSettings ShippedIni()
 
 } // namespace
 
-TEST(ClassicTile, Amblight32IsIdentity)
+TEST(ClassicTile, AmbientIsTheTruncatedMmxByte)
 {
-    // 8 * 32 / 255: the light table's identity point.
-    const SClassicLightModel m = ComputeClassicLightModel(32, Color(255, 255, 255), ShippedIni());
-    for (float a : m.tile_ambient)
-        EXPECT_NEAR(a, 8.0f * 32.0f / 255.0f, kEps);
+    // MMX table: the ambient byte is int(80 * A / 255) for a white ambient,
+    // and the transfer's >> 3 makes a byte of 8 identity, so the gain is
+    // byte / 8. AMBLIGHT 26 gives int(8.16) = 8, identity; 32 gives
+    // int(10.04) = 10, a gain of 1.25.
+    const SClassicLightModel m26 = ComputeClassicLightModel(26, Color(255, 255, 255), ShippedIni());
+    for (float a : m26.tile_ambient)
+        EXPECT_EQ(a, 1.0f);
+    const SClassicLightModel m32 = ComputeClassicLightModel(32, Color(255, 255, 255), ShippedIni());
+    for (float a : m32.tile_ambient)
+        EXPECT_EQ(a, 10.0f / 8.0f);
 }
 
-TEST(ClassicTile, KeepAmbientIsDarkAndBlue)
+TEST(ClassicTile, KeepAmbientAtGammaThree)
 {
-    // The Keep: AMBLIGHT 4, AMBCOLOR 155,155,210. Colour scales to max 1.
+    // The Keep: AMBLIGHT 4 plus GammaLevel 3's offset of 10 = 14, AMBCOLOR
+    // 155,155,210 (colour scaled to max 1). Bytes: int(80 * 155/210 * 14/255)
+    // = int(3.24) = 3, and int(80 * 14/255) = int(4.39) = 4. This is the
+    // multiplier the retail S1 capture shows on unlit floor and wall
+    // (docs/LIGHTING_FIDELITY.md section 8).
+    const SClassicLightModel m = ComputeClassicLightModel(14, Color(155, 155, 210), ShippedIni());
+    EXPECT_EQ(m.tile_ambient[0], 3.0f / 8.0f);
+    EXPECT_EQ(m.tile_ambient[1], 3.0f / 8.0f);
+    EXPECT_EQ(m.tile_ambient[2], 4.0f / 8.0f);
+    // Light byte per unit intensity and multiplier: 80 * (1 - 14/255) / 20,
+    // as a gain (/ 8). Multiplier 12 at full intensity: 5.67.
+    EXPECT_NEAR(m.tile_gain_per_mult, 80.0f * (1.0f - 14.0f / 255.0f) / 20.0f / 8.0f, kEps);
+    EXPECT_NEAR(m.tile_gain_per_mult * 12.0f, 5.6696f, 1e-3f);
+}
+
+TEST(ClassicTile, KeepAmbientWithoutGammaOffsetIsNearBlack)
+{
+    // AMBLIGHT 4 alone (GammaLevel 2): the red and green bytes truncate to
+    // 0 and blue to 1, so unlit stone is near black with a blue cast.
     const SClassicLightModel m = ComputeClassicLightModel(4, Color(155, 155, 210), ShippedIni());
-    const float base = 8.0f * 4.0f / 255.0f;
-    EXPECT_NEAR(m.tile_ambient[0], base * 155.0f / 210.0f, kEps);
-    EXPECT_NEAR(m.tile_ambient[1], base * 155.0f / 210.0f, kEps);
-    EXPECT_NEAR(m.tile_ambient[2], base, kEps);
-    // Full-intensity light gain for the Keep's multiplier-12 lights:
-    // 8 * (1 - 4/255) * 12 / 20 = 4.7247.
-    EXPECT_NEAR(m.tile_gain_per_mult * 12.0f, 8.0f * (1.0f - 4.0f / 255.0f) * 12.0f / 20.0f, kEps);
+    EXPECT_EQ(m.tile_ambient[0], 0.0f);
+    EXPECT_EQ(m.tile_ambient[1], 0.0f);
+    EXPECT_EQ(m.tile_ambient[2], 1.0f / 8.0f);
 }
 
 TEST(ClassicTile, BlackAmbientColourIsSafe)
@@ -102,6 +123,23 @@ TEST(ClassicMesh, KeyLightComesFromAboveAndPlusY)
                        m.mesh_dir_to_light[1] * m.mesh_dir_to_light[1] +
                        m.mesh_dir_to_light[2] * m.mesh_dir_to_light[2];
     EXPECT_NEAR(len2, 1.0f, kEps);
+}
+
+TEST(ClassicMesh, MapLightsDoNotReachMeshesWithoutRealTimeLight)
+{
+    // LightAffectObject (0x00415c70) adds map lights only with
+    // RealTimeLight on; Classic renders the RealTimeLight=No image.
+    const SClassicLightModel m = ComputeClassicLightModel(14, Color(155, 155, 210), ShippedIni());
+    EXPECT_FALSE(m.mesh_map_lights);
+}
+
+TEST(GammaAmbient, OffsetPerLevel)
+{
+    // TMapPane::SetAmbientLight (0x00453640): (GammaLevel * 5 - 10) * 2.
+    EXPECT_EQ(GammaAmbientOffset(0), -20);
+    EXPECT_EQ(GammaAmbientOffset(2), 0);
+    EXPECT_EQ(GammaAmbientOffset(3), 10);
+    EXPECT_EQ(GammaAmbientOffset(4), 20);
 }
 
 TEST(ClassicLights, NonPositiveMultiplierUsesDefaultTable)

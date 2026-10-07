@@ -109,7 +109,9 @@ constexpr uint32_t kObjFlagMask     = 0xF0000000u;
 // values from the area ambient and the lighting settings
 // (classiclighting.cpp). Derivation: docs/LIGHTING_FIDELITY.md §2-§3, §6.
 struct SClassicLightModel {
-    // Static tiles (DLS light table).
+    // Static tiles (DLS through the MMX light table). Both are gains, i.e.
+    // the table's multiplier bytes over 8: tile_ambient is the truncated
+    // ambient byte / 8, so 8 * tile_ambient is an integer.
     float tile_ambient[3]        = {};    // ambient gain per channel
     float tile_gain_per_mult     = 0.0f;  // full-intensity light gain per unit of light multiplier
     // 3D meshes (T3DScene). Light values are in effective units, after the
@@ -120,6 +122,10 @@ struct SClassicLightModel {
     float mesh_gain_per_mult     = 0.0f;  // light brightness at the source per unit of multiplier
     float mesh_dir_to_light[3]   = { 0.0f, 0.0f, 1.0f };  // world space, unit length
     float mesh_overbright        = 1.0f;  // ceiling on summed mesh light
+    // Whether the map's lights reach meshes. Retail lights 3D objects with
+    // their MaxLights nearest map lights only when RealTimeLight is on
+    // (LightAffectObject 0x00415c70); otherwise ambient and key light only.
+    bool  mesh_map_lights        = false;
 };
 
 // Opaque handles to renderer-owned resources. 0 is invalid.
