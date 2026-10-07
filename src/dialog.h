@@ -150,6 +150,7 @@ class TDialogEntry
 
     void RemoveButtons();
     [[nodiscard]] TBitmap* Portrait() const;
+    void TraceGeometry();
 
     TDialogPane& pane;                              // +0x00
     TSafeRef<TObjectInstance> speaker;              // +0x04
@@ -175,6 +176,7 @@ class TDialogEntry
     std::array<TButton*, kMaxTexts> buttons{};      // +0x100, owned by the pane
     std::array<int32_t, kMaxTexts> highlight{};     // +0x120
     std::array<int32_t, kMaxTexts> hightarget{};    // +0x140
+    std::vector<int32_t> traced;                    // the geometry last written to the trace
 };
 
 // REVSYNC: TDialogPane @ 0x00667cc8 (vtable 0x005a5c60, 0x1f0 bytes;

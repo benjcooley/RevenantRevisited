@@ -31,6 +31,7 @@ in what order, with what values. Questions the story tests keep hitting:
 | `[script] <object>: trigger N of '<name>' starts` / `ends` | trigger start `0x00492440`, `End` `0x00493e40` | `script.cpp` |
 | `[dialog] <speaker> says: <text>` | `TCharacter::Say` `0x004d0610` (this, text, frames, anim, sound) | `dialog.cpp` |
 | `[dialog] choice N committed (label '<l>')` | the response taken, `0x00492d70` types 2/5/10 | `dialog.cpp` |
+| `[dialog] rect <speaker> mode M "<text>" at X,Y size WxH fade F texts (x0,y0)-(x1,y1) …` — each entry's screen rect and its text rects, when they change | entry pulse `0x005348f0` (this = entry): speaker `+0x04` (map index → name `+0x38`), mode `+0x08`, base `+0x18/+0x1c` + offset `+0x20/+0x24`, size `+0x28/+0x2c`, fade `+0x54`, text rects `+0x80` (entry-relative, inclusive) | `TDialogEntry::TraceGeometry`, at the start of `Pulse` |
 | `[state] <VAR> = <n>` | the game-state setter behind `set` | `command.cpp` |
 | `[textbar] <text>` | `TTextBar::Print` | `textbar.cpp` |
 | `[session] entered level N` | level entry | `gamesession.cpp` |

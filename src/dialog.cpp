@@ -368,6 +368,8 @@ void TDialogEntry::Pulse()
     if (!IsPlaced())
         return;
 
+    TraceGeometry();
+
     if (ticksleft >= 0)
     {
         if (ticksleft == 0)
@@ -414,6 +416,41 @@ void TDialogEntry::Dismiss()
 
 // REVSYNC: the layout step of 0x005351d0 for one entry. A new entry appears
 // at its place; a placed one slides there in kSlideTicks equal 16.16 steps.
+// The entry's screen rect and its texts' rects, written to the trace when
+// they change (with the fade at that moment; a fade alone writes nothing):
+// `[dialog] rect ...`, the geometry half of the retail/port
+// diff (RETAIL_TRACE.md §2). Taken at the start of the pulse, the state
+// retail's entry pulse 0x005348f0 finds on entry, where a retail hook reads
+// the same fields: base +0x18/+0x1c, stack offset +0x20/+0x24, size
+// +0x28/+0x2c, fade +0x54, text rects +0x80 (entry-relative, inclusive).
+void TDialogEntry::TraceGeometry()
+{
+    const int32_t x = basex + offx;
+    const int32_t y = basey + offy;
+    std::vector<int32_t> geometry{ x, y, kWidth, height };
+    for (size_t i = 0; i < texts.size(); ++i)
+    {
+        const SRect& r = rects[i];
+        geometry.insert(geometry.end(), { x + r.left, y + r.top, x + r.right, y + r.bottom });
+    }
+    if (geometry == traced)
+        return;
+    traced = std::move(geometry);
+
+    std::string textrects;
+    for (size_t i = 4; i + 3 < traced.size(); i += 4)
+    {
+        char buf[64];
+        snprintf(buf, sizeof(buf), " (%d,%d)-(%d,%d)", traced[i], traced[i + 1], traced[i + 2], traced[i + 3]);
+        textrects += buf;
+    }
+    const TObjectInstance* who = speaker.Get();
+    const std::string first = texts.empty() ? std::string() : ToUtf8(texts[0].substr(0, 24).c_str());
+    log_trace("[dialog] rect %s mode %d \"%s\" at %d,%d size %dx%d fade %d texts%s",
+              who && who->GetName() ? who->GetName() : "-", static_cast<int32_t>(mode), first.c_str(),
+              x, y, kWidth, height, fade, textrects.c_str());
+}
+
 void TDialogEntry::MoveTo(int32_t offset)
 {
     if (targetx == 0 && targety == offset)
