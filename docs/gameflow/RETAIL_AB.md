@@ -227,7 +227,7 @@ the voice length over 0–30,000 ms (every millisecond); and 12 edge cases
 lines, Windows-1252 bytes, brackets, a `[me]` after a high byte, 255- and
 300-character lines, a missing voice).
 
-**Results** (case set `fb7744b1…` without edges): all 1,545 shipped inputs
+**Results** (case set `81b137c2…`, 1,558 cases; port `00052ca`): all 1,545 shipped inputs
 and all 30,001 sweep points match, voiced and unvoiced (voice lengths 339–
 14,811 ms). Edge cases: 8 of 12 match; the other 4:
 
@@ -276,7 +276,7 @@ the rest), staggered by 6 ticks (arrivals push the player stack up while
 it slides), and newest-first; same-tick expiries; dismissals in the middle
 of a slide; both stacks interleaved; no-timeout entries. Heights 44–80.
 
-**Results**: every entry's lifetime, base, offset, target, 16.16 position,
+**Results** (case set `24ca8932…`; port `00052ca`): every entry's lifetime, base, offset, target, 16.16 position,
 step, dismissed flag and fade are identical at every tick in all 54
 timelines (18,139 entry-ticks). The time-based presentation interpolates
 between these tick states, so it agrees with retail at tick boundaries.
