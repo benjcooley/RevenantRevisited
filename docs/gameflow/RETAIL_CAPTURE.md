@@ -64,9 +64,12 @@ rewrites its INI on exit, so always end with `restore`.
     `AutoCombat=No`.
   - Keys typed while the prompt is closed are hotkeys: `o` opens Options,
     and Escape from there opens the in-game menu.
-- **Options Cancel re-applies the gamma ramp** (`0x0053b0c7`), and under
-  dosbox-x that visibly changes the picture (§3, 13). After visiting
-  Options, use the session for positions and timing only, not colour.
+- **Options OK brightens the map.** OK re-sets the map ambient with the
+  gamma offset on top of the one it already has (question 93), so every
+  OK at `GammaLevel` 3 adds 10 to the area's ambient until it is next
+  set (§3, 13). The display ramp that OK and Cancel re-apply has no
+  effect under dosbox-x. After an OK, use the session for positions and
+  timing only, not colour (LIGHTING_FIDELITY.md §8).
 - **The opening fight.** Unarmed and with no player input, Locke (100 hp)
   loses to Rahul in 2–3 minutes. The run below used `alreadydead`, then
   swings (A/S/D) until Rahul fell.
@@ -98,7 +101,7 @@ The full recordings are in `~/RevenantRetailLab/captures/gameflow/`:
 | 10 | `10_rahul_fight.png` | Rahul attacking; his portrait and health at the top right | combat HUD, combat log |
 | 11 | `11_rahul_killed.png` | "Critical strike vs. Rahul Dmg:55"; Sardok and Tendrick come back | Rahul's death |
 | 12 | `12_game_over.png` | Game Over (Restart / Load / Exit) | death screen |
-| 13 | `13_after_options_cancel.png` | After Options → Cancel: the gamma ramp applied, lavender | gamma (S16), not the S1 look |
+| 13 | `13_after_options_cancel.png` | After the Options pane: the map brighter and lavender, the HUD unchanged; the pane closed through OK, which re-added the gamma ambient offset (the file name predates that finding) | gamma (S16, question 93), not the S1 look |
 
 Facts the set settles:
 
@@ -114,8 +117,10 @@ Facts the set settles:
 - **The gvortex** lights Locke and the floor green.
 - **The pit** inside the resurrection circle shows a blue-violet cracked
   surface, not black.
-- **Gamma ramp.** At boot under dosbox-x the ramp isn't in effect; it is
-  after Options → Cancel (13).
+- **Gamma.** The ambient offset is in effect from area entry (S1 renders
+  at ambient 14 at level 3); the display ramp never takes effect under
+  dosbox-x: the HUD is pixel-identical in 05 and 13. What brightens 13
+  is the map ambient, re-set with the offset by the pane's OK.
 
 ## 4. Port against retail (5a4d9ea, `--resolution=640x480`, retail-default INI)
 

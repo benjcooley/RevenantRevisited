@@ -204,11 +204,24 @@ the control's codes separated by commas, each code its keys joined with
       2.7, 2.3, 1.8, 1.6, 1.1).
     - The map ambient. `TMapPane::SetAmbientLight` `0x00453640` stores
       `light + (GammaLevel * 5 - 10) * 2` (floored at 0); map init
-      `0x0044d5c0` sets `GammaLevel * 10 - 10`. So level 2 adds nothing,
-      3 adds 10, 4 adds 20. FadeAmbient `0x00453720` doesn't add it. OK
+      `0x0044d5c0` inlines it with light 10 (`GammaLevel * 10 - 10`). So
+      level 2 adds nothing, 3 adds 10, 4 adds 20. Area entry
+      (`0x0041ba00`), the day/night update (`0x0041b770`) and the script's
+      `ambient` command (`0x0042596d`) all go through it; FadeAmbient
+      `0x00453720`, the cross-fade between nearby areas, doesn't add it. OK
       calls SetAmbientLight on `MapPane.ambient` (`+0x8cc`, `0x006671a4`),
       which already holds the offset, so each OK adds the offset again
       until the next area ambient change.
+    - What the shipped game shows, from the dosbox-x captures
+      (LIGHTING_FIDELITY.md §8): the ambient offset is in effect (the Keep
+      renders at ambient 14 at level 3), and the ramp never is. In the
+      capture session the pane opened several times (the `o` of a cheat
+      word typed while the prompt was closed) and each time it closed the
+      map got brighter while the HUD's pixels stayed identical. A ramp
+      would change the HUD too; only OK's `SetAmbientLight` touches the map
+      (Cancel re-applies the ramp alone, and the pane's close
+      `0x00435010` only fades it), so the pane closed through OK, and the
+      brightening is question 93 at work.
 
 ## 8. Scrollbar behaviour (DEF engine)
 
@@ -244,6 +257,8 @@ retail's keys and format.
 | rebind buffer `+0x1ac` | `TOptionsPane::bindings` (each control's keys); rebinding edits the buffer, OK commits it. Before this the port wrote rebinds straight into the live control map, so Cancel kept them |
 | control map Load `0x00439ba0` at boot | `InitDefaultControlMap()` reads `[Controls]` after building the table (it never did, so OK used to overwrite the player's `[Controls]` with the port's table). The port's table (from the 1998 source) isn't retail's `0x005d5500`: its order, several defaults and some controls differ. A control the INI names gets the INI's keys; the others keep the table's, and the port-only ones are added to `[Controls]` on first read |
 | CD SetVolume `0x0049a5c0` | `ApplyMusicVolume(level)` (`sound.cpp`): 0..`0x60`, the music group's gain `level / 0x60` |
+| SetAmbientLight `0x00453640` | `TMapPane::SetAmbientLight` adds `GammaAmbientOffset(GammaLevel)` (`gameoptions.h`), floored at 0; FadeAmbient doesn't (2026-10-07) |
+| OK's `SetAmbientLight(MapPane.ambient, 1)` `0x0053afbc` | `TOptionsPane::Apply` re-sets `MapPane`'s ambient, adding the offset again as retail (question 93) |
 | per-sample `EffectsVolume` | `ApplyEffectsVolume(level)`: the sfx group's gain `level / 0x7f`; game sounds and movie audio both play through the sfx group |
 
 Live in the port: Auto, Dialog, Enhanced (the light model reads it every
@@ -262,11 +277,15 @@ frame), Violence (read at each blood effect), Music, Sound.
 - Effects volume is a gain on the sfx group (`level / 0x7f`), not
   retail's per-sample subtraction in Miles units: the same for a
   full-volume sound, a little louder for quiet ones at low settings.
-- Gamma is stored, shown and saved but changes nothing on screen: the
-  port has no display gamma ramp, and `TMapPane::SetAmbientLight` doesn't
-  add the gamma ambient offset (§7.11). Both are lighting-fidelity work
-  for the renderer owner, to be checked against retail captures first
-  (screenshot S16, question 92).
+- Gamma reaches the screen through the map ambient only (§7.11): the
+  port has no display gamma ramp, in Classic or Revisited. The retail
+  captures are the reference, and in them the ramp has no effect: the HUD
+  is pixel-identical at boot and after the pane re-applied it, so the
+  dosbox-x display driver ignores `SetGammaRamp`. On a
+  1999 card that honoured it, the ramp would darken the midtones at every
+  level below 4 (½ → 0.15–0.34) and leave level 4 near linear; the
+  shipped INI's level 4 would look close to the captures either way.
+  Whether the ramp should come back as a Revisited option is question 92.
 - Real Time Lights is stored, shown and saved but inert: Classic always
   renders retail's `RealTimeLight=No` image (LIGHTING_FIDELITY §1).
 - Always Face Enemy and No Combat Results are stored, shown and saved;
