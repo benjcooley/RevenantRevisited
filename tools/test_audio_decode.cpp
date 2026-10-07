@@ -124,11 +124,17 @@ TEST(DecodedLength, Mp3CountsEveryFrame)
     EXPECT_EQ(audio::DecodedLengthMs(mp3.data(), mp3.size()), 522u);
 }
 
-TEST(DecodedLength, GarbageIsZero)
+TEST(DecodedLength, GarbageHasNone)
 {
     const std::vector<uint8_t> junk(1000, 0x5A);
-    EXPECT_EQ(audio::DecodedLengthMs(junk.data(), junk.size()), 0u);
-    EXPECT_EQ(audio::DecodedLengthMs(nullptr, 0), 0u);
+    EXPECT_FALSE(audio::DecodedLengthMs(junk.data(), junk.size()).has_value());
+    EXPECT_FALSE(audio::DecodedLengthMs(nullptr, 0).has_value());
+}
+
+TEST(DecodedLength, NoFramesIsZero)
+{
+    const auto wav = MakeWav(22050, 1, 16, 0);
+    EXPECT_EQ(audio::DecodedLengthMs(wav.data(), wav.size()), 0u);
 }
 
 TEST(DecodeToPCM16, WavKeepsRateChannelsAndFrames)
@@ -157,6 +163,18 @@ TEST(DecodeToPCM16, Mp3MatchesItsLength)
     EXPECT_EQ(pcm.size(), 20u * 1152 * 2);
 }
 
+// A WAV with an empty data chunk is a valid silent sound, not a failure.
+TEST(DecodeToPCM16, NoFramesDecodesEmpty)
+{
+    const auto wav = MakeWav(22050, 1, 16, 0);
+    WAVEFORMATEX fmt{};
+    std::vector<uint8_t> pcm{ 1, 2, 3 };
+    ASSERT_TRUE(audio::DecodeToPCM16(wav.data(), wav.size(), &fmt, pcm));
+    EXPECT_EQ(fmt.nChannels, 1);
+    EXPECT_EQ(fmt.nSamplesPerSec, 22050u);
+    EXPECT_TRUE(pcm.empty());
+}
+
 TEST(DecodeToPCM16, GarbageFails)
 {
     const std::vector<uint8_t> junk(1000, 0x5A);
@@ -181,4 +199,32 @@ TEST(ShippedVoices, OpeningLines)
         GTEST_SKIP() << "no Ahkuilon.rvm voices under " << data;
     EXPECT_EQ(audio::DecodedLengthMs(loc.data(), loc.size()), 1227u);
     EXPECT_EQ(audio::DecodedLengthMs(sar.data(), sar.size()), 3343u);
+}
+
+// Resources/sound/effects/blank.wav: a 22050 Hz mono 16-bit WAV whose data
+// chunk is empty, followed by a LIST chunk (WaveConvertPro). The grunt lists
+// in Locke's I3D tags pick it for silence; it must decode, to nothing.
+// gvortex.wav is the opening vortex's sound (Misc\Gvortex.i3d state 0 frame 1).
+TEST(ShippedEffects, BlankAndVortex)
+{
+    const char* data = std::getenv("REVENANT_DATA_PATH");
+    if (!data)
+        GTEST_SKIP() << "REVENANT_DATA_PATH not set";
+    const std::string pack = std::string(data) + "/resources.rvr";
+
+    const auto blank = ReadPackEntry(pack, "Sound/effects/blank.wav");
+    const auto vortex = ReadPackEntry(pack, "Sound/effects/gvortex.wav");
+    if (blank.empty() || vortex.empty())
+        GTEST_SKIP() << "no resources.rvr sounds under " << data;
+
+    WAVEFORMATEX fmt{};
+    std::vector<uint8_t> pcm;
+    ASSERT_TRUE(audio::DecodeToPCM16(blank.data(), blank.size(), &fmt, pcm));
+    EXPECT_TRUE(pcm.empty());
+    EXPECT_EQ(audio::DecodedLengthMs(blank.data(), blank.size()), 0u);
+
+    ASSERT_TRUE(audio::DecodeToPCM16(vortex.data(), vortex.size(), &fmt, pcm));
+    EXPECT_EQ(fmt.nSamplesPerSec, 22050u);
+    EXPECT_EQ(pcm.size(), 229293u * 2);
+    EXPECT_EQ(audio::DecodedLengthMs(vortex.data(), vortex.size()), 10398u);
 }

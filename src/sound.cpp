@@ -141,6 +141,13 @@ PTSound TSound::Load(const char* path)
         log_warn("audio: can't decode %s", path);
         return nullptr;
     }
+    if (pcm.empty()) {
+        // A file without samples (blank.wav, the silent pick in the grunt
+        // lists) is a sound that plays nothing, as Miles played it.
+        PTSound sound = new TSound;
+        memcpy(&sound->format, &fmt, sizeof(WAVEFORMATEX));
+        return sound;
+    }
     return Load(&fmt, static_cast<uint32_t>(pcm.size()), pcm.data(), false);
 }
 
@@ -519,10 +526,11 @@ int32_t TSoundPlayer::SampleLengthMs(int32_t id)
     if (ref->lengthms < 0) {
         const std::string path = SoundPath(*ref);
         std::vector<uint8_t> bytes;
-        ref->lengthms = rev_read_file(path.c_str(), bytes)
-                      ? static_cast<int32_t>(audio::DecodedLengthMs(bytes.data(), bytes.size()))
-                      : 0;
-        if (ref->lengthms == 0)
+        std::optional<uint32_t> ms;
+        if (rev_read_file(path.c_str(), bytes))
+            ms = audio::DecodedLengthMs(bytes.data(), bytes.size());
+        ref->lengthms = ms ? static_cast<int32_t>(*ms) : 0;
+        if (!ms)
             log_warn("audio: can't measure %s", path.c_str());
     }
     return ref->lengthms;

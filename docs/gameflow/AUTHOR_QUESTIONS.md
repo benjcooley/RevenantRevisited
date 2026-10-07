@@ -376,3 +376,23 @@ Answer inline (or in chat) and the owning doc gets updated.
      in the pack, not the hand. Was the first fight meant to be hard to win
      without equipping the sword, as the lesson that items have to be
      equipped?
+
+## The resurrection vortex ([../vfx/forensics/X23_GVORTEX_TEffect.md](../vfx/forensics/X23_GVORTEX_TEffect.md))
+
+140. How bright should the resurrection vortex be? Its tag draws every
+     object `litadd`: ONE/ONE blending, the texture modulated by the
+     object's lighting. Its materials have full emission, so on a Direct3D
+     card the texture adds at full strength. The port does that: a
+     saturated green column whose base goes yellow-white, with Locke barely
+     visible inside it. Retail's software renderer lights 3D vertices from
+     the scene's lights alone and never reads the material (`0x0056eb30`),
+     so the lab footage (dosbox-x, Software3D) shows a dim, translucent
+     column, about a fifth as bright, with Locke clearly floating up inside
+     it ([comparison](../vfx/captures/X23_gvortex_port_vs_lab.png)). Which
+     look did you intend: the hardware one, or the softer one the software
+     renderer gave?
+141. Locke's resurrect animation has sound tags for `loc1resscream`
+     (frame 33) and `loc1resbreath` (frame 169), but no such samples ship
+     in any archive, so retail plays nothing there (the footage has
+     neither; its footsteps at frames 163-199 do play). Were they recorded
+     and cut? The port stays silent, as retail.
