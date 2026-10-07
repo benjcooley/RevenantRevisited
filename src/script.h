@@ -192,6 +192,8 @@ enum class EScriptWait : uint8_t
     ResponseControlOn = 10,   // "wait respctrlon"
 };
 
+namespace RetailAB { class TriggerProbe; }
+
 class TScript
 {
   public:
@@ -247,6 +249,36 @@ class TScript
     // depth (+0xa4). Read by the retail A/B dump (retailab.cpp).
     [[nodiscard]] int32_t Ip() const { return ip; }
     [[nodiscard]] int32_t Depth() const { return depth; }
+
+    // Block stepping, observed: Continue reports each line it hands to the
+    // command interpreter (`offset`: the stream position after the line's
+    // first token, in the current prototype's text; the block depth before
+    // the line is Depth()) and what the interpreter returned for it. The
+    // retail A/B (retailab.cpp, `script-step`) compares the sequence with
+    // retail's 0x004933d0; nothing observes it in the game.
+    class IStepObserver
+    {
+      public:
+        virtual ~IStepObserver() = default;
+        virtual void BeforeLine(TScript& script, int32_t offset) = 0;
+        virtual void AfterLine(TScript& script, int32_t bits) = 0;
+    };
+    static void SetStepObserver(IStepObserver* observer) { stepobserver = observer; }
+
+    // What the trigger test reads of the world besides the owner: the main
+    // player (retail 0x00667fcc) and, for a CUBE trigger, the first of the
+    // map pane's moving objects inside the cube (MapPane.ObjectInCube;
+    // retail asks 0x00452480 on the owner's level). Unset, these are Player
+    // and the map pane; the retail A/B (retailab.cpp, `trigger-test`) sets a
+    // fixture world. Nothing sets it in the game.
+    class ITriggerWorld
+    {
+      public:
+        virtual ~ITriggerWorld() = default;
+        [[nodiscard]] virtual TObjectInstance* MainPlayer() const = 0;
+        [[nodiscard]] virtual TObjectInstance* ObjectInCube(PS3DRect cube, int32_t objset) const = 0;
+    };
+    static void SetTriggerWorld(const ITriggerWorld* world) { triggerworld = world; }
 
     // REVSYNC: 0x00492640 -- asks for a manual trigger (TRIGGER, DIALOG,
     // ACTIVATE, USE, GIVE, GET, COMBAT, DEAD), which starts at the next
@@ -311,6 +343,12 @@ class TScript
     bool WaitSatisfied(bool commanddone);
 
     static bool pauseall;                          // True if all scripts paused
+    static inline IStepObserver* stepobserver = nullptr;
+    static inline const ITriggerWorld* triggerworld = nullptr;
+
+    // The retail A/B's trigger-test probe sets the request state and calls
+    // Triggered directly (retailab.cpp).
+    friend class RetailAB::TriggerProbe;
 
     TScriptProto* proto      = nullptr;            // Pointer to script prototype
     TScriptProto* topproto   = nullptr;            // Pointer to the top prototype
