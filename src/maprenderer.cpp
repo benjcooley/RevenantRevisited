@@ -877,6 +877,80 @@ static void DrawArrow(ImDrawList* dl, const ImVec2& a, const ImVec2& b,
     dl->AddLine(b, h1, color, thickness);
 }
 
+// The draw an I3D object's retail blend mode (BLEND3D_*, from its state's
+// "blendcont" tag) asks for, as a transparent-mesh draw. Retail's render
+// states (0x00417d60): the lowest set mode bit wins; "lit" modes modulate
+// the texture by the object's lit color, the others draw the texture alone;
+// every blended mode draws both faces and tests depth without writing it.
+// False for no mode and for "normal", which draw on the opaque mesh path.
+// REVSYNC-DIVERGENCE: BLEND3D_NOZCHECK (retail turns the depth test off) is
+// drawn depth-tested; the only shipped "...z" tag is the multiplayer
+// MPAppear effect. Retail's fallback for cards without the lit blend stages
+// (0x0066818c: lit modes drawn unlit) isn't modelled.
+bool HelperDrawForBlend(uint32_t blend, SHelperMeshSubmit& m)
+{
+    if (blend == 0 || (blend & BLEND3D_NORMAL))
+        return false;
+    if (blend & BLEND3D_NOZCHECK)
+    {
+        static bool warned = false;
+        if (!warned)
+        {
+            warned = true;
+            log_warn("[maprenderer] I3D blend 0x%x asks for no depth test; drawn depth-tested", blend);
+        }
+    }
+    if (blend & BLEND3D_ALPHA)
+        m.shade = EHelperMeshShade::Texture;
+    else if (blend & BLEND3D_LITALPHA)
+        m.shade = EHelperMeshShade::TextureLit;
+    else if (blend & BLEND3D_ADD)
+    {
+        m.additive_blend = true;
+        m.shade = EHelperMeshShade::Texture;
+    }
+    else if (blend & BLEND3D_LITADD)
+    {
+        m.additive_blend = true;
+        m.shade = EHelperMeshShade::TextureLit;
+    }
+    else if (blend & BLEND3D_ALPHAADD)
+    {
+        m.additive_blend = true;
+        m.premultiply_alpha = true;
+        m.shade = EHelperMeshShade::Texture;
+    }
+    else
+        return false;
+    return true;
+}
+
+// The material colors of an I3D object (white diffuse and ambient, no
+// emission, when it has none), for the lit blend modes.
+void LoadObjectMaterial(T3DImagery* img, int32_t objnum, SHelperMeshSubmit& m)
+{
+    for (int32_t i = 0; i < 4; ++i)
+    {
+        m.diffuse[i] = m.ambient[i] = 1.0f;
+        m.specular[i] = 0.0f;
+        m.emissive[i] = i == 3 ? 1.0f : 0.0f;
+    }
+    S3DObj o = {};
+    img->GetObject(objnum, &o);
+    if (o.material < 0 || o.material >= img->NumMaterials())
+        return;
+    S3DMat mat = {};
+    img->GetMaterial(o.material, &mat);
+    const auto& d = mat.matdesc;
+    const float diffuse[4]  = { d.diffuse.r,  d.diffuse.g,  d.diffuse.b,  d.diffuse.a };
+    const float ambient[4]  = { d.ambient.r,  d.ambient.g,  d.ambient.b,  d.ambient.a };
+    const float emissive[4] = { d.emissive.r, d.emissive.g, d.emissive.b, d.emissive.a };
+    std::memcpy(m.diffuse, diffuse, sizeof(diffuse));
+    std::memcpy(m.ambient, ambient, sizeof(ambient));
+    std::memcpy(m.emissive, emissive, sizeof(emissive));
+    m.power = d.power;
+}
+
 } // namespace
 
 void SSectorDrawableInst::UpdateFromInstance()
@@ -1182,7 +1256,21 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             std::memcpy(world_renderer, scaled_world, sizeof(world_renderer));
         }
 
-        if (oi->ObjClass() == OBJCLASS_HELPER)
+        SHelperMeshSubmit blended = {};
+        if (HelperDrawForBlend(meshimg->StateBlend(state), blended))
+        {
+            // A blend-mode object (an effect's glow, swirl or column) draws
+            // in the transparent pass over the lit scene, not into the
+            // G-buffer.
+            const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+            const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+            blended.mesh = asset.handle;
+            std::memcpy(blended.world, world_renderer, sizeof(blended.world));
+            LoadObjectMaterial(meshimg, asset.objnum, blended);
+            blended.sort_depth = CameraDepth({ mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z }, ctx.cam_forward);
+            Renderer->SubmitHelperMesh(blended);
+        }
+        else if (oi->ObjClass() == OBJCLASS_HELPER)
         {
             const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
