@@ -23,7 +23,9 @@
 #include "dls.h"                  // MakeColorTables (the trig tables too)
 #include "imagery.h"
 #include "imageres.h"
+#include "gameoptions.h"
 #include "player.h"
+#include "playscreen.h"
 #include "revenant.h"
 #include "revutils.h"
 #include "rules.h"
@@ -50,8 +52,9 @@ namespace
 // stat definitions; a TPlayer sizes its stats from its class). The data
 // steps of InitGlobals (revmain.cpp) in its order -- program paths, the
 // [Paths] INI section, the two base archives, the imagery path (step 8),
-// the classes (step 16) -- without the display, sound or map. Once per
-// process.
+// the trig tables (step 12, MakeColorTables: every angle and distance reads
+// them), the classes (step 16) -- without the display, sound or map. Once
+// per process.
 bool LoadGameData(std::string& error)
 {
     static bool loaded = false;
@@ -66,6 +69,7 @@ bool LoadGameData(std::string& error)
         return false;
     }
     TObjectImagery::SetImageryPath(NORMALPATH);
+    MakeColorTables();
     if (!TObjectClass::LoadClasses())
     {
         error = "can't load class.def";
@@ -244,6 +248,7 @@ class TFixtureChar : public Base, public IFixtureChar
         this->SetMoveAngle((int32_t)spec["moveangle"].Int(spec["facing"].Int()));
         this->state = (uint16_t)spec["state"].Int(0);
         this->charflags = (uint32_t)spec["charflags"].Int();
+        this->target_out_of_sight = spec["out_of_sight"].Bool();
         for (const auto& [k, v] : spec["stats"].Members())
             stats[k] = (int32_t)v.Int();
         for (const auto& [k, v] : spec["classstats"].Members())
@@ -542,6 +547,19 @@ int32_t EmptyWorld(TCharacter* self, TCharacter* chars[], int32_t maxchars, int3
     return 0;
 }
 
+// The case's `blocked` answers FindClearPath (retail) / Blocked (port).
+bool g_blocked = false;
+
+bool CaseBlocked(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, uint32_t bits)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "FindClearPath").FieldString("who", g_world->NameOf(self));
+    j.Key("to").Begin('[').Value(newpos.x).Value(newpos.y).Value(newpos.z).End(']');
+    j.Field("result", g_blocked ? 1 : 0).End('}');
+    Seam(j.str());
+    return g_blocked;
+}
+
 void WriteSeams(JsonOut& j)
 {
     j.Key("seams").Begin('[');
@@ -566,10 +584,15 @@ std::string CombatCall(const Case& c, std::string& error)
         if (!LoadGameData(error))
             return {};
         const JsonValue cs = JsonValue::Parse(c.Field(0));
+        const JsonValue& g = cs["globals"];
+        CombatFace = g["combatface"].Bool(true);
+        PlayScreen.SetFixtureState((int32_t)g["frame"].Int(0), g["control"].Bool(true), g["ps_5d8"].Bool(false));
         g_seams.clear();
         TFixtureWorld world(cs);
         g_world = &world;
         TCharacter::findCharactersSeam = EmptyWorld;
+        TCharacter::blockedSeam = CaseBlocked;
+        g_blocked = cs["blocked"].Bool(false);
         TCharacter* me = world.Get(cs["self"].Str());
         IFixtureChar* fx = world.Fixture(me);
         g_seams.clear();
@@ -584,6 +607,7 @@ std::string CombatCall(const Case& c, std::string& error)
         else
             throw std::runtime_error("unknown call '" + call + "'");
         TCharacter::findCharactersSeam = nullptr;
+        TCharacter::blockedSeam = nullptr;
 
         JsonOut j;
         j.Begin('{').FieldString("schema", "combat.call.v1").FieldString("side", "port");
@@ -597,6 +621,7 @@ std::string CombatCall(const Case& c, std::string& error)
     catch (const std::exception& e)
     {
         TCharacter::findCharactersSeam = nullptr;
+        TCharacter::blockedSeam = nullptr;
         g_world = nullptr;
         error = e.what();
         return {};

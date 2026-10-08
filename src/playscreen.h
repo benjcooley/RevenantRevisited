@@ -209,6 +209,11 @@ class TPlayScreen : public TScreen
 
     // ---- Game time -----------------------------------------------------
     [[nodiscard]] int32_t GameFrame()    const;
+    void SetFixtureState(int32_t frame, bool control, bool demo)
+        { gameframes = frame; controlon = control; demomode = demo; }
+      // Retail A/B fixtures only (retailab_combat.cpp): the frame count and
+      // the control / demo flags as a case sets them, without
+      // SetControlOn(false)'s input release
     [[nodiscard]] int32_t GameTime()     const { return gametime; }
     void                   SetGameTime(int32_t t);
     [[nodiscard]] int32_t TimeOfDay()    const;

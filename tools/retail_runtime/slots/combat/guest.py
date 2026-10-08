@@ -46,7 +46,7 @@ ANGLE_TABLES = (0x41e2de, 0x41e535)
 O_VTABLE, O_CLASS, O_FLAGS, O_POS, O_FACING, O_NAME, O_ID = 0x00, 0x04, 0x08, 0x10, 0x36, 0x38, 0x40
 O_MOVEANGLE = 0xb0
 O_DOING, O_DESIRED, O_ROOT = 0xd8, 0xdc, 0xe0
-O_CHARDATA, O_CHARFLAGS, O_ENGAGE, O_MONSTER = 0xfc, 0x110, 0x254, 0x280
+O_CHARDATA, O_CHARFLAGS, O_OUT_OF_SIGHT, O_MONSTER = 0xfc, 0x110, 0x254, 0x280
 O_PLAYERSTATE = 0x36c
 CHAR_SIZE, PLAYER_SIZE = 0x2a0, 0x674
 CHAR_VTABLE, PLAYER_VTABLE = 0x5a7848, 0x5b4f30
@@ -317,7 +317,7 @@ class CombatWorld:
         vm.write(obj + O_FACING, bytes([spec.get('facing', 0) & 0xff]))
         vm.put_u32(obj + O_MOVEANGLE, spec.get('moveangle', spec.get('facing', 0)) & 0xffffffff)
         vm.put_u32(obj + O_CHARFLAGS, spec.get('charflags', 0))
-        vm.put_u32(obj + O_ENGAGE, spec.get('engage', 0))
+        vm.put_u32(obj + O_OUT_OF_SIGHT, int(spec.get('out_of_sight', 0)))
         if player:
             vm.put_u32(obj + O_PLAYERSTATE, spec.get('playerstate', 0))
             vm.put_u32(G_PLAYER, obj)

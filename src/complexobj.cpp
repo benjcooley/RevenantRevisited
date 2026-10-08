@@ -281,14 +281,17 @@ void TComplexObject::SetDoing(PTActionBlock ab)
     root->interrupt = false;    // Now that we're doing, don't interrupt
 }
 
-void TComplexObject::SetDesired(PTActionBlock ab)
+// REVSYNC: SetDesired @ 0x004db3a0 -- a block already waiting stays while
+// the one being done has priority (retail tests doing's priority; the 1998
+// code tested the waiting block's); false then, and the caller keeps `ab`.
+// An interrupting block is forced at once (ForceCommand with `flags`).
+bool TComplexObject::SetDesired(PTActionBlock ab, uint32_t flags)
 {
     if (ab == nullptr)             // nullptr indicates we want to go back to root
         ab = root;
 
-    if (desired && desired != doing &&  // If we have a priority action, and we aren't already
-        desired->priority)              // playing it, don't replace it.
-            return;
+    if (desired && desired != doing && doing && doing->priority)
+        return false;
 
     if (ab != desired)                  // Set the desired command
     {
@@ -306,9 +309,10 @@ void TComplexObject::SetDesired(PTActionBlock ab)
 
     if (ab->interrupt && doing != ab && !doing->priority) // Interrupt flag means DO IT RIGHT NOW
     {
-        ForceCommand(ab);
+        ForceCommand(ab, 0, flags);
         ab->interrupt = false;
     }
+    return true;
 }
 
 // Have object attempt to move into a new state
