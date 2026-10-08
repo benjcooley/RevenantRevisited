@@ -5,21 +5,21 @@
     "retail_type_rows": 176,
     "distinct_retail_names_casefold": 174,
     "distinct_asset_paths_casefold": 166,
-    "preview_ids": 159,
-    "retail_rows_with_preview_candidates": 120,
-    "retail_rows_without_preview_candidates": 56,
+    "preview_ids": 162,
+    "retail_rows_with_preview_candidates": 123,
+    "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 71,
+    "retail_rows_with_source_fixes_recorded": 74,
     "port_smoke_preview_ids": 34,
     "retail_rows_with_port_smoke": 36,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 56,
+    "actual_runtime_verified_rows": 60,
     "visual_fidelity_confirmed_rows": 16,
     "repeatable_ab_rows": 8,
-    "thin_bounded_render_frontend_rows": 40
+    "thin_bounded_render_frontend_rows": 46
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -196,6 +196,50 @@
       "check": "ripple_no_splash_frontend_render",
       "status": "pass",
       "scope": "No-splash ring birth through kill/postdeath; shared original software raster."
+    },
+    "recon/retail_asm/runtime/effects/static-texture-next-20261007/manifest.json": {
+      "sha256": "c52f96704b160a19f254ba7167cb2c6c0d153e69c86ee215658310754002d914",
+      "check": "authored_texture_frame_frontend",
+      "status": "pass",
+      "scope": "Exact STILL header/constant pose and every active authored texture frame: StillWater1,watchers4each. Native original texture selector uses explicit copyframes=false opaque surface/texture handles; candidate actual generic SubmitMesh picks registered per-frame mesh. Original matrix/raster and selected owner translation, white lighting/cullNONE/depthtest-write. Natural owner cadence, default-builder/caller/map placement and modernGPU parity are separate; no texture fitting.",
+      "retail_rows": [
+        "StillWater:0xadbcef14",
+        "ogrokwatcher1:0xaeaeeb23",
+        "ogrokwatcher2:0xaeaeeb24",
+        "ogrokwatcher3:0xaeaeeb25"
+      ]
+    },
+    "recon/retail_asm/runtime/effects/default-static-frontend-ab/manifest.json": {
+      "sha256": "1fa5468d7d7c047a004b6a730a15e11fc3dfb21022a4840d50c5c68a68ffed27",
+      "check": "constant_default_mesh_frontend",
+      "status": "pass",
+      "scope": "Complete selected default/no-tag constant asset root parts vs compiled production keys/matrix/extraction/static submission. Original software projection/raster shared, identity/translated owner, fixed512viewport/white/cullNONE/depthtestwrite. Part0 remapping/decodedasset/provider interfaces explicit; character utility selection, natural owner/map/illumination/device/Metal separate.",
+      "retail_rows": [
+        "CharUtility:0xadbcef13",
+        "SewerWater:0xadbcef19"
+      ]
+    },
+    "recon/retail_asm/runtime/effects/map-texture-next-20261007/manifest.json": {
+      "sha256": "0f9522e7844c27e7ecc86dcf49a171057b7c1cc3ca6fe3fb7108691bab38de37",
+      "check": "map_texture_lifecycle",
+      "status": "pass",
+      "scope": "Actual map NewObject/default animator/NextFrame/MOVE/DELETE and Metal output. Synthetic ground-only module; natural context and retail device fidelity remain open.",
+      "retail_rows": [
+        "StillWater:0xadbcef14",
+        "ogrokwatcher1:0xaeaeeb23",
+        "ogrokwatcher2:0xaeaeeb24",
+        "ogrokwatcher3:0xaeaeeb25"
+      ]
+    },
+    "recon/retail_asm/runtime/effects/drip-ripple-composite-ab/manifest.json": {
+      "sha256": "b11655ab9ce5312845e1ad3491136cfd82bf42877f2756693a2d06c478ecf648",
+      "check": "drip_linked_no_splash_child_composite",
+      "status": "pass",
+      "scope": "Actual native Drip emitter events instantiate actual original no-splash Ripple Init/Animate/Render; production independently spawns/advances/removes/renders real TRippleEffect via compiled actual Drip/Ripple methods/factory and asset providers. Compare linked birth/live ages/death and ordered mixed-texture software pixels, not port rings positioned from native traces. Identity owner/fixed camera/white vertices, explicit component-style scheduling; original sector iteration/map allocation/loader/component installation and audio/global RNG coupling remain separate. Length20 excludes splash recursion.",
+      "retail_rows": [
+        "Drip:0x5975abde",
+        "Ripple:0x12309867"
+      ]
     }
   }
 }

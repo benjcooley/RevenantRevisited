@@ -1,5 +1,5 @@
 {
-  "scope": "Selected constant state0 mesh/texture-frame0 profiles only; watchers have4/4/6 texture frames and animation remains open.",
+  "scope": "Exact single-state STILL header/constant geometry profiles, all active texture frames. StillWater1 frame; watchers4 active frames, with watcher3 stored frames4/5 excluded from active-loop credit.",
   "profiles": [
     {
       "name": "StillWater",
@@ -7,7 +7,15 @@
       "asset": "Misc\\StillWater.I3D",
       "asset_sha256": "e1bdfe4f633f6b9dd496232ed5a624a3c882ba932ccd2fcb954f0fe0095e4450",
       "vertices": 4,
-      "faces": 2
+      "faces": 2,
+      "header_states": 1,
+      "header_state_name": "STILL",
+      "header_animation_flags": 8193,
+      "header_frames": 1,
+      "texture_frames": 1,
+      "active_texture_frames": [
+        0
+      ]
     },
     {
       "name": "ogrokwatcher1",
@@ -15,7 +23,18 @@
       "asset": "misc\\ogrokwatcher1.i3d",
       "asset_sha256": "b8a393e78a8614f217fedfab546d2c5ffa51b8952568d2f6d11417ca26cf7570",
       "vertices": 4,
-      "faces": 2
+      "faces": 2,
+      "header_states": 1,
+      "header_state_name": "STILL",
+      "header_animation_flags": 1,
+      "header_frames": 4,
+      "texture_frames": 4,
+      "active_texture_frames": [
+        0,
+        1,
+        2,
+        3
+      ]
     },
     {
       "name": "ogrokwatcher2",
@@ -23,7 +42,18 @@
       "asset": "misc\\ogrokwatcher2.i3d",
       "asset_sha256": "78a989483c7b9ee2075084950de8a85f187ca27fd6f0881546df12737bbd634b",
       "vertices": 4,
-      "faces": 2
+      "faces": 2,
+      "header_states": 1,
+      "header_state_name": "STILL",
+      "header_animation_flags": 1,
+      "header_frames": 4,
+      "texture_frames": 4,
+      "active_texture_frames": [
+        0,
+        1,
+        2,
+        3
+      ]
     },
     {
       "name": "ogrokwatcher3",
@@ -31,7 +61,18 @@
       "asset": "misc\\ogrokwatcher3.i3d",
       "asset_sha256": "df960c5d82019f8b2e8504f0147ed855516f459e6f6f8d94553a3eb696be0978",
       "vertices": 4,
-      "faces": 2
+      "faces": 2,
+      "header_states": 1,
+      "header_state_name": "STILL",
+      "header_animation_flags": 1,
+      "header_frames": 4,
+      "texture_frames": 6,
+      "active_texture_frames": [
+        0,
+        1,
+        2,
+        3
+      ]
     }
   ]
 }

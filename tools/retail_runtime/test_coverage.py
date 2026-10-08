@@ -55,6 +55,14 @@ class CoverageTests(unittest.TestCase):
         self.assertFalse(any(row['control'] and row['control']['profile']=='shared_missile_base'
             for row in self.coverage['types'].values()))
 
+    def test_new_static_and_texture_proofs_keep_natural_and_device_gates_open(self):
+        for type_id in ('0xadbcef14','0xaeaeeb23','0xaeaeeb24','0xaeaeeb25','0xadbcef13','0xadbcef19',
+                        '0x5975abde','0x63fd3827'):
+            row=self.coverage['types'][type_id]
+            self.assertEqual(row['gates']['pixel_frontend']['status'],'shared_original_raster_pass')
+            self.assertEqual(row['gates']['full_acceptance']['status'],'open')
+            self.assertFalse(row['gates']['runtime']['natural_context_verified'])
+
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path);args=parser.parse_args()

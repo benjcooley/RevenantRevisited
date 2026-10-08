@@ -43,10 +43,12 @@ def generate(ledger_path=LEDGER,executable=BASELINE):
             if path.is_file():
                 data=path.read_bytes();value=json.loads(data)
                 diffs=[]
-                for case in value.get('cases',[]):
-                    if type(case.get('differing_rgb565_pixels')) is int:diffs.append(case['differing_rgb565_pixels'])
-                    for pose in case.get('poses',[]):
-                        if type(pose.get('differing_rgb565_pixels')) is int:diffs.append(pose['differing_rgb565_pixels'])
+                def measured_pixels(case):
+                    for key in ('differing_rgb565_pixels','pixel_differences','different_pixels'):
+                        if type(case.get(key)) is int:diffs.append(case[key])
+                    for key in ('cases','poses'):
+                        for child in case.get(key,[]):measured_pixels(child)
+                for case in value.get('cases',[]):measured_pixels(case)
                 total=value.get('differing_rgb565_pixels')
                 pixel_checked=bool(diffs) or type(total) is int or value.get('shared_original_raster_pixel_status')=='pass'
                 pixel_equal=pixel_checked and (not diffs or max(diffs)==0) and (type(total) is not int or total==0)
