@@ -24,6 +24,7 @@
 //
 // *************************************************************************
 
+#include "combattrace.h"
 #include "playscreen.h"
 
 #include "audio_backend.h"
@@ -812,6 +813,9 @@ void TPlayScreen::Update()
     gametime = lastsessionframes
              + (gameframes - sessionstart) * 100 / kGameFrameRate;
     timeofday = TimeOfDayMinutes(gametime);
+
+    // --combattrace: the tick's fighters (no-op otherwise).
+    CombatTrace::Tick(gameframes);
 }
 
 namespace {

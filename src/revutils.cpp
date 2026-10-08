@@ -1920,7 +1920,36 @@ std::string rev_first_existing(const char *preferred_dir, const char *fallback_d
     return path;
 }
 
-// Random number function
+// ********* Random numbers **********
+
+namespace
+{
+uint32_t g_randomState = 1;     // MSVC rand()'s holdrand; srand(1) is its default
+uint64_t g_randomDraws = 0;
+}
+
+// REVSYNC: rand @ 0x0058c582 -- holdrand = holdrand * 214013 + 2531011,
+// returns (holdrand >> 16) & 0x7fff.
+int32_t GameRand()
+{
+    g_randomState = g_randomState * 214013u + 2531011u;
+    ++g_randomDraws;
+    return (int32_t)((g_randomState >> 16) & 0x7fff);
+}
+
+void SeedRandom(uint32_t seed)
+{
+    g_randomState = seed;       // REVSYNC: srand @ 0x0058c575
+    srand(seed);
+}
+
+uint64_t RandomDraws()
+{
+    return g_randomDraws;
+}
+
+// REVSYNC: random @ 0x00483300 -- lo when equal (no draw), else the pair in
+// order and lo + rand() % (hi - lo + 1).
 int32_t random(int32_t min, int32_t max)
 {
     if (min == max)
@@ -1933,7 +1962,7 @@ int32_t random(int32_t min, int32_t max)
         max = t;
     }
 
-    int32_t r = rand() % (max - min + 1);
+    int32_t r = GameRand() % (max - min + 1);
     r += min;
     return r;
 }

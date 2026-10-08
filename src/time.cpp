@@ -25,6 +25,16 @@ void TTime::SetTimeScale(double scale)
     m_timeScale = scale;
 }
 
+void TTime::BeginFixedFrame()
+{
+    m_realDeltaTime = LegacyFrameSeconds;
+    m_deltaTime = LegacyFrameSeconds;
+    m_frameCount++;
+    m_legacyFrameCount++;
+    m_time = static_cast<double>(m_legacyFrameCount) * LegacyFrameSeconds;
+    m_legacyFrameFraction = 0.0;
+}
+
 void TTime::BeginFrame(double dt_seconds)
 {
     if (dt_seconds < 0.0)

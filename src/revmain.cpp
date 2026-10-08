@@ -48,6 +48,7 @@
 #include "testmodes.h"
 #include "testconfig.h"
 #include "time.h"
+#include "combattrace.h"
 #include "mappane.h"
 #include "object.h"
 #include "automap.h"
@@ -1544,6 +1545,8 @@ void ApplyCommandLineResolution(int argc, char** argv)
 
 } // namespace
 
+static bool FixedStep = false;      // --fixedstep: one game tick per frame (AppFrame)
+
 void GetParameters(int argc, char **argv)
 {
     argh::parser cmd;
@@ -1553,9 +1556,28 @@ void GetParameters(int argc, char **argv)
         "gamespeed", "monitor", "violencelevel", "preloadsize",
         "chunkcachesize", "driver", "device", "videocap", "fastlock",
         "loadmap", "lang", "test", "level", "resolution", "res",
-        "cinematic", "menu", "exec",
+        "cinematic", "menu", "exec", "seed", "combattrace",
     });
     cmd.parse(argc, argv);
+
+  // Deterministic runs (docs/gameplay/COMBAT_DOJO.md §9): --seed=N gives the
+  // random number generator a fixed start, --fixedstep advances exactly one
+  // game tick per frame, --combattrace=<file> records every fight per tick.
+    {
+        std::string p;
+        if (arg_param(cmd, "seed", p))
+        {
+            SeedRandom((uint32_t)std::stoul(p));
+            log_info("[determinism] random seed %s", p.c_str());
+        }
+        if (arg_flag(cmd, "fixedstep"))
+        {
+            FixedStep = true;
+            log_info("[determinism] fixed step: one 24 Hz tick per frame");
+        }
+        if (arg_param(cmd, "combattrace", p) && !CombatTrace::Open(p.c_str()))
+            log_error("[combattrace] can't write %s", p.c_str());
+    }
 
   // Game speed first — performance knobs below depend on it
     if (!arg_param_to(cmd, "gamespeed", GameSpeed)) {} // leaves prior value
@@ -2482,7 +2504,9 @@ static void AppInit()
     // parse command line, initialize monitor info, language, window, and
     // the rest of the system.
 
-    srand((unsigned)time(nullptr));
+    // Seeded from the clock as retail's WinMain (srand(time()) at
+    // 0x0048662d); --seed reseeds in GetParameters.
+    SeedRandom((uint32_t)time(nullptr));
 
     // Posix port of retail's WinMain GetProgramPaths probe — RunPath is
     // the executable directory, SavePath is the per-user writable
@@ -2638,7 +2662,10 @@ static void AppFrame()
     if (!SystemInitialized || Closing)
         return;
 
-    TTime::BeginFrame(sapp_frame_duration());
+    if (FixedStep)
+        TTime::BeginFixedFrame();
+    else
+        TTime::BeginFrame(sapp_frame_duration());
 
     // --max-runtime hard ceiling: if a positive limit was passed, hard-
     // exit when wall-clock elapsed since first frame exceeds it. Belt-
