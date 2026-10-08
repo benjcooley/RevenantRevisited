@@ -515,6 +515,16 @@ perform.
 | Screen fade drawn per tick in 31 alpha levels | stepped on the same ticks, cover interpolated; a fade-in's cover one step behind | time-based animation | smooth; the fade-in reveal trails retail's by one tick |
 | Handlers with 4 raw args, hand-rolled token parsing | `SCommandContext` + `TCommandArgs` | one parsing vocabulary | none |
 | 3,700-line `command.cpp` | per-family handler files, one table | maintainability | none |
+| A script's tenth block level (`+0x54` + 10 × 8) is the depth field itself: the first line at depth 10 resets the depth and ends the block | ten levels; a block that reaches depth 10 stops with "Blocks nested too deep" | no emulated memory overlap | none for the shipped scripts (depth 5 at most); a script nesting nine blocks into a trigger stops one line earlier than retail (forensics/SCRIPT_ENGINE.md §4.2) |
+
+Removed 2026-10-07 (the port now does as retail): a prototype's text kept
+as the 1998 body between the object's `BEGIN` and `END` (so `Jump`'s depth
+was retail's − 1 and a block ended at its trigger's `END` instead of
+running on after a jump), the tokenizer's CR handling and line count (where
+a jump resumed, error line numbers), the interpreter skipping the rest of
+an `ELSE` line (`ELSE IF`), and a CUBE trigger searching the map pane's
+3×3 window instead of the owner's level (forensics/SCRIPT_ENGINE.md §4,
+§7; RETAIL_AB.md targets 1, 4, 5).
 
 ## 8. Open questions (author)
 

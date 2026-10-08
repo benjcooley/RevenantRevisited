@@ -189,7 +189,9 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | Prototype variables (DATA blocks, `setprotovariable`, readers) | 2026-10-05 |
 | [x] | Commands for the opening, the doors and exits, movement (`goto*`, `face*`), `try`, `statmod`, `addat` ([forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §6) | 2026-10-05 |
 | [x] | From the NPC sweep: a `jump` or a taken choice lands as deep as its label sits (retail `Jump`: blocks no longer end at an inner IF's END and skip `CONTROL ON`/`SETCDVOLUME FULL`); a line starting with quoted text runs (`"TRAINING SWORD".DELETE`); `set` steps past its value ([forensics/SCRIPT_ENGINE.md](forensics/SCRIPT_ENGINE.md) §7, [forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §4) | 2026-10-05 |
+| [x] | From the retail A/B ([RETAIL_AB.md](RETAIL_AB.md) targets 1, 4, 5): block stepping is retail's -- the prototype's text is the whole OBJECT block, `Jump` counts the object's BEGIN, so a block runs on after a jump through the next trigger to the object's END (Daly, Steffan, Jong and a dozen townsfolk walk one idle round as the conversation's tail; AUTHOR_QUESTIONS 104); the tokenizer reads CR-transparently and counts lines as retail's; `ELSE IF`; block levels as retail leaves them; a CUBE trigger searches the owner's level. Every shipped block and label steps as retail's; deviation: depth 10 ([forensics/SCRIPT_ENGINE.md](forensics/SCRIPT_ENGINE.md) §4) | 2026-10-07 |
 | [ ] | `lastattack` member (needs the combat track's attack result; Jong's training) | — |
+| [ ] | `Start` ending a running block (`0x00492440` calls `End`): a trigger interrupting an ALWAYS block gets back what that block took (RETAIL_AB.md, Next) | — |
 | [ ] | Mainline ImGui console panel (replaces threaded TConsolePane) | — |
 
 **Exit:** Scripts pump every frame; triggered scripts fire from in-game; console executes commands.

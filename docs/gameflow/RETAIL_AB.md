@@ -143,7 +143,24 @@ a region / reversed corners, PROXIMITY forms, bad parameters, unknown
 trigger, header forms, DATA forms, labels, a missing END, LF-only, a 0xFF
 byte, Windows-1252 names).
 
-**Results** (case set `9bb50965…`, retail `28bec273…`):
+**Results since the port follows retail's stepping** (2026-10-07, case set
+`9bb50965…`, retail `28bec273…`, port `ac2d17f`): all 14 shipped files
+match -- 264 prototypes, 409 triggers, 10 DATA variables, 403 labels, every
+field including the text extent, each label's depth and where it resumes.
+22 of the 29 cases match; the other 7 are the malformed-input deviations
+below (the unknown trigger or a missing `BEGIN`, four files, and the three
+DATA hangs). The bad parameter retail
+reported one line later now matches: the port's tokenizer counts a line as
+it reads the line feed, as retail's (SCRIPT_ENGINE.md §4.1).
+
+What changed in the port: the prototype's text is the whole block
+(`OBJECT` … `END` and its line break), so `Jump` counts the object's
+`BEGIN`; the tokenizer skips carriage returns wherever it reads (retail
+`0x00478a10`), so the stream stands at the next line's start after a word
+that ends a line, and that is where a jump resumes; `TScriptManager::Save`
+writes the text as is.
+
+**Results before** (port `c0185e1`):
 
 Shipped: 264 prototypes, 409 triggers, 10 DATA variables and 403 labels.
 Names, trigger types, block starts, trigger names, cubes, distances,
@@ -168,10 +185,16 @@ SteffanK (`:Start`, `:misthaven`, `:cult`, `:letyoulive`). **Settled by
 the block-stepping A/B (target 4 below): retail does run on, and not only
 after those 13** -- every `jump` leaves retail one level deeper than the
 port, wherever the label sits, so any jump in a trigger that isn't its
-object's last runs on into the next trigger. Not changed in the port; a
-decision (§8 of DIALOG.md: retail hazards are decided, not copied).
+object's last runs on into the next trigger. Decided 2026-10-07: the port
+follows retail (all three differences are gone, above;
+AUTHOR_QUESTIONS 104 asks whether the run-on was meant).
 
-Edge cases (malformed input; the port's behaviour stands unless noted):
+Edge cases (malformed input; the port's behaviour stands unless noted).
+The documented deviations that remain since 2026-10-07: the unknown
+trigger / missing `BEGIN` (`bad_parameters.s`, `headers.s`,
+`unknown_trigger.s`, and `byte_ff.s`: its 0xFF, read as −1, ends the
+comment it sits in on both sides, and the rest of that line parses as a
+block with no `BEGIN`) and the three DATA hangs:
 
 - **Fixed in the port**: `CUBE NULL …` leaves the name empty (the port
   named the trigger "NULL"); `CUBE <name> <region>` keeps the region name
@@ -184,10 +207,13 @@ Edge cases (malformed input; the port's behaviour stands unless noted):
   block becomes further broken prototypes; the port reports the trigger
   and goes on (a deliberate deviation, `script.cpp`).
 - A 0xFF byte (ÿ) anywhere: retail's string stream returns it as −1, the
-  tokenizer's end of stream, and the parse goes wrong from there; the port
-  reads it as a character. No shipped script has one.
-- A bad parameter that ends its line is reported one line later by retail
-  (its tokenizer has read the line break).
+  tokenizer's end of stream, and the parse goes wrong from there. The
+  port's tokenizer reads it the same way (its `char` is −1 too); what
+  differs in `byte_ff.s` is the unknown-trigger deviation above. No
+  shipped script has one.
+- ~~A bad parameter that ends its line is reported one line later by
+  retail~~ (its tokenizer has read the line break): matches since
+  2026-10-07, the port's tokenizer counting lines as retail's does.
 - DATA lines with a missing or mistyped value (`NUMBER X`, `TEXT X`,
   `NUMBER X "seven"`): retail never finishes the block (instruction budget
   exhausted; the hang SCRIPT_ENGINE.md §7 describes); the port reads on.
@@ -356,7 +382,41 @@ IF/ELSE/ELSE IF, WHILE, jump loops, an unknown label, a quoted context, a
 number line, nesting 9 deep, an unclosed IF), each under both condition
 policies: 1,680 runs (818 trigger and 806 label runs shipped).
 
-**Results** (case set `613feb21…`, retail `28bec273…`, port `5e76b0f`):
+**Results since the port follows retail** (2026-10-07, case set
+`613feb21…`, retail `28bec273…`, port `ac2d17f`): all 14 shipped files
+match in every run (818 trigger and 806 label runs: lines, depths, bits,
+ends, errors), and 3 of the 4 edge files. The one left is the depth-10
+deviation (`loops_errors.s`, object `Deep`, 3 runs): the label 9 blocks
+deep in its trigger is at depth 10, where retail runs one line (`SAY
+NINE`) and ends the block because its tenth block level is the depth field
+itself; the port refuses that depth ("Blocks nested too deep",
+SCRIPT_ENGINE.md §4.2). What changed in the port, beyond target 1's text
+and tokenizer: the interpreter leaves the rest of an `ELSE` line unread and
+`Continue` reruns an `ELSE IF`'s IF from it (`0x00493b06`); the block levels
+start at zero, as retail's allocator leaves them, so an ELSE after a jump
+into a block runs its body without "ELSE without matching IF"; `Reset` no
+longer clears level 0.
+
+The run-on in the game (headless, STORY_TESTING.md; the trace is
+`revenant.log`):
+
+- *keep.s DalyK* (the `rand` save, choice A): after `jump Marker` the
+  block runs `control on`, `SETCDVOLUME FULL`, `END` (the DIALOG
+  block's), `ALWAYS` ("Unrecognized command." on the console), `BEGIN`,
+  `GOTO 12300 12594`, `PIVOT 190`, `WAIT 30`, `GOTO 12132 12590`, `PIVOT
+  60`, `WAIT 30`, `END`, `END` (the object's), then ends -- retail's line
+  sequence for `:Marker` in this A/B. Before, the block ended at the
+  first `END`.
+- *forest.s Jong1* (`New Game1`, `JONGMEETSTATE=1`, SPARYES then
+  SPARENDYES): after the lesson's `SETCDVOLUME FULL`, `END`, `ALWAYS`,
+  `BEGIN`, `WAIT 24` (one second), `IF JONGLOOKSTATE = 3` (false:
+  `:TRAINEND` set it to 1), `END`, `END`. 81 lines against 75 before.
+- *keep.s RandK* (`jump Start` loop, both menus): the same through its
+  ALWAYS block (`WAIT 24`, `IF TENDRICKSTATE > 1`, false).
+- The opening's SardokR, whose trigger is the object's last, runs one line
+  more, the object's `END`; otherwise its trace is unchanged.
+
+**Results before** (port `5e76b0f`):
 
 | Runs | Same lines | + the object's `END` only | Run on into the next trigger | Other |
 |---|---|---|---|---|
@@ -430,9 +490,8 @@ body:
 
 So, with the shipped scripts, nothing new appears on screen: the NPC's
 idle routine starts one pass early, inside the conversation's block, and
-for that pass he refuses a new conversation. The port ends the block at the
-trigger's `END` and is unchanged; whether to follow retail is a decision
-(DIALOG.md §8).
+for that pass he refuses a new conversation. Decided 2026-10-07: the port
+follows retail (results above).
 
 By-product: Jong1's DIALOG block jumps to `NOCOMPLETE2` … `NOCOMPLETE9`
 (forest.s lines 660–688) and only `:nocomplete1` exists; with TRAINSTATE
@@ -515,7 +574,15 @@ character, the owner first or second in the list, unnamed, named object,
 an item first, a second player-class object, no player, other levels; the
 guard existing or gone.
 
-**Results** (case set `c2fb3b2c…`, port `5e76b0f`): 134 match. The rule is retail's
+**Results since 2026-10-07** (case set `c2fb3b2c…`, port `ac2d17f`): 137 of
+138 match. The CUBE search is retail's `0x00452480` now: the owner's level,
+from that level's loaded sectors within the cube's map rect
+(`MapPane.ObjectInCube(cube, level, objset)` over `TMapIterator(level,
+rect, …)`; the seam `TScript::ITriggerWorld::ObjectInCube` takes the level,
+and its default is that search). The one difference left is the
+running-trigger record (`+0xa8`, below), unreachable in retail.
+
+**Results before** (case set `c2fb3b2c…`, port `5e76b0f`): 134 match. The rule is retail's
 (SCRIPT_ENGINE.md §3) in every case but two kinds:
 
 - **The running-trigger record** (`+0xa8` equal to the trigger: retail
@@ -564,15 +631,15 @@ cores): say-duration 22 → 15 s, dialog-layout 1.1 → 0.3 s with 4.
 
 ### Next
 
-- **The run-on decision** (target 4): follow retail (count the object's
-  `BEGIN` -- the port's text would have to keep retail's extent, target
-  1 -- and let a block end only below depth 1) or keep the port's ending
-  at the trigger's `END`. The A/B above is the evidence; the visible cost
-  is small either way.
-- **The CUBE search level** (target 5): retail searches the owner's level
-  over its loaded sectors; the port's map pane its window. Likely a port
-  fix (a level-aware, loaded-sector search, as `FindClosestObject`
-  already does, COMMAND_SYSTEM.md §2.3), to be decided.
+- ~~The run-on decision~~ and ~~the CUBE search level~~: done 2026-10-07
+  (targets 1, 4 and 5 above).
+- **`Start` ends a running block** (`0x00492440` calls `End` when the ip
+  is set), so a trigger that interrupts an ALWAYS block gives back what
+  that block took and clears its guard before the new block starts; the
+  port's `Start` doesn't. Found reading the code, not tested.
+- **String escapes**: retail's tokenizer also decodes `\r`, `\t` and
+  `\xNN` in quoted text (`0x00478c9c`, unless the token's flag 1 is set);
+  the port's decodes `\n` only. Not tested here.
 - **The rest of `Continue`**: waits across calls (`WaitSatisfied`
   `0x00492d70`) and the trigger scan (priorities, an interrupted ALWAYS
   block's resume at `+0xac`): a run-loop A/B with several `Continue` calls

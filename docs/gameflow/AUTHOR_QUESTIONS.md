@@ -369,6 +369,19 @@ Answer inline (or in chat) and the owning doc gets updated.
      its start (town.s:2677) and again at its end (2778), where every other
      block sets it back to `FULL`; after talking to her the music stays at
      half volume until the next conversation. A typo for `FULL`?
+104. After a `jump` or a picked choice, retail's script runs on past the
+     conversation's END into the object's next trigger block, to the
+     object's own END: `Jump` counts the object's BEGIN into the block depth
+     (`0x00493fa0`), so the trigger's END leaves the block open
+     ([forensics/SCRIPT_ENGINE.md](forensics/SCRIPT_ENGINE.md) §4.2). With
+     the shipped scripts that next block is the NPC's ALWAYS routine, run
+     once as the conversation's tail: Daly (keep.s) and Steffan walk one
+     round of their patrol, Jong (forest.s) waits a second, a dozen
+     townsfolk walk their routes, and meanwhile none of them can be talked
+     to again. The 1998 code ended the block at the trigger's END. Was the
+     run-on intended (the NPC goes back to his business as part of the
+     scene), or a side effect of the depth count? The port follows retail
+     either way.
 
 ## The first fight ([../gameplay/forensics/PLAYER_INPUT.md](../gameplay/forensics/PLAYER_INPUT.md))
 
