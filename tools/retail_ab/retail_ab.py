@@ -804,13 +804,17 @@ def main():
         cases = [c for c in cases if any(s in c['name'] for s in args.case)]
     case_hash = hashlib.sha256(json.dumps([(c['name'], c['sha256']) for c in cases]).encode()).hexdigest()
 
+    # A fixture versioned with this tree's emulator runs from it; the others
+    # from RETAIL_RUNTIME (the main checkout's working copy).
+    fixture = REPO / 'tools' / 'retail_runtime' / spec['fixture']
+    if not fixture.exists():
+        fixture = RUNTIME / spec['fixture']
     if spec.get('port_first'):
         port_info, port = run_port(args.port, args.target, cases, workdir, spec['port_fields'])
         retail_cases = [spec['retail_case'](c, port.get(c['name'])) for c in cases]
-        retail_info, retail = run_retail(RUNTIME / spec['fixture'], retail_cases, args.jobs)
+        retail_info, retail = run_retail(fixture, retail_cases, args.jobs)
     else:
-        retail_info, retail = run_retail(RUNTIME / spec['fixture'], cases, args.jobs,
-                                         spec.get('split'), spec.get('merge'))
+        retail_info, retail = run_retail(fixture, cases, args.jobs, spec.get('split'), spec.get('merge'))
         port_info, port = run_port(args.port, args.target, cases, workdir, spec['port_fields'])
     # The retail dump beside the port's (<target>.port.jsonl), for reading
     # a run in full.
