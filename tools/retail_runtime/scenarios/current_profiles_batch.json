@@ -1,0 +1,862 @@
+{
+  "sessions": [
+    {
+      "name": "partsys-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "authoredpartsys",
+          "params": {
+            "shape": 2,
+            "face": 64,
+            "render": true,
+            "seed": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "missile-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_entity",
+          "id": "source",
+          "position": [
+            0,
+            0,
+            128
+          ]
+        },
+        {
+          "op": "create_entity",
+          "id": "target",
+          "position": [
+            320,
+            0,
+            128
+          ],
+          "stats": {
+            "hp": 100,
+            "enemy": true
+          }
+        },
+        {
+          "op": "spawn_effect",
+          "id": "fx",
+          "type": "shared_missile_base",
+          "source_id": "source",
+          "destination_id": "target"
+        }
+      ]
+    },
+    {
+      "name": "flame-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "flame"
+        }
+      ]
+    },
+    {
+      "name": "ripple-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "ripple_no_splash",
+          "params": {
+            "length": 20
+          }
+        }
+      ]
+    },
+    {
+      "name": "fizzle-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "fizzle"
+        }
+      ]
+    },
+    {
+      "name": "mistfog-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "mistfog"
+        }
+      ]
+    },
+    {
+      "name": "sign-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "static_mesh",
+          "params": {
+            "profile": "CampSign"
+          }
+        }
+      ]
+    },
+    {
+      "name": "globe-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "static_mesh",
+          "params": {
+            "type_id": "0xad92bd24"
+          }
+        }
+      ]
+    },
+    {
+      "name": "fountain-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "fountain",
+          "params": {
+            "type_id": "0x22491405"
+          }
+        }
+      ]
+    },
+    {
+      "name": "ribbon-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "colored_ribbon",
+          "params": {
+            "profile": "RibbonB"
+          }
+        }
+      ]
+    },
+    {
+      "name": "head-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_entity",
+          "id": "source",
+          "position": [
+            0,
+            0,
+            128
+          ]
+        },
+        {
+          "op": "create_entity",
+          "id": "target",
+          "position": [
+            1000,
+            0,
+            128
+          ],
+          "stats": {
+            "hp": 0,
+            "enemy": true
+          }
+        },
+        {
+          "op": "spawn_effect",
+          "id": "fx",
+          "type": "fireball_head",
+          "source_id": "source",
+          "destination_id": "target",
+          "launch_params": {
+            "render_inputs": {
+              "frame": 3,
+              "rotation": 12,
+              "scale": 0.3,
+              "glow": 1.5,
+              "face": 32
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "streamer-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "streamer"
+        }
+      ]
+    },
+    {
+      "name": "flame-blue-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "flame",
+          "params": {
+            "type_id": "0x50ba373c"
+          }
+        }
+      ]
+    },
+    {
+      "name": "flame-green-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "flame",
+          "params": {
+            "variant": "green"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mist-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "mist"
+        }
+      ]
+    },
+    {
+      "name": "pixie-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "pixie"
+        }
+      ]
+    },
+    {
+      "name": "symglow-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "symglow"
+        }
+      ]
+    },
+    {
+      "name": "waterfall-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "waterfall"
+        }
+      ]
+    },
+    {
+      "name": "sparks-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": "retail_original_build.json",
+      "setup": [
+        {
+          "op": "create_effect",
+          "id": "fx",
+          "type": "sparks",
+          "params": {
+            "profile": "editor"
+          }
+        }
+      ]
+    }
+  ],
+  "jobs": [
+    {
+      "session": "partsys-agent",
+      "name": "partsys-pose-tick30",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 30
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "state",
+            "output": "state.json"
+          }
+        ]
+      }
+    },
+    {
+      "session": "missile-agent",
+      "name": "missile-impact-tick40",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 40
+          },
+          {
+            "op": "validate_execution_contract",
+            "id": "fx"
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "state",
+            "output": "state.json"
+          }
+        ]
+      }
+    },
+    {
+      "session": "flame-agent",
+      "name": "flame-pixels-tick3",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 3
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame.png",
+            "depth_output": "frame.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "ripple-agent",
+      "name": "ripple-pixels-tick3",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 3
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame.png",
+            "depth_output": "frame.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "fizzle-agent",
+      "name": "fizzle-pixels-tick4",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 4
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame.png",
+            "depth_output": "frame.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "mistfog-agent",
+      "name": "mistfog-pixels-tick24",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 24
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame.png",
+            "depth_output": "frame.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "sign-agent",
+      "name": "CampSign-constant-track-and-translation",
+      "scenario": {
+        "operations": [
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame-00.png",
+            "depth_output": "frame-00.depth-u16"
+          },
+          {
+            "op": "set_sample_frame",
+            "id": "fx",
+            "frame": 50
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame-50.png",
+            "depth_output": "frame-50.depth-u16"
+          },
+          {
+            "op": "set_sample_frame",
+            "id": "fx",
+            "frame": 99
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame-99.png",
+            "depth_output": "frame-99.depth-u16"
+          },
+          {
+            "op": "set_position",
+            "id": "fx",
+            "position": [
+              16,
+              -8,
+              4
+            ]
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "moved-99.png",
+            "depth_output": "moved-99.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "globe-agent",
+      "name": "Globe-constant-track-and-translation",
+      "scenario": {
+        "operations": [
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame-00.png",
+            "depth_output": "frame-00.depth-u16"
+          },
+          {
+            "op": "set_sample_frame",
+            "id": "fx",
+            "frame": 50
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame-50.png",
+            "depth_output": "frame-50.depth-u16"
+          },
+          {
+            "op": "set_sample_frame",
+            "id": "fx",
+            "frame": 99
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame-99.png",
+            "depth_output": "frame-99.depth-u16"
+          },
+          {
+            "op": "set_position",
+            "id": "fx",
+            "position": [
+              16,
+              -8,
+              4
+            ]
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "moved-99.png",
+            "depth_output": "moved-99.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "fountain-agent",
+      "name": "CyanFont-native-loop-tick96",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 96
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame.png",
+            "depth_output": "frame.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "ribbon-agent",
+      "name": "RibbonB-two-part-composite-and-owner",
+      "scenario": {
+        "operations": [
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame.png",
+            "depth_output": "frame.depth-u16"
+          },
+          {
+            "op": "set_position",
+            "id": "fx",
+            "position": [
+              16,
+              -8,
+              4
+            ]
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "moved.png",
+            "depth_output": "moved.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "head-agent",
+      "name": "FireBall-moving-head-kernels-only",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 2
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "tick-02.png",
+            "depth_output": "tick-02.depth-u16"
+          },
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 4
+          },
+          {
+            "op": "validate_execution_contract",
+            "id": "fx"
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "tick-06.png",
+            "depth_output": "tick-06.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "streamer-agent",
+      "name": "Streamer-active-and-native-reap",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 24
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "tick-24.png",
+            "depth_output": "tick-24.depth-u16"
+          },
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 80
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "dead-104.png",
+            "depth_output": "dead-104.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "flame-blue-agent",
+      "name": "Flame-blue-exact-ID",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 3
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame.png",
+            "depth_output": "frame.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "flame-green-agent",
+      "name": "Flame-green-exact-variant",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 3
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame.png",
+            "depth_output": "frame.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "mist-agent",
+      "name": "Mist-native-respawn-tick96",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 96
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame.png",
+            "depth_output": "frame.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "pixie-agent",
+      "name": "Pixie-empty-character-context-tick96",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 96
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame.png",
+            "depth_output": "frame.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "symglow-agent",
+      "name": "SymGlow-one-render-per-captured-timer",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 3
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "timer-03.png",
+            "depth_output": "timer-03.depth-u16"
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "timer-03-repeat.png",
+            "depth_output": "timer-03-repeat.depth-u16"
+          },
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 3
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "timer-06.png",
+            "depth_output": "timer-06.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "waterfall-agent",
+      "name": "Waterfall-literal-hundred-drop-pool",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 96
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "frame.png",
+            "depth_output": "frame.depth-u16"
+          }
+        ]
+      }
+    },
+    {
+      "session": "sparks-agent",
+      "name": "Sparks-native-explicit-birth-and-ballistics",
+      "scenario": {
+        "operations": [
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 12
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "tick-12.png",
+            "depth_output": "tick-12.depth-u16"
+          },
+          {
+            "op": "advance_ticks",
+            "id": "fx",
+            "ticks": 40
+          },
+          {
+            "op": "capture",
+            "id": "fx",
+            "kind": "pixels",
+            "output": "done-52.png",
+            "depth_output": "done-52.depth-u16"
+          }
+        ]
+      }
+    }
+  ]
+}

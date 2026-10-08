@@ -1,0 +1,61 @@
+{
+  "scope": "Audited generic static colored Ribbon identities; base Ribbon revive animator excluded.",
+  "profiles": [
+    {
+      "name": "RibbonB",
+      "id": "0x562c743a",
+      "asset": "Magic\\RibbonB.I3D",
+      "asset_sha256": "196b68ef168f4ea7423726fa22a6a61f3e7a2b10082ee92b5b126348504eee17",
+      "vertices": 186,
+      "faces": 204
+    },
+    {
+      "name": "RibbonG",
+      "id": "0x562c743b",
+      "asset": "Magic\\RibbonG.I3D",
+      "asset_sha256": "ce77a1139a3af351de1cbd7eb3e035600c2b70d49e0396ba095e3d181d93d2c8",
+      "vertices": 186,
+      "faces": 204
+    },
+    {
+      "name": "RibbonO",
+      "id": "0x562c743c",
+      "asset": "Magic\\RibbonO.I3D",
+      "asset_sha256": "a7079e2875aa95db069f606f8a8f0c9224c0b7b717084c264630746ad6657258",
+      "vertices": 186,
+      "faces": 204
+    },
+    {
+      "name": "RibbonP",
+      "id": "0x562c743d",
+      "asset": "Magic\\RibbonP.I3D",
+      "asset_sha256": "041f002d0781f1a581cd3469451c46258bfbb52612b4ea1531e684161404f71b",
+      "vertices": 186,
+      "faces": 204
+    },
+    {
+      "name": "RibbonR",
+      "id": "0x562c743e",
+      "asset": "Magic\\RibbonR.I3D",
+      "asset_sha256": "b9c24c1e80abeb10363675b56e9677363925fdf1d05a259b85c47c9c29322013",
+      "vertices": 186,
+      "faces": 204
+    },
+    {
+      "name": "RibbonW",
+      "id": "0x562c743f",
+      "asset": "Magic\\RibbonW.I3D",
+      "asset_sha256": "9e3d425a3a54fb012659bee976576222ca8f60690e1544947d0fec82dc458d21",
+      "vertices": 186,
+      "faces": 204
+    },
+    {
+      "name": "RibbonY",
+      "id": "0x562c7440",
+      "asset": "Magic\\RibbonY.I3D",
+      "asset_sha256": "50856762148be21c238b053ea7a36810f57aea427e973e0ced4875279489c6c1",
+      "vertices": 186,
+      "faces": 204
+    }
+  ]
+}

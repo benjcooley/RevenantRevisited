@@ -1,0 +1,27 @@
+{
+  "sessions": [
+    {
+      "name": "agent-flame",
+      "executable": "../../../recon/retail_asm/baseline/Revenant.rebuilt.exe",
+      "executable_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+      "baseline_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+      "build_id": "unchanged-retail-baseline",
+      "patch_manifest": {"kind": "unchanged-baseline"},
+      "setup": [{"op": "allocate", "name": "result", "size": 4}]
+    },
+    {
+      "name": "agent-sparks",
+      "executable": "../../../recon/retail_asm/baseline/Revenant.rebuilt.exe",
+      "executable_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+      "baseline_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+      "build_id": "unchanged-retail-baseline",
+      "patch_manifest": {"kind": "unchanged-baseline"},
+      "setup": [{"op": "allocate", "name": "result", "size": 4}]
+    }
+  ],
+  "jobs": [
+    {"session": "agent-flame", "name": "warm-render-state-a", "scenario": "render_state.json"},
+    {"session": "agent-sparks", "name": "warm-render-state-b", "scenario": "render_state.json"},
+    {"session": "agent-flame", "name": "warm-render-state-repeat", "scenario": "render_state.json"}
+  ]
+}
