@@ -29,6 +29,7 @@
 #include "player.h"
 #include "logging.h"
 
+#include <algorithm>
 #include <math.h>
 #include <string.h>
 
@@ -51,6 +52,20 @@ DEFOBJSTAT(Character, Sleeping,     SLP,  CHRFLAG_FIRST + CHRFLAG_SLEEPING, 0, 0
 DEFOBJSTAT(Character, Health,       HLT,  CHRSTAT_FIRST + CHRSTAT_HEALTH, 25, 0, 10000)
 DEFOBJSTAT(Character, Fatigue,      FAT,  CHRSTAT_FIRST + CHRSTAT_FATIGUE, 25, 0, 10000)
 DEFOBJSTAT(Character, Mana,         MAN,  CHRSTAT_FIRST + CHRSTAT_MANA, 25, 0, 10000)
+
+// REVSYNC: the shipped game's CHARACTER object stats 6-16 (SStatEntry
+// registrations; recon/scripts/object_stats.py).
+DEFOBJSTAT(Character, DmgResMisc,     DRMI, CHRRESIST_FIRST + CHRRESIST_MISC,     0, -100, 100)
+DEFOBJSTAT(Character, DmgResHand,     DRHA, CHRRESIST_FIRST + CHRRESIST_HAND,     0, -100, 100)
+DEFOBJSTAT(Character, DmgResPuncture, DRPU, CHRRESIST_FIRST + CHRRESIST_PUNCTURE, 0, -100, 100)
+DEFOBJSTAT(Character, DmgResCut,      DRCU, CHRRESIST_FIRST + CHRRESIST_CUT,      0, -100, 100)
+DEFOBJSTAT(Character, DmgResChop,     DRCH, CHRRESIST_FIRST + CHRRESIST_CHOP,     0, -100, 100)
+DEFOBJSTAT(Character, DmgResBludgeon, DRBL, CHRRESIST_FIRST + CHRRESIST_BLUDGEON, 0, -100, 100)
+DEFOBJSTAT(Character, DmgResMagical,  DRMA, CHRRESIST_FIRST + CHRRESIST_MAGICAL,  0, -100, 100)
+DEFOBJSTAT(Character, DmgResBurn,     DRBU, CHRRESIST_FIRST + CHRRESIST_BURN,     0, -100, 100)
+DEFOBJSTAT(Character, DmgResFreeze,   DRFR, CHRRESIST_FIRST + CHRRESIST_FREEZE,   0, -100, 100)
+DEFOBJSTAT(Character, DmgResPoison,   DRPO, CHRRESIST_FIRST + CHRRESIST_POISON,   0, -100, 100)
+DEFOBJSTAT(Character, DamageMod,      DMGM, CHRVAL_DAMAGEMOD,                     0, -100, 100)
 
 extern TDialogPane DialogPane;
 
@@ -78,7 +93,6 @@ void TCharacter::ClearChar()
 
     autocombat = AutoBeginCombat;
     
-    waittype = WAIT_NOTHING;
     waitticks = 0;
     forcecommanddone = false;
     forcenomove = false;
@@ -87,8 +101,10 @@ void TCharacter::ClearChar()
 
     // When character loaded or created, make exit timestamp current..
     // Prevents ONEXIT flag from expiring when character is saved on top of a
-    // destination exit.
-    exittimestamp = CurrentScreen->FrameCount();
+    // destination exit. The game session can build the world before the
+    // PlayScreen runs; its frame count starts at 0 when it does, which is
+    // what retail's load inside TPlayScreen::Initialize saw.
+    exittimestamp = (CurrentScreen == &PlayScreen) ? PlayScreen.FrameCount() : 0;
 
   // Set root state
   // NONE: DefaultRootState() will NOT be virtual when ClearChar()
@@ -150,9 +166,12 @@ void TCharacter::ClearChar()
   // Reset hasseen list
     memset(&hasseen, 0, sizeof(SHasSeen) * MAXHASSEEN);
 
-  // Clear Fade
+  // Clear Fade (retail ClearChar 0x004c18a0): fully visible. The step of 5
+  // toward a limit of 100 settles to still on the first pulse.
     fade = 100;
     fade_step = 5;
+    fade_limit = 100;
+    fade_direction = 0;
 
   // Clear the Invisible Spell
     invisible_spell = false;
@@ -214,18 +233,22 @@ void TCharacter::Pulse()
         if (target)
             target->SignalHostility(this, target);
 
-      // Update the health/etc. for player's target
-        if ((TPlayer*)this == Player && target)
-            TextBar.SetHealthDisplay(target->GetName(), target->Health());
+        // REVSYNC: the 1998 build put the player's target's name and health
+        // on the text bar here. Retail dropped it: TTextBar::SetHealthDisplay
+        // (0x0054ca20) has one caller, the map loader's progress bar
+        // (0x004598c8); the target's health is TPlyrStatusBar's.
     }
 
     // Check to see if exit flag has expired (exit flags are set by exit objects)
-    // Exits search through character list to tag character that it is on an exit.  Characters
-    // then check the time stamp and clear themselves after two frames.  This system prevents
-    // the old reflective exit bug, where an exit takes a character to another exit, which
-    // then takes him back to the first... etc. etc. as the character can only activate an
-    // exit when he was previously (in the past two frames) not already on one.
-    if (exittimestamp < CurrentScreen->FrameCount() - 2)
+    // Exits search through the player list to tag a player that is on an exit.  Characters
+    // then check the time stamp and clear themselves once off every strip for a while.  This
+    // system prevents the old reflective exit bug, where an exit takes a character to another
+    // exit, which then takes him back to the first... etc. etc. as the character can only
+    // activate an exit when he was previously not already on one.
+    // REVSYNC: 0x004c1c7d -- retail waits more than 5 frames (1998: 2). Retail
+    // also forgets the exit it stood on after 24; nothing reads that, so the
+    // port doesn't keep it (EXITS.md §1.6).
+    if (CurrentScreen->FrameCount() - exittimestamp > 5)
         SetFlag(OF_ONEXIT, false);
 
     // Do blood for impdecap (you can be dead!)
@@ -255,6 +278,10 @@ void TCharacter::Pulse()
             }
         }
     }
+
+  // REVSYNC: TCharacter::Pulse @ 0x004c1bb0 -- one step of any fade, dead
+  // or alive (UpdateFade's only caller in retail).
+    UpdateFade();
 
     if (IsDead())
     {
@@ -444,50 +471,10 @@ void TCharacter::UpdateAction(int32_t bits)
     if (doing->firsttime)
         doing->firsttime = false;
 
-  // ********************************************************************
-  // Now continue the script (before the code below sets the Action Block for the
-  // next frame.  The script is currently paused if this code is running.  Ordinary
-  // script CMD_WAITS always wait on the next command being finished (WAIT_NOTHING).
-  // Special waits can set the WAIT_ flags to wait on other things.
-    if (GetScript())
-    {
-        bool continuescript = false;
-
-        if (waittype == WAIT_NOTHING && comstate == COM_COMPLETED) // Ordinary wait action done
-            continuescript = true;
-        else if (waittype == WAIT_TICKS)                           // Wait for ticks done
-        {
-            waitticks--;
-            if (waitticks <= 0)
-                continuescript = true;  
-        }
-        else if (waittype == WAIT_RESPONSE && DialogPane.HasResponded())  // Wait for a response    
-        {
-            ScriptJump(DialogPane.GetResponseLabel());
-            waittype = WAIT_NOTHING;
-            continuescript = true;
-            DialogPane.Hide(); // Done with dialog pane, now hide it
-        }
-        else if (waittype == WAIT_CHAR_DONE && comstate == COM_COMPLETED)
-        {
-            if (!doing->obj || ((TCharacter*)doing->obj)->IsInRoot())
-                continuescript = true;
-        }
-
-      // NEXT LINE: Next line in script
-        if (continuescript)
-        {
-            commanddone = true;             // Force animation state to done
-            comstate = COM_COMPLETED;       // Force command state to COMPLETED
-            if (desired)                    // Break whatever is animating!
-                desired->priority = false;
-            if (doing)                      // Break whatever is animating!
-                doing->priority = false;
-            waittype = WAIT_NOTHING;        // Don't wait anymore
-            ContinueScript();
-        }
-    }
-
+  // REVSYNC: TCharacter::Pulse @ 0x004c3371 — run the script, telling it
+  // whether the current action has completed. Waits belong to the script
+  // (SCRIPT_ENGINE.md §5); the 1998 character-side waits are gone.
+    ContinueScript(comstate == COM_COMPLETED);
 
   // ********************************************************************
   // Now set the action blocks for the next frame.  The rules are:
@@ -499,10 +486,12 @@ void TCharacter::UpdateAction(int32_t bits)
   // the root state.
 
   // Cause character to fall if move bits flag has fall
+  // REVSYNC: 0x004c3429 -- with incidentals off the next state is always
+  // the 100% variant (TryCommand's flag).
     if (bits & MOVE_FALLING)
         comstate = ForceCommand(new TActionBlock("fall"), bits);
     else
-        comstate = TryCommand(desired, bits);
+        comstate = TryCommand(desired, bits, Incidentals() ? 0 : kCommandNoIncidentals);
 
   // ********************************************************************
   // Decrement the wait value (if any)
@@ -1172,6 +1161,41 @@ void TCharacter::RestoreHealth()
     SetHealth(MaxHealth());
 }
 
+// REVSYNC: TCharacter::GetFieldText = retail 0x004d5260 (vtable +0xc8).
+// "armor" is ArmorValue(), plus for the main player its DmgResMisc (vtable
+// +0x260; spells such as STATLINE DmgResMisc 4 raise it) and the armor of
+// the effects on it (0x005407d0, the +0x134 of each object in the
+// character's list at +0x170) -- that list isn't in the port yet.
+// "attackpct", "defensepct", "damage" and "stealth" are combat formulas
+// over getters not yet identified in the port; they answer "no such field".
+bool TCharacter::GetFieldText(const char *field, char *buf, int32_t buflen)
+{
+    if (!field || !buf || buflen <= 0)
+        return false;
+
+    int32_t value = 0;
+    if (stricmp(field, "armor") == 0)
+    {
+        value = ArmorValue();
+        if (this == Player)
+            value += GetObjStat(CHRRESIST_FIRST + CHRRESIST_MISC);
+    }
+    else if (stricmp(field, "maxhealth") == 0)
+        value = MaxHealth();
+    else if (stricmp(field, "maxfatigue") == 0)
+        value = MaxFatigue();
+    else if (stricmp(field, "maxmana") == 0)
+        value = MaxMana();
+    else if (stricmp(field, "attackpct") == 0 || stricmp(field, "defensepct") == 0 ||
+             stricmp(field, "damage") == 0 || stricmp(field, "stealth") == 0)
+        return false;
+    else
+        return TComplexObject::GetFieldText(field, buf, buflen);
+
+    snprintf(buf, buflen, "%d", value);
+    return true;
+}
+
 // Returns true if character has seen 'me'
 bool TCharacter::HasSeenMe(TCharacter* me)
 {
@@ -1231,17 +1255,14 @@ void TCharacter::SetHasSeenAutoCombat(bool on)
     }
 }
 
-// Returns the percentage of transparency for character's imagery
+// REVSYNC: TCharacter::Transparency @ 0x004c5a50 -- how visible the
+// character's imagery is, 0..100: the fade. (In a network game a player in
+// player state 2 is capped at 40; no multiplayer in the port.) The
+// pre-release hid aggressive monsters the player hadn't seen yet; retail
+// dropped that.
 int32_t TCharacter::Transparency()
 {
-    if (Editor ||
-        !Player || this == Player || 
-        !Aggressive() || 
-        IsDead() ||
-        Player->HasSeenMe(this))
-            return max(0, min(fade, 100));
-    else
-        return min(fade, 0);
+    return std::clamp(fade, 0, 100);
 }
 
 // DLS brightness routine (gives brightness given distance)
@@ -1681,6 +1702,19 @@ bool TCharacter::ResolveHit(TCharacter* targ,
                 targ->Damage(damage, DT_NONE, 0, hitab, this);
 
             }
+
+          // REVSYNC: the end of retail's hit resolution (0x004c62b0): a
+          // player earns experience from the target -- for the kill, in the
+          // weapon's skill, and in stealth if the target never saw it
+          // coming (TPlayer vtable +0x414, +0x41c, +0x420; each checks the
+          // target is dead). docs/gameplay/forensics/PLAYER_STATS.md §7.
+            if (ObjClass() == OBJCLASS_PLAYER)
+            {
+                TPlayer* player = static_cast<TPlayer*>(this);
+                player->AwardKillExp(targ);
+                player->AwardSkillExp(SK_WEAPONSKILLS + player->WeaponType(), targ);
+                player->AwardStealthExp(targ);
+            }
         }
     }
 
@@ -1804,7 +1838,7 @@ int32_t TCharacter::ResolveAttack(TActionBlock* ab, int32_t bits)
           // Play block sound do sparks
             if (targ && targ->doing->action == ACTION_BLOCK)
             {
-                if (attack->flags && CA_SPARKS)
+                if (attack->flags & CA_SPARKS)
                     EffectBurst("sparks");
                 PlayWave(listrnd(chardata->blocksounds));
             }
@@ -2192,7 +2226,7 @@ int32_t TCharacter::ResolveSay(TActionBlock* ab, int32_t bits)
     if (ab->wait <= 0 || (doing && doing->stop))
     {
         ab->wait = 0;
-        ForceCommand(root);
+        ForceCommand(root, 0, Incidentals() ? 0 : kCommandNoIncidentals);   // REVSYNC: 0x004c8437
         return COM_COMPLETED;
     }
 
@@ -2259,7 +2293,7 @@ void TCharacter::EffectBurst(char *name, int32_t height)
       // ported. Combat still kills the target; blood is cosmetic.
         // ((TBloodEffect*)inst)->SetParams(height, (GetFace() + 128) & 255, 0, 80, 20, random(1, 5));
     }
-    else
+    else if (!stricmp(name, "sparks"))
     {
         def.pos = pos;
 
@@ -2268,17 +2302,14 @@ void TCharacter::EffectBurst(char *name, int32_t height)
         if (!inst)
             return;
 
-        inst->CreateAnimator();
-        TParticle3DAnimator* anim = (TParticle3DAnimator*)inst->GetAnimator();
-
         int32_t ang = (GetFace() + random(-80, 80)) & 0xff;
 
         S3DPoint vect;
         ConvertToVector(ang, 100, vect);
 
-        if (anim)
+        if (doing && doing->obj)
         {
-            SParticleParams pr;
+            SParticleParams pr = {};
 
             S3DPoint vect0, tpos;
             doing->obj->GetPos(tpos);
@@ -2300,20 +2331,36 @@ void TCharacter::EffectBurst(char *name, int32_t height)
             pr.spread.X = (float)0.5;
             pr.spread.Y = (float)0.5;
             pr.spread.Z = (float)0.5;
-            pr.gravity = (float)0.2;
-            pr.trails = 1;
+            // Retail EffectBurst caller tuning (cls_0x5a7b98.cpp:4645–4651).
+            pr.gravity = 0.25f;
+            pr.trails = 2;
             pr.minstart = 0;
             pr.maxstart = 8;
             pr.minlife = 20;
             pr.maxlife = 40;
-            pr.bounce = false;
+            pr.bounce = true;
             pr.killobj = true; 
             pr.objflags = 1 << (ObjId() & 0x3);
             pr.seektargets = false;
             pr.numtargets = 0;
 
-            anim->InitParticles(&pr);
+            if (!TSparkEffect::AttachBurst(*inst, pr))
+            {
+                log_warn("[combat] could not attach typed Sparks burst");
+                inst->SetFlags(OF_KILL);
+            }
         }
+        else
+        {
+            log_warn("[combat] Sparks burst has no combat target");
+            inst->SetFlags(OF_KILL);
+        }
+    }
+    else
+    {
+        // Other generic particle callers need their own recovered profiles;
+        // do not reinterpret a generic animator as TParticle3DAnimator.
+        log_warn("[combat] unsupported EffectBurst particle type '%s'", name);
     }
 }
 
@@ -3201,18 +3248,23 @@ bool TCharacter::Go(S3DPoint vect)
     return Go(angle);
 }
 
+// REVSYNC: Goto @ 0x004cedb0 -- start walking toward (x, y) (Go), then give
+// the walk its target, which ResolveMove walks to and snaps onto within 8.
+// The target goes on the block Go queued, the desired one, or on the one
+// being done when nothing is queued (desired is the root): the walk started
+// at once, or Go turned the current step. Not ported: retail's third argument,
+// an item to pick up on arrival (+0x288, set only when given), and flag
+// 0x1000 on the block, which the combat-mode move resolvers read (0x004c7f80,
+// 0x004c7980).
 bool TCharacter::Goto(int32_t x, int32_t y)
 {
-    int32_t angle = ConvertToFacing(pos, S3DPoint(x, y, pos.z));
-    if (Go(angle))
-    {
-        doing->target.x = x;
-        doing->target.y = y;
-        doing->target.z = pos.z;
-        return true;
-    }
-    else
+    const int32_t angle = ConvertToFacing(pos, S3DPoint(x, y, pos.z));
+    if (!Go(angle))
         return false;
+
+    TActionBlock* ab = desired != root ? desired : doing;
+    ab->target = S3DPoint(x, y, pos.z);
+    return true;
 }
 
 bool TCharacter::Stop(char *name)
@@ -3542,77 +3594,98 @@ bool TCharacter::TryGet()
     return true;
 }
 
-bool TCharacter::Say(char *string, int32_t wait, char *anim, char *sound)
+// REVSYNC: Say @ 0x004d0610 (DIALOG.md §3.1). Plays the voice unpositioned,
+// starts the say action for the voice's length (or the line's), and puts the
+// line in the dialog pane. `wait` (ticks), when given, wins.
+//   - The voice paces the line whenever it exists: retail measured the playing
+//     sample, so with sound output off it paced by text; the port's decoded
+//     length keeps silenced and test runs paced like normal play.
+//   - Retail starts the action with TryCommand; the port's TryCommand drops a
+//     block it can't start yet, so the action is set desired (which owns it).
+bool TCharacter::Say(const char *string, int32_t wait, const char *anim, const char *sound)
 {
-    if (!string)
+    if (!string || Health() <= 0)
         return false;
 
-  // Play sound file
-    bool played = false;
+    voice = -1;
+    int32_t voicems = 0;
     if (sound && PlaySpeech)
     {
-      int32_t soundid = SoundPlayer.FindSound(sound);
-      if (soundid >= 0)
-      {
-        if (SoundPlayer.Mount(soundid))
+        voice = SoundPlayer.FindSound(sound);
+        if (voice >= 0)
         {
-            TSound* sound = SoundPlayer.GetSound(soundid);
-            if (sound)
+            if (SoundPlayer.Mount(voice))
             {
-                wait = sound->GetLength() * FRAMERATE / 100;     // Get seconds to wait
+                SoundPlayer.Play(voice);            // full volume, no position
+                SoundPlayer.Unmount(voice);
             }
-            S3DPoint p, mp;
-            GetPos(p);
-            MapPane.GetMapPos(mp);
-            p -= mp;
-            played = SoundPlayer.Play(soundid, 0, 0, &p);
-            SoundPlayer.Unmount(soundid);
+            voicems = SoundPlayer.SampleLengthMs(voice);
         }
-      }
-    } 
-        
-    char buf[128];
-    DialogLine(string, buf, 128);  // Translate dialog line (convert [tags])
+    }
 
-    TActionBlock* ab;
-    if (anim)
-        ab = new TActionBlock(anim, ACTION_SAY);
-    else
-        ab = new TActionBlock("say", ACTION_SAY);
+    char line[256];
+    DialogLine(string, line, sizeof(line));
 
-    if (!played || ShowDialog)
-        ab->data = (void *)strdup(buf);
-    else
-        ab->data = nullptr;
-
-    if (wait < 0)
-        ab->wait = 20 + max(15, strlen(buf) * 5 / 4);  // Ratio of ticks to chars
-    else
-        ab->wait = wait;
+    TActionBlock* ab = new TActionBlock(anim ? anim : "say", ACTION_SAY);
+    // The action's copy of the line; ShowDialog off blanks it when a voice
+    // speaks it (nothing draws it -- the pane always shows the line).
+    ab->data = (voicems > 0 && !ShowDialog) ? nullptr : (void *)strdup(line);
+    ab->wait = SpeechTicks(wait, voicems, line);
     ab->loop = true;
-    SetDesired(ab);
+    const int32_t ticks = ab->wait;
 
+    // Step 7 (DIALOG.md §3.1): start the say animation now -- retail's
+    // vtable 0x218 at 0x004db4d0, the port's ForceCommand -- rather than
+    // queue it as desired. A queued say waited behind whatever the speaker
+    // was doing (Kylie held each line ~40 s), or forever when that never
+    // ended (the level-46 slaves), and the script's speech wait, which wants
+    // the speaker idle in its root state, never came. A speaker who can't
+    // take it still speaks the line; the refused block, which retail leaked,
+    // is freed.
+    ForceCommand(ab);
+    if (doing != ab && desired != ab)
+        delete ab;
+
+    DialogPane.AddSpeech(this, line, ticks);
     return true;
 }
 
-bool TCharacter::SayTag(int32_t tagid, int32_t wait, char *anim)
+// REVSYNC: 0x004d084b..0x004d08e0 (Say's duration). Retail: `12 -
+// ftol(ms * 0.001f * -24.0f)` in x87 extended precision, which truncates to
+// the same tick as the integer form here for any length under ~14 minutes;
+// a voice of length 0 paces by the text. Checked against retail by the A/B
+// (docs/gameflow/RETAIL_AB.md, say-duration).
+int32_t TCharacter::SpeechTicks(int32_t wait, int32_t voicems, const char *line)
 {
-    char *line = DialogList.GetLine(tagid);
-    char *tag = DialogList.GetTag(tagid);
-
-    if (!line || !tag)
-        return false;
-
-    return Say(line, wait, anim, tag);
+    if (wait >= 0)
+        return wait;
+    if (voicems > 0)
+        return 12 + voicems * 24 / 1000;
+    return 2 * (int32_t)strlen(line) + 36;
 }
 
-bool TCharacter::SayTag(char *tag, int32_t wait, char *anim)
+// REVSYNC: SayIndex @ 0x004d09b0 -- dialog line `tagid`, with the voice its
+// tag names.
+bool TCharacter::SayTag(int32_t tagid, int32_t wait, const char *anim)
 {
-    int32_t tagid = DialogList.FindLine(tag);
+    return Say(DialogList.GetLine(tagid), wait, anim, DialogList.GetTag(tagid));
+}
+
+// REVSYNC: SayTag @ 0x004d0a20
+bool TCharacter::SayTag(const char *tag, int32_t wait, const char *anim)
+{
+    const int32_t tagid = DialogList.FindLine(tag);
     if (tagid < 0)
         return false;
-
     return SayTag(tagid, wait, anim);
+}
+
+// REVSYNC: 0x004d6000
+void TCharacter::StopTalking()
+{
+    if (voice >= 0)
+        SoundPlayer.Stop(voice);
+    ForceCommandDone();
 }
 
 // Begins drawing bow or crossbow
@@ -3808,16 +3881,14 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
     }
     else
     {
-        // Default: retail just checks `root->action == ACTION_COMBAT`
-        // and rejects on a single specific transition-state name we
-        // haven't recovered (DAT_005e0318). Until that string is
-        // identified, only enforce the action gate so we don't
-        // accidentally reject legitimate combat states.
+        // Default: the root must be a combat root, and not one still
+        // named "walk" (retail 0x4d12bf: root action 3, then Is(DAT_005e0318
+        // = "walk") rejects).
         if (!root) { note_reject("default-mode no root"); return false; }
         if (root->action != ACTION_COMBAT)
             { note_reject("default-mode !ACTION_COMBAT"); return false; }
-        // TODO retail: DAT_005e0318 transition-state reject (was guessed
-        // as "comhand" — that guess was rejecting Locke's "hand" root).
+        if (root->Is("walk"))
+            { note_reject("default-mode walk root"); return false; }
     }
 
     // CA_PLAYANIM gating (retail 0x4d12ef-0x4d1349)
@@ -3844,8 +3915,10 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
         return true;
     }
 
-    if (waittype != 0 && objclass != OBJCLASS_PLAYER)
-        return false;  // monster waittype gate, never fires for player
+    // Monsters don't attack while their script waits. (This gate read the
+    // 1998 character wait state, which now lives on the script.)
+    if (IsScriptWaiting() && objclass != OBJCLASS_PLAYER)
+        return false;
 
     // Not still doing another attack (retail 0x4d139c)
     if (doing && doing->action == ACTION_ATTACK && doing->attack &&
@@ -4689,8 +4762,13 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
 
     SetDesired(ab);
 
+  // REVSYNC: 0x004d3f8b -- the opponent is both the block's user and its
+  // enemy.
     if (GetScript())
-        GetScript()->Trigger(TRIGGER_COMBAT); // Trigger the combat script
+    {
+        TCharacter* enemy = Fighting();
+        GetScript()->Trigger(TRIGGER_COMBAT, nullptr, nullptr, enemy, kAliasUser, enemy, kAliasEnemy);
+    }
 
     nextattack = -1;
 
@@ -4725,11 +4803,16 @@ bool TCharacter::EndFighting()
     return true;
 }
 
+// REVSYNC: 0x004d4790 (in part). No target drops the current one from the
+// doing, root and desired actions without starting combat -- what a
+// teleport does (EXITS.md §3.1); 1998 entered combat with nobody. Retail's
+// gates for a live target (busy attack/impact blocks, the player's pending
+// attack fields) aren't compared yet.
 bool TCharacter::SetFighting(TCharacter* newtarget)
 {
     if (newtarget && newtarget->IsDead())   // Can't target dead guys
         return false;
-    if (!IsFighting())
+    if (!IsFighting() && newtarget)
         return BeginCombat(newtarget);
     if (doing->obj == newtarget)
         return true;
@@ -4745,12 +4828,6 @@ bool TCharacter::SetFighting(TCharacter* newtarget)
     }
 
     return true;
-}
-
-void TCharacter::Wait(int32_t waitlen)
-{
-    waittype = WAIT_TICKS;
-    waitticks = waitlen;
 }
 
 bool TCharacter::PlayAnim(char *string)
@@ -4793,21 +4870,29 @@ int32_t TCharacter::CursorType(TObjectInstance* inst)
     return CURSOR_MOUTH;                // chat for a bit
 }
 
+// REVSYNC: Use @ 0x004d4a60. An object used on a character is a GET for
+// the character and a GIVE for the giver; a character used without one is
+// looted when dead and talked to otherwise. Not ported yet: when GET, GIVE or
+// DIALOG fires, retail also turns incidentals off for both characters, stops
+// them (0x004cee70) and marks the character (+0x108).
 bool TCharacter::Use(TObjectInstance* user, int32_t with)
 {
+    if (TObjectInstance::Use(user, with))   // objects that combine
+        return true;
+
     if (with >= 0)
     {
-        TObjectInstance* inst = MapPane.GetInstance(with);
-        if (!inst)
+        TObjectInstance* item = MapPane.GetInstance(with);
+        if (!item)
             return false;
         if (GetScript())
-            GetScript()->Trigger(TRIGGER_GET, inst->GetName());
+            GetScript()->Trigger(TRIGGER_GET, item->GetName(), nullptr, user, kAliasUser, item, kAliasItem);
         if (user && user->GetScript())
-            GetScript()->Trigger(TRIGGER_GIVE, inst->GetName());
+            user->GetScript()->Trigger(TRIGGER_GIVE, item->GetName(), nullptr, this, kAliasUser, item, kAliasItem);
         return true;
     }
 
-    if (IsDead() && user)
+    if (Health() <= 0 && user)
     {
         // loot the corpse
         TInventoryIterator i(this);
@@ -4819,12 +4904,14 @@ bool TCharacter::Use(TObjectInstance* user, int32_t with)
                 TextBar.Print("Can't carry any more.");
             else
             {
+                // Before the add: gold or food may merge into a pile and be deleted
+                char buf[80];
+                snprintf(buf, sizeof(buf), "%s taken from corpse of %s.", oi->GetName(), GetName());
+
                 oi->RemoveFromInventory();
                 user->AddToInventory(oi);
 
-                char buf[80];
-                sprintf(buf, "%s taken from corpse of %s.", oi->GetName(), GetName());
-                TextBar.Print(buf);
+                TextBar.Print("%s", buf);
             }
 
             return true;
@@ -4833,24 +4920,21 @@ bool TCharacter::Use(TObjectInstance* user, int32_t with)
         return false;
     }
 
-    if (!Aggressive() && user == (TObjectInstance*)Player)
-    {
-      // Face eachother
-        S3DPoint upos;
-        user->GetPos(upos);
-        int32_t angle = ConvertToFacing(pos, upos);
-        Face(angle);
-        angle = ConvertToFacing(upos, pos);
-        user->Face(angle);
+    if (Aggressive() || !user || user->ObjClass() != OBJCLASS_PLAYER)
+        return false;
 
-      // Start DIALOG section
-        if (GetScript())
-            GetScript()->Trigger(TRIGGER_DIALOG);
+  // Face each other, then start the DIALOG block with the player as its user.
+    S3DPoint upos;
+    user->GetPos(upos);
+    int32_t angle = ConvertToFacing(pos, upos);
+    Face(angle);
+    angle = ConvertToFacing(upos, pos);
+    user->Face(angle);
 
-        return true;
-    }
+    if (GetScript())
+        GetScript()->Trigger(TRIGGER_DIALOG, nullptr, nullptr, user, kAliasUser);
 
-    return false;
+    return true;
 }
 
 // REVSYNC: retail TCharacter::CharBlocking / FindCharInLine @ 0x4d4db0
@@ -4895,13 +4979,13 @@ TCharacter* TCharacter::CharBlocking(TObjectInstance* inst, const S3DPoint& pos,
 
 // ------------- Streaming functions ------------------
 
-// Loads object data from the sector
+// REVSYNC: TCharacter::Load @ 0x004d4eb0 (SAVE_GAME.md §11.3).
 void TCharacter::Load(RTInputStream is, int32_t version, int32_t objversion)
 {
+    uint8_t basever = 0;
     if (objversion >= 3)
-        LOAD_BASE(TComplexObject)
-    else
-        TComplexObject::Load(is, version, 0);
+        is >> basever;
+    TComplexObject::Load(is, version, basever);
 
   // Get saved last pulse values (so we can figure what has happened to char)
     if (objversion < 1)
@@ -4949,12 +5033,23 @@ void TCharacter::Load(RTInputStream is, int32_t version, int32_t objversion)
         if (MaxMana() > chardata->mana)
             SetMaxMana(chardata->mana);
     }
+
+  // A character saved dead is removed on its first frame.
+    if (Health() < 1)
+        ResetFlags(flags | OF_KILL);
+
+  // Fully visible, not fading. Retail also zeroes a fade direction
+  // (+0x1a0) the port's fade doesn't model.
+    fade = 100;
+    fade_step = 0;
+    fade_limit = 100;
 }
 
-// Saves object data to the sector
+// REVSYNC: TCharacter::Save @ 0x004d50d0.
 void TCharacter::Save(RTOutputStream os)
 {
-    SAVE_BASE(TComplexObject)
+    os << (uint8_t)TComplexObject::ObjVersion();
+    TComplexObject::Save(os);
 
   // Last time any health/fatigue/mana was recovered
     os << lasthealthrecov;
@@ -5014,44 +5109,108 @@ void TCharacter::MakeInvisible()
     }
 }
 
+// REVSYNC: TCharacter::Fade @ 0x004d56c0 (`fadecharacterin/out`) -- +1
+// fades back in to 100, but only while the character is alive; anything
+// else fades out to 0. 5 a pulse either way.
+void TCharacter::Fade(int32_t direction)
+{
+    fade_direction = direction;
+    if (direction == 1)
+    {
+        if (Health() > 0)
+        {
+            fade_step = -5;
+            fade_limit = 100;
+        }
+        return;
+    }
+
+    fade_step = 5;
+    fade_limit = 0;
+    fade_direction = -1;
+}
+
+// REVSYNC: TCharacter::SetFade @ 0x004d5730 -- a dead character can only
+// fade out. A negative 'amt' keeps the current visibility.
 void TCharacter::SetFade(int32_t amt, int32_t amt2, int32_t amt3)
 {
-    fade = amt;
+    if (Health() <= 0 && amt2 < 0)
+        return;
+
+    if (amt >= 0)
+        fade = amt;
     fade_step = amt2;
     fade_limit = amt3;
+    fade_direction = (amt2 > 0) ? -1 : 1;
 }
 
-int32_t TCharacter::GetFade(void)
+// REVSYNC: TCharacter::UpdateFade @ 0x004d57a0 -- one pulse of the fade.
+// Fading in past 0 makes an object-invisible character visible again; the
+// fade stops (step and direction 0) at its limit, at 0, or at 100.
+void TCharacter::UpdateFade()
 {
-    return fade;
-}
+    if (fade_step == 0)
+        return;
 
-void TCharacter::UpdateFade(void)
-{
     fade -= fade_step;
+    if (fade > 0 && fade_step < 0 && (flags & OF_INVISIBLE))
+        SetFlag(OF_INVISIBLE, false);
 
     if (fade_limit == -1)
     {
         if (fade < 0)
+        {
             fade = 0;
-        if (fade > 100)
-            fade = 100;
-    }
-    else if (fade_step > 0)
-    {
-        if (fade < fade_limit)
-            fade = fade_limit;
-        if (fade > 100)
-            fade = 100;
+            fade_step = fade_direction = 0;
+        }
     }
     else if (fade_step < 0)
     {
         if (fade > fade_limit)
+        {
             fade = fade_limit;
+            fade_step = fade_direction = 0;
+        }
         if (fade < 0)
+        {
             fade = 0;
+            fade_step = fade_direction = 0;
+        }
+        return;     // retail skips the 100 cap on the way in
+    }
+    else if (fade < fade_limit)
+    {
+        fade = fade_limit;
+        fade_step = fade_direction = 0;
     }
 
+    if (fade > 100)
+    {
+        fade = 100;
+        fade_step = fade_direction = 0;
+    }
+}
+
+// REVSYNC: TCharacter::SetInvisible @ 0x004d5880 -- the invisibility spell
+// fades its target to 30; ending it fades a living character back to 100.
+void TCharacter::SetInvisibleSpell(bool on)
+{
+    if (invisible_spell == on)
+        return;
+
+    invisible_spell = on;
+    if (on)
+    {
+        fade_step = 5;
+        fade_limit = 30;
+        fade_direction = -1;
+    }
+    else if (Health() > 0)
+    {
+        fade_step = -5;
+        fade_limit = 100;
+        fade_direction = 1;
+    }
 }
 
 // set to cast mode

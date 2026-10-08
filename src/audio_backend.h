@@ -22,6 +22,9 @@
 //     engine spatializer on for Revisited mode.
 //   - Music is a separate one-shot streaming Source on the music group,
 //     loaded from .ogg (stb_vorbis built into miniaudio).
+//   - File decoding (WAV, MP3, Ogg Vorbis) needs no engine: it works when
+//     output is silenced (--headless) or failed to come up, so a sound's
+//     length is known either way.
 //
 // Unit conventions match the 1998 API so callers don't need to know about
 // the backend:
@@ -33,7 +36,10 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <vector>
 
 struct tWAVEFORMATEX;   // sound.h's WAVEFORMATEX
 
@@ -65,7 +71,9 @@ bool Functioning();
 // ---- Mixer --------------------------------------------------------------
 
 // Master/sfx/music volume in linear 0..1. The factory default is 1.0
-// (passthrough). Apply call after a Settings change.
+// (passthrough). Apply call after a Settings change. The sfx and music
+// group volumes may be set before Init(); they take effect when it opens
+// the device.
 void SetMasterVolume(float v);
 void SetSfxVolume(float v);
 void SetMusicVolume(float v);
@@ -75,6 +83,22 @@ void SetMusicVolume(float v);
 // game pause.
 void PauseAll();
 void UnpauseAll();
+
+// ---- Decoding (no engine needed) ----------------------------------------
+
+// Decodes a whole encoded file held in memory (WAV, MP3 or Ogg Vorbis) to
+// interleaved signed 16-bit PCM at the file's own rate and channel count.
+// `format` receives the PCM WAVEFORMATEX that CreateSourceFromPCM takes.
+// Returns false if the data can't be decoded. A file with no frames
+// decodes (true) to an empty `pcm`.
+bool DecodeToPCM16(const uint8_t* data, size_t bytes,
+                   tWAVEFORMATEX* format, std::vector<uint8_t>& pcm);
+
+// Length of an encoded file held in memory, in milliseconds: its PCM frame
+// count * 1000 / its sample rate, truncated. MP3 counts every frame
+// (no encoder-delay trim). Empty if the data can't be decoded; 0 for a
+// file with no frames.
+std::optional<uint32_t> DecodedLengthMs(const uint8_t* data, size_t bytes);
 
 // ---- Source (one decoded SFX, possibly with one playing voice) ----------
 
@@ -105,6 +129,8 @@ void DestroySource(Source* src);
 // volume_ds and pan_ds use 1998 DirectSound units (see header preamble).
 bool PlaySource(Source* src, int32_t volume_ds, int32_t freq_hz, int32_t pan_ds);
 void StopSource(Source* src);
+// Start a voice StopSource stopped again from where it stopped (no rewind).
+void ResumeSource(Source* src);
 
 bool IsPlaying(const Source* src);
 bool IsLooping(const Source* src);
@@ -126,7 +152,10 @@ void MusicStop();
 
 bool MusicPlaying();
 
-// 0..1 linear, scaled on top of SetMusicVolume's group setting.
+// 0..1 linear, scaled on top of SetMusicVolume's group setting. Applies to
+// the playing track and every track after it (starts at 1): it stands in
+// for retail's CD "current volume", a device setting that outlives a track,
+// which scripts drop to half and back with `setcdvolume`.
 void MusicSetVolume(float v);
 
 // ---- Diagnostics --------------------------------------------------------

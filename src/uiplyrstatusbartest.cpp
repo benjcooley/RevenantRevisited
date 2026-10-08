@@ -28,33 +28,31 @@
 // icons → pane_w-0x46. The prior attempt dropped the 0x41 chrome origin and
 // placed the right card 0x41 too far left.
 //
+// Data (slot23 FUN_0054af20): the left card is the main player (`Player`,
+// retail DAT_00667fcc), the right card the character the player fights
+// (TCharacter::Fighting). The pane keeps no game data of its own; the
+// --test=ui-plyrstatusbar host supplies a demo player (uidemoplayer.h).
+//
 // *************************************************************************
 
 #include "uiplyrstatusbartest.h"
 
-#include "animation.h"
 #include "bitmap.h"
 #include "bitmapatlas.h"
-#include "character.h"
+#include "dialog.h"
 #include "display.h"
 #include "font.h"
 #include "hudstate.h"
 #include "logging.h"
 #include "multi.h"
-#include "object.h"
+#include "player.h"
 #include "renderer.h"
 #include "surface.h"
 #include "time.h"
 
-#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-
-// Object/imagery class registries (defined in the object system) — global
-// symbols, declared outside the anonymous namespace so they link correctly.
-extern TObjectClass CharacterClass;
-extern TObjectClass PlayerClass;
 
 namespace {
 
@@ -160,33 +158,17 @@ constexpr int32_t kNameCellH     = 0x40;    // 64 (§8)
 constexpr int32_t kNameCellY     = 0x36;    // 54 (§8)
 
 // Font: Arimo-Regular ("Small") — the Arial-metric-compatible font, spec §8 px ~12.
-constexpr const char* kFontPath = "thirdparty/fonts/Arimo-Regular.ttf";
+constexpr const char* kFontFile = "Arimo-Regular.ttf";
 constexpr int32_t     kFontPx   = 12;       // §8 ("~12")
 
 // --- animation (spec §9) ---------------------------------------------
 constexpr int32_t kFadeMax   = 6;             // §9 ramp range 0..6
 constexpr double  kSimTickMs = 1000.0 / 24.0; // 24Hz sim gate (protocol rule 6, §9)
 
-// =====================================================================
-// Synthetic per-character state for the harness.
-// =====================================================================
-struct SCharState
-{
-    const char* name;
-    int32_t     level;
-    int32_t     hp, hpMax;
-    int32_t     mp, mpMax;
-    int32_t     ft, ftMax;
-};
-
-// Player = Locke, matching the reference (docs/ui/plyr_stats_panel.png:
-// HP 1833, MP 2174, FT 191, "Locke / Level 26"). Maxes set so the fill ratios
-// match the reference bars (HP ~95%, MP ~82%, FT ~50%).
-SCharState g_player = { "Locke", 26, 1833, 1930, 2174, 2650, 191, 380 };
-
-// Target = a second character; its stats animate so the fade-in and the
-// drain-from-inner-edge (dir = -1) are visible across a capture.
-SCharState g_target = { "Vermis", 18, 640, 1200, 320, 800, 540, 700 };
+// Name/level format (FUN_0054ae10): players get the STATBARFMT dialog line,
+// default "%s\nLevel %d"; any other character shows its name alone.
+constexpr const char* kNameLevelTag     = "STATBARFMT";
+constexpr const char* kNameLevelDefault = "%s\nLevel %d";
 
 // =====================================================================
 // Loaded assets.
@@ -201,25 +183,64 @@ PTBitmap g_fatigueIcon = nullptr;
 PTBitmap g_ring        = nullptr;
 PTBitmap g_lockeFace   = nullptr;   // 30x30 shipped player portrait (portraits.dat)
 
-// Portrait via the retail object-image path: a character instance whose
-// InventoryImage() (the +0x130 getter PlayerSide uses) yields its baked icon.
-// Same getter the inventory panes + paperdoll use for item icons. The player
-// mesh bakes no icon, so g_realPortrait is usually null and we draw g_lockeFace;
-// a live 3D head would be a Revisited enhancement (CharacterPortrait_SPEC.md).
-TObjectInstance* g_portraitInst = nullptr;
-PTBitmap         g_realPortrait = nullptr;
-
 const SFontAtlas* g_font = nullptr;
 
 TSurface* g_pane  = nullptr;
 int32_t   g_paneW = 0;             // live pane width (this+0xc, §3) = display width
 
-// Fade ramps (spec §9). Player targets kFadeMax (always present once a player
-// exists); target ramps toward kFadeMax when a target exists, else 0.
-int32_t g_playerFade    = 0;       // this[0xd4] (§9)
-int32_t g_targetFade    = 0;       // this[0xdc] (§9)
-bool    g_targetPresent = true;
-double  g_lastTickMs    = 0.0;
+// Fade ramps (spec §9). Player targets kFadeMax while a player exists;
+// target ramps toward kFadeMax while the player fights someone, else 0.
+int32_t g_playerFade = 0;          // this[0xd4] (§9)
+int32_t g_targetFade = 0;          // this[0xdc] (§9)
+double  g_lastTickMs = 0.0;
+
+// The last character the player fought (this+0xb8, a map index in retail):
+// the target card keeps drawing it while it fades out (slot23 :623-628).
+TSafeRef<TCharacter> g_lastTarget;
+
+// The player's current target (FUN_0054af20 :64-71): the root action's
+// object when the root action is combat (3) or bow (0x19).
+TCharacter* CurrentTarget()
+{
+    return Player ? Player->Fighting() : nullptr;
+}
+
+// Portrait: the character's baked .i3d head icon (the +0x130 inventory
+// image PlayerSide stamps), probed across states because the icon lives on
+// one state only. Characters that bake none fall back to the shipped
+// LockeFace, as the harness always has (retail draws no face then).
+PTBitmap PortraitOf(TObjectInstance* ch)
+{
+    TObjectImagery* img = ch ? ch->GetImagery() : nullptr;
+    if (img)
+        for (int32_t s = 0; s < img->NumStates(); ++s)
+            if (PTBitmap bm = img->GetInvImage(s))
+                return bm;
+    return g_lockeFace;
+}
+
+// FUN_0054ae10: "<name>\nLevel <n>" for players, the bare name otherwise.
+// Returns the two lines through line1/line2.
+void FormatNameLevel(TCharacter* ch, char (&line1)[64], char (&line2)[64])
+{
+    line1[0] = line2[0] = '\0';
+    const char* name = ch->GetName() ? ch->GetName() : "";
+    if (ch->ObjClass() != OBJCLASS_PLAYER)
+    {
+        std::snprintf(line1, sizeof(line1), "%s", name);
+        return;
+    }
+    const int32_t fmtid = DialogList.FindLine(kNameLevelTag);   // retail: default if absent
+    const char* fmt = fmtid >= 0 ? DialogList.GetLine(fmtid) : nullptr;
+    char text[128];
+    std::snprintf(text, sizeof(text), fmt ? fmt : kNameLevelDefault,
+                  name, static_cast<int>(static_cast<TPlayer*>(ch)->Level()));
+    const char* nl = std::strchr(text, '\n');
+    const size_t n1 = nl ? size_t(nl - text) : std::strlen(text);
+    std::snprintf(line1, sizeof(line1), "%.*s", int(n1), text);
+    if (nl)
+        std::snprintf(line2, sizeof(line2), "%s", nl + 1);
+}
 
 // fade → bar/chrome alpha (spec §9: alpha = ctr*255/6).
 float FadeAlpha(int32_t fade)
@@ -312,7 +333,7 @@ void DrawBar(const SBarGeom& g, int32_t dstX, int32_t dstY,
 // Draw one chip (player or target) into the pane RT.
 // Mirrors slot 20 (chrome compose, §6a) + slot 23 (bars + text, §5).
 // =====================================================================
-void DrawSide(const SCharState& ch, bool isRight, int32_t fade,
+void DrawSide(TCharacter* ch, bool isRight, int32_t fade,
               int32_t tw, int32_t th)
 {
     const float fadeAlpha = FadeAlpha(fade);
@@ -338,10 +359,8 @@ void DrawSide(const SCharState& ch, bool isRight, int32_t fade,
     if (g_backPanel)
         Renderer->DrawBitmapToTarget(g_backPanel, chromeBase, 0, tw, th);
 
-    // Portrait FIRST (under the ring), centered on the ring anchor. Prefer the
-    // character's baked .i3d head icon; fall back to the LockeFace asset.
-    PTBitmap face = g_realPortrait ? g_realPortrait : g_lockeFace;
-    if (face)
+    // Portrait FIRST (under the ring), centered on the ring anchor.
+    if (PTBitmap face = PortraitOf(ch))
     {
         const int32_t fx = chromeBase + ringCX - face->width / 2;
         const int32_t fy = kRingAnchorYCenter - face->height / 2;
@@ -369,10 +388,12 @@ void DrawSide(const SCharState& ch, bool isRight, int32_t fade,
     const int32_t dir      = isRight ? -1 : +1;
     const int32_t shadowDX = isRight ? -kShadowDX : kShadowDX;
 
+    // Value getters +0x1c0/+0x1d0/+0x1c8, maxima +0x1d8/+0x1e8/+0x1e0 (§6).
+    const int32_t values[3] = { ch->Health(), ch->Mana(), ch->Fatigue() };
     struct { int bar; int v; int mx; } rows[3] = {
-        { BAR_HP, ch.hp, ch.hpMax },
-        { BAR_MP, ch.mp, ch.mpMax },
-        { BAR_FT, ch.ft, ch.ftMax },
+        { BAR_HP, values[0], ch->MaxHealth()  },
+        { BAR_MP, values[1], ch->MaxMana()    },
+        { BAR_FT, values[2], ch->MaxFatigue() },
     };
     for (const auto& r : rows)
     {
@@ -397,10 +418,9 @@ void DrawSide(const SCharState& ch, bool isRight, int32_t fade,
 
         char buf[32];
         const int32_t valYs[3] = { kValueYHealth, kValueYMana, kValueYFatigue };
-        const int32_t valVs[3] = { ch.hp, ch.mp, ch.ft };
         for (int i = 0; i < 3; ++i)
         {
-            std::snprintf(buf, sizeof(buf), "%d", valVs[i]);          // "%d" (§8)
+            std::snprintf(buf, sizeof(buf), "%d", values[i]);         // "%d" (§8)
             DrawTextShadowedToTarget(g_font, buf, valX, valYs[i],
                                      kValueCellW, kValueCellH, valAlign,
                                      1.0f, 1.0f, 1.0f, tw, th);        // white (§8)
@@ -414,20 +434,20 @@ void DrawSide(const SCharState& ch, bool isRight, int32_t fade,
         // cell literal): nameX = ringScreenCX - cellW/2 (fixes the ~6px off).
         const int32_t nameX = ringScreenCX - kNameCellW / 2;
         const float   lh    = TextLineHeight(g_font);
-        char line2[32];
-        std::snprintf(line2, sizeof(line2), "Level %d", ch.level);    // "%s\nLevel %d" (§8)
+        char line1[64];
+        char line2[64];
+        FormatNameLevel(ch, line1, line2);
 
-        DrawTextShadowedToTarget(g_font, ch.name, nameX, kNameCellY,
+        DrawTextShadowedToTarget(g_font, line1, nameX, kNameCellY,
                                  kNameCellW, kValueCellH, ETextAlign::Center,
                                  1.0f, 1.0f, 1.0f, tw, th);
-        DrawTextShadowedToTarget(g_font, line2, nameX,
-                                 kNameCellY + (int32_t)(lh + 0.5f),
-                                 kNameCellW, kValueCellH, ETextAlign::Center,
-                                 1.0f, 1.0f, 1.0f, tw, th);
+        if (line2[0])
+            DrawTextShadowedToTarget(g_font, line2, nameX,
+                                     kNameCellY + (int32_t)(lh + 0.5f),
+                                     kNameCellW, kValueCellH, ETextAlign::Center,
+                                     1.0f, 1.0f, 1.0f, tw, th);
     }
 }
-
-void TryExtractPortrait();   // defined below; called from Refresh
 
 // =====================================================================
 // HUD drawable — composes the whole pane RT then DrawSurface's it once
@@ -450,9 +470,10 @@ public:
         EnsurePane();
         if (!g_pane) return;
 
-        TryExtractPortrait();   // grab the baked head icon once imagery is ready
-        AdvanceRamps();
-        UpdateSyntheticState();
+        TCharacter* target = CurrentTarget();
+        if (target)
+            g_lastTarget = target;
+        AdvanceRamps(target != nullptr);
 
         const int32_t tw = g_pane->Width();
         const int32_t th = g_pane->Height();
@@ -461,14 +482,18 @@ public:
         // (the pane is a HUD overlay; spec §3).
         g_pane->StartPass(0.0f, 0.0f, 0.0f, 0.0f);
 
-        // Player chip: origin screen 0 (§3). Always present once a player
-        // exists, so player fade targets kFadeMax (§9).
-        DrawSide(g_player, /*isRight*/ false, g_playerFade, tw, th);
+        // Nothing at all without a player (slot23 :61-63).
+        if (Player)
+        {
+            // Player chip: origin screen 0 (§3).
+            DrawSide(Player, /*isRight*/ false, g_playerFade, tw, th);
 
-        // Target chip: origin screen pane_w-0xc1 (§3). Only when a target is
-        // resolved (here: synthetic g_targetPresent) and its fade > 0 (§5/§9).
-        if (g_targetFade > 0)
-            DrawSide(g_target, /*isRight*/ true, g_targetFade, tw, th);
+            // Target chip: origin screen pane_w-0xc1 (§3), while its fade > 0;
+            // a target the player let go keeps drawing as it fades (§5/§9).
+            TCharacter* shown = target ? target : g_lastTarget.Get();
+            if (shown && g_targetFade > 0)
+                DrawSide(shown, /*isRight*/ true, g_targetFade, tw, th);
+        }
 
         g_pane->EndPass();
     }
@@ -488,8 +513,10 @@ private:
         g_pane = new TSurface(g_paneW > 0 ? g_paneW : 1, kPaneH, SG_PIXELFORMAT_RGBA8);
     }
 
-    // Fade ramps, gated to 24Hz (spec §9, protocol rule 6).
-    static void AdvanceRamps()
+    // Fade ramps, gated to the 24Hz tick (slot 19 FUN_00549da0, spec §9):
+    // the player card ramps to 6 while a player exists, the target card
+    // toward 6 while the player fights someone and back to 0 after.
+    static void AdvanceRamps(bool targetPresent)
     {
         const double nowMs = TTime::Time() * 1000.0;
         if (g_lastTickMs == 0.0) g_lastTickMs = nowMs;
@@ -498,110 +525,20 @@ private:
         {
             g_lastTickMs += kSimTickMs;
             ++guard;
-            // player always present → target kFadeMax (§9)
+            if (!Player)
+            {
+                g_playerFade = g_targetFade = 0;
+                continue;
+            }
             if (g_playerFade < kFadeMax) ++g_playerFade;
-            // target ramps toward present?6:0 (§9)
-            const int32_t tgt = g_targetPresent ? kFadeMax : 0;
+            const int32_t tgt = targetPresent ? kFadeMax : 0;
             if (g_targetFade < tgt)      ++g_targetFade;
             else if (tgt < g_targetFade) --g_targetFade;
         }
     }
-
-    // Synthetic driver: cycle target presence (exercise §9 fade-in/out + the §7
-    // mirrored shadow) and animate the target's stats so the dir=-1 drain is
-    // visible. Player stays fixed at the reference values.
-    static void UpdateSyntheticState()
-    {
-        const double t = TTime::Time();
-        // Target present for 5s, absent for 2s, repeat (~7s cycle).
-        const double phase = t - 7.0 * (double)(int)(t / 7.0);
-        g_targetPresent = (phase < 5.0);
-
-        // Slow triangle wave (0..1) so the gauges visibly move and the dir=-1
-        // drain-from-inner-edge is observable.
-        const double u   = t / 4.0;
-        const double tri = 1.0 - 2.0 * std::fabs(u - std::floor(u + 0.5));  // 0..1
-        g_target.hp = (int32_t)(g_target.hpMax * (0.25 + 0.6 * tri));
-        g_target.mp = (int32_t)(g_target.mpMax * (0.15 + 0.7 * tri));
-        g_target.ft = (int32_t)(g_target.ftMax * (0.40 + 0.5 * tri));
-    }
 };
 
 TPlyrStatusHud g_hud;
-
-// Spawn a real player/character instance to source the portrait from. The
-// imagery body loads asynchronously, so extraction happens later in
-// TryExtractPortrait (called per-frame) once the mesh + icons are ready.
-void SpawnPortraitInstance()
-{
-    int32_t objclass = OBJCLASS_PLAYER;
-    int32_t objtype  = PlayerClass.FindObjType((char*)"Locke");
-    if (objtype < 0)
-        for (int32_t i = 0; i < PlayerClass.NumTypes(); ++i)
-            if (PlayerClass.GetObjType(i)) { objtype = i; break; }
-    if (objtype < 0)
-    {
-        objclass = OBJCLASS_CHARACTER;
-        for (int32_t i = 0; i < CharacterClass.NumTypes(); ++i)
-            if (CharacterClass.GetObjType(i)) { objtype = i; break; }
-    }
-    if (objtype < 0)
-    {
-        log_warn("[ui-plyrstatusbar] no character types available for portrait");
-        return;
-    }
-
-    TObjectClass* cl = TObjectClass::GetClass(objclass);
-    if (!cl) return;
-
-    SObjectDef def = {};
-    def.objclass = (short)objclass;
-    def.objtype  = (short)objtype;
-    def.state    = 0;
-    def.level    = 0;
-    def.pos      = { 0, 0, 0 };
-    def.vel      = { 0, 0, 0 };
-    def.accum    = { 0, 0, 0 };
-    def.rotatex  = 0;
-    def.rotatey  = 0;
-    def.rotatez  = 32;
-    def.group    = 0;
-
-    TObjectInstance* inst = cl->NewObject(&def);
-    if (!inst)
-    {
-        log_warn("[ui-plyrstatusbar] NewObject failed for portrait (class=%d type=%d)",
-                 objclass, objtype);
-        return;
-    }
-    if (auto* chr = dynamic_cast<TCharacter*>(inst))
-    {
-        const char* root = chr->DefaultRootState();
-        if (root && *root) chr->SetState((char*)root);
-    }
-    inst->OnScreen();
-    g_portraitInst = inst;
-}
-
-// Once the spawned instance's imagery is loaded, pull its baked head icon. The
-// portrait is the character's baked .i3d icon (GetInvImage), the +0x130 path
-// PlayerSide uses; the head icon lives on a single state (state 0 for
-// characters), NOT the live animation GetState() — so probe states for the
-// first that carries one. Retried each frame until it succeeds (the imagery
-// body streams in asynchronously after spawn).
-void TryExtractPortrait()
-{
-    if (g_realPortrait || !g_portraitInst) return;
-    TObjectImagery* img = g_portraitInst->GetImagery();
-    if (!img || img->NumStates() <= 0) return;
-    for (int32_t s = 0; s < img->NumStates(); ++s)
-        if ((g_realPortrait = img->GetInvImage(s)) != nullptr)
-        {
-            log_info("[ui-plyrstatusbar] portrait icon: state %d, %dx%d",
-                     s, g_realPortrait->width, g_realPortrait->height);
-            return;
-        }
-}
 
 }  // namespace
 
@@ -630,10 +567,6 @@ bool InitializeUIPlyrStatusBarMode()
     if (g_portraitsDat)
         g_lockeFace = LookupByName(g_portraitsDat, "LockeFace");
 
-    // Spawn the player instance; its baked head icon is extracted later, once
-    // the imagery streams in (TryExtractPortrait, per-frame). LockeFace until then.
-    SpawnPortraitInstance();
-
     log_info("[ui-plyrstatusbar] assets: BackPanel=%s Bars=%s "
              "Health=%s Mana=%s Fatigue=%s Ring=%s LockeFace=%s",
              g_backPanel ? "OK" : "MISS", g_bars ? "OK" : "MISS",
@@ -642,17 +575,17 @@ bool InitializeUIPlyrStatusBarMode()
              g_lockeFace ? "OK" : "MISS");
 
     // Font: LiberationSans "Small" (spec §8).
-    g_font = BuildTTFAtlas(kFontPath, kFontPx);
+    g_font = BuildTTFAtlas(TTFFilePath(kFontFile).c_str(), kFontPx);
     log_info("[ui-plyrstatusbar] font %s @%dpx = %s",
-             kFontPath, kFontPx, g_font ? "OK" : "MISS");
+             kFontFile, kFontPx, g_font ? "OK" : "MISS");
 
     delete g_pane;
-    g_pane          = nullptr;
-    g_paneW         = 0;
-    g_playerFade    = 0;
-    g_targetFade    = 0;
-    g_targetPresent = true;
-    g_lastTickMs    = 0.0;
+    g_pane       = nullptr;
+    g_paneW      = 0;
+    g_playerFade = 0;
+    g_targetFade = 0;
+    g_lastTickMs = 0.0;
+    g_lastTarget.Clear();
 
     Renderer->AddHud(&g_hud, 0.0f);
     return true;
@@ -681,13 +614,7 @@ void CloseUIPlyrStatusBarMode()
     g_paneW        = 0;
     g_backPanel    = g_bars = g_healthIcon = g_manaIcon = nullptr;
     g_fatigueIcon  = g_ring = g_lockeFace = nullptr;
-    if (g_portraitInst)
-    {
-        g_portraitInst->OffScreen();
-        delete g_portraitInst;
-        g_portraitInst = nullptr;
-    }
-    g_realPortrait = nullptr;
+    g_lastTarget.Clear();
     g_statusbarDat = nullptr;
     g_portraitsDat = nullptr;
     g_font         = nullptr;

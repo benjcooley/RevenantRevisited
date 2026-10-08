@@ -27,26 +27,14 @@
 // pass at screen (452, 0). Mirrors uibarinvtest / uiplyrstatusbartest /
 // uisidetabstest — the canonical compose-to-target contract.
 //
-// Test-harness items (spec §6.4 / §10): the pane is interesting only when
-// populated. We spawn a named set of real retail equipment items (armor /
-// weapon / ranged / ammo / lightsource accessories) via the object class
-// registries and let oi->InventoryImage() yield the baked .i3d icon.
-// Imagery loads asynchronously; per-frame TryExtractIcon pulls the icon
-// once it lands (same pattern uibarinvtest / uiplyrstatusbartest use —
-// [[project-ui-portrait-and-icons]]). The visible wells read
-// Player->GetEquip(i), so the slot icons and live paperdoll always agree.
-//
-// Coverage of BOTH icon APIs — static (`invitem`, TBitmap) AND animated
-// (`invanim`, TAnimation). Per the icon-load loop at
-// src/3dimage.cpp:362-371 / :622-631, items can carry either. The
-// per-frame TryExtractIcon probes invitem first then falls back to
-// GetInvAnimation, and CurrentIconBitmap picks the current frame for
-// animated icons at ~10 FPS.
-//
-// Empty slots that have no demo item show the placeholder pictogram so the
-// "what goes here" hint reads correctly (spec §6.3, the retail-specific
-// addition). Body-drag rotation is wired through the shared testmode input
-// path so scripted captures can exercise the paperdoll interaction.
+// Contents (spec §5): the main player's equipment. Each well shows
+// Player->GetEquip(i) through the shared TInvSlot (static `invitem` or
+// animated `invanim` icons, src/3dimage.cpp:362-371), or the slot's
+// placeholder pictogram when empty (spec §6.3, the retail-specific
+// addition). The paperdoll is the same player wearing the same items, so
+// the wells and the body always agree. The --test=ui-equip host supplies a
+// demo player. Body-drag rotation is wired through the shared testmode
+// input path so scripted captures can exercise the paperdoll interaction.
 //
 // Primitives (UI_METHOD_MAP §12 — canonical shared toolbox only):
 //   Renderer->DrawBitmapToTarget        — opaque chrome stamp
@@ -57,9 +45,9 @@
 // No hand-rolled chroma-key passes, no procedural silhouette stand-ins.
 //
 // Live 3D paperdoll (#11, #13 — landed):
-//   The pane spawns Locke as a TPlayer instance and per-frame:
-//   1. Advances the engine animator (inst->NextFrame() + Animate(false))
-//      so the body advances the recovered base state.
+//   The pane draws the main player's model wearing its equipment, and:
+//   1. Poses it from the pane's own state (retail EquipPane +0xbc, slot
+//      19), never the player's: the body in the world keeps its state.
 //   2. Uses the recovered slot-19 animation string (DAT_005e4060 = "walk")
 //      instead of cycling winv/binv gesture exports, which produce the
 //      raised/crossed-arm poses seen in the broken paperdoll.
@@ -111,25 +99,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
-
-// Item-class registries (defined in their respective .cpp files). The pane
-// is content-agnostic — these are sample real items so the test mode has
-// something to draw; the production pane gets its items from
-// Player->GetEquip(i) (spec §5 step 3a).
-//
-extern TObjectClass ArmorClass;
-extern TObjectClass WeaponClass;
-extern TObjectClass RangedWeaponClass;
-extern TObjectClass AmmoClass;
-extern TObjectClass LightSourceClass;
-// Character body (paperdoll subject) — Locke or first available player.
-// Used to source the character's baked .i3d body via GetInvAnimation/GetInvImage
-// (same path uiplyrstatusbartest uses for the portrait, scaled up here for
-// the full body). The character's .i3d carries an invitem (static body icon)
-// and may carry an invanim (per-frame body animation); per-frame Refresh
-// walks invanim if present.
-extern TObjectClass CharacterClass;
-extern TObjectClass PlayerClass;
 
 namespace {
 
@@ -232,18 +201,24 @@ TSurface* g_pane = nullptr;
 // sub-rect via Renderer->CompositeLitTargetSubrectToTarget so the live
 // Locke draws on top of the chrome stone backdrop.
 //
-// Animation drive: inst->NextFrame() + Animate(false) once per legacy
-// tick, exactly like char3d. The legacy-tick gate is delta-time-driven
-// (TTime::LegacyFrameCount() advances by wall-clock), so the cycle is
-// frame-rate-independent in compliance with [[feedback-framerate-
-// independent-anim]]. Retail slot 19 copies DAT_005e4060 into the pane's
-// animation buffer; the recovered data resolves that string as "walk".
+// Pose: the pane's own state, never the player's. Retail slot 19 copies
+// DAT_005e4060 into the pane's animation buffer; the recovered data
+// resolves that string as "walk".
 //
 // Empty placeholder until the imagery streamer has loaded the .i3d body
 // (async, mirrors uiplyrstatusbartest::TryExtractPortrait): per-frame
 // TryBuildBodyMeshes retries until the sub-objects are decodable.
 // =====================================================================
-TObjectInstance* g_bodyInst    = nullptr;  // spawned Locke (player class instance)
+// The meshes below are built for one player, its equipment and its bow
+// mode; BindBody rebuilds them when any of those changes.
+TSafeRef<TPlayer>         g_bodyPlayer;
+TSafeRef<TObjectInstance> g_bodyEquip[NUM_EQ_SLOTS];
+bool                      g_bodyBowMode = false;
+// The paperdoll's pose: the first frame of this state, independent of the
+// player's state in the world. Retail slot 19 (EquipPane_SPEC §9) steps an
+// idle animation chosen through the character's vtable +0x131, which isn't
+// identified yet, so the pane holds the recovered state's first frame.
+int32_t                   g_bodyState = -1;
 T3DImagery*      g_body3DImg   = nullptr;  // dynamic_cast<T3DImagery*> of imagery
 TTextureHandle   g_bodyFallbackAlbedo = kInvalidTexture;
 
@@ -257,7 +232,6 @@ std::vector<SBodyMesh> g_bodyMeshes;
 float          g_bodyBBoxMin[3] = { 0, 0, 0 };
 float          g_bodyBBoxMax[3] = { 0, 0, 0 };
 float          g_bodyScale      = 1.0f;
-int64_t        g_bodyLastTick   = -1;
 bool           g_bodyMeshesBuilt = false;
 
 // #12 — Per-equipment sub-mesh registry. One entry per equipment sub-
@@ -403,46 +377,6 @@ constexpr int32_t kBodyHitY = 78;
 constexpr int32_t kBodyHitW = 92;
 constexpr int32_t kBodyHitH = 166;
 
-// =====================================================================
-// Per-slot demo content (spec §6.4 algorithm intent only; test mode
-// does not depend on a Player).
-//
-// We spawn a real retail object for a subset of the 11 EQ_* slots and
-// let oi->InventoryImage() drive the baked-icon path. The slots not
-// listed here render their named placeholder (spec §6.3 retail addition).
-// The slot enum drives which placeholder fills in for empty wells.
-//
-// Choices:
-//   - a full named leather outfit so the paperdoll has visible armor
-//     replacements for head/body/hands/legs/feet.
-//   - Short Sword, Light Bow, Arrow, neck/ring jewelry, and Torch so the
-//     occupied slot path covers the rest of the retail EQ_* table.
-//
-// Asynchronous imagery streams in after spawn; per-frame TryExtractIcon
-// retries until the icon lands (same pattern uibarinvtest uses;
-// [[project-ui-portrait-and-icons]]).
-// =====================================================================
-struct SDemoSlot
-{
-    int32_t          eqslot     = -1;     // EQ_* enum index (0..10)
-    int32_t          objclass   = -1;
-    TObjectClass*    cls        = nullptr;// registry pointer (null = leave empty)
-    TObjectInstance* inst       = nullptr;
-    PTBitmap         icon       = nullptr;// static invitem (3dimage.cpp:2017-2025)
-    TAnimation*      anim       = nullptr;// animated invanim (3dimage.cpp:2028-2035)
-    int32_t          animFrames = 0;      // cached anim->NumFrames()
-    const char*      typeName   = "?";
-};
-
-constexpr int32_t kDemoCount = NUM_EQ_SLOTS;
-SDemoSlot g_demo[kDemoCount];
-
-// Animation pacing for invanim icons — ~10 FPS reads as motion without
-// flickering. The spec gives no rate for the per-item icon animation
-// (Animate slot 19 ticks per-engine-tick and is gated by mbr_0xc4 /
-// mbr_0xbc, spec §9); the wall-clock 10 FPS keeps the demo legible.
-constexpr double kIconAnimMs = 100.0;
-
 SInvSlotStyle MakeEquipSlotStyle()
 {
     SInvSlotStyle style;
@@ -495,173 +429,39 @@ PTBitmap LookupByName(TMulti* m, const char* name)
     return nullptr;
 }
 
-// Per-frame: pull a spawned item's baked icon once its imagery has
-// streamed in. Probes BOTH `invitem` (static TBitmap) AND `invanim`
-// (animated TAnimation), per the icon-load loop at src/3dimage.cpp:
-// 362-371 / :622-631 which copies either one or the other depending on
-// what the .i3d body carries. State 0 is the canonical "inventory image"
-// for items; defensive sweep of further states mirrors uiplyrstatusbartest
-// ([[project-ui-portrait-and-icons]] — the imagery body loads async, so
-// retry each frame until it lands).
-//
-// Sets icon OR anim (mutually exclusive per state); returns true once
-// SOMETHING is bound so the caller can stop retrying for that slot.
-bool TryExtractIcon(SDemoSlot& d)
+// The body's player, or null when it has none to draw.
+TPlayer* Body()
 {
-    if (d.icon || d.anim) return true;        // already bound
-    if (!d.inst) return false;
-    TObjectImagery* img = d.inst->GetImagery();
-    if (!img || img->NumStates() <= 0) return false;
+    return g_bodyPlayer.Get();
+}
 
-    // Static icon — what most items carry. 3dimage.cpp:2017-2025.
-    if (PTBitmap bm = img->GetInvImage(0))
+// Follow the main player: when the player, its equipment or its bow mode
+// changed since the meshes were built, drop them so TryBuildBodyMeshes
+// rebuilds them (and re-picks the pose state for a new player).
+void BindBody()
+{
+    TPlayer* player = Player;
+    bool changed = (g_bodyPlayer.Get() != player);
+    if (changed)
     {
-        d.icon = bm;
-        log_info("[ui-equip] slot EQ_%d '%s': invitem %dx%d",
-                 d.eqslot, d.typeName, bm->width, bm->height);
-        return true;
+        g_bodyPlayer = player;
+        g_body3DImg  = nullptr;
+        g_bodyState  = -1;
     }
-
-    // Animated icon — 3dimage.cpp:2028-2035 exposes
-    // the icons[state].invanim field which the icon-load loop populates
-    // at :368-371 / :628-631 as an alternative to invitem.
-    if (TAnimation* a = img->GetInvAnimation(0))
-    {
-        d.anim       = a;
-        d.animFrames = a->NumFrames();
-        log_info("[ui-equip] slot EQ_%d '%s': invanim %d frames (animated)",
-                 d.eqslot, d.typeName, d.animFrames);
-        return true;
-    }
-
-    // Defensive probe — some items put the icon on a non-zero state.
-    for (int32_t s = 1; s < img->NumStates(); ++s)
-    {
-        if (PTBitmap bm = img->GetInvImage(s))
+    for (int32_t i = 0; player && i < NUM_EQ_SLOTS; ++i)
+        if (g_bodyEquip[i].Get() != player->GetEquip(i))
         {
-            d.icon = bm;
-            log_info("[ui-equip] slot EQ_%d '%s': invitem state %d %dx%d",
-                     d.eqslot, d.typeName, s, bm->width, bm->height);
-            return true;
-        }
-        if (TAnimation* a = img->GetInvAnimation(s))
-        {
-            d.anim       = a;
-            d.animFrames = a->NumFrames();
-            log_info("[ui-equip] slot EQ_%d '%s': invanim state %d %d frames",
-                     d.eqslot, d.typeName, s, d.animFrames);
-            return true;
-        }
-    }
-    return false;
-}
-
-// Resolve the bitmap to draw for a slot at the current wall-clock time.
-// Static icon returns directly; animated icon picks the current frame via
-// a time-based ramp (10 FPS, kIconAnimMs above).
-PTBitmap CurrentIconBitmap(const SDemoSlot& d)
-{
-    if (d.icon) return d.icon;
-    if (d.anim && d.animFrames > 0)
-    {
-        const double nowMs = TTime::Time() * 1000.0;
-        const int32_t f    = (int32_t)(nowMs / kIconAnimMs) % d.animFrames;
-        return d.anim->GetFrame(f);
-    }
-    return nullptr;
-}
-
-SDemoSlot* FindDemoSlotForInstance(TObjectInstance* inst)
-{
-    if (!inst) return nullptr;
-    for (int32_t i = 0; i < kDemoCount; ++i)
-        if (g_demo[i].inst == inst)
-            return &g_demo[i];
-    return nullptr;
-}
-
-PTBitmap CurrentIconBitmapForInstance(TObjectInstance* inst)
-{
-    if (!inst) return nullptr;
-
-    if (SDemoSlot* demo = FindDemoSlotForInstance(inst))
-    {
-        TryExtractIcon(*demo);
-        return CurrentIconBitmap(*demo);
-    }
-
-    TObjectImagery* img = inst->GetImagery();
-    if (!img || img->NumStates() <= 0) return nullptr;
-
-    auto animFrame = [](TAnimation* anim) -> PTBitmap {
-        if (!anim || anim->NumFrames() <= 0) return nullptr;
-        const double nowMs = TTime::Time() * 1000.0;
-        const int32_t f = (int32_t)(nowMs / kIconAnimMs) % anim->NumFrames();
-        return anim->GetFrame(f);
-    };
-
-    if (PTBitmap bm = img->GetInvImage(0)) return bm;
-    if (PTBitmap bm = animFrame(img->GetInvAnimation(0))) return bm;
-
-    for (int32_t s = 1; s < img->NumStates(); ++s)
-    {
-        if (PTBitmap bm = img->GetInvImage(s)) return bm;
-        if (PTBitmap bm = animFrame(img->GetInvAnimation(s))) return bm;
-    }
-    return nullptr;
-}
-
-PTBitmap CurrentEquippedSlotIcon(int32_t eqslot)
-{
-    auto* player = dynamic_cast<TPlayer*>(g_bodyInst);
-    if (!player || eqslot < 0 || eqslot >= NUM_EQ_SLOTS) return nullptr;
-    return CurrentIconBitmapForInstance(player->GetEquip(eqslot));
-}
-
-void SeedHarnessEquipFromBody()
-{
-    auto* player = dynamic_cast<TPlayer*>(g_bodyInst);
-    if (!player) return;
-
-    for (int32_t i = 0; i < NUM_EQ_SLOTS; ++i)
-    {
-        TObjectInstance* item = player->GetEquip(i);
-        SHarnessSlot& slot = UIDragState::harness_equip[i];
-        slot.inst      = item;
-        slot.icon      = CurrentIconBitmapForInstance(item);
-        slot.qty       = item ? item->Amount() : 1;
-        slot.is_bag    = false;
-        slot.bag_inner = nullptr;
-        slot.label     = item ? item->GetTypeName() : nullptr;
-    }
-}
-
-void SyncBodyEquipmentFromHarness()
-{
-    auto* player = dynamic_cast<TPlayer*>(g_bodyInst);
-    if (!player) return;
-
-    bool changed = false;
-    for (int32_t i = 0; i < NUM_EQ_SLOTS; ++i)
-    {
-        TObjectInstance* desired = UIDragState::harness_equip[i].inst;
-        if (player->GetEquip(i) == desired)
-            continue;
-
-        if (desired && !player->CanEquip(desired, i))
-            desired = nullptr;
-
-        if (player->GetEquip(i) != desired)
-        {
-            player->Equip(desired, i);
+            g_bodyEquip[i] = player->GetEquip(i);
             changed = true;
         }
+    const bool bowMode = player && player->IsBowMode();
+    if (bowMode != g_bodyBowMode)
+    {
+        g_bodyBowMode = bowMode;
+        changed = true;
     }
-
     if (changed)
         ReleaseBodyMeshRefs();
-
-    SeedHarnessEquipFromBody();
 }
 
 float NormalizeFacingUnits(float units)
@@ -692,86 +492,6 @@ bool IsPaperdollBodyPoint(int32_t sx, int32_t sy)
         return false;
     return lx >= kBodyHitX && lx < kBodyHitX + kBodyHitW &&
            ly >= kBodyHitY && ly < kBodyHitY + kBodyHitH;
-}
-
-// =====================================================================
-// SpawnBodyInstance — spawn Locke (player class instance preferred so
-// Player->GetEquip(i) drives the equipment-replacement system in
-// charanimator.cpp::HideCharParts / RenderEquipment; falls back to
-// Character class if no Player type is available). Sets a "still" /
-// DefaultRootState so the paperdoll holds a stable idle pose; the
-// per-frame inst->NextFrame() ticks animation forward.
-// =====================================================================
-void SpawnBodyInstance()
-{
-    int32_t objclass = OBJCLASS_PLAYER;
-    int32_t objtype  = PlayerClass.FindObjType((char*)"Locke");
-    if (objtype < 0)
-        for (int32_t i = 0; i < PlayerClass.NumTypes(); ++i)
-            if (PlayerClass.GetObjType(i)) { objtype = i; break; }
-    if (objtype < 0)
-    {
-        objclass = OBJCLASS_CHARACTER;
-        for (int32_t i = 0; i < CharacterClass.NumTypes(); ++i)
-            if (CharacterClass.GetObjType(i)) { objtype = i; break; }
-    }
-    if (objtype < 0)
-    {
-        log_warn("[ui-equip] no character types available for paperdoll body");
-        return;
-    }
-
-    TObjectClass* cl = TObjectClass::GetClass(objclass);
-    if (!cl) return;
-
-    SObjectDef def = {};
-    def.objclass = (short)objclass;
-    def.objtype  = (short)objtype;
-    def.state    = 0;
-    def.level    = 0;
-    def.pos      = { 0, 0, 0 };
-    def.vel      = { 0, 0, 0 };
-    def.accum    = { 0, 0, 0 };
-    def.rotatex  = 0;
-    def.rotatey  = 0;
-    // The retail paperdoll matrix supplies the base orientation itself.
-    // This env override is only an extra yaw offset for visual sweeps.
-    if (const char* override_face = std::getenv("REVENANT_EQUIP_FACING"))
-        g_bodyFacingUnits = NormalizeFacingUnits(float(std::atoi(override_face)));
-    else
-        g_bodyFacingUnits = kDefaultFacingUnits;
-    def.rotatez = 0;
-    def.group    = 0;
-
-    TObjectInstance* inst = cl->NewObject(&def);
-    if (!inst)
-    {
-        log_warn("[ui-equip] NewObject failed for paperdoll body (class=%d type=%d)",
-                 objclass, objtype);
-        return;
-    }
-    // Default pose: recovered retail slot-19 animation string. Fall back to
-    // the default root only if a stripped-down character lacks that state.
-    inst->OnScreen();
-    if (auto* chr = dynamic_cast<TCharacter*>(inst))
-    {
-        int32_t initState = chr->FindState((char*)kRecoveredPaperdollState);
-        if (initState >= 0)
-            chr->SetState(initState);
-        else if (const char* root = chr->DefaultRootState())
-            chr->SetState((char*)root);
-    }
-    g_bodyInst = inst;
-    log_info("[ui-equip] spawned paperdoll body: class=%d type=%d name='%s'",
-             objclass, objtype, inst->GetTypeName() ? inst->GetTypeName() : "?");
-
-    const int32_t recovered = inst->FindState((char*)kRecoveredPaperdollState);
-    if (recovered >= 0)
-        log_info("[ui-equip] paperdoll state '%s' available (state id=%d)",
-                 kRecoveredPaperdollState, recovered);
-    else
-        log_warn("[ui-equip] paperdoll state '%s' missing; using DefaultRootState",
-                 kRecoveredPaperdollState);
 }
 
 // Build mesh handles for every visible sub-object of the body's .i3d
@@ -812,15 +532,14 @@ void SpawnBodyInstance()
 // subsequent calls.
 bool ProcessEquipmentForSkeleton()
 {
-    if (!g_body3DImg || !g_bodyInst) return false;
-    auto* player = dynamic_cast<TPlayer*>(g_bodyInst);
-    if (!player) return false;
+    TPlayer* player = Body();
+    if (!g_body3DImg || !player) return false;
 
     // Player must have a BodyType for the equipment to match.
     const char* bodyType = player->BodyType();
     if (!bodyType || !*bodyType) return false;
     const int32_t bodyTypeLen = int32_t(std::strlen(bodyType));
-    TCharacter* character = dynamic_cast<TCharacter*>(g_bodyInst);
+    TCharacter* character = player;
 
     // Retail TCharAnimator::Render starts by hiding the placeholder
     // "sword"/"weapon" player objects; equipment can still render on the
@@ -1033,7 +752,7 @@ bool ProcessEquipmentForSkeleton()
 // hide+attach logic can run in one pass.
 bool AreEquipmentImageriesReady()
 {
-    auto* player = dynamic_cast<TPlayer*>(g_bodyInst);
+    TPlayer* player = Body();
     if (!player) return true;  // No player → nothing to wait on.
     for (int32_t eq = 0; eq < NUM_EQ_SLOTS; ++eq)
     {
@@ -1056,12 +775,13 @@ bool AreEquipmentImageriesReady()
 void TryBuildBodyMeshes()
 {
     if (g_bodyMeshesBuilt) return;
-    if (!g_bodyInst || !Renderer) return;
+    TPlayer* body = Body();
+    if (!body || !Renderer) return;
     if (g_bodyFallbackAlbedo == kInvalidTexture)
         g_bodyFallbackAlbedo = Renderer->WhiteTextureHandle();
 
     if (!g_body3DImg)
-        g_body3DImg = dynamic_cast<T3DImagery*>(g_bodyInst->GetImagery());
+        g_body3DImg = dynamic_cast<T3DImagery*>(body->GetImagery());
     if (!g_body3DImg) return;
     if (g_body3DImg->NumStates() <= 0 || g_body3DImg->NumObjects() <= 0) return;
 
@@ -1076,12 +796,19 @@ void TryBuildBodyMeshes()
     // replaced are added to g_hiddenPlayerObjnums.
     ProcessEquipmentForSkeleton();
 
-    const int32_t state     = g_bodyInst->GetState();
-    const int32_t frame     = g_bodyInst->GetFrame();
-    const int32_t prevstate = g_bodyInst->GetPrevState();
-    const int32_t prevframe = g_bodyInst->GetPrevFrame();
-    const SAnimPose pose = SampleI3DAnimPose(g_body3DImg, state, frame,
-                                             prevstate, prevframe);
+    // The paperdoll's own state: the recovered "walk" (retail slot 19,
+    // DAT_005e4060), never the state the player is in; a stripped-down
+    // character without one stands in its default root.
+    if (g_bodyState < 0)
+    {
+        g_bodyState = body->FindState((char*)kRecoveredPaperdollState);
+        if (g_bodyState < 0)
+            g_bodyState = body->FindState((char*)body->DefaultRootState());
+        if (g_bodyState < 0)
+            g_bodyState = 0;
+    }
+    const int32_t state = g_bodyState;
+    const SAnimPose pose = SampleI3DAnimPose(g_body3DImg, state, 0, state, 0);
     bool bbox_init = false;
     const int32_t texslots = g_body3DImg->NumTextures() + 1;
 
@@ -1245,42 +972,13 @@ void BuildRetailPaperdollRoot(float out[16])
 // (kBody3DSrc{X,Y,W,H}); the equip pane RT then samples that sub-rect
 // in Refresh() via Renderer->CompositeLitTargetSubrectToTarget.
 //
-// Animation drive: legacy-tick-gated inst->NextFrame() + Animate(false),
-// identical to char3d's per-tick step. This is delta-time-driven through
-// the engine's wall-clock tick counter, not a fixed-frame loop —
-// satisfies [[feedback-framerate-independent-anim]].
+// The pose is the first frame of the pane's own state (g_bodyState).
 void RenderBody3D()
 {
     if (!Renderer || !Display.IsActive() || !Display.BackBuffer()) return;
-    if (!g_bodyInst || g_bodyMeshes.empty() || !g_body3DImg) return;
+    if (!Body() || g_bodyMeshes.empty() || !g_body3DImg || g_bodyState < 0) return;
 
-    // Freeze flag — when REVENANT_EQUIP_FREEZE=1 we skip NextFrame, Animate,
-    // and IdleAnimTick so the paperdoll holds its initial pose. Used while
-    // tuning camera/orientation/lighting against the retail reference image
-    // (paperdoll-empty-locke_nude.png) — a still image is the only fair
-    // comparison target. Drop the env var to restore #13 idle cycling.
-    static const bool s_freeze = []{
-        const char* env = std::getenv("REVENANT_EQUIP_FREEZE");
-        return env && *env && env[0] != '0';
-    }();
-
-    if (!s_freeze)
-    {
-        // Advance animation once per legacy tick. Char3d uses the same gate;
-        // legacy tick advances on real wall-clock so this is frame-rate
-        // independent.
-        const int64_t legacy_tick = TTime::LegacyFrameCount();
-        if (legacy_tick != g_bodyLastTick)
-        {
-            g_bodyLastTick = legacy_tick;
-            g_bodyInst->NextFrame();
-            if (g_bodyInst->NeedsAnimator() && !g_bodyInst->HasAnimator())
-                g_bodyInst->OnScreen();
-            g_bodyInst->Animate(false);
-        }
-    }
-
-    const int32_t state = g_bodyInst->GetState();
+    const int32_t state = g_bodyState;
 
     // Retail FUN_00536bc0 sets the D3D viewport to the full pane rect, uses
     // identity view (FUN_00412c50), then restores the fixed T3DScene
@@ -1315,11 +1013,7 @@ void RenderBody3D()
     float root[16];
     BuildRetailPaperdollRoot(root);
 
-    const SAnimPose pose = SampleI3DAnimPose(g_body3DImg,
-                                              g_bodyInst->GetState(),
-                                              g_bodyInst->GetFrame(),
-                                              g_bodyInst->GetPrevState(),
-                                              g_bodyInst->GetPrevFrame());
+    const SAnimPose pose = SampleI3DAnimPose(g_body3DImg, state, 0, state, 0);
 
     // Submit the body meshes — but skip any player sub-objects that are
     // being replaced by equipment (#12). The hidden list is populated by
@@ -1360,112 +1054,6 @@ void RenderBody3D()
 }
 
 
-// Spawn a single item from a given class, OPTIONALLY filtering by the
-// item's EqSlot stat so an EQ_HEAD slot receives an actual head-armor
-// piece (not the first armor type, which might be boots — see retail
-// CanEquip at src/player.cpp:284-289 which gates equip on
-// `oi->GetStat("EqSlot") == slot`). If wantEqSlot >= 0, only types whose
-// EqSlot matches are spawned; if wantEqSlot < 0, the first spawnable
-// type is returned.
-//
-// Returned instance has OnScreen called so the imagery streamer kicks
-// in; ownership belongs to the test harness. If no type matches the
-// requested EqSlot, returns null AND the caller falls through to the
-// empty-slot placeholder branch in the per-slot loop.
-TObjectInstance* SpawnItemFromClass(TObjectClass& cls, int32_t objclass,
-                                    int32_t wantEqSlot,
-                                    const char** name_out)
-{
-    const int32_t numTypes = cls.NumTypes();
-    for (int32_t i = 0; i < numTypes; ++i)
-    {
-        SObjectInfo* info = cls.GetObjType(i);
-        if (!info) continue;
-
-        SObjectDef def = {};
-        def.objclass = (short)objclass;
-        def.objtype  = (short)i;
-        def.state    = 0;
-        def.level    = 0;
-        def.pos      = { 0, 0, 0 };
-        def.vel      = { 0, 0, 0 };
-        def.accum    = { 0, 0, 0 };
-        def.rotatex  = 0;
-        def.rotatey  = 0;
-        def.rotatez  = 0;
-        def.group    = 0;
-
-        TObjectInstance* inst = cls.NewObject(&def);
-        if (!inst) continue;
-
-        // EqSlot filter — mirrors retail TPlayer::CanEquip (player.cpp:
-        // 284-289). The stat tells the engine which EQ_* slot the type
-        // is allowed to occupy. We use it here so the test harness picks
-        // a slot-appropriate type (helmet for HEAD, boots for FEET, etc.)
-        // rather than the first item in the type table that happens to
-        // be the wrong slot. The stat lives on the freshly-built object
-        // (NewObject populates class-defaults from SObjectInfo::stats);
-        // we query it before OnScreen so the rejected probe doesn't run
-        // the imagery streamer + animator setup.
-        if (wantEqSlot >= 0 && inst->FindStat("EqSlot") >= 0)
-        {
-            const int32_t s = inst->GetStat("EqSlot");
-            if (s != wantEqSlot)
-            {
-                delete inst;
-                continue;
-            }
-        }
-
-        inst->OnScreen();
-        if (name_out) *name_out = info->name ? info->name : cls.ClassName();
-        return inst;
-    }
-    return nullptr;
-}
-
-TObjectInstance* SpawnNamedItemFromClass(TObjectClass& cls, int32_t objclass,
-                                         const char* typeName,
-                                         int32_t wantEqSlot,
-                                         const char** name_out)
-{
-    if (!typeName) return nullptr;
-    const int32_t objtype = cls.FindObjType(typeName);
-    if (objtype < 0) return nullptr;
-
-    SObjectInfo* info = cls.GetObjType(objtype);
-    if (!info) return nullptr;
-
-    SObjectDef def = {};
-    def.objclass = (short)objclass;
-    def.objtype  = (short)objtype;
-    def.state    = 0;
-    def.level    = 0;
-    def.pos      = { 0, 0, 0 };
-    def.vel      = { 0, 0, 0 };
-    def.accum    = { 0, 0, 0 };
-    def.rotatex  = 0;
-    def.rotatey  = 0;
-    def.rotatez  = 0;
-    def.group    = 0;
-
-    TObjectInstance* inst = cls.NewObject(&def);
-    if (!inst) return nullptr;
-
-    if (wantEqSlot >= 0 && inst->FindStat("EqSlot") >= 0 &&
-        inst->GetStat("EqSlot") != wantEqSlot)
-    {
-        log_warn("[ui-equip] named sample '%s' has EqSlot=%d, expected %d",
-                 typeName, inst->GetStat("EqSlot"), wantEqSlot);
-        delete inst;
-        return nullptr;
-    }
-
-    inst->OnScreen();
-    if (name_out) *name_out = info->name ? info->name : typeName;
-    return inst;
-}
-
 // =====================================================================
 // HUD drawable — composes the pane RT once per frame and DrawSurface's
 // it at the spec §3 screen anchor (452, 0). The screen TR-anchored
@@ -1493,17 +1081,6 @@ public:
         EnsurePane();
         if (!g_pane) return;
 
-        // Per-frame icon extraction (async imagery load —
-        // [[project-ui-portrait-and-icons]]). The draw loop below reads
-        // Player->GetEquip(i); this warm-up only extracts icons for the
-        // objects the player is actually wearing.
-        if (auto* player = dynamic_cast<TPlayer*>(g_bodyInst))
-        {
-            for (int32_t i = 0; i < NUM_EQ_SLOTS; ++i)
-                if (SDemoSlot* demo = FindDemoSlotForInstance(player->GetEquip(i)))
-                    TryExtractIcon(*demo);
-        }
-        SyncBodyEquipmentFromHarness();
         // Per-frame mesh build for the paperdoll body. Imagery loads
         // async; retries each frame until the .i3d submeshes are
         // available and registerable.
@@ -1560,7 +1137,7 @@ public:
         // No drop shadows (spec §7: FUN_00438d80 NOT XREF'd from any
         // of the four leaf methods — UNCONFIRMED-F).
         // -----------------------------------------------------------------
-        auto* player = dynamic_cast<TPlayer*>(g_bodyInst);
+        TPlayer* player = Body();
         const SUIDragState& drag = UIDragState::Get();
         const bool draggingEquip = UIDragState::IsDragging()
                                 && drag.source == EDragSource::Equip;
@@ -1572,9 +1149,7 @@ public:
             if (draggingEquip && drag.source_idx == i)
                 continue;
 
-            TObjectInstance* item = player ? player->GetEquip(i) : nullptr;
-            PTBitmap itemIcon = CurrentIconBitmapForInstance(item);
-            slot->SetItem(item, itemIcon, item ? item->Amount() : 1);
+            slot->BindItem(player ? player->GetEquip(i) : nullptr);
             slot->Draw(g_pane, tw, th, nullptr);
         }
 
@@ -1595,63 +1170,6 @@ private:
 
 TEquipHud g_hud;
 
-// =====================================================================
-// SpawnDemoSlots — bind named retail equipment into Locke's EQ_* table.
-// This pass is about the live paperdoll, so all sample items are real
-// equip-compatible objects that Player->CanEquip accepts. The names are
-// from the packed retail class data in imagery.rvi.
-// =====================================================================
-void SpawnDemoSlots()
-{
-    for (int32_t i = 0; i < kDemoCount; ++i) g_demo[i] = SDemoSlot{};
-
-    auto bind = [](SDemoSlot* arr, int32_t* count,
-                   int32_t eqslot, int32_t objclass,
-                   TObjectClass& cls, const char* typeName,
-                   int32_t wantEqSlot) {
-        if (*count >= kDemoCount) return;
-        SDemoSlot& d = arr[*count];
-        d.eqslot   = eqslot;
-        d.objclass = objclass;
-        d.cls      = &cls;
-        d.inst     = SpawnNamedItemFromClass(cls, objclass, typeName,
-                                             wantEqSlot, &d.typeName);
-        if (!d.inst)
-        {
-            d.inst = SpawnItemFromClass(cls, objclass, wantEqSlot, &d.typeName);
-            if (d.inst)
-                log_warn("[ui-equip] named sample '%s' missing; fell back to %s.%s",
-                         typeName, cls.ClassName(), d.typeName ? d.typeName : "?");
-        }
-        if (d.inst)
-        {
-            ++(*count);
-            log_info("[ui-equip] bound EQ_%d ← %s.%s", eqslot,
-                     cls.ClassName(), d.typeName ? d.typeName : "?");
-        }
-        else
-        {
-            log_warn("[ui-equip] no %s sample '%s' / EqSlot=%d — slot %d stays empty",
-                     cls.ClassName(), typeName ? typeName : "?", wantEqSlot, eqslot);
-        }
-    };
-
-    int32_t count = 0;
-    bind(g_demo, &count, EQ_HEAD,         OBJCLASS_ARMOR,         ArmorClass,        "Brown Leather Helmet",      EQ_HEAD);
-    bind(g_demo, &count, EQ_NECK,         OBJCLASS_ARMOR,         ArmorClass,        "Emerald Collar",            EQ_NECK);
-    bind(g_demo, &count, EQ_BODY,         OBJCLASS_ARMOR,         ArmorClass,        "Brown Leather Chest Plate", EQ_BODY);
-    bind(g_demo, &count, EQ_OFFHAND,      OBJCLASS_ARMOR,         ArmorClass,        "Brown Leather Gloves",      EQ_OFFHAND);
-    bind(g_demo, &count, EQ_PRIMEHAND,    OBJCLASS_WEAPON,        WeaponClass,       "Short Sword",               EQ_PRIMEHAND);
-    bind(g_demo, &count, EQ_R_ACCESSORY,  OBJCLASS_ARMOR,         ArmorClass,        "Emerald Ring",              EQ_R_ACCESSORY);
-    bind(g_demo, &count, EQ_L_ACCESSORY,  OBJCLASS_LIGHTSOURCE,   LightSourceClass,  "Torch",                     EQ_L_ACCESSORY);
-    bind(g_demo, &count, EQ_RANGEDWEAPON, OBJCLASS_RANGEDWEAPON,  RangedWeaponClass, "Light Bow",                 EQ_RANGEDWEAPON);
-    bind(g_demo, &count, EQ_AMMO,         OBJCLASS_AMMO,          AmmoClass,         "Arrow",                     EQ_AMMO);
-    bind(g_demo, &count, EQ_LEGS,         OBJCLASS_ARMOR,         ArmorClass,        "Brown Leather Leg Plate",   EQ_LEGS);
-    bind(g_demo, &count, EQ_FEET,         OBJCLASS_ARMOR,         ArmorClass,        "Brown Leather Boots",       EQ_FEET);
-
-    log_info("[ui-equip] spawned %d demo items into EQ_* slots", count);
-}
-
 }  // namespace
 
 // =====================================================================
@@ -1671,7 +1189,6 @@ bool InitializeUIEquipMode()
         for (int32_t i = 0; i < 11; ++i)
             g_placeholders[i] = LookupByName(g_equipDat, kPlaceholderName[i]);
     }
-    UIDragState::ResetEquipHarness();
 
     log_info("[ui-equip] assets: chrome %s (expect 188x306)",
              g_chrome ? "OK" : "MISS");
@@ -1685,49 +1202,12 @@ bool InitializeUIEquipMode()
                    ? "" : " (expect 40x40)");
     BuildEquipSlots();
 
-    // Spawn demo items into a subset of EQ_* slots so both the occupied
-    // (item icon) AND empty (placeholder) render paths exercise in a
-    // single capture. The imagery streams in asynchronously; per-frame
-    // Refresh calls TryExtractIcon to pull the baked .i3d face once it
-    // lands.
-    SpawnDemoSlots();
-
-    // Spawn the paperdoll body (Locke). Same async pattern as
-    // SpawnDemoSlots — the imagery streams in after spawn; per-frame
-    // Refresh calls TryExtractBody to pull the body bitmap/animation
-    // once it lands. Falls back to the chrome's painted silhouette
-    // until then.
-    SpawnBodyInstance();
-
-    // Equip the demo items on the spawned Player so engine state mirrors
-    // a real "Locke wearing kit" scenario. This populates Player->GetEquip
-    // (i) which is what charanimator.cpp::ProcessEquipment reads. The
-    // sokol-side mesh extraction for equipment-on-skeleton (#12) reads
-    // the same equipment[] array — once it's wired (port of
-    // ProcessEquipment to the SubmitMesh path), no other change is
-    // needed here. CanEquip filters per-slot compatibility; mismatched
-    // items silently skip.
-    if (auto* player = dynamic_cast<TPlayer*>(g_bodyInst))
-    {
-        for (int32_t i = 0; i < kDemoCount; ++i)
-        {
-            const SDemoSlot& d = g_demo[i];
-            if (!d.inst || d.eqslot < 0 || d.eqslot >= NUM_EQ_SLOTS) continue;
-            if (player->CanEquip(d.inst, d.eqslot))
-            {
-                player->Equip(d.inst, d.eqslot);
-                log_info("[ui-equip] equipped EQ_%d ← %s on Player",
-                         d.eqslot, d.typeName ? d.typeName : "?");
-            }
-            else
-            {
-                log_info("[ui-equip] CanEquip rejected EQ_%d ← %s (likely "
-                         "EqSlot stat mismatch; slot well will show placeholder)",
-                         d.eqslot, d.typeName ? d.typeName : "?");
-            }
-        }
-    }
-    SeedHarnessEquipFromBody();
+    // The retail paperdoll matrix supplies the base orientation itself;
+    // this env override is only an extra yaw offset for visual sweeps.
+    if (const char* override_face = std::getenv("REVENANT_EQUIP_FACING"))
+        g_bodyFacingUnits = NormalizeFacingUnits(float(std::atoi(override_face)));
+    else
+        g_bodyFacingUnits = kDefaultFacingUnits;
 
     delete g_pane;
     g_pane = nullptr;
@@ -1750,6 +1230,9 @@ void RenderUIEquipModeEmbedded()
 {
     if (!g_hudVisible)
         return;
+
+    // 0. Follow the main player and its equipment.
+    BindBody();
 
     // 1. Run the 3D body render so lit_target holds Locke at the
     //    kBody3DSrc{...} rect. SuppressPresent is scoped to this render so
@@ -1790,30 +1273,17 @@ void CloseUIEquipMode()
     for (int32_t i = 0; i < 11; ++i) g_placeholders[i] = nullptr;
     g_equipDat = nullptr;
 
-    for (int32_t i = 0; i < kDemoCount; ++i)
-    {
-        SDemoSlot& d = g_demo[i];
-        if (d.inst)
-        {
-            d.inst->OffScreen();
-            delete d.inst;
-        }
-        d = SDemoSlot{};
-    }
-
-    if (g_bodyInst)
-    {
-        g_bodyInst->OffScreen();
-        delete g_bodyInst;
-        g_bodyInst = nullptr;
-    }
+    g_bodyPlayer.Clear();
+    for (TSafeRef<TObjectInstance>& item : g_bodyEquip)
+        item.Clear();
+    g_bodyBowMode = false;
+    g_bodyState   = -1;
     // Mesh handles registered via RegisterMesh are owned by the renderer;
     // the renderer's asset cache will GC them on shutdown. We just drop
     // our refcount.
     ReleaseBodyMeshRefs();
     g_body3DImg          = nullptr;
     g_bodyFallbackAlbedo = kInvalidTexture;
-    g_bodyLastTick       = -1;
     g_bodyFacingUnits    = kDefaultFacingUnits;
     g_bodyDragRotating   = false;
     g_bodyDragStartX     = 0;

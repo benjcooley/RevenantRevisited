@@ -1,0 +1,554 @@
+# Gameflow architecture — screens, game flow, game session, commands
+
+Design for the systems the gameflow track owns: the **screen system**,
+the **higher-level game flow** (title → game → death/end → title), the
+**game session** that owns the world, and the **command system** that
+scripts and the console drive. The production **HUD** is rebuilt on the
+screen system and is covered here as its first consumer.
+
+Requirements and retail behavior come from the forensics:
+[forensics/SCREEN_SYSTEM.md](forensics/SCREEN_SYSTEM.md),
+[forensics/GAME_FLOW.md](forensics/GAME_FLOW.md),
+[forensics/SAVE_GAME.md](forensics/SAVE_GAME.md),
+[forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md).
+Engine conventions this extends: [../FRAME_PIPELINE.md](../FRAME_PIPELINE.md),
+[../RENDERER_ARCHITECTURE.md](../RENDERER_ARCHITECTURE.md),
+[../ui/ARCHITECTURE.md](../ui/ARCHITECTURE.md),
+[../ui/CONVENTIONS.md](../ui/CONVENTIONS.md),
+[../PORT_PLAN.md](../PORT_PLAN.md) §2.
+
+**Invariant:** player-visible behavior matches retail exactly (screens,
+transitions, timing, script semantics, save files). Structure is modern
+where that costs nothing in fidelity; where retail's structure can't be
+kept (re-entrant frame loop, world owned by a screen), the divergence is
+deliberate and recorded in §7.
+
+## 1. Layers
+
+```
+ TGameFlow ─────────── owns ──────────► TGameSession (world lifetime)
+   │ sequences screens                     │ map, players, scripts, game
+   ▼                                       │ state, time, load/save jobs
+ TScreen (current)  ◄── presents ──────────┘
+   │ pane tree + modal stack
+   ▼
+ TPane subtree ──compose/draw──► TRenderer (HUD layer)
+   ▲ input (AppEvent → screen → modal top / hit-tested pane)
+
+ Scripts / console ──► CommandInterpreter ──► command handlers ──► game objects
+```
+
+- **TGameFlow** decides *which* screen is up and *when* the world
+  starts, loads and ends. Nothing else switches screens.
+- **TGameSession** owns everything that lives exactly as long as one
+  play-through: what retail kept alive between `TPlayScreen::Initialize`
+  and `Close`.
+- **TScreen** presents and routes input; **TPane** trees hold UI state
+  and draw through the renderer. `TPlayScreen` presents a session; it
+  does not own it.
+- The **command system** is the one way scripts and the console act on
+  the world; handlers are thin parsers over game-object methods.
+
+## 2. Game flow — `TGameFlow` (new)
+
+Retail has no flow object: screens poke `nextscreen` globals from
+button callbacks, `TPlayer::Animate`, the `endgame` command and WinMain.
+`TGameFlow` centralizes that graph so every transition is one named
+intent with one implementation.
+
+```cpp
+class TGameFlow
+{
+  public:
+    // Boot: intro -> title, or straight into a game/editor (QUICKSTART,
+    // --quickstart=<save>, EDITOR, --test routes stay in AppInit).
+    void Boot(const SBootOptions& options);
+
+    void StartNewGame();                    // title "New Game"
+    void LoadGame(const char* slotName);    // the Load Game screen's "Load Game"
+    void ShowLoadGameScreen();              // title "Load Game", death "Load"
+    void ShowOptionsScreen();               // title "Options"
+    void RestartAfterDeath();               // death "Restart" (see §8 Q1)
+    void PlayerDied();                      // from TPlayer death countdown
+    void ReturnToTitle();                   // Quit Module, death Exit, endgame
+    void QuitApplication();                 // title Exit, in-game Exit
+
+    TGameSession* Session();                // null outside a game
+};
+extern TGameFlow GameFlow;
+```
+
+- Implemented on the existing screen mechanism: an intent sets the
+  current screen's next screen and marks it done; `AppFrame` performs
+  the swap. `BootScreen` routing in `AppInit` shrinks to
+  `GameFlow.Boot(options)` (+ the `--test` screens, which stay outside
+  the flow).
+- Screen objects stay globals (`LogoScreen`, `PlayScreen`,
+  `DeathScreen`, …) as in retail; only the flow references them for
+  transitions.
+- Test/dev entry points are `SBootOptions`: `--quickstart[=save]`
+  (retail `QUICKSTART`), `--nointro`, `--menu=<button>` (presses a title
+  button through the title screen's real button path), `--loadmap`
+  (alias of `--quickstart=<save>`).
+
+## 3. Game session — `TGameSession` (new)
+
+Retail's `TPlayScreen` conflated presentation with the world. The
+session takes the world half; the managers it coordinates are unchanged.
+Retail behavior: [forensics/SAVE_GAME.md](forensics/SAVE_GAME.md) (save
+format, `LoadGame`/`SaveGame`, `curmap`) and
+[forensics/GAME_FLOW.md](forensics/GAME_FLOW.md) §2.3 (start modes).
+
+| Responsibility | Retail | Port owner |
+|---|---|---|
+| Mount start module, areas | `PlayScreen::Initialize` (`0x004609f0`, `TAreaMgr::Initialize`); `Close` | session start / `End` |
+| Script prototypes (`master.s`), `state.def` names | `TScriptManager::Initialize` per game | boot (`InitGlobals`), unchanged — see §3.4 |
+| Per-game script and state reset | inside `LoadGame` (`0x00496e20`, `ReloadStates`) | `TSaveGame::LoadGame`, as retail |
+| Sector working set (`curmap`) | `TMapPane::{Clear,Load,Save}CurMap` | `TMapManager` (sector owner); `TMapPane`'s window only borrows (§3.4) |
+| Save file read/write, slot list, merchant table | save manager (`0x0048d260..0x0048e820`) | `TSaveGame` (evolved to the retail format) |
+| New / load / save / end a game | `PlayScreen::Initialize` start modes, in-game menu | `TGameSession` |
+| Load the player's level, place players | `PlayScreen::Initialize` (`0x004997d0`) | `TGameSession` |
+| Exit list (`exit.def`) | map pane initialize/close (`0x0050c880`, `0x0050c8a0`) | `TGameSession` load step `exits`, `End` (forensics/EXITS.md §8) |
+| Level change after a teleport: load the camera's level, put players back | map pane sector update (`0x00459220`, `0x00459b80`) | `TGameSession::EnterLevel`, each tick after the simulation |
+| Effect imagery, panes, cursors, fades | `PlayScreen::Initialize` | `TPlayScreen` (presentation) |
+| Game time, deferred load/save, simulation tick | PlayScreen (`+0x680..`, `+0x5e4..`, `Pulse`) | `TGameSession` — step 2e |
+
+### 3.1 Components
+
+```cpp
+// src/gamesession.h — owned by TGameFlow (GameFlow.Session()).
+class TGameSession
+{
+  public:
+    // Start a game: queue the load steps for a new game (start mode 0) or a
+    // named slot (start mode 1; a slot that can't load -> new game, as retail).
+    void Start(const SSessionStart& start);
+    bool Step();                         // run the next load step; false when done
+    float Progress() const;
+    bool  Ready() const;
+    bool  Failed() const;
+
+    void End();                          // leave the game: unload world, clear players, close areas
+
+    // Requests made during play, carried out at the start of the next tick
+    // (retail PlayScreen +0x5e4..+0x5f0).
+    void RequestLoad(const std::string& slot);
+    void RequestSave(const std::string& slot);
+    void RequestQuickSave();             // retail 0x0047e850
+    void RequestReloadLastSlot();        // developer convenience (F9), not retail
+    void ProcessRequests();              // called by TPlayScreen::Update
+};
+```
+
+- **`TGameFlow` owns the session.** Its intents start games through it
+  (`StartNewGame`, `LoadGame`, `RestartAfterDeath`, QUICKSTART) and it
+  ends the game when the screen that follows the PlayScreen isn't the
+  PlayScreen (`ScreenEnded`, called by `AppFrame` after the swap). The
+  game therefore never ends inside a simulation tick (e.g. from
+  `TPlayer`'s death countdown).
+
+- **`TSaveGame`** keeps its class identity and becomes retail's save
+  manager: `SSaveHeader` and the body codec (game states, merchant
+  table, player list) are separate from orchestration, so the format can
+  be tested on a buffer; `LoadGame(name, flags)`, `LoadNewGame()`,
+  `SaveGame(name)`, `RefreshSlots()`, `HasSoldUnique/AddSoldUnique`
+  follow the retail functions one for one. The reset sequence in
+  `LoadGame` calls the ported subsystem for each retail call and marks
+  the unported ones (dialog, buy/sell, area exit, control) with their
+  retail address.
+- **`TGameState::LoadStream/SaveStream`** move to
+  `TInputStream`/`TOutputStream` (the binary streams the format uses).
+- **Working set.** `SectorStore` (`src/sectorstore.h`) owns where sector
+  files live: the working set `<SavePath>/curmap` (created on demand)
+  and the base map through the resource layer — never the install's
+  `curmap`. `TMapManager` owns the loaded sectors and gains
+  `FlushSectors`, `ClearCurMap`, `LoadCurMap(dir)`, `SaveCurMap(dir)`,
+  and, for the editor commands that edit sector files directly
+  (`sectorcommand`, `generate`, `load sectors`), `ReloadLevel(level,
+  edit)` / `ReloadSectors` (retail `TMapPane::FreeAllSectors` /
+  `ReloadSectors`). `rev_fopen` write modes resolve only under SavePath.
+
+### 3.2 New game, step by step
+
+1. `TGameFlow::StartNewGame()` → `Session().Start({NEWGAME})`.
+2. Session steps: module + areas → `ClearCurMap` → `LoadNewGame`
+   (retail resets, `newgame.sav`, players, game time) → load the main
+   player's level (`MapManager.SetCurrentLevel`) → put each player into
+   its sector.
+3. The flow switches to `TPlayScreen`. Its `Initialize` builds
+   presentation only (renderer, HUD, cursors, effect imagery) and binds
+   the renderer to `MapManager`'s current map, following
+   `CurrentMapChanged` from then on.
+
+A load from a slot is the same with `LoadCurMap(<slot>/CurMap)` +
+`LoadGame(slot)`. `End()` runs when the flow leaves the game (title,
+death, quit).
+
+### 3.3 What this replaces
+
+- `SpawnDefaultPlayer` + starter loadout in the boot path, and the
+  Level-10 floor in `TPlayer::ClearPlayer` (stand-ins for `newgame.sav`).
+  The editor's "Place Here" keeps its own use of `SpawnDefaultPlayer`.
+- The pre-release `game.sav` wrapper, including HUD state in slots 2–12
+  and the automap blob (neither exists in retail saves).
+- The renderer choosing the starting level from defaults. Dev overrides
+  `--level=L` / `--sector=L_X_Y` still work: the new game loads normally,
+  then the player is moved to that sector at walkmap height.
+
+### 3.4 Decisions
+
+- **Script prototypes stay boot-loaded.** Retail re-parsed `master.s` per
+  game, but prototypes are static data, `--test` hosts need them, and
+  every per-game reset retail performs is in `LoadGame` anyway. (This
+  revises the earlier plan to move `ScriptManager.Initialize` into the
+  session.)
+- **Synchronous first, then staged.** The load is written as an ordered
+  step list from the start; 2c runs all steps in one call, 2d adds
+  `TLoadScreen`, which runs one step per frame and draws the loading bar
+  with retail's increments (forensics: `0x00448680` calls in
+  `PlayScreen::Initialize`). No API change between the two.
+- **A load during play is staged too.** `ProcessRequests` starts it with
+  its own step list (the save, then the level: retail's in-game load has
+  no area or exit reload) and the progress scale of the load dialog's
+  popup (80, then the sectors to 800). `TPlayScreen::StepGameLoad` runs a
+  step a tick while `Loading()`, as it runs `EnterLevel` while
+  `LevelLoading()`: the world doesn't tick, render or take input, requests
+  wait, and a still of the frame's world and HUD panels (captured under
+  the pane tree) stands in for them; the panes stay live over it.
+  Retail did all of it synchronously, the screen standing still
+  (forensics/INGAME_MENU.md §5.1). What the hold covers: the game step's
+  reset (`TSaveGame::ResetWorld`) replaces `curmap` and unloads every
+  level, ends the conversation, clears the shop, resets the scripts,
+  leaves the areas and deletes the players; the save then makes a new
+  player outside any sector. Until the world step has loaded his level,
+  put him in his sector and centred the camera, there is no world to
+  tick, draw or click, and a HUD refresh would read that half-placed
+  player.
+- **Presenters follow `TMapManager::CurrentMapChanged`** to rebind after
+  a load or level change; it is the existing "the world was replaced"
+  signal, so the session adds none of its own.
+- **One owner for each sector and object.** `TMapManager` owns the maps,
+  each `TGameMap` owns its sectors (created in `Load`, freed in
+  `Unload`/`Discard`, nowhere else), each `TSector` owns its objects
+  except `OF_NONMAP` ones (the players, owned by `TPlayerManager`), which
+  it only holds while they stand in it. Everything else borrows:
+  `TMapPane`'s `sectors[][]` window and the renderer's draw records drop
+  their sector pointers on the map's `Unloaded` event, which fires before
+  the sectors are freed, and keep a `TSafeRef<TGameMap>`; objects are held
+  through `TSafeRef<TObjectInstance>` / mapindex. A destroyed object
+  first leaves its owner's inventory and its sector (retail
+  `~TObjectInstance` → detach `0x0046e630` → `TMapPane::RemoveObject`
+  `0x00451610`, which works from the object's own links), so deleting a
+  player still standing in a sector is safe in any order. Retail kept the
+  loaded sectors on `TMapPane` (a global loaded list it streamed and
+  freed); those paths are gone (`attic/src/mappane_sectors.cpp`).
+- **No automap persistence until the retail automap files are ported**
+  (SAVE_GAME §8). Dropping the pre-release blob loses automap state
+  across save/load in the meantime; carrying it in a retail save is not
+  an option.
+
+### 3.5 Delivery
+
+| Step | Content | Verified by |
+|---|---|---|
+| 2a ✓ | Working set + write policy (`SectorStore`, `rev_fopen`, `TSector`, `TMapManager`) | sectors written under SavePath, nothing written to the install; level 0 loads the pristine 35,549 objects |
+| 2b ✓ | `TSaveGame` retail format + `TGameState` streams + slot list | `newgame.sav` parses; header, game states and merchant table written byte-identical to retail (player body: see SAVE_GAME §10) |
+| 2c ✓ | `TGameSession`, flow/PlayScreen integration, in-game requests, stand-ins removed | `--quickstart` and title New Game: Locke L1, 25/25 HP, in the Keep resurrection chamber (filmstrip); `--savecycle-test` round trip identical |
+| 2d ✓ | `TLoadScreen` (`src/loadscreen.*`) + staged steps: the title fades out, the loading screen runs one session step per tick with the bar at retail's running total after the same work (areas 165, exits 215, game 240, world 1000), then the PlayScreen fades in. QUICKSTART still loads before the first screen | `--menu=newgame` filmstrip: retail "Loading Game" backdrop, bar at 16% then full |
+| 2e | Game time and the simulation tick into the session | time and time-of-day match retail (TIME.md) |
+| 2f ✓ | Save interop: every object class streams retail's layout (player objversion 15), sector state hash, `ss.bmp` thumbnail (SAVE_GAME §11) | retail `New Game1` loaded and re-saved: `game.sav` differs only in game time and the player's AI bit, 279 of 283 sectors equal ignoring constructor-owned flags; state hashes of all 558 retail sectors and 4,822 shipped base-map sectors reproduced; a port save re-saves byte-identical. In retail (dosbox-x): pending, [SAVE_INTEROP_TEST.md](SAVE_INTEROP_TEST.md) |
+
+- `IRuntimeMode` (game/editor) stays inside `TPlayScreen`: it is a
+  presentation/input policy, and editor mode decides whether the session
+  ticks.
+
+## 4. Screen system — evolving `TScreen` / `TPane`
+
+Class identities stay; the changes make the A.2 retained tree the real
+UI model and replace the re-entrant modal loop.
+
+### 4.1 Drawing
+
+- **One HUD layer per screen.** `TScreen` registers itself with the
+  renderer while active and, in `Draw()`, walks its visible pane tree
+  in order (then the modal stack) calling `TPane::Draw()`. Panes no
+  longer register individual HUD drawables. Cursor, debug and editor
+  overlays remain separate HUD drawables at their own z.
+- **Two pane draw hooks** (new virtuals on `TPane`):
+  - `Compose()` — runs before the frame's passes (the Animate phase)
+    for dirty visible panes; re-renders the pane's cached `TSurface`
+    with the `…ToTarget` primitives. The "cached panel" pattern the UI
+    track established, made part of the pane contract.
+  - `Draw()` — runs inside the HUD pass; submits the cached surface
+    and any live per-frame draws (`DrawSurface`, `DrawBitmap`, text).
+  Legacy `DrawBackground` / `Animate(bool)` remain only for panes not yet
+  migrated and are removed as panes move over.
+- Dirty tracking uses the existing `SetDirty` propagation; children
+  compose before parents.
+- **Screen fade.** A screen that fades embeds a `TScreenFade` and points
+  `TScreen::fade` at it (retail's fade-in/fade-out slots). The screen
+  fades in when it begins, fades out when closed (`RequestClose`;
+  `AppFrame` ends it at black, `ReadyToEnd`), steps the fader after each
+  tick's pulse, and draws its cover as its top HUD layer, above the
+  cursor. Forensics: [forensics/SCREEN_SYSTEM.md](forensics/SCREEN_SYSTEM.md) §2.6.
+
+### 4.2 Modal stack (replaces exclusive panes + `RunModal`)
+
+```cpp
+using TModalDone = std::function<void(int32_t result)>;
+void TScreen::PushModal(TPane* pane, uint32_t flags, TModalDone done);
+void TPane::EndModal(int32_t result);   // pops and calls done(result) next frame
+```
+
+- Flags keep retail values, one bit per screen pass narrowed to the top
+  modal (forensics/INGAME_MENU.md §4.1): `MODAL_MOUSE` 0x01,
+  `MODAL_KEYS` 0x02 (also holds back the screen's own key commands),
+  `MODAL_JOYSTICK` 0x04, `MODAL_PAUSE` 0x08 (only the modal pulses: the
+  world stops), `MODAL_ANIMATE` 0x10 (only the modal animates and
+  draws); `0x100` re-applies UI blit effects under the modal (retail
+  `0x004aacb0`, purpose unconfirmed — stored, not yet rendered). A pass
+  without its bit goes to every pane once, the modal included. Popups
+  push `MODAL_INPUT` (7); the in-game menu and its dialogs `MODAL_GAME`
+  (0xf: the world pauses but keeps drawing). `SetExclusivePane` gives
+  `MODAL_INPUT`, or everything with complete exclusion.
+- The modal stack *is* retail's exclusive-pane stack (retail `RunModal`
+  pushes through `SetExclusivePane`), evolved with completion callbacks
+  and results; the legacy `SetExclusivePane` callers keep working.
+- Retail sequences written as nested `RunModal` calls (in-game menu →
+  load → back to menu) become continuation chains:
+  `PushModal(menu, …, [](int r){ if (r == LOAD) PushModal(load, …,
+  [](int r2){ if (!r2) ShowInGameMenu(); }); … })`. Same screens, same
+  order, same results; the frame loop is never re-entered.
+- Screen events stay: `TPane::OnScreenEvent(code, param)` broadcast for
+  closing (`0x100`), modal pushed (`0x101`) — retail `OnEvent`
+  `0x00490960`.
+
+### 4.3 Input
+
+`AppEvent` → current screen → top modal if any, else the pane tree
+hit-tested front-to-back including children (mouse-up still reaches
+every pane, as retail). Drags capture the pointer through the existing
+cross-pane drag state (`uidragstate`). `--input-script` feeds the same
+path for every screen (test modes included).
+
+### 4.4 Layout and resolution
+
+Panes keep retail 640×480 rects as their Classic geometry; Revisited
+canvases position them with A.2 anchors, laid out on the screen's root
+when the canvas resizes. Classic output must stay pixel-identical.
+
+### 4.5 DEF screens are panes
+
+Retail DEF screens are `TButtonPane`s opened modally. The UI track's
+DEF engine (`TDefScreen`, data-driven widgets) becomes a `TPane`
+subclass so the in-game menu, load/save, options and popups push as
+modals; the title's Load/Options screens host the same pane in a small
+`TScreen`.
+
+Built (2026-10-05): `TDefPane` (`src/defpane.*`) opens with retail's DEF
+flags (`DEF_OVERLAY` picks the `tex` / `alpha` chrome, `DEF_FADE` the
+5-pulse fade, `Finish(result)` ends a modal after its fade-out), raises
+retail's control events as virtuals (`OnOpened`, `OnActivate`,
+`OnListSelect`, `OnSliderChanged`, `OnKey`, `DrawField`) and has button
+keys, EDIT text entry, the list's scrollbar and slider range / value
+setters. The dialogs on it: `TInGameMenuPane` and the
+continuation chain `TInGameMenu` (`src/ingamemenu.*`, owned by
+`TPlayScreen`), `TLoadGamePane` / `TSaveGamePane` (`src/savegamepane.*`),
+`TOptionsPane`, `TPopupPane` (`src/popuppane.*`). A pane does its own
+checks and confirmations; what an outcome means (load, return to the
+title, close the modal) is its host's, through the activation handler or
+the `PushModal` completion — retail branched inside the pane on a
+from-game flag.
+
+The player's settings stay retail's globals, read from and written to
+`Revenant.ini` in retail's keys and format: `[Options]` by `ReadOptions` /
+`SaveOptions` (`src/gameoptions.*`, at boot, on the Options pane's OK and
+at shutdown), `[Controls]` by the control map. The Options pane edits
+copies and applies them on OK ([forensics/OPTIONS.md](forensics/OPTIONS.md)).
+
+### 4.6 Screens
+
+| Screen | Basis |
+|---|---|
+| `TCinematicScreen` | existing; intro and full-screen movies (opens files through `rev_fopen`) |
+| `TLogoScreen` | retail title: `TButtonPane` + five `TButton`s from `menus.dat` |
+| `TLoadScreen` | retail loading bar (`loadbar.dat` / module `loadscreen.bmp`), shows session load progress |
+| `TPlayScreen` | presents the session; HUD panes; in-game menu, dialog, popups as modals; in-game `playmovie` as a modal pane |
+| `TDeathScreen` | retail death screen with `TDeathPane` (Restart / Load / Exit) |
+| `TLoadGameScreen` / `TOptionsScreen` | retail `0x0066fa78` / `0x0066fe88` (`src/menuscreens.*`): the load dialog and the options pane as ordinary panes, entered through `GameFlow.ShowLoadGameScreen()` (title, death) / `ShowOptionsScreen()` (title) |
+
+## 5. HUD (production rebuild)
+
+The retail HUD is a pane tree on `TPlayScreen` (forensics GAME_FLOW
+§2.3 step 5): map pane, side pane (tabs, equip, automap, stats,
+spellbook), bottom pane (bar inventory, quick spells, bottom bar), text
+bar, dialog, player status bar. The rebuild:
+
+- **Evolves the existing pane classes into their retail successors**
+  (`TInventory`, `TStatPane`, `TSpellPane`, `TEquipPane`, `TTextBar`,
+  `TQuickSpellPane`, `TDialogPane`; the 1998 `THealthBar`/`TStaminaBar`
+  (`TStatusBar`) into retail's `TPlyrStatusBar`, `TMultiCtrlPane` into
+  the retail side-tab control — each mapping confirmed in a HUD
+  forensics pass before porting) and adds the retail containers
+  (`TSidePane`, `TBottomPane`, `TSideTabsPane`, `TBarInvPane`,
+  `TBottomBarPane`) as `TPane` subclasses in the tree, each drawing
+  through §4.1.
+- **Reuses the UI track's evidence**, not its structure: the specs'
+  coordinates/assets and the harness draw code move into the pane
+  classes; the `ui*test.cpp` harnesses become thin `--test` hosts that
+  instantiate the production panes against a real player fixture. No
+  "synthetic state" switches in production code.
+- Panes bind to game data through `TSafeRef` (player, target) and the
+  session; UI state that retail saved (`pane` in save slot 1) is saved
+  the retail way. HUD-only state that retail did not save is not written
+  into the retail save header.
+
+**In production so far:** `TDialogPane` and `TTextBar`. `TPlayScreen::
+Initialize` adds them in retail's order (dialog, then the text bar,
+`0x0047adab`); each composes its own render target in `Compose`, draws in
+the screen's pane layer, pulses in the screen's pane pass, and lays itself
+out against `TPlayScreen::GetMapViewRect` (retail's play-screen layout
+moves them). The text bar's `--test=ui-textbar` hosts the production pane
+and feeds it through its public calls. The other HUD panels are still
+harness drawables (`InitializeUIHudMode`) under the pane layer.
+
+## 6. Command system
+
+Scripts keep retail's text-interpreted execution (decision 2026-10-04):
+`TScript` advances through prototype text and hands one line at a time
+to the interpreter. The command layer around it is restructured:
+
+### 6.1 Descriptors and handlers
+
+```cpp
+struct SCommandContext
+{
+    TObjectInstance* target = nullptr;   // "<obj>." or the caller
+    TObjectInstance* caller = nullptr;   // object whose script/console ran it
+    TScript*         script = nullptr;   // null for console/editor
+    bool             console = false;    // abbreviations, console output
+};
+using TCommandHandler = uint32_t (*)(SCommandContext& ctx, TCommandArgs& args);
+
+struct SCommand                           // one row per retail entry
+{
+    const char*     name;
+    TCommandHandler handler;
+    int32_t         classcontext, classcontext2;
+    bool            requiresparams, editoronly;
+    const char*     usage;
+    uint32_t        retailaddr;           // provenance
+};
+```
+
+- The table stays one list in retail order (data, not code). Handlers
+  live in per-family files (`cmd_flow.cpp`, `cmd_speech.cpp`,
+  `cmd_character.cpp`, `cmd_object.cpp`, `cmd_inventory.cpp`,
+  `cmd_presentation.cpp`, `cmd_gameflow.cpp`, `cmd_editor.cpp`),
+  replacing the 3,700-line `command.cpp`; the interpreter and table
+  stay in `command.cpp`.
+- Result flags keep retail values (they are the protocol with
+  `TScript::Continue`): `CMD_WAIT` 1, `CMD_BADCOMMAND` 2,
+  `CMD_BADPARAMS` 4, `CMD_OUTOFMEM` 8, `CMD_USAGE` 0x10,
+  `CMD_DELETED` 0x20, `CMD_CONDTRUE` 0x40, `CMD_CONDFALSE` 0x80,
+  `CMD_ELSE` 0x100, `CMD_SKIPBLOCK` 0x200, `CMD_LOOP` 0x400,
+  `CMD_BEGIN` 0x800, `CMD_END` 0x1000, `CMD_JUMP` 0x2000, and retail's
+  `CMD_WAITSAY` 0x4000 — as a typed flags enum.
+
+### 6.2 Arguments, objects, values
+
+- **`TCommandArgs`** wraps the `TToken` stream with the primitives
+  retail handlers use (keyword test with optional abbreviation, number,
+  name, quoted text, optional `=`, end-of-line, rest-of-line), so each
+  port expresses its grammar in a few calls and consumes tokens exactly
+  like the retail body.
+- **`ResolveScriptObject(name, caller, script)`** — retail resolver
+  `0x0041e690`: `this`, `user`, `player`, `target`, `current`,
+  `party<N>`, script aliases, then nearest object by name.
+- **Values** — one evaluator for numbers/variables (game state,
+  per-prototype `DATA`/`NUMBER` variables, local values, object stats)
+  and conditions (retail `0x0041f230`), shared by `if`, `while`, `set`,
+  `say`, `choice` and the handlers that accept variables.
+
+### 6.3 Waiting
+
+Handlers express waits only through the retail protocol: return
+`CMD_WAIT` / `CMD_WAITSAY` (the interpreter calls
+`script->WaitChar/WaitSay(target)`), or call `script->SetWait(type,
+param)` for the typed waits (frames, response, screen fade, buy/sell,
+death). The wait state machine lives in `TScript` (retail `0x00492b00`);
+what each wait polls is owned by its subsystem (character actions,
+`TCharacter::IsTalking`, `TDialogPane`, the PlayScreen fade, the
+buy/sell screen).
+
+### 6.4 Console
+
+One mainline command queue (`TConsole`, replacing the stub
+`TConsolePane`) feeds the interpreter for the editor's ImGui console
+panel and `--exec`; output goes to the console view and the logging
+facade. No separate queue elsewhere. Script errors are logged with
+prototype name and line (diagnostics only; behavior unchanged).
+
+### 6.5 Not-yet-ported commands
+
+Registered with their retail row but answer **unrecognized** (retail's
+behavior for a missing command: report, skip the line, continue) and
+log once with the retail address. Nothing reports a success it did not
+perform.
+
+## 7. Deliberate divergences from retail structure
+
+| Retail | Port | Why | Behavior impact |
+|---|---|---|---|
+| Re-entrant frame loop for modals (`RunModal`, `TimerLoop(1)`) | Modal stack + completion continuations | sokol owns the outer loop | none |
+| In-game dialogs load and save inside their button handler; the load behind a "loadingmap" progress popup | the dialog's host hands the slot to `TGameSession::RequestLoad` / `RequestSave`, carried out at the start of the next tick; the load stages a step a tick behind a still of the world, under the same popup | one owner of the world's replacement; no frame drawn of a half-replaced world | the load starts a frame later; the panes over the still stay live (forensics/INGAME_MENU.md §10) |
+| DEF dialogs branch on a from-game flag (load: start mode or in-place load; exit: close or switch screens) | the host decides through the pane's activation handler / modal completion | panes don't switch screens | none |
+| World lives in `TPlayScreen` | `TGameSession` owned by `TGameFlow` | overlays, loads and movies don't rebuild the screen; testable | none |
+| Loading bar repainted inside one long frame | Staged session load across frames | no re-entrant loop | bar animates the same |
+| `nextscreen` set from many sites | `TGameFlow` intents | one transition graph | none |
+| `master.s` re-parsed every game | parsed once at boot; per-game resets as retail | static data; `--test` hosts | none |
+| `LoadGame` resets the world, then reads the file | reads and checks the file first | a missing or damaged save no longer leaves an empty world | only on failure |
+| `TScriptManager` frees script instances on Close | objects own their scripts; the manager's list is non-owning | one owner (the port's objects already freed them: double free) | none |
+| Sectors loaded, streamed and freed by `TMapPane` (global loaded list, `UpdateSectors`, `FreeAllSectors`) | `TMapManager` loads whole levels and owns their sectors; `TMapPane`'s window borrows the current map's | one owner; the window can't free or outlive what it borrows | none (editor reloads go through `TMapManager::ReloadLevel`) |
+| Sector window streamed around the camera and every player; "Loading Map..." whenever it moved onto unloaded sectors | whole levels: the camera's and any with a player stay loaded, the rest are released to the working set on a level change (`TGameSession::ReleaseUnusedLevels`, retail's release `0x00459490`); a level's load runs a slice per frame under retail's loading line, the world held | one owner, no streaming; the frame loop keeps presenting (retail drew the line mid-load straight to the display) | the line appears on every entry to a level that isn't loaded, not on each window move |
+| Panes blit into a CPU backbuffer | Pane `Compose`/`Draw` through `TRenderer` | GPU compositor | none (Classic pixel-identical) |
+| Screen fade drawn per tick in 31 alpha levels | stepped on the same ticks, cover interpolated; a fade-in's cover one step behind | time-based animation | smooth; the fade-in reveal trails retail's by one tick |
+| Handlers with 4 raw args, hand-rolled token parsing | `SCommandContext` + `TCommandArgs` | one parsing vocabulary | none |
+| 3,700-line `command.cpp` | per-family handler files, one table | maintainability | none |
+| A script's tenth block level (`+0x54` + 10 × 8) is the depth field itself: the first line at depth 10 resets the depth and ends the block | ten levels; a block that reaches depth 10 stops with "Blocks nested too deep" | no emulated memory overlap | none for the shipped scripts (depth 5 at most); a script nesting nine blocks into a trigger stops one line earlier than retail (forensics/SCRIPT_ENGINE.md §4.2) |
+
+Removed 2026-10-07 (the port now does as retail): a prototype's text kept
+as the 1998 body between the object's `BEGIN` and `END` (so `Jump`'s depth
+was retail's − 1 and a block ended at its trigger's `END` instead of
+running on after a jump), the tokenizer's CR handling and line count (where
+a jump resumed, error line numbers), the interpreter skipping the rest of
+an `ELSE` line (`ELSE IF`), and a CUBE trigger searching the map pane's
+3×3 window instead of the owner's level (forensics/SCRIPT_ENGINE.md §4,
+§7; RETAIL_AB.md targets 1, 4, 5).
+
+## 8. Open questions (author)
+
+1. Death **Restart** after a loaded game: retail appears to fall through
+   to a new game (start name already cleared). Keep that, or reload the
+   last save?
+2. Title screen music: none in `TLogoScreen::Initialize` — correct?
+
+## 9. Implementation order
+
+1. Screen system: `TPane::Compose/Draw`, screen HUD layer, modal stack,
+   screen events, input routing; `TLogoScreen`, `TLoadScreen`,
+   `TDeathScreen` on it, each with a `--test` host and filmstrip
+   verification against the specs.
+2. `TGameFlow` + `TGameSession`: boot (intro → title), start modes,
+   staged load, death, end of game, quit; world lifecycle moved out of
+   `TPlayScreen` / `InitGlobals`. Retail-format `newgame.sav` loading
+   (savegame).
+3. Command system: descriptors + handler families + `TCommandArgs` +
+   resolver + evaluator + `TConsole`; then retail handler ports in
+   order of the opening scene, then by script usage. Adjacent: the
+   `TScript` wait machine and triggers, dialog.
+4. HUD rebuild on the screen system, panel by panel (each verified at
+   640×480 and Revisited sizes), then retire the harness-based HUD.
+
+Each step lands on `feature/gameflow` with clean builds and its own
+verification; `main` changes only when the user merges.

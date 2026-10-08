@@ -23,7 +23,7 @@ class TContainer : public TObjectInstance
     TContainer(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { }
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
-    virtual int32_t CursorType(TObjectInstance* inst = nullptr);
+    int32_t CursorType(TObjectInstance* inst = nullptr) override;
 
     virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
     virtual void Save(RTOutputStream os);

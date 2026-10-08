@@ -28,16 +28,45 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 #   ./build-asan/Revenant      # ASan runtime errors stream to stderr
 #
 # ASan overhead is ~2x runtime + ~3x memory; fine for catching crashes
-# but not what you ship.
+# but not what you ship. Symbolized reports, headless runs and lldb:
+# see docs/DEBUG_TOOLING.md.
 # ----------------------------------------------------------------------------
 option(REVENANT_ASAN "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
 if(REVENANT_ASAN)
   message(STATUS "Sanitizers: AddressSanitizer + UndefinedBehaviorSanitizer enabled")
+
+  # Check that the sanitizer runtime can start on this OS before building
+  # everything against it. A runtime older than the OS can fail inside its
+  # own initializer, before main() -- Xcode 16's on macOS 26 aborts with
+  # "CHECK failed: sanitizer_malloc_mac.inc ... asan_init_is_running".
+  # Re-checked on every configure: an OS update can break a toolchain that
+  # passed before.
+  include(CheckCSourceRuns)
+  set(CMAKE_REQUIRED_FLAGS "-fsanitize=address -fsanitize=undefined")
+  set(CMAKE_REQUIRED_LINK_OPTIONS -fsanitize=address -fsanitize=undefined)
+  unset(REVENANT_SANITIZER_RUNTIME_STARTS CACHE)
+  check_c_source_runs("int main(void) { return 0; }" REVENANT_SANITIZER_RUNTIME_STARTS)
+  unset(CMAKE_REQUIRED_FLAGS)
+  unset(CMAKE_REQUIRED_LINK_OPTIONS)
+  if(NOT REVENANT_SANITIZER_RUNTIME_STARTS)
+    message(FATAL_ERROR
+      "The AddressSanitizer runtime of ${CMAKE_C_COMPILER_ID} "
+      "${CMAKE_C_COMPILER_VERSION} (${CMAKE_C_COMPILER}) cannot start on "
+      "${CMAKE_SYSTEM_NAME} ${CMAKE_SYSTEM_VERSION}. The toolchain is probably "
+      "older than the OS: update Xcode / the Command Line Tools, then "
+      "reconfigure. See docs/DEBUG_TOOLING.md.")
+  endif()
+
   # vptr is disabled because several polymorphic effect classes
   # (TBloodEffect, TBurnEffect, TDripEffect, TPulpEffect, TParticle3DAnimator)
   # have all virtuals inline → no key function → no typeinfo emitted →
   # link error. Re-enable once those have an out-of-line virtual.
+  # -fsanitize-recover=address only makes recovery possible: ASan still
+  # stops at the first error unless the run sets
+  # ASAN_OPTIONS=halt_on_error=0, which lets one run report past a known
+  # bug (e.g. to reach shutdown).
   add_compile_options(-fsanitize=address -fsanitize=undefined -fno-sanitize=vptr
+                      -fsanitize-recover=address
                       -fno-omit-frame-pointer -fno-optimize-sibling-calls -g -O1)
   add_link_options(-fsanitize=address -fsanitize=undefined -fno-sanitize=vptr)
 endif()
@@ -130,10 +159,6 @@ target_link_libraries(Revenant PRIVATE imgui revsmk)
 # <sokol_gfx.h> / <sokol_app.h> / sokol_imgui.h.
 target_compile_definitions(Revenant PRIVATE SOKOL_${SOKOL_BACKEND})
 
-# Absolute path to vendored fonts so the editor can load them regardless of
-# the current working directory at runtime.
-target_compile_definitions(Revenant PRIVATE REV_FONTS_DIR="${FONTS_DIR}")
-target_compile_definitions(Revenant PRIVATE REV_EDITOR_DATA_DIR="${CMAKE_SOURCE_DIR}/data/editor")
 target_compile_definitions(Revenant PRIVATE REV_VFX_TEST_BG_DIR="${CMAKE_SOURCE_DIR}/tools/vfx/test_backgrounds")
 
 # Include directories for third-party dependencies
@@ -154,6 +179,8 @@ add_executable(test_defdoc tools/test_defdoc.cpp)
 add_executable(test_render_metadata
   tools/test_render_metadata.cpp
   src/render_metadata.cpp)
+# The test reads the source tree's engine asset, whatever the cwd.
+target_compile_definitions(test_render_metadata PRIVATE REV_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
 
 add_executable(test_anim_system
   tools/test_anim_system.cpp
@@ -187,6 +214,9 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 target_link_libraries(test_particlefx PRIVATE GTest::gtest_main)
 
+add_executable(test_vfs_path_index tools/test_vfs_path_index.cpp)
+add_executable(test_retail_mesh_lighting tools/test_retail_mesh_lighting.cpp)
+
 add_executable(cpu_tile_perspective_test
   tools/cpu_tile_perspective_test.cpp)
 
@@ -208,6 +238,65 @@ target_include_directories(test_parse PRIVATE
   ${IMGUI_DIR}
 )
 target_compile_definitions(test_parse PRIVATE SOKOL_${SOKOL_BACKEND})
+
+# Classic (retail) light-model arithmetic. classiclighting.cpp is pure; the
+# engine headers it includes need the same include dirs as test_parse.
+add_executable(test_classiclighting
+  tools/test_classiclighting.cpp
+  src/classiclighting.cpp)
+target_include_directories(test_classiclighting PRIVATE
+  ${SOKOL_DIR}
+  ${HANDMADE_MATH_DIR}
+  ${SIMPLEINI_DIR}
+  ${MINIZ_DIR}
+  ${LOG_DIR}
+  ${ARGH_DIR}
+  ${STB_DIR}
+  ${IMGUI_DIR}
+)
+target_compile_definitions(test_classiclighting PRIVATE SOKOL_${SOKOL_BACKEND})
+target_link_libraries(test_classiclighting PRIVATE GTest::gtest_main)
+
+# Player-stat rules (maxima, STATLEVEL, kill experience, STATLINE).
+# playerstats.cpp needs only the tokenizer; the test stubs parse.cpp's
+# engine hooks like test_parse does.
+add_executable(test_playerstats
+  tools/test_playerstats.cpp
+  src/playerstats.cpp
+  src/parse.cpp)
+target_include_directories(test_playerstats PRIVATE
+  ${SOKOL_DIR}
+  ${HANDMADE_MATH_DIR}
+  ${SIMPLEINI_DIR}
+  ${MINIZ_DIR}
+  ${LOG_DIR}
+  ${ARGH_DIR}
+  ${STB_DIR}
+  ${IMGUI_DIR}
+)
+target_compile_definitions(test_playerstats PRIVATE SOKOL_${SOKOL_BACKEND})
+target_link_libraries(test_playerstats PRIVATE GTest::gtest_main)
+
+# Sound file decoding and lengths (audio_backend's decoders; no playback
+# device). miniz reads the shipped voices when REVENANT_DATA_PATH is set.
+add_executable(test_audio_decode
+  tools/test_audio_decode.cpp
+  src/audio_backend.cpp
+  ${MINIZ_DIR}/miniz.c
+  ${LOG_DIR}/log.c)
+target_include_directories(test_audio_decode PRIVATE
+  ${SOKOL_DIR}
+  ${HANDMADE_MATH_DIR}
+  ${SIMPLEINI_DIR}
+  ${MINIZ_DIR}
+  ${LOG_DIR}
+  ${ARGH_DIR}
+  ${STB_DIR}
+  ${MINIAUDIO_DIR}
+  ${IMGUI_DIR}
+)
+target_compile_definitions(test_audio_decode PRIVATE SOKOL_${SOKOL_BACKEND})
+target_link_libraries(test_audio_decode PRIVATE GTest::gtest_main)
 
 # ----------------------------------------------------------------------------
 # revsmk — clean-room Smacker (SMK2) decoder. Self-contained (C++ stdlib only),

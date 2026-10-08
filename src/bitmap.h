@@ -82,8 +82,8 @@ class TBitmap : public TBitmapData
   // Miscellaneous bitmap buffer functions
     bool Clear(SColor &color, uint32_t drawmode = DM_USEDEFAULT, uint16_t zpos = 0xffff);
       // Clears bitmap to keycolor.                 
-    bool SaveBMP(char *filename);
-      // Saves BMP of source bitmap.
+    bool SaveBMP(const char *filename, int32_t scale = 1);
+      // Saves a 24-bit BMP of the bitmap, shrunk by scale (1-8)
     bool SaveZBF(char *filename);
       // Saves zbuffer file
     bool OnPixel(int32_t x, int32_t y);

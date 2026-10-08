@@ -5,32 +5,45 @@
 | **Effect ID** | F01 (covers F01 `TFlameEffect` + F02 `TFlameAnimator`) |
 | **Class(es)** | `TFlameEffect` (object, near-empty shell — no override bodies) + `TFlameAnimator` (the visual: one `int32_t frame` field + `Initialize`/`Animate`/`Render`/`RefreshZBuffer`). |
 | **Status** | forensics-complete (see §13 for the genuine unknowns) |
-| **Retail fidelity** | **retail-partial** — registration string `"FLAME"` is **retail-confirmed** (`s_FLAME_005e10f4` XREF'd from the animator-builder factory table @ `005c5348→0x4e4ea0`, the same registration mechanism as B01/Sparks); asset `Magic\Flame.I3D` is in shipped `data/imagery.rvi` but **NOT byte-identical** to snapshot — **7 bytes differ in the surface descriptor at file offset 0x48-0x4E** (snapshot's surface dims 339×316 are nonsensical for the 41,348 B file; retail's 128×160 fit the 40,960 B payload exactly). The texture **pixel data is unchanged**; the asset's loader-visible metadata was fixed. The `TFlameAnimator::Animate/Render` bodies could **NOT** be cross-checked against a readable retail decomp — `cls_0x5a9d88` (the MEDIUM candidate via the `"FLAME"` XREF) has a 264 B layout + 25 vftable entries that do **NOT** match a tiny `T3DAnimator + int32_t frame` class (the snapshot TFlameAnimator class size is much smaller). The render body at `0x4e4ea0` lives as a free-function trampoline that the recon pass didn't isolate. Net: name + asset corroborated, kinematic constants (the frame-wrap 18, the `frame*11/24` UV-cell math, the 45°/30°/160° rotations, the 0.5 scale, the Alpha blend) are **snapshot-only** and the **render blend is the top drift risk** (torches glow → textbook additive sprite design; snapshot codes Alpha — flagged in §7). Retail also added two color-variant assets (`flameb.i3d`, `flameg.i3d`) not present in snapshot; effect class unchanged. See §2.1. |
+| **Retail fidelity** | **bounded retail frontend verified (2026-10-07)** — actual retail Animate `0x4e4ef0` and Render `0x4e4f20` execute in the thin emulator. Authored geometry, UVs, rotations, scale, local frame wrap and blend requests are checked against the compiled port component. Eighteen RGB565 image pairs match using the same original software rasterizer. Full map/hierarchy integration and Revisited GPU-backend parity remain open. |
 | **Author / Date** | vfx-forensics-agent / 2026-05-29 |
 | **Family** | fire (single-card flipbook torch flame — the iconic dungeon ambient torch/candle/brazier) |
-| **Draws** | a **single ScreenAligned billboard quad** — one `box01` sub-object of `Magic\Flame.I3D` drawn with a UV sub-rect picked off a **4-column × 2-row atlas** (8 frames in one 128×160 RGB565 surface). |
+| **Draws** | One authored `box01` quad of `Magic\Flame.I3D`, transformed by explicit rotations and scale, selecting one cell from a **4×2 atlas in a 128×128 ARGB4444 surface**. |
 | **Archetype(s)** | **(A) UV-coordinate atlas-cell pick flipbook** — `tu/tv` recomputed per-frame from a per-render-frame counter (`frame * 11 / 24`) to land on one of 8 atlas cells, NOT a `framehtexs[]` texture-handle swap. **(B) continuous loop** — `frame` cycles `0..17` forever, no kill condition in the animator (the effect object lives until its owning sector / spell kills it). No particle emitter, no sub-emit, no associated light, no audio. |
 
 ---
 
 ## 1. Summary
 
-`"FLAME"` is the iconic Revenant torch/candle flame seen in every dungeon, tavern,
-keep, and ambient lighting scene. It is the simplest possible mesh-effect: a
-**single billboard quad** holding one I3D sub-object (`box01`), with a
-**static-cell-pick UV flipbook** that rewrites the four corner UVs each frame to
-land on one of **8 cells** in a **4×2 atlas** packed into a single 128×160 RGB565
-texture (`Magic\Flame.I3D`). The frame counter loops `0..17` indefinitely (the
-mapping `n = frame * 11 / 24` makes most cells hold for ~2 frames, giving a
-non-uniform flicker), and the quad is drawn through an explicit object matrix
-that scales by 0.5 and rotates by (45° X, 30° Y, 160° Z). There is **no particle
-emitter, no sub-emitted sparks, no dynamic light, no audio, and no state
-machine** — every torch in the world is one of these, lit forever, drawn each
-render frame. The visual identity is the **bright hot orange/yellow flame with
-near-white core on a green chroma-key background** (the `0x0f20` RGB565 = (8,
-228, 0) green is 54% of the texture pixels — flame.i3d is **green-keyed**, NOT
-black-keyed; this is the asset-side fact that decides the chroma-key handling
-in any consumer).
+**2026-10-07 retail-body verification:** the earlier statements that Render and
+Animate are unextracted or snapshot-only are superseded for base Flame
+`0x50ba373b`. Registration `0x4e4ea0` leads through builder `0x5a9de8` and factory
+`0x4f5d70` to animator vtable `0x5a9dec`. The unchanged retail instructions verify
+X45°/Y30°/Z160° rotations, uniform 0.5 scale, atlas-cell integer selection
+`frame*11/24`, and the 18-frame Animate wrap. The retained
+[thin-emulator report](../../../recon/retail_asm/runtime/effects/flame-frontend-ab/manifest.json)
+records the real shipped mesh/atlas, compiled production component, 18 matching
+image pairs, eight distinct images and exact warm resets. Both frontends use
+the original software renderer; owner hierarchy/extents and imagery submission
+are explicit fixture boundaries. This is new source/frontend evidence, not
+full map-context or Metal-renderer acceptance.
+
+**2026-10-04 asset correction:** §2.1(1) and §4 supersede the earlier
+asset interpretation throughout this document. The actual atlas is
+**128×128 ARGB4444 with authored alpha**, not a 128×160 RGB565 green-keyed
+surface. The original mesh is centered, 38.11058×69.56522 model units;
+50×125 is a restore rectangle. Older green-background blend heuristics
+in §7/§13 are not evidence of the retail blend state.
+
+`"FLAME"` is the placed torch/candle flame used in shipped dungeon and
+ambient scenes. It draws one authored `box01` quad from `Magic\Flame.I3D`,
+rewriting four UVs to select one of eight 32×64 cells in a 128×128
+ARGB4444 atlas. Its local counter cycles 0..17; `floor(frame*11/24)`
+gives nonuniform two/three-tick cel holds. Snapshot source rotates the
+real mesh by X45°, Y30°, Z160° and scales it uniformly by 0.5. It adds
+no particles, light, audio, or lifetime state. Color and alpha come
+from the actual hot orange/yellow texture, with a near-white core and
+transparent red background.
 
 ---
 
@@ -120,32 +133,23 @@ in any consumer).
 
 `src/effect_old.cpp` is a pre-release snapshot. Cross-checks:
 
-**(1) Asset identity — NEAR-IDENTICAL, with a 7-byte surface-header fix.**
-- Snapshot `legacy/Imagery/Magic/flame.i3d`: 41,348 B, MD5
-  `736514e58a772c2cc7040543b919150a`.
-- Retail (extracted from `data/imagery.rvi` member `Imagery/Magic/flame.i3d`):
-  41,348 B, MD5 `e108cad4d45b6b23af8ad73bafed286c`.
-- `cmp -l` reports **7 differing bytes, all at file offsets 0x48-0x4E**
-  (inside the `SSurfaceDesc` block at 0x44):
-  | offset | snapshot bytes (u16 LE) | retail bytes (u16 LE) |
-  |--------|------------------------|------------------------|
-  | 0x48-0x49 | 0x20, 0x01 (some flag) | 0x20, 0x01 (same) |
-  | 0x4A-0x4B | 0x64, 0x00 (= 100) | 0x64, 0x00 (same) |
-  | 0x4C-0x4D | **0x0153 = 339** | **0x0080 = 128** ← surface width |
-  | 0x4E-0x4F | **0x013c = 316** | **0x00a0 = 160** ← surface height |
-  | 0x50-0x51 | **0x0153 = 339** | **0x0040 = 64**  ← cell width |
-  | 0x52-0x53 | **0x0087 = 135** | **0x0078 = 120** ← cell height |
-- The snapshot's surface dimensions (339×316) are **nonsensical** for the
-  41,348 B file (would require 214 KB of payload at 16-bit). The retail dims
-  (128×160 → 40,960 B at 16-bit) fit the **40,976-byte payload from 0x174 to
-  end** exactly. **The texel data is unchanged**; the snapshot asset would
-  mis-decode at load time (or be corrected by a loader heuristic). This is a
-  late asset-header fix, not a content change.
-- The **8 of `data/imagery.rvi` total `flame*.i3d` members** also include
-  `flameb.i3d`/`flameg.i3d` (33,404 B, 1999-03-17) and
-  `Equip/flamearrow.i3d` (23,362 B, 1999-09-02) — none of which the snapshot
-  has. These are color-variant + flame-arrow add-ons; the F01 effect class
-  itself consumes the orange `Magic\flame.i3d` first-registered.
+**(1) Asset identity — identical mesh/texture, seven graphics-bounds bytes differ.**
+Both files are 41,348 bytes. Snapshot MD5 is
+`736514e58a772c2cc7040543b919150a`; retail MD5 is
+`e108cad4d45b6b23af8ad73bafed286c`. The seven differences are at absolute
+file offsets `0x48..0x4e`, inside `SImageryStateHeader`, not a texture
+surface descriptor. Retail changes graphics width/height from 339×316 to
+128×160 and registration x/y from 339×135 to 64×120. The actual texture
+is **128×128 ARGB4444 in both files**, and the mesh is unchanged.
+
+The CGSR file header is 20 bytes, with an 84-byte imagery header; the
+`SOld3DImageryBody` begins at file offset `0x68`. Its texture descriptor
+is at `0x400`: height/width are both 128, bit count 16, channel masks
+R=`0x0f00`, G=`0x00f0`, B=`0x000f`, A=`0xf000`. The frame pixels are
+`0x2184..0xa184` (32,768 bytes), located by following the texture/frame
+relative offsets. Earlier readings of `0x174` as pixel payload and
+RGB565 green-key decoding were incorrect. The dominant `0x0f20` texel is
+**transparent red** RGBA(255,34,0,0), not opaque green.
 
 **(2) Registration + naming — CONFIRMED.** The retail binary contains the
 `"FLAME"` string at `.rdata 0x5e10f4` with one XREF: `0x4e4ea0`
@@ -194,9 +198,8 @@ the **frame-wrap-18**, the **`frame*11/24` UV-cell math**, the
 **(45°, 30°, 160°) rotation**, the **0.5 uniform scale**, the **Alpha blend**,
 and the **(25, 62) RefreshZBuffer patch** — is **snapshot-only** and
 unverified against shipped retail. Risk to reconstruction is highest on
-**the render blend** (§7 BLEND SANITY-CHECK: a bright-on-green-key glow
-sprite is textbook additive; the snapshot codes Alpha — flag and
-visually vet); secondary risk is the explicit rotation triple (does the
+**the render blend** (snapshot Alpha and current capture evidence favor
+it, but retail Render is unextracted); secondary risk is the explicit rotation triple (does the
 flame face the iso camera correctly with the snapshot's angles, or were
 they re-tuned for ship?).
 
@@ -231,9 +234,9 @@ retail-corroborated; the per-frame math values are snapshot-only.
 | RefreshZBuffer patch w | `(int32_t)(50.0f * 0.5f) = 25` px | screen px | `effect_old.cpp:4571` | **snapshot-only** |
 | RefreshZBuffer patch h | `(int32_t)(125.0f * 0.5f) = 62` px (truncated from 62.5) | screen px | `effect_old.cpp:4572` | **snapshot-only** |
 | RefreshZBuffer patch centering | offset by `-size.x/2, -size.y/2` (centred on projected origin) | px | `effect_old.cpp:4577` | **snapshot-only** |
-| asset surface dims | 128×160 RGB565 (retail) / 339×316 (snapshot, bogus) | px | retail bytes 0x4C-0x4F | **yes (retail)** for 128×160 (matches the 40,960-byte payload exactly); snapshot-bogus |
-| asset cell-dim hint | 64×120 (retail) / 339×135 (snapshot, bogus) | px | retail bytes 0x50-0x53 | yes (retail) for 64×120 — but see §4 / §13.2 (doesn't tile the 128×160 surface) |
-| asset payload offset | starts at `0x174`, runs to `0xa174` = exactly 128×160×2 B | bytes | computed | yes |
+| asset surface dims | 128×128 ARGB4444 in retail and snapshot | px | descriptor at file `0x400`, h/w `0x408/0x40c`, masks `0x458..0x464` | **yes (retail)** |
+| imagery graphics bounds / registration | retail 128×160, reg (64,120); snapshot 339×316, reg (339,135) | px | `SImageryStateHeader`, file `0x48..0x4e` | **yes (retail)** — not texture or cell dimensions |
+| asset payload offset | `0x2184..0xa184`, 128×128×2 bytes | bytes | mesh texture/frame relative-offset chain | **yes (retail)** |
 | TORADIANf | `π/180` | rad/deg | `revdefs.h` | snapshot-only |
 
 `Animate(bool draw)` runs per **render frame** in this animator (the snapshot
@@ -254,110 +257,74 @@ rate per the framerate-independent-animation feedback note.
 
 ## 4. Assets
 
-| asset | path | size | role | how loaded (original) |
-|-------|------|------|------|-----------------------|
-| Flame | snapshot `legacy/Imagery/Magic/flame.i3d` (41,348 B, MD5 `736514e58a772c2cc7040543b919150a`); retail `data/imagery.rvi:Imagery/Magic/flame.i3d` (41,348 B, MD5 `e108cad4d45b6b23af8ad73bafed286c`) — **same texel payload, differ in 7 surface-header bytes** (§2.1) | 41,348 B | the torch-flame sprite — STILL 2D billboard I3D with **1 sub-object** (`box01`) | registered `Class.Def:2030` under name `"Flame"` (id `0x50ba373b`); loaded by the OBJCLASS_EFFECT registry on instance spawn; the sole sub-object bound via `GetObject(0)` and its verts pulled via `GetVerts(obj, D3DVT_LVERTEX)` (`effect_old.cpp:4490-4491`) so the effect owns its own `obj->lverts[0..3]` it mutates each render |
+Use the retail `Imagery/Magic/flame.i3d` member of `data/imagery.rvi`
+(41,348 bytes, MD5 `e108cad4d45b6b23af8ad73bafed286c`). Its single
+sub-object is `box01`; object count is at file `0x7c0`, name at `0x7c4`.
+The snapshot has the same mesh and texture bytes (§2.1).
 
-**Sub-objects (1)** — confirmed from the I3D object table at file offset
-`0x7c0`: count = 1, name = `box01` (`0x7c4: '62 6f 78 30 31 00'` = `"box01"`).
-A single billboard quad. No multiple flame cards, no spark sub-object, no
-additional geometry. (Both snapshot and retail asset have the same 1-count
-+ same `box01` name.)
+### 4.1 Actual texture format and atlas
 
-**Texture decode (the §4 atlas decode — read off the actual UVs):**
+The actual `SSurfaceDesc` is at file `0x400`, with a **128×128 ARGB4444**
+surface, one frame, channel masks R=`0x0f00`, G=`0x00f0`, B=`0x000f`,
+A=`0xf000`. Frame pixels begin at `0x2184`; 16,384 texels occupy exactly
+32,768 bytes through EOF `0xa184`. The animator's 4-column×2-row UV
+strides therefore select **32×64 texel cells**, not 32×80.
 
-- **Dimensions (retail):** **128 × 160 pixels**, **RGB565 16-bit**
-  (`data[0x4C-0x4F] = 0x0080 0x00a0`). Payload runs `0x174 → 0xa174` =
-  `128 * 160 * 2 = 40,960` bytes exactly. **One physical surface — there is
-  no `framehtexs[]` per-frame texture handle array.** `S3DTex.numframes = 1`
-  for this asset (no per-frame texture swap; the flipbook is purely UV-based).
-- **Atlas layout:** **4 columns × 2 rows = 8 cells** of **32 × 80 pixels**
-  each. This is **decoded from the actual UV math in the snapshot's Render
-  body** (`effect_old.cpp:4543-4556`):
-  - Column stride `0.25` (UV) = 1/4 of the surface width = `0.25 * 128 = 32 px`.
-  - Row stride `0.5` (UV) = 1/2 of the surface height = `0.5 * 160 = 80 px`.
-  - So one cell = `(col*32 .. (col+1)*32, row*80 .. (row+1)*80)` in pixels.
-- **Per-cell contents (visually inferred — must be vetted against the decoded
-  texture):** 8 stages of a flickering flame — each cell is a `32 × 80`
-  vertical flame still. The bottom of the cell is the flame base (texture
-  origin in I3D STILL convention), the top is the flame tip. Cells (0,0)
-  through (3,1) are 8 sequential flicker poses (likely an animator-authored
-  loop: flame growing → peaking → diminishing → growing again, but the
-  specific per-cell pose mapping isn't documented in source and the §6
-  temporal math doesn't traverse them linearly — see the cell-by-frame table
-  below).
-- **The UV mapping (the actual mapping from the Render body, NOT 0..1)** —
-  per `effect_old.cpp:4543-4556`, every render frame computes `xpos = col *
-  0.25; ypos = row * 0.5` (the cell's *origin* UV), then writes the four
-  quad-corner UVs as a 0.25 × 0.5 sub-rect anchored at `(xpos, ypos)`:
-  ```
-  lverts[0].tu/tv = (xpos,        ypos)        ; top-left
-  lverts[1].tu/tv = (xpos + 0.25, ypos)        ; top-right
-  lverts[2].tu/tv = (xpos,        ypos + 0.5)  ; bottom-left
-  lverts[3].tu/tv = (xpos + 0.25, ypos + 0.5)  ; bottom-right
-  ```
-  So **the quad samples exactly one 0.25 × 0.5 sub-rect = one of the 8
-  cells**, NOT the whole texture. Any reconstruction that maps the full
-  texture (UV `(0,0)-(1,1)`) onto the quad will draw all 8 cells in a 4×2
-  grid — the "atlas-grid bug" the protocol explicitly warns against.
-- **Animation mechanism (cell-by-frame, the §8 table):** the cell is
-  selected by `n = (int32_t)(frame * 11 / 24); col = n % 4; row = n / 4`,
-  with `frame` cycling 0..17. This produces the following sequence over one
-  18-frame loop (each row is one render frame):
+Texture alpha is authored. The dominant `0x0f20` texel (11,065 of 16,384
+pixels, 67.5%) decodes to RGBA(255,34,0,0), a transparent red background.
+The hot core values such as `0xfffd` decode to RGBA(255,255,221,255).
+There is no source RGB565 green chroma convention to reconstruct. Any
+remaining color-key handling is a loader/renderer implementation choice,
+not evidence that the original flame was green-keyed. `0x48..0x4e`
+contains imagery graphics bounds and registration, not surface dimensions.
 
-  | frame | `n` | (col, row) | (xpos, ypos) UV | held for (frames) |
-  |-------|-----|------------|-----------------|-------------------|
-  | 0  | 0 | (0, 0) | (0.00, 0.0) | 3 |
-  | 1  | 0 | (0, 0) | (0.00, 0.0) | – |
-  | 2  | 0 | (0, 0) | (0.00, 0.0) | – |
-  | 3  | 1 | (1, 0) | (0.25, 0.0) | 2 |
-  | 4  | 1 | (1, 0) | (0.25, 0.0) | – |
-  | 5  | 2 | (2, 0) | (0.50, 0.0) | 2 |
-  | 6  | 2 | (2, 0) | (0.50, 0.0) | – |
-  | 7  | 3 | (3, 0) | (0.75, 0.0) | 2 |
-  | 8  | 3 | (3, 0) | (0.75, 0.0) | – |
-  | 9  | 4 | (0, 1) | (0.00, 0.5) | 2 |
-  | 10 | 4 | (0, 1) | (0.00, 0.5) | – |
-  | 11 | 5 | (1, 1) | (0.25, 0.5) | 3 |
-  | 12 | 5 | (1, 1) | (0.25, 0.5) | – |
-  | 13 | 5 | (1, 1) | (0.25, 0.5) | – |
-  | 14 | 6 | (2, 1) | (0.50, 0.5) | 2 |
-  | 15 | 6 | (2, 1) | (0.50, 0.5) | – |
-  | 16 | 7 | (3, 1) | (0.75, 0.5) | 2 |
-  | 17 | 7 | (3, 1) | (0.75, 0.5) | – |
+The original renderer rewrites UVs by vertex index:
 
-  So all 8 cells are visited each cycle, with cells **(0,0) and (1,1)
-  held for 3 frames** and the others held for **2 frames** — the
-  `frame * 11 / 24` integer division gives a deliberately non-uniform
-  flicker (most cells get ~2.18 frames at the average rate, but the
-  rounding clusters extras on cells 0 and 5). At a nominal 24 Hz the full
-  cycle takes `18/24 = 0.75 s`. **This is the source of the flame's
-  natural irregular flicker — it is NOT a uniform 8-cell flipbook.**
+```
+vertex 0: (u,      v)
+vertex 1: (u+.25,  v)
+vertex 2: (u,      v+.5)
+vertex 3: (u+.25,  v+.5)
+u = (floor(frame*11/24) % 4) * .25
+v = (floor(frame*11/24) / 4) * .5
+```
 
-- **Chroma key — GREEN, NOT BLACK.** Histogramming the 20,480 texture
-  pixels:
-  | RGB565 | (R, G, B) 8-bit | count | % |
-  |--------|-----------------|-------|---|
-  | `0x0f20` | (8, 228, 0) | 11,057 | 54.0 % ← **green chroma key** |
-  | `0x0000` | (0, 0, 0) | 3,620 | 17.7 % |
-  | `0x1f30` | (24, 228, 128) | 491 | 2.4 % |
-  | `0xfffd` | (248, 252, 232) | 253 | 1.2 % ← near-white flame core |
-  | `0xfff8` | (248, 252, 192) | 201 | 1.0 % |
-  | `0xfff9` | (248, 252, 200) | 191 | 0.9 % |
+The 18 authored ticks visit cells
+`0,0,0,1,1,2,2,3,3,4,4,5,5,5,6,6,7,7`. This is a 0.75-second loop
+at 24 authored ticks/sec. Preserve that discrete cell timing with elapsed
+time; continuous `floor(time*11)` alone does not retain the same holds.
 
-  The dominant background color is **bright green `(8, 228, 0)`**, not
-  black. The 20%-black-pixel heuristic the port loader uses
-  (`src/3dimage.cpp:1701-1721`, per knowledge 02 §4.1) would **not fire**
-  on this asset — its background is green-keyed. The 17.7 % pure-black
-  pixels are mostly the *inside* of the flame (dark core where flame texels
-  are intentionally `0,0,0` to read as black under MODULATE + per-vertex
-  diffuse, rather than as transparent). A reconstruction needs to chroma-
-  key the GREEN, not the BLACK, on this asset. **This is a per-asset
-  chroma convention divergence from the Blood/Sparks/black-keyed family.**
+### 4.2 Authored geometry and registration
 
-The effect loads a real asset — do NOT substitute a procedural flame
-sprite. The hot near-white core, hot-yellow flame body, and bright-green
-chroma key are the visual identity (§10).
+The global vertex pool starts at file `0x1dd4`, with four 32-byte
+`S3DVertex` records. Runtime `GetObjVerts(0)` returns these centered
+object-local positions:
+
+```
+0: (-19.0552902222, -34.7826118469, 0)
+1: ( 19.0552902222, -34.7826118469, 0)
+2: (-19.0552902222,  34.7826118469, 0)
+3: ( 19.0552902222,  34.7826118469, 0)
+faces: (2,0,3), (1,3,0)
+```
+
+The quad is **38.11058×69.56522 model units before scale**. The
+`RefreshZBuffer` 50×125 constants are damage/restore rectangle dimensions;
+they are not the mesh size. At render, original source applies row-vector
+`Rx(45°)*Ry(30°)*Rz(160°)*S(0.5)`, then the instance world transform.
+The current port's instance transform already includes `WORLD3D_Z_SCALE`
+(1.5) plus object rotation/translation, so it must be applied once to
+these transformed local corners. The resulting quad has tilt and shear;
+an axis-aligned billboard or a fitted projected bounding box loses that
+geometry. This 1.5 stretch is the current port convention, not a verified
+retail mesh-to-world conversion; the remaining projection gap is recorded
+in the lower-ambient comparison below. Retail Flame renderer-body
+confirmation remains pending.
+
+Verified independently by extracting the retail archive member and by
+`Revenant --headless --dumpi3d=Magic\flame.i3d`, which reports a 128×128
+texture, four vertices, six indices, and the above model bounds. Dump
+artifacts for this pass are `/tmp/revenant-flame-authored/`.
 
 ---
 
@@ -402,7 +369,7 @@ chroma key are the visual identity (§10).
    wz (up)
    │
    │       ▲           Single ScreenAligned/oriented billboard
-   │      /│           (one box01 sub-object, 32×80 px source cell)
+   │      /│           (one box01 sub-object, 32×64 px source cell)
    │     ╱ │           Authored "up" along quad's local Y; matrix
    │    ╱  │           applies RotX(45°)·RotY(30°)·RotZ(160°)·Scale(0.5)
    │   ╱   │           ────────────────────────────────────────────────
@@ -538,13 +505,10 @@ RefreshZBuffer():
              size.x, size.y)               //   25 × 62 px box
 ```
 
-The `50.0f * 0.5f` and `125.0f * 0.5f` are clearly the
-**asset's cell-dimension hint** (`64 × 120` from the retail surface
-descriptor) downscaled by the **same 0.5 scale** the Render body applies —
-roughly matching the flame's on-screen footprint. (Why 50/125 instead of
-64/120? Likely a hand-picked tighter patch. The cast-to-int truncates 62.5
-to 62.) `RestoreZ` then issues `Scene3D.RestoreZBuffer(rect)` per the
-free-function helper at `effect_old.cpp:162-171`.
+The 50×125 constants describe a centered Z-buffer restore/damage patch,
+scaled by 0.5 and truncated to 25×62 pixels. They do not describe the
+mesh size or graphics registration header (§4.2). `RestoreZ` issues
+`Scene3D.RestoreZBuffer(rect)` via `effect_old.cpp:162-171`.
 
 ### Temporal diagram (continuous loop, never dies)
 
@@ -588,61 +552,20 @@ no scale/alpha envelope — only the cell-pick changes per frame.
   TFlareAnimator and TSymGlowAnimator use on their (also-keyed) glow
   sprites.
 
-  ### BLEND SANITY-CHECK (mandatory)
+  ### BLEND SANITY-CHECK
 
-  **Sprite design:** the flame texture is a bright-white-core + hot-yellow
-  flame on a **bright-green (chroma-keyed) background** (§4 histogram: 54%
-  green-key pixels, 17.7% black core pixels, the rest hot whites/yellows
-  with greenish edge bleed). A bright-on-keyed-background sprite is the
-  **textbook additive sprite** (the chroma background reads as transparent
-  under additive; the flame contributes additively to the lit scene like
-  a torch should). Torches in the game world **glow** — they light up the
-  surrounding stone, brass, the player's clothes. Drawing them with
-  straight Alpha mutes that glow effect (the flame becomes a translucent
-  overlay rather than a self-luminous additive contribution).
+  The texture is ARGB4444 with authored alpha. Its transparent red texels
+  do not establish additive blending: alpha and additive both discard
+  or weight them through coverage. Snapshot source explicitly requests
+  SRC_ALPHA/INV_SRC_ALPHA. Retail Render remains unextracted, so visual
+  evidence is required to confirm its blend state.
 
-  **The snapshot code says Alpha. This is SUSPECT for two reasons:**
-  1. Bright-on-key sprite design + observed in-game glow strongly suggest
-     **AdditiveStraight** in the shipped game.
-  2. The retail render body at `0x4e4ea0` is NOT decompiled (§2.1), so the
-     blend choice is **snapshot-only** and unverified — exactly the
-     "snapshot Alpha on a glow is unverified" drift the SPARKS exemplar
-     (§2.1) confirmed happens for sparks (snapshot Alpha → shipped
-     Additive). The same risk applies here.
-
-  **Sister-family cross-check:**
-  - `TFlareAnimator::Render` (`src/effect_old.cpp:584-612`) — **Alpha**
-    (`SetBlendState`). Glow-family sister, same blend.
-  - `TSymGlowAnimator::Render` (`src/effect_old.cpp:4642-4665`) — **Alpha**
-    (`SetBlendState`). Glow-family sister, same blend.
-  - **Both `TFlareAnimator` and `TSymGlowAnimator` zero their material at
-    `Initialize` to make the flat-color blend read as self-lit emissive**
-    (`TFlareAnimator::Initialize` `:517-550` — ambient/diffuse/specular/
-    emissive/power all 0). **`TFlameAnimator::Initialize` (`:4486-4494`)
-    does NOT zero its material.** So `TFlameAnimator` is more naive
-    than its sisters: it uses the imagery's authored material *and* the
-    Alpha blend. The authored I3D material is unread by the snapshot's
-    Render path (per-vertex diffuse is what MODULATE uses, and the
-    snapshot Render never writes `lverts[i].color`), so the per-vertex
-    diffuse defaults to whatever `GetVerts` initialized — most likely
-    opaque white (1.0, 1.0, 1.0, 1.0), so the texture passes through
-    unmodulated.
-  - The contrast with the additive fire-family glow effects (FireFlash,
-    FireWind, Burn, Aura — all `SetAddBlendState`, knowledge 03 §1.1) is
-    notable: the spell-fire effects are additive, the *ambient* fire
-    (Flame, Fault Fire) is Alpha per the snapshot. **Whether this is
-    intentional differentiation or a snapshot bug for the ambient
-    family is the open question.**
-
-  **Verdict (with the SPARKS-protocol caveat):** classify the snapshot as
-  **Alpha** per code, but **flag it as snapshot-only-and-suspect** for the
-  reconstruction. A bright-green-keyed glow being rendered Alpha rather
-  than Additive is exactly the F03/Sparks pattern that turned out
-  retail-wrong (the SPARKS doc §2.1 documented snapshot Alpha → shipped
-  Additive for spark sprites). The reconstruction agent **must visually
-  vet against an in-game torch capture** (§12) and be ready to switch to
-  AdditiveStraight if the snapshot blend reads dull/translucent on the
-  scene.
+  The 2026-10-04 isolated comparison favors Alpha over Additive on the
+  same captured floor. That remains preliminary because the reference
+  ambient was unusually high; lower-light and authored-map captures
+  remain the acceptance checks. Scenery lights are separate map objects,
+  not emitted by Flame. The earlier green-key/additive inference was
+  based on a wrong asset decode and is withdrawn.
 
 - **Lit vs self-lit:** classify as **Unlit** (the color is literal — the
   per-vertex diffuse is opaque white by default and the texture's authored
@@ -656,17 +579,11 @@ no scale/alpha envelope — only the cell-pick changes per frame.
   ZWRITEENABLE=false` (set by `SetBlendState`,
   `effect_old.cpp:224-225`). `RefreshZBuffer` repairs scene Z under the
   flame's projected footprint (§6.4).
-- **Orientation:** **ScreenAligned-with-explicit-tilt** — see §6.3 note.
-  Not a canonical WorldXY (no `rot.x = -π/2`), not a bare ScreenAligned
-  (matrix builds explicit (45°, 30°, 160°) rotation). The flame quad
-  presents at a fixed orientation, NOT camera-aligned per render frame.
-  Whether this reads "facing camera enough" under the iso projection is a
-  property of how the iso camera is also tilted by ~30°; the snapshot
-  values appear tuned for the iso view. **Per NOMENCLATURE §2, this
-  effect would want a `WorldUpAligned` enum (future-noted as not yet
-  implemented) — pin the quad's up axis to world +Z and let it rotate
-  about Z to face the camera. The snapshot's static 3-Euler rotation is
-  the original's approximation of that, fixed for the iso view.**
+- **Orientation:** an authored mesh at a fixed explicit tilt, not a
+  camera-facing billboard. Apply the source matrix to the real corner
+  positions. Do not replace it with a guessed WorldUpAligned behavior
+  or a projected bounding box. Retail retuning of the angles is still
+  an evidence gap, requiring native capture or extracted Render code.
 - **Per-quad / per-object transform:** explicit
   `OBJ3D_MATRIX | OBJ3D_VERTS = 0x2100`. The matrix is
   `RotX(45°) · RotY(30°) · RotZ(160°) · Scale(0.5)` with translation 0
@@ -686,9 +603,8 @@ no scale/alpha envelope — only the cell-pick changes per frame.
 knowledge 03 §8.6 mechanism #2 ("UV atlas-cell pick"): the four corner
 UVs are recomputed each render frame to land on one of 8 cells in a 4×2
 atlas (§4). The asset's `S3DTex.numframes = 1` (single physical surface,
-no per-frame texture handles), confirmed by the 40,960-byte payload fitting
-exactly one 128×160×2 surface and the asset header at offset 0x174 reading
-`numframes=1`. So the flipbook is **purely UV-based** — no
+no per-frame texture handles), confirmed by the actual 32,768-byte
+128×128×2 payload and the mesh texture record reporting one frame (§4). So the flipbook is **purely UV-based** — no
 `SetTextureFrame()` call, no `framehtexs[]` swap, no `textureframe[]` write.
 
 **Rate / wrap / per-instance phase offset:**
@@ -725,32 +641,14 @@ light. The ambient torch flame does not.)
 
 ## 10. Color
 
-- **Source:** **the authored `Magic\Flame.I3D` texture** (§4). Texture pixel
-  data confirmed: hot near-white core `(248, 252, 232)` + bright yellow
-  body `(248, 252, 192-216)` + transitions through yellow/orange to the
-  green chroma-keyed background `(8, 228, 0)`. The effect supplies **no
-  per-vertex tint** (`lverts[i].color` is never written by Render) and
-  **no spell color** (there is no live spell caller, §12). The hue is
-  entirely the texture's.
-- **Exact values:** the dominant hot colors are
-  - `0xfffd` (248, 252, 232) — flame core, near-white
-  - `0xfff8` (248, 252, 192) — pale yellow
-  - `0xfff9` (248, 252, 200) — pale yellow
-  - `0xfffb` (248, 252, 216) — pale yellow-white
-  - `0x0f20` (8, 228, 0) — **green chroma key** (54% of pixels — the
-    background)
-  - `0x0000` (0, 0, 0) — black (17.7% — internal flame core where the
-    texture deliberately fades to black inside the flame body)
-- **Expected visual:** **bright hot orange/yellow flame with a near-white
-  core, on a transparent (green-keyed) background.** Saturated warm hot
-  color, NOT pale. Per the `feedback-vfx-color-health-signal` memory, a
-  pale/gray/missing-color flame at reconstruction = broken port (likely
-  causes: wrong chroma-key handling — code looking for black but the
-  asset is green-keyed; wrong blend — Alpha when it should be additive;
-  the texture not loaded at all and the renderer falling back to a
-  default; or vertex color writing something non-white).
-- **Normalization / boosts:** none — there is no NormalizeColors or
-  ambient-mix or hilt-brightness code in the flame path.
+The authored `Magic\Flame.I3D` texture supplies all color and coverage;
+Render supplies no per-vertex tint or spell color. Decode by the actual
+ARGB4444 masks (§4): `0xfffd` is RGBA(255,255,221,255), `0xfff8` is
+RGBA(255,255,136,255), `0xfff9` is RGBA(255,255,153,255), and `0x0f20`
+is RGBA(255,34,0,0), fully transparent red. Expected: hot orange/yellow
+with a near-white core on a transparent background. Do not derive
+RGB565 colors or green-key rules from these values. There is no
+effect-specific color normalization or boost.
 
 ---
 
@@ -813,26 +711,14 @@ a sibling Speaker effect placed alongside it in world data.
 
 ## 13. Gaps & uncertainties
 
-- **13.1 The render blend is the headline snapshot-drift risk
-  (snapshot-only-and-suspect — vet vs ground truth).** Per §7's BLEND
-  SANITY-CHECK: the snapshot says **Alpha** (`SetBlendState`), but the
-  sprite design (bright hot-white-core flame on green chroma-key) +
-  the in-game intent (a torch GLOWS) point to **AdditiveStraight**. The
-  retail render body at `0x4e4ea0` is **NOT** decompiled, so the blend
-  is unverified. The SPARKS exemplar (§2.1) documented exactly this
-  pattern shipping Additive despite a snapshot-Alpha; F01 carries the
-  same risk. **Reconstruction MUST visually vet against a torch capture
-  and be ready to switch to AdditiveStraight.** If the reconstructed
-  flame reads dull, translucent, or as a sticker rather than a glow,
-  the blend is wrong.
-- **13.2 The asset's cell-dimension hint (`64×120`) doesn't tile the
-  surface evenly.** The retail surface descriptor at byte 0x50-0x53
-  reports cell dims of 64×120, but the actual UV math (cells of 32×80
-  px from `0.25 × 0.5` UV strides on the 128×160 surface) gives a
-  different geometry. The 64×120 likely represents the *intended on-
-  screen quad size* (i.e. authored render dims for the I3D STILL
-  imagery), not the atlas cell size. Reconstruction: trust the UV math
-  for atlas decoding (8 cells of 32×80), not the header hint.
+- **13.1 Retail blend remains unconfirmed.** Snapshot Alpha is explicit;
+  current isolated capture evidence favors it over Additive. The old
+  green-key/additive inference came from a wrong asset decode and is
+  withdrawn. Confirm against lower-light and authored-map footage.
+- **13.2 Resolved asset-header confusion (2026-10-04).** Width/height
+  128×160 and registration 64×120 at file `0x48..0x4e` describe the
+  imagery state's graphics rectangle. The actual surface is 128×128
+  ARGB4444 at `0x400`, with 32×64 atlas cells; see corrected §4.
 - **13.3 The (45°, 30°, 160°) rotation triple is unusual and
   snapshot-only.** It does not match any canonical orientation in
   NOMENCLATURE §2 (not WorldXY's `-π/2` tip, not bare ScreenAligned).
@@ -866,13 +752,12 @@ a sibling Speaker effect placed alongside it in world data.
   works on whichever asset is bound when the object is built. The
   snapshot only has the orange original; reconstruction can defer the
   color variants to a later phase if focusing on the canonical torch.
-- **13.7 Snapshot asset surface header is bogus.** The 7-byte
-  difference at offsets 0x48-0x4E (snapshot's surface dims 339×316
-  vs. retail's 128×160, snapshot cell 339×135 vs. retail 64×120)
-  means the snapshot asset would mis-decode the texture in the
-  load path. The texel data is correct; only the metadata is wrong.
-  The retail asset is the one to consume. (This is a pure asset-side
-  fix, not an effect-code change.)
+- **13.7 Resolved texture-format confusion (2026-10-04).** Snapshot
+  and retail texture descriptors/payload are identical; their seven
+  differences concern graphics bounds/registration. Earlier RGB565
+  histograms sampled mesh data and misread ARGB4444 pixels. Authored
+  alpha makes the dominant red texel transparent. Consume the retail
+  asset, but do not treat its 128×160 graphics bounds as texture size.
 - **13.8 The Render body never writes per-vertex color.** Under
   MODULATE the texture is multiplied by whatever default `lverts[i].
   color` `GetVerts` leaves in place (typically opaque white). This is
@@ -882,40 +767,234 @@ a sibling Speaker effect placed alongside it in world data.
   ensure the per-vertex diffuse defaults to opaque white. This is
   noted in the doc rather than the burndown because it is an engine
   invariant rather than an effect-specific behavior.
-- **13.9 Per the framerate-independent animation feedback,
-  reconstruction must convert `Animate` frame-stepping to a time-
-  based rate.** The snapshot increments `frame` per `Animate` call,
-  not per sim tick — strictly framerate-dependent. Reconstruction
-  should integrate the cell-advance by real `dt` at a rate of
-  ~10.91 cells/sec (= 11/24 cells per frame × 24 frame/sec target).
-  The non-uniform 2 vs 3 frame holds are baked into the `*11/24`
-  integer math; the time-based equivalent is `cell = floor(t *
-  (11/24) * 24)` (or equivalently, `cell = floor(t * 11)` where
-  `t` is seconds since spawn), which preserves the non-uniform
-  holds exactly.
+- **13.9 Preserve authored cel holds using elapsed time.** Original
+  Animate increments once per call, with an 18-tick counter. At the
+  nominal 24-Hz cadence, use `tick=floor(seconds*24) % 18`, then
+  `cell=floor(tick*11/24)`. Continuous `floor(seconds*11)` alone does
+  not preserve the exact two/three-tick holds. The current flipbook
+  clock uses elapsed time and retains this discrete source sequence;
+  retail cadence and phase remain unsynchronized.
 
 ---
 
 ## 14. Reconstruction burndown
 
+### 2026-10-04 shipped-map acceptance scene
+
+Primary context check: `Ahkuilon.rvm`, `Map/41_10_10.dat`, area
+**The City of The Children**. Retail `area.def` sets ambient 24,
+RGB(150,150,250). Do not replace these authored conditions with the
+neutral isolated-fixture lighting for the main acceptance capture.
+
+The v15 sector has 418 slots and 8,162 bytes, parsed exactly using the
+retail block-size layout (`recon/docs/SECTOR_FILE_FORMAT.md`). Flame
+(type `0x50ba373b`, class 25) occupies slots 17 and 18 at
+(10449,10475,98) and (10757,10479,98). Their actual `DunTorch4` sconces
+(type `0x8447068b`) occupy slots 255 and 256 at (10471,10497,16) and
+(10779,10501,16). `DunWallS`, `DunColS`, tall wall pieces and
+`Dunffff`/`Dunffff2` floors provide the authored surroundings.
+
+Proposed camera: level 41, world center (10603,10477,16), logical
+viewport 640×340. This frames both wall torches and their mounting
+scenery. Their different world X coordinates also change isometric Y:
+the flames appear near screen (166,20) and (470,180), not at a shared
+screen Y. The first native context screenshot is
+`~/RevenantRetailLab/captures/runs/vfx-map-ab-01-torches_city-retail/before.png`.
+It shows the actual sconces, illuminated walls, floor and editor light
+markers. The subsequent full-map comparison is
+`captures/ab/vfx-map-ab-02-torches_city/`, binary SHA-256
+`64d06458c76815a20092f65d053e0d9a8edab48226baf802bf06ff3650120b29`.
+Both port flames are attached to the correct authored sconces. Retail's
+orange illumination on the walls and floor is absent in the port capture;
+this is a map light-object issue, not evidence for adding a light to
+Flame. Yellow editor markers still obscure the retail flame pixels, so
+exact map shape/cel acceptance needs a marker-free reference.
+
+The two torch ROIs (140,0,205,75) and (440,145,510,225) each contain
+exactly one distinct image across all 150 numbered port frames in that
+capture: these map flames were not animating. The definition-based
+Flame constructor attached its component before streamed `Load()`
+replaced the temporary map index. Activation had already registered a
+`TSafeComponentRef` using that old index; changing the index does not
+repeat `OnAttach()` on an already active component. The constructor now
+defers attachment to the existing imagery-builder `AttachComponents`
+path after loading. The imagery-only preview constructor retains its
+one-time activation after receiving a final runtime index. A new build
+and full-map sequence must confirm at least eight changing cels before
+this capture can support animation acceptance.
+
+Retail console commands `hideobjects lightsource` and
+`hideobjects helper` hide those classes, but do **not** remove these
+yellow markers: the markers are class 9 Tile, type `Light`, imagery
+`Town\\TwnLight.I2D`, with both `OF_LIGHT` and `OF_EDITOR` set. Do not
+hide the entire Tile class. These class commands are present in the
+retail binary but absent from the old editor snapshot.
+The retail command table at `0x5c7924` dispatches `hideobjects` to
+`0x427010`, which calls map method `0x45a7c0`. It resolves the class,
+iterates matching objects and sets only `OF_INVISIBLE` (0x80), leaving
+light flags and parameters intact. The reverse method `0x45a700` clears
+that bit, including any previously invisible objects in the class, so
+blind class-wide hide/show pairs are not an exact state restoration.
+Port `show_gizmos=false` suppresses light and helper geometry through
+`maprenderer.cpp`, while illumination remains enabled.
+
+The shipped scoped command `Light.toggle invisible on` is confirmed by
+the command table (`0x5c81cc` → handler `0x423a90`). The handler recognizes
+`on`, `1`, and `true` at `0x423b58`–`0x423bd4`, sets value 1, and calls
+`SetFlag` (`0x472db0`), which sets only bit 7 (`OF_INVISIBLE`, flag-name
+table entry `0x5d478c`). The interpreter at `0x41e8e0` resolves the
+`Light.` context through `0x41e690` and the nearest-object finder
+`0x451fe0`/`0x451de0`. Unlike the old snapshot's scoped parser, the retail
+resolver passes the current command context: distance is measured from
+the selected object's position if there is one, otherwise the camera
+center. Clear selection before positioning the camera exactly at a
+known light marker and issuing this command. Empty serialized object
+names use their type name, initialized by base constructor `0x46e1f0`.
+
+The four on-screen marker world positions are (10450,10606,102),
+(10477,10509,102), (10736,10448,64), and (10704,10736,224). All 13 Light
+Tiles in this sector originally have flags `0x4c105`, with invisibility
+clear. A targeted temporary hide can preserve their illumination and
+avoid changing unrelated Tiles; restore the original camera, capture,
+then unload without saving. No genuine global widget toggle has been
+confirmed. Retail `widgets` is a UI definition token, not a console
+command; Ctrl+Shift+W toggles script execution and is not a widget toggle.
+
+The retail editor can view this shipped scene read-only;
+loading a module must not save unrelated editor modifications. The
+port should load the original sectors and submit both effects through
+normal map rendering. An isolated floor capture remains diagnostic,
+not sufficient to accept a persistent placed effect.
+
+### 2026-10-04 compiled authored-quad lower-ambient check
+
+Evidence: `~/RevenantRetailLab/captures/ab/vfx-dark-ab-01-flame/`,
+native reference `captures/runs/vfx-dark-ref-01-flame/`. The comparison
+uses ambient 32, white RGB, the same nine retail floor plates and
+camera/placement as the earlier isolated fixture. Port binary SHA-256:
+`7266123ce6bec3ef2a7d9f8917d093322c827bd80e9e7a9026ea0664f1715949`.
+Retail AVI SHA-256:
+`5e494cc071b4975da97f2f54f2749e3e383e64f0816b7908017f6846f9346fc4`.
+No position or scale fitting was performed.
+
+Both lossless native frames decoded at 30 Hz and port PNG frames contain
+exactly eight distinct, repeating Flame cels. Matching the eight unique
+cels in cyclic order, without moving or scaling pixels, gives mean
+absolute RGB error 0.7317 in the 90×135 ROI. The pipeline's single global
+17-frame phase estimate gives 0.7706. Background pixels dominate these
+metrics; neither is a fidelity percentage. Raw elapsed and estimated
+phase videos are both retained.
+
+For pixels exceeding the matching ground baseline by more than 20 in
+any channel, the port's intensity centroid is 0.26–0.47 screen pixels
+right and 0.72–0.98 pixels down across matching cels. Its bottom is one
+pixel lower in six cels, two pixels lower in one, unchanged in one.
+Across the captured frames, the selected pixels' mean RGB is
+(192.55,149.23,81.81) native and (191.58,147.23,81.85) port. The remaining
+visible difference is a small consistent registration/shear difference;
+there is no evidence here for replacing the atlas, adding a color tint,
+or changing the authored rotations to fit the capture.
+
+Native cycle starts span 21–24 decoded 30 Hz frames; the port alternates
+22/23 frames after the partial initial cycle, consistent with the source
+18 ticks at 24 Hz (0.75 seconds). Native display/simulation phase remains
+unsynchronized. This evidence supports the present cel clock, not a
+retail timing identity claim.
+
+**Generic camera/model-Z evidence gap:** original `3dscene.cpp`
+`SetSize` uses viewport scale `65536*512/sqrt(256²+256²)`, and its
+30° camera projects model-local Z with coefficient `sqrt(3/2)`
+(1.22474487 pixels/unit). Retail `T3DScene::meth_0x412150` retains that
+viewport formula: constants at `0x5a37f0`, `0x5a37f8`, `0x5a3800` decode
+to 65536 (double), 512 (float), 131072 (double). They were checked in
+the retail executable SHA-256
+`28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5`.
+Current port quad projection instead multiplies model-local Z by
+`WORLD3D_Z_SCALE*0.867 = 1.3005`.
+
+The snapshot animator translates map Z using `FIX_Z_VALUE(z)=z/1.46`,
+without local Z stretch in `MakeMatrix`. Retail animator body
+`0x40e460` (`recon/classes/cls_0x5a7e38.cpp`) instead uses
+`(z/(1.46-z*(1/300)*0.01))*1.038`; its constants at
+`0x5a351c`–`0x5a3528` were verified in the same executable. Original
+`mappane.cpp::Update3DScenePos` also converts a positive-Z camera into
+a zero-Z camera using integer `WorldToScreen` then `ScreenToWorld`;
+camera (10000,10000,16) becomes (9987,9987,0).
+
+Applying those source/retail-derived rules to the unchanged authored
+corners predicts port-minus-retail screen Y differences
+(1.861,2.583,0.247,0.969) pixels for vertices 0–3. This is a diagnostic
+prediction, not a fitted adjustment or a fully verified retail camera
+reconstruction. It explains why generic model/anchor projection should
+be investigated before applying any Flame-specific offset or scale.
+Pixel-center/rasterizer conventions and the complete retail camera
+body still need reconciliation. Full-map ground, occlusion, lighting
+and mounting registration remain unvalidated.
+
+### 2026-10-04 authored geometry and map-path repair
+
+The port now loads the four actual `box01` positions, applies the
+snapshot's row-vector rotations and 0.5 scale, and then transforms each
+corner through the instance world matrix. `SubmitFxQuad` uses the existing
+FX-strip backend with zero extrusion to preserve all corners and UVs.
+No fitted scale, position, screen bounding box, or procedural asset is used.
+
+The old Flame setup attached both a flipbook and a particle component.
+Map submission suppresses the flipbook whenever the particle component
+exists, so full maps used the emitter's extra 32-unit Z offset and a
+separate animation clock while the VFX preview used the flipbook. Flame
+now attaches only the authored-quad flipbook component; map and preview
+invoke the same virtual submission path. The old emitter block remains
+in the parsed definition for format compatibility and is not attached.
+
+The compiled lower-ambient check above now covers this geometry. A
+complete capture on a shipped map and resolution of the generic
+projection gap remain required. It is not marked validated.
+
+### 2026-10-04 earlier billboard retail-capture check
+
+The native 3dfx reference `retail-3dfx-white-20261004-a` now supplies a repeatable
+visual check: MCP_AB module, nine Dunffff ground plates, camera at
+(10000,10000,16), Flame at (10000,10000,96), ambient 128 with white RGB.
+The port uses the captured floor as a backdrop, with no size or position fitting.
+This checks the flame in isolation; it does not validate port ground rendering,
+depth occlusion, or placement in full game maps.
+
+The component path had two concrete implementation defects: it ignored the
+definition's 0.5 scale, and supplied an integer frame counter to expressions
+whose `frame(time, rate)` input is seconds. It now applies the declared scale
+and samples a local elapsed clock at 24 authored ticks per second, wrapping
+after 18 ticks. The expression uses rate 11, preserving the snapshot's exact
+cel holds. Tests cover three loops, display rates of 30/60/120 Hz, and updates
+crossing several authored ticks. Retail timing is still not phase-synchronized.
+
+An isolated alpha-versus-additive comparison favors the snapshot's alpha blend
+on this reference, so TorchFlame now uses alpha. Estimated-phase ROI mean
+absolute RGB error fell from 6.009 before these fixes to 1.383 with scale/clock,
+then 1.168 with alpha (0..255 channel units). These scores include background
+pixels and use one global offset; they are not a fidelity percentage or proof
+of the retail render state. Raw elapsed comparisons are retained separately.
+
+Evidence is under `~/RevenantRetailLab/captures/ab/`: `flame-scale-01`,
+`flame-clock-01`, and `flame-alpha-01`. Shape and placement still visibly differ;
+the billboard approximation has not reconstructed the I3D mesh rotations or
+confirmed retail render code. **The effect remains retail-partial.** The
+burndown below is not marked complete by these isolated fixes.
+
 ```
 - [ ] Load Magic\Flame.I3D — use the RETAIL copy from data/imagery.rvi
       (41,348 B, MD5 e108cad4d45b6b23af8ad73bafed286c). The snapshot's
-      legacy/Imagery/Magic/flame.i3d differs in 7 surface-header bytes
-      (bogus surface dims 339×316 vs retail's 128×160); the texel data is
+      legacy/Imagery/Magic/flame.i3d differs in 7 graphics-header bytes
+      (bounds/registration only, not texture dimensions); the texel data is
       identical. Address its single STILL billboard sub-object: box01
       (GetObject 0). NO procedural flame sprite. (§2.1, §4, §13.7)
-- [ ] Decode the texture as a 128×160 RGB565 surface = 4-column × 2-row
-      atlas of 8 cells (each 32×80 px). The flipbook is a UV CELL PICK
+- [ ] Decode the texture as a 128×128 ARGB4444 surface = 4-column × 2-row
+      atlas of 8 cells (each 32×64 px). The flipbook is a UV CELL PICK
       (§8 mechanism #2), NOT a framehtexs[] swap (S3DTex.numframes = 1).
       The §4 cell-by-frame table is the authoritative atlas-decode. (§4, §8)
-- [ ] Handle CHROMA KEY as GREEN, not black: the dominant background color
-      is RGB565 0x0f20 = (R=8, G=228, B=0) at 54% of pixels (NOT the
-      knowledge-base's black-pixel heuristic — that would fail on this
-      asset and leave the green visible). The 17.7% pure-black pixels are
-      INTERNAL flame core texels (intentionally black; do NOT key those).
-      Decision rule: green-key pixel ⇒ alpha=0 (premultiplied);
-      keep black core pixels opaque. (§4 chroma-key section, §13)
+- [ ] Preserve authored ARGB4444 alpha and RGB. Dominant 0x0f20 is
+      transparent red, not RGB565 green. No inferred chroma-key rule
+      should replace the source alpha channel. (§4.1, §10)
 - [ ] Spawn: one TEffect object per torch via the standard MapPane.NewObject
       path on OBJCLASS_EFFECT + FindObjType("flame"). Continuous LOOPING
       effect (no kill condition in the animator); lives as long as the
@@ -954,13 +1033,10 @@ a sibling Speaker effect placed alongside it in world data.
 - [ ] Per-quad scale = uniform 0.5. NO per-frame scale/alpha envelope —
       the only thing that changes per frame is the UV cell pick. (§6.3)
 - [ ] Blend = ALPHA per snapshot code (SetBlendState: MODULATE,
-      SRC_ALPHA/INV_SRC_ALPHA), BUT FLAG IT AS SNAPSHOT-ONLY-AND-SUSPECT:
-      the sprite design (bright-on-green-key glow) + in-game intent
-      (torches GLOW) point to AdditiveStraight; the retail render body is
-      not decompiled (cls_0x5a9d88 is mis-mapped per §2.1/§13.5); the
-      SPARKS exemplar §2.1 confirmed a similar snapshot-Alpha → shipped-
-      Additive pattern. VISUALLY VET against a torch capture and be ready
-      to switch to AdditiveStraight if the snapshot blend reads dull. (§7, §13.1)
+      SRC_ALPHA/INV_SRC_ALPHA). Existing isolated comparisons favor this
+      blend. Confirm the retail render body and a placed torch capture;
+      perceived glow alone does not establish additive blending. The
+      cls_0x5a9d88 mapping is incorrect per §2.1/§13.5. (§7, §13.1)
 - [ ] Lit-mode = Unlit / self-lit. The animator does NOT zero the material
       (unlike TFlareAnimator) and does NOT mix ambient (unlike water).
       The texture renders at full sprite brightness. (§7, §10)
@@ -969,7 +1045,8 @@ a sibling Speaker effect placed alongside it in world data.
 - [ ] RefreshZBuffer: restore scene Z over a 25 × 62 pixel patch centred
       on the projected effect origin (sizes are the snapshot's
       `50.0f * 0.5f, 125.0f * 0.5f` truncated to int — the 0.5f matches
-      the render scale; the 50/125 are the authored sprite footprint). (§6.4)
+      the render scale; 50/125 describe the damage rectangle, not the
+      authored quad dimensions). (§6.4)
 - [ ] Texture animation mechanism: UV CELL PICK, NOT framehtexs[] swap.
       Cell index advances non-uniformly per the §4 cell-by-frame table
       (cells 0 and 5 held for 3 frames, others for 2). Per-instance frame
@@ -1000,8 +1077,8 @@ a sibling Speaker effect placed alongside it in world data.
 ```
 
 **Definition of done:** every torch / candle / brazier sconce in the
-world draws as a single ~32×80-pixel hot-orange/yellow flame with a near-
-white core (real `Magic\Flame.I3D` texels, green-keyed), oriented in a
+world draws as a single authored-quad hot-orange/yellow flame with a near-
+white core (real `Magic\Flame.I3D` texels and alpha), oriented in a
 fixed (45°/30°/160°) Euler at uniform scale 0.5, animated as a UV-cell
 flipbook walking the 8-cell 4×2 atlas in the §4 non-uniform sequence on
 a ~0.75 s loop (per-instance, naturally desynced by spawn time), drawn

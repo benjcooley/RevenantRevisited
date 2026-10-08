@@ -1,0 +1,97 @@
+// The isatrelativedistance member of the expression evaluator 0x0041f230 -- retail disassembly
+// from its keyword test. Same spot formula as gotorelativedistance; < 0x32 from the member's
+// object (Distance2D 0x0046de60). A missing object jumps to 0x0041fb12: Output + return 4.
+0041f648  PUSH 0x5cad18
+0041f64d  MOV ECX,EBX
+0041f64f  CALL 0x00479700
+0041f654  TEST EAX,EAX
+0041f656  JZ 0x0041f755
+0041f65c  MOV ECX,EBX
+0041f65e  CALL 0x00478a10
+0041f663  MOV ECX,EBX
+0041f665  CALL 0x00479580
+0041f66a  MOV ECX,dword ptr [ESP + 0x10]
+0041f66e  MOV EAX,dword ptr [EBX + 0x28]
+0041f671  PUSH ECX
+0041f672  PUSH EDI
+0041f673  PUSH EAX
+0041f674  CALL 0x0041e690
+0041f679  ADD ESP,0xc
+0041f67c  MOV ECX,EBX
+0041f67e  MOV EDI,EAX
+0041f680  CALL 0x00479580
+0041f685  MOV EAX,dword ptr [EBX + 0x10]
+0041f688  XOR EBP,EBP
+0041f68a  CMP EAX,0x8
+0041f68d  JNZ 0x0041f9ec
+0041f693  MOV EDX,dword ptr [EBX + 0x14]
+0041f696  MOV ECX,EBX
+0041f698  MOV dword ptr [ESP + 0x1c],EDX
+0041f69c  CALL 0x00478a10
+0041f6a1  MOV ECX,EBX
+0041f6a3  CALL 0x00479580
+0041f6a8  MOV EAX,dword ptr [EBX + 0x10]
+0041f6ab  XOR ECX,ECX
+0041f6ad  CMP EAX,0x8
+0041f6b0  JNZ 0x0041f6c4
+0041f6b2  MOV EAX,dword ptr [EBX + 0x14]
+0041f6b5  MOV ECX,EBX
+0041f6b7  MOV dword ptr [ESP + 0x20],EAX
+0041f6bb  CALL 0x00478a10
+0041f6c0  MOV ECX,dword ptr [ESP + 0x20]
+0041f6c4  TEST EDI,EDI
+0041f6c6  JZ 0x0041fb12
+0041f6cc  MOV EBP,dword ptr [EDI + 0x10]
+0041f6cf  XOR EAX,EAX
+0041f6d1  MOV AL,byte ptr [EDI + 0x36]
+0041f6d4  MOV dword ptr [ESP + 0x24],EBP
+0041f6d8  MOV EDX,dword ptr [EDI + 0x14]
+0041f6db  MOV dword ptr [ESP + 0x28],EDX
+0041f6df  MOV EDX,dword ptr [EDI + 0x18]
+0041f6e2  MOV dword ptr [ESP + 0x2c],EDX
+0041f6e6  MOV EDX,dword ptr [ESI + 0x10]
+0041f6e9  FILD dword ptr [ESP + 0x1c]
+0041f6ed  MOV dword ptr [ESP + 0x3c],EDX
+0041f6f1  MOV EDX,dword ptr [ESI + 0x14]
+0041f6f4  MOV dword ptr [ESP + 0x40],EDX
+0041f6f8  MOV EDX,dword ptr [ESI + 0x18]
+0041f6fb  LEA ESI,[EAX + ECX*0x1]
+0041f6fe  MOV dword ptr [ESP + 0x44],EDX
+0041f702  MOV dword ptr [ESP + 0x20],ESI
+0041f706  FILD dword ptr [ESP + 0x20]
+0041f70a  FMUL float ptr [0x005a3a90]
+0041f710  FCOS
+0041f712  FLD ST1
+0041f714  FMULP
+0041f716  CALL 0x0058a840
+0041f71b  ADD ESI,0x7f
+0041f71e  MOV EDX,dword ptr [ESP + 0x28]
+0041f722  MOV dword ptr [ESP + 0x20],ESI
+0041f726  ADD EDX,EAX
+0041f728  FILD dword ptr [ESP + 0x20]
+0041f72c  MOV dword ptr [ESP + 0x28],EDX
+0041f730  FMUL float ptr [0x005a3a90]
+0041f736  FSIN
+0041f738  FXCH
+0041f73a  FMULP
+0041f73c  CALL 0x0058a840
+0041f741  ADD EBP,EAX
+0041f743  LEA EAX,[ESP + 0x3c]
+0041f747  MOV dword ptr [ESP + 0x24],EBP
+0041f74b  PUSH EAX
+0041f74c  LEA ECX,[ESP + 0x28]
+0041f750  JMP 0x0041f972
+(the shared compare)
+0041f972  PUSH ECX
+0041f973  CALL 0x0046de60
+0041f978  ADD ESP,0x8
+0041f97b  XOR EDX,EDX
+0041f97d  CMP EAX,0x32
+0041f980  MOV ECX,EBX
+0041f982  SETL DL
+0041f985  MOV EBP,EDX
+(missing object)
+0041fb12  PUSH 0x5cad30
+0041fb17  CALL 0x0041ee50
+0041fb1c  ADD ESP,0x4
+0041fb1f  MOV EAX,0x4

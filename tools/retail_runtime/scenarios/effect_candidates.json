@@ -1,0 +1,738 @@
+{
+  "schema_version": 1,
+  "kind": "effect_fixture_candidate_catalogue",
+  "audited_date": "2026-10-07",
+  "executable_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+  "reference_policy": "Thin runtime is primary for normal VFX validation. DOSBox-X/emulated3D only for specifically targeted software-rendering diagnostics with coordinated guest ownership.",
+  "ledger_source": "docs/vfx/EFFECT_BURNDOWN.json",
+  "ledger_sha256": "5c905083124fb812cd76bb28524c7de6c4f8de8331da336480cb2a35da8927cf",
+  "ledger_counts": {
+    "retail_type_rows": 176,
+    "distinct_retail_names_casefold": 174,
+    "distinct_asset_paths_casefold": 166,
+    "preview_ids": 159,
+    "retail_rows_with_preview_candidates": 120,
+    "retail_rows_without_preview_candidates": 56,
+    "unmapped_preview_ids": 8,
+    "retail_rows_with_source_fixes_recorded": 71,
+    "port_smoke_preview_ids": 34,
+    "retail_rows_with_port_smoke": 36,
+    "accurate_software_reference_rows": 50,
+    "ab_workflow_demonstrated_rows": 49,
+    "fully_accepted_rows": 0,
+    "remaining_acceptance_rows": 176,
+    "actual_runtime_verified_rows": 56,
+    "visual_fidelity_confirmed_rows": 16,
+    "repeatable_ab_rows": 8,
+    "thin_bounded_render_frontend_rows": 40
+  },
+  "parallel_contract": "Each worker reads immutable baseline or named verified private variant, owns Runtime+surfaces+snapshot+virtual filesystem, and writes a distinct worker output directory. Never mutate another worker executable/state or shared baseline.",
+  "full_acceptance_changes": 0,
+  "candidates": [
+    {
+      "id": "base_flame",
+      "priority": 1,
+      "retail_type_ids": [
+        "0x50ba373b"
+      ],
+      "status": "bounded_original_vs_port_frontend_render_ab_passed",
+      "runner": "tools/retail_runtime/flame_probe.py",
+      "report": "recon/retail_asm/runtime/effects/flame-frontend-ab/manifest.json",
+      "calls": [
+        {
+          "va": "0x4e4ef0",
+          "role": "original Animate; frame at animator+0xfc wraps18"
+        },
+        {
+          "va": "0x4e4f20",
+          "role": "original Render; explicit matrix and four UV pairs"
+        },
+        {
+          "va": "0x43ad80",
+          "role": "original x87 transform"
+        },
+        {
+          "va": "0x56d960",
+          "role": "original textured software triangle dispatcher"
+        }
+      ],
+      "required_inputs": {
+        "asset": "Imagery/Magic/flame.i3d",
+        "asset_vertex_offset": "0x1dd4",
+        "asset_texture_offset": "0x2184",
+        "texture_format": "ARGB4444",
+        "texture_size": [
+          128,
+          128
+        ],
+        "indices": [
+          2,
+          0,
+          3,
+          1,
+          3,
+          0
+        ],
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17
+        ],
+        "camera": [
+          0,
+          0,
+          0
+        ],
+        "viewport": [
+          96,
+          96
+        ],
+        "zdist": 1925,
+        "world": "identity for bounded fixture; real map transform separate",
+        "asset_index_offset": "0x1e54"
+      },
+      "boundaries": [
+        "Base animator hierarchy and extents are excluded in isolated fixture.",
+        "Imagery provider returns authored box01 prototype.",
+        "Original Scene blend request2/1 is checked, then original camera/software raster executes separately.",
+        "Port component class bodies + clock/expression/matrix code compiled directly from current production source.",
+        "Both frontend image sets use original software raster; actual Revisited Metal backend not compared."
+      ],
+      "provenance": [
+        "docs/vfx/forensics/F01_TFlameEffect.md",
+        "docs/vfx/forensics/FIRST_BATCH_MAP_PLACEMENTS.md",
+        "recon/ghidra/cls_0x5a9e50.cpp",
+        "recon/ghidra/_data.txt",
+        "src/effect.cpp",
+        "src/effect.h",
+        "data/Resources/effects.def"
+      ],
+      "map_context": {
+        "module": "Ahkuilon",
+        "level": 41,
+        "placements": [
+          {
+            "slot": 17,
+            "position": [
+              10449,
+              10475,
+              98
+            ],
+            "map_index": 2137626654
+          },
+          {
+            "slot": 18,
+            "position": [
+              10757,
+              10479,
+              98
+            ],
+            "map_index": 2138397532
+          }
+        ]
+      },
+      "caveats": [
+        "Ghidra class5a9e50 shares methods; exact registration4e4ea0 \u2192 builder5a9de8 \u2192 factory4f5d70 \u2192 animator vtable5a9dec establishes base Flame.",
+        "Three rows named Flame exist. Base0x50ba373b only; FlameB/G not included."
+      ],
+      "acceptance_gates": [
+        "Warm snapshot and exact replay of CPU/memory/files/clock/RNG.",
+        "Run original retail animator/controller instructions from the verified executable.",
+        "Use shipped geometry, UVs, topology and textures with no fitted scale/position/color.",
+        "Capture actual original software pixels; label original software quantization/blend limits separately.",
+        "Compare current port CPU geometry/state and port-rendered output; shared-original-raster comparison is a bounded frontend gate, not Metal parity.",
+        "Exercise creation/removal, saved type identity, normal runtime trigger and actual map/owner context."
+      ],
+      "ledger_rows": [
+        {
+          "type_id": "0x50ba373b",
+          "asset": "Magic\\Flame.I3D",
+          "existing_acceptance": {
+            "catalogued": true,
+            "animator_and_asset_mapping": false,
+            "source_behavior_audited": false,
+            "port_smoke": false,
+            "accurate_software_reference": true,
+            "repeatable_ab": false,
+            "visual_fidelity": true,
+            "runtime_trigger_integration": false,
+            "map_or_character_context": false,
+            "accepted": false
+          }
+        }
+      ],
+      "provenance_sha256": {
+        "docs/vfx/forensics/F01_TFlameEffect.md": "3027c746686ed72b1f757c79929636d4cd8de20cb82c7a9d2dcdb850ccb169b6",
+        "docs/vfx/forensics/FIRST_BATCH_MAP_PLACEMENTS.md": "e46168087319c476d4cafbbefdc998fa7d5c18359ded431bb4087cee12a4ce72",
+        "recon/ghidra/cls_0x5a9e50.cpp": "e8532e2251a4e981e3fdd2a952e5cae1917b82b397014cb293f2a111fe30258a",
+        "recon/ghidra/_data.txt": "8986dfe3824c1357522a22fb024d446c00a4d4857a16c5016bf0131cee73722b",
+        "src/effect.cpp": "b562e02fd9e129556d70e4302e3cf15dd5a0178d441a2fa14e024961d4b436e7",
+        "src/effect.h": "53ce3398e10e358ab545822fc2482f488538c3a4f9cd40d5f1293d44766c51cd",
+        "data/Resources/effects.def": "64c1955b2a28f49148f449b1c174c1359cabb62248f740d58138f934071cd75d"
+      },
+      "latest_report_summary": {
+        "case_count": 18,
+        "replays_per_case": 2,
+        "setup_ms": 137.7368329995079,
+        "median_warm_pair_ms": 24.039937001361977,
+        "p95_warm_pair_ms": 25.69095899525564,
+        "matching_pixel_frames": 18,
+        "distinct_original_pixel_frames": 8,
+        "metal_backend_compared": false,
+        "full_game_integration": false
+      },
+      "capabilities": {
+        "complete_source_target_world": false,
+        "original_world_collision_and_impact_validated": false,
+        "natural_runtime_reaping_validated": false
+      }
+    },
+    {
+      "id": "authored_partsys_water",
+      "priority": 2,
+      "retail_type_ids": [
+        "0xd0c0f036",
+        "0xd0c0f037",
+        "0xd0c0f038",
+        "0xd0c0f039"
+      ],
+      "status": "bounded_original_state_and_pose_ab_passed",
+      "runner": "tools/retail_runtime/effect_probe.py",
+      "report": "recon/retail_asm/runtime/effects/partsys-state-ab.json",
+      "calls": [
+        {
+          "va": "0x403320",
+          "role": "Initialize; quality/PPS/pool allocation"
+        },
+        {
+          "va": "0x403760",
+          "role": "Pulse"
+        },
+        {
+          "va": "0x4031c0",
+          "role": "particle spawn"
+        },
+        {
+          "va": "0x402a20",
+          "role": "particle update"
+        },
+        {
+          "va": "0x401390",
+          "role": "curve evaluation for authored tracks; constants-only base fixture does not call this"
+        },
+        {
+          "va": "0x4026d0",
+          "role": "original pose/color setup; bounded fixture stops0x4028e2 before drawing"
+        }
+      ],
+      "required_inputs": {
+        "base_fixture": {
+          "emitter_count": 1,
+          "pool_capacity": 10,
+          "pps": 24,
+          "lifespan": [
+            10,
+            10
+          ],
+          "initial_speed": [
+            2,
+            2
+          ],
+          "gravity": 0.5,
+          "owner_position": [
+            10,
+            20,
+            30
+          ],
+          "owner_faces": [
+            0,
+            32,
+            64,
+            127,
+            255
+          ],
+          "emitter_shapes": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "ticks": 30,
+          "seed": 1
+        },
+        "shipped_water": {
+          "emitter_count": 6,
+          "fall_pool_capacity": 140,
+          "cap_pool_capacity": 52,
+          "tag_source": "/Users/benjamincooley/RevenantRetailLab/research/water-variant-dispatch-20261004/audit.json"
+        }
+      },
+      "boundaries": [
+        "Matched MSVC RNG callback at58c582.",
+        "Bone/emitter origin zero, emitter and imagery transforms identity.",
+        "Walk-height callback returns zero.",
+        "One synthetic lit vertex verifies copied color/pose setup; no authored water pixel output in base fixture.",
+        "Complete-pool hash proves repeated state reset; port comparison samples first slot + aggregate RNG/credit, not all pool fields."
+      ],
+      "provenance": [
+        "docs/vfx/forensics/PARTSYS_RUNTIME.md",
+        "src/authoredpartsys.cpp",
+        "src/partsysdefinition.cpp",
+        "/Users/benjamincooley/RevenantRetailLab/research/partsys/verify_retail.py",
+        "/Users/benjamincooley/RevenantRetailLab/research/partsys/verify_water.py",
+        "/Users/benjamincooley/RevenantRetailLab/research/partsys/verify_initialize.py"
+      ],
+      "next_steps": [
+        "Resolve authored prototypes/emitters/materials from each exact water tag.",
+        "Replay full shipped track arrays + six emitters with current persistent Runtime.",
+        "Feed authored geometry+original poses into original SW renderer; compare port packets and images.",
+        "Keep unknown visible native water contexts deferred rather than tuning invented emitters."
+      ],
+      "acceptance_gates": [
+        "Warm snapshot and exact replay of CPU/memory/files/clock/RNG.",
+        "Run original retail animator/controller instructions from the verified executable.",
+        "Use shipped geometry, UVs, topology and textures with no fitted scale/position/color.",
+        "Capture actual original software pixels; label original software quantization/blend limits separately.",
+        "Compare current port CPU geometry/state and port-rendered output; shared-original-raster comparison is a bounded frontend gate, not Metal parity.",
+        "Exercise creation/removal, saved type identity, normal runtime trigger and actual map/owner context."
+      ],
+      "ledger_rows": [
+        {
+          "type_id": "0xd0c0f036",
+          "asset": "misc\\WFall.i3d",
+          "existing_acceptance": {
+            "catalogued": true,
+            "animator_and_asset_mapping": true,
+            "source_behavior_audited": true,
+            "port_smoke": true,
+            "accurate_software_reference": false,
+            "repeatable_ab": false,
+            "visual_fidelity": false,
+            "runtime_trigger_integration": false,
+            "map_or_character_context": false,
+            "accepted": false
+          }
+        },
+        {
+          "type_id": "0xd0c0f037",
+          "asset": "misc\\WFall2.i3d",
+          "existing_acceptance": {
+            "catalogued": true,
+            "animator_and_asset_mapping": true,
+            "source_behavior_audited": true,
+            "port_smoke": true,
+            "accurate_software_reference": false,
+            "repeatable_ab": false,
+            "visual_fidelity": false,
+            "runtime_trigger_integration": false,
+            "map_or_character_context": false,
+            "accepted": false
+          }
+        },
+        {
+          "type_id": "0xd0c0f038",
+          "asset": "misc\\WCap.i3d",
+          "existing_acceptance": {
+            "catalogued": true,
+            "animator_and_asset_mapping": true,
+            "source_behavior_audited": true,
+            "port_smoke": true,
+            "accurate_software_reference": false,
+            "repeatable_ab": false,
+            "visual_fidelity": false,
+            "runtime_trigger_integration": false,
+            "map_or_character_context": false,
+            "accepted": false
+          }
+        },
+        {
+          "type_id": "0xd0c0f039",
+          "asset": "misc\\Wcap2.i3d",
+          "existing_acceptance": {
+            "catalogued": true,
+            "animator_and_asset_mapping": true,
+            "source_behavior_audited": true,
+            "port_smoke": true,
+            "accurate_software_reference": false,
+            "repeatable_ab": false,
+            "visual_fidelity": false,
+            "runtime_trigger_integration": false,
+            "map_or_character_context": false,
+            "accepted": false
+          }
+        }
+      ],
+      "provenance_sha256": {
+        "docs/vfx/forensics/PARTSYS_RUNTIME.md": "91c089d88b149b7a59a60e651d9c3fca6c1e8cfa3556264da5684585451d6a42",
+        "src/authoredpartsys.cpp": "308257a5a2373641fed34ad1603db3778edf2a4d5dd9b699c51a3c237b8c74f5",
+        "src/partsysdefinition.cpp": "e5f4e96e920d3d43736da361e166ebfafdb2adbd99de454e7a4533493738adba",
+        "/Users/benjamincooley/RevenantRetailLab/research/partsys/verify_retail.py": "a638cf69e73ce5b2bece72c49dca214a2e343eaec609823016101657e921aa2e",
+        "/Users/benjamincooley/RevenantRetailLab/research/partsys/verify_water.py": "3934006a1c874b15c674a42a6c5ec5eab88707397c9e082c70ee929872b75ad0",
+        "/Users/benjamincooley/RevenantRetailLab/research/partsys/verify_initialize.py": "c98661487cd3ec1be7eab4420f79fcadb26d634a707a7907932ad4a981f58fdf"
+      },
+      "capabilities": {
+        "complete_source_target_world": false,
+        "original_world_collision_and_impact_validated": false,
+        "natural_runtime_reaping_validated": false
+      }
+    },
+    {
+      "id": "ripple_emitted_by_drip",
+      "priority": 3,
+      "retail_type_ids": [
+        "0x5975abde",
+        "0x12309867"
+      ],
+      "status": "candidate_not_exercised_in_thin_runtime_yet",
+      "calls": [
+        {
+          "va": "0x4f0780",
+          "role": "Ripple Initialize: owner supplies length, scale .5, counters zero"
+        },
+        {
+          "va": "0x4f08b0",
+          "role": "Ripple Animate, ring phase/scale/death and optional splash creation"
+        },
+        {
+          "va": "0x4f0c10",
+          "role": "Ripple Render"
+        },
+        {
+          "va": "0x4f0b80",
+          "role": "atlas UV helper"
+        }
+      ],
+      "required_inputs": {
+        "asset": "Imagery/Magic/ripples.I3D",
+        "retail_animator_vtable": "0x5ac5b0",
+        "fields": {
+          "length": "animator+0xfc",
+          "atlas_phase": "animator+0x100",
+          "tick": "animator+0x104",
+          "scale": "animator+0x10c"
+        },
+        "simple_ring": {
+          "length": 20,
+          "scale_start": 0.5,
+          "growth_per_tick": 0.0625,
+          "tick_rate": 24,
+          "splash": false
+        },
+        "diagnostic_drip": {
+          "size": 64,
+          "height": 128,
+          "period": 1,
+          "scope": "same prior emitted-ripple comparison; not natural map parameters"
+        }
+      },
+      "boundaries": [
+        "Start with length20 ring, which takes original no-splash branch.",
+        "Owner vtable/query/flags need explicit guest fixture implementations; do not treat unknown calls as success.",
+        "Length>24 adds RNG, heap, child spawning and recursive effects; queue afterward."
+      ],
+      "map_context": {
+        "module": "Ahkuilon",
+        "area": "The Caverns",
+        "level": 30,
+        "sector": "Map/30_7_9.dat",
+        "slot": 229,
+        "position": [
+          8159,
+          9591,
+          102
+        ],
+        "drip_parameters": [
+          20,
+          200,
+          35
+        ],
+        "ambient": 12,
+        "ambient_color": [
+          155,
+          155,
+          210
+        ]
+      },
+      "provenance": [
+        "docs/vfx/forensics/H03_H04_WATER_AUDIT.md",
+        "docs/vfx/forensics/FIRST_BATCH_MAP_PLACEMENTS.md",
+        "recon/ghidra/cls_0x5ac5b0.cpp",
+        "/Users/benjamincooley/RevenantRetailLab/research/quick-drip-20261005/retail-ripple.asm"
+      ],
+      "caveats": [
+        "User accepted emitted Ripple appearance despite independent random seeds. That does not certify standalone saved Ripple length/dispatch or full Drip/map behavior.",
+        "Thin runtime is primary; existing DOSBox evidence is retained and targeted 3D-device diagnostics are permitted."
+      ],
+      "acceptance_gates": [
+        "Warm snapshot and exact replay of CPU/memory/files/clock/RNG.",
+        "Run original retail animator/controller instructions from the verified executable.",
+        "Use shipped geometry, UVs, topology and textures with no fitted scale/position/color.",
+        "Capture actual original software pixels; label original software quantization/blend limits separately.",
+        "Compare current port CPU geometry/state and port-rendered output; shared-original-raster comparison is a bounded frontend gate, not Metal parity.",
+        "Exercise creation/removal, saved type identity, normal runtime trigger and actual map/owner context."
+      ],
+      "ledger_rows": [
+        {
+          "type_id": "0x5975abde",
+          "asset": "Magic\\Drip.i3d",
+          "existing_acceptance": {
+            "catalogued": true,
+            "animator_and_asset_mapping": false,
+            "source_behavior_audited": false,
+            "port_smoke": false,
+            "accurate_software_reference": true,
+            "repeatable_ab": false,
+            "visual_fidelity": false,
+            "runtime_trigger_integration": false,
+            "map_or_character_context": false,
+            "accepted": false
+          }
+        },
+        {
+          "type_id": "0x12309867",
+          "asset": "Magic\\Ripples.I3D",
+          "existing_acceptance": {
+            "catalogued": true,
+            "animator_and_asset_mapping": false,
+            "source_behavior_audited": false,
+            "port_smoke": false,
+            "accurate_software_reference": false,
+            "repeatable_ab": false,
+            "visual_fidelity": true,
+            "runtime_trigger_integration": false,
+            "map_or_character_context": false,
+            "accepted": false
+          }
+        }
+      ],
+      "provenance_sha256": {
+        "docs/vfx/forensics/H03_H04_WATER_AUDIT.md": "e2281652d121144cae7193ffaac22318d774680ea0f944aa91857b447f71696f",
+        "docs/vfx/forensics/FIRST_BATCH_MAP_PLACEMENTS.md": "e46168087319c476d4cafbbefdc998fa7d5c18359ded431bb4087cee12a4ce72",
+        "recon/ghidra/cls_0x5ac5b0.cpp": "c55ce5ef984059e56452989ae8b81326d2d1b925213843842faea9d06a5447ea",
+        "/Users/benjamincooley/RevenantRetailLab/research/quick-drip-20261005/retail-ripple.asm": "403f7c2e01de5a4b0e6b2029896b7c43192483b340ae8728de52dbbacc498cfe"
+      },
+      "capabilities": {
+        "complete_source_target_world": false,
+        "original_world_collision_and_impact_validated": false,
+        "natural_runtime_reaping_validated": false
+      }
+    },
+    {
+      "id": "shared_missile_fireball_motion",
+      "priority": 4,
+      "retail_type_ids": [
+        "0x63fd382a"
+      ],
+      "status": "strict_original_motion_ab_and_native_runtime_smoke_passed",
+      "reference_profile": "shared_missile_base",
+      "runner": "tools/retail_runtime/projectile_probe.py",
+      "report": "recon/retail_asm/runtime/effects/projectile-expanded-ab/manifest.json",
+      "native_runtime_report": "recon/retail_asm/runtime/effects/projectile-expanded-ab/native-runtime-manifest.json",
+      "required_inputs": {
+        "source_entity": "position/facing/identity/health as used by caller",
+        "destination_entity": "distinct position/identity/health/enmity",
+        "speed": "retail Fireball default8; explicit profile override for shared missile cases",
+        "launch_ready": true,
+        "animator_present": "explicit base lifecycle input; Fireball visual phase separate",
+        "world": "ground/wall and character-query inputs matched explicitly"
+      },
+      "original_fields": {
+        "position": "0x10",
+        "velocity": "0x1c",
+        "accumulator": "0x28",
+        "state": "0xc",
+        "flags": "0x8",
+        "range": "0x184",
+        "speed": "0x188",
+        "status": "0x18c",
+        "spell": "0xd8",
+        "animator": "0x58"
+      },
+      "original_functions": [
+        "0x510220",
+        "0x470920",
+        "0x4df070",
+        "0x46db20",
+        "0x46ea20",
+        "0x4defe0"
+      ],
+      "original_leaf_defaults": {
+        "function": "0x510bd0",
+        "speed_fixed": 524288,
+        "status": 1,
+        "range": 32768,
+        "damage_once": 1
+      },
+      "latest_report_summary": {
+        "case_count": 15,
+        "total_ticks_compared": 1441,
+        "integer_field_comparisons": 21615,
+        "error_count": 0,
+        "mean_warm_scenario_ms": 18.642677699487347
+      },
+      "source_provenance": [
+        "src/missilestate.h",
+        "src/missilestate.cpp",
+        "src/effect.cpp",
+        "src/effect.h",
+        "src/object.cpp",
+        "src/fireballruntimetest.cpp",
+        "recon/ghidra/cls_0x5b401c.cpp",
+        "recon/ghidra/cls_0x5b4290.cpp"
+      ],
+      "capabilities": {
+        "motion_executed": true,
+        "source_destination_used": true,
+        "live_dead_friendly_and_wall_impact_checked": true,
+        "kill_request_checked": true,
+        "native_factory_constructor_pulse_checked": true,
+        "native_world_queries_checked": true,
+        "map_reaper_checked": false,
+        "full_fireball_visuals_and_damage_checked": false
+      },
+      "acceptance_gates": [
+        "Retained original Move/Pulse trace, matched inputs, strict integer state and exact reset.",
+        "Actual shared controller consumed by native Fireball Pulse/preview; no speed fitting or per-frame host position forcing.",
+        "Real class factory/constructor/world queries/Pulse movement and kill request.",
+        "Full retail Fireball animator/render/damage and natural cast/save/map reaper remain open."
+      ],
+      "baseline_ledger_acceptance_changed_by_probe": false,
+      "bounded_head_glow_render": {
+        "status": "pass",
+        "report": "recon/retail_asm/runtime/effects/fireball-head-after/manifest.json",
+        "before_report": "recon/retail_asm/runtime/effects/fireball-head-before-canonical/manifest.json",
+        "moving_pairs": 48,
+        "position_uv_checks": 1920,
+        "pixel_differences": 0,
+        "exact_original_replays": 48,
+        "metal_backend_compared": false,
+        "full_visual_accepted": false
+      },
+      "bounded_trail_render": {
+        "report": "recon/retail_asm/runtime/effects/fireball-trail-visible-after/manifest.json",
+        "status": "pass",
+        "original_ticks": 72,
+        "impact_tick": 61,
+        "drain_tick": 70,
+        "geometry_uv_checks": 2920,
+        "pixel_differences": 0,
+        "full_port_trail_simulation_compared": false,
+        "full_animator": false
+      },
+      "bounded_generated_head_history": {
+        "report": "recon/retail_asm/runtime/effects/fireball-core-ab/manifest.json",
+        "ticks": 472,
+        "field_checks": 36816,
+        "exact_binary32_card_fields": 36344,
+        "pixel_pairs": 14,
+        "pixel_differences": 0,
+        "actual_production_helper": "src/fireballcore.h called by TFireBallEffect::StepAnimate",
+        "source_destination_motion": "Original Pulse/Move owner trajectory; candidate generates its own head/history",
+        "rng_contract": "Three explicit MSVC streams; sparks excluded/noRNG on both sides",
+        "full_animator": false,
+        "open": [
+          "complete shared spark RNG order",
+          "state-specific growth",
+          "burst/ring",
+          "damage",
+          "normal map reaping",
+          "Metal backend parity"
+        ]
+      },
+      "bounded_shared_spark_prefix": {
+        "status": "pass",
+        "report": "recon/retail_asm/runtime/effects/fireball-spark-after/manifest.json",
+        "before_report": "recon/retail_asm/runtime/effects/fireball-spark-before-corrected/manifest.json",
+        "before_mismatches": 100389,
+        "ticks": 288,
+        "strict_field_checks": 138240,
+        "ordered_random_range_calls": 11222,
+        "errors": 0,
+        "head_glow_trail_pixel_pairs": 14,
+        "pixel_differences": 0,
+        "actual_runtime_helper": "src/fireballspark.h",
+        "original_functions": [
+          "0x50ad50",
+          "0x50adb0",
+          "0x50af40"
+        ],
+        "scope": "All40 spark dynamic slots/RNG + head/history stage before state-specific actions. Spark particles not rendered, burst/ring random calls excluded.",
+        "full_animator": false
+      },
+      "bounded_authored_spark_render": {
+        "status": "pass",
+        "report": "recon/retail_asm/runtime/effects/fireball-spark-render-after/manifest.json",
+        "before_report": "recon/retail_asm/runtime/effects/fireball-spark-render-before/manifest.json",
+        "before_packet_errors": 7180,
+        "before_bridge_pixel_differences": 24460,
+        "independent_raw_d3d_checks": 4308,
+        "common_world_geometry_uv_checks": 7180,
+        "bridge_relative_pixel_pairs": 17,
+        "pixel_differences": 0,
+        "exact_original_warm_packet_pixel_replays": 17,
+        "coordinate_bridge": "Whole native ABS D3D Z\u00d71.46, existing REV_FIX_Z_VALUE/common-world API boundary",
+        "independent_original_device_or_metal_acceptance": false,
+        "full_animator": false
+      }
+    }
+  ],
+  "scenario_entity_contract": {
+    "required_when_effect_has_callers": [
+      "source_entity_identity",
+      "source_position",
+      "source_stats",
+      "source_facing",
+      "source_attachment_or_bone",
+      "target_entity_identity",
+      "target_position",
+      "target_stats",
+      "target_facing",
+      "launch_state",
+      "spell_or_combat_parameters"
+    ],
+    "static_map_effects": "Do not invent actor targets for map Flame/water fixtures.",
+    "moving_effect_acceptance": [
+      "original Pulse/Animate fixed ticks",
+      "trajectory and source/target/attachment motion",
+      "original world collision queries",
+      "impact and child creation",
+      "terminal state and normal reaping",
+      "port event/state comparison",
+      "frames before launch, in flight, at impact and after cleanup"
+    ],
+    "current_complete_world_supported": false,
+    "fireball_launch_collision_adapter_verified": true,
+    "fireball_priority": "Production motion fixed and matched; expand natural spell/combat, visuals and map reaper next.",
+    "fireball_verification_scope": "Original shared missile motion/impact/kill and current native Fireball runtime motion verified. Full Fireball visuals, damage and natural cast/map reaper remain open."
+  },
+  "next_selected_candidate": {
+    "retail_name": "YFireBall",
+    "type_id": "0x63fd3827",
+    "provenance": "recon/retail_asm/runtime/effects/yfireball-candidate.json",
+    "status": "bounded_shared_frontend_pass",
+    "report": "recon/retail_asm/runtime/effects/yfireball-frontend-ab/manifest.json",
+    "state_checks": 46080,
+    "ordered_random_range_calls": 3695,
+    "packet_checks": 10941,
+    "pixel_pairs": 17,
+    "pixel_differences": 0,
+    "exact_original_warm_packet_pixel_replays": 17,
+    "current_production": "Canonical TFireBallEffect inheritance and exact Y asset factory replace lifetime-only billboard stub",
+    "natural_yhagoro_world_or_complete_effect_accepted": false
+  }
+}

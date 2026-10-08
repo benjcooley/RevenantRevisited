@@ -61,6 +61,7 @@ struct SSpellData
     int32_t damagetype;                     // Type of damage spell does
     char invoke[RESNAMELEN];            // Invoke animation
     int32_t effectstart;                    // Frames after starting invoke to start effect
+    int32_t poisonchance;                   // Retail SSpellData+0xc8, POISONCHANCE
 };
 
 typedef TPointerArray<SSpellData, 16, 16> TSpellDataArray;
@@ -120,18 +121,25 @@ class TSpell
     // The constructor for the tspell object
     TSpell(TObjectInstance* invoke, TObjectInstance* *targ, int32_t numtargs, S3DPoint* sourcepos, PSSpellData dat, PSSpellVariant var, PTSpell mtr = nullptr);
     TSpell()
-    { invoker = nullptr; targets[0] = nullptr; targetnum = 0;
+    { invoker = nullptr; effect.Clear();
+      for (auto& target : targets) target = nullptr;
+      targetnum = 0; wait = -1;
       timer = 0; master = nullptr; spell = nullptr; variant = nullptr; frame = 0; 
       magic_offense = 0; magic_defense = 0;
       source.x = source.y = source.z = -1; }
+    virtual ~TSpell();
 
     // Functions to return current spell values
     TObjectInstance* GetInvoker() { return invoker; }
+    TSafeRef<TObjectInstance> GetInvokerRef() const { return invoker_ref; }
       // Returns the character that invoked the spell
     TObjectInstance* GetTarget(int32_t numtarg = 0) 
         { if (numtarg >= targetnum) return nullptr; else return targets[numtarg]; }
       // Returns the target for the spell
     int32_t GetTargetNum() { return targetnum; }
+    TSafeRef<TObjectInstance> GetTargetRef(int32_t numtarg = 0) const
+        { return numtarg >= 0 && numtarg < targetnum ? target_refs[numtarg] : TSafeRef<TObjectInstance>{}; }
+    int32_t PoisonChance() const { return spell ? spell->poisonchance : 0; }
       // Returns the number of targets
     bool GetSourcePos(S3DPoint &pos);
       // Gets the source position of the spell.  Either the position passed by 'sourcepos'
@@ -169,7 +177,9 @@ class TSpell
 
   protected:
     TObjectInstance* invoker;               // Object that invoked the spell
-    TObjectInstance* effect;                // The effect for this spell
+    TSafeRef<TObjectInstance> invoker_ref;
+    TSafeRef<TObjectInstance> target_refs[MAXSPELLTARGETS];
+    TSafeRef<TObjectInstance> effect;       // Weak identity; reaping/reuse cannot dangle
 
     int32_t targetnum;                      // Number of targets in target list
     TObjectInstance* targets[MAXSPELLTARGETS]; // Spell's target list
@@ -202,7 +212,7 @@ class TSpellManager
   public:
     TSpellManager() { spells.Clear(); wait = 0; }
       // default constructor
-    ~TSpellManager() { spells.Clear(); }
+    ~TSpellManager() { spells.DeleteAll(); }
       // default destructor
 
     void Pulse();
@@ -217,4 +227,3 @@ class TSpellManager
     int32_t GetOffense();
     int32_t GetSpellCount(char* spell);
 };
-

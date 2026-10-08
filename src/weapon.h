@@ -45,7 +45,7 @@ class TWeapon : public TObjectInstance
     void ClearWeapon();
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
-    virtual int32_t CursorType(TObjectInstance* with = nullptr);
+    int32_t CursorType(TObjectInstance* with = nullptr) override;
 
     virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
     virtual void Save(RTOutputStream os);

@@ -142,7 +142,7 @@ constexpr float kTextB = 0x10 / 255.0f;
 // Retail: "Scroll" BMFONT from font.def:57 `scrlfont`. Port approximation:
 // Arimo-Regular @ 12px (Arial-metric compatible, matching HUD sizing).
 // UNCONFIRMED-E: need font.def Scroll entry to confirm exact size + face.
-constexpr const char* kFontPath = "thirdparty/fonts/Arimo-Regular.ttf";
+constexpr const char* kFontFile = "Arimo-Regular.ttf";
 constexpr int32_t     kFontPx   = 12;
 
 // --- auto-page timing ------------------------------------------------
@@ -582,9 +582,9 @@ bool InitializeUIScrollPaneMode()
     }
 
     // Font — spec §8 UNCONFIRMED-E (retail "Scroll" BMFONT → Arimo approx).
-    g_font = BuildTTFAtlas(kFontPath, kFontPx);
+    g_font = BuildTTFAtlas(TTFFilePath(kFontFile).c_str(), kFontPx);
     log_info("[ui-scrollpane] font %s @%dpx = %s",
-             kFontPath, kFontPx, g_font ? "OK" : "MISS");
+             kFontFile, kFontPx, g_font ? "OK" : "MISS");
 
     delete g_pane;
     g_pane         = nullptr;

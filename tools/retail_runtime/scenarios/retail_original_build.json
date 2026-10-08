@@ -1,0 +1,8 @@
+{
+  "name": "retail-original",
+  "build_id": "retail-original-28bec27387bf53a5",
+  "executable": "../../../recon/retail_asm/baseline/Revenant.rebuilt.exe",
+  "executable_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+  "baseline_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+  "patch_manifest": {"kind": "unchanged-baseline"}
+}

@@ -50,6 +50,7 @@ This effort is part of **[../PORT_PLAN.md](../PORT_PLAN.md) Phase 4** (feature r
 | [PLAN.md](PLAN.md) | Phased bring-up + rationale |
 | [BURNDOWN.md](BURNDOWN.md) | Live task list with status |
 | [CONVENTIONS.md](CONVENTIONS.md) | UI-specific do's/don'ts on top of project-wide conventions |
+| [TEXT_RENDERING.md](TEXT_RENDERING.md) | The one glyph walk, bitmap and TrueType atlases, how Windows-1252 text bytes become glyphs |
 | [briefs/](briefs/) | Self-contained sub-agent task packets |
 | [../HUD.md](../HUD.md) | Retail HUD UX spec — what we're reproducing |
 | [../UI.md](../UI.md) | Older internal UI architecture notes — partly superseded by [ARCHITECTURE.md](ARCHITECTURE.md); cross-reference, don't trust blindly |

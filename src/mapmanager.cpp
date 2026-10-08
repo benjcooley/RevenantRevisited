@@ -7,6 +7,10 @@
 #include "mapmanager.h"
 
 #include "gamemap.h"
+#include "logging.h"
+#include "object.h"
+#include "sector.h"
+#include "sectorstore.h"
 
 TMapManager::TMapManager()  = default;
 // Trivial dtor: Shutdown() must have run already (via ShutdownGlobals) so
@@ -35,7 +39,10 @@ void TMapManager::Shutdown()
 TGameMap* TMapManager::GetOrLoad(int32_t level)
 {
     if (TGameMap* cached = GetCached(level))
+    {
+        cached->LoadSectors(INT32_MAX);     // a staged load finishes now
         return cached;
+    }
 
     auto fresh = std::make_unique<TGameMap>();
     if (!fresh->Load(level))
@@ -44,6 +51,26 @@ TGameMap* TMapManager::GetOrLoad(int32_t level)
     TGameMap* raw = fresh.get();
     cache.emplace_back(std::move(fresh));
     return raw;
+}
+
+TGameMap* TMapManager::LoadStaged(int32_t level, int32_t count)
+{
+    TGameMap* map = GetCached(level);
+    if (!map)
+    {
+        auto fresh = std::make_unique<TGameMap>();
+        if (!fresh->BeginLoad(level))
+            return nullptr;
+        map = fresh.get();
+        cache.emplace_back(std::move(fresh));
+    }
+    map->LoadSectors(count);
+    return map;
+}
+
+TGameMap* TMapManager::Cached(int32_t i) const
+{
+    return (i >= 0 && i < NumCached()) ? cache[size_t(i)].get() : nullptr;
 }
 
 TGameMap* TMapManager::GetCached(int32_t level) const
@@ -106,4 +133,109 @@ void TMapManager::EvictAll()
     cache.clear();        // each unique_ptr -> ~TGameMap -> Unload notify
     if (had_current)
         listeners.Notify(EMapManagerEvent::CurrentMapChanged, this);
+}
+
+void TMapManager::Notify(uint32_t notify, void* ptr) const
+{
+    for (const std::unique_ptr<TGameMap>& map : cache)
+    {
+        if (!map)
+            continue;
+        for (TSector* sector : map->Sectors())
+        {
+            if (!sector)
+                continue;
+            for (int32_t i = 0; i < sector->NumObjSetItems(OBJSET_NOTIFY); i++)
+            {
+                TObjectInstance* object = sector->GetObjSetInstance(OBJSET_NOTIFY, i);
+                if (object && (object->Flags() & OF_NOTIFY))
+                    object->Notify(notify, ptr);
+            }
+        }
+    }
+}
+
+void TMapManager::FlushSectors() const
+{
+    for (const std::unique_ptr<TGameMap>& m : cache)
+        if (m)
+            m->Flush();
+}
+
+void TMapManager::ClearCurMap()
+{
+    for (const std::unique_ptr<TGameMap>& m : cache)
+        if (m)
+            m->Discard();
+    EvictAll();
+    SectorStore::Clear();
+}
+
+void TMapManager::LoadCurMap(const std::filesystem::path& dir)
+{
+    ClearCurMap();
+    SectorStore::ImportFrom(dir);
+}
+
+void TMapManager::SaveCurMap(const std::filesystem::path& dir) const
+{
+    FlushSectors();
+    SectorStore::ExportTo(dir);
+}
+
+void TMapManager::ReloadLevel(int32_t level, const std::function<void()>& editFiles)
+{
+    TGameMap* map = GetCached(level);
+    if (!map)
+    {
+        if (editFiles)
+            editFiles();
+        return;
+    }
+
+    // The players outlive the sectors (a sector lets go of its OF_NONMAP
+    // objects when it is freed). Hold them by reference: `editFiles` runs
+    // console commands.
+    const std::vector<TSafeRef<TObjectInstance>> nonmap = map->NonMapObjects();
+    const bool wasCurrent = (map == current);
+
+    Evict(level);               // writes the sectors to the working set, then frees them
+    if (editFiles)
+        editFiles();
+
+    TGameMap* reloaded = GetOrLoad(level);
+    if (!reloaded)
+    {
+        log_error("[mapmanager] level %d didn't load again", level);
+        return;
+    }
+    int32_t placed = 0;
+    for (const TSafeRef<TObjectInstance>& ref : nonmap)
+    {
+        TObjectInstance* oi = ref.Get();
+        if (!oi || oi->GetSector())
+            continue;
+        if (TSector* sector = reloaded->SectorAt(oi->Pos()))
+        {
+            sector->AddObject(oi);
+            ++placed;
+        }
+        else
+            log_warn("[mapmanager] level %d: no sector under '%s' after the reload",
+                     level, oi->GetName() ? oi->GetName() : "?");
+    }
+    log_info("[mapmanager] level %d reloaded from its sector files; %d of %zu non-map "
+             "object(s) back in place", level, placed, nonmap.size());
+    if (wasCurrent)
+        SetCurrentMap(reloaded);
+}
+
+void TMapManager::ReloadSectors()
+{
+    std::vector<int32_t> levels;
+    for (const std::unique_ptr<TGameMap>& m : cache)
+        if (m)
+            levels.push_back(m->Level());
+    for (const int32_t level : levels)
+        ReloadLevel(level);
 }
