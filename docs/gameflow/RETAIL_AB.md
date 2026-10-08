@@ -100,7 +100,7 @@ difference, the retail build SHA-256, the port commit (`+dirty` when the
 tree has changes), the port binary's hash, the case set's hash and the
 timing. Exit status 0 only when everything matches.
 
-Paths: `RETAIL_RUNTIME` (default: the main checkout's `tools/retail_runtime`),
+Paths: `RETAIL_RUNTIME` (default: this repo's `tools/retail_runtime`; the gameflow fixtures are its `slots/gameflow/`), `RETAIL_EXE` (the generated baseline: this checkout's `recon/retail_asm/baseline`, else the main checkout's; tools/retail_runtime/SETUP.md),
 `RETAIL_PY` (the retail-asm venv), `REVENANT_DATA_PATH` (default
 `~/RevenantRetailLab/retail-cd/REVENANT`), `--port` (default
 `build/Revenant`).
