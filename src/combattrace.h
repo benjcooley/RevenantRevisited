@@ -25,6 +25,12 @@ namespace CombatTrace
     // Starts the trace into `path`; false if it can't be written.
     bool Open(const char* path);
 
+    // Also records every random number drawn in ticks [from, to]: the
+    // value and the asking code's address as an offset into the
+    // executable (`atos -o build/Revenant -l 0x100000000 <0x100000000+at>`),
+    // the same in every run. For finding where two runs part.
+    void TraceRandom(int64_t from, int64_t to);
+
     [[nodiscard]] bool Enabled();
 
     // After each game tick (PlayScreen pulse): the tick's character lines.

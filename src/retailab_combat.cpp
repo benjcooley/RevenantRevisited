@@ -20,6 +20,7 @@
 #include "retailab_json.h"
 
 #include "character.h"
+#include "dls.h"                  // MakeColorTables (the trig tables too)
 #include "imagery.h"
 #include "imageres.h"
 #include "player.h"
@@ -602,12 +603,71 @@ std::string CombatCall(const Case& c, std::string& error)
     }
 }
 
+// ---- M2: the angle and distance kernels ----------------------------------
+
+// Case (field 0, JSON): {"kernel", "inputs": [[...], ...]}; see
+// slots/combat/kernels.py. The tables these read are built by
+// MakeColorTables (InitGlobals step 12), once.
+std::string CombatKernels(const Case& c, std::string& error)
+{
+    static bool tables = false;
+    if (!tables)
+    {
+        MakeColorTables();
+        tables = true;
+    }
+    try
+    {
+        const JsonValue cs = JsonValue::Parse(c.Field(0));
+        const std::string kernel = cs["kernel"].Str();
+        auto point = [](const JsonValue& v) {
+            return S3DPoint((int32_t)v[0].Int(), (int32_t)v[1].Int(), (int32_t)v[2].Int(0));
+        };
+        TObjectInstance a(nullptr), b(nullptr);
+        JsonOut j;
+        j.Begin('{').FieldString("schema", "combat.kernels.v1").FieldString("side", "port");
+        j.FieldString("kernel", kernel).Key("outputs").Begin('[');
+        for (const JsonValue& in : cs["inputs"].Items())
+        {
+            if (kernel == "angle-diff")
+                j.Value(AngleDiff((int32_t)in[0].Int(), (int32_t)in[1].Int()));
+            else if (kernel == "facing")
+                j.Value(ConvertToFacing(point(in[0]), point(in[1])));
+            else if (kernel == "distance")
+                j.Value(Distance(point(in[0]), point(in[1])));
+            else if (kernel == "vector")
+            {
+                S3DPoint v{0, 0, 0};
+                ConvertToVector((int32_t)in[0].Int(), (int32_t)in[1].Int(), v, (int32_t)in[2].Int());
+                j.Begin('[').Value(v.x).Value(v.y).Value(v.z).End(']');
+            }
+            else if (kernel == "obj-distance" || kernel == "obj-angle")
+            {
+                a.ForcePos(point(in[0]));
+                b.ForcePos(point(in[1]));
+                j.Value(kernel == "obj-distance" ? a.Distance(&b) : a.AngleTo(&b));
+            }
+            else
+                throw std::runtime_error("unknown kernel '" + kernel + "'");
+        }
+        j.End(']').End('}');
+        return j.str();
+    }
+    catch (const std::exception& e)
+    {
+        error = e.what();
+        return {};
+    }
+}
+
 }  // namespace
 
 Target CombatTarget(const std::string& name)
 {
     if (name == "combat-go" || name == "combat-resolve")
         return CombatCall;
+    if (name == "combat-kernels")
+        return CombatKernels;
     return nullptr;
 }
 

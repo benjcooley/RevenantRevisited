@@ -1,0 +1,16 @@
+{
+  "name": "forest_araknid_vs_arakna",
+  "about": "Retail New Game1 (the forest, Locke at 5806,24815 on level 0). An Araknid and an Arakna spawned east of Locke and set on each other; control off so neither takes Locke as a target (retail IsValidTarget refuses the player while a script holds control).",
+  "slot": "Port Resave",
+  "seed": 1,
+  "ticks": 1440,
+  "exec": [
+    "sleep 24",
+    "control off",
+    "addat 6000 24815 Araknid",
+    "addat 6000 24935 Arakna",
+    "sleep 2",
+    "Araknid.beginfighting Arakna",
+    "Arakna.beginfighting Araknid"
+  ]
+}

@@ -15,6 +15,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <dlfcn.h>
 #include <set>
 
 namespace CombatTrace
@@ -25,6 +26,19 @@ namespace
 FILE* g_out = nullptr;
 int64_t g_tick = 0;
 std::set<int32_t> g_traced;      // map indices of characters seen fighting
+int64_t g_rngFrom = 1, g_rngTo = 0;
+
+void OnRandom(int32_t value, const void* caller)
+{
+    if (!g_out || g_tick < g_rngFrom || g_tick > g_rngTo)
+        return;
+    Dl_info info;
+    uintptr_t at = (uintptr_t)caller;
+    if (dladdr(caller, &info) && info.dli_fbase)
+        at -= (uintptr_t)info.dli_fbase;
+    fprintf(g_out, "%lld\trng\tn=%llu\tvalue=%d\tat=0x%llx\n", (long long)g_tick,
+            (unsigned long long)RandomDraws(), value, (unsigned long long)at);
+}
 
 const char* Name(const TObjectInstance* o)
 {
@@ -65,6 +79,13 @@ bool Open(const char* path)
 {
     g_out = fopen(path, "w");
     return g_out != nullptr;
+}
+
+void TraceRandom(int64_t from, int64_t to)
+{
+    g_rngFrom = from;
+    g_rngTo = to;
+    SetRandomObserver(OnRandom);
 }
 
 bool Enabled()
