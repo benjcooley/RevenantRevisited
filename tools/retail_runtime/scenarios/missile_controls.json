@@ -1,0 +1,12 @@
+{
+  "name": "original-shared-missile-distinct-endpoints",
+  "executable_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+  "operations": [
+    {"op": "create_entity", "id": "caster", "position": [0, 0, 128]},
+    {"op": "create_entity", "id": "target", "position": [320, 0, 128], "stats": {"hp": 100, "enemy": true}},
+    {"op": "spawn_effect", "id": "missile", "type": "shared_missile_base", "source_id": "caster", "destination_id": "target", "launch_params": {"speed": 8}},
+    {"op": "advance_ticks", "id": "missile", "ticks": 40},
+    {"op": "validate_execution_contract", "id": "missile"},
+    {"op": "capture", "id": "missile", "kind": "state"}
+  ]
+}
