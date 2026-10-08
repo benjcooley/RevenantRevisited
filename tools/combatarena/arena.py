@@ -122,10 +122,12 @@ def run_once(scn: dict, port: Path, out: Path, watch: bool = False, extra: list[
     stop = 'exited'
     with open(out / 'stdout.txt', 'wb') as so:
         proc = subprocess.Popen(args, cwd=out, env=env, stdout=so, stderr=subprocess.STDOUT)
+        wall_limit = scn.get('wall_limit_s', 600)
         while proc.poll() is None:
             time.sleep(0.25)
-            if last_tick(trace) >= ticks:
-                stop = 'ticks reached'
+            done = last_tick(trace) >= ticks
+            if done or time.time() - begin > wall_limit:
+                stop = 'ticks reached' if done else f'wall limit {wall_limit} s'
                 proc.send_signal(signal.SIGTERM)
                 try:
                     proc.wait(10)

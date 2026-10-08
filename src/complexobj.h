@@ -208,7 +208,9 @@ class TComplexObject : public TObjectInstance
       // Set doing to ab and update pointers
     virtual PTActionBlock GetDesired() { return desired; }
       // Gets the current desired action block
-    virtual void SetDesired(PTActionBlock ab);
+    virtual bool SetDesired(PTActionBlock ab, uint32_t flags = 0);
+        // False when refused (a block still waits while doing has priority);
+        // the caller then still owns `ab`
       // Set desired pointer and update pointers
     virtual bool IsFinalState() { return false; }
       // Returns whether character is in their last days

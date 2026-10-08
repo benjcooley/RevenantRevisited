@@ -55,9 +55,21 @@ class TCharacter : public TComplexObject
     TCharacter(TObjectImagery* newim) : TComplexObject(newim) { ClearChar(); }
     TCharacter(SObjectDef* def, TObjectImagery* newim) : TComplexObject(def, newim) { ClearChar(); }
 
+    int32_t Distance(const TObjectInstance* inst) const override;
+      // REVSYNC: TCharacter::Distance @ 0x004d61b0 -- edge to edge: the
+      // centre distance less this character's Radius and, for a character
+      // target, its Radius; never below 0
+    bool IsValidTarget(TCharacter* target);
+      // REVSYNC: 0x004cd990 -- may `target` be fought: there, alive, not
+      // invisible, within combat range, and the player only while he has
+      // control or demo mode is on
+
     using FindCharactersSeam = int32_t (*)(TCharacter* self, TCharacter* chars[], int32_t maxchars,
         int32_t range, int32_t angle, int32_t anglerange, int32_t flags);
     static inline FindCharactersSeam findCharactersSeam = nullptr;
+    using BlockedSeam = bool (*)(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, uint32_t bits);
+    static inline BlockedSeam blockedSeam = nullptr;
+      // Likewise for Blocked (retail FindClearPath 0x004c39d0)
       // Retail A/B fixtures only (retailab_combat.cpp): when set, it answers
       // FindCharacters instead of the map, as the retail fixture's seam at
       // FindCharacters 0x004cd690 does (docs/gameplay/COMBAT_DOJO.md §6.3).
@@ -297,6 +309,11 @@ class TCharacter : public TComplexObject
       // Forces the current command to be done
 
     static constexpr uint32_t kCharFlagNoIncidentals = 0x2;
+    // Retail charflags (+0x110) bits the combat code reads:
+    static constexpr uint32_t kCharFlagNotTargetable = 0x8000;    // IsValidTarget refuses (setter unidentified)
+    static constexpr uint32_t kCharFlagInteractive   = 0x80000;   // in an interactive move: Go skips its gates
+    static constexpr uint32_t kCharFlagPlayerAI      = 0x100000;  // the player runs AI() (retail: set for
+                                                                  // net players at 0x0051efc4; the arena's --playerai)
       // charflags bit (retail +0x110 & 2): `incidentals off`
     void SetIncidentals(bool on)
         { if (on) charflags &= ~kCharFlagNoIncidentals; else charflags |= kCharFlagNoIncidentals; }
