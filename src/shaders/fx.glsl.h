@@ -193,6 +193,7 @@ layout(location = 3) in vec2 uv;
 layout(location = 4) in vec4 color;
 layout(location = 5) in float debug_mode;
 layout(location = 6) in float light_mode;
+layout(location = 7) in float retail_texture;
 layout(std140) uniform fx_params {
     vec4 vp;
     vec4 camz;
@@ -206,6 +207,7 @@ out vec2  v_uv;
 out vec4  v_color;
 out vec3  v_lit;
 out float v_debug;
+out float v_retail_texture;
 void main() {
     vec3 vd = normalize(world_pos - cam_pos.xyz);
     vec3 t = world_tan;
@@ -240,6 +242,7 @@ void main() {
     v_color = color;
     v_lit   = lit;
     v_debug = debug_mode;
+    v_retail_texture = retail_texture;
 }
 )GLSL";
 
@@ -249,15 +252,22 @@ in vec2  v_uv;
 in vec4  v_color;
 in vec3  v_lit;
 in float v_debug;
+in float v_retail_texture;
 uniform sampler2D atlas;
 out vec4 o_color;
 void main() {
     int mode = int(v_debug + 0.5);
+    vec4 texel = texture(atlas, v_uv);
+    if (v_retail_texture > 0.5) {
+        ivec2 size = textureSize(atlas, 0);
+        ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
+        texel = texelFetch(atlas, xy, 0);
+    }
     vec4 c;
     if      (mode == 1) c = v_color;
-    else if (mode == 2) c = texture(atlas, v_uv);
-    else if (mode == 3) { c = texture(atlas, v_uv); c = vec4(1.0, 1.0, 1.0, c.a); }
-    else                c = texture(atlas, v_uv) * v_color;
+    else if (mode == 2) c = texel;
+    else if (mode == 3) { c = texel; c = vec4(1.0, 1.0, 1.0, c.a); }
+    else                c = texel * v_color;
     c.rgb *= v_lit;
     if (c.a < 0.002) discard;
     o_color = c;

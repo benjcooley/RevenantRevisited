@@ -355,6 +355,7 @@ struct vs_in {
     float4 color        [[attribute(4)]];
     float  debug_mode   [[attribute(5)]];
     float  light_mode   [[attribute(6)]];
+    float  retail_texture [[attribute(7)]];
 };
 struct vs_out {
     float4 pos      [[position]];
@@ -362,6 +363,7 @@ struct vs_out {
     float4 color;
     float3 lit_factor;
     float  debug_mode;
+    float  retail_texture;
 };
 vertex vs_out _main(vs_in in [[stage_in]],
                     constant fx_params& p [[buffer(0)]],
@@ -403,6 +405,7 @@ vertex vs_out _main(vs_in in [[stage_in]],
     o.color      = in.color;
     o.lit_factor = lit;
     o.debug_mode = in.debug_mode;
+    o.retail_texture = in.retail_texture;
     return o;
 }
 )MSL";
@@ -416,19 +419,26 @@ struct vs_out {
     float4 color;
     float3 lit_factor;
     float  debug_mode;
+    float  retail_texture;
 };
 fragment float4 _main(vs_out in [[stage_in]],
                       texture2d<float> atlas [[texture(0)]],
                       sampler smp [[sampler(0)]]) {
     int mode = int(in.debug_mode + 0.5);
+    float4 texel = atlas.sample(smp, in.uv);
+    if (in.retail_texture > 0.5) {
+        uint2 size = uint2(atlas.get_width(), atlas.get_height());
+        uint2 xy = min(uint2(floor(fract(in.uv) * float2(size))), size - uint2(1));
+        texel = atlas.read(xy);
+    }
     float4 c;
     if (mode == 1) {
         c = in.color;
     } else if (mode == 2 || mode == 3) {
-        c = atlas.sample(smp, in.uv);
+        c = texel;
         if (mode == 3) c = float4(1.0, 1.0, 1.0, c.a);
     } else {
-        c = atlas.sample(smp, in.uv) * in.color;
+        c = texel * in.color;
     }
     c.rgb *= in.lit_factor;
     if (c.a < 0.002) discard_fragment();

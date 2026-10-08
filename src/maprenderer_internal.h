@@ -79,6 +79,7 @@ struct SSectorMeshAsset {
     int32_t         texslot = -1;
     int32_t         uv_variant = 0;
     MeshHandle      handle = 0;
+    int32_t         retail_lighting = 0;
     // See SSectorTileTex::ref_count. Draw items do not own this ref; the
     // sector/map residency scan records source-data references separately.
     uint32_t        ref_count = 0;

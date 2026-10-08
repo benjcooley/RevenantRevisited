@@ -56,6 +56,9 @@ struct SConfig {
     std::string out_path;                // --snap path or filmstrip basename
     std::string prefix;                  // --snapprefix value
     int32_t     warmup_frames = 6;       // discard frames before first capture
+    double      fixed_step_sec = 0.0;   // --snapstep; 0 keeps the live clock
+    bool        seed_set = false;      // --snapseed; repeatable port captures
+    uint32_t    seed = 0;
 
     // --snaprect=x,y,w,h — capture only this subrect of the display.
     // (-1, -1, -1, -1) means "whole display".

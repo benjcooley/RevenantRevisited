@@ -3616,7 +3616,24 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_frame();
     if (_sapp.quit_requested || _sapp.quit_ordered) {
-        [_sapp.macos.window performClose:nil];
+        if (_sapp.desc.hidden) {
+            /* [RevenantRevisited] A hidden capture window may be borderless,
+               so performClose: can do nothing. The headless hide shim also
+               suppresses termination after the last window closes. Honor the
+               normal cancellable quit event, then terminate through NSApp so
+               applicationWillTerminate still runs the cleanup callback. */
+            if (!_sapp.quit_ordered) {
+                _sapp_macos_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+                if (_sapp.quit_requested) {
+                    _sapp.quit_ordered = true;
+                }
+            }
+            if (_sapp.quit_ordered) {
+                [NSApp terminate:nil];
+            }
+        } else {
+            [_sapp.macos.window performClose:nil];
+        }
     }
 }
 

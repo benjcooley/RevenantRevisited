@@ -22,16 +22,22 @@ layout(location = 4) in vec4 w1;
 layout(location = 5) in vec4 w2;
 layout(location = 6) in vec4 w3;
 layout(location = 7) in vec4 tint;
+layout(location = 9) in vec2 uv_offset;
+layout(location = 10) in float retail_mode;
 layout(std140) uniform mesh_params {
     vec4 vp;
     vec4 camz;
     vec4 camw;
+    vec4 retail_ambient;
+    vec4 retail_directional;
 };
 out vec3  v_wpos;
 out vec3  v_wnormal;
 out vec2  v_uv;
 out vec4  v_tint;
 out float v_scene_z;
+out vec3 v_retail_color;
+out float v_retail_mode;
 void main() {
     // w0..w3 are rows of a 4x4 world matrix (backend-neutral layout).
     vec4 ph = vec4(pos, 1.0);
@@ -40,6 +46,9 @@ void main() {
                              dot(w1.xyz, normal),
                              dot(w2.xyz, normal)));
 
+    vec3 source_light = retail_ambient.xyz + retail_directional.xyz *
+        max(dot(wn, vec3(0.0, 0.78125, 0.625)), 0.0);
+    vec3 retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
     if (camw.w > 0.5) {
         const float D3D_XY_SCALE = 1.4142135623730951;
         const float D3D_Z_SCALE  = 2.1798270608996972e-5;
@@ -53,9 +62,11 @@ void main() {
         gl_Position.w = 1.0;
         v_wpos    = wp;
         v_wnormal = wn;
-        v_uv      = uv;
+        v_uv      = uv + uv_offset;
         v_tint    = tint;
         v_scene_z = scene_z_n;
+    v_retail_color = retail_color;
+    v_retail_mode = retail_mode;
         return;
     }
 
@@ -79,9 +90,11 @@ void main() {
     gl_Position.w = 1.0;
     v_wpos    = wp;
     v_wnormal = wn;
-    v_uv      = uv;
+    v_uv      = uv + uv_offset;
     v_tint    = tint;
     v_scene_z = scene_z_n;
+    v_retail_color = retail_color;
+    v_retail_mode = retail_mode;
 }
 )GLSL";
 
@@ -92,17 +105,26 @@ in vec3  v_wnormal;
 in vec2  v_uv;
 in vec4  v_tint;
 in float v_scene_z;
+in vec3 v_retail_color;
+in float v_retail_mode;
 uniform sampler2D albedo_tex;
 layout(location = 0) out vec4 o_albedo;
 layout(location = 1) out vec4 o_normal;
 layout(location = 2) out vec4 o_scene_z;
 layout(location = 3) out vec4 o_obj_id;
 void main() {
-    vec4 c = texture(albedo_tex, v_uv) * v_tint;
+    vec4 texel = texture(albedo_tex, v_uv);
+    if (v_retail_mode > 0.5) {
+        ivec2 size = textureSize(albedo_tex, 0);
+        ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
+        texel = texelFetch(albedo_tex, xy, 0);
+    }
+    vec4 c = texel * v_tint;
+    if (v_retail_mode > 0.5 && v_retail_mode < 1.5) c.rgb *= v_retail_color;
     if (c.a < 0.01) discard;
     vec3 N = normalize(v_wnormal);
     o_albedo  = c;
-    o_normal  = vec4(N * 0.5 + 0.5, 1.0);
+    o_normal  = vec4(N * 0.5 + 0.5, v_retail_mode > 0.5 ? 2.0 : 1.0);
     o_scene_z = vec4(v_scene_z, 0.0, 0.0, 1.0);
     o_obj_id  = vec4(0.0, 0.0, 0.0, 0.0);   // Phase 1: empty id
 }

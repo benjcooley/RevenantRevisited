@@ -19,12 +19,15 @@
 #include "font.h"
 #include "fonttable.h"
 #include "framesnap.h"
+#include "fireballruntimetest.h"
 #include "hudstate.h"
 #include "imagery.h"
 #include "imageres.h"
 #include "imgui.h"
 #include "chunkcache.h"
 #include "character.h"
+#include "command.h"
+#include "mappane.h"
 #include "cursor.h"
 #include "logging.h"
 #include "maprenderer.h"
@@ -3150,6 +3153,176 @@ void InputSimStart(const char* script)
                  g_inputSimEvents.size(), g_inputSimLoop ? 1 : 0);
 }
 
+// Optional --test=sector timeline. Commands go through the same interpreter
+// as story scripts; @expect/@absent are observations, never object mutation.
+// Format: legacy_tick | context type/name (or -) | command
+struct SSceneCommandEvent {
+    double tick = 0;
+    std::string context, command;
+    int line = 0;
+};
+struct SSceneCommandIdentity {
+    std::string selector;
+    int32_t map_index = -1;
+    uint32_t id = 0;
+};
+std::vector<SSceneCommandEvent> g_sceneCommands;
+std::vector<SSceneCommandIdentity> g_sceneIdentities;
+size_t g_sceneCommandNext = 0;
+double g_sceneCommandTicks = 0;
+int64_t g_sceneCommandPulsedTick = -1;
+bool g_sceneCommandFailed = false;
+bool g_sceneCommandCompleted = false;
+
+std::string SceneTrim(const std::string& value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    return first == std::string::npos ? "" : value.substr(first, value.find_last_not_of(" \t\r\n") - first + 1);
+}
+bool SceneCommandsStart() {
+    g_sceneCommands.clear(); g_sceneIdentities.clear();
+    g_sceneCommandNext = 0; g_sceneCommandTicks = 0; g_sceneCommandPulsedTick = -1; g_sceneCommandFailed = false; g_sceneCommandCompleted = false;
+    if (!StartupSceneCommandFile[0]) return true;
+    if (!StartupSceneCameraSet) {
+        log_error("[scene-command] requires explicit --scene-camera=L,X,Y,Z"); return false;
+    }
+    std::ifstream input(StartupSceneCommandFile);
+    if (!input) { log_error("[scene-command] cannot read '%s'", StartupSceneCommandFile); return false; }
+    std::string line; int number = 0;
+    while (std::getline(input, line)) {
+        ++number; line = SceneTrim(line);
+        if (line.empty() || line[0] == '#') continue;
+        const auto a = line.find('|'), b = a == std::string::npos ? a : line.find('|', a + 1);
+        if (a == std::string::npos || b == std::string::npos) {
+            log_error("[scene-command] invalid row at line %d", number); return false;
+        }
+        SSceneCommandEvent event;
+        const std::string tick = SceneTrim(line.substr(0, a));
+        char* end = nullptr; event.tick = strtod(tick.c_str(), &end);
+        event.context = SceneTrim(line.substr(a + 1, b - a - 1));
+        event.command = SceneTrim(line.substr(b + 1)); event.line = number;
+        if (tick.empty() || *end || !std::isfinite(event.tick) || event.tick < 0 ||
+            (!g_sceneCommands.empty() && event.tick < g_sceneCommands.back().tick) ||
+            event.context.empty() || event.command.empty()) {
+            log_error("[scene-command] invalid or unsorted row at line %d", number); return false;
+        }
+        g_sceneCommands.push_back(std::move(event));
+    }
+    const S3DPoint center = { StartupSceneCamera[1], StartupSceneCamera[2], StartupSceneCamera[3] };
+    if (!MapPane.BindCommandMapWindow(StartupSceneCamera[0], center)) {
+        log_error("[scene-command] cannot borrow current map active window"); return false;
+    }
+    log_info("[scene-command] loaded %zu rows from '%s' (24Hz ticks)", g_sceneCommands.size(), StartupSceneCommandFile);
+    return true;
+}
+TObjectInstance* SceneCommandContext(const std::string& selector) {
+    if (selector == "-") return nullptr;
+    for (const auto& identity : g_sceneIdentities) if (identity.selector == selector) {
+        TObjectInstance* object = MapPane.GetInstance(identity.map_index);
+        return object && object->ObjId() == identity.id ? object : nullptr;
+    }
+    std::string name = selector;
+    TObjectInstance* object = MapPane.FindClosestObject(name.data());
+    if (object) g_sceneIdentities.push_back({selector, object->GetMapIndex(), object->ObjId()});
+    return object;
+}
+void SceneCommandLogObject(const char* phase, const std::string& selector, TObjectInstance* object) {
+    if (!object) { log_info("[scene-command] %s context=%s alive=0", phase, selector.c_str()); return; }
+    const S3DPoint pos = object->Pos();
+    log_info("[scene-command] %s context=%s alive=1 id=%08x map_index=%d pos=%d,%d,%d amount=%d components=%d state=%d frame=%d",
+        phase, selector.c_str(), object->ObjId(), object->GetMapIndex(), pos.x, pos.y, pos.z,
+        object->Amount(), object->NumComponents(), object->GetState(), object->GetFrame());
+    for (int32_t slot = 0; slot < object->NumComponents(); ++slot)
+        if (TObjectComponent* component = object->GetComponent(slot))
+            log_info("[scene-command] component context=%s slot=%d name=%s generation=%u",
+                selector.c_str(), slot, component->ComponentName(), component->Generation());
+    if (auto* animator = dynamic_cast<T3DAnimator*>(object->GetAnimator())) {
+        const auto stats = animator->PartSysStats();
+        if (stats.controllers || stats.unsupported)
+            log_info("[scene-command] partsys phase=%s context=%s controllers=%zu emitters=%zu capacity=%zu alive=%zu next_emitter=%zu ticks=%llu quads=%llu renders=%llu unsupported=%d",
+                phase, selector.c_str(), stats.controllers, stats.emitters, stats.capacity,
+                stats.alive, stats.next_emitter, (unsigned long long)stats.ticks,
+                (unsigned long long)stats.quads, (unsigned long long)stats.renders, int(stats.unsupported));
+    }
+}
+void SceneCommandsTick() {
+    if (!StartupSceneCommandFile[0] || g_sceneCommandFailed) return;
+    // The renderer samples poses; opt-in scene tests use the real map tick
+    // functions for authored frames, pulses/scripts, movement and OF_KILL reap.
+    while (g_sceneCommandPulsedTick < int64_t(std::floor(g_sceneCommandTicks + 1e-6))) {
+        ++g_sceneCommandPulsedTick;
+        MapPane.NextFrameObjects();
+        MapPane.PulseObjects();
+        MapPane.MoveObjects();
+    }
+    while (g_sceneCommandNext < g_sceneCommands.size() &&
+           g_sceneCommands[g_sceneCommandNext].tick <= g_sceneCommandTicks + 1e-6) {
+        const auto& event = g_sceneCommands[g_sceneCommandNext++];
+        TObjectInstance* object = SceneCommandContext(event.context);
+        SceneCommandLogObject("before", event.context, object);
+        bool ok = true; int32_t result = 0;
+        if (event.command == "@absent") {
+            // A selector must have previously bound an identity; otherwise a
+            // misspelled name could produce a false passing deletion check.
+            bool bound = false;
+            for (const auto& identity : g_sceneIdentities) if (identity.selector == event.context) bound = true;
+            ok = bound && !object;
+        } else if (event.command.rfind("@partsys ", 0) == 0) {
+            // Observe actual map-owned controller state and submitted particles.
+            // Whole-image changes alone cannot prove that an emitter is running.
+            unsigned long long controllers = 0, emitters = 0, capacity = 0;
+            unsigned long long min_alive = 0, min_ticks = 0, min_quads = 0;
+            char extra = 0;
+            auto* animator = object ? dynamic_cast<T3DAnimator*>(object->GetAnimator()) : nullptr;
+            ok = animator && sscanf(event.command.c_str(), "@partsys %llu %llu %llu %llu %llu %llu %c",
+                &controllers, &emitters, &capacity, &min_alive, &min_ticks, &min_quads, &extra) == 6;
+            if (ok) {
+                const auto stats = animator->PartSysStats();
+                ok = !stats.unsupported && stats.controllers == controllers &&
+                    stats.emitters == emitters && stats.capacity == capacity &&
+                    stats.alive >= min_alive && stats.ticks >= min_ticks && stats.quads >= min_quads;
+            }
+        } else if (event.command.rfind("@frame ", 0) == 0) {
+            int expected = 0; char extra = 0;
+            ok = sscanf(event.command.c_str(), "@frame %d %c", &expected, &extra) == 1 &&
+                 object && object->GetFrame() == expected;
+        } else if (event.command.rfind("@expect ", 0) == 0) {
+            unsigned id = 0; int x = 0, y = 0, z = 0, count = 0; char component[128] = {}, extra = 0;
+            ok = sscanf(event.command.c_str(), "@expect %x %d %d %d %127s %d %c", &id, &x, &y, &z,
+                        component, &count, &extra) == 6 && object;
+            if (ok) {
+                const S3DPoint pos = object->Pos(); int actual = 0;
+                for (int32_t slot = 0; slot < object->NumComponents(); ++slot)
+                    if (TObjectComponent* c = object->GetComponent(slot))
+                        if (strcmp(c->ComponentName(), component) == 0) ++actual;
+                ok = object->ObjId() == id && pos.x == x && pos.y == y && pos.z == z && actual == count;
+            }
+        } else if (event.command[0] == '@') {
+            ok = false;
+        } else if (event.context != "-" && !object) {
+            ok = false;
+        } else {
+            std::string command = event.command + "\n";
+            TStringParseStream stream(command.data()); TToken token(stream); token.WhiteGet();
+            result = CommandInterpreter(object, token);
+            ok = (result & CMD_ERROR) == 0;
+        }
+        log_info("[scene-command] row line=%d tick=%.3f elapsed=%.3f context=%s result=%d status=%s command=%s",
+            event.line, event.tick, g_sceneCommandTicks, event.context.c_str(), result,
+            ok ? "PASS" : "FAIL", event.command.c_str());
+        SceneCommandLogObject("after", event.context, SceneCommandContext(event.context));
+        if (!ok) {
+            g_sceneCommandFailed = true;
+            log_error("[scene-command] FAILED at line %d", event.line);
+            sapp_request_quit(); return;
+        }
+    }
+    if (!g_sceneCommandCompleted && g_sceneCommandNext == g_sceneCommands.size()) {
+        g_sceneCommandCompleted = true;
+        log_info("[scene-command] COMPLETE rows=%zu failures=0", g_sceneCommands.size());
+    }
+    g_sceneCommandTicks += TTime::DeltaTime() * 24.0;
+}
+
 }  // namespace
 
 namespace TestModes {
@@ -3266,7 +3439,13 @@ bool Initialize(const char* mode)
     if (strcmp(mode, "blank") == 0 || strcmp(mode, "ticker") == 0)
         return true;
     if (strcmp(mode, "sector") == 0)
-        return g_mapRenderer.InitializeFromStartupArgs();
+        return g_mapRenderer.InitializeFromStartupArgs() && SceneCommandsStart();
+    if (strcmp(mode, "fireball-runtime") == 0)
+    {
+        const bool result=RunFireballRuntimeTest(g_mapRenderer);
+        sapp_request_quit();
+        return result;
+    }
     if (strcmp(mode, "mesh") == 0)
         return InitializeMeshMode();
     if (strcmp(mode, "char3d") == 0)
@@ -3364,8 +3543,11 @@ bool Initialize(const char* mode)
 
 void Close(const char* mode)
 {
-    if (strcmp(mode, "sector") == 0)
+    if (strcmp(mode, "sector") == 0 || strcmp(mode, "fireball-runtime") == 0) {
+        g_sceneCommands.clear(); g_sceneIdentities.clear();
+        MapPane.ReleaseCommandMapWindow();
         g_mapRenderer.Shutdown();
+    }
     if (strcmp(mode, "mesh") == 0)
         CloseMeshMode();
     if (strcmp(mode, "char3d") == 0)
@@ -3438,8 +3620,10 @@ void Render(const char* mode)
     // state change is reflected in this frame (no-op without --input-script).
     InputSimTick(mode);
 
-    if (strcmp(mode, "sector") == 0)
+    if (strcmp(mode, "sector") == 0) {
+        SceneCommandsTick();
         return g_mapRenderer.RenderFrame();
+    }
     if (strcmp(mode, "mesh") == 0)
         return RenderMeshMode();
     if (strcmp(mode, "char3d") == 0)
