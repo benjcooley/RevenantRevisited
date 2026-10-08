@@ -259,6 +259,13 @@ struct TMapRenderer::Impl
     // Non-owning draw intents derived from the current map contents. Rebuilds
     // here should be cheap bookkeeping over resident assets.
     std::vector<SSectorDrawableInst> sectorDrawInst;
+    // Bumped whenever sectorDrawInst is rebuilt or cleared: a draw id (index
+    // + 1) read back from an earlier frame names a record only while the
+    // version it was drawn under is current (the id probe's tag).
+    uint64_t drawListVersion = 0;
+    // The viewport pixel the map pane picks at this frame (the pointer), or
+    // -1: RenderFrame asks the renderer for the id probe there.
+    int32_t pickX = -1, pickY = -1;
     std::unordered_map<int64_t, std::vector<int32_t>> sectorDrawBins;
     // Per-frame visible/padded-sector candidate list. Capacity is retained so
     // camera movement only rewrites indices; it does not allocate draw records.
@@ -464,6 +471,7 @@ struct TMapRenderer::Impl
     void clearDrawRecords()
     {
         sectorDrawInst.clear();
+        ++drawListVersion;
         sectorDrawBins.clear();
         sectorTileTexByBitmap.clear();
         frameDrawIndices.clear();

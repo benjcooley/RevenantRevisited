@@ -36,6 +36,10 @@ class IRuntimeMode
     // is a no-op here.
     virtual void Tick() {}
 
+    // Once a drawn frame, after the world is drawn and before the HUD: the
+    // game mode's map cursor (what is under the pointer).
+    virtual void Animate() {}
+
     // Raw input. Return true if the event was consumed by the mode and
     // should NOT fall through to the screen's default handling.
     virtual bool HandleKey       (int32_t /*key*/, bool /*down*/)                  { return false; }
