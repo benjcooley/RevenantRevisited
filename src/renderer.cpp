@@ -2536,10 +2536,11 @@ void TRenderer::DrainMeshQueue()
     if (int32_t(mesh_queue.size()) > kMaxMeshInstances)
         mesh_queue.resize(kMaxMeshInstances);
 
-    // Sort by mesh handle so same-asset instances are contiguous.
+    // Keep geometry/texture/cull-compatible instances contiguous.
     std::sort(mesh_queue.begin(), mesh_queue.end(),
               [](const SMeshSubmit& a, const SMeshSubmit& b) {
                   if (a.mesh != b.mesh) return a.mesh < b.mesh;
+                  if (a.texture_override != b.texture_override) return a.texture_override < b.texture_override;
                   return a.retail_positive_face_cull < b.retail_positive_face_cull;
               });
 
@@ -2567,11 +2568,12 @@ void TRenderer::DrainMeshQueue()
     const sg_range u_range = { u, sizeof(u) };
 
 
-    // Emit one instanced draw per contiguous run of equal mesh handles.
+    // Emit one instanced draw per compatible mesh/texture/cull run.
     size_t i = 0;
     while (i < mesh_queue.size()) {
         size_t j = i + 1;
         while (j < mesh_queue.size() && mesh_queue[j].mesh == mesh_queue[i].mesh &&
+               mesh_queue[j].texture_override == mesh_queue[i].texture_override &&
                mesh_queue[j].retail_positive_face_cull == mesh_queue[i].retail_positive_face_cull) ++j;
         if (mesh_queue[i].retail_positive_face_cull && !mesh_source_cull_pipeline.id)
         { i = j; continue; } // Fail closed rather than silently disabling requested culling.
@@ -2584,7 +2586,8 @@ void TRenderer::DrainMeshQueue()
         bind.vertex_buffers[1]        = instance_vb;
         bind.vertex_buffer_offsets[1] = int(i) * kMeshInstanceFloats * int(sizeof(float));
         bind.index_buffer             = me.ibuf;
-        bind.fs_images[0]             = TextureImage(me.albedo);
+        bind.fs_images[0]             = TextureImage(mesh_queue[i].texture_override != kInvalidTexture
+                                                     ? mesh_queue[i].texture_override : me.albedo);
         sg_apply_bindings(&bind);
         sg_draw(0, me.num_indices, int(j - i));
 
@@ -2774,7 +2777,7 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     sg_bindings bind = {};
     bind.vertex_buffers[0] = me.vbuf;
     bind.index_buffer = me.ibuf;
-    bind.fs_images[0] = TextureImage(me.albedo);
+    bind.fs_images[0] = TextureImage(s.texture_override != kInvalidTexture ? s.texture_override : me.albedo);
     sg_apply_bindings(&bind);
 
     float vsu[36] = {};
@@ -2884,7 +2887,8 @@ void TRenderer::EmitTranslucentMeshSurface(const STransparentWorldSubmit* first,
             bind.vertex_buffers[1]        = instances;
             bind.vertex_buffer_offsets[1] = e.mesh_instance * kMeshInstanceFloats * int(sizeof(float));
             bind.index_buffer             = me.ibuf;
-            bind.fs_images[0]             = TextureImage(me.albedo);
+            bind.fs_images[0]             = TextureImage(e.mesh.texture_override != kInvalidTexture
+                                                         ? e.mesh.texture_override : me.albedo);
             sg_apply_bindings(&bind);
             sg_draw(0, me.num_indices, 1);
         }

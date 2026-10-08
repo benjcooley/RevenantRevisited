@@ -451,6 +451,7 @@ struct SMeshVertex
 struct SMeshSubmit
 {
     MeshHandle mesh = 0;
+    TTextureHandle texture_override = kInvalidTexture; // per draw; invalid uses cached albedo
     float      world[16] = {};   // row-major 4x4
     float      tint[4] = { 1.0f, 1.0f, 1.0f, 1.0f };   // rgba multiplier; alpha < kOpaqueMeshAlpha = translucent
     uint32_t   obj_id = 0;    // packed into id_target (RGBA8) for picking
@@ -481,6 +482,7 @@ enum class EHelperMeshShade : uint8_t { Material = 0, Texture = 1, TextureLit = 
 struct SHelperMeshSubmit
 {
     MeshHandle mesh = 0;
+    TTextureHandle texture_override = kInvalidTexture;
     float      world[16] = {};
     bool       shadow_plane = false;
     bool       additive_blend = false;   // ONE, ONE; otherwise SRC_ALPHA, ONE_MINUS_SRC_ALPHA
