@@ -685,9 +685,12 @@ int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen
         Output("Couldn't complete command due to low memory.\n");
     if (retval & (CMD_USAGE | CMD_BADPARAMS))
         Output(Commands[cmd].usage);
+    // REVSYNC: 0x0041ed34 -- the rest of the line is read and dropped, except
+    // after an ELSE (0x100): `ELSE IF …` leaves its IF for TScript::Continue,
+    // which runs it next (0x00493b06).
     if (retval & CMD_BADCOMMAND)
         Output("Unrecognized command.");
-    else if (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+    else if (t.Type() != TKN_RETURN && t.Type() != TKN_EOF && !(retval & CMD_ELSE))
     {
         if (!(retval & CMD_ERROR))
             Output("(extra parameters ignored)\n");

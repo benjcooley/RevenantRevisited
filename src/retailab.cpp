@@ -942,23 +942,22 @@ class TFixtureObject : public Base
     TFixtureObject& operator=(const TFixtureObject&) = delete;
 };
 
-// The trigger test's world: its objects in list order (all moving), the
-// main player among them or none, and the level the map pane's window shows
-// (the player's, else the owner's). ObjectInCube is MapPane.ObjectInCube's
-// loop -- the first of the window's moving objects inside the cube, by
-// S3DRect::In -- over these objects.
+// The trigger test's world: its objects in list order (all moving) and the
+// main player among them or none. ObjectInCube is MapPane.ObjectInCube's
+// loop -- the first object on the level asked inside the cube, by
+// S3DRect::In -- over these objects, as the retail fixture's iterator hands
+// out the world's objects on that level.
 class TFixtureWorld : public TScript::ITriggerWorld
 {
   public:
     std::vector<TObjectInstance*> objects;
     TObjectInstance* player = nullptr;
-    int32_t windowlevel = 0;
 
     TObjectInstance* MainPlayer() const override { return player; }
-    TObjectInstance* ObjectInCube(PS3DRect cube, int32_t /*objset*/) const override
+    TObjectInstance* ObjectInCube(PS3DRect cube, int32_t level, int32_t /*objset*/) const override
     {
         for (TObjectInstance* o : objects)
-            if (o->GetLevel() == windowlevel && cube->In(o->Pos()))
+            if (o->GetLevel() == level && cube->In(o->Pos()))
                 return o;
         return nullptr;
     }
@@ -1044,7 +1043,6 @@ std::string TriggerTest(const Case& c, std::string& error)
         error = "no owner";
         return {};
     }
-    world.windowlevel = (world.player ? world.player : owner)->GetLevel();
 
     // The guard: the object that set off the running trigger, by id.
     std::unique_ptr<TObjectInstance> guardobject;

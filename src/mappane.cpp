@@ -1732,18 +1732,29 @@ int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width
     return found;
 }
 
-TObjectInstance* TMapPane::ObjectInCube(PS3DRect cube, int32_t objset)
+// REVSYNC: 0x00452480 -- the first object of `objset` on `lvl` inside the
+// cube, every face included, in the order the iterator hands them out. It
+// walks that level's loaded sectors that meet the cube's map rect, and their
+// objects inside that rect (iterator 0x0044cf80, flags 0x6e0: loaded
+// sectors, active or not, of one level; the map rect; no inventory) -- not
+// the pane's 3x3 window. A CUBE trigger asks on its owner's level
+// (0x004927b0); the 1998 search walked the window, the player's level.
+TObjectInstance* TMapPane::ObjectInCube(PS3DRect cube, int32_t lvl, int32_t objset)
 {
-    TObjectInstance* in = nullptr;
+    SRect area;
+    area.left   = cube->beg.x;
+    area.top    = cube->beg.y;
+    area.right  = cube->end.x;
+    area.bottom = cube->end.y;
 
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+    for (TMapIterator i(lvl, &area, CHECK_NOINVENT, objset); i; i++)
     {
         if (cube->In(i->Pos()))
             return i;
     }
 
     return nullptr;
-}   
+}
 
 TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with)
 {

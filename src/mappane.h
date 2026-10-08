@@ -407,8 +407,9 @@ class TMapPane : public TPane
         // As above, from an object's position and level (else the camera's)
     int32_t FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height = 0, int32_t objclass = -1, int32_t maxnum = MAXFOUNDOBJS, int32_t objset = OBJSET_ALL);
       // Finds objects within given range. If height not given uses width as radius
-    TObjectInstance* ObjectInCube(PS3DRect cube, int32_t objset = OBJSET_ALL);
-        // Returns pointer to object in cube
+    TObjectInstance* ObjectInCube(PS3DRect cube, int32_t level, int32_t objset = OBJSET_ALL);
+        // The first object on level inside the cube, faces included, from
+        // the level's loaded sectors (a CUBE trigger's search)
     TObjectInstance* OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with = nullptr);
         // Returns the index of the object the mouse is on
     TObjectInstance* GetInstance(int32_t index, int32_t objset = OBJSET_ALL);

@@ -175,6 +175,8 @@ class TToken
       // Fatal error at line number
 
   private:
+    int32_t ReadChar();             // the next character: CRs skipped, lines counted
+
     PTParseStream stream;
     int32_t type;
     int32_t index;
