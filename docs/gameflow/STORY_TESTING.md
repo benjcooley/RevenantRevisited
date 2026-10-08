@@ -133,7 +133,7 @@ the script line behind it and how many runs saw it:
 |---|---|
 | `console` | an error the interpreter printed (Bad parameters, Unrecognized command, Context not found, extra parameters …) |
 | `script error`, `not ported`, `error`, `fatal` | the matching log lines |
-| `early end` | the block ended at an inner `END`, not its own: its last lines never ran |
+| `early end` | the block ended at an inner `END`, not its own: its last lines never ran. A block that ran on past its own `END` after a jump (into the next trigger, as retail's does: SCRIPT_ENGINE.md §4.2; the run is marked "ran on to the object's END") must end at the object's `END` |
 | `hang` | the block was still running at the end |
 | `loop` | still running, the same choice taken three times or more (the key schedule, not the block) |
 | `shop open` | still waiting for the shop's Exit |
@@ -145,7 +145,9 @@ the script line behind it and how many runs saw it:
 The `retail` table is in the tool (`RETAIL_CONSOLE`), each entry with the
 handler that answers so: `jump`, the buy/sell name and criteria commands
 and `fadecharacterout`/`in` leave a token ("extra parameters ignored"),
-`stat x = y` answers bad parameters (COMMAND_SYSTEM.md §4, §6.4, §6.6).
+`stat x = y` answers bad parameters (COMMAND_SYSTEM.md §4, §6.4, §6.6),
+and a trigger's header line reached by a block running on after a jump
+(`ALWAYS`, `CUBE …`) is no command ("Unrecognized command.").
 
 ### 7.1 The sweep of 2026-10-05
 
@@ -170,3 +172,24 @@ each of her lines holds the script ~40 s, others 4–10 s (BURNDOWN T9).
 The level-46 slave camp blocks (Shegra, Slave1, Slave2, Druhgslave2,
 Druhgslave3) stop on their first `say` or `try`: the speaker never gets back
 to its root state (likely the same cause as Kylie's, BURNDOWN T9).
+
+### 7.2 The run-on after a jump (2026-10-07)
+
+Retail's block stepping (SCRIPT_ENGINE.md §4.2: after a jump a block runs
+on past its trigger's END to the object's END) checked with the sweep from
+`New Game1`, keys `1`, the 32 forest and town NPCs, the binary before
+(`c0185e1`) and after (`ac2d17f`). 26 runs are the same. The six that
+differ:
+
+| NPC | Before | After | Why |
+|---|---|---|---|
+| Gatekeeper1 | 42 lines, ended | 64, ended | the block runs on through his ALWAYS waypoint walk ("Unrecognized command." for the `ALWAYS` line, as retail) |
+| Verhoeven1 | 37, ended | 57, ended | the same, his ALWAYS route |
+| Gus1, Pauline1 | 84 / 32, ended | 85 / 33, ended | the DIALOG block is the object's last: one more line, the object's END |
+| Heather1 | 45, ended | 48, not ended | the block runs on into her ALWAYS block and waits there (`WAIT 24`); the conversation has just moved Locke to level 0 (`PLAYER.POS … 0`), so level 1 is released and Heather with her script (retail frees the old level's sectors the same way); the tool sees no end and reports a hang |
+| Jong1 | 6,098 lines | 6,050 | both loop on `player.lastattack` (not ported, T8) to the window's end; the count is the window |
+
+Also run: Jong1 with `JONGMEETSTATE=1` (SPARYES, then SPARENDYES): 75
+lines before, 81 after, the six of his ALWAYS block (`WAIT 24`, `IF
+JONGLOOKSTATE = 3`, false); keep.s DalyK and RandK from the Keep saves
+(RETAIL_AB.md, target 4).
