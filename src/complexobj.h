@@ -172,6 +172,10 @@ class TComplexObject : public TObjectInstance
         // true, the action is garanteed to have an animation to play.
     const char* GetState() { return (const char*) doing->name; }
         // return the state name that the object is doing
+    const TActionBlock* RootBlock() const { return root; }
+    const TActionBlock* DoingBlock() const { return doing; }
+    const TActionBlock* DesiredBlock() const { return desired; }
+        // Read-only views of the three action blocks (traces, debug panes)
     virtual void Notify(int32_t notify, void *ptr);
         // Notify Action (check root,desired, and doing for deleted target obj)
 
