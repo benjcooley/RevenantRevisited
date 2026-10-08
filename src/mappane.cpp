@@ -4055,12 +4055,21 @@ void TMapPane::Animate(bool draw)
     {
         hoverpickframe = frame;
         hovercursor = CURSOR_NONE;
-        if (TObjectInstance* on = OnObject(x, y))
+        TObjectInstance* on = OnObject(x, y);
+        if (on)
         {
             if (!GetDragObj() && on->IsInventoryItem() && !(on->GetFlags() & OF_INVISIBLE))
                 hovercursor = CURSOR_HAND;          // can pick up while in the map pane
             else
                 hovercursor = on->CursorType(GetDragObj());
+        }
+        // The pick, in the log when it changes (test runs read it).
+        const int32_t onindex = on ? on->GetMapIndex() : -1;
+        if (onindex != hoverindex)
+        {
+            hoverindex = onindex;
+            log_info("[mapinput] over %s (%d, %d): cursor %d",
+                     on ? on->GetName() : "nothing", x, y, hovercursor);
         }
     }
 
