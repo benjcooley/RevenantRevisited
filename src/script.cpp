@@ -7,13 +7,6 @@
 // * the class-level map; individual method `REVSYNC:` markers below cite  *
 // * the recon/discovered/cls_*.cpp addresses each implementation was      *
 // * cross-checked against.                                                *
-// *                                                                       *
-// * Hot-path note: TScript::Continue / Triggered keep the pre-release C++ *
-// * because the retail bodies hook engine subsystems (dialog HUD, player  *
-// * FSM, multi-context vftable slots 0x148/0x14c/0x154/0x1c0) that have   *
-// * not been ported yet. The trigger machine shape — TRIGGER_* opcodes,   *
-// * priority gating, MAXITERATIONS infinite-loop guard, BEGIN/END depth   *
-// * stack — matches retail. TODO(revsync) markers flag each divergence.   *
 // *************************************************************************
 
 #include <stdio.h>
@@ -66,7 +59,23 @@ void TraceLine(TObjectInstance* context, const char* line)
               (int)(end - line), line);
 }
 
+// The trigger test's world in the game: the main player and the map.
+class TMapTriggerWorld final : public TScript::ITriggerWorld
+{
+  public:
+    [[nodiscard]] TObjectInstance* MainPlayer() const override { return Player; }
+    [[nodiscard]] TObjectInstance* ObjectInCube(PS3DRect cube, int32_t level, int32_t objset) const override
+        { return MapPane.ObjectInCube(cube, level, objset); }
+};
+
+const TMapTriggerWorld MapTriggerWorld;
+
 }  // namespace
+
+const TScript::ITriggerWorld& TScript::TriggerWorld()
+{
+    return triggerworld ? *triggerworld : MapTriggerWorld;
+}
 
 TObjectInstance* TakenObject = nullptr;
 TObjectInstance* DroppedObject = nullptr;
@@ -168,7 +177,8 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
     if (st->priority < curpriority)
         return false;
 
-    TObjectInstance* const player = triggerworld ? triggerworld->MainPlayer() : Player;
+    const ITriggerWorld& world = TriggerWorld();
+    TObjectInstance* const player = world.MainPlayer();
     bool fires = false;
     switch (st->type)
     {
@@ -226,12 +236,12 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
                 fires = true;
             }
         }
-        else if (TObjectInstance* inside = triggerworld ? triggerworld->ObjectInCube(&st->cube, OBJSET_MOVING)
-                                                        : MapPane.ObjectInCube(&st->cube, OBJSET_MOVING))
+        else if (TObjectInstance* inside = world.ObjectInCube(&st->cube, context->GetLevel(), OBJSET_MOVING))
         {
-            // A character or player in the cube that isn't the named object
-            // (an unnamed cube carries its own prototype's name, so its owner
-            // standing in it doesn't count).
+            // The first moving object in the cube on the owner's level
+            // (0x00452480 with the context's +0x0e), if a character or player
+            // that isn't the named object (an unnamed cube carries its own
+            // prototype's name, so its owner standing in it doesn't count).
             const int32_t objclass = inside->ObjClass();
             const bool character = objclass == OBJCLASS_CHARACTER || objclass == OBJCLASS_PLAYER;
             const bool named = st->name[0] != '\0' && inside->GetName() &&
@@ -519,21 +529,57 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
     // Now Continue Script
     // *******************
 
+    // REVSYNC: 0x00493827 -- the line loop. A block ends when a line leaves
+    // the depth below 1 (0x00493c99): the depth counts the object's own BEGIN
+    // once a jump has counted it (Jump), so after a jump the trigger's END
+    // leaves the depth at 1 and the block runs on through the next trigger's
+    // header line (a line the interpreter doesn't know) and block to the
+    // object's END (SCRIPT_ENGINE.md §4.2).
     if (ip != kNotRunning)
         s.SetPos((uint32_t)ip);
 
     int32_t iterations = MAXITERATIONS;
     const char *text = curproto->text;
+    // Where an `ELSE IF`'s IF is read from on the next pass (0x00493b06).
+    uint32_t pendingif = 0;
+
+    // The block is over (retail clears the ip and its flags, +0x48/+0x4c).
+    // A story test reads the trace to tell a block that ran to its end from
+    // one still waiting.
+    const auto endblock = [&]() {
+        log_trace("[script] %s: trigger %d ends", (context && context->GetName()) ? context->GetName() : "?",
+                  trigger);
+        ip = kNotRunning;
+        priority = 0;
+    };
 
     while (ip != kNotRunning && (!(priority & SCRIPT_PAUSED)))
     {
+        // Retail has ten block levels; at depth 10 its level overlays the
+        // depth field itself (the first line there resets the depth and ends
+        // the block). The port refuses that depth instead.
+        if (depth >= MAXDEPTH)
+        {
+            ScriptError("Blocks nested too deep", t.LineNum());
+            endblock();
+            break;
+        }
+
         uint32_t thisline = s.GetPos();
-        if (thisline > (uint32_t)ip && !isspace(text[thisline]) &&
-                                    !isspace(text[thisline - 1]))
+        if (thisline > (uint32_t)ip && !isspace((unsigned char)text[thisline]) &&
+                                    !isspace((unsigned char)text[thisline - 1]))
             thisline--;                         // token code jacks the pointer sometimes
 
         t.Get();
         t.SkipBlanks();
+        if (pendingif)
+        {
+            // The token still holds the character after this line's first
+            // token, which is read first.
+            s.SetPos(pendingif);
+            t.WhiteGet();
+        }
+        pendingif = 0;
 
         if (t.Type() == TKN_SYMBOL && t.Code() == ':')
         {
@@ -556,9 +602,14 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
             if (bits & CMD_DELETED)
                 return;
 
+            // The levels a line touches: none outside 0..MAXDEPTH-1 (an END
+            // too many leaves -1, and the block ends after the line).
+            SScriptBlock* const level = (depth >= 0 && depth < MAXDEPTH) ? &block[depth] : nullptr;
+
             if (bits & CMD_CONDTRUE)
             {
-                block[depth].conditional = true;
+                if (level)
+                    level->conditional = true;
             }
             else if (bits & CMD_CONDFALSE)
             {
@@ -567,21 +618,39 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
                     SkipBlock(t);
                 else
                     t.SkipLine();
-                block[depth].conditional = false;
+                if (level)
+                    level->conditional = false;
             }
 
+            // An ELSE leaves the rest of its line unread (CommandInterpreter).
+            // After a true IF it skips from the next token: a block if that
+            // is a BEGIN, else to the next line. For `ELSE IF c` the next
+            // token is the IF's condition, so the skip ends on the ELSE line
+            // and the end-of-line skip below drops the following line -- the
+            // ELSE IF's BEGIN -- and its body runs. After a false IF the IF
+            // is still the token: the line is rewound and the IF runs on the
+            // next pass (0x00493a08..0x00493b46).
             if (bits & CMD_ELSE)
             {
-                if (block[depth].conditional == COND_UNDEF)
+                const int32_t conditional = level ? level->conditional : COND_UNDEF;
+                if (conditional == COND_UNDEF)
                     ScriptError("ELSE without matching IF", t.LineNum());
-                else if (block[depth].conditional == true)
+                else if (conditional == true)
                 {
                     t.LineGet();
                     if (t.Is("BEGIN"))
                         SkipBlock(t);
                     else
                         t.SkipLine();
-                    block[depth].conditional = COND_UNDEF;
+                    level->conditional = COND_UNDEF;
+                }
+                if (t.Is("IF"))
+                {
+                    s.SetPos(thisline);
+                    t.Get();
+                    t.SkipBlanks();
+                    pendingif = s.GetPos();
+                    t.Get();
                 }
             }
 
@@ -590,8 +659,11 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
 
             if (bits & CMD_BEGIN)
             {
-                block[++depth].loopstart = 0;
-                block[depth].conditional = COND_UNDEF;
+                if (++depth < MAXDEPTH)
+                {
+                    block[depth].loopstart = 0;
+                    block[depth].conditional = COND_UNDEF;
+                }
             }
 
             if (bits & CMD_END)
@@ -600,14 +672,17 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
                     ScriptError("END without matching BEGIN", t.LineNum());
             }
 
-            if (block[depth].loopstart != 0)
+            if (depth >= 0 && depth < MAXDEPTH)
             {
-                s.SetPos(block[depth].loopstart);
-                block[depth].loopstart = 0;
-            }
+                if (block[depth].loopstart != 0)
+                {
+                    s.SetPos(block[depth].loopstart);
+                    block[depth].loopstart = 0;
+                }
 
-            if (bits & CMD_LOOP)
-                block[depth].loopstart = thisline;
+                if (bits & CMD_LOOP)
+                    block[depth].loopstart = thisline;
+            }
 
             // A line that leaves the script waiting ends the run: a command
             // that keeps its target busy (CMD_WAIT), or one that set a wait
@@ -633,13 +708,7 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
         {
             if (iterations < 1)
                 ScriptError("Infinite loop detected\n", t.LineNum());
-
-            // The block is over: a story test reads this to tell a block
-            // that ran to its END from one still waiting.
-            log_trace("[script] %s: trigger %d ends", (context && context->GetName()) ? context->GetName() : "?",
-                      trigger);
-            ip = kNotRunning;
-            priority = 0;
+            endblock();
         }
     }
 
@@ -650,17 +719,21 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
 // REVSYNC: Jump @ 0x00493fa0 (the `jump` command's, through 0x00471290, and a
 // taken response's). The skip to the current trigger is the 1998 loop; it
 // moves nothing, since the fresh token is no BEGIN (SkipBlock 0x004795f0), so
-// the label is looked for from the top of the prototype. On the way every
-// BEGIN and END token is counted into the block depth (0x004940cd..
-// 0x00494152), so the script lands at the label as deep as the label sits:
-// a label inside `IF … BEGIN` keeps that block open, and the block's END
-// closes it rather than the trigger's. The 1998 code set the depth to 1
-// ("a bit hacky"), so a choice inside an IF ended the trigger at the IF's END
-// and skipped the block's last lines (town.s Heather1: CONTROL ON,
-// SETCDVOLUME FULL).
+// the label is looked for from the top of the prototype's text -- the whole
+// OBJECT block. On the way every BEGIN and END token is counted into the
+// block depth (0x004940cd..0x00494152), the object's own BEGIN included: a
+// label directly in a trigger block lands at depth 2, one inside `IF …
+// BEGIN` at 3. So the label's enclosing blocks stay open, and Continue ends
+// the block only when the object's END closes the last (SCRIPT_ENGINE.md
+// §4.2): after the trigger's END the next trigger's header and block run too.
+// The script resumes where the tokenizer stands after the label's name --
+// one character past it, carriage returns not counted (TToken::ReadChar):
+// the start of the next line (0x00494208).
+// The 1998 code set the depth to 1 ("a bit hacky") and skipped the label's
+// line (SkipLine), eating the next line's first token.
 // A label it can't find: the error, the ip unchanged and the depth counted to
-// the prototype's end (0, so Continue ends the block after the jump's line);
-// the 1998 code restarted the script instead.
+// the text's end (0, so Continue ends the block after the jump's line); the
+// 1998 code restarted the script instead.
 void TScript::Jump(TObjectInstance* /*context*/, const char *label)
 {
     if (!curproto || !curproto->text)
@@ -690,11 +763,7 @@ void TScript::Jump(TObjectInstance* /*context*/, const char *label)
             return;
         }
 
-        // The script goes on right after the label's name (0x00494208 stores
-        // the token's position as the ip), so the line after the label runs.
-        // The 1998 code skipped to the next line here, which ate that line's
-        // first token: `:sell1` followed by `buysellshoptype sell misc`
-        // (town.s, every shop) lost the shop type.
+        // The ip is the stream's position after the label's name (0x00494208).
         if (t.Type() == TKN_SYMBOL && t.Code() == ':')
         {
             t.Get();
@@ -789,8 +858,7 @@ void TScript::Reset()
     newtriggerstr[0] = '\0';
     newtriggerstr2[0] = '\0';
     curtrigger = nullptr;
-    depth = 0;
-    block[0] = SScriptBlock{};
+    depth = 0;                                  // the block levels stay as they are
     savedip = kNotRunning;
     saveddepth = 0;
     triggerer.Clear();
@@ -988,6 +1056,14 @@ int32_t TScriptProto::ParseScript(TToken &t)
   // Skip initial blanks
     t.SkipBlanks();
 
+  // REVSYNC: 0x00494e20 -- the text starts at the block's first token, the
+  // OBJECT keyword: the stream stands one character past it, which the
+  // tokenizer holds. Trigger positions are relative to it. (The 1998 code
+  // kept only the body, from the line after the object's BEGIN.)
+    const char *source = t.Stream() ? t.Stream()->Data() : nullptr;
+    const int64_t first = (int64_t)t.GetPos() - (int64_t)strlen(t.Text()) - 1;
+    const uint32_t start = first > 0 ? (uint32_t)first : 0;
+
   // Parse script header line
     ParseCriteria(t);
 
@@ -997,9 +1073,6 @@ int32_t TScriptProto::ParseScript(TToken &t)
 
     while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
         t.Get();
-
-  // Mark line after begin as beginning of script buffer
-    uint32_t start = t.GetPos();
 
   // Now get first trigger token
     t.LineGet();
@@ -1197,27 +1270,6 @@ int32_t TScriptProto::ParseScript(TToken &t)
     if (!t.Is("END"))
         ScriptError("Object block END expected", t.LineNum());
 
-    // Extract the trigger body from the full-buffer copy SetBuffer left on
-    // text. start/GetPos are offsets into the parser's source buffer, which
-    // has the same contents. The "-4" trims the trailing "END\n".
-    int32_t bodylen = (int32_t)(t.GetPos() - start - 4);
-    if (bodylen < 0) bodylen = 0;
-    // The body is copied from the text being parsed. (The 1998 code copied
-    // through a raw pointer position; positions are offsets now.)
-    const char *source = t.Stream() ? t.Stream()->Data() : nullptr;
-    if (!source)
-    {
-        ScriptError("Script body can't be read from this stream", t.LineNum());
-        bodylen = 0;
-    }
-    char *newtext = (char *)malloc(bodylen + 1);
-    if (bodylen > 0)
-        memcpy(newtext, source + start, bodylen);
-    newtext[bodylen] = 0;
-    free(text);
-    text = newtext;
-    len = bodylen;
-
     // REVSYNC: 0x00494e20 (tail) -- the object's END ends its line.
     t.WhiteGet();
     if (t.Type() != TKN_RETURN)
@@ -1227,20 +1279,37 @@ int32_t TScriptProto::ParseScript(TToken &t)
         ScriptError(msg, t.LineNum());
     }
 
+    // The text runs to here: through the END and its line break. It is
+    // copied from the text being parsed (positions are offsets into it).
+    int32_t textlen = (int32_t)((int64_t)t.GetPos() - start);
+    if (textlen < 0)
+        textlen = 0;
+    if (!source)
+    {
+        ScriptError("Script text can't be read from this stream", t.LineNum());
+        textlen = 0;
+    }
+    char *newtext = (char *)malloc(textlen + 1);
+    if (textlen > 0)
+        memcpy(newtext, source + start, textlen);
+    newtext[textlen] = 0;
+    free(text);
+    text = newtext;
+    len = textlen;
+
     t.LineGet();
 
-    return bodylen;
+    return textlen;
 }
 
+// REVSYNC: TScriptManager::Save @ 0x00496690 writes each prototype's text as
+// is -- the block as it was parsed, OBJECT through END -- and "\r\n". (The
+// 1998 code wrote its own OBJECT/BEGIN header around the body.)
 bool TScriptProto::WriteScript(FILE *fp)
 {
-    if (fprintf(fp, "OBJECT \"%s\"\r\n", name) < 0)
-        return false;
-
-    if (fputs("begin\r\n", fp) == EOF || fputs(text, fp) == EOF || fputs("end\r\n\r\n", fp) == EOF)
-        return false;
-
-    return true;
+    if (!text)
+        return true;
+    return fputs(text, fp) != EOF && fputs("\r\n", fp) != EOF;
 }
 
 // **************
@@ -1512,7 +1581,8 @@ bool TScriptManager::Load(char *filename, void *owner)
     return retval;
 }
 
-// REVSYNC: Save @ 0x00496690 — text serialise dirty protos for the owner.
+// REVSYNC: Save @ 0x00496690 — the owner's prototypes, each text as is, in a
+// file opened binary ("wb": the texts keep their CRLFs, the header its LFs).
 bool TScriptManager::Save(char *filename, void *owner)
 {
     if (!scriptsdirty)
@@ -1522,7 +1592,7 @@ bool TScriptManager::Save(char *filename, void *owner)
 
     sprintf(fname, "%s%s", ClassDefPath, filename);
 
-    FILE *fp = TryOpen(fname, "wt");
+    FILE *fp = TryOpen(fname, "wb");
     if (fp == nullptr)
         return false;
 
