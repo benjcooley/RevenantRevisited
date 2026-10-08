@@ -76,7 +76,7 @@ fragment float4 _main(vs_out in [[stage_in]],
     float4 nrm = normal_tex.sample(smp, in.uv);
     float3 np  = nrm.xyz;
     float3 N   = normalize(np * 2.0 - 1.0);
-    bool   is_mesh = nrm.a < 0.5;     // G-buffer surface class: 1 tile, 0 mesh
+    bool   is_mesh = (nrm.a < 0.5 || nrm.a > 1.5);     // G-buffer surface class: 1 tile, 0 mesh
     float  ao  = ao_tex.sample(smp, in.uv).r;
     float  fbw = float(albedo_tex.get_width());
     float  fbh = float(albedo_tex.get_height());
@@ -126,6 +126,8 @@ fragment float4 _main(vs_out in [[stage_in]],
         if ((uint(id_tex.read(ip).a * 255.0 + 0.5) & 0x20u) != 0u)
             s.lit = alb.rgb;
     }
+    // Marker2 carries an already lit/unlit authored retail mesh.
+    if (int(p.settings.z) == 0 && nrm.a > 1.5) s.lit = alb.rgb;
     if (vm == 4) return float4(s.points, 1.0);
     if (vm == 6) return float4(float3(s.sun_shadow), 1.0);
     float3 col = s.lit;

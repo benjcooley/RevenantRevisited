@@ -211,6 +211,7 @@ struct vs_in {
     float4 color        : TEXCOORD4;
     float  debug_mode   : TEXCOORD5;
     float  light_mode   : TEXCOORD6;
+    float  retail_texture : TEXCOORD7;
 };
 struct vs_out {
     float4 pos      : SV_Position;
@@ -218,6 +219,7 @@ struct vs_out {
     float4 color    : TEXCOORD1;
     float3 lit      : TEXCOORD2;
     float  debug    : TEXCOORD3;
+    float  retail_texture : TEXCOORD4;
 };
 vs_out main_vs(vs_in i) {
     float3 vd = normalize(i.world_pos - cam_pos.xyz);
@@ -252,6 +254,7 @@ vs_out main_vs(vs_in i) {
     o.color = i.color;
     o.lit   = lit;
     o.debug = i.debug_mode;
+    o.retail_texture = i.retail_texture;
     return o;
 }
 )HLSL";
@@ -265,14 +268,22 @@ struct vs_out {
     float4 color    : TEXCOORD1;
     float3 lit      : TEXCOORD2;
     float  debug    : TEXCOORD3;
+    float  retail_texture : TEXCOORD4;
 };
 float4 main_ps(vs_out i) : SV_Target {
     int mode = int(i.debug + 0.5);
+    float4 texel = atlas.Sample(smp, i.uv);
+    if (i.retail_texture > 0.5) {
+        uint width, height; atlas.GetDimensions(width, height);
+        int2 size = int2(width, height);
+        int2 xy = min(int2(floor(frac(i.uv) * float2(size))), size - int2(1,1));
+        texel = atlas.Load(int3(xy,0));
+    }
     float4 c;
     if      (mode == 1) c = i.color;
-    else if (mode == 2) c = atlas.Sample(smp, i.uv);
-    else if (mode == 3) { c = atlas.Sample(smp, i.uv); c = float4(1,1,1,c.a); }
-    else                c = atlas.Sample(smp, i.uv) * i.color;
+    else if (mode == 2) c = texel;
+    else if (mode == 3) { c = texel; c = float4(1,1,1,c.a); }
+    else                c = texel * i.color;
     c.rgb *= i.lit;
     if (c.a < 0.002) discard;
     return c;

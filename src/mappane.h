@@ -328,6 +328,9 @@ class TMapPane : public TPane
     // anything inside it ticks; anything outside is idle this frame.
     // Cheap when the player hasn't crossed a sector boundary (no-op).
     void UpdateActiveWindow();
+    // Borrow a diagnostic window through the same manager/unload contract.
+    bool BindCommandMapWindow(int32_t maplevel, const S3DPoint& mapcenter);
+    void ReleaseCommandMapWindow();
     void ClearWindow();
         // Drop every borrowed sector (the window is empty until the next
         // UpdateActiveWindow)
@@ -536,6 +539,7 @@ class TMapPane : public TPane
         // Borrow the window's sectors from `map` and follow its Unloaded event
 
   // Data Members
+    bool command_window_borrowed = false;
     TSector* sectors[SECTORWINDOWX][SECTORWINDOWY] = {}; // Window borrowed from windowmap (see above)
     TSafeRef<TGameMap> windowmap;                        // Map the sector window borrows from
     TGameMap::EventListenerId windowlistener = 0;        // Our Unloaded listener on windowmap

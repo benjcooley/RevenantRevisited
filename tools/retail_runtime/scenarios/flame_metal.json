@@ -1,0 +1,13 @@
+{
+  "name": "flame-real-renderer-black-fixed-camera",
+  "effect": "TFlameEffect",
+  "origin": [0,0,0],
+  "camera": [320,170],
+  "rectangle": [272,122,96,96],
+  "background": "black",
+  "frames": 18,
+  "fps": 24,
+  "seed": 1,
+  "warmup": 0,
+  "timeout_seconds": 45
+}

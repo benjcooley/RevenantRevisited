@@ -17,11 +17,13 @@ effect TorchFlame
         width = 50.0
         height = 125.0
         scale = 0.5
-        blend = additive
+        blend = alpha
         flip_v = true
         chroma_key = [255, 0, 0]
-        frame_expr = "frame(time_frame, 13.0)"
-        uv_rect_expr = "flipbook(frame(time_frame, 13.0), 4, 2)"
+        // Snapshot TFlameAnimator: floor(frame * 11 / 24), wrapping at
+        // 18 authored ticks. The flipbook supplies local clock seconds.
+        frame_expr = "frame(time_frame, 11.0)"
+        uv_rect_expr = "flipbook(frame(time_frame, 11.0), 4, 2)"
     }
 
     emitter billboard
@@ -306,29 +308,28 @@ effect Mist
         //   vx = random(-L,L)/32 = -2..+2 wu/tick
         //   vy = random(-W,W)/32 = -0.625..+0.625 wu/tick
         //   vz = random(H/2, H) = +2..+4 wu/tick (always upward)
-        //   pos.x = random(-L,L)/2 = -32..+32 wu (port widens 3x to ±96)
-        //   pos.y = random(-W,W)/2 = -10..+10 wu (port widens 3x to ±30)
+        //   pos.x = random(-L,L)/2 = -32..+32 wu
+        //   pos.y = random(-W,W)/2 = -10..+10 wu
         //   pos.z = +5 wu (slightly above origin)
         spawn_expr = "
-            pos = emit_pos + vec3(rand(-96, 96), rand(-30, 30), 20);
-            vel = vec3(rand(-2, 2), rand(-0.625, 0.625), rand(2, 4));
-            scale = vec3(56 * (0.75 + 0.5 * rand01()),
-                         56 * (0.75 + 0.5 * rand01()),
-                         1);
+            pos = emit_pos + vec3(floor(rand(-64, 65)) / 2, floor(rand(-20, 21)) / 2, 5);
+            vel = vec3(floor(rand(-64, 65)) / 32, floor(rand(-20, 21)) / 32,
+                       floor(rand(2, 5)));
+            scale = vec3(56 * 0.7, 56 * 0.7, 1);
             rot.x = 0;
             frame = 0;
-            color = vec4(0.16, 0.18, 0.22, 1);
+            color = vec4(1, 1, 1, 1);
         "
 
         // Per-tick body. RIPPLE_GRAVITY = 0.37 wu/tick^2 (shared retail
         // constant with H03/H04). Under the explicit-tick-multiplier
         // model, the engine invokes this body exactly tick_hz=24 times/sec,
         // so per-tick literals produce the retail-authored motion verbatim:
-        //   vel.z -= 0.37     -- per-tick gravity
         //   pos  += vel       -- one tick's position advance (vel is wu/tick)
+        //   vel.z -= 0.37     -- gravity after movement, as in the source
         tick_expr = "
-            vel.z = vel.z - 0.37;
             pos = pos + vel;
+            vel.z = vel.z - 0.37;
         "
 
         // Respawn-in-place when the drop lands. emit_pos.z is the

@@ -1,5 +1,11 @@
 # Retail Effect Inventory (true ground truth)
 
+Current scope and completion are tracked in [EFFECT_BURNDOWN.md](EFFECT_BURNDOWN.md)
+and its JSON ledger. The 2026-10-04 archive audit found **176 type rows,
+174 distinct names and 166 assets**. The older coverage estimates below are
+historical research, not acceptance counts. Preserve all type IDs: three rows
+named `Flame` use different colored assets.
+
 Extracted **2026-05-30** from the shipped retail `class.def`
 (`data/imagery.rvi` → `class.def`, 233,484 B, dated 10-06-1999). This is
 the AUTHORITATIVE list of every `EFFECT` type the shipped game knew
@@ -90,7 +96,7 @@ candidates:
 
 - **Labback** — Misc\Labback.I3D — labyrinth background?
 - **Fire** uses `Misc\Fire.I3D` (not `Magic\`) — different I3D from F03's bespoke
-- **Smoke** — already ported (S08-family)
+- **Smoke** — mapping/port unverified; standalone retail probes at Z16 and Z35 were invisible. S08 MistFog is a different retail type.
 - **heal** — different from `Heal` in our wave-1 (lowercase variant)
 - **speaker** — Misc\Speaker.I3D — likely audio-only "effect" registered as visual placeholder
 

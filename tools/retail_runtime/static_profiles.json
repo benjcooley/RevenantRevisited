@@ -1,0 +1,109 @@
+{
+  "scope": "Audited single-object static Globe and town-sign asset identities, not acceptance claims.",
+  "profiles": [
+    {
+      "name": "OlihootSign",
+      "id": "0xad92bc1e",
+      "asset": "Misc\\Olihoot.I3D",
+      "asset_sha256": "9cf29ed4426a2c1ff2669182d493485af7330e861236675e17f36f3d56f85d33",
+      "vertices": 42,
+      "faces": 24
+    },
+    {
+      "name": "OgrokSign",
+      "id": "0xad92bc1f",
+      "asset": "Misc\\Ogroks.I3D",
+      "asset_sha256": "9c6633a62c93b8647a35cd8bb63b2d1e379b9c8f120cf7c419add2b2e3f73cd5",
+      "vertices": 42,
+      "faces": 24
+    },
+    {
+      "name": "CampSign",
+      "id": "0xad92bc20",
+      "asset": "Misc\\Camp.I3D",
+      "asset_sha256": "b62bf542b144a74e0348a698300baea600084ddfdfa3eddf9fc90a93dac35d2a",
+      "vertices": 42,
+      "faces": 24
+    },
+    {
+      "name": "TowerSign",
+      "id": "0xad92bc21",
+      "asset": "Misc\\Tower.I3D",
+      "asset_sha256": "c3739aaaacc7ae8907b26aaad4cf9bff5a61f2d8b59ab91c5b975c23f069edb9",
+      "vertices": 42,
+      "faces": 24
+    },
+    {
+      "name": "DruhgSign",
+      "id": "0xad92bc22",
+      "asset": "Misc\\Druhg.I3D",
+      "asset_sha256": "5d37dd17ce277fecbe9c5a070b912170d8e1606e198dec75de0392864e3d2aef",
+      "vertices": 42,
+      "faces": 24
+    },
+    {
+      "name": "RuinsSign",
+      "id": "0xad92bc23",
+      "asset": "Misc\\Ruins.I3D",
+      "asset_sha256": "ff4e6eaf9b9254da23b1ed04110cf99ac254319a35d421ee7fe0f51e5c6e86f2",
+      "vertices": 42,
+      "faces": 24
+    },
+    {
+      "name": "BoneSign",
+      "id": "0xad92bc24",
+      "asset": "Misc\\Bone.I3D",
+      "asset_sha256": "b278ec9c770a8fcc45bfdc88c317a1eaaf132268195807823ca5e4e98610a9e7",
+      "vertices": 42,
+      "faces": 24
+    },
+    {
+      "name": "YardSign",
+      "id": "0xad92bc26",
+      "asset": "Misc\\Yard.I3D",
+      "asset_sha256": "1e759fdc2edfa58ceb199cae130302310c0b9f25cb322f245faee97cce5e64d7",
+      "vertices": 42,
+      "faces": 24
+    },
+    {
+      "name": "AncientSign",
+      "id": "0xad92bc25",
+      "asset": "Misc\\Ancient.I3D",
+      "asset_sha256": "0a27a3208774fdf01a2abd8a0a1a3f35faddcab8314f74f807b0c101588eaf1c",
+      "vertices": 42,
+      "faces": 24
+    },
+    {
+      "name": "VillageSign",
+      "id": "0xad92bc27",
+      "asset": "Misc\\Village.I3D",
+      "asset_sha256": "fbd298874c88a267d4f61058a8ae014ffcd5cfdcba951cbde309c6e7507b07ec",
+      "vertices": 42,
+      "faces": 24
+    },
+    {
+      "name": "MistSign",
+      "id": "0xad92bc35",
+      "asset": "Misc\\Mist.I3D",
+      "asset_sha256": "1ed6adaa2750747a8827a5dff0f8046acfe539f18d0ba970124a12f639412c05",
+      "vertices": 42,
+      "faces": 24
+    },
+    {
+      "name": "HavenSign",
+      "id": "0xad92bc36",
+      "asset": "Misc\\Haven.I3D",
+      "asset_sha256": "7d364c6baa2e25482b807f58895353454785cf44298969fc575db8cd35bde979",
+      "vertices": 42,
+      "faces": 24
+    },
+    {
+      "name": "Globe",
+      "id": "0xad92bd24",
+      "asset": "misc\\Globe.I3D",
+      "asset_sha256": "c43170c7e6cf1dd59146bfd5446a46a70eb2b9f45da75ec508198c8ce4552514",
+      "vertices": 28,
+      "faces": 26
+    }
+  ]
+}

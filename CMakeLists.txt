@@ -214,6 +214,9 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 target_link_libraries(test_particlefx PRIVATE GTest::gtest_main)
 
+add_executable(test_vfs_path_index tools/test_vfs_path_index.cpp)
+add_executable(test_retail_mesh_lighting tools/test_retail_mesh_lighting.cpp)
+
 add_executable(cpu_tile_perspective_test
   tools/cpu_tile_perspective_test.cpp)
 

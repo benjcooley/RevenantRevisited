@@ -3831,6 +3831,29 @@ void TMapPane::AnimateObjects(bool draw)
 // REVSYNC: UpdateSectors @ 0x00459220 -- the window is the sectors around
 // the map's center (where the camera looks: normally the player, elsewhere
 // during a scripted pan), on the map's level.
+bool TMapPane::BindCommandMapWindow(int32_t maplevel, const S3DPoint& mapcenter)
+{
+    TGameMap* map = MapManager.CurrentMap();
+    if (!map || map->Level() != maplevel) return false;
+    // Diagnostics do not silently take over a live gameplay window.
+    if (!command_window_borrowed)
+        for (int32_t y = 0; y < SECTORWINDOWY; ++y)
+            for (int32_t x = 0; x < SECTORWINDOWX; ++x)
+                if (sectors[x][y]) return false;
+    center = prevcenter = mapcenter;
+    level = newlevel = maplevel;
+    sectorx = (mapcenter.x >> SECTORWSHIFT) - SECTORWINDOWX / 2;
+    sectory = (mapcenter.y >> SECTORHSHIFT) - SECTORWINDOWY / 2;
+    BindWindow(map); // Use the same safe-reference and unload listener as gameplay.
+    command_window_borrowed = true;
+    return true;
+}
+
+void TMapPane::ReleaseCommandMapWindow()
+{
+    if (command_window_borrowed) ClearWindow();
+}
+
 void TMapPane::UpdateActiveWindow()
 {
     TGameMap* map = MapManager.CurrentMap();
@@ -3898,6 +3921,7 @@ void TMapPane::ClearWindow()
         map->RemoveListener(windowlistener);
     windowlistener = 0;
     windowmap.Clear();
+    command_window_borrowed = false;
 
     for (int32_t y = 0; y < SECTORWINDOWY; ++y)
         for (int32_t x = 0; x < SECTORWINDOWX; ++x)

@@ -91,7 +91,7 @@ constexpr int32_t kLightUniformVec4s =
 constexpr int32_t kLightUniformFloats = kLightUniformVec4s * 4;
 
 // Floats per mesh instance row: world rows w0..w3, tint, obj_id (RGBA8 as floats).
-constexpr int32_t kMeshInstanceFloats = 24;
+constexpr int32_t kMeshInstanceFloats = 28;
 
 // A fragment shader that lights surfaces: the shared lighting model
 // (lightmodel.*.h) followed by the pass's own body.
@@ -137,16 +137,22 @@ void DescribeMeshVertexStage(sg_shader_desc& sh)
     sh.attrs[6].name = "w3";          sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 4;
     sh.attrs[7].name = "tint";        sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 5;
     sh.attrs[8].name = "inst_obj_id"; sh.attrs[8].sem_name = "TEXCOORD"; sh.attrs[8].sem_index = 6;
+    sh.attrs[9].name = "uv_offset"; sh.attrs[9].sem_name = "TEXCOORD"; sh.attrs[9].sem_index = 7;
+    sh.attrs[10].name = "retail_mode"; sh.attrs[10].sem_name = "TEXCOORD"; sh.attrs[10].sem_index = 8;
 
     sh.vs.source = kMeshVs;
     sh.vs.entry  = kShaderVsEntry;
-    sh.vs.uniform_blocks[0].size = 3 * sizeof(float) * 4;
+    sh.vs.uniform_blocks[0].size = 5 * sizeof(float) * 4;
     sh.vs.uniform_blocks[0].uniforms[0].name = "vp";
     sh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     sh.vs.uniform_blocks[0].uniforms[1].name = "camz";
     sh.vs.uniform_blocks[0].uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
     sh.vs.uniform_blocks[0].uniforms[2].name = "camw";
     sh.vs.uniform_blocks[0].uniforms[2].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.vs.uniform_blocks[0].uniforms[3].name = "retail_ambient";
+    sh.vs.uniform_blocks[0].uniforms[3].type = SG_UNIFORMTYPE_FLOAT4;
+    sh.vs.uniform_blocks[0].uniforms[4].name = "retail_directional";
+    sh.vs.uniform_blocks[0].uniforms[4].type = SG_UNIFORMTYPE_FLOAT4;
 
     sh.fs.entry = kShaderFsEntry;
     sh.fs.images[0].name         = "albedo_tex";
@@ -175,13 +181,19 @@ void DescribeMeshVertexLayout(sg_pipeline_desc& pip)
         pip.layout.attrs[3 + i].offset       = i * int32_t(sizeof(float)) * 4;
         pip.layout.attrs[3 + i].format       = SG_VERTEXFORMAT_FLOAT4;
     }
+    pip.layout.attrs[9].buffer_index = 1;
+    pip.layout.attrs[9].offset = 24 * int32_t(sizeof(float));
+    pip.layout.attrs[9].format = SG_VERTEXFORMAT_FLOAT2;
+    pip.layout.attrs[10].buffer_index = 1;
+    pip.layout.attrs[10].offset = 26 * int32_t(sizeof(float));
+    pip.layout.attrs[10].format = SG_VERTEXFORMAT_FLOAT;
     pip.index_type     = SG_INDEXTYPE_UINT16;
     pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
     pip.cull_mode      = SG_CULLMODE_NONE;
 }
 
 // One mesh instance row (kMeshInstanceFloats): world rows, tint, obj_id bytes.
-void PackMeshInstanceRow(const SMeshSubmit& s, float* dst)
+void PackMeshInstanceRow(const SMeshSubmit& s, float* dst, float retail_mode)
 {
     std::memcpy(dst,      s.world, sizeof(s.world));
     std::memcpy(dst + 16, s.tint,  sizeof(s.tint));
@@ -189,6 +201,8 @@ void PackMeshInstanceRow(const SMeshSubmit& s, float* dst)
     dst[21] = float((s.obj_id >>  8) & 0xFFu) / 255.0f;
     dst[22] = float((s.obj_id >> 16) & 0xFFu) / 255.0f;
     dst[23] = float((s.obj_id >> 24) & 0xFFu) / 255.0f;
+    dst[24] = s.uv_offset[0]; dst[25] = s.uv_offset[1];
+    dst[26] = retail_mode; dst[27] = 0.0f;
 }
 
 struct SScreenPoint { float x, y; };
@@ -905,6 +919,7 @@ using namespace metal;
 struct helper_vs_params {
     float4 w0; float4 w1; float4 w2; float4 w3;
     float4 vp; float4 camz; float4 camw;
+    float4 retail_ambient; float4 retail_directional; // directional.w: mode
 };
 struct vs_in {
     float3 pos    [[attribute(0)]];
@@ -916,6 +931,8 @@ struct vs_out {
     float3 wpos;
     float3 wnormal;
     float2 uv;
+    float3 retail_color;
+    float retail_mode;
 };
 vertex vs_out _main(vs_in in [[stage_in]],
                     constant helper_vs_params& p [[buffer(0)]]) {
@@ -944,6 +961,11 @@ vertex vs_out _main(vs_in in [[stage_in]],
     o.wpos = wp;
     o.wnormal = wn;
     o.uv = in.uv;
+    // blue/swscene.cpp::Illuminate quantizes each vertex before interpolation.
+    float3 source_light = p.retail_ambient.xyz + p.retail_directional.xyz *
+        max(dot(wn, float3(0.0, 0.78125, 0.625)), 0.0);
+    o.retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
+    o.retail_mode = p.retail_directional.w;
     return o;
 }
 )MSL";
@@ -955,8 +977,8 @@ struct vs_out {
     float3 wpos;
     float3 wnormal;
     float2 uv;
-    float4 tint;
-    float  scene_z;
+    float3 retail_color;
+    float retail_mode;
 };
 struct helper_params {
     float4 diffuse;
@@ -972,6 +994,14 @@ fragment float4 _main(vs_out in [[stage_in]],
                       constant helper_params& hp [[buffer(0)]],
                       texture2d<float> albedo_tex [[texture(0)]],
                       sampler smp [[sampler(0)]]) {
+    if (in.retail_mode > 0.5) {
+        // RGB565 source raster: texture times Gouraud light; no material
+        // specular/emissive term can create color in a black texel.
+        uint2 size = uint2(albedo_tex.get_width(), albedo_tex.get_height());
+        uint2 xy = min(uint2(floor(fract(in.uv) * float2(size))), size - uint2(1));
+        float4 tex = albedo_tex.read(xy);
+        return float4(tex.rgb * in.retail_color, tex.a);
+    }
     float4 tex = albedo_tex.sample(smp, in.uv);
     if (hp.shade.x > 0.5) {
         bool lit = hp.shade.x > 1.5;
@@ -1036,10 +1066,13 @@ layout(location = 2) in vec2 uv;
 layout(std140) uniform helper_vs_params {
     vec4 w0; vec4 w1; vec4 w2; vec4 w3;
     vec4 vp; vec4 camz; vec4 camw;
+    vec4 retail_ambient; vec4 retail_directional;
 };
 out vec3  v_wpos;
 out vec3  v_wnormal;
 out vec2  v_uv;
+out vec3  v_retail_color;
+out float v_retail_mode;
 void main() {
     vec4 ph = vec4(pos, 1.0);
     vec3 wp = vec3(dot(w0, ph), dot(w1, ph), dot(w2, ph));
@@ -1062,6 +1095,10 @@ void main() {
     v_wpos = wp;
     v_wnormal = wn;
     v_uv = uv;
+    vec3 source_light = retail_ambient.xyz + retail_directional.xyz *
+        max(dot(wn, vec3(0.0, 0.78125, 0.625)), 0.0);
+    v_retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
+    v_retail_mode = retail_directional.w;
 }
 )GLSL";
 inline constexpr const char* kHelperMeshFs = R"GLSL(
@@ -1069,8 +1106,8 @@ inline constexpr const char* kHelperMeshFs = R"GLSL(
 in vec3  v_wpos;
 in vec3  v_wnormal;
 in vec2  v_uv;
-in vec4  v_tint;
-in float v_scene_z;
+in vec3  v_retail_color;
+in float v_retail_mode;
 layout(std140) uniform helper_params {
     vec4 diffuse;
     vec4 ambient;
@@ -1084,6 +1121,13 @@ layout(std140) uniform helper_params {
 uniform sampler2D albedo_tex;
 out vec4 fragColor;
 void main() {
+    if (v_retail_mode > 0.5) {
+        ivec2 size = textureSize(albedo_tex, 0);
+        ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
+        vec4 tex = texelFetch(albedo_tex, xy, 0);
+        fragColor = vec4(tex.rgb * v_retail_color, tex.a);
+        return;
+    }
     vec4 tex = texture(albedo_tex, v_uv);
     if (shade.x > 0.5) {
         bool lit = shade.x > 1.5;
@@ -1145,6 +1189,7 @@ inline constexpr const char* kHelperMeshVs = R"HLSL(
 cbuffer helper_vs_params : register(b0) {
     float4 w0; float4 w1; float4 w2; float4 w3;
     float4 vp; float4 camz; float4 camw;
+    float4 retail_ambient; float4 retail_directional;
 };
 struct vs_in {
     float3 pos    : POSITION;
@@ -1156,6 +1201,8 @@ struct vs_out {
     float3 wpos    : TEXCOORD0;
     float3 wnormal : TEXCOORD1;
     float2 uv      : TEXCOORD2;
+    float3 retail_color : TEXCOORD3;
+    float retail_mode : TEXCOORD4;
 };
 vs_out main_vs(vs_in i) {
     float4 ph = float4(i.pos, 1.0);
@@ -1180,6 +1227,10 @@ vs_out main_vs(vs_in i) {
     o.wpos = wp;
     o.wnormal = wn;
     o.uv = i.uv;
+    float3 source_light = retail_ambient.xyz + retail_directional.xyz *
+        max(dot(wn, float3(0.0, 0.78125, 0.625)), 0.0);
+    o.retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
+    o.retail_mode = retail_directional.w;
     return o;
 }
 )HLSL";
@@ -1201,10 +1252,17 @@ struct ps_in {
     float3 wpos : TEXCOORD0;
     float3 wnormal : TEXCOORD1;
     float2 uv : TEXCOORD2;
-    float4 tint : TEXCOORD3;
-    float  scene_z : TEXCOORD4;
+    float3 retail_color : TEXCOORD3;
+    float retail_mode : TEXCOORD4;
 };
 float4 main_ps(ps_in input) : SV_Target0 {
+    if (input.retail_mode > 0.5) {
+        uint width, height; albedo_tex.GetDimensions(width, height);
+        uint2 size = uint2(width, height);
+        uint2 xy = min(uint2(floor(frac(input.uv) * float2(size))), size - uint2(1,1));
+        float4 tex = albedo_tex.Load(int3(xy,0));
+        return float4(tex.rgb * input.retail_color, tex.a);
+    }
     float4 tex = albedo_tex.Sample(smp, input.uv);
     if (shade.x > 0.5) {
         bool lit = shade.x > 1.5;
@@ -1726,9 +1784,8 @@ void TRenderer::ShutdownTilePipeline()
 
 void TRenderer::InitMeshPipeline()
 {
-    // Every mesh shader shares kMeshVs: 9 attribute slots (0..2 per vertex,
-    // 3..8 per instance: 4 world rows, tint, obj_id) and one uniform block of
-    // 3 vec4s (vp / camz / camw) on the vertex side.
+    // Every mesh shader shares kMeshVs: 11 attribute slots and one vertex
+    // uniform block of five vec4s, including authored UV/retail lighting data.
     sg_shader_desc sh = {};
     DescribeMeshVertexStage(sh);
     sh.fs.source = kMeshFs;
@@ -1756,6 +1813,13 @@ void TRenderer::InitMeshPipeline()
     pip.depth.write_enabled = true;
     pip.label = "renderer.mesh.pipeline";
     mesh_pipeline = sg_make_pipeline(&pip);
+    // Source Blue culls positive Y-up projected cross before raster Y inversion.
+    // Modern mesh VS uses Y-up NDC, so source-visible faces are clockwise here.
+    // Keep the same opaque MRTs, shaders, alpha policy, LESS_EQUAL and depth writes.
+    pip.face_winding = SG_FACEWINDING_CW;
+    pip.cull_mode = SG_CULLMODE_BACK;
+    pip.label = "renderer.mesh.source-positive-cull";
+    mesh_source_cull_pipeline = sg_make_pipeline(&pip);
 
     // Translucent meshes draw into helper_pass (lit_target + scene depth).
     // Step 1 leaves each surface's nearest depth; colour writes are off.
@@ -1809,7 +1873,7 @@ void TRenderer::InitMeshPipeline()
     hsh.attrs[2].name = "uv";        hsh.attrs[2].sem_name = "TEXCOORD"; hsh.attrs[2].sem_index = 0;
     hsh.vs.source = kHelperMeshVs;
     hsh.vs.entry  = kShaderVsEntry;
-    hsh.vs.uniform_blocks[0].size = 7 * sizeof(float) * 4;
+    hsh.vs.uniform_blocks[0].size = 9 * sizeof(float) * 4;
     hsh.vs.uniform_blocks[0].uniforms[0].name = "w0";
     hsh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     hsh.vs.uniform_blocks[0].uniforms[1].name = "w1";
@@ -1824,6 +1888,10 @@ void TRenderer::InitMeshPipeline()
     hsh.vs.uniform_blocks[0].uniforms[5].type = SG_UNIFORMTYPE_FLOAT4;
     hsh.vs.uniform_blocks[0].uniforms[6].name = "camw";
     hsh.vs.uniform_blocks[0].uniforms[6].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.vs.uniform_blocks[0].uniforms[7].name = "retail_ambient";
+    hsh.vs.uniform_blocks[0].uniforms[7].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.vs.uniform_blocks[0].uniforms[8].name = "retail_directional";
+    hsh.vs.uniform_blocks[0].uniforms[8].type = SG_UNIFORMTYPE_FLOAT4;
     hsh.fs.source = kHelperMeshFs;
     hsh.fs.entry  = kShaderFsEntry;
     hsh.fs.uniform_blocks[0].size = 8 * sizeof(float) * 4;
@@ -1894,6 +1962,16 @@ void TRenderer::InitMeshPipeline()
     hpip.label = "renderer.helper.add.front.pipeline";
     helper_mesh_add_front_pipeline = sg_make_pipeline(&hpip);
 
+    // Gold '#$iflare': NewObject's '$' bit40 survives blendcont litadd,
+    // producing retail mode80. All normal helper pipeline states stay above.
+    hpip.depth.compare = SG_COMPAREFUNC_ALWAYS;
+    hpip.cull_mode = SG_CULLMODE_FRONT;
+    hpip.label = "renderer.gold.no-depth.back.pipeline";
+    helper_gold_no_depth_back_pipeline = sg_make_pipeline(&hpip);
+    hpip.cull_mode = SG_CULLMODE_BACK;
+    hpip.label = "renderer.gold.no-depth.front.pipeline";
+    helper_gold_no_depth_front_pipeline = sg_make_pipeline(&hpip);
+
     for (int32_t i = 0; i < kMeshInstanceVBCount; ++i)
     {
         sg_buffer_desc ivb = {};
@@ -1922,12 +2000,15 @@ void TRenderer::ShutdownMeshPipeline()
     if (helper_mesh_front_pipeline.id) { sg_destroy_pipeline(helper_mesh_front_pipeline); helper_mesh_front_pipeline = {}; }
     if (helper_mesh_add_back_pipeline.id) { sg_destroy_pipeline(helper_mesh_add_back_pipeline); helper_mesh_add_back_pipeline = {}; }
     if (helper_mesh_add_front_pipeline.id) { sg_destroy_pipeline(helper_mesh_add_front_pipeline); helper_mesh_add_front_pipeline = {}; }
+    if (helper_gold_no_depth_back_pipeline.id) { sg_destroy_pipeline(helper_gold_no_depth_back_pipeline); helper_gold_no_depth_back_pipeline = {}; }
+    if (helper_gold_no_depth_front_pipeline.id) { sg_destroy_pipeline(helper_gold_no_depth_front_pipeline); helper_gold_no_depth_front_pipeline = {}; }
     if (helper_mesh_shader.id)   { sg_destroy_shader(helper_mesh_shader); helper_mesh_shader = {}; }
     if (mesh_translucent_pipeline.id) { sg_destroy_pipeline(mesh_translucent_pipeline); mesh_translucent_pipeline = {}; }
     if (mesh_translucent_shader.id)   { sg_destroy_shader(mesh_translucent_shader);     mesh_translucent_shader   = {}; }
     if (mesh_depth_pipeline.id) { sg_destroy_pipeline(mesh_depth_pipeline); mesh_depth_pipeline = {}; }
     if (mesh_depth_shader.id)   { sg_destroy_shader(mesh_depth_shader);     mesh_depth_shader   = {}; }
     if (mesh_pipeline.id)    { sg_destroy_pipeline(mesh_pipeline);  mesh_pipeline    = {}; }
+    if (mesh_source_cull_pipeline.id) { sg_destroy_pipeline(mesh_source_cull_pipeline); mesh_source_cull_pipeline = {}; }
     if (mesh_shader.id)      { sg_destroy_shader(mesh_shader);      mesh_shader      = {}; }
 }
 
@@ -2051,7 +2132,8 @@ TTextureHandle TRenderer::RegisterTextureAsset(uint64_t key,
                                                int32_t height,
                                                ERendererTextureFormat format,
                                                uint64_t gpu_bytes,
-                                               ERendererTextureFilter filter)
+                                               ERendererTextureFilter filter,
+                                               bool repeat)
 {
     if (!pixels || width <= 0 || height <= 0)
         return kInvalidTexture;
@@ -2069,7 +2151,7 @@ TTextureHandle TRenderer::RegisterTextureAsset(uint64_t key,
     desc.pixel_format = format == ERendererTextureFormat::R32F ? SG_PIXELFORMAT_R32F : SG_PIXELFORMAT_RGBA8;
     desc.min_filter = filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
     desc.mag_filter = filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
-    desc.wrap_u = desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+    desc.wrap_u = desc.wrap_v = repeat ? SG_WRAP_REPEAT : SG_WRAP_CLAMP_TO_EDGE;
     desc.data.subimage[0][0] = { pixels, pixel_bytes };
     desc.label = "renderer.texture";
 
@@ -2440,6 +2522,12 @@ void TRenderer::SubmitHelperMesh(const SHelperMeshSubmit& m)
     transparent_world_queue.push_back(sub);
 }
 
+void TRenderer::SubmitGoldFlareAfterFx(const SHelperMeshSubmit& m)
+{
+    if (m.mesh == 0 || m.mesh > meshes.size() || !m.additive_blend || m.retail_lighting != 1) return;
+    gold_flare_after_fx_queue.push_back(m);
+}
+
 void TRenderer::DrainMeshQueue()
 {
     if (mesh_queue.empty() || !mesh_pipeline.id) return;
@@ -2450,32 +2538,45 @@ void TRenderer::DrainMeshQueue()
 
     // Sort by mesh handle so same-asset instances are contiguous.
     std::sort(mesh_queue.begin(), mesh_queue.end(),
-              [](const SMeshSubmit& a, const SMeshSubmit& b) { return a.mesh < b.mesh; });
+              [](const SMeshSubmit& a, const SMeshSubmit& b) {
+                  if (a.mesh != b.mesh) return a.mesh < b.mesh;
+                  return a.retail_positive_face_cull < b.retail_positive_face_cull;
+              });
 
     // Pack instance rows (kMeshInstanceFloats each). Capacity is retained by
     // the renderer; the draw loop must not allocate just because the
     // animated/visible mesh count changes within the usual range.
     mesh_instance_scratch.resize(mesh_queue.size() * kMeshInstanceFloats);
     for (size_t i = 0; i < mesh_queue.size(); ++i)
-        PackMeshInstanceRow(mesh_queue[i], &mesh_instance_scratch[i * kMeshInstanceFloats]);
+    {
+        const auto& m = mesh_queue[i];
+        const int mode = m.retail_lighting == 1 && !retail_mesh_rgb_enabled ? 0 : m.retail_lighting;
+        PackMeshInstanceRow(m, &mesh_instance_scratch[i * kMeshInstanceFloats],
+                            light.mode == 0 ? float(mode) : 0.0f);
+    }
     const sg_buffer instance_vb = NextMeshInstanceBuffer();
     if (!instance_vb.id) return;
 
     const sg_range r = { mesh_instance_scratch.data(), mesh_instance_scratch.size() * sizeof(float) };
     sg_update_buffer(instance_vb, &r);
 
-    sg_apply_pipeline(mesh_pipeline);
+    // Each contiguous mesh/cull group applies its own compatible pipeline below.
 
-    float u[12] = {};
+    float u[20] = {};
     PackMeshVsUniforms(u);
     const sg_range u_range = { u, sizeof(u) };
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
+
 
     // Emit one instanced draw per contiguous run of equal mesh handles.
     size_t i = 0;
     while (i < mesh_queue.size()) {
         size_t j = i + 1;
-        while (j < mesh_queue.size() && mesh_queue[j].mesh == mesh_queue[i].mesh) ++j;
+        while (j < mesh_queue.size() && mesh_queue[j].mesh == mesh_queue[i].mesh &&
+               mesh_queue[j].retail_positive_face_cull == mesh_queue[i].retail_positive_face_cull) ++j;
+        if (mesh_queue[i].retail_positive_face_cull && !mesh_source_cull_pipeline.id)
+        { i = j; continue; } // Fail closed rather than silently disabling requested culling.
+        sg_apply_pipeline(mesh_queue[i].retail_positive_face_cull ? mesh_source_cull_pipeline : mesh_pipeline);
+        sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
 
         const SMeshEntry& me = meshes[mesh_queue[i].mesh - 1];
         sg_bindings bind = {};
@@ -2502,7 +2603,7 @@ sg_buffer TRenderer::NextMeshInstanceBuffer()
     return {};
 }
 
-void TRenderer::PackMeshVsUniforms(float (&u)[12]) const
+void TRenderer::PackMeshVsUniforms(float (&u)[20]) const
 {
     u[0] = recon.ox;
     u[1] = recon.oy;
@@ -2516,6 +2617,8 @@ void TRenderer::PackMeshVsUniforms(float (&u)[12]) const
     u[9] = recon.center_wy;
     u[10] = recon.zoom;
     u[11] = recon.mesh_projection_mode;
+    for (int c=0;c<3;++c) { u[12+c]=retail_mesh_ambient[c]; u[16+c]=retail_mesh_directional[c]; }
+    u[15]=u[19]=0.0f;
 }
 
 void TRenderer::EmitTransparentTile(const STileSubmit& t)
@@ -2657,19 +2760,24 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
 {
     sg_pipeline back_pipeline = s.additive_blend ? helper_mesh_add_back_pipeline : helper_mesh_back_pipeline;
     sg_pipeline front_pipeline = s.additive_blend ? helper_mesh_add_front_pipeline : helper_mesh_front_pipeline;
+    if (s.retail_gold_no_depth && s.additive_blend && s.retail_lighting == 1)
+    {
+        back_pipeline = helper_gold_no_depth_back_pipeline;
+        front_pipeline = helper_gold_no_depth_front_pipeline;
+    }
     if (!back_pipeline.id || !front_pipeline.id) return;
 
     const float view_dir[4] = { -0.5f, -0.5f, 1.0f, 1.0f };
     const SMeshEntry& me = meshes[s.mesh - 1];
 
-    sg_apply_pipeline(back_pipeline);
+    sg_apply_pipeline(s.retail_positive_face_cull ? front_pipeline : back_pipeline);
     sg_bindings bind = {};
     bind.vertex_buffers[0] = me.vbuf;
     bind.index_buffer = me.ibuf;
     bind.fs_images[0] = TextureImage(me.albedo);
     sg_apply_bindings(&bind);
 
-    float vsu[28] = {};
+    float vsu[36] = {};
     int vo = 0;
     std::memcpy(&vsu[vo], s.world + 0,  sizeof(float) * 4); vo += 4;
     std::memcpy(&vsu[vo], s.world + 4,  sizeof(float) * 4); vo += 4;
@@ -2687,6 +2795,14 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     vsu[vo++] = recon.center_wy;
     vsu[vo++] = recon.zoom;
     vsu[vo++] = 0.0f;
+    // An explicit helper reference mode selects the software path even when
+    // the surrounding VFX backdrop uses the modern lighting configuration.
+    // Its ambient/directional inputs still come from the existing retail
+    // environment; no helper-specific brightness or sun replacement.
+    for (int c = 0; c < 3; ++c) vsu[vo++] = retail_mesh_ambient[c];
+    vsu[vo++] = 0.0f;
+    for (int c = 0; c < 3; ++c) vsu[vo++] = retail_mesh_directional[c];
+    vsu[vo++] = s.retail_lighting == 1 ? 1.0f : 0.0f;
     const sg_range vsr = { vsu, sizeof(vsu) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vsr);
 
@@ -2704,6 +2820,9 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fsr);
 
     sg_draw(0, me.num_indices, 1);
+    // Existing front pipeline uses BACK cull with default CW winding: it keeps
+    // clockwise NDC / positive screen-down source faces. Defaults draw both.
+    if (s.retail_positive_face_cull) return;
     sg_apply_pipeline(front_pipeline);
     sg_apply_bindings(&bind);
     sg_draw(0, me.num_indices, 1);
@@ -2724,7 +2843,9 @@ sg_buffer TRenderer::UploadTranslucentMeshInstances()
         }
         s.mesh_instance = rows++;
         mesh_instance_scratch.resize(size_t(rows) * kMeshInstanceFloats);
-        PackMeshInstanceRow(s.mesh, &mesh_instance_scratch[size_t(s.mesh_instance) * kMeshInstanceFloats]);
+        const int mode = s.mesh.retail_lighting == 1 && !retail_mesh_rgb_enabled ? 0 : s.mesh.retail_lighting;
+        PackMeshInstanceRow(s.mesh, &mesh_instance_scratch[size_t(s.mesh_instance) * kMeshInstanceFloats],
+                            light.mode == 0 ? float(mode) : 0.0f);
     }
     if (rows == 0)
         return {};
@@ -2746,7 +2867,7 @@ void TRenderer::EmitTranslucentMeshSurface(const STransparentWorldSubmit* first,
     if (!mesh_depth_pipeline.id || !mesh_translucent_pipeline.id || !instances.id)
         return;
 
-    float vsu[12] = {};
+    float vsu[20] = {};
     PackMeshVsUniforms(vsu);
     const sg_range vs_range = { vsu, sizeof(vsu) };
     const sg_range fs_range = { light_uniforms, size_t(kLightUniformFloats) * sizeof(float) };
@@ -2827,6 +2948,25 @@ void TRenderer::DrainTransparentWorldQueue()
     }
     sg_end_pass();
     transparent_world_queue.clear();
+    lit_target_dirty = true;
+}
+
+void TRenderer::DrainGoldFlareAfterFxQueue()
+{
+    if (gold_flare_after_fx_queue.empty() || !helper_pass.id) return;
+    // Both FX and helper passes use lit_target RGBA8 and the same DEPTH
+    // attachment. The preceding pass has ended; load both attachments and
+    // retain each sourced no-write policy. Gold's '$' mode80 explicitly uses
+    // ALWAYS/no-write; ordinary helper pipelines remain LESS_EQUAL/no-write.
+    sg_pass_action pa = {};
+    pa.colors[0].action = SG_ACTION_LOAD;
+    pa.depth.action = SG_ACTION_LOAD;
+    pa.stencil.action = SG_ACTION_DONTCARE;
+    sg_begin_pass(helper_pass, &pa);
+    for (const auto& flare : gold_flare_after_fx_queue)
+        EmitTransparentHelper(flare);
+    sg_end_pass();
+    gold_flare_after_fx_queue.clear();
     lit_target_dirty = true;
 }
 
@@ -3315,6 +3455,7 @@ void TRenderer::RunLightingPass()
 
     DrainTransparentWorldQueue();
     DrainFxQueue();
+    DrainGoldFlareAfterFxQueue();
     DrainOverlayQueue();
     lit_target_dirty = true;
     // Make any post-lighting samplers (PresentForSnap, the equip-pane
@@ -3380,6 +3521,7 @@ void TRenderer::BeginTilePass(float r, float g, float b, float a)
     current_tile_pass_stats = {};
     tile_queue.clear();
     transparent_world_queue.clear();
+    gold_flare_after_fx_queue.clear();
     overlay_queue.clear();
     sg_pass_action pa = {};
     pa.colors[0].action = SG_ACTION_CLEAR;
@@ -5231,6 +5373,7 @@ void TRenderer::InitFxPipeline()
         sh.attrs[4].name = "color";       sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 4;
         sh.attrs[5].name = "debug_mode";  sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 5;
         sh.attrs[6].name = "light_mode";  sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 6;
+        sh.attrs[7].name = "retail_texture"; sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 7;
         sh.vs.source = kFxStripVs;
         sh.vs.entry  = kShaderVsEntry;
         FillFxSharedVsUbo(sh.vs.uniform_blocks[0]);
@@ -5256,6 +5399,7 @@ void TRenderer::InitFxPipeline()
         pip.layout.attrs[4].buffer_index = 0; pip.layout.attrs[4].offset = 9  * sizeof(float); pip.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
         pip.layout.attrs[5].buffer_index = 0; pip.layout.attrs[5].offset = 13 * sizeof(float); pip.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT;
         pip.layout.attrs[6].buffer_index = 0; pip.layout.attrs[6].offset = 14 * sizeof(float); pip.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[7].buffer_index = 0; pip.layout.attrs[7].offset = 15 * sizeof(float); pip.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT;
         pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
         pip.cull_mode      = SG_CULLMODE_NONE;
         for (int32_t b = 0; b < kFxBlendCount; ++b)
@@ -5494,11 +5638,44 @@ void TRenderer::SubmitFxStrip(const SStripDrawItem& item)
     fx_strip_queue.push_back(std::move(e));
 }
 
+void TRenderer::SubmitFxQuad(const SQuadDrawItem& item)
+{
+    if (g_fx_wireframe_override || item.debug_mode == EFxDebugMode::Wireframe)
+    {
+        constexpr int32_t edges[4][2] = {{0, 1}, {1, 3}, {3, 2}, {2, 0}};
+        SStripSegment segments[4] = {};
+        const int32_t count = item.corner_count == 3 ? 3 : 4;
+        constexpr int32_t tri_edges[3][2] = {{0,1},{1,2},{2,0}};
+        for (int32_t i = 0; i < count; ++i)
+        {
+            const int32_t* edge = count == 3 ? tri_edges[i] : edges[i];
+            std::copy_n(item.world_pos[edge[0]], 3, segments[i].world_a);
+            std::copy_n(item.world_pos[edge[1]], 3, segments[i].world_b);
+            segments[i].width_a_wu = segments[i].width_b_wu = 0.6f;
+            segments[i].color_a[0] = segments[i].color_b[0] = 0.0f;
+        }
+        SStripDrawItem outline = {};
+        outline.segments = segments;
+        outline.num_segments = count;
+        outline.key = item.key;
+        outline.key.texture = white_texture;
+        outline.debug_mode = EFxDebugMode::SolidColor;
+        SubmitFxStrip(outline);
+        return;
+    }
+    SQuadDrawItem queued = item;
+    if (queued.key.texture == kInvalidTexture && white_texture != kInvalidTexture)
+        queued.key.texture = white_texture;
+    queued.key.pipeline_id = uint16_t(EFxPipeline::Strip);
+    fx_quad_queue.push_back(queued);
+}
+
 void TRenderer::DrainFxQueue()
 {
     const bool empty = fx_billboard_queue.empty()
                     && fx_particle_queue.empty()
-                    && fx_strip_queue.empty();
+                    && fx_strip_queue.empty()
+                    && fx_quad_queue.empty();
     if (empty || !fx_pass.id) return;
 
     // If no consumer set the FX camera basis this frame, derive one from
@@ -5712,7 +5889,7 @@ void TRenderer::DrainFxQueue()
     }
 
     // ---- Strips ---------------------------------------------------------
-    if (!fx_strip_queue.empty() && fx_strip_pip[0][0].id)
+    if ((!fx_strip_queue.empty() || !fx_quad_queue.empty()) && fx_strip_pip[0][0].id)
     {
         // Strips are not auto-batched. Expand each strip's segments into
         // 6 vertices per segment (two triangles per quad) and emit a
@@ -5721,12 +5898,20 @@ void TRenderer::DrainFxQueue()
         // Per strip: write vertices, then draw range [base, base+count).
         struct DrawSpan { int32_t first; int32_t count; SFxBatchKey key; EFxDebugMode dbg; EFxLightMode lit; };
         std::vector<DrawSpan> spans;
+        int32_t dropped_capacity_items = 0;
 
         for (const auto& e : fx_strip_queue)
         {
             const int32_t n = int32_t(e.segments.size());
             if (n <= 0) continue;
             const int32_t first_v = int32_t(scratch.size() / kFxStripVertexFloats);
+            // Admit a whole item before packing it. An oversized item must
+            // not invalidate the already accepted strips/quads in this frame.
+            if (n > (kMaxFxStripVerts - first_v) / 6)
+            {
+                ++dropped_capacity_items;
+                continue;
+            }
             const float dbg = float(uint8_t(e.debug_mode));
             const float lit = float(uint8_t(e.light_mode));
 
@@ -5823,6 +6008,49 @@ void TRenderer::DrainFxQueue()
             spans.push_back(ds);
         }
 
+        // Authored quads share the strip pipeline with zero half-width: the
+        // vertex shader then projects each supplied world corner directly.
+        // No camera-facing expansion or axis-aligned bounding-box fitting.
+        for (const SQuadDrawItem& quad : fx_quad_queue)
+        {
+            DrawSpan ds = {};
+            ds.first = int32_t(scratch.size() / kFxStripVertexFloats);
+            ds.count = quad.corner_count == 3 ? 3 : 6;
+            if (ds.count > kMaxFxStripVerts - ds.first)
+            {
+                ++dropped_capacity_items;
+                continue;
+            }
+            ds.key = quad.key;
+            ds.dbg = quad.debug_mode;
+            ds.lit = quad.light_mode;
+            // Match the authored quad's diagonal (BL, TL, BR) (TR, BR, TL).
+            constexpr int32_t corners[6] = {2, 0, 3, 1, 3, 0};
+            constexpr int32_t triangle[3] = {0,1,2};
+            for (int32_t i = 0; i < ds.count; ++i)
+            {
+                const int32_t corner = ds.count == 3 ? triangle[i] : corners[i];
+                const float* pos = quad.world_pos[corner];
+                scratch.push_back(pos[0]); scratch.push_back(pos[1]); scratch.push_back(pos[2]);
+                // A nonzero tangent keeps all shader normalizations defined.
+                scratch.push_back(1.0f); scratch.push_back(0.0f); scratch.push_back(0.0f);
+                scratch.push_back(0.0f);  // no strip extrusion
+                scratch.push_back(quad.uv[corner][0]); scratch.push_back(quad.uv[corner][1]);
+                for (float channel : quad.color_rgba) scratch.push_back(channel);
+                scratch.push_back(float(uint8_t(quad.debug_mode)));
+                scratch.push_back(float(uint8_t(quad.light_mode)));
+                scratch.push_back(float(quad.retail_texture));
+            }
+            spans.push_back(ds);
+        }
+
+        // Warn once per overflow episode instead of flooding the frame log.
+        static bool warned_capacity = false;
+        if (dropped_capacity_items > 0 && !warned_capacity)
+            log_warn("[fx] vertex capacity: dropped %d strip/quad items; retained %zu vertices",
+                     dropped_capacity_items, scratch.size() / kFxStripVertexFloats);
+        warned_capacity = dropped_capacity_items > 0;
+
         if (!scratch.empty() && int32_t(scratch.size() / kFxStripVertexFloats) <= kMaxFxStripVerts)
         {
             const sg_range r = { scratch.data(), scratch.size() * sizeof(float) };
@@ -5858,6 +6086,14 @@ void TRenderer::DrainFxQueue()
     fx_billboard_queue.clear();
     fx_particle_queue.clear();
     fx_strip_queue.clear();
+    fx_quad_queue.clear();
     fx_camera.set = false;
     lit_target_dirty = true;
+}
+
+void TRenderer::SetRetailMeshLighting(const float ambient[3], const float directional[3], bool rgb_enabled)
+{
+    std::memcpy(retail_mesh_ambient, ambient, sizeof(retail_mesh_ambient));
+    std::memcpy(retail_mesh_directional, directional, sizeof(retail_mesh_directional));
+    retail_mesh_rgb_enabled = rgb_enabled;
 }

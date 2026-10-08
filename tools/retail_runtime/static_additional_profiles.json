@@ -1,0 +1,37 @@
+{
+  "scope": "Selected constant state0 mesh/texture-frame0 profiles only; watchers have4/4/6 texture frames and animation remains open.",
+  "profiles": [
+    {
+      "name": "StillWater",
+      "id": "0xadbcef14",
+      "asset": "Misc\\StillWater.I3D",
+      "asset_sha256": "e1bdfe4f633f6b9dd496232ed5a624a3c882ba932ccd2fcb954f0fe0095e4450",
+      "vertices": 4,
+      "faces": 2
+    },
+    {
+      "name": "ogrokwatcher1",
+      "id": "0xaeaeeb23",
+      "asset": "misc\\ogrokwatcher1.i3d",
+      "asset_sha256": "b8a393e78a8614f217fedfab546d2c5ffa51b8952568d2f6d11417ca26cf7570",
+      "vertices": 4,
+      "faces": 2
+    },
+    {
+      "name": "ogrokwatcher2",
+      "id": "0xaeaeeb24",
+      "asset": "misc\\ogrokwatcher2.i3d",
+      "asset_sha256": "78a989483c7b9ee2075084950de8a85f187ca27fd6f0881546df12737bbd634b",
+      "vertices": 4,
+      "faces": 2
+    },
+    {
+      "name": "ogrokwatcher3",
+      "id": "0xaeaeeb25",
+      "asset": "misc\\ogrokwatcher3.i3d",
+      "asset_sha256": "df960c5d82019f8b2e8504f0147ed855516f459e6f6f8d94553a3eb696be0978",
+      "vertices": 4,
+      "faces": 2
+    }
+  ]
+}

@@ -12,6 +12,15 @@
 #include <cstring>
 #include <initializer_list>
 
+float ParticleAtlasTime(double elapsed_seconds, int32_t cycle_frames, double frames_per_second)
+{
+    if (!std::isfinite(elapsed_seconds) || elapsed_seconds < 0.0 ||
+        !std::isfinite(frames_per_second) || frames_per_second <= 0.0 || cycle_frames <= 0)
+        return 0.0f;
+    const double tick = std::floor(elapsed_seconds * frames_per_second + 1e-7);
+    return float(std::fmod(tick, double(cycle_frames)) / frames_per_second);
+}
+
 int32_t ParticleDefaultLanes(EParticleVar var)
 {
     switch (var)

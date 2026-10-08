@@ -1,16 +1,27 @@
-# TSymGlowAnimator - MEDIUM CONFIDENCE CANDIDATE
+# TSymGlowAnimator - verified leaf setup/animation/render slots
 source_class: "TSymGlowAnimator"
 ghidra_class: "cls_0x5a9e50"
-confidence: "MEDIUM"
+confidence: "HIGH"
 
 # Evidence:
 #   - "SymGlow" string at .rdata 005e10fc has 1 XREF: 004e5110 in cls_0x5a9e50
 #     (delta +0x220 in fn 0x4e4ef0).
-#   - "sparks" string at .rdata 005e1104 also XREFs into cls_0x5a9e50 at
-#     004e53a0 (+0x140 in fn 0x4e5260) — suggests this class also spawns
-#     sparks particles, consistent with a glowing symbol effect.
+#   - Native vtable 005a9e50 slots +92/+44/+52 execute SetupObjects
+#     004e5130, Animate 004e51c0 and Render 004e5260. The thin fixture
+#     verifies all 162 breathing/UV states and 14 repeated software pairs.
+#   - OOAnalyzer's merged method list also contains Flame methods. Those
+#     associations and neighboring "sparks" registration are not evidence
+#     that this cylinder spawns sparks.
 #   - cls_0x5a9e50 size 268 bytes, 7 methods, self-allocated 0x10c bytes.
-#   - Inherits from TEffect chain.
+#   - Animator inherits from T3DAnimator; its owner is an effect instance.
 
 fields:
+  "0xfc": "float last_render_scroll_step"
+  "0x100": "float zscale"
+  "0x104": "float dz"
+  "0x108": "int timer"
 methods:
+  SetupObjects: "0x4e5130"
+  Animate: "0x4e51c0"
+  Render: "0x4e5260"
+verified_evidence: "recon/retail_asm/runtime/effects/symglow-current-frontend-ab/manifest.json"
