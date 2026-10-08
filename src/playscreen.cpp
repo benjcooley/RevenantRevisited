@@ -282,6 +282,7 @@ bool TPlayScreen::Initialize()
     // map and follows it when a load or level change replaces it.
     mapRenderer = std::make_unique<TMapRenderer>();
     mapRenderer->Initialize();
+    MapPane.SetMapView(mapRenderer.get());
     BindWorld();
     mapListener = MapManager.AddListener([this](EMapManagerEvent, TMapManager*) { BindWorld(); });
     // Push global Revisited point-light multipliers now that MapRenderer
@@ -672,6 +673,7 @@ void TPlayScreen::Close()
     }
     if (mapRenderer)
     {
+        MapPane.SetMapView(nullptr);
         mapRenderer->Shutdown();
         mapRenderer.reset();
     }
@@ -1476,6 +1478,7 @@ void TPlayScreen::Animate(bool /*draw*/)
     if (g_playHudInitialized)
         RenderUIHudModeEmbedded();
     RenderFrame();
+    CurrentMode()->Animate();
     EditorDrawChrome();
     if (DebugUI::IsVisible())
     {
@@ -1557,6 +1560,27 @@ void TPlayScreen::OpenInGameMenu()
 bool TPlayScreen::InGameMenuOpen() const
 {
     return menuPending || ingamemenu->IsOpen();
+}
+
+bool TPlayScreen::MapHasPointer(int32_t x, int32_t y) const
+{
+    if (ModalHas(MODAL_MOUSE) || GameFlow.Session().Loading() || InBuySellDrawer(x, y))
+        return false;
+    return !(g_playHudInitialized && (IsReconstructedHudPoint(x, y) || UIDragState::IsActive()));
+}
+
+uint32_t TPlayScreen::ControlModeMask() const
+{
+    // ControlMap.GetCommand returns the first binding whose modes meet the
+    // mask, so exactly one mode goes in ('S' is sneak in walk mode and
+    // thrust in combat mode).
+    if (Player)
+    {
+        if (Player->IsCombat())     return CTRL_COMBATMODE;
+        if (Player->IsBowMode())    return CTRL_BOWMODE;
+        if (Player->IsSneakMode())  return CTRL_SNEAKMODE;
+    }
+    return CTRL_NORMALMODE;
 }
 
 void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)

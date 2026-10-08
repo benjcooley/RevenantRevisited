@@ -42,8 +42,9 @@ class TAnimImagery : public TObjectImagery
         // Draws unlit imagery to background
     virtual void DrawLit(TObjectInstance* oi, TSurface* surface);
         // Draws lit imagery to background
-    virtual bool GetZ(TObjectInstance* oi, TSurface* surface);
-        // Get first unclipped zbuffer point by simulating drawing to the surface
+    bool GetZ(TObjectInstance* oi, const TObjectInstance* frontmost) override;
+        // Retail's gates on the state and the still, then whether the still's
+        // pixel is the one shown at the pick point (TAnimImagery::GetZ 0x00418b70)
     virtual void DrawSelected(TObjectInstance* oi, TSurface* surface);
         // Causes image to draw selection (hilighting) around itself
     virtual bool AlwaysOnTop(TObjectInstance* oi);
