@@ -167,6 +167,10 @@ void SeedRandom(uint32_t seed);
     // still call directly)
 uint64_t RandomDraws();
     // Values drawn since start: a run's draw count is part of its trace
+using RandomObserver = void (*)(int32_t value, const void* caller);
+void SetRandomObserver(RandomObserver observer);
+    // Determinism debugging (--combattrace-rng): told every draw and the
+    // code address that asked for it (random()'s caller, or GameRand's)
 
 // Comma delimited list functions (useful for strings in "abcd,defg,hijk" format)
 // If dst is nullptr, retuns result pointer from static internal buffer

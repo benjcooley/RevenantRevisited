@@ -214,7 +214,43 @@ def resolve_cases(data: Path, workdir: Path) -> list[dict]:
     return finish(cases)
 
 
+# ---- M2: angle and distance kernels ---------------------------------------------
+
+def kernel_cases(data: Path, workdir: Path) -> list[dict]:
+    """Exhaustive where it's cheap: every angle pair; vectors over a grid
+    dense near the axes and the table edge (255 before the halving loops),
+    plus long ones; every angle at a spread of speeds and z angles."""
+    cases = []
+    angles = list(range(256)) + [256, 300, -1, -64, 511]
+    pairs = [[a, b] for a in angles for b in angles]
+    for i in range(0, len(pairs), 8192):
+        cases.append(dict(name=f'k.angle-diff.{i // 8192}', kernel='angle-diff', inputs=pairs[i:i + 8192]))
+    coords = sorted(set(list(range(-40, 41)) + list(range(-300, 301, 13)) +
+                        [-5000, -1024, -511, -256, -255, 255, 256, 511, 1024, 5000]))
+    vecs = [[[1000, 1000, 0], [1000 + dx, 1000 + dy, 0]] for dx in coords for dy in coords]
+    for kernel in ('facing', 'distance', 'obj-distance', 'obj-angle'):
+        for i in range(0, len(vecs), 4096):
+            cases.append(dict(name=f'k.{kernel}.{i // 4096}', kernel=kernel, inputs=vecs[i:i + 4096]))
+    vec_in = [[a, s, z] for a in range(256) for s in (1, 4, 16, 100, 256, 1000, 0x40000)
+              for z in (0, 16, 64, 200)]
+    cases.append(dict(name='k.vector', kernel='vector', inputs=vec_in))
+    return finish(cases)
+
+
+def compare_kernels(case: dict, retail: dict, port: dict) -> list[dict]:
+    out = []
+    for i, (r, p) in enumerate(zip(retail['outputs'], port['outputs'])):
+        if r != p:
+            out.append(dict(where=f'input {case["inputs"][i]}', line=None, field=case['kernel'], retail=r, port=p))
+    if len(retail['outputs']) != len(port['outputs']):
+        out.append(dict(where='count', line=None, field='outputs', retail=len(retail['outputs']),
+                        port=len(port['outputs'])))
+    return out
+
+
 TARGETS = {
+    'combat-kernels': dict(fixture='slots/combat/kernels.py', cases=kernel_cases, compare=compare_kernels,
+                           port_fields=port_fields, unit=lambda r: len(r['outputs'])),
     'combat-go': dict(fixture='slots/combat/combat_call.py', cases=go_cases, compare=compare,
                       port_fields=port_fields, unit=lambda r: 1),
     'combat-resolve': dict(fixture='slots/combat/combat_call.py', cases=resolve_cases, compare=compare,

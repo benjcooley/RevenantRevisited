@@ -1558,7 +1558,7 @@ void GetParameters(int argc, char **argv)
         "chunkcachesize", "driver", "device", "videocap", "fastlock",
         "loadmap", "lang", "test", "level", "resolution", "res",
         "cinematic", "menu", "exec", "vfx-lighting-mode", "partsys-quality", "partsys-incoming-blend",
-        "seed", "combattrace",
+        "seed", "combattrace", "combattrace-rng",
     });
     cmd.parse(argc, argv);
 
@@ -1579,6 +1579,12 @@ void GetParameters(int argc, char **argv)
         }
         if (arg_param(cmd, "combattrace", p) && !CombatTrace::Open(p.c_str()))
             log_error("[combattrace] can't write %s", p.c_str());
+        if (arg_param(cmd, "combattrace-rng", p))       // FROM:TO ticks
+        {
+            const size_t colon = p.find(':');
+            CombatTrace::TraceRandom(std::stoll(p.substr(0, colon)),
+                                     colon == std::string::npos ? std::stoll(p) : std::stoll(p.substr(colon + 1)));
+        }
     }
 
   // Game speed first — performance knobs below depend on it

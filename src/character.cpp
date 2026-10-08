@@ -28,6 +28,7 @@
 #include "ammo.h"
 #include "player.h"
 #include "logging.h"
+#include "combattrace.h"
 
 #include <algorithm>
 #include <math.h>
@@ -1015,6 +1016,8 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
 
   // Apply damage to low level object
     TObjectInstance::Damage(damage);
+    CombatTrace::Event(this, "damage", "amount=%d\ttype=%d\thp=%d\tby=%s", damage, damagetype, Health(),
+                       attacker && attacker->GetName() ? attacker->GetName() : "-");
 
   // Get impact pointer
     SCharAttackImpact* impactdata = nullptr;
@@ -1022,6 +1025,7 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
   // Do death...
     if (Health() < 1)
     {
+        CombatTrace::Event(this, "death", "by=%s", attacker && attacker->GetName() ? attacker->GetName() : "-");
 /*      if (!random(0, 2))
         {
             S3DPoint vel;
@@ -1625,11 +1629,14 @@ bool TCharacter::ResolveHit(TCharacter* targ,
                 tohit -= (maxroll - tohit + 1) / 2;     // Then DOUBLE hit chances
 
             // We hit, so set damage value to precalculated attack damage!
-            if (random(1, maxroll) > tohit)
+            const int32_t roll = random(1, maxroll);
+            if (roll > tohit)
             {
                 damage = attackdamage; 
                 impact = attackimpact; // This can be nullptr;
             }
+            CombatTrace::Event(this, roll > tohit ? "hit" : "miss", "target=%s\troll=%d\ttohit=%d\tmaxroll=%d\tdamage=%d",
+                               targ->GetName() ? targ->GetName() : "-", roll, tohit, maxroll, damage);
 
             // We hit the character (though we may not have done much damage)!
             if (!targ->IsDoing(ACTION_BLOCK) || damage > 0) // ****** CODE FOR IMPACT *******
@@ -4282,7 +4289,13 @@ bool TCharacter::DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage)
 
   // Do magic attack
     if (ad->flags & CA_MAGICATTACK)
+    {
+        CombatTrace::Event(this, "cast", "spell=%s\ttarget=%s", ad->spellname,
+                           targ && targ->GetName() ? targ->GetName() : "-");
         return CastByName(ad->spellname, (TObjectInstance* *)&targ, (targ)?1:0, &(ad->spellsource));
+    }
+    CombatTrace::Event(this, "attack", "attack=%s\ttarget=%s\tdamage=%d", ad->attackname,
+                       targ && targ->GetName() ? targ->GetName() : "-", damage);
 
   // Get action type
     ACTION a;

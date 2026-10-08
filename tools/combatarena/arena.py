@@ -98,7 +98,7 @@ def last_tick(trace: Path) -> int:
     return -1
 
 
-def run_once(scn: dict, port: Path, out: Path, watch: bool = False) -> dict:
+def run_once(scn: dict, port: Path, out: Path, watch: bool = False, extra: list[str] = ()) -> dict:
     if out.exists():
         shutil.rmtree(out)
     save = out / 'save'
@@ -115,6 +115,7 @@ def run_once(scn: dict, port: Path, out: Path, watch: bool = False) -> dict:
             f'--max-runtime={scn.get("max_runtime", 600)}']
     if not watch:
         args.insert(1, '--headless')
+    args += list(extra)
     env = dict(os.environ, REVENANT_SAVE_PATH=str(save), REVENANT_DATA_PATH=str(DATA))
     (out / 'cmd.txt').write_text(' '.join(repr(a) for a in args) + '\n')
     begin = time.time()
@@ -187,11 +188,11 @@ def cmd_run(a) -> int:
     port = Path(a.port).resolve()
     base = Path(a.out).resolve() / scn['name']
     if a.watch:
-        r = run_once(scn, port, base / 'watch', watch=True)
+        r = run_once(scn, port, base / 'watch', watch=True, extra=a.extra)
         print(json.dumps(r, indent=1))
         return 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=a.repeat) as pool:
-        results = list(pool.map(lambda i: run_once(scn, port, base / f'run{i + 1}'), range(a.repeat)))
+        results = list(pool.map(lambda i: run_once(scn, port, base / f'run{i + 1}', extra=a.extra), range(a.repeat)))
     for r in results:
         print(f"{Path(r['out']).name}: {r['stop']}, tick {r['last_tick']}, {r['wall_s']} s, "
               f"trace {r['trace_sha256'][:16]}")
@@ -226,6 +227,8 @@ def main() -> int:
     r.add_argument('--repeat', type=int, default=2)
     r.add_argument('--watch', action='store_true')
     r.add_argument('--port', default=str(REPO / 'build' / 'Revenant'))
+    r.add_argument('--extra', action='append', default=[], help='an extra port argument (repeatable), '
+                   'e.g. --extra=--combattrace-rng=89:90')
     s = sub.add_parser('show')
     s.add_argument('trace')
     s.add_argument('--every', type=int, default=24)
