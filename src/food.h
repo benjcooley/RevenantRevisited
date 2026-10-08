@@ -24,8 +24,16 @@ class TFood : public TObjectInstance
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Munch munch munch
-    virtual int32_t CursorType(TObjectInstance* inst = nullptr) { if (inst) return CURSOR_NONE; return CURSOR_MOUTH; }
+    int32_t CursorType(TObjectInstance* inst = nullptr) override { if (inst) return CURSOR_NONE; return CURSOR_MOUTH; }
         // Yummy
+
+    void Load(RTInputStream is, int32_t version, int32_t objversion) override;
+        // A loaded stack holds at least one
+    bool MergeInto(TObjectInstance* newowner) override;
+        // REVSYNC: 0x0050ea80. Joins newowner's stack of the same name
+
+    // How many are in this stack (retail object stat 0)
+    OBJSTATFUNC(Amount)
 
     // Food statistics
     STATFUNC(Value)

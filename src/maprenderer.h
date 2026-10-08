@@ -33,6 +33,10 @@ class TMapRenderer
                                                        int32_t sector_x,
                                                        int32_t sector_y)> post_load_hook = {});
 
+    // One-time setup for a renderer whose map is supplied with SetMap
+    // (the PlayScreen, which presents the game session's world).
+    void Initialize();
+
     // Bind the renderer to a TGameMap (owned by TMapManager).
     // Subscribes to the map's Loaded/Updated/Unloaded events:
     //  * Loaded / Updated -> rebuild drawable / light / scene caches
@@ -96,6 +100,15 @@ class TMapRenderer
     // Caves typically want 1.5-2.0 on intensity to read; open forest can
     // drop range to keep the scene crisper.
     void SetPointLightMultipliers(float intensity_mul, float range_mul);
+
+    // Lighting model pushed to the renderer every frame: 0 = Classic
+    // (retail), 1 = modern. Seeded from [Revisited] LightingMode.
+    void SetLightingMode(int32_t mode);
+
+    // Whether the current area has a day/night cycle (AREA_DONIGHT: the area
+    // defines night ambient values). The modern model's sun only exists in
+    // such areas; retail had no sun at all, so Classic never uses one.
+    void SetDaylightCycle(bool has_cycle);
 
     // Last-frame draw counts, exposed so the editor status bar can show
     // exactly what's hitting the GPU. All-zero before the first frame.

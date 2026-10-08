@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "testmodes.h"
+#include "screen.h"
 
 #include <sokol_app.h>          // sapp_request_quit on script drain
 #include <stb_image_write.h>   // for i3ddump test mode (impl lives in framesnap.cpp)
@@ -36,23 +37,23 @@
 #include "render_metadata.h"
 #include "renderer.h"
 #include "revenant.h"
+#include "revutils.h"
 #include "sound.h"
 #include "testconfig.h"
 #include "time.h"
 #include "tile.h"
 #include "uidragstate.h"
+#include "uidemoplayer.h"
 #include "uianchortest.h"
 #include "uibarinvtest.h"
 #include "uibottombartest.h"
 #include "uicliptest.h"
-#include "uideathtest.h"
 #include "uiequiptest.h"
 #include "uihudtest.h"
 #include "uidefscreentest.h"
 #include "uiinventorytest.h"
 #include "uilayouttest.h"
 #include "uiloadscreentest.h"
-#include "uimainmenutest.h"
 #include "uimaptest.h"
 #include "uinineslicetest.h"
 #include "uiplyrstatusbartest.h"
@@ -2327,11 +2328,10 @@ bool InitializeI3DStaticMode()
 bool InitializeWaterPreviewMode()
 {
     std::string meta_error;
-    const std::filesystem::path meta_path =
-        std::filesystem::current_path() / ".." / "data" / "Resources" / "render_metadata.def";
-    if (!LoadRenderMetadataFile(meta_path.string().c_str(), g_i3dTest.render_meta, &meta_error))
+    const std::string meta_path = rev_engine_asset("render_metadata.def");
+    if (!LoadRenderMetadataFile(meta_path.c_str(), g_i3dTest.render_meta, &meta_error))
         log_warn("[water3d] failed to load render metadata '%s': %s",
-                 meta_path.string().c_str(), meta_error.c_str());
+                 meta_path.c_str(), meta_error.c_str());
 
     g_i3dTest.roster = {
         "Misc\\Water.I3D",
@@ -2558,7 +2558,7 @@ bool InitializeIconMode()
         return true;
     }
     log_info("[icon] atlas %dx%d for %d glyphs",
-        atlas->width, atlas->height, (int)atlas->numchars);
+        atlas->width, atlas->height, (int)atlas->glyphs.size() - 1);
     return true;
 }
 
@@ -2899,19 +2899,19 @@ void RenderAudioMode()
         ImGui::Text("SFX registry (%d entries)", SoundPlayer.NumItems());
         if (ImGui::BeginChild("sfxlist", ImVec2(0, 0), true)) {
             for (int32_t i = 0; i < SoundPlayer.NumItems(); ++i) {
-                PSSoundRef ref = SoundPlayer.GetRef(i);
-                if (!ref || !ref->name) continue;
+                const SSoundRef* ref = SoundPlayer.GetRef(i);
+                if (!ref) continue;
                 ImGui::PushID(i);
                 if (ImGui::Button("Play")) {
                     if (SoundPlayer.Mount(i)) {
                         SoundPlayer.Play(i);
                         SoundPlayer.Unmount(i);
                     } else {
-                        log_warn("[audio] mount failed for sound[%d] '%s'", i, ref->name);
+                        log_warn("[audio] mount failed for sound[%d] '%s'", i, ref->name.c_str());
                     }
                 }
                 ImGui::SameLine();
-                ImGui::Text("%s", ref->name);
+                ImGui::Text("%s", ref->file.c_str());
                 ImGui::PopID();
             }
         }
@@ -2934,13 +2934,13 @@ void RenderAudioMode()
 // HandleMouseClick / HandleKeyPress path real input uses. Coordinates are in
 // Classic 640x480 content pixels (the UI test modes letterbox internally).
 // =====================================================================
-enum { MS_MOVE = 0, MS_CLICK, MS_KEY, MS_LOG, MS_SNAP };
+enum { MS_MOVE = 0, MS_CLICK, MS_KEY, MS_CHAR, MS_LOG, MS_SNAP };
 
 struct SInputEvent
 {
     double      at_ms = 0.0;   // fire time, ms from script start
     int32_t     kind  = MS_MOVE;
-    int32_t     button = 0;    // MB_* for MS_CLICK; VK code for MS_KEY
+    int32_t     button = 0;    // MB_* for MS_CLICK; VK code for MS_KEY; character for MS_CHAR
     int32_t     x = 0, y = 0;  // for MS_KEY: x = 1 (down) / 0 (up)
     std::string text;          // for MS_LOG
 };
@@ -3125,6 +3125,18 @@ void InputSimStart(const char* script)
             else
                 log_warn("[input-sim] key_press: unknown key '%s'",
                          tok.size() > 1 ? tok[1].c_str() : "");
+        }
+        else if (op == "type" || op == "type_text")
+        {
+            // Typed text: one character event per character, 30 ms apart.
+            constexpr int32_t kTypeIntervalMs = 30;
+            const size_t sp = cmd.find(' ');
+            const std::string text = (sp == std::string::npos) ? "" : cmd.substr(sp + 1);
+            for (const char c : text)
+            {
+                g_inputSimEvents.push_back({ t_ms, MS_CHAR, (int32_t)(unsigned char)c, 0, 0, "" });
+                t_ms += kTypeIntervalMs;
+            }
         }
         else if (op == "loop")
             g_inputSimLoop = true;
@@ -3330,8 +3342,9 @@ namespace TestModes {
 // Defined here (in the TestModes namespace) so it can call the dispatch
 // functions directly. Fires all synthetic input events whose timestamp has
 // elapsed since the script started.
-static void InputSimTick(const char* mode)
+void InputSimTick(TScreen* screen)
 {
+    if (!screen) return;
     if (!g_inputSimActive) return;
     const double now_ms = TTime::Time() * 1000.0;
     if (g_inputSimStartMs == 0.0) g_inputSimStartMs = now_ms;
@@ -3349,7 +3362,7 @@ static void InputSimTick(const char* mode)
             // the script. Same globals the real mouse handler writes. Pass the
             // held-button mask so moves between down/up read as a drag.
             cursorx = e.x; cursory = e.y;
-            HandleMouseMove(mode, mousebutton, e.x, e.y);
+            screen->MouseMove(mousebutton, e.x, e.y);
             break;
         case MS_CLICK:
             cursorx = e.x; cursory = e.y;
@@ -3365,12 +3378,16 @@ static void InputSimTick(const char* mode)
             case MB_MIDDLEUP:   mousebutton &= ~MB_MIDDLEDOWN; break;
             default: break;
             }
-            HandleMouseClick(mode, e.button, e.x, e.y);
+            screen->MouseClick(e.button, e.x, e.y);
             break;
         case MS_KEY:
             // e.button = VK code, e.x = 1 (down) / 0 (up). Same path real keys
             // take; real keyboard is NOT gated, so synthetic + real coexist.
-            HandleKeyPress(mode, e.button, e.x != 0);
+            screen->KeyPress(e.button, e.x != 0);
+            break;
+        case MS_CHAR:
+            // The CHAR event path (revmain's SAPP_EVENTTYPE_CHAR).
+            screen->CharPress(e.button, true);
             break;
         case MS_SNAP:
             // Manual filmstrip capture (--filmstrip=N,0). Captures the LAST
@@ -3413,6 +3430,11 @@ static void InputSimTick(const char* mode)
     }
 }
 
+void InputSimArm()
+{
+    InputSimStart(StartupInputScript.c_str());
+}
+
 bool InputScriptActive()
 {
     // Own the mouse only while the script still has work to do: events pending,
@@ -3431,10 +3453,24 @@ bool DumpIconsToFolder(const char* path)
     return DumpIconsToPath(path);
 }
 
+// The --test=ui-* modes whose panes read the main player. They run against
+// the demo player (uidemoplayer.h), installed around the mode.
+static bool UsesDemoPlayer(const char* mode)
+{
+    static constexpr const char* kModes[] = {
+        "ui-hud", "ui-plyrstatusbar", "ui-stats", "ui-equip", "ui-inventory",
+        "ui-barinv", "ui-sidebar", "ui-quickspell", "ui-spellbook",
+    };
+    for (const char* m : kModes)
+        if (strcmp(mode, m) == 0)
+            return true;
+    return false;
+}
+
 bool Initialize(const char* mode)
 {
-    // Arm the scripted input simulator (no-op if --input-script was not given).
-    InputSimStart(StartupInputScript);
+    if (UsesDemoPlayer(mode) && !UIDemoPlayer::Install())
+        log_warn("[test] %s: no demo player; the panes show no player", mode);
 
     if (strcmp(mode, "blank") == 0 || strcmp(mode, "ticker") == 0)
         return true;
@@ -3526,10 +3562,6 @@ bool Initialize(const char* mode)
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return InitializeUIMainMenuMode();
-    if (strcmp(mode, "ui-death") == 0)
-        return InitializeUIDeathMode();
     if (IsUIDefScreenMode(mode))
         return InitializeUIDefScreenMode(mode);
     if (strcmp(mode, "audio") == 0)
@@ -3598,10 +3630,6 @@ void Close(const char* mode)
         CloseUIHudMode();
     if (strcmp(mode, "ui-loadscreen") == 0)
         CloseUILoadScreenMode();
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        CloseUIMainMenuMode();
-    if (strcmp(mode, "ui-death") == 0)
-        CloseUIDeathMode();
     if (IsUIDefScreenMode(mode))
         CloseUIDefScreenMode();
     if (strcmp(mode, "audio") == 0)
@@ -3609,6 +3637,8 @@ void Close(const char* mode)
     if (strcmp(mode, "vfx") == 0)
         VfxTest::Close();
     DestroyBitmapAtlas(&g_uiAtlas);
+    if (UsesDemoPlayer(mode))
+        UIDemoPlayer::Remove();
 }
 
 void Render(const char* mode)
@@ -3616,9 +3646,8 @@ void Render(const char* mode)
     if (!Display.IsActive() || !Display.BackBuffer())
         return;
 
-    // Advance the scripted input simulator before painting so any hover/down
-    // state change is reflected in this frame (no-op without --input-script).
-    InputSimTick(mode);
+    if (UsesDemoPlayer(mode))
+        UIDemoPlayer::Pulse();
 
     if (strcmp(mode, "sector") == 0) {
         SceneCommandsTick();
@@ -3682,10 +3711,6 @@ void Render(const char* mode)
         return RenderUIHudMode();
     if (strcmp(mode, "ui-loadscreen") == 0)
         return RenderUILoadScreenMode();
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return RenderUIMainMenuMode();
-    if (strcmp(mode, "ui-death") == 0)
-        return RenderUIDeathMode();
     if (IsUIDefScreenMode(mode))
         return RenderUIDefScreenMode();
     if (strcmp(mode, "audio") == 0)
@@ -3697,12 +3722,6 @@ void Render(const char* mode)
 
 void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 {
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return HandleMouseClickUIMainMenuMode(button, x, y);
-    if (strcmp(mode, "ui-death") == 0)
-        return HandleMouseClickUIDeathMode(button, x, y);
-    if (IsUIDefScreenMode(mode))
-        return HandleMouseClickUIDefScreenMode(button, x, y);
     if (strcmp(mode, "ui-hud") == 0)
     {
         const SHudState& s = GetHudState();
@@ -3787,12 +3806,6 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 
 void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 {
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return HandleMouseMoveUIMainMenuMode(x, y);
-    if (strcmp(mode, "ui-death") == 0)
-        return HandleMouseMoveUIDeathMode(x, y);
-    if (IsUIDefScreenMode(mode))
-        return HandleMouseMoveUIDefScreenMode(button, x, y);
     // #8 iOS-style velocity drag for the spellbook scroll
     if (strcmp(mode, "ui-spellbook") == 0)
         return HandleMouseMoveUISpellbookMode(button, x, y);
@@ -3829,10 +3842,7 @@ void HandleKeyPress(const char* mode, int32_t key, bool down)
         return;
     }
     if (IsUIDefScreenMode(mode))
-    {
-        HandleKeyPressUIDefScreenMode(key, down);
-        return;
-    }
+        return;   // keys reach the DEF pane through the screen's pane routing
     // HUD test modes that compose the sidebar / bottom-bar / six-button
     // strip receive keyboard control: V toggles sidebar, B toggles
     // bottom-bar, 1-6 select panels (per uisidebartest.h docstring).

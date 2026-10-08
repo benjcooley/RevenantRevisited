@@ -28,7 +28,7 @@
 #include "uibarinvtest.h"
 #include "uibottombartest.h"
 #include "uiequiptest.h"
-#include "uiinventorytest.h"   // Inventory pane (#7a-#7e — populates harness_inv[])
+#include "uiinventorytest.h"
 #include "uimaptest.h"
 #include "uiplyrstatusbartest.h"
 #include "uiquickspelltest.h"
@@ -36,17 +36,15 @@
 #include "uispellbooktest.h"
 #include "uispellcreatetest.h"
 #include "uistatstest.h"
-#include "uitextbartest.h"
 
 namespace {
 
 bool g_initStatusBar = false;
-bool g_initTextBar   = false;
 bool g_initBottomBar = false;
 bool g_initBarInv    = false;
 bool g_initQuickSp   = false;
 bool g_initSidebar   = false;
-bool g_initInventory = false;   // Inventory pane (populates harness_inv[])
+bool g_initInventory = false;
 bool g_initMap       = false;
 bool g_initSpell     = false;
 bool g_initStats     = false;
@@ -108,9 +106,6 @@ bool InitializeUIHudMode()
 
     // Equip pane — live 3D paperdoll + equipment slots.
     SafeInit("Equip",         g_initEquip,     &InitializeUIEquipMode);
-
-    // Overlay (transparent)
-    SafeInit("TextBar",       g_initTextBar,   &InitializeUITextBarMode);
 
     RegisterUIBitmapAtlasInventoryImagery();
     const bool atlasOk = BuildUIBitmapAtlas();
@@ -186,7 +181,6 @@ void RenderUIHudModeEmbedded()
         SetUIEquipModeVisible(upperVisible && s.topSlot == HUD_TOP_EQUIP);
         RenderUIEquipModeEmbedded();
     }
-    if (g_initTextBar)   RenderUITextBarModeEmbedded();
 }
 
 void CloseUIHudMode()
@@ -197,7 +191,6 @@ void CloseUIHudMode()
         Renderer->RemoveHud(&g_cursorHud);
         g_cursorOverlayRegistered = false;
     }
-    SafeClose("TextBar",       g_initTextBar,   &CloseUITextBarMode);
     SafeClose("Equip",         g_initEquip,     &CloseUIEquipMode);
     SafeClose("SpellCreate",   g_initSpell,     &CloseUISpellCreateMode);
     SafeClose("Map",           g_initMap,       &CloseUIMapMode);

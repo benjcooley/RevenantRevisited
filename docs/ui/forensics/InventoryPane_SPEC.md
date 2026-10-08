@@ -670,6 +670,8 @@ Equip-pane held-slot → transfer. The scroll arrows are wired in Initialize to
 `LAB_00537500` (left) / `LAB_00537510` (right) callbacks via the button ctor
 (`cls_0x5a3c68`, `:164/:184`).
 
+**Right button up (5), confirmed 2026-10-06** (`0x00538210`, [../../gameplay/forensics/PLAYER_INPUT.md](../../gameplay/forensics/PLAYER_INPUT.md) §6): with nothing held anywhere, the item under the cursor is equipped in its own `eqslot` (`CanEquip` `0x00519300`, `Equip` `0x005199b0`, class sound `0x00473a10`), or `EQUIPUNABLE`; a talisman of the player's goes into his "Spell Pouch" instead; in stats mode (`DAT_0065c9e0`) it shows the item's info. The port equips (talisman and info not ported). The event codes are the `MB_*` values (`revdefs.h`): 1 left down (the grab), 4 left up (the drop), 5 right up; the decode above that reads 4 and 5 as down and up is off.
+
 **Modal-state globals:** lower-region selector `DAT_0065d1bc` (==0 selects this
 pane); `DAT_0065c9e0` (a "stats-mode" interaction modifier, `:321`);
 `DAT_0066829c` (a use-vs-swap gate, `:454`). Visual effect: when `DAT_0065d1bc !=

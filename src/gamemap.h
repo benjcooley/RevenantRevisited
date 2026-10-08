@@ -9,9 +9,12 @@
 // typed local-event listener list so consumers (MapRenderer, debug HUD,
 // editor overlays, etc.) can react to Loaded / Updated / Unloaded.
 //
-// Owned by TMapManager (the cache of currently-loaded levels). Renderer
-// holds a TSafeRef<TGameMap> against the current map -- generation check
-// guards against silently rebinding after a level swap freed the map.
+// Owned by TMapManager (the cache of currently-loaded levels). The map is
+// the only owner of its sectors: they are created in Load and freed in
+// Unload / Discard, nowhere else. Borrowers of a sector pointer (TMapPane's
+// window, the renderer's draw records) drop it on Unloaded. Renderer holds
+// a TSafeRef<TGameMap> against the current map -- generation check guards
+// against silently rebinding after a level swap freed the map.
 //
 // Lifecycle:
 //   TGameMap m;
@@ -56,10 +59,30 @@ class TGameMap : public TSafeObjectBase<TGameMap>
     // unloads first.
     bool Load(int32_t level);
 
-    // Free all sectors. Fires Unloaded BEFORE the sectors are deleted
-    // so subscribers can drop refs while the pointers are still
-    // dereferenceable (for last-frame cleanup).
+    // Load in stages, so a loading screen can show it filling (retail filled
+    // its bar per sector, 0x004997d0): BeginLoad finds the level's sector
+    // files (as Load: a same-level map is already done); LoadSectors reads
+    // up to `count` more and, once every one is in, stamps the tile walkmaps,
+    // fires Loaded and returns true. Load is BeginLoad + all of LoadSectors.
+    bool BeginLoad(int32_t level);
+    bool LoadSectors(int32_t count);
+    [[nodiscard]] bool  Loading() const { return loading; }
+    [[nodiscard]] float LoadFraction() const;
+
+    // A sector's place on its level.
+    struct SSectorCoord { int32_t sx = 0; int32_t sy = 0; };
+
+    // Free all sectors, writing each to the working set first. Fires
+    // Unloaded BEFORE the sectors are deleted so subscribers can drop refs
+    // while the pointers are still dereferenceable (for last-frame cleanup).
     void Unload();
+
+    // Free all sectors without writing them, for when the working set is
+    // about to be replaced (new or loaded game). Fires Unloaded like Unload.
+    void Discard();
+
+    // Write every sector to the working set, keeping them loaded.
+    void Flush() const;
 
     [[nodiscard]] bool    IsLoaded() const { return level >= 0; }
     [[nodiscard]] int32_t Level()    const { return level;       }
@@ -72,6 +95,13 @@ class TGameMap : public TSafeObjectBase<TGameMap>
     // Find a sector by (sx, sy). O(N) linear scan; small loaded counts
     // make this fine for now. Returns nullptr if not loaded.
     [[nodiscard]] TSector* FindSector(int32_t sx, int32_t sy) const;
+
+    // The sector containing world position `pos`, or nullptr.
+    [[nodiscard]] TSector* SectorAt(const S3DPoint& pos) const;
+
+    // The OF_NONMAP objects (the players) standing in this map's sectors.
+    // The map doesn't own them: they outlive its sectors.
+    [[nodiscard]] std::vector<TSafeRef<TObjectInstance>> NonMapObjects() const;
 
     // ---- Listener API -------------------------------------------------
     using Listeners      = TListenerList<EGameMapEvent, TGameMap*>;
@@ -99,7 +129,17 @@ class TGameMap : public TSafeObjectBase<TGameMap>
                                  const FindSectorFn& find_sector);
 
   private:
+    enum class ESectorRelease : uint8_t { Save, Discard };
+    void Release(ESectorRelease how);
+
+    void FinishLoad();
+
     int32_t               level = -1;
     std::vector<TSector*> sectors;
     Listeners             listeners;
+
+    std::vector<SSectorCoord> pending;      // the level's sector files, in load order
+    size_t                nextpending = 0;  // the next one to read
+    int32_t               loadedobjs  = 0;
+    bool                  loading     = false;
 };

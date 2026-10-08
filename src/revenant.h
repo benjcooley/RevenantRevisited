@@ -38,8 +38,12 @@ extern char ClassDefPath[MAXPATHLEN]; // Where to load / save Class.Def
 extern char ExileRCPath[MAXPATHLEN];  // Where to run ExileRC from & where
                                       // the graphics for the resources are
 extern char ResourcePath[MAXPATHLEN]; // Where to read / write the resources
+extern char ImageryPath[MAXPATHLEN];  // Imagery tree / imagery.rvi; class.def and the rules rosters (INI [Paths] ImageryPath)
+extern char ModulesPath[MAXPATHLEN];  // Root of the game modules (INI [Paths] ModulesPath)
 extern char BaseMapPath[MAXPATHLEN];  // Where the untouched version of the game map is stored
 extern char CurMapPath[MAXPATHLEN];   // Where the current map is stored
+extern char MoviePath[MAXPATHLEN];    // Where the .smk movies live (INI [Paths] MoviePath)
+extern char SaveGamePath[MAXPATHLEN]; // Root of the save slots (INI [Paths] SaveGamePath)
 
 // Multi-Monitor Variables (Note: Additional Monitor globals are defined in MONITOR.H)
 extern int32_t MonitorNum;                 // Monitor game will run on (default is 1, primary)
@@ -108,7 +112,9 @@ extern bool Editor;             // This is true if we are in edit mode
 extern bool StartInEditor;      // Whether to start the program in editor mode
 extern bool RevisitedEnabled;   // --revisited: mount the Revisited overlay (.rvr / dev folder); FATAL if requested but missing
 extern bool NoQuickLoad;        // Prevent the program from attempting to load the IMAGERY.DAT file
-extern char StartupSavePath[];  // --loadmap=<path>; empty if no startup auto-load
+extern char StartupSavePath[];  // --loadmap=<slot>; empty if no startup auto-load
+extern bool StartupSaveCycle;   // --savecycle-test: WriteGame/ReadGame round-trip + diff log on first PlayScreen pulse
+extern int32_t StartupSaveCycleSettle;  // --savecycle-test=<frames>: frames before the save (0 = before the first tick)
 
 // Startup-selected render size. WIDTH/HEIGHT remain the classic fallback
 // constants for legacy layout code; new render targets and window creation
@@ -135,7 +141,7 @@ extern int32_t MaxLights;           // Maximum number of lights that can affect 
 extern int32_t Ambient3D;           // Adjust this below 100 for darker ambient, or above for lighter
 extern int32_t LightRange3D;        // Adjust this below 100 to decrease 3D light range, or above to increase
 extern int32_t LightMult3D;         // Per-point-light intensity multiplier percent (retail default 250 = 2.5x)
-extern bool    EnhancedLighting;    // [Lighting]EnhancedLighting Yes/No — retail "fancier 3D lighting" toggle
+extern bool    EnhancedLighting;    // [Options]EnhancedLighting Yes/No — MODULATE2X/4X overbright for 3D objects
 
 // Whether map pane is full screen or not
 extern bool FullScreen;

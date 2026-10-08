@@ -12,6 +12,7 @@
 #include "tool.h"
 #include "player.h"
 #include "key.h"
+#include "dialog.h"
 #include "sound.h"
 #include "spellpane.h"
 
@@ -56,14 +57,14 @@ bool TContainer::Use(TObjectInstance* user, int32_t with)
         if (inst)
         {
             sprintf(buf, "The %s is closed.", GetName());
-            TextBar.Print(buf);
+            TextBar.Print("%s", buf);
             return false;
         }
 
         SetState(OPEN);
         
         sprintf(buf, "%s opened.", GetName());
-        TextBar.Print(buf);
+        TextBar.Print("%s", buf);
         return true;
     }
 
@@ -94,13 +95,15 @@ bool TContainer::Use(TObjectInstance* user, int32_t with)
             {
                 if (Inventory.GetContainer() && (uint32_t)Inventory.GetContainer()->FindFreeInventorySlot() < MAXINVITEMS)
                 {
+                    // Gold or food may merge into a pile and be deleted
+                    snprintf(buf, sizeof(buf), "%s taken from %s.", oi->GetName(), GetName());
+                    const TSafeRef<TObjectInstance> taken(oi);
                     oi->RemoveFromInventory();
                     Inventory.GetContainer()->AddToInventory(oi);
 
-                    sprintf(buf, "%s taken from %s.", oi->GetName(), GetName());
-                    TextBar.Print(buf);
+                    TextBar.Print("%s", buf);
 
-                    TakenObject = oi;
+                    TakenObject = taken.Get();
                 }
                 else
                     TextBar.Print("Can't carry any more.");
@@ -112,19 +115,20 @@ bool TContainer::Use(TObjectInstance* user, int32_t with)
 
                 SetState(CLOSED);
                 sprintf(buf, "%s closed.", GetName());
-                TextBar.Print(buf);
+                TextBar.Print("%s", buf);
             }
         }
         else
         {
-            // add to
+            // add to (gold or food may merge into a pile and be deleted)
+            snprintf(buf, sizeof(buf), "%s put in %s.", inst->GetName(), GetName());
+            const TSafeRef<TObjectInstance> dropped(inst);
             inst->RemoveFromInventory();
             AddToInventory(inst);
 
-            sprintf(buf, "%s put in %s.", inst->GetName(), GetName());
-            TextBar.Print(buf);
+            TextBar.Print("%s", buf);
 
-            DroppedObject = inst;
+            DroppedObject = dropped.Get();
         }
 
     }
@@ -145,6 +149,7 @@ int32_t TContainer::NumObjects()
     return RealNumInventoryItems();
 }
 
+// REVSYNC: TContainer::Load @ 0x004dd3e0 (SAVE_GAME.md §11.3).
 void TContainer::Load(RTInputStream is, int32_t version, int32_t objversion)
 {
     TObjectInstance::Load(is, version, objversion);
@@ -157,6 +162,12 @@ void TContainer::Load(RTInputStream is, int32_t version, int32_t objversion)
         SetStat("PickDifficulty", pickdifficulty);
     }
 
+  // A container in the world re-enters its saved state (open or shut).
+    if (!(flags & OF_INVENTORY))
+    {
+        SetCommandDone(true);
+        SetState(state);
+    }
 }
 
 void TContainer::Save(RTOutputStream os)
@@ -164,57 +175,60 @@ void TContainer::Save(RTOutputStream os)
     TObjectInstance::Save(os);
 }
 
+// REVSYNC: CheckKeyUse @ 0x004dd480 -- a key or lockpick used on this locked
+// container or door. True for any key or pick attempt, whatever came of it;
+// only the main player hears and reads about it. A lock of difficulty 0
+// can't be picked; a successful pick earns lockpicking experience.
 bool TContainer::CheckKeyUse(TObjectInstance* user, TObjectInstance* inst)
 {
     if (!inst || !Locked())
         return false;
 
-    // check for the key unlock
+    auto report = [user](const char *sound, const char *line, bool keys) {
+        if (user != Player)
+            return;
+        PLAY(sound);
+        TextBar.Print("%s", DialogList.GetLine(line));
+        if (keys)
+            PLAY("keys");
+    };
+
     if (inst->ObjClass() == OBJCLASS_KEY)
     {
-        if (((PTKey)inst)->KeyId() == KeyId())
-        {   
-            PLAY("unlock succeed");
-            TextBar.Print("Unlocked.");
+        if (static_cast<TKey*>(inst)->KeyId() == KeyId())
+        {
+            report("unlock succeed", "CONTUNLOCKED", false);
             SetLocked(false);
-            return true;
         }
         else
-        {
-            PLAY("unlock failed");
-            TextBar.Print("This is the wrong key.");
-            return true;
-        }
+            report("unlock failed", "CONTWRONGKEY", false);
+        return true;
     }
 
-    // check for a lockpick attempt
     if (inst->ObjClass() == OBJCLASS_TOOL)
     {
-        int32_t abil = ((PTTool)inst)->Pick();
-        if (abil > 0)
+        int32_t abil = static_cast<TTool*>(inst)->Pick();
+        if (abil <= 0)
+            return false;
+
+        TPlayer* player = user && user->ObjClass() == OBJCLASS_PLAYER ? static_cast<TPlayer*>(user) : nullptr;
+        if (player)
+            abil += player->Skill(SK_LOCKPICK) + player->Agil();
+
+        if (PickDifficulty() == 0)
+            report("unlock fail", "CONTPICKFAIL", true);
+        else if (abil < PickDifficulty())
+            report("unlock fail", "CONTPICKTOUGH", true);
+        else if (random(0, abil) < PickDifficulty())
+            report("unlock fail", "CONTPICKFAIL", true);
+        else
         {
-            if (user->ObjClass() == OBJCLASS_PLAYER)
-                abil += ((TPlayer*)user)->Agil() + ((TPlayer*)user)->Skill(SK_LOCKPICK);
-
-            if (abil < PickDifficulty())
-            {
-                PLAY("unlock fail");
-                TextBar.Print("The lock is too difficult to pick.");
-            }
-            else if (random(0, abil) < PickDifficulty())
-            {
-                PLAY("unlock fail");
-                TextBar.Print("You fail to pick the lock.");
-            }
-            else
-            {
-                PLAY("unlock succeed");
-                TextBar.Print("The lock quietly yields to your skills.");
-                SetLocked(false);
-            }
-
-            return true;
+            report("unlock succeed", "CONTUNLOCK", true);
+            SetLocked(false);
+            if (player)
+                player->AddSkillExp(SK_LOCKPICK, 50);
         }
+        return true;
     }
 
     return false;
@@ -233,7 +247,7 @@ class TVialRack : public TContainer
     TVialRack(SObjectDef* def, TObjectImagery* newim) : TContainer(def, newim) {}
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
-    virtual int32_t CursorType(TObjectInstance* inst = nullptr);
+    int32_t CursorType(TObjectInstance* inst = nullptr) override;
     virtual void Save(RTOutputStream os);
 };
 

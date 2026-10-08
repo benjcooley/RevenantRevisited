@@ -69,7 +69,7 @@ def extract_class(path,name,terminator):
 
 
 def production_spans(definitions=None):
-    text=(definitions or (ROOT/'data/Resources/effects.def').read_bytes()).decode()
+    text=(definitions or (ROOT/'assets/effects.def').read_bytes()).decode()
     start=text.index('effect TorchFlame')
     return dict(base=extract_class(ROOT/'src/effect.h','TFlipbookBillboardComponent','\nstruct SParticleBucketEffectDef'),
         flame=extract_class(ROOT/'src/effect.cpp','TFlameQuadComponent','\nDEFINE_BUILDER("FLAME"'),
@@ -228,13 +228,13 @@ def main():
     if args.repeat<2:parser.error('--repeat must be at least two')
     args.output.mkdir(parents=True,exist_ok=True)
     source_paths=[ROOT/p for p in ('src/effect.cpp','src/effect.h','src/math3d.cpp','src/math3d.h',
-                   'src/particlefx.cpp','src/particlefx.h','data/Resources/effects.def')]
+                   'src/particlefx.cpp','src/particlefx.h','assets/effects.def')]
     before={str(p.relative_to(ROOT)):digest(p.read_bytes()) for p in source_paths}
     before_spans={name:digest(text.encode()) for name,text in production_spans().items()}
     type_id,asset_member=PROFILES[args.profile]
     with zipfile.ZipFile(args.archive) as archive:asset=archive.read(asset_member)
     metadata=parse_asset(asset)
-    definitions=(ROOT/'data/Resources/effects.def').read_bytes()
+    definitions=(ROOT/'assets/effects.def').read_bytes()
     port_rows,compiled=build_port(args.output,asset,definitions)
     start=time.perf_counter();fixture=FlameFixture(args.executable,asset,build=args.build)
     setup_ms=(time.perf_counter()-start)*1000

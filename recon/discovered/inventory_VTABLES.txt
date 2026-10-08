@@ -1,0 +1,43 @@
+Inventory slots of the retail object vtables (docs/gameflow/forensics/INVENTORY.md §1).
+Read with InvVtScan / InvVtSlots (Ghidra, read-only): every object vtable whose
+slot 0x04 is TObjectInstance::Distance 0x0046ea20, plus TCharacter and TPlayer.
+Class names from SAVE_GAME.md §11.3.
+
+slot  base (TObjectInstance 0x5a50e8)      overrides
+0x50  0x0046f7e0 AddToInventory(uniqueid, n, slot)   -
+0x54  0x0046f940 AddToInventory(name, n, slot)       -
+0x58  0x0046f3d0 AddToInventory(item, slot)          0x004ddc40 TContainer family (CONTAINER 0x5a8118,
+                                                                INVCONTAINER 0x5a8360, VIAL RACK 0x5a7ed0,
+                                                                EXIT family 0x5b2258 0x5b24e0 0x5b27cc 0x5b2a4c)
+0x5c  0x0046fad0 CanTrade: Value (0x190) != -1        0x004dd3a0 TContainer family: not an INVCONTAINER "Swag Bag"
+0x60  0x0046faf0 RemoveFromInventory                 0x004bf730 TAmmo (0x5a6944..0x5a73f8), 0x00515c00 TMoney (0x5b4a7c),
+                                                     0x00523a70 TTalisman (0x5b619c: spell pane refresh, then base)
+0x64  0x0046fbe0 MoveInventory(item, to, slot)       -
+0x68  0x00477780 GiveWeapons(to)                     -
+0x6c  0x0046fc40 GiveInventoryTo(to, item, n)        -
+0x70  0x0046fd30 GiveInventoryTo(to, name, n)        -
+0x74  0x00477970 DeleteFromInventory(item, n)        -
+0x78  0x00477950 DeleteFromInventory(name, n)        -
+0x7c  0x00477990 GetInventory(index)                 -
+0x80  0x004779c0 NumInventoryItems                   -
+0x84  0x0046fde0 GetInventoryAmount(name)            -
+0x88  0x0046fea0 HasEmptySlot                        -
+0x8c  0x0046f3a0 AddToMap                            0x00516660 TMoney
+0x90  0x0046f3c0 RemoveFromMap                       -
+0x94  0x0046fef0 FindFreeInventorySlot               -
+0x98  0x0046fee0 MergeInto(newowner): 0              0x00515b50 TMoney, 0x0050ea80 TFood (0x5b2cd4) and
+                                                     TPotion (0x5b2ee4), 0x004bf680 TAmmo (icon count only, 0)
+0x9c  0x004779f0 SignalAddedToInventory: no-op       0x00516830 TMoney (inventory icon count +1)
+0xa0  0x00477a00 (icon release): no-op               0x00516870 TMoney (inventory icon count -1)
+0xa4  0x004703c0 FindObjInventory(class, type)       -
+0xa8  0x00470280 FindObjInventory(name)              -
+0xac  0x00470330 FindObjInventory(id)                -
+0xb0  0x00470480 DropInventory(item)                 -
+0x170 0x00477d50 LinkedInventory: 0                  0x004ddd70 TContainer family: +0xd8
+0x174 0x00477d60 SetLinkedInventory: no-op           0x004ddd80 TContainer family: +0xd8 = arg
+0x190 0x00477d90 Value: 0                            per item class
+0x198 0x00477db0 Amount: 1                           TMoney 0x00516920, TFood 0x0050ed70, TAmmo 0x004c0e00
+0x19c 0x00477dc0 SetAmount: no-op                    TMoney 0x00515c90, TFood 0x0050eb20, TAmmo 0x004bf7c0
+
+TCharacter 0x5a7848 and TPlayer 0x5b4f30 override none of 0x50..0xb0, 0x170, 0x174.
+No other object vtable (122 scanned) overrides 0x58, 0x98 or 0x170.

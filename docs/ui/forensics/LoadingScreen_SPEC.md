@@ -22,6 +22,16 @@ class has only four methods (ctor, dtor, Step, Set) and they are all
 extracted; SDrawParam fields for both blit call sites have been decoded
 from raw disassembly (see §6). The asset roster is dumped and measured.
 
+**Port (2026-10-05):** `src/loadscreen.{h,cpp}` — `TLoadBarPane` (Step,
+Set, the §4 draw) on a `TLoadScreen` the game flow shows between the title
+and the PlayScreen, fed by the session's load steps
+(docs/gameflow/ARCHITECTURE.md §3.5 2d). `DAT_00668158` is the EDITOR
+flag (GetParameters `0x00483bc0`). Not ported: the
+`<module>\loadscreen.bmp` override (no shipped module has one). The world
+load reads about 30 ms of sectors per tick (`TMapManager::LoadStaged`),
+filling the bar from 240 by the fraction of the level read, as retail's
+per-sector callback (`0x0047b260`) filled it from where it stood.
+
 **This is NOT the in-game `loadgame.def` saved-game picker** — that is
 the DEF screen `cls_0x5b9584`, covered separately in
 [LoadGameDef_SPEC.md](LoadGameDef_SPEC.md). The boot loadscreen here is

@@ -27,12 +27,6 @@
 #include "spell.h"
 #endif
 
-// Wait types
-#define WAIT_NOTHING        0
-#define WAIT_RESPONSE       1
-#define WAIT_CHAR_DONE      2
-#define WAIT_TICKS          3
-
 // FindChar flags
 #define FINDCHAR_ENEMY     1    // Find only enemies
 #define FINDCHAR_HEAR      2    // Find only characters we can hear
@@ -65,7 +59,7 @@ class TCharacter : public TComplexObject
         // Characters always own a TObjectAnimator from construction. See
         // TObjectInstance::IsAnimatorPermanent for the contract.
 
-    virtual int32_t CursorType(TObjectInstance* inst = nullptr);
+    int32_t CursorType(TObjectInstance* inst = nullptr) override;
         // Talk icon if they are friendly, attack icon if aggressive, hand if dead
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Talk to or attack character
@@ -150,14 +144,18 @@ class TCharacter : public TComplexObject
       // Attempts to use something in the direction character is facing
     bool TryGet();
       // Attempts to get something in the direction character is facing
-    bool Say(char *string, int32_t wait = -1, char *anim = nullptr, char *sound = nullptr);
+    bool Say(const char *string, int32_t wait = -1, const char *anim = nullptr, const char *sound = nullptr);
       // Causes character to blather incessantly about something irrelevant
       // (anim is override for animation to play when saying, nullptr is "say")
       // Tag indicates that the say command is a index tag into the DialogList
       // list of dialog lines.  The tag will also be used to play the dialog wave file.
-    bool SayTag(int32_t tagid, int32_t wait = -1, char *anim = nullptr);
+    [[nodiscard]] static int32_t SpeechTicks(int32_t wait, int32_t voicems, const char *line);
+      // How long Say holds a line, in ticks (DIALOG.md §3.2): `wait` when
+      // given (>= 0), else the voice's length, else the line's (`line` is
+      // DialogLine's output).
+    bool SayTag(int32_t tagid, int32_t wait = -1, const char *anim = nullptr);
       // Says something given a dialog tag id number
-    bool SayTag(char *tag, int32_t wait = -1, char *anim = nullptr);
+    bool SayTag(const char *tag, int32_t wait = -1, const char *anim = nullptr);
       // Says something given a dialog tag
     bool CastByName(char* name, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
       // Cast a spell by usings its name
@@ -242,14 +240,19 @@ class TCharacter : public TComplexObject
     bool SetFighting(TCharacter* newtarget);
       // Sets the current fighting target
     bool IsTalking() { if (doing && doing->Is("say")) return true; return false; }
+    void StopTalking();
+      // REVSYNC: 0x004d6000 -- silence the voice and end the say action
       // Returns whether character is talking or not
     bool IsWalkMode() { if (root && 
-        ((IsCombat() && (root->Is("combat") || root->Is("comhand"))) ||
+        ((IsCombat() && (root->Is("combat") || root->Is("hand"))) ||
         (IsBowMode() && root->Is("bow")) ||
         root->Is("walk")) ) return true; return false; }
-      // Returns whether character is in walk mode
+      // Returns whether character is in walk mode. REVSYNC: the unarmed
+      // combat roots are "hand" and "handrun" (retail 0x004cf000 reads
+      // "hand" 0x005e064c, 0x004c9790 "handrun" 0x005e0610), not 1998's
+      // "comhand" / "comhandrun".
     bool IsRunMode() { if (root && 
-        ((IsCombat() && (root->Is("combatrun") || root->Is("comhandrun"))) ||
+        ((IsCombat() && (root->Is("combatrun") || root->Is("handrun"))) ||
         (IsBowMode() && root->Is("bowrun")) ||
         root->Is("run")) ) return true; return false; }
       // Returns whether character is in run mode
@@ -283,15 +286,16 @@ class TCharacter : public TComplexObject
         { return doing && doing->action == ACTION_FLAIL; }
       // Returns true if character is acting like a fool (result of calling Go())
 
-  // Wait functions
-    void Wait(int32_t waitlen);
-      // Wait for specified number of frames to elapse
-    void WaitChar(TObjectInstance* inst) { if (doing) doing->obj = inst; waittype = WAIT_CHAR_DONE; }
-      // Waits for another character to finish his current action
-    void WaitResponse() { waittype = WAIT_RESPONSE; }
-      // Waits for the player to pick a response in the response panel
     void ForceCommandDone() { forcecommanddone = true; }
       // Forces the current command to be done
+
+    static constexpr uint32_t kCharFlagNoIncidentals = 0x2;
+      // charflags bit (retail +0x110 & 2): `incidentals off`
+    void SetIncidentals(bool on)
+        { if (on) charflags &= ~kCharFlagNoIncidentals; else charflags |= kCharFlagNoIncidentals; }
+      // Incidentals are the random "NN:" variants of a character's root and idle
+      // states (fidgets); off, the character always plays the 100% variant
+    bool Incidentals() const { return !(charflags & kCharFlagNoIncidentals); }
 
     // Static access functions
     static TCharacter* CharBlocking(TObjectInstance* inst, const S3DPoint& pos, int32_t radius = 0);
@@ -327,14 +331,21 @@ class TCharacter : public TComplexObject
     virtual void Save(RTOutputStream os);
         // Saves object data to the sector
 
-  // invisibilty functions
+  // Fading (retail TCharacter +0x194..+0x1a4): fade is the visibility 0..100
+  // that Transparency() reports; each Pulse moves it by fade_step (positive
+  // fades out) until it reaches fade_limit.
+    void Fade(int32_t direction);
+      // `fadecharacterin/out`: +1 back to fully visible (living characters only), else out to 0
     void SetFade(int32_t amt, int32_t amt2 = 5, int32_t amt3 = -1);
-    int32_t GetFade(void);
-    void UpdateFade(void);
+      // Start a fade from 'amt' (kept when < 0) by 'amt2' per pulse to 'amt3' (-1: no limit)
+    int32_t GetFade() const { return fade; }
+    void UpdateFade();
+      // One pulse of the fade
 
   // Invisible Spell Functions
     bool IsInvisibleSpell(){return invisible_spell;}
-    void SetInvisibleSpell(bool new_val){invisible_spell = new_val;}
+    void SetInvisibleSpell(bool on);
+      // Fades to 30 while the spell lasts and back afterwards
 
   // Teleport functions
     void SetTeleportLevel(int32_t new_level){teleport_level = new_level;}
@@ -367,6 +378,20 @@ class TCharacter : public TComplexObject
     OBJSTATFUNC(Fatigue)
     OBJSTATFUNC(Mana)
 
+  // Damage resistances and modifier (the shipped game's code-defined stats;
+  // their values come from class.def and saves, nothing in the port reads them yet)
+    OBJSTAT(DmgResMisc)
+    OBJSTAT(DmgResHand)
+    OBJSTAT(DmgResPuncture)
+    OBJSTAT(DmgResCut)
+    OBJSTAT(DmgResChop)
+    OBJSTAT(DmgResBludgeon)
+    OBJSTAT(DmgResMagical)
+    OBJSTAT(DmgResBurn)
+    OBJSTAT(DmgResFreeze)
+    OBJSTAT(DmgResPoison)
+    OBJSTAT(DamageMod)
+
    // Calculated stats
     virtual int32_t MaxHealth() { return chardata->health; }
       // Returns monster max health value
@@ -374,6 +399,8 @@ class TCharacter : public TComplexObject
       // Returns monster max fatigue value
     virtual int32_t MaxMana() { return chardata->mana; }
       // Returns monster max mana value
+    bool GetFieldText(const char *field, char *buf, int32_t buflen) override;
+      // Character fields of the stat sheet (retail 0x004d5260)
     virtual int32_t BlockPcnt() { return chardata->blockfreq; }
       // Returns percentage of time character will block an attack
     virtual int32_t ArmorValue() { return chardata->armorvalue; }
@@ -522,15 +549,14 @@ class TCharacter : public TComplexObject
 
     PSCharData chardata;        // Pointer to global character settings for this type of char
 
-    int32_t waittype;               // Wait for this before continuing script execution
     int32_t waitticks;              // Number of ticks to wait for no action block wait
 
     bool forcecommanddone;      // For skipping past animations
     bool forcenomove;           // For forcing end movement
 
-    uint32_t charflags;            // Character flags
+    uint32_t charflags = 0;        // Character flags (retail +0x110; retail's allocator zeroed it)
 
-    int32_t exittimestamp;          // When timestamp is +2 frames from current frame, OF_ONEXIT is cleared
+    int32_t exittimestamp;          // Frame the character was last on an exit; OF_ONEXIT clears 5 frames on
     bool is_invisible;          // is our character affected by invisibility
 
   // Move stuff
@@ -562,12 +588,14 @@ class TCharacter : public TComplexObject
     float magic_resistance;     // between 0.0 and 1.0... percentage of magic resistance
 
     // Visibility
-    int32_t fade;
-    int32_t fade_step;
-    int32_t fade_limit;
+    int32_t fade = 100;             // retail +0x194, 0..100
+    int32_t fade_step = 0;          // retail +0x198, subtracted from fade each pulse
+    int32_t fade_limit = 100;       // retail +0x19c, where the fade stops (-1: at 0 or 100)
+    int32_t fade_direction = 0;     // retail +0x1a0, -1 out / 1 in / 0 still (no retail reader found)
 
   // Invisible Spell Addition
-    bool invisible_spell;
+    bool invisible_spell = false;   // retail +0x1a4
+    int32_t voice = -1;             // retail +0x260: the sound id of the line being spoken, -1 none
 
   // Teleport Coordinates
     int32_t teleport_level;

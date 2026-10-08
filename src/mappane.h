@@ -8,6 +8,7 @@
 
 #include "revenant.h"
 
+#include "gamemap.h"
 #include "lightdef.h"
 #include "multisurface.h"
 #include "screen.h"
@@ -38,6 +39,7 @@
 #define CHECK_MOVING    (1 << 4)        // check OF_MOVING
 #define CHECK_NOINVENT  (1 << 5)        // no inventory recurse
 #define CHECK_MAPRECT   (1 << 6)        // check screen rectangle for intersection
+#define CHECK_LOADED    (1 << 7)        // walk the loaded sectors, not the pane's window
 
 // This is the standard local range for an object when iterating through its neighbors
 // Using this range prevents object searches from becoming too big when large numbers of
@@ -56,6 +58,12 @@ class TMapIterator
       // Initializes iterator with a range value
     TMapIterator(RTObjectInstance oi, int32_t fl = CHECK_NONE, int32_t objset = OBJSET_ALL);
       // Initializes iterator with a range value
+    TMapIterator(int32_t level, PSRect maprect, int32_t fl = CHECK_NOINVENT, int32_t objset = OBJSET_ALL);
+      // REVSYNC: the retail iterator's loaded-sector mode (0x0044cf80, flag
+      // 0x80; 0x400 with a level): every loaded sector of `level` (-1: of
+      // every loaded level) instead of the pane's 3x3 window, and given a
+      // map rect, only the sectors and objects in it. Retail's name lookups
+      // walk this way (FindObject 0x00451d70, FindClosestObject 0x00451de0).
     void Initialize(PSRect sr = nullptr, int32_t fl = CHECK_NONE, int32_t objset = OBJSET_ALL);
       // Initializes iterator
     TObjectInstance* Item() { return item; }
@@ -96,6 +104,15 @@ class TMapIterator
 
     int32_t flags;                  // flags for which objects are valid
     SRect r;                    // screen rectangle for CHECK_RECT and CHECK_LIGHT
+
+    // CHECK_LOADED: the level walked (-1: all) and the walk's position in
+    // MapManager's cached maps.
+    int32_t level  = -1;
+    int32_t mapnum = 0;
+    size_t  secnum = 0;
+
+    TSector* NextWindowSector();
+    TSector* NextLoadedSector();
 };
 
 // ********************************
@@ -118,6 +135,7 @@ struct SBgUpdateRect
 #define CENTERON_OBJ    1
 #define CENTERON_POS    2
 #define CENTERON_SCROLL 4
+#define CENTERON_SNAP   8     // jump to the target at the next update, once (retail flag 8)
 
 _STRUCTDEF(SCenterOnState)
 struct SCenterOnState
@@ -165,16 +183,8 @@ class TMapPane : public TPane
     void UpdateMouseMovement(int32_t x, int32_t y);
       // Update moving Player around
 
-  // Map management functions
-    void LoadCurMap(char *from = nullptr);
-      // Loads the current map in the "curmap" directory from the given directory 
-      // (i.e. "savegame.001"), or clears the "curmap" directory if nullptr, forces
-      // reload of all sectors.
-    void SaveCurMap(char *to = nullptr);
-      // Saves map in curmap to the given game subdirectory 
-      //(i.e. "savegame.001") or "map" if null
-    void ClearCurMap();
-      // Deletes all files in the "curmap" directory, and forces sectors to reload.
+  // Map management (retail Load/Save/ClearCurMap) lives on TMapManager,
+  // which owns the loaded sectors in the port.
 
   // Lighting functions
     void DrawDLight();
@@ -301,27 +311,29 @@ class TMapPane : public TPane
     void AnimateSelectedObjects();
       // Draws selected objects that are moving (usually being dragged)
 
-  // Sector Functions
-    void UpdateSectors();
-        // Reload sectors based on pane x, y position
+  // Sector window
+  // -------------
+  // sectors[][] is a window of SECTORWINDOWX x SECTORWINDOWY sectors BORROWED
+  // from MapManager's current map; the pane never loads, saves or frees a
+  // sector. TMapManager owns the loaded sectors (retail kept them on the
+  // pane: TMapPane::FreeAllSectors/ReloadSectors/DeleteSector and the
+  // streaming UpdateSectors, which now live on TMapManager or are gone).
+  // The window follows the map it borrowed from: it is emptied when that
+  // map unloads, before the sectors are freed, and refilled on the next
+  // UpdateActiveWindow.
 
-    // Populate the active window (sectors[SECTORWINDOWX][SECTORWINDOWY])
-    // from MapManager.CurrentMap, centered on the Player's sector. The
-    // active window is what TMapIterator walks for per-frame
-    // PulseObjects / MoveObjects / NextFrameObjects -- so anything
-    // inside it ticks; anything outside is idle this frame. Cheap when
-    // the player hasn't crossed a sector boundary (no-op).
+    // Populate the active window from MapManager.CurrentMap, centered on
+    // the Player's sector. The active window is what TMapIterator walks
+    // for per-frame PulseObjects / MoveObjects / NextFrameObjects -- so
+    // anything inside it ticks; anything outside is idle this frame.
+    // Cheap when the player hasn't crossed a sector boundary (no-op).
     void UpdateActiveWindow();
-    // Borrow already-loaded CurrentMap sectors for real command diagnostics.
-    // No disk load or ownership transfer; release before map teardown.
+    // Borrow a diagnostic window through the same manager/unload contract.
     bool BindCommandMapWindow(int32_t maplevel, const S3DPoint& mapcenter);
     void ReleaseCommandMapWindow();
-    void SaveAllSectors();
-        // Save all sectors to disk without deallocating
-    void FreeAllSectors();
-        // Save all sectors to disk and then deallocate them
-    void ReloadSectors();
-        // Free and then reload all sectors
+    void ClearWindow();
+        // Drop every borrowed sector (the window is empty until the next
+        // UpdateActiveWindow)
 
   // World position functions
     void SetMapPos(S3DPoint& newpos);
@@ -330,18 +342,24 @@ class TMapPane : public TPane
     int32_t GetMapLevel() { return level; }
 
   // Center On Functions (causes game map to center on point or object)
-    void CenterOnObj(TObjectInstance* obj, bool scroll)
-        { centeron.obj = obj; centeron.flags = CENTERON_OBJ | (scroll ? CENTERON_SCROLL:0); }
-      // Center on object
+    void CenterOnObj(TObjectInstance* obj, uint32_t flags = 0);
+      // Follow an object. REVSYNC: SetCameraObject @ 0x004538d0 -- `flags`
+      // may add CENTERON_SCROLL (scroll rather than jump) and CENTERON_SNAP
+      // (jump once first); `centeron` passes both, `scrollto` scroll.
     TObjectInstance* GetCenterOnObj() { return centeron.obj; }
+    [[nodiscard]] bool IsFollowingPlayer() const;
+      // The camera follows the player
+    [[nodiscard]] S3DPoint CameraPos(double fraction) const;
+      // Where the camera looks between ticks: the center, `fraction` of the way from the last tick's
       // Gets centered object
-    void CenterOnPos(S3DPoint& pos, int32_t level, bool scroll)
-        { centeron.pos = pos; centeron.level = level; centeron.flags = CENTERON_POS | (scroll ? CENTERON_SCROLL:0); }
-      // Center on a point
+    void CenterOnPos(const S3DPoint& pos, int32_t level, uint32_t flags = 0);
+      // Center on a point. REVSYNC: SetCameraPos @ 0x00453940 (flags as above)
     void GetCenterOnPos(S3DPoint& pos, int32_t &level) { pos = centeron.pos; level = centeron.level; }
       // Gets current center on point
     bool IsScrollCenterOn() { return centeron.flags & CENTERON_SCROLL; }
       // True if we smooth scroll to object or point
+    void SnapIfFollowing(const TObjectInstance* obj);
+      // When the camera follows obj, its next update jumps instead of scrolling (a teleport)
     void SaveCenterOnState(PSCenterOnState state)
         { memcpy(state, &centeron, sizeof(SCenterOnState)); }
       // Saves the current center on state to structure
@@ -364,17 +382,14 @@ class TMapPane : public TPane
       // Allows map to update lists, etc. when an objects flags change (mainly
       // for OF_LIGHT, OF_PULSE, and OF_ANIMATE changing objects location on 
       // OBJSET_xxx sector arrays.
-    TObjectInstance* RemoveObject(int32_t index);
-      // Removes the given object from the map, recursing through inventories
-    TObjectInstance* RemoveObject(TObjectInstance* inst)
-        { return RemoveObject(inst->GetMapIndex()); }
-      // Removes the given object from the map, recursing through inventories
+    TObjectInstance* RemoveObject(TObjectInstance* inst);
+      // Takes the object (and its shadow) out of the world -- out of its
+      // owner's inventory or its sector -- without deleting it. Works from
+      // the object's own links, inside or outside the sector window.
     void DeleteObject(TObjectInstance* obj);
       // Removes and deletes an object
-    TObjectInstance* RemoveFromSector(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t sectindex);
-      // Removes the given object from the sector array (called by RemoveObject())
-    void DeleteSector(TSector* sect);
-      // Removes and deletes a sector (hey.. don't call this)
+    TObjectInstance* RemoveFromSector(TObjectInstance* inst);
+      // Takes the object out of its sector (walkmap, redraw, sector array)
     void ReloadImagery();
       // Forces imagery system to reload imagery.
     int32_t AddShadow(TObjectInstance* oi);
@@ -385,16 +400,19 @@ class TMapPane : public TPane
   // NOTE: Use the 'objset' variable to greatly reduce search times for common sets of
   // objects like MOVING objects and CHARACTERS. 
   
-    TObjectInstance* FindObject(char *name, int32_t occurance = 1, int32_t objset = OBJSET_ALL);
-        // Returns a pointer to the occurance of object answering to name
-    TObjectInstance* FindClosestObject(char *name, S3DPoint pos, bool partial, int32_t objset = OBJSET_ALL);
-        // Returns a pointer to the object answering to name closest to center
-    TObjectInstance* FindClosestObject(char *name, TObjectInstance* from = nullptr, bool partial = false, int32_t objset = OBJSET_ALL);
-        // Returns a pointer to the object answering to name closest to center
+    TObjectInstance* FindObject(const char *name, int32_t occurance = 1, int32_t objset = OBJSET_ALL);
+        // The occurance'th object answering to name in the loaded sectors of
+        // any level
+    TObjectInstance* FindClosestObject(const char *name, const S3DPoint& pos, int32_t level, bool partial, int32_t objset = OBJSET_ALL);
+        // The object answering to name nearest pos on level, within retail's
+        // reach (sqrt 0x800000), in that level's loaded sectors
+    TObjectInstance* FindClosestObject(const char *name, TObjectInstance* from = nullptr, bool partial = false, int32_t objset = OBJSET_ALL);
+        // As above, from an object's position and level (else the camera's)
     int32_t FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height = 0, int32_t objclass = -1, int32_t maxnum = MAXFOUNDOBJS, int32_t objset = OBJSET_ALL);
       // Finds objects within given range. If height not given uses width as radius
-    TObjectInstance* ObjectInCube(PS3DRect cube, int32_t objset = OBJSET_ALL);
-        // Returns pointer to object in cube
+    TObjectInstance* ObjectInCube(PS3DRect cube, int32_t level, int32_t objset = OBJSET_ALL);
+        // The first object on level inside the cube, faces included, from
+        // the level's loaded sectors (a CUBE trigger's search)
     TObjectInstance* OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with = nullptr);
         // Returns the index of the object the mouse is on
     TObjectInstance* GetInstance(int32_t index, int32_t objset = OBJSET_ALL);
@@ -475,10 +493,10 @@ class TMapPane : public TPane
     int32_t GetTotalMoney(TObjectInstance* oi);
         // Return the total about of money owned by the object
 
-    int32_t CheckPos(TObjectInstance* inst, const S3DPoint& newpos, int32_t newlevel = -1);
-        // Call before moving inst to newpos - returns index
-    int32_t TransferObject(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t newsx, int32_t newsy);
-        // Transfer an object to a new sector, returns new itemnum
+    int32_t CheckPos(TObjectInstance* inst, S3DPoint& newpos, int32_t newlevel = -1);
+        // Call before moving inst to newpos (may clamp it) - returns index, 0 if it left the map
+    void TakeOutOfMap(TObjectInstance* inst);
+        // A player whose destination isn't loaded: out of its sector, not deleted
     bool Use(int32_t index, int32_t with);
     int32_t Face(int32_t index, int32_t newfacing);
 
@@ -498,6 +516,9 @@ class TMapPane : public TPane
   private:
 
   // Private functions
+    void StopFollowingPlayer();
+        // What the camera leaving the player does: the speech goes, and the
+        // play screen's drawer closes when it holds the shop
     void UpdateMapPos();
         // Called by drawbackground to update the map pane position (Does CenterOn stuff)
         // calls SetMapPos())
@@ -514,9 +535,14 @@ class TMapPane : public TPane
     void PulseFadeAmbient();
         // Called by Pulse() function to update ambient fade values
   
+    void BindWindow(TGameMap* map);
+        // Borrow the window's sectors from `map` and follow its Unloaded event
+
   // Data Members
     bool command_window_borrowed = false;
-    TSector* sectors[SECTORWINDOWX][SECTORWINDOWY]; // Currently loaded sectors
+    TSector* sectors[SECTORWINDOWX][SECTORWINDOWY] = {}; // Window borrowed from windowmap (see above)
+    TSafeRef<TGameMap> windowmap;                        // Map the sector window borrows from
+    TGameMap::EventListenerId windowlistener = 0;        // Our Unloaded listener on windowmap
     int32_t oldsectorx, oldsectory;                 // Position of sector in last frame
     int32_t sectorx, sectory;                       // Position of sector in current frame
     int32_t newsectorx, newsectory;                 // Position of sector in next frame
@@ -526,6 +552,9 @@ class TMapPane : public TPane
     int32_t oldscrollx, oldscrolly;                 // Scroll position of previous frame
     int32_t scrollx, scrolly;                       // Scroll position of current frame
     S3DPoint center;                                // World coordinates of pane center (current pos)
+    S3DPoint prevcenter;                            // The center at the previous tick (camera interpolation)
+    S3DPoint scrollvel{};                           // Smooth-scroll velocity (retail 0x00658468..70)
+    int32_t  lastcamz = 0;                          // The target z last update (retail 0x00658320)
     SCenterOnState centeron;                        // Pane will attempt to scroll to this object or point
     int32_t onobject;                               // Object clicked on
     int32_t grabx, graby;                           // Click pos

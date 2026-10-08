@@ -25,6 +25,9 @@ class TParseStream
     virtual void Reset() = 0;
     virtual uint32_t GetPos() const = 0;
     virtual void SetPos(uint32_t newpos) = 0;
+    // The text being parsed, for streams over memory (positions are offsets
+    // into it); null for file streams.
+    [[nodiscard]] virtual const char *Data() const { return nullptr; }
 };
 
 // ********************************************************
@@ -38,10 +41,11 @@ class TStringParseStream : public TParseStream
     TStringParseStream(char *buffer, int32_t len = 0x7FFFFFFF)
         { buf = buffer; end = buf + len; ptr = buffer; }
     virtual const char *Name() const { return "String"; }
-    virtual int32_t GetChar() { if (!*ptr || ptr == end) return ENDOFSTREAM; else return *ptr++; }
+    virtual int32_t GetChar() { if (!*ptr || ptr == end) return ENDOFSTREAM; else return (uint8_t)*ptr++; }
     virtual void Reset() { ptr = buf; }
     virtual uint32_t GetPos() const { return (uint32_t)(ptr - buf); }
     virtual void SetPos(uint32_t newpos) { ptr = (char *)(buf + newpos); }
+    [[nodiscard]] const char *Data() const override { return buf; }
 
   private:
 
@@ -138,6 +142,7 @@ class TToken
       index = 0; code = 0; number = 0; text[0] = 0; lastch = 0; linenum = 1; }
     
     void SetStream(TParseStream &s) { stream = &s; }
+    [[nodiscard]] TParseStream *Stream() const { return stream; }
 
     void Get();         // Gets next token
     void WhiteGet();    // Gets next non-whitespace token
@@ -156,7 +161,7 @@ class TToken
     const char *Text() const { return text; }
     double Number() const { return number; }
 
-    bool Is(char *istext, int32_t abbrevlen = 0) const;
+    bool Is(const char *istext, int32_t abbrevlen = 0) const;
     bool IsBegin() const { return type == TKN_KEYWORD && code == KEY_BEGIN; }
     bool IsEnd() const { return type == TKN_KEYWORD && code == KEY_END; }
     void DoBegin();                 // Call to compile BEGIN
@@ -170,6 +175,8 @@ class TToken
       // Fatal error at line number
 
   private:
+    int32_t ReadChar();             // the next character: CRs skipped, lines counted
+
     PTParseStream stream;
     int32_t type;
     int32_t index;

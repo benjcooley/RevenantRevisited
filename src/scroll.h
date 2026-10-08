@@ -26,7 +26,7 @@ class TScroll final : public TObjectInstance
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Read scroll
-    virtual int32_t CursorType(TObjectInstance* inst = nullptr) { if (inst) return CURSOR_NONE; return CURSOR_EYE; }
+    int32_t CursorType(TObjectInstance* inst = nullptr) override { if (inst) return CURSOR_NONE; return CURSOR_EYE; }
         // Indicate you can read the scroll
 
     virtual void Load(RTInputStream is, int32_t version, int32_t objversion);

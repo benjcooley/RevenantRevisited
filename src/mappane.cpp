@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "mappane.h"
+#include "dialog.h"
 
 #include "gamemap.h"
 #include "graphics.h"
@@ -33,13 +34,16 @@
 #include "spellpane.h"
 #include "sound.h"
 #include "logging.h"
+#include "gameoptions.h"
 
+#include <algorithm>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
 #include <math.h>
 #include <time.h>
+#include <string>
 #include <unordered_map>
 
 extern TEditStatusPane StatusBar;
@@ -79,13 +83,16 @@ inline int32_t ScreenGrid(int32_t n, int32_t s)
 
 // Fast mapindex → TObjectInstance* lookup. Holders store the integer
 // mapindex and resolve through MapPane.GetInstance() each frame (see
-// mappane.h). The map is a function-local static so it's constructed on
-// first use regardless of global-init order. Kept in sync exclusively by
+// mappane.h). Constructed on first use regardless of global-init order, and
+// never destroyed: objects deleted during static destruction (maps or
+// players a FatalError/exit path didn't shut down) still unregister here,
+// after a destructed function-local static would be gone. Same reasoning as
+// TSafeObjectBase's registry (saferef.h). Kept in sync exclusively by
 // TObjectInstance::SetMapIndex() and TObjectInstance::~TObjectInstance().
 static std::unordered_map<int32_t, TObjectInstance*>& InstMap()
 {
-    static std::unordered_map<int32_t, TObjectInstance*> m;
-    return m;
+    static auto* m = new std::unordered_map<int32_t, TObjectInstance*>();
+    return *m;
 }
 
 void TMapPane::RegisterInstance(TObjectInstance* oi, int32_t index)
@@ -155,6 +162,12 @@ TMapIterator::TMapIterator(RTObjectInstance oi, int32_t fl, int32_t objset)
     Initialize(&r, fl | CHECK_MAPRECT, objset);
 }
 
+TMapIterator::TMapIterator(int32_t lvl, PSRect maprect, int32_t fl, int32_t objset)
+    : level(lvl)
+{
+    Initialize(maprect, fl | CHECK_LOADED | (maprect ? CHECK_MAPRECT : 0), objset);
+}
+
 void TMapIterator::Initialize(PSRect sr, int32_t fl, int32_t os)
 {
     if (sr)
@@ -171,6 +184,8 @@ void TMapIterator::Initialize(PSRect sr, int32_t fl, int32_t os)
     objset = os;
     sx = -1;        // Causes NextItem() to start at sx=0
     sy = 0;
+    mapnum = 0;
+    secnum = 0;
     index = 0;
     numitems = 0;
     sector = nullptr;
@@ -223,36 +238,9 @@ TObjectInstance* TMapIterator::NextItem()
 
         while (index >= numitems)   // If at end of array (or no array) get next sector
         {
-            if (++sx >= SECTORWINDOWX)
-            {
-                sx = 0;
-                sy++;
-            }
-                
-            if (sy >= SECTORWINDOWY)
+            sector = (flags & CHECK_LOADED) ? NextLoadedSector() : NextWindowSector();
+            if (!sector)
                 return nullptr;
-            
-            if (!MapPane.sectors[sx][sy])
-                continue;
-
-            if (flags & CHECK_SECTRECT)
-            {
-                // Does rectangle intersect sector
-                SRect sr;
-                MapPane.sectors[sx][sy]->GetMaxScreenRect(sr);
-                if (!r.Intersects(sr))
-                    continue;
-            }
-            else if (flags & CHECK_MAPRECT)
-            {
-                // Does rectangle intersect sector
-                SRect sr;
-                MapPane.sectors[sx][sy]->GetMaxMapRect(sr);
-                if (!r.Intersects(sr))
-                    continue;
-            }
-
-            sector = MapPane.sectors[sx][sy];
             numitems = sector->NumObjSetItems(objset);
             index = 0;
         }
@@ -323,6 +311,71 @@ TObjectInstance* TMapIterator::NextItem()
     return item;
 }
 
+// The next sector of the pane's 3x3 window that passes the rect checks.
+TSector* TMapIterator::NextWindowSector()
+{
+    for (;;)
+    {
+        if (++sx >= SECTORWINDOWX)
+        {
+            sx = 0;
+            sy++;
+        }
+        if (sy >= SECTORWINDOWY)
+            return nullptr;
+
+        TSector* candidate = MapPane.sectors[sx][sy];
+        if (!candidate)
+            continue;
+
+        SRect sr;
+        if (flags & CHECK_SECTRECT)
+        {
+            candidate->GetMaxScreenRect(sr);
+            if (!r.Intersects(sr))
+                continue;
+        }
+        else if (flags & CHECK_MAPRECT)
+        {
+            candidate->GetMaxMapRect(sr);
+            if (!r.Intersects(sr))
+                continue;
+        }
+        return candidate;
+    }
+}
+
+// The next loaded sector of `level` (every level when negative) that meets
+// the map rect, walking MapManager's cached maps.
+TSector* TMapIterator::NextLoadedSector()
+{
+    for (; mapnum < MapManager.NumCached(); mapnum++, secnum = 0)
+    {
+        const TGameMap* map = MapManager.Cached(mapnum);
+        if (!map || (level >= 0 && map->Level() != level))
+            continue;
+
+        const std::vector<TSector*>& list = map->Sectors();
+        while (secnum < list.size())
+        {
+            TSector* candidate = list[secnum++];
+            if (!candidate)
+                continue;
+            if (flags & CHECK_MAPRECT)
+            {
+                SRect sr;
+                candidate->GetMaxMapRect(sr);
+                if (!r.Intersects(sr))
+                    continue;
+            }
+            sx = candidate->SectorX();
+            sy = candidate->SectorY();
+            return candidate;
+        }
+    }
+    return nullptr;
+}
+
 void TMapIterator::Nuke()
 {
     if (item)
@@ -353,9 +406,7 @@ bool TMapPane::Initialize()
     oldscrollx = scrollx = oldscrolly = scrolly = 0x80000000;
     oldlevel = level = 0;
 
-    for (int32_t sy = 0; sy < SECTORWINDOWY; sy++)
-        for (int32_t sx = 0; sx < SECTORWINDOWX; sx++)
-            sectors[sx][sy] = nullptr;
+    ClearWindow();
 
     SColor c;
     c.red = 255;
@@ -405,11 +456,12 @@ bool TMapPane::Initialize()
 
 void TMapPane::Close()
 {
-  // Make sure update thread is finished  
+  // Make sure update thread is finished
     EndUpdateThread();
 
-  // Delete all sectors (saving them if in editor)
-    FreeAllSectors();
+  // Retail freed every loaded sector here (FreeAllSectors). The sectors
+  // belong to TMapManager in the port; the pane only lets go of its window.
+    ClearWindow();
 
   // Free imagery in imagery system
     TObjectImagery::FreeAllImagery();
@@ -508,77 +560,6 @@ void TMapPane::FreeBackgroundBuffers()
         delete updatemulti;
         updatemulti = nullptr;
     }
-}
-
-// ******************
-// * Map Management *
-// ******************
-
-// Loads the current map in the "curmap" directory from the given directory 
-// (i.e. "savegame.001"), or clears the "curmap" directory if nullptr, forces
-// reload of all sectors.
-void TMapPane::LoadCurMap(char *from)
-{
-    char frompath[MAXPATHLEN], topath[MAXPATHLEN];
-    
-    ClearCurMap();
-
-    if (!from)
-        return;
-
-    makepath(from, frompath, MAXPATHLEN);
-    strcat(frompath, "\\*.DAT");
-    makepath(CURMAPDIR, topath, MAXPATHLEN);
-
-    copyfiles(frompath, topath);
-}
-
-// Saves map in curmap to the given game subdirectory 
-//(i.e. "savegame.001") or "map" if null
-void TMapPane::SaveCurMap(char *to)
-{
-    ReloadSectors(); // Forces sectors to be saved
-
-    LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                        // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                        //  BETWEEN THESE TWO FUNCTIONS!!)
-
-    TSector::ClearPreloadSectors();
-    
-    UNLOCKSECTORS;      // Do not return between these two things
-
-    if (!to)
-        to = BASEMAPDIR;
-
-    char frompath[MAXPATHLEN], topath[MAXPATHLEN];
-
-    makepath(CURMAPDIR, frompath, MAXPATHLEN);
-    strncatz(frompath, "\\*.DAT", MAXPATHLEN);
-    makepath(to, topath, MAXPATHLEN);
-    strncatz(topath, "\\", MAXPATHLEN);
-
-    copyfiles(frompath, topath);
-}
-
-// Deletes all files in the "curmap" directory, and forces sectors to reload.
-void TMapPane::ClearCurMap()
-{
-    char path[MAXPATHLEN];
-    
-    ReloadSectors();
-
-    LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                        // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                        //  BETWEEN THESE TWO FUNCTIONS!!)
-
-    TSector::ClearPreloadSectors();
-    
-    UNLOCKSECTORS;      // Do not return between these two things
-
-    makepath("curmap", path, MAXPATHLEN);
-    strncatz(path, "\\*.DAT", MAXPATHLEN);
-
-    deletefiles(path);
 }
 
 // ******************
@@ -1112,9 +1093,13 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
                                 used = inst->Use(Player);
                             else
                             {
-                                TakenObject = GetInstance(objindex);
-                                Player->Pickup(TakenObject);
-                                TextBar.Print("Picked up %s.", inst->GetTypeName());
+                                // Gold or food may merge into a pile and be deleted
+                                TObjectInstance* const item = GetInstance(objindex);
+                                const std::string name = inst->GetTypeName();
+                                const TSafeRef<TObjectInstance> taken(item);
+                                Player->Pickup(item);
+                                TakenObject = taken.Get();
+                                TextBar.Print("Picked up %s.", name.c_str());
                                 used = true;
                             }
                         }
@@ -1374,14 +1359,15 @@ int32_t TMapPane::NewObject(SObjectDef* def)
     oi->SetMapIndex(-1);
     int32_t index = AddObject(oi);
 
-    if (index < 0 && shadowindex >= 0)
+    // REVSYNC: the failure path of TMapPane::NewObject @ 0x00450e40 deletes
+    // the shadow it made (once; the 1998 code deleted it a second time).
+    if (index < 0)
     {
-        TObjectInstance* shadow = GetInstance(shadowindex);
-        if (shadow)
-        {
-            DeleteObject(shadow);
-            delete shadow;
-        }
+        if (shadowindex >= 0)
+            DeleteObject(GetInstance(shadowindex));
+        // REVSYNC-DIVERGENCE: retail leaked the object it couldn't place;
+        // nothing else refers to it, so it is freed here.
+        delete oi;
     }
 
     return index;
@@ -1442,52 +1428,41 @@ int32_t TMapPane::AddObject(TObjectInstance* oi)
     return oi->GetMapIndex();
 }
 
-// Remove object (The main place objects are removed)
-TObjectInstance* TMapPane::RemoveObject(int32_t index)
+// REVSYNC: TMapPane::RemoveObject @ 0x00451610 -- take an object out of the
+// world (the main place objects are removed): its shadow, its animator, then
+// out of its owner's inventory or out of its sector. Retail works from the
+// object's own links, so this finds objects outside the sector window and
+// in sectors no window holds (the 1998 version searched the window by
+// mapindex). The object is not deleted.
+TObjectInstance* TMapPane::RemoveObject(TObjectInstance* inst)
 {
-    TObjectInstance* inst = nullptr;
-    TMapIterator i;
-
-    for ( ; i; i++)
-        if (i->GetMapIndex() == index)
-        {
-            inst = i;
-            break;
-        }
-
     if (!inst)
         return nullptr;
 
-  // Notify that object is being deleted
+  // Notify that object is being deleted. Kept where the 1998 code had it;
+  // retail notified from the object's detach (0x0046e630) instead.
     Notify(N_DELETINGOBJECT, inst);
 
-    if (i.Parent())
-    {
-        // extract from inventory
+    if (inst->GetShadow() >= 0)
+        RemoveObject(GetInstance(inst->GetShadow()));
+
+    if (inst->HasAnimator())
+        inst->FreeAnimator();
+
+    // Retail also sent a multiplayer "object removed" message (0x00584270)
+    // for objects in the map; the port is single player.
+    if (inst->IsInInventory() || inst->GetOwner())
         inst->RemoveFromInventory();
-    }
-    else
-    {
-        RemoveFromSector(inst, i.SectorX(), i.SectorY(), i.SectorIndex());
-    }
-
-    if (inst)
-    {
-        if (inst->GetShadow() >= 0)
-            RemoveObject(inst->GetShadow());
-
-        if (inst->HasAnimator())
-            inst->FreeAnimator();
-    }
+    else if (inst->GetSector())
+        RemoveFromSector(inst);
 
     return inst;
 }
 
-// Delete object
+// Removes and deletes an object
 void TMapPane::DeleteObject(TObjectInstance* obj)
 {
-    if (RemoveObject(obj->GetMapIndex()) == nullptr)
-        FatalError("Tried to delete an object not in the sector.  This is a Very Bad Thing(tm).  Get Adam to check this out RIGHT AWAY!");
+    RemoveObject(obj);
     delete obj;
 }
 
@@ -1500,25 +1475,12 @@ void TMapPane::ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32
     oi->GetSector()->ObjectFlagsChanged(oi, oldflags, newflags);
 }
 
-// Delete sector
-void TMapPane::DeleteSector(TSector* sect)
+TObjectInstance* TMapPane::RemoveFromSector(TObjectInstance* inst)
 {
-    Notify(N_DELETINGSECTOR, sect);
+    TSector* sector = inst->GetSector();
+    if (!sector)
+        return inst;
 
-  // Make sure all objects know they are off screen now
-    for (TObjectIterator i(sect->ObjectArray()); i; i++)
-    {
-        if (!i.Item())
-            continue;
-        i.Item()->OffScreen();
-    }
-
-  // Saves and deletes
-    TSector::CloseSector(sect);
-}
-
-TObjectInstance* TMapPane::RemoveFromSector(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t sectindex)
-{
     // extract from sector
     ExtractWalkmap(inst);
 
@@ -1526,8 +1488,8 @@ TObjectInstance* TMapPane::RemoveFromSector(TObjectInstance* inst, int32_t sx, i
                         // Group the update rect and the actual removal below so update system doesn't
                         // accidently redraw this object before it is deleted
 
-    AddObjectUpdateRect(inst->GetMapIndex());  
-    sectors[sx][sy]->RemoveObject(sectindex);
+    AddObjectUpdateRect(inst->GetMapIndex());
+    sector->RemoveObject(inst);
 
     UNLOCKSECTORS;
 
@@ -1573,12 +1535,15 @@ int32_t TMapPane::AddShadow(TObjectInstance* oi)
     return index;
 }
 
-// Object find functions
-TObjectInstance* TMapPane::FindObject(char *name, int32_t occurance, int32_t objset)
+// REVSYNC: FindObject @ 0x00451d70 -- the occurance'th object of that name
+// in the loaded sectors of any level (its iterator flags 0x2a0: loaded,
+// active or not), not only the pane's 3x3 window. beginfighting and
+// giveweapons look their objects up this way.
+TObjectInstance* TMapPane::FindObject(const char *name, int32_t occurance, int32_t objset)
 {
     int32_t found = 0;
 
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+    for (TMapIterator i(-1, nullptr, CHECK_NOINVENT, objset); i; i++)
     {
         const char *instname = i->GetName();
 
@@ -1589,28 +1554,76 @@ TObjectInstance* TMapPane::FindObject(char *name, int32_t occurance, int32_t obj
     return nullptr;
 }
 
-TObjectInstance* TMapPane::FindClosestObject(char *name, S3DPoint frompos, bool partial, int32_t objset)
+// Retail drops the spoken lines and any open choices when the camera stops
+// following the player, and closes the play screen's drawer when it holds the
+// shop (SetCameraObject 0x004538d0, SetCameraPos 0x00453940).
+bool TMapPane::IsFollowingPlayer() const
 {
-    TObjectInstance* closest = nullptr;
-    int32_t closestdist = 0x800000;
+    return (centeron.flags & CENTERON_OBJ) && Player && centeron.obj == Player;
+}
 
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+// REVSYNC: the camera half of a teleport (TExit::Activate 0x0050d3a0, `pos`
+// 0x00423d40): flag 8, which UpdateMapPos clears after jumping.
+void TMapPane::SnapIfFollowing(const TObjectInstance* obj)
+{
+    if ((centeron.flags & CENTERON_OBJ) && centeron.obj == obj)
+        centeron.flags |= CENTERON_SNAP;
+}
+
+void TMapPane::StopFollowingPlayer()
+{
+    DialogPane.ClearSpeech(false);
+    if (PlayScreen.Drawer() == TPlayScreen::EDrawer::BuySell)
+        PlayScreen.CloseDrawer();
+}
+
+void TMapPane::CenterOnObj(TObjectInstance* obj, uint32_t flags)
+{
+    if (IsFollowingPlayer() && obj != Player)
+        StopFollowingPlayer();
+    centeron.obj = obj;
+    centeron.flags = (flags & ~CENTERON_POS) | CENTERON_OBJ;
+}
+
+void TMapPane::CenterOnPos(const S3DPoint& pos, int32_t level, uint32_t flags)
+{
+    if (IsFollowingPlayer())
+        StopFollowingPlayer();
+    centeron.pos = pos;
+    centeron.level = level;
+    centeron.flags = (flags & ~CENTERON_OBJ) | CENTERON_POS;
+}
+
+// REVSYNC: 0x00451de0 -- the nearest object of that name on `lvl` within
+// sqrt(0x800000) (~2896 units) of frompos, from the level's loaded sectors
+// (its iterator flags 0x4a0), not only the pane's 3x3 window: a script
+// near the window's edge finds its waypoints (Hruthford's `goto HRUWAY01`
+// with the camera elsewhere on the level). Only the sectors within that
+// reach are walked. Names match exactly (ignoring case) unless `partial`
+// asks for an abbreviation match; the 1998 source had the two branches the
+// other way round, and retail's callers pass `partial` for the abbreviated
+// forms (`get`, `select`, `swap`).
+TObjectInstance* TMapPane::FindClosestObject(const char *name, const S3DPoint& frompos, int32_t lvl, bool partial, int32_t objset)
+{
+    constexpr int32_t kMaxSqrDist = 0x800000;
+    constexpr int32_t kReach      = 2897;       // ceil(sqrt(kMaxSqrDist))
+    SRect area;
+    area.left   = frompos.x - kReach;
+    area.top    = frompos.y - kReach;
+    area.right  = frompos.x + kReach;
+    area.bottom = frompos.y + kReach;
+
+    TObjectInstance* closest = nullptr;
+    int32_t closestdist = kMaxSqrDist;
+
+    for (TMapIterator i(lvl, &area, CHECK_NOINVENT, objset); i; i++)
     {
         const char *instname = i->GetName();
+        if (!instname)
+            continue;
 
-        bool found = false;
-
-        if (partial)
-        {
-            if (instname && stricmp(name, instname) == 0)
-                 found = true;
-        }
-        else
-        {
-            if (instname && abbrevcmp(name, instname) > 0)
-                 found = true;
-        }
-
+        const bool found = partial ? abbrevcmp(name, instname) > 0
+                                   : stricmp(name, instname) == 0;
         if (found)
         {
             S3DPoint pos;
@@ -1627,15 +1640,12 @@ TObjectInstance* TMapPane::FindClosestObject(char *name, S3DPoint frompos, bool 
     return closest;
 }
 
-TObjectInstance* TMapPane::FindClosestObject(char *name, TObjectInstance* from, bool partial, int32_t objset)
+// REVSYNC: FindClosestObject @ 0x00451fe0 -- from the object's position and
+// level, else the camera's.
+TObjectInstance* TMapPane::FindClosestObject(const char *name, TObjectInstance* from, bool partial, int32_t objset)
 {
-    S3DPoint frompos;
-    if (from)
-        from->GetPos(frompos);
-    else
-        frompos = center;
-
-    return FindClosestObject(name, frompos, partial, objset);
+    const S3DPoint frompos = from ? from->Pos() : center;
+    return FindClosestObject(name, frompos, from ? from->GetLevel() : level, partial, objset);
 }
 
 int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height, int32_t objclass, int32_t maxnum, int32_t objset)
@@ -1722,18 +1732,29 @@ int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width
     return found;
 }
 
-TObjectInstance* TMapPane::ObjectInCube(PS3DRect cube, int32_t objset)
+// REVSYNC: 0x00452480 -- the first object of `objset` on `lvl` inside the
+// cube, every face included, in the order the iterator hands them out. It
+// walks that level's loaded sectors that meet the cube's map rect, and their
+// objects inside that rect (iterator 0x0044cf80, flags 0x6e0: loaded
+// sectors, active or not, of one level; the map rect; no inventory) -- not
+// the pane's 3x3 window. A CUBE trigger asks on its owner's level
+// (0x004927b0); the 1998 search walked the window, the player's level.
+TObjectInstance* TMapPane::ObjectInCube(PS3DRect cube, int32_t lvl, int32_t objset)
 {
-    TObjectInstance* in = nullptr;
+    SRect area;
+    area.left   = cube->beg.x;
+    area.top    = cube->beg.y;
+    area.right  = cube->end.x;
+    area.bottom = cube->end.y;
 
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+    for (TMapIterator i(lvl, &area, CHECK_NOINVENT, objset); i; i++)
     {
         if (cube->In(i->Pos()))
             return i;
     }
 
     return nullptr;
-}   
+}
 
 TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with)
 {
@@ -1832,23 +1853,21 @@ void WalkGridToPos(int32_t x, int32_t y, S3DPoint& pos)
 // General purpose handler for transfer, extract, clear etc
 void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
 {
-    // Sector resolver: try the active 3x3 streaming window first; fall
-    // back to MapManager.CurrentMap()->FindSector for everything outside
-    // that window. The window-first ordering keeps legacy code paths
-    // that expect sectors[][] to win unchanged; the MapManager fallback
-    // covers the new "no streaming" model where the window is empty.
-    auto find_sector = [this](int32_t sx, int32_t sy) -> TSector* {
+    // Sector resolver: the walkmaps an object touches are in its own map --
+    // its own sector (which may be one no map holds, e.g. a sector an editor
+    // command loaded on its own) and the loaded sectors of its level. Not
+    // the sector window or the current map: those hold another level's
+    // sectors at the same (sx, sy) whenever the object isn't on the level
+    // being played. (The window borrows from the current map, so for
+    // objects there this is the same lookup.)
+    TSector* const own = oi ? oi->GetSector() : nullptr;
+    const TGameMap* const map = oi ? MapManager.GetCached(oi->GetLevel()) : nullptr;
+    auto find_sector = [own, map](int32_t sx, int32_t sy) -> TSector* {
         if ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY)
             return nullptr;
-        const bool in_window =
-            sx >= sectorx && sx < sectorx + SECTORWINDOWX &&
-            sy >= sectory && sy < sectory + SECTORWINDOWY;
-        if (in_window)
-            if (TSector* s = sectors[sx - sectorx][sy - sectory])
-                return s;
-        if (TGameMap* m = MapManager.CurrentMap())
-            return m->FindSector(sx, sy);
-        return nullptr;
+        if (own && own->SectorX() == sx && own->SectorY() == sy)
+            return own;
+        return map ? map->FindSector(sx, sy) : nullptr;
     };
 
     // EXTRACT mode also wants to redraw the walkmap rect as part of the
@@ -1862,8 +1881,11 @@ void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
         // walkmap-local coords; recompute here once after the stamp.
         TGameMap::StampTileWalkmap(oi, mode, find_sector);
 
+        // RedrawWalkmapRect re-stamps the neighbours from the sector window,
+        // which holds the current map's sectors only; redrawing them into
+        // another level's sector would corrupt it.
         TObjectImagery* imagery = oi ? oi->GetImagery() : nullptr;
-        if (imagery)
+        if (imagery && map && map == windowmap.Get())
         {
             int32_t w, l, h;
             imagery->GetWorldBoundBox(oi->GetState(), w, l, h);
@@ -2304,8 +2326,14 @@ void TMapPane::DrawDLight()
                  bitmap, DM_ALPHALIGHTEN); //, nullptr, 31 - (dlight.intensity / 8));
 }
 
+// REVSYNC: 0x00453640. Retail adds the gamma ambient offset here, so every
+// area ambient, the map's start value (map init 0x0044d5c0 inlines this
+// with light 10) and the script's ambient command carry it. FadeAmbient
+// (0x00453720) stores its target without it, as retail.
 void TMapPane::SetAmbientLight(int32_t light, bool stopfade)
 {
+    light = (std::max)(0, light + GammaAmbientOffset(GammaLevel));
+
     if (stopfade)
         totambfadeframes = totambfadesteps = 0; // Stop fading
 
@@ -2455,139 +2483,95 @@ void TMapPane::UpdateMapPos()
             }
         }
     }
-    else        // Set map position code for regular game
-    {           // --------------------------------------
+    else
+    {
+        // REVSYNC: UpdateMapPos @ 0x004539d0, the game half. The camera moves
+        // toward what it follows -- the centeron object or point, else where
+        // it is -- scrolling smoothly, or jumping when it is told to snap (a
+        // teleport), changes level, is ~1024 units away or isn't scrolling.
+        // Grid scrolling is used only with smooth scrolling off while the
+        // player has control (0x0065d0d0 is PlayScreen +0x5e0, the control
+        // flag). Not ported: a map pane mode (+0x918 == 1) that ignored the
+        // centeron target; its meaning is unknown.
+        prevcenter = center;
 
-        S3DPoint pos, newpos;
-        GetMapPos(newpos);
-        int32_t newlevel = GetMapLevel();
-        static S3DPoint vel(0, 0, 0);
-        static S3DPoint lastpos;
-        static int32_t lastlevel;
-
-      // Regular game uses the contents of the 'centeron' structure to attempt
-      // to center on either a point or an object.  The center on structure is
-      // set by the CenterOn() functions, and can be called from a script.
-
-      // Get what we're supposed to center on
-        if (centeron.flags & CENTERON_OBJ)
+        S3DPoint target = center;
+        int32_t targetlevel = newlevel;
+        if ((centeron.flags & CENTERON_OBJ) && centeron.obj)
         {
-            if (centeron.obj)   // Note: check for validity of this object in Notify()
-            {
-                centeron.obj->GetPos(pos);
-                newlevel = centeron.obj->GetLevel();
-            }
+            target = centeron.obj->Pos();
+            targetlevel = centeron.obj->GetLevel();
         }
         else if (centeron.flags & CENTERON_POS)
         {
-            pos = centeron.pos;
-            newlevel = centeron.level;
-        }
-        else
-        {
-            pos = newpos; // Center on nothing
-            newlevel = GetMapLevel();
+            target = centeron.pos;
+            targetlevel = centeron.level;
         }
 
-      // Smooth out z (average last five z positions)
-        static int32_t zsmoothlist[5];
-        static int32_t zsmoothpos;
-        if (dist(lastpos.x, lastpos.y, pos.x, pos.y) < 32)
+        // Height changes under 9 units (steps, bobbing) don't move the camera.
+        if (absval(lastcamz - target.z) < 9)
+            target.z = lastcamz;
+
+        const bool gridscroll = !SmoothScroll && PlayScreen.IsControlOn();
+        bool jump = gridscroll || targetlevel != newlevel ||
+                    dist(center.x, center.y, target.x, target.y) > 0x3ff ||
+                    !(centeron.flags & CENTERON_SCROLL) || (centeron.flags & CENTERON_SNAP);
+
+        S3DPoint next = target;
+        if (!jump)
         {
-            zsmoothlist[zsmoothpos] = pos.z;
-            pos.z = (zsmoothlist[0] + 
-                     zsmoothlist[1] +
-                     zsmoothlist[2] +
-                     zsmoothlist[3] +    
-                     zsmoothlist[4]) / 5;
-            zsmoothpos++;
-            if (zsmoothpos >= 5)
-                zsmoothpos = 0;
-        }
-        else
-        {
-            zsmoothlist[0] = 
-                zsmoothlist[1] =     
-                zsmoothlist[2] =      
-                zsmoothlist[3] =     
-                zsmoothlist[4] = pos.z;
-            zsmoothpos = 0;
-        }
-
-      // If scrolling, handle scroll velocities to new position (only if scroll on and level is same)
-        if (SmoothScroll && newlevel == GetMapLevel() && (centeron.flags & CENTERON_SCROLL))
-        {
-            S3DPoint newvel;
-
-            int32_t factor = 10;
-            if (ScrollLock)
-                factor = 6;
-
-            newvel.x = (pos.x - center.x) / factor;
-            newvel.y = (pos.y - center.y) / factor;
-            newvel.z = (pos.z - center.z) / factor;
-
-            if (newvel.x > vel.x)
-                vel.x++;
-            else if (newvel.x < vel.x)
-                vel.x--;
-
-            if (newvel.y > vel.y)
-                vel.y++;
-            else if (newvel.y < vel.y)
-                vel.y--;
-
-            if (newvel.z > vel.z)
-                vel.z++;
-            else if (newvel.z < vel.z)
-                vel.z--;
-
-            vel.x = max(-12, min(12, vel.x));
-            vel.y = max(-12, min(12, vel.y));
-            vel.z = max(-12, min(12, vel.z));
-
-            newpos += vel;
-        }
-        else
-        {
-            vel.x = vel.y = vel.z = 0;
-            newpos = pos;   // No scrolling,.. just set pos
-        }
-        
-        if (SmoothScroll)
-            SetMapPos(newpos);
-        else                // Non smooth scrolling, calculate screen grid and set pos
-        {
-            int32_t x, y;
-            WorldToScreen(pos, x, y);
-            x = ScreenGrid(x, MAPGRIDWIDTH);
-            y = ScreenGrid(y - CHARACTER_HEIGHT, MAPGRIDHEIGHT);
-
-            int32_t sx, sy;
-            WorldToScreen(center, sx, sy);
-            sx = ScreenGrid(sx, MAPGRIDWIDTH);
-            sy = ScreenGrid(sy, MAPGRIDHEIGHT);
-
-            x *= MAPGRIDWIDTH;
-            y *= MAPGRIDHEIGHT;
-            ScreenToWorld(x, y, newpos);
-            if (absval(newpos.x - center.x) > 4 || absval(newpos.y - center.y) > 4)
-            //if (x != sx || y != sy)
+            const int32_t factor = ScrollLock ? 6 : 10;
+            const S3DPoint want((target.x - center.x) / factor,
+                                (target.y - center.y) / factor,
+                                (target.z - center.z) / factor);
+            // Retail's test sums signed velocities, so a fast scroll up or
+            // left never jumps.
+            if (want.x + want.y < 0x100)
             {
-                //x *= MAPGRIDWIDTH;
-                //y *= MAPGRIDHEIGHT;
-                //ScreenToWorld(x, y, newpos);
-                SetMapPos(newpos);
-                MapPane.RedrawAll();
+                auto approach = [](int32_t v, int32_t goal) {
+                    v += (goal > v) - (goal < v);
+                    return std::clamp(v, -12, 12);
+                };
+                scrollvel.x = approach(scrollvel.x, want.x);
+                scrollvel.y = approach(scrollvel.y, want.y);
+                scrollvel.z = approach(scrollvel.z, want.z);
+                next = center;
+                next += scrollvel;
+            }
+            else
+                jump = true;
+        }
+        if (jump)
+            scrollvel = S3DPoint(0, 0, 0);
+        lastcamz = target.z;
+
+        if (gridscroll)
+        {
+            // The view moves a screen (less a 64-pixel overlap) at a time, to
+            // the cell the target is in.
+            auto cell = [](int32_t v, int32_t size) {
+                if (absval(v) < size / 2)
+                    return 0;
+                return (v + (v < 0 ? -size / 2 : size / 2)) / size;
+            };
+            const int32_t cellw = MAPPANEWIDTH - 64;
+            const int32_t cellh = MAPPANEHEIGHT - 64;
+            int32_t sx, sy;
+            WorldToScreen(target, sx, sy);
+            S3DPoint snapped;
+            ScreenToWorld(cell(sx, cellw) * cellw, cell(sy - 32, cellh) * cellh, snapped);
+            if (absval(snapped.x - center.x) >= 5 || absval(snapped.y - center.y) >= 5)
+            {
+                SetMapPos(snapped);
+                RedrawAll();
             }
         }
+        else
+            SetMapPos(next);
 
-        SetMapLevel(newlevel);
-
-      // Set Last values
-        lastpos = pos;
-        lastlevel = level;
-    }       
+        SetMapLevel(targetlevel);
+        centeron.flags &= ~CENTERON_SNAP;
+    }
 }
 
 // The pulse function is pretty much the first function that's called in a screen refresh.
@@ -2624,8 +2608,9 @@ void TMapPane::Pulse()
   // Update 3D position
     Update3DScenePos();
 
-  // Update Sectors
-    UpdateSectors();
+  // Borrow the sectors around the player (retail streamed them in here:
+  // UpdateSectors @ 0x00459220; TMapManager loads whole levels in the port)
+    UpdateActiveWindow();
 
   // Leave Pulse with new map position completely set
 }
@@ -3833,246 +3818,114 @@ void TMapPane::AnimateObjects(bool draw)
     Display.ResetClipRect();
 }
 
-// *******************************
-// * Sector Management Functions *
-// *******************************
+// *****************
+// * Sector Window *
+// *****************
 
-void TMapPane::SaveAllSectors()
-{
-    int32_t sx, sy;
+// The window borrows sectors from TMapManager's current map (see mappane.h).
+// Loading, saving and freeing sectors is the manager's job: retail's
+// FreeAllSectors / ReloadSectors / SaveAllSectors / DeleteSector and the
+// streaming UpdateSectors are in attic/src/mappane_sectors.cpp with the
+// TMapManager operations that replace them.
 
-    LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                        // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                        //  BETWEEN THESE TWO FUNCTIONS!!)
-
-    for (sx = 0; sx < SECTORWINDOWX; sx++)
-        for (sy = 0; sy < SECTORWINDOWY; sy++)
-            if (sectors[sx][sy])
-                sectors[sx][sy]->Save();
-
-    UNLOCKSECTORS;       // Allow update system to access sector arrays again
-                         // If lock is called without unlock, system will CRASH!!
-}
-
-void TMapPane::FreeAllSectors()
-{
-    // This window borrows MapManager-owned sectors; their owner tears down.
-    if (command_window_borrowed) { ReleaseCommandMapWindow(); return; }
-    int32_t sx, sy;
-
-    LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                        // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                        //  BETWEEN THESE TWO FUNCTIONS!!)
-
-    // NOTE: We don't need to call the LockSectors() function here because the
-    // update system is turned off by the time we get here
-
-    for (sx = 0; sx < SECTORWINDOWX; sx++)
-        for (sy = 0; sy < SECTORWINDOWY; sy++)
-            if (sectors[sx][sy])
-            {
-                DeleteSector(sectors[sx][sy]);
-                sectors[sx][sy] = nullptr;
-            }
-
-    UNLOCKSECTORS;       // Allow update system to access sector arrays again
-                         // If lock is called without unlock, system will CRASH!!
-}
-
-void TMapPane::ReloadSectors()
-{
-    FreeAllSectors();
-    sectorx += 10000000;
-    sectory += 10000000;
-    RedrawAll();
-}
-
+// REVSYNC: UpdateSectors @ 0x00459220 -- the window is the sectors around
+// the map's center (where the camera looks: normally the player, elsewhere
+// during a scripted pan), on the map's level.
 bool TMapPane::BindCommandMapWindow(int32_t maplevel, const S3DPoint& mapcenter)
 {
     TGameMap* map = MapManager.CurrentMap();
     if (!map || map->Level() != maplevel) return false;
-    // A diagnostic must never silently take over an owned legacy window.
+    // Diagnostics do not silently take over a live gameplay window.
     if (!command_window_borrowed)
         for (int32_t y = 0; y < SECTORWINDOWY; ++y)
             for (int32_t x = 0; x < SECTORWINDOWX; ++x)
                 if (sectors[x][y]) return false;
-    command_window_borrowed = true;
-    center = mapcenter;
+    center = prevcenter = mapcenter;
     level = newlevel = maplevel;
     sectorx = (mapcenter.x >> SECTORWSHIFT) - SECTORWINDOWX / 2;
     sectory = (mapcenter.y >> SECTORHSHIFT) - SECTORWINDOWY / 2;
-    for (int32_t y = 0; y < SECTORWINDOWY; ++y)
-        for (int32_t x = 0; x < SECTORWINDOWX; ++x)
-            sectors[x][y] = map->FindSector(sectorx + x, sectory + y);
+    BindWindow(map); // Use the same safe-reference and unload listener as gameplay.
+    command_window_borrowed = true;
     return true;
 }
 
 void TMapPane::ReleaseCommandMapWindow()
 {
-    if (!command_window_borrowed) return;
-    memset(sectors, 0, sizeof(sectors));
-    command_window_borrowed = false;
+    if (command_window_borrowed) ClearWindow();
 }
 
 void TMapPane::UpdateActiveWindow()
 {
-    if (!Player) return;
     TGameMap* map = MapManager.CurrentMap();
     if (!map) return;
 
-    S3DPoint pos;
-    Player->GetPos(pos);
-    const int32_t player_lvl = Player->GetLevel();
-    const int32_t player_sx  = pos.x >> SECTORWSHIFT;
-    const int32_t player_sy  = pos.y >> SECTORHSHIFT;
-
-    // Window origin = player sector minus half-window so the player's
-    // sector ends up at the center cell.
-    const int32_t new_sectorx = player_sx - SECTORWINDOWX / 2;
-    const int32_t new_sectory = player_sy - SECTORWINDOWY / 2;
-
-    if (level == player_lvl && sectorx == new_sectorx && sectory == new_sectory)
+    // The camera has moved to a level that isn't current yet (a teleport):
+    // nothing to borrow until TGameSession::EnterLevel brings it in.
+    if (map->Level() != newlevel)
     {
-        // Already centered correctly. Cells stay valid as long as the
-        // map underneath doesn't change -- TGameMap::Unloaded would
-        // null these out at the renderer too.
+        if (windowmap.Get())
+            ClearWindow();
+        level = newlevel;
         return;
     }
 
-    level    = player_lvl;
+    // Window origin = center's sector minus half the window, so that sector
+    // is the center cell.
+    const int32_t new_sectorx = (center.x >> SECTORWSHIFT) - SECTORWINDOWX / 2;
+    const int32_t new_sectory = (center.y >> SECTORHSHIFT) - SECTORWINDOWY / 2;
+
+    // A load replaces the map even when the center lands in the same sector
+    // cell, so the map is part of the check.
+    if (windowmap.Get() == map && level == newlevel &&
+        sectorx == new_sectorx && sectory == new_sectory)
+        return;
+
+    level    = newlevel;
     sectorx  = new_sectorx;
     sectory  = new_sectory;
+    BindWindow(map);
+}
+
+// Where the camera looks this frame: the center, moved `fraction` of the way
+// from the previous tick's (the center steps at 24 Hz).
+S3DPoint TMapPane::CameraPos(double fraction) const
+{
+    const double f = std::clamp(fraction, 0.0, 1.0);
+    return S3DPoint(prevcenter.x + (int32_t)std::lround((center.x - prevcenter.x) * f),
+                    prevcenter.y + (int32_t)std::lround((center.y - prevcenter.y) * f),
+                    prevcenter.z + (int32_t)std::lround((center.z - prevcenter.z) * f));
+}
+
+void TMapPane::BindWindow(TGameMap* map)
+{
+    if (windowmap.Get() != map)
+    {
+        ClearWindow();
+        windowmap = map;
+        // The map fires Unloaded before it frees its sectors (gamemap.h), so
+        // the window never holds a sector the map has freed.
+        windowlistener = map->AddListener([this](EGameMapEvent event, TGameMap*) {
+            if (event == EGameMapEvent::Unloaded)
+                ClearWindow();
+        });
+    }
 
     for (int32_t y = 0; y < SECTORWINDOWY; ++y)
         for (int32_t x = 0; x < SECTORWINDOWX; ++x)
             sectors[x][y] = map->FindSector(sectorx + x, sectory + y);
 }
 
-void TMapPane::UpdateSectors()
+void TMapPane::ClearWindow()
 {
-    int32_t x, y;
+    if (TGameMap* map = windowmap.Get(); map && windowlistener)
+        map->RemoveListener(windowlistener);
+    windowlistener = 0;
+    windowmap.Clear();
+    command_window_borrowed = false;
 
-  // Change sector position
-    oldlevel = level;
-    level = newlevel;
-    oldsectorx = sectorx;
-    oldsectory = sectory;
-
-  // account for the character actually being at (sectorx+1, sectory+1)
-    sectorx = (center.x >> SECTORWSHIFT) - 1;
-    sectory = (center.y >> SECTORHSHIFT) - 1;
-
-  // If sector has changed.. reload sectors
-    if (sectorx != oldsectorx || sectory != oldsectory || level != oldlevel || IsDirty())
-    {
-        LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                            // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                            //  BETWEEN THESE TWO FUNCTIONS!!)
-
-      // Temporary sectors
-        TSector* newsectors[SECTORWINDOWX][SECTORWINDOWY];
-        memset(newsectors, 0, sizeof(TSector*) * SECTORWINDOWX * SECTORWINDOWY);
-
-      // Delete old sectors
-        int32_t nx, ny;
-        for (x = 0; x < SECTORWINDOWX; x++)
-        {
-            for (y = 0; y < SECTORWINDOWY; y++)
-            {
-                // Offset by one, because sectorx refers to middle sector
-                nx = oldsectorx - sectorx + x;
-                ny = oldsectory - sectory + y;
-
-                // Old sector is out of sector window.. delete it
-                if (level != oldlevel || (uint32_t)nx >= SECTORWINDOWX || (uint32_t)ny >= SECTORWINDOWY)
-                {
-                    if (sectors[x][y])
-                        DeleteSector(sectors[x][y]);
-                    sectors[x][y] = nullptr;
-                }
-                else // Sector still there.. put it in a new position
-                    newsectors[nx][ny] = sectors[x][y];
-            }
-        }
-
-      // Copy new sector list to sector list
-        memcpy(sectors, newsectors, sizeof(TSector*) * SECTORWINDOWX * SECTORWINDOWY);
-
-      // Preload sectors if level changed
-        if (!PreloadSectors)
-            TSector::ClearPreloadSectors();
-        else if (!TSector::InPreloadArea(center, level)) // Reload cache if we're not in cache rect
-        {
-
-          // Get new sector rectangle area
-            SRect r;
-            r.left = center.x - SECTORWIDTH * PreloadSectorSize / 2;
-            r.right = center.x + SECTORWIDTH * PreloadSectorSize / 2;
-            r.top = center.y - SECTORHEIGHT * PreloadSectorSize / 2;
-            r.bottom = center.y + SECTORHEIGHT * PreloadSectorSize / 2;
-
-            if (TextBar.IsOpen() && !TextBar.IsHidden() && CurrentScreen->FrameCount() > 0)
-            {
-                TextBar.Print("Loading Map... Please Wait");
-                TextBar.Draw();
-                TextBar.PutToScreen();
-            }
-
-          // Now reload cache around current pos
-            TSector::LoadPreloadSectors(level, 1, &r); // Don't care if this works or not
-
-            if (TextBar.IsOpen() && !TextBar.IsHidden() && CurrentScreen->FrameCount() > 0)
-            {
-                TextBar.Print("");
-                TextBar.Draw();
-                TextBar.PutToScreen();
-            }
-        }
-
-      // Load new sectors if needed
-        bool loaded = false;
-
-        for (x = 0; x < SECTORWINDOWX; x++)
-        {
-            for (y = 0; y < SECTORWINDOWY; y++)
-            {
-                if (!sectors[x][y])
-                {
-                    if ((uint32_t)(sectorx + x) < MAXSECTORX && (uint32_t)(sectory + y) < MAXSECTORY)
-                    {
-                        sectors[x][y] = TSector::LoadSector(level, sectorx+x, sectory+y);
-                        loaded = true;
-                    }
-                }
-            }
-        }
-
-        if (loaded)
-            TransferAllWalkmaps();
-
-        // Make sure all selected objects are still valid
-        if (Editor)
-            StatusBar.Validate();
-
-        UNLOCKSECTORS;       // Allow update system to access sector arrays again
-                             // If lock is called without unlock, system will CRASH!!
-
-
-      // Now that sectors have changed, attempt to readd player characters to map
-      // if they aren't in it yet.
-      //
-      // Since player characters are OF_NONMAP. They aren't saved or deleted by the
-      // sector system.  When the map changes, we simply go through the list of characters.
-      // and add them into the current map if they aren't in there already.
-
-        for (int32_t player = 0; player < PlayerManager.NumPlayers(); player++)
-        {
-            TPlayer* p = PlayerManager.GetPlayer(player);
-            if (p && !p->GetSector())
-                AddObject(p); // Attempt to add player to current sector area
-        }
-
-    }
+    for (int32_t y = 0; y < SECTORWINDOWY; ++y)
+        for (int32_t x = 0; x < SECTORWINDOWX; ++x)
+            sectors[x][y] = nullptr;
 }
 
 /*void TMapPane::GetPlayerFocus(S3DPoint& pos)
@@ -4228,129 +4081,77 @@ int32_t TMapPane::GetTotalMoney(TObjectInstance* oi)
     return MoneyHandler(oi, 0);
 }
 
-// Checks new position and transfers object between sectors if object crosses a sector
-// boundry.  Also prevents objects from going outside of loaded sector list
-int32_t TMapPane::CheckPos(TObjectInstance* inst, const S3DPoint& newpos_in, int32_t newlevel)
+// The loaded sector at (level, sx, sy): any sector of a level TMapManager
+// holds (retail's loaded-sector list, 0x00499e10).
+static TSector* LoadedSector(int32_t level, int32_t sx, int32_t sy)
 {
-  // If default, or object is owned by map, set level to object level
-  // Note: only floating NONMAP objects like TPlayer objects can change their level
+    TGameMap* map = MapManager.GetCached(level);
+    return map ? map->FindSector(sx, sy) : nullptr;
+}
+
+// REVSYNC: CheckPos @ 0x00459f50 -- before an object moves to newpos (which
+// this may clamp), keep it in a loaded sector:
+// - a move within its sector changes nothing;
+// - into another loaded sector, it changes sectors;
+// - a player whose destination isn't loaded (another level, not yet
+//   brought in) leaves the map until TGameSession::EnterLevel puts it back;
+// - any other object stays inside its sector.
+// Returns the object's map index, 0 when it left the map, -1 when it can't
+// be placed.
+int32_t TMapPane::CheckPos(TObjectInstance* inst, S3DPoint& newpos, int32_t newlevel)
+{
+    if (inst->IsInInventory())
+        return inst->GetMapIndex();
+
+    // Only non-map objects (players) can change level.
     if (newlevel == -1 || !(inst->Flags() & OF_NONMAP))
         newlevel = inst->GetLevel();
 
-    // Local mutable copy so we can clamp/snap to sector bounds without
-    // mutating the caller's point.
-    S3DPoint newpos = newpos_in;
+    newpos.x = std::clamp(newpos.x, 0, MAXMAPWIDTH);
+    newpos.y = std::clamp(newpos.y, 0, MAXMAPHEIGHT);
 
-    // basic bounds checking
-    if (newpos.x < 0)
-        newpos.x = 0;
-    else if (newpos.x >= MAXMAPWIDTH)
-        newpos.x = MAXMAPWIDTH;
-
-    if (newpos.y < 0)
-        newpos.y = 0;
-    else if (newpos.y >= MAXMAPHEIGHT)
-        newpos.y = MAXMAPHEIGHT;
-
-    int32_t newsx = (newpos.x >> SECTORWSHIFT) - sectorx;
-    int32_t newsy = (newpos.y >> SECTORHSHIFT) - sectory;
-
-
-    // Note: Since non map objects are usually characters, it's ok to move them outside of
-    if (inst->Flags() & OF_NONMAP)  // Non map can be outside of current sector list (it's OK)
+    if (!LoadedSector(newlevel, newpos.x >> SECTORWSHIFT, newpos.y >> SECTORHSHIFT))
     {
-
-    // Non map objects (usually characters), can be teleported outside of the current map.
-    // When this happens, they are removed from the current sector list until the DrawBackground()
-    // function reloads a new sector list which contains them again.  Objects outside of sectors
-    // will never get Pulse or Animate calls (to make sure they don't somehow hose the system).
-
-        if (newsx < 0 || newsx >= SECTORWINDOWX || 
-            newsy < 0 || newsy >= SECTORWINDOWY || 
-            newlevel != GetMapLevel())
+        if (inst->Flags() & OF_NONMAP)
         {
-            RemoveObject(inst);
+            TakeOutOfMap(inst);
             return 0;
         }
+
+        // Retail clamps to its sector's span plus one: a move past the far
+        // edge lands on the next sector's first unit, which then fails below.
+        const S3DPoint cur = inst->Pos();
+        const int32_t minx = (cur.x >> SECTORWSHIFT) << SECTORWSHIFT;
+        const int32_t miny = (cur.y >> SECTORHSHIFT) << SECTORHSHIFT;
+        newpos.x = std::clamp(newpos.x, minx, minx + SECTORWIDTH);
+        newpos.y = std::clamp(newpos.y, miny, miny + SECTORHEIGHT);
     }
-    else
+
+    TSector* from = inst->GetSector();
+    TSector* to = LoadedSector(newlevel, newpos.x >> SECTORWSHIFT, newpos.y >> SECTORHSHIFT);
+    if (!from || !to)
+        return -1;
+    if (from != to)
     {
-
-    // For normal objects, make sure new sector is within loaded sectors - 
-    // if not leave it bumping up against the sector boundry
-
-        if (newsx < 0)
-        {
-            newsx = 0;
-            newpos.x = max(sectorx, 0) << SECTORWSHIFT;
-        }
-        else if (newsx >= SECTORWINDOWX)
-        {
-            newsx = SECTORWINDOWX - 1;
-            newpos.x = ((sectorx + newsx) << SECTORWSHIFT) + SECTORWIDTH - 1;
-        }
-
-        if (newsy < 0)
-        {
-            newsy = 0;
-            newpos.y = max(sectory, 0) << SECTORHSHIFT;
-        }
-        else if (newsy >= SECTORWINDOWY)
-        {
-            newsy = SECTORWINDOWY - 1;
-            newpos.y = ((sectory + newsy) << SECTORHSHIFT) + SECTORHEIGHT - 1;
-        }
+        LOCKSECTORS;
+        from->RemoveObject(inst);
+        to->AddObject(inst);
+        UNLOCKSECTORS;
     }
-
-    // Check to see if it changed sectors while moving
-    if (!inst->IsInInventory())
-    {
-        S3DPoint pos;
-        inst->GetPos(pos);
-        int32_t sx = (pos.x >> SECTORWSHIFT) - sectorx;
-        int32_t sy = (pos.y >> SECTORHSHIFT) - sectory;
-
-      // Position is OUT OF RANGE!!!!
-        if ((uint32_t)sx >= SECTORWINDOWX || (uint32_t)sy >= SECTORWINDOWY)
-        {
-            pos.x = (inst->GetSector()->SectorX() << SECTORWSHIFT) + (SECTORWIDTH >> 1);
-            pos.y = (inst->GetSector()->SectorY() << SECTORHSHIFT) + (SECTORHEIGHT >> 1);
-            pos.z = 16;
-            inst->ForcePos(pos);
-            sx = (pos.x >> SECTORWSHIFT) - sectorx;
-            sy = (pos.y >> SECTORHSHIFT) - sectory;
-        }
-
-        if (newsx != sx || newsy != sy)
-            return TransferObject(inst, sx, sy, newsx, newsy);
-    }
-
     return inst->GetMapIndex();
 }
 
-// Moves an object from one sector to another
-int32_t TMapPane::TransferObject(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t newsx, int32_t newsy)
+// The player half of CheckPos: out of its sector with its shadow and
+// animator, but not deleted -- the camera, scripts and the player list keep
+// their references (no N_DELETINGOBJECT, unlike RemoveObject).
+void TMapPane::TakeOutOfMap(TObjectInstance* inst)
 {
-    if (!inst || (uint32_t)sx >= SECTORWINDOWX || (uint32_t)sy >= SECTORWINDOWY)
-        return -1;
-
-    TMapIterator i;
-
-    for ( ; i; i++)
-        if (i == inst)
-            break;
-
-    if (!i)
-        return -1;
-
-    LOCKSECTORS;      // Prevent update system from accessing sectors
-
-    sectors[sx][sy]->RemoveObject(i.SectorIndex());
-    sectors[newsx][newsy]->AddObject(inst);
-
-    UNLOCKSECTORS;    // Allow update system to access sectors again
-
-    return inst->GetMapIndex();
+    if (inst->GetShadow() >= 0)
+        RemoveObject(GetInstance(inst->GetShadow()));
+    if (inst->HasAnimator())
+        inst->FreeAnimator();
+    if (inst->GetSector())
+        RemoveFromSector(inst);
 }
 
 // Walkmap auto-generator for current sector

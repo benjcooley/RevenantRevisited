@@ -1,0 +1,18 @@
+// FUN_0049d7c0 @ 0049d7c0 size=53
+
+char * __thiscall FUN_0049d7c0(int *param_1,uint param_2)
+
+{
+  int iVar1;
+  
+  iVar1 = *param_1;
+  if ((uint)(param_1[5] + iVar1) <= param_2) {
+    return s__badid__005dab54;
+  }
+  if ((int)param_2 < iVar1) {
+    return (char *)**(undefined4 **)(param_1[4] + param_2 * 4);
+  }
+  return (char *)**(undefined4 **)(param_1[9] + (param_2 - iVar1) * 4);
+}
+
+

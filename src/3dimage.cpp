@@ -1304,6 +1304,7 @@ bool T3DImagery::InitializeMesh(S3DImageryBody* mesh)
     retail_shadowfist_profile = ValidateRetailShadowfistProfile();
     retail_warriorborn_profile = ValidateRetailWarriorbornProfile();
     retail_teleportation_profile = ValidateRetailTeleportationProfile();
+    ResolveStateBlends();
 
     // ---- mount sounds referenced by play tags ----
     for (c = 0; c < tags.NumItems(); c++)
@@ -1330,6 +1331,7 @@ void T3DImagery::ClearMesh()
     ClearObjects();
     ClearTextures();
     ClearMaterials();
+    stateblend.clear();
 
     for (i = 0; i < NumStates(); i++)
     {
@@ -2182,15 +2184,161 @@ void T3DImagery::EndRender()
     Scene3D.EndScene();
 }
 
+namespace {
+
+// REVSYNC: 0x0040af50 -- the sample an object's tag sound plays. Retail
+// upper-cases the name and then:
+//   * a name with "STEP" in it, on a character or the player, gets the
+//     terrain under it appended ("wood", "stone", "carpet", "grass", else
+//     "dirt": walkmap bits 10-15 at its position, 0x00452ea0) and plays at
+//     volume 0x5c (0x40 while sneaking);
+//   * a name starting "IMP" and not ending in a digit gets the struck
+//     character's weapon kind appended ("sword", "bigsword" one time in
+//     five for two-handers, "staff", "bow", "hand");
+//   * a name starting "BLOCK" plays nothing;
+//   * any other name plays as it is.
+// REVSYNC-DIVERGENCE: only the BLOCK rule is ported. The port's walkmap
+// keeps heights alone (no terrain bits), so STEP names play as they are:
+// the plain step samples are the dirt recordings (step1r.wav ==
+// step1rdirt.wav), what retail plays on terrain 0. The IMP weapon suffix
+// waits on the combat port's weapon kinds.
+bool ResolveTagSound(const char* name)
+{
+    return strnicmp(name, "BLOCK", 5) != 0;
+}
+
+} // namespace
+
+// REVSYNC: the "blendcont" tag. T3DAnimator::RefreshControllers (0x0040df90)
+// builds a controller for every tag of the state the animator enters (and
+// every state -1 tag on its first refresh) whose name, compared without
+// case, is a registered controller; "play", "beg" and "end" never are.
+// blendcont (builder 0x00405750) parses its string as "item[=value],..."
+// (0x0040d750): a blend name sets the mode (0x00405770, below), "obj" names
+// objects (base 0x0040d4a0), anything else fails the tag. Its Initialize
+// (0x00405940) then flags every object of the animator to draw with the
+// mode -- but only when the tag named no objects: a tag with an object
+// list draws nothing differently. The controller has no Pulse or Render;
+// the mode is all it does.
+// The shipped imagery has 56 blendcont tags in 42 files (litadd 36,
+// litaddz 12, litalpha 8), none with an object list or a "filename" item
+// (retail's items read from a file, not ported).
+// REVSYNC-DIVERGENCE: retail's mode stays on the objects after the animator
+// leaves the tagged state; the port answers per state (a state tag over a
+// state -1 one). Single-state effects (gvortex, appear) can't tell the
+// difference.
+void T3DImagery::ResolveStateBlends()
+{
+    static constexpr struct { const char* name; uint32_t mode; } kModes[] = {
+        { "none",      0 },
+        { "normal",    BLEND3D_NORMAL },
+        { "alpha",     BLEND3D_ALPHA },
+        { "litalpha",  BLEND3D_LITALPHA },
+        { "add",       BLEND3D_ADD },
+        { "litadd",    BLEND3D_LITADD },
+        { "nocheckz",  BLEND3D_NORMAL   | BLEND3D_NOZCHECK },
+        { "litalphaz", BLEND3D_LITALPHA | BLEND3D_NOZCHECK },
+        { "litaddz",   BLEND3D_LITADD   | BLEND3D_NOZCHECK },
+        { "alphaadd",  BLEND3D_ALPHAADD },
+    };
+
+    const int32_t numstates = NumStates();
+    stateblend.assign(size_t(numstates > 0 ? numstates : 0), 0);
+    std::vector<bool> fromstatetag(stateblend.size(), false);
+
+    for (int32_t c = 0; c < tags.NumItems(); c++)
+    {
+        const S3DTag& tag = tags[c];
+        if (stricmp(tag.name, "blendcont") != 0)
+            continue;
+
+        // Items are split at top-level commas: "obj=(a,b)" is one item.
+        uint32_t mode = 0;
+        bool hasmode = false, hasobjects = false, failed = false;
+        const char* p = tag.str;
+        while (*p && !failed)
+        {
+            while (*p == ' ' || *p == '\t')
+                ++p;
+            const char* start = p;
+            int32_t depth = 0;
+            while (*p && (depth > 0 || *p != ','))
+            {
+                if (*p == '(') ++depth;
+                else if (*p == ')') --depth;
+                ++p;
+            }
+            std::string item(start, size_t(p - start));
+            if (*p == ',')
+                ++p;
+            const size_t eq = item.find('=');
+            std::string key = item.substr(0, eq);
+            while (!key.empty() && (key.back() == ' ' || key.back() == '\t'))
+                key.pop_back();
+            if (key.empty())
+                continue;
+
+            if (stricmp(key.c_str(), "obj") == 0)
+            {
+                hasobjects = true;
+                continue;
+            }
+            bool known = false;
+            for (const auto& m : kModes)
+            {
+                if (stricmp(key.c_str(), m.name) == 0)
+                {
+                    mode = m.mode;
+                    hasmode = known = true;
+                    break;
+                }
+            }
+            failed = !known;
+        }
+        if (failed)
+        {
+            log_warn("[i3d] %s: blendcont '%s' (state %d) has an item retail rejects; tag dropped",
+                     GetResFilename(), tag.str, tag.state);
+            continue;
+        }
+        if (!hasmode || hasobjects)
+            continue;
+
+        if (tag.state < 0)
+        {
+            for (size_t s = 0; s < stateblend.size(); s++)
+                if (!fromstatetag[s])
+                    stateblend[s] = mode;
+        }
+        else if (size_t(tag.state) < stateblend.size())
+        {
+            stateblend[size_t(tag.state)] = mode;
+            fromstatetag[size_t(tag.state)] = true;
+        }
+    }
+}
+
+// REVSYNC: 0x0040b2e0 -- each tick (T3DAnimator::Pulse) every "play" tag of
+// the state whose frame is the animator's frame + 1 plays one name picked
+// at random from its list. The animator still holds the frame it drew last;
+// the object has already stepped to the next one (TMapPane::Pulse runs
+// NextFrameObjects before PulseObjects), so a tag fires on the tick its
+// frame comes up. Without an object the sample plays flat, at full volume.
 void T3DImagery::PlaySound(TObjectInstance* inst, int32_t state, int32_t frame)
 {
-    char* soundlist = FindTag((char*)"play", state, frame);
-    if (soundlist)
+    for (int32_t c = 0; c < tags.NumItems(); c++)
     {
+        const S3DTag& tag = tags[c];
+        if (tag.state != state || tag.frame != frame + 1 || strcmp(tag.name, "play") != 0)
+            continue;
+
+        char* sound = listrnd(tag.str);
+        if (!ResolveTagSound(sound))
+            continue;
         if (!inst)
-            PLAY(listrnd(soundlist));
+            PLAY(sound);
         else
-            inst->PlayWave(listrnd(soundlist));
+            inst->PlayWave(sound);
     }
 }
 

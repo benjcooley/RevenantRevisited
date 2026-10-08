@@ -1,0 +1,66 @@
+# TExit family vtables -- read from data/Revenant.exe (dwords) and Ghidra
+# (StoresOf / VtableCtors: the code that stores each builder vtable, and the
+# string pushed just before it). See docs/gameflow/forensics/EXITS.md 1.1.
+#
+# builder vtable  name             Build fn     object vtable  class           slots  size   registration
+# 0x5b2250        "EXIT"           0x0050e360   0x5b27cc       TExit           0xa0   0xf8   0x0050c640
+# 0x5b2254        "PressPlate"     0x0050de90   0x5b2258       TPressPlate     0xa1   0xf8   0x0050da00
+# 0x5b24dc        "UpBlock"        0x0050df80   0x5b24e0       TUpBlock        0xa0   0xf8   0x0050da60
+# 0x5b2760        "DragonEnt"      0x0050e060   0x5b2764       TDragonEntAnim. 25     0xfc   0x0050db90 (REGISTER_3DANIMATOR)
+# 0x5b27c8        "LEVER"          0x0050e430   0x5b2a4c       TLever          0xa0   0x108  0x0050dc00
+# 0x5b70b8        "TrapLever"      0x00527870   0x5b70bc       TTrapLever      0x8e   0xf8   0x00524d80 (CLASS TRAP)
+# 0x5b72f4        "TrapPressPlate" 0x00527950   0x5b72f8       TTrapPressPlate 0x8e   0xfc   0x00524fc0 (CLASS TRAP)
+#
+# No "SpikeWall" or "ELEVATOR" builder exists in retail (no such strings).
+#
+# Slots where any family member differs from TExit (column 2 = TExit's entry).
+# Row 0x280 is past TExit's end (that dword is TLever's slot 0, FOOD's builder
+# vtable, ...); only TPressPlate really has a slot 0x280. The TRAP vtables end
+# at 0x234; their rows from 0x238 are the next vtable's dwords.
+#
+# slot   TExit     PressPlate UpBlock    Lever      TrapLever  TrapPressPlate
+0x0    0x50e400 0x50df50 0x50e030 0x50e4e0 0x527920 0x527a00
+0x58   0x4ddc40   same     same     same   0x46f3d0 0x46f3d0
+0x5c   0x4dd3a0   same     same     same   0x46fad0 0x46fad0
+0xbc   0x50d1a0 0x50df30 0x50dae0 0x50dc20 0x524da0 0x524fe0     Use
+0xc0   0x50d370 0x50df40 0x50e020   same   0x527910 0x5279f0     CursorType
+0xc4   0x50d980   same     same     same   0x477a30 0x477a30     UseRange
+0x110  0x50d640   same   0x50da80 0x50dc40 0x524e50 0x5251e0     Pulse
+0x158  0x50e350   same     same     same   0x471b50 0x471b50     SetCommandDone
+0x160  0x50d990   same     same     same   0x472430 0x472430     Load
+0x164  0x50d9c0   same     same     same   0x472980 0x472980     Save
+0x1f0  0x50e170   same     same     same   0x528410 0x528410     TExit: Openable()
+0x1f4  0x50e180   same     same     same   0x524e40 0x525030     TExit: SetOpenable(v)
+0x1f8  0x50e260   same     same     same   0x528420 0x528420     TExit: TileFlags()
+0x1fc  0x50e270   same     same     same   0x528430 0x528430     TExit: SetTileFlags(v)
+0x208  0x50e290   same     same     same   0x5284a0 0x5284a0     TExit: Locked()
+0x20c  0x50e2a0   same     same     same   0x5284b0 0x5284b0     TExit: SetLocked(v)
+0x210  0x50e2c0   same     same     same   0x5284d0 0x5284d0     TExit: KeyId()
+0x214  0x50e2d0   same     same     same   0x5284e0 0x5284e0     TExit: SetKeyId(v)
+0x218  0x50e2f0   same     same     same   0x528530 0x528530     TExit: PickDifficulty()
+0x21c  0x50e300   same     same     same   0x528540 0x528540     TExit: SetPickDifficulty(v)
+0x248  0x50d3a0   same     same     same                         TExit: Activate(user, flag)
+0x24c  0x50d510 0x50da50   same     same                         TExit: Unactivate()
+0x250  0x50d230   same     same   0x50de60                       TExit: Operate(user)
+0x254  0x50e1a0   same     same     same                         TExit: Facing()
+0x258  0x50e1b0   same     same     same                         TExit: SetFacing(v)
+0x25c  0x50e1d0   same     same     same                         TExit: UseCenter()
+0x260  0x50e1e0   same     same     same                         TExit: SetUseCenter(v)
+0x264  0x50e200   same     same     same                         TExit: StopMoving()
+0x268  0x50e210   same     same     same                         TExit: SetStopMoving(v)
+0x26c  0x50e230   same     same     same                         TExit: Delay()
+0x270  0x50e240   same     same     same                         TExit: SetDelay(v)
+0x274  0x50e320   same     same     same                         TExit: AutoActivate()
+0x278  0x50e330   same     same     same                         TExit: SetAutoActivate(v)
+0x27c  0x50ce70   same     same     same                         TExit: GetExitStrip(...)
+0x280     -     0x50da20     -        -                          TPressPlate only: the 1998 Activate (new slot, never called)
+#
+# TRAP-class slots used by TTrapLever / TTrapPressPlate (stat entries from the
+# TRAP registrations at 0x00524252..0x005243a9):
+#   0x200/0x204 Facing (0x66e018)   0x208/0x20c Usable (0x66e028)   0x210/0x214 IsDevice (0x66e098)
+#   0x218/0x21c ActRange (0x66dfc8) 0x220/0x224 Timer (0x66dff0)    0x228/0x22c SetOff (0x66e09c)
+#   0x230/0x234 Enabled (0x66dfe0)
+#
+# TExit vs TContainer (vtable 0x5a8118): TContainer ends at slot 0x244; TExit
+# adds 0x248..0x27c and overrides 0x0, 0xbc, 0xc0, 0xc4, 0x110 (TContainer's is
+# the base 0x004708e0), 0x158, 0x160, 0x164, 0x1f0..0x21c.

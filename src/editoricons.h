@@ -4,7 +4,7 @@
 // *           editoricons.h - Object-category icons for the editor        *
 // *************************************************************************
 //
-// Loads PNG icons from REV_EDITOR_DATA_DIR/icons/<category>.png as renderer
+// Loads PNG icons from the engine assets (editor/icons/<category>.png) as renderer
 // textures, keyed by OBJCLASS_*. Inventory item classes (WEAPON, ARMOR ...
 // MAPSCROLL) all collapse onto the single "ITEM" icon. Categories with
 // no icon return kInvalidTexture.

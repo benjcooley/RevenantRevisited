@@ -40,16 +40,12 @@
 //   font.h DrawTextShadowedToTarget              - 3-pass black shadow text
 // No hand-rolled shadow passes / glyph walks; no procedural stand-ins.
 //
-// Test-harness driver (spec §1 / §6c):
-//   - We have no live Player so the harness binds 5 sample spells matching
-//     the QuickSpell harness names: Advanced Healing, Iron Skin, Fire
-//     Flash, Ice Bolt, plus Heal. These are real SpellIcons.dat entries
-//     (idx 50, 21, 12, 17, 16) — the bitmap path matches retail exactly.
-//   - The spec talisman-glyph composition is data-driven (per-spell recipe);
-//     the recon does not expose the per-spell talisman list in source, so
-//     the harness uses representative glyphs per spell from spellscroll.dat
-//     (visual exercise of the per-row glyph blit — UNCONFIRMED-G).
-//   - Scrolling is deterministic: the pane rests at scrollY=0 until input
+// Contents (spec §1 / §6c): one row per spell the main player has learned
+// (TPlayer::KnownSpell, retail player + 0x2ec, talisman codes), filled from
+// its spell.def entry: variant name, circle icon, description, skill and
+// mana, and one glyph per talisman of the code. The --test=ui-spellbook
+// host supplies a demo player.
+//   - Scrolling is deterministic://   - Scrolling is deterministic: the pane rests at scrollY=0 until input
 //     drives it. Use --input-script arrow clicks or drags when a filmstrip
 //     should exercise the scroll-align loop and row paint-window test.
 //
@@ -59,16 +55,20 @@
 
 #include "bitmap.h"
 #include "bitmapatlas.h"
+#include "dialog.h"
 #include "display.h"
 #include "font.h"
 #include "logging.h"
 #include "multi.h"
+#include "player.h"
 #include "renderer.h"
+#include "spell.h"
 #include "surface.h"
 #include "time.h"
 #include "uispellcell.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -134,6 +134,7 @@ constexpr int32_t kDescYRel     = 4;      // split line 1 (§4)
 constexpr int32_t kDescLine2YRel = 0x10;  // 16 — line 2 (§4)
 constexpr int32_t kDescW        = 0x55;   // 85 (§4)
 constexpr int32_t kDescH        = 0x56;   // 86 (§4)
+constexpr int32_t kDescMaxLines = (kDescH - kDescYRel) / (kDescLine2YRel - kDescYRel);
 constexpr int32_t kGlyphXStart  = 0x0c;   // 12 — first talisman glyph x (§4)
 constexpr int32_t kGlyphYBaseRel = 0x3d;  // lineH + 61 — glyph row (§4 recon)
 constexpr int32_t kGlyphPitch   = 0x10;   // 16 — per-glyph step (§4)
@@ -161,7 +162,7 @@ constexpr float kDescColR = 0x40 / 255.0f, kDescColG = 0x28 / 255.0f, kDescColB 
 // All cells: font_id 0x401 / 0x402 — both go through FUN_004be2b0 with bit
 // 0x400 set (3-pass black shadow). Arimo-Regular @ ~11 px matches the
 // Arial-metric retail font for HUD-scale text.
-constexpr const char* kFontPath = "thirdparty/fonts/Arimo-Regular.ttf";
+constexpr const char* kFontFile = "Arimo-Regular.ttf";
 constexpr int32_t     kFontPx   = 11;
 
 // --- scroll animation (spec §6b — step 0x28 = 40 px/tick) ------------
@@ -176,8 +177,9 @@ constexpr const char* kSpellIconsDat = "SpellIcons.dat";
 
 // Ordered talisman name table — spec §2 footnote `PTR_DAT_005e4fb4` holds
 // the 12 S* names in retail order: SSun, SLife, SOcean, SLaw, SSoul,
-// SStars, SDeath, SChaos, SSky, SEarth, SWard, SMoon. Kept here so the
-// harness can drive recipe glyphs by talisman name (spec §4 glyph row).
+// SStars, SDeath, SChaos, SSky, SEarth, SWard, SMoon. That is spell.def's
+// talisman letter order (A Sun, B Life, ... L Moon), so a code letter
+// picks its glyph by position.
 constexpr const char* kTalismanNames[12] = {
     "SSun", "SLife", "SOcean", "SLaw", "SSoul", "SStars",
     "SDeath", "SChaos", "SSky", "SEarth", "SWard", "SMoon",
@@ -244,62 +246,27 @@ constexpr double kRubberBandDiv  = 3.0;    // resistance divisor past edge
 // the upper content slot at x = display_w - 188, y = 0.
 constexpr int32_t kPaneScreenY = 0;
 
-// =====================================================================
-// Per-spell harness binding — names from QuickSpell + Heal (spec §1
-// "Test mode populates 4-5 representative spells"). Skill/mana values
-// are representative; the talisman recipe (sequence of S* names) is the
-// retail per-spell recipe — driven from a small static table here since
-// the recon snapshot does not expose the per-spell talisman list in C++
-// source (spec §14-G UNCONFIRMED).
-// =====================================================================
-struct SSpell
+// The glyph of one talisman letter of a code; -1 for letters past Moon
+// (M-O are reserved for monster spells and Fizzle in spell.def).
+int32_t TalismanGlyphIndex(char letter)
 {
-    const char* name;            // SpellIcons.dat entry name
-    const char* desc;            // wrapped description (theme color)
-    int32_t     skill;
-    int32_t     mana;
-    int32_t     talismans[6];    // indices into kTalismanNames[]; -1 terminator
-    PTBitmap    icon;            // cached at init from g_spellIconsDat
-};
+    const int32_t idx = std::toupper((unsigned char)letter) - 'A';
+    return (idx >= 0 && idx < 12) ? idx : -1;
+}
 
-SSpell g_spells[5] = {
-    {
-        "Advanced Healing",
-        "Restores significant\nhealth to caster.",
-        12, 35,
-        { 1 /*SLife*/, 0 /*SSun*/, 4 /*SSoul*/, -1, -1, -1 },
-        nullptr,
-    },
-    {
-        "Iron Skin",
-        "Hardens flesh to\nresist physical blows.",
-        8, 20,
-        { 9 /*SEarth*/, 10 /*SWard*/, 3 /*SLaw*/, -1, -1, -1 },
-        nullptr,
-    },
-    {
-        "Fire Flash",
-        "A burst of fire\nstuns nearby foes.",
-        6, 18,
-        { 0 /*SSun*/, 7 /*SChaos*/, -1, -1, -1, -1 },
-        nullptr,
-    },
-    {
-        "Ice Bolt",
-        "Hurls a freezing\nshard at the target.",
-        5, 14,
-        { 2 /*SOcean*/, 11 /*SMoon*/, -1, -1, -1, -1 },
-        nullptr,
-    },
-    {
-        "Heal",
-        "Mends small wounds\non the caster.",
-        2, 6,
-        { 1 /*SLife*/, 0 /*SSun*/, -1, -1, -1, -1 },
-        nullptr,
-    },
-};
-constexpr int32_t kSpellCount = sizeof(g_spells) / sizeof(g_spells[0]);
+// A label from the dialog list (retail meth_0x49d800), e.g. SPANESKILLS.
+// Retail shows "[TAG]" for a tag the data lacks; the fallback covers that.
+const char* DialogLabel(const char* tag, const char* fallback)
+{
+    const int32_t id = DialogList.FindLine(tag);
+    return id >= 0 ? DialogList.GetLine(id) : fallback;
+}
+
+// The player's known spells (the rows).
+int32_t SpellCount()
+{
+    return Player ? Player->NumKnownSpells() : 0;
+}
 
 // =====================================================================
 // Asset lookup helper — same shape as the other ui*test panes.
@@ -316,6 +283,34 @@ PTBitmap LookupByName(TMulti* m, const char* name)
     return nullptr;
 }
 
+// Greedy word wrap of `text` into lines no wider than `width` px; returns
+// the line count (the retail cell wraps with GDI DT_WORDBREAK, spec §8).
+int32_t WrapText(const char* text, int32_t width, char (&lines)[kDescMaxLines][64])
+{
+    int32_t count = 0;
+    char line[64] = {};
+    while (g_font && *text && count < kDescMaxLines)
+    {
+        while (*text == ' ') ++text;
+        const char* end = text;
+        while (*end && *end != ' ') ++end;
+        char candidate[64];
+        std::snprintf(candidate, sizeof(candidate), "%s%s%.*s",
+                      line, line[0] ? " " : "", int(end - text), text);
+        if (line[0] && TextWidth(g_font, candidate) > float(width))
+        {
+            std::snprintf(lines[count++], sizeof(lines[0]), "%s", line);
+            line[0] = '\0';
+            continue;   // the word starts the next line
+        }
+        std::snprintf(line, sizeof(line), "%s", candidate);
+        text = end;
+    }
+    if (line[0] && count < kDescMaxLines)
+        std::snprintf(lines[count++], sizeof(lines[0]), "%s", line);
+    return count;
+}
+
 // Per-row height = lines * lineH + 0x5b (spec §6a). For the harness the
 // desc is 2 lines, name is 1 line; we use the spec rebuild formula with
 // the wrapped-name lines count (1) → row pitch = lineH + 91.
@@ -327,7 +322,7 @@ int32_t RowPitch()
 
 int32_t ContentTotalHeight()
 {
-    return RowPitch() * kSpellCount;  // sum of per-row heights (§6a)
+    return RowPitch() * SpellCount();  // sum of per-row heights (§6a)
 }
 
 // Max scroll = max(0, contentHeight - 229) (spec §6b clamp).
@@ -454,7 +449,7 @@ private:
         //     row_top accumulates down the column; iVar10 = scrollY - running
         //     translates row-local y to content-surface-local y.
         const int32_t rowH = RowPitch();
-        for (int32_t i = 0; i < kSpellCount; ++i)
+        for (int32_t i = 0; i < SpellCount(); ++i)
         {
             const int32_t rowTop = i * rowH;
             const int32_t rowBot = rowTop + rowH;
@@ -465,7 +460,7 @@ private:
             // element at row-local rl is rowTop + rl - scrollY.
             const int32_t rowYInContent = rowTop - g_scrollY;
 
-            DrawSpellRow(g_spells[i], rowYInContent, tw, th);
+            DrawSpellRow(i, rowYInContent, tw, th);
         }
 
         g_content->EndPass();
@@ -473,10 +468,13 @@ private:
 
     // Compose one spell row's visible elements (spec §4 / §5 step 3 inner
     // body). All coords are content-surface-local.
-    static void DrawSpellRow(const SSpell& sp, int32_t rowYInContent,
+    static void DrawSpellRow(int32_t row, int32_t rowYInContent,
                              int32_t tw, int32_t th)
     {
         const int32_t rowY = rowYInContent;
+        const char* code = Player->KnownSpell(row);
+        const SSpellInfo info = LookupSpell(code);
+        const char* name = info.variant ? info.variant->name : code;
         const int32_t lineH = g_font ? int32_t(TextLineHeight(g_font) + 0.5f) : 12;
 
         // (a) Spell circle icon — spec §4 / Draw FUN_004bd680(iStack_2d0,
@@ -488,7 +486,7 @@ private:
         iconSlot.SetRingSprites(g_ringU, g_ringD, g_ringG);
         iconSlot.SetIconOffset(0, 0);
         iconSlot.SetHitRect(0, 0, kIconW, kIconH);
-        iconSlot.SetSpell(sp.icon, 0, sp.name);
+        iconSlot.SetSpell(SpellIconFor(g_spellIconsDat, info), row, name);
         iconSlot.Draw(tw, th);
 
         // (b) Spell name text — spec §8 row 1. cell (10, +44, 132, lineH),
@@ -497,57 +495,41 @@ private:
         if (g_font)
         {
             DrawTextShadowedToTarget(
-                g_font, sp.name,
+                g_font, name,
                 kNameX, rowY + kNameYRel,
                 kNameW, lineH,
                 ETextAlign::Left,
                 kNameR, kNameG, kNameB,
                 tw, th);
 
-            // (c) Description / skill block — spec §8 row 2/3. cell (54, 4,
-            //     85, 86) for split text, or y=10 when unsplit. We emit one
-            //     DrawTextShadowedToTarget per line for the explicit "\n"
-            //     break in the harness desc.
-            const char* desc = sp.desc;
-            const char* nl   = std::strchr(desc, '\n');
-            char line1[64], line2[64];
-            if (nl)
+            // (c) Description — spec §8 row 2/3: the spell's DESCRIPTION,
+            //     word-wrapped into the (54, 4, 85, 86) cell; a single line
+            //     sits at y=10 instead.
+            const char* desc = (info.spell && info.spell->desc) ? info.spell->desc : "";
+            char lines[kDescMaxLines][64] = {};
+            const int32_t numLines = WrapText(desc, kDescW, lines);
+            for (int32_t l = 0; l < numLines; ++l)
             {
-                const size_t n = (size_t)(nl - desc);
-                const size_t cap1 = sizeof(line1) - 1;
-                const size_t cp = n < cap1 ? n : cap1;
-                std::memcpy(line1, desc, cp);
-                line1[cp] = 0;
-                std::snprintf(line2, sizeof(line2), "%s", nl + 1);
-            }
-            else
-            {
-                std::snprintf(line1, sizeof(line1), "%s", desc);
-                line2[0] = 0;
-            }
-            DrawTextShadowedToTarget(
-                g_font, line1,
-                kDescX, rowY + (line2[0] ? kDescYRel : kDescSingleYRel),
-                kDescW, lineH,
-                ETextAlign::Left,
-                kDescColR, kDescColG, kDescColB,
-                tw, th);
-            if (line2[0])
+                const int32_t y = (numLines == 1)
+                    ? kDescSingleYRel
+                    : kDescYRel + l * (kDescLine2YRel - kDescYRel);
                 DrawTextShadowedToTarget(
-                    g_font, line2,
-                    kDescX, rowY + kDescLine2YRel,
+                    g_font, lines[l],
+                    kDescX, rowY + y,
                     kDescW, lineH,
                     ETextAlign::Left,
                     kDescColR, kDescColG, kDescColB,
                     tw, th);
+            }
 
             // (d) "Skill: N" stat line — spec §8 row 4. cell
             //     (10, lineH + 44, 132), font 0x401, yellow-green,
             //     shadowed.
-            //     Format = "%s: %d" with label "Skill" (UNCONFIRMED-D label
-            //     text — retail resolves SPANESKILLS via meth_0x49d800).
+            //     Format "%s: %d" (s_%s:_%d_005e5310), label SPANESKILLS from
+            //     the dialog list (meth_0x49d800; english.def "Skill").
             char buf[32];
-            std::snprintf(buf, sizeof(buf), "Skill: %d", sp.skill);
+            std::snprintf(buf, sizeof(buf), "%s: %d", DialogLabel("SPANESKILLS", "Skill"),
+                          info.variant ? info.variant->skilllevel : 0);
             DrawTextShadowedToTarget(
                 g_font, buf,
                 kSkillX, rowY + lineH + kStatYBaseRel,
@@ -558,7 +540,8 @@ private:
 
             // (e) "Mana: N" stat line — spec §8 row 5. cell
             //     (90, lineH + 44, 132), font 0x401, cyan, shadowed.
-            std::snprintf(buf, sizeof(buf), "Mana: %d", sp.mana);
+            std::snprintf(buf, sizeof(buf), "%s: %d", DialogLabel("SPANEMANA", "Mana"),
+                          info.variant ? info.variant->mana : 0);
             DrawTextShadowedToTarget(
                 g_font, buf,
                 kManaX, rowY + lineH + kStatYBaseRel,
@@ -573,10 +556,10 @@ private:
         //     20x20 from spellscroll.dat:S<Talisman>, alpha (drawmode
         //     0x2000) — the bitmap's own alpha carries the composite.
         int32_t gx = kGlyphXStart;
-        for (int32_t t = 0; t < 6 && sp.talismans[t] >= 0; ++t)
+        for (const char* t = code; *t; ++t)
         {
-            const int32_t idx = sp.talismans[t];
-            if (idx < 0 || idx >= 12) continue;
+            const int32_t idx = TalismanGlyphIndex(*t);
+            if (idx < 0) continue;
             PTBitmap glyph = g_talismanGlyphs[idx];
             if (!glyph) { gx += kGlyphPitch; continue; }
             Renderer->DrawBitmapToTarget(
@@ -711,22 +694,16 @@ bool InitializeUISpellbookMode()
         g_ringU = LookupByName(g_spellIconsDat, "RingU");
         g_ringD = LookupByName(g_spellIconsDat, "RingD");
         g_ringG = LookupByName(g_spellIconsDat, "RingG");
-        for (int32_t i = 0; i < kSpellCount; ++i)
-            g_spells[i].icon = LookupByName(g_spellIconsDat, g_spells[i].name);
     }
     log_info("[ui-spellbook] rings: RingU=%s RingD=%s RingG=%s",
              g_ringU ? "OK" : "MISS",
              g_ringD ? "OK" : "MISS",
              g_ringG ? "OK" : "MISS");
-    for (int32_t i = 0; i < kSpellCount; ++i)
-        log_info("[ui-spellbook] spell[%d] '%s' icon=%s",
-                 i, g_spells[i].name, g_spells[i].icon ? "OK" : "MISS");
-
     // Font: small Arimo for the spell-name + stat lines (spec §8 — retail
     // fonts 0x401/0x402, Arial-metric compatible).
-    g_font = BuildTTFAtlas(kFontPath, kFontPx);
+    g_font = BuildTTFAtlas(TTFFilePath(kFontFile).c_str(), kFontPx);
     log_info("[ui-spellbook] font %s @%dpx = %s",
-             kFontPath, kFontPx, g_font ? "OK" : "MISS");
+             kFontFile, kFontPx, g_font ? "OK" : "MISS");
 
     delete g_pane;
     delete g_content;
@@ -777,7 +754,6 @@ void CloseUISpellbookMode()
     g_arrowUpUp    = g_arrowDownUp = nullptr;
     g_ringU = g_ringD = g_ringG = nullptr;
     for (int32_t i = 0; i < 12; ++i) g_talismanGlyphs[i] = nullptr;
-    for (int32_t i = 0; i < kSpellCount; ++i) g_spells[i].icon = nullptr;
     g_scrollDat     = nullptr;
     g_spellIconsDat = nullptr;
     g_font          = nullptr;

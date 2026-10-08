@@ -25,25 +25,29 @@ if (first == 'MAP ') {
 ```
 char[4] fcc        // "MAP "  = 0x20504150 LE (bytes: 4d 41 50 20)
 int32   version    // = 0x0f (=15) in shipped data
-int32   statehash   // v14+: CRC32 over state-bearing objects (see below)
+int32   statehash   // v14+: Adler-32 over the sector's characters (see below)
 int32   numobjects
 ```
 
-`statehash` is a hash regenerated at save time by `FUN_00499e90` over
-sector coords (level/sectorx/sectory) + numobjects + the serialized
-body of state-bearing objects (object classes `0xb` and `0xc` —
-TCharacter/TPlayer). It differs between save copies even when the
-object list looks identical, and is likely used as a fingerprint so
-the engine can detect whether a sector file has changed since last
-save (e.g., to decide whether to reload from disk). Traced in
-`data/Revenant.exe` (Ghidra project `RevenantDev`):
+`statehash` is computed at save time by `FUN_00499e90`, retail's
+Adler-32 variant (signed bytes, sums reduced mod 65521 per 5,552-byte
+chunk) over level, sector x, sector y and the object count (int32
+each), then the `SaveObject` bytes of every object of class `0xb` /
+`0xc` (TPlayer / TCharacter) in slot order, written without
+inventories; a player contributes its `ff ff` placeholder. A result of
+0 is stored as `0xf0f0f0f0`. Confirmed 2026-10 by recomputing it for
+all 558 retail-written sectors and 4,822 of the 4,823 hashed shipped
+base-map sectors (`46_6_9.dat` ships with a stale value); details in
+[SAVE_GAME.md §11.6](../../docs/gameflow/forensics/SAVE_GAME.md),
+checker `tools/savefmt/revsave.py statehash`. An empty sector hashes
+its header only: `2_8_10` below gives `0x00e00015`.
 
-- `TSector::Load` = `FUN_00498780` — reads field into `TSector+0xb4`
+- `TSector::Load` = `FUN_00498780` — stores the field at `TSector+0xb4`
   when `version > 13`.
-- `TSector::Save` = `FUN_00498c90` — calls `FUN_00499e90` to compute
-  a fresh hash, writes after version. The hash appears to be used as
-  a fingerprint to detect whether a sector file has changed since last
-  save (possibly CRC-family, but the exact algorithm is unconfirmed).
+- `TSector::Save` = `FUN_00498c90` — the only caller of `FUN_00499e90`;
+  writes the fresh hash, not `+0xb4`. No reader of `+0xb4` was found
+  among the sector functions, so what retail uses the stored value for
+  is still open.
 
 Evidence (`data/Curmap/` shipped sectors):
 
@@ -161,10 +165,10 @@ have different addresses *and* lack the v14+ `statehash` field.
 - `TObjectInstance::LoadObject` = `FUN_00471ce0` — confirmed.
 - `TSector::Load` = `FUN_00498780`.
 - `TSector::Save` = `FUN_00498c90`.
-- `TSector::Save` hash helper = `FUN_00499e90` (calls hash-family
-  `FUN_0056ff60` init / `FUN_0056ff80` update / `FUN_0049cdd0`
-  finalize — signature resembles CRC32 but is unconfirmed; used as a
-  change-detection fingerprint, not a cryptographic integrity check).
+- `TSector::Save` hash helper = `FUN_00499e90`: Adler-32 init
+  `FUN_0056ff60` / update `FUN_0056ff80`, each object serialized into a
+  scratch `TOutputStream` whose buffer `FUN_0049cdd0` returns (it logs
+  "Output Stream Overrun"); see the statehash notes above.
 - OOAnalyzer did not classify TSector as a struct, so none of these
   appear in `recon/ghidra/cls_*.cpp` — they live only in
   `recon/ghidra/_data.txt`.

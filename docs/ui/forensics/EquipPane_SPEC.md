@@ -1055,6 +1055,8 @@ the slot immediately before MouseClick) — UNCONFIRMED-J.
 | slot 10 (EQ_FEET) | (141, 202, 40, 40) | same | §4 |
 | anywhere in pane | (0, 0, 188, 306) | bounds gate / drop area | snapshot `src/screen.h:167` `InPane`, `equip.cpp:85` |
 
+**Retail body confirmed (2026-10-06, `0x005363e0`, [../../gameplay/forensics/PLAYER_INPUT.md](../../gameplay/forensics/PLAYER_INPUT.md) §6):** button 1 grabs the item of the slot under the cursor; button 2 shows its info (`0x005496a0`); button 4 (up) with nothing held from this pane takes the held pack item (`DAT_0065d67c`) or belt item (`0x10b + DAT_0065b090`) released **anywhere in the pane** and equips it in its own `eqslot` (`CanEquip` `0x00519300`, `Equip` `0x005199b0`), or prints `EQUIPUNABLE`; the cell under the cursor doesn't matter. The port does this through `UIDragState::EquipInOwnSlot`.
+
 **Drop dispatch (slot 25 `up`)** mirrors snapshot `MouseClick`
 (`src/equip.cpp:75-131` — see §6.4 pseudocode). The Inventory↔Equip handoff
 shares the **modal global `Inventory.heldslot`** (snapshot

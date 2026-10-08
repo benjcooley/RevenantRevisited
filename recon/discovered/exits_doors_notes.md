@@ -1,5 +1,11 @@
 # TExit / Doors — Retail Walkthrough vs `src/exit.cpp`
 
+> **Superseded** by [docs/gameflow/forensics/EXITS.md](../../docs/gameflow/forensics/EXITS.md)
+> (raw decompiles in [exits/](exits/)). Several claims below are wrong —
+> the walk-over type test is inverted, only players are checked, the
+> exit list is keyed by instance name, `0x0050d230` is `Operate` — see
+> EXITS.md §9.
+
 Source of truth for retail: `data/Revenant.exe` via `data/RevenantDev`
 Ghidra project. Source side: `src/exit.cpp`, `src/exit.h`,
 `src/character.{h,cpp}`, `src/object.cpp:887` (`TObjectInstance::SetPos`),
