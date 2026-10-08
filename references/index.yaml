@@ -1,3 +1,63 @@
 catalog_version: 1
-generated: '2026-05-29'
-entries: []
+generated: '2026-10-04'
+entries:
+- domain: vfx
+  id: TBlueFountainAnimator_BESPOKE
+  clip_id: retail-sw-ambient32-20261004-bluefont
+  sha256: 114285e78e5933230e088ce4a592bcfb5fc40f2016ab44e920ab8a92491a649e
+  frame_count: 64
+- domain: vfx
+  id: TFizzleEffect
+  clip_id: retail-sw-fullburst-20261004-fizzle
+  sha256: 41b6ef639430e4e6141a1a0917d1d2286e93b525be39eacb07b95a63c0209cdf
+  frame_count: 99
+- domain: vfx
+  id: TFizzleEffect
+  clip_id: retail-sw-fullburst-repeat-20261004-fizzle
+  sha256: c226786567698c1903ccd991d146045b6bf53ec98d7ee9f6334767d8da978cf9
+  frame_count: 99
+- domain: vfx
+  id: TFlameEffect
+  clip_id: retail-sw-ground-20261004-a
+  sha256: e0cbb7a40afad7075dea05c4178d9ecc0f0c9fab8656be87861a1344838f7457
+  frame_count: 39
+- domain: vfx
+  id: TFlameEffect
+  clip_id: retail-sw-fps-20261004-a
+  sha256: 9a30c97c6c7774f3cc3d004043607b8b07a5e4afaeb8c9fc9829f96df06e25a4
+  frame_count: 39
+- domain: vfx
+  id: TFlameEffect
+  clip_id: retail-sw-fps-20261004-b
+  sha256: a6635dae3a9884ffba27b141a9728477e06103882050c348f94b316b5843cd75
+  frame_count: 39
+- domain: vfx
+  id: TFlameEffect
+  clip_id: retail-3dfx-white-20261004-a
+  sha256: 1264e2f493eca32700f71ab15b89421bff1fca1a62087ef5cae522ea935c067b
+  frame_count: 49
+- domain: vfx
+  id: TFlameEffect
+  clip_id: retail-sw-ambient32-20261004-flame
+  sha256: e21ad8310b64da5c6009fce4cd185f478767541e84fd4a385d7c9a0de97ac13d
+  frame_count: 64
+- domain: vfx
+  id: TFountainAnimator_BESPOKE
+  clip_id: retail-sw-ambient32-20261004-cyanfont
+  sha256: 65578ad714d125ec40e5a5a30c62d9780ba63f0f1667fc5424d2b85b9578ee0f
+  frame_count: 64
+- domain: vfx
+  id: TGreenFountainAnimator_BESPOKE
+  clip_id: retail-sw-ambient32-20261004-greenfont
+  sha256: 669b24edfb7f5aced8eb57a3b15bdc47633ebb8496adc29f2afecaad066676fa
+  frame_count: 64
+- domain: vfx
+  id: TMistEffect
+  clip_id: retail-sw-ambient32-20261004-mist
+  sha256: 20326c484b456d2116852a3587c7b5c7133db43dbc2de64ae18c58563d1817cf
+  frame_count: 64
+- domain: vfx
+  id: TRedFountainAnimator_BESPOKE
+  clip_id: retail-sw-ambient32-20261004-redfont
+  sha256: 5309a9470153a43e06dce39456396b45fab0d1ecc7e1a71b1f1799eb18e44a36
+  frame_count: 64

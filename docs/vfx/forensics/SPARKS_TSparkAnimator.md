@@ -1,5 +1,184 @@
 # SPARKS TSparkAnimator — Original-Effect Forensics
 
+## Current native thin-runtime proof — 2026-10-07
+
+The retail animator body is now executed directly, superseding the earlier
+"unavailable TU" limitation for the tested subset. See
+[native comparison and repeat instructions](../../../recon/retail_asm/runtime/effects/sparks-editor-current-ab/README.md).
+Initialize `4e53c0`, InitParticles `4e55b0`, Animate `4e5830` and Render `4e5d30`
+verify the actual editor fallback. All 53 states and 11 repeated software pairs
+pass after preserving native reciprocal/intermediate precision. A controlled
+twenty-particle bounce/two-trail profile also passes; it does not execute the
+actual ResolveAttack/blocked-combat caller.
+
+Native NewObject/CalcObjectMatrix/RenderObject prove POS1-only transformation:
+the 0.01 SCL write is a visibility input, not enabled geometric scaling.
+No guessed shrink is justified. Natural owner, caller/audio, map/light and
+independent Metal/device gates remain open; older captures below are retained.
+
+## Current clean software reference — 2026-10-05
+
+**Overall isolated editor-default appearance passes; actual blocked-combat acceptance remains open.** The active reference is [sw-fps-sparks-20261005](/Users/benjamincooley/RevenantRetailLab/captures/runs/sw-fps-sparks-20261005/manifest.json): FPS workaround visibly enabled, recording begun before spawn, 34 changing images, zero background drift below the twelve-row diagnostic band and exact natural/deletion ground without a camera reset. Earlier FPS-off trails and 3dfx/depth observations remain historical diagnostics.
+
+The own [editor-default pair](/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fps-sparks-editor-default-20261005/manifest.json) contains 240 authored FX-quad frames from binary `e829e8dbd53c8d4d26f7c82f21159147137d0905181d2591bf9cde7670764870`. Both backgrounds are exact below the diagnostic band. Root reviewed six active raw elapsed samples at 0.0333, 0.1667, 0.3333, 0.6, 0.9 and 1.2667 seconds at 3× enlargement with preserved aspect. Native and port have comparable mixed pink/blue/green glints, source shape/size, spread, travel/fall and one-shot visibility. Independent RNG needs no particle/pixel identity; no position/scale/color/time/seed fitting was applied.
+
+Supplementary [sparks-active-zoom.png](/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fps-sparks-editor-default-20261005/sparks-active-zoom.png), SHA256 `957209096da9580331c6c8c6810bbc0f5928688a1e157ba6bc9502af6bc8bccd`, retains that six-sample review. The [integrity audit](/Users/benjamincooley/RevenantRetailLab/research/ledger-reconciliation-20261005/sparks-gold-combatflash-integrity.json) verifies all 240 port images, native/media/timing hashes and the review image. Root corrected a copied manifest sentence: this candidate uses authored FX quads, not `SHelperMeshSubmit` RGB565 mode. Frames/media/binary remain unchanged.
+
+This pass validates the editor-default **appearance**, not exact numeric retail fallback defaults or combat parameters. Real `ResolveAttack → blocked miss → CA_SPARKS → EffectBurst` remains required in a loaded actor scene, including 15–25 particles, single variant, gravity 0.25, trails 2, bounce, owner cleanup and caller audio. No new real-runtime count, natural caller/context or full effect acceptance is credited. Capture teardown needed termination after complete output; normal shutdown remains open.
+
+The port audit below describes current source geometry and true 24 Hz simulation with render interpolation. Later original reconstruction recommendations and failed-reference sections retain historical provenance and do not override this current scoped acceptance or the authoritative [burn-down](../EFFECT_BURNDOWN.md).
+
+## Port audit — 2026-10-04
+
+The runnable combat baseline is `TSparkEffect`. `TSparksEffect_BESPOKE`
+previously drew one 32-unit, warm-tinted additive sprite, growing and fading
+over sixteen ticks. Those constants and curves had no support in the source;
+that preview now delegates to the combat baseline. The old placeholder body
+is retained under `#if 0` for provenance.
+
+The baseline preserves retail caller parameters from `cls_0x5a7b98.cpp`
+(`EffectBurst`, §2.1): 15–25 particles, gravity 0.25, two draw substeps,
+bounce enabled, local emission height +45, delay 0–8, life 20–40 ticks,
+and one selected photon variant for the whole burst. It uses the snapshot
+animator's ballistic/bounce/render bodies; the retail animator body is still
+unavailable, so blend and animator behavior remain subject to live verification.
+No color, alpha, or scale curve is added; texture color uses an untinted white
+multiplier, Alpha blend, Unlit, ScreenAligned and TestNoWrite.
+
+Two concrete defects in that baseline were also corrected:
+
+- `1000 / 24` truncated the clock interval to 41 ms (24.39 Hz). The interval
+  is now `1000.0 / 24.0` ms, with all elapsed ticks consumed. Rendering linearly
+  interpolates between the preserved ballistic states, so movement is smooth
+  at other display rates while matching the authored tick positions.
+- A guessed 10-by-10 billboard replaced the authored photon quad. The four
+  sub-objects now supply their actual XYZ/UV records to `SubmitFxQuad`.
+  Raw vertices start at file offset `0x1d48` in the unchanged Sparks asset
+  (sixteen 32-byte XYZ/normal/UV records). Projecting these with the renderer's
+  `S=x-y`, `T=(x+y)/2-0.867*z` gives approximately **11.3232 by 8.8426** units
+  before the object's transform, for every variant. Each particle-plus-vertex
+  is transformed by the owner's full `Transform().Matrix()` before submission,
+  preserving the normal I3D mesh path's `WORLD3D_Z_SCALE=1.5` on local Z. This
+  stretches the quad's projected height to approximately 11.8485 units and
+  also transforms the local particle motion and emission offset. A flattened
+  screen-space bounds replacement missed that stretch; it is no longer used.
+  UV selection retains the authored small offsets and vertex mapping; no
+  whole-atlas mapping, square fitting, tint, or fitted rescaling is used.
+
+### Actual combat integration
+
+The active `TCharacter::EffectBurst` previously created a generic animator,
+cast it to `TParticle3DAnimator`, and made a virtual `InitParticles` call despite
+that legacy animator having no compiled implementation. The new combat path
+uses `TSparkEffect::AttachBurst(owner, params)` to attach a typed visual/update
+component to the map's effect object. It uses the same state initializer and
+quad submit path as the preview, accepts the caller's real midpoint offset,
+facing and `ObjId() & 3` variant selection, and consumes the retail 0.25/2/true
+gravity/trails/bounce settings. State advancement is exclusively in OnUpdate;
+map rendering only submits the current state. The owner is marked `OF_KILL`
+after all particles finish when caller `killobj=true`. Unsupported non-blood
+particle names log instead of taking the unsafe generic-animator cast.
+
+The blocked-miss trigger now tests `attack->flags & CA_SPARKS`; the previous
+logical `&&` accepted every nonzero flag set, including attacks without the
+Sparks flag. This is a runtime connection and safety repair; actual blocked
+combat in a loaded map remains the acceptance test.
+
+### Editor and combat are separate reference cases
+
+`add Sparks` in F12 does not call `TCharacter::EffectBurst`. Without caller
+parameters, the snapshot animator seeds its developer fallback on its first
+Animate (`effect_old.cpp:4794–4824`). `TSparkEffect::SpawnEditorDefaultForTest`
+is a diagnostic factory for this case: 10 particles, local position `(0,0,70)`,
+position jitter `(3,3,3)`, mean velocity `(1,-1,0.5)` per tick, velocity jitter
+`(0.5,0.5,0.5)`, gravity 0.2, one draw per particle, start 0–8, life 10–30,
+no bounce, and all four photon variants randomly selected per particle.
+The original fallback has `killobj=false`; the preview reports disappearance
+through IsAlive so the harness can choose to repeat a burst. That replay is a
+preview behavior, not the original object's lifetime semantics. These fallback
+constants are snapshot-supported, **not retail-confirmed** until editor footage
+or the retail animator body supplies that evidence.
+
+For comparison, plant the object at world ground height (for the MCP_AB scene,
+z=16); with the normal 1.5 local Z transform, combat particles emit at world
+z=83.5 and editor fallback at world z=121 (before per-particle jitter). Keep
+the camera and world anchor identical. Capture the first 1.7 seconds for the
+editor fallback, or at least 2.1 seconds for combat. Useful inspection moments
+are 0, 0.167, 0.333, 0.833, 1.25, 1.667 and 2 seconds. RNG seeds cannot yet be
+synchronized with the guest: match population, single/mixed variant policy,
+anchor, travel, fall, death, brightness and scale, not individual particle IDs.
+Combat verification requires a blocked melee or equivalent initialized caller;
+an editor-default clip cannot validate the combat parameterization.
+
+An available actual-map scenario is Ahkuilon's Jong sparring arena. Its
+`forest.s` SPARYES branch starts JONG1 fighting the player, supplies/removes the
+training sword, and references nearby positions `(1000,29638,32)` and
+`(1155,29902,17)`. Map sectors `Map/0_0_28.dat` and `Map/0_1_28.dat` exist in
+`data/Modules/Ahkuilon.rvm`; exact named object records have not been decoded
+here. The Druhg location `(11335,15895,80)`, level 0, is another loaded-map
+combat setting. For a reproducible block, use a character's combat target,
+face the attacker, and maintain `Block(frames)` through the attack's impact
+frame. Script `.block` exists; `.attack` in the current port is a no-op, so
+that command cannot be assumed to initiate a test attack. Verify the actual
+`ResolveAttack → blocked miss → EffectBurst("sparks")` route rather than
+calling only the visual factory.
+
+**Validation status:** source and asset audit complete; first live editor
+comparison is described below. Exact retail fallback parameters and actual
+blocked-combat acceptance remain open. Sparks is not marked fully validated.
+
+### First live editor comparison — ambient 32
+
+The parent subsequently captured F12 `add Sparks` in the 3dfx MCP_AB scene at
+ambient 32, white ambient color. Reference run `vfx-dark-ref-02-sparks`,
+`retail.avi` SHA-256
+`0c4ed6764a5728fb8a20a3223eaf1cb63f3c35db2a04d3c8513252e5e4187441`,
+was compared with the one-shot `TSparkEffect_EDITOR_DEFAULT` preview. The
+current comparison is `vfx-dark-ab-03-sparks` (binary SHA-256
+`64d06458c76815a20092f65d053e0d9a8edab48226baf802bf06ff3650120b29`).
+The floor is baked from retail; floor rendering, scene occlusion and actual
+blocked-combat integration are not exercised by this comparison.
+
+Both clips contain magenta, cyan and blue sparks. The apparently mostly
+magenta retail contact sheet does **not** justify changing the diagnostic to
+one selected color. Foreground colored-pixel proportions were approximately
+53.0% magenta, 22.7% blue and 24.3% cyan in retail; 23.1%, 49.0% and 27.9% in
+the port. These are time-weighted pixel observations after HSV filtering, not
+particle counts. One RNG-unsynchronized burst cannot establish a distribution
+change or identify its emitted count: particles overlap, especially early.
+
+Late isolated-looking sprite cores had median thresholded bounds 8×8 pixels
+in both clips and median peak RGB channel 224 in retail and in the
+port. This supports the geometry, texture color and untinted brightness;
+it does not establish the full sprite footprint under every blend/depth case.
+Launch position and rightward, falling travel are visually consistent with the
+snapshot fallback. Last visible foreground was at 1.20 seconds in retail and
+1.4333 seconds in the port, both compatible with the fallback delay/life ranges.
+Reference zero is first visible onset with one native 60 Hz preroll frame.
+The current port invocation specifies `--snapwarmup=1`, one fixed 1/60 second
+step; timing CSV records first capture at simulation 0.033333333 seconds and
+relative time zero, then successive captures at 0.066666667, 0.100000000 and
+0.133333333 seconds. The earlier comparison had an implicit 0.116667 second
+first timestamp and is superseded for timing assessment. Zero warmup was
+rejected because its first image contained the render target's magenta allocation
+clear; one step is the minimum verified clean setup. Current captures show the
+floor and sparks normally, with no such allocation-clear artifact.
+
+This makes the port start explicit and repeatable. It does not synchronize
+the native spawn tick or RNG: first-visible onset may follow random start
+delays, and integer legacy updates and interpolated port motion have different
+subtick display phases. The 0.2333 second visible-tail difference therefore
+does not establish a simulation-rate defect. No timing, position or scale fit
+was applied.
+
+Analysis provenance: `sparks-analysis.json` and `sparks-analysis.png` in that
+comparison folder. Foreground threshold was maximum channel difference from
+the baked ground greater than 25; 8-connected clusters with at least two pixels;
+colored-pixel filter saturation >0.3 and value >0.25. The comparison supports
+the editor diagnostic but leaves its exact retail parameter values and actual
+combat-map acceptance open. No behavior adjustment is warranted from this one
+sample.
+
 | field | value |
 |-------|-------|
 | **Effect ID** | (none yet — needs an INVENTORY row; suggest **X22**, see §1) |

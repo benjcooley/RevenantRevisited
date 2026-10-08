@@ -971,3 +971,47 @@ retail glow reads brighter/cleaner (likely the right answer for at least
 the GREEN variant; vet per-variant). Smooth/time-based motion (no 24Hz
 stepping). Draw ONE FONT effect on screen at a time when verifying
 (per the project's one-effect-on-screen rule).
+
+
+## 2026-10-07 executable and actual runtime producer verification
+
+The original-executable evidence now supersedes this document's earlier
+retail-partial/inconclusive status for the controller constants, leaf color
+selection and blend request. `tools/retail_runtime/fountain_probe.py` runs real
+Initialize 0x4e4080, shared Animate 0x4e4120, Render 0x4e41f0, each actual leaf
+Animate/SetColorObject, original CalcObjectMatrix 0x40a420 and original software
+raster. The four leaf vtables are 0x5a9964/0x5a99cc/0x5a9a34/0x5a9a9c.
+
+All 388 state cases (four colors × ticks 0..96, two warm replays) match original
+float32 bubble positions, rise, scale, delays, respawn and color selection,
+with 256 unchanged observed native range-RNG results per color. Forty-four
+sampled image pairs have zero differing RGB565 pixels. Every color has 11
+distinct images, and the same-tick four-color outputs are distinct. Exact
+shipped Sparkle geometry, local indices and wrapped UVs are preserved.
+
+Asset-format correction: the verified 15,992-byte
+`Imagery/Misc/sparkle.i3d` SHA256
+`a4a0564e778ea00286edc6169c7d6dba3309f2ef83c339727f9b8c5d06dad21b`
+has one 64×64 ARGB4444 atlas (flags 41h, masks 0f00/00f0/000f/f000), not
+the RGB565 format claimed in parts of the older checklist. Four authored
+objects select their different atlas cells; no fitted tint is required.
+Original Render requests the Alpha blend mode (2,1). This does not justify the
+older suggestion to switch GREEN or another variant to additive for brightness.
+Keep the actual source request while classifying separate renderer behavior.
+
+Both production paths are compiled and checked independently: the canonical
+TFountainAnimator_Bespoke initialization/TickAndSubmit body and actual map
+`fountain_shim::State/Initialize/Animate/Tick/Render` from
+`src/effects/fountain.cpp`. Their 388 state records and rendered geometry/UV/
+color-selection payloads are exactly equal with the same native inputs, so
+the 44 raster-image comparisons cover both producers. The runtime path uses
+its real owner-aware Render dispatch with a selected identity owner, rather
+than the standalone null-owner fallback. No production fix was needed.
+
+Evidence and full provenance are in
+`recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json` and README.
+Natural Sabu/tomb script placement, owner movement/facing/Z stretch, map depth,
+creation/component binding/deletion and modern GPU rendering remain separate
+gates. Thin execution is primary; targeted DOSBox-X device checks remain
+available for renderer questions. This bounded pass does not mark all
+Fountain acceptance checks complete.

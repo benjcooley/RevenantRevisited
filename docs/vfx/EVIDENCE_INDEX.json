@@ -1,0 +1,201 @@
+{
+  "schema_version": 1,
+  "scope": "Reference to local measured artifacts; generated reports/captures are not checked in. Acceptance gates remain in EFFECT_BURNDOWN.json.",
+  "counts": {
+    "retail_type_rows": 176,
+    "distinct_retail_names_casefold": 174,
+    "distinct_asset_paths_casefold": 166,
+    "preview_ids": 159,
+    "retail_rows_with_preview_candidates": 120,
+    "retail_rows_without_preview_candidates": 56,
+    "unmapped_preview_ids": 8,
+    "retail_rows_with_source_fixes_recorded": 71,
+    "port_smoke_preview_ids": 34,
+    "retail_rows_with_port_smoke": 36,
+    "accurate_software_reference_rows": 50,
+    "ab_workflow_demonstrated_rows": 49,
+    "fully_accepted_rows": 0,
+    "remaining_acceptance_rows": 176,
+    "actual_runtime_verified_rows": 56,
+    "visual_fidelity_confirmed_rows": 16,
+    "repeatable_ab_rows": 8,
+    "thin_bounded_render_frontend_rows": 40
+  },
+  "reports": {
+    "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
+      "sha256": "288065c88bb9745685b3b3524eb8159228cbf10cd17004cd187b4d9b50e18036",
+      "retail_row": "BlueFont:0x557c4738",
+      "check": "fountain_canonical_frontend",
+      "status": "pass",
+      "scope": "Native registered leaf10-bubble state/color/RNG versus independently compiled canonical preview and actual owner-aware fountain_shim runtime producer. Runtime states/mesh/UV/color packets equal canonical; shared original raster pixels verified."
+    },
+    "recon/retail_asm/runtime/effects/colored-ribbon-frontend-ab/manifest.json": {
+      "sha256": "a12363132e1e8c3e9f4eb9858df248d0e9273fd5d751366d7f3e98ec86f41602",
+      "retail_row": "RibbonY:0x562c7440",
+      "check": "colored_ribbon_static_frontend",
+      "status": "pass",
+      "scope": "Both authored objects and textures; original key decode/matrix versus compiled generic mesh path, identity/translated owner, fixed key-pose scale-before-translation order."
+    },
+    "recon/retail_asm/runtime/effects/flame-current-source-ab/manifest.json": {
+      "sha256": "b2ab2249016c62e3eeeca4349a92f86c2c79981aa3781150ffd68a7f3c36da25",
+      "retail_row": "Flame:0x50ba373b",
+      "check": "base_flame_frontend_render",
+      "status": "pass",
+      "scope": null
+    },
+    "recon/retail_asm/runtime/effects/flame-metal-capture/comparison-diagnostic.json": {
+      "sha256": "4861be392fca4cd8661242da49aba0cdb6e232f8f68ec6d5d77db94f9268f3af",
+      "retail_row": "Flame:0x50ba373b",
+      "check": "flame_real_metal_vs_thin_software",
+      "status": "diagnostic_pixels_differ",
+      "scope": null
+    },
+    "recon/retail_asm/runtime/effects/flame-blue-frontend-ab/manifest.json": {
+      "sha256": "3c832d17e7d4489ba915442c9866c8a76553f72f44a157c272b2f444cdb694ae",
+      "retail_row": "Flame:0x50ba373c",
+      "check": "authored_flame_blue_frontend",
+      "status": "pass",
+      "scope": "Original Flame Animate/Render/matrix/UV with the exact colored Flame authored quad and ARGB4444 atlas versus compiled canonical Flame component. Both use original software raster, identity owner and selected camera."
+    },
+    "recon/retail_asm/runtime/effects/flame-green-frontend-ab/manifest.json": {
+      "sha256": "dd7d8454e5a279aeac5571d3c250b16f9f8b8107d0c289c60b77c8c2d1ca0f47",
+      "retail_row": "Flame:0x50ba373d",
+      "check": "authored_flame_green_frontend",
+      "status": "pass",
+      "scope": "Original Flame Animate/Render/matrix/UV with the exact colored Flame authored quad and ARGB4444 atlas versus compiled canonical Flame component. Both use original software raster, identity owner and selected camera."
+    },
+    "recon/retail_asm/runtime/effects/projectile-expanded-ab/manifest.json": {
+      "sha256": "60f5bfbe340be5fe3247a48246e38cfe5ea43fbee0a4872c392754171ca00e0a",
+      "retail_row": "FireBall:0x63fd382a",
+      "check": "shared_missile_motion_production_ab",
+      "status": "pass",
+      "scope": "Original shared Move/Pulse/aim/math helpers against production missile module and helpers with original initialized lookup inputs."
+    },
+    "recon/retail_asm/runtime/effects/fireball-head-after/manifest.json": {
+      "sha256": "0d84742b32a899e194e763dc8f75cdf8589e13755bd1aae3950138502f6d8bee",
+      "retail_row": "FireBall:0x63fd382a",
+      "check": "fireball_moving_head_glow_frontend",
+      "status": "pass",
+      "scope": "Original moving missile source/destination in same Runtime, then original head/glow matrix/UV kernels and textured SW pixels. Pose frame/spin/scale/glow are explicitly selected render inputs, not a full original animator lifecycle. Exact compiled production SubmitBillboards captures either old WorldXY particle descriptors (diagnostic shader expansion) or authored quad geometry. Both use original raster; Metal/backend parity remains separate."
+    },
+    "recon/retail_asm/runtime/effects/fireball-trail-visible-after/manifest.json": {
+      "sha256": "5d2f5ba94861d1ec0f899e86304f49b43c6cf3dbbd80c3967ace28dfc41b6968",
+      "retail_row": "FireBall:0x63fd382a",
+      "check": "fireball_moving_trail_impact_drain_frontend",
+      "status": "pass",
+      "scope": "Actual original moving missile and Animate common prefix plus native trail Render versus compiled production SubmitAuthoredTrail supplied the original trail state. Authored glow then body passes; current-head/ghost-tail excluded; fixed camera retains impact/drain visibility. Original spark callbacks isolated/noRNG; selected steady head scale0.6. Full animator/state generation equivalence remains separate."
+    },
+    "recon/retail_asm/runtime/effects/fireball-core-ab/manifest.json": {
+      "sha256": "76f26399326f76656d87b17bcbce93a83ff2f15eabdea221b7e9c8c8da9b3ffa",
+      "retail_row": "FireBall:0x63fd382a",
+      "check": "fireball_generated_head_history_rng_stage",
+      "status": "pass",
+      "scope": "Shared production head/history stage now called by normalStepAnimate; three moving/skip/spinwrap seeded native scenarios, exact original RNG seed/frame/spin/head/history and14head/glow/trail softwarepairs. Original sharedSpark callbacks remain substituted/noRNG; fullsparkordering excluded. Nativefactory/Pulse smoke normalexit0."
+    },
+    "recon/retail_asm/runtime/effects/fireball-spark-after/manifest.json": {
+      "sha256": "b1b07af472a0b747bfcb7498af71b6d981ee7991a604ca56dff6bf102b806d6b",
+      "retail_row": "FireBall:0x63fd382a",
+      "check": "fireball_shared_spark_pool_rng_stage",
+      "status": "pass",
+      "scope": "Original40slot72byte sharedspark Set/Animate/Create plus head/history vs shared production helper called by normalStepAnimate. Actualmoving/launchwait/impact/drain; exact callordering, originalpool drains81/84/81. Originalpool constructorstorage remains upstream fixture setup; chosen MSVC RNG stream does not prove globalplatformCRT parity. Fourteen actualhead/glow/trail pairs use generatedspark-state/RNG, not sparkparticle rendering."
+    },
+    "recon/retail_asm/runtime/effects/fireball-spark-render-after/manifest.json": {
+      "sha256": "4e453e342a9045aa6304f911202303157d05e2151c7827f688c1e32ea3534803",
+      "retail_row": "FireBall:0x63fd382a",
+      "check": "fireball_authored_spark_raw_packet_render",
+      "status": "pass",
+      "scope": "Original50b2b0 rawD3D sparkpacket kernels/ABSowner bypass vsproduction authoredbox02matrix/UV. Raw4308coordinatecheck independentofbridge; common-worldZ viaexistingREV_FIX_Z_VALUE\u00d71.46 evidencedbyGetObjectMapPos/quadworldprojection.17bridge-relativeoriginalsoftwareimages do notprove originaldevice/Metal parity."
+    },
+    "recon/retail_asm/runtime/effects/yfireball-frontend-ab/manifest.json": {
+      "sha256": "4caaf97b4325c2086624a458eaad12721a68e02669eaa2b7eb657feaa9f41b2a",
+      "retail_row": "YFireBall:0x63fd3827",
+      "check": "yfireball_native_moving_shared_frontend",
+      "status": "pass",
+      "scope": "Actual Yleaf/nativeoffset methods andgreenasset vssharedproductionmovingmissile/spark/head/history/trail frontend. Selectedsteady.6 pose, identityowner/Zstretch1.5/fullwhitefixture andexplicitABSraw-to-commonZbridge; movingmixed17softwarepairs. Actual6frame GREENmodernpreviewsmoke/normalexit separate. NaturalYmapbuilder/NPCcast/hitlogic notenabled."
+    },
+    "recon/retail_asm/runtime/effects/symglow-current-frontend-ab/manifest.json": {
+      "sha256": "1a75002a5e594e0ed6c6f72f76428713baaa0e844fc26e0836473793cec6ee9b",
+      "retail_row": "SymGlow:0x27df45be",
+      "check": "symglow_native_vertex_uv_breathing_frontend",
+      "status": "pass",
+      "scope": "Original Setup/Animate/Render per-vertex UV stores and breathing against compiled unchanged production initializer/Advance/Submit. Exact66vertex92triangleARGB4444cylinder, identityowner, fullwhite vertex light and currentfrontendculling supplied at adapted submission. Additionalstride3 provesupdateswithoutdrawdo notscrollUV. Original matrix/projection/raster execute. Modernpreview42changingframes/normalexit smoke separate."
+    },
+    "recon/retail_asm/runtime/effects/sparks-editor-current-ab/manifest.json": {
+      "sha256": "f033a84d6516c683c6fe370343cafc83eb87968a851db0c2976e670b96221c67",
+      "retail_row": "Sparks:0x14db0f2e",
+      "check": "sparks_native_editor_burst_frontend",
+      "status": "pass",
+      "scope": "Actual nativeeditorfallback10particle Init/allocator/Animate/Render/done vscompiled productionInit/Advance/Submit;additionalexplicit20particlebounce/trails2 inputs, actualper-axisfloatstores and90/90or180/160 range/rawCRT calls. Shipped4authoredphotons/ARGB4444atlas; POS1-only originalmatrix ignoresstoredSCL.01. Identityowner/whitevertexlight/imageryboundary; commonrasteroriginalindices, not independentMetal/combatcaller proof."
+    },
+    "recon/retail_asm/runtime/effects/cure-nullspell-frontend-ab/manifest.json": {
+      "sha256": "1d95487f29222ee7153fc8ee35a4bb6e320769efe69d7d6c69a3de64098b9780",
+      "retail_row": "Cure:0x152dafef",
+      "check": "cure_nullspell_complete_records_frontend",
+      "status": "pass",
+      "scope": "Actual nullspell Init/Animate 80swirls/5balls +ownerkill vscompiled productioncure_retail byteexactrecords;actualRender object0 andcompiledTCureSubmit matrices throughoriginalprojection/RGB565raster. Audio lookup/basehierarchy/ownerendpoints adapted,mesh/materialprovider/identityowner supplied. Whitevertex/cullNONE/commonrasteroverwrite explicit; originaladditive/materiallighting/sort/device/Metal separate."
+    },
+    "recon/retail_asm/runtime/effects/streamer-frontend-ab/manifest.json": {
+      "sha256": "b443d14ffa591c8696548fdfd254207343a201ed88a56e348c062203d89f7c7d",
+      "retail_row": "Streamer:0x482dfe82",
+      "check": "streamer_four_stream_lifecycle_frontend",
+      "status": "pass",
+      "scope": "Original Initialize/Animate/spiral/insertion/Render against compiled unchanged production initialization and shared preview/map Advance/Submit, identity owner/face zero, exact four authored RGB565 meshes/textures through original raster. Kill at101. Current frontend culling is supplied at submission boundary."
+    },
+    "recon/retail_asm/runtime/effects/drip-frontend-ab/manifest.json": {
+      "sha256": "bd28d8109cf2e48db77abd83505d00b4d12e7d8690179ca20033b5e9ffb39ce1",
+      "retail_row": "Drip:0x5975abde",
+      "check": "drip_native_emitter_head_child_requests",
+      "status": "pass",
+      "scope": "NativeDripemitter/physicsRNGsubset/fallinghead/emittedRippleparameters vscompiled sharedAdvance/Submit for3explicitparameter sets. ActualWaterRandomzero-range rawconsumption contract corrected. NativeaudioRNG separatelyobserved/unported; childfactory/init/lifecycle/render andchildRNG request boundary;unusedprespawnvectors unclaimed."
+    },
+    "recon/retail_asm/runtime/effects/mist-frontend-ab/manifest.json": {
+      "sha256": "ea0c9bf01bdd532f36abce5a45b7ab0b7824e4a54c248d33e13481706c5b78be",
+      "retail_row": "Mist:0x2093487a",
+      "check": "mist_continuous_drop_lifecycle_frontend",
+      "status": "pass",
+      "scope": "Original Initialize/Animate/Render against unchanged compiled actual shared preview/map production initializer/Advance/Submit;50 continuous drops and repeated respawns, authored ARGB4444 quad, identity owner and original software raster."
+    },
+    "recon/retail_asm/runtime/effects/waterfall-frontend-ab/manifest.json": {
+      "sha256": "8ec2964679b0e2eb355d0df03594985a82337e6ea3e5e303951bfcce291028e9",
+      "retail_row": "Waterfall:0xa907dabf",
+      "check": "waterfall_native_warmup_drop_frontend",
+      "status": "pass",
+      "scope": "Original literalWaterfall100drop Init/warmup/Animate/Render vscompiled sharedactualpreview/map producer, exactWater.i3d geometry/UV/RGB565texture, controlledwhitevertexinputs. Original unused copied-LVERTEX lighting output intentionally omitted after Render clearsVERTS. Actualmatrix/projection/raster with originalindices; modernquadtriangulation/lighting/blend separate."
+    },
+    "recon/retail_asm/runtime/effects/mistfog-frontend-ab/manifest.json": {
+      "sha256": "db54c6cc21fefcfb9ad611c6ef3223862d6fc0ac538b41cadeb2713375ff3495",
+      "retail_row": "MistFog:0x180674ba",
+      "check": "mistfog_native_reset_and_frontend",
+      "status": "pass",
+      "scope": null
+    },
+    "recon/retail_asm/runtime/effects/pixie-frontend-ab/manifest.json": {
+      "sha256": "8c4de798f57124474d41b9c5042dc48eed0e8d362975ad16bcf415bc2d00efeb",
+      "retail_row": "Pixie:0x89abcde1",
+      "check": "pixie_native_swarm_empty_nearby_frontend",
+      "status": "pass",
+      "scope": "Original25-particle swarm Init/Animate/Render vscompiled sharedpreview/map producer, exact2authored ARGB4444textures/meshes, emptynearby-character query result, identityowner/face0, currentfrontendculling supplied at submission. Originalmatrix/projection/raster unchanged."
+    },
+    "recon/retail_asm/runtime/effects/fizzle-frontend-ab/manifest.json": {
+      "sha256": "bcec10de8fa0c7fa3904874184b9a32c92c35718844d14740bf9c8539c62dca9",
+      "retail_row": "Fizzle:0xab8800dd",
+      "check": "fizzle_particle_frontend_render",
+      "status": "pass",
+      "scope": "Three particle systems/90slots, strict original RNG stream, state/lifecycle/shared-raster pixels."
+    },
+    "recon/retail_asm/runtime/effects/static-mesh-frontend-ab/manifest.json": {
+      "sha256": "4ed2d905451c3b8652f58b3adab87922fba1a8e3735f871df97a768a2844f9de",
+      "retail_row": "Globe:0xad92bd24",
+      "check": "static_authored_mesh_frontend",
+      "status": "pass",
+      "scope": "Original key decode/matrix/raw mesh versus compiled production generic mesh path; three staticframes andtwoownerpositions, shared original white-lit cull-NONE raster."
+    },
+    "recon/retail_asm/runtime/effects/ripple-current-source-ab/manifest.json": {
+      "sha256": "178089095f21f33eaa27f37c42b6b98ea25c2c1b345eabedaf6ae1f5bf3c74e2",
+      "retail_row": "Ripple:0x12309867",
+      "check": "ripple_no_splash_frontend_render",
+      "status": "pass",
+      "scope": "No-splash ring birth through kill/postdeath; shared original software raster."
+    }
+  }
+}
