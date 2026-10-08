@@ -1,0 +1,270 @@
+# Combat dojo: combat and spell casting A/B against retail
+
+Plan and ledger (started 2026-10-07). The combat track checks the port's
+combat, movement and spell code against the shipped game by running
+retail's own functions in the in-process emulator on states we control,
+running the port's functions on the same states, and comparing what each
+decided. One behaviour at a time, milliseconds per case; then multi-tick
+sequences built from behaviours that already match.
+
+Same machinery as gameflow's ([../gameflow/RETAIL_AB.md](../gameflow/RETAIL_AB.md)):
+a retail fixture in the emulator's combat slot
+(`tools/retail_runtime/slots/combat/`, main checkout), the port's
+`Revenant --retail-ab=<target>` (`src/retailab_combat.cpp`), one compare
+command (`tools/retail_ab/retail_ab.py <target>`). Forensics per behaviour
+go in [forensics/](forensics/) as [AGENT_GUIDE.md](AGENT_GUIDE.md) asks;
+this file is the plan, the kata ledger and the results.
+
+Priority (2026-10-07, from the author): **orbit and movement first.** In
+the port, characters don't circle each other in combat and movement is
+wrong. Damage, attacks and spells follow.
+
+## 1. How a kata works
+
+A kata is one retail behaviour with a closed set of inputs and an
+observable result.
+
+- **Retail side.** The fixture builds the inputs in guest memory as
+  retail's own structures (retail constructors where they exist; the
+  layouts in §6 otherwise), calls the original function and dumps the
+  result as JSON. Retail code runs natively except at **seams**.
+- **Port side.** The same case drives the port's function on port objects
+  built for it (fixture subclasses that answer the same seams), and the
+  same JSON comes out.
+- **Seams sit at the same level on both sides.** A seam answers a query
+  from the case (a state exists, a stat's value, the world's characters)
+  instead of running the code behind it. Both sides answer it from the
+  same case data, so the comparison tests the code between the seams and
+  nothing else. Every seam call is recorded and is part of the compared
+  result: which queries a function makes, in what order, is behaviour.
+  What sits behind a seam gets its own kata later (imagery state lookup,
+  the stat system, the map iterator).
+- **Compared result.** Everything the function decided: its return value,
+  the action blocks it created or changed (by meaning, not raw bits:
+  §6.2), angles, the fields it wrote on the character, its seam calls, the
+  RNG draws (§3).
+- **Coverage.** The fixture records which basic blocks of the function
+  under test the case set reached. A kata is complete when every reachable
+  branch of the retail function has a case (or the unreachable ones are
+  listed).
+- **Evidence.** Each run records the retail build hash, the port commit,
+  the case-set hash and every difference (the gameflow driver's
+  `report.json`).
+
+## 2. Kata ledger
+
+Status: `[ ]` not started · `[~]` fixture built, differences open ·
+`[x]` matches · `[!]` blocked. Addresses are retail; verified in the
+disassembly unless marked *(order)* (identified by vtable/source order
+only).
+
+### M — movement and orbit (first)
+
+| # | Kata | Retail | Port | Status |
+|---|---|---|---|---|
+| M1 | action-state core: SetRoot / SetDoing / SetDesired / TryCommand / ForceCommand / UpdateAction | `0x4db2d0` `0x4db340` `0x4db3a0` `0x4db4d0` `0x4db450` `0x4db1d0` | `TComplexObject::*` | [ ] |
+| M2 | facing kernels: AdvanceAngles, GetAngleMoveAnim, AngleDiff, ConvertToFacing | `0x4c5ad0` `0x4d39f0` `0x46ded0` `0x46dc60` | `TCharacter::AdvanceAngles`, `GetAngleMoveAnim`, `AngleDiff`, `ConvertToFacing` | [ ] |
+| M3 | combat walking: Go(angle), empty world | `0x4ce350` | `TCharacter::Go(int)` | [~] 762 cases, 0 match (§5) |
+| M4 | combat walking with retargeting (world + sight/hearing seams) | `0x4ce350`, FindCharacters `0x4cd690` | same | [ ] |
+| M5 | combat resolve tick: ResolveCombat / ResolveCombatMove | `0x4c7980` `0x4c7f80` | `ResolveCombat`, `ResolveCombatMove` | [~] 654 cases, 0 match (§5) |
+| M6 | player input per tick: UpdateMove → Go / Stop / Block / Leap | `0x47de30` | `TPlayScreen::UpdateMove` | [ ] |
+| M7 | displacement: Move / MoveStep (velocity, blocking, shove) | `0x4c46d0` `0x4c3bc0`, TPlayer `0x518df0` | `TCharacter::Move`, `MoveStep` | [ ] |
+| M8 | orbit sequence: N ticks of Pulse → UpdateAction → Resolve* → Move, player strafing around a stationary target, monster approaching and circling | the above, chained | the above | [ ] |
+| M9 | AI combat movement: approach, combat range, retreat, wander | `0x4c8b60`, `0x4c9790` | `TCharacter::AI` | [ ] |
+| M10 | leap, side step, knock back, pivot, stop | `0x4d2be0` `0x4d6220` `0x4d3750` `0x4c8470` `0x4cee70` | same | [ ] |
+
+### C — melee
+
+| # | Kata | Retail | Port | Status |
+|---|---|---|---|---|
+| C1 | CalculateDamage | `0x4c4860` | `TCharacter::CalculateDamage` | [ ] formula read (§5.5) |
+| C2 | Damage (impact / death choice) | `0x4c4950` | `TCharacter::Damage` | [ ] |
+| C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [ ] |
+| C4 | hit resolution: ResolveAttack → ResolveHit (to-hit, tiers) | `0x4c6dd0` `0x4c62b0` | same | [ ] |
+| C5 | block / dodge / impact / dead resolvers | `0x4d2e30` `0x4d3150` `0x4c74b0` `0x4c7810` `0x4c77a0` | same | [ ] |
+| C6 | Pulse: regen, fatigue, poison, chains, death | `0x4c1bb0`, TPlayer `0x518aa0` | `TCharacter::Pulse`, `TPlayer::Pulse` | [ ] |
+| C7 | experience and level-up | `0x51a630` | `AwardKillExp` / `AwardSkillExp` | [ ] |
+
+### S — spells
+
+| # | Kata | Retail | Port | Status |
+|---|---|---|---|---|
+| S1 | talismans → spell, quick spell, fizzle | `0x51b5d0` `0x51b7c0` | `TSpellList::GetSpellDataByTalismans`, `TPlayer::HasTalismans` | [ ] |
+| S2 | cast gates: mana, wait, fail roll | `0x53fe80`, `0x4d5c20` | `TSpellManager::Cast*` | [ ] |
+| S3 | spell damage, poison roll | `0x53f560` `0x53f090` | `TSpell::Damage`, `TSpell` ctor | [ ] |
+| S4 | missiles: flight, hit, damage | `0x510220` | missile effects | [ ] |
+
+### D — data
+
+| # | Kata | Retail | Port | Status |
+|---|---|---|---|---|
+| D0 | which rules files retail reads (loose `Resources/` against `resources.rvr`) | file open path | `rev_fopen` | [ ] |
+| D1 | rules.def / char.def / spell.def parse: every CHARACTER, ATTACK, IMPACT, SPELL | `0x48b990` `0x489850` `0x53ead0` | `TRules::Load`, `SCharData::Load`, `SSpellData::Load` | [ ] |
+
+## 3. Determinism
+
+- **RNG.** Retail draws from the MSVC CRT `rand` (`0x58c582`, LCG
+  `s = s*214013 + 2531011`, `(s>>16) & 0x7fff`, seed per thread at
+  `ptd+0x14`) through `random(lo, hi)` (`0x483300`: `lo` when equal, else
+  `lo + rand() % (hi-lo+1)`). The port's `random()` (`revutils.cpp`) uses
+  the host libc `rand`, a different generator. For A/B both sides draw from
+  one **tape**: the case's list of values, handed out in order; each side
+  records every draw as `(lo, hi, value)`. The draws' count, order and
+  ranges are compared; that is how a missing or extra roll shows up.
+- **Reseeding.** Retail reseeds the global stream from the wall clock when
+  it gives an object a unique id (`0x44ce30`, `0x451150`, `0x451430`:
+  `srand(rand() + GetTickCount())`). A fixture that spawns objects pins
+  `GetTickCount` and `time`.
+- **Time.** Fixtures set the game frame (`GameFrame` `0x47e920` reads the
+  PlayScreen at `0x65caf0`) and the clock per case; nothing reads the wall
+  clock. Cadences keyed on the frame (retarget every 8 frames for the
+  player, 32 for monsters, `(GameFrame ^ id) & mask`) are case inputs.
+
+## 4. Realistic state: captured retail games
+
+Forged fixtures need every global and field a function reads to hold the
+values it holds in a running game. Reading them off statically doesn't
+scale (the IsValidTarget PlayScreen flags in §5 are an example). The plan
+for that:
+
+- **A capture build** (named retail build, recon/retail_asm/patches/):
+  a hook in the play loop that, on a key, writes the process's committed
+  memory (VirtualQuery walk) and the CPU-independent globals to a file, and
+  a savegame beside it.
+- **Captured in the DOSBox lab** at chosen combat moments (the Keep
+  fight, an Araknid in the forest).
+- **Loaded by the emulator** as a whole guest image: the Player, the map,
+  chardata, imagery and every global as the game had them. Retail
+  functions then run on real state; seams stay only for what the capture
+  can't hold (devices, threads).
+- **The port** loads the savegame from the same moment (save interop is a
+  gameflow invariant) and runs the same ticks and input.
+
+Until then, every global a fixture sets is listed in its kata as an
+assumption, and both values are run where the right one is unknown.
+
+## 5. Findings so far (2026-10-07)
+
+Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.md).
+
+1. **`CombatFace`: retail faces the opponent while moving in combat.**
+   `Revenant.ini` `CombatFace = Yes` (default; global `0x5d7a64`, also set
+   by the Options screen). With it on, Go (`0x4ce350`) and ResolveCombat
+   (`0x4c7980`) keep a moving player's facing on the target and pick the
+   strafe animation from the angle between moving and facing
+   (GetAngleMoveAnim): that is the orbit. Monsters always do it. The port
+   has no CombatFace; its ResolveCombat and Go are the 1998 versions.
+2. **ResolveCombat differs from the 1998 version** the port carries:
+   target re-acquisition is gated by frame cadence (player every 8 frames,
+   monsters every 32, unless the AI is off), a new target must lie within
+   45° of the move direction, turn rates are `((|Δ|−32)⁺/32)·4 + 8`
+   (monsters, standing player) or `·8 + 16` (moving player's new step),
+   and the goto target is cleared only when `+0x288` is 0.
+3. **The action-state core differs.** Retail SetDesired refuses a new
+   block while a pending one waits and *doing* has priority; the port
+   checks the desired block's priority. (Both send an interrupting block to
+   ForceCommand: the recon files for `0x4db450` / `0x4db4d0` have
+   Try/ForceCommand swapped.) The port's SetState also skips restarting a
+   looping state that is set again, which retail does. These sit under
+   every movement.
+4. **Action block flags moved.** Retail: firsttime `0x1`, transition
+   `0x2`, priority `0x10`, interrupt `0x20`, nowaitdone `0x40`, dontforce
+   `0x80`, stop `0x100`, waitpivot `0x200`, noroot `0x400`, goto `0x1000`;
+   the port's 1998 bitfield has priority `0x8` through noroot `0x200`. A
+   bit was inserted below priority in retail (not yet identified).
+4a. **Players never pivot in combat** (Go): retail makes the strafe step
+   at once and turns on the way; the port stops to pivot when the facing is
+   off by more than 45°. Retail Go also always writes the held angle into
+   the root block, probes 4 units ahead, refuses a dead mover, and changes
+   an existing step in place.
+4b. **Distance is edge to edge.** Retail TCharacter::Distance subtracts
+   both characters' Radius (class.def); the port measures centre to
+   centre, so every combat range is off by `r1 + r2` (32 for two radius-16
+   characters).
+4c. **Retargeting is on a frame cadence** (player every 8 frames, monsters
+   every 32) and needs the new target within 45° of the move direction;
+   the port retargets every tick. Retail checks sight; the port doesn't.
+4d. **The player-control flag** (PlayScreen `+0x5e0`): while a script holds
+   control, monsters can't target the player.
+5. **CalculateDamage** (`0x4c4860`): retail is
+   `max(1, (100 − Resist(type)) · ((100 + mod) · d / 100) / 100 − Armor())`,
+   then halved for magic types (6–9) with charflags `0x200` or physical
+   with `0x100`, zero for magic types on Baez (`+0x280 == 1`), and ÷7 with
+   `0x10` unless freeze. Resist is `chardata->damagemods[type]` for
+   characters, a stat for the player; Armor is `chardata->armor` or the
+   player's equipped protection. The port adds `damagemods` (sign flipped)
+   and ignores armor and the flags.
+6. **Data provenance.** The port reads the 1998 `data/Resources/rules.def`
+   (no TOHIT tables, FATIGUEDATA 25,1,100); retail's is the 8.6 KB
+   `rules.def` in `resources.rvr`. The retail lab install's loose
+   `Resources/rules.def` is the port's 1998 file (copied in 2026-05-05),
+   and `effects.def` / `render_metadata.def` there are port files too. D0
+   settles which one the shipped executable reads.
+
+## 6. Layouts used by the fixtures
+
+Retail, verified against the disassembly where a fixture relies on them.
+
+### 6.1 Objects
+
+- TObjectInstance: class `+0x04` (short; 0xb player, 0xc character),
+  flags `+0x08`, state `+0x0c` (short), pos `+0x10`, facing `+0x36`
+  (byte), name `+0x38`, id `+0x40`, imagery `+0x54`, frame `+0x5c`
+  (short), moveangle `+0xb0`.
+- TComplexObject: doing `+0xd8`, desired `+0xdc`, root `+0xe0`.
+- TCharacter (0x2a0 bytes, vtable `0x5a7848`): chardata `+0xfc`,
+  charflags `+0x110`, combat-engage `+0x254`, per-monster id `+0x280`.
+- TPlayer (0x674 bytes, vtable `0x5b4f30`): state bits `+0x36c`.
+- SCharData: damagemods `+0xe4`, combat range max `+0x15c` (read by
+  IsValidTarget), armor `+0x1c4`.
+
+### 6.2 TActionBlock (100 bytes, ctor `0x4da9f0(name, action)`)
+
+action `+0x00`, name[32] `+0x04`, frame `+0x24` (−1), wait `+0x28`,
+angle `+0x2c`, moveangle `+0x30`, turnrate `+0x34` (16), target `+0x38`,
+obj `+0x44`, attack `+0x48`, impact `+0x4c`, damage `+0x50`, data `+0x5c`,
+flags `+0x60` (1). The layout matches the port's `TActionBlock` except the
+flag bits (§5.4): dumps name the flags, each side mapping its own bits.
+
+### 6.3 Seams in use
+
+| Seam | Retail | Port | Answered from |
+|---|---|---|---|
+| state exists | FindState `0x477c10`, FindTransitionState `0x477c30` (slots `0x138`/`0x13c`) | `FindState`, `FindTransitionState` (virtual) | the case's state table per character |
+| animation layer | SetState `0x46f250` (slot `0x18`, recorded, state stored); stand-in imagery at `+0x54`: NumStates `+0x3c`, GetAniFlags `+0x8c`, header frame counts | SetState override; a registered header from the same table, NumStates / GetAniFlags recorded | the case's state table (frames, aniflags) |
+| object stats | GetObjStat `0x4d7520` (TPlayer `0x51ae30`), slot `0xdc` | Health / Fatigue / Mana overrides | the case's `stats` |
+| type stats | GetStat `0x4d74d0`, slot `0xd8` | Radius override | the case's `classstats` |
+| clear path | FindClearPath `0x4c39d0` | (none in the port's Go) | the case's `blocked` |
+| sight | CanSeeCharacter `0x4cd540` | (none in the port's resolvers) | the case's `sees` |
+| world | FindCharacters `0x4cd690` (M3/M5: empty world) | `TCharacter::findCharactersSeam` | the case's characters |
+
+## 7. Running it
+
+From the combat worktree (`worktrees/combat`, branch `feature/combat`),
+after building the port (`cmake --build build --target Revenant`):
+
+```sh
+python3 tools/retail_ab/retail_ab.py combat-go          # M3, first difference per case
+python3 tools/retail_ab/retail_ab.py combat-resolve     # M5
+python3 tools/retail_ab/retail_ab.py combat-go --all --case go.player.cf1.f0.b64
+```
+
+- Cases: `tools/retail_ab/combat_targets.py` (generators and the compare).
+- Retail: `tools/retail_runtime/slots/combat/` in the main checkout:
+  `guest.py` (layouts, shared seams, fault reports with the callers on the
+  stack), `combat_call.py` (the method per case).
+- Port: `src/retailab_combat.cpp` (`--retail-ab=combat-*`), loading the
+  install's class.def once (`REVENANT_DATA_PATH`, set from `--data`).
+- Output: `build/retail_ab/<target>/` — `report.json`, both dumps.
+
+Speed (2026-10-07, 4 retail processes): M3 762 cases in ~1.5 s retail,
+~2.9 s port; M5 654 cases in ~1 s / ~2 s.
+
+## 8. Coordination
+
+- **Gameflow** owns scripts, saves, the DOSBox lab and the driver this
+  reuses; combat targets plug in through a registry hook, not a fork.
+  Changes to combat paths in `character.cpp` are announced to gameflow
+  first (it ported `beginfighting` / `specificattack` there).
+- **VFX** owns effect visuals; spell damage and missile hits (S3/S4) are
+  combat's, their visuals VFX's.
