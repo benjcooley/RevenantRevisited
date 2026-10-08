@@ -766,6 +766,10 @@ TARGETS = {
                          unit=lambda r: 1 + len(r.get('sweep', []))),
 }
 
+# The combat dojo's targets (combat_targets.py, docs/gameplay/COMBAT_DOJO.md).
+from combat_targets import TARGETS as COMBAT_TARGETS  # noqa: E402
+TARGETS.update(COMBAT_TARGETS)
+
 
 # =====================================================================
 # Driver
@@ -789,6 +793,8 @@ def main():
     parser.add_argument('--jobs', type=int, default=max(1, (os.cpu_count() or 2) // 2),
                         help='retail fixture processes at once (default: half the cores)')
     args = parser.parse_args()
+    # The port reads the same install the cases come from.
+    os.environ.setdefault('REVENANT_DATA_PATH', str(args.data))
 
     spec = TARGETS[args.target]
     workdir = (args.out / args.target).resolve()

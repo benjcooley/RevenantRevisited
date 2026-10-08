@@ -2806,6 +2806,9 @@ bool TCharacter::CanSeeCharacter(TCharacter* chr, int32_t angle)
 int32_t TCharacter::FindCharacters(TCharacter* chars[], int32_t maxchars, 
     int32_t range, int32_t angle, int32_t anglerange, int32_t flags)
 {
+    if (findCharactersSeam)
+        return findCharactersSeam(this, chars, maxchars, range, angle, anglerange, flags);
+
     if (maxchars < 1)
         return 0;
 

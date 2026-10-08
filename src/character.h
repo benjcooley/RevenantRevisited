@@ -55,6 +55,13 @@ class TCharacter : public TComplexObject
     TCharacter(TObjectImagery* newim) : TComplexObject(newim) { ClearChar(); }
     TCharacter(SObjectDef* def, TObjectImagery* newim) : TComplexObject(def, newim) { ClearChar(); }
 
+    using FindCharactersSeam = int32_t (*)(TCharacter* self, TCharacter* chars[], int32_t maxchars,
+        int32_t range, int32_t angle, int32_t anglerange, int32_t flags);
+    static inline FindCharactersSeam findCharactersSeam = nullptr;
+      // Retail A/B fixtures only (retailab_combat.cpp): when set, it answers
+      // FindCharacters instead of the map, as the retail fixture's seam at
+      // FindCharacters 0x004cd690 does (docs/gameplay/COMBAT_DOJO.md §6.3).
+
     bool IsAnimatorPermanent() const override { return true; }
         // Characters always own a TObjectAnimator from construction. See
         // TObjectInstance::IsAnimatorPermanent for the contract.
