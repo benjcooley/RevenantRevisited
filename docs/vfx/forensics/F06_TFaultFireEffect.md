@@ -13,6 +13,38 @@
 
 ---
 
+## Current retail A/B and runtime work — 2026-10-05
+
+Actual retail editor creation of `Faultfire` (`0x51753bce`) produces a visible,
+animated upright column. The old assertion that there is no retail ground truth
+is superseded by this retained reference; missing story callers remain a separate
+question. Its five-second sample contains122 changing ROI images, an exactly
+stable backdrop outside the effect and exact floor restoration after a one-unit
+camera nudge/return. Deletion initially leaves a cached image. The full native AVI,
+terminal input jobs and cleanup screenshots are preserved.
+
+The former bespoke WorldXY billboard had guessed tint, pulsing geometry and a
+four-second fade/lifetime. It is replaced with the shipped four-vertex/six-index
+quad: Scale(.25,.25,1), RotateZ(pi/2), Translate(0,0,32), V shifted once by-.01,
+24Hz U steps of random(2,8)/100 and two V scales `.125*(cos(th+i*pi/2)+7)`.
+There is no synthetic fade, lifetime or preview respawn. Exact-type runtime
+initialization waits for the final map identity and owns `faultfire_reference`;
+manual preview uses the same state without a globally updated component.
+
+A/B retains a visible opacity/raster difference: the native red upper column is
+solid while the port's is translucent. This is **not** an appearance pass. Do not
+fit alpha or tint to conceal an unresolved source/software-device difference.
+The older shim still substitutes a screen-aligned billboard and is not accepted
+by these new captures. Snapshot timing/constants remain subject to retail review.
+
+Evidence is under `/Users/benjamincooley/RevenantRetailLab`:
+
+- `captures/runs/sw-complete-faultfire-20261005/manifest.json` and both native AVIs.
+- `captures/ab/sw-faultfire-before-mesh-20261005/`: actual retail versus old floor billboard.
+- `captures/ab/sw-faultfire-authored-persistent-20261005/`: current persistent authored mesh.
+- `research/faultfire-20261005/asset/`: fresh decoded shipped asset.
+- `research/faultfire-20261005/build-persistent-preview.log`: successful build.
+
 ## 1. Summary
 
 `"FaultFire"` is a spell-cast fire effect that draws a **rising flame column along
