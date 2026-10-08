@@ -7,6 +7,15 @@ state, geometry, animation, motion and comparisons stay in this fast loop.
 Existing guest recordings remain evidence. Unsupported fixtures stay queued
 while the next easy effect moves forward.
 
+Latest bounded rendered coverage is 46/176. StillWater and all active watcher
+texture frames pass original-selector/matrix/raster comparisons; CharUtility
+and SewerWater pass all-part static comparisons and actual native animator
+lookup. Use `static_texture_probe.py` and `default_static_probe.py`.
+`map_texture_probe.py` exercises real map create/frame-wrap/move/delete and
+detects frozen textures even when owner frame counters advance. It requires a
+prepared floor-only module and an installed data root; use `--help` for inputs.
+These remain bounded tests, with natural context and full device parity open.
+
 The complete scope remains the 176 retail type rows in
 [`EFFECT_BURNDOWN.json`](../../docs/vfx/EFFECT_BURNDOWN.json). As audited for this
 work, 16 rows have a bounded visual appearance check and zero have every runtime
@@ -625,3 +634,22 @@ retain the early-appearance limit: original software skips triangle edges over
 shows Z testing is not the cause. Do not fit VFX geometry/camera to hide this.
 Early real-device appearance, device culling, lighting/blending, map binding and
 modern GPU remain separate gates.
+
+
+### Linked Drip → short no-splash Ripple
+
+[`drip_ripple_probe.py`](drip_ripple_probe.py) extends the emitter-only evidence
+for `(length20,height128,period1)`: original native child Initialize/Animate/Render
+and independently compiled actual production Drip/Ripple factory/Advance/Submit
+agree through five complete child lifecycles, 145 states and 43 composite software
+image/depth pairs. Seventeen samples submit both head and ring. Existing children
+advance before the parent; newborns first advance next tick. Period is changed
+before tick121 to drain the last child. Native sector scheduling, map installation,
+audio/global RNG coupling, splashes and modern GPU appearance remain separate.
+
+[Instructions and scope](../../recon/retail_asm/runtime/effects/drip-ripple-composite-ab/README.md)
+and [report](../../recon/retail_asm/runtime/effects/drip-ripple-composite-ab/manifest.json)
+include two exact warm replays. `test_drip_ripple_composite.py` also compiles a
+broken child-link driver and confirms its slipped age and missing removal are
+rejected. This narrowly extends the earlier request-boundary result; it does not
+expand the length64 or map-context claims.
