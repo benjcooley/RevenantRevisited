@@ -591,6 +591,7 @@ class TMapPane : public TPane
     bool walking = false;                           // Right-button walk on (retail +0x11c)
     int32_t hovercursor = CURSOR_NONE;              // Cursor type for what's under the pointer (retail +0x12c)
     int32_t hoverpickframe = -1;                    // Screen frame of the last pick for it
+    int32_t hoverindex = -1;                        // Map index of that pick (-1: nothing), for the log
     TMapRenderer* mapview = nullptr;                // The renderer drawing this map (not owned)
     uint32_t notifyflags;                           // Notify Objects of changes
     int32_t lastkey = -1;                           // Direction the right-button walk holds (retail +0x128)
