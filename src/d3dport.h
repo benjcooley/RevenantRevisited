@@ -203,6 +203,27 @@ void RenderObject(TRenderer&  renderer,
                   const Matrix*  inst_world = nullptr);
 
 // --------------------------------------------------------------------------
+// RenderObjectSpinning — WorldXY-oriented textured billboard with per-
+// instance in-plane rotation. Required for effects whose snapshot Render
+// body builds OBJ3D_MATRIX with RotateX(-π/2) tip (WorldXY) plus a
+// per-particle RotateZ (spin) that changes every tick.
+//
+// Routes to SubmitFxParticle with WorldXY orientation + rotation_rad.
+// The position is inst_world * obj.pos (same as the ScreenAligned path).
+// The size is obj.scl[0]/[1] (× base_size_wu is the caller's job — same
+// gotcha #3 rule as ScreenAligned).
+//
+// Shim-extension added for X21 TFizzleEffect (forensics §7: OBJ3D_MATRIX
+// path, per-particle rot.z spin, RotateX(-π/2) ground tip, RotateZ(-π/4)
+// static spin).
+// --------------------------------------------------------------------------
+void RenderObjectSpinning(TRenderer&   renderer,
+                          const Obj&   obj,
+                          float        rotation_rad,
+                          TTextureHandle texture,
+                          const Matrix*  inst_world = nullptr);
+
+// --------------------------------------------------------------------------
 // Mesh registration helpers.
 //
 // RegisterSubMesh extracts an I3D sub-object as an SMeshVertex buffer +

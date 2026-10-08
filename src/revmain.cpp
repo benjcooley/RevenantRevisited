@@ -40,6 +40,7 @@
 #include "revisited_settings.h"
 #include "testscreen.h"
 #include "cinematicscreen.h"
+#include "i3dgltf.h"
 #include "testmodes.h"
 #include "testconfig.h"
 #include "time.h"
@@ -1663,6 +1664,15 @@ void GetParameters(int argc, char **argv)
     if (arg_flag(cmd, "vfx-no-ui"))
         StartupVfxHideUi = true;
 
+  // VFX-WIREFRAME — render every FX submit as a thin quad outline
+  // instead of filled textured. Sets g_fx_wireframe_override (renderer.h).
+  // Flag-style: --vfx-wireframe (no value).
+    if (arg_flag(cmd, "vfx-wireframe"))
+    {
+        StartupVfxWireframe = true;
+        g_fx_wireframe_override = true;
+    }
+
   // VFX-BG=<black|ltgray|forest|dungeon> — pre-select the diagnostic
   // backdrop for --test=vfx (for scripted multi-BG captures).
     {
@@ -1716,6 +1726,24 @@ void GetParameters(int argc, char **argv)
         std::string p;
         if (arg_param(cmd, "dumptiles", p))
             strncpyz(StartupDumpTilesPath, p.c_str(), MAXPATHLEN);
+    }
+
+  // DUMPICONS=path — export all baked inventory icons / portraits to the
+  // given folder, creating it if needed.
+    {
+        std::string p;
+        if (arg_param(cmd, "dumpicons", p))
+            strncpyz(StartupDumpIconsPath, p.c_str(), MAXPATHLEN);
+    }
+
+  // DUMPGLTF=asset|@list [DUMPGLTFOUT=dir|file.glb] — export I3D asset(s)
+  // as Blender-loadable .glb with per-state animations.
+    {
+        std::string p;
+        if (arg_param(cmd, "dumpgltf", p))
+            strncpyz(StartupDumpGltfPath, p.c_str(), MAXPATHLEN);
+        if (arg_param(cmd, "dumpgltfout", p))
+            strncpyz(StartupDumpGltfOutPath, p.c_str(), MAXPATHLEN);
     }
 
   // DUMPI3D=asset [DUMPI3DOUT=dir] — extract one I3D's textures (PNG) +
@@ -2075,6 +2103,24 @@ bool InitGlobals()
         if (!TestModes::DumpTilesToFolder(StartupDumpTilesPath))
             FatalError("Failed dumping any tiles to %s", StartupDumpTilesPath);
         Status("Tile dump complete. Exiting.\n");
+        return false;
+    }
+
+    if (StartupDumpIconsPath[0])
+    {
+        Status("Dumping icons to %s\n", StartupDumpIconsPath);
+        if (!TestModes::DumpIconsToFolder(StartupDumpIconsPath))
+            FatalError("Failed dumping any icons to %s", StartupDumpIconsPath);
+        Status("Icon dump complete. Exiting.\n");
+        return false;
+    }
+
+    if (StartupDumpGltfPath[0])
+    {
+        Status("Dumping glTF for %s\n", StartupDumpGltfPath);
+        if (!DumpGltfFromStartupArgs(StartupDumpGltfPath, StartupDumpGltfOutPath))
+            FatalError("Failed dumping glTF for %s", StartupDumpGltfPath);
+        Status("glTF dump complete. Exiting.\n");
         return false;
     }
 
