@@ -91,8 +91,10 @@ character's (`0x004c3371`).
 3. A pending `say`: start it and wait for it (type 8).
 4. Trigger scan, top prototype then parents: the first trigger that
    fires starts (`0x00492440`), unless an ALWAYS block is running and the
-   new one is also ALWAYS. Starting records the trigger type, clears the
-   block stack, calls the owner's (and user's) "script started" hook
+   new one is also ALWAYS. Starting (`Start` `0x00492440`: `End` first if
+   a block is running -- not ported -- then the ip, depth 0; the block
+   levels are left as they are, §4.2) records the trigger type, calls the
+   owner's (and user's) "script started" hook
    (vtable 0x148), and sets the trigger-user guard to the user's map index
    when the user alias is set. An ALWAYS block interrupted by a higher
    trigger is saved (+0xac/+0xb0) and resumed when that trigger ends.
