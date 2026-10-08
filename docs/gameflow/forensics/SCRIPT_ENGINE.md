@@ -98,12 +98,110 @@ character's (`0x004c3371`).
    trigger is saved (+0xac/+0xb0) and resumed when that trigger ends.
 5. Run lines through `CommandInterpreter` until a wait, the end, or 6000
    lines (infinite-loop guard). Result flags drive the block stack
-   (BEGIN/END/IF/ELSE/LOOP/JUMP, §6.1 of ARCHITECTURE).
+   (BEGIN/END/IF/ELSE/LOOP/JUMP, §4.2).
 6. At the end: the "script ended" hook (vtable 0x14c) and `End`.
 
 `End` (`0x00493e40`) clears the guard, the wait and the choice list, and
 gives back what the script took: control on (flag 1), dialog pane closed
 (4), camera back on the player (8).
+
+### 4.1 The prototype's text and the tokenizer
+
+`ParseScript` (`0x00494e20`) keeps the **whole block** as the prototype's
+text (`+0x04`, length `+0x40`): from the `OBJECT` keyword (the stream
+position less the token's length and the character the tokenizer holds,
+right after the first `SkipBlanks`) through the object's `END` and the line
+break after it (the `WhiteGet` that checks for it). Trigger positions
+(`+0x04` of a trigger record) are offsets into it, to the line after the
+trigger's header. `TScriptManager::Save` (`0x00496690`, editor only)
+writes each text as is followed by `"\r\n"`, in a file opened `"wb"` after
+a header written with LFs.
+
+The tokenizer (`TToken::Get` `0x00478a10`) reads every character through
+the same step: carriage returns are skipped wherever they are, and a line
+feed counts a line as it is read. A token holds the character after it
+(`+0x2c`), which is never a CR: after an identifier that ends a CRLF line
+the stream has passed the LF and the line is counted. So:
+
+- a script error reports the line the tokenizer has read up to: a bad
+  parameter at the end of its line is reported on the next one;
+- the stream position after a line's last token is the next line's start;
+- a `SetPos` on the stream leaves the held character in the token, and the
+  next `Get` returns it first (the `ELSE IF` rewind below depends on it).
+
+A 0xFF byte is the end of the stream (`GetChar` sign-extends it to −1).
+
+### 4.2 Block stepping (`0x00493827`–`0x00493d81`)
+
+Per line, from the stream position (`thisline`, one back when the
+tokenizer stands inside a word):
+
+1. `Get`, `SkipBlanks`. A pending `ELSE IF` position (below): `SetPos` to
+   it, `WhiteGet`.
+2. A `:` line is skipped (`SkipLine`). A line starting with an identifier,
+   keyword or quoted text goes to `CommandInterpreter` (`0x00493942`);
+   anything else prints "Bad token in trigger block".
+3. The result bits, in this order:
+   - `0x20` (context deleted): return.
+   - `0x40` (IF true): the level's conditional = 1. `0x80` (IF false):
+     `LineGet`; a `BEGIN` → `SkipBlock`, else `SkipLine`; conditional = 0.
+   - `0x100` (ELSE): conditional `0xdeaf` → "ELSE without matching IF";
+     conditional 1 → `LineGet`, then `SkipBlock` or `SkipLine` as for a
+     false IF, and conditional = `0xdeaf`. Then, if the token is `IF`
+     (`0x00493b06`): `SetPos(thisline)`, `Get`, `SkipBlanks` (the `ELSE`),
+     note the stream position as pending, `Get`. The interpreter leaves the
+     rest of an ELSE line unread (`0x0041ed34` skips it only without bit
+     `0x100`), so after `ELSE IF c` the token is `IF` when the IF before
+     was false, and the IF runs on the next pass -- read after that line's
+     first token and the character the token held, so it reports "Bad token
+     in trigger block" first when that line was a `BEGIN`. When the IF
+     before was true, the skip starts at the condition: it ends on the ELSE
+     line, the end-of-line skip drops the next line (the ELSE IF's
+     `BEGIN`), and the ELSE IF's body runs one level up.
+   - `0x200` (SKIPBLOCK): `SkipBlock`.
+   - `0x800` (BEGIN): depth + 1; that level's loop start = 0, conditional =
+     `0xdeaf`.
+   - `0x1000` (END): depth − 1; below 0 → "END without matching BEGIN".
+   - The level's loop start, if set: the stream goes there and it clears.
+     `0x400` (LOOP): the level's loop start = `thisline`.
+   - `0x1` (WAIT) or a wait set: the ip = the stream position; return.
+   - `0x2000` (JUMP): the stream goes to the ip (`Jump` set it).
+4. Read to the line's end. Depth below 1: the block ends (ip and flags
+   `+0x48`/`+0x4c` cleared). Otherwise the iteration count (6000) goes
+   down; at 0, "Infinite loop detected" and the block ends.
+
+The block levels (`+0x54`, 8 bytes each: loop start, conditional) are
+never cleared as a whole: the allocator zero-fills a new script
+(`0x00482fb0`), the constructor sets level 0's conditional to `0xdeaf`,
+BEGIN sets the level it opens, and `Start`/`Reset` (`0x00492440`,
+`0x004924f0`) only set the depth to 0. A level a jump lands in keeps what
+it last held -- 0 in a fresh script -- so an ELSE there runs its body
+without an error.
+
+**Jump** (`0x00493fa0`) counts every `BEGIN` and `END` token from the top
+of the text into the depth (`0x004940cd`–`0x00494152`), the object's own
+`BEGIN` included: a label directly in a trigger block is at depth 2, one
+inside an `IF … BEGIN` at 3. It resumes at the stream position after the
+label's name (`0x00494208`), the start of the next line (§4.1). So after a
+jump the trigger's `END` leaves the depth at 1, and the block **runs on**:
+the next trigger's header line goes to the interpreter (TCharacter's
+`ParseCommand` answers "Unrecognized command.", on the console, seen only
+in the editor), then that trigger's `BEGIN` and body run as part of the
+block, and so on to the object's `END`, which ends it. A trigger block
+that executes a `jump` itself runs on the same way. With the shipped
+scripts (RETAIL_AB.md, target 4): 22 objects, 91 labels and blocks reach
+another trigger, all a DIALOG block followed by `ALWAYS` except town.s
+BAYNE1 (`CUBE`, whose `IF` is false by then). The ALWAYS body runs once as
+the conversation's tail: keep.s DalyK and SteffanK walk one round of their
+patrol, forest.s Jong1 waits 24 ticks, a dozen townsfolk walk their routes
+-- and while it runs the trigger-user guard (`+0x10`) keeps the NPC from
+being talked to again. When it ends, the ALWAYS block the conversation
+interrupted resumes (`+0xac`).
+
+At depth 10 retail's level is `+0xa4`, the depth itself: the first line
+there resets the depth to 0 (its "loop start") and ends the block. The port
+doesn't reproduce the overlap; it stops a block at depth 10 with "Blocks
+nested too deep" (§7). No shipped script goes past depth 5.
 
 ## 5. Waits
 
@@ -137,7 +235,7 @@ which matches itself again. Object names in sector and save files are
 stored with bit 7 set on every byte (`TObjectInstance::Load`
 `0x00472430`).
 
-## 7. Port state (2026-10-05)
+## 7. Port state (2026-10-07)
 
 Retail:
 - attachment (names decoded, world-wide notify; the second pass matched
@@ -152,7 +250,15 @@ Retail:
   `say`, `goto`, `stat`); only `forest.s` declares any (Jong's training);
 - the instruction pointer, an offset into the prototype text (the 1998
   raw pointer broke on 64-bit);
-- the trigger test (`0x004927b0`), the user and the trigger-user guard;
+- the trigger test (`0x004927b0`), the user and the trigger-user guard.
+  A CUBE trigger's search for someone in the cube is retail's `0x00452480`
+  (2026-10-07): the first moving object inside the cube on the **owner's**
+  level, from that level's loaded sectors that meet the cube's map rect
+  (iterator `0x0044cf80` flags `0x6e0`; the port's `TMapIterator(level,
+  rect, …)`, `MapPane.ObjectInCube`). The 1998 search walked the map
+  pane's 3×3 window, the player's level. The running-trigger record
+  (`+0xa8`) the test also compares with is never written in retail, so the
+  port has none;
 - "running" is retail's test, the ip being set (`+0x48`); until
   2026-10-05 the port tested its `priority` (retail's flags, `+0x4c`,
   which no start sets), so every block counted as idle and an ALWAYS
@@ -210,31 +316,40 @@ Not ported:
 - (the screen-fade wait is ported, SCREEN_SYSTEM.md §2.6; the buy/sell
   wait ends when the shop is no longer in use, COMMAND_SYSTEM.md §6.6).
 
-`Jump` (`0x00493fa0`), the `jump` command's and a picked response's: the
-script goes on right after the label's name (`0x00494208` stores the
-token's position as the ip), so the line after the label runs. Ported
-2026-10-05; the 1998 code skipped past the label line (`SkipLine`), which
-ate the next line's first token — harmless before a blank line, but every
-shop's `:sell1` / `buysellshoptype sell …` lost its shop type.
+`Jump` (`0x00493fa0`), the `jump` command's and a picked response's (§4.2).
+The search starts at the top of the prototype's text (the 1998 "skip down
+to the current trigger" loop moves nothing: the fresh token isn't a BEGIN,
+so `SkipBlock` `0x004795f0` returns at once) and steps token by token
+(`LineGet` `0x004795a0`), counting `BEGIN`/`END` into the depth. A label it
+can't find prints "Jump to an unknown label attempted" (`0x005da1dc`) and
+returns 0 with the ip unchanged and the depth counted to the end of the
+text (0, so the block ends after the jump's line). History of the port:
 
-The search starts at the top of the prototype (the 1998 "skip down to the
-current trigger" loop moves nothing: the fresh token isn't a BEGIN, so
-`SkipBlock` `0x004795f0` returns at once) and steps token by token
-(`LineGet` `0x004795a0`). On the way it sets the block depth (`+0xa4`) to 0
-and counts every `BEGIN` (+1) and `END` (−1) token (`0x004940cd`–`0x00494152`),
-so the script lands at the label as deep as the label sits: the trigger's
-own BEGIN is 1, each enclosing `IF … BEGIN` one more. A label it can't find
-prints "Jump to an unknown label attempted" (`0x005da1dc`) and returns 0
-with the ip unchanged and the depth counted to the end of the prototype (0,
-so the block ends after the jump's line). Ported 2026-10-05: the 1998 code
-set the depth to 1 ("a bit hacky"), so a choice or `jump` whose label sat
-inside an `IF … BEGIN` block ended the whole trigger at that IF's `END` and
-skipped the block's last lines, typically `CONTROL ON` and `SETCDVOLUME
-FULL` (the music stayed at half volume): from `New Game1`, forest.s
-Gatekeeper1 and town.s Heather1, Pauline1, Verhoeven1 and Kylie1, and the
-shops of Hruthford, Gina and Cronus, whose menus sit inside `IF MISTSTATE`
-blocks; found by the NPC sweep (STORY_TESTING.md §7). 284 of the 327
-labels in the module's DIALOG blocks sit inside an IF block. It
-also restarted the script on an unknown label; no shipped script has one
-(the 404 `jump` and `choice` lines of the module scripts and `master.s`
-all name a label of their own OBJECT block).
+- 2026-10-05: the resume point after the label's name and the counted
+  depth replaced the 1998 code, which skipped the label's line
+  (`SkipLine`, eating the next line's first token: every shop's `:sell1` /
+  `buysellshoptype sell …` lost its shop type) and set the depth to 1 ("a
+  bit hacky"; a choice inside an `IF … BEGIN` ended the trigger at that
+  IF's `END` and skipped `CONTROL ON` / `SETCDVOLUME FULL`: Gatekeeper1,
+  Heather1, Pauline1, Verhoeven1, Kylie1, the shops of Hruthford, Gina and
+  Cronus; found by the NPC sweep, STORY_TESTING.md §7). The 1998 code also
+  restarted the script on an unknown label; no shipped script has one.
+- 2026-10-07: the port's text was still the 1998 body (the lines between
+  the object's `BEGIN` and `END`), so its depths were retail's − 1 and its
+  blocks ended at the trigger's `END`; and its tokenizer held the CR after
+  a word at a line's end, so the ip after a label was the LF before the
+  next line. Both follow retail now (§4.1, §4.2): the text is the whole
+  block, the depth counts the object's `BEGIN`, a block runs on after a
+  jump, and the ip is the next line's start. Checked by the retail A/B
+  (RETAIL_AB.md targets 1 and 4): every shipped label and block steps as
+  retail's.
+
+Port deviations in block stepping:
+
+- **Depth 10.** Retail's tenth level overlays the depth field (§4.2); the
+  port has the ten levels and stops a block that reaches depth 10 with
+  "Blocks nested too deep". No shipped script nests that deep (retail
+  depth 5 at most).
+- An `END` too many (depth −1): retail reads level −1, its flags at
+  `+0x4c`, as a loop start; the port touches no level outside 0–9. The
+  block ends after the line either way.
