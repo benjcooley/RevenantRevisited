@@ -9,6 +9,12 @@
 char  StartupTestMode[32]     = "";
 char  StartupSectorId[32]     = "";
 char  StartupLevelId[32]      = "";
+int32_t StartupSceneCamera[4] = {0,0,0,0};
+bool StartupSceneCameraSet = false;
+char StartupSceneModule[64] = "";
+char StartupSceneCommandFile[MAXPATHLEN] = "";
+int32_t StartupSceneAmbient[4] = {0,0,0,0};
+bool StartupSceneAmbientSet = false;
 char  StartupAssetPath[128]   = "";
 float StartupAssetScale       = 0.0f;   // 0 = auto-fit based on bbox
 char  StartupDumpTilesPath[MAXPATHLEN] = "";
@@ -20,6 +26,13 @@ char  StartupDumpI3DOutPath[MAXPATHLEN] = "";
 char  StartupVfxId[64]        = "";
 bool  StartupVfxHideUi        = false;
 bool  StartupVfxWireframe     = false;
+int32_t StartupVfxLightingMode = -1;
+int32_t StartupPartSysQuality = 0;
+int32_t StartupPartSysIncomingBlend = 0;
 char  StartupCinematicPath[MAXPATHLEN] = "";
 char  StartupVfxBackground[16] = "";
+char  StartupVfxBackdrop[MAXPATHLEN] = "";
+float StartupVfxCamera[2] = {-1.0f, -1.0f};
+int32_t StartupVfxOrigin[3] = {0, 0, 0};
+bool StartupVfxOriginSet = false;
 char  StartupInputScript[1024] = "";

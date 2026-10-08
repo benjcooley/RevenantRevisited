@@ -115,7 +115,8 @@ float4 main_ps(vs_out in_) : SV_Target0 {
     float4 alb = albedo_tex.Sample(smp, in_.uv);
     if (alb.a < 0.01) discard;
     float  d   = sample_scene_depth(in_.uv);
-    float3 np  = normal_tex.Sample(smp, in_.uv).xyz;
+    float4 normal_sample = normal_tex.Sample(smp, in_.uv);
+    float3 np = normal_sample.xyz;
     float3 N   = normalize(np * 2.0 - 1.0);
     float  ao  = ao_tex.Sample(smp, in_.uv).r;
     float  fbw, fbh; albedo_tex.GetDimensions(fbw, fbh);
@@ -214,6 +215,7 @@ float4 main_ps(vs_out in_) : SV_Target0 {
   // Brightness cap (see light.glsl.h for rationale).
     float light_ceiling = max(ambient_col.w, 1e-3);
     light = min(light, float3(light_ceiling, light_ceiling, light_ceiling));
+    if (mode == 0 && normal_sample.a > 1.5) light = float3(1.0, 1.0, 1.0);
     return float4(alb.rgb * light, 1.0);
 }
 )HLSL";

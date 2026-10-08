@@ -113,7 +113,8 @@ void main() {
     vec4 alb = texture(albedo_tex, v_uv);
     if (alb.a < 0.01) discard;
     float d  = sample_scene_depth(v_uv);
-    vec3  np = texture(normal_tex, v_uv).xyz;
+    vec4 normal_sample = texture(normal_tex, v_uv);
+    vec3 np = normal_sample.xyz;
     vec3  N  = normalize(np * 2.0 - 1.0);
     float ao = texture(ao_tex, v_uv).r;
     vec2  ts = vec2(textureSize(albedo_tex, 0));
@@ -222,6 +223,7 @@ void main() {
   // ambient overbright while still capping stacked point lights).
     float light_ceiling = max(ambient_col.w, 1e-3);
     light = min(light, vec3(light_ceiling));
+    if (mode == 0 && normal_sample.a > 1.5) light = vec3(1.0);
     frag_color = vec4(alb.rgb * light, 1.0);
 }
 )GLSL";

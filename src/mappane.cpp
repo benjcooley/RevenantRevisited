@@ -3856,6 +3856,8 @@ void TMapPane::SaveAllSectors()
 
 void TMapPane::FreeAllSectors()
 {
+    // This window borrows MapManager-owned sectors; their owner tears down.
+    if (command_window_borrowed) { ReleaseCommandMapWindow(); return; }
     int32_t sx, sy;
 
     LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
@@ -3883,6 +3885,33 @@ void TMapPane::ReloadSectors()
     sectorx += 10000000;
     sectory += 10000000;
     RedrawAll();
+}
+
+bool TMapPane::BindCommandMapWindow(int32_t maplevel, const S3DPoint& mapcenter)
+{
+    TGameMap* map = MapManager.CurrentMap();
+    if (!map || map->Level() != maplevel) return false;
+    // A diagnostic must never silently take over an owned legacy window.
+    if (!command_window_borrowed)
+        for (int32_t y = 0; y < SECTORWINDOWY; ++y)
+            for (int32_t x = 0; x < SECTORWINDOWX; ++x)
+                if (sectors[x][y]) return false;
+    command_window_borrowed = true;
+    center = mapcenter;
+    level = newlevel = maplevel;
+    sectorx = (mapcenter.x >> SECTORWSHIFT) - SECTORWINDOWX / 2;
+    sectory = (mapcenter.y >> SECTORHSHIFT) - SECTORWINDOWY / 2;
+    for (int32_t y = 0; y < SECTORWINDOWY; ++y)
+        for (int32_t x = 0; x < SECTORWINDOWX; ++x)
+            sectors[x][y] = map->FindSector(sectorx + x, sectory + y);
+    return true;
+}
+
+void TMapPane::ReleaseCommandMapWindow()
+{
+    if (!command_window_borrowed) return;
+    memset(sectors, 0, sizeof(sectors));
+    command_window_borrowed = false;
 }
 
 void TMapPane::UpdateActiveWindow()

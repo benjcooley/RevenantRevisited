@@ -312,6 +312,10 @@ class TMapPane : public TPane
     // inside it ticks; anything outside is idle this frame. Cheap when
     // the player hasn't crossed a sector boundary (no-op).
     void UpdateActiveWindow();
+    // Borrow already-loaded CurrentMap sectors for real command diagnostics.
+    // No disk load or ownership transfer; release before map teardown.
+    bool BindCommandMapWindow(int32_t maplevel, const S3DPoint& mapcenter);
+    void ReleaseCommandMapWindow();
     void SaveAllSectors();
         // Save all sectors to disk without deallocating
     void FreeAllSectors();
@@ -511,6 +515,7 @@ class TMapPane : public TPane
         // Called by Pulse() function to update ambient fade values
   
   // Data Members
+    bool command_window_borrowed = false;
     TSector* sectors[SECTORWINDOWX][SECTORWINDOWY]; // Currently loaded sectors
     int32_t oldsectorx, oldsectory;                 // Position of sector in last frame
     int32_t sectorx, sectory;                       // Position of sector in current frame

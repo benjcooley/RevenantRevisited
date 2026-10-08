@@ -1,6 +1,6 @@
 // *************************************************************************
 // *                  Revenant Revisited (port) - 2026                     *
-// *  fountain.cpp - TFountainAnimator port via the d3d::* shim            *
+// *  fountain.cpp - TFountainAnimator reference with authored quads      *
 // *                                                                       *
 // *  SHIM VALIDATION PORT — proves the d3d::* shim is rich enough that a *
 // *  transcription of the snapshot Initialize/Animate/Render bodies      *
@@ -16,20 +16,21 @@
 // *  confirmed via retail builder thunks. Per-tick constants are         *
 // *  snapshot-only (no decompiled retail Render body).                   *
 // *                                                                       *
-// *  Blend mode is SUSPECT per forensics §7 — snapshot says Alpha, but   *
-// *  the sister Photon/Sparks/Sparkle effects use Additive. iter1        *
-// *  ships snapshot-Alpha; visual A/B will likely call for Additive.    *
+// *  Blend remains snapshot Alpha. Native visual verification pending. *
 // *************************************************************************
 
 #include <cstdint>
 #include <cstdlib>     // for std::rand
 #include <cstring>
+#include <memory>
 
 #include "../d3dport.h"
+#include "../effect.h"
 #include "../logging.h"
 #include "../math3d.h"
 #include "../imagery.h"
 #include "../renderer.h"
+#include "../time.h"
 
 extern TRenderer* Renderer;
 
@@ -44,14 +45,7 @@ constexpr float   kFountainScaleStep  = 0.15f;    // src/effect.h:759 — FOUNTA
 constexpr float   kInitialBubbleScale = 2.0f;     // effect_old.cpp:3808, 3847
 constexpr const char* kImageryPath    = "Misc\\Sparkle.I3D";
 
-// Per-sparkle base WU size. In retail RenderObject(obj) scales the
-// authored vertex positions (photon sub-object half-extent ~5.25 wu) by
-// obj->scl, giving a 2.0 * 5.25 ≈ 10.5 wu sparkle. Our SubmitFxBillboard
-// takes a full WU size and the renderer handles projection, so we
-// multiply scale by an equivalent base. Matches the bespoke port's
-// kFountainBespokeBaseSizeWu = 64 (src/effect.h:4979) — visually
-// verified.
-constexpr float   kFountainBaseSizeWu = 64.0f;
+constexpr double  kTickSeconds = 1.0 / 24.0;
 
 // Inclusive range random — matches the snapshot's random(lo, hi) semantics
 // (lo and hi both inclusive; not <hi exclusive).
@@ -66,6 +60,11 @@ static int32_t snap_random(int32_t lo, int32_t hi)
 // --------------------------------------------------------------------------
 struct State
 {
+    ~State()
+    {
+        if (owns_imagery && imagery)
+            TObjectImagery::FreeImagery(imagery);
+    }
     int32_t  colorobj      = 0;          // 0/1/2/3 — sub-object selector
     float    base_pos[3]   = {0,0,0};    // effect world position (animator.pos)
     bool     alive         = true;
@@ -81,10 +80,12 @@ struct State
     // since at Spawn time the I3D loader hasn't always uploaded the
     // texture to the GPU yet.
     T3DImagery*    imagery     = nullptr;
+    bool          owns_imagery = false;       // standalone LoadImagery reference only
     TTextureHandle texture     = kInvalidTexture;
     float          diffuse[4]  = {1,1,1,1};   // sub-object's authored DIFFUSE
-    float          emissive[4] = {0,0,0,1};
-    float          uv_rect[4]  = {0,0,1,1};   // sub-object's UV sub-rect
+    S3DVertex      vertices[4] = {};          // authored corners and UVs
+    double         sim_accum_seconds = 0.0;
+    uint64_t       sim_ticks = 0;
 
     // Diagnostic info
     int32_t spawn_log_done = 0;
@@ -173,7 +174,8 @@ static void Animate(State* st)
 //             UpdateExtents()
 //     RestoreBlendState()
 // --------------------------------------------------------------------------
-static void Render(State* st)
+static void Render(State* st, const TObjectInstance* owner = nullptr,
+                   EFxDebugMode debug_mode = EFxDebugMode::Normal)
 {
     if (!Renderer || !st->alive) return;
 
@@ -197,55 +199,44 @@ static void Render(State* st)
     d3d::BlendStateGuard blend_scope;
     d3d::SetBlendState();    // Alpha — snapshot effect_old.cpp:3864
 
-    // Build the animator's world-translation matrix
-    // (base_pos = the spawned effect's world position).
-    d3d::Matrix inst_world;
-    d3d::MatrixIdentity(inst_world);
-    d3d::MatrixTranslate(inst_world,
-                         st->base_pos[0], st->base_pos[1], st->base_pos[2]);
-
-    // obj = GetObject(colorobj). Sparkle.I3D's 4 sub-objects share one
-    // texture (a 2x2 color atlas); per-variant color comes from the
-    // sub-object's UV sub-rect into that atlas (resolved at Spawn).
-    d3d::Obj obj;
-    obj.objnum     = st->colorobj;
-    std::memcpy(obj.diffuse,  st->diffuse,  sizeof(obj.diffuse));
-    std::memcpy(obj.emissive, st->emissive, sizeof(obj.emissive));
-    // Encode the resolved UV sub-rect into lverts[0..3] (Flag_Verts
-    // tells RenderObject to consume them). lverts[0]=TL, lverts[3]=BR.
-    const float u_lo = st->uv_rect[0];
-    const float v_lo = st->uv_rect[1];
-    const float u_hi = u_lo + st->uv_rect[2];
-    const float v_hi = v_lo + st->uv_rect[3];
-    obj.lverts[0].tu = u_lo; obj.lverts[0].tv = v_lo;
-    obj.lverts[1].tu = u_lo; obj.lverts[1].tv = v_hi;
-    obj.lverts[2].tu = u_hi; obj.lverts[2].tv = v_lo;
-    obj.lverts[3].tu = u_hi; obj.lverts[3].tv = v_hi;
+    // Match the effect-owner transform used by the mesh and bespoke paths.
+    hmm_mat4 world = {};
+    if (owner)
+        world = owner->Transform().Matrix();
+    else
+    {
+        MtxClear(&world);
+        const hmm_vec3 root_scale = {1.0f, 1.0f, WORLD3D_Z_SCALE};
+        MtxScale(&world, &root_scale);
+        const hmm_vec3 origin = {st->base_pos[0], st->base_pos[1], st->base_pos[2]};
+        MtxTranslate(&world, &origin);
+    }
+    SQuadDrawItem item = {};
+    std::memcpy(item.color_rgba, st->diffuse, sizeof(item.color_rgba));
+    item.key.texture = st->texture;
+    item.key.blend = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode = EFxLightMode::Unlit;
+    item.debug_mode = debug_mode;
 
     for (int32_t n = 0; n < kNumFountainBubbles; ++n)
     {
         if (st->framenum[n] > 0)
         {
-            // obj->flags = OBJ3D_SCL1 | OBJ3D_POS2 — apply scale first,
-            // then translate (snapshot effect_old.cpp:3874). We also set
-            // Flag_Verts so RenderObject honors the per-sub-object UV
-            // sub-rect we stamped into obj.lverts (atlas cell selection).
-            //
-            // Snapshot's scale[n] scales the photon mesh's authored vertex
-            // positions; we collapse to a single billboard size by
-            // multiplying by the base size constant (kFountainBaseSizeWu)
-            // since SubmitFxBillboard takes a full WU size.
-            obj.flags = d3d::Flag_Scl1 | d3d::Flag_Pos2 | d3d::Flag_Verts;
-            const float size = st->scale[n] * kFountainBaseSizeWu;
-            obj.scl[0] = obj.scl[1] = obj.scl[2] = size;
-            obj.pos[0] = st->p[n][0];
-            obj.pos[1] = st->p[n][1];
-            obj.pos[2] = st->p[n][2];
-
-            d3d::RenderObject(*Renderer, obj,
-                              d3d::Orientation::ScreenAligned,
-                              st->texture,
-                              &inst_world);
+            const hmm_vec3 position = {st->p[n][0], st->p[n][1], st->p[n][2]};
+            for (int32_t vertex = 0; vertex < 4; ++vertex)
+            {
+                const S3DVertex& authored = st->vertices[vertex];
+                const hmm_vec3 local = authored.pos * st->scale[n] + position;
+                hmm_vec3 corner = {};
+                MtxTransform(&world, &local, &corner);
+                item.world_pos[vertex][0] = corner.X;
+                item.world_pos[vertex][1] = corner.Y;
+                item.world_pos[vertex][2] = corner.Z;
+                item.uv[vertex][0] = authored.tu;
+                item.uv[vertex][1] = authored.tv;
+            }
+            Renderer->SubmitFxQuad(item);
         }
     }
 
@@ -263,88 +254,168 @@ static void Render(State* st)
 // --------------------------------------------------------------------------
 // Spawn — load the asset, populate state, run Initialize.
 // --------------------------------------------------------------------------
-State* Spawn(const S3DPoint& origin, int32_t colorobj)
+// The runtime owner already owns its loaded imagery. Bind the same asset
+// records as the standalone shim without creating a second map instance or
+// taking an extra imagery reference. The caller owns the returned state.
+static State* BindImagery(T3DImagery* img3d, const S3DPoint& origin, int32_t colorobj)
 {
-    if (!Renderer) return nullptr;
-    if (colorobj < 0 || colorobj > 3) colorobj = 0;
-
-    State* st = new State();
-    st->colorobj    = colorobj;
+    if (!img3d || colorobj < 0 || colorobj > 3)
+    {
+        log_error("[fountain-shim] invalid imagery or color sub-object %d", colorobj);
+        return nullptr;
+    }
+    auto st = std::make_unique<State>();
+    st->colorobj = colorobj;
     st->base_pos[0] = float(origin.x);
     st->base_pos[1] = float(origin.y);
     st->base_pos[2] = float(origin.z);
-
-    // Bind the shared Sparkle.I3D asset (forensics §4).
-    int32_t img_id = TObjectImagery::FindImagery(kImageryPath);
-    if (img_id < 0)
-    {
-        // Legacy/unregistered fallback (the i3ddump tool's pattern).
-        std::string p = kImageryPath;
-        img_id = TObjectImagery::RegisterImagery(p.data());
-    }
-    if (img_id < 0)
-    {
-        log_error("[fountain-shim] could not resolve '%s'", kImageryPath);
-        delete st;
-        return nullptr;
-    }
-    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
-    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
-    if (!img3d)
-    {
-        log_error("[fountain-shim] '%s' is not T3DImagery", kImageryPath);
-        delete st;
-        return nullptr;
-    }
-
-    // Cache the imagery pointer; defer texture binding to the first
-    // Submit() call (handle is sometimes invalid at Spawn time before
-    // the loader uploads to GPU).
     st->imagery = img3d;
 
-    // Material diffuse / emissive (these don't depend on GPU upload).
-    d3d::LoadMaterial(img3d, colorobj, st->diffuse, st->emissive);
-
-    // Resolve the chosen sub-object's UV sub-rect. Sparkle.I3D's texture
-    // is a 2×2 atlas with 4 colored sparkles (cyan/red/green/blue); each
-    // sub-object's authored vertex UVs pick one quadrant. Without this,
-    // we'd sample the whole atlas and render all 4 colors at once.
-    // (Forensics §4 confirmed: per-sub-object baked UV rects.)
+    if (colorobj >= img3d->NumObjects() || img3d->NumObjVerts(colorobj) != 4)
     {
-        const int32_t nv = img3d->NumObjVerts(colorobj);
-        if (nv > 0)
-        {
-            std::vector<S3DVertex> vbuf(size_t(nv), S3DVertex{});
-            img3d->GetObjVerts(colorobj, vbuf.data(), 0, 0,
-                               ERender3DVertex::Vertex);
-            float minu = vbuf[0].tu, maxu = vbuf[0].tu;
-            float minv = vbuf[0].tv, maxv = vbuf[0].tv;
-            for (int32_t i = 1; i < nv; ++i)
-            {
-                if (vbuf[i].tu < minu) minu = vbuf[i].tu;
-                if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
-                if (vbuf[i].tv < minv) minv = vbuf[i].tv;
-                if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
-            }
-            st->uv_rect[0] = minu;
-            st->uv_rect[1] = minv;
-            st->uv_rect[2] = maxu - minu;
-            st->uv_rect[3] = maxv - minv;
-        }
+        log_error("[fountain-shim] sub-object %d requires an authored four-vertex quad", colorobj);
+        return nullptr;
+    }
+    img3d->GetObjVerts(colorobj, st->vertices, 0, 0, ERender3DVertex::Vertex);
+    S3DObj object = {};
+    img3d->GetObject(colorobj, &object);
+    if (object.material >= 0 && object.material < img3d->NumMaterials())
+    {
+        S3DMat material = {};
+        img3d->GetMaterial(object.material, &material);
+        const auto& color = material.matdesc.diffuse;
+        st->diffuse[0] = color.r;
+        st->diffuse[1] = color.g;
+        st->diffuse[2] = color.b;
+        st->diffuse[3] = color.a;
     }
 
     // Run Initialize (the snapshot's per-bubble seeding).
-    Initialize(st);
+    Initialize(st.get());
 
     log_info("[fountain-shim] spawned colorobj=%d at (%.0f,%.0f,%.0f) "
              "diffuse=(%.2f,%.2f,%.2f,%.2f)",
              colorobj, st->base_pos[0], st->base_pos[1], st->base_pos[2],
              st->diffuse[0], st->diffuse[1], st->diffuse[2], st->diffuse[3]);
-    return st;
+    return st.release();
 }
 
-void Tick(State* st)    { if (st && st->alive) Animate(st); }
+State* Spawn(const S3DPoint& origin, int32_t colorobj)
+{
+    if (!Renderer) return nullptr;
+    if (colorobj < 0 || colorobj > 3) colorobj = 0;
+    int32_t img_id = TObjectImagery::FindImagery(kImageryPath);
+    if (img_id < 0)
+    {
+        std::string path = kImageryPath;
+        img_id = TObjectImagery::RegisterImagery(path.data());
+    }
+    if (img_id < 0)
+    {
+        log_error("[fountain-shim] could not resolve '%s'", kImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    auto* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[fountain-shim] '%s' is not T3DImagery", kImageryPath);
+        if (base) TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    State* state = BindImagery(img3d, origin, colorobj);
+    if (!state) TObjectImagery::FreeImagery(base);
+    else state->owns_imagery = true;
+    return state;
+}
+
+void Tick(State* st)
+{
+    if (!st || !st->alive) return;
+    st->sim_accum_seconds += TTime::DeltaTime();
+    while (st->sim_accum_seconds >= kTickSeconds)
+    {
+        st->sim_accum_seconds -= kTickSeconds;
+        Animate(st);
+        ++st->sim_ticks;
+    }
+}
 void Submit(State* st)  { if (st && st->alive) Render(st);  }
 void Destroy(State* st) { delete st; }
+
+// Real map/runtime dispatch. Four generic EFFECT types share this state
+// implementation; the retail type ID fixes their authored sub-object.
+// Attachment runs only after the actual owner's final map identity exists.
+namespace {
+class TFountainRuntimeComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    explicit TFountainRuntimeComponent(State* state) : state_(state) {}
+    [[nodiscard]] const char* ComponentName() const override { return "fountain_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        Render(state_.get(), &owner, DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        Tick(state_.get());
+        if (!logged_tick_ && state_->sim_ticks > 0 && Owner())
+        {
+            logged_tick_ = true;
+            log_info("[fountain-runtime] first simulation tick type='%s' id=%08x map_index=%d "
+                     "colorobj=%d ticks=%llu",
+                     Owner()->GetTypeName(), Owner()->ObjId(), Owner()->GetMapIndex(),
+                     state_->colorobj, static_cast<unsigned long long>(state_->sim_ticks));
+        }
+    }
+  private:
+    // Imagery is borrowed from Owner; TObjectInstance destroys components
+    // before freeing that imagery. State has no independently owned asset.
+    std::unique_ptr<State> state_;
+    bool logged_tick_ = false;
+};
+
+class TFountainRuntimeBuilder final : public T3DAnimatorBuilder
+{
+  public:
+    TFountainRuntimeBuilder(const char* name, uint32_t type_id, int32_t colorobj)
+        : T3DAnimatorBuilder(name), type_id_(type_id), colorobj_(colorobj) {}
+    T3DAnimator* Build(TObjectInstance* owner) override { return new T3DAnimator(owner); }
+    void AttachComponents(TObjectInstance* owner) override
+    {
+        if (!owner || owner->GetMapIndex() < 0 || owner->ObjClass() != OBJCLASS_EFFECT ||
+            owner->ObjId() != type_id_ || owner->GetComponent<TFountainRuntimeComponent>())
+            return;
+        auto* imagery = dynamic_cast<T3DImagery*>(owner->GetImagery());
+        S3DTex texture = {};
+        if (!imagery || imagery->NumTextures() <= 0) return;
+        imagery->GetTexture(0, &texture);
+        if (texture.htexture == kInvalidTexture) return; // lazy hook retries
+        // Do not seed a discarded particle state on a texture-upload retry.
+        auto state = std::unique_ptr<State>(BindImagery(imagery, owner->Pos(), colorobj_));
+        if (!state) return;
+        state->texture = texture.htexture;
+        auto component = std::make_unique<TFountainRuntimeComponent>(state.release());
+        component->Configure(texture.htexture, int32_t(texture.desc.width),
+                             int32_t(texture.desc.height), 1, 1, 1,
+                             1.0f, 1.0f, false, true);
+        owner->AddComponent(std::move(component));
+        const S3DPoint position = owner->Pos();
+        log_info("[fountain-runtime] attached type='%s' id=%08x map_index=%d "
+                 "colorobj=%d texture=%u origin=(%d,%d,%d)",
+                 owner->GetTypeName(), owner->ObjId(), owner->GetMapIndex(), colorobj_,
+                 texture.htexture, position.x, position.y, position.z);
+    }
+  private:
+    uint32_t type_id_;
+    int32_t colorobj_;
+};
+
+TFountainRuntimeBuilder cyan_runtime_builder("CyanFont", 0x22491405u, 0);
+TFountainRuntimeBuilder red_runtime_builder("RedFont", 0x335a2516u, 1);
+TFountainRuntimeBuilder green_runtime_builder("GreenFont", 0x446b3627u, 2);
+TFountainRuntimeBuilder blue_runtime_builder("BlueFont", 0x557c4738u, 3);
+} // namespace
 
 } // namespace fountain_shim

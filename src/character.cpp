@@ -1804,7 +1804,7 @@ int32_t TCharacter::ResolveAttack(TActionBlock* ab, int32_t bits)
           // Play block sound do sparks
             if (targ && targ->doing->action == ACTION_BLOCK)
             {
-                if (attack->flags && CA_SPARKS)
+                if (attack->flags & CA_SPARKS)
                     EffectBurst("sparks");
                 PlayWave(listrnd(chardata->blocksounds));
             }
@@ -2259,7 +2259,7 @@ void TCharacter::EffectBurst(char *name, int32_t height)
       // ported. Combat still kills the target; blood is cosmetic.
         // ((TBloodEffect*)inst)->SetParams(height, (GetFace() + 128) & 255, 0, 80, 20, random(1, 5));
     }
-    else
+    else if (!stricmp(name, "sparks"))
     {
         def.pos = pos;
 
@@ -2268,17 +2268,14 @@ void TCharacter::EffectBurst(char *name, int32_t height)
         if (!inst)
             return;
 
-        inst->CreateAnimator();
-        TParticle3DAnimator* anim = (TParticle3DAnimator*)inst->GetAnimator();
-
         int32_t ang = (GetFace() + random(-80, 80)) & 0xff;
 
         S3DPoint vect;
         ConvertToVector(ang, 100, vect);
 
-        if (anim)
+        if (doing && doing->obj)
         {
-            SParticleParams pr;
+            SParticleParams pr = {};
 
             S3DPoint vect0, tpos;
             doing->obj->GetPos(tpos);
@@ -2300,20 +2297,36 @@ void TCharacter::EffectBurst(char *name, int32_t height)
             pr.spread.X = (float)0.5;
             pr.spread.Y = (float)0.5;
             pr.spread.Z = (float)0.5;
-            pr.gravity = (float)0.2;
-            pr.trails = 1;
+            // Retail EffectBurst caller tuning (cls_0x5a7b98.cpp:4645–4651).
+            pr.gravity = 0.25f;
+            pr.trails = 2;
             pr.minstart = 0;
             pr.maxstart = 8;
             pr.minlife = 20;
             pr.maxlife = 40;
-            pr.bounce = false;
+            pr.bounce = true;
             pr.killobj = true; 
             pr.objflags = 1 << (ObjId() & 0x3);
             pr.seektargets = false;
             pr.numtargets = 0;
 
-            anim->InitParticles(&pr);
+            if (!TSparkEffect::AttachBurst(*inst, pr))
+            {
+                log_warn("[combat] could not attach typed Sparks burst");
+                inst->SetFlags(OF_KILL);
+            }
         }
+        else
+        {
+            log_warn("[combat] Sparks burst has no combat target");
+            inst->SetFlags(OF_KILL);
+        }
+    }
+    else
+    {
+        // Other generic particle callers need their own recovered profiles;
+        // do not reinterpret a generic animator as TParticle3DAnimator.
+        log_warn("[combat] unsupported EffectBurst particle type '%s'", name);
     }
 }
 

@@ -13,6 +13,16 @@ extern char StartupTestMode[32];
 extern char StartupSectorId[32];
 // --level=L — which level --test=sector should render, centered on world 0,0.
 extern char StartupLevelId[32];
+// --scene-camera=L,X,Y,Z --scene-module=name: reproducible real-map VFX
+// captures through --test=sector, in the retail editor's 640x340 viewport.
+extern int32_t StartupSceneCamera[4];
+extern bool StartupSceneCameraSet;
+extern char StartupSceneModule[64];
+// Optional sector-only timeline of real engine commands, in legacy 24Hz ticks.
+extern char StartupSceneCommandFile[MAXPATHLEN];
+// Optional authored scene lighting override: intensity,R,G,B.
+extern int32_t StartupSceneAmbient[4];
+extern bool StartupSceneAmbientSet;
 // --asset=path — which imagery --test=i3d3d should load (default Misc\\Blood.I3D).
 extern char StartupAssetPath[128];
 // --scale=f — uniform mesh scale multiplier for --test=i3d3d.
@@ -44,6 +54,16 @@ extern bool StartupVfxHideUi;
 // projection, and screen-space distortion independently of the
 // authored texture content.
 extern bool StartupVfxWireframe;
+// --vfx-lighting-mode=auto|classic|modern — VFX-only render diagnostic.
+// Auto (-1) preserves explicit source ambient -> classic, otherwise modern.
+extern int32_t StartupVfxLightingMode;
+// --partsys-quality=0|1|2 — match retail controller quality during captures.
+// 0 preserves full emission; retail 1 uses one quarter, 2 uses one half.
+extern int32_t StartupPartSysQuality;
+// --partsys-incoming-blend=auto|16|80: exact Imight/Fmastery capture input before first
+// particle submission. Auto(0) keeps visible ordinary compatibility; not a
+// guessed retail scene state. Does not change other profiles/general rendering.
+extern int32_t StartupPartSysIncomingBlend;
 // --cinematic=<path> — which .SMK file --test=ui-cinematic should play.
 // Empty = default intro FMV (data/Disk2/MIX_FMV1.SMK).
 extern char StartupCinematicPath[MAXPATHLEN];
@@ -52,6 +72,12 @@ extern char StartupCinematicPath[MAXPATHLEN];
 // --vfx-bg=<black|ltgray|forest|dungeon> — pre-select the diagnostic
 // backdrop for --test=vfx (default ltgray). Empty / unknown = default.
 extern char StartupVfxBackground[16];
+// Retail comparison controls: optional baked backdrop, authored camera origin
+// in screen pixels, and an explicit world-space effect origin (no auto-fit).
+extern char StartupVfxBackdrop[MAXPATHLEN];
+extern float StartupVfxCamera[2];
+extern int32_t StartupVfxOrigin[3];
+extern bool StartupVfxOriginSet;
 
 // --input-script="..." (alias: --mouse-script) — a scripted synthetic input
 // sequence (mouse + keyboard) replayed into the active --test mode's input

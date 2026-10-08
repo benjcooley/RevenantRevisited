@@ -13,6 +13,7 @@
 #include "mappane.h"
 #include "parse.h"
 #include "timer.h"
+#include "vfspathindex.h"
 
 #include <chrono>
 #include <math.h>
@@ -1194,9 +1195,9 @@ struct VFSEntry
 };
 
 std::vector<std::unique_ptr<VFSArchive>> g_base_archives;
-std::unordered_map<std::string, VFSEntry> g_base_map;
+TVfsPathIndex<VFSEntry> g_base_map;
 std::unique_ptr<VFSArchive> g_module_archive;
-std::unordered_map<std::string, VFSEntry> g_module_map;
+TVfsPathIndex<VFSEntry> g_module_map;
 // Pre-release modules ship unpacked as data/Modules/<name>/; retail uses
 // data/Modules/<name>.rvm ZIPs. MountModule detects which and we fall back
 // to filesystem lookup from this directory when set.
@@ -1314,7 +1315,7 @@ std::unique_ptr<VFSArchive> vfs_open_archive(const std::filesystem::path &path)
     return arc;
 }
 
-void vfs_index_archive(VFSArchive *arc, std::unordered_map<std::string, VFSEntry> &map)
+void vfs_index_archive(VFSArchive *arc, TVfsPathIndex<VFSEntry> &map)
 {
     const mz_uint n = mz_zip_reader_get_num_files(&arc->zip);
     for (mz_uint i = 0; i < n; ++i)
@@ -1324,9 +1325,7 @@ void vfs_index_archive(VFSArchive *arc, std::unordered_map<std::string, VFSEntry
             continue;
         if (st.m_is_directory)
             continue;
-        // First-wins within a single archive (same as retail)
-        map.try_emplace(vfs_basename_lower(st.m_filename),
-                        VFSEntry{arc, i, (size_t)st.m_uncomp_size});
+        map.Add(st.m_filename, VFSEntry{arc, i, (size_t)st.m_uncomp_size});
     }
 }
 
@@ -1376,13 +1375,7 @@ FILE *rev_vfs_open(const char *name, const char *flags)
     if (!flags || flags[0] != 'r' || strchr(flags, '+'))
         return nullptr;
 
-    const auto key = vfs_basename_lower(name);
-
-    const VFSEntry *entry = nullptr;
-    if (auto it = g_module_map.find(key); it != g_module_map.end())
-        entry = &it->second;
-    else if (auto it = g_base_map.find(key); it != g_base_map.end())
-        entry = &it->second;
+    const VFSEntry *entry = ResolveVfsArchivePath(name, g_module_map, g_base_map);
     if (!entry)
         return nullptr;
 

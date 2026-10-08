@@ -60,6 +60,7 @@ extern char buf[];
 COMMAND(CmdSelect);
 COMMAND(CmdDeselect);
 COMMAND(CmdAdd);
+COMMAND(CmdAddAt);
 COMMAND(CmdAddInv);
 COMMAND(CmdGive);
 COMMAND(CmdUndo);
@@ -175,6 +176,7 @@ COMMAND(CmdJump);
 SCommand Commands[] =
 { { "activate", CmdActivate, OBJCLASS_EXIT, 0, false, false, "usage: <object>.activate\n" },
   { "add", CmdAdd, -1, -1, true, false, "usage: add [<amt>] <typename>\n       add light [<intensity>]\n" },
+  { "addat", CmdAddAt, -1, -1, true, false, "usage: addat <x> <y> [<amt>] <typename>\n" },
   { "addinv", CmdAddInv, 0, 0, true, false, "usage: <object>.addinv [<amt>] <obj>\n" },
   { "addrc", CmdAddRC, -1, -1, false, true, "usage: addrc\n" },
   { "amb", CmdAmbient, -1, -1, true, false, "usage: ambient <intensity>\n" },
@@ -1667,13 +1669,10 @@ COMMAND(CmdDeselect)
     return 0;
 }
 
-COMMAND(CmdAdd)
+static int32_t AddAtPosition(TObjectInstance* context, TToken &t, const S3DPoint& pos)
 {
     int32_t objtype = -1;
     int32_t number = 1;
-
-    S3DPoint pos;
-    MapPane.GetMapPos(pos);
 
     if (t.Type() == TKN_NUMBER)
     {
@@ -1786,6 +1785,29 @@ COMMAND(CmdAdd)
     }
 
     return 0;
+}
+
+COMMAND(CmdAdd)
+{
+    S3DPoint pos;
+    MapPane.GetMapPos(pos);
+    return AddAtPosition(context, t, pos);
+}
+
+COMMAND(CmdAddAt)
+{
+    // Retail story/editor table 0x5c6ec0 -> 0x421770: x, y, optional
+    // amount; Z comes from the map center, not the third numeric token.
+    S3DPoint pos;
+    MapPane.GetMapPos(pos);
+    if (t.Type() != TKN_NUMBER) return CMD_BADPARAMS;
+    pos.x = t.Index(); t.WhiteGet();
+    if (t.Type() != TKN_NUMBER) return CMD_BADPARAMS;
+    pos.y = t.Index(); t.WhiteGet();
+    // Retail additionally resolves identifier coordinates through its scoped
+    // script state manager (0x497800). That later API is absent in snapshot;
+    // do not substitute the unrelated StringVal string hash or reinterpret Z.
+    return AddAtPosition(context, t, pos);
 }
 
 COMMAND(CmdAddInv)

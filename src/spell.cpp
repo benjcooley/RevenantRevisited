@@ -35,6 +35,7 @@ SSpellData::SSpellData()
     damagetype = 0;
     memset(invoke, 0, RESNAMELEN);
     effectstart = 0;
+    poisonchance = 0; // retail constructor 0x53da50
 }
 
 // destructor
@@ -87,6 +88,11 @@ bool SSpellData::Load(char *aname, TToken &t)
         {
             if (!Parse(t, "FLAGS %i\n", &flags))
                 t.Error("Error parsing FLAGS tag");
+        }
+        else if (t.Is("POISONCHANCE"))
+        {
+            if (!Parse(t, "POISONCHANCE %i\n", &poisonchance))
+                t.Error("Error parsing POISONCHANCE tag");
         }
         else if (t.Is("ANIMATION"))
         {
@@ -359,7 +365,12 @@ TSpell::TSpell(TObjectInstance* invoke,
     TObjectInstance* *targ, int32_t numtargs, S3DPoint* sourcepos, 
     PSSpellData dat, PSSpellVariant var, PTSpell mtr)
 { 
-    invoker = invoke; 
+    invoker = invoke;
+    invoker_ref = invoke;
+    effect.Clear();
+    for (auto& target : targets) target = nullptr;
+    frame = 0;
+    magic_offense = magic_defense = 0;
 
     if (numtargs < 1)
         numtargs = 1;
@@ -371,7 +382,19 @@ TSpell::TSpell(TObjectInstance* invoke,
     else
         memcpy(targets, targ, numtargs * sizeof(TObjectInstance*));
 
-    spell = dat; 
+    spell = dat;
+    for (int32_t i = 0; i < targetnum; ++i)
+        target_refs[i] = targets[i];
+    // Retail 0x53f10b..143 procs only with an explicit target array. The
+    // inclusive roll and strict comparison intentionally preserve chance100.
+    if (targ && dat && dat->poisonchance != 0)
+        for (int32_t i = 0; i < targetnum; ++i)
+        {
+            const int32_t roll = random(0, 100);
+            if (roll < dat->poisonchance)
+                if (auto* character = dynamic_cast<TCharacter*>(targets[i]))
+                    character->SetPoisoned(true);
+        }
     variant = var; 
     timer = -1; 
     master = mtr;
@@ -381,6 +404,16 @@ TSpell::TSpell(TObjectInstance* invoke,
         source = *sourcepos;
     else
         source.x = source.y = source.z = -1;    // Means not used
+}
+
+TSpell::~TSpell()
+{
+    // The manager owns this spell. The effect can outlive its invoker or
+    // finish first; resolve its generation-checked identity before use.
+    if (auto* live_effect = dynamic_cast<TEffect*>(effect.Get()))
+        if (live_effect->GetSpell() == this)
+            live_effect->SetSpell(nullptr);
+    effect.Clear();
 }
 
 // Returns source pos, or right hand pos if 'source' is (-1,-1,-1).
@@ -454,7 +487,7 @@ bool TSpell::Timer()
         effect = MapPane.GetInstance(MapPane.NewObject(&def));
 
         if (effect)
-            ((PTEffect)effect)->SetSpell(this);
+            ((PTEffect)effect.Get())->SetSpell(this);
     }
 
     return timer == 0; 
@@ -549,7 +582,7 @@ void TSpellManager::Pulse()
         spells[i]->Pulse(); 
         
         if (spells[i]->Timer())
-            spells.Remove(i); 
+            spells.Delete(i); // leaves a vacant slot; the next index is not skipped
     }
 }
 

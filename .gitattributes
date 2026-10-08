@@ -28,3 +28,7 @@ data/**/*.EXE     filter=lfs diff=lfs merge=lfs -text
 data/**/*.asi     filter=lfs diff=lfs merge=lfs -text
 data/**/*.ico     filter=lfs diff=lfs merge=lfs -text
 data/**/*.sav     filter=lfs diff=lfs merge=lfs -text
+
+# Preserve legacy source line endings while checking real trailing whitespace.
+*.cpp whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+*.h whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

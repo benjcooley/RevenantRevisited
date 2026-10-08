@@ -121,7 +121,8 @@ fragment float4 _main(vs_out in [[stage_in]],
     float4 alb = albedo_tex.sample(smp, in.uv);
     if (alb.a < 0.01) discard_fragment();
     float  d   = sample_scene_depth(depth_tex, in.uv);
-    float3 np  = normal_tex.sample(smp, in.uv).xyz;
+    float4 normal_sample = normal_tex.sample(smp, in.uv);
+    float3 np = normal_sample.xyz;
     float3 N   = normalize(np * 2.0 - 1.0);
     float  ao  = ao_tex.sample(smp, in.uv).r;
     float  fbw = float(albedo_tex.get_width());
@@ -221,6 +222,7 @@ fragment float4 _main(vs_out in [[stage_in]],
   // Brightness cap (see light.glsl.h for rationale).
     float light_ceiling = max(p.ambient_col.w, 1e-3f);
     light = min(light, float3(light_ceiling));
+    if (mode == 0 && normal_sample.a > 1.5) light = float3(1.0);
     float3 col = alb.rgb * light;
 
     // Editor outline: each id_target pixel carries flag bits in the top
