@@ -227,6 +227,8 @@ class Proto:
     line: int
     blocks: list[Block] = field(default_factory=list)
     labels: set[str] = field(default_factory=set)   # every `:label` in the OBJECT block
+    end: int = 0                                    # line of the object's END
+    lines: list[str] = field(default_factory=list)  # the file's lines
 
     def dialog(self) -> Block | None:
         return next((b for b in self.blocks if b.trigger == 'DIALOG'), None)
@@ -248,7 +250,7 @@ def parse_script(script: str, text: str) -> list[Proto]:
         if not m:
             i += 1
             continue
-        proto = Proto(m.group(1), script, i + 1)
+        proto = Proto(m.group(1), script, i + 1, lines=lines)
         protos.append(proto)
         depth = 0
         trigger = None
@@ -269,6 +271,7 @@ def parse_script(script: str, text: str) -> list[Proto]:
                     proto.blocks.append(Block(trigger, bstart + 1, i + 1, lines[bstart:i + 1]))
                     trigger = None
                 if depth == 0:
+                    proto.end = i + 1
                     break
             elif depth == 1 and w in TRIGGERS:
                 trigger = w
@@ -328,6 +331,11 @@ class Npc:
     matches: list[dict]
     facts: dict
     dialog_lines: list[str]
+    # After a jump the block runs on through the triggers after it to the
+    # object's END (TScript::Jump counts the object's BEGIN; SCRIPT_ENGINE.md
+    # §4.2): the lines from the DIALOG block's BEGIN to there.
+    object_end: int = 0
+    run_lines: list[str] = field(default_factory=list)
 
     @property
     def found(self) -> bool:
@@ -366,7 +374,8 @@ def locate(mod: ModuleData, slot: Path | None, scripts: list[str] | None,
                     if by:
                         matches.append(dict(asdict(o), by=by))
             npcs.append(Npc(proto.name, script, proto.line, block.begin, block.end,
-                            levels, matches, block_facts(block, proto.labels), block.lines))
+                            levels, matches, block_facts(block, proto.labels), block.lines,
+                            proto.end, proto.lines[block.begin - 1:proto.end]))
     return npcs
 
 
@@ -536,9 +545,24 @@ def run_one(spec: RunSpec, binary: Path, slot: Path, ini: Path, data: Path,
     return analyze_dir(spec.out)
 
 
-def analyze_dir(d: Path) -> dict:
+def add_run_lines(npc: dict, mod: ModuleData | None) -> None:
+    """A run recorded before the NPC carried the lines it runs on through
+    (`run_lines`, `object_end`): read them from the module's script."""
+    if 'run_lines' in npc or mod is None:
+        return
+    text = mod.scripts().get(npc['script'])
+    for proto in parse_script(npc['script'], text or ''):
+        block = proto.dialog()
+        if proto.name.upper() == npc['name'].upper() and block and block.begin == npc['dialog_begin']:
+            npc['object_end'] = proto.end
+            npc['run_lines'] = proto.lines[block.begin - 1:proto.end]
+            return
+
+
+def analyze_dir(d: Path, mod: ModuleData | None = None) -> dict:
     """Analyze one run directory (run.json + revenant.log) into result.json."""
     run = json.loads((d / 'run.json').read_text())
+    add_run_lines(run['spec']['npc'], mod)
     result = analyze(run, d / 'revenant.log', names_file(d.parent, None, None))
     (d / 'result.json').write_text(json.dumps(result, indent=1))
     return result
@@ -564,6 +588,9 @@ RETAIL_CONSOLE = (
      'fadecharacterout/in 0x00428020/0x00428070 leave the name (COMMAND_SYSTEM §6.4)'),
     (r'^(NOWAIT )?(\w+\.)?STAT .*=', ('Bad parameters.', 'usage:'),
      'stat 0x00424010 wants the end of input after the value (COMMAND_SYSTEM §4)'),
+    (r'^(ALWAYS|TRIGGER|PROXIMITY|CUBE|ACTIVATE|GIVE|GET|COMBAT|DEAD)\b', ('Unrecognized command',),
+     "after a jump the block runs on into the next trigger, whose header isn't a command "
+     '(TScript::Jump 0x00493fa0, SCRIPT_ENGINE §4.2)'),
 )
 
 
@@ -606,12 +633,13 @@ def analyze(run: dict, log: Path, names: set[str] | None = None) -> dict:
     npc = spec['npc']
     name = npc['name'].upper()
     rc, stop_reason = run['rc'], run['stop']
-    smap = SourceMap(npc['dialog_lines'], npc['dialog_begin'])
+    smap = SourceMap(npc.get('run_lines') or npc['dialog_lines'], npc['dialog_begin'])
     r = {'npc': npc['name'], 'script': npc['script'], 'tag': spec['tag'], 'keys': spec['keys'],
          'sets': spec['sets'], 'exec': spec['exec'], 'rc': rc, 'stop': stop_reason,
          'wall_s': run['wall_s'], 'started': False, 'ended': False, 'lines_run': 0,
          'last_line': None, 'issues': [], 'committed': [], 'menus_shown': 0,
          'responses_run': 0, 'choices_run': [], 'states_set': [], 'level_entered': [],
+         'ran_on': False,
          'exec_results': [], 'shutdown': False}
     if not log.exists():
         r['issues'].append({'kind': 'no log'})
@@ -659,9 +687,16 @@ def analyze(run: dict, log: Path, names: set[str] | None = None) -> dict:
                 in_block = False
                 r['ended'] = True
                 # A block ends at its own END; one that ends at an inner END
-                # skipped its last lines.
+                # skipped its last lines. A block that ran on past its END
+                # after a jump ends only at the object's END: its depth counts
+                # the object's BEGIN (SCRIPT_ENGINE.md §4.2). (The source map
+                # can't tell that END from a skipped block's.)
                 last = r['last_line'] or {}
-                if last.get('source_line') and last['source_line'] != npc['dialog_end']:
+                if r['ran_on']:
+                    ok = norm(last.get('text') or '') == 'END'
+                else:
+                    ok = not last.get('source_line') or last['source_line'] == npc['dialog_end']
+                if not ok:
                     issue('early end', f'the block ended at line {last["source_line"]}, not at its END '
                           f'(line {npc["dialog_end"]})', (npc['name'], last.get('text'), last['source_line']))
                 continue
@@ -672,6 +707,8 @@ def analyze(run: dict, log: Path, names: set[str] | None = None) -> dict:
             if in_block and obj.upper() == name:
                 r['lines_run'] += 1
                 r['last_line'] = {'text': rest.strip(), 'source_line': src}
+                if src and src > npc['dialog_end']:
+                    r['ran_on'] = True
                 n = norm(rest)
                 if n.startswith('WAIT RESP'):
                     r['responses_run'] += 1
@@ -759,6 +796,7 @@ def report(dirs: list[Path], show_retail: bool = False) -> None:
         last = r['last_line'] or {}
         print(f'{run_name(r):<36} {"yes" if r["started"] else "NO":<5} {"yes" if r["ended"] else "NO":<5} '
               f'{r["lines_run"]:>5} {r["menus_shown"]:>5}  {collapse(r["committed"]) or "-"}'
+              + ('  (ran on to the object\'s END)' if r.get('ran_on') else '')
               + ('' if r['ended'] else f'  | last {last.get("source_line")}: {last.get("text")} | {r["stop"]}'))
     print()
     # The same issue seen in several runs (a nearby ALWAYS block) is listed once.
@@ -832,7 +870,7 @@ def main(argv: list[str]) -> int:
             for d in a.dirs:
                 names_file(d, mod, a.slot)
                 for p in sorted(d.glob('*/run.json')):
-                    analyze_dir(p.parent)
+                    analyze_dir(p.parent, mod)
         report(a.dirs, a.retail)
         return 0
     if not a.data:

@@ -133,7 +133,7 @@ the script line behind it and how many runs saw it:
 |---|---|
 | `console` | an error the interpreter printed (Bad parameters, Unrecognized command, Context not found, extra parameters …) |
 | `script error`, `not ported`, `error`, `fatal` | the matching log lines |
-| `early end` | the block ended at an inner `END`, not its own: its last lines never ran |
+| `early end` | the block ended at an inner `END`, not its own: its last lines never ran. A block that ran on past its own `END` after a jump (into the next trigger, as retail's does: SCRIPT_ENGINE.md §4.2; the run is marked "ran on to the object's END") must end at the object's `END` |
 | `hang` | the block was still running at the end |
 | `loop` | still running, the same choice taken three times or more (the key schedule, not the block) |
 | `shop open` | still waiting for the shop's Exit |
@@ -145,7 +145,9 @@ the script line behind it and how many runs saw it:
 The `retail` table is in the tool (`RETAIL_CONSOLE`), each entry with the
 handler that answers so: `jump`, the buy/sell name and criteria commands
 and `fadecharacterout`/`in` leave a token ("extra parameters ignored"),
-`stat x = y` answers bad parameters (COMMAND_SYSTEM.md §4, §6.4, §6.6).
+`stat x = y` answers bad parameters (COMMAND_SYSTEM.md §4, §6.4, §6.6),
+and a trigger's header line reached by a block running on after a jump
+(`ALWAYS`, `CUBE …`) is no command ("Unrecognized command.").
 
 ### 7.1 The sweep of 2026-10-05
 
