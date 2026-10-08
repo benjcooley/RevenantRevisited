@@ -28,15 +28,16 @@ bool SpecularEnable = true;
 bool ZEnable = true;
 bool BilinearFilter = false;
 bool NoUpdateRects = false;
-int32_t MaxLights = 1;
+int32_t MaxLights = 3;           // retail GetINISettings default
 bool UseDirLight = true;
 int32_t DirLightPercent = 85;
 bool Double3D, Triple3D;
 
-int32_t Ambient3D = 100;
-int32_t LightRange3D = 100;
-int32_t LightMult3D = 250;       // retail revenant.ini default; per-light intensity scale (percent)
-bool    EnhancedLighting = true; // retail revenant.ini default
+// Retail GetINISettings defaults (FUN_00484500); docs/LIGHTING_FIDELITY.md §3.1.
+int32_t Ambient3D = 130;
+int32_t LightRange3D = 180;
+int32_t LightMult3D = 250;        // per-light intensity scale (percent)
+bool    EnhancedLighting = false; // [Options]; retail .data default off
 
 // DLS brightness routine (gives brightness given distance).
 extern double GetLightBrightness(int32_t dist, int32_t intensity, int32_t multiplier);

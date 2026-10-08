@@ -96,8 +96,37 @@ _CLASSDEF(TSurface)
 // click-pick reads the same pixel and masks them off.
 constexpr uint32_t kObjFlagSelected = 1u << 31;
 constexpr uint32_t kObjFlagHovered  = 1u << 30;
+// The surface shows its own colours, unlit: retail drew it after the light
+// transfer (a 2D imagery state with ANIIM_LIT). The light pass tests it.
+constexpr uint32_t kObjFlagSelfLit  = 1u << 29;
 constexpr uint32_t kObjIdMask       = 0x0FFFFFFFu;
 constexpr uint32_t kObjFlagMask     = 0xF0000000u;
+
+// Inputs to the light pass's Classic model (lighting mode 0), which lights
+// the two G-buffer surface classes the way retail lit them: static tiles
+// with the DLS light tables, 3D meshes with T3DScene's vertex lighting.
+// The renderer only evaluates the model; the game layer derives these
+// values from the area ambient and the lighting settings
+// (classiclighting.cpp). Derivation: docs/LIGHTING_FIDELITY.md §2-§3, §6.
+struct SClassicLightModel {
+    // Static tiles (DLS through the MMX light table). Both are gains, i.e.
+    // the table's multiplier bytes over 8: tile_ambient is the truncated
+    // ambient byte / 8, so 8 * tile_ambient is an integer.
+    float tile_ambient[3]        = {};    // ambient gain per channel
+    float tile_gain_per_mult     = 0.0f;  // full-intensity light gain per unit of light multiplier
+    // 3D meshes (T3DScene). Light values are in effective units, after the
+    // EnhancedLighting MODULATEnX scale; mesh_overbright is that scale.
+    float mesh_ambient[3]        = {};
+    float mesh_ambient_intensity = 0.0f;  // subtracted from each light's brightness, pre-scale
+    float mesh_dir_color[3]      = {};    // directional key light colour
+    float mesh_gain_per_mult     = 0.0f;  // light brightness at the source per unit of multiplier
+    float mesh_dir_to_light[3]   = { 0.0f, 0.0f, 1.0f };  // world space, unit length
+    float mesh_overbright        = 1.0f;  // ceiling on summed mesh light
+    // Whether the map's lights reach meshes. Retail lights 3D objects with
+    // their MaxLights nearest map lights only when RealTimeLight is on
+    // (LightAffectObject 0x00415c70); otherwise ambient and key light only.
+    bool  mesh_map_lights        = false;
+};
 
 // Opaque handles to renderer-owned resources. 0 is invalid.
 using MeshHandle = uint32_t;
@@ -413,11 +442,17 @@ struct SMeshVertex
 // mesh handle, uploads a dynamic instance vertex buffer, and emits one
 // instanced draw per mesh at EndTilePass (instancing is always on; a single
 // instance just means count=1).
+//
+// The tint alpha picks the pass. At kOpaqueMeshAlpha or above the mesh fills
+// the G-buffer; below it the mesh is translucent and draws in the
+// transparent-world pass over the lit scene, back to front by sort_depth.
+// Translucent meshes that share a surface_id are one surface (a character's
+// body parts): it shows only its nearest layer, blended once.
 struct SMeshSubmit
 {
-    MeshHandle mesh;
-    float      world[16];     // row-major 4x4
-    float      tint[4];       // rgba multiplier
+    MeshHandle mesh = 0;
+    float      world[16] = {};   // row-major 4x4
+    float      tint[4] = { 1.0f, 1.0f, 1.0f, 1.0f };   // rgba multiplier; alpha < kOpaqueMeshAlpha = translucent
     uint32_t   obj_id = 0;    // packed into id_target (RGBA8) for picking
     float      uv_offset[2] = {0.0f, 0.0f}; // authored scrolltex, per instance
     // Classic software I3D: 0 deferred, 1 RGB565 vertex-lit, 2 ARGB unlit.
@@ -425,19 +460,37 @@ struct SMeshSubmit
     // Opt-in source positive screen-down faces. Ordinary opaque depth/write
     // policy is retained; default meshes keep their existing two-sided path.
     bool retail_positive_face_cull = false;
+    float      sort_depth = 0.0f;   // translucent only: camera depth, wu (greater is farther)
+    uint32_t   surface_id = 0;      // translucent only: shared by one surface's meshes; 0 = its own surface
 };
+
+// Tint alpha at or above which a mesh is opaque. Retail drew a character's
+// materials opaque when their alpha was within 0.001 of 1 (TCharAnimator
+// SetMaterialTransparency 0x004d82a0) and alpha-blended otherwise.
+inline constexpr float kOpaqueMeshAlpha = 0.999f;
+
+// How a transparent mesh forms its color before blending.
+//   Material   -- tex*diffuse*(ambient + light*N.L) + specular + emissive
+//                 (the helper-object look).
+//   Texture    -- the texture alone.
+//   TextureLit -- the texture modulated by fixed-function vertex lighting,
+//                 saturate(emissive + ambient*A + diffuse*light*N.L), the way
+//                 a D3D MODULATE stage combines them; alpha is tex.a*diffuse.a.
+enum class EHelperMeshShade : uint8_t { Material = 0, Texture = 1, TextureLit = 2 };
 
 struct SHelperMeshSubmit
 {
-    MeshHandle mesh;
-    float      world[16];
+    MeshHandle mesh = 0;
+    float      world[16] = {};
     bool       shadow_plane = false;
-    bool       additive_blend = false;
-    float      diffuse[4];
-    float      ambient[4];
-    float      specular[4];
-    float      emissive[4];
-    float      power;
+    bool       additive_blend = false;   // ONE, ONE; otherwise SRC_ALPHA, ONE_MINUS_SRC_ALPHA
+    EHelperMeshShade shade = EHelperMeshShade::Material;
+    bool       premultiply_alpha = false; // color *= alpha first: SRC_ALPHA, ONE under additive_blend
+    float      diffuse[4] = {};
+    float      ambient[4] = {};
+    float      specular[4] = {};
+    float      emissive[4] = {};
+    float      power = 0.0f;
     float      sort_depth = 0.0f;
     // 0: existing helper material shader. 1: Blue SW RGB565 normal lighting,
     // five-bit vertex Gouraud modulation, nearest wrapped texture sampling.
@@ -451,6 +504,7 @@ enum class ETransparentWorldKind : uint8_t
 {
     Tile,
     Helper,
+    Mesh,       // translucent SMeshSubmit
 };
 
 struct STransparentWorldSubmit
@@ -459,6 +513,8 @@ struct STransparentWorldSubmit
     float                 sort_depth = 0.0f;
     STileSubmit           tile = {};
     SHelperMeshSubmit     helper = {};
+    SMeshSubmit           mesh = {};
+    int32_t               mesh_instance = 0;   // Mesh: row in this drain's instance buffer
 };
 
 // THudDrawable -- base class for everything that draws into the HUD layer.
@@ -643,10 +699,12 @@ public:
     //   4 = point-only   5 = recon heat 6 = shadow mask 7 = AO only
     //   8 = z edges      9 = ground/world height
     void SetTileViewMode(int32_t mode);
-    // 0 = retail 1998 (ambient + distance-only point lights, no sun,
-    //                  no shadows, no AO)
-    // 1 = modern (adds directional sun + screen-space contact shadows)
+    // 0 = Classic: the retail lighting model (SetClassicLightModel), no
+    //     sun, no shadows, no AO
+    // 1 = modern (ambient * light_col.w, directional sun + screen-space
+    //     contact shadows, AO, world-space point-light falloff)
     void SetLightingMode(int32_t mode);
+    void SetClassicLightModel(const SClassicLightModel& model);
     // Sun contact-shadow mask. The expensive receiver->sun ray march writes
     // a low-resolution R32F visibility buffer once; softness is then a cheap
     // separable blur of that buffer before deferred lighting samples it.
@@ -672,13 +730,23 @@ public:
     void SetShadowVariance(float sx, float sy, float sz);
 
     // ---- Point lights ---------------------------------------------------
-    // Rebuild each frame: ClearPointLights() then AddPointLight(...) per.
-    // Position is world xyz, radius is world units (linear-then-squared
-    // falloff to 0 at radius). Up to kMaxPointLights per frame; extras
-    // silently dropped.
+    // Rebuild each frame: ClearPointLights() then Add*PointLight(...) per.
+    // Up to kMaxPointLights per frame across both kinds; extras silently
+    // dropped.
     void ClearPointLights();
+    // Direct light: world xyz, radius in world units, colour * intensity
+    // added through the pow falloff in every lighting mode.
     void AddPointLight(float wx, float wy, float wz, float radius_wu,
                        float r, float g, float b, float intensity);
+    // Authored map light (an object's SLightDef): radius is the authored
+    // intensity, rgb the authored colour / 255, multiplier the resolved
+    // retail multiplier. Classic evaluates it with the retail model; modern
+    // scales it with SetRetailLightModernScale.
+    void AddRetailPointLight(float wx, float wy, float wz, float radius,
+                             float r, float g, float b, float multiplier);
+    // Modern-mode reading of retail lights: intensity = multiplier *
+    // gain_per_mult, world radius = radius * range_scale.
+    void SetRetailLightModernScale(float gain_per_mult, float range_scale);
 
     // ---- Deferred reconstruction (pass [3]) -----------------------------
     // Packed per-frame params for the light shader's iso inverse. Call
@@ -944,6 +1012,13 @@ public:
     void DrawSurface(TSurface* surf, int32_t x, int32_t y);
     void DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
                            float tr, float tg, float tb, float ta);
+    // Sub-rect of a cached surface, tinted: the swapchain twin of
+    // DrawSurfaceSubrectToTarget (retail's colour-modulated overlay quads).
+    void DrawSurfaceSubrectTinted(TSurface* surf,
+                                  int32_t dst_x, int32_t dst_y,
+                                  int32_t src_x, int32_t src_y,
+                                  int32_t src_w, int32_t src_h,
+                                  float tr, float tg, float tb, float ta);
 
     // Composite a sub-rect of the lit_target (the post-lighting 3D scene)
     // into the currently-active TSurface render-target pass. `src_x/src_y`
@@ -973,6 +1048,12 @@ public:
     // separators / debug overlays.
     void DrawSolidRect(int32_t x, int32_t y, int32_t w, int32_t h,
                        uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+
+    // Covers the whole swapchain with (r, g, b) at opacity `a` (0..1),
+    // blended over everything drawn before it. Tints one cached white texel,
+    // so an opacity that changes every frame creates no per-value images
+    // (unlike DrawSolidRect). The screen fade draws with it (TScreenFade).
+    void FillScreen(float r, float g, float b, float a);
 
     // Compose-to-target variant of DrawSolidRect (emits into the active TSurface
     // render-target pass). `target_w/target_h` are the RT dims. Used by the DEF
@@ -1019,8 +1100,10 @@ public:
     // Called by TDisplay::FlipPage between Scene3D present and ImGui.
     // Sorts registered drawables by z ascending (ties keep insertion
     // order) and invokes Draw() on each inside the active swapchain
-    // pass.
-    void DrawHud();
+    // pass. With `belowZ`, only the drawables under that z draw (a frame
+    // capture without the layers above it).
+    void DrawHud(float belowZ = kAllHudLayers);
+    static constexpr float kAllHudLayers = 1.0e30f;
 
     // Where to composite the game image onto the swapchain. Default is
     // the entire window. Editor mode disables this (the game render
@@ -1168,6 +1251,12 @@ private:
     sg_shader   mesh_shader      = {};
     sg_pipeline mesh_pipeline    = {};
     sg_pipeline mesh_source_cull_pipeline = {};
+    // Translucent meshes, in the transparent-world pass: a depth-only pass
+    // per surface, then its lit colour where that left the nearest depth.
+    sg_shader   mesh_depth_shader          = {};
+    sg_pipeline mesh_depth_pipeline        = {};
+    sg_shader   mesh_translucent_shader    = {};
+    sg_pipeline mesh_translucent_pipeline  = {};
     sg_shader   transparent_tile_shader   = {};
     sg_pipeline transparent_tile_pipeline = {};
     sg_shader   helper_mesh_shader        = {};
@@ -1291,6 +1380,10 @@ private:
         int32_t plight_count = 0;
         float   plight_pos[kMaxPointLights][4] = {};
         float   plight_col[kMaxPointLights][4] = {};
+        bool    plight_retail[kMaxPointLights] = {};   // AddRetailPointLight vs AddPointLight
+        SClassicLightModel classic;
+        float   retail_modern_gain_per_mult = 0.0f;
+        float   retail_modern_range_scale   = 1.0f;
     } light;
 
     // ---- Reconstruction params (per frame) ------------------------------
@@ -1316,6 +1409,8 @@ private:
     void ShutdownAOPipeline();
     void InitLightPipeline();
     void ShutdownLightPipeline();
+    void PushPointLight(bool retail, float wx, float wy, float wz, float radius,
+                        float r, float g, float b, float w);
     void RunAOPass();
     void InitShadowPipeline();
     void ShutdownShadowPipeline();
@@ -1333,10 +1428,22 @@ private:
     void InitMeshPipeline();
     void ShutdownMeshPipeline();
     void DrainMeshQueue();
+    // Next buffer of the instance-row stream ring (one upload per buffer per frame).
+    sg_buffer NextMeshInstanceBuffer();
+    // The mesh vertex shader's uniform block (vp / camz / camw), 12 floats.
+    void PackMeshVsUniforms(float (&u)[20]) const;
     void EmitTransparentTile(const STileSubmit& t);
     void EmitTransparentHelper(const SHelperMeshSubmit& s);
+    // Uploads the instance rows of the queue's translucent meshes; null if none.
+    sg_buffer UploadTranslucentMeshInstances();
+    // One translucent surface: entries [first, first+count) share a surface_id.
+    void EmitTranslucentMeshSurface(const STransparentWorldSubmit* first, size_t count,
+                                    sg_buffer instances, const float* light_uniforms);
     void DrainTransparentWorldQueue();
     void DrainGoldFlareAfterFxQueue();
+    // The light uniform block (lightmodel.*.h `params`), shared by the
+    // deferred light pass and the translucent mesh pass.
+    void PackLightUniforms(float* u) const;
 
     // ---- FX (billboards / particles / strips) ---------------------------
     void InitFxPipeline();

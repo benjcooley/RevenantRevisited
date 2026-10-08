@@ -8,6 +8,8 @@
 
 #include "revenant.h"
 
+#include <string>
+
 extern char StartupTestMode[32];
 // --sector=L_X_Y — which sector --test=sector should render. Empty = default.
 extern char StartupSectorId[32];
@@ -67,6 +69,17 @@ extern int32_t StartupPartSysIncomingBlend;
 // --cinematic=<path> — which .SMK file --test=ui-cinematic should play.
 // Empty = default intro FMV (data/Disk2/MIX_FMV1.SMK).
 extern char StartupCinematicPath[MAXPATHLEN];
+// --exec="cmd; cmd; sleep N; ..." — console commands run in the live
+// PlayScreen once a player exists (see consoleexec.h).
+extern char StartupExec[4096];
+// Boot options (TGameFlow::Boot): --quickstart[=<save>] is retail QUICKSTART
+// (no intro / title; new game or load <save>); --nointro skips the intro movie;
+// --menu=<button> presses a title button automatically
+// (newgame|loadgame|multi|options|exit).
+extern bool StartupQuickstart;
+extern char StartupQuickstartSave[MAXPATHLEN];
+extern bool StartupNoIntro;
+extern char StartupMenuButton[32];
 
 
 // --vfx-bg=<black|ltgray|forest|dungeon> — pre-select the diagnostic
@@ -99,6 +112,10 @@ extern bool StartupVfxOriginSet;
 //                             return, tab, space, up/down/left/right, f1..f12,
 //                             del, home, end, pgup, pgdn, backspace), or a
 //                             numeric VK code.
+//   type TEXT               — type TEXT (the rest of the command, spaces
+//                             kept): one character event per character, 30 ms
+//                             apart, as the platform sends for printable keys
+//                             (what an EDIT field takes).
 //   loop                    — restart the script from the top when it ends
 //   take_snapshot [LABEL]   — capture one manual-filmstrip frame (only when
 //   | snapshot [LABEL]        --filmstrip=N,0 manual mode is active). Put a
@@ -112,4 +129,4 @@ extern bool StartupVfxOriginSet;
 // Example (per-item move→hover→press→release→snap):
 //   --filmstrip=6,0 --input-script="moveto 435 161; pause 300; take_snapshot;
 //     left_down; pause 150; take_snapshot; left_up; pause 300; ..."
-extern char StartupInputScript[1024];
+extern std::string StartupInputScript;      // any length

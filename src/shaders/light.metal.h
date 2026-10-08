@@ -4,17 +4,15 @@
 // *        light.metal.h  - MSL deferred lighting fullscreen pass         *
 // *************************************************************************
 //
-// Reads the G-buffer (albedo + world normal + scene_z + AO) and runs:
-//   * directional sun (hard normal-facing visibility, tunable N.L falloff)
-//   * blurred screen-space sun-shadow mask (mode 1 only)
-//   * up to KPL point lights with retail's pow-based falloff curve
+// Reads the G-buffer (albedo + world normal + scene_z + AO) and lights each
+// sample with shade_surface() from lightmodel.metal.h, which TRenderer
+// prepends to kLightFsMetal (the lighting models are described there). The
+// G-buffer normal's alpha carries the surface class the Classic model keys
+// on: 1 tile, 0 mesh.
 //
 // Fragment world position is reconstructed from scene_z via the retail iso
 // inverse (same math as ao.metal.h and tile.metal.h). See
 // docs/DEFERRED_LIGHTING.md for the derivation.
-//
-// NOTE: KPL must match TRenderer::kMaxPointLights in renderer.h. If you
-// change one, change the other.
 //
 // *************************************************************************
 
@@ -34,21 +32,6 @@ vertex vs_out _main(vs_in in [[stage_in]]) {
 )MSL";
 
 inline constexpr const char* kLightFsMetal = R"MSL(
-#include <metal_stdlib>
-using namespace metal;
-#define ISO_COS30 0.867
-#define ISO_WZ_DENOM 2.003378
-#define KPL 16
-struct params {
-    float4 vp; float4 recon; float4 light_dir; float4 light_col;
-    float4 ambient_col; float4 settings;
-    float4 plight_pos[KPL]; float4 plight_col[KPL];
-    float4 shadow;
-    float4 shadow_dir;
-    float4 shadow_world_dir;
-    float4 normal_lighting;
-    float4 selected_obj_id;
-};
 struct vs_out { float4 pos [[position]]; float2 uv; };
 static float3 reconstruct_world(float2 uv, float d, constant params& p, float fbw, float fbh) {
     float scene_z = d * p.vp.w + p.vp.z;
@@ -71,43 +54,12 @@ static float3 reconstruct_world(float2 uv, float d, constant params& p, float fb
                   p.recon.y + (sum_r - S) * 0.5,
                   wz);
 }
-static float2 project_world_uv(float3 W, constant params& p, float fbw, float fbh) {
-    float dx = W.x - p.recon.x;
-    float dy = W.y - p.recon.y;
-    float S = dx - dy;
-    float T = 0.5 * (dx + dy) - W.z * ISO_COS30;
-    float scale = max(p.settings.w, 0.0001);
-    if (p.recon.w > 0.5) {
-        float scene_z = p.recon.z - ISO_COS30 * (dx + dy) - 0.5 * W.z;
-        scale *= p.recon.z / max(scene_z, 1.0);
-    }
-    S *= scale;
-    T *= scale;
-    return float2((S + p.vp.x) / fbw, (T + p.vp.y) / fbh);
-}
-static float scene_depth_world(float3 W, constant params& p) {
-    float dx = W.x - p.recon.x;
-    float dy = W.y - p.recon.y;
-    return p.recon.z - ISO_COS30 * (dx + dy) - 0.5 * W.z;
-}
-static float interpolate_ray_depth(float z0, float z1, float a, constant params& p) {
-    if (p.recon.w > 0.5) {
-        float inv_z = mix(1.0 / max(z0, 1.0), 1.0 / max(z1, 1.0), a);
-        return 1.0 / max(inv_z, 1e-6);
-    }
-    return mix(z0, z1, a);
-}
 static float sample_scene_depth(texture2d<float> depth_tex, float2 uv) {
     uint w = depth_tex.get_width();
     uint h = depth_tex.get_height();
     uint2 p = uint2(uint(clamp(uv.x * float(w), 0.0, float(w - 1))),
                     uint(clamp(uv.y * float(h), 0.0, float(h - 1))));
     return depth_tex.read(p).r;
-}
-static float shadow_tap_weight(int tap, int sampleCount) {
-    if (sampleCount <= 1) return 1.0;
-    float u = float(tap) / float(sampleCount - 1);
-    return mix(0.5, 1.0, 1.0 - fabs(u * 2.0 - 1.0));
 }
 fragment float4 _main(vs_out in [[stage_in]],
                       texture2d<float> albedo_tex [[texture(0)]],
@@ -121,9 +73,10 @@ fragment float4 _main(vs_out in [[stage_in]],
     float4 alb = albedo_tex.sample(smp, in.uv);
     if (alb.a < 0.01) discard_fragment();
     float  d   = sample_scene_depth(depth_tex, in.uv);
-    float4 normal_sample = normal_tex.sample(smp, in.uv);
-    float3 np = normal_sample.xyz;
+    float4 nrm = normal_tex.sample(smp, in.uv);
+    float3 np  = nrm.xyz;
     float3 N   = normalize(np * 2.0 - 1.0);
+    bool   is_mesh = (nrm.a < 0.5 || nrm.a > 1.5);     // G-buffer surface class: 1 tile, 0 mesh
     float  ao  = ao_tex.sample(smp, in.uv).r;
     float  fbw = float(albedo_tex.get_width());
     float  fbh = float(albedo_tex.get_height());
@@ -140,26 +93,6 @@ fragment float4 _main(vs_out in [[stage_in]],
         return float4(fine, coarse, 1.0 - coarse, 1.0);
     }
     if (vm == 3) return float4(np, 1.0);
-    int nl_dbg = int(p.settings.y);
-    if (vm == 4) {
-        float3 accum = float3(0.0);
-        const float kMP = 0.0022436f;
-        const float kSC = 50.0 / (1.0 - kMP);
-        for (int i = 0; i < nl_dbg; ++i) {
-            float3 delta = p.plight_pos[i].xyz - W;
-            float  dist  = length(delta);
-            float  rad   = p.plight_pos[i].w;
-            if (rad > 0.0 && dist < rad) {
-                float3 Lp    = delta / max(dist, 1e-5);
-                float  pterm = mix(1.0, max(dot(N, Lp), 0.0), clamp(p.normal_lighting.x, 0.0, 1.0));
-                float normd = dist * 254.0 / rad;
-                float pw    = pow(normd + 1.0, -1.1) - kMP;
-                float attn  = clamp(pw * kSC, 0.0, 1.0);
-                accum += p.plight_col[i].rgb * p.plight_col[i].w * attn * pterm;
-            }
-        }
-        return float4(accum, 1.0);
-    }
     if (vm == 5) {
         float ws = max(p.settings.z, 1.0);
         float zs = max(p.settings.w, 1.0);
@@ -183,47 +116,21 @@ fragment float4 _main(vs_out in [[stage_in]],
         float band = (fract(fabs(h) / 128.0) < 0.04) ? 1.0 : 0.0;
         return float4(max(norm_h, band), norm_h * (1.0 - 0.5 * band), 1.0 - norm_h, 1.0);
     }
-    float3 light = p.ambient_col.rgb * p.light_col.w;
-    int mode = int(p.settings.z);
-    if (mode == 1) light *= ao;
-    float3 Ldir = normalize(p.light_dir.xyz);
-    float  raw_sun_ndotl = dot(N, Ldir);
-    float  sun_ndotl = max(raw_sun_ndotl, 0.0);
-    float  normal_hardness = clamp(p.normal_lighting.x, 0.0, 1.0);
-    float  sun_term = mix(1.0, sun_ndotl, normal_hardness);
-    // Direct sun visibility is a composition of two intentionally separate
-    // facts: normal-facing geometry and the blurred cast-shadow mask. The
-    // lighting pass never ray-marches; the mask is produced once per frame by
-    // the shadow pass, then blurred as an image operation.
-    float normal_visibility = (raw_sun_ndotl > 0.0) ? 1.0 : 0.0;
-    float cast_shadow = (mode == 1 && p.shadow.w > 0.5) ? shadow_tex.sample(smp, in.uv).r : 1.0;
-    float sun_shadow = normal_visibility * cast_shadow;
-    if (mode == 1) {
-        light += p.light_col.rgb * p.light_dir.w * sun_term * sun_shadow;
+    float cast_shadow = (p.shadow.w > 0.5) ? shadow_tex.sample(smp, in.uv).r : 1.0;
+    surface_light s = shade_surface(alb.rgb, W, N, is_mesh, ao, cast_shadow, p);
+    // kObjFlagSelfLit (bit 0x20 of the id's top byte): imagery retail drew
+    // after the light transfer keeps its own colours.
+    {
+        uint2 ip = uint2(min(uint(in.uv.x * float(id_tex.get_width())),  id_tex.get_width()  - 1),
+                         min(uint(in.uv.y * float(id_tex.get_height())), id_tex.get_height() - 1));
+        if ((uint(id_tex.read(ip).a * 255.0 + 0.5) & 0x20u) != 0u)
+            s.lit = alb.rgb;
     }
-    if (vm == 6) return float4(float3(sun_shadow), 1.0);
-    const float kMinPower = 0.0022436f;
-    const float kScale    = 50.0 / (1.0 - kMinPower);
-    int nl = int(p.settings.y);
-    for (int i = 0; i < KPL; ++i) {
-        if (i >= nl) break;
-        float3 delta = p.plight_pos[i].xyz - W;
-        float  dist  = length(delta);
-        float  rad   = p.plight_pos[i].w;
-        if (rad > 0.0 && dist < rad) {
-            float3 Lp    = delta / max(dist, 1e-5);
-            float  pterm = mix(1.0, max(dot(N, Lp), 0.0), normal_hardness);
-            float  normd = dist * 254.0 / rad;
-            float  pw    = pow(normd + 1.0, -1.1) - kMinPower;
-            float  attn  = clamp(pw * kScale, 0.0, 1.0);
-            light += p.plight_col[i].rgb * p.plight_col[i].w * attn * pterm;
-        }
-    }
-  // Brightness cap (see light.glsl.h for rationale).
-    float light_ceiling = max(p.ambient_col.w, 1e-3f);
-    light = min(light, float3(light_ceiling));
-    if (mode == 0 && normal_sample.a > 1.5) light = float3(1.0);
-    float3 col = alb.rgb * light;
+    // Marker2 carries an already lit/unlit authored retail mesh.
+    if (int(p.settings.z) == 0 && nrm.a > 1.5) s.lit = alb.rgb;
+    if (vm == 4) return float4(s.points, 1.0);
+    if (vm == 6) return float4(float3(s.sun_shadow), 1.0);
+    float3 col = s.lit;
 
     // Editor outline: each id_target pixel carries flag bits in the top
     // 4 bits of its packed obj_id (alpha channel). Bit 0x80 of A is

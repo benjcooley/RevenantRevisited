@@ -33,9 +33,9 @@ perfection is not a prerequisite for progressing through the effects catalogue.
 - Original assets: `/Users/benjamincooley/RevenantRetailLab/retail-cd/REVENANT`.
 - Port executable: `/Users/benjamincooley/projects/RevenantRevisited/build/Revenant`.
 - Current thin-emulator evidence: [`recon/retail_asm/runtime`](../recon/retail_asm/runtime).
-- Gameflow fixtures are owned by the separate gameflow/retail-trace work;
-  integrate that agent's branch separately. This source package contains the
-  shared runtime and VFX fixtures.
+- Gameflow/retail-trace fixtures are integrated from main. See
+  [the gameflow trace guide](gameflow/RETAIL_TRACE.md) for their entry point;
+  these use the shared runtime alongside the VFX fixtures.
 - Checkpoint restore tracks written pages natively (`dirtypages.c`, built with `cc` on first use; 2026-10-07): 3x on store-heavy fixtures, same pages and results. [Details and timings](../tools/retail_runtime/README.md#checkpoint-restore-native-dirty-pages).
 - Complete effect ledger: [176 retail rows](vfx/EFFECT_BURNDOWN.md).
 

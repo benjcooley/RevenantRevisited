@@ -32,21 +32,11 @@
 //     top. Items can drag as a single bitmap through the same manager, but
 //     spells are not forced into that shape.
 //
-// Coordination note (Agent B — uidragstate.{h,cpp}):
-//   EDragSource::SpellPane = 4 is already defined in uidragstate.h
-//   (added in an earlier pass). No additional changes needed there.
-//   However the drag-source item reference (`SUIDragState::item`) holds
-//   a `TObjectInstance*` — for spell slots we store spell index + 1 as
-//   a reinterpret_cast<TObjectInstance*>(intptr_t(spellIdx + 1)) sentinel
-//   so spell zero is not confused with nullptr.
-//   This is a harness-only hack; the production path will store a proper
-//   TSpell* (or equivalent) when TPlayScreen routes the drag.
+// A spell drag carries no item: SUIDragState::source_idx is the spell row.
 //
-// Coordination note (Agent A — hudstate.{h,cpp}):
-//   For persistent quickspell bindings (survive save/load), add:
-//     char quickspellBindings[4][64];  // spell name per slot, empty = none
-//   to SHudState. The TSpellIconSlot writes/reads from there in production.
-//   In the test harness we use a local binding array.
+// Spell panes show the main player's spells by talisman code (quick spells,
+// known spells); LookupSpell turns a code into its spell.def entry and
+// SpellIconFor into its SpellIcons.dat circle.
 //
 // *************************************************************************
 
@@ -60,6 +50,23 @@
 #include <functional>
 
 class TMulti;
+struct SSpellData;
+struct SSpellVariant;
+
+// The spell.def entry a talisman code names: the variant (name, mana,
+// skill) and its spell (description). Both null when the code names none.
+struct SSpellInfo
+{
+    const SSpellVariant* variant = nullptr;
+    const SSpellData*    spell   = nullptr;
+};
+[[nodiscard]] SSpellInfo LookupSpell(const char* talismans);
+
+// The spell's circle in SpellIcons.dat, matched by variant name, else by
+// spell name, ignoring case. The archive keys some icons by variant
+// ("Advanced Healing") and some by spell ("Iron Skin"); which one
+// retail's QuickSpellPane draws is QuickSpellPane_SPEC UNCONFIRMED-D.
+[[nodiscard]] TBitmap* SpellIconFor(TMulti* spellIcons, const SSpellInfo& info);
 
 // State flags — mirrors the retail `mbr_0x14` bits for TQuickSpellPane.
 struct SSpellCellState

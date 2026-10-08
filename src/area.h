@@ -132,7 +132,7 @@ _CLASSDEF(TAreaManager)
 class TAreaManager
 {
   private:
-    bool initialized;
+    bool initialized = false;
     TAreaArray areas;
 
   public:
@@ -150,6 +150,10 @@ class TAreaManager
       // Returns the area the player is currently in (AREA_PLAYERIN flag),
       // or nullptr if none. Cheaper than InArea — just scans the player-in
       // flag rather than re-doing the geometry test.
+    void ExitAll();
+      // REVSYNC: 0x0041c600 — leave every area the player is in (stops its
+      // music and ambient sounds, drops its scripts). LoadGame runs this so
+      // the loaded game enters its areas fresh.
     bool Load();
       // Loads all areas from the "AREA.DEF" file
     void Pulse();

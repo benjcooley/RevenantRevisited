@@ -108,9 +108,11 @@ Per-resolution choices live as toggles under `[Revisited]` in `Revenant.ini`:
 
 `TDialogList` already loads `ENGLISH.DEF`. UI text goes through `DialogList.GetLine("tag")`. The tag set in the existing retail `english.def` will need extending for UI labels not already there — that extension lives as a Revisited overlay file at `revisited/resources/<path>/english.def` (or whichever retail file carries UI strings). Actual non-English packs are deferred to last; the API is what we use now.
 
+The text functions decode their bytes per an `ETextEncoding` (Windows-1252 for the retail data, UTF-8 for a future locale pack) and look glyphs up by code point: [TEXT_RENDERING.md](TEXT_RENDERING.md) §2.
+
 ## 5. Resource overlay (mostly free)
 
-`rev_fopen()` already walks SavePath → RunPath → active module → base. The Revisited overlay slots in via `rev_resolve_revisited_overlay()` + `MountArchive` per [revisited/README.md](../../revisited/README.md). UI work uses `LoadResource` / `TMulti::LoadMulti` / `rev_fopen` as-is and gets overlay precedence for free. Dev mode = `revisited/resources/` loose folder; deploy = `RevenantRevisited.rvr` ZIP.
+`rev_fopen()` already walks SavePath → overlay → RunPath, where each mounted pack answers for its directory (`resources.rvr` for `Resources\…`), pack before loose file as in retail; DEF screens read `ResourcePath` loose-first ([../DATA_LAYOUT.md](../DATA_LAYOUT.md)). The Revisited overlay slots in via `rev_resolve_revisited_overlay()` + `MountArchive` per [revisited/README.md](../../revisited/README.md). UI work uses `LoadResource` / `TMulti::LoadMulti` / `rev_fopen` as-is and gets overlay precedence for free. Dev mode = `revisited/resources/` loose folder; deploy = `RevenantRevisited.rvr` ZIP.
 
 ## 6. Render path for UI
 

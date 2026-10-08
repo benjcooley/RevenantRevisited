@@ -37,13 +37,9 @@
 //                                          (font flag 0x400, spec §8)
 // No hand-rolled shadow passes / glyph walks; no procedural stand-ins.
 //
-// Test-harness items (spec §1 plain language):
-//   - The pane is interesting only when populated. We spawn a handful of
-//     real retail items via the object class registries (Potion, Food,
-//     Key) and run them through InventoryImage() so the icon path matches
-//     the pane's retail draw exactly. Spawn imagery loads asynchronously,
-//     so per-frame TryExtract pulls the icon once it lands (same pattern
-//     uiplyrstatusbartest uses for the portrait).
+// Contents (spec §5 step 7): the main player's belt, inventory slot
+// 0x10b + N for box N (revdefs.h kInvSlotBeltFirst), each bound through the
+// shared TInvSlot. The --test=ui-barinv host supplies a demo player.
 //
 // *************************************************************************
 
@@ -57,7 +53,7 @@
 #include "imagery.h"
 #include "logging.h"
 #include "multi.h"
-#include "object.h"
+#include "player.h"
 #include "renderer.h"
 #include "surface.h"
 #include "invslot.h"
@@ -66,15 +62,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-
-// Item-class registries (defined in their respective .cpp files). The pane
-// is content-agnostic — these are sample real items so the test mode has
-// something to draw; the production pane gets its items from the player's
-// inventory (spec §5 step 6/7).
-extern TObjectClass PotionClass;
-extern TObjectClass FoodClass;
-extern TObjectClass KeyClass;
-extern TObjectClass InvContainerClass;
 
 namespace {
 
@@ -142,7 +129,7 @@ constexpr int32_t kValCellHMul = 2;              // h = lineH * 2 (spec §8 / §
 // the single shared Arimo atlas (UI_METHOD_MAP §12) for both, since
 // font-id 0x404's exact pt-size mapping is UNCONFIRMED-I and the visible
 // difference at HUD scale is negligible.
-constexpr const char* kFontPath = "thirdparty/fonts/Arimo-Regular.ttf";
+constexpr const char* kFontFile = "Arimo-Regular.ttf";
 constexpr int32_t     kFontPx   = 11;            // tiny labels in a 42-tall box
 
 // =====================================================================
@@ -216,73 +203,13 @@ const SFontAtlas* g_font = nullptr;
 TSurface* g_pane  = nullptr;
 int32_t   g_paneW = 0;        // live pane width (= display width, spec §3)
 
-// =====================================================================
-// Per-slot synthetic state.
-// =====================================================================
-//
-// Each entry represents one populated slot. The real pane walks the
-// player's inventory and filters on slot_id (`field_7c - 0x10b`); since
-// this test harness has no Player, we just bind a real spawned item per
-// slot. The Pouch overlay branch in the retail pane is keyed on the item
-// name being "Pouch" — for the test we drive the overlay synthetically on
-// the slot index, so the rendering paths exercise without relying on real
-// pouch contents.
-//
-// Item categories (spec §1 "what shows where"):
-//   - kIconOnly:    a plain icon (most items — potions, keys, food)
-//   - kIconValue:   icon + value label (val>1; e.g. food-stack, ammo)
-//   - kIconPouch:   icon + inner-item overlay + quantity label
-//
-// The "value" and "quantity" sources in the real pane are vtable getters
-// on the item (vtable+0x198 / TPlayScreen::meth_0x470040). We drive them
-// from the harness so the visual exercise is complete.
-// =====================================================================
-enum ESlotKind { kIconOnly, kIconValue, kIconPouch };
-
-struct SSlotItem
-{
-    int32_t          objclass = -1;
-    int32_t          objtype  = -1;
-    TObjectInstance* inst     = nullptr;
-    PTBitmap         icon     = nullptr;
-    PTBitmap         inner    = nullptr;     // populated for Pouch slots
-    ESlotKind        kind     = kIconOnly;
-    int32_t          value    = 1;           // for kIconValue
-    int32_t          qty      = 1;           // for kIconPouch
-    const char*      label    = "?";
-    TInvSlot*        slot     = nullptr;     // shared per-cell sub-control
-};
-
-// 4-6 demo slots — chosen to populate the leftmost cells with a mix of
-// kinds so the icon-only / icon+value / pouch+qty branches all render.
-SSlotItem g_slots[6];
-int32_t   g_slotCount = 0;
-TInvSlot* g_barSlots[kHarnessBarInvSlots] = {};
-
-int32_t SlotQuantity(const SSlotItem& s)
-{
-    return (s.kind == kIconPouch) ? s.qty
-         : (s.kind == kIconValue ? s.value : 1);
-}
-
-void SyncHarnessForDemoSlot(const SSlotItem& s)
-{
-    if (!s.inst) return;
-    for (int32_t i = 0; i < kHarnessBarInvSlots; ++i)
-    {
-        SHarnessSlot& hs = UIDragState::harness_barinv[i];
-        if (hs.inst != s.inst) continue;
-        hs.icon      = s.icon;
-        hs.qty       = SlotQuantity(s);
-        hs.is_bag    = (s.kind == kIconPouch);
-        hs.bag_inner = (s.kind == kIconPouch) ? s.inner : nullptr;
-        hs.label     = s.label;
-    }
-}
+// One TInvSlot per box (geometry; content bound each Refresh).
+constexpr int32_t kMaxBoxes = 0xb;   // belt slots 0x10b..0x115
+TInvSlot* g_barSlots[kMaxBoxes] = {};
 
 void BuildBarInvSlots()
 {
-    for (int32_t i = 0; i < kHarnessBarInvSlots; ++i)
+    for (int32_t i = 0; i < kMaxBoxes; ++i)
     {
         delete g_barSlots[i];
         const int32_t slotX = kSlotX0 + kSlotPitchX * i;
@@ -305,29 +232,6 @@ PTBitmap LookupByName(TMulti* m, const char* name)
         if (nm && !std::strcmp(nm, name))
             return m->Bitmap(i);
     }
-    return nullptr;
-}
-
-// Per-frame: pull the spawned items' baked icons once their imagery has
-// streamed in. Mirrors uiplyrstatusbartest's TryExtractPortrait pattern
-// ([[project-ui-portrait-and-icons]] — the imagery body loads async, so we
-// retry each frame until it lands). The state-0 icon is the canonical
-// "inventory image" for non-character objects.
-PTBitmap TryExtractIcon(TObjectInstance* inst)
-{
-    if (!inst) return nullptr;
-    TObjectImagery* img = inst->GetImagery();
-    if (!img || img->NumStates() <= 0) return nullptr;
-    // GetInvImage(state, num=0) — spec [[project-ui-portrait-and-icons]];
-    // the same getter every inventory pane / paperdoll uses. State 0 is the
-    // baked icon for static items (no animation states).
-    if (PTBitmap bm = img->GetInvImage(0))
-        return bm;
-    // Probe further states defensively (some items have the icon on a
-    // non-zero state — same defensive sweep PlyrStatusBar uses).
-    for (int32_t s = 1; s < img->NumStates(); ++s)
-        if (PTBitmap bm = img->GetInvImage(s))
-            return bm;
     return nullptr;
 }
 
@@ -355,16 +259,6 @@ public:
         EnsurePane();
         if (!g_pane) return;
 
-        // Per-frame icon extraction (async imagery load — [[project-ui-
-        // portrait-and-icons]]).
-        for (int32_t i = 0; i < g_slotCount; ++i)
-        {
-            SSlotItem& s = g_slots[i];
-            if (!s.icon)  s.icon  = TryExtractIcon(s.inst);
-            if (s.kind == kIconPouch && !s.inner) s.inner = s.icon; // overlay
-            SyncHarnessForDemoSlot(s);
-        }
-
         const int32_t tw = g_pane->Width();
         const int32_t th = g_pane->Height();
 
@@ -387,37 +281,24 @@ public:
             Renderer->DrawBitmapToTarget(g_barInvBox, boxX, kSlotY, tw, th);
         }
 
-        // Spec §5 step 7 (per-item loop). The real pane iterates the
-        // player's inventory and decides which slot each item belongs to
-        // via `field_7c - 0x10b`. The test mode binds slot index directly.
-        // Each slot routes through the shared TInvSlot class
-        // (src/invslot.{h,cpp}) — same primitive Inventory + Equip
-        // (next pass) use, per the FONT/COLOR MATRIX in invslot.h.
+        // Spec §5 step 7 (per-item loop): box N holds the player's
+        // inventory item at slot 0x10b + N; each routes through the shared
+        // TInvSlot (FONT/COLOR MATRIX in invslot.h). The dragged item's box
+        // paints empty while it follows the cursor (`:1462-1464`).
         const SUIDragState& drag = UIDragState::Get();
         const bool draggingBar = UIDragState::IsDragging()
                               && drag.source == EDragSource::BarInv;
 
-        for (int32_t N = 0; N < kHarnessBarInvSlots && N < visibleCount; ++N)
+        for (int32_t N = 0; Player && N < kMaxBoxes && N < visibleCount; ++N)
         {
             if (draggingBar && drag.source_idx == N)
                 continue;
 
-            TInvSlot* slot = g_barSlots[N];
-            if (!slot) continue;
+            TObjectInstance* item = Player->GetInventorySlot(kInvSlotBeltFirst + N);
+            if (!item || !g_barSlots[N]) continue;
 
-            const SHarnessSlot& hs = UIDragState::harness_barinv[N];
-            if (!hs.inst) continue;
-
-            // Bind the shared harness content. BarInv's private demo roster
-            // only owns sample instance lifetime and lazy icon extraction;
-            // visible slot contents come from UIDragState so inventory,
-            // equipment, and the bottom row all see the same transfer state.
-            slot->SetItem(hs.inst, hs.icon, hs.qty);
-            if (hs.is_bag)
-                slot->SetPouchOverlay(hs.bag_inner);
-            else
-                slot->SetPouchOverlay(nullptr);
-            slot->Draw(g_pane, tw, th, g_font);
+            g_barSlots[N]->BindItem(item);
+            g_barSlots[N]->Draw(g_pane, tw, th, g_font);
         }
 
         g_pane->EndPass();
@@ -443,82 +324,6 @@ private:
 
 TBarInvHud g_hud;
 
-// =====================================================================
-// Spawn a single item from a given class. The class registries (Potion,
-// Food, Key) are populated at boot from the IMAGERY.DAT / OBJECTS.DAT
-// archives; we walk the class's type table and pick the first type whose
-// imagery loads with a non-null inv-image. Same shape as the portrait-
-// instance spawn in uiplyrstatusbartest.
-// =====================================================================
-TObjectInstance* SpawnItemFromClass(TObjectClass& cls, int32_t objclass,
-                                    const char** name_out)
-{
-    const int32_t numTypes = cls.NumTypes();
-    for (int32_t i = 0; i < numTypes; ++i)
-    {
-        SObjectInfo* info = cls.GetObjType(i);
-        if (!info) continue;
-
-        SObjectDef def = {};
-        def.objclass = (short)objclass;
-        def.objtype  = (short)i;
-        def.state    = 0;
-        def.level    = 0;
-        def.pos      = { 0, 0, 0 };
-        def.vel      = { 0, 0, 0 };
-        def.accum    = { 0, 0, 0 };
-        def.rotatex  = 0;
-        def.rotatey  = 0;
-        def.rotatez  = 0;
-        def.group    = 0;
-
-        TObjectInstance* inst = cls.NewObject(&def);
-        if (!inst) continue;
-        inst->OnScreen();
-        if (name_out) *name_out = info->name ? info->name : cls.ClassName();
-        return inst;
-    }
-    return nullptr;
-}
-
-void SpawnDemoSlots()
-{
-    g_slotCount = 0;
-    auto add = [&](TObjectClass& cls, int32_t objclass, ESlotKind kind,
-                   int32_t v, int32_t q) {
-        if (g_slotCount >= (int32_t)(sizeof(g_slots) / sizeof(g_slots[0])))
-            return;
-        SSlotItem& s = g_slots[g_slotCount];
-        const char* nm = nullptr;
-        s.inst = SpawnItemFromClass(cls, objclass, &nm);
-        if (!s.inst) return;
-        s.objclass = objclass;
-        s.kind     = kind;
-        s.value    = v;
-        s.qty      = q;
-        s.label    = nm ? nm : cls.ClassName();
-
-        SHarnessSlot& hs = UIDragState::harness_barinv[g_slotCount];
-        hs.inst      = s.inst;
-        hs.icon      = s.icon;
-        hs.qty       = SlotQuantity(s);
-        hs.is_bag    = (s.kind == kIconPouch);
-        hs.bag_inner = s.inner;
-        hs.label     = s.label;
-
-        ++g_slotCount;
-    };
-
-    // Slot 0: a plain potion (icon only).
-    add(PotionClass, OBJCLASS_POTION, kIconOnly, 1, 1);
-    // Slot 1: an icon + value label (e.g. food stack of 12).
-    add(FoodClass, OBJCLASS_FOOD, kIconValue, 12, 1);
-    // Slot 2: a Pouch-style slot (icon + inner overlay + qty 7).
-    add(InvContainerClass, OBJCLASS_INVCONTAINER, kIconPouch, 1, 7);
-    // Slot 3: a key (icon only — typical solo quick-use).
-    add(KeyClass, OBJCLASS_KEY, kIconOnly, 1, 1);
-}
-
 }  // namespace
 
 // =====================================================================
@@ -539,17 +344,11 @@ bool InitializeUIBarInvMode()
         log_info("[ui-barinv] BarInvBox %dx%d (expect 42x42)",
                  g_barInvBox->width, g_barInvBox->height);
 
-    g_font = BuildTTFAtlas(kFontPath, kFontPx);
+    g_font = BuildTTFAtlas(TTFFilePath(kFontFile).c_str(), kFontPx);
     log_info("[ui-barinv] font %s @%dpx = %s",
-             kFontPath, kFontPx, g_font ? "OK" : "MISS");
+             kFontFile, kFontPx, g_font ? "OK" : "MISS");
 
-    // Spawn a small set of real items so the icon + text branches all
-    // render. The imagery streams in asynchronously; per-frame Refresh
-    // calls TryExtractIcon to pull the baked .i3d face once it lands.
-    UIDragState::ResetBarInvHarness();
-    SpawnDemoSlots();
     BuildBarInvSlots();
-    log_info("[ui-barinv] spawned %d demo slot items", g_slotCount);
 
     delete g_pane;
     g_pane  = nullptr;
@@ -585,22 +384,9 @@ void CloseUIBarInvMode()
     g_bottombarDat = nullptr;
     g_font         = nullptr;
 
-    for (int32_t i = 0; i < g_slotCount; ++i)
-    {
-        SSlotItem& s = g_slots[i];
-        if (s.inst)
-        {
-            s.inst->OffScreen();
-            delete s.inst;
-        }
-        s = SSlotItem{};
-    }
-    g_slotCount = 0;
-
-    for (int32_t i = 0; i < kHarnessBarInvSlots; ++i)
+    for (int32_t i = 0; i < kMaxBoxes; ++i)
     {
         delete g_barSlots[i];
         g_barSlots[i] = nullptr;
     }
-    UIDragState::ResetBarInvHarness();
 }

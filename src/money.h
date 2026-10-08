@@ -36,7 +36,7 @@ class TMoney : public TObjectInstance
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Combine money
-    virtual int32_t CursorType(TObjectInstance* with = nullptr);
+    int32_t CursorType(TObjectInstance* with = nullptr) override;
         // Returns type of cursor that should appear when mouse arrow is over the object
 
     virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
@@ -44,6 +44,8 @@ class TMoney : public TObjectInstance
     virtual void Save(RTOutputStream os);
         // Saves data to the sector
 
+    bool MergeInto(TObjectInstance* newowner) override;
+        // REVSYNC: 0x00515b50. Joins newowner's gold pile
     virtual void SignalAddedToInventory();
         // Called to signal object that it was added to a new inventory
     virtual void RemoveFromInventory();
@@ -65,7 +67,8 @@ class TMoney : public TObjectInstance
     STATFUNC(Value)
     OBJSTAT(Amount)
     virtual int32_t Amount() { return GetObjStat(se_Amount.id); }
-    virtual void SetAmount(int32_t amt);  // We redefine this in Money.cpp
+    virtual void SetAmount(int32_t amt);
+        // REVSYNC: 0x00515c90. Also shows the pile's size in its state
 
 };
 

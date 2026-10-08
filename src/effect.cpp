@@ -123,32 +123,16 @@ void ParseOptionalColorRgb01(const defdoc::Node& node, const char* key, bool& en
     enabled = true;
 }
 
+// effects.def is port-authored engine data (the particle definitions the
+// engine's effect reconstructions run on), not a retail file, so it lives in
+// the engine's own assets rather than the install.
 std::string ReadParticleEffectsFile()
 {
-    const char* candidates[] = {
-        "data/Resources/effects.def",
-        "../data/Resources/effects.def",
-        "effects.def",
-    };
-
-    char fname[MAXPATHLEN];
-    std::snprintf(fname, sizeof(fname), "%seffects.def", ClassDefPath);
-    FILE* fp = rev_fopen(fname, "rb");
+    const std::string fname = rev_engine_asset("effects.def");
+    FILE* fp = fname.empty() ? nullptr : std::fopen(fname.c_str(), "rb");
     if (!fp)
-    {
-        for (const char* candidate : candidates)
-        {
-            fp = rev_fopen(candidate, "rb");
-            if (fp)
-            {
-                std::snprintf(fname, sizeof(fname), "%s", candidate);
-                break;
-            }
-        }
-    }
-    if (!fp)
-        ParticleFatal(std::string("[particle] unable to open effects.def; tried ") + fname +
-                      ", data/Resources/effects.def, ../data/Resources/effects.def, effects.def");
+        ParticleFatal(std::string("[particle] unable to open engine asset effects.def ('") +
+                      fname + "')");
 
     std::string text;
     char buf[4096];
@@ -1150,67 +1134,37 @@ static TGenericEffectBuilder g_effect_wavem_builder("WaveM");
 static TGenericEffectBuilder g_effect_speaker_builder("speaker");
 static TGenericEffectBuilder g_effect_speaker_caps_builder("Speaker");
 
+// REVSYNC: TEffect::Pulse @ 0x004de800 (vtable 0x005a85ac slot 0x110), the
+// part every effect runs: the object pulse (animator: tag sounds; script),
+// then an effect whose imagery state doesn't loop removes itself once that
+// animation has played out (CommandDone, which NextFrame sets at its last
+// frame). A script-added effect such as the opening's gvortex lives exactly
+// one run of its animation this way. The 1998 body's SetFrame(0) is gone in
+// retail.
+// REVSYNC-DIVERGENCE: the rest of 0x004de800 isn't ported here: the start
+// delay (+0x138: animation held until it counts down), a spell effect
+// following its invoker or target (+0xe4 spell), the light fade of effects
+// with a light definition (+0xd8, whose presence also skips the removal
+// above) and the timed life (+0x130: a countdown, +0x12c, that blinks the
+// effect out over its last +0x134 ticks). Script-added effects use none.
 void TEffect::Pulse()
 {
     TObjectInstance::Pulse();
-    // These retail types use the default 3D animator and authored looping
-    // mesh frames. Retail TEffect::Pulse (0x4de800) no longer has the
-    // snapshot's unconditional frame reset. Preserve the audited types'
-    // normal NextFrame progression; bespoke callers keep their prior path.
-    switch (ObjId())
+
+    // Retail preserves the owner's normal animation frames for all effects;
+    // the old per-type whitelist kept the snapshot reset for other types.
+    // Keep the audited null-spell lifetime gate and mark, rather than erase,
+    // existing flags so the normal map sweep can reap the object.
+    // A replacing runtime visual has its own verified lifetime (for
+    // example Cure, Mist and Drip). Its companion generic animator's
+    // header can finish earlier; the visual simulator requests its own kill.
+    const auto* visual = GetComponent<TFlipbookBillboardComponent>();
+    const bool visual_owns_lifetime = visual && visual->ReplacesDefaultVisual();
+    if (!visual_owns_lifetime && !spell && HasAnimator() && imagery &&
+        !(imagery->GetAniFlags(GetState()) & AF_LOOPING) && CommandDone())
     {
-        case 0x82aeb30fu: // Exact Immortalmight authored30loop; no proxy or clock reset.
-            if(auto* mesh=dynamic_cast<T3DImagery*>(imagery); GetState()!=0 || !mesh || !mesh->HasRetailImmortalmightPartSysProfile())SetFrame(0);
-            break;
-        case 0xb0e024dfu: // Exact Fmastery authored30loop; no proxy or clock reset.
-            if(auto* mesh=dynamic_cast<T3DImagery*>(imagery); GetState()!=0 || !mesh || !mesh->HasRetailFmasteryPartSysProfile())SetFrame(0);
-            break;
-        case 0x5be39ae0u: // ExactMight authoredpartsys30frame loop, source/default animator.
-            if(auto* mesh=dynamic_cast<T3DImagery*>(imagery); GetState()!=0 || !mesh || !mesh->HasRetailMightPartSysProfile())
-                SetFrame(0);
-            break;
-        case 0xd0c0f035u: // GoldEffect: exact Goldp default animator, 45-frame nonlooping state
-            if (HasAnimator() && !spell && imagery &&
-                !(imagery->GetAniFlags(GetState()) & AF_LOOPING) && CommandDone())
-                SetFlags(GetFlags() | OF_KILL); // Retail 4deec1..4deecc; map Pulse reaps later.
-            break;
-        case 0xad92bd29u: // CombatFlash: exact state0/start1 authored profile only
-            if (GetState() != 0) { SetFrame(0); break; } // Preserve unaudited states' prior behavior.
-            if (HasAnimator() && !spell && imagery &&
-                !(imagery->GetAniFlags(GetState()) & AF_LOOPING) && CommandDone())
-                SetFlags(GetFlags() | OF_KILL);
-            break;
-        case 0xad92bd40u: // Exact default Teleportation100-frame loop, null-spell editor owner.
-            if (auto* mesh=dynamic_cast<T3DImagery*>(imagery); GetState()!=0 || !mesh || !mesh->HasRetailTeleportationProfile())
-                SetFrame(0);
-            break; // AF_LOOPING retains authored owner, no custom teleport payload.
-        case 0x550decafu: // Exact Sfist start authored60-frame loop, generic owner.
-            if (auto* mesh=dynamic_cast<T3DImagery*>(imagery); GetState()!=0 || !mesh || !mesh->HasRetailShadowfistProfile())
-                SetFrame(0); // retain unsupported modified assets' previous policy
-            break; // source LOOPING prevents null-spell CommandDone kill
-        case 0x9de2a0feu: // Exact Wborn authored60-frame loop, own immutable profile.
-            if (auto* mesh=dynamic_cast<T3DImagery*>(imagery); GetState()!=0 || !mesh || !mesh->HasRetailWarriorbornProfile())
-                SetFrame(0);
-            break; // source LOOPING prevents null-spell CommandDone kill
-        case 0xad99fdf2u: // Exact shipped Appear defaultstart; null-spell editor path only.
-            if (auto* mesh=dynamic_cast<T3DImagery*>(imagery); GetState()!=0 || !mesh || !mesh->HasRetailMPAppearStartProfile())
-            { SetFrame(0); break; }
-            if (HasAnimator() && !spell && !(imagery->GetAniFlags(GetState())&AF_LOOPING) && CommandDone())
-                SetFlags(GetFlags()|OF_KILL); // actual4deec1; normal later map reap
-            break;
-        case 0xd0c0f036u: // WaterFlft: WFall.i3d, 15 frames
-        case 0xd0c0f037u: // WaterFrt: WFall2.i3d, 15 frames
-        case 0xd0c0f038u: // WaterClft: WCap.i3d, 15 frames
-        case 0xd0c0f039u: // WaterCrt: Wcap2.i3d, 15 frames
-        case 0xd0c0f03au: // RiverFall: RiverFall.i3d, 100 frames
-            break;
-        case 0x0c05263au: // Exact audited Punch profile preserves the authored581-frame loop.
-            if (auto* mesh = dynamic_cast<T3DImagery*>(imagery); !mesh || !mesh->HasRetailPunchProfile())
-                SetFrame(0);
-            break;
-        default:
-            SetFrame(0);
-            break;
+        log_debug("[effect] %s: state %d played out, removed", GetName(), GetState());
+        SetFlags(GetFlags() | OF_KILL);
     }
     SetCommandDone(false);
 }
@@ -1514,7 +1468,7 @@ TFlameEffect* TFlameEffect::SpawnForTest(const S3DPoint& origin)
 // See docs/vfx/forensics/B01_TBloodEffect_RENDER_RESETTLED.md for the
 // authoritative spec, docs/vfx/PLAN_B01_engine_rework.md for the rework
 // plan. Blood is rebuilt as two engine particle buckets declared in
-// data/Resources/effects.def:
+// assets/effects.def:
 //
 //   blood_fly    — one-shot 10-droplet burst (spawn_burst=10), 24 Hz
 //                  integration, gravity+drag tick_expr, reflection-plane
@@ -2140,7 +2094,7 @@ void TBloodEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
         item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
         // Light mode: matches the engine-driven blood_fly bucket
-        // (data/Resources/effects.def `light_mode = "unlit"`) which is
+        // (assets/effects.def `light_mode = "unlit"`) which is
         // currently set Unlit as a harness diagnostic until the test scene
         // lights TBloodEffect properly (resettled doc §6.6). Keeping the
         // bespoke aligned with the engine path means the A/B capture
@@ -6503,6 +6457,9 @@ void TFireBallEffect::Pulse()
     if(alive_)
     {
         StepMissilePulse();
+        // Original Animate510e5b calls SetCommandDone(false). The collapsed
+        // simulator must retain this handshake before generic effect cleanup.
+        SetCommandDone(false);
         StepAnimate();
     }
     if(!alive_)KillThisEffect();

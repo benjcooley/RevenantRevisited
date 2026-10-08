@@ -34,7 +34,12 @@ def capture(scenario,output):
         '--snapseed='+str(scenario.get('seed',1)),'--snapwarmup='+str(scenario.get('warmup',1)),
         '--snaprect='+','.join(map(str,rectangle)),'--snapprefix='+str(output/'frame-')]
     env=os.environ.copy();env['REVENANT_DATA_PATH']=str(data)
-    binary_sha=sha(binary);definitions=data/'Resources/effects.def'
+    assets=Path(scenario.get('assets_root',env.get('REVENANT_ASSETS_PATH',ROOT/'assets'))).resolve()
+    env['REVENANT_ASSETS_PATH']=str(assets)
+    binary_sha=sha(binary)
+    # Engine-owned definitions follow the executable's assets lookup, independent
+    # of the licensed retail data root (which supplies imagery and maps).
+    definitions=assets/'effects.def'
     definitions_sha=sha(definitions);(output/'effects.def').write_bytes(definitions.read_bytes())
     log=output/'run.log';start=time.monotonic();complete=False;terminated=False
     with log.open('wb') as handle:
@@ -54,16 +59,23 @@ def capture(scenario,output):
                 try:process.wait(timeout=2)
                 except subprocess.TimeoutExpired:process.kill();process.wait(timeout=2)
     frames=sorted(output.glob('frame-[0-9][0-9][0-9]-*.png'))
-    report=dict(status='pass' if complete else 'fail',scenario=scenario,command=command,
+    report=dict(status='pass' if complete and process.returncode==0 and not terminated else 'fail',scenario=scenario,command=command,
         binary_sha256=binary_sha,definitions_sha256=definitions_sha,
         elapsed_seconds=time.monotonic()-start,owned_pid=process.pid,exit_code=process.returncode,
         forced_owned_shutdown=terminated,frames=[dict(path=str(p),sha256=sha(p)) for p in frames],
         log_sha256=sha(log),dosbox_used=False,
         scope='Actual Revisited GPU output for the explicit scenario; comparison/acceptance is separate.')
+    if terminated:
+        report['error']='Owned capture process required forced shutdown; completed images do not establish a clean exit'
+    elif process.returncode!=0:
+        report['error']=f'Owned capture process exited with code {process.returncode}; completed images do not establish a clean exit'
+    elif not complete:
+        report['error']='Capture did not complete the requested frames and filmstrip'
     if sha(binary)!=binary_sha or sha(definitions)!=definitions_sha:
         report['status']='fail';report['error']='Binary or runtime definitions changed during capture'
     if complete:
-        timing=list(csv.DictReader((output/'frame-timing.csv').open()))
+        with (output/'frame-timing.csv').open() as timing_file:
+            timing=list(csv.DictReader(timing_file))
         if len(timing)!=count or any(abs(float(row['relative_seconds'])-i/fps)>1e-6 for i,row in enumerate(timing)):
             report['status']='fail';report['error']='Simulation cadence differs from the explicit scenario'
         report['timing']=timing

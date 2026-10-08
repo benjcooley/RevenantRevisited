@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cctype>
+#include <chrono>
 #include <fcntl.h>
 #include <math.h>
 #include <sstream>
@@ -27,6 +28,7 @@
 #include "assetcache.h"
 #include "audio_backend.h"
 #include "framesnap.h"
+#include "gameoptions.h"
 #include "headless_window.h"
 #include "logging.h"
 #include "fonttable.h"
@@ -40,6 +42,9 @@
 #include "revisited_settings.h"
 #include "testscreen.h"
 #include "cinematicscreen.h"
+#include "death.h"
+#include "gameflow.h"
+#include "logoscreen.h"
 #include "i3dgltf.h"
 #include "testmodes.h"
 #include "testconfig.h"
@@ -58,10 +63,12 @@
 #include "parse.h"
 #include "mapmanager.h"
 #include "player.h"
+#include "multi.h"
 #include "multictrl.h"
 #include "spell.h"
 #include "spellpane.h"
 #include "statpane.h"
+#include "retailab.h"
 #include "script.h"
 #include "textbar.h"
 #include "statusbar.h"
@@ -103,8 +110,12 @@ char ClassDefPath[MAXPATHLEN];               // Where to load / save Class.Def
 char ExileRCPath[MAXPATHLEN];                // Where to run ExileRC from & where
                                              // the graphics for the resources are
 char ResourcePath[MAXPATHLEN];               // Where to read / write the resources
+char ImageryPath[MAXPATHLEN];                // Imagery tree / imagery.rvi; class.def and rules rosters
+char ModulesPath[MAXPATHLEN];                // Root of the game modules
 char BaseMapPath[MAXPATHLEN];                // Where the untouched version of the game map is stored
 char CurMapPath[MAXPATHLEN];                 // Where the current map is stored
+char MoviePath[MAXPATHLEN];                  // Where the .smk movies live
+char SaveGamePath[MAXPATHLEN];               // Root of the save slots (INI [Paths] SaveGamePath)
 
 // Current language
 TString Language;                   // Where the current map is stored
@@ -258,10 +269,11 @@ static int32_t videocapmegs, videocapfps;
 char DXDriverMatchStr[FILENAMELEN]; // Will use first DX driver who's description has the given string in it
                                     // i.e. use if string is "permidia" and driver desc is "Glint Permidia 2 3D"
 
-// Optional save-game path requested via `--loadmap=...` on the command line.
-// When non-empty, AppInit hands it to PlayScreen.LoadGameFile() so the engine
-// restores a live session on first Pulse().
+// Optional save slot requested via `--loadmap=...` on the command line; the
+// boot quickstarts into it.
 char StartupSavePath[MAXPATHLEN] = "";
+bool StartupSaveCycle = false;
+int32_t StartupSaveCycleSettle = 60;
 
 // Window/backbuffer size selected before sokol creates the native window.
 // WIDTH/HEIGHT stay as the classic 640x480 layout baseline; the renderer and
@@ -1542,7 +1554,7 @@ void GetParameters(int argc, char **argv)
         "gamespeed", "monitor", "violencelevel", "preloadsize",
         "chunkcachesize", "driver", "device", "videocap", "fastlock",
         "loadmap", "lang", "test", "level", "resolution", "res",
-        "cinematic", "vfx-lighting-mode", "partsys-quality", "partsys-incoming-blend",
+        "cinematic", "menu", "exec", "vfx-lighting-mode", "partsys-quality", "partsys-incoming-blend",
     });
     cmd.parse(argc, argv);
 
@@ -1627,13 +1639,28 @@ void GetParameters(int argc, char **argv)
         }
     }
 
-  // LOADMAP=<save-file> — jump straight into a loaded save at boot,
-  // skipping any menu screens. Path is resolved via rev_fopen (SavePath,
-  // RunPath, module dir, then VFS archives).
+  // LOADMAP=<slot> — jump straight into a save slot at boot, skipping any
+  // menu screens (same as --quickstart=<slot>).
     {
         std::string p;
         if (arg_param(cmd, "loadmap", p))
             strncpyz(StartupSavePath, p.c_str(), MAXPATHLEN);
+    }
+
+  // SAVECYCLE-TEST[=<frames>] — after <frames> PlayScreen frames (default
+  // 60; 0 = before the first simulation tick) save to slot "savecycle",
+  // load it back and log the player's key fields before and after. With 0,
+  // the slot is what the port writes for the game exactly as it was loaded
+  // (docs/gameflow/SAVE_INTEROP_TEST.md).
+    {
+        std::string p;
+        if (arg_param(cmd, "savecycle-test", p))
+        {
+            StartupSaveCycle = true;
+            StartupSaveCycleSettle = std::max<int32_t>(0, std::atoi(p.c_str()));
+        }
+        else if (arg_flag(cmd, "savecycle-test"))
+            StartupSaveCycle = true;
     }
 
   // TEST=<mode> — route to TTestScreen instead of LogoScreen/PlayScreen.
@@ -1650,6 +1677,39 @@ void GetParameters(int argc, char **argv)
         std::string p;
         if (arg_param(cmd, "vfx", p))
             strncpyz(StartupVfxId, p.c_str(), sizeof(StartupVfxId));
+    }
+
+  // QUICKSTART[=<save>] — retail flag: skip the intro and the title screen,
+  // start a new game (or load the named save) directly.
+    {
+        std::string p;
+        if (arg_param(cmd, "quickstart", p))
+        {
+            StartupQuickstart = true;
+            strncpyz(StartupQuickstartSave, p.c_str(), sizeof(StartupQuickstartSave));
+        }
+        else if (arg_flag(cmd, "quickstart"))
+            StartupQuickstart = true;
+    }
+
+  // NOINTRO — skip the intro movie before the title screen.
+    if (arg_flag(cmd, "nointro"))
+        StartupNoIntro = true;
+
+  // MENU=<newgame|loadgame|multi|options|exit> — press that title button
+  // automatically (skips the intro). For driving the menu in tests.
+    {
+        std::string p;
+        if (arg_param(cmd, "menu", p))
+            strncpyz(StartupMenuButton, p.c_str(), sizeof(StartupMenuButton));
+    }
+
+  // EXEC="cmd; cmd; sleep N" — console commands to run once the PlayScreen
+  // has a player (consoleexec.cpp). Drives script commands headlessly.
+    {
+        std::string p;
+        if (arg_param(cmd, "exec", p))
+            strncpyz(StartupExec, p.c_str(), sizeof(StartupExec));
     }
 
   // CINEMATIC=<path> — .SMK file for --test=ui-cinematic. Empty = intro FMV.
@@ -1739,7 +1799,7 @@ void GetParameters(int argc, char **argv)
     {
         std::string p;
         if (arg_param(cmd, "input-script", p) || arg_param(cmd, "mouse-script", p))
-            strncpyz(StartupInputScript, p.c_str(), sizeof(StartupInputScript));
+            StartupInputScript = p;
     }
 
   // SECTOR=L_X_Y — pick which sector --test=sector keeps alive and renders.
@@ -1828,42 +1888,50 @@ void GetParameters(int argc, char **argv)
     }
 }
 
+// REVSYNC: GetINISettings @ 0x00484500 — the [Paths] section, with retail's
+// defaults. Each path ends with a backslash. The loaders compose paths from
+// these: shared game data under ClassDefPath / ResourcePath (resources.rvr
+// answers .\Resources\), imagery data under ImageryPath (imagery.rvi answers
+// .\Imagery\), a module's own files under ModulesPath\<module>\. See
+// docs/DATA_LAYOUT.md.
 void GetINISettings()
 {
   // ***** Get Program Paths *****
 
     INISetSection("Paths");
-    INIGetText("ClassDefPath", ".", ClassDefPath, MAXPATHLEN);
     INIGetText("ExileRCPath", ".", ExileRCPath, MAXPATHLEN);
-    INIGetText("ResourcePath", ".", ResourcePath, MAXPATHLEN);
+    INIGetText("ClassDefPath", ".\\Resources", ClassDefPath, MAXPATHLEN);
+    INIGetText("ResourcePath", ".\\Resources", ResourcePath, MAXPATHLEN);
+    INIGetText("ImageryPath", ".\\Imagery", ImageryPath, MAXPATHLEN);
     INIGetText("CurMapPath", ".", CurMapPath, MAXPATHLEN);
     INIGetText("BaseMapPath", ".", BaseMapPath, MAXPATHLEN);
+    INIGetText("MoviePath", ".\\Resources\\FMV", MoviePath, MAXPATHLEN);
+    INIGetText("SaveGamePath", ".\\Save", SaveGamePath, MAXPATHLEN);
+    INIGetText("ModulesPath", ".\\Modules", ModulesPath, MAXPATHLEN);
 
     // Make sure each string ends with a backslash
-    if (ClassDefPath[strlen(ClassDefPath) - 1] != '\\')
-        strcat(ClassDefPath, "\\");
+    for (char *path : {ClassDefPath, ExileRCPath, ResourcePath, ImageryPath, CurMapPath,
+                       BaseMapPath, MoviePath, SaveGamePath, ModulesPath})
+    {
+        if (path[0] == '\0' || path[strlen(path) - 1] != '\\')
+            strncatz(path, "\\", MAXPATHLEN);
+    }
 
-    if (ExileRCPath[strlen(ExileRCPath) - 1] != '\\')
-        strcat(ExileRCPath, "\\");
-
-    if (ResourcePath[strlen(ResourcePath) - 1] != '\\')
-        strcat(ResourcePath, "\\");
-
-    if (CurMapPath[strlen(CurMapPath) - 1] != '\\')
-        strcat(CurMapPath, "\\");
-
-    if (BaseMapPath[strlen(BaseMapPath) - 1] != '\\')
-        strcat(BaseMapPath, "\\");
-
+    // Defaults as retail GetINISettings (FUN_00484500);
+    // docs/LIGHTING_FIDELITY.md §3.1. ReadOptions (gameoptions.cpp) reads
+    // [Options].
     INISetSection("Lighting");
-    MaxLights = INIGetInt("MaxLights", 1);
-    Ambient3D = INIGetInt("Ambient3D", 100);
+    MaxLights = INIGetInt("MaxLights", 3);
+    Ambient3D = INIGetInt("Ambient3D", 130);
     LightRange3D = INIGetInt("LightRange3D", 180);
     LightMult3D = INIGetInt("LightMult3D", 250);
-    EnhancedLighting = INIGetYesNo("EnhancedLighting", true);
 
-    INISetSection("Options");
-    DoubleTapTicks = INIGetInt("DoubleTapTicks", 6);
+    // FUN_00484500: the language names the dialog lists and the voice folder,
+    // so it is known before the main module mounts.
+    INISetSection("Language");
+    char language[64];
+    INIGetText("Language", "English", language, sizeof(language));
+    Language = language;
 }
 
 // This function gets called as soon as the display system finds the right driver.
@@ -1884,41 +1952,6 @@ void DriverSetupCallback()
         UseClearZBuffer = true; // Use a secondary clear zbuffer for drawing instead of display zbuffer
     }
 #endif
-}
-
-bool InitLanguage()
-{
-  // Set language. The actual DialogList load happens inside InitGlobals
-  // alongside the rest of the engine's lifecycle steps; that keeps every
-  // singleton's Initialize/Init call in one canonical caller.
-    Language = "english";
-
-// Old MAYHEM stuff
-#if 0
-   // Get Language file
-    p = strstr(lpCmdLine, "LANG=");
-    if (p)
-        Language = atoi(p + 5);
-    else
-        Language = GetProfileInt("intl", "iCountry", 1);
-    char buf[20];
-    wsprintf(buf, "LANGUAGE.%03d", Language);
-    f = fopen(buf, "rb");
-    if (!f)
-        Language = ENGLISH;
-    else
-        fclose(f);
-
-    if (Language == ENGLISH)
-        SecondLang = ENGLISH;
-
-    if (strstr(lpCmdLine, "KOR"))
-        SecondLang = KOREAN;
-
-    LoadLanguage(Language);
-#endif
-
-    return true;
 }
 
 // TODO(port): multi-monitor selection. sokol_app puts the window on the
@@ -2213,9 +2246,8 @@ bool InitGlobals()
     if (!SpellList.Initialize())
         FatalError("Unable to load spell list");
 
-  // (19) DialogList — Initialize() loads <Language>.def. Pulled out of
-  // the old InitLanguage() helper so all global lifecycle calls live in
-  // one canonical caller.
+  // (19) DialogList loads the base <ClassDefPath><Language>.def table.
+  // The module table loads when TModuleManager mounts the module.
     if (!DialogList.Initialize())
         FatalError("Unable to load dialog list");
 
@@ -2233,6 +2265,27 @@ bool InitGlobals()
   // valid and the data manager is up; before any caller can fire SFX.
     Status("Initializing audio system\n");
     SoundPlayer.Initialize();   // failure here is non-fatal; game runs silent
+
+  // (23) ScriptManager — parses master.s into the proto registry and
+  // loads gamestate names from state.def. Both files live inside the
+  // mounted module archive (master.s is in resources.rvr; state.def is
+  // in both base and module), resolved via rev_fopen's basename-keyed
+  // VFS. Has to run after MountArchive/MountModule and before any
+  // sector spawn (TObjectInstance::InitScript calls back into the
+  // proto registry when an instance comes to life). Fatal if the
+  // master script can't be parsed — the world has no AI without it.
+    Status("Loading scripts\n");
+    if (!ScriptManager.Initialize())
+        FatalError("Unable to load master script (master.s)");
+
+  // (24) GameData — the shared in-game resource archive (cursor, hand
+  // cursor, walk wedges). REVSYNC: retail engine init (0x00485870) loads
+  // gamedata.dat into this global before any screen runs; the title screen
+  // and the PlayScreen both draw its cursors. (The 1998 snapshot loaded the
+  // identical playscrn.dat lazily from TPlayScreen::Initialize.)
+    GameData = TMulti::LoadMulti(const_cast<char*>("gamedata.dat"));
+    if (!GameData)
+        FatalError("Unable to load gamedata.dat");
 
     if (!_CrtCheckMemory())
     {
@@ -2273,6 +2326,18 @@ void ShutdownGlobals()
 
   // ---- inverse of InitGlobals ----
 
+  // (24) GameData
+    if (GameData)
+    {
+        free(GameData);                 // TMulti is a malloc'd resource blob
+        GameData = nullptr;
+    }
+
+  // (23) ScriptManager — flushes the proto registry + gamestate names.
+  // Editor builds write any dirty scripts back to master.s before the
+  // memory is dropped. No live dependents so this can lead the inverse.
+    ScriptManager.Close();
+
   // (22) Sound — stop the playback thread + drain music before anything
   // else unwinds; nothing else depends on audio so this is the safest
   // first inverse step. Also flushes the cached SFX list.
@@ -2295,6 +2360,10 @@ void ShutdownGlobals()
 
   // (18) Rules
     Rules.Close();
+
+  // SpellList — loaded by TPlayScreen::Initialize (retail 0x0047add4) or by
+  // a --test=ui-* demo player; nothing to close when neither ran.
+    SpellList.Close();
 
   // (17) PlayerManager
     PlayerManager.Close();
@@ -2403,6 +2472,12 @@ sapp_desc sokol_main(int argc, char* argv[])
     g_argc = argc;
     g_argv = argv;
 
+    // --retail-ab=<target>: dump a port function over a case file for the
+    // retail A/B compare, then exit; no window, no engine (retailab.h).
+    int abexit = 0;
+    if (RetailAB::Run(argc, argv, abexit))
+        std::exit(abexit);
+
     IsMMX = false;
     ApplyCommandLineResolution(argc, argv);
 
@@ -2412,7 +2487,7 @@ sapp_desc sokol_main(int argc, char* argv[])
     // flag in case desc.hidden wasn't honored by a build that doesn't
     // include our sokol_app patch). Scan argv directly — argh hasn't run.
     // Also parse --max-runtime=N here: a wall-clock hard ceiling that
-    // calls sapp_request_quit() N seconds after AppFrame first ticks.
+    // hard-exits the process N seconds after AppFrame first ticks.
     // This is a belt-and-suspenders safety net for agent runs — even if
     // the input-script's auto-exit fails or the engine deadlocks before
     // the script drains, the process eventually exits on its own.
@@ -2457,6 +2532,9 @@ sapp_desc sokol_main(int argc, char* argv[])
         // timer still run normally; framesnap reads the offscreen RT.
         desc.hidden = true;
         desc.no_dock_icon = true;
+        // ...which, silent too, makes the app an App Nap target: keep the
+        // frame timer running.
+        HeadlessWindow::KeepAwake();
         // Suppress audio in headless mode — agent-driven test runs were
         // dumping music + SFX onto the user's speakers. audio::SetSilenced
         // must be called BEFORE audio::Init (which sound.cpp:406 does on
@@ -2486,6 +2564,7 @@ static void AppInit()
     INISetPath(RunPath);
 
     GetINISettings();
+    ReadOptions();   // retail's order (0x004865a0): INI, [Options], command line
 
     GetParameters(g_argc, g_argv);
 
@@ -2505,9 +2584,8 @@ static void AppInit()
         if (HeadlessWindow::ParseArgs(g_argc, g_argv))
         {
             log_info("[headless] --headless active; window will be hidden");
-            // Hide ASAP — sokol_app has already shown the NSWindow by the
-            // time init_cb (this AppInit) fires, so a few frames may still
-            // flash visible before the per-frame HideAllWindows kicks in.
+            // desc.hidden already kept the window off screen; this and the
+            // per-frame call in AppFrame keep it that way.
             HeadlessWindow::HideAllWindows();
         }
     }
@@ -2533,8 +2611,6 @@ static void AppInit()
 
     if (!InitMonitor())
         FatalError("Invalid monitor selected", nullptr);
-
-    InitLanguage();
 
     // MainWindow's lifecycle now lives at the top of InitGlobals so every
     // singleton flows through the canonical caller; sokol_app already
@@ -2565,6 +2641,19 @@ static void AppInit()
             log_info("[boot] routing to CinematicScreen");
             BootScreen = &CinematicScreen;
         }
+        else if (strcmp(StartupTestMode, "ui-death") == 0)
+        {
+            log_info("[boot] routing to DeathScreen");
+            BootScreen = &DeathScreen;
+        }
+        else if (strcmp(StartupTestMode, "ui-mainmenu") == 0)
+        {
+            log_info("[boot] routing to LogoScreen (title)");
+            SBootOptions options;
+            options.noIntro    = true;
+            options.menuButton = TLogoScreen::ButtonFromName(StartupMenuButton);
+            BootScreen = GameFlow.Boot(options);
+        }
         else
         {
             log_info("[boot] routing to TestScreen, mode='%s'", StartupTestMode);
@@ -2573,18 +2662,31 @@ static void AppInit()
     }
     else
     {
-        log_info("[boot] routing to PlayScreen");
-        BootScreen = &PlayScreen;
-
-        // --loadmap=<file>: hand the save path to PlayScreen; its Pulse()
-        // picks it up on the first tick, clears the current map, and streams
-        // the player object — the same path the menu uses for "Continue".
-        if (StartupSavePath[0])
+        SBootOptions options;
+        options.quickstart     = StartupQuickstart || StartupSavePath[0];
+        options.quickstartSave = StartupQuickstartSave[0] ? StartupQuickstartSave : StartupSavePath;
+        options.noIntro        = StartupNoIntro;
+        options.menuButton     = TLogoScreen::ButtonFromName(StartupMenuButton);
+        if (StartupMenuButton[0] && options.menuButton < 0)
+            log_warn("[boot] --menu=%s: unknown title button "
+                     "(newgame|loadgame|multi|options|exit)", StartupMenuButton);
+        if (StartupSectorId[0] &&
+            std::sscanf(StartupSectorId, "%d_%d_%d", &options.devLevel,
+                        &options.devSectorX, &options.devSectorY) != 3)
         {
-            log_info("[boot] auto-loading save '%s'", StartupSavePath);
-            PlayScreen.LoadGameFile(StartupSavePath);
+            log_warn("[boot] bad --sector='%s', expected L_X_Y", StartupSectorId);
+            options.devLevel = options.devSectorX = options.devSectorY = -1;
         }
+        else if (!StartupSectorId[0] && StartupLevelId[0] &&
+                 std::sscanf(StartupLevelId, "%d", &options.devLevel) != 1)
+        {
+            log_warn("[boot] bad --level='%s', expected L", StartupLevelId);
+            options.devLevel = -1;
+        }
+        BootScreen = GameFlow.Boot(options);
     }
+
+    TestModes::InputSimArm();   // no-op without --input-script
 
     SystemInitialized = true;
 }
@@ -2594,9 +2696,14 @@ static void AppInit()
 // for agent runs (paired with the input-script auto-exit). 0 = disabled.
 // Parsed once in GetParameters; consumed by AppFrame.
 static double g_max_runtime_sec = 0.0;
-static double g_max_runtime_start_ms = 0.0;
+static std::chrono::steady_clock::time_point g_max_runtime_start;
+static bool g_max_runtime_started = false;
 
-void SetMaxRuntimeSeconds(double s) { g_max_runtime_sec = s; }
+void SetMaxRuntimeSeconds(double s)
+{
+    g_max_runtime_sec = s;
+    g_max_runtime_started = false;
+}
 
 static void AppFrame()
 {
@@ -2628,9 +2735,13 @@ static void AppFrame()
     // the run was already broken.
     if (g_max_runtime_sec > 0.0)
     {
-        const double now_ms = TTime::Time() * 1000.0;
-        if (g_max_runtime_start_ms == 0.0) g_max_runtime_start_ms = now_ms;
-        const double elapsed_sec = (now_ms - g_max_runtime_start_ms) / 1000.0;
+        const auto now = std::chrono::steady_clock::now();
+        if (!g_max_runtime_started)
+        {
+            g_max_runtime_start = now;
+            g_max_runtime_started = true;
+        }
+        const double elapsed_sec = std::chrono::duration<double>(now - g_max_runtime_start).count();
         if (elapsed_sec >= g_max_runtime_sec)
         {
             log_info("[max-runtime] hit %.1fs limit -- hard exit",
@@ -2659,20 +2770,20 @@ static void AppFrame()
         simgui_new_frame(&fd);
     }
 
-    // Begin next queued screen if none is active.
+    // Begin next queued screen if none is active. With nothing to run the app
+    // is quitting; quit requests are processed asynchronously (frames can keep
+    // arriving meanwhile), so close the ImGui frame opened above before
+    // returning or the next NewFrame asserts.
     if (!CurrentScreen && BootScreen)
     {
         TScreen *next = BootScreen;
         BootScreen = nullptr;
-        if (!TScreen::ShowScreen(next, 0))
-        {
-            sapp_request_quit();
-            return;
-        }
+        TScreen::ShowScreen(next, 0);
     }
 
     if (!CurrentScreen)
     {
+        ImGui::EndFrame();
         sapp_request_quit();
         return;
     }
@@ -2684,6 +2795,9 @@ static void AppFrame()
         if (AppActive)
             CurrentScreen->MouseMove(mousebutton, cursorx, cursory);
     }
+
+    // Scripted input (--input-script) takes the same route as real input.
+    TestModes::InputSimTick(CurrentScreen);
 
     // Tick / Draw split (see docs/FRAME_PIPELINE.md). Tick catches up
     // missed legacy 24Hz pulses (pure sim, no draw calls); DrawFrame
@@ -2714,10 +2828,12 @@ static void AppFrame()
     if (FrameSnap::Active())
         FrameSnap::TickAfterRender();
 
-    if (CurrentScreen->IsDone() || Closing)
+    // A closing screen runs on until its fade-out reaches black.
+    if (CurrentScreen->ReadyToEnd() || Closing)
     {
         TScreen *next = CurrentScreen->GetNextScreen();
         TScreen::EndCurrentScreen();
+        GameFlow.ScreenEnded(next);
         BootScreen = next;
         if (!next && !Closing)
             sapp_request_quit();
@@ -2728,9 +2844,15 @@ static void AppCleanup()
 {
     // ShutdownGlobals() handles MainWindow.Close() as its very last step;
     // AppCleanup just drives that and then unmounts the resource archives.
+    // The log lines bracket the teardown so a test run can confirm the
+    // process went through it rather than a hard exit.
+    log_info("[shutdown] begin");
+    // REVSYNC: 0x004870ee -- retail saved [Options] once its main loop ended.
+    SaveOptions();
     if (SystemInitialized)
         ShutdownGlobals();
     UnmountAll();
+    log_info("[shutdown] complete");
 }
 
 // Translate an sapp_keycode into the legacy VK_* codes the screen / pane
@@ -3125,8 +3247,7 @@ static void UnusedWinMainAnchor_()
     }
 #endif
 
-  // Initialize language resources
-    if (!InitLanguage());
+  // Language: read by GetINISettings ([Language] Language).
 
 #ifdef _DEBUG
     if (!_CrtCheckMemory())

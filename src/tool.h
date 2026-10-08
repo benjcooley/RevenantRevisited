@@ -17,7 +17,7 @@ class TTool : public TObjectInstance
     TTool(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
-    virtual int32_t CursorType(TObjectInstance* with = nullptr);
+    int32_t CursorType(TObjectInstance* with = nullptr) override;
 
     // Tool stats
     STATFUNC(Value)

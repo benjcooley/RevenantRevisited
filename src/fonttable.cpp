@@ -92,6 +92,23 @@ TFont* TFontTable::Bitmap(const char* nm)
     return f ? f->primary : nullptr;
 }
 
+// Retail creates a WINFONT with CreateFontA(height = the FONT.DEF size), a
+// cell height, which is the pixel height BuildTTFAtlas rasterizes at. The
+// faces map to their metric-compatible open fonts (project-ui-text-rendering).
+// No bold or italic files ship, so those styles draw regular.
+const SFontAtlas* TFontTable::Atlas(const char* nm)
+{
+    const TGenericFont* f = nm ? FindFont(nm) : nullptr;
+    if (!f)
+        return nullptr;
+    if (f->type != FONT_WINFONT)
+        return BuildFontAtlas(f->primary);
+    const char* file = !stricmp(f->facename, "Times New Roman")
+                     ? "Tinos-Regular.ttf"
+                     : "Arimo-Regular.ttf";
+    return BuildTTFAtlas(TTFFilePath(file).c_str(), f->height);
+}
+
 TFont* TFontTable::LoadAtom(const char* resname)
 {
     if (!resname || !*resname)

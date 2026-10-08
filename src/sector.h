@@ -89,17 +89,28 @@ class TSector final
 
     void Clear();
 
-  // Creates and loads a sector (uses preloaded sector if it can find one)
+  // Creates and loads a sector (uses preloaded sector if it can find one).
+  // TGameMap is the only live caller and owns the result: sectors are freed
+  // with CloseSector / DiscardSector by the map that loaded them, never by a
+  // borrower (see gamemap.h). The preload cache below is the 1998/retail
+  // streaming cache; nothing fills it in the port.
 
-    // Loads the sector.. keeps file open so sector is locked
-    static TSector* LoadSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory, bool preload = true);
+    // Loads the sector; nullptr if its file is missing, unreadable or
+    // malformed (the sector isn't kept half loaded).
+    [[nodiscard]] static TSector* LoadSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory, bool preload = true);
     // Save and delete the sector (doesn't really delete it if sector is preload)
     static void CloseSector(TSector* sector);
+    // Delete the sector without saving it (its working-set copy is being replaced)
+    static void DiscardSector(TSector* sector);
 
     // Load and save the sector (straight load.. don't use preloaded sector list)
 
-    bool Load(bool lock = false);
+    [[nodiscard]] bool Load(bool lock = false);
+      // False if the file is missing, unreadable or malformed; objects read
+      // before the failure stay in the sector
     void Save();
+    [[nodiscard]] uint32_t StateHash();
+        // The hash Save writes into the header (SAVE_GAME.md §11.6)
 
     // Sector
 
@@ -116,6 +127,11 @@ class TSector final
     int32_t AddObject(TObjectInstance* oi, int32_t item = -1);
     int32_t SetObject(TObjectInstance* oi, int32_t item);
     TObjectInstance* RemoveObject(int32_t item);
+    int32_t RemoveObject(TObjectInstance* oi);
+      // Takes `oi` out of the sector and clears its sector pointer; returns
+      // its former index, or -1 if it isn't here. The sector holds a raw
+      // pointer to each object in it, so an object leaves its sector before
+      // it is freed (~TObjectInstance does this) or handed to an inventory.
     int32_t NumItems() const { return objects.NumItems(); }
     int32_t GetObjIndex(const TObjectInstance* oi) const;
     PTObjectArray ObjectArray()
@@ -191,17 +207,16 @@ class TSector final
   private:
     uint16_t *walkmap;
     int32_t  level, sectorx, sectory;
-    bool preloaded;
+    bool preloaded = false;
     char filename[FILENAMELEN];
-    int32_t usecount;
+    int32_t usecount = 0;
 
-    // v14+ adds a 4-byte hash between sector version and numobjects.
-    // Retail regenerates it at save time over sector coords, numobjects,
-    // and the serialized body of state-bearing objects (obj classes
-    // 0xb/0xc — TCharacter/TPlayer). See TSector::Save at FUN_00498c90
-    // and hash helper FUN_00499e90 in data/Revenant.exe. We round-trip
-    // the read value for now; regeneration is future work.
+    // v14+ header hash between version and object count, as last loaded or
+    // saved. Save regenerates it (StateHash).
     int32_t statehash = 0;
+
+    void KeepInside(TObjectInstance* inst) const;
+        // Moves a loaded object whose position is outside the sector into it
 
     // Bumped on every Add/Remove/Set, set to 1 in Load. Renderer
     // (and any other cache derived from `objects`) compares against

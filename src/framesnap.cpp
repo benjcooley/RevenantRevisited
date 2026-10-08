@@ -6,6 +6,7 @@
 #include "framesnap.h"
 
 #include "display.h"
+#include "font.h"       // TTFFilePath
 #include "logging.h"
 #include "renderer_readback.h"
 #include "surface.h"
@@ -312,8 +313,8 @@ bool CaptureCurrentFrame()
 
 // ---- TTF label rendering ------------------------------------------------
 //
-// JetBrainsMono is a fixed-width font that's vendored in the tree for the
-// editor; mono is ideal for our use (legible at small sizes, no kerning
+// JetBrainsMono is a fixed-width font the port ships in its engine assets for
+// the editor; mono is ideal for our use (legible at small sizes, no kerning
 // math). Loaded lazily on first label render, cached for the run.
 stbtt_fontinfo g_labelFont;
 std::vector<uint8_t> g_labelFontData;
@@ -325,9 +326,9 @@ bool EnsureLabelFont()
     if (g_labelFontLoaded) return true;
     if (g_labelFontFailed) return false;
 
-    static constexpr const char* kFontPath = "thirdparty/fonts/JetBrainsMono-Regular.ttf";
-    FILE* f = std::fopen(kFontPath, "rb");
-    if (!f) { g_labelFontFailed = true; log_warn("[framesnap] label font missing: %s", kFontPath); return false; }
+    const std::string path = TTFFilePath("JetBrainsMono-Regular.ttf");
+    FILE* f = path.empty() ? nullptr : std::fopen(path.c_str(), "rb");
+    if (!f) { g_labelFontFailed = true; log_warn("[framesnap] label font missing: '%s'", path.c_str()); return false; }
     std::fseek(f, 0, SEEK_END);
     const long sz = std::ftell(f);
     std::fseek(f, 0, SEEK_SET);

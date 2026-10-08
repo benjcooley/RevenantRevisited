@@ -5,7 +5,8 @@
 // *************************************************************************
 //
 // D3D11 port of mesh.metal.h.  See that header for layout + projection
-// math documentation.
+// math documentation, and for the translucent pass's depth and colour
+// shaders.
 //
 // *************************************************************************
 
@@ -70,8 +71,8 @@ vs_out main_vs(vs_in i) {
         o.uv      = i.uv + i.uv_offset;
         o.tint    = i.tint;
         o.scene_z = scene_z_n;
-    o.retail_color = retail_color;
-    o.retail_mode = i.retail_mode;
+        o.retail_color = retail_color;
+        o.retail_mode = i.retail_mode;
         return o;
     }
 
@@ -137,9 +138,77 @@ fs_out main_ps(vs_out in_) {
     float3 N = normalize(in_.wnormal);
     fs_out o;
     o.albedo  = c;
-    o.normal  = float4(N * 0.5 + 0.5, in_.retail_mode > 0.5 ? 2.0 : 1.0);
+    o.normal  = float4(N * 0.5 + 0.5, in_.retail_mode > 0.5 ? 2.0 : 0.0);
     o.scene_z = float4(in_.scene_z, 0.0, 0.0, 1.0);
     o.obj_id  = float4(0.0, 0.0, 0.0, 0.0);   // Phase 1: empty id
     return o;
+}
+)HLSL";
+
+// Translucent pass, step 1: depth only (colour writes are masked off). Covers
+// exactly the fragments step 2 shades.
+inline constexpr const char* kMeshDepthFsHlsl = R"HLSL(
+Texture2D    albedo_tex : register(t0);
+SamplerState smp        : register(s0);
+struct vs_out {
+    float4 pos     : SV_Position;
+    float3 wpos    : TEXCOORD0;
+    float3 wnormal : TEXCOORD1;
+    float2 uv      : TEXCOORD2;
+    float4 tint    : TEXCOORD3;
+    float  scene_z : TEXCOORD4;
+    float3 retail_color : TEXCOORD5;
+    float retail_mode : TEXCOORD6;
+};
+void main_ps(vs_out in_) {
+    float4 texel = albedo_tex.Sample(smp, in_.uv);
+    if (in_.retail_mode > 0.5) {
+        uint width, height;
+        albedo_tex.GetDimensions(width, height);
+        int2 size = int2(width, height);
+        int2 xy = min(int2(floor(frac(in_.uv) * float2(size))), size - int2(1, 1));
+        texel = albedo_tex.Load(int3(xy, 0));
+    }
+    if (texel.a * in_.tint.a < 0.01) discard;
+}
+)HLSL";
+
+// Translucent pass, step 2: lit colour at the surface's nearest depth,
+// blended over lit_target. Appended to kLightModelHlsl. The surface isn't in
+// the G-buffer, so it has no SSAO or sun cast shadow (both 1).
+inline constexpr const char* kMeshTranslucentFsHlsl = R"HLSL(
+Texture2D    albedo_tex : register(t0);
+SamplerState smp        : register(s0);
+struct vs_out {
+    float4 pos     : SV_Position;
+    float3 wpos    : TEXCOORD0;
+    float3 wnormal : TEXCOORD1;
+    float2 uv      : TEXCOORD2;
+    float4 tint    : TEXCOORD3;
+    float  scene_z : TEXCOORD4;
+    float3 retail_color : TEXCOORD5;
+    float retail_mode : TEXCOORD6;
+};
+float4 main_ps(vs_out in_) : SV_Target0 {
+    float4 texel = albedo_tex.Sample(smp, in_.uv);
+    if (in_.retail_mode > 0.5) {
+        uint width, height;
+        albedo_tex.GetDimensions(width, height);
+        int2 size = int2(width, height);
+        int2 xy = min(int2(floor(frac(in_.uv) * float2(size))), size - int2(1, 1));
+        texel = albedo_tex.Load(int3(xy, 0));
+    }
+    float4 c = texel * in_.tint;
+    if (in_.retail_mode > 0.5 && in_.retail_mode < 1.5) c.rgb *= in_.retail_color;
+    if (c.a < 0.01) discard;
+    float3 N = normalize(in_.wnormal);
+    int vm = (int)settings.x;
+    if (vm == 1) return float4(c.rgb, c.a);
+    if (vm == 3) return float4(N * 0.5 + 0.5, c.a);
+    surface_light s = shade_surface(c.rgb, in_.wpos, N, true, 1.0, 1.0);
+    if ((int)settings.z == 0 && in_.retail_mode > 0.5) s.lit = c.rgb;
+    if (vm == 4) return float4(s.points, c.a);
+    if (vm == 6) return float4(s.sun_shadow, s.sun_shadow, s.sun_shadow, c.a);
+    return float4(s.lit, c.a);
 }
 )HLSL";

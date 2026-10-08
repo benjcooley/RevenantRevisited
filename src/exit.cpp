@@ -3,20 +3,33 @@
 // *                    Copyright (C) 1998 Cinematix                       *
 // *                       Exit.cpp - TExit object                         *
 // *************************************************************************
+//
+// Retail behaviour: docs/gameflow/forensics/EXITS.md. The 1998 bodies the
+// shipped game replaced are in attic/src/exit_1998.cpp.
 
 #include "exit.h"
 
 #include "3dimage.h"
-#include "dls.h"
+#include "dialog.h"
 #include "file.h"
+#include "logging.h"
 #include "mappane.h"
+#include "module.h"
 #include "parse.h"
 #include "player.h"
-#include "playscreen.h"
-#include "savegame.h"
 #include "script.h"
 #include "sound.h"
 #include "textbar.h"
+
+#include <cstdio>
+#include <cstring>
+#include <iterator>
+#include <memory>
+#include <string>
+#include <vector>
+
+extern short DistX[256];
+extern short DistY[256];
 
 REGISTER_BUILDER(TExit)
 TObjectClass ExitClass("EXIT", OBJCLASS_EXIT, 0);
@@ -27,92 +40,163 @@ DEFSTAT(Exit, Facing,               FACE, 1, 0, 0, 255)
 DEFSTAT(Exit, UseCenter,            USE,  2, 0, 0, 2)
 DEFSTAT(Exit, StopMoving,           STMV, 3, 0, 1, 1)
 DEFSTAT(Exit, Delay,                DLY,  4, 0, 0, 1000)
+DEFSTAT(Exit, TileFlags,            TFLG, 5, 0, 1, 32)
 
 // Hard coded object stats
 DEFOBJSTAT(Exit, Locked,            LOCK, 0, 0, 0, 1)
 DEFOBJSTAT(Exit, KeyId,             KEY,  1, 0, 0, 100000)
 DEFOBJSTAT(Exit, PickDifficulty,    PICK, 2, 0, 0, 100000)
+DEFOBJSTAT(Exit, AutoActivate,      AACT, 3, 0, 0, 1)
 
+// *****************
+// * The exit list *
+// *****************
 
-// these should be static members of TExit, but it doesn't seem to recognize
-// their existance when I do it that way, so here they are
-PSExitRef exitlist;     // master list of exits
-bool exitlistdirty;     // if we need to save out the exit list
+namespace {
 
-bool TExit::Initialize()
+// One exit.def entry (retail SExitRef, 0x24 bytes): where going through the
+// exit named `name` puts you.
+struct SExitRef
 {
-    exitlistdirty = false;
-    return ReadExitList();
+    std::string name;
+    S3DPoint    target;
+    int32_t     level    = 0;
+    int32_t     mapindex = -1;   // written by the editor, never read (as retail)
+    int32_t     ambient  = -1;   // likewise
+    SColor      ambcolor{};
+};
+
+// In file order. Retail pushed each entry at the head of its list and
+// searched from the head, so for a repeated name the last entry wins.
+std::vector<SExitRef> exitlist;
+bool exitlistdirty = false;
+
+SExitRef* FindExit(const char *name)
+{
+    if (!name)
+        return nullptr;
+    for (auto it = exitlist.rbegin(); it != exitlist.rend(); ++it)
+        if (!stricmp(it->name.c_str(), name))
+            return &*it;
+    return nullptr;
 }
 
-void TExit::Close()
+struct SFileCloser
 {
-    WriteExitList();
-    DestroyExitList();
-}
+    void operator()(FILE *fp) const { fclose(fp); }
+};
 
-bool TExit::ReadExitList(bool reload)
+// REVSYNC: ReadExitList @ 0x0050c8f0 -- the active module's exit.def, else
+// the shared one. `reload` keeps the entries already read and adds only
+// names not yet listed (WriteExitList merges with it). A malformed line
+// ends the read, keeping what came before it.
+bool ReadExitList(bool reload)
 {
     if (!reload)
-        exitlist = nullptr;
+        exitlist.clear();
 
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%sexit.def", ClassDefPath);
-    
-    FILE *fp = TryOpen(fname, "rb");
+    const std::string path = ModuleManager.DataFilePath("exit.def");
+    std::unique_ptr<FILE, SFileCloser> fp(TryOpen(path.c_str(), "rb"));
     if (!fp)
+    {
+        log_warn("[exit] %s: can't open; no exits", path.c_str());
         return false;
+    }
 
-    TFileParseStream s(fp, fname);
+    TFileParseStream s(fp.get(), path.c_str());
     TToken t(s);
-
     t.Get();
 
-    PSExitRef ref;
-    char name[128];
-
+    bool ok = true;
     do
     {
         if (t.Type() == TKN_RETURN || t.Type() == TKN_WHITESPACE)
             t.LineGet();
-
         if (t.Type() == TKN_EOF)
             break;
 
-        ref = new SExitRef;
-
+        char name[128];
+        SExitRef ref;
         if (!Parse(t, "%t (%d, %d, %d) level %d mapindex %d ambient %d (%d, %d, %d)",
-                    name, &ref->target.x, &ref->target.y, &ref->target.z, &ref->level, &ref->mapindex,
-                    &ref->ambient, &ref->ambcolor.red, &ref->ambcolor.green, &ref->ambcolor.blue))
-            return false;
-
-        if (reload)
+                   name, &ref.target.x, &ref.target.y, &ref.target.z, &ref.level,
+                   &ref.mapindex, &ref.ambient, &ref.ambcolor.red, &ref.ambcolor.green,
+                   &ref.ambcolor.blue))
         {
-            // don't overwrite any that already exist in the loaded version
-            if (FindExit(name))
-            {
-                delete ref;
-                ref = nullptr;
-            }
+            log_warn("[exit] %s: line %d unreadable; list ends there", path.c_str(), t.LineNum());
+            ok = false;
+            break;
         }
 
-        if (ref)
+        if (!reload || !FindExit(name))
         {
-            ref->name = strdup(name);
-            ref->next = exitlist;
-            exitlist = ref;
+            ref.name = name;
+            exitlist.push_back(std::move(ref));
         }
 
-        t.SkipLine();       // skip past any other garbage on the line, including the newline
-
+        t.SkipLine();       // the rest of the line, newline included
     } while (t.Type() != TKN_EOF);
 
-    fclose(fp);
-
     exitlistdirty = false;
-    return true;
+    log_info("[exit] %s: %d exits", path.c_str(), (int32_t)exitlist.size());
+    return ok;
 }
 
+// Retail's IsOutside builds its two points with 0x0046db20 on an angle it
+// doesn't wrap: the Facing stat plus the object's facing byte (and that
+// plus 0x7f). The sine table (DistX) lies right before the cosine table
+// (DistY) in memory, so angles 256..383 take their x from DistY; the port's
+// ConvertToVector wraps instead. This reproduces every read that stays
+// inside the two tables. Other angles read memory outside them, unknown
+// from the executable, and are wrapped (logged once).
+S3DPoint RetailFacingPoint(int32_t angle, int32_t length)
+{
+    if (angle < 0 || angle >= 256 + 128)
+    {
+        static bool logged = false;
+        if (!logged)
+        {
+            log_warn("[exit] IsOutside angle %d is outside retail's tables; wrapped", angle);
+            logged = true;
+        }
+        S3DPoint v;
+        ConvertToVector(angle & 255, length, v);
+        return v;
+    }
+
+    const int32_t x = angle < 256 ? DistX[angle] : DistY[angle - 256];
+    const int32_t y = DistY[angle <= 128 ? 128 - angle : angle - 128];
+    return S3DPoint(x * length / 256, y * length / 256, 0);
+}
+
+// Walking onto these doesn't activate them: their master.s USE scripts own
+// them (Pulse 0x0050d640, a case-sensitive strcmp on the type name).
+bool IsScriptedDoorType(const char *type)
+{
+    return type && (!strcmp(type, "Door1") || !strcmp(type, "Door2") ||
+                    !strcmp(type, "PortEW") || !strcmp(type, "PortNS"));
+}
+
+}  // namespace
+
+// REVSYNC: 0x0050c880
+bool TExit::Initialize()
+{
+    exitlistdirty = false;
+    return ReadExitList(false);
+}
+
+// REVSYNC: 0x0050c8a0
+void TExit::Close()
+{
+    WriteExitList();
+    exitlist.clear();
+    exitlistdirty = false;
+}
+
+// REVSYNC: WriteExitList @ 0x0050cca0. Retail wrote the module's exit.def
+// when that file existed on disk, else the shared one; DataFilePath picks
+// the same, and the file layer puts writes under the save path. Entries go
+// out in retail's list order (newest first).
 bool TExit::WriteExitList()
 {
     if (!exitlistdirty)
@@ -121,42 +205,77 @@ bool TExit::WriteExitList()
     if (!ReadExitList(true))    // get any exits that have been added since last load
         return false;
 
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%sexit.def", ClassDefPath);
-    
-    FILE *fp = TryOpen(fname, "wb");
+    const std::string path = ModuleManager.DataFilePath("exit.def");
+    std::unique_ptr<FILE, SFileCloser> fp(TryOpen(path.c_str(), "wb"));
     if (!fp)
         return false;
 
-    for (PSExitRef ref = exitlist; ref; ref = ref->next)
-        if (!fprintf(fp, "%s (%d, %d, %d) level %d mapindex 0x%x ambient %d (%d, %d, %d)\r\n",
-                        ref->name, ref->target.x, ref->target.y, ref->target.z, ref->level, ref->mapindex,
-                        ref->ambient, ref->ambcolor.red, ref->ambcolor.green, ref->ambcolor.blue))
-        {
-            fclose(fp);
+    for (auto it = exitlist.rbegin(); it != exitlist.rend(); ++it)
+        if (fprintf(fp.get(), "%s (%d, %d, %d) level %d mapindex 0x%x ambient %d (%d, %d, %d)\r\n",
+                    it->name.c_str(), it->target.x, it->target.y, it->target.z, it->level,
+                    it->mapindex, it->ambient, it->ambcolor.red, it->ambcolor.green,
+                    it->ambcolor.blue) < 0)
             return false;
-        }
 
-    fclose(fp);
     exitlistdirty = false;
     return true;
 }
 
-void TExit::DestroyExitList()
+bool TExit::AddExit(const char *name, TObjectInstance* inst, bool getamb)
 {
-    PSExitRef next;
+    if (!name || !*name || !inst)
+        return false;
 
-    for (PSExitRef ref = exitlist; ref; ref = next)
+    SExitRef* ref = FindExit(name);
+    if (!ref)
     {
-        next = ref->next;
-
-        delete ref->name;
-        delete ref;
+        exitlist.push_back(SExitRef{});
+        ref = &exitlist.back();
+        ref->name = name;
     }
 
-    exitlist = nullptr;
-    exitlistdirty = false;
+    if (inst->ObjClass() != OBJCLASS_EXIT)
+    {
+        inst->GetPos(ref->target);
+        ref->mapindex = -1;
+    }
+    else
+    {
+        if (inst->GetImagery() == nullptr)
+            ref->target = S3DPoint(0, 0, 0);
+        else
+        {
+            int32_t regx, regy, regz, width, length, height;
+            static_cast<TExit*>(inst)->GetExitStrip(regx, regy, regz, width, length, height);
+            const S3DPoint start(-regx * GRIDSIZE, -regy * GRIDSIZE, 0);
+            const S3DPoint end(start.x + width * GRIDSIZE, start.y + length * GRIDSIZE, 0);
+            ref->target = S3DPoint((start.x + end.x) / 2, (start.y + end.y) / 2, 0);
+        }
+        ref->target += inst->Pos();
+
+        // remember to close the door on the way out...
+        ref->mapindex = inst->GetMapIndex();
+
+        if (getamb)
+        {
+            ref->ambient = MapPane.GetAmbientLight();
+            ref->ambcolor = MapPane.GetAmbientColor();
+        }
+        else
+        {
+            ref->ambcolor.red = ref->ambcolor.green = ref->ambcolor.blue = 255;
+            ref->ambient = -1;
+        }
+    }
+
+    ref->level = MapPane.GetMapLevel();
+    exitlistdirty = true;
+    return true;
 }
+
+// *********
+// * TExit *
+// *********
 
 void TExit::GetExitStrip(int32_t &regx, int32_t &regy, int32_t &regz, int32_t &width, int32_t &length, int32_t &height)
 {
@@ -200,7 +319,6 @@ void TExit::GetExitStrip(int32_t &regx, int32_t &regy, int32_t &regz, int32_t &w
     if (dir >= 0xE0 || dir < 0x20)
     {
         // north-facing exit
-        //regy += 1;
         length = 1;
     }
     else if (dir < 0x60)
@@ -218,257 +336,184 @@ void TExit::GetExitStrip(int32_t &regx, int32_t &regy, int32_t &regz, int32_t &w
     else if (dir < 0xE0)
     {
         // west-facing exit
-        //regx += 1;
         width = 1;
     }
 }
 
-bool TExit::AddExit(char *name, TObjectInstance* inst, bool getamb)
+// Cells as retail computes them (C division, so a point up to a cell short
+// of the strip's near edge still counts).
+bool TExit::OnStrip(const S3DPoint& at, int32_t regx, int32_t regy, int32_t width, int32_t length) const
 {
-    if (!name || !*name || !inst)
-        return false;
-
-    PSExitRef ref = FindExit(name);
-
-    // if it already exists we can skip some stuff
-    if (!ref)
-    {
-        ref = new SExitRef;
-        ref->name = strdup(name);
-
-        ref->next = exitlist;
-        exitlist = ref;
-    }
-
-    if (inst->ObjClass() != OBJCLASS_EXIT)
-    {
-        inst->GetPos(ref->target);
-        ref->mapindex = -1;
-    }
-    else
-    {
-        if (inst->GetImagery() == nullptr)
-            memset(&ref->target, 0, sizeof(S3DPoint));
-        else
-        {
-            int32_t regx, regy, regz, width, length, height;
-            ((PTExit)inst)->GetExitStrip(regx, regy, regz, width, length, height);
-            S3DPoint start(0, 0, 0);
-            start.x -= regx * GRIDSIZE;
-            start.y -= regy * GRIDSIZE;
-            S3DPoint end = start;
-            end.x += width * GRIDSIZE;
-            end.y += length * GRIDSIZE;
-
-            ref->target.x = (start.x + end.x) / 2;
-            ref->target.y = (start.y + end.y) / 2;
-            ref->target.z = (start.z + end.z) / 2;
-        }
-
-        S3DPoint pos;
-        inst->GetPos(pos);
-        ref->target += pos;
-
-        // remember to close the door on the way out...
-        ref->mapindex = inst->GetMapIndex();
-
-        if (getamb)
-        {
-            ref->ambient = MapPane.GetAmbientLight();
-            GetAmbientColor(ref->ambcolor);
-        }
-        else
-        {
-            ref->ambcolor.red = ref->ambcolor.green = ref->ambcolor.blue = 255;
-            ref->ambient = -1;
-        }
-    }
-
-    ref->level = MapPane.GetMapLevel();     // hrm...no level on objects...is that bad?
-
-    exitlistdirty = true;
-
-    return true;
+    const int32_t gx = (regx * GRIDSIZE - pos.x + at.x) / GRIDSIZE;
+    const int32_t gy = (regy * GRIDSIZE - pos.y + at.y) / GRIDSIZE;
+    return gx >= 0 && gy >= 0 && gx < width && gy < length;
 }
 
-PSExitRef TExit::FindExit(char *exitname)
+// Driven by the animation's name in the imagery, not the state number: a
+// finished CLOSING animation goes to `closedstate`, OPENING to open.
+void TExit::StepAnimation(int32_t closedstate, bool needsmultiframe)
 {
-    for (PSExitRef ref = exitlist; ref; ref = ref->next)
-        if (stricmp(ref->name, exitname) == 0)
-            return ref;
+    if (!CommandDone() || !Openable() || !HasAnimator())
+        return;
 
-    return nullptr;
+    TObjectImagery* im = GetImagery();
+    if (!im || (needsmultiframe && im->GetAniLength(state) <= 1))
+        return;
+
+    const char *ani = im->GetAniName(state);
+    if (!ani)
+        return;
+    if (!stricmp(ani, "CLOSING"))
+        SetExitState(closedstate);
+    if (!stricmp(ani, "OPENING"))
+        SetExitState(EXIT_OPEN);
+}
+
+void TExit::Pulse()
+{
+    TObjectInstance::Pulse();       // retail skips TContainer (0x004708e0)
+
+    if (!Editor)
+    {
+        StepAnimation(EXIT_CLOSED, true);
+
+        // Retail ran the scan on the server only; the port is single player.
+        if (GetImagery())
+        {
+            int32_t regx, regy, regz, width, length, height;
+            GetExitStrip(regx, regy, regz, width, length, height);
+
+            exitflags &= ~(kExitPlayerOn | kExitArrivedOnExit);
+            for (int32_t i = 0; i < PlayerManager.NumPlayers(); i++)
+            {
+                TPlayer* player = PlayerManager.GetPlayer(i);
+                if (!player || !OnStrip(player->Pos(), regx, regy, width, length) ||
+                    IsScriptedDoorType(GetTypeName()))
+                    continue;
+
+                // A player already on an exit -- just arrived through one --
+                // doesn't set this one off; it has to step off every strip
+                // first (TCharacter clears OF_ONEXIT after 5 frames).
+                exitflags |= kExitPlayerOn;
+                if (player->IsOnExit())
+                    exitflags |= kExitArrivedOnExit;
+                else
+                    Activate(player, false);
+                player->SetOnExit();
+            }
+        }
+    }
+
+    if (!HasAnimator())
+        SetCommandDone(true);
 }
 
 bool TExit::Use(TObjectInstance* user, int32_t with)
 {
-    TObjectInstance::Use(user, with);
+    if (!Openable())
+        return false;
 
-    if (Openable())
+    // A key or lockpick attempt answers for itself, and the USE trigger
+    // still runs even when it failed (EXITS.md §1.8).
+    if (!CheckKeyUse(user, MapPane.GetInstance(with)) && Locked())
     {
-        if (CheckKeyUse(user, MapPane.GetInstance(with)))
-            return true;
-
-        if (Locked())
-        {
-            TextBar.Print("It seems to be locked.");
-            return false;
-        }
-
-        if (state == EXIT_OPEN || state == EXIT_OPENING)
-            SetExitState(EXIT_CLOSING);
-        else if (state == EXIT_CLOSED || state == EXIT_CLOSING)
-            SetExitState(EXIT_OPENING);
-
-        return true;
+        if (user == Player)
+            TextBar.Print("%s", DialogList.GetLine("DOORLOCKED"));
+        return false;
     }
 
-    return false;
+    TObjectInstance::Use(user, with);
+    return true;
 }
 
 int32_t TExit::CursorType(TObjectInstance* with)
 {
-    if (Openable())
-    {
-        if (with)
-            return CURSOR_HAND;
-
-        return CURSOR_DOOR;
-    }
+    if (Openable() && !(flags & OF_INVISIBLE))
+        return with ? CURSOR_HAND : CURSOR_DOOR;
 
     return CURSOR_NONE;
 }
 
-bool TExit::Activate()
+void TExit::UseRange(int32_t &mindist, int32_t &maxdist, int32_t &minang, int32_t &maxang)
 {
-    if (GetScript())
-        GetScript()->Trigger(TRIGGER_ACTIVATE);
+}
 
-    if (exitflags & EX_FROMEXIT)        // if we just came from an exit, don't reflect back
+bool TExit::Activate(TObjectInstance* user, bool forced)
+{
+    if (!user)
+        user = Player;
+    if (!user || Locked())
         return false;
 
-    PSExitRef ref = FindExit(name);     // find this exit in the master list
-    if (!ref)
-        return false;
-
-    S3DPoint targ = ref->target;
-
-    // minor hack, for now
-    if (stricmp(GetTypeName(), "Door") == 0 && Player)
+    if (GetScript() && !forced)
     {
-        S3DPoint vect;
-        ConvertToVector(Player->GetFace(), 24, vect);
-        targ += vect;
+        GetScript()->Trigger(TRIGGER_ACTIVATE, nullptr, nullptr, user, kAliasUser);
+        return true;
     }
 
-    // Set new position
-    Player->SetPos(targ, ref->level);
+    if (!forced && !AutoActivate())
+        return false;
 
+    const SExitRef* ref = FindExit(GetName());
+    if (!ref)
+        return GetScript() != nullptr;
+
+    user->Teleport(ref->target, ref->level);
     return true;
 }
 
 void TExit::Unactivate()
 {
     if (Openable())
-        SetExitState(EXIT_CLOSING);
+        SetExitState(EXIT_CLOSINGOUT);
 }
 
-bool TExit::SetExitState(int32_t es)
+void TExit::Operate(TObjectInstance* user)
 {
-    int32_t st;
+    if (state == EXIT_OPEN || state == EXIT_OPENINGOUT)
+        SetExitState(IsOutside(user) ? EXIT_CLOSINGOUT : EXIT_CLOSINGIN);
+    else if (state == EXIT_CLOSED || state == EXIT_CLOSINGOUT)
+        SetExitState(IsOutside(user) ? EXIT_OPENINGOUT : EXIT_OPENINGIN);
+}
 
-    if (es == EXIT_OPEN)
-        st = FindState("open");
-    else if (es == EXIT_CLOSED)
-        st = FindState("closed");
-    else if (es == EXIT_OPENING)
+// `obj` is outside when it is nearer the point 10 units behind the exit's
+// facing than the one 10 units in front of it (retail's approximate
+// distance, 0x0046de60 = Distance).
+bool TExit::IsOutside(const TObjectInstance* obj)
+{
+    if (!obj)
+        return false;
+
+    const int32_t facing = Facing() + GetFace();
+    const S3DPoint front = RetailFacingPoint(facing, 10);
+    const S3DPoint back  = RetailFacingPoint(facing + 0x7f, 10);
+    S3DPoint delta = obj->Pos();
+    delta -= pos;
+    return ::Distance(back, delta) < ::Distance(front, delta);
+}
+
+void TExit::SetExitState(int32_t es)
+{
+    struct SStateName { const char *name; const char *fallback; };
+    static constexpr SStateName kNames[] = {
+        { "openingout", "closed to open" },     // EXIT_OPENINGOUT
+        { "open",       nullptr },              // EXIT_OPEN
+        { "closingout", "open to closed" },     // EXIT_CLOSINGOUT
+        { "closed",     nullptr },              // EXIT_CLOSED
+        { "openingin",  "closed to open" },     // EXIT_OPENINGIN
+        { "closingin",  "open to closed" },     // EXIT_CLOSINGIN
+    };
+
+    int32_t st = es;
+    if (es >= 0 && es < (int32_t)std::size(kNames))
     {
-        st = FindState("opening");
+        st = FindState(kNames[es].name);
+        if (st < 0 && kNames[es].fallback)
+            st = FindState(kNames[es].fallback);
         if (st < 0)
-            st = FindState("closed to open");
+            st = es;
     }
-    else if (es == EXIT_CLOSING)
-    {
-        st = FindState("closing");
-        if (st < 0)
-            st = FindState("open to closed");
-    }
-
-    if (st < 0)
-        st = es;
-
-    return SetState(st);
-}
-
-void TExit::Pulse()
-{
-    TContainer::Pulse();
-
-    if (!Editor && CommandDone() && Openable())
-    {
-        if (state == EXIT_CLOSING)
-            SetExitState(EXIT_CLOSED);
-        else if (state == EXIT_OPENING)
-            SetExitState(EXIT_OPEN);
-    }
-
-    if (Player && !Editor && GetImagery())
-    {
-        int32_t regx, regy, regz, width, length, height;
-        GetExitStrip(regx, regy, regz, width, length, height);
-
-        // get the player's relative position to the exit
-        S3DPoint delta;
-        Player->GetPos(delta);
-        delta -= pos;
-        delta.x = (delta.x + (regx * GRIDSIZE)) / GRIDSIZE;
-        delta.y = (delta.y + (regy * GRIDSIZE)) / GRIDSIZE;
-        delta.z = (delta.z + (GetImagery()->GetWorldRegZ(state) * GRIDSIZE)) / GRIDSIZE;
-
-        bool activate = true;
-//      if (StopMoving())
-//      {
-//          // for usecenter exits, wait until the character stops moving
-//          S3DPoint lnextmove;
-//          Player->GetNextMove(lnextmove);
-//          if (lnextmove.x != 0 || lnextmove.y != 0 || lnextmove.z != 0)
-//              activate = false;
-//      }
-
-        // check if the player is over the strip of walkmap immediately past
-        // the bounding box in the given direction
-        if (delta.x >= 0 && delta.y >= 0 && /*delta.z >= 0 &&*/
-            delta.x < width && delta.y < length/* && delta.z < height*/)
-        {
-            if (Player->IsOnExit() && !(exitflags & EX_ON))
-                exitflags |= EX_FROMEXIT; // Looks like we just poped here from another exit
-
-            Player->SetOnExit(); // Indicate we're on an exit
-            exitflags |= EX_ON;
-
-            if (activate &&                     // Activation enabled
-                !(exitflags & EX_ACTIVATED))    // Hasn't already been activated
-            {
-                if (wait++ > Delay())
-                {
-                    wait = 0;
-                    if (Activate())
-                        exitflags |= EX_ACTIVATED;
-                }
-            }
-        }
-        else
-        {
-            if (exitflags & EX_ACTIVATED)
-                Unactivate();
-
-            exitflags &= ~(EX_ON | EX_ACTIVATED | EX_FROMEXIT);
-        }
-    }
-}
-
-void TExit::UseRange(int32_t &mindist, int32_t &maxdist, int32_t &minang, int32_t &maxang)
-{
+    SetState(st);
 }
 
 void TExit::Load(RTInputStream is, int32_t version, int32_t objversion)
@@ -487,94 +532,89 @@ void TExit::Save(RTOutputStream os)
 // * TPressPlate *
 // ***************
 
-#define PLATE_UP        0
-#define PLATE_DOWN      1
-
+// Retail vtable 0x5b2258. Its 1998 Activate (TExit::Activate, then the plate
+// goes down) became 0x0050da20, but in a new vtable slot (0x280) that
+// nothing calls: the engine never moves a plate, which behaves as a plain
+// auto-activating exit (EXITS.md §2.1). Not ported, since it never runs.
 _CLASSDEF(TPressPlate)
 class TPressPlate : public TExit
 {
   public:
-    TPressPlate(TObjectImagery* newim) : TExit(newim) { }
-    TPressPlate(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) { }
+    TPressPlate(TObjectImagery* newim) : TExit(newim) {}
+    TPressPlate(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) {}
 
-    virtual bool Use(TObjectInstance* user, int32_t with = -1) { return false; }
-    virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
-
-    virtual bool Activate();
-    virtual void Unactivate();
+    // REVSYNC: 0x0050df30
+    bool Use(TObjectInstance* user, int32_t with = -1) override { return false; }
+    // REVSYNC: 0x0050df40
+    int32_t CursorType(TObjectInstance* with = nullptr) override { return CURSOR_NONE; }
+    // REVSYNC: 0x0050da50 -- the plate up (state 0).
+    void Unactivate() override { SetState(0); }
 };
 
 DEFINE_BUILDER("PressPlate", TPressPlate)
 REGISTER_BUILDER(TPressPlate)
 
-bool TPressPlate::Activate()
-{
-    TExit::Activate();
-
-    SetState(PLATE_DOWN);
-
-    return true;
-}
-
-void TPressPlate::Unactivate()
-{
-    SetState(PLATE_UP);
-}
-
 // ************
 // * TUpBlock *
 // ************
 
+// Retail vtable 0x5b24e0 (types UpBlock: UpBlock.I3D and WallBlock.I3D).
 _CLASSDEF(TUpBlock)
 class TUpBlock : public TExit
 {
   public:
-    TUpBlock(TObjectImagery* newim) : TExit(newim) { }
-    TUpBlock(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) { }
+    TUpBlock(TObjectImagery* newim) : TExit(newim) {}
+    TUpBlock(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) {}
 
-    virtual bool Use(TObjectInstance* user, int32_t with = -1);
-    virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
-
-    virtual void Pulse();
+    // REVSYNC: 0x0050dae0
+    bool Use(TObjectInstance* user, int32_t with = -1) override;
+    // REVSYNC: 0x0050e020
+    int32_t CursorType(TObjectInstance* with = nullptr) override { return CURSOR_NONE; }
+    // REVSYNC: 0x0050da80
+    void Pulse() override;
 };
 
 DEFINE_BUILDER("UpBlock", TUpBlock)
 REGISTER_BUILDER(TUpBlock)
 
+// A finished move settles (raw states).
 void TUpBlock::Pulse()
 {
     if (!Editor && CommandDone())
     {
-        if (state == EXIT_CLOSING)
+        if (state == EXIT_CLOSING || state == EXIT_CLOSINGIN)
             SetState(EXIT_CLOSED);
-        else if (state == EXIT_OPENING)
+        else if (state == EXIT_OPENING || state == EXIT_OPENINGIN)
             SetState(EXIT_OPEN);
     }
 
     TExit::Pulse();
 }
 
+// A USE script that handles it wins; otherwise a bare use (no item) moves
+// the block the other way.
 bool TUpBlock::Use(TObjectInstance* user, int32_t with)
 {
-    if (with == -1)
-    {
-        if (state == EXIT_CLOSING || state == EXIT_CLOSED)
-            SetState(EXIT_OPENING);
-        else if (state == EXIT_OPENING || state == EXIT_OPEN)
-            SetState(EXIT_CLOSING);
-
-        PLAY("grind rock");
-
+    if (TObjectInstance::Use(user, with))
         return true;
-    }
+    if (with != -1)
+        return false;
 
-    return false;
+    if (state == EXIT_CLOSING || state == EXIT_CLOSED)
+        SetState(EXIT_OPENING);
+    else if (state == EXIT_OPENING || state == EXIT_OPEN)
+        SetState(EXIT_CLOSING);
+
+    PLAY("grind rock");
+    return true;
 }
 
 // **********************
 // * TDragonEntAnimator *
 // **********************
 
+// Retail animator vtable 0x5b2764, as 1998. TExit::GetExitStrip never asks
+// the animator, so its strip is unused (EXITS.md §2.4).
 _CLASSDEF(TDragonEntAnimator)
 class TDragonEntAnimator : public T3DAnimator
 {
@@ -604,63 +644,8 @@ void TDragonEntAnimator::Animate(bool draw)
 
 bool TDragonEntAnimator::Render()
 {
-    /*
-    uint32_t savedcull;
-    TRY_D3D(Device2->GetRenderState(D3DRENDERSTATE_CULLMODE, &savedcull));
-
-    TRY_D3D(Device2->SetRenderState(D3DRENDERSTATE_CULLMODE, D3DCULL_NONE));
-
-    TRY_D3D(Device2->SetRenderState(D3DRENDERSTATE_CULLMODE, savedcull));
-    */
-
     T3DAnimator::Render();
-
     return true;
-}
-
-// **************
-// * TSpikeWall *
-// **************
-
-_CLASSDEF(TSpikeWall)
-class TSpikeWall : public TExit
-{
-  public:
-    TSpikeWall(TObjectImagery* newim) : TExit(newim) { }
-    TSpikeWall(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) { }
-
-    virtual bool Use(TObjectInstance* user, int32_t with = -1) { return false; }
-    virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
-
-    virtual bool Activate();
-    virtual void Unactivate();
-};
-
-DEFINE_BUILDER("SpikeWall", TSpikeWall)
-REGISTER_BUILDER(TSpikeWall)
-
-bool TSpikeWall::Activate()
-{
-    TExit::Activate();
-    
-    if (Player)
-    {
-        Player->Force("impale");
-        Player->Damage(10000, DAMAGE_PIERCING);     // make sure he's good n' dead
-    }
-
-    SetState(EXIT_OPENING);
-
-    PLAY("spike");
-
-    return true;
-}
-
-void TSpikeWall::Unactivate()
-{
-    SetState(EXIT_CLOSING);
-
-    PLAY("spike");
 }
 
 // ***************
@@ -672,29 +657,52 @@ REGISTER_BUILDER(TLever)
 bool TLever::Use(TObjectInstance* user, int32_t with)
 {
     TExit::Use(user, with);
-
     return true;
-}                                              
-
-void TLever::Pulse()
-{
-    TExit::Pulse();
-
-    if (Editor)
-        return;
-
-/*  if (AtActivatePos() == ACTIVATE_IMTHERE)
-    {
-        S3DPoint newpos;
-
-        Player->Face( (usedir * 64));   // 0 = NE, SE, SW, NW
-        Player->GetPos( newpos);
-        newpos.x = targetpos.x;
-        newpos.y = targetpos.y;
-        Player->SetPos( newpos);
-        ((PTCharacter)Player)->Pull( this);
-        return;
-    }
-*/
 }
 
+// Raw states: anything but open or closed goes to closed, open or closed
+// starts closing.
+void TLever::Operate(TObjectInstance* user)
+{
+    if (state != EXIT_OPEN && state != EXIT_CLOSED)
+        SetState(EXIT_CLOSED);
+    else
+        SetState(EXIT_CLOSINGOUT);
+}
+
+// The 1998 exit model, for the main player: Delay frames on the strip
+// activate it once; stepping off unactivates it.
+void TLever::Pulse()
+{
+    TObjectInstance::Pulse();
+
+    if (!Editor)
+        StepAnimation(EXIT_OPENINGOUT, false);  // retail's CLOSING -> 0 (author question 33)
+
+    if (!Player || Editor || !GetImagery())
+        return;
+
+    int32_t regx, regy, regz, width, length, height;
+    GetExitStrip(regx, regy, regz, width, length, height);
+
+    if (!OnStrip(Player->Pos(), regx, regy, width, length))
+    {
+        if (exitflags & kExitActivated)
+            Unactivate();
+        exitflags &= ~(kExitPlayerOn | kExitActivated | kExitArrivedOnExit);
+        return;
+    }
+
+    if (Player->IsOnExit() && !(exitflags & kExitPlayerOn))
+        exitflags |= kExitArrivedOnExit;
+    Player->SetOnExit();
+
+    const uint32_t before = exitflags;
+    exitflags |= kExitPlayerOn;
+    if (!(before & kExitActivated) && wait++ > Delay())
+    {
+        wait = 0;
+        if (Activate(nullptr, false))
+            exitflags |= kExitActivated;
+    }
+}
