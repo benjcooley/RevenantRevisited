@@ -1,5 +1,15 @@
 # VFX Agent Guide
 
+**Active workflow (2026-10-07):** use the thin in-process retail emulator for
+most VFX validation. DOSBox-X with the emulated 3D device is allowed for targeted
+checks of software-rendering issues, with guest ownership coordinated first.
+Keep routine work in the fast emulator. Read [the current A/B guide](../RETAIL_AB_TESTING.md)
+and [independent named builds/sessions](../../tools/retail_runtime/README-parallel.md).
+Use structured test actions and direct retail-function adapters rather than
+typing editor console commands. Extend missing adapter support or move to another
+easy effect. Record renderer limitations separately from VFX behavior; favor
+fast, repeatable progress. Preserve historical references as provenance.
+
 Protocol for an agent picking up a slice of the VFX restoration. Designed so
 multiple agents can work in parallel without stepping on each other.
 
@@ -398,7 +408,7 @@ file if it doesn't exist) before sinking days into a bespoke workaround.
 Not every effect should be a data-driven engine definition. **Use the engine
 for the common shapes; keep bespoke when behavior is genuinely unique.**
 
-**Use the engine** (declare in `data/Resources/effects.def`, drive via
+**Use the engine** (declare in `assets/effects.def`, drive via
 `TParticleEffectComponent` + expression VM, minimal C++ shim) when the
 effect is one of these shapes:
 

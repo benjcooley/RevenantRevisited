@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "testmodes.h"
+#include "screen.h"
 
 #include <sokol_app.h>          // sapp_request_quit on script drain
 #include <stb_image_write.h>   // for i3ddump test mode (impl lives in framesnap.cpp)
@@ -19,12 +20,15 @@
 #include "font.h"
 #include "fonttable.h"
 #include "framesnap.h"
+#include "fireballruntimetest.h"
 #include "hudstate.h"
 #include "imagery.h"
 #include "imageres.h"
 #include "imgui.h"
 #include "chunkcache.h"
 #include "character.h"
+#include "command.h"
+#include "mappane.h"
 #include "cursor.h"
 #include "logging.h"
 #include "maprenderer.h"
@@ -33,23 +37,23 @@
 #include "render_metadata.h"
 #include "renderer.h"
 #include "revenant.h"
+#include "revutils.h"
 #include "sound.h"
 #include "testconfig.h"
 #include "time.h"
 #include "tile.h"
 #include "uidragstate.h"
+#include "uidemoplayer.h"
 #include "uianchortest.h"
 #include "uibarinvtest.h"
 #include "uibottombartest.h"
 #include "uicliptest.h"
-#include "uideathtest.h"
 #include "uiequiptest.h"
 #include "uihudtest.h"
 #include "uidefscreentest.h"
 #include "uiinventorytest.h"
 #include "uilayouttest.h"
 #include "uiloadscreentest.h"
-#include "uimainmenutest.h"
 #include "uimaptest.h"
 #include "uinineslicetest.h"
 #include "uiplyrstatusbartest.h"
@@ -2324,11 +2328,10 @@ bool InitializeI3DStaticMode()
 bool InitializeWaterPreviewMode()
 {
     std::string meta_error;
-    const std::filesystem::path meta_path =
-        std::filesystem::current_path() / ".." / "data" / "Resources" / "render_metadata.def";
-    if (!LoadRenderMetadataFile(meta_path.string().c_str(), g_i3dTest.render_meta, &meta_error))
+    const std::string meta_path = rev_engine_asset("render_metadata.def");
+    if (!LoadRenderMetadataFile(meta_path.c_str(), g_i3dTest.render_meta, &meta_error))
         log_warn("[water3d] failed to load render metadata '%s': %s",
-                 meta_path.string().c_str(), meta_error.c_str());
+                 meta_path.c_str(), meta_error.c_str());
 
     g_i3dTest.roster = {
         "Misc\\Water.I3D",
@@ -2555,7 +2558,7 @@ bool InitializeIconMode()
         return true;
     }
     log_info("[icon] atlas %dx%d for %d glyphs",
-        atlas->width, atlas->height, (int)atlas->numchars);
+        atlas->width, atlas->height, (int)atlas->glyphs.size() - 1);
     return true;
 }
 
@@ -2896,19 +2899,19 @@ void RenderAudioMode()
         ImGui::Text("SFX registry (%d entries)", SoundPlayer.NumItems());
         if (ImGui::BeginChild("sfxlist", ImVec2(0, 0), true)) {
             for (int32_t i = 0; i < SoundPlayer.NumItems(); ++i) {
-                PSSoundRef ref = SoundPlayer.GetRef(i);
-                if (!ref || !ref->name) continue;
+                const SSoundRef* ref = SoundPlayer.GetRef(i);
+                if (!ref) continue;
                 ImGui::PushID(i);
                 if (ImGui::Button("Play")) {
                     if (SoundPlayer.Mount(i)) {
                         SoundPlayer.Play(i);
                         SoundPlayer.Unmount(i);
                     } else {
-                        log_warn("[audio] mount failed for sound[%d] '%s'", i, ref->name);
+                        log_warn("[audio] mount failed for sound[%d] '%s'", i, ref->name.c_str());
                     }
                 }
                 ImGui::SameLine();
-                ImGui::Text("%s", ref->name);
+                ImGui::Text("%s", ref->file.c_str());
                 ImGui::PopID();
             }
         }
@@ -2931,13 +2934,13 @@ void RenderAudioMode()
 // HandleMouseClick / HandleKeyPress path real input uses. Coordinates are in
 // Classic 640x480 content pixels (the UI test modes letterbox internally).
 // =====================================================================
-enum { MS_MOVE = 0, MS_CLICK, MS_KEY, MS_LOG, MS_SNAP };
+enum { MS_MOVE = 0, MS_CLICK, MS_KEY, MS_CHAR, MS_LOG, MS_SNAP };
 
 struct SInputEvent
 {
     double      at_ms = 0.0;   // fire time, ms from script start
     int32_t     kind  = MS_MOVE;
-    int32_t     button = 0;    // MB_* for MS_CLICK; VK code for MS_KEY
+    int32_t     button = 0;    // MB_* for MS_CLICK; VK code for MS_KEY; character for MS_CHAR
     int32_t     x = 0, y = 0;  // for MS_KEY: x = 1 (down) / 0 (up)
     std::string text;          // for MS_LOG
 };
@@ -3123,6 +3126,18 @@ void InputSimStart(const char* script)
                 log_warn("[input-sim] key_press: unknown key '%s'",
                          tok.size() > 1 ? tok[1].c_str() : "");
         }
+        else if (op == "type" || op == "type_text")
+        {
+            // Typed text: one character event per character, 30 ms apart.
+            constexpr int32_t kTypeIntervalMs = 30;
+            const size_t sp = cmd.find(' ');
+            const std::string text = (sp == std::string::npos) ? "" : cmd.substr(sp + 1);
+            for (const char c : text)
+            {
+                g_inputSimEvents.push_back({ t_ms, MS_CHAR, (int32_t)(unsigned char)c, 0, 0, "" });
+                t_ms += kTypeIntervalMs;
+            }
+        }
         else if (op == "loop")
             g_inputSimLoop = true;
         else if (op == "take_snapshot" || op == "snapshot" || op == "snap")
@@ -3150,6 +3165,176 @@ void InputSimStart(const char* script)
                  g_inputSimEvents.size(), g_inputSimLoop ? 1 : 0);
 }
 
+// Optional --test=sector timeline. Commands go through the same interpreter
+// as story scripts; @expect/@absent are observations, never object mutation.
+// Format: legacy_tick | context type/name (or -) | command
+struct SSceneCommandEvent {
+    double tick = 0;
+    std::string context, command;
+    int line = 0;
+};
+struct SSceneCommandIdentity {
+    std::string selector;
+    int32_t map_index = -1;
+    uint32_t id = 0;
+};
+std::vector<SSceneCommandEvent> g_sceneCommands;
+std::vector<SSceneCommandIdentity> g_sceneIdentities;
+size_t g_sceneCommandNext = 0;
+double g_sceneCommandTicks = 0;
+int64_t g_sceneCommandPulsedTick = -1;
+bool g_sceneCommandFailed = false;
+bool g_sceneCommandCompleted = false;
+
+std::string SceneTrim(const std::string& value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    return first == std::string::npos ? "" : value.substr(first, value.find_last_not_of(" \t\r\n") - first + 1);
+}
+bool SceneCommandsStart() {
+    g_sceneCommands.clear(); g_sceneIdentities.clear();
+    g_sceneCommandNext = 0; g_sceneCommandTicks = 0; g_sceneCommandPulsedTick = -1; g_sceneCommandFailed = false; g_sceneCommandCompleted = false;
+    if (!StartupSceneCommandFile[0]) return true;
+    if (!StartupSceneCameraSet) {
+        log_error("[scene-command] requires explicit --scene-camera=L,X,Y,Z"); return false;
+    }
+    std::ifstream input(StartupSceneCommandFile);
+    if (!input) { log_error("[scene-command] cannot read '%s'", StartupSceneCommandFile); return false; }
+    std::string line; int number = 0;
+    while (std::getline(input, line)) {
+        ++number; line = SceneTrim(line);
+        if (line.empty() || line[0] == '#') continue;
+        const auto a = line.find('|'), b = a == std::string::npos ? a : line.find('|', a + 1);
+        if (a == std::string::npos || b == std::string::npos) {
+            log_error("[scene-command] invalid row at line %d", number); return false;
+        }
+        SSceneCommandEvent event;
+        const std::string tick = SceneTrim(line.substr(0, a));
+        char* end = nullptr; event.tick = strtod(tick.c_str(), &end);
+        event.context = SceneTrim(line.substr(a + 1, b - a - 1));
+        event.command = SceneTrim(line.substr(b + 1)); event.line = number;
+        if (tick.empty() || *end || !std::isfinite(event.tick) || event.tick < 0 ||
+            (!g_sceneCommands.empty() && event.tick < g_sceneCommands.back().tick) ||
+            event.context.empty() || event.command.empty()) {
+            log_error("[scene-command] invalid or unsorted row at line %d", number); return false;
+        }
+        g_sceneCommands.push_back(std::move(event));
+    }
+    const S3DPoint center = { StartupSceneCamera[1], StartupSceneCamera[2], StartupSceneCamera[3] };
+    if (!MapPane.BindCommandMapWindow(StartupSceneCamera[0], center)) {
+        log_error("[scene-command] cannot borrow current map active window"); return false;
+    }
+    log_info("[scene-command] loaded %zu rows from '%s' (24Hz ticks)", g_sceneCommands.size(), StartupSceneCommandFile);
+    return true;
+}
+TObjectInstance* SceneCommandContext(const std::string& selector) {
+    if (selector == "-") return nullptr;
+    for (const auto& identity : g_sceneIdentities) if (identity.selector == selector) {
+        TObjectInstance* object = MapPane.GetInstance(identity.map_index);
+        return object && object->ObjId() == identity.id ? object : nullptr;
+    }
+    std::string name = selector;
+    TObjectInstance* object = MapPane.FindClosestObject(name.data());
+    if (object) g_sceneIdentities.push_back({selector, object->GetMapIndex(), object->ObjId()});
+    return object;
+}
+void SceneCommandLogObject(const char* phase, const std::string& selector, TObjectInstance* object) {
+    if (!object) { log_info("[scene-command] %s context=%s alive=0", phase, selector.c_str()); return; }
+    const S3DPoint pos = object->Pos();
+    log_info("[scene-command] %s context=%s alive=1 id=%08x map_index=%d pos=%d,%d,%d amount=%d components=%d state=%d frame=%d",
+        phase, selector.c_str(), object->ObjId(), object->GetMapIndex(), pos.x, pos.y, pos.z,
+        object->Amount(), object->NumComponents(), object->GetState(), object->GetFrame());
+    for (int32_t slot = 0; slot < object->NumComponents(); ++slot)
+        if (TObjectComponent* component = object->GetComponent(slot))
+            log_info("[scene-command] component context=%s slot=%d name=%s generation=%u",
+                selector.c_str(), slot, component->ComponentName(), component->Generation());
+    if (auto* animator = dynamic_cast<T3DAnimator*>(object->GetAnimator())) {
+        const auto stats = animator->PartSysStats();
+        if (stats.controllers || stats.unsupported)
+            log_info("[scene-command] partsys phase=%s context=%s controllers=%zu emitters=%zu capacity=%zu alive=%zu next_emitter=%zu ticks=%llu quads=%llu renders=%llu unsupported=%d",
+                phase, selector.c_str(), stats.controllers, stats.emitters, stats.capacity,
+                stats.alive, stats.next_emitter, (unsigned long long)stats.ticks,
+                (unsigned long long)stats.quads, (unsigned long long)stats.renders, int(stats.unsupported));
+    }
+}
+void SceneCommandsTick() {
+    if (!StartupSceneCommandFile[0] || g_sceneCommandFailed) return;
+    // The renderer samples poses; opt-in scene tests use the real map tick
+    // functions for authored frames, pulses/scripts, movement and OF_KILL reap.
+    while (g_sceneCommandPulsedTick < int64_t(std::floor(g_sceneCommandTicks + 1e-6))) {
+        ++g_sceneCommandPulsedTick;
+        MapPane.NextFrameObjects();
+        MapPane.PulseObjects();
+        MapPane.MoveObjects();
+    }
+    while (g_sceneCommandNext < g_sceneCommands.size() &&
+           g_sceneCommands[g_sceneCommandNext].tick <= g_sceneCommandTicks + 1e-6) {
+        const auto& event = g_sceneCommands[g_sceneCommandNext++];
+        TObjectInstance* object = SceneCommandContext(event.context);
+        SceneCommandLogObject("before", event.context, object);
+        bool ok = true; int32_t result = 0;
+        if (event.command == "@absent") {
+            // A selector must have previously bound an identity; otherwise a
+            // misspelled name could produce a false passing deletion check.
+            bool bound = false;
+            for (const auto& identity : g_sceneIdentities) if (identity.selector == event.context) bound = true;
+            ok = bound && !object;
+        } else if (event.command.rfind("@partsys ", 0) == 0) {
+            // Observe actual map-owned controller state and submitted particles.
+            // Whole-image changes alone cannot prove that an emitter is running.
+            unsigned long long controllers = 0, emitters = 0, capacity = 0;
+            unsigned long long min_alive = 0, min_ticks = 0, min_quads = 0;
+            char extra = 0;
+            auto* animator = object ? dynamic_cast<T3DAnimator*>(object->GetAnimator()) : nullptr;
+            ok = animator && sscanf(event.command.c_str(), "@partsys %llu %llu %llu %llu %llu %llu %c",
+                &controllers, &emitters, &capacity, &min_alive, &min_ticks, &min_quads, &extra) == 6;
+            if (ok) {
+                const auto stats = animator->PartSysStats();
+                ok = !stats.unsupported && stats.controllers == controllers &&
+                    stats.emitters == emitters && stats.capacity == capacity &&
+                    stats.alive >= min_alive && stats.ticks >= min_ticks && stats.quads >= min_quads;
+            }
+        } else if (event.command.rfind("@frame ", 0) == 0) {
+            int expected = 0; char extra = 0;
+            ok = sscanf(event.command.c_str(), "@frame %d %c", &expected, &extra) == 1 &&
+                 object && object->GetFrame() == expected;
+        } else if (event.command.rfind("@expect ", 0) == 0) {
+            unsigned id = 0; int x = 0, y = 0, z = 0, count = 0; char component[128] = {}, extra = 0;
+            ok = sscanf(event.command.c_str(), "@expect %x %d %d %d %127s %d %c", &id, &x, &y, &z,
+                        component, &count, &extra) == 6 && object;
+            if (ok) {
+                const S3DPoint pos = object->Pos(); int actual = 0;
+                for (int32_t slot = 0; slot < object->NumComponents(); ++slot)
+                    if (TObjectComponent* c = object->GetComponent(slot))
+                        if (strcmp(c->ComponentName(), component) == 0) ++actual;
+                ok = object->ObjId() == id && pos.x == x && pos.y == y && pos.z == z && actual == count;
+            }
+        } else if (event.command[0] == '@') {
+            ok = false;
+        } else if (event.context != "-" && !object) {
+            ok = false;
+        } else {
+            std::string command = event.command + "\n";
+            TStringParseStream stream(command.data()); TToken token(stream); token.WhiteGet();
+            result = CommandInterpreter(object, token);
+            ok = (result & CMD_ERROR) == 0;
+        }
+        log_info("[scene-command] row line=%d tick=%.3f elapsed=%.3f context=%s result=%d status=%s command=%s",
+            event.line, event.tick, g_sceneCommandTicks, event.context.c_str(), result,
+            ok ? "PASS" : "FAIL", event.command.c_str());
+        SceneCommandLogObject("after", event.context, SceneCommandContext(event.context));
+        if (!ok) {
+            g_sceneCommandFailed = true;
+            log_error("[scene-command] FAILED at line %d", event.line);
+            sapp_request_quit(); return;
+        }
+    }
+    if (!g_sceneCommandCompleted && g_sceneCommandNext == g_sceneCommands.size()) {
+        g_sceneCommandCompleted = true;
+        log_info("[scene-command] COMPLETE rows=%zu failures=0", g_sceneCommands.size());
+    }
+    g_sceneCommandTicks += TTime::DeltaTime() * 24.0;
+}
+
 }  // namespace
 
 namespace TestModes {
@@ -3157,8 +3342,9 @@ namespace TestModes {
 // Defined here (in the TestModes namespace) so it can call the dispatch
 // functions directly. Fires all synthetic input events whose timestamp has
 // elapsed since the script started.
-static void InputSimTick(const char* mode)
+void InputSimTick(TScreen* screen)
 {
+    if (!screen) return;
     if (!g_inputSimActive) return;
     const double now_ms = TTime::Time() * 1000.0;
     if (g_inputSimStartMs == 0.0) g_inputSimStartMs = now_ms;
@@ -3176,7 +3362,7 @@ static void InputSimTick(const char* mode)
             // the script. Same globals the real mouse handler writes. Pass the
             // held-button mask so moves between down/up read as a drag.
             cursorx = e.x; cursory = e.y;
-            HandleMouseMove(mode, mousebutton, e.x, e.y);
+            screen->MouseMove(mousebutton, e.x, e.y);
             break;
         case MS_CLICK:
             cursorx = e.x; cursory = e.y;
@@ -3192,12 +3378,16 @@ static void InputSimTick(const char* mode)
             case MB_MIDDLEUP:   mousebutton &= ~MB_MIDDLEDOWN; break;
             default: break;
             }
-            HandleMouseClick(mode, e.button, e.x, e.y);
+            screen->MouseClick(e.button, e.x, e.y);
             break;
         case MS_KEY:
             // e.button = VK code, e.x = 1 (down) / 0 (up). Same path real keys
             // take; real keyboard is NOT gated, so synthetic + real coexist.
-            HandleKeyPress(mode, e.button, e.x != 0);
+            screen->KeyPress(e.button, e.x != 0);
+            break;
+        case MS_CHAR:
+            // The CHAR event path (revmain's SAPP_EVENTTYPE_CHAR).
+            screen->CharPress(e.button, true);
             break;
         case MS_SNAP:
             // Manual filmstrip capture (--filmstrip=N,0). Captures the LAST
@@ -3240,6 +3430,11 @@ static void InputSimTick(const char* mode)
     }
 }
 
+void InputSimArm()
+{
+    InputSimStart(StartupInputScript.c_str());
+}
+
 bool InputScriptActive()
 {
     // Own the mouse only while the script still has work to do: events pending,
@@ -3258,15 +3453,35 @@ bool DumpIconsToFolder(const char* path)
     return DumpIconsToPath(path);
 }
 
+// The --test=ui-* modes whose panes read the main player. They run against
+// the demo player (uidemoplayer.h), installed around the mode.
+static bool UsesDemoPlayer(const char* mode)
+{
+    static constexpr const char* kModes[] = {
+        "ui-hud", "ui-plyrstatusbar", "ui-stats", "ui-equip", "ui-inventory",
+        "ui-barinv", "ui-sidebar", "ui-quickspell", "ui-spellbook",
+    };
+    for (const char* m : kModes)
+        if (strcmp(mode, m) == 0)
+            return true;
+    return false;
+}
+
 bool Initialize(const char* mode)
 {
-    // Arm the scripted input simulator (no-op if --input-script was not given).
-    InputSimStart(StartupInputScript);
+    if (UsesDemoPlayer(mode) && !UIDemoPlayer::Install())
+        log_warn("[test] %s: no demo player; the panes show no player", mode);
 
     if (strcmp(mode, "blank") == 0 || strcmp(mode, "ticker") == 0)
         return true;
     if (strcmp(mode, "sector") == 0)
-        return g_mapRenderer.InitializeFromStartupArgs();
+        return g_mapRenderer.InitializeFromStartupArgs() && SceneCommandsStart();
+    if (strcmp(mode, "fireball-runtime") == 0)
+    {
+        const bool result=RunFireballRuntimeTest(g_mapRenderer);
+        sapp_request_quit();
+        return result;
+    }
     if (strcmp(mode, "mesh") == 0)
         return InitializeMeshMode();
     if (strcmp(mode, "char3d") == 0)
@@ -3347,10 +3562,6 @@ bool Initialize(const char* mode)
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return InitializeUIMainMenuMode();
-    if (strcmp(mode, "ui-death") == 0)
-        return InitializeUIDeathMode();
     if (IsUIDefScreenMode(mode))
         return InitializeUIDefScreenMode(mode);
     if (strcmp(mode, "audio") == 0)
@@ -3364,8 +3575,11 @@ bool Initialize(const char* mode)
 
 void Close(const char* mode)
 {
-    if (strcmp(mode, "sector") == 0)
+    if (strcmp(mode, "sector") == 0 || strcmp(mode, "fireball-runtime") == 0) {
+        g_sceneCommands.clear(); g_sceneIdentities.clear();
+        MapPane.ReleaseCommandMapWindow();
         g_mapRenderer.Shutdown();
+    }
     if (strcmp(mode, "mesh") == 0)
         CloseMeshMode();
     if (strcmp(mode, "char3d") == 0)
@@ -3416,10 +3630,6 @@ void Close(const char* mode)
         CloseUIHudMode();
     if (strcmp(mode, "ui-loadscreen") == 0)
         CloseUILoadScreenMode();
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        CloseUIMainMenuMode();
-    if (strcmp(mode, "ui-death") == 0)
-        CloseUIDeathMode();
     if (IsUIDefScreenMode(mode))
         CloseUIDefScreenMode();
     if (strcmp(mode, "audio") == 0)
@@ -3427,6 +3637,8 @@ void Close(const char* mode)
     if (strcmp(mode, "vfx") == 0)
         VfxTest::Close();
     DestroyBitmapAtlas(&g_uiAtlas);
+    if (UsesDemoPlayer(mode))
+        UIDemoPlayer::Remove();
 }
 
 void Render(const char* mode)
@@ -3434,12 +3646,13 @@ void Render(const char* mode)
     if (!Display.IsActive() || !Display.BackBuffer())
         return;
 
-    // Advance the scripted input simulator before painting so any hover/down
-    // state change is reflected in this frame (no-op without --input-script).
-    InputSimTick(mode);
+    if (UsesDemoPlayer(mode))
+        UIDemoPlayer::Pulse();
 
-    if (strcmp(mode, "sector") == 0)
+    if (strcmp(mode, "sector") == 0) {
+        SceneCommandsTick();
         return g_mapRenderer.RenderFrame();
+    }
     if (strcmp(mode, "mesh") == 0)
         return RenderMeshMode();
     if (strcmp(mode, "char3d") == 0)
@@ -3498,10 +3711,6 @@ void Render(const char* mode)
         return RenderUIHudMode();
     if (strcmp(mode, "ui-loadscreen") == 0)
         return RenderUILoadScreenMode();
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return RenderUIMainMenuMode();
-    if (strcmp(mode, "ui-death") == 0)
-        return RenderUIDeathMode();
     if (IsUIDefScreenMode(mode))
         return RenderUIDefScreenMode();
     if (strcmp(mode, "audio") == 0)
@@ -3513,12 +3722,6 @@ void Render(const char* mode)
 
 void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 {
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return HandleMouseClickUIMainMenuMode(button, x, y);
-    if (strcmp(mode, "ui-death") == 0)
-        return HandleMouseClickUIDeathMode(button, x, y);
-    if (IsUIDefScreenMode(mode))
-        return HandleMouseClickUIDefScreenMode(button, x, y);
     if (strcmp(mode, "ui-hud") == 0)
     {
         const SHudState& s = GetHudState();
@@ -3603,12 +3806,6 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 
 void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 {
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return HandleMouseMoveUIMainMenuMode(x, y);
-    if (strcmp(mode, "ui-death") == 0)
-        return HandleMouseMoveUIDeathMode(x, y);
-    if (IsUIDefScreenMode(mode))
-        return HandleMouseMoveUIDefScreenMode(button, x, y);
     // #8 iOS-style velocity drag for the spellbook scroll
     if (strcmp(mode, "ui-spellbook") == 0)
         return HandleMouseMoveUISpellbookMode(button, x, y);
@@ -3645,10 +3842,7 @@ void HandleKeyPress(const char* mode, int32_t key, bool down)
         return;
     }
     if (IsUIDefScreenMode(mode))
-    {
-        HandleKeyPressUIDefScreenMode(key, down);
-        return;
-    }
+        return;   // keys reach the DEF pane through the screen's pane routing
     // HUD test modes that compose the sidebar / bottom-bar / six-button
     // strip receive keyboard control: V toggles sidebar, B toggles
     // bottom-bar, 1-6 select panels (per uisidebartest.h docstring).

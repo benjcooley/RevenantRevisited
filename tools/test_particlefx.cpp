@@ -31,9 +31,9 @@ void expect_vec_near(const float* values, std::initializer_list<float> expected)
 defdoc::Document load_effect_defs()
 {
     std::filesystem::path path =
-        std::filesystem::current_path() / "data" / "Resources" / "effects.def";
+        std::filesystem::current_path() / "assets" / "effects.def";
     if (!std::filesystem::exists(path))
-        path = std::filesystem::current_path() / ".." / "data" / "Resources" / "effects.def";
+        path = std::filesystem::current_path() / ".." / "assets" / "effects.def";
     std::ifstream in(path);
     if (!in)
     {
@@ -240,11 +240,12 @@ TEST(ParticleFxDefs, TorchFlame)
     EXPECT_EQ(bucket->get_int("atlas_cols"), 4);
     EXPECT_EQ(bucket->get_int("atlas_rows"), 2);
     EXPECT_DOUBLE_EQ(bucket->get_double("scale"), 0.5);
+    EXPECT_EQ(bucket->get_string("blend"), "alpha");
     EXPECT_TRUE(bucket->get_bool("flip_v"));
     ASSERT_EQ((*bucket)["chroma_key"].as_array().size(), 3);
     EXPECT_EQ((*bucket)["chroma_key"].as_array()[0].as_int(), 255);
-    EXPECT_EQ(bucket->get_string("frame_expr"), "frame(time_frame, 13.0)");
-    EXPECT_EQ(bucket->get_string("uv_rect_expr"), "flipbook(frame(time_frame, 13.0), 4, 2)");
+    EXPECT_EQ(bucket->get_string("frame_expr"), "frame(time_frame, 11.0)");
+    EXPECT_EQ(bucket->get_string("uv_rect_expr"), "flipbook(frame(time_frame, 11.0), 4, 2)");
 
     auto emitters = torch->blocks("emitter");
     ASSERT_EQ(emitters.size(), 1);
@@ -265,8 +266,38 @@ TEST(ParticleFxDefs, TorchFlame)
     ctx.time_frame = 0.70f;
     float uv[4] = {};
     expr.Eval(ctx, uv, 4);
-    expect_near(uv[0], 0.25f);
-    expect_near(uv[1], 0.0f);
+    expect_near(uv[0], 0.75f);
+    expect_near(uv[1], 0.5f);
+}
+
+TEST(ParticleFxAtlasClock, AuthoredFlameHoldsAndLoop)
+{
+    // Independent sequence from effect_old.cpp:4507-4509,4543-4544.
+    constexpr int cells[] = {0,0,0,1,1,2,2,3,3,4,4,5,5,5,6,6,7,7};
+    for (int tick = 0; tick < 54; ++tick)
+    {
+        const float seconds = ParticleAtlasTime(double(tick)/24.0,18,24.0);
+        EXPECT_EQ(int(seconds*11.0f),cells[tick%18]);
+    }
+}
+
+TEST(ParticleFxAtlasClock, SameElapsedTimeAcrossDisplayRates)
+{
+    for (const int fps : {30,60,120})
+    {
+        double elapsed = 0.0;
+        for (int update = 1; update <= fps*3; ++update)
+        {
+            elapsed += 1.0/double(fps);
+            if (update%(fps/30)==0)
+                expect_near(ParticleAtlasTime(elapsed,18,24.0),
+                            ParticleAtlasTime(double(update)/fps,18,24.0));
+        }
+    }
+    // A slow update must cross all intervening cels, rather than advancing
+    // just once as the old global-tick gate did.
+    expect_near(ParticleAtlasTime(0.5,18,24.0),0.5f);
+    expect_near(ParticleAtlasTime(0.80,18,24.0),1.0f/24.0f);
 }
 
 TEST(ParticleFxBucket, LayoutAndOwnerCleanup)

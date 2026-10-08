@@ -176,7 +176,7 @@ bool TActionBlock::IsPartOf(const char *prefix, const char *state) const
     if (state)
         sprintf(stnamebuf, "%s%s*", prefix, state);
     else
-        sprintf(stnamebuf, "%s*", prefix, state);
+        sprintf(stnamebuf, "%s*", prefix);
     return Is(stnamebuf);
 }
 
@@ -312,7 +312,7 @@ void TComplexObject::SetDesired(PTActionBlock ab)
 }
 
 // Have object attempt to move into a new state
-int32_t TComplexObject::TryCommand(PTActionBlock ab, int32_t bits)
+int32_t TComplexObject::TryCommand(PTActionBlock ab, int32_t bits, uint32_t flags)
 {
   // Use root if desired is nullptr
     if (ab == nullptr)
@@ -323,14 +323,19 @@ int32_t TComplexObject::TryCommand(PTActionBlock ab, int32_t bits)
         (commanddone || !doing ||                       // Okay, command done, or not doing anything
         (doing && ab != doing && doing->nowaitdone) ||  // Or doing action is nowait action
         (desired && ab != desired && desired->interrupt))) // Or desired action is interrupt
-        return ForceCommand(ab, bits); // Do new state when old one is done (or interrupted)
+        return ForceCommand(ab, bits, flags); // Do new state when old one is done (or interrupted)
     else
         return COM_EXECUTING;   // Otherwise tell program we're still waiting
 }
 
-// Force the object into the given state
-int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits)
+// Force the object into the given state. REVSYNC: retail 0x004db4d0 takes a
+// third argument whose bit 0 (kCommandNoIncidentals) looks every state up
+// with pcnt 100 instead of a random roll: the 100% variant, never an "NN:"
+// incidental. The rest of this body is still the pre-release one.
+int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits, uint32_t flags)
 {
+    const int32_t pcnt = (flags & kCommandNoIncidentals) ? 100 : -1;
+
     if (doing && doing->priority && desired != doing)
         return COM_EXECUTING;
 
@@ -348,7 +353,7 @@ int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits)
     int32_t newstate = -1;
 
     if (doing == nullptr)
-        newstate = FindState(ab->name);
+        newstate = FindState(ab->name, pcnt);
     else
     {
       // ROOT2ROOT means don't do a transition back to the root state because the 
@@ -359,24 +364,24 @@ int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits)
         if ((GetAniFlags() & AF_ROOT2ROOT) && desired && desired == root)
         {
             ab = root; // Return back too root right now
-            newstate = FindState(ab->name);
+            newstate = FindState(ab->name, pcnt);
         }
         else
         {
       // Try to find a transition from the current action to the new action.  If we can't
       // find one, we will just force it (see below).
-            newstate = FindTransitionState(doing->name, ab->name);
+            newstate = FindTransitionState(doing->name, ab->name, pcnt);
         }
 
       // Can't find a transition, well then we go ahead and force it... 
         if (newstate < 0 && !ab->dontforce)
         {   
           // One of these things is bound to work!!
-          newstate = FindState(ab->name);   // Use end state name
+          newstate = FindState(ab->name, pcnt);   // Use end state name
           if (newstate < 0)
-            newstate = FindTransitionState(root->name, ab->name);  // Try transition from root
+            newstate = FindTransitionState(root->name, ab->name, pcnt);  // Try transition from root
           if (newstate < 0)
-            newstate = FindTransitionState(ab->name, root->name);  // Try transition to root
+            newstate = FindTransitionState(ab->name, root->name, pcnt);  // Try transition to root
         }
 
         // flag transition if the two states aren't the same
@@ -404,7 +409,7 @@ int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits)
         SetFrame(ab->obj->GetFrame() + 1);
 
   // Make this block the root block if current or next animation is a root animation
-    uint32_t nextaniflags = imagery ? imagery->GetAniFlags(FindState(ab->name)) : 0;
+    uint32_t nextaniflags = imagery ? imagery->GetAniFlags(FindState(ab->name, pcnt)) : 0;
     if ((GetAniFlags() & AF_ROOT || nextaniflags & AF_ROOT) && !ab->noroot)
         SetRoot(ab);
 
@@ -420,13 +425,13 @@ int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits)
     return COM_EXECUTING;
 }
 
-// Loads object data from the sector
+// REVSYNC: TComplexObject::Load @ 0x004db930 (SAVE_GAME.md §11.3).
 void TComplexObject::Load(RTInputStream is, int32_t version, int32_t objversion)
 {
+    uint8_t basever = 0;
     if (objversion >= 1)
-        LOAD_BASE(TObjectInstance)
-    else
-        TObjectInstance::Load(is, version, 0);
+        is >> basever;
+    TObjectInstance::Load(is, version, basever);
 
   // Load root state
     PTActionBlock ab;
@@ -437,34 +442,36 @@ void TComplexObject::Load(RTInputStream is, int32_t version, int32_t objversion)
     else
     {
         uint8_t action;
-        char name[RESNAMELEN];
         is >> action;
-        is >> name;
-        ab = new TActionBlock(name, (ACTION)action);
+        const std::string rootname = is.ReadString();
+        ab = new TActionBlock(rootname.substr(0, RESNAMELEN - 1).c_str(), (ACTION)action);
     }
 
     SetRoot(ab);
     SetDoing(ab);
     SetDesired(ab);
+
+  // Keep the saved state when it is the root's own (an animation state is
+  // named "<group>:<name>"); otherwise start the root.
+    if (const char* statename = imagery ? imagery->GetAniName(state) : nullptr)
+    {
+        if (const char* colon = strchr(statename, ':'))
+            statename = colon + 1;
+        if (stricmp(ab->name, statename) == 0)
+            return;
+    }
     state = FindState(ab->name);
 }
 
-// Saves object data to the sector
+// REVSYNC: TComplexObject::Save @ 0x004dbb80.
 void TComplexObject::Save(RTOutputStream os)
 {
-    SAVE_BASE(TObjectInstance)
+    os << (uint8_t)TObjectInstance::ObjVersion();
+    TObjectInstance::Save(os);
 
   // Save root state
     os << (uint8_t)root->action;
-    uint8_t len = (uint8_t)strlen(root->name);
-    os << len;
-    char *p = root->name;
-    while (len)
-    {
-        os << (*p);
-        p++;
-        len--;
-    }
+    os << root->name;
 }
 
 void TComplexObject::Notify(int32_t notify, void *ptr)

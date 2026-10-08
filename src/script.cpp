@@ -2,6 +2,11 @@
 // *                         Cinematix Revenant                            *
 // *                    Copyright (C) 1998 Cinematix                       *
 // *                    Script.cpp - Script functions                      *
+// *                                                                       *
+// * REVSYNC: per-method retail sync 2026-05-17. See script.h header for   *
+// * the class-level map; individual method `REVSYNC:` markers below cite  *
+// * the recon/discovered/cls_*.cpp addresses each implementation was      *
+// * cross-checked against.                                                *
 // *************************************************************************
 
 #include <stdio.h>
@@ -10,30 +15,80 @@
 
 #include "revenant.h"
 #include "script.h"
+#include "buysell.h"
+#include "logging.h"
 #include "parse.h"
 #include "object.h"
 #include "command.h"
 #include "mappane.h"
+#include "mapmanager.h"
 #include "dialog.h"
 #include "file.h"
+#include "module.h"
 #include "revutils.h"
 #include "exit.h"
 #include "player.h"
+#include "playscreen.h"
+#include "stream.h"
 #include "textbar.h"
 
+#include <algorithm>
+
 bool TScript::pauseall = false;
+
+namespace {
+
+// The script line about to run, at trace level (revenant.log), so a scene can
+// be followed line by line. `line` may start with the blank and comment
+// lines the tokenizer skipped to reach the command.
+void TraceLine(TObjectInstance* context, const char* line)
+{
+    for (;;)
+    {
+        while (*line == ' ' || *line == '\t' || *line == '\r' || *line == '\n')
+            ++line;
+        if (line[0] != '/' || line[1] != '/')
+            break;
+        while (*line && *line != '\n')
+            ++line;
+    }
+    const char* end = line;
+    while (*end && *end != '\n' && *end != '\r')
+        ++end;
+    log_trace("[script] %s: %.*s", (context && context->GetName()) ? context->GetName() : "?",
+              (int)(end - line), line);
+}
+
+// The trigger test's world in the game: the main player and the map.
+class TMapTriggerWorld final : public TScript::ITriggerWorld
+{
+  public:
+    [[nodiscard]] TObjectInstance* MainPlayer() const override { return Player; }
+    [[nodiscard]] TObjectInstance* ObjectInCube(PS3DRect cube, int32_t level, int32_t objset) const override
+        { return MapPane.ObjectInCube(cube, level, objset); }
+};
+
+const TMapTriggerWorld MapTriggerWorld;
+
+}  // namespace
+
+const TScript::ITriggerWorld& TScript::TriggerWorld()
+{
+    return triggerworld ? *triggerworld : MapTriggerWorld;
+}
 
 TObjectInstance* TakenObject = nullptr;
 TObjectInstance* DroppedObject = nullptr;
 
-void ScriptError(char *buf, int32_t linenum)
+void ScriptError(const char *buf, int32_t linenum)
 {
     char buf2[100];
-    sprintf(buf2, "Script error at line %d: %s\n", linenum, buf);
+    snprintf(buf2, sizeof(buf2), "Script error at line %d: %s\n", linenum, buf);
+    log_warn("[script] error at line %d: %s", linenum, buf);
     if (Editor)
         Output(buf2);
     else
-        TextBar.Print(buf2);
+        TextBar.Print("%s", buf2);
 }
 
 void SkipBlock(TToken &t)
@@ -46,187 +101,373 @@ void SkipBlock(TToken &t)
 // * TScript *
 // ***********
 
+// REVSYNC: ctor @ 0x00492170
 TScript::TScript(TScriptProto* prototype)
 {
     topproto = curproto = prototype;
-    ip = nullptr;
-    priority = 0;
-    depth = 0;
-    lastpriority = 0;
-    newtrigger = 0;
-    newtriggerstr[0] = '\0';
+    proto = prototype;
     block[0].conditional = COND_UNDEF;
     block[0].loopstart = 0;
+    ScriptManager.RegisterScript(this);
 }
 
-TScript::TScript() 
-{ 
-    topproto = curproto = nullptr; 
-    ip = nullptr; 
-    priority = 0; 
-    depth = 0; 
-    newtrigger = 0; 
-    lastpriority = 0;
-    block[depth].conditional = COND_UNDEF;
-    block[depth].loopstart = 0;
-//  ScriptManager.AddScript(this); 
+TScript::TScript()
+{
+    block[0].conditional = COND_UNDEF;
+    block[0].loopstart = 0;
+    ScriptManager.RegisterScript(this);
 }
 
 TScript::~TScript()
 {
+    ScriptManager.UnregisterScript(this);
 }
 
+// REVSYNC: SetText @ 0x004944c0 — retail allocates via FUN_00482ef0 (strdup-like) and
+// clears the upper script flags except bit 0x20000 (paused-by-context). Our pre-release
+// path mirrors only the proto-buffer side; the flag bookkeeping isn't observable
+// because our Continue() doesn't gate on those bits.
 void TScript::SetText(char *buf)
 {
-    topproto->SetBuffer(buf);
+    if (topproto)
+        topproto->SetBuffer(buf);
     ScriptManager.SetScriptsDirty();
 }
- 
-void TScript::Start(TScriptProto* proto, int32_t pos, int32_t newpriority)
+
+void TScript::Start(TScriptProto* startproto, int32_t pos, int32_t /*newpriority*/)
 {
-    if (!proto)
+    if (!startproto)
         curproto = topproto;
     else
-        curproto = proto;
+        curproto = startproto;
 
-    if (pos < 0 || pos >= curproto->Length())
+    if (!curproto || pos < 0 || pos >= curproto->Length())
         return;
 
-    ip = curproto->Text() + pos;
+    ip = pos;
 }
 
-void TScript::StartTrigger(TScriptProto* proto, PSScriptTrigger st)
+// REVSYNC: the start in Continue @ 0x004933d0. A block a player's trigger
+// started can't be interrupted by another trigger while that player exists
+// (Triggered checks the guard). Retail also calls the owner's, user's and
+// second object's "script started" hooks (vtable 0x148; not ported).
+void TScript::StartTrigger(TObjectInstance* context, TScriptProto* startproto, PSScriptTrigger st)
 {
-    Start(proto, st->pos, st->priority);
-    trigger = st->type;         // Set current trigger we're going to do
-    newtrigger = 0;             // Set manual new trigger (if any) to 0
-    newtriggerstr[0] = '\0';    // Set manual new trigger key (if any) to nullptr
+    log_trace("[script] %s: trigger %d of '%s' starts",
+              (context && context->GetName()) ? context->GetName() : "?",
+              st->type, startproto && startproto->name ? startproto->name : "?");
+    Start(startproto, st->pos, st->priority);
+    depth = 0;
+    trigger = st->type;
+    newtrigger = 0;
+    newtriggerstr[0] = '\0';
+    curtrigger = st;
+    if (st->type == TRIGGER_ALWAYS)
+        triggerguard.Clear();
+    else if (triggerer.Get() && !stricmp(useralias.c_str(), kAliasUser))
+        triggerguard = triggerer.Get();
 }
 
-bool TScript::Triggered(PSScriptTrigger st, int32_t priority, TObjectInstance* context)
+// REVSYNC: 0x004927b0. SCRIPT_ENGINE.md §3. Retail's USE trigger also
+// matches a second string the port doesn't record yet.
+bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance* context)
 {
-    bool retval = false;
-
-  // Are we already doing this trigger?
-    if (curtrigger == st || st->priority < priority)
+  // Not one below the running block's priority. (Retail also compares with a
+  // running-trigger record, +0xa8, that nothing ever sets.)
+    if (st->priority < curpriority)
         return false;
 
-  // ******************
-  // !!!!!REMEMBER!!!!!
-  // ******************
-  
-  // This function is being called often, so 
-  // make sure you don't do anything to intense
-  // here.  KEEP IT SIMPLE AND FAST!
-
+    const ITriggerWorld& world = TriggerWorld();
+    TObjectInstance* const player = world.MainPlayer();
+    bool fires = false;
     switch (st->type)
     {
-      case TRIGGER_ALWAYS:      // This trigger will always fire if it has a higherer priority
-      {
-        retval = true;
+      case TRIGGER_ALWAYS:
+        fires = true;
         break;
-      }
-      case TRIGGER_TRIGGER:     // This is the manually fired trigger (triggered by script 'trigger' command)
-      {
-        if (newtrigger == TRIGGER_TRIGGER && 
-          !stricmp(st->name, newtriggerstr))
-            retval = true;
+
+      case TRIGGER_TRIGGER:
+      case TRIGGER_GIVE:
+      case TRIGGER_GET:
+        fires = newtrigger == st->type && !stricmp(st->name, newtriggerstr);
         break;
-      }
-      case TRIGGER_DIALOG:      // This trigger is triggered by clicking on a friendly character
-      {
-        if (newtrigger == TRIGGER_DIALOG)
-            retval = true;
+
+      case TRIGGER_USE:                     // either name the request gave
+        fires = newtrigger == TRIGGER_USE &&
+                (!stricmp(st->name, newtriggerstr) || !stricmp(st->name, newtriggerstr2));
         break;
-      }
-      case TRIGGER_PROXIMITY:   // This allow you to set a floating proximity field for a character
-      {                         // Slightly slow, so be careful where you use this
+
+      case TRIGGER_DIALOG:
+      case TRIGGER_ACTIVATE:
+      case TRIGGER_COMBAT:
+      case TRIGGER_DEAD:
+        fires = newtrigger == st->type;
+        break;
+
+      case TRIGGER_PROXIMITY:
         if (newtrigger == TRIGGER_PROXIMITY)
-            retval = true;
-        else 
+            fires = true;
+        else if (player && !stricmp(st->name, player->GetName()))
         {
-            if (Player && !stricmp(st->name, Player->GetName()))
-                retval = context->Pos().InRange(Player->Pos(), st->dist);
-            else
+            // Box first, then dx² + dy² ≤ 2·dist².
+            const S3DPoint here = context->Pos();
+            const S3DPoint there = player->Pos();
+            const int32_t dx = here.x - there.x;
+            const int32_t dy = here.y - there.y;
+            if (std::abs(dx) <= st->dist && std::abs(dy) <= st->dist &&
+                dx * dx + dy * dy <= 2 * st->dist * st->dist)
             {
-//              TObjectInstance* inst = MapPane.ObjectInRange(context->Pos(), st->dist, OBJSET_CHARACTER);
-//              if (st->name[0] == '\0' || !stricmp(st->name, inst->GetName()))
-//                  retval = true;
+                triggerer = player;
+                useralias = kAliasUser;
+                fires = true;
             }
         }
         break;
-      }
-      case TRIGGER_CUBE:        // Nice and fast cube trigger
-      {
+
+      case TRIGGER_CUBE:
         if (newtrigger == TRIGGER_CUBE)
-            retval = true;
-        else if (!stricmp(st->name, context->GetName()))
+            fires = true;
+        else if (player && (!stricmp(st->name, "player") || !stricmp(st->name, player->GetName())))
         {
-            if (st->cube.In(context->Pos()))
-                retval = true;
+            if (st->cube.In(player->Pos()))
+            {
+                triggerer = player;
+                useralias = kAliasUser;
+                fires = true;
+            }
         }
-        else if (Player && !stricmp(st->name, Player->GetName()))
+        else if (TObjectInstance* inside = world.ObjectInCube(&st->cube, context->GetLevel(), OBJSET_MOVING))
         {
-            if (st->cube.In(Player->Pos()))
-                retval = true;
+            // The first moving object in the cube on the owner's level
+            // (0x00452480 with the context's +0x0e), if a character or player
+            // that isn't the named object (an unnamed cube carries its own
+            // prototype's name, so its owner standing in it doesn't count).
+            const int32_t objclass = inside->ObjClass();
+            const bool character = objclass == OBJCLASS_CHARACTER || objclass == OBJCLASS_PLAYER;
+            const bool named = st->name[0] != '\0' && inside->GetName() &&
+                               !stricmp(st->name, inside->GetName());
+            if (character && !named)
+            {
+                triggerer = inside;
+                useralias = kAliasUser;
+                fires = true;
+            }
         }
-        else 
-        {
-            TObjectInstance* inst = MapPane.ObjectInCube(&st->cube, OBJSET_MOVING);
-            if (inst && (st->name[0] == '\0' || !stricmp(st->name, inst->GetName())))
-                retval = true;
-        }
         break;
-      }
-      case TRIGGER_ACTIVATE:    // This trigger is triggered when object is activated
-      {
-        if (newtrigger == TRIGGER_ACTIVATE)
-            retval = true;
-        break;
-      }
-      case TRIGGER_USE:         // Triggered when character uses an object
-      {
-        if (newtrigger == TRIGGER_USE && 
-          !stricmp(st->name, newtriggerstr))
-            retval = true;
-        break;
-      }
-      case TRIGGER_GIVE:        // Triggered when this character give another char an object
-      {
-        if (newtrigger == TRIGGER_GIVE && 
-          !stricmp(st->name, newtriggerstr))
-            retval = true;
-        break;
-      }
-      case TRIGGER_GET:         // Triggered when this character gets an object
-      {
-        if (newtrigger == TRIGGER_GET && 
-          !stricmp(st->name, newtriggerstr))
-            retval = true;
-        break;
-      }
-      case TRIGGER_COMBAT:      // Triggered when this character enters combat mode
-      {
-        if (newtrigger == TRIGGER_COMBAT)
-            retval = true;
-        break;
-      }
-      case TRIGGER_DEAD:        // Triggered when we die (Blahhh.. uuhhhh!!)
-      {
-        if (newtrigger == TRIGGER_DEAD)
-            retval = true;
-        break;
-      }
     }
 
-    return retval;
+  // While the object that set off the running trigger exists, nothing else
+  // fires.
+    if (fires && triggerguard.Id() != -1)
+    {
+        if (triggerguard.Get())
+            return false;
+        triggerguard.Clear();
+    }
+    return fires;
+}
+
+// REVSYNC: 0x00492ac0
+TObjectInstance* TScript::User() const
+{
+    if (TObjectInstance* user = AliasedUser())
+        return user;
+    return Player;
+}
+
+TObjectInstance* TScript::AliasedUser() const
+{
+    TObjectInstance* user = triggerer.Get();
+    if (user && user->ObjClass() == OBJCLASS_PLAYER && !stricmp(useralias.c_str(), kAliasUser))
+        return user;
+    return nullptr;
+}
+
+// REVSYNC: 0x00492640, the prototype search. A nameless request matches any
+// trigger of its type; otherwise the trigger's name must be one of the two.
+bool TScript::HasTrigger(int32_t type, const char *str, const char *str2) const
+{
+    for (TScriptProto* p = topproto; p; p = p->ParentProto())
+        for (int32_t c = 0; c < p->NumTriggers(); c++)
+        {
+            const SScriptTrigger& st = p->triggers[c];
+            if (st.type != type)
+                continue;
+            if ((!str && !str2) || (str && !stricmp(st.name, str)) || (str2 && !stricmp(st.name, str2)))
+                return true;
+        }
+    return false;
+}
+
+// REVSYNC: 0x00492640
+bool TScript::Trigger(int32_t type, const char *str, const char *str2,
+                      TObjectInstance* user, const char *useras,
+                      TObjectInstance* other, const char *otheras)
+{
+    if (!HasTrigger(type, str, str2))
+        return false;
+
+  // While an object's trigger runs here, only that object may ask again.
+  // Retail answers anyone else with the script's busy line (0x00494620), a
+  // multiplayer reply built on busysay/busymsg, which aren't ported.
+    if (triggerguard.Id() != -1)
+    {
+        const bool asuser = user && useras && !stricmp(useras, kAliasUser);
+        if (!asuser || user != triggerguard.Get())
+            return false;
+    }
+
+    newtrigger = type;
+    if (str)
+        snprintf(newtriggerstr, sizeof(newtriggerstr), "%s", str);
+    if (str2)
+        snprintf(newtriggerstr2, sizeof(newtriggerstr2), "%s", str2);
+    triggerer = user;
+    useralias = useras ? useras : "";
+    second = other;
+    secondalias = otheras ? otheras : "";
+    return true;
+}
+
+// The resolver's alias step (in 0x0041e690): +0xcc names +0xc4, +0xd0 names
+// +0xc8.
+TObjectInstance* TScript::Alias(const char *name) const
+{
+    if (!useralias.empty() && !stricmp(name, useralias.c_str()))
+        return triggerer.Get();
+    if (!secondalias.empty() && !stricmp(name, secondalias.c_str()))
+        return second.Get();
+    return nullptr;
+}
+
+// REVSYNC: SetWait @ 0x00492b00 (single player). Response waits name the
+// player waited on; retail also opened the dialog pane's choices here, which
+// arrives with the dialog port (the 1998 pane is opened by "wait response").
+void TScript::SetWait(EScriptWait type, TObjectInstance* object, int32_t frames)
+{
+    if (wait != EScriptWait::None)
+        return;
+
+    TObjectInstance* waiter = User();
+    const bool response = type == EScriptWait::Response || type == EScriptWait::ResponseControlOn;
+    if (response && waiter == Player)
+    {
+        // Retail sets no wait if the choices are already up, so the block
+        // runs on into its first label (DIALOG.md §2.3).
+        if (DialogPane.IsShowingResponses())
+            return;
+        DialogPane.ShowResponses(waiter, type == EScriptWait::ResponseControlOn);
+    }
+
+    wait = type;
+    waitframes = frames;
+    switch (type)
+    {
+      case EScriptWait::Response:
+      case EScriptWait::ResponseControlOn:
+      case EScriptWait::ScreenFade:
+      case EScriptWait::BuySell:
+        waitobject = waiter;
+        break;
+      default:
+        waitobject = object;
+        break;
+    }
+}
+
+// REVSYNC: 0x00492d70 (single player).
+bool TScript::WaitSatisfied(bool commanddone)
+{
+    if (wait == EScriptWait::Frames && waitframes > 0)
+        waitframes--;
+
+    switch (wait)
+    {
+      case EScriptWait::None:
+        return commanddone;
+
+      case EScriptWait::Frames:
+        return waitframes < 1;
+
+      case EScriptWait::Response:
+      case EScriptWait::ResponseControlOn:
+        // The pane commits the pick in its own pulse, after this one.
+        if (const char *label = DialogPane.CommittedLabel())
+        {
+            taken &= ~kTakenDialog;
+            if (label[0])
+                Jump(nullptr, label);
+            return true;
+        }
+        return false;
+
+      case EScriptWait::CharDone:
+      {
+        // A complex object (a character) is done when it is back in its root
+        // state, or at the end of a loop of a looping animation; any other
+        // action holds the wait. A walk (goto) is a chain of non-looping
+        // steps, so the script waits for the arrival, not the first step.
+        TObjectInstance* object = waitobject.Get();
+        if (!object)
+            return commanddone;
+        if (!object->IsComplex())
+            return object->CommandDone();
+        if (static_cast<TComplexObject*>(object)->IsInRoot())
+            return true;
+        return (object->GetAniFlags() & AF_LOOPING) && object->CommandDone();
+      }
+
+      case EScriptWait::Say:
+      {
+        // The speaker is idle again: back in its root state (DIALOG.md §2.5),
+        // not merely done with the say action. Retail also wants a
+        // non-character's animation state to carry flag 1 (not ported).
+        TObjectInstance* object = waitobject.Get();
+        if (!object)
+            return commanddone;
+        if (object->IsComplex())
+            return static_cast<TComplexObject*>(object)->IsIdleInRoot();
+        return object->CommandDone();
+      }
+
+      case EScriptWait::Death:
+      {
+        TObjectInstance* object = waitobject.Get();
+        return !object || (object->IsCharacter() && static_cast<TCharacter*>(object)->IsDead());
+      }
+
+      case EScriptWait::ScreenFade:
+        // The play screen's fade has finished (0x0048eb00).
+        return !PlayScreen.IsFading();
+
+      case EScriptWait::BuySell:
+        // The shop is no longer in use (+0x1b0, 0x0049301d): its Exit, or
+        // the drawer closing.
+        return !BuySellPane.IsActive();
+    }
+    return true;
 }
 
 #define MAXITERATIONS   6000            // for catching endless loops
 
-void TScript::Continue(TObjectInstance* context)
+// REVSYNC: Continue @ 0x004933d0 — see header note. The retail body is 458 lines
+// of engine-coupled logic; we keep the pre-release executor which matches the
+// retail outer loop (trigger scan → token interpreter → CMD_* flag handling →
+// MAXITERATIONS guard) but skips the context-vftable plumbing.
+// REVSYNC: Continue @ 0x004933d0 — entry and wait gate (SCRIPT_ENGINE.md §4).
+// The trigger scan and line loop below are still the 1998 ones.
+void TScript::Continue(TObjectInstance* context, bool commanddone)
 {
     if (priority & SCRIPT_PAUSED || pauseall)
+        return;
+
+  // Nothing to do while the owner is busy or a wait is unsatisfied.
+    if ((!commanddone || wait != EScriptWait::None) && !WaitSatisfied(commanddone))
+        return;
+    wait = EScriptWait::None;
+    waitobject.Clear();
+
+    if (!curproto)
         return;
 
   // Setup stream and token
@@ -236,67 +477,139 @@ void TScript::Continue(TObjectInstance* context)
     // Check Triggers For Interruption
     // *******************************
 
-    TScriptProto* proto = topproto;
-    bool foundtrigger = false;
-    while (proto)
+    // REVSYNC: Continue @ 0x004933d0, the trigger scan (SCRIPT_ENGINE.md §4).
+    // A firing trigger starts if the script is idle, runs an ALWAYS block
+    // (whose place is saved to resume), or runs a block that interrupted
+    // one. ALWAYS triggers only start an idle script, after the scan,
+    // resuming an interrupted ALWAYS block where it stopped.
+    TScriptProto* alwaysproto = nullptr;
+    PSScriptTrigger always = nullptr;
+    bool started = false;
+    for (TScriptProto* p = topproto; p && !started; p = p->ParentProto())
     {
-        for (int32_t c = 0; c < proto->NumTriggers(); c++)
+        for (int32_t c = 0; c < p->NumTriggers(); c++)
         {
-            if (Triggered(&proto->triggers[c], priority, context))  // Check to see if script is triggered
+            PSScriptTrigger st = &p->triggers[c];
+            if (!Triggered(st, priority, context))
+                continue;
+            if (st->type == TRIGGER_ALWAYS)
             {
-                foundtrigger = true;
-                StartTrigger(proto, &proto->triggers[c]);
-                break;
+                const bool first = always == nullptr;
+                alwaysproto = p;                // retail keeps the last it passes
+                always = st;
+                if (first)
+                    continue;
             }
-        }
-        if (foundtrigger)
+            if (Running() && trigger != TRIGGER_ALWAYS && savedip == kNotRunning)
+                continue;
+            if (Running() && trigger == TRIGGER_ALWAYS)
+            {
+                savedip = ip;
+                saveddepth = depth;
+            }
+            StartTrigger(context, p, st);
+            started = true;
             break;
-        proto = proto->ParentProto();
+        }
+    }
+    if (!started && always && !Running())
+    {
+        StartTrigger(context, alwaysproto, always);
+        if (savedip == kNotRunning)
+            savedip = ip;                       // retail notes the block's start
+        else
+        {
+            ip = savedip;
+            depth = saveddepth;
+            savedip = kNotRunning;
+            saveddepth = 0;
+        }
     }
 
     // Now Continue Script
     // *******************
 
-    // now execute the current thread
-    s.SetPos((uint32_t)(uintptr_t)ip);
+    // REVSYNC: 0x00493827 -- the line loop. A block ends when a line leaves
+    // the depth below 1 (0x00493c99): the depth counts the object's own BEGIN
+    // once a jump has counted it (Jump), so after a jump the trigger's END
+    // leaves the depth at 1 and the block runs on through the next trigger's
+    // header line (a line the interpreter doesn't know) and block to the
+    // object's END (SCRIPT_ENGINE.md §4.2).
+    if (ip != kNotRunning)
+        s.SetPos((uint32_t)ip);
 
     int32_t iterations = MAXITERATIONS;
+    const char *text = curproto->text;
+    // Where an `ELSE IF`'s IF is read from on the next pass (0x00493b06).
+    uint32_t pendingif = 0;
 
-    while (ip && (!(priority & SCRIPT_PAUSED)))
+    // The block is over (retail clears the ip and its flags, +0x48/+0x4c).
+    // A story test reads the trace to tell a block that ran to its end from
+    // one still waiting.
+    const auto endblock = [&]() {
+        log_trace("[script] %s: trigger %d ends", (context && context->GetName()) ? context->GetName() : "?",
+                  trigger);
+        ip = kNotRunning;
+        priority = 0;
+    };
+
+    while (ip != kNotRunning && (!(priority & SCRIPT_PAUSED)))
     {
-      // Prevent main char self running demo script from interrupting this script...
-        if (Player && context != Player && Player->GetScript() &&
-            Player->GetScript()->Running() && 
-            Player->GetScript()->GetTrigger() == TRIGGER_ALWAYS)
+        // Retail has ten block levels; at depth 10 its level overlays the
+        // depth field itself (the first line there resets the depth and ends
+        // the block). The port refuses that depth instead.
+        if (depth >= MAXDEPTH)
         {
-            Player->GetScript()->End();
+            ScriptError("Blocks nested too deep", t.LineNum());
+            endblock();
+            break;
         }
 
-        uint32_t thisline = s.GetPos();            // hang onto it in case of loop
-        if (thisline > (uint32_t)(uintptr_t)ip && !isspace(*((char *)(uintptr_t)thisline)) &&
-                                    !isspace(*((char *)(uintptr_t)thisline - 1)))
+        uint32_t thisline = s.GetPos();
+        if (thisline > (uint32_t)ip && !isspace((unsigned char)text[thisline]) &&
+                                    !isspace((unsigned char)text[thisline - 1]))
             thisline--;                         // token code jacks the pointer sometimes
 
         t.Get();
         t.SkipBlanks();
+        if (pendingif)
+        {
+            // The token still holds the character after this line's first
+            // token, which is read first.
+            s.SetPos(pendingif);
+            t.WhiteGet();
+        }
+        pendingif = 0;
 
         if (t.Type() == TKN_SYMBOL && t.Code() == ':')
         {
-            // label - ignore this line
             t.SkipLine();
         }
-        else if (t.Type() == TKN_IDENT || t.Type() == TKN_KEYWORD)
+        // REVSYNC: Continue @ 0x004933d0 hands a line starting with an
+        // identifier, a keyword or quoted text to the interpreter, which
+        // takes a quoted name as the context: forest.s's
+        // `"TRAINING SWORD".DELETE`. The 1998 test left quoted text out
+        // ("Bad token in trigger block").
+        else if (t.Type() == TKN_IDENT || t.Type() == TKN_KEYWORD || t.Type() == TKN_TEXT)
         {
-            // call the command interpreter
-            int32_t bits = CommandInterpreter(context, t);  // ****** MAIN COMMAND PROCESSOR HERE *****
+            if (stepobserver)
+                stepobserver->BeforeLine(*this, (int32_t)s.GetPos());
+            TraceLine(context, text + thisline);
+            int32_t bits = CommandInterpreter(context, t, 0, this);  // ****** MAIN COMMAND PROCESSOR HERE *****
+            if (stepobserver)
+                stepobserver->AfterLine(*this, bits);
 
-            // interpret the return code(s)
             if (bits & CMD_DELETED)
-                return;                 // ack!
+                return;
+
+            // The levels a line touches: none outside 0..MAXDEPTH-1 (an END
+            // too many leaves -1, and the block ends after the line).
+            SScriptBlock* const level = (depth >= 0 && depth < MAXDEPTH) ? &block[depth] : nullptr;
 
             if (bits & CMD_CONDTRUE)
             {
-                block[depth].conditional = true;
+                if (level)
+                    level->conditional = true;
             }
             else if (bits & CMD_CONDFALSE)
             {
@@ -305,21 +618,39 @@ void TScript::Continue(TObjectInstance* context)
                     SkipBlock(t);
                 else
                     t.SkipLine();
-                block[depth].conditional = false;
+                if (level)
+                    level->conditional = false;
             }
 
+            // An ELSE leaves the rest of its line unread (CommandInterpreter).
+            // After a true IF it skips from the next token: a block if that
+            // is a BEGIN, else to the next line. For `ELSE IF c` the next
+            // token is the IF's condition, so the skip ends on the ELSE line
+            // and the end-of-line skip below drops the following line -- the
+            // ELSE IF's BEGIN -- and its body runs. After a false IF the IF
+            // is still the token: the line is rewound and the IF runs on the
+            // next pass (0x00493a08..0x00493b46).
             if (bits & CMD_ELSE)
             {
-                if (block[depth].conditional == COND_UNDEF)
+                const int32_t conditional = level ? level->conditional : COND_UNDEF;
+                if (conditional == COND_UNDEF)
                     ScriptError("ELSE without matching IF", t.LineNum());
-                else if (block[depth].conditional == true)
+                else if (conditional == true)
                 {
                     t.LineGet();
                     if (t.Is("BEGIN"))
                         SkipBlock(t);
                     else
                         t.SkipLine();
-                    block[depth].conditional = COND_UNDEF;
+                    level->conditional = COND_UNDEF;
+                }
+                if (t.Is("IF"))
+                {
+                    s.SetPos(thisline);
+                    t.Get();
+                    t.SkipBlanks();
+                    pendingif = s.GetPos();
+                    t.Get();
                 }
             }
 
@@ -328,8 +659,11 @@ void TScript::Continue(TObjectInstance* context)
 
             if (bits & CMD_BEGIN)
             {
-                block[++depth].loopstart = 0;
-                block[depth].conditional = COND_UNDEF;
+                if (++depth < MAXDEPTH)
+                {
+                    block[depth].loopstart = 0;
+                    block[depth].conditional = COND_UNDEF;
+                }
             }
 
             if (bits & CMD_END)
@@ -338,30 +672,35 @@ void TScript::Continue(TObjectInstance* context)
                     ScriptError("END without matching BEGIN", t.LineNum());
             }
 
-            if (block[depth].loopstart != 0)
+            if (depth >= 0 && depth < MAXDEPTH)
             {
-                s.SetPos(block[depth].loopstart);
-                block[depth].loopstart = 0;
+                if (block[depth].loopstart != 0)
+                {
+                    s.SetPos(block[depth].loopstart);
+                    block[depth].loopstart = 0;
+                }
+
+                if (bits & CMD_LOOP)
+                    block[depth].loopstart = thisline;
             }
 
-            if (bits & CMD_LOOP)
-                block[depth].loopstart = thisline;
-
-            if (bits & CMD_WAIT)
+            // A line that leaves the script waiting ends the run: a command
+            // that keeps its target busy (CMD_WAIT), or one that set a wait
+            // itself (`wait`, `say`).
+            if ((bits & CMD_WAIT) || IsWaiting())
             {
-                ip = (char *)s.GetPos();
+                ip = (int32_t)s.GetPos();
                 break;
             }
 
             if (bits & CMD_JUMP)
             {
-                s.SetPos((uint32_t)(uintptr_t)ip);
+                s.SetPos((uint32_t)ip);
             }
         }
         else
             ScriptError("Bad token in trigger block", t.LineNum());
 
-        // skip over any extra crap on the line
         while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
             t.Get();
 
@@ -369,24 +708,37 @@ void TScript::Continue(TObjectInstance* context)
         {
             if (iterations < 1)
                 ScriptError("Infinite loop detected\n", t.LineNum());
-
-            ip = nullptr;
-            priority = 0;
+            endblock();
         }
     }
 
-    // Nothing to trigger
-    if (ip == nullptr) // Script done
-    {
+    if (ip == kNotRunning) // Script done
         lastpriority = 0;
-        if (!DialogPane.IsHidden() &&               // Dialog pane is still up and...
-          DialogPane.GetCharacter() == context)     // This script was using the dialog pane
-            DialogPane.Hide();
-    }
 }
 
-void TScript::Jump(TObjectInstance* context, char *label)
+// REVSYNC: Jump @ 0x00493fa0 (the `jump` command's, through 0x00471290, and a
+// taken response's). The skip to the current trigger is the 1998 loop; it
+// moves nothing, since the fresh token is no BEGIN (SkipBlock 0x004795f0), so
+// the label is looked for from the top of the prototype's text -- the whole
+// OBJECT block. On the way every BEGIN and END token is counted into the
+// block depth (0x004940cd..0x00494152), the object's own BEGIN included: a
+// label directly in a trigger block lands at depth 2, one inside `IF …
+// BEGIN` at 3. So the label's enclosing blocks stay open, and Continue ends
+// the block only when the object's END closes the last (SCRIPT_ENGINE.md
+// §4.2): after the trigger's END the next trigger's header and block run too.
+// The script resumes where the tokenizer stands after the label's name --
+// one character past it, carriage returns not counted (TToken::ReadChar):
+// the start of the next line (0x00494208).
+// The 1998 code set the depth to 1 ("a bit hacky") and skipped the label's
+// line (SkipLine), eating the next line's first token.
+// A label it can't find: the error, the ip unchanged and the depth counted to
+// the text's end (0, so Continue ends the block after the jump's line); the
+// 1998 code restarted the script instead.
+void TScript::Jump(TObjectInstance* /*context*/, const char *label)
 {
+    if (!curproto || !curproto->text)
+        return;
+
     TStringParseStream s(curproto->text, strlen(curproto->text));
     TToken t(s);
 
@@ -399,7 +751,8 @@ void TScript::Jump(TObjectInstance* context, char *label)
         t.SkipBlanks();
     }
 
-    // find the label
+    // find the label, counting the blocks opened on the way
+    depth = 0;
     while (1)
     {
         t.SkipBlanks();
@@ -407,67 +760,151 @@ void TScript::Jump(TObjectInstance* context, char *label)
         if (t.Type() == TKN_EOF)
         {
             ScriptError("Jump to an unknown label attempted", t.LineNum());
-            Start();        // reset the script
             return;
         }
 
+        // The ip is the stream's position after the label's name (0x00494208).
         if (t.Type() == TKN_SYMBOL && t.Code() == ':')
         {
             t.Get();
             if (t.Is(label))
-            {
-                // we have a match
-                t.SkipLine();
                 break;
-            }
         }
+
+        if (t.Is("BEGIN"))
+            depth++;
+        else if (t.Is("END"))
+            depth--;
 
         t.LineGet();
     }
 
-    ip = (char *)s.GetPos();        // save the new position
-    depth = 1;          // a bit hacky - probably needs to count the begin/end pairs..
+    ip = (int32_t)s.GetPos();
 }
 
+// REVSYNC: Break @ 0x004942a0
 void TScript::Break()
 {
     priority |= SCRIPT_PAUSED;
 }
 
+// REVSYNC: Resume @ 0x004942b0
 void TScript::Resume()
 {
     priority &= ~SCRIPT_PAUSED;
 }
 
+// REVSYNC: End @ 0x00493e40 — gives back what the block took: the dialog
+// (4), control (1), the fade bit (2) and the camera (8). Not ported: the
+// multiplayer rollback of the player's state bits (SetPlayerState
+// 0x0051d680).
 void TScript::End()
 {
-    ip = nullptr;
+    triggerguard.Clear();
+    wait = EScriptWait::None;
+    waitobject.Clear();
+    ip = kNotRunning;
     lastpriority = priority = 0;
+
+    // Give back what the block took. A block cut off between `choice` and
+    // its response still holds the dialog.
+    if (taken & kTakenDialog)
+    {
+        DialogPane.SkipSpeech();
+        taken &= ~kTakenDialog;
+    }
+    if (taken & kTakenControl)
+    {
+        PlayScreen.SetControlOn(true);      // retail SetControl(1), 0x0047c580
+        taken &= ~kTakenControl;
+    }
+    // A block that faded the screen out and never back in leaves it black:
+    // retail fades back in here only for a multiplayer host (0x0067682c).
+    taken &= ~kTakenFade;
+    // The camera snaps back to the player unless it is already on him.
+    if (taken & kTakenCamera)
+    {
+        if (!MapPane.IsFollowingPlayer())
+            MapPane.CenterOnObj(Player, CENTERON_SNAP);
+        taken &= ~kTakenCamera;
+    }
+}
+
+// REVSYNC: 0x004932a0
+void TScript::AddChoice(const char *label, const char *text)
+{
+    taken |= kTakenDialog;
+    DialogPane.AddChoice(label, text);
+}
+
+// REVSYNC: 0x00494530
+void TScript::SetBusySay(const char *text, const char *voice)
+{
+    busysay = text ? text : "";
+    busysayvoice = voice ? voice : "";
+}
+
+// REVSYNC: 0x004944c0
+void TScript::SetBusyMessage(const char *text)
+{
+    busymessage = text ? text : "";
+}
+
+void TScript::Reset()
+{
+    End();
+    curproto = topproto;
+    newtrigger = trigger = 0;
+    newtriggerstr[0] = '\0';
+    newtriggerstr2[0] = '\0';
+    curtrigger = nullptr;
+    depth = 0;                                  // the block levels stay as they are
+    savedip = kNotRunning;
+    saveddepth = 0;
+    triggerer.Clear();
+    useralias.clear();
+    second.Clear();
+    secondalias.clear();
 }
 
 // ****************
 // * TScriptProto *
 // ****************
 
+TScriptProto::TScriptProto() = default;
+
+// REVSYNC: ctor @ 0x004946f0 — (parent, owner, filename, buffer). Retail allocates
+// the trigger array struct (0x50 bytes) and zeros it (which `triggers` does via
+// its member ctor), strdup's filename, and if buffer is non-null kicks off
+// ParseScript via the inline TStringParseStream / TToken in the ctor frame.
 TScriptProto::TScriptProto(TScriptProto* pparent, void *powner, char *pfilename, char *pbuffer)
 {
     parent = pparent;
     owner = powner;
-    filename = new char[strlen(pfilename) + 1];
-    strcpy(filename, pfilename);
-    name = nullptr;
-    text = nullptr;
-    len = 0;
+    if (pfilename)
+    {
+        filename = new char[strlen(pfilename) + 1];
+        strcpy(filename, pfilename);
+    }
     if (pbuffer)
-        SetBuffer(pbuffer);
+    {
+        TStringParseStream s(pbuffer, strlen(pbuffer));
+        TToken t(s);
+        t.LineGet();
+        ParseScript(t);
+    }
 }
 
+// REVSYNC: dtor @ 0x004948e0 — frees name/filename/text plus walks the trigger
+// array slots (which TVirtualArray does for us in its dtor). Retail also walks
+// param_1[+0x1c]/+0x20 a second time to clear a tail allocation; that's the
+// TVirtualArray's interior buffer which our destructor handles automatically.
 TScriptProto::~TScriptProto()
 {
     if (name)
-        free(name);
+        delete[] name;
     if (filename)
-        free(filename);
+        delete[] filename;
     if (text)
         free(text);
 }
@@ -476,7 +913,6 @@ bool TScriptProto::FitsCriteria(TObjectInstance* inst)
 {
     if (name && *name && stricmp(name, inst->GetName()) == 0)
         return true;
-
     return false;
 }
 
@@ -489,13 +925,13 @@ void TScriptProto::SetBuffer(char *buffer)
         free(text);
 
     text = strdup(buffer);
-    len = strlen(text);
+    len = (int32_t)strlen(text);
 
     TStringParseStream s(text, len);
     TToken t(s);
 
     t.LineGet();
-//  ParseScript(t); 
+//  ParseScript(t);
 }
 
 void TScriptProto::GetBuffer(char *buffer, int32_t buflen)
@@ -506,6 +942,7 @@ void TScriptProto::GetBuffer(char *buffer, int32_t buflen)
     strncpyz(buffer, text, buflen);
 }
 
+// REVSYNC: ParseCriteria @ 0x00494c50.
 bool TScriptProto::ParseCriteria(TToken &t)
 {
     if (t.Is("CONTEXT") || t.Is("OBJTYPE") || t.Is("OBJECT"))
@@ -513,17 +950,21 @@ bool TScriptProto::ParseCriteria(TToken &t)
         t.WhiteGet();
         if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
             ScriptError("Expected object context identifier", t.LineNum());
-        name = strdup(t.Text());
+
+        if (name)
+            delete[] name;
+        name = new char[strlen(t.Text()) + 1];
+        strcpy(name, t.Text());
+
         t.WhiteGet();
 
         if (t.Is("PARENT"))
         {
             t.WhiteGet();
-
             if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
                 ScriptError("Expected object parent identifier", t.LineNum());
 
-            parent = ScriptManager.FindScriptProto((char*)t.Text());
+            parent = ScriptManager.FindScriptProto(t.Text());
 
             t.WhiteGet();
         }
@@ -542,16 +983,86 @@ bool TScriptProto::ParseCriteria(TToken &t)
 #define TRIGBUFGROW 512
 #define MAXTRIGSIZE 256
 
+// REVSYNC: ParseScript @ 0x00494e20. Trigger tag→type mapping verified against
+// the retail switch ladder. Cube parsing canonicalises (x1,y1,z1)..(x2,y2,z2)
+// into (min,max) per retail.
+// REVSYNC: 0x00495750 / 0x00495830 -- `DATA`, `BEGIN`, then one variable per
+// line up to `END`: `NUMBER <name> [<value>]` or `TEXT <name> ["<value>"]`; a
+// missing or mistyped value leaves 0 or "". Retail looped forever on a line
+// starting with neither keyword (or blank): it never moved past it. The port
+// reports such a line and goes on.
+void TScriptProto::ParseVariables(TToken &t)
+{
+    auto nextline = [&t]() {
+        while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+            t.Get();
+        t.SkipBlanks();
+    };
+
+    nextline();                                 // past `DATA`
+    if (t.Is("BEGIN"))
+        nextline();
+
+    while (t.Type() != TKN_EOF && !t.Is("END") && !t.Is("BEGIN"))
+    {
+        SScriptVariable var;
+        if (t.Is("NUMBER"))
+            var.type = SScriptVariable::EType::Number;
+        else if (t.Is("TEXT"))
+            var.type = SScriptVariable::EType::Text;
+        else
+        {
+            ScriptError("NUMBER or TEXT expected in DATA block", t.LineNum());
+            nextline();
+            continue;
+        }
+
+        t.WhiteGet();
+        var.name = t.Text();
+        t.WhiteGet();
+        if (var.type == SScriptVariable::EType::Number && t.Type() == TKN_NUMBER)
+            var.number = t.Index();
+        else if (var.type == SScriptVariable::EType::Text && t.Type() == TKN_TEXT)
+            var.text = std::string(t.Text()).substr(0, SScriptVariable::kMaxText);
+        variables.push_back(std::move(var));
+        nextline();
+    }
+
+    nextline();                                 // past `END`
+}
+
+SScriptVariable* TScriptProto::FindVariable(const char *varname)
+{
+    for (SScriptVariable& var : variables)
+        if (!stricmp(var.name.c_str(), varname))
+            return &var;
+    return nullptr;
+}
+
 int32_t TScriptProto::ParseScript(TToken &t)
 {
     char buf[80];
     char trigname[20];
+    // A cube's corners, kept across triggers as retail's frame slots are: a
+    // cube that fails to parse is built from what the last one left (zero
+    // before the first).
+    int32_t cx1 = 0, cy1 = 0, cz1 = 0, cx2 = 0, cy2 = 0, cz2 = 0;
 
-  // Clear current list of triggers before we begin
+  // Clear current list of triggers (and variables) before we begin
     triggers.Clear();
+    numtriggers = 0;
+    variables.clear();
 
   // Skip initial blanks
     t.SkipBlanks();
+
+  // REVSYNC: 0x00494e20 -- the text starts at the block's first token, the
+  // OBJECT keyword: the stream stands one character past it, which the
+  // tokenizer holds. Trigger positions are relative to it. (The 1998 code
+  // kept only the body, from the line after the object's BEGIN.)
+    const char *source = t.Stream() ? t.Stream()->Data() : nullptr;
+    const int64_t first = (int64_t)t.GetPos() - (int64_t)strlen(t.Text()) - 1;
+    const uint32_t start = first > 0 ? (uint32_t)first : 0;
 
   // Parse script header line
     ParseCriteria(t);
@@ -559,37 +1070,39 @@ int32_t TScriptProto::ParseScript(TToken &t)
     t.SkipBlanks();
     if (!t.Is("BEGIN"))
         ScriptError("Object block BEGIN expected", t.LineNum());
-    
+
     while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
         t.Get();
 
-  // Mark line after begin as beginning of script buffer
-    uint32_t start = t.GetPos();
-    int32_t depth = 0;
-
   // Now get first trigger token
     t.LineGet();
-    
+
   // Iterate through the triggers and setup trigger list
     while (t.Type() != TKN_EOF && !t.Is("END"))
     {
-      // Parse trigger tags now
         if (t.Type() != TKN_IDENT)
             ScriptError("Trigger identifier expected", t.LineNum());
 
-      // Setup basic trigger structure
+        // REVSYNC: 0x004954f4 -- a DATA block declares the prototype's
+        // variables; then on to the next trigger.
+        if (t.Is("DATA"))
+        {
+            ParseVariables(t);
+            continue;
+        }
+
         SScriptTrigger st;
         memset(&st, 0, sizeof(SScriptTrigger));
         st.type = 0;
 
-      // Tags...
-        strcpy(trigname, t.Text());
-        if (t.Is("ALWAYS"))                 // ALWAYS trigger
+        strncpyz(trigname, t.Text(), sizeof(trigname));
+
+        if (t.Is("ALWAYS"))
         {
             t.WhiteGet();
             st.type = TRIGGER_ALWAYS;
         }
-        else if (t.Is("TRIGGER"))                   // ALWAYS trigger
+        else if (t.Is("TRIGGER"))
         {
             t.WhiteGet();
             st.type = TRIGGER_TRIGGER;
@@ -600,17 +1113,17 @@ int32_t TScriptProto::ParseScript(TToken &t)
                 t.WhiteGet();
             }
         }
-        else if (t.Is("DIALOG"))            // DIALOG trigger
+        else if (t.Is("DIALOG"))
         {
             t.WhiteGet();
             st.type = TRIGGER_DIALOG;
         }
-        else if (t.Is("PROXIMITY"))         // CUBE trigger
+        else if (t.Is("PROXIMITY"))
         {
             t.WhiteGet();
 
             st.type = TRIGGER_PROXIMITY;
-            st.dist = 256;
+            st.dist = 256;          // REVSYNC: retail default uStack_338 = 0x100
 
             if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
             {
@@ -621,64 +1134,86 @@ int32_t TScriptProto::ParseScript(TToken &t)
             if (t.Type() == TKN_NUMBER)
                 Parse(t, "%i", &st.dist);
         }
-        else if (t.Is("CUBE"))              // CUBE trigger
+        else if (t.Is("CUBE"))
         {
             t.WhiteGet();
 
             st.type = TRIGGER_CUBE;
 
+            // REVSYNC: 0x00495062 -- `CUBE [<name>|NULL] <x,y,z x,y,z>` or
+            // `CUBE [<name>|NULL] <region>`. NULL leaves the name empty; no
+            // name at all takes the prototype's. A region name instead of
+            // the corners is kept in `region` with an empty cube (retail's
+            // trigger test 0x004927b0 never reads it). The 1998 parser
+            // took NULL as a name and had no region form.
             if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
             {
-                strncpyz(st.name, t.Text(), MAXSCRIPTNAME);
+                if (!t.Is("NULL"))
+                    strncpyz(st.name, t.Text(), MAXSCRIPTNAME);
                 t.WhiteGet();
             }
             else
-                strncpyz(st.name, name, MAXSCRIPTNAME);
+            {
+                if (name) strncpyz(st.name, name, MAXSCRIPTNAME);
+                else st.name[0] = '\0';
+            }
 
-            int32_t x1, y1, z1, x2, y2, z2;
+            if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
+            {
+                strncpyz(st.region, t.Text(), MAXSCRIPTNAME);
+                t.Get();
+            }
+            else
+            {
+                if (!Parse(t, "%i,%i,%i %i,%i,%i", &cx1, &cy1, &cz1, &cx2, &cy2, &cz2))
+                    ScriptError("Invalid cube trigger", t.LineNum());
 
-            if (!Parse(t, "%i,%i,%i %i,%i,%i", &x1, &y1, &z1, &x2, &y2, &z2))
-                ScriptError("Invalid cube trigger", t.LineNum());
-
-            st.cube.beg.x = min(x1, x2);
-            st.cube.beg.y = min(y1, y2);
-            st.cube.beg.z = min(z1, z2);
-            st.cube.end.x = max(x1, x2);
-            st.cube.end.y = max(y1, y2);
-            st.cube.end.z = max(z1, z2);
+                st.cube.beg.x = min(cx1, cx2);
+                st.cube.beg.y = min(cy1, cy2);
+                st.cube.beg.z = min(cz1, cz2);
+                st.cube.end.x = max(cx1, cx2);
+                st.cube.end.y = max(cy1, cy2);
+                st.cube.end.z = max(cz1, cz2);
+            }
         }
-        else if (t.Is("ACTIVATE"))          // ACTIVATE trigger
+        else if (t.Is("ACTIVATE"))
         {
             t.WhiteGet();
             st.type = TRIGGER_ACTIVATE;
         }
-        else if (t.Is("USE"))               // USE trigger
+        else if (t.Is("USE"))
         {
             t.WhiteGet();
             st.type = TRIGGER_USE;
-            
+
+            // REVSYNC: retail (LAB_00494ffb path) falls back to proto->name when
+            //   no identifier follows USE. Pre-release left it empty.
             if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
             {
                 strncpyz(st.name, t.Text(), MAXSCRIPTNAME);
                 t.WhiteGet();
             }
+            else if (name)
+            {
+                strncpyz(st.name, name, MAXSCRIPTNAME);
+            }
         }
-        else if (t.Is("GIVE"))              // GIVE trigger
+        else if (t.Is("GIVE"))
         {
             t.WhiteGet();
             st.type = TRIGGER_GIVE;
-            
+
             if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
             {
                 strncpyz(st.name, t.Text(), MAXSCRIPTNAME);
                 t.WhiteGet();
             }
         }
-        else if (t.Is("GET"))               // GET trigger
+        else if (t.Is("GET"))
         {
             t.WhiteGet();
             st.type = TRIGGER_GET;
-            
+
             if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
             {
                 strncpyz(st.name, t.Text(), MAXSCRIPTNAME);
@@ -695,15 +1230,18 @@ int32_t TScriptProto::ParseScript(TToken &t)
             t.WhiteGet();
             st.type = TRIGGER_DEAD;
         }
-        else 
+        else
         {
-            sprintf(buf, "Unknown trigger %s", t.Text());
+            // REVSYNC: retail aborts the whole file on unknown trigger
+            //   (LOAD STOPPED, returns 0xffffffff). We escalate to a
+            //   non-fatal error to keep editing flow tolerant.
+            snprintf(buf, sizeof(buf), "Unknown trigger %s", t.Text());
             ScriptError(buf, t.LineNum());
         }
 
         if (t.Type() != TKN_RETURN)
         {
-            sprintf(buf, "Bad parameter for %s trigger", trigname);
+            snprintf(buf, sizeof(buf), "Bad parameter for %s trigger", trigname);
             ScriptError(buf, t.LineNum());
             t.SkipLine();
         }
@@ -732,44 +1270,58 @@ int32_t TScriptProto::ParseScript(TToken &t)
     if (!t.Is("END"))
         ScriptError("Object block END expected", t.LineNum());
 
-    // Extract the trigger body from the full-buffer copy SetBuffer left on
-    // text. start/GetPos are offsets into the parser's source buffer, which
-    // has the same contents. The "-4" trims the trailing "END\n".
-    int32_t bodylen = (int32_t)(t.GetPos() - start - 4);
-    char *newtext = (char *)malloc(bodylen + 1);
-    if (text)
+    // REVSYNC: 0x00494e20 (tail) -- the object's END ends its line.
+    t.WhiteGet();
+    if (t.Type() != TKN_RETURN)
     {
-        memcpy(newtext, text + start, bodylen);
-        free(text);
+        char msg[256];
+        snprintf(msg, sizeof(msg), "RETURN expected in %s:%s", filename ? filename : "(null)", t.Text());
+        ScriptError(msg, t.LineNum());
     }
-    newtext[bodylen] = 0;
+
+    // The text runs to here: through the END and its line break. It is
+    // copied from the text being parsed (positions are offsets into it).
+    int32_t textlen = (int32_t)((int64_t)t.GetPos() - start);
+    if (textlen < 0)
+        textlen = 0;
+    if (!source)
+    {
+        ScriptError("Script text can't be read from this stream", t.LineNum());
+        textlen = 0;
+    }
+    char *newtext = (char *)malloc(textlen + 1);
+    if (textlen > 0)
+        memcpy(newtext, source + start, textlen);
+    newtext[textlen] = 0;
+    free(text);
     text = newtext;
-    len = bodylen;
+    len = textlen;
 
     t.LineGet();
 
-    return bodylen;
+    return textlen;
 }
 
+// REVSYNC: TScriptManager::Save @ 0x00496690 writes each prototype's text as
+// is -- the block as it was parsed, OBJECT through END -- and "\r\n". (The
+// 1998 code wrote its own OBJECT/BEGIN header around the body.)
 bool TScriptProto::WriteScript(FILE *fp)
 {
-    if (fprintf(fp, "OBJECT \"%s\"\r\n", name) < 0)
-        return false;
-
-    if (fputs("begin\r\n", fp) == EOF || fputs(text, fp) == EOF || fputs("end\r\n\r\n", fp) == EOF)
-        return false;
-
-    return true;
+    if (!text)
+        return true;
+    return fputs(text, fp) != EOF && fputs("\r\n", fp) != EOF;
 }
 
 // **************
 // * TGameState *
 // **************
 
+// REVSYNC: Load @ 0x00495cf0 — text .def parser; the active module's copy of
+// the file, else the shared one.
 bool TGameState::Load(char *filename)
 {
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%s%s", ClassDefPath, filename);
+    const std::string fname_str = ModuleManager.DataFilePath(filename);
+    const char *fname = fname_str.c_str();
 
     FILE *fp = rev_fopen(fname, "rb");
     if (!fp)
@@ -780,6 +1332,15 @@ bool TGameState::Load(char *filename)
 
     t.LineGet();
 
+    // Free any existing names before we reset numstates.
+    for (int32_t i = 0; i < numstates; i++)
+    {
+        if (statename[i])
+        {
+            delete[] statename[i];
+            statename[i] = nullptr;
+        }
+    }
     numstates = 0;
 
     while (t.Type() != TKN_EOF)
@@ -805,7 +1366,6 @@ bool TGameState::Load(char *filename)
         }
         else
             FatalError("Expected gamestate identifier in %s", filename);
-
     }
 
     fclose(fp);
@@ -836,25 +1396,107 @@ bool TGameState::Save(char *filename)
     return true;
 }
 
+namespace {
+
+// Names are stored with the high bit set on every byte (retail ORs on save,
+// XORs on load; state names are ASCII, so the two agree).
+constexpr uint8_t kStateNameMask = 0x80;
+
+}  // namespace
+
+// REVSYNC: LoadStream @ 0x00496110
+bool TGameState::LoadStream(TInputStream &is)
+{
+    if (is.Remaining() < 4)
+        return false;
+    int32_t count = 0;
+    is >> count;
+
+    for (int32_t i = 0; i < count; i++)
+    {
+        if (is.Remaining() < 1)
+            return false;
+        uint8_t length = 0;
+        is >> length;
+        if (is.Remaining() < length + 4)
+            return false;
+
+        char name[256];
+        for (int32_t c = 0; c < length; c++)
+        {
+            uint8_t byte = 0;
+            is >> byte;
+            name[c] = (char)(byte ^ kStateNameMask);
+        }
+        name[length] = '\0';
+
+        int32_t value = 0;
+        is >> value;
+
+        const int32_t index = FindStateIndex(name);
+        if (index >= 0)
+        {
+            state[index] = value;
+            continue;
+        }
+        if (numstates >= MAXGAMESTATES)
+        {
+            log_warn("[gamestate] save holds more than %d states; dropping '%s'",
+                     MAXGAMESTATES, name);
+            continue;
+        }
+        statename[numstates] = new char[length + 1];
+        strcpy(statename[numstates], name);
+        state[numstates] = value;
+        numstates++;
+    }
+    return true;
+}
+
+// REVSYNC: SaveStream @ 0x004974d0
+void TGameState::SaveStream(TOutputStream &os) const
+{
+    os.MakeFreeSpace(4);
+    os << numstates;
+
+    for (int32_t i = 0; i < numstates; i++)
+    {
+        const char *name = statename[i] ? statename[i] : "";
+        const size_t length = std::min<size_t>(strlen(name), 255);
+        os.MakeFreeSpace((int32_t)length + 5);
+        os << (uint8_t)length;
+        for (size_t c = 0; c < length; c++)
+            os << (uint8_t)(name[c] | kStateNameMask);
+        os << state[i];
+    }
+}
+
 // ******************
 // * TScriptManager *
 // ******************
 
+// REVSYNC: Initialize @ 0x00496240 — clears the 3 internal arrays then loads
+// master.s + state.def. Retail zeros raw memory; we rely on the array ctors.
 bool TScriptManager::Initialize()
 {
     scripts.Clear();
+    fileowners.Clear();
 
-#if 0 // TODO(port): Subsystem 7 — debug heap instrumentation (MSVC CRT → AddressSanitizer)
-    if (!_CrtCheckMemory())
-    {
-        _CrtMemDumpAllObjectsSince(nullptr);
-        _RPT0(_CRT_ERROR, "Memory Error");
-    }
-#endif
-
-    return (Load("master.s") && gamestate.Load("state.def"));
+    const bool master_ok = Load("master.s");
+    const bool state_ok  = gamestate.Load("state.def");
+    log_info("[script] Initialize: master.s=%s state.def=%s, %d proto(s), %d gamestate(s)",
+             master_ok ? "ok" : "FAIL",
+             state_ok  ? "ok" : "FAIL",
+             scripts.NumItems(),
+             gamestate.NumStates());
+    return master_ok && state_ok;
 }
 
+// REVSYNC: Close @ 0x00496330 — Save if editor + delete protos + delete
+// file/owner records. Retail also clears the empty TVirtualArray slots; our
+// containers do that in their destructors. REVSYNC-DIVERGENCE: retail also
+// deleted the live script instances here; in the port their objects own and
+// delete them (see the TScriptManager comment in script.h).
 void TScriptManager::Close()
 {
     if (Editor)
@@ -863,22 +1505,26 @@ void TScriptManager::Close()
         gamestate.Save("state.def");
     }
 
+    // Delete protos.
     scripts.DeleteAll();
+
+    // Free file/owner records.
+    for (int32_t i = 0; i < fileowners.NumItems(); i++)
+    {
+        if (fileowners.Used(i))
+            fileowners.Delete(i);
+    }
+    fileowners.Clear();
 }
 
+// REVSYNC: Load @ 0x00496490 — slurps file, ParseScripts, registers owner.
+// The active module's copy of the script, else the shared one.
 bool TScriptManager::Load(char *filename, void *owner)
 {
-    char fname[MAXPATHLEN];
+    const std::string fname_str = ModuleManager.DataFilePath(filename);
+    const char *fname = fname_str.c_str();
 
-#if 0 // TODO(port): Subsystem 7 — debug heap instrumentation (MSVC CRT → AddressSanitizer)
-    if (!_CrtCheckMemory())
-    {
-        _CrtMemDumpAllObjectsSince(nullptr);
-        _RPT0(_CRT_ERROR, "Memory Error");
-    }
-#endif
-
-    sprintf(fname, "%s%s", ClassDefPath, filename);
+    const int before = scripts.NumItems();
 
     FILE *fp = TryOpen(fname, "rb");
     if (fp == nullptr)
@@ -888,35 +1534,55 @@ bool TScriptManager::Load(char *filename, void *owner)
     fseek(fp, 0, SEEK_END);
     int32_t bufsize = (int32_t)ftell(fp);
     fseek(fp, 0, SEEK_SET);
-    char *buffer = new char[bufsize+1];
+    char *buffer = new char[bufsize + 1];
 
     if (fread(buffer, 1, bufsize, fp) < (size_t)bufsize)
         retval = false;
     else
     {
-        buffer[bufsize] = 0;            // null-terminate it
+        buffer[bufsize] = 0;
         ParseScripts(buffer, filename, owner);
     }
 
-    delete buffer;
+    delete[] buffer;
     fclose(fp);
 
-    if (MapPane.IsOpen())
-        MapPane.Notify(N_SCRIPTADDED, nullptr);
+    // REVSYNC: ParseScripts @ 0x00496860 notifies the world so objects that
+    // match a new prototype pick it up (area scripts load after the area's
+    // objects exist).
+    MapManager.Notify(N_SCRIPTADDED, nullptr);
 
     scriptsdirty = false;
 
-#if 0 // TODO(port): Subsystem 7 — debug heap instrumentation (MSVC CRT → AddressSanitizer)
-    if (!_CrtCheckMemory())
+    // REVSYNC: register filename↔owner pair (retail trails the parse with this).
+    // If a record for this filename already exists, just refresh its owner;
+    // otherwise allocate a new record and add it.
+    bool found = false;
+    for (int32_t i = 0; i < fileowners.NumItems(); i++)
     {
-        _CrtMemDumpAllObjectsSince(nullptr);
-        _RPT0(_CRT_ERROR, "Memory Error");
+        if (!fileowners.Used(i)) continue;
+        if (!stricmp(fileowners[i]->filename, filename))
+        {
+            fileowners[i]->owner = owner;
+            found = true;
+            break;
+        }
     }
-#endif
+    if (!found)
+    {
+        SScriptFileOwner *rec = new SScriptFileOwner();
+        strncpyz(rec->filename, filename, sizeof(rec->filename));
+        rec->owner = owner;
+        fileowners.Add(rec);
+    }
 
+    log_info("[script] Load('%s'): +%d proto(s) (total %d)", filename,
+             scripts.NumItems() - before, scripts.NumItems());
     return retval;
 }
 
+// REVSYNC: Save @ 0x00496690 — the owner's prototypes, each text as is, in a
+// file opened binary ("wb": the texts keep their CRLFs, the header its LFs).
 bool TScriptManager::Save(char *filename, void *owner)
 {
     if (!scriptsdirty)
@@ -926,7 +1592,7 @@ bool TScriptManager::Save(char *filename, void *owner)
 
     sprintf(fname, "%s%s", ClassDefPath, filename);
 
-    FILE *fp = TryOpen(fname, "wt");
+    FILE *fp = TryOpen(fname, "wb");
     if (fp == nullptr)
         return false;
 
@@ -954,6 +1620,9 @@ bool TScriptManager::Save(char *filename, void *owner)
     return retval;
 }
 
+// REVSYNC: Clear @ 0x004967a0 — drop protos AND file/owner records for owner.
+// Retail walks the file/owner list backwards (so Collapse() doesn't shift
+// indexes under us); we mirror that.
 void TScriptManager::Clear(void *owner)
 {
     for (int32_t c = 0; c < scripts.NumItems(); c++)
@@ -963,29 +1632,64 @@ void TScriptManager::Clear(void *owner)
 
         if (scripts[c]->owner == owner)
         {
-            MapPane.Notify(N_SCRIPTDELETED, scripts[c]);
-
+            MapManager.Notify(N_SCRIPTDELETED, scripts[c]);
             scripts.Delete(c);
         }
     }
-}   
 
-TScriptProto* TScriptManager::FindScriptProto(char *name)
+    // REVSYNC: also prune file/owner records for this owner (retail second loop)
+    for (int32_t c = fileowners.NumItems() - 1; c >= 0; c--)
+    {
+        if (!fileowners.Used(c)) continue;
+        if (fileowners[c]->owner == owner)
+            fileowners.Delete(c);
+    }
+}
+
+TScriptProto* TScriptManager::FindScriptProto(const char *fname)
 {
     for (int32_t c = 0; c < scripts.NumItems(); c++)
     {
-        if (!stricmp(scripts[c]->name, name))
+        if (!scripts.Used(c)) continue;
+        if (scripts[c]->name && !stricmp(scripts[c]->name, fname))
             return scripts[c];
     }
-    
+
     return nullptr;
 }
 
+// REVSYNC: ReloadStates @ 0x004975c0
 bool TScriptManager::ReloadStates()
 {
     return gamestate.Load("state.def");
 }
 
+// REVSYNC: 0x00496e20
+void TScriptManager::ResetScripts()
+{
+    for (TScript* script : instances)
+        script->Reset();
+}
+
+void TScriptManager::RegisterScript(TScript* script)
+{
+    instances.push_back(script);
+}
+
+void TScriptManager::UnregisterScript(TScript* script)
+{
+    const auto it = std::find(instances.begin(), instances.end(), script);
+    if (it != instances.end())
+    {
+        *it = instances.back();
+        instances.pop_back();
+    }
+}
+
+// REVSYNC: ParseScripts @ 0x00496860 — chunk buffer into TScriptProtos. Retail
+// also handles a hot-reload diff path (mark-protos-stale → reparse → reattach
+// to instances) which we don't exercise in the cold-load case; the per-proto
+// allocation + ParseScript + registry insertion is identical.
 void TScriptManager::ParseScripts(char *buffer, char *filename, void *owner)
 {
     TStringParseStream s(buffer, strlen(buffer));
@@ -995,11 +1699,11 @@ void TScriptManager::ParseScripts(char *buffer, char *filename, void *owner)
 
     while (t.Type() != TKN_EOF)
     {
-        TScriptProto* script = new TScriptProto(nullptr, owner, filename, buffer);
+        TScriptProto* script = new TScriptProto(nullptr, owner, filename, nullptr);
         script->ParseScript(t);
 
         int32_t c;
-        for (c = 0; c < scripts.NumItems(); c++) // Add into unused entries
+        for (c = 0; c < scripts.NumItems(); c++)
         {
             if (!scripts.Used(c))
             {
@@ -1012,39 +1716,105 @@ void TScriptManager::ParseScripts(char *buffer, char *filename, void *owner)
     }
 }
 
-
-// This finds all the scripts which apply to a given object instance and put pointers to
-// them into the new script object (which is returned).
+// REVSYNC: ObjectScript @ 0x00497370 — match proto by instance name first
+// (inst+0x38), then by type name (**(inst+0x4c), the type's name: Door1,
+// PortEW... -- how the master.s door prototypes reach every door). Retail allocates the new
+// TScript via FUN_00482fb0(0xe8) then runs the ctor; the `FUN_0041c840`
+// follow-up call returns a registry id stored at +0x14 — we don't need that
+// runtime id in our port (no global instance handle table).
 PTScript TScriptManager::ObjectScript(TObjectInstance* inst)
 {
-    for (int32_t c = 0; c < scripts.NumItems(); c++)
-    {
-        if (!scripts.Used(c))
-            continue;
+    if (!inst) return nullptr;
 
-        if (scripts[c]->FitsCriteria(inst))
+    // Pass 1: match instance name.
+    const char *instname = inst->GetName();
+    if (instname && *instname)
+    {
+        for (int32_t c = 0; c < scripts.NumItems(); c++)
         {
-            PTScript newscript = new TScript(scripts[c]);
-            return newscript;
+            if (!scripts.Used(c)) continue;
+            TScriptProto *sp = scripts[c];
+            if (!sp->name || !*sp->name) continue;
+            if (stricmp(sp->name, instname) == 0)
+            {
+                PTScript ns = new TScript(sp);
+                log_info("[script] attached '%s' -> obj %s", sp->name, instname);
+                return ns;
+            }
+        }
+    }
+
+    // Pass 2: match the type name.
+    const char *typename_ = inst->GetTypeName();
+    if (typename_ && *typename_)
+    {
+        for (int32_t c = 0; c < scripts.NumItems(); c++)
+        {
+            if (!scripts.Used(c)) continue;
+            TScriptProto *sp = scripts[c];
+            if (!sp->name || !*sp->name) continue;
+            if (stricmp(sp->name, typename_) == 0)
+            {
+                PTScript ns = new TScript(sp);
+                log_info("[script] attached '%s' -> obj %s (type match)", sp->name,
+                         instname ? instname : "(unnamed)");
+                return ns;
+            }
         }
     }
 
     return nullptr;
 }
 
-struct { char *name; int32_t val; } LocalScriptVals[] =
+// REVSYNC: AddScript @ 0x00497120 — editor / scripted dynamic-proto path. Retail
+// builds a synthetic OBJECT block in a scratch buffer if no matching proto
+// exists, parses it via ParseScript, then ctors a new TScript bound to the
+// proto. Used by the editor's Insert-script and by a couple of script commands.
+// Not exercised on the current boot path; preserved for parity.
+PTScript TScriptManager::AddScript(TObjectInstance* /*inst*/, char *name, void *owner, char *buffer)
 {
-    { "Name",               0   },
-    { "IsShopObject",       0   },
-    { "Tab",                0   },
+    // Find or create the matching proto.
+    TScriptProto *sp = nullptr;
+    for (int32_t c = 0; c < scripts.NumItems(); c++)
+    {
+        if (!scripts.Used(c)) continue;
+        if (scripts[c]->name && !stricmp(scripts[c]->name, name))
+        {
+            sp = scripts[c];
+            break;
+        }
+    }
 
-    { nullptr }        // terminator
+    if (!sp)
+    {
+        const size_t synthlen = (buffer ? strlen(buffer) : 0) + strlen(name) + 32;
+        char *synth = new char[synthlen];
+        snprintf(synth, synthlen, "OBJECT %s\r\nBEGIN\r\n%s\r\nEND\r\n", name,
+                 buffer ? buffer : "");
+
+        sp = new TScriptProto(nullptr, owner, name, synth);
+        scripts.Add(sp);
+        delete[] synth;
+    }
+
+    PTScript ns = new TScript(sp);
+    return ns;
+}
+
+// REVSYNC: LocalScriptVals — retail static table at PTR_DAT_005da0b0; same
+// {Name, IsShopObject, Tab} entries pre-release used.
+static struct { const char *name; int32_t val; } LocalScriptVals[] =
+{
+    { "Name",               0 },
+    { "IsShopObject",       0 },
+    { "Tab",                0 },
+    { nullptr,              0 }     // terminator
 };
 
-int32_t TScriptManager::FindLocalVal(char *name)
+int32_t TScriptManager::FindLocalVal(const char *fname)
 {
     for (int32_t i = 0; LocalScriptVals[i].name; i++)
-        if (stricmp(name, LocalScriptVals[i].name) == 0)
+        if (stricmp(fname, LocalScriptVals[i].name) == 0)
             return i;
 
     return -1;
@@ -1064,13 +1834,80 @@ int32_t TScriptManager::GetLocalVal(int32_t index)
     return 0;
 }
 
-int32_t TScriptManager::GameState(char *name)
+// REVSYNC: GameState lookup @ 0x004975d0 — local table first then global gamestate.
+int32_t TScriptManager::GameState(const char *fname)
 {
     // first check the constants set up by the currently executing script trigger
-    int32_t index = FindLocalVal(name);
+    int32_t index = FindLocalVal(fname);
     if (index >= 0)
         return GetLocalVal(index);
 
     // if it's not there, check the game state variables (globals)
-    return gamestate.State(name);
+    return gamestate.State(fname);
+}
+
+// ***********************
+// * Prototype variables *
+// ***********************
+
+namespace {
+
+// The prototypes an object reads its variables from: named like the object
+// or like its type (retail compares the name at +0x38, then the type name).
+bool ProtoNamesObject(const TScriptProto* proto, const TObjectInstance* obj)
+{
+    if (!obj || !proto || !proto->name || !*proto->name)
+        return false;
+    const char *objname = obj->GetName();
+    const char *typname = obj->GetTypeName();
+    return (objname && !stricmp(proto->name, objname)) || (typname && !stricmp(proto->name, typname));
+}
+
+}  // namespace
+
+int32_t TScriptManager::VariableType(const char *name, const TObjectInstance* obj)
+{
+    for (int32_t c = 0; c < scripts.NumItems(); c++)
+        if (scripts.Used(c) && ProtoNamesObject(scripts[c], obj))
+            if (const SScriptVariable* var = scripts[c]->FindVariable(name))
+                return static_cast<int32_t>(var->type);
+    return -1;
+}
+
+int32_t TScriptManager::VariableNumber(const char *name, const TObjectInstance* obj)
+{
+    for (int32_t c = 0; c < scripts.NumItems(); c++)
+        if (scripts.Used(c) && ProtoNamesObject(scripts[c], obj))
+            if (const SScriptVariable* var = scripts[c]->FindVariable(name);
+                var && var->type == SScriptVariable::EType::Number && var->number != STATE_INVALID)
+                return var->number;
+    return STATE_INVALID;
+}
+
+const char *TScriptManager::VariableText(const char *name, const TObjectInstance* obj)
+{
+    for (int32_t c = 0; c < scripts.NumItems(); c++)
+        if (scripts.Used(c) && ProtoNamesObject(scripts[c], obj))
+            if (const SScriptVariable* var = scripts[c]->FindVariable(name);
+                var && var->type == SScriptVariable::EType::Text)
+                return var->text.c_str();
+    return nullptr;
+}
+
+void TScriptManager::SetVariableNumber(const char *name, int32_t value, const TObjectInstance* obj)
+{
+    for (int32_t c = 0; c < scripts.NumItems(); c++)
+        if (scripts.Used(c) && ProtoNamesObject(scripts[c], obj))
+            if (SScriptVariable* var = scripts[c]->FindVariable(name);
+                var && var->type == SScriptVariable::EType::Number)
+                var->number = value;
+}
+
+void TScriptManager::SetVariableText(const char *name, const char *text, const TObjectInstance* obj)
+{
+    for (int32_t c = 0; c < scripts.NumItems(); c++)
+        if (scripts.Used(c) && ProtoNamesObject(scripts[c], obj))
+            if (SScriptVariable* var = scripts[c]->FindVariable(name);
+                var && var->type == SScriptVariable::EType::Text)
+                var->text = std::string(text ? text : "").substr(0, SScriptVariable::kMaxText);
 }

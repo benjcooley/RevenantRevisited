@@ -4,9 +4,11 @@
 // *                  playscreen.h - main play-mode screen                 *
 // *************************************************************************
 //
-// TPlayScreen drives an in-game session: world rendering through the
+// TPlayScreen presents the game in progress: world rendering through the
 // owned TMapRenderer, command/input dispatch, game-time tracking, and
-// pane composition for HUD / inventory / editor / dialogs.
+// pane composition for HUD / inventory / editor / dialogs. The world itself
+// (map, players, areas, game states) belongs to the game session
+// (TGameSession, owned by TGameFlow); the screen binds to it.
 //
 // Architecture:
 //   - World rendering happens via the same TMapRenderer that powers
@@ -14,8 +16,8 @@
 //     loop calls RenderFrame() each tick; panes composite 2D on top.
 //   - Game-time + time-of-day live here so other systems (lighting,
 //     save-game, scripts) can ask the screen for "now".
-//   - Save-load entry points stage their work and run on the next
-//     Update() so we don't tear down state mid-frame.
+//   - Save/load requests made during play are queued on the session and
+//     carried out at the start of the next Update().
 //
 // The retail TPlayScreen and its DrawBackground / Pulse / Animate /
 // post-character anim arrays have been retired to attic/src/playscreen.*
@@ -31,8 +33,13 @@
 #include "graphics.h"
 #include "screen.h"
 
-#include <memory>
+#include "mapmanager.h"
+#include "moviepane.h"
 
+#include <memory>
+#include <vector>
+
+class TInGameMenu;
 class TMapRenderer;
 class TObjectImagery;
 
@@ -62,6 +69,9 @@ enum GAMECOMMAND : int32_t
     GAMECMD_MOVEDOWN, GAMECMD_MOVEUP,
     GAMECMD_LEAPDOWN, GAMECMD_LEAPUP,
     GAMECMD_BLOCKDOWN, GAMECMD_BLOCKUP,
+    // Retail's last four controls (table 0x005d5500 #65-68, Command
+    // 0x0047cf40 cases 0x52-0x55): the in-game dialogs without the menu.
+    GAMECMD_GAMEOPTIONS, GAMECMD_LOADGAME, GAMECMD_SAVEGAME, GAMECMD_QUICKSAVE,
 };
 
 // CMDFLAG_* bitmask values fed into TPlayer command-flag state.
@@ -82,9 +92,10 @@ enum GAMECOMMAND : int32_t
 #define CMDFLAG_MOVEFLAGS   (0x300)
 
 // Populate the global ControlMap with the default game key bindings (the
-// canonical GAMECMD_* table). Idempotent-ish: callers that need the bindings
-// before TPlayScreen exists (the main-menu Options screen, --test=ui-options)
-// can call this so ControlMap.NumControls() is non-zero. TPlayScreen::Initialize
+// canonical GAMECMD_* table), then the player's bindings from Revenant.ini
+// [Controls]. Idempotent-ish: callers that need the bindings before
+// TPlayScreen exists (the main-menu Options screen, --test=ui-options) can
+// call this so ControlMap.NumControls() is non-zero. TPlayScreen::Initialize
 // also calls it. The table lives here because it is keyed on GAMECMD_*.
 void InitDefaultControlMap();
 
@@ -112,12 +123,10 @@ class TPlayScreen : public TScreen
     bool Initialize() override;
     void Close()      override;
 
-    // Drop a default "Locke" TPlayer into the loaded sector at
-    // (level, sx, sy) and register him with PlayerManager. Used when
-    // there is no save-load path / new-game flow yet -- gives the
-    // world a Player to render and drive. Called from inside the
-    // TMapRenderer post-load hook so the renderer's drawable scan
-    // picks the player up. Returns true if Player exists after the call.
+    // Editor "Place Here" with no game loaded: drop a default "Locke"
+    // TPlayer into the loaded sector at (level, sx, sy) and register him
+    // with PlayerManager. Games start from newgame.sav (TGameSession).
+    // Returns true if Player exists after the call.
     bool SpawnDefaultPlayer(int32_t level, int32_t sector_x, int32_t sector_y);
 
     // ---- Per-frame -----------------------------------------------------
@@ -130,16 +139,24 @@ class TPlayScreen : public TScreen
     // Legacy entry points kept so existing callers compile. Pulse() /
     // Animate() forward to Update() in the new model; DrawBackground() is
     // now a no-op (no BITMAP.100 backdrop). Treat them as deprecated.
-    virtual void Pulse();
-    virtual void Animate(bool draw);
-    virtual void DrawBackground();
+    void Pulse() override;
+    void Animate(bool draw) override;
+    void DrawBackground() override;
 
     // ---- Input ---------------------------------------------------------
     void MouseClick(int32_t button, int32_t x, int32_t y) override;
     void MouseMove (int32_t button, int32_t x, int32_t y) override;
     void KeyPress  (int32_t key, bool down)               override;
-    virtual void Joystick(int32_t key, bool down);
+    void Joystick  (int32_t key, bool down)               override;
     virtual void Command (GAMECOMMAND command);
+
+    // ---- In-game menu --------------------------------------------------
+    // REVSYNC: the ESC case of KeyPress @ 0x0047c630: write the save
+    // thumbnail from the frame on screen, then open the in-game menu
+    // (0x0047e500) over it.
+    void OpenInGameMenu();
+    // The in-game menu or one of its dialogs is up.
+    [[nodiscard]] bool InGameMenuOpen() const;
 
     // ---- Mode flags ----------------------------------------------------
     [[nodiscard]] bool IsFullScreen() const { return fullscreen; }
@@ -149,6 +166,13 @@ class TPlayScreen : public TScreen
     void               SetDemoMode(bool on);
 
     [[nodiscard]] bool IsControlOn() const { return controlon; }
+
+    // REVSYNC: playmovie @ 0x00427d80 -- retail stopped the CD music
+    // (0x0049a560) and played the movie through its blocking player
+    // (0x004bc470), so nothing else moved until it ended. Here the movie is a
+    // modal pane and the world doesn't tick while it plays.
+    void PlayMovie(const char* path);
+    [[nodiscard]] bool PlayingMovie() const { return movieplaying; }
     void               SetControlOn(bool on);
 
     void MultiUpdate() { multidirty = true; }
@@ -161,13 +185,27 @@ class TPlayScreen : public TScreen
     void HideLowerPanes();
     void ShowLowerPanes();
 
-    // ---- Save / load ---------------------------------------------------
-    [[nodiscard]] int32_t GameNum() const { return gamenum; }
-    void LoadGame    (int32_t game);
-    void LoadGameFile(const char* path);
-    void SaveGame    (int32_t game);
-    void NewGame() { LoadGame(0); }
-    void SaveMap();
+    // The map view on screen (retail MapPane's rect): what the world renders
+    // into, inside the HUD's side and bottom panels.
+    void GetMapViewRect(int32_t& x, int32_t& y, int32_t& w, int32_t& h) const;
+
+    // ---- The bottom drawer ---------------------------------------------
+    // REVSYNC: PlayScreen +0x6a0..+0x6c4, run by its pulse 0x0047b4d0. The
+    // drawer holds one thing at a time: the editor's console (mode 1, not
+    // ported), the HUD's bottom bar (mode 2; open while SHudState::
+    // bottomBarOpen), or the shop (mode 3, BuySellPane). Opening the shop
+    // closes the bottom bar and opens the side panel; closing the shop leaves
+    // the drawer closed in mode 2 (BuySellScreen_SPEC §1).
+    enum class EDrawer : int32_t { Console = 1, Hud = 2, BuySell = 3 };
+    [[nodiscard]] EDrawer Drawer() const { return drawer; }           // 0x0047ed20
+    // The height the drawer covers at the bottom of the screen.
+    [[nodiscard]] int32_t DrawerHeight() const;
+    // +0x6b8: buysellscreen asks for the shop (on), its Exit lets it go
+    // (off); the drawer follows on the next pulse.
+    void RequestBuySell(bool on) { buysellrequest = on; }
+    // REVSYNC: 0x0047ecc0 / 0x0047ece0 -- close the drawer on the next pulse
+    // if it is open. Only the shop's mode is closed here; see the definition.
+    void CloseDrawer();
 
     // ---- Game time -----------------------------------------------------
     [[nodiscard]] int32_t GameFrame()    const;
@@ -205,8 +243,31 @@ class TPlayScreen : public TScreen
       // mode can drive it without befriending the screen.
 
   private:
+    // Points the renderer at MapManager's current map (the session's world).
+    void BindWorld();
+
+    // A save loaded during play (TGameSession::Loading). Retail loaded it
+    // synchronously, the screen standing still; here the session runs it a
+    // step a tick while the world holds, and a still of the world and the
+    // HUD panels (the frame's layers under the pane tree, captured as the
+    // load began) stands in for them. The panes keep drawing over it.
+    // docs/gameflow/forensics/INGAME_MENU.md §5.1.
+    void StepGameLoad();
+    void FreezeFrame(const uint8_t* rgba, int32_t width, int32_t height);
+    void ShowStill();
+    void ThawFrame();
+
+    // The drawer half of Pulse 0x0047b4d0.
+    void UpdateDrawer();
+    void OpenBuySellDrawer();
+    void CloseBuySellDrawer();
 
     std::unique_ptr<TMapRenderer> mapRenderer;
+    TMapManager::EventListenerId  mapListener = 0;
+
+    // The in-game menu and its dialogs (retail's panes 0x0066f748 ...).
+    std::unique_ptr<TInGameMenu>  ingamemenu;
+    bool menuPending = false;       // the menu opens once its thumbnail is taken
 
     // Mode flags
     bool fullscreen   = false;
@@ -214,13 +275,6 @@ class TPlayScreen : public TScreen
     bool controlon    = true;
     bool interfacedirty = false;
     bool multidirty   = false;
-
-    // Save / load deferred work
-    bool    loadgame  = false;
-    bool    savegame  = false;
-    int32_t gamenum   = 0;
-    char    loadgamepath[MAXPATHLEN] = {};
-    bool    savemap   = false;
 
     // Game time
     int32_t gameframes        = 0;  // frames since this PlayScreen started
@@ -231,6 +285,29 @@ class TPlayScreen : public TScreen
 
     // Pane plumbing
     PTPane nextpane = nullptr;
+
+    // The play screen's fader (retail +0x5bc), set up in Initialize.
+    TScreenFade screenfade;
+
+    // `playmovie`'s movie while it plays.
+    TMoviePane movie;
+    bool       movieplaying = false;
+
+    // The still behind a load during play.
+    enum class EFreeze : uint8_t { None, Capturing, Frozen };
+    EFreeze                       freeze = EFreeze::None;
+    std::vector<uint8_t>          frozenPixels;     // the capture, until uploaded
+    int32_t                       frozenWidth  = 0;
+    int32_t                       frozenHeight = 0;
+    TTextureHandle                frozenTexture = kInvalidTexture;
+    std::unique_ptr<THudDrawable> frozenLayer;
+    bool                          stillShown = false;
+
+    // The bottom drawer (+0x6c0 mode, +0x6b8 shop request, +0x6b4 close
+    // request).
+    EDrawer drawer         = EDrawer::Hud;
+    bool    buysellrequest = false;
+    bool    drawerclose    = false;
 
     // Effect imagery cached at boot (blood, sparks). Optional; kept null
     // when the imagery isn't in the current data set.

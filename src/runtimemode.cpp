@@ -8,6 +8,7 @@
 
 #include "ctrlmap.h"
 #include "cursor.h"
+#include "gameflow.h"
 #include "platform/cursor.h"
 #include "imgui.h"
 #include "logging.h"
@@ -20,7 +21,6 @@
 #include "renderer.h"
 #include "revenant.h"
 #include "revtypes.h"
-#include "uisidebartest.h"
 
 #include <sokol_app.h>
 
@@ -112,97 +112,42 @@ class TGameModeImpl final : public IRuntimeMode
         if (PlayScreen.IsControlOn() && !PlayScreen.IsDemoMode())
             PlayScreen.UpdateMove();
 
-        // Game-logic tick over the active 3x3 window centered on the
-        // player. UpdateActiveWindow re-fills MapPane.sectors[][];
-        // NextFrameObjects owns the authoritative 24 Hz animation frame
-        // advance; PulseObjects runs per-instance AI/state; MoveObjects
-        // applies movement from movebits set during Pulse.
-        MapPane.UpdateActiveWindow();
-        MapPane.NextFrameObjects();
-        MapPane.PulseObjects();
-        MapPane.MoveObjects();
+        // The map pane's tick (retail's pane pass pulses it before the
+        // dialog pane): ambient fades, animation frames, object AI and
+        // movement, the camera following its centeron target, then the
+        // sector window around the camera's center.
+        MapPane.Pulse();
     }
 
     bool HandleKey(int32_t key, bool down) override
     {
-      // Pump the global ControlMap so cmdflagstate reflects what's
-      // currently held. UpdateMove polls that state every tick to drive
-      // directional movement (forward/back/strafe). For edge-triggered
-      // commands (attacks, combos, mode toggles, dodge, jump, block) we
-      // dispatch the returned GAMECMD_* into the player here.
+      // F9: developer reload of the last slot saved or loaded; retail had no
+      // quick load. (Quick Save is retail's control, Ctrl+Backspace, through
+      // the control map below.) Fires on key-down only and consumes the key
+      // so it doesn't fall through to the gameplay command path.
+        if (down && key == VK_F9) {
+            GameFlow.Session().RequestReloadLastSlot();
+            return true;
+        }
+
+      // Pump the global ControlMap: it keeps the held command flags
+      // UpdateMove polls each tick (direction, block, leap) and returns the
+      // key's command -- its down command on a press, its up command on a
+      // release -- which goes to TPlayScreen::Command, as retail's key
+      // handler (0x0047c630) passes it to Command (0x0047cf40).
       //
       // Same-key bindings disambiguate by the current control mode:
-      // 'S' is "sneak-back" in normal/sneak mode and "thrust" in combat
+      // 'S' is "sneak" in normal/sneak mode and "thrust" in combat
       // mode; 'D' is "inventory-drop" in inventory mode and "chop" in
       // combat mode. ControlMap.GetCommand returns the *first* binding
       // whose mode mask intersects modemask, so we have to pass exactly
       // the active mode — ALLMODES would always pick the earlier entry.
         const uint32_t modemask = CurrentModeMask();
-        int32_t cmd = ControlMap.GetCommand(key, down, modemask);
+        const int32_t cmd = ControlMap.GetCommand(key, down, modemask);
 
         if (Player && PlayScreen.IsControlOn() && !PlayScreen.IsDemoMode() &&
             cmd != GAMECMD_NONE)
-        {
-            if (down)
-            {
-                switch (cmd)
-                {
-                  // Combat mode toggle — required before swings register
-                  // (IsValidAttack rejects unless IsCombat()).
-                    case GAMECMD_COMBAT:
-                        if (Player->IsCombat()) Player->EndCombat();
-                        else                    Player->BeginCombat();
-                        break;
-
-                    case GAMECMD_SIDEPANEL:
-                        ToggleUISidebarPanel();
-                        break;
-
-                    case GAMECMD_BOTTOMPANEL:
-                        ToggleUIBottomPanel();
-                        break;
-
-                  // Three primary attack buttons.
-                    case GAMECMD_SWING:  {
-                        bool r = Player->Swing();
-                        log_info("[input] SWING -> ButtonAttack(1) returned %d", r ? 1 : 0);
-                        break;
-                    }
-                    case GAMECMD_THRUST: {
-                        bool r = Player->Thrust();
-                        log_info("[input] THRUST -> ButtonAttack(2) returned %d", r ? 1 : 0);
-                        break;
-                    }
-                    case GAMECMD_CHOP:   {
-                        bool r = Player->Chop();
-                        log_info("[input] CHOP -> ButtonAttack(3) returned %d", r ? 1 : 0);
-                        break;
-                    }
-
-                  // 12 combo slots (Ctrl+A-H, Shift+A-H).
-                    case GAMECMD_COMBO1: case GAMECMD_COMBO2: case GAMECMD_COMBO3:
-                    case GAMECMD_COMBO4: case GAMECMD_COMBO5: case GAMECMD_COMBO6:
-                    case GAMECMD_COMBO7: case GAMECMD_COMBO8: case GAMECMD_COMBO9:
-                    case GAMECMD_COMBO10: case GAMECMD_COMBO11: case GAMECMD_COMBO12:
-                        Player->Combo((cmd - GAMECMD_COMBO1) + 1);
-                        break;
-
-                    case GAMECMD_DODGE:    Player->Dodge();   break;
-                    case GAMECMD_JUMP:     Player->Jump();    break;
-                    case GAMECMD_BLOCKDOWN: Player->Block();   break;
-
-                    default: break;
-                }
-            }
-            else
-            {
-                switch (cmd)
-                {
-                    case GAMECMD_BLOCKUP: Player->StopBlock(); break;
-                    default: break;
-                }
-            }
-        }
+            PlayScreen.Command(static_cast<GAMECOMMAND>(cmd));
 
       // Returning false lets the rest of the pane stack also see the
       // key (for non-game accelerators like F-keys, dev overlays).

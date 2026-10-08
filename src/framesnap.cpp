@@ -6,9 +6,11 @@
 #include "framesnap.h"
 
 #include "display.h"
+#include "font.h"       // TTFFilePath
 #include "logging.h"
 #include "renderer_readback.h"
 #include "surface.h"
+#include "time.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
@@ -35,10 +37,12 @@ SConfig g_cfg;
 int32_t g_frameCount        = 0;
 int32_t g_capturesTaken     = 0;
 int32_t g_lastCaptureFrame  = -1000000;
+double g_captureStartTime = -1.0;
 
 struct SCapturedFrame {
     std::vector<uint8_t> pixels;   // RGBA8, captureW * captureH * 4
     std::string          label;    // optional caption (manual mode); may be empty
+    double               sim_time = 0.0;
 };
 std::vector<SCapturedFrame> g_capturedFrames;
 
@@ -153,6 +157,21 @@ bool ParseArgs(int argc, char** argv, SConfig& cfg)
         {
             cfg.prefix = v3;
             found = true;
+        }
+        else if (const char* step = GetFlagValue(argv[i], "snapstep"))
+        {
+            const double seconds = std::atof(step);
+            if (seconds > 0.0 && seconds <= 0.1) cfg.fixed_step_sec = seconds;
+        }
+        else if (const char* seed = GetFlagValue(argv[i], "snapseed"))
+        {
+            char* end = nullptr;
+            const unsigned long value = std::strtoul(seed, &end, 10);
+            if (*seed >= '0' && *seed <= '9' && end && !*end && value <= UINT32_MAX)
+            {
+                cfg.seed = uint32_t(value);
+                cfg.seed_set = true;
+            }
         }
         else if (const char* v4 = GetFlagValue(argv[i], "snapwarmup"))
         {
@@ -284,6 +303,7 @@ bool CaptureCurrentFrame()
         return false;
     }
     SCapturedFrame cap;
+    cap.sim_time = TTime::Time();
     cap.pixels = std::move(buf);
     cap.label  = g_pendingLabel;
     g_pendingLabel.clear();
@@ -293,8 +313,8 @@ bool CaptureCurrentFrame()
 
 // ---- TTF label rendering ------------------------------------------------
 //
-// JetBrainsMono is a fixed-width font that's vendored in the tree for the
-// editor; mono is ideal for our use (legible at small sizes, no kerning
+// JetBrainsMono is a fixed-width font the port ships in its engine assets for
+// the editor; mono is ideal for our use (legible at small sizes, no kerning
 // math). Loaded lazily on first label render, cached for the run.
 stbtt_fontinfo g_labelFont;
 std::vector<uint8_t> g_labelFontData;
@@ -306,9 +326,9 @@ bool EnsureLabelFont()
     if (g_labelFontLoaded) return true;
     if (g_labelFontFailed) return false;
 
-    static constexpr const char* kFontPath = "thirdparty/fonts/JetBrainsMono-Regular.ttf";
-    FILE* f = std::fopen(kFontPath, "rb");
-    if (!f) { g_labelFontFailed = true; log_warn("[framesnap] label font missing: %s", kFontPath); return false; }
+    const std::string path = TTFFilePath("JetBrainsMono-Regular.ttf");
+    FILE* f = path.empty() ? nullptr : std::fopen(path.c_str(), "rb");
+    if (!f) { g_labelFontFailed = true; log_warn("[framesnap] label font missing: '%s'", path.c_str()); return false; }
     std::fseek(f, 0, SEEK_END);
     const long sz = std::ftell(f);
     std::fseek(f, 0, SEEK_SET);
@@ -483,6 +503,16 @@ void FlushOutputs()
 
     // Filmstrip path: per-frame PNGs + NxN composite grid.
     const int32_t n = int32_t(g_capturedFrames.size());
+    const std::string timing_path = g_cfg.prefix + "timing.csv";
+    if (FILE* timing = std::fopen(timing_path.c_str(), "w"))
+    {
+        std::fprintf(timing, "frame,simulation_seconds,relative_seconds\n");
+        for (int32_t i = 0; i < n; ++i)
+            std::fprintf(timing, "%d,%.9f,%.9f\n", i + 1,
+                         g_capturedFrames[size_t(i)].sim_time,
+                         g_capturedFrames[size_t(i)].sim_time - g_capturedFrames[0].sim_time);
+        std::fclose(timing);
+    }
     for (int32_t i = 0; i < n; ++i)
     {
         const std::string p = MakeIndexedPath(g_batchNumber, i + 1,
@@ -608,12 +638,10 @@ void TickAfterRender()
     }
     else
     {
-        // Auto filmstrip: capture every interval_sec of REAL time. We use
-        // frame count converted via a nominal 60Hz cadence — good enough
-        // for the animated synthetic state cycling that drives the test
-        // modes; if wall-clock-precise timing matters, swap in a timer.
-        const double secPerFrame = 1.0 / 60.0;
-        const double now = double(g_frameCount - g_cfg.warmup_frames) * secPerFrame;
+        // Capture on the simulation clock used by the effect, including
+        // slow motion and optional fixed-step snapshot runs.
+        if (g_captureStartTime < 0.0) g_captureStartTime = TTime::Time();
+        const double now = TTime::Time() - g_captureStartTime;
         const double next = g_capturesTaken * g_cfg.interval_sec;
         if (now + 1e-6 >= next)
         {

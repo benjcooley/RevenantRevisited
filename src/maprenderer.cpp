@@ -9,6 +9,7 @@
 
 #include "animimage.h"
 #include "animimagebody.h"
+#include "area.h"
 #include "3dimage.h"
 #include "bitmap.h"
 #include "bitmapdata.h"
@@ -17,6 +18,9 @@
 #include "display.h"
 #include "effect.h"
 #include "renderer.h"
+#include "kinsecretdoorprofile.h"
+#include "punchandjudyprofile.h"
+#include "retailmeshlighting.h"
 #include "debugui.h"
 #include "imgui.h"
 #include "imagery.h"
@@ -51,6 +55,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -108,12 +113,20 @@ static SMapCameraViewport ComputeMapCameraViewport(int32_t viewport_w, int32_t v
     // Higher render resolutions cover the framebuffer with that virtual view
     // instead of expanding world coverage and changing the ortho camera scale.
     // Non-4:3 modes crop one axis; they must not reveal extra world.
+    //
+    // The scale comes from the screen, not from the viewport: retail's map
+    // pane is a window onto the 640x480 screen, drawn 1:1, which the HUD's
+    // side panel and bottom bar only cover (docs/LIGHTING_FIDELITY.md §8.1).
+    // A viewport smaller than the screen (the play field) crops the view
+    // around its centre; it doesn't shrink the world into it.
     SMapCameraViewport v = {};
     if (viewport_w <= 0 || viewport_h <= 0)
         return v;
 
-    const float sx = float(viewport_w) / float(WIDTH);
-    const float sy = float(viewport_h) / float(HEIGHT);
+    const int32_t screen_w = Display.IsActive() ? Display.Width()  : viewport_w;
+    const int32_t screen_h = Display.IsActive() ? Display.Height() : viewport_h;
+    const float sx = float(screen_w) / float(WIDTH);
+    const float sy = float(screen_h) / float(HEIGHT);
     v.scale = (std::max)(0.0001f, (std::max)(sx, sy));
     v.offset_x = (float(viewport_w) - float(WIDTH) * v.scale) * 0.5f;
     v.offset_y = (float(viewport_h) - float(HEIGHT) * v.scale) * 0.5f;
@@ -818,6 +831,28 @@ static bool UploadTileBitmap(PTBitmap bm,
     return true;
 }
 
+// The still bitmap a 2D (animation) imagery shows for a state, or nullptr
+// when the imagery isn't 2D or the state is out of range.
+static TBitmap* StateStillBitmap(TObjectImagery* img, int32_t state)
+{
+    SImageryHeader* hdr = img ? img->GetHeader() : nullptr;
+    SImageryBody* body = img ? img->GetBody() : nullptr;
+    if (!hdr || !body || hdr->imageryid != OBJIMAGE_ANIMATION)
+        return nullptr;
+    if (state < 0 || state >= hdr->numstates)
+        return nullptr;
+    return static_cast<TBitmap*>(reinterpret_cast<SAnimImageryBody*>(body)->states[state].still);
+}
+
+// Index of the resident tile texture made from bm, or -1.
+static int32_t FindSectorBitmap(const std::vector<SSectorTileTex>& cache, const TBitmap* bm)
+{
+    for (size_t t = 0; t < cache.size(); ++t)
+        if (cache[t].bm_key == bm)
+            return int32_t(t);
+    return -1;
+}
+
 static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
                                  std::unordered_map<PTBitmap, int32_t>& by_bitmap,
                                  PTBitmap bm,
@@ -875,6 +910,80 @@ static void DrawArrow(ImDrawList* dl, const ImVec2& a, const ImVec2& b,
     const ImVec2 h1(b.x - dir.x * head - perp.x * wing, b.y - dir.y * head - perp.y * wing);
     dl->AddLine(b, h0, color, thickness);
     dl->AddLine(b, h1, color, thickness);
+}
+
+// The draw an I3D object's retail blend mode (BLEND3D_*, from its state's
+// "blendcont" tag) asks for, as a transparent-mesh draw. Retail's render
+// states (0x00417d60): the lowest set mode bit wins; "lit" modes modulate
+// the texture by the object's lit color, the others draw the texture alone;
+// every blended mode draws both faces and tests depth without writing it.
+// False for no mode and for "normal", which draw on the opaque mesh path.
+// REVSYNC-DIVERGENCE: BLEND3D_NOZCHECK (retail turns the depth test off) is
+// drawn depth-tested; the only shipped "...z" tag is the multiplayer
+// MPAppear effect. Retail's fallback for cards without the lit blend stages
+// (0x0066818c: lit modes drawn unlit) isn't modelled.
+bool HelperDrawForBlend(uint32_t blend, SHelperMeshSubmit& m)
+{
+    if (blend == 0 || (blend & BLEND3D_NORMAL))
+        return false;
+    if (blend & BLEND3D_NOZCHECK)
+    {
+        static bool warned = false;
+        if (!warned)
+        {
+            warned = true;
+            log_warn("[maprenderer] I3D blend 0x%x asks for no depth test; drawn depth-tested", blend);
+        }
+    }
+    if (blend & BLEND3D_ALPHA)
+        m.shade = EHelperMeshShade::Texture;
+    else if (blend & BLEND3D_LITALPHA)
+        m.shade = EHelperMeshShade::TextureLit;
+    else if (blend & BLEND3D_ADD)
+    {
+        m.additive_blend = true;
+        m.shade = EHelperMeshShade::Texture;
+    }
+    else if (blend & BLEND3D_LITADD)
+    {
+        m.additive_blend = true;
+        m.shade = EHelperMeshShade::TextureLit;
+    }
+    else if (blend & BLEND3D_ALPHAADD)
+    {
+        m.additive_blend = true;
+        m.premultiply_alpha = true;
+        m.shade = EHelperMeshShade::Texture;
+    }
+    else
+        return false;
+    return true;
+}
+
+// The material colors of an I3D object (white diffuse and ambient, no
+// emission, when it has none), for the lit blend modes.
+void LoadObjectMaterial(T3DImagery* img, int32_t objnum, SHelperMeshSubmit& m)
+{
+    for (int32_t i = 0; i < 4; ++i)
+    {
+        m.diffuse[i] = m.ambient[i] = 1.0f;
+        m.specular[i] = 0.0f;
+        m.emissive[i] = i == 3 ? 1.0f : 0.0f;
+    }
+    S3DObj o = {};
+    img->GetObject(objnum, &o);
+    if (o.material < 0 || o.material >= img->NumMaterials())
+        return;
+    S3DMat mat = {};
+    img->GetMaterial(o.material, &mat);
+    const auto& d = mat.matdesc;
+    const float diffuse[4]  = { d.diffuse.r,  d.diffuse.g,  d.diffuse.b,  d.diffuse.a };
+    const float ambient[4]  = { d.ambient.r,  d.ambient.g,  d.ambient.b,  d.ambient.a };
+    const float emissive[4] = { d.emissive.r, d.emissive.g, d.emissive.b, d.emissive.a };
+    std::memcpy(m.diffuse, diffuse, sizeof(diffuse));
+    std::memcpy(m.ambient, ambient, sizeof(ambient));
+    std::memcpy(m.emissive, emissive, sizeof(emissive));
+    m.power = d.power;
 }
 
 } // namespace
@@ -947,10 +1056,47 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         return;
     }
 
+    // A combat caller may attach its visual after the sector's initial
+    // drawable scan. Resolve a live replacement before submitting the cached
+    // tile/mesh, so it cannot remain a static asset or draw both versions.
+    if (kind != ESectorDrawableKind::Billboard && Renderer &&
+        !oi->GetComponent<TParticleEffectComponent>())
+    {
+        if (auto* visual = oi->GetComponent<TFlipbookBillboardComponent>())
+            if (visual->ReplacesDefaultVisual())
+            {
+                if (visual->Texture() != kInvalidTexture)
+                {
+                    visual->Submit(*Renderer, *oi);
+                    ++stats.draw_submitted;
+                }
+                return;
+            }
+    }
+
     if (kind == ESectorDrawableKind::Tile)
     {
         if (!ctx.show_tiles || !ctx.tile_assets) return;
         if (!ctx.show_gizmos && (oi->IsLight() || oi->ObjClass() == OBJCLASS_HELPER)) return;
+        // Retail's map draw skips OF_INVISIBLE objects (GetUpdateObjs'
+        // CHECK_INVIS) and, outside the editor, OF_EDITOR ones
+        // (DrawUnlitObjects 0x00456cc0 tests flag 0x100).
+        if (!ctx.show_gizmos && (oi->GetFlags() & (OF_INVISIBLE | OF_EDITOR))) return;
+        // Retail draws a 2D imagery state in the unlit pass, lit by the DLS
+        // lights, when it has ANIIM_UNLIT, and after the light transfer, in
+        // its own colours, when it has ANIIM_LIT (TAnimImagery::DrawUnlit /
+        // DrawLit, 1998 animimage.cpp; a state with both ends up lit, one
+        // with neither isn't drawn). The resurrection pit's Elevator
+        // platform is ANIIM_LIT. Effects keep their own path.
+        if (oi->ObjClass() != OBJCLASS_EFFECT)
+            if (TObjectImagery* img = oi->GetImagery())
+            {
+                const uint32_t image_flags = img->GetImageFlags(oi->GetState());
+                if (!(image_flags & (ANIIM_LIT | ANIIM_UNLIT)) && !ctx.show_gizmos)
+                    return;
+                if (image_flags & ANIIM_LIT)
+                    obj_id |= kObjFlagSelfLit;
+            }
         const auto& tex = (*ctx.tile_assets)[asset_idx];
         const SRendererImagePairInfo* image_pair = Renderer ? Renderer->ImagePairInfo(tex.image_pair) : nullptr;
         const S3DPoint rel = {world_pos.x - ctx.sectorCameraWorld.x, world_pos.y - ctx.sectorCameraWorld.y, world_pos.z};
@@ -1092,6 +1238,32 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         T3DImagery* meshimg = dynamic_cast<T3DImagery*>(img);
         if (!meshimg) { ++stats.mesh_skipped; return; }
 
+        if (oi->ObjId()==0xad99fdf2u && (state!=0 || !meshimg->HasRetailMPAppearStartProfile()))
+        { ++stats.mesh_skipped; return; } // exact profile fails closed, no opaque substitute
+
+        if (oi->ObjId()==0x550decafu && (state!=0 || !meshimg->HasRetailShadowfistProfile()))
+        { ++stats.mesh_skipped; return; } // no unaudited opaque substitute
+
+        if (oi->ObjId()==0x9de2a0feu && (state!=0 || !meshimg->HasRetailWarriorbornProfile()))
+        { ++stats.mesh_skipped; return; } // no unaudited opaque substitute
+
+        if (oi->ObjId()==0xad92bd40u && (state!=0 || !meshimg->HasRetailTeleportationProfile()))
+        { ++stats.mesh_skipped; return; } // No unaudited opaque substitute.
+
+        if(oi->ObjId()==0xb0e024dfu && (state!=0 || !meshimg->HasRetailFmasteryPartSysProfile()))
+        {++stats.mesh_skipped;return;} // exactprofile only; no generated/static substitute
+        if(oi->ObjId()==0x82aeb30fu && (state!=0 || !meshimg->HasRetailImmortalmightPartSysProfile()))
+        {++stats.mesh_skipped;return;} // modified profiles do not draw a substitute flare
+        if(oi->ObjId()==0x5be39ae0u && (state!=0 || !meshimg->HasRetailMightPartSysProfile()))
+        {++stats.mesh_skipped;return;} // exactprofile only, no staticprototype substitute
+        // The animator says how opaque the object draws this frame. A
+        // character that is OF_INVISIBLE, or faded below retail's threshold,
+        // isn't drawn (TCharAnimator::DrawAlpha).
+        T3DAnimator* d3 = dynamic_cast<T3DAnimator*>(oi->GetAnimator());
+        const float draw_alpha = d3 ? d3->DrawAlpha() : 1.0f;
+        if (draw_alpha <= 0.0f)
+            return;
+
         // Cheap padded-G-buffer cull: project the mesh anchor to screen
         // pixels and skip only once it is well outside the drawable border.
         // The object-size margin covers tall/wide meshes whose bounds extend
@@ -1114,6 +1286,18 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             }
         }
         const SSectorMeshAsset& asset = (*ctx.mesh_assets)[asset_idx];
+        if (auto* animator = dynamic_cast<T3DAnimator*>(oi->GetAnimator()))
+            if (animator->PartSysOwnsObject(asset.objnum))
+            {
+                // Retail partsys hides the shared prototype between draws.
+                // Submit only the controller's absolute authored particle quads;
+                // an unsupported controller cannot leave a static substitute.
+                const hmm_vec3 scale = {ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z};
+                const int32_t count = animator->SubmitPartSys(*Renderer, asset.objnum,
+                                                             asset.texslot, scale);
+                stats.mesh_submitted += count;
+                return;
+            }
         if (state < 0 || state >= meshimg->NumStates() || meshimg->IsHidden(asset.objnum, state))
         {
             ++stats.mesh_skipped;
@@ -1128,7 +1312,6 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         bool used_bone_xform = false;
         if (!ctx.force_mesh_preview_pose)
         {
-            T3DAnimator* d3 = dynamic_cast<T3DAnimator*>(oi->GetAnimator());
             if (d3)
             {
                 S3DAnimObj* bone = d3->GetObject(asset.objnum);
@@ -1175,7 +1358,78 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             std::memcpy(world_renderer, scaled_world, sizeof(world_renderer));
         }
 
-        if (oi->ObjClass() == OBJCLASS_HELPER)
+        uint32_t authored_blend = 0;
+        const auto* authored_animator = dynamic_cast<T3DAnimator*>(oi->GetAnimator());
+        const bool gold_flare = authored_animator &&
+            authored_animator->GoldBaseMeshBlend(asset.objnum, authored_blend);
+        const bool combat_start1_base = authored_animator &&
+            authored_animator->CombatFlashStart1BaseMeshBlend(asset.objnum, authored_blend);
+        const bool mpappear_start = authored_animator &&
+            authored_animator->MPAppearStartMeshBlend(asset.objnum, authored_blend);
+        const bool shadowfist = authored_animator &&
+            authored_animator->ShadowfistMeshBlend(asset.objnum, authored_blend);
+        const bool warriorborn = authored_animator &&
+            authored_animator->WarriorbornMeshBlend(asset.objnum, authored_blend);
+        const bool teleportation = authored_animator &&
+            authored_animator->TeleportationMeshBlend(asset.objnum, authored_blend);
+        const bool immortalmight_base=authored_animator &&
+            authored_animator->ImmortalmightBaseMeshBlend(asset.objnum,authored_blend);
+        const bool fmastery_base=authored_animator &&
+            authored_animator->FmasteryBaseMeshBlend(asset.objnum,authored_blend);
+        // The exact Goldp profile retains the actual #$iflare mesh and live
+        // bone transform. Its blendcont mode16 is separate from coin alpha2.
+        // Exact '$' mode80 selects ONE/ONE with no Z test or writes;
+        // software mode1 preserves RGB565 normal lighting with authored normals.
+        if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base)
+        {
+            hmm_mat4 gold_world;
+            const bool matrix_ok = fmastery_base ?
+                const_cast<T3DAnimator*>(authored_animator)->FmasteryBaseMeshWorldMatrix(gold_world) : immortalmight_base ?
+                const_cast<T3DAnimator*>(authored_animator)->ImmortalmightBaseMeshWorldMatrix(gold_world) : teleportation ?
+                const_cast<T3DAnimator*>(authored_animator)->TeleportationMeshWorldMatrix(asset.objnum,gold_world) : warriorborn ?
+                const_cast<T3DAnimator*>(authored_animator)->WarriorbornMeshWorldMatrix(asset.objnum,gold_world) : shadowfist ?
+                const_cast<T3DAnimator*>(authored_animator)->ShadowfistMeshWorldMatrix(asset.objnum,gold_world) : mpappear_start ?
+                const_cast<T3DAnimator*>(authored_animator)->MPAppearStartMeshWorldMatrix(asset.objnum,gold_world) : gold_flare ?
+                (authored_blend == 80u && const_cast<T3DAnimator*>(authored_animator)->GoldBaseMeshWorldMatrix(gold_world)) :
+                (authored_blend == 16u && const_cast<T3DAnimator*>(authored_animator)->CombatFlashStart1BaseMeshWorldMatrix(gold_world));
+            if (!matrix_ok)
+            { ++stats.mesh_skipped; return; }
+            TransposeSourceToRenderer(gold_world, world_renderer);
+            if (ctx.mesh_scale_x != 1 || ctx.mesh_scale_y != 1 || ctx.mesh_scale_z != 1)
+            {
+                float scaling[16], scaled[16];
+                MatrixScale16(ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z, scaling);
+                MatrixMul16(scaling, world_renderer, scaled);
+                std::memcpy(world_renderer, scaled, sizeof(scaled));
+            }
+        }
+        // Audited per-object modes precede generic inferred state blend tags.
+        const bool audited_profile = gold_flare || combat_start1_base || mpappear_start ||
+            shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base ||
+            (oi->ObjId()==0xd0c0f035u && meshimg->HasGoldPartSysProfile()) ||
+            (oi->ObjId()==0xad92bd29u && state==0) ||
+            (oi->ObjId()==0xad99fdf2u && meshimg->HasRetailMPAppearStartProfile()) ||
+            (oi->ObjId()==0x550decafu && meshimg->HasRetailShadowfistProfile()) ||
+            (oi->ObjId()==0x9de2a0feu && meshimg->HasRetailWarriorbornProfile()) ||
+            (oi->ObjId()==0xad92bd40u && meshimg->HasRetailTeleportationProfile()) ||
+            (oi->ObjId()==0x82aeb30fu && meshimg->HasRetailImmortalmightPartSysProfile()) ||
+            (oi->ObjId()==0xb0e024dfu && meshimg->HasRetailFmasteryPartSysProfile()) ||
+            (oi->ObjId()==0x5be39ae0u && meshimg->HasRetailMightPartSysProfile());
+        SHelperMeshSubmit blended = {};
+        if (!audited_profile && HelperDrawForBlend(meshimg->StateBlend(state), blended))
+        {
+            // A blend-mode object (an effect's glow, swirl or column) draws
+            // in the transparent pass over the lit scene, not into the
+            // G-buffer.
+            const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+            const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+            blended.mesh = asset.handle;
+            std::memcpy(blended.world, world_renderer, sizeof(blended.world));
+            LoadObjectMaterial(meshimg, asset.objnum, blended);
+            blended.sort_depth = CameraDepth({ mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z }, ctx.cam_forward);
+            Renderer->SubmitHelperMesh(blended);
+        }
+        else if (oi->ObjClass() == OBJCLASS_HELPER || gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || ((immortalmight_base || fmastery_base) && (authored_blend==16u || authored_blend==80u)))
         {
             const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
@@ -1188,16 +1442,40 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             std::memcpy(m.specular, asset.specular, sizeof(m.specular));
             std::memcpy(m.emissive, asset.emissive, sizeof(m.emissive));
             m.power = asset.power;
+            if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base)
+            {
+                m.additive_blend = true; // source inherited particle16 for exact Imight base
+                m.retail_lighting = 1;
+                m.retail_gold_no_depth = gold_flare || mpappear_start || ((immortalmight_base || fmastery_base) && authored_blend==80u); // Appear litaddz80; Combat remains depth-tested16.
+                m.retail_positive_face_cull = mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base;
+            }
             m.sort_depth = CameraDepth({ mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z }, ctx.cam_forward);
-            Renderer->SubmitHelperMesh(m);
+            // Retail default Render40e8ed invokes controllers before base meshes40eaa3.
+            if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base) Renderer->SubmitGoldFlareAfterFx(m);
+            else Renderer->SubmitHelperMesh(m);
         }
         else
         {
+            // Sort keys for the renderer's translucent pass (it uses them only
+            // when draw_alpha is below opaque): the object's camera depth, and
+            // the object as the surface all its meshes belong to.
+            const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+            const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             SMeshSubmit m = {};
             m.mesh = asset.handle;
             std::memcpy(m.world, world_renderer, sizeof(m.world));
-            m.tint[0] = m.tint[1] = m.tint[2] = m.tint[3] = 1.0f;
+            m.tint[0] = m.tint[1] = m.tint[2] = 1.0f;
+            m.tint[3] = draw_alpha;
             m.obj_id = obj_id;
+            if (oi->ObjClass() == OBJCLASS_EFFECT) m.retail_lighting = (immortalmight_base || fmastery_base) ? 1 : asset.retail_lighting;
+            m.retail_positive_face_cull = (IsRetailKinSecretDoorStill(oi, meshimg) && asset.objnum == 0) ||
+                                          IsRetailPunchAndJudy(oi, meshimg) || immortalmight_base || fmastery_base;
+            // Query immutable authored tags with this live instance's state/frame.
+            // The global clock advances at 24Hz, independent of render cadence.
+            meshimg->ScrollTexOffset(asset.objnum, oi->GetState(), oi->GetFrame(),
+                                     TTime::LegacyFrameCount(), m.uv_offset);
+            m.sort_depth = CameraDepth({ mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z }, ctx.cam_forward);
+            m.surface_id = uint32_t(oi->GetMapIndex() + 1);
             Renderer->SubmitMesh(m);
         }
         ++stats.mesh_submitted;
@@ -1419,6 +1697,9 @@ void TMapRenderer::SetPointLightMultipliers(float intensity_mul, float range_mul
     impl->radius_mul    = range_mul;
 }
 
+void TMapRenderer::SetLightingMode(int32_t mode) { if (impl) impl->lighting_mode = mode; }
+void TMapRenderer::SetDaylightCycle(bool has_cycle) { if (impl) impl->daylight_cycle = has_cycle; }
+
 TMapRenderer::SDrawCounts TMapRenderer::GetLastDrawCounts() const
 {
     SDrawCounts out;
@@ -1591,6 +1872,13 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
             keep_lvl = l; keep_sx = x; keep_sy = y; use_level_origin = false;
         } else log_warn("[sector] bad --sector='%s', expected L_X_Y", StartupSectorId);
     }
+    if (StartupSceneCameraSet)
+    {
+        keep_lvl = StartupSceneCamera[0];
+        keep_sx = MapRendererFloorDiv(StartupSceneCamera[1], SECTORWIDTH);
+        keep_sy = MapRendererFloorDiv(StartupSceneCamera[2], SECTORHEIGHT);
+        use_level_origin = false;
+    }
 
     extern int32_t g_loadObjNullObjVerNeg, g_loadObjNullClassNeg,
                    g_loadObjNullBadClass,  g_loadObjNullBadType,
@@ -1719,9 +2007,41 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
     // events and triggers RebuildForCurrentMap, which builds non-owning draw
     // and light records over the level-resident asset cache.
     SetMap(gmap, use_level_origin, keep_sx, keep_sy);
+    if (StartupSceneCameraSet)
+    {
+        SetCameraWorld(StartupSceneCamera[0], StartupSceneCamera[1],
+                       StartupSceneCamera[2], StartupSceneCamera[3]);
+        SetOutputViewport(640, 340);
+        if (AreaManager.Initialize())
+        {
+            S3DPoint camera = {StartupSceneCamera[1], StartupSceneCamera[2], StartupSceneCamera[3]};
+            TArea* area = nullptr;
+            for (int32_t i = 0; i < AreaManager.NumAreas(); ++i)
+                if (TArea* candidate = AreaManager.GetArea(i))
+                    if (candidate->In(camera, StartupSceneCamera[0])) area = candidate;
+            int32_t ambient = MapPane.GetAmbientLight();
+            SColor color = MapPane.GetAmbientColor();
+            if (area) area->GetCurrentAmbient(ambient, color);
+            if (StartupSceneAmbientSet)
+            {
+                ambient = StartupSceneAmbient[0];
+                color = {uint8_t(StartupSceneAmbient[1]), uint8_t(StartupSceneAmbient[2]),
+                         uint8_t(StartupSceneAmbient[3])};
+            }
+            MapPane.SetAmbient(ambient, color);
+            log_info("[scene] camera=(%d,%d,%d,%d) area='%s' ambient=%d rgb=(%d,%d,%d) viewport=640x340",
+                StartupSceneCamera[0], camera.x, camera.y, camera.z,
+                area ? area->GetName() : "none", ambient, color.red, color.green, color.blue);
+        }
+    }
 
-    DebugUI::RegisterContributor(this);
+    Initialize();
     return true;
+}
+
+void TMapRenderer::Initialize()
+{
+    DebugUI::RegisterContributor(this);
 }
 
 void TMapRenderer::SetMap(TGameMap* m, bool use_level_origin,
@@ -2089,7 +2409,17 @@ void TMapRenderer::RebuildForCurrentMap()
                             asset.objnum = objnum;
                             asset.texslot = texslot;
                             asset.handle = h;
-                            if (oi->ObjClass() == OBJCLASS_HELPER)
+                            if (texslot > 0) {
+                                S3DTex texture = {};
+                                meshimg->GetTexture(texslot - 1, &texture);
+                                asset.retail_lighting = texture.desc.pixelFormat.dwRGBAlphaBitMask ? 2 : 1;
+                            }
+                            if (oi->ObjClass() == OBJCLASS_HELPER ||
+                                (oi->ObjId() == 0xd0c0f035u && meshimg->HasGoldPartSysProfile()) ||
+                                (oi->ObjId() == 0xad99fdf2u && oi->GetState()==0 && meshimg->HasRetailMPAppearStartProfile()) ||
+                                (oi->ObjId() == 0x550decafu && oi->GetState()==0 && meshimg->HasRetailShadowfistProfile()) ||
+                                (oi->ObjId() == 0x9de2a0feu && oi->GetState()==0 && meshimg->HasRetailWarriorbornProfile()) ||
+                                (oi->ObjId() == 0xad92bd40u && oi->GetState()==0 && meshimg->HasRetailTeleportationProfile()))
                             {
                                 asset.helper_material = true;
                                 S3DObj o = {};
@@ -2274,16 +2604,19 @@ void TMapRenderer::RebuildForCurrentMap()
                 continue;
             }
 
-            if (oi->ObjClass() != OBJCLASS_TILE) continue;
+            // Retail draws every map object through its imagery, whatever
+            // its class: DrawUnlitObjects (0x00456cc0) draws each object
+            // GetUpdateObjs (0x0045f800, flags 0x3f) collects. Exits (the
+            // Keep's resurrection-pit Elevator), containers and items lying
+            // on the map therefore draw like tiles. Invisible and editor-only
+            // objects are filtered per frame in Submit, as retail filters
+            // them per update.
             ++total_tiles;
             if (hdr->imageryid != OBJIMAGE_ANIMATION) { ++non_2d; continue; }
-            auto* ab = (SAnimImageryBody*)body;
             if (st < 0 || st >= hdr->numstates) { ++bad_state; continue; }
-            PTBitmap bm = (TBitmap*)ab->states[st].still;
+            TBitmap* bm = StateStillBitmap(img, st);
             if (!bm) { ++no_still; continue; }
-            int32_t tex_idx = -1;
-            for (size_t t = 0; t < s.sectorTileTex.size(); ++t)
-                if (s.sectorTileTex[t].bm_key == bm) { tex_idx = (int32_t)t; break; }
+            int32_t tex_idx = FindSectorBitmap(s.sectorTileTex, bm);
             if (tex_idx < 0)
             {
                 SSectorTileTex t = {};
@@ -2564,6 +2897,10 @@ void TMapRenderer::RenderFrame()
             // here double-advances live gameplay animation and skips authored
             // keys at loop boundaries.
             oi->Animate(false);
+            // Draw-only state (a character's drawn alpha) moves once per
+            // drawn frame, by draw time; Submit reads it below.
+            if (T3DAnimator* a3 = dynamic_cast<T3DAnimator*>(oi->GetAnimator()))
+                a3->UpdateDrawState(TTime::DeltaTime());
         }
     }
     mark_phase(timings.animate_ms);
@@ -2602,6 +2939,17 @@ void TMapRenderer::RenderFrame()
             if (TObjectImagery* img = oi->GetImagery())
             {
                 const int32_t st = oi->GetState();
+                // A chest opening or a door's state change shows the new
+                // state's still, as the imagery draw does in retail.
+                if (st != old_state)
+                    if (TBitmap* bm = StateStillBitmap(img, st))
+                    {
+                        int32_t tex_idx = FindSectorBitmap(s.sectorTileTex, bm);
+                        if (tex_idx < 0)
+                            tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
+                        if (tex_idx >= 0)
+                            inst.asset_idx = tex_idx;
+                    }
                 inst.regx = img->GetRegX(st);
                 inst.regy = img->GetRegY(st);
                 inst.regz = img->GetRegZ(st);
@@ -2787,27 +3135,61 @@ void TMapRenderer::RenderFrame()
     // MapPane every time the player enters an area; the renderer is the
     // only consumer that has to push it onward to the GPU.
     //
-    // Scaling: AMBLIGHT is an arbitrary-units integer authored by level
-    // designers (Demo-module range 4..35; retail levels run higher). The
-    // retail DirectX renderer mapped these through palette lookups whose
-    // final pixel-multiplier behaviour we don't have a closed form for,
-    // so the divisor `s.ambient_divisor` is a tunable in the debug UI
-    // (Lighting tab) seeded to ~1200 from observation of retail
-    // screenshots. [Lighting]Ambient3D is an additional percent
-    // multiplier on top.
+    // Classic maps it exactly as retail did (classiclighting.cpp). Modern
+    // maps it through the `s.ambient_divisor` art tunable, with
+    // [Lighting]Ambient3D as a percent on top. Both models also feed the
+    // scene ambient and sun to the FX LitFlat path, so Classic exposes its
+    // tile ambient there and no sun: retail had none.
+    const bool classic = (s.lighting_mode == 0);
+    const bool sun_active = !classic && s.daylight_cycle;
     {
-        const int32_t mp_ambient   = MapPane.GetAmbientLight();
-        const SColor& mp_color     = MapPane.GetAmbientColor();
-        const float   divisor      = (s.ambient_divisor > 0.0f) ? s.ambient_divisor : 1.0f;
-        const float   amb_scale    =
-            float(mp_ambient) * float(Ambient3D) / (divisor * 100.0f);
-        s.ambient          = amb_scale;
-        s.ambient_color[0] = float(mp_color.red)   / 255.0f;
-        s.ambient_color[1] = float(mp_color.green) / 255.0f;
-        s.ambient_color[2] = float(mp_color.blue)  / 255.0f;
+        const int32_t mp_ambient = MapPane.GetAmbientLight();
+        const SColor& mp_color   = MapPane.GetAmbientColor();
+        SClassicLightSettings settings;
+        settings.ambient3d         = Ambient3D;
+        settings.light_mult3d      = LightMult3D;
+        settings.max_lights        = MaxLights;
+        settings.enhanced_lighting = EnhancedLighting;
+        settings.use_dir_light     = UseDirLight;
+        settings.dir_light_percent = DirLightPercent;
+        const SClassicLightModel model = ComputeClassicLightModel(mp_ambient, mp_color, settings);
+        Renderer->SetClassicLightModel(model);
+        if (classic)
+        {
+            s.ambient = 1.0f;
+            for (int32_t i = 0; i < 3; ++i)
+                s.ambient_color[i] = model.tile_ambient[i];
+        }
+        else
+        {
+            const float divisor = (s.ambient_divisor > 0.0f) ? s.ambient_divisor : 1.0f;
+            s.ambient          = float(mp_ambient) * float(Ambient3D) / (divisor * 100.0f);
+            s.ambient_color[0] = float(mp_color.red)   / 255.0f;
+            s.ambient_color[1] = float(mp_color.green) / 255.0f;
+            s.ambient_color[2] = float(mp_color.blue)  / 255.0f;
+        }
     }
 
-    Renderer->SetLight(s.light_dir[0], s.light_dir[1], s.light_dir[2], s.intensity, s.color[0], s.color[1], s.color[2], s.ambient);
+    const SColor& mesh_color = MapPane.GetAmbientColor();
+    const auto retail_mesh = RetailSoftwareMeshLighting(MapPane.GetAmbientLight(), Ambient3D,
+        {mesh_color.red, mesh_color.green, mesh_color.blue}, UseDirLight, DirLightPercent);
+    // ARGB software textures always bypass lighting. RGB565 source lighting is
+    // exact here only without positional lights: retain deferred contributions
+    // on lit maps until original per-owner nearest-light selection is ported.
+    const bool source_rgb = s.residentPointLightCount == 0;
+    Renderer->SetRetailMeshLighting(retail_mesh.ambient.data(), retail_mesh.directional.data(), source_rgb);
+    static bool mesh_lighting_logged = false;
+    if (!mesh_lighting_logged) {
+        mesh_lighting_logged = true;
+        log_info("[retail-mesh-light] mode=%d ambient=%g,%g,%g directional=%g,%g,%g rgb-source=%d point-lights=%d",
+            s.lighting_mode, retail_mesh.ambient[0], retail_mesh.ambient[1], retail_mesh.ambient[2],
+            retail_mesh.directional[0], retail_mesh.directional[1], retail_mesh.directional[2],
+            int(source_rgb), s.residentPointLightCount);
+    }
+
+    Renderer->SetLight(s.light_dir[0], s.light_dir[1], s.light_dir[2],
+                       sun_active ? s.intensity : 0.0f,
+                       s.color[0], s.color[1], s.color[2], s.ambient);
     Renderer->SetAmbientColor(s.ambient_color[0], s.ambient_color[1], s.ambient_color[2]);
     Renderer->SetLightCeiling(s.light_ceiling);
     Renderer->SetAmbientOcclusion(s.ao_enable, s.ao_radius_px, s.ao_strength, s.ao_bias, s.ao_max_dist);
@@ -2819,7 +3201,7 @@ void TMapRenderer::RenderFrame()
     Renderer->SetEdgeThreshold(s.edge_thr);
     Renderer->SetTileViewMode(s.view_mode);
     Renderer->SetLightingMode(s.lighting_mode);
-    Renderer->SetSunShadow(s.sun_shadow, s.sun_shadow_step, s.sun_shadow_soft, s.sun_shadow_max);
+    Renderer->SetSunShadow(s.sun_shadow && sun_active, s.sun_shadow_step, s.sun_shadow_soft, s.sun_shadow_max);
     Renderer->SetPerspectiveDebugMode(s.sectorPerspectiveCamera ? s.sectorPerspectiveDebugMode : 0);
     Renderer->SetPerspectiveProjectionMode(s.sectorPerspectiveCamera ? s.sectorPerspectiveProjectionMode : 0);
     Renderer->SetPerspectiveProxyRasterScale(s.sectorPerspectiveCamera ? s.sectorPerspectiveProxyRasterScale : 1.0f);
@@ -2871,27 +3253,32 @@ void TMapRenderer::RenderFrame()
                 if (d2 < picks[worst].d2_to_view) picks[worst] = { light_idx, d2 };
             }
         }
-      // Retail [Lighting]LightMult3D is a per-light intensity scale in
-      // percent (default 250 = 2.5x). Apply on top of the editor-tunable
-      // intensity_mul so debug overrides still compose.
-        const float light_mult = float(LightMult3D) / 100.0f;
-        const float range_mul  = float(LightRange3D) / 100.0f;
+        // Authored lights go up in retail units (radius, colour,
+        // multiplier); the light pass applies the Classic or modern model.
+        // radius_mul / intensity_mul are the Revisited per-area
+        // POINTLIGHTRANGE / POINTLIGHTINT and stay 1 without --revisited.
         for (int32_t k = 0; k < pick_n; ++k)
         {
             const SSectorLight& L = s.sectorLights[picks[k].light_idx];
             const S3DPoint wp = s.sectorLightPos(L);
             float rgb[3]; s.sectorLightColor(L, rgb);
-            Renderer->AddPointLight(float(wp.x), float(wp.y), float(wp.z),
-                                    s.sectorLightRadius(L) * s.radius_mul * range_mul,
-                                    rgb[0], rgb[1], rgb[2],
-                                    s.sectorLightIntensity(L) * s.intensity_mul * light_mult);
+            Renderer->AddRetailPointLight(float(wp.x), float(wp.y), float(wp.z),
+                                          s.sectorLightRadius(L) * s.radius_mul,
+                                          rgb[0], rgb[1], rgb[2],
+                                          s.sectorLightMultiplier(L) * s.intensity_mul);
         }
         stats.point_lights_submitted = pick_n;
     }
+    // Modern reading of the authored lights: LightMult3D percent of a
+    // percent multiplier, radius stretched by LightRange3D.
+    Renderer->SetRetailLightModernScale(float(LightMult3D) / 10000.0f,
+                                        float(LightRange3D) / 100.0f);
     mark_phase(timings.point_lights_ms);
 
     const float zspan = s.z_far - s.z_near;
-    Renderer->BeginTilePass(0.12f, 0.16f, 0.10f, 1.0f);
+    // Pixels no tile covers are black, as retail's DrawUnlitObjects clears
+    // them (Box colour 0, FUN_00456cc0; docs/LIGHTING_FIDELITY.md §2.1).
+    Renderer->BeginTilePass(0.0f, 0.0f, 0.0f, 1.0f);
     mark_phase(timings.begin_pass_ms);
 
     constexpr int32_t kCovCellPx = 32;
@@ -2937,11 +3324,21 @@ void TMapRenderer::RenderFrame()
     drawctx.cov_ch = cov_ch;
     drawctx.cov = &s.coverageScratch;
     ParticleManager().BeginDrawPulsePass();
+    std::unordered_set<TObjectInstance*> submitted_replacement_owners;
     for (int32_t idx : s.frameDrawIndices)
     {
         if (idx < 0 || idx >= int32_t(s.sectorDrawInst.size()))
             continue;
         ++stats.draw_candidates;
+        // A late replacement can inherit several cached submesh records.
+        // Submit its whole visual once per gather, including any old billboard
+        // record; ordinary meshes and particle-component owners keep their path.
+        if (TObjectInstance* owner = s.sectorDrawInst[idx].src.Get())
+            if (!owner->GetComponent<TParticleEffectComponent>())
+                if (auto* visual = owner->GetComponent<TFlipbookBillboardComponent>())
+                    if (visual->ReplacesDefaultVisual() &&
+                        !submitted_replacement_owners.insert(owner).second)
+                        continue;
         // obj_id = drawable index + 1 (0 reserved for "no object").
         // OR editor-state flag bits into obj_id for any selected
         // drawable. We compare by map index (the universal id all

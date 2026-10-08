@@ -9,16 +9,13 @@
 #include "logging.h"
 #include "object.h"
 #include "renderer.h"
+#include "revutils.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_PNG
 #include "stb_image.h"
 
-#include <cstdio>
-
-#ifndef REV_EDITOR_DATA_DIR
-#  define REV_EDITOR_DATA_DIR "data/editor"
-#endif
+#include <string>
 
 namespace {
 
@@ -42,13 +39,12 @@ SCat s_sector;
 
 TTextureHandle LoadPNG(const char* relpath)
 {
-    char path[1024];
-    std::snprintf(path, sizeof(path), "%s/icons/%s", REV_EDITOR_DATA_DIR, relpath);
+    const std::string path = rev_engine_asset((std::string("editor/icons/") + relpath).c_str());
 
     int w = 0, h = 0, n = 0;
-    stbi_uc* px = stbi_load(path, &w, &h, &n, 4);
+    stbi_uc* px = path.empty() ? nullptr : stbi_load(path.c_str(), &w, &h, &n, 4);
     if (!px) {
-        log_warn("[icons] failed to load '%s' (%s)", path, stbi_failure_reason());
+        log_warn("[icons] failed to load '%s' (%s)", path.c_str(), stbi_failure_reason());
         return kInvalidTexture;
     }
 
@@ -70,7 +66,7 @@ TTextureHandle LoadPNG(const char* relpath)
     stbi_image_free(px);
 
     if (texture == kInvalidTexture)
-        log_warn("[icons] texture upload failed for '%s'", path);
+        log_warn("[icons] texture upload failed for '%s'", path.c_str());
     return texture;
 }
 

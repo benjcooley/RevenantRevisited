@@ -14,6 +14,9 @@
 #include "chunkcache.h"
 #include "decompdata.h"
 
+#include <algorithm>
+#include <vector>
+
 PTBitmap TBitmap::NewBitmap(int32_t width, int32_t height, int32_t bmflags, 
     int32_t aliasbufsize)
 {
@@ -483,102 +486,84 @@ bool TBitmap::Put(int32_t x, int32_t y, TSurface* surface, int32_t srcx, int32_t
     return Draw(&db, &dp);
 }
 
-bool TBitmap::SaveBMP(char *filename)
+// REVSYNC: TBitmap::SaveBMP @ 0x004a2960. Writes a 24-bit BMP of a 15/16-bit
+// bitmap, shrunk by `scale` (1-8): each output pixel is the mean of a
+// scale x scale block, rows bottom-up, BGR. The output width is padded to a
+// multiple of 4 pixels; its last columns read on into the next source row,
+// and each block starts (scale - 1) rows above where an even split would
+// put it (retail stepped its row pointer back twice), clamped to the first
+// row. The header's image-size field is 0 and the file-size field is
+// (width * height + 18) * 3, both as retail wrote them. The save thumbnail
+// (docs/gameflow/forensics/SAVE_GAME.md §11.7) is a 640x480 capture at
+// scale 3.
+bool TBitmap::SaveBMP(const char *filename, int32_t scale)
 {
-    if (this->width < 1 || this->height < 1 || !(flags & (BM_15BIT | BM_16BIT)))
+    if (width < 1 || height < 1 || !(flags & (BM_15BIT | BM_16BIT)))
         return false;
+    scale = std::clamp<int32_t>(scale, 1, 8);
 
-    int32_t dstwidth = (width + 3) & 0xFFFFFFFC; // Round up to even 4 pixels
+    const int32_t dstwidth  = (width / scale + 3) & ~3;
+    const int32_t dstheight = height / scale;
 
     FILE *f = fopen(filename, "wb");
     if (!f)
         return false;
 
-    // Portable BMP file header (14 bytes) + BITMAPINFOHEADER (40 bytes), little-endian
-    const uint32_t fileHeaderSize = 14;
-    const uint32_t infoHeaderSize = 40;
-    const uint32_t pixelDataOffset = fileHeaderSize + infoHeaderSize;
-    const uint32_t imageSize = (uint32_t)(dstwidth * 3) * (uint32_t)height;
-    const uint32_t fileSize = pixelDataOffset + imageSize;
+    auto writeU16 = [&](uint16_t v) { const uint8_t b[2] = { (uint8_t)v, (uint8_t)(v >> 8) }; return fwrite(b, 2, 1, f) == 1; };
+    auto writeU32 = [&](uint32_t v) { const uint8_t b[4] = { (uint8_t)v, (uint8_t)(v >> 8), (uint8_t)(v >> 16), (uint8_t)(v >> 24) }; return fwrite(b, 4, 1, f) == 1; };
 
-    auto writeU16 = [&](uint16_t v) { uint8_t b[2] = { (uint8_t)(v & 0xFF), (uint8_t)((v >> 8) & 0xFF) }; return fwrite(b, 2, 1, f) == 1; };
-    auto writeU32 = [&](uint32_t v) { uint8_t b[4] = { (uint8_t)(v & 0xFF), (uint8_t)((v >> 8) & 0xFF), (uint8_t)((v >> 16) & 0xFF), (uint8_t)((v >> 24) & 0xFF) }; return fwrite(b, 4, 1, f) == 1; };
-    auto writeS32 = [&](int32_t v) { return writeU32((uint32_t)v); };
+    constexpr uint32_t kHeadersSize = 14 + 40;
+    bool ok = writeU16(0x4D42)                                              // "BM"
+           && writeU32((uint32_t)(dstheight * dstwidth + 18) * 3)           // file size
+           && writeU16(0) && writeU16(0)
+           && writeU32(kHeadersSize)                                        // pixel data offset
+           && writeU32(40)                                                  // BITMAPINFOHEADER
+           && writeU32((uint32_t)dstwidth) && writeU32((uint32_t)dstheight)
+           && writeU16(1) && writeU16(24)                                   // planes, bits
+           && writeU32(0) && writeU32(0)                                    // BI_RGB, image size
+           && writeU32(0) && writeU32(0) && writeU32(0) && writeU32(0);     // resolution, colors
 
-    bool ok = true;
-    ok = ok && writeU16(0x4D42);           // "BM"
-    ok = ok && writeU32(fileSize);
-    ok = ok && writeU16(0);                // reserved1
-    ok = ok && writeU16(0);                // reserved2
-    ok = ok && writeU32(pixelDataOffset);
-    ok = ok && writeU32(infoHeaderSize);
-    ok = ok && writeS32(dstwidth);
-    ok = ok && writeS32(height);
-    ok = ok && writeU16(1);                // planes
-    ok = ok && writeU16(24);               // bit count
-    ok = ok && writeU32(0);                // BI_RGB
-    ok = ok && writeU32(imageSize);
-    ok = ok && writeS32(0);                // x pels per meter
-    ok = ok && writeS32(0);                // y pels per meter
-    ok = ok && writeU32(0);                // clr used
-    ok = ok && writeU32(0);                // clr important
-    if (!ok)
+    const uint16_t *pixels = (const uint16_t *)data16;
+    const int64_t pixelcount = (int64_t)width * height;
+    std::vector<uint8_t> line((size_t)dstwidth * 3);
+    const int32_t blockarea = scale * scale;
+    int64_t rowend = (int64_t)(height - 1) * width;     // start of the source row for output row 0
+
+    for (int32_t row = 0; ok && row < dstheight; row++)
     {
-        fclose(f);
-        return false;
-    }
-
-    uint8_t *line = new uint8_t[dstwidth * 3];
-    if (!line)
-    {
-        fclose(f);
-        return false;
-    }
-
-    memset(line, 0, dstwidth * 3);
-
-    uint16_t *src = ((uint16_t *)data16) + (width * (height - 1));
-
-    for (int32_t loop = 0; loop < height; loop++)
-    {
-        uint16_t *s = src;
-        uint8_t *d = line;
-        for (int32_t x = 0; x < width; x++)
+        const int64_t start = std::max<int64_t>(rowend - (int64_t)(scale - 1) * width * 2, 0);
+        uint8_t *d = line.data();
+        for (int32_t x = 0; x < dstwidth; x++)
         {
-            uint8_t red, green, blue;
-            if (flags & BM_16BIT)
+            uint32_t red = 0, green = 0, blue = 0;
+            for (int32_t bx = 0; bx < scale; bx++)
             {
-                red = (uint8_t)((uint16_t)(*s & 0xF800) >> 8);
-                green = (uint8_t)((uint16_t)(*s & 0x07E0) >> 3);
-                blue = (uint8_t)((uint16_t)(*s & 0x001F) << 3);
+                for (int32_t by = 0; by < scale; by++)
+                {
+                    const int64_t at = start + (int64_t)x * scale + bx + (int64_t)by * width;
+                    const uint16_t v = at < pixelcount ? pixels[at] : 0;
+                    if (flags & BM_16BIT)
+                    {
+                        red   += (v >> 8) & 0xf8;
+                        green += (v & 0x07e0) >> 3;
+                    }
+                    else
+                    {
+                        red   += (v >> 7) & 0xf8;
+                        green += (v & 0x03e0) >> 2;
+                    }
+                    blue += (uint8_t)(v << 3);
+                }
             }
-            else
-            {
-                red = (uint8_t)((uint16_t)(*s & 0x7C00) >> 7);
-                green = (uint8_t)((uint16_t)(*s & 0x03E0) >> 2);
-                blue = (uint8_t)((uint16_t)(*s & 0x001F) << 3);
-            }
-            s++;
-            *d++ = blue;
-            *d++ = green;
-            *d++ = red;
+            *d++ = (uint8_t)(blue / blockarea);
+            *d++ = (uint8_t)(green / blockarea);
+            *d++ = (uint8_t)(red / blockarea);
         }
-        
-        if (fwrite(line, dstwidth * 3, 1, f) != 1)
-        {
-            delete line;
-            fclose(f);
-            return false;
-        }
-
-        src -= width;
+        ok = fwrite(line.data(), line.size(), 1, f) == 1;
+        rowend -= (int64_t)width * scale;
     }
 
-    delete line;
-
-    fclose(f);
-
-    return true;
+    return (fclose(f) == 0) && ok;
 }
 
 bool TBitmap::SaveZBF(char *filename)

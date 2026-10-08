@@ -10,9 +10,8 @@
 // teal / red / blue / green / yellow GDI text with a 3-pass black drop
 // shadow (right + down, the §6b shape).
 //
-// This test mode draws the static chrome plus a representative sample of
-// the POS/TAB/NEXTLINE-driven lines so the layout (positions, colors,
-// shadow, right-align of values) is visually verifiable; the full DEF
+// The pane draws the chrome and the Page1 lines (POS/TAB/NEXTLINE layout
+// written as code) with the main player's field values; the full DEF
 // interpreter is a separate engine task (statpane.def §6a).
 //
 // Built from docs/ui/forensics/CharacterStatsPane_SPEC.md.

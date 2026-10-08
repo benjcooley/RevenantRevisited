@@ -8,10 +8,22 @@
 | **Retail fidelity** | **retail-partial** — registration string `"FireSwarm"` is **retail-confirmed** with **2 XREFs** at `004f00d0` and `004f0110` (the paired `REGISTER_BUILDER` + `REGISTER_3DANIMATOR` factory entries at the consecutive table slots `005c53c8` and `005c53cc`, matching the FireFlash / FireWind / FireBall registration pattern; `recon/classes/_data.txt:107531-107532, 56018-56021`). Asset `Magic\FireSwarm.i3d` is **byte-identical** between snapshot (`legacy/Imagery/Magic/fireswarm.i3d`) and the shipped `data/imagery.rvi:Imagery/Magic/fireswarm.i3d` (24,300 B, MD5 `927caed9595abffae3ea7a939b3a240a` on both — verified by extracting via `zipfile`). Asset registered as `"FireSwarm" "Magic\FireSwarm.i3d" 0x582c1e78` in the retail `class.def` member of `data/imagery.rvi` (note the **content hash differs** from the snapshot's `legacy/Class.Def:2062` value `0x482dfe82` — same name+path, different `0x???????` hash, which is the `class.def`-line content hash, not an asset MD5; the asset itself is byte-identical). The Ghidra mapping `cls_0x5abe4c` (392 B / 26 vftable entries; `recon/mappings/TFireSwarmEffect_cls_0x5abe4c_candidate.yaml`) is **mis-sized** for the snapshot's tiny `TFireSwarmEffect` (which is empty over `TEffect` plus a 16 B animator) — same MEDIUM-confidence wrong-class problem as F01 / F11; treat the mapping as a registry hit, not a struct match. No spell.def variant in shipped or legacy invokes `"FireSwarm"`, no `ATTACHEFFECT`, no `char.def` reference → **the effect class+asset shipped but it has no live caller in retail data — vestigial in shipped**. The blend (`SetBlendState` = Alpha) and all tuning constants are **snapshot-only** and unverified against a retail Render decomp. See §2.1. |
 | **Author / Date** | vfx-forensics-agent (worktree-redo-F05) / 2026-05-29 |
 | **Family** | fire (decorative/spell — a swirling scaling cylinder of fire; the inventory's "swarm of small fire particles" hint is **wrong** — it is NOT a particle emitter, it is a **single I3D cylinder mesh** transform-animated over 75 ticks). |
-| **Draws** | **one I3D sub-object** — `GetObject(1)` = `tube01` of `Magic\FireSwarm.i3d` (a 64-vertex cylinder mesh authored along the local +Z axis with an embedded 64×128 ARGB4444 flame texture), drawn as a single transformed mesh per render frame. The `box01` sub-object at index 0 (a small red glow disc on the same texture's top half) is **NOT drawn** — `GetObject(1)` skips it. |
-| **Archetype(s)** | **(B) I3D-mesh transform-animated** — a single cylinder mesh whose object-space scale and Z-rotation are recomputed every frame from a 3-float per-instance state. **(D) one-shot ramp** — runs once for 75 render-frames then `KillThisEffect()`s itself. Specifically: XY radius grows linearly (`cylhscl += 0.4` per frame, from `0.4` → `30.4`), Z height shrinks linearly (`cylvscl -= 0.4` per frame, from `30.0` → `0.0` at exactly tick 75), and the whole mesh continuously yaws about world-Z (`cylth += 0.5` rad per frame, wrapped at `2π`). No emitter, no sub-particles, no flipbook, no associated light, no audio. |
+| **Draws** | **one I3D sub-object** — `GetObject(1)` = `tube01` of `Magic\FireSwarm.i3d` (a 174-vertex cylinder mesh authored along the local +Z axis with an embedded 64×64 ARGB4444 flame texture), drawn as a single transformed mesh per render frame. The `box01` sub-object at index 0 (a small red glow disc with separate texture 0) is **NOT drawn** — `GetObject(1)` skips it. |
+| **Archetype(s)** | **(B) I3D-mesh transform-animated** — a single cylinder mesh whose object-space scale and Z-rotation are recomputed every frame from a 3-float per-instance state. **(D) one-shot ramp** — runs once and kills on tick 76, then `KillThisEffect()`s itself. Specifically: XY radius grows linearly (`cylhscl += 0.4` per frame, from `0.4` → `30.4`), Z height shrinks linearly (`cylvscl -= 0.4` per frame, from `30.0` → `0.0` at exactly tick 75), and the whole mesh continuously yaws about world-Z (`cylth += 0.5` rad per frame, wrapped at `2π`). No emitter, no sub-particles, no flipbook, no associated light, no audio. |
 
 ---
+
+## Current implementation and evidence — 2026-10-05
+
+The bespoke path now draws the shipped 174-vertex/192-triangle object 1 with **texture 1**, source scale/rotation, unchanged UVs, Alpha/no depth writes and discrete 24Hz simulation. The former wrong-texture billboard, ignored yaw and integer timing are removed. One exact `0x582c1e78` owner component supports actual map creation, movement, natural expiry and explicit deletion. The standalone preview runs once and does not respawn.
+
+The current [diagnostic pair](/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fireswarm-authored-diagnostic-20261005/manifest.json) contains 240 port frames, 76 distinct images and 120 exact-ground tail frames. Separate [natural expiry](/Users/benjamincooley/RevenantRetailLab/captures/runtime-fixtures/fireswarm-natural-20261005/command-capture/manifest.json) and [explicit deletion](/Users/benjamincooley/RevenantRetailLab/captures/runtime-fixtures/fireswarm-explicit-delete-20261005/command-capture/manifest.json) fixtures pass 5 and 6 timeline checks respectively, animate at both poses and end on exact ground. An earlier combined fixture is retained as failed: its generation-bound selector correctly refused to retarget a recreated owner; the corrected fixtures preserve that guard.
+
+The actual 43.65-second retail capture has 26 distinct viewport images and accumulates a frozen cylinder residue after expiry. Deletion does not remove that residue; a one-unit camera nudge and return restores the floor exactly. **Native reference accuracy, cadence and visual acceptance remain open.** No geometry, tint, alpha or phase fitting is applied; this is source/runtime progress with a retained retail diagnostic.
+
+The three FireSwarm proxy aliases for `dragonfire`, `headfireball` and `dragonattack` now fail explicitly unsupported instead of borrowing this cylinder behavior. Each has 12 verified ground-only preview frames. Their actual animator mappings remain unfinished; the independent FireCone candidate for dragonfire is unaffected.
+
+The subsequent [source winding correction](/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fireswarm-authored-cull-fixed-20261005/manifest.json) preserves authored topology and corrects the Y-up to screen-down cull sign. A fresh six-check explicit lifecycle regression passes with both poses animating and29 exact-ground deleted-tail frames. Earlier cylinder captures remain historical. Native software trails still prevent fidelity acceptance.
 
 ## 1. Summary
 
@@ -34,8 +46,8 @@ In Render the cylinder is drawn with a transform built as
 `Scale(cylhscl, cylhscl, cylvscl) · RotZ(cylth)` (no translation — the mesh
 sits at the effect's world position via the engine's standard concatenation),
 the blend state set to **Alpha** (`SetBlendState` → MODULATE + SRC_ALPHA/
-INV_SRC_ALPHA, ZWRITE off, ZTEST on). The mesh is a 64-vertex cylinder tube
-wrapped with a 64×128 ARGB4444 flame texture (red core, yellow flame
+INV_SRC_ALPHA, ZWRITE off, ZTEST on). The mesh is a 174-vertex cylinder tube
+wrapped with a 64×64 ARGB4444 flame texture (red core, yellow flame
 tongues drooping downward — see §10), so the whole thing reads as a
 **short-lived ring of fire that spreads outward and collapses to a disc on
 the floor**.
@@ -134,7 +146,7 @@ this glow sprite.
     `:200-209` (the standard 6-state save/restore wrapper used by all
     `Render()` bodies in `effect_old.cpp`).
 - **`spell.def` / placement search:** searched `data/Resources/spell.def`,
-  `data/Resources/effects.def`, `data/Resources/rules.def`,
+  `assets/effects.def`, `data/Resources/rules.def`,
   `data/Resources/master.s`, `data/Imagery/char.def`, `legacy/spell.def`,
   `legacy/rules.def`, `legacy/char.def`, every `data/Modules/*/*.def`,
   and `data/Modules/Ahkuilon_unzipped/*.s` for `FireSwarm` / `fireswarm`
@@ -289,8 +301,8 @@ retail-corroborated.
 | kill condition | `frameon > FIRESWARM_DURATION (= 75)` → `KillThisEffect()` (sets `OF_KILL | OF_PULSE`, signals parent spell) | gate | `effect_old.cpp:10511-10514`; helper `:426-432` | **snapshot-only** |
 | RefreshZBuffer patch w/h | `50, 50` — **but the `RestoreZ` call is commented out** (`effect_old.cpp:10561`), so RefreshZBuffer is a **no-op** | screen px | `effect_old.cpp:10553-10554, 10561` | **snapshot-only** (vestigial constants) |
 | M_2PI | `2 × M_PI = 6.2831853...` | rad | `src/revdefs.h:24` | helper |
-| asset surface format | **ARGB4444** (NOT RGB565 — masks `A=0xF000, R=0x0F00, G=0x00F0, B=0x000F` at file offsets `0x1ec0-0x1ed0`) | pixel format | I3D bytes `0x1ec0`+ | yes (asset-verified) |
-| asset surface dims | **64 × 128** pixels (payload at file offset `0x1ee8`, runs 16,384 B to `0x5ee8`) | px | I3D byte-level decode | yes (asset-verified — fits exactly, see §4) |
+| asset surface format | **ARGB4444**; quantized alpha in steps of 17 | pixel format | Current loader dump, 2026-10-05 | yes (asset-verified) |
+| asset surface dims | **Two 64×64 single-frame textures**; cylinder uses texture 1 | px | Current loader dump | yes (asset-verified; supersedes combined decode) |
 
 `Animate(bool draw)` runs **per Animate call** in this animator (the
 snapshot does not gate by sim-tick — every call increments `frameon` and
@@ -301,7 +313,7 @@ these as `per-second` rates derived from the original 24 Hz baseline:
 - `cylhscl_rate = 0.4 × 24 = 9.6` scale-units/sec
 - `cylvscl_rate = 0.4 × 24 = 9.6` scale-units/sec
 - `cylth_rate = 0.5 × 24 = 12.0` rad/sec ≈ 687.5°/sec ≈ **1.91 rotations/sec**
-- `duration = 75 / 24 = 3.125` seconds (effect dies at ~3.13 s)
+- Source simulation uses discrete 24Hz ticks; strict `frameon > 75` kills on tick 76 (`76/24 ≈ 3.167` seconds). These are source timings, not verified native cadence.
 
 At the duration limit (`frameon = 75`, just before kill):
 - `cylhscl = 0.4 + 0.4 × 75 = 30.4` (XY radius peaks at ~30 scale-units)
@@ -319,104 +331,17 @@ in world space.
 
 | asset | path | size | role | how loaded (original) |
 |-------|------|------|------|-----------------------|
-| FireSwarm | snapshot `legacy/Imagery/Magic/fireswarm.i3d` (24,300 B, MD5 `927caed9595abffae3ea7a939b3a240a`); retail `data/imagery.rvi:Imagery/Magic/fireswarm.i3d` (24,300 B, MD5 `927caed9595abffae3ea7a939b3a240a`) — **byte-identical** (§2.1.2) | 24,300 B | the swirling fire-cylinder mesh — 2 sub-objects (`box01`, `tube01`); only `tube01` is drawn by F05; embedded ARGB4444 64×128 flame texture | registered `Class.Def:2062` and the retail `class.def` member as `"FireSwarm" "Magic\FireSwarm.i3d"`; loaded by the OBJCLASS_EFFECT registry on instance spawn; the `tube01` sub-object bound via `GetObject(1)` `effect_old.cpp:10531` |
+| FireSwarm | snapshot `legacy/Imagery/Magic/fireswarm.i3d` (24,300 B, MD5 `927caed9595abffae3ea7a939b3a240a`); retail `data/imagery.rvi:Imagery/Magic/fireswarm.i3d` (24,300 B, MD5 `927caed9595abffae3ea7a939b3a240a`) — **byte-identical** (§2.1.2) | 24,300 B | the swirling fire-cylinder mesh — 2 sub-objects (`box01`, `tube01`); only `tube01` is drawn by F05; embedded ARGB4444 64×64 flame texture | registered `Class.Def:2062` and the retail `class.def` member as `"FireSwarm" "Magic\FireSwarm.i3d"`; loaded by the OBJCLASS_EFFECT registry on instance spawn; the `tube01` sub-object bound via `GetObject(1)` `effect_old.cpp:10531` |
 
 **Sub-objects (2)** — confirmed from the I3D object table:
 - `GetObject(0) = "box01"` — name at file offset `0xac`. **NOT drawn** by F05 (the animator skips it).
 - `GetObject(1) = "tube01"` — name at file offset `0xdc`. **The only sub-object drawn.**
 
-The `box01` index-0 object is the small red glow disc visible at the **top
-half** of the texture preview (see §10) — it appears to be an authored
-"core glow" mesh the developers built into the same I3D but the
-`TFireSwarmAnimator` opted not to use. Its presence in the asset is
-likely vestigial (or staged for a future variant that never landed) —
-reconstruction should preserve its existence in the asset but only draw
-`tube01`.
+The current decoded asset manifest supersedes the older hand-decoded combined texture interpretation. `box01` has 12 vertices/36 indices and uses texture 0; `tube01` has **174 vertices/576 indices (192 triangles)** and uses material 1/texture 1. Cylinder bounds are `(-5.37819,-5.37819,0)..(5.37819,5.37819,20)`. Both materials have white diffuse/emissive values. Only object 1 is submitted by the snapshot animator.
 
-**`tube01` geometry** (decoded from float vertex data starting around
-file offset `0x100`-ish):
-- Cylinder mesh authored along the local **+Z axis** (the height direction
-  that the per-frame `cylvscl` scale modulates).
-- 64 vertices arranged in vertical strips around the cylinder (face index
-  buffer visible at `0x1bd0`+ with small u16 indices like `0x93, 0x4a,
-  0x96, 0x93`...).
-- The texture wraps around the cylinder circumference (U axis) and
-  vertically along the cylinder height (V axis). Per-vertex UVs are
-  authored at I3D build time — **never mutated at runtime** (the Render
-  body does not write `lverts[*].tu/tv`; in fact `OBJ3D_VERTS` is **not
-  set** so the effect doesn't own its own vert buffer).
-- Material: a default `S3DMat` with `power = 0.9` (the `0x3f666666` =
-  `0.9f` float seen at `0x1d78` is the standard "shiny" power), color
-  values all `1.0` (`0x3f800000` from `0x1d58`-`0x1d74`).
+There are **two separate 64×64, single-frame ARGB4444 textures**, not one 64×128 atlas. Alpha samples are quantized in steps of 17. The cylinder uses texture 1; the unused glow disc uses texture 0. UVs remain authored and unchanged. The PNG dump writer flips its output vertically; that diagnostic convention is not an instruction to flip runtime UVs.
 
-**Texture decode (the cylinder skin):**
-
-- **Dimensions:** **64 × 128 pixels** (16,384 B payload at file offsets
-  `0x1ee8..0x5ee8`). Header bytes at `0x1ec0..0x1ee0` confirm:
-  | offset | u16 LE | meaning |
-  |--------|--------|---------|
-  | `0x1ec0` | `0x0010` (= 16) | **bits per pixel** |
-  | `0x1ec4` | `0x0f00` | **R mask** (4-bit, bits 8-11) |
-  | `0x1ec8` | `0x00f0` | **G mask** (4-bit, bits 4-7) |
-  | `0x1ecc` | `0x000f` | **B mask** (4-bit, bits 0-3) |
-  | `0x1ed0` | `0xf000` | **A mask** (4-bit, bits 12-15) |
-
-  These masks unambiguously identify the format as **ARGB4444**, not
-  RGB565 (the typical Revenant texture format). This is **the relevant
-  asset-level fact for the blend question** — ARGB4444 has a real alpha
-  channel, so the texture does **not** need chroma-keying to render
-  transparent edges, and the snapshot's `SetBlendState` Alpha blend can
-  read the alpha channel literally. Compare F01 Flame (`Magic\flame.i3d`)
-  which is RGB565 with a green chroma key — completely different
-  transparency mechanism.
-
-- **No flipbook, no atlas.** The texture surface count is `numtex = 1`
-  (`numframes = 1`) — the cylinder shows the **same** texture every
-  frame. The visual motion comes from the geometry transform (RotZ
-  yaw + radial expand + vertical collapse), not from texture animation.
-  This is consistent with the snapshot Render body never calling
-  `SetTextureFrame()` and never writing `lverts[*].tu/tv`.
-
-- **Pixel content (decoded into a preview PNG by extracting the 16,384 B
-  payload and re-mapping ARGB4444 → 8-bit RGBA, composited on black):**
-  | region | description |
-  |--------|-------------|
-  | top ¼ (64×32 ish) | a small **bright red ball of light** centered horizontally — appears to be the texture for the **unused `box01` sub-object** (a glow disc). Alpha 0 around it, red core. |
-  | bottom ¾ (64×96 ish) | **drooping flame tongues** — bright **yellow-white** at the top (`(255,255,238)`, `(255,255,221)`), fading down through orange (`(255,170,68)`, `(255,136,51)`) to darker red, with **alpha increasing from 0 at the edges to 255 at the flame cores**. The bottom of the texture has 4-5 visible flame-tongue spikes drooping downward. |
-
-  Decoded color samples (ARGB4444 → 8-bit RGB):
-  - `0xffff` (255, 255, 255) — white flame core (peak)
-  - `0xfffe` (255, 255, 238) — pale yellow
-  - `0xffed` (255, 238, 221) — light yellow/cream
-  - `0xefec` (255, 238, 204) — pale yellow
-  - `0xcfdb` (255, 204, 187) — pale orange
-  - `0xafb8` (255, 187, 136) — orange
-  - `0x8fa6` (255, 170, 102) — burnt orange
-  - `0x7fa5` (255, 170, 85) — burnt orange
-  - `0x6f83` (255, 136, 51) — red-orange (flame body)
-  - `0x4f60` (255, 102, 0) — red core
-  - `0x3f60` (255, 102, 0) with α=51 — flame edge
-  - `0x2f00` (255, 0, 0) with α=34 — dark red ember edge
-  - `0x0f00` (255, 0, 0) with α=0 — **transparent background** (this dominates the texture, with alpha=0 so it never contributes to the framebuffer)
-
-  **Chroma-key — NONE.** Unlike F01 Flame (`Magic\flame.i3d`, RGB565
-  green-keyed), this texture uses **real per-pixel ARGB alpha**.
-  Reconstruction must respect the alpha channel literally; do NOT apply
-  a chroma-key conversion. (Any chroma-key code path the engine has for
-  RGB565 imagery should be skipped for this asset based on the
-  16-bpp-but-ARGB4444 surface descriptor at file offset `0x1ec0`.)
-
-- **Wrap convention.** Cylinder UVs typically wrap U around the
-  circumference (so the texture U=0 and U=1 edges meet at the cylinder
-  seam) and V along the height (V=0 at one end, V=1 at the other). The
-  cylinder authored verts encode this directly; the engine clamps or
-  tiles per the I3D material flags (default WRAP — standard Revenant
-  cylinder skinning).
-
-The effect loads a real asset — do NOT substitute a procedural cylinder
-or a generic ring-of-fire (per `feedback-no-standins`). The yellow-tipped
-ARGB4444 flame skin is the visual identity; a procedural ring would
-miss the drooping flame-tongue silhouettes that define the look.
+Fresh provenance: shipped member `Imagery/Magic/fireswarm.i3d`, 24,300 bytes, MD5 `927caed9595abffae3ea7a939b3a240a`, SHA256 `858011f22ae4b4e17be08667a8ea2cc018c71b672889cef822e12c07a57676c0`. The current loader dump and provenance are retained in `/Users/benjamincooley/RevenantRetailLab/research/fireswarm-20261005/asset/manifest.txt` and `asset-provenance.json`. Earlier guessed raw offsets and combined texture sample tables are superseded; do not use them to implement geometry or select texture 0.
 
 ---
 
@@ -697,7 +622,7 @@ because the cylinder's footprint changes too dramatically across the
                                               (effect lives ticks 0..75 = 76 ticks)
 ```
 
-At a nominal 24 Hz the full cycle takes `75 / 24 ≈ 3.13 s`. The
+At a nominal 24 Hz source expiry occurs on tick 76 (`76/24 ≈ 3.167 s`). The
 cylinder makes `37.5 / 2π ≈ 5.97` full rotations and ends as a flat
 ground-disc of radius ~30 wu.
 
@@ -706,10 +631,10 @@ ground-disc of radius ~30 wu.
 ## 7. Rendering (original render state + geometry)
 
 - **What it draws:** **one mesh** — the `tube01` sub-object (index 1) of
-  `Magic\FireSwarm.i3d`. A 64-vertex cylinder authored along the mesh's
-  local +Z axis, skinned with a 64×128 ARGB4444 flame texture (red core,
+  `Magic\FireSwarm.i3d`. A 174-vertex cylinder authored along the mesh's
+  local +Z axis, skinned with a 64×64 ARGB4444 flame texture (red core,
   yellow flame-tongue silhouettes). The `box01` sub-object at index 0
-  (the small red glow disc on the same texture's top half) is **NOT
+  (the small red glow disc using separate texture 0) is **NOT
   drawn**.
 - **Blend mode (original — what the code actually does):** **Alpha
   (modulated)** via `SetBlendState()` (`effect_old.cpp:10527`; helper
@@ -778,16 +703,7 @@ ground-disc of radius ~30 wu.
      (FireFlash, FireWind, Burn, Aura, FireCone), so a fire-spell
      ground-disc visual that uses Alpha is an outlier.
 
-  The ARGB4444 asset format is the **stronger** signal — it's a hard
-  artist-encoded fact, vs. blend choice which is a code-side
-  pre-release WIP knob. Reconstruction should default to **Alpha** per
-  the snapshot + asset, and the visual-vet against an in-game capture
-  is impossible (no live caller — §2.1.5), so the only fallback is to
-  visually self-vet the cylinder + flame texture against either the
-  asset's standalone rendering or a sister Alpha-glow capture (e.g. an
-  F01 torch). If the rendered result looks wrong (translucent ground
-  disc rather than a luminous ring), switch to AdditiveStraight and
-  re-check.
+  Preserve the snapshot Alpha state until an accurate native/device reference establishes a different retail state. The editor can spawn this class directly even without a shipped caller. The current native software attempt accumulates old cylinder images; it cannot settle blend or cadence. A sister effect or an attractive standalone preview is not a substitute for that reference. Do not change to additive blending to conceal this unresolved difference.
 
 - **Lit vs self-lit:** classify as **Unlit** (NOMENCLATURE §4 — texture
   color is literal). The per-vertex diffuse is whatever the engine's
@@ -833,7 +749,7 @@ ground-disc of radius ~30 wu.
 
 ## 8. Texture animation
 
-**Mechanism: STATIC TEXTURE.** The asset has `numtex = 1` (one texture
+**Mechanism: STATIC TEXTURE.** The asset has two single-frame textures (cylinder uses texture 1;
 slot) with `numframes = 1` (one frame per slot — no `framehtexs[]`
 array). The Render body never calls `SetTextureFrame()`, never writes
 `obj->textureframe`, never writes `lverts[*].tu/tv`. **The texture
@@ -941,7 +857,7 @@ FLY-entry; FireSwarm has **no equivalent** — the effect is silent.
 **No live callers in shipped retail data.** Confirmed by grep across:
 - `data/Resources/spell.def` (0 hits)
 - `data/Resources/rules.def` (0 hits)
-- `data/Resources/effects.def` (0 hits)
+- `assets/effects.def` (0 hits)
 - `data/Resources/master.s` (0 hits)
 - `data/Imagery/char.def` (0 hits — no `ATTACHEFFECT "FireSwarm"`)
 - `data/Modules/Ahkuilon_unzipped/*.def` and `*.s` (0 hits — no
@@ -1025,7 +941,7 @@ Legacy clues to original intent (pre-release WIP):
    transform to take effect, that's a port-side concern, not a
    forensics issue.
 5. **The `box01` sub-object is in the asset but never drawn.** The
-   small red glow disc at the top half of the texture is authored as
+   small red glow disc using its own texture 0 is authored as
    `GetObject(0) = "box01"`, but `TFireSwarmAnimator::Render` calls
    `GetObject(1)` (tube01). Two possibilities: (a) the dev abandoned
    the `box01` sub-object during pre-release iteration and left it in
@@ -1033,24 +949,8 @@ Legacy clues to original intent (pre-release WIP):
    both objects (e.g. a "core glow + cylinder tube" composite). The
    reconstruction should preserve the asset as-is (do NOT delete
    `box01` from the I3D) but only render `tube01`.
-6. **No retail caller means no in-game ground truth.** Unlike F01
-   Flame (every dungeon torch) or B01 Blood (every hit reaction),
-   FireSwarm has no live placement. The reconstruction has to
-   visually self-vet against the asset's standalone rendering, not
-   against an in-game capture. This makes the blend question (§7)
-   particularly hard to settle — there is no "what does it look
-   like in retail" answer.
-7. **Cylinder cull-mode ambiguity.** `SetBlendState` does not set
-   `CULLMODE`. If the cylinder is single-sided (only outer faces
-   authored), the engine's default `D3DCULL_CCW` is correct. If the
-   cylinder is double-sided (inner + outer authored), the cull
-   should be `NONE`. Quicksand's Render
-   (`effect_old.cpp:9337-9339`) explicitly sets `CULLMODE = NONE`
-   for its sand-overlay quads — FireSwarm does NOT. This implies
-   the FireSwarm tube is meant to render single-sided. Should be
-   visually self-checked on reconstruction; if the cylinder shows a
-   "hole in the back" when viewed from one side, set CULLMODE to
-   NONE.
+6. **Natural caller/context remains open.** A bounded editor spawn produced actual retail images, but native software trails invalidate the complete-lifecycle fidelity reference. Retain the diagnostic and defer device investigation; no natural caller or full acceptance is established.
+7. **Cylinder culling remains source-backed.** Preserve the source default winding/culling. FireSwarm does not request the two-sided override used by other effects. Do not disable culling merely to fill a visual hole; resolve source/device behavior with an accurate reference first.
 8. **`SetCommandDone(false)` semantics during the kill tick.** On
    `frameon = 76`, the animator calls `KillThisEffect()` (which sets
    `OF_KILL | OF_PULSE`) and the next Pulse will remove the effect.
@@ -1076,8 +976,7 @@ For the reconstruction agent — what they need to do, in order:
    from either `legacy/Imagery/Magic/fireswarm.i3d` or
    `data/imagery.rvi:Imagery/Magic/fireswarm.i3d` (same MD5,
    byte-identical). Confirm the loader recognizes the **ARGB4444**
-   surface format (masks `0xF000/0x0F00/0x00F0/0x000F` at I3D offset
-   `0x1ec0`); if the loader only handles RGB565, add ARGB4444
+   surface format from the current loader dump; if the loader only handles RGB565, add ARGB4444
    support. Do NOT apply chroma-key conversion — this asset uses
    real per-pixel alpha.
 2. **Bind sub-object 1 (`tube01`).** Skip `GetObject(0) = "box01"`
@@ -1085,30 +984,19 @@ For the reconstruction agent — what they need to do, in order:
 3. **Implement the 3-float per-instance state.** `cylhscl`,
    `cylvscl`, `cylth`, plus the `frameon` lifetime tick. Initialize
    per §6.3: `frameon=0, cylth=0, cylhscl=0.4, cylvscl=30.0`.
-4. **Per-tick update (time-based — rates from §3):**
-   - `cylhscl += 9.6 * dt` (== `+0.4` per 24 Hz tick)
-   - `cylvscl -= 9.6 * dt` (== `-0.4` per 24 Hz tick)
-   - `cylth += 12.0 * dt; if (cylth > 2π) cylth -= 2π;`
-   - `frameon += 24.0 * dt` (or just `lifetime_s += dt; if (lifetime_s
-     > 75/24 = 3.125) kill effect`).
+4. **Discrete 24Hz update:** accumulate elapsed time and execute whole `1000.0/24.0` ms ticks. Each tick increments `frameon`, adds `0.4` to XY scale, subtracts `0.4` from Z scale and adds `0.5` radians to yaw, with the source wrap. Kill on tick 76 (`frameon > 75`). Continuous interpolation and integer 41ms steps are not the source update.
 5. **Build the per-frame transform.** `m = Scale(cylhscl, cylhscl,
    cylvscl) · RotZ(cylth)`, no translate. The mesh sits at the
    effect's world position via the engine's parent-transform
    concatenation.
-6. **Submit with Alpha blend.** `MODULATE + SRC_ALPHA/INV_SRC_ALPHA,
-   ZWRITE off, ZTEST on`. Use the engine's `EFxBlend::Alpha` or
-   equivalent. **Watch for the BLEND SANITY-CHECK risk in §7** —
-   if the cylinder visually reads dull/translucent rather than
-   luminous, switch to `AdditiveStraight` and re-check.
-7. **Cull-mode = engine default** (likely CCW). If the cylinder shows
-   a hole in the back, switch to `NONE` per gap §13.7.
+6. **Submit with source Alpha blend.** `MODULATE + SRC_ALPHA/INV_SRC_ALPHA`, ZWRITE off, ZTEST on. No additive substitution or brightness fitting while native fidelity is unresolved.
+7. **Preserve source culling.** Use the source projected winding convention; do not substitute two-sided rendering to conceal an unresolved mismatch.
 8. **No Z patch.** The original `RefreshZBuffer` is commented out;
    no scene Z disturbance.
 9. **No texture animation.** Static texture. No flipbook, no UV
    mutation, no atlas pick.
 10. **No light, no audio.** Skip those branches entirely.
-11. **Kill at lifetime > 3.125 s** (or `frameon > 75` if using tick
-    counter). Use the engine's kill-effect equivalent
+11. **Kill at discrete tick 76** (`frameon > 75`). Use the engine's kill-effect equivalent
     (`KillThisEffect` / mark-for-deletion). Parent spell signaling
     is a no-op since no live spell calls this.
 12. **Visual self-vet.** Spawn one FireSwarm in the VFX test harness
@@ -1126,3 +1014,17 @@ The reconstruction is small (a single transform-animated mesh + a
 **low** — comparable to F01 Flame (without the per-frame UV math).
 The main risk is the asset format (ARGB4444 must load correctly) and
 the blend choice (snapshot Alpha vs. fire-family Additive — see §7).
+
+## FPS-enabled reference recovery, 2026-10-05
+
+The earlier frozen-cylinder reference was recorded without the visible FPS redraw prerequisite. Ctrl+Shift+F restored clean native animation in `sw-fps-fireswarm-20261005` and `sw-fps-fireswarm-repeat-20261005`. Both naturally expire to exact ground without camera movement; the first paired preview has zero background drift. Its binary is7018fc568d28, before the later SetVortex build.
+
+Raw elapsed samples differ in initial visible phase/progression. First changed pixel is not proven to be source tick zero; retain true24Hz/tick76 source behavior, and audit native first-visible latency/cadence before a correction. No alpha, scale, phase or RNG fitting; no visual or natural caller acceptance yet.
+
+## Thin native controller and recovered raster limit, 2026-10-07
+
+The [thin report](../../../recon/retail_asm/runtime/effects/fireswarm-frontend-ab/manifest.json) confirms registration `0x4f0110`, builder `0x5ac0c8` and animator vtable `0x5ac0cc`, superseding the old merged candidate association. Original Initialize `0x4f0130`, Animate `0x4f0160` and Render `0x4f0270` agree with compiled current shared map/preview methods through ticks 0-78: all 237 scale/yaw float32 fields and expiry at 76. Exact object 1/tube01 geometry, indices/UVs and ARGB4444 texture 1 produce matching submitted packets and twelve selected shared-software image/depth pairs. Complete state and selected pixels repeat twice; no production fix, RNG or audio is involved.
+
+Five later samples 30/36/48/60/72 are visibly nonempty and distinct. Early appearance remains constrained by the original dispatcher: `0x56d9fd..0x56da7f` skips triangle edges above 640px horizontal or 480px vertical, jumping to `0x56dba7`, even on a larger canvas. The initial 600wu cylinder projects about 745px tall. Direct native constant reads and [the repeatable diagnostic](../../../recon/retail_asm/runtime/effects/fireswarm-frontend-ab/software-span-limit.json) establish this limit; Z testing on/off gives identical color hashes. It is not a Z-buffer cause. Early empty pairs do not validate flame appearance; exact state/mesh and later visible pixels have their narrower scope. No scale/camera/raster fitting or patch hides the limit.
+
+Identity owner/no spell/white vertices and the fixed original projection are explicit. Current frontend culling is supplied at the imagery boundary rather than certified against the device. Loader/component/map context, arbitrary poses, normals/lighting/blending/culling, early real-device appearance and modern GPU remain open. Earlier guest residue diagnostics retain their cache/device provenance. See [instructions](../../../recon/retail_asm/runtime/effects/fireswarm-frontend-ab/README.md).

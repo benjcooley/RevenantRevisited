@@ -13,6 +13,7 @@
 
 #include "editorstub.h"
 
+#include "command.h"
 #include "editor.h"
 #include "logging.h"
 #include "runtimemode.h"
@@ -32,17 +33,16 @@ PTTerrainTemplate     TerrainTemplates = nullptr;
 
 // Legacy scratch buffer the retail editor + command interpreter both used
 // for ad-hoc string formatting. Kept in this TU because command.cpp
-// `extern char buf[];`s it.
+// `extern char buf[1024];`s it.
 char                  buf[1024]    = {};
 
 // Legacy editor command stubs. The retail bodies lived in attic/src/
 // editor.cpp; they're referenced by name from command.cpp's command table
 // so we keep the symbols (no-ops). Will be retired or re-implemented as
 // the ImGui editor lands.
-class TToken;
-int32_t CmdAddRC(TObjectInstance* /*ctx*/, TToken& /*t*/)        { return 0; }
-int32_t CmdDeleteRC(TObjectInstance* /*ctx*/, TToken& /*t*/)     { return 0; }
-int32_t CmdSaveTileBM(TObjectInstance* /*ctx*/, TToken& /*t*/)   { return 0; }
+COMMAND(CmdAddRC)      { return 0; }
+COMMAND(CmdDeleteRC)   { return 0; }
+COMMAND(CmdSaveTileBM) { return 0; }
 
 void StartEditor(bool /*starting*/)
 {

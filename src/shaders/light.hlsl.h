@@ -4,11 +4,10 @@
 // *       light.hlsl.h  - HLSL deferred lighting (SM5 / D3D11 variant)    *
 // *************************************************************************
 //
-// Windows / SOKOL_D3D11 port of light.metal.h. Lighting consumes the
-// precomputed sun-shadow mask; it does not ray-march.
-//
-// NOTE: KPL must match TRenderer::kMaxPointLights in renderer.h. If you
-// change one, change the other.
+// Windows / SOKOL_D3D11 port of light.metal.h. TRenderer prepends
+// lightmodel.hlsl.h (the params cbuffer and shade_surface) to
+// kLightFsHlsl. Lighting consumes the precomputed sun-shadow mask; it
+// does not ray-march.
 //
 // *************************************************************************
 
@@ -26,23 +25,6 @@ vs_out main_vs(vs_in i) {
 )HLSL";
 
 inline constexpr const char* kLightFsHlsl = R"HLSL(
-#define ISO_COS30 0.867
-#define ISO_WZ_DENOM 2.003378
-#define KPL 16
-cbuffer params : register(b0) {
-    float4 vp;
-    float4 recon;
-    float4 light_dir;
-    float4 light_col;
-    float4 ambient_col;
-    float4 settings;
-    float4 plight_pos[KPL];
-    float4 plight_col[KPL];
-    float4 shadow;
-    float4 shadow_dir;
-    float4 shadow_world_dir;
-    float4 normal_lighting;
-};
 Texture2D    albedo_tex : register(t0);
 Texture2D    normal_tex : register(t1);
 Texture2D    depth_tex  : register(t2);
@@ -72,32 +54,6 @@ float3 reconstruct_world(float2 uv, float d, float fbw, float fbh) {
                   recon.y + (sum_r - S) * 0.5,
                   wz);
 }
-float2 project_world_uv(float3 W, float fbw, float fbh) {
-    float dx = W.x - recon.x;
-    float dy = W.y - recon.y;
-    float S = dx - dy;
-    float T = 0.5 * (dx + dy) - W.z * ISO_COS30;
-    float scale = max(settings.w, 0.0001);
-    if (recon.w > 0.5) {
-        float scene_z = recon.z - ISO_COS30 * (dx + dy) - 0.5 * W.z;
-        scale *= recon.z / max(scene_z, 1.0);
-    }
-    S *= scale;
-    T *= scale;
-    return float2((S + vp.x) / fbw, (T + vp.y) / fbh);
-}
-float scene_depth_world(float3 W) {
-    float dx = W.x - recon.x;
-    float dy = W.y - recon.y;
-    return recon.z - ISO_COS30 * (dx + dy) - 0.5 * W.z;
-}
-float interpolate_ray_depth(float z0, float z1, float a) {
-    if (recon.w > 0.5) {
-        float inv_z = lerp(1.0 / max(z0, 1.0), 1.0 / max(z1, 1.0), a);
-        return 1.0 / max(inv_z, 1e-6);
-    }
-    return lerp(z0, z1, a);
-}
 float sample_scene_depth(float2 uv) {
     uint w, h;
     depth_tex.GetDimensions(w, h);
@@ -106,17 +62,14 @@ float sample_scene_depth(float2 uv) {
                          float2(float(w - 1), float(h - 1))));
     return depth_tex.Load(int3(p, 0)).r;
 }
-float shadow_tap_weight(int tap, int sampleCount) {
-    if (sampleCount <= 1) return 1.0;
-    float u = (float)tap / (float)(sampleCount - 1);
-    return lerp(0.5, 1.0, 1.0 - abs(u * 2.0 - 1.0));
-}
 float4 main_ps(vs_out in_) : SV_Target0 {
     float4 alb = albedo_tex.Sample(smp, in_.uv);
     if (alb.a < 0.01) discard;
     float  d   = sample_scene_depth(in_.uv);
-    float3 np  = normal_tex.Sample(smp, in_.uv).xyz;
+    float4 nrm = normal_tex.Sample(smp, in_.uv);
+    float3 np  = nrm.xyz;
     float3 N   = normalize(np * 2.0 - 1.0);
+    bool   is_mesh = (nrm.a < 0.5 || nrm.a > 1.5);     // G-buffer surface class: 1 tile, 0 mesh
     float  ao  = ao_tex.Sample(smp, in_.uv).r;
     float  fbw, fbh; albedo_tex.GetDimensions(fbw, fbh);
     float3 W = reconstruct_world(in_.uv, d, fbw, fbh);
@@ -132,26 +85,6 @@ float4 main_ps(vs_out in_) : SV_Target0 {
         return float4(fine, coarse, 1.0 - coarse, 1.0);
     }
     if (vm == 3) return float4(np, 1.0);
-    int nl_dbg = (int)settings.y;
-    if (vm == 4) {
-        float3 accum = float3(0.0, 0.0, 0.0);
-        const float kMP = 0.0022436;
-        const float kSC = 50.0 / (1.0 - kMP);
-        [loop] for (int i = 0; i < nl_dbg; ++i) {
-            float3 delta = plight_pos[i].xyz - W;
-            float  dist  = length(delta);
-            float  rad   = plight_pos[i].w;
-            if (rad > 0.0 && dist < rad) {
-                float3 Lp    = delta / max(dist, 1e-5);
-                float  pterm = lerp(1.0, max(dot(N, Lp), 0.0), saturate(normal_lighting.x));
-                float normd = dist * 254.0 / rad;
-                float pw    = pow(normd + 1.0, -1.1) - kMP;
-                float attn  = saturate(pw * kSC);
-                accum += plight_col[i].rgb * plight_col[i].w * attn * pterm;
-            }
-        }
-        return float4(accum, 1.0);
-    }
     if (vm == 5) {
         float ws = max(settings.z, 1.0);
         float zs = max(settings.w, 1.0);
@@ -175,45 +108,21 @@ float4 main_ps(vs_out in_) : SV_Target0 {
         float band = (frac(abs(h) / 128.0) < 0.04) ? 1.0 : 0.0;
         return float4(max(norm_h, band), norm_h * (1.0 - 0.5 * band), 1.0 - norm_h, 1.0);
     }
-    float3 light = ambient_col.rgb * light_col.w;
-    int mode = (int)settings.z;
-    if (mode == 1) light *= ao;
-    float3 Ldir = normalize(light_dir.xyz);
-    float  raw_sun_ndotl = dot(N, Ldir);
-    float  sun_ndotl = max(raw_sun_ndotl, 0.0);
-    float  normal_hardness = saturate(normal_lighting.x);
-    float  sun_term = lerp(1.0, sun_ndotl, normal_hardness);
-    // Direct sun visibility is a composition of two intentionally separate
-    // facts: normal-facing geometry and the blurred cast-shadow mask. The
-    // lighting pass never ray-marches; the mask is produced once per frame by
-    // the shadow pass, then blurred as an image operation.
-    float normal_visibility = (raw_sun_ndotl > 0.0) ? 1.0 : 0.0;
-    float cast_shadow = (mode == 1 && shadow.w > 0.5) ? shadow_tex.Sample(smp, in_.uv).r : 1.0;
-    float sun_shadow = normal_visibility * cast_shadow;
-    if (mode == 1) {
-        light += light_col.rgb * light_dir.w * sun_term * sun_shadow;
+    float cast_shadow = (shadow.w > 0.5) ? shadow_tex.Sample(smp, in_.uv).r : 1.0;
+    surface_light s = shade_surface(alb.rgb, W, N, is_mesh, ao, cast_shadow);
+    // kObjFlagSelfLit (bit 0x20 of the id's top byte): imagery retail drew
+    // after the light transfer keeps its own colours.
+    {
+        uint iw, ih;
+        id_tex.GetDimensions(iw, ih);
+        int2 ip = int2(min(uint(in_.uv.x * float(iw)), iw - 1), min(uint(in_.uv.y * float(ih)), ih - 1));
+        if ((uint(id_tex.Load(int3(ip, 0)).a * 255.0 + 0.5) & 0x20u) != 0u)
+            s.lit = alb.rgb;
     }
-    if (vm == 6) return float4(sun_shadow, sun_shadow, sun_shadow, 1.0);
-    const float kMinPower = 0.0022436;
-    const float kScale    = 50.0 / (1.0 - kMinPower);
-    int nl = (int)settings.y;
-    [loop] for (int i = 0; i < KPL; ++i) {
-        if (i >= nl) break;
-        float3 delta = plight_pos[i].xyz - W;
-        float  dist  = length(delta);
-        float  rad   = plight_pos[i].w;
-        if (rad > 0.0 && dist < rad) {
-            float3 Lp    = delta / max(dist, 1e-5);
-            float  pterm = lerp(1.0, max(dot(N, Lp), 0.0), normal_hardness);
-            float normd = dist * 254.0 / rad;
-            float pw    = pow(normd + 1.0, -1.1) - kMinPower;
-            float attn  = saturate(pw * kScale);
-            light += plight_col[i].rgb * plight_col[i].w * attn * pterm;
-        }
-    }
-  // Brightness cap (see light.glsl.h for rationale).
-    float light_ceiling = max(ambient_col.w, 1e-3);
-    light = min(light, float3(light_ceiling, light_ceiling, light_ceiling));
-    return float4(alb.rgb * light, 1.0);
+    // Marker2 carries an already lit/unlit authored retail mesh.
+    if ((int)settings.z == 0 && nrm.a > 1.5) s.lit = alb.rgb;
+    if (vm == 4) return float4(s.points, 1.0);
+    if (vm == 6) return float4(s.sun_shadow, s.sun_shadow, s.sun_shadow, 1.0);
+    return float4(s.lit, 1.0);
 }
 )HLSL";

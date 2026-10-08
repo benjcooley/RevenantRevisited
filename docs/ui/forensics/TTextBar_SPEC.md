@@ -1,559 +1,474 @@
 # TTextBar — Reconstruction SPEC
 
-Floating multi-line game-message / status-text overlay (under the map), plus the
-optional opponent name + health bar shown over a combat target. Retail leaf class
-`cls_0x5a5560` (vtable `0x5a5560`), global singleton `0x65c5d0`.
+The message feed over the bottom-left of the map view, plus the map-loading
+progress bar drawn under its newest line. Retail leaf class `cls_0x5a5560`
+(vtable `0x5a5560`), global singleton `0x65c5d0`.
+
+Confidence marks: **C** confirmed in code (decomp or disassembly), **S**
+confirmed by a retail screenshot, **U** unconfirmed.
 
 ---
 
 ## §0 — Sources & status
 
 **Class:** `cls_0x5a5560` = **TTextBar** (vtable `0x005a5560`). Global instance
-`0x0065c5d0`. Wired by global-ctor stub `FUN_00480725`. Confirmed 98% by Wave-2A
-(string anchor `"Trouble initializing text bar"` + .CRT$ ctor vtable wire + leaf-
-TPane vtable shape + Close↔Initialize structural reciprocity — see brief).
+`0x0065c5d0`, wired by the global-ctor stub `FUN_00480725`. Identified by the
+string `"Trouble initializing text bar"` at its `Initialize` call in
+`TPlayScreen::Initialize` (`0x0047abf8`). **C**
 
-**Vtable / method map** (dumped `0x5a5560`, 35 slots; overrides at 0/1/7/13/19/20/23/28,
-the rest inherited from TPane base `cls_0x5a4494`). Override slot positions match
-TPlyrStatusBar's leaf-TPane shape (`cls_0x5a54e4_TPlyrStatusBar_vtable.txt`), giving
-the slot→role mapping below:
+**Port status (2026-10-05): ported.** `src/textbar.{h,cpp}` is the retail
+class; `TPlayScreen` adds it as a production pane (§3.3); `--test=ui-textbar`
+hosts the same pane with a scripted feed. Port mapping and deviations: §13.
+Not ported: the typed-message prompt and the multiplayer chat feed (§10).
 
-| slot | addr | role (this spec) | recon file |
+**Vtable / methods** (vtable dumped from `Revenant.exe` at `0x5a5560`, 35 slots;
+overrides at 0/1/7/13/19/20/23/28, the rest inherited from `TPane`
+`0x5a4494`). Slot roles follow the retail pane contract established for
+`TDialogPane` (gameflow `DIALOG.md` §4.3): `+0x4c` per-tick pulse from the
+screen's pane pass `0x0048fda0`, `+0x50` redraw from the draw pass
+`0x0048ff00`, `+0x1c`/`+0x5c` the `NoTexOverlay` off/on draws.
+
+| slot | addr | role | recon file |
 |---|---|---|---|
 | 0 | `0x54bf70` | `Initialize` | `recon/discovered/FUN_0054bf70_TTextBar_init.cpp` |
-| 1 | `0x54c3d0` | `Close` | `recon/discovered/cls_0x5a5560_TTextBar_Close_54c3d0.cpp` |
-| 7 | `0x54c600` | **Draw (Classic path)** — blit fg surface lines to display w/ per-line alpha fade | `/tmp` extract (see §6) |
-| 13 | `0x54c9c0` | `Clear`/Reset (rebuild fg surface empty) | `/tmp` extract |
-| 19 | `0x54c460` | **Tick/Update** — age out lines, pull combat-target name into feed | `/tmp` extract |
-| 20 | `0x54c440` | `Animate` — recomposite + base draw (TPlyrStatusBar slot-20 twin) | `/tmp` extract |
-| 23 | `0x54c780` | **Draw (hi-res path)** — `(*+0x5c)` mosaic blit + effect post-process | `/tmp` extract |
-| 28 | `0x54d4a0` | chat/console **keystroke input** handler | `/tmp` extract |
-| (helper) | `0x54cd40` | **Composite** — render all line records + health bar into fg/bg surfaces | `recon/discovered/cls_0x5a5560_TTextBar_FUN_54cd40.cpp` |
-| (helper) | `0x54cb00` | **DrawHealthBar** — PutHue texthealthbar w/ hue+slide | `recon/discovered/FUN_0054cb00_TTextBar_DrawHealthBlock.cpp` |
-| (helper) | `0x54d0c0` | **AddLine** — push a record into scrollback ring | `/tmp` extract |
-| (helper) | `0x54d390` | append target-name+health line | `/tmp` extract |
-| (helper) | `0x54d700` | clear input-edit buffer (thunk; not extracted — UNCONFIRMED-1) | — |
-| (helper) | `0x438ed0` | **DrawLineText** — wraps `FUN_004be2b0` GDI DrawTextA | `/tmp` extract |
-| (helper) | `0x521c60` | font-metric getter (ascent/descent from HDC table) | `/tmp` extract |
-| (prim) | `0x4bd8c0` | `PutHue(x,y,bm,drawmode,hue)` = `TSurface::PutHue` (`src/surface.h:237`) | method-map / src |
+| 1 | `0x54c3d0` | `Close` | `cls_0x5a5560_TTextBar_Close_54c3d0.cpp` |
+| 7 (`+0x1c`) | `0x54c600` | **Draw**, `NoTexOverlay` off: per-line alpha fade | `cls_0x5a5560_TTextBar_DrawOverlay_54c600.cpp` |
+| 13 (`+0x34`) | `0x54c9c0` | **Hide** | `cls_0x5a5560_TTextBar_Hide_54c9c0.cpp` |
+| 19 (`+0x4c`) | `0x54c460` | **Pulse**: age lines; multiplayer chat feed | `cls_0x5a5560_TTextBar_Pulse_54c460.cpp` |
+| 20 (`+0x50`) | `0x54c440` | **redraw**: if dirty, `Composite(-1)`, `SetDirty(false)` | `cls_0x5a5560_TTextBar_Compose_54c440.cpp` |
+| 23 (`+0x5c`) | `0x54c780` | **Draw**, `NoTexOverlay` on | `cls_0x5a5560_TTextBar_DrawPlain_54c780.cpp` |
+| 28 (`+0x70`) | `0x54d4a0` | `CharPress`: the typed-message prompt | `cls_0x5a5560_TTextBar_CharPress_54d4a0.cpp` |
+| — | `0x54cd40` | `Composite(index)`: render line `index` (−1: all) | `cls_0x5a5560_TTextBar_FUN_54cd40.cpp` |
+| — | `0x54cb00` | `DrawHealthBar`: the strip under line 0 | `FUN_0054cb00_TTextBar_DrawHealthBlock.cpp` |
+| — | `0x54ca20` | `SetHealthDisplay(name)` | `cls_0x5a5560_TTextBar_SetHealthDisplay_54ca20.cpp` |
+| — | `0x54ca60` | `SetLevels(level, target)` | `cls_0x5a5560_TTextBar_SetLevels_54ca60.cpp` |
+| — | `0x54cad0` | `ClearHealthDisplay()` | `cls_0x5a5560_TTextBar_ClearHealthDisplay_54cad0.cpp` |
+| — | `0x54cbb0` | `DrawImmediate()`: line 0 straight to the display, mid-tick | `cls_0x5a5560_TTextBar_DrawImmediate_54cbb0.cpp` |
+| — | `0x54d0c0` | `AddLine(type, color, text)` | `cls_0x5a5560_TTextBar_AddLine_54d0c0.cpp` |
+| — | `0x54d170` | `Print(fmt, ...)` → `VPrint(1, …)` | `cls_0x5a5560_TTextBar_Print_54d170.cpp` |
+| — | `0x54d190` | `Print(type, fmt, ...)` → `VPrint` | `cls_0x5a5560_TTextBar_PrintType_54d190.cpp` |
+| — | `0x54d1b0` | `VPrint(type, fmt, va)` | `cls_0x5a5560_TTextBar_VPrint_54d1b0.cpp` |
+| — | `0x54d2f0` | open the prompt | `cls_0x5a5560_TTextBar_BeginInput_54d2f0.cpp` |
+| — | `0x54d390` | commit the prompt line | `cls_0x5a5560_TTextBar_CommitInput_54d390.cpp` |
+| — | `0x54d700` | submit typed text (chat / `@` script / cheat words) | `cls_0x5a5560_TTextBar_SubmitInput_54d700.cpp` |
 
-Recon files read: all of the above, `FUN_0054bf70_TTextBar_init.cpp`,
-`cls_0x5a5560_TTextBar_FUN_54cd40.cpp`, `FUN_0054cb00_TTextBar_DrawHealthBlock.cpp`,
-`cls_0x5a5560_TTextBar_Close_54c3d0.cpp`, `cls_0x5a5560_TTextBar_ctor_globalinit_480725.cpp`,
-`cls_0x5a54e4_TPlyrStatusBar_vtable.txt`. Briefs: `docs/ui/briefs/B_r4_textbar_assessment.md`.
-Method-map primitives: `FUN_004be2b0` (text), `FUN_00438d80` (shadow/blit struct),
-`FUN_004aacb0` (effect post-process), `FUN_00414d70` (blit), `FUN_00419dd0` (field copy).
-Color/layout literals decoded from `objdump` (`Revenant.exe`, §7). Asset measured
-with `tools/ui/dump_dat.py` + direct TMulti parse (§2).
+Helpers: `0x00438ed0` line text (`util_DrawLineText_438ed0.cpp`) →
+`0x004be2b0` GDI text; `0x004bd8c0` `PutHue` (`util_PutHue_4bd8c0.cpp`) →
+`0x004b21d0` hue-change blit (`util_HueChangeBlit_4b21d0.cpp`); `0x00521c60`
+font-table lookup (`util_FontTableGetFont_521c60.cpp`).
 
-**Status:** `forensics-complete` for the message-overlay + health-bar render paths
-(the on-screen visuals). The chat-input handler (slot 28) and exact bg/fg surface
-compositing order are documented but carry the UNCONFIRMED items in §14.
+Decomps were extracted with `DecompileBatch.java` from a copy of
+`data/RevenantDev`; constants and the colour table were read from
+`Revenant.exe` with `objdump`.
 
-**Errors to close (existing port `src/textbar.{cpp,h}`):** the snapshot port is the
-*pre-release* single-line `text[80]` design and is **superseded**. It (a) has no
-scrollback ring, (b) no multi-surface buffered composition, (c) no per-line color
-table, (d) no per-line TTL fade, (e) `Close()` is a no-op (retail frees 3 surfaces +
-buffer). The reconstruction must replace its `DrawBackground` entirely; only the
-health-bar math (`SetHealthDisplay`/`SetLevels`/health tween) survives verbatim.
+### §0.1 Corrections to the first version of this spec (2026-10-05)
 
-**Snapshot note (supplementary — superseded by retail):** `src/textbar.h:42-48`
-declares the old layout (`char text[80]; char name[80]; int32 level, targetlevel;
-bool animating, pulsecheck;`). `src/textbar.cpp:33-85 DrawBackground` is the readable
-intent for the **health block only** — its constants (155,176,16,186, increment 4)
-are byte-identical to retail `FUN_0054cb00`, and `PutHue(min(0,-(186-level)),1,...)`
-matches retail exactly, so the snapshot is authoritative *only* for the health-bar
-algorithm (cited in §6/§9). Its layout, surfaces, and the message-feed are NOT — do
-not pull old coordinates into §2–§5/§8.
+| claim | retail | cite |
+|---|---|---|
+| up to `0x64` records, 9 visible | at most **9** lines: `+0x64` (offset 100) holds `DAT_005e5800` = 9; the buffer holds 12 (`0x450` bytes) | `0x54bf70`, `0x54d0c0` |
+| the health bar shows the combat target | it is the **map-loading progress bar**; its one caller is the map loader | `0x004598c8`, §6.5 |
+| Pulse feeds the combat target's name | that half feeds **multiplayer chat** (gated on the MP flag `DAT_0066829c`) | `0x54c460` |
+| slot 7 Classic, slot 23 hi-res | `DAT_006680c8` is the ini's `NoTexOverlay`: slot 7 is the textured overlay path (fades), slot 23 the plain path | `DIALOG.md` §4.6, `0x00484d6c` |
+| fg surface 12 lines, two 1-line bg surfaces | `+0x84` is the 1-line scratch; `+0x88`/`+0x8c` are 12 lines | `0x54bf70` |
+| text cell top at (4, 9) | `9` is the **baseline** (cap tops 2 px under the line top) | §8, captures |
+| colours: type 8 yellow, type 0x10 purple | type 8 red (255,40,40), type 0x10 sky blue (0,190,255) | §7 |
+| `texthealthbar` in `PLAYSCRN.DAT` | `gamedata.dat` (the archive at `0x0065abc0`), entry 98 | `0x54cb82` |
+| rect fixed by Initialize | `TPlayScreen`'s layout moves it (§3.3) | `0x0047bc50` |
+| fallback rect 406×198, padding 14 | the ctor stub's rect is y 406, 198 × 14 (x from a register) | `0x00480725` |
 
 ---
 
 ## §1 — Overview
 
-TTextBar is the bottom-of-screen text overlay. It serves two jobs:
+1. **Message feed.** `Print` formats a message and splits it at `'\n'`; each
+   piece becomes a **line record** (type, colour, life in ticks, text). New
+   lines go to the bottom; up to nine show, stacked upward. The **three
+   newest never age**; an older line lives 120 ticks (5 s) from the moment
+   it moves past them and fades over its last 24. **C** (code), **S** (retail
+   captures: `docs/ui/sample_screen_1.jpg`, `_2.jpg` each show exactly three
+   lines at the bottom-left of the map view).
+2. **Loading bar.** While a map loads synchronously, the map loader
+   (`MapPane.cpp`, `0x004597b0`) puts "Loading Map... Please Wait" on the
+   bar as its newest line and draws the `texthealthbar` strip under it,
+   sliding in and turning from red to green as the load progresses. **C**
+3. **Typed-message prompt** (Enter, slot 28): a `"Message: "` line the player
+   types into; in multiplayer it is chat, in single player `@` lines run a
+   script line on the player and some words toggle cheats. **C**; not ported.
 
-1. **Game-message log.** Engine code calls a `Print`-style API to push short
-   strings ("The door is now open", "Got the Hammer of Wounding", combat/system
-   messages). Retail keeps a **scrollback ring of line records** (not the
-   pre-release single line): each record has a 0x50-byte text, a type, a color, and
-   a TTL counter. Lines age out and fade. Up to `0x64` records are stored; up to 9
-   (`DAT_005e5800`) are visible.
-
-2. **Opponent name + health bar.** When the player is fighting a target with no
-   pending message, the bar shows the enemy name and a sliding/hue-shifting health
-   strip (`texthealthbar`, 200×11). This feature survives from pre-release verbatim.
-
-It is a **single instance** (the global `0x65c5d0`), not mirrored player/target like
-TPlyrStatusBar. The pane is rendered into off-screen TMosaicSurface buffers (1 fg + 2
-bg) then blitted to the display each frame; it is shown whenever it has visible
-content. There is also a **chat/console input mode** (slot 28) where keystrokes build
-a `msgprefix`-prefixed line — a typed-message feature.
-
-Plain-language: it is the scrolling status-line overlay at the bottom of the play
-view that prints colored game messages which fade after a few seconds, and doubles as
-the enemy-health readout in combat.
+The 1998 pane (`textbar.cpp` before this port) showed one line of text, or the
+name and health of the creature Locke was fighting. Retail replaced both; the
+target's health went to `TPlyrStatusBar`.
 
 ---
 
 ## §2 — Asset roster
 
-| asset | archive | entry name | WxH (measured) | role | source rects | cite |
-|---|---|---|---|---|---|---|
-| texthealthbar | `legacy/PLAYSCRN.DAT` | `texthealthbar` (TMulti idx 98) | **200×11** (`0xc8 × 0x0b`), flags `0x2` BM_15BIT (RGB555), keycolor `0x0` | the opponent health gradient strip; drawn via PutHue with per-frame hue rotation + horizontal slide | full bitmap (no sub-rects) | measured: TMulti parse of PLAYSCRN.DAT bitmap idx 98 @ file off `642779`; `FUN_0054cb00:42` `s_texthealthbar_005e581c` |
-| Font "Small" | (FONT.DEF, registered to HDC table) | `Small` | Arial, **12px**, GDI WINFONT; default COLOR 255 255 255 | all textbar line text (line color overridden per-record, see §8) | n/a (GDI glyph render) | `data/resources_unzipped/font.def` `WINFONT "Small" FONT "Arial" 12 COLOR 255 255 255 ...`; font index `DAT_0065abc4` set @ `0x485dcf` from `"Small"` (push `0x5d8844` @ `0x485db1` → call → eax → store `0x65abc4`) |
+| asset | archive | entry | size | role | cite |
+|---|---|---|---|---|---|
+| `texthealthbar` | `gamedata.dat` (`GameData`, `0x0065abc0`) | idx 98 | **200 × 11**, flags `0x2` (RGB555), keycolor 0 | the loading strip; a green gradient, transparent (0) right-hand corner | `0x54cb82` `mov ecx,[0x65abc0]; push "texthealthbar"; call 0x46d710`; measured by TMulti parse |
+| font `"Small"` | `font.def` | `WINFONT "Small" FONT "Arial" 12` | 12 px, `LEXTRA` 0 | all line text | `DAT_0065abc4` set at `0x485dcf` |
 
-No chrome bitmap (BackPanel-style) exists — TTextBar is a **transparent overlay**; its
-"background" is the 3 mosaic surfaces composited over the live 3D, not a static plate.
-
-**texthealthbar source-rect note:** PutHue draws the whole 200×11 bitmap; the "fill"
-effect is achieved by *sliding the bitmap left* (negative x) as health drops, not by
-sub-rect clipping (§6 DrawHealthBar).
+All 2112 opaque strip pixels are green-dominant, so the hue blit recolours the
+whole strip (§6.4).
 
 ---
 
 ## §3 — Coordinate frames & surfaces
 
-TTextBar is **NOT** the fixed-chrome chip model used by TPlyrStatusBar. It is a
-dynamically-positioned overlay whose pane rect is computed from runtime screen-viewport
-globals, and whose content is drawn into a display-width foreground surface then blitted.
+### §3.1 Line height
 
-### Frame table (mandatory)
+`lineH = font +0x50 (height) + font +0x54 (LEXTRA)` = 12 + 0 = **12** for
+"Small" (`0x54bf70`; the same reading as the dialog pane's line, `DIALOG.md`
+§4.2). Retail captures show a 12 px pitch. **C S**
 
-| frame | parent | anchor | origin in parent (formula + literal) | what is expressed in it | cite |
-|---|---|---|---|---|---|
-| **screen** | framebuffer TL (root) | — | (0,0) | final pixels | — |
-| **pane** | screen | **bottom-left of play viewport** (computed, not fixed) | `pane.left = DAT_006668dc`; `pane.top = (DAT_006668e8 − maxLines·lineH) + DAT_006668e0`; `pane.right = DAT_006668e4`; where maxLines = `DAT_005e5800 = 9`, lineH = `+0x78` (font ascent+descent) | the whole overlay | `FUN_0054bf70:51-57` (`+0x14=DAT_006668dc`, `+0x18=(DAT_006668e8 − DAT_005e5800·iVar4)+DAT_006668e0`, `+0x1c=DAT_006668e4`) |
-| **fg-surface** | pane | TL of pane (the surface is blitted at pane origin) | pane TL; surface size = `display_w × (lineH·12)` | all rendered line text + the health bar | `FUN_0054bf70:33-52,84-95` (`+0x70`=display width `*(PTR_DAT_005d79e0+4)`; `+0x74 = lineH·0xc`; surface alloc `FUN_004a5740`) |
-| **bg-surface ×2** | pane | TL of pane | display_w × lineH each (`+0x88`,`+0x8c`) | per-line scratch (one line tall) used as the transparent multi-buffer compositing stage | `FUN_0054bf70:96-184` (`+0x88`,`+0x8c` = two `0x74`-byte TMosaicSurfaces sized `+0x70 × +0x74`) |
-| **line-cell** | fg-surface | TL constant | **chrome-local `(4, 9)`** (text draw point inside fg surface, per-line) | one line's glyphs | `FUN_0054cd40:94` `FUN_00438ed0(4, 9, lineText, font,…)` |
-| **healthbar-cell** | fg-surface | left edge, slides | **`x = min(0, level−186)`, `y = 1`** | the texthealthbar strip | `FUN_0054cb00:40-43` PutHue(`min(0,level−0xba)`, `1`, …) |
-| **source-rect** | texthealthbar bitmap TL | — | full 200×11 | the health gradient | §2 |
-
-**Composition formula (final screen coord of a line):**
-`screen = pane_origin + fg_local`, e.g. line text screen pos =
-`(pane.left + 4, pane.top + 9 + lineSlot·lineH)` where lineSlot scrolls (see §9).
-The fg surface is the single render target; everything composes into it, then it
-blits to the display at pane origin.
-
-### Anchor detection / verification
-
-- The pane is **bottom-anchored** to the play viewport: `pane.top = viewport_bottom −
-  (9·lineH)` (`FUN_0054bf70:56` reads `DAT_006668e8` = viewport bottom and subtracts
-  `9·lineH`). So as the viewport resizes the bar stays glued to the bottom of the 3D
-  view — it is NOT a constant screen y. Record `anchor = bottom-left of play viewport,
-  offset = 9·lineH up from its bottom`.
-- The ctor stub `FUN_00480725` writes a *fallback* static rect **406×198** (`0x196 ×
-  0xc6`) with padding 14 (`0xe`) at `0x65c5d8/dc/e0`; **Initialize overrides** width/top
-  with the screen-viewport formula above, so 406×198 is only the pre-Initialize default
-  and must not be treated as the live size (live width = `+0x70` = display width).
-
-### Surfaces / direct-renderer contract
-
-Retail uses 3 TMosaicSurfaces (1 fg `+0x84`, 2 bg `+0x88`/`+0x8c`) for transparent
-double-buffered line scrolling. The port need not mirror the 3 surfaces 1:1 but MUST
-keep the contract: **compose all lines + health into one display-width offscreen RT,
-then blit that RT to the HUD at the pane origin** (NOMENCLATURE direct-renderer
-contract). Do not draw glyphs straight to the swapchain.
-
-### Layout diagram
+### §3.2 Initialize's rect
 
 ```
-play viewport (screen)
-┌───────────────────────────────────────────────────────────┐
-│                                                             │
-│                    (3D world view)                          │
-│                                                             │
-│ pane.top = viewport_bottom − 9·lineH ───────────────────┐   │
-│ ┌─ fg-surface  (display_w × 12·lineH) ─────────────────┐│   │
-│ │ (4,9)  Got the Hammer of Wounding         <- line 0  ││   │
-│ │ (4,9+lineH) The door is now open          <- line 1  ││   │
-│ │ ...                                                   ││   │
-│ │ health: PutHue at (min(0,level-186), 1) [200x11] ─┐  ││   │
-│ │ ◄── strip slides left as health drops ────────────┘  ││   │
-│ └──────────────────────────────────────────────────────┘│   │
-│ pane.left=DAT_006668dc          pane.right=DAT_006668e4 ──┘   │
-└───────────────────────────────────────────────────────────┘
+pane.x = MapPane.x                       (DAT_006668dc)
+pane.y = MapPane.y + MapPane.h − 9·lineH (DAT_006668e0 + DAT_006668e8 − …)
+pane.w = MapPane.w                       (DAT_006668e4)
+pane.h = 9·lineH                         (108)
+```
+At that point `TPlayScreen::Initialize` has made the map pane the whole display
+(`0x0047aae6..0x0047aafd`). **C**
+
+### §3.3 The play screen's layout
+
+`TPlayScreen`'s layout code (`0x0047bc50`, in the drawer/panel handling of
+its pulse, `cls_0x5a5320_TPlayScreen_Pulse_47b4d0.cpp`) re-anchors the bar
+whenever it lays the panels out, if the bar is open:
+
+```
+newx = 0
+newy = bottom pane top (0x00667c70) − pane.h
+neww = display width − side tabs width (0x0065be6c) − side pane width (0x0066615c)
+newh = pane.h
+```
+In Classic 640 × 480 with the side pane (188) and bottom pane (60) open:
+**(0, 312) 400 × 108**. The side tabs strip is 52 px (`TSideTabsPane_SPEC.md`).
+**C**
+
+`TPlayScreen::Initialize` adds the bar after the side tabs and before the
+player status bar (`0x0047ad63..0x0047adc0`: MapPane, DialogPane, `0x666140`,
+`0x667c58`, SideTabs, **TextBar**, PlyrStatusBar), so it draws over the
+dialog entries. **C**
+
+### §3.4 Surfaces
+
+| field | size | role | cite |
+|---|---|---|---|
+| `+0x84` | display width × lineH | one line's scratch: cleared, bar, text | `0x54bf70` (`FUN_004a5740(+0x70, lineH)`) |
+| `+0x88` | display width × 12·lineH | lines by slot (software path) | `FUN_004bb5c0(+0x70, +0x74)` |
+| `+0x8c` | display width × 12·lineH | lines by slot, drawn from | same |
+| `+0x7c` | — | slot y of line 0 = surface height − lineH | `0x54c36b` |
+
+Line `i` lives at slot y `(+0x7c − i·lineH) mod height`; the slots never roll,
+so any change to the records recomposes every line. **C**
+
+### §3.5 On screen
+
+Line `i` (0 = newest) draws at screen `(pane.x, pane.y + pane.h − (i+1)·lineH)`,
+`pane.w` wide (`0x54c600`: `y = +0x10 + +8 − lineH`, step `−lineH`; width
+`+0xc`). Its text pen is `(4, 9)` inside the line: x 4, **baseline 9**. **C S**
+
+```
+map view (0,0)–(452,420), Classic
+ …
+ y 384 ┌ line 2 ─────────────────────────────┐  caps 386..392
+ y 396 ├ line 1 ───────────────────────────── ┤  caps 398..404
+ y 408 ├ line 0 (newest) ──────────────────── ┤  caps 410..416, bar at y 409
+ y 420 └──────────── bottom pane ─────────────┘
+       x 0 .. 400 (side tabs at 400..452)
 ```
 
 ---
 
-## §4 — Static element layout
+## §4 — Line record
 
-TTextBar has no fixed chrome elements; layout is per-line + the health strip. All
-coords are **fg-surface-local** (compose `+ pane_origin` for screen — §3). No
-player/target mirror (single instance).
+Stride `0x5c` (92) bytes (`0x54d0c0`, `0x54c460`, `0x54cd40`). **C**
 
-| element | space | (x,y) | (w,h) | source rect | cite |
-|---|---|---|---|---|---|
-| line text (each visible line) | fg-surface | `(4, 9)` then scrolls by `lineH` per slot | clip `10000×10000` (effectively unclipped; single-line) | n/a (GDI render) | `FUN_0054cd40:94`; `FUN_00438ed0:15` (w=h=10000) |
-| health strip | fg-surface | `(min(0, level−186), 1)` | `200×11` | full texthealthbar | `FUN_0054cb00:40-43` |
+| off | field | notes |
+|---|---|---|
+| `+0x00` | type | §7 |
+| `+0x04` | colour | read for type `0x40` only; 0 → green |
+| `+0x08` | life, ticks | 120 when added |
+| `+0x0c` | text | `strncpy(…, 0x4f)`, NUL at `+0x5b` |
 
-The "scroll by lineH" mechanism: `FUN_0054cd40` walks records and decrements the draw
-y by `+0x78` (lineH) each record, wrapping by the surface height when negative
-(`:131-134` `iVar6 -= lineH; if (iVar6<0) iVar6 += surfaceHeight`). lineH = `+0x78` =
-`font_ascent + font_descent` (`FUN_0054bf70:50-52`).
+Pane fields: `+0x60` line count, `+0x64` max lines (9), `+0x68` first aging
+line (3), `+0x6c` record buffer, `+0x70` display width, `+0x74` 12·lineH,
+`+0x78` lineH, `+0x90` bar shown, `+0x94` "redraw the screen on the next
+`DrawImmediate`", `+0x98` level, `+0x9c` target level, `+0xa0` prompt open,
+`+0xa4` prompt room, `+0xd0` prompt text, `+0x120` last chat message seen.
 
 ---
 
 ## §5 — Draw order / composition
 
-Two render paths selected by `DAT_006680c8` (the Classic-vs-hi-res / hardware flag).
+**Composite(index)** `0x54cd40`, for each line `i < count` with `index == −1`
+or `index == i`:
 
-**Per-frame composition (`FUN_0054cd40`, the Composite helper):**
-1. Clear the fg surface (`+0x84`): `(*+100)(...)` Box fill (`:45`).
-2. For each line record `i` in `[0, +0x60)` whose age/visibility passes
-   (`iStack_1c == -1 || iStack_1c == i`, `:51`):
-   a. Pick the **line color** from the type→color table by `record.type` switch
-      (`:54-79`, §7).
-   b. Clear the per-line bg surface (`+0x88`) `(*+100)(0,0,w,h,...)` (`:85`).
-   c. If this is the health line slot (`iStack_3c==0 && +0x90!=0`): call
-      `FUN_0054cb00` (DrawHealthBar) (`:87-90`).
-   d. Draw the line text into the bg/fg via `FUN_00438ed0(4, 9, text, font, color,
-      0x400, 0x80000000)` (`:91-94`) — GDI DrawTextA with shadow flag `0x400`.
-   e. Build an `SDrawParam` via `FUN_00438d80` and blit the line surface onto the next
-      surface with `(*+0x5c)` (`:96-115`); Classic vs hi-res differ only in the
-      drawmode (`0x100` transparent vs `0x80000000`) and which scratch buffer
-      (`auStack_94` vs `auStack_e8`).
-   f. Blit the bg line into the fg accumulation via `(*+0x5c)` on `+0x8c` (`:116-129`).
-   g. Advance draw y: `iVar6 -= lineH` (wrap) (`:131-134`).
-3. (Done in the Draw slots) Blit the assembled fg surface to the **display**:
-   - **Classic (slot 7, `FUN_0054c600`)**: per visible line, `FUN_00414d70(...)` copies
-     a band of the fg surface to the display with **per-line alpha** =
-     `min(255, ttl·255/24)` packed as `alpha<<24 | 0xffffff` (`:32-41,57-60`).
-   - **Hi-res (slot 23, `FUN_0054c780`)**: `(*+0x5c)(SDrawParam, +0x8c, …)` mosaic blit
-     per line (`:64-110`), then `FUN_004aacb0(...)` effect post-process (`:116-119`).
+1. colour from the type (§7);
+2. clear `+0x84` (to `DAT_006668d0`);
+3. if `index == 0` and the bar is shown: `DrawHealthBar` (§6.4);
+4. text at (4, 9), font `"Small"`, flags `0x400` (`0x00438ed0` adds `0x80`,
+   single line), drawmode `0x80000000`;
+5. blit `+0x84` into slot `i` of `+0x88` (transparent `0x100` in the
+   software path), then `+0x88`'s slot into `+0x8c`.
 
-**Tick (slot 19, `FUN_0054c460`)** runs before draw: ages records (decrements TTL,
-removes expired tail), and pulls the current combat target's name/level into the feed
-(`:28-88`, via `DAT_00667fcc` player + `FUN_00570760`).
+So **`Composite(−1)` never draws the bar**, and `Composite(0)` redraws only
+line 0. Callers: `AddLine` and a dirty pane (slot 20) → `−1`; `SetLevels`,
+`ClearHealthDisplay`, `Hide`, the prompt → `0`. (The function opens with a
+`Box(40, 0, 40, 300, 0x997b)` on `+0x84`, which each line's clear wipes: a
+leftover.) **C**
+
+**Draw**, `NoTexOverlay` off (slot 7, `0x54c600`): bands of lines with equal
+alpha, each a textured quad (`0x00414d70`) from `+0x8c` to the display,
+diffuse `alpha << 24 | 0xffffff`, blend mode 4 when alpha < 255, else 2.
+**Draw**, `NoTexOverlay` on (slot 23, `0x54c780`): bands drawn opaque through
+`ParamBlit`, but only those with alpha > `0x80`. Slot 23 then runs the UI blit-effect pass `0x004aacb0`
+over the pane when `DAT_005d7a18` is 0. Both clear `+0x94`. **C**
 
 ---
 
-## §6 — Algorithms (pseudocode per helper)
+## §6 — Algorithms
 
-### DrawHealthBar — `FUN_0054cb00`  (matches pre-release `textbar.cpp:43-72`)
-
-```
-# health tween toward target, then draw the sliding hue-shifted strip
-delta = abs(level /*+0x98*/ - targetlevel /*+0x9c*/)
-if delta < 5:                level = targetlevel              # snap when close (HEALTH_INCREMENT=4)
-elif level < targetlevel:    level += 4
-elif level > targetlevel:    level -= 4
-
-hue = (level * 155 /*0x9b*/) / 176 /*0xb0*/
-if hue < 17 /*0x11*/: hue = 0
-else:                 hue -= 16 /*0x10*/
-
-x = min(0, level - 186 /*0xba/*)          # (0<u)-1 & u  ==  min(0,u)  with u=level-186
-PutHue(x, y=1, texthealthbar, drawmode=0x100 /*DM_TRANSPARENT*/, hue)
-```
-Cite: `FUN_0054cb00:13-43`. The strip is 200px wide; at level≥186 it sits at x=0
-(fully visible), and slides left (x negative) as level drops to 0 (→ x=−186), so only
-the right ~14px remain — the drain animation. `hue` rotates the palette so the bar
-shifts color (green→red) with health. `level` increments by ±4/tick (24Hz).
-
-### AddLine — `FUN_0054d0c0(this, type, color, text)`
+### §6.1 VPrint — `0x54d1b0`
 
 ```
-if text == NULL or text[0] in {'\0',' '}: return        # skip empty/space-only
-slot = (this+0xa0 != 0) ? 1 : 0                          # 0xa0 = "input line active" flag
-memmove(records[slot+1], records[slot], (records_total - slot)*0x5c)   # shift ring down
-if lineCount /*+0x60*/ < maxRecords /*+0x64*/: lineCount++
-strncpy(records[slot].text /*+0xc*/, text, 0x4f); text[0x4f]=0
-records[slot].type  = type     # +0
-records[slot].color = color    # +4
-records[slot].ttl   = 0x78     # +8  (= 120 ticks = 5s @24Hz)
-Composite(0xffffffff)          # FUN_0054cd40(-1) → recompose all lines
+if !open: return
+if TEXTDUMP (DAT_00668178, the -TEXTDUMP switch): append the message to
+    "<path>TextDump.txt", with a "Revenant Text Dump executed at" header once
+vsprintf(buf[256], fmt, va)
+for each '\n' in buf: cut there; AddLine(type, 0, piece)
+if the rest is non-empty: AddLine(type, 0, buf)      # buf, not the rest (retail bug, §11)
 ```
-Cite: `FUN_0054d0c0:12-29`. **Line record stride = `0x5c` = 92 bytes**; layout:
-`+0x00 type`, `+0x04 color`, `+0x08 ttl`, `+0x0c text[0x50=80]`. (Stride confirmed by
-`FUN_0054c460:17,25` `i*0x5c` / `piVar2 += -0x17`, and `FUN_0054cd40:136` `iStack_64 +=
-0x5c`.)
+`Print(fmt, …)` passes type 1; `Print(type, fmt, …)` its type. **C**
 
-### DrawLineText — `FUN_00438ed0(x, y, text, font, color, flags, drawmode)`
+### §6.2 AddLine — `0x54d0c0`
 
 ```
-flags2 = flags | 0x80                       # 0x80 = single-line override (UI_METHOD_MAP §5)
-SetField(&color)                            # FUN_00419dd0 copies packed color into call struct
-FUN_004be2b0(surface, x, y, 10000, 10000, text, color=0, font, flags2, flags2, drawmode)
+if !text or text[0] in {'\0', ' '}: return            # a leading space drops the line
+slot = prompt open ? 1 : 0
+memmove(records + slot + 1, records + slot, (11 − slot) records)
+count = min(count + 1, 9)
+records[slot] = { type, colour, 120, text[:79] }
+Composite(−1)
 ```
-Cite: `FUN_00438ed0:11-15`. Delegates to the GDI DrawTextA compositor
-(UI_METHOD_MAP §5). The textbar always passes `font = DAT_0065abc4` (Small/Arial-12),
-`flags` carrying the `0x400` shadow bit, drawmode `0x80000000`, and the per-line color
-(`FUN_0054cd40:91-94`). Cell is effectively unbounded (10000×10000) → single line,
-left-aligned, top.
+**C**
 
-### Tick/age-out — `FUN_0054c460` (slot 19)
-
-```
-for i from (lineCount-1) down to (+0x68 = floor index, =3):
-    records[i].ttl -= 1
-    if records[i].ttl < 1 and i == lineCount-1:  lineCount--       # pop expired tail
-# combat-target feed: if a target exists (DAT_0066829c, DAT_00667fcc),
-# walk the active object list (FUN_00570760) and AddLine the target's
-# name with a color keyed by its faction/level (FUN_0054d0c0 type 0x40/8)
-```
-Cite: `FUN_0054c460:14-88`. Confirms TTL is at record+8 and counts down each tick;
-`+0x68`(=`DAT_005e5804`=3) is the floor below which lines aren't aged (pinned header
-slots). The faction-color path picks color from `&DAT_005e20b8[level*4]` (`:58`).
-
-### Draw (Classic) per-line alpha fade — `FUN_0054c600` (slot 7)
+### §6.3 Pulse — `0x54c460`
 
 ```
-for each visible line:
-    ttl = records[i].ttl
-    alpha = (ttl < 24 /*0x18*/) ? (ttl*255/24) : 255
-    if alpha changed since last band: flush band via FUN_00414d70(..., alpha<<24 | 0xffffff, ...)
+for i = count − 1 down to 3:                          # +0x68 = 3: lines 0..2 never age
+    records[i].life −= 1
+    if records[i].life < 1 and i == count − 1: count −= 1
+if multiplayer and a player:                          # not ported
+    for each chat message since +0x120 (FUN_00570760):
+        skip our own; sender < 0 → AddLine(8, …)
+        else AddLine(0x40, team colour (0x005e20b8[min(team, 16)]) or green, text), sound "viles"
 ```
-Cite: `FUN_0054c600:31-60`. **Lines fade over their last 24 ticks (~1s @24Hz)**:
-alpha = ttl·255/24. The hi-res path (slot 23) does the same fade implicitly via the
-mosaic blit + effect pass.
+Older lines start at higher indices, so the tail always expires first. **C**
+
+### §6.4 DrawHealthBar — `0x54cb00`
+
+```
+step level toward target: |Δ| < 5 → level = target; else ±4
+hue = level · 155 / 176;  hue = hue < 17 ? 0 : hue − 16
+PutHue(+0x84, x = min(0, level − 186), y = 1, texthealthbar, 0x100, hue)
+```
+`PutHue` `0x004bd8c0` blits with `drawmode | 0x100000` (DM_CHANGEHUE), colour
+= hue. The hue blit `0x004b21d0` matches the 1998 `PutHueChange`
+(`graphics.cpp`): for each non-zero pixel whose green (5-bit × 8) exceeds red
+and blue, `v = g / 255`, `s = (g − min(r, b)) / g`, and HSV → RGB with the new
+hue, terms truncated (`__ftol`); other pixels unchanged; 0 is skipped under
+`0x100`. The strip runs red (empty) → green (186: hue 147). **C**
+
+### §6.5 The loading-bar API
+
+| call | effect | cite |
+|---|---|---|
+| `SetHealthDisplay(name)` | `+0x90 = +0x94 = 1`; `AddLine(0x80, 0, name)` | `0x54ca20` |
+| `SetLevels(level, target)` | if `+0x90 == 0`: `+0x90 = +0x94 = 1`, `AddLine(0x80, 0, GetLine("loadmsg"))`; set both; `Composite(0)` | `0x54ca60` |
+| `ClearHealthDisplay()` | `+0x90 = +0x98 = +0x9c = 0`; `records[0].type = 1`; `Composite(0)` | `0x54cad0` |
+| `DrawImmediate()` | open, shown, bar up: if `+0x94`, redraw the screen (`CurrentScreen` slot 18) and clear it; else draw line 0's band at the display's bottom, flip | `0x54cbb0` |
+
+Only caller, the map loader `0x004597b0` (gated on: bar open, not hidden, on
+screen, screen frame count > 0): `SetHealthDisplay(GetLine("loadmapmsg"))`,
+`DrawImmediate`, `PutToScreen`; per step the callback `0x00459a00`:
+`SetLevels(p · 180 / 1000, same)` (p in ‰), `DrawImmediate`, `PutToScreen`;
+at the end `ClearHealthDisplay`, `DrawImmediate`, `PutToScreen`. After a load
+"Loading Map... Please Wait" stays in the feed as an ordinary line (sample
+screenshot 1 shows it among the three lines). **C S**
+
+### §6.6 Hide — `0x54c9c0`
+
+```
+prompt off; records[0].type = 0x40; Composite(0)
+SubmitInput(+0xd0)                    # whatever was typed runs (§11)
+bar off, level = target = 0; records[0].type = 1; Composite(0)
+hidden = ignoreinput = 1
+```
+Called from `TPlayScreen`'s panel layout when its drawer state (`+0x6c4`)
+is 0 or 3 (`0x0047b874`, `0x0047b8d0`); the other branch shows it again
+(hidden and ignore-input cleared, then slot 10, `0x0047b96b`). **C**
 
 ---
 
-## §7 — Effects & shadows
+## §7 — Colours
 
-- **Per-line text shadow.** `FUN_00438ed0` passes flag bit **`0x400`** (set in
-  `FUN_0054cd40:92` `uVar8 = 0x400`) → `FUN_004be2b0` runs its 3-pass black drop shadow
-  (base, +1x, +1y) then the colored pass (UI_METHOD_MAP §5 / NOMENCLATURE §4). So every
-  line is white/colored text with a 1px black down-right shadow. Reproduce as
-  `DrawTextShadowedToTarget`.
-- **Line-type color table** (decoded from the static-init block `0x54be60-0x54bf6b`
-  via objdump; each entry is `[+0]=B,[+1]=G,[+2]=R,[+3]=pad`, consumed RGB→BGR-swapped
-  by `FUN_004be2b0:378`). The `FUN_0054cd40` switch (`:54-79`) maps `record.type`:
+Static initializers `0x0054be70..0x0054bf68` build the table as bytes
+`[0] [1] [2]`; the GDI text call swaps bytes 0 and 2 into its COLORREF
+(`0x004be2b0`), so byte 2 is red. As `0x00RRGGBB`:
 
-  | record.type | global | bytes (B G R) | **RGB** | meaning |
-  |---|---|---|---|---|
-  | 1 / default | `DAT_0067064c` | 00 c8 ff | **(255,200,0)** gold/amber | normal game message |
-  | 2 | `DAT_00670664` | ff 00 b4 | **(180,0,255)** violet | (system type 2) |
-  | 4 | `DAT_00670654` | b4 00 ff | **(255,0,180)** magenta-pink | (system type 4) |
-  | 8 | `DAT_00670668` | 28 ff ff | **(255,255,40)** yellow | enemy/combat name (hostile) |
-  | 0x10 | `DAT_0067065c` | ff 00 be | **(190,0,255)** purple | (type 0x10) |
-  | 0x20 | `DAT_00670658` | ff ff ff | **(255,255,255)** white | chat/input echo |
-  | 0x40 | `DAT_00670660` (fallback) or `record.color` (`puVar2[1]`) | 00 d2 00 | **(0,210,0)** green (fallback) | target name (uses per-record color if nonzero, else green) |
-  | 0x80 | `DAT_00670650` | ff ff ff | **(255,255,255)** white | (type 0x80) |
+| type | global | bytes | RGB | retail callers |
+|---|---|---|---|---|
+| 1 (and any unlisted value) | `0x0067064c` | `00 c8 ff` | **(255,200,0)** gold | `Print(fmt, …)`: 111 call sites |
+| 2 | `0x00670664` | `ff 00 b4` | (180,0,255) violet | none |
+| 4 | `0x00670654` | `b4 00 ff` | (255,0,180) pink | none |
+| 8 | `0x00670668` | `28 28 ff` | (255,40,40) red | multiplayer server lines |
+| `0x10` | `0x0067065c` | `ff be 00` | (0,190,255) sky blue | `Print(0x10, ITEMTOFAR)` "You are too far away." (`0x0044ff38`) |
+| `0x20` | `0x00670658` | `ff ff ff` | white | the prompt line |
+| `0x40` | record `+0x04`, else `0x00670660` | `00 d2 00` | the line's own, else (0,210,0) green | chat (`0x00464daf`, `0x0046ca68`, Pulse), the committed prompt |
+| `0x80` | `0x00670650` | `ff ff ff` | white | `SetHealthDisplay`, `SetLevels` |
 
-  Cite: switch `FUN_0054cd40:54-79`; byte values objdump `0x54be72-0x54bf63`
-  (`%al` tracked: xor-zero before 064c/0664/0654/065c/0660, `$0x28` before 0668,
-  `$0xff` before 0658/0650/0658-block). Type `0x40` reads `record.color` (`puVar2[1]`)
-  and only falls back to green when it is 0 (`:71-76`).
+**C.** The sample screenshots show the lines pale peach with magenta fringes
+(the retail pink-halo artifact over JPEG); the code says gold. **U** (S12,
+question 51).
 
-- **Health bar hue rotation** (not a shadow): `PutHue` rotates the texthealthbar palette
-  by `hue` (§6) so the strip color tracks health. drawmode `0x100` = DM_TRANSPARENT.
-- **Chroma key:** texthealthbar keycolor field = `0x0`; the global magenta key
-  (`0x7c1f` RGB555) applies on blit (UI_METHOD_MAP §16). Text uses real GDI coverage,
-  not magenta — see §11 pink-halo note.
+**Shadow:** flags `0x400` select the 3-pass black shadow (base, +1 x, +1 y)
+under the coloured pass (UI_METHOD_MAP §5), as the dialog's `0x401`. **C**
 
 ---
 
 ## §8 — Text rendering
 
-All textbar text uses font **`DAT_0065abc4` = "Small" = Arial 12px** (GDI WINFONT),
-via `FUN_00438ed0` → `FUN_004be2b0`. Coords are fg-surface-local (compose `+ pane_origin`).
+| string | cell | font | colour | align | shadow | cite |
+|---|---|---|---|---|---|---|
+| each line | line-local pen (4, 9): **9 is the baseline** | "Small" (Arial 12) | §7 | left, single line (`0x80`) | yes | `0x54ce94` push 9, push 4 → `0x00438ed0` → `0x004be2b0(x, y, 10000, 10000, …)` |
 
-| string | cell (space, x,y,w,h) | font | px | color | h-align | v-align | shadow | format / source | cite |
-|---|---|---|---|---|---|---|---|---|---|
-| each message/feed line | fg-surface, `(4, 9, 10000, 10000)` (single-line, scrolls by lineH per slot) | Small (Arial) | 12 | per-record (§7 table; default gold (255,200,0)) | **left** (`0x80` single-line override; no `&2`/`&4` set → DrawTextA default left) | **top** (DT_TOP; no DT_VCENTER) | yes (`0x400` 3-pass black) | record.text (`+0xc`), filled by AddLine `strncpy(..,text,0x4f)` | `FUN_0054cd40:91-94`; `FUN_00438ed0:15`; `FUN_0054d0c0:21` |
-
-- **h-align = left, v-align = top.** `FUN_00438ed0` ORs `0x80` (single-line) into the
-  flags; no center/right bit (`&2`/`&4`) is set, so DrawTextA defaults to left/top
-  (UI_METHOD_MAP §5). Lines stack **downward** from the cell top by lineH; do not
-  vertically center.
-- **Visual-anchor check:** the only "centered-looking" element is the health bar, which
-  is a bitmap (not text) positioned by formula (§6) — no text-centering claim to verify.
-  Line text is left-anchored at x=4 inside the pane; its visual left edge = `pane.left+4`.
-- **Color source:** packed at the `FUN_0054cd40` call site from the §7 type→color table
-  (NOT from FONT.DEF "Small"'s default white). The `0x400` shadow bit lives in the
-  flags arg, not the font id. Format strings: AddLine takes a pre-formatted C string;
-  the combat-feed line is the object name `*(target+0x38)` copied via strncpy
-  (`FUN_0054d390:35`). The chat-input line is `msgprefix` + typed chars
-  (`FUN_0054d4a0:38-128`).
+Baseline: both sample captures put each line's cap tops 2 px and its last cap
+row 8 px under the line's top (lines at y 384, 396, 408; caps 386–392,
+398–404, 410–416), x from 4. GDI's Arial 12 has ascent 10, so the cell top is
+y − 10 = −1: the single-line path of `0x004be2b0` positions by baseline. The
+mechanism inside `0x004be2b0` is **U**; the placement is **S**.
 
 ---
 
-## §9 — Animation & dynamic behavior
+## §9 — Animation
 
 ```
-ramp record.ttl (per line):
-  range   0..0x78 (120)
-  step    -1 per tick (24Hz) once aged (slot 19 FUN_0054c460:18-22)
-  start   0x78 (120) on AddLine (FUN_0054d0c0:27)  ≈ 5.0 s lifetime
-  maps-to alpha = (ttl<24) ? ttl*255/24 : 255   (slot 7 FUN_0054c600:32-36)
-  on-end  line popped from tail when ttl<1 (FUN_0054c460:21-22)
-  cite    FUN_0054d0c0:27, FUN_0054c460:18-22, FUN_0054c600:32-36
+line life:  120 → 0, −1 per tick, only for lines 3..8          (0x54c460)
+alpha:      life < 24 ? life · 255 / 24 : 255                   (0x54c600)
+            NoTexOverlay on: drawn only while alpha > 128       (0x54c780)
+bar level:  ±4 per Composite(0) toward target, snap within 4    (0x54cb00)
 ```
-
-```
-tween health level (+0x98) -> targetlevel (+0x9c):
-  from   level
-  to     targetlevel
-  over   |Δ|/4 ticks (±4 per tick, snap when |Δ|<5)
-  easing linear (step ±4)
-  drive  SetHealthDisplay/SetLevels updates targetlevel; pulsecheck keeps it alive
-  on-end hold; bar cleared if pulsecheck not refreshed (ClearHealthDisplay)
-  maps-to hue=(level*155/176) then -16 floor 0; x=min(0,level-186)
-  cite   FUN_0054cb00:13-43 (== textbar.cpp:43-72)
-```
-
-Temporal (line fade):
-```
-alpha (0..255)
-255 ┤────────────────●╮
-    │                  ╲  linear, alpha=ttl*255/24
-  0 ┤                   ●
-    └──────────────────────── ttl
-    ttl: 120 ............ 24 ...... 0   (held opaque, then 24-tick fade-out, then popped)
-```
-
-**Dirty / redraw model:** retail recomposes the whole fg surface on AddLine
-(`FUN_0054cd40(-1)`) and on Clear; the Draw slots blit it every frame. There is a
-pulse-keepalive for the health line (pre-release `pulsecheck`; retail `+0x90`/`+0xa0`
-flags) — if `SetHealthDisplay` isn't called each tick the health line clears
-(`ClearHealthDisplay`). Port should use a version counter (NOMENCLATURE §6) marking the
-fg RT dirty on AddLine/age/health-change.
-
-**Phases:** normal-message mode ↔ input/chat mode (`+0xa0` flag; slot 28 builds a
-`msgprefix`-led line as the user types, committed on Enter `0xd`).
+The three newest lines stay until pushed down; then each holds 4 s and fades
+for 1 s.
 
 ---
 
-## §10 — Input & dispatch
+## §10 — Input
 
-TTextBar is mostly non-interactive (no hit rects / click commands). It has one input
-surface: the **chat/console keystroke handler, slot 28 `FUN_0054d4a0(this, key, down)`**:
-
-- `+0xa0 == 0` and key `0xd` (Enter): enter input mode — seed line with `msgprefix`,
-  set `+0xa4 = 0x50 − prefixLen` (remaining capacity), `+0xa0 = 1` (`:29-53`).
-- In input mode: Enter `0xd` → commit (`FUN_0054d390`); Backspace `0x8` → delete last
-  char (`:56-74`); printable (`0x20..0xff`) → append into the edit buffer at `+0xd0`
-  (`:77-110`); then recompose (`FUN_0054cd40(0)`).
-- The edit buffer is at `this+0xd0` (`+0xd0`); committed lines copy it into a record.
-
-This is the typed-message / debug-console path; gameplay messages arrive via the
-`Print`/AddLine API (`FUN_0054d0c0`), not input. Skip click/hit-rect handling (none).
-
----
-
-## §11 — Retail bugs NOT to reproduce
-
-1. **Pink-halo on shadowed text.** The `0x400` 3-pass shadow over a magenta-cleared
-   scratch produces a pink fringe in retail (NOMENCLATURE §4, UI_METHOD_MAP §16,
-   `TPlyrStatusBar_SPEC.md:295`). **Do not reproduce.** Render glyphs with real alpha
-   coverage (white RGB, coverage in alpha), 3 black-tinted passes (base/+1x/+1y) then
-   the colored pass — no magenta key on text.
-2. **406×198 fallback rect.** The ctor stub's static rect (`FUN_00480725`) is a
-   pre-Initialize default that does NOT reflect the live overlay; using it as the
-   render size would mis-size the bar. Always use the Initialize-computed pane rect
-   (display-width × viewport-anchored top).
+Slot 28 `0x54d4a0` (`CharPress`): Enter with the prompt closed opens it
+(`0x54d2f0`: clears pending input, stops the player, adds a `0x20` line
+`GetLine("msgprefix")` = "Message: "); typed characters append (room
+`+0xa4` = 80 − prefix); Backspace deletes; Enter commits (`0x54d390`: line 0
+becomes type `0x40` in the player's colour, "<name>: <text>", then
+`SubmitInput`). `SubmitInput` `0x54d700`: multiplayer → send as chat; text
+starting `@` → run as a script line on the player; else the cheat words
+(`alreadydead`, `alchemy`, `nahkranoth`, `noamnesia`, `lookunderthehood`,
+`dummies`, `abracadabra`, `potionsnlotions`, `gimmesomegrub`, `debug`) with a
+"Cheat Enabled"/"Cheat Disabled" line. `TPlayScreen`'s key handling reads
+`+0xa0` (`0x0047c63e`, `0x0047cbd0`). **C**; **not ported**.
 
 ---
 
-## §12 — Reconstruction pseudocode
+## §11 — Retail bugs
+
+1. **Pink halo** on shadowed text (magenta-keyed scratch + antialiased GDI
+   edges). Not reproduced: glyphs carry real alpha.
+2. **Print's last piece.** After a `'\n'`, the trailing piece is added as the
+   buffer's start (`0x0054d2ba`: `lea eax,[esp+0xd0]`), so "A\nB" shows "A"
+   twice. The port adds the trailing piece (question 53).
+3. **Hide submits the prompt** (§6.6). Moot until the prompt is ported
+   (question 55).
+
+---
+
+## §12 — Reconstruction
+
+`src/textbar.{h,cpp}`:
 
 ```
-struct Line { int type; uint32 color; int ttl; char text[0x50]; };   // 0x5c bytes
-state: Line lines[0x64]; int lineCount; int maxVisible=9; int lineH; Surface fgRT;
-       int healthLevel, healthTarget; bool healthActive; bool inputActive; char editBuf[...];
-
-Initialize():
-    lineH = font.ascent + font.descent           # Small / Arial-12 metrics
-    fgRT  = new Surface(display_w, lineH*12)      # one display-width RT (replaces 3 retail surfaces)
-    pane.left  = viewport.left
-    pane.right = viewport.right
-    pane.top   = viewport.bottom - maxVisible*lineH   # bottom-anchored
-
-AddLine(type, color, text):                       # FUN_0054d0c0
-    if !text || text[0]=='\0' || text[0]==' ': return
-    slot = inputActive ? 1 : 0
-    memmove(lines+slot+1, lines+slot, (lineCount-slot)*sizeof(Line))
-    if lineCount < 0x64: lineCount++
-    lines[slot] = { type, color, ttl=0x78, strncpy(text,0x4f) }
-    markDirty()
-
-Tick():                                            # slot 19 FUN_0054c460
-    for i in [lineCount-1 .. 3]:
-        if --lines[i].ttl < 1 and i==lineCount-1: lineCount--
-    feedCombatTargetName()                          # AddLine target name if fighting
-    healthTween()                                   # ±4 toward healthTarget
-    markDirty()
-
-Composite():                                       # FUN_0054cd40 — into fgRT
-    clear(fgRT)
-    y = 9
-    for i in [0 .. lineCount):
-        col = colorForType(lines[i].type, lines[i].color)   # §7 table
-        if i==healthSlot and healthActive: DrawHealthBar(fgRT)
-        DrawTextShadowedToTarget(fgRT, atlasSmall, lines[i].text, x=4, y, w=∞,
-                                 ALIGN_LEFT, col.r, col.g, col.b)   # 0x400 shadow
-        y += lineH                                   # stack downward
-    markClean()
-
-DrawHealthBar(rt):                                 # FUN_0054cb00 / textbar.cpp:43-72
-    healthTween()
-    hue = (healthLevel*155/176); hue = (hue<17)?0:hue-16
-    PutHue(rt, x=min(0, healthLevel-186), y=1, texthealthbar, DM_TRANSPARENT, hue)
-
-Draw():                                            # slot 7 (classic) / 23 (hi-res)
-    for each visible line band:
-        alpha = (lines[i].ttl < 24) ? lines[i].ttl*255/24 : 255
-        blit fgRT band -> display at pane_origin, with band alpha   # fade-out tail
-    # (port: composite fgRT to HUD with per-line alpha, or bake alpha into RT)
-
-OnKey(key,down):                                   # slot 28 FUN_0054d4a0 (chat input)
-    ... msgprefix-led edit buffer; Enter commits via AddLine ...
+Initialize   font "Small" atlas, lineH = height + LEXTRA, texthealthbar;
+             LayOut; TPane::Initialize; empty feed; RecomposeAll
+Pulse        LayOut; age lines 3..count−1, pop the expired tail     (slot 19)
+Compose      if dirty: RecomposeAll, clean                           (slot 20)
+             if a composition is pending: every line into the RT,
+             the strip under line 0 when barshown
+Draw         line i: RT slot i → (x, bottom − (i+1)·lineH), w = pane w,
+             alpha from life (eased between ticks)                   (slot 7)
+RecomposeAll   barshown = false; pending          (Composite(−1))
+RecomposeFirst step level if the bar is up; barshown = bar up; pending (Composite(0))
 ```
 
 ---
 
-## §13 — Port mapping notes
+## §13 — Port mapping and deviations
 
-| retail call | port primitive | home |
+| retail | port | home |
 |---|---|---|
-| `FUN_00438ed0`→`FUN_004be2b0` text (flags `0x80` single-line, `0x400` shadow) | `DrawTextShadowedToTarget(atlas, text, x, y, w, ETextAlign::Left, r,g,b)` | font.cpp |
-| build "Small" font atlas | `BuildTTFAtlas("<Arial-substitute>", 12)` | font.cpp |
-| `PutHue` (`FUN_0054cb00`) | **needs new primitive:** `DrawBitmapHueRotatedToTarget(bm, x, y, hue)` — a palette/hue-rotation blit. No existing renderer primitive does hue rotation on a 555 bitmap. (Alternative: pre-bake N hue variants of texthealthbar.) FLAG for renderer. | renderer (new) |
-| `FUN_00414d70` band blit w/ alpha (slot 7) | `DrawBitmapSubrectTintedToTarget` / compose fgRT with per-band alpha | renderer |
-| `(*+0x5c)` mosaic blit + `FUN_004aacb0` (slot 23) | `DrawSurface` / `DrawSurfaceTinted` (compose fgRT → HUD) | renderer |
-| `(*+100)` Box clear of surfaces | `Surface::Box` / clear RT | surface |
-| 3 TMosaicSurfaces | one offscreen `TSurface` RT (direct-renderer contract) | renderer/surface |
+| `0x00438ed0` → `0x004be2b0` text, flags `0x480`, shadow | `DrawTextShadowedAtBaseline(font, text, 4, slot + 9, …)` | `font.cpp` |
+| "Small" WINFONT, Arial 12 | `FontTable->Atlas("Small")` = Arimo 12 (Arial-metric) | `fonttable.cpp` |
+| `PutHue` → hue blit `0x004b21d0` | `DecodeBitmapHueChangedToRGBA` into a streamed texture, re-decoded when the hue changes; `Renderer->Composite` into the RT | `bitmapdecode.cpp`, `textbar.cpp` |
+| `+0x84` / `+0x88` / `+0x8c` mosaic surfaces | one RGBA render target, display width × 9 slots, each slot `lineH + 8` rows (4 above, 4 below) so shadows and descenders stay inside their slot, as retail's 1-line scratch clips them | `textbar.cpp` |
+| `Composite` called inline | `RecomposeAll` / `RecomposeFirst` record the outcome (`barshown`) and bump a request counter; `Compose` renders the latest outcome once per frame | `textbar.cpp` |
+| slot 7 quads with `alpha << 24 \| 0xffffff` | `DrawSurfaceSubrectTinted(…, 1, 1, 1, alpha)` per line, in the screen's pane layer | `textbar.cpp` |
+| `TPlayScreen` layout `0x0047bc50` | `TTextBar::LayOut` each pulse from `PlayScreen.GetMapViewRect()`: (map x, map bottom − 9·lineH, map w − 52, 9·lineH), as `TDialogPane` lays itself out | `textbar.cpp` |
+| `TPlayScreen::Initialize` `0x0047abf8` / `0x0047adab` | `TextBar.Initialize()` + `AddPane(&TextBar)` after the HUD harness (so the map view is the HUD's); `RemovePane` + `Close` in `TPlayScreen::Close` | `playscreen.cpp` |
 
-Missing primitive: **hue-rotated bitmap draw** for the health strip (texthealthbar +
-`PutHue`). Either add a hue-rotation composite or pre-generate hue LUT variants.
+Deviations:
+
+- **Alpha eased between ticks** for the aging lines (frame-rate-independent
+  rule); retail steps it per tick in 255/24 steps.
+- **`NoTexOverlay` on** (slot 23) is not drawn; the port draws the overlay
+  path, as the dialog pane does.
+- **Print** logs every message as `[textbar] <text>` at debug level, even
+  while the bar is closed, instead of the `TEXTDUMP` file; the 256-byte
+  buffer is bounded (`vsnprintf`); the trailing piece after a `'\n'` is added
+  (§11.2).
+- **`Clear()`** is a port call (empty feed, bar off: what Initialize leaves);
+  retail has none, and nothing calls it yet. The level loader,
+  `TGameSession::EnterLevel`, drives the bar as retail's loader does (§6.5):
+  `SetHealthDisplay(LOADMAPMSG)`, `SetLevels(p · 180 / 1000)` per slice,
+  `ClearHealthDisplay`, which leaves the line in the feed.
+- **`DrawImmediate`** (`0x54cbb0`) is not ported: the port never blocks a
+  frame to load; the level loads a slice per frame instead, with the world
+  held (EXITS.md §7). `TPane::DrawImmediate`/`PutToScreen` remain for the unused
+  `TSector::LoadPreloadSectors`.
+- **Hide** skips the prompt submit (no prompt).
+- **The 1998 combat readout is gone.** `TCharacter::Pulse` no longer calls
+  `SetHealthDisplay(name, health)` each tick; retail's `SetHealthDisplay` has
+  one caller, the map loader.
+- **Not ported:** the typed-message prompt (§10) and the multiplayer chat
+  feed (§6.3).
+
+Verification (2026-10-05): `--test=ui-textbar --headless --filmstrip=14,1`
+(stacking, gold/sky-blue/white colours, shadow over a mid-tone backdrop, the
+strip sliding in green under "Loading Map...", the loading line turning
+gold, older lines fading, three left); in game, `ressexit` locked: "It seems
+to be locked" under "Locke entered The Keep" at x 4, caps 398–404 / 410–416,
+matching the retail captures row for row.
 
 ---
 
-## §14 — UNCONFIRMED / open questions
+## §14 — Open questions
 
-1. **`FUN_0054d700` (edit-buffer clear) not extracted.** Appears as a thunk/jmp; the
-   `Disasm.java` extract returned empty. Impact: low (only affects chat-input reset).
-   Resolve: `DecompileAddr.java 0x0054d700` (retry; may need disassembly mode).
-2. **Exact health-line compositing y inside `FUN_0054cd40`.** `:88` calls
-   `FUN_0054cb00(iVar6)` where `iVar6` is the running scroll-y; the health bar's own
-   draw uses y=1 (its cell), but which line *slot* the health line occupies and how it
-   interleaves with text lines is inferred (`iStack_3c==0 && +0x90!=0` gate, `:87`).
-   Impact: medium (vertical placement of the health strip relative to text lines).
-   Resolve: visual-verify against a combat capture; or trace `+0x90`/`iStack_3c` set
-   sites.
-3. **Line-record sub-fields beyond +0/+4/+8/+0xc.** Stride 0x5c (92) is confirmed but
-   only `type(+0)`, `color(+4)`, `ttl(+8)`, `text(+0xc..+0x5b, 80 bytes)` are pinned.
-   Bytes `+0x5c..` of the 92-byte record beyond the 80-char text + 12-byte head are
-   padding/unknown. Impact: low. Resolve: inspect AddLine writers for other offsets.
-4. **`DAT_005e5804`(=3) at `+0x68` semantics.** Used as the age-floor index in slot 19
-   (`FUN_0054c460:14`) — lines `[0..2]` are not aged (pinned). Read as "3 header/pinned
-   slots." Impact: low (top lines may persist). Resolve: confirm against which lines are
-   pinned in-game (system header vs scrollback).
-5. **Type→color table type meanings (types 2, 0x10) labels.** RGB values are decoded
-   exactly (§7); the *gameplay meaning* of types 2 (violet) and 0x10 (purple) is
-   inferred. Impact: cosmetic (right color regardless). Resolve: grep AddLine call
-   sites for which engine events pass each type.
-6. **Hue-rotation exact palette math in `PutHue`/`FUN_004bd8c0`.** The 200×11 strip is
-   RGB555 (no palette in the bitmap header) — "hue" likely indexes a hue-shift LUT or
-   rotates 555 channels. The pre-release `PutHue` does a hue change on the bitmap;
-   exact transform not extracted. Impact: medium (health-bar color accuracy). Resolve:
-   `DecompileAddr.java 0x004bd8c0` (PutHue body) — currently only signature confirmed.
-7. **Classic vs hi-res path divergence (slot 7 vs 23).** Both render the same lines;
-   they differ in blit primitive + the `0x100`/`0x80000000` drawmode and the effect
-   post-process (`FUN_004aacb0`). The port should use the single compose-to-RT path;
-   the two retail paths are an artifact of the software/hardware split. Confirmed both
-   produce the same visual (per-line fade); no UNCONFIRMED on the visual, only on which
-   path the target build uses (`DAT_006680c8`).
+1. **The baseline mechanism** in `0x004be2b0`'s single-line path (§8). The
+   placement is settled by captures; the code path is not traced.
+2. **Message colour on screen** (§7): gold in code, pale in the JPEG
+   captures. Screenshot S12.
+3. **`+0x94`'s screen redraw** in `DrawImmediate` calls `CurrentScreen`
+   slot 18 (`0x00491870`); its role is unconfirmed. Not ported.
+4. **`DAT_006668d0`**, the line surface's clear colour, is unread (likely
+   the transparent key). The port clears to transparent.

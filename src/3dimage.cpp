@@ -13,12 +13,18 @@
 
 #include "3dimage.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <cctype>
+#include <string>
 #include <vector>
 
 #include "3dscene.h"
+#include "authoredpartsys.h"
+#include "testconfig.h"
+#include "goldauthoredmatrix.h"
 #include "animation.h"
 #include "bitmap.h"
 #include "logging.h"
@@ -27,10 +33,620 @@
 #include "i3danimpose.h"
 #include "parse.h"
 #include "renderer.h"
+#include "revutils.h"
 #include "sound.h"
 #include "time.h"
 
 T3DAnimatorBuilder T3DAnimatorBuilderInstance;  // Register default builder
+
+static bool IsGoldImageryFilename(const char* filename)
+{
+    if (!filename) return false;
+    std::string path(filename);
+    for (char& c : path)
+        c = c == '\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    constexpr const char* suffix = "misc/goldp.i3d";
+    constexpr size_t length = 14;
+    return path.size() >= length && path.compare(path.size() - length, length, suffix) == 0 &&
+           (path.size() == length || path[path.size() - length - 1] == '/');
+}
+
+bool T3DImagery::ValidateGoldPartSysProfile()
+{
+    // Fail closed on modified/later assets. This is the literal shipped Goldp
+    // vertical slice, not general blendcont or alpha-particle enablement.
+    if (!IsGoldImageryFilename(GetResFilename()) || version != 3 ||
+        (flags & I3D_ISMORPH) || NumStates() != 1 || GetAniLength(0) != 45 ||
+        GetAniFlags(0) != 0x2000 || NumObjects() != 3 || NumTextures() != 2 || NumTags() != 2)
+        return false;
+    if (stricmp(GetObjectName(0), "gold") || stricmp(GetObjectName(1), "#$iflare") ||
+        stricmp(GetObjectName(2), "#goldp") || NumObjVerts(0) != 0 ||
+        NumObjVerts(1) != 4 || NumObjFaces(1) != 2 || NumObjVerts(2) != 4 ||
+        NumObjFaces(2) != 2 || IsHidden(1, 0) || IsHidden(2, 0))
+        return false;
+    const S3DTag& blend = *GetTag(0);
+    const S3DTag& particles = *GetTag(1);
+    constexpr const char* parameters = "obj=(gold),particle=#goldp,pps=[0:400,2:0],initialvelocity=45:50,blendmode=alpha,scale=1.25,lifespan=35:35,color=[0:(255,255,255),100:(255,255,255)],localrotation=[0:(0,0,0),100:(0,0,0)],gravity=1.5,friction=0.05,spread=8,azimuth=8,bounce=-25:-25";
+    if (blend.state != 0 || blend.frame != 5 || !blend.name || !blend.str ||
+        stricmp(blend.name, "blendcont") || stricmp(blend.str, "litadd") ||
+        particles.state != 0 || particles.frame != 10 || !particles.name || !particles.str ||
+        stricmp(particles.name, "partsys") || std::strcmp(particles.str, parameters))
+        return false;
+    for (int32_t object = 1; object <= 2; ++object)
+    {
+        int32_t starts[MAXTEXTURES + 1] = {}, counts[MAXTEXTURES + 1] = {};
+        GetObjFaces(object, nullptr, starts, counts);
+        if (counts[object] != 2 || counts[0] || counts[3 - object]) return false;
+    }
+    S3DTex flare = {}, coins = {};
+    GetTexture(0, &flare); GetTexture(1, &coins);
+    const auto& rgb = flare.desc.pixelFormat;
+    const auto& argb = coins.desc.pixelFormat;
+    return flare.desc.width == 64 && flare.desc.height == 64 && flare.numframes == 1 &&
+           rgb.dwRGBBitCount == 16 && rgb.dwRBitMask == 0xf800 && rgb.dwGBitMask == 0x07e0 &&
+           rgb.dwBBitMask == 0x001f && rgb.dwRGBAlphaBitMask == 0 &&
+           coins.desc.width == 16 && coins.desc.height == 16 && coins.numframes == 1 &&
+           argb.dwRGBBitCount == 16 && argb.dwRBitMask == 0x0f00 && argb.dwGBitMask == 0x00f0 &&
+           argb.dwBBitMask == 0x000f && argb.dwRGBAlphaBitMask == 0xf000;
+}
+
+static bool IsCombatFlashImageryFilename(const char* filename)
+{
+    if (!filename) return false;
+    std::string path(filename);
+    for (char& c : path) c = c == '\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    constexpr const char* suffix = "misc/impact.i3d";
+    const size_t length = std::strlen(suffix);
+    return path.size() >= length && path.compare(path.size() - length, length, suffix) == 0 &&
+           (path.size() == length || path[path.size() - length - 1] == '/');
+}
+
+bool T3DImagery::ValidateCombatFlashStart1PartSysProfile()
+{
+    // Exact Impact inventory is checked; only start1/state0 is enabled below.
+    // Later tags/trails are not inferred from a successful first-state profile.
+    if (!IsCombatFlashImageryFilename(GetResFilename()) || version != 3 ||
+        (flags & I3D_ISMORPH) || NumStates() != 18 || NumObjects() != 21 ||
+        NumMaterials() != 11 || NumTextures() != 10 || NumTags() != 18 ||
+        GetAniLength(0) != 19 || GetAniFlags(0) != 0x2000)
+        return false;
+    constexpr const char* names[] = {"#particle01","impact01","#impact01","#particle02","impact02","#impact02",
+        "#particle03","impact03","#impact03","#impact06","#impact04","#impact05","impact04","impact05",
+        "impact06","impact07","impact08","impact09","#impact08","#impact07","#impact09"};
+    for (int object = 0; object < 21; ++object)
+        if (stricmp(GetObjectName(object), names[object])) return false;
+    if (NumObjVerts(0) != 4 || NumObjFaces(0) != 2 || NumObjVerts(1) != 0 ||
+        NumObjFaces(1) != 0 || NumObjVerts(2) != 4 || NumObjFaces(2) != 2 ||
+        IsHidden(0,0) || IsHidden(2,0)) return false;
+    const S3DTag& blend = *GetTag(0); const S3DTag& particles = *GetTag(1);
+    constexpr const char* parameters = "obj=(impact01),particle=#particle01,pps=[0:250,2:0],initialvelocity=15:30,scale=[0:2.5,100:0],lifespan=30:45,localrotation=[0:(0,0,0),100:(0,360,0)],friction=0.3,gravity=0.5,color=[0:(255,225,100),25:(255,175,50),99:(0,0,0)],spread=120";
+    if (blend.state != 0 || blend.frame != 0 || !blend.name || !blend.str ||
+        stricmp(blend.name,"blendcont") || stricmp(blend.str,"litadd") ||
+        particles.state != 0 || particles.frame != 1 || !particles.name || !particles.str ||
+        stricmp(particles.name,"partsys") || std::strcmp(particles.str,parameters)) return false;
+    for (int object : {0,2}) {
+        S3DObj obj = {}; S3DMat material = {}; GetObject(object,&obj);
+        if (obj.material != 0) return false;
+        GetMaterial(obj.material,&material); if (material.texture != 0) return false;
+        S3DFace faces[2] = {}; int starts[MAXTEXTURES+1] = {},counts[MAXTEXTURES+1] = {};
+        GetObjFaces(object,faces,starts,counts);
+        if (counts[1] != 2 || faces[0].v1 != 2 || faces[0].v2 != 3 || faces[0].v3 != 0 ||
+            faces[1].v1 != 1 || faces[1].v2 != 2 || faces[1].v3 != 0) return false;
+        for (int slot=0;slot<=NumTextures();++slot) if (slot!=1 && counts[slot]) return false;
+    }
+    S3DTex texture = {}; GetTexture(0,&texture); const auto& rgb=texture.desc.pixelFormat;
+    return texture.desc.width==64 && texture.desc.height==64 && texture.numframes==1 &&
+           rgb.dwRGBBitCount==16 && rgb.dwRBitMask==0xf800 && rgb.dwGBitMask==0x07e0 &&
+           rgb.dwBBitMask==0x001f && rgb.dwRGBAlphaBitMask==0;
+}
+
+bool T3DImagery::ValidateRetailPunchProfile()
+{
+    if (!GetResFilename() || version != 3 || flags != 0xdc || NumStates() != 1 ||
+        GetAniLength(0) != 581 || GetAniFlags(0) != 0x2001 || NumObjects() != 8 ||
+        numverts != 262 || numfaces != 220 || NumMaterials() != 2 || NumTextures() != 2 || NumTags()) return false;
+    std::string path(GetResFilename());
+    for (char& c : path) c = c == '\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    constexpr const char* suffix = "misc/punchandjudy.i3d";
+    const size_t length = std::strlen(suffix);
+    if (path.size() < length || path.compare(path.size() - length, length, suffix) ||
+        (path.size() != length && path[path.size() - length - 1] != '/')) return false;
+    constexpr const char* names[8] = {"phead01","pbody01","prightarm01","pleftarm01","jrightarm","jbody","jhead","jrightarm01"};
+    constexpr int verts[8] = {62,33,20,16,16,42,57,16};
+    constexpr int faces[8] = {71,15,19,15,15,26,44,15};
+    constexpr int keys[8] = {752,726,859,887,701,425,658,669};
+    constexpr uint64_t key_hashes[8] = {0x13c550526d7fe5ffull,0x9f98a86110344625ull,0x36f37be8325d0e1bull,0xfc0490d9498406e5ull,0xb82986f9ea1bb25full,0x14866a9bc8d221b0ull,0x645b815854f05009ull,0x5ccb9eb3826162a4ull};
+    for (int i = 0; i < 8; ++i) {
+        const S3DObj& object = objects[i];
+        const int slot = i < 4 ? 1 : 2;
+        if (std::strcmp(object.name, names[i]) || object.parent[0] != -1 ||
+            object.numverts != verts[i] || object.numfaces != faces[i] || object.material != slot - 1 ||
+            object.numanikeys[0] != keys[i] || !object.anikeys[0] ||
+            object.numtexfaces[0] || object.numtexfaces[slot] != faces[i] || object.numtexfaces[3-slot]) return false;
+        uint64_t hash = 1469598103934665603ull;
+        const auto* bytes = static_cast<const uint8_t*>(object.anikeys[0]);
+        for (size_t j = 0; j < size_t(keys[i]) * sizeof(SAniKey32); ++j) { hash ^= bytes[j]; hash *= 1099511628211ull; }
+        if (hash != key_hashes[i]) return false;
+    }
+    for (int i = 0; i < 2; ++i) {
+        const S3DTex& texture = textures[i]; const auto& pf = texture.desc.pixelFormat;
+        if (texture.desc.width != 64 || texture.desc.height != 64 || texture.numframes != 1 ||
+            pf.dwRGBBitCount != 16 || pf.dwRBitMask != 0xf800 || pf.dwGBitMask != 0x07e0 ||
+            pf.dwBBitMask != 0x001f || pf.dwRGBAlphaBitMask) return false;
+    }
+    return true;
+}
+
+
+bool T3DImagery::ValidateRetailMPAppearStartProfile()
+{
+    // Exact shipped default start only; no generic blendcont enablement.
+    if (!GetResFilename() || version != 3 || flags != 0xdc || NumStates() != 1 ||
+        GetAniLength(0) != 90 || GetAniFlags(0) != 0x2000 || NumObjects() != 7 ||
+        numverts != 118 || numfaces != 104 || NumMaterials() != 4 || NumTextures() != 4 || NumTags() != 2)
+        return false;
+    std::string path(GetResFilename());
+    for (char& c : path) c = c == '\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    constexpr const char* suffix = "magic/appear.i3d";
+    const size_t length = std::strlen(suffix);
+    if (path.size() < length || path.compare(path.size()-length,length,suffix) ||
+        (path.size()!=length && path[path.size()-length-1]!='/')) return false;
+    const S3DTag& play = *GetTag(0); const S3DTag& blend = *GetTag(1);
+    if (play.state!=0 || play.frame!=1 || !play.name || !play.str ||
+        std::strcmp(play.name,"play") || std::strcmp(play.str,"appear") ||
+        blend.state!=0 || blend.frame!=20 || !blend.name || !blend.str ||
+        std::strcmp(blend.name,"blendcont") || std::strcmp(blend.str,"litaddz")) return false;
+    constexpr const char* names[7] = {"main pulse","#$star","second pulse","skirt01","skirt02","skirt03","rectangle01"};
+    constexpr int vertex_counts[7] = {22,4,22,22,22,22,4}, face_counts[7] = {20,2,20,20,20,20,2};
+    constexpr int key_counts[7] = {225,59,242,220,216,214,177}, material_indices[7] = {0,1,2,3,3,3,1}, slots[7] = {1,2,3,4,4,4,2};
+    constexpr uint64_t key_hashes[7] = {0x5ca5af897f337e4bull,0x6fc643bf823f89bull,0xd33104f7c2ac7b62ull,0x3f85f68a04176316ull,0x86f4521e17e63288ull,0xe2899f80250c5114ull,0x1dded56c45d96427ull};
+    for (int i=0;i<7;++i) {
+        const S3DObj& object=objects[i];
+        if (std::strcmp(object.name,names[i]) || object.parent[0]!=-1 ||
+            object.numverts!=vertex_counts[i] || object.numfaces!=face_counts[i] ||
+            object.material!=material_indices[i] || object.numanikeys[0]!=key_counts[i] || !object.anikeys[0]) return false;
+        for (int slot=0;slot<=4;++slot)
+            if (object.numtexfaces[slot]!=(slot==slots[i] ? face_counts[i] : 0)) return false;
+        uint64_t hash=1469598103934665603ull;
+        const auto* bytes=static_cast<const uint8_t*>(object.anikeys[0]);
+        for (size_t j=0;j<size_t(key_counts[i])*sizeof(SAniKey32);++j) { hash^=bytes[j]; hash*=1099511628211ull; }
+        if (hash!=key_hashes[i]) return false;
+    }
+    for (int i=0;i<4;++i) {
+        const S3DTex& texture=textures[i]; const auto& pf=texture.desc.pixelFormat;
+        const int size=i<2 ? 128 : 64;
+        if (texture.desc.width!=size || texture.desc.height!=size || texture.numframes!=1 ||
+            pf.dwRGBBitCount!=16 || pf.dwRBitMask!=0xf800 || pf.dwGBitMask!=0x07e0 ||
+            pf.dwBBitMask!=0x001f || pf.dwRGBAlphaBitMask || materials[i].texture!=i) return false;
+    }
+    return true;
+}
+
+bool T3DImagery::ValidateRetailShadowfistProfile()
+{
+    // Exact shipped looping defaultstart only; no generic blendcont enablement.
+    if (!GetResFilename() || version != 3 || flags != 0xdc || NumStates() != 1 ||
+        GetAniLength(0) != 60 || GetAniFlags(0) != 0x2001 || NumObjects() != 8 ||
+        numverts != 176 || numfaces != 160 || NumMaterials() != 1 || NumTextures() != 1 || NumTags() != 1)
+        return false;
+    std::string path(GetResFilename());
+    for (char& c : path) c = c == '\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    constexpr const char* suffix = "magic/sfist.i3d";
+    const size_t length = std::strlen(suffix);
+    if (path.size() < length || path.compare(path.size()-length,length,suffix) ||
+        (path.size()!=length && path[path.size()-length-1]!='/')) return false;
+    const S3DTag& blend = *GetTag(0);
+    if (blend.state!=0 || blend.frame!=10 || !blend.name || !blend.str ||
+        std::strcmp(blend.name,"blendcont") || std::strcmp(blend.str,"litadd")) return false;
+    constexpr const char* names[8] = {"#flare02","#flare03","#flare04","#flare05","#flare06","#flare07","#flare08","#flare01"};
+    constexpr int vertex_counts[8] = {22,22,22,22,22,22,22,22}, face_counts[8] = {20,20,20,20,20,20,20,20};
+    constexpr int key_counts[8] = {68,68,68,68,68,68,68,68}, material_indices[8] = {0,0,0,0,0,0,0,0}, slots[8] = {1,1,1,1,1,1,1,1};
+    constexpr uint64_t key_hashes[8] = {0xed9eafa7674b9738ull,0x1d963457c15cbee0ull,0xb9473b666e5bc9eull,0x569f9bfde63f195aull,0xd2e12bc81c6778eeull,0x5fcbf69117f6b28aull,0xe6a0a45bf5ff6b04ull,0x4b5d88c8d81647afull};
+    for (int i=0;i<8;++i) {
+        const S3DObj& object=objects[i];
+        if (std::strcmp(object.name,names[i]) || object.parent[0]!=-1 ||
+            object.numverts!=vertex_counts[i] || object.numfaces!=face_counts[i] ||
+            object.material!=material_indices[i] || object.numanikeys[0]!=key_counts[i] || !object.anikeys[0]) return false;
+        for (int slot=0;slot<=1;++slot)
+            if (object.numtexfaces[slot]!=(slot==slots[i] ? face_counts[i] : 0)) return false;
+        uint64_t hash=1469598103934665603ull;
+        const auto* bytes=static_cast<const uint8_t*>(object.anikeys[0]);
+        for (size_t j=0;j<size_t(key_counts[i])*sizeof(SAniKey32);++j) { hash^=bytes[j]; hash*=1099511628211ull; }
+        if (hash!=key_hashes[i]) return false;
+    }
+    for (int i=0;i<1;++i) {
+        const S3DTex& texture=textures[i]; const auto& pf=texture.desc.pixelFormat;
+        const int size=32;
+        if (texture.desc.width!=size || texture.desc.height!=size || texture.numframes!=1 ||
+            pf.dwRGBBitCount!=16 || pf.dwRBitMask!=0xf800 || pf.dwGBitMask!=0x07e0 ||
+            pf.dwBBitMask!=0x001f || pf.dwRGBAlphaBitMask || materials[i].texture!=i) return false;
+    }
+    return true;
+}
+
+bool T3DImagery::ValidateRetailWarriorbornProfile()
+{
+    // Exact shipped looping defaultstart only; no generic blendcont enablement.
+    if (!GetResFilename() || version != 3 || flags != 0xdc || NumStates() != 1 ||
+        GetAniLength(0) != 60 || GetAniFlags(0) != 0x2001 || NumObjects() != 8 ||
+        numverts != 176 || numfaces != 160 || NumMaterials() != 1 || NumTextures() != 1 || NumTags() != 1)
+        return false;
+    std::string path(GetResFilename());
+    for (char& c : path) c = c == '\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    constexpr const char* suffix = "magic/wborn.i3d";
+    const size_t length = std::strlen(suffix);
+    if (path.size() < length || path.compare(path.size()-length,length,suffix) ||
+        (path.size()!=length && path[path.size()-length-1]!='/')) return false;
+    const S3DTag& blend = *GetTag(0);
+    if (blend.state!=0 || blend.frame!=10 || !blend.name || !blend.str ||
+        std::strcmp(blend.name,"blendcont") || std::strcmp(blend.str,"litadd")) return false;
+    constexpr const char* names[8] = {"#flare02","#flare03","#flare04","#flare05","#flare06","#flare07","#flare08","#flare01"};
+    constexpr int vertex_counts[8] = {22,22,22,22,22,22,22,22}, face_counts[8] = {20,20,20,20,20,20,20,20};
+    constexpr int key_counts[8] = {68,68,68,68,68,68,68,68}, material_indices[8] = {0,0,0,0,0,0,0,0}, slots[8] = {1,1,1,1,1,1,1,1};
+    constexpr uint64_t key_hashes[8] = {0x8e28c0cf42be59a8ull,0x396198019732f598ull,0xa63c11233cfeedaull,0xb5edf1a83a8c5396ull,0x3ca32a18ce8ddef2ull,0x4d9caec728983d32ull,0xae2172b537b38880ull,0x97ceba4228b3a926ull};
+    for (int i=0;i<8;++i) {
+        const S3DObj& object=objects[i];
+        if (std::strcmp(object.name,names[i]) || object.parent[0]!=-1 ||
+            object.numverts!=vertex_counts[i] || object.numfaces!=face_counts[i] ||
+            object.material!=material_indices[i] || object.numanikeys[0]!=key_counts[i] || !object.anikeys[0]) return false;
+        for (int slot=0;slot<=1;++slot)
+            if (object.numtexfaces[slot]!=(slot==slots[i] ? face_counts[i] : 0)) return false;
+        uint64_t hash=1469598103934665603ull;
+        const auto* bytes=static_cast<const uint8_t*>(object.anikeys[0]);
+        for (size_t j=0;j<size_t(key_counts[i])*sizeof(SAniKey32);++j) { hash^=bytes[j]; hash*=1099511628211ull; }
+        if (hash!=key_hashes[i]) return false;
+    }
+    for (int i=0;i<1;++i) {
+        const S3DTex& texture=textures[i]; const auto& pf=texture.desc.pixelFormat;
+        const int size=64;
+        if (texture.desc.width!=size || texture.desc.height!=size || texture.numframes!=1 ||
+            pf.dwRGBBitCount!=16 || pf.dwRBitMask!=0xf800 || pf.dwGBitMask!=0x07e0 ||
+            pf.dwBBitMask!=0x001f || pf.dwRGBAlphaBitMask || materials[i].texture!=i) return false;
+    }
+    return true;
+}
+
+bool T3DImagery::ValidateRetailTeleportationProfile()
+{
+    // Exact shipped looping defaultstart only; no generic blendcont enablement.
+    if (!GetResFilename() || version != 3 || flags != 0xdc || NumStates() != 1 ||
+        GetAniLength(0) != 100 || GetAniFlags(0) != 0x2001 || NumObjects() != 6 ||
+        numverts != 263 || numfaces != 254 || NumMaterials() != 8 || NumTextures() != 8 || NumTags() != 1)
+        return false;
+    std::string path(GetResFilename());
+    for (char& c : path) c = c == '\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    constexpr const char* suffix = "magic/teleportation.i3d";
+    const size_t length = std::strlen(suffix);
+    if (path.size() < length || path.compare(path.size()-length,length,suffix) ||
+        (path.size()!=length && path[path.size()-length-1]!='/')) return false;
+    const S3DTag& blend = *GetTag(0);
+    if (blend.state!=0 || blend.frame!=35 || !blend.name || !blend.str ||
+        std::strcmp(blend.name,"blendcont") || std::strcmp(blend.str,"litadd")) return false;
+    constexpr const char* names[6] = {"upflame","in flame","r1","r2","r3","glow06"};
+    constexpr int vertex_counts[6] = {38,38,61,61,61,4}, face_counts[6] = {36,36,60,60,60,2};
+    constexpr int key_counts[6] = {157,171,108,105,108,70}, material_indices[6] = {0,0,1,3,5,7};
+    constexpr int face_groups[6][9] = {{0,36,0,0,0,0,0,0,0},{0,36,0,0,0,0,0,0,0},{0,0,40,20,0,0,0,0,0},{0,0,0,0,40,20,0,0,0},{0,0,0,0,0,0,40,20,0},{0,0,0,0,0,0,0,0,2}};
+    constexpr uint64_t key_hashes[6] = {0x5ff0f075ec64e9e0ull,0xb29a17bcab1d4043ull,0x70b5c76723506739ull,0x31f982395099527full,0x82ab3efea99888e2ull,0x4898a220736f1f75ull};
+    for (int i=0;i<6;++i) {
+        const S3DObj& object=objects[i];
+        if (std::strcmp(object.name,names[i]) || object.parent[0]!=-1 ||
+            object.numverts!=vertex_counts[i] || object.numfaces!=face_counts[i] ||
+            object.material!=material_indices[i] || object.numanikeys[0]!=key_counts[i] || !object.anikeys[0]) return false;
+        for (int slot=0;slot<=8;++slot)
+            if (object.numtexfaces[slot]!=face_groups[i][slot]) return false;
+        uint64_t hash=1469598103934665603ull;
+        const auto* bytes=static_cast<const uint8_t*>(object.anikeys[0]);
+        for (size_t j=0;j<size_t(key_counts[i])*sizeof(SAniKey32);++j) { hash^=bytes[j]; hash*=1099511628211ull; }
+        if (hash!=key_hashes[i]) return false;
+    }
+    for (int i=0;i<8;++i) {
+        const S3DTex& texture=textures[i]; const auto& pf=texture.desc.pixelFormat;
+        const int size=i==0 ? 128 : 64;
+        if (texture.desc.width!=size || texture.desc.height!=size || texture.numframes!=1 ||
+            pf.dwRGBBitCount!=16 || pf.dwRBitMask!=0xf800 || pf.dwGBitMask!=0x07e0 ||
+            pf.dwBBitMask!=0x001f || pf.dwRGBAlphaBitMask || materials[i].texture!=i) return false;
+    }
+    return true;
+}
+
+
+bool T3DImagery::ValidateRetailMightPartSysProfile()
+{
+    if (!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+        GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=2 || NumMaterials()!=2 ||
+        NumTextures()!=1 || NumTags()!=1 || numverts!=4 || numfaces!=2) return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    constexpr const char* suffix="magic/might.i3d";const size_t length=std::strlen(suffix);
+    if(path.size()<length || path.compare(path.size()-length,length,suffix) ||
+       (path.size()!=length && path[path.size()-length-1]!='/'))return false;
+    constexpr const char* names[2]={"#rect","cfire"};
+    constexpr uint64_t hashes[2]={0x72efcd2cf641afull,0x43f82d294c438c35ull};
+    for(int i=0;i<2;++i){const auto& object=objects[i];
+        if(std::strcmp(object.name,names[i]) || object.parent[0]!=-1 || object.material!=i ||
+           object.numverts!=(i?0:4) || object.numfaces!=(i?0:2) ||
+           object.numanikeys[0]!=6 || !object.anikeys[0] || object.numtexfaces[0] ||
+           object.numtexfaces[1]!=(i?0:2))return false;
+        uint64_t h=1469598103934665603ull;const auto* bytes=static_cast<const uint8_t*>(object.anikeys[0]);
+        for(size_t j=0;j<6*sizeof(SAniKey32);++j){h^=bytes[j];h*=1099511628211ull;}
+        if(h!=hashes[i])return false;
+    }
+    const auto& t=*GetTag(0);
+    constexpr const char* parameters="obj=(cfire),particle=#rect,pps=30,lifespan=10:25,initialvelocity=2.5:5.5,scale=[0:0.75,100:0],rlocalrotation=[0:(0,0,0),100:(0,15,0)],color=[0:(255,255,255),15:(255,197,1),45:(255,126,1),65:(255,72,1),100:(10,1,1)],spread=90,alpha=[0:1,100:0],friction=[0:0.1],emittertype=circle,emittersize=1,relvel=0.25";
+    if(t.state!=0 || t.frame!=5 || !t.name || !t.str || std::strcmp(t.name,"partsys") ||
+       std::strcmp(t.str,parameters))return false;
+    const auto& tex=textures[0];const auto& pf=tex.desc.pixelFormat;
+    return tex.desc.width==64 && tex.desc.height==64 && tex.numframes==1 &&
+        pf.dwRGBBitCount==16 && pf.dwRBitMask==0xf800 && pf.dwGBitMask==0x07e0 &&
+        pf.dwBBitMask==0x001f && pf.dwRGBAlphaBitMask==0 && materials[0].texture==0;
+}
+
+bool T3DImagery::ValidateRetailImmortalmightPartSysProfile()
+{
+    if (!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+        GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=3 || NumMaterials()!=2 ||
+        NumTextures()!=1 || NumTags()!=1 || numverts!=8 || numfaces!=4) return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    constexpr const char* suffix="magic/imight.i3d";const size_t length=std::strlen(suffix);
+    if(path.size()<length || path.compare(path.size()-length,length,suffix) ||
+       (path.size()!=length && path[path.size()-length-1]!='/'))return false;
+    constexpr const char* names[3]={"#rect","cfire","#flare"};
+    constexpr uint64_t hashes[3]={0xbb6a60243fe988deull,0x72571c90fccc0036ull,0x95fb61ec8f6b7831ull};
+    for(int i=0;i<3;++i){const auto& object=objects[i];
+        if(std::strcmp(object.name,names[i]) || object.parent[0]!=-1 || object.material!=(i==1?1:0) ||
+           object.numverts!=(i==1?0:4) || object.numfaces!=(i==1?0:2) ||
+           object.numanikeys[0]!=(i==2?38:6) || !object.anikeys[0] || object.numtexfaces[0] ||
+           object.numtexfaces[1]!=(i==1?0:2))return false;
+        uint64_t h=1469598103934665603ull;const auto* bytes=static_cast<const uint8_t*>(object.anikeys[0]);
+        for(size_t j=0;j<size_t(i==2?38:6)*sizeof(SAniKey32);++j){h^=bytes[j];h*=1099511628211ull;}
+        if(h!=hashes[i])return false;
+    }
+    const auto& t=*GetTag(0);
+    constexpr const char* parameters="obj=(cfire),particle=#rect,pps=30,lifespan=10:25,initialvelocity=3:6,scale=[0:1,100:0],rlocalrotation=[0:(0,0,0),100:(0,15,0)],color=[0:(255,255,255),15:(255,185,1),100:(10,1,1)],spread=90,alpha=[0:1,100:0],friction=[0:0.1],emittertype=circle,emittersize=1,relvel=0.25";
+    if(t.state!=0 || t.frame!=5 || !t.name || !t.str || std::strcmp(t.name,"partsys") ||
+       std::strcmp(t.str,parameters))return false;
+    // Guard authored material identity. RGB565 alpha-mask0 skips retail blend4 selection409e57..5c.
+    const auto& m=materials[0].matdesc;
+    if(m.diffuse.r!=1 || m.diffuse.g!=1 || m.diffuse.b!=1 || m.diffuse.a!=1 ||
+       m.ambient.r!=1 || m.ambient.g!=1 || m.ambient.b!=1 || m.ambient.a!=1 ||
+       m.specular.r!=0.9f || m.specular.g!=0.9f || m.specular.b!=0.9f || m.specular.a!=1 ||
+       m.emissive.r!=1 || m.emissive.g!=1 || m.emissive.b!=1 || m.emissive.a!=1 || m.power!=0) return false;
+    const auto& tex=textures[0];const auto& pf=tex.desc.pixelFormat;
+    return tex.desc.width==64 && tex.desc.height==64 && tex.numframes==1 &&
+        pf.dwRGBBitCount==16 && pf.dwRBitMask==0xf800 && pf.dwGBitMask==0x07e0 &&
+        pf.dwBBitMask==0x001f && pf.dwRGBAlphaBitMask==0 && materials[0].texture==0;
+}
+
+bool T3DImagery::ValidateRetailFmasteryPartSysProfile()
+{
+    if (!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+        GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=3 || NumMaterials()!=2 ||
+        NumTextures()!=1 || NumTags()!=1 || numverts!=8 || numfaces!=4) return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    constexpr const char* suffix="magic/fmaster.i3d";const size_t length=std::strlen(suffix);
+    if(path.size()<length || path.compare(path.size()-length,length,suffix) ||
+       (path.size()!=length && path[path.size()-length-1]!='/'))return false;
+    constexpr const char* names[3]={"#rect","fist","#flare"};
+    constexpr uint64_t hashes[3]={0xc1066a8ed52e6f34ull,0xc1eeb3c3fa2acd63ull,0x128790d8d4a0698ull};
+    for(int i=0;i<3;++i){const auto& object=objects[i];
+        if(std::strcmp(object.name,names[i]) || object.parent[0]!=-1 || object.material!=(i==1?1:0) ||
+           object.numverts!=(i==1?0:4) || object.numfaces!=(i==1?0:2) ||
+           object.numanikeys[0]!=(i==2?38:6) || !object.anikeys[0] || object.numtexfaces[0] ||
+           object.numtexfaces[1]!=(i==1?0:2))return false;
+        uint64_t h=1469598103934665603ull;const auto* bytes=static_cast<const uint8_t*>(object.anikeys[0]);
+        for(size_t j=0;j<size_t(i==2?38:6)*sizeof(SAniKey32);++j){h^=bytes[j];h*=1099511628211ull;}
+        if(h!=hashes[i])return false;
+    }
+    const auto& t=*GetTag(0);
+    constexpr const char* parameters="obj=(fist),particle=#rect,pps=30,lifespan=5:15,initialvelocity=1:3,scale=[0:0.75,100:0],color=[0:(255,10,1),10:(255,50,1),100:(10,1,0)],spread=360,azimuth=360,friction=[0:0.1],relvel=0.1";
+    if(t.state!=0 || t.frame!=5 || !t.name || !t.str || std::strcmp(t.name,"partsys") ||
+       std::strcmp(t.str,parameters))return false;
+    // Guard authored material identity. RGB565 alpha-mask0 skips retail blend4 selection409e57..5c.
+    const auto& m=materials[0].matdesc;
+    if(m.diffuse.r!=1 || m.diffuse.g!=1 || m.diffuse.b!=1 || m.diffuse.a!=1 ||
+       m.ambient.r!=1 || m.ambient.g!=1 || m.ambient.b!=1 || m.ambient.a!=1 ||
+       m.specular.r!=0.9f || m.specular.g!=0.9f || m.specular.b!=0.9f || m.specular.a!=1 ||
+       m.emissive.r!=1 || m.emissive.g!=1 || m.emissive.b!=1 || m.emissive.a!=1 || m.power!=0) return false;
+    const auto& tex=textures[0];const auto& pf=tex.desc.pixelFormat;
+    return tex.desc.width==64 && tex.desc.height==64 && tex.numframes==1 &&
+        pf.dwRGBBitCount==16 && pf.dwRBitMask==0xf800 && pf.dwGBitMask==0x07e0 &&
+        pf.dwBBitMask==0x001f && pf.dwRGBAlphaBitMask==0 && materials[0].texture==0;
+}
+
+void T3DImagery::InitializePartSysTracks()
+{
+    partsys_tracks.clear();
+    gold_partsys_profile = ValidateGoldPartSysProfile();
+    might_partsys_profile = ValidateRetailMightPartSysProfile();
+    immortalmight_partsys_profile = ValidateRetailImmortalmightPartSysProfile();
+    fmastery_partsys_profile = ValidateRetailFmasteryPartSysProfile();
+    combatflash_start1_partsys_profile = ValidateCombatFlashStart1PartSysProfile();
+    for (int32_t i = 0; i < NumTags(); ++i)
+    {
+        const S3DTag& tag = *GetTag(i);
+        if (!tag.name || stricmp(tag.name, "partsys")) continue;
+        SPartSysTrack track;
+        track.state = tag.state;
+        track.tagframe = tag.frame;
+        const auto unsupported = [&](const char* reason) {
+            track.diagnostic = reason;
+        };
+        if (!authored_partsys::ParseDefinition(tag.str ? tag.str : "", track.definition,
+                                             track.diagnostic))
+        {
+            // Atomic parser failure retains no guessed emitter or prototype.
+        }
+        else if (combatflash_start1_partsys_profile && tag.state != 0)
+            unsupported("CombatFlash start1 profile supports state0 only");
+        else if ((flags & I3D_ISMORPH) || tag.state < 0 || tag.state >= NumStates())
+            unsupported("morph or all-state partsys rendering is not recovered");
+        else
+        {
+            track.prototype = GetObjectNum(const_cast<char*>(track.definition.particle.c_str()));
+            for (const std::string& name : track.definition.objects)
+            {
+                const int32_t emitter = GetObjectNum(const_cast<char*>(name.c_str()));
+                if (emitter < 0) { unsupported("authored emitter object not found"); break; }
+                track.emitters.push_back(emitter);
+            }
+            if (track.definition.objects.empty())
+                unsupported("implicit all-object emitters are not recovered");
+            if (track.prototype < 0 || NumObjVerts(track.prototype) != 4 ||
+                NumObjFaces(track.prototype) != 2)
+                unsupported("only the authored four-vertex/two-face water prototype is recovered");
+            if (track.diagnostic.empty())
+            {
+                S3DFace faces[2] = {};
+                int32_t starts[MAXTEXTURES + 1] = {}, counts[MAXTEXTURES + 1] = {};
+                GetObjFaces(track.prototype, faces, starts, counts);
+                if (faces[0].v1 != 2 || faces[0].v2 != 3 || faces[0].v3 != 0 ||
+                    faces[1].v1 != 1 || faces[1].v2 != 2 || faces[1].v3 != 0)
+                    unsupported("prototype topology differs from the audited water triangles");
+                for (int32_t slot = 0; slot <= NumTextures(); ++slot)
+                    if (counts[slot])
+                    {
+                        if (slot == 0 || counts[slot] != 2 || track.texture_slot >= 0)
+                            unsupported("prototype requires one textured triangle pair");
+                        track.texture_slot = slot;
+                    }
+                if (track.texture_slot < 1)
+                    unsupported("prototype texture is absent");
+                if (track.definition.blendmode != 16 &&
+                    !(gold_partsys_profile && track.definition.blendmode == 2))
+                    unsupported("only the recovered water litadd blend mode is implemented");
+                if (track.diagnostic.empty())
+                {
+                    GetObjVerts(track.prototype, track.vertices.data(), tag.state, 0);
+                    track.supported = true;
+                }
+            }
+        }
+        // Other controllers cannot be silently skipped on a claimed supported
+        // owner. These four water assets have exactly their single partsys tag.
+        for (int32_t j = 0; j < NumTags() && track.supported; ++j)
+        {
+            const char* name = GetTag(j)->name;
+            if ((gold_partsys_profile || combatflash_start1_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
+            if (name && stricmp(name, "partsys") && stricmp(name, "scrolltex") &&
+                stricmp(name, "play") && stricmp(name, "beg") && stricmp(name, "end"))
+            {
+                track.supported = false;
+                track.diagnostic = std::string("unrecovered companion controller: ") + name;
+            }
+        }
+        if (!track.supported)
+            log_warn("[partsys] unsupported imagery=%s state=%d tagframe=%d reason=%s",
+                     GetResFilename(), track.state, track.tagframe, track.diagnostic.c_str());
+        partsys_tracks.push_back(std::move(track));
+    }
+}
+
+// Narrow source-backed controller grammar; unsupported syntax is explicit.
+static bool ParseScrollTexParams(const char* params, std::string& object,
+                                 float& du, float& dv)
+{
+    if (!params) return false;
+    bool have_obj = false, have_du = false, have_dv = false;
+    std::string input(params);
+    size_t start = 0;
+    const auto trim = [](std::string value) {
+        const size_t first = value.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) return std::string();
+        return value.substr(first, value.find_last_not_of(" \t\r\n") - first + 1);
+    };
+    while (start < input.size())
+    {
+        const size_t comma = input.find(',', start);
+        const std::string item = trim(input.substr(start, comma - start));
+        const size_t equal = item.find('=');
+        if (equal == std::string::npos) return false;
+        const std::string key = trim(item.substr(0, equal));
+        const std::string value = trim(item.substr(equal + 1));
+        if (value.empty()) return false;
+        if (!stricmp(key.c_str(), "obj"))
+        {
+            if (have_obj || value.find_first_of("()\"'") != std::string::npos) return false;
+            for (unsigned char c : value)
+                if (!std::isalnum(c) && c != '_' && c != '#') return false;
+            object = value; have_obj = true;
+        }
+        else if (!stricmp(key.c_str(), "du") || !stricmp(key.c_str(), "dv"))
+        {
+            char* end = nullptr;
+            const double parsed = std::strtod(value.c_str(), &end);
+            const float rounded = float(parsed);
+            if (end == value.c_str() || *end || !std::isfinite(rounded)) return false;
+            if (!stricmp(key.c_str(), "du"))
+            { if (have_du) return false; du = rounded; have_du = true; }
+            else
+            { if (have_dv) return false; dv = rounded; have_dv = true; }
+        }
+        else return false;
+        if (comma == std::string::npos) break;
+        start = comma + 1;
+        if (start == input.size()) return false;
+    }
+    return have_obj && have_du && have_dv;
+}
+
+void T3DImagery::InitializeScrollTexTracks(S3DImageryBody* mesh)
+{
+    scrolltex_tracks.clear();
+    if (!mesh || mesh->version < 3) return;
+    for (int32_t i = 0; i < mesh->numtags; ++i)
+    {
+        S3DImageryTag& tag = mesh->tags[i];
+        const char* name = static_cast<const char*>(tag.name.ptr());
+        if (!name || stricmp(name, "scrolltex")) continue;
+        std::string object;
+        SScrollTexTrack track;
+        track.state = tag.state; track.tagframe = tag.frame;
+        const char* params = static_cast<const char*>(tag.str.ptr());
+        if (!ParseScrollTexParams(params, object, track.du, track.dv) ||
+            (track.object = GetObjectNum(const_cast<char*>(object.c_str()))) < 0)
+        {
+            log_warn("[scrolltex] unsupported tag in %s: '%s' (requires single obj, du, dv)",
+                     GetResFilename(), params ? params : "<null>");
+            continue;
+        }
+        // Multiple controllers on one object can capture a previous controller's
+        // modified UVs. Do not claim those semantics with a stateless offset.
+        bool overlaps = false;
+        for (const auto& prior : scrolltex_tracks)
+            if (prior.object == track.object &&
+                (prior.state == track.state || prior.state == -1 || track.state == -1))
+                overlaps = true;
+        if (overlaps)
+        {
+            log_warn("[scrolltex] overlapping controllers unsupported in %s object=%s",
+                     GetResFilename(), object.c_str());
+            continue;
+        }
+        scrolltex_tracks.push_back(track);
+        log_info("[scrolltex] authored %s object=%s state=%d tagframe=%d du=%g dv=%g",
+                 GetResFilename(), object.c_str(), track.state, track.tagframe, track.du, track.dv);
+    }
+}
+
+bool T3DImagery::ScrollTexOffset(int32_t object, int32_t state, int32_t frame,
+                                int64_t legacy_frame, float out_uv[2]) const
+{
+    out_uv[0] = out_uv[1] = 0.0f;
+    for (const auto& track : scrolltex_tracks)
+    {
+        if (track.object != object || (track.state != -1 && track.state != state) ||
+            frame < track.tagframe) continue;
+        // legacy/3dcont.cpp:148-150: global synchronized float frame count,
+        // never render FPS or time elapsed since this instance appeared.
+        const float f = float(legacy_frame);
+        out_uv[0] = track.du * f;
+        out_uv[1] = track.dv * f;
+        return true;
+    }
+    return false;
+}
 
 static inline uint8_t ExpandBitsTo8(uint32_t value, int32_t bits)
 {
@@ -140,7 +756,8 @@ static bool DecodeTextureFrameRGBA(const SSurfaceDesc* srcsd, const void* srcpix
     return false;
 }
 
-static uint64_t I3DTextureAssetKey(AssetUid asset_id, int32_t texture_index, int32_t frame_index)
+static uint64_t I3DTextureAssetKey(AssetUid asset_id, int32_t texture_index, int32_t frame_index,
+                                  bool repeat = false)
 {
     uint64_t hash = 1469598103934665603ull;
     auto mix = [&hash](uint64_t value) {
@@ -150,6 +767,7 @@ static uint64_t I3DTextureAssetKey(AssetUid asset_id, int32_t texture_index, int
     mix(asset_id);
     mix(uint64_t(uint32_t(texture_index)));
     mix(uint64_t(uint32_t(frame_index)));
+    if (repeat) mix(0x525054u); // distinct sampler identity; preserve existing clamp keys
     return hash ? hash : 1ull;
 }
 
@@ -570,6 +1188,9 @@ bool T3DImagery::InitializeMesh(S3DImageryBody* mesh)
         }
     }
 
+    // Parse immutable controller metadata before choosing texture samplers.
+    InitializeScrollTexTracks(mesh);
+
     // ---- textures ----
     hastextures = mesh->numtextures != 0;
     textures.Clear();
@@ -677,6 +1298,14 @@ bool T3DImagery::InitializeMesh(S3DImageryBody* mesh)
         }
     }
 
+    InitializePartSysTracks();
+    retail_punch_keys = ValidateRetailPunchProfile();
+    retail_mpappear_start_profile = ValidateRetailMPAppearStartProfile();
+    retail_shadowfist_profile = ValidateRetailShadowfistProfile();
+    retail_warriorborn_profile = ValidateRetailWarriorbornProfile();
+    retail_teleportation_profile = ValidateRetailTeleportationProfile();
+    ResolveStateBlends();
+
     // ---- mount sounds referenced by play tags ----
     for (c = 0; c < tags.NumItems(); c++)
     {
@@ -702,6 +1331,7 @@ void T3DImagery::ClearMesh()
     ClearObjects();
     ClearTextures();
     ClearMaterials();
+    stateblend.clear();
 
     for (i = 0; i < NumStates(); i++)
     {
@@ -756,6 +1386,18 @@ void T3DImagery::ClearMesh()
     }
 
     tags.Clear();
+    scrolltex_tracks.clear();
+    partsys_tracks.clear();
+    gold_partsys_profile = false;
+    might_partsys_profile = false;
+    immortalmight_partsys_profile = false;
+    fmastery_partsys_profile = false;
+    retail_punch_keys = false;
+    retail_mpappear_start_profile = false;
+    retail_shadowfist_profile = false;
+    retail_warriorborn_profile = false;
+    retail_teleportation_profile = false;
+    combatflash_start1_partsys_profile = false;
 
     meshinitialized = false;
 }
@@ -987,10 +1629,13 @@ static void MakeMatrix(hmm_mat4& m, hmm_vec3& pos, hmm_vec3& rot, hmm_vec3& scl)
     if (rot.X != 0.0f) MtxRotateX(&m, rot.X);
     if (rot.Y != 0.0f) MtxRotateY(&m, rot.Y);
     if (rot.Z != 0.0f) MtxRotateZ(&m, rot.Z);
-    if (pos.X != 0.0f || pos.Y != 0.0f || pos.Z != 0.0f)
-        MtxTranslate(&m, &pos);
     if (scl.X != 1.0f || scl.Y != 1.0f || scl.Z != 1.0f)
         MtxScale(&m, &scl);
+    // Retail CalcObjectMatrix 40a55f..40a576 scales the rotation basis,
+    // then stores key position unchanged. Translating first scales that
+    // position too (visible in Ribbon's non-unit-scale floor glow).
+    if (pos.X != 0.0f || pos.Y != 0.0f || pos.Z != 0.0f)
+        MtxTranslate(&m, &pos);
 }
 
 bool T3DImagery::IsHidden(int32_t objnum, int32_t state)
@@ -1191,7 +1836,10 @@ bool T3DImagery::GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t 
                 // frames: frame 1 still samples key 0, the displayed final
                 // frame samples the second-to-last key, and loop playback
                 // visibly goes second-last -> first -> held first.
-                if ((num <= 0) || (frame < curframe + frames))
+                // Actual retail4096bc JGE is inclusive. Opt in only the
+                // exact audited Punch, Appear, Sfist and Wborn keys; others keep their policy.
+                const bool reached = (retail_punch_keys || retail_mpappear_start_profile || retail_shadowfist_profile || retail_warriorborn_profile || retail_teleportation_profile || might_partsys_profile || immortalmight_partsys_profile || fmastery_partsys_profile) ? frame <= curframe + frames : frame < curframe + frames;
+                if ((num <= 0) || reached)
                 {
                     GetAniKey32(curkey, keys, numkeys,
                         posidx, rotidx, sclidx, pos, rot, scl);
@@ -1536,15 +2184,161 @@ void T3DImagery::EndRender()
     Scene3D.EndScene();
 }
 
+namespace {
+
+// REVSYNC: 0x0040af50 -- the sample an object's tag sound plays. Retail
+// upper-cases the name and then:
+//   * a name with "STEP" in it, on a character or the player, gets the
+//     terrain under it appended ("wood", "stone", "carpet", "grass", else
+//     "dirt": walkmap bits 10-15 at its position, 0x00452ea0) and plays at
+//     volume 0x5c (0x40 while sneaking);
+//   * a name starting "IMP" and not ending in a digit gets the struck
+//     character's weapon kind appended ("sword", "bigsword" one time in
+//     five for two-handers, "staff", "bow", "hand");
+//   * a name starting "BLOCK" plays nothing;
+//   * any other name plays as it is.
+// REVSYNC-DIVERGENCE: only the BLOCK rule is ported. The port's walkmap
+// keeps heights alone (no terrain bits), so STEP names play as they are:
+// the plain step samples are the dirt recordings (step1r.wav ==
+// step1rdirt.wav), what retail plays on terrain 0. The IMP weapon suffix
+// waits on the combat port's weapon kinds.
+bool ResolveTagSound(const char* name)
+{
+    return strnicmp(name, "BLOCK", 5) != 0;
+}
+
+} // namespace
+
+// REVSYNC: the "blendcont" tag. T3DAnimator::RefreshControllers (0x0040df90)
+// builds a controller for every tag of the state the animator enters (and
+// every state -1 tag on its first refresh) whose name, compared without
+// case, is a registered controller; "play", "beg" and "end" never are.
+// blendcont (builder 0x00405750) parses its string as "item[=value],..."
+// (0x0040d750): a blend name sets the mode (0x00405770, below), "obj" names
+// objects (base 0x0040d4a0), anything else fails the tag. Its Initialize
+// (0x00405940) then flags every object of the animator to draw with the
+// mode -- but only when the tag named no objects: a tag with an object
+// list draws nothing differently. The controller has no Pulse or Render;
+// the mode is all it does.
+// The shipped imagery has 56 blendcont tags in 42 files (litadd 36,
+// litaddz 12, litalpha 8), none with an object list or a "filename" item
+// (retail's items read from a file, not ported).
+// REVSYNC-DIVERGENCE: retail's mode stays on the objects after the animator
+// leaves the tagged state; the port answers per state (a state tag over a
+// state -1 one). Single-state effects (gvortex, appear) can't tell the
+// difference.
+void T3DImagery::ResolveStateBlends()
+{
+    static constexpr struct { const char* name; uint32_t mode; } kModes[] = {
+        { "none",      0 },
+        { "normal",    BLEND3D_NORMAL },
+        { "alpha",     BLEND3D_ALPHA },
+        { "litalpha",  BLEND3D_LITALPHA },
+        { "add",       BLEND3D_ADD },
+        { "litadd",    BLEND3D_LITADD },
+        { "nocheckz",  BLEND3D_NORMAL   | BLEND3D_NOZCHECK },
+        { "litalphaz", BLEND3D_LITALPHA | BLEND3D_NOZCHECK },
+        { "litaddz",   BLEND3D_LITADD   | BLEND3D_NOZCHECK },
+        { "alphaadd",  BLEND3D_ALPHAADD },
+    };
+
+    const int32_t numstates = NumStates();
+    stateblend.assign(size_t(numstates > 0 ? numstates : 0), 0);
+    std::vector<bool> fromstatetag(stateblend.size(), false);
+
+    for (int32_t c = 0; c < tags.NumItems(); c++)
+    {
+        const S3DTag& tag = tags[c];
+        if (stricmp(tag.name, "blendcont") != 0)
+            continue;
+
+        // Items are split at top-level commas: "obj=(a,b)" is one item.
+        uint32_t mode = 0;
+        bool hasmode = false, hasobjects = false, failed = false;
+        const char* p = tag.str;
+        while (*p && !failed)
+        {
+            while (*p == ' ' || *p == '\t')
+                ++p;
+            const char* start = p;
+            int32_t depth = 0;
+            while (*p && (depth > 0 || *p != ','))
+            {
+                if (*p == '(') ++depth;
+                else if (*p == ')') --depth;
+                ++p;
+            }
+            std::string item(start, size_t(p - start));
+            if (*p == ',')
+                ++p;
+            const size_t eq = item.find('=');
+            std::string key = item.substr(0, eq);
+            while (!key.empty() && (key.back() == ' ' || key.back() == '\t'))
+                key.pop_back();
+            if (key.empty())
+                continue;
+
+            if (stricmp(key.c_str(), "obj") == 0)
+            {
+                hasobjects = true;
+                continue;
+            }
+            bool known = false;
+            for (const auto& m : kModes)
+            {
+                if (stricmp(key.c_str(), m.name) == 0)
+                {
+                    mode = m.mode;
+                    hasmode = known = true;
+                    break;
+                }
+            }
+            failed = !known;
+        }
+        if (failed)
+        {
+            log_warn("[i3d] %s: blendcont '%s' (state %d) has an item retail rejects; tag dropped",
+                     GetResFilename(), tag.str, tag.state);
+            continue;
+        }
+        if (!hasmode || hasobjects)
+            continue;
+
+        if (tag.state < 0)
+        {
+            for (size_t s = 0; s < stateblend.size(); s++)
+                if (!fromstatetag[s])
+                    stateblend[s] = mode;
+        }
+        else if (size_t(tag.state) < stateblend.size())
+        {
+            stateblend[size_t(tag.state)] = mode;
+            fromstatetag[size_t(tag.state)] = true;
+        }
+    }
+}
+
+// REVSYNC: 0x0040b2e0 -- each tick (T3DAnimator::Pulse) every "play" tag of
+// the state whose frame is the animator's frame + 1 plays one name picked
+// at random from its list. The animator still holds the frame it drew last;
+// the object has already stepped to the next one (TMapPane::Pulse runs
+// NextFrameObjects before PulseObjects), so a tag fires on the tick its
+// frame comes up. Without an object the sample plays flat, at full volume.
 void T3DImagery::PlaySound(TObjectInstance* inst, int32_t state, int32_t frame)
 {
-    char* soundlist = FindTag((char*)"play", state, frame);
-    if (soundlist)
+    for (int32_t c = 0; c < tags.NumItems(); c++)
     {
+        const S3DTag& tag = tags[c];
+        if (tag.state != state || tag.frame != frame + 1 || strcmp(tag.name, "play") != 0)
+            continue;
+
+        char* sound = listrnd(tag.str);
+        if (!ResolveTagSound(sound))
+            continue;
         if (!inst)
-            PLAY(listrnd(soundlist));
+            PLAY(sound);
         else
-            inst->PlayWave(listrnd(soundlist));
+            inst->PlayWave(sound);
     }
 }
 
@@ -1744,14 +2538,16 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
         TTextureHandle htexture = kInvalidTexture;
         if (Renderer)
         {
-            const uint64_t key = I3DTextureAssetKey(AssetId(), texture_index, f);
+            const uint64_t key = I3DTextureAssetKey(AssetId(), texture_index, f, HasScrollTex());
             htexture = Renderer->RegisterTextureAsset(key,
                                                        rgba.data(),
                                                        rgba.size(),
                                                        int32_t(srcsd->width),
                                                        int32_t(srcsd->height),
                                                        ERendererTextureFormat::RGBA8,
-                                                       uint64_t(rgba.size()));
+                                                       uint64_t(rgba.size()),
+                                                       ERendererTextureFilter::Linear,
+                                                       HasScrollTex());
             if (htexture != kInvalidTexture)
             {
                 Renderer->AddTextureAssetRef(htexture);
@@ -2142,6 +2938,575 @@ T3DAnimatorBuilder* T3DAnimatorBuilder::GetBuilder(const char* name)
 // * T3DAnimator Funtions *
 // ************************
 
+struct T3DAnimator::SPartSysControllers
+{
+    struct Controller
+    {
+        T3DImagery::SPartSysTrack track;
+        authored_partsys::State simulation;
+        authored_partsys::TickInputs inputs;
+        int64_t last_render_frame = -1;
+    };
+    std::vector<Controller> controllers;
+    int32_t previous_state = -1;
+    bool initialized = false;
+    bool unsupported = false;
+    uint64_t pulses = 0;
+    uint64_t quads = 0, renders = 0;
+
+    static void FillInputs(Controller& controller, T3DAnimator& animator,
+                           TObjectInstance& owner)
+    {
+        auto& inputs = controller.inputs;
+        const S3DPoint p = owner.Pos();
+        inputs.owner_position = {float(p.x), float(p.y), float(p.z)};
+        inputs.owner_face = static_cast<unsigned char>(owner.GetFace());
+        // Retail 403771 reads animator+14; Animate copies owner frame later.
+        // Gold's transient PPS curve must see initial cached0, not owner1.
+        inputs.animation_frame = (owner.ObjId() == 0xd0c0f035u ||
+            (owner.ObjId()==0x5be39ae0u && owner.GetState()==0 && animator.Get3DImagery()->HasRetailMightPartSysProfile()) ||
+            (owner.ObjId()==0x82aeb30fu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailImmortalmightPartSysProfile()) ||
+            (owner.ObjId()==0xb0e024dfu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailFmasteryPartSysProfile()) ||
+            (owner.ObjId() == 0xad92bd29u && owner.GetState() == 0)) ? animator.GetFrame() : owner.GetFrame();
+        // Retail Initialize obtains object zero's origin before resolving the
+        // authored emitter list. Keep that distinct from its first emitter.
+        hmm_mat4 object_zero;
+        inputs.has_object_zero_origin = animator.GetObjectMatrix(0, &object_zero);
+        if (inputs.has_object_zero_origin)
+            inputs.object_zero_origin = {object_zero.Elements[3][0],
+                                         object_zero.Elements[3][1], object_zero.Elements[3][2]};
+        for (size_t i = 0; i < controller.track.emitters.size(); ++i)
+        {
+            const int32_t object = controller.track.emitters[i];
+            S3DAnimObj* bone = animator.GetObject(object);
+            hmm_mat4 matrix;
+            // This is the source owner-local matrix, NOT the render bone's
+            // stretched world matrix. The simulation adds live owner XYZ itself.
+            if (!bone || !animator.GetObjectMatrix(object, &matrix)) continue;
+            auto& pose = inputs.emitters[i];
+            std::memcpy(pose.matrix.data(), matrix.Elements, sizeof(matrix));
+            pose.origin = {matrix.Elements[3][0], matrix.Elements[3][1], matrix.Elements[3][2]};
+            pose.position = {bone->pos.X, bone->pos.Y, bone->pos.Z};
+            pose.scale = {bone->scl.X, bone->scl.Y, bone->scl.Z};
+        }
+    }
+};
+
+T3DAnimator::T3DAnimator(TObjectInstance* oi) : TObjectAnimator(oi) {}
+
+void T3DAnimator::RefreshPartSysControllers()
+{
+    T3DImagery* imagery = Get3DImagery();
+    if (!inst || !imagery || imagery->partsys_tracks.empty()) return;
+    if (!partsys_controllers)
+        partsys_controllers = std::make_unique<SPartSysControllers>();
+    auto& state = *partsys_controllers;
+    const int32_t current_state = inst->GetState();
+    if (state.initialized && state.previous_state == current_state) return;
+
+    // Runtime support is deliberately exact-type scoped. Successful syntax
+    // parsing does not establish the semantics of later geyser/blend tags.
+    const uint32_t id = inst->ObjId();
+    const bool gold = id == 0xd0c0f035u && imagery->gold_partsys_profile && current_state == 0;
+    const bool combat_start1 = id == 0xad92bd29u && imagery->combatflash_start1_partsys_profile && current_state == 0;
+    const bool might = id==0x5be39ae0u && imagery->might_partsys_profile && current_state==0;
+    const bool immortalmight = id==0x82aeb30fu && imagery->immortalmight_partsys_profile && current_state==0;
+    const bool fmastery=id==0xb0e024dfu && imagery->fmastery_partsys_profile && current_state==0;
+    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && (id < 0xd0c0f036u || id > 0xd0c0f039u))
+    {
+        if (!state.initialized)
+            log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only audited water, Goldp, CombatFlash start1 and exact Might/Immortalmight/Fmastery profiles are enabled",
+                     inst->GetTypeName(), id, inst->GetMapIndex());
+        state.unsupported = true;
+        state.controllers.clear();
+        state.previous_state = current_state;
+        state.initialized = true;
+        return;
+    }
+
+    // Legacy RefreshControllers keeps all-state controllers and removes only
+    // controllers belonging to another state. Loop wrap never reinitializes.
+    auto& controllers = state.controllers;
+    controllers.erase(std::remove_if(controllers.begin(), controllers.end(),
+        [current_state](const SPartSysControllers::Controller& controller) {
+            return controller.track.state != -1 && controller.track.state != current_state;
+        }), controllers.end());
+    state.unsupported = false;
+    if (gold || combat_start1)
+    {
+        // Retail blendcont Initialize 405940: immediate state-entry writes to
+        // every animator object, preserving the prior no-depth-test bit. Its
+        // Pulse/Render are empty and Close does not restore these values.
+        for (int32_t object = 0; object < NumObjects(); ++object)
+            if (S3DAnimObj* bone = GetObject(object))
+            {
+                const char* name = imagery->GetObjectName(object);
+                const unsigned char first = static_cast<unsigned char>(name[0]);
+                if (!((first >= '0' && first <= '9') || (first >= 'a' && first <= 'z') ||
+                      (first >= 'A' && first <= 'Z')))
+                {
+                    // Actual NewObject 409f61..409fda. Restore only this exact
+                    // profile; generic/water objects retain their existing path.
+                    if (std::strchr(name, '#')) bone->flags |= OBJ3D_GOLD_CAMERA_FACING;
+                    if (std::strchr(name, '*')) bone->flags |= OBJ3D_HIDE;
+                    if (std::strchr(name, '$')) bone->blend |= 0x40u;
+                }
+                bone->flags |= OBJ3D_BLEND;
+                bone->blend = (bone->blend & 0x40u) | 16u;
+            }
+        log_info("[blendcont] init type=%s id=%08x map_index=%d state=0 tagframe=%d mode=16 objects=%d profile=%s",
+                 inst->GetTypeName(), id, inst->GetMapIndex(), gold ? 5 : 0, NumObjects(),
+                 gold ? "gold" : "combatflash-start1");
+    }
+    for (const auto& track : imagery->partsys_tracks)
+    {
+        if (track.state != current_state && !(track.state == -1 && !state.initialized)) continue;
+        if (!track.supported)
+        {
+            state.unsupported = true;
+            log_warn("[partsys] unsupported owner type=%s id=%08x map_index=%d state=%d reason=%s",
+                     inst->GetTypeName(), id, inst->GetMapIndex(), current_state, track.diagnostic.c_str());
+            continue;
+        }
+        SPartSysControllers::Controller controller;
+        controller.track = track;
+        controller.inputs.emitters.resize(track.emitters.size());
+        controller.inputs.ground_height = [](int x, int y, int z) {
+            S3DPoint position = {x, y, z};
+            return MapPane.GetWalkHeight(position);
+        };
+        SPartSysControllers::FillInputs(controller, *this, *inst);
+        std::string diagnostic;
+        // Default quality0 retains full emission. Explicit capture overrides
+        // reproduce the measured retail setting through its existing policy.
+        if (!controller.simulation.Initialize(track.definition, controller.inputs,
+                                              StartupPartSysQuality, diagnostic))
+        {
+            state.unsupported = true;
+            log_warn("[partsys] unsupported owner type=%s id=%08x map_index=%d state=%d reason=%s",
+                     inst->GetTypeName(), id, inst->GetMapIndex(), current_state, diagnostic.c_str());
+            continue;
+        }
+        EnableObject(track.prototype, false);
+        log_info("[partsys] init type=%s id=%08x map_index=%d state=%d tagframe=%d emitters=%zu capacity=%zu quality=%d prototype=%s",
+                 inst->GetTypeName(), id, inst->GetMapIndex(), track.state, track.tagframe,
+                 track.emitters.size(), controller.simulation.Capacity(), StartupPartSysQuality,
+                 imagery->GetObjectName(track.prototype));
+        controllers.push_back(std::move(controller));
+    }
+    // An unsupported companion cannot leave a partially functioning substitute.
+    if (state.unsupported) controllers.clear();
+    state.previous_state = current_state;
+    state.initialized = true;
+}
+
+void T3DAnimator::AdvancePartSysControllers()
+{
+    RefreshPartSysControllers();
+    if (!partsys_controllers || partsys_controllers->unsupported) return;
+    auto& state = *partsys_controllers;
+    if (state.controllers.empty()) return;
+    ++state.pulses;
+    const authored_partsys::RandomRange rng = [](int minimum, int maximum) {
+        return random(minimum, maximum);
+    };
+    for (auto& controller : state.controllers)
+    {
+        SPartSysControllers::FillInputs(controller, *this, *inst);
+        // Authoritative map Pulse already runs once for each 24Hz tick, even
+        // when several ticks catch up within one render frame. A global frame
+        // deduplication here would incorrectly discard those pulses.
+        // The retail controller ignores tagframe and evaluates raw owner frame.
+        controller.simulation.Advance(controller.inputs, rng);
+    }
+}
+
+bool T3DAnimator::PartSysOwnsObject(int32_t object) const
+{
+    if (!partsys_controllers) return false;
+    if (partsys_controllers->unsupported) return true;
+    for (const auto& controller : partsys_controllers->controllers)
+        if (controller.track.prototype == object) return true;
+    return false;
+}
+
+
+bool T3DAnimator::ShadowfistMeshBlend(int32_t object, uint32_t& blend) const
+{
+    if (!inst || inst->ObjId()!=0x550decafu || inst->GetState()!=0 ||
+        !Get3DImagery()->HasRetailShadowfistProfile() || object<0 || object>=8 ||
+        !animobjs.Used(object) || !(animobjs[object]->flags&OBJ3D_BLEND)) return false;
+    blend=animobjs[object]->blend;
+    return blend==16u;
+}
+
+bool T3DAnimator::ShadowfistMeshWorldMatrix(int32_t object, hmm_mat4& world)
+{
+    uint32_t blend=0;
+    if (!ShadowfistMeshBlend(object,blend) || !IsObjectEnabled(object)) return false;
+    auto* imagery=Get3DImagery(); hmm_vec3 position{},rotation{},scale{};
+    // Actual default Render consumes integer authored frame. Do not smooth the
+    // source pose with the modern renderer's fractional next-frame blend.
+    imagery->SetPrevState(inst->GetPrevState(),inst->GetPrevFrame());
+    if (!imagery->GetAniKey(object,0,inst->GetFrame(),position,rotation,scale) ||
+        scale.X<=0 || scale.Y<=0 || scale.Z<=0) return false;
+    // Retail40a4fc..40a55f: rotation then nonuniform scale; translation is
+    // restored directly40a570..576, and '#' then preserves it40a71f..40a852.
+    MtxClear(&world);
+    MtxRotateX(&world,rotation.X); MtxRotateY(&world,rotation.Y); MtxRotateZ(&world,rotation.Z);
+    MtxScale(&world,&scale);
+    if (animobjs[object]->flags&OBJ3D_GOLD_CAMERA_FACING) ApplyRetailGoldCameraOrientation(world);
+    MtxTranslate(&world,&position); // source preserves XYZ after fixed '#' camera matrices
+    MtxMultiply(&world,&world,&inst->Transform().Matrix());
+    return true;
+}
+
+bool T3DAnimator::TeleportationMeshBlend(int32_t object, uint32_t& blend) const
+{
+    if (!inst || inst->ObjId()!=0xad92bd40u || inst->GetState()!=0 ||
+        !Get3DImagery()->HasRetailTeleportationProfile() || object<0 || object>=6 ||
+        !animobjs.Used(object) || !(animobjs[object]->flags&OBJ3D_BLEND)) return false;
+    blend=animobjs[object]->blend;
+    return blend==16u;
+}
+
+bool T3DAnimator::TeleportationMeshWorldMatrix(int32_t object, hmm_mat4& world)
+{
+    uint32_t blend=0;
+    if (!TeleportationMeshBlend(object,blend) || !IsObjectEnabled(object)) return false;
+    auto* imagery=Get3DImagery(); hmm_vec3 position{},rotation{},scale{};
+    // Actual default Render consumes integer authored frame. Do not smooth the
+    // source pose with the modern renderer's fractional next-frame blend.
+    imagery->SetPrevState(inst->GetPrevState(),inst->GetPrevFrame());
+    if (!imagery->GetAniKey(object,0,inst->GetFrame(),position,rotation,scale) ||
+        scale.X<=0 || scale.Y<=0 || scale.Z<=0) return false;
+    // Retail40a4fc..40a55f: rotation then nonuniform scale; translation is
+    // restored directly40a570..576, and '#' then preserves it40a71f..40a852.
+    MtxClear(&world);
+    MtxRotateX(&world,rotation.X); MtxRotateY(&world,rotation.Y); MtxRotateZ(&world,rotation.Z);
+    MtxScale(&world,&scale);
+    // All six exact source names lack #/$; no fixed camera matrices or depth bypass.
+    MtxTranslate(&world,&position); // source preserves XYZ after fixed '#' camera matrices
+    MtxMultiply(&world,&world,&inst->Transform().Matrix());
+    return true;
+}
+
+bool T3DAnimator::WarriorbornMeshBlend(int32_t object, uint32_t& blend) const
+{
+    if (!inst || inst->ObjId()!=0x9de2a0feu || inst->GetState()!=0 ||
+        !Get3DImagery()->HasRetailWarriorbornProfile() || object<0 || object>=8 ||
+        !animobjs.Used(object) || !(animobjs[object]->flags&OBJ3D_BLEND)) return false;
+    blend=animobjs[object]->blend;
+    return blend==16u;
+}
+
+bool T3DAnimator::WarriorbornMeshWorldMatrix(int32_t object, hmm_mat4& world)
+{
+    uint32_t blend=0;
+    if (!WarriorbornMeshBlend(object,blend) || !IsObjectEnabled(object)) return false;
+    auto* imagery=Get3DImagery(); hmm_vec3 position{},rotation{},scale{};
+    // Actual default Render consumes integer authored frame. Do not smooth the
+    // source pose with the modern renderer's fractional next-frame blend.
+    imagery->SetPrevState(inst->GetPrevState(),inst->GetPrevFrame());
+    if (!imagery->GetAniKey(object,0,inst->GetFrame(),position,rotation,scale) ||
+        scale.X<=0 || scale.Y<=0 || scale.Z<=0) return false;
+    // Retail40a4fc..40a55f: rotation then nonuniform scale; translation is
+    // restored directly40a570..576, and '#' then preserves it40a71f..40a852.
+    MtxClear(&world);
+    MtxRotateX(&world,rotation.X); MtxRotateY(&world,rotation.Y); MtxRotateZ(&world,rotation.Z);
+    MtxScale(&world,&scale);
+    if (animobjs[object]->flags&OBJ3D_GOLD_CAMERA_FACING) ApplyRetailGoldCameraOrientation(world);
+    MtxTranslate(&world,&position); // source preserves XYZ after fixed '#' camera matrices
+    MtxMultiply(&world,&world,&inst->Transform().Matrix());
+    return true;
+}
+
+bool T3DAnimator::MPAppearStartMeshBlend(int32_t object, uint32_t& blend) const
+{
+    if (!inst || inst->ObjId()!=0xad99fdf2u || inst->GetState()!=0 ||
+        !Get3DImagery()->HasRetailMPAppearStartProfile() || object<0 || object>=7 ||
+        !animobjs.Used(object) || !(animobjs[object]->flags&OBJ3D_BLEND)) return false;
+    blend=animobjs[object]->blend;
+    return blend==80u;
+}
+
+bool T3DAnimator::MPAppearStartMeshWorldMatrix(int32_t object, hmm_mat4& world)
+{
+    uint32_t blend=0;
+    if (!MPAppearStartMeshBlend(object,blend) || !IsObjectEnabled(object)) return false;
+    auto* imagery=Get3DImagery(); hmm_vec3 position{},rotation{},scale{};
+    // Actual default Render consumes integer authored frame. Do not smooth the
+    // source pose with the modern renderer's fractional next-frame blend.
+    imagery->SetPrevState(inst->GetPrevState(),inst->GetPrevFrame());
+    if (!imagery->GetAniKey(object,0,inst->GetFrame(),position,rotation,scale) ||
+        scale.X<=0 || scale.Y<=0 || scale.Z<=0) return false;
+    // Retail40a4fc..40a55f: rotation then nonuniform scale; translation is
+    // restored directly40a570..576, and '#' then preserves it40a71f..40a852.
+    MtxClear(&world);
+    MtxRotateX(&world,rotation.X); MtxRotateY(&world,rotation.Y); MtxRotateZ(&world,rotation.Z);
+    MtxScale(&world,&scale);
+    if (animobjs[object]->flags&OBJ3D_GOLD_CAMERA_FACING) ApplyRetailGoldCameraOrientation(world);
+    MtxTranslate(&world,&position); // source preserves XYZ after fixed '#' camera matrices
+    MtxMultiply(&world,&world,&inst->Transform().Matrix());
+    return true;
+}
+
+bool T3DAnimator::GoldBaseMeshBlend(int32_t object, uint32_t& blend) const
+{
+    if (!inst || inst->ObjId() != 0xd0c0f035u || !Get3DImagery()->HasGoldPartSysProfile() ||
+        !partsys_controllers || partsys_controllers->unsupported || object != 1 ||
+        !animobjs.Used(object) || !(animobjs[object]->flags & OBJ3D_BLEND)) return false;
+    blend = animobjs[object]->blend;
+    return true;
+}
+
+bool T3DAnimator::GoldBaseMeshWorldMatrix(hmm_mat4& world)
+{
+    uint32_t blend = 0;
+    if (!GoldBaseMeshBlend(1, blend) || blend != 80u) return false;
+    auto* imagery = Get3DImagery();
+    hmm_vec3 position{}, rotation{}, scale{};
+    imagery->SetPrevState(inst->GetPrevState(), inst->GetPrevFrame());
+    if (!imagery->GetAniKey(1, inst->GetState(), inst->GetFrame(), position, rotation, scale)) return false;
+    if (scale.X <= 0 || scale.Y <= 0 || scale.Z <= 0) return false;
+    MtxClear(&world);
+    MtxScale(&world, &scale);
+    MtxRotateX(&world, rotation.X); MtxRotateY(&world, rotation.Y); MtxRotateZ(&world, rotation.Z);
+    ApplyRetailGoldCameraOrientation(world);
+    // Retail writes preserved local XYZ into matrix._41/_42/_43 after the
+    // camera matrices; translation must not be rotated or scaled by them.
+    MtxTranslate(&world, &position);
+    MtxMultiply(&world, &world, &inst->Transform().Matrix());
+    return true;
+}
+
+bool T3DAnimator::CombatFlashStart1BaseMeshBlend(int32_t object, uint32_t& blend) const
+{
+    if (!inst || inst->ObjId()!=0xad92bd29u || inst->GetState()!=0 ||
+        !Get3DImagery()->HasCombatFlashStart1PartSysProfile() || !partsys_controllers ||
+        partsys_controllers->unsupported || object!=2 || !animobjs.Used(object) ||
+        !(animobjs[object]->flags & OBJ3D_BLEND)) return false;
+    blend=animobjs[object]->blend;
+    return blend==16u; // '#impact01' has no '$': depth test remains enabled.
+}
+
+bool T3DAnimator::CombatFlashStart1BaseMeshWorldMatrix(hmm_mat4& world)
+{
+    uint32_t blend=0;
+    if (!CombatFlashStart1BaseMeshBlend(2,blend)) return false;
+    auto* imagery=Get3DImagery(); hmm_vec3 position{},rotation{},scale{};
+    imagery->SetPrevState(inst->GetPrevState(),inst->GetPrevFrame());
+    if (!imagery->GetAniKey(2,0,inst->GetFrame(),position,rotation,scale)) return false;
+    if (scale.X<=0 || scale.Y<=0 || scale.Z<=0) return false;
+    MtxClear(&world); MtxScale(&world,&scale);
+    MtxRotateX(&world,rotation.X); MtxRotateY(&world,rotation.Y); MtxRotateZ(&world,rotation.Z);
+    ApplyRetailGoldCameraOrientation(world); // Recovered generic '#' branch, no new fitted matrix.
+    MtxTranslate(&world,&position); // Original preserves translation after fixed camera orientation.
+    MtxMultiply(&world,&world,&inst->Transform().Matrix());
+    return true;
+}
+
+bool T3DAnimator::ImmortalmightBaseMeshBlend(int32_t object,uint32_t& blend) const
+{
+    if(!inst || inst->ObjId()!=0x82aeb30fu || inst->GetState()!=0 ||
+       !Get3DImagery()->HasRetailImmortalmightPartSysProfile() || !partsys_controllers ||
+       partsys_controllers->unsupported || object!=2 || !animobjs.Used(2)) return false;
+    // Actual RGB565 NewObject adds no OBJ3D_BLEND. Source controller Render
+    // leaves its last particle's mode16 in the scene for the later base mesh.
+    // Before a particle is submitted, BeginRender preserves caller state.
+    // An explicit measured capture input covers that case; 0 retains visible
+    // ordinary opaque compatibility, without claiming unmeasured retail state.
+    blend=partsys_controllers->quads ? 16u : uint32_t(StartupPartSysIncomingBlend);
+    return blend==0u || blend==16u || blend==80u;
+}
+
+bool T3DAnimator::ImmortalmightBaseMeshWorldMatrix( hmm_mat4& world)
+{
+    uint32_t blend=0;
+    if (!ImmortalmightBaseMeshBlend(2,blend) || !IsObjectEnabled(2)) return false;
+    auto* imagery=Get3DImagery(); hmm_vec3 position{},rotation{},scale{};
+    // Actual default Render consumes integer authored frame. Do not smooth the
+    // source pose with the modern renderer's fractional next-frame blend.
+    imagery->SetPrevState(inst->GetPrevState(),inst->GetPrevFrame());
+    if (!imagery->GetAniKey(2,0,inst->GetFrame(),position,rotation,scale) ||
+        scale.X<=0 || scale.Y<=0 || scale.Z<=0) return false;
+    // Retail40a4fc..40a55f: rotation then nonuniform scale; translation is
+    // restored directly40a570..576, and '#' then preserves it40a71f..40a852.
+    MtxClear(&world);
+    MtxRotateX(&world,rotation.X); MtxRotateY(&world,rotation.Y); MtxRotateZ(&world,rotation.Z);
+    MtxScale(&world,&scale);
+    if (animobjs[2]->flags&OBJ3D_GOLD_CAMERA_FACING) ApplyRetailGoldCameraOrientation(world);
+    MtxTranslate(&world,&position); // source preserves XYZ after fixed '#' camera matrices
+    MtxMultiply(&world,&world,&inst->Transform().Matrix());
+    return true;
+}
+
+bool T3DAnimator::FmasteryBaseMeshBlend(int32_t object,uint32_t& blend) const
+{
+    if(!inst || inst->ObjId()!=0xb0e024dfu || inst->GetState()!=0 ||
+       !Get3DImagery()->HasRetailFmasteryPartSysProfile() || !partsys_controllers ||
+       partsys_controllers->unsupported || object!=2 || !animobjs.Used(2)) return false;
+    // Actual RGB565 NewObject adds no OBJ3D_BLEND. Source controller Render
+    // leaves its last particle's mode16 in the scene for the later base mesh.
+    // Before a particle is submitted, BeginRender preserves caller state.
+    // An explicit measured capture input covers that case; 0 retains visible
+    // ordinary opaque compatibility, without claiming unmeasured retail state.
+    blend=partsys_controllers->quads ? 16u : uint32_t(StartupPartSysIncomingBlend);
+    return blend==0u || blend==16u || blend==80u;
+}
+
+bool T3DAnimator::FmasteryBaseMeshWorldMatrix( hmm_mat4& world)
+{
+    uint32_t blend=0;
+    if (!FmasteryBaseMeshBlend(2,blend) || !IsObjectEnabled(2)) return false;
+    auto* imagery=Get3DImagery(); hmm_vec3 position{},rotation{},scale{};
+    // Actual default Render consumes integer authored frame. Do not smooth the
+    // source pose with the modern renderer's fractional next-frame blend.
+    imagery->SetPrevState(inst->GetPrevState(),inst->GetPrevFrame());
+    if (!imagery->GetAniKey(2,0,inst->GetFrame(),position,rotation,scale) ||
+        scale.X<=0 || scale.Y<=0 || scale.Z<=0) return false;
+    // Retail #branch40a71f..40a852 rebuilds scale then rotations before
+    // fixed camera. Exact Fmaster flare is anisotropic: order cannot commute.
+    MtxClear(&world);
+    MtxScale(&world,&scale);
+    MtxRotateX(&world,rotation.X); MtxRotateY(&world,rotation.Y); MtxRotateZ(&world,rotation.Z);
+    if (animobjs[2]->flags&OBJ3D_GOLD_CAMERA_FACING) ApplyRetailGoldCameraOrientation(world);
+    MtxTranslate(&world,&position); // source preserves XYZ after fixed '#' camera matrices
+    MtxMultiply(&world,&world,&inst->Transform().Matrix());
+    return true;
+}
+
+uint64_t T3DAnimator::PartSysPulseCount() const
+{ return partsys_controllers ? partsys_controllers->pulses : 0; }
+
+size_t T3DAnimator::PartSysControllerCount() const
+{ return partsys_controllers ? partsys_controllers->controllers.size() : 0; }
+
+bool T3DAnimator::PartSysUnsupported() const
+{ return partsys_controllers && partsys_controllers->unsupported; }
+
+size_t T3DAnimator::PartSysLiveParticles() const
+{
+    size_t alive = 0;
+    if (partsys_controllers)
+        for (const auto& controller : partsys_controllers->controllers)
+            for (const auto& particle : controller.simulation.Particles())
+                alive += particle.alive ? 1 : 0;
+    return alive;
+}
+
+T3DAnimator::SAuthoredPartSysStats T3DAnimator::PartSysStats() const
+{
+    SAuthoredPartSysStats stats;
+    if (!partsys_controllers) return stats;
+    const auto& state = *partsys_controllers;
+    stats.controllers = state.controllers.size();
+    stats.ticks = state.pulses;
+    stats.quads = state.quads;
+    stats.renders = state.renders;
+    stats.unsupported = state.unsupported;
+    for (const auto& controller : state.controllers)
+    {
+        stats.capacity += controller.simulation.Capacity();
+        stats.emitters += controller.track.emitters.size();
+        for (const auto& particle : controller.simulation.Particles())
+            stats.alive += particle.alive ? 1 : 0;
+    }
+    if (!state.controllers.empty())
+        stats.next_emitter = state.controllers.front().simulation.NextEmitter();
+    return stats;
+}
+
+int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
+                                  int32_t texture_slot, const hmm_vec3& render_scale)
+{
+    if (!partsys_controllers || partsys_controllers->unsupported) return 0;
+    int32_t submitted = 0;
+    const authored_partsys::RandomRange rng = [](int minimum, int maximum) {
+        return random(minimum, maximum);
+    };
+    for (auto& controller : partsys_controllers->controllers)
+    {
+        const auto& track = controller.track;
+        if (track.prototype != object || track.texture_slot != texture_slot ||
+            track.state != inst->GetState() ||
+            controller.last_render_frame == TTime::FrameCount()) continue;
+        const TTextureHandle texture = Get3DImagery()->GetTextureHandle(texture_slot - 1);
+        if (texture == kInvalidTexture) continue;
+        controller.last_render_frame = TTime::FrameCount();
+        ++partsys_controllers->renders;
+        const auto& particles = controller.simulation.Particles();
+        for (size_t slot = 0; slot < particles.size(); ++slot)
+        {
+            if (!particles[slot].alive) continue;
+            // The retail helper samples three rotation ranges during Render.
+            // Keep those calls here; Submit never advances simulation state.
+            const auto sample = controller.simulation.SampleRender(slot, rng);
+            hmm_mat4 matrix;
+            MtxClear(&matrix);
+            const hmm_vec3 scale = {sample.scale, sample.scale, sample.scale};
+            MtxScale(&matrix, &scale);
+            MtxRotateX(&matrix, sample.rotation[0]);
+            MtxRotateY(&matrix, sample.rotation[1]);
+            MtxRotateZ(&matrix, sample.rotation[2]);
+            const bool might = inst->ObjId()==0x5be39ae0u && inst->GetState()==0 &&
+                Get3DImagery()->HasRetailMightPartSysProfile() && track.prototype==0;
+            const bool immortalmight=inst->ObjId()==0x82aeb30fu && inst->GetState()==0 &&
+                Get3DImagery()->HasRetailImmortalmightPartSysProfile() && track.prototype==0;
+            const bool fmastery=inst->ObjId()==0xb0e024dfu && inst->GetState()==0 &&
+                Get3DImagery()->HasRetailFmasteryPartSysProfile() && track.prototype==0;
+            if (might || immortalmight || fmastery || inst->ObjId() == 0xd0c0f035u ||
+                (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0 &&
+                 Get3DImagery()->HasCombatFlashStart1PartSysProfile() && track.prototype == 0))
+                ApplyRetailGoldCameraOrientation(matrix); // actual '#' flag retained on both audited prototypes
+            const hmm_vec3 position = {sample.position[0], sample.position[1], sample.position[2]};
+            MtxTranslate(&matrix, &position);
+
+            SQuadDrawItem item = {};
+            item.key.texture = texture;
+            // Retail particle Render overwrites the prototype's companion
+            // blend with its own per-particle mode. Gold coins are alpha2;
+            // the four water profiles remain litadd16 exactly as before.
+            item.key.blend = uint8_t(sample.blendmode == 2 ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
+            // Preserve source packed prelit vertex color. Combat particles are
+            // RGB565 with litadd16, not normal-lit material meshes or alpha coins.
+            item.retail_texture = (might || immortalmight || fmastery || inst->ObjId() == 0xd0c0f035u ||
+                (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0)) ? 1 : 0;
+            item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
+            item.light_mode = EFxLightMode::Unlit;
+            for (int c = 0; c < 3; ++c)
+                item.color_rgba[c] = (might || immortalmight || fmastery) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
+            // Actual SW LV prelit channels are5bit; canonicalDEST_ONE ignores
+            // alpha in its8wordXYZ/UV/RGB packet. Keep literal alpha metadata,
+            // no premultiplication/alternateblend. PixelLSB-table raster gate open.
+            item.color_rgba[3] = sample.alpha;
+            // Original faces (2,3,0)/(1,2,0) are preserved by this reorder
+            // into FXquad's (2,0,3)/(1,3,0); first face differs only cyclically.
+            constexpr int corners[4] = {0, 1, 3, 2};
+            for (int c = 0; c < 4; ++c)
+            {
+                const S3DVertex& vertex = track.vertices[size_t(corners[c])];
+                hmm_vec3 world;
+                MtxTransform(&matrix, &vertex.pos, &world);
+                item.world_pos[c][0] = world.X * render_scale.X;
+                item.world_pos[c][1] = world.Y * render_scale.Y;
+                // SampleRender's centre is retail MODELZ (FIX applied), while
+                // Particle.position remains raw map/common-world simulation XYZ.
+                // Match ordinary mesh raw translation + local MODELZ stretch;
+                // ABS particles bypass the owner's transform, so bridge here once.
+                item.world_pos[c][2] = (particles[slot].position[2] +
+                    (world.Z - sample.position[2]) * WORLD3D_Z_SCALE) * render_scale.Z;
+                item.uv[c][0] = vertex.tu;
+                item.uv[c][1] = vertex.tv;
+            }
+            renderer.SubmitFxQuad(item);
+            ++submitted;
+            ++partsys_controllers->quads;
+        }
+    }
+    return submitted;
+}
+
 T3DAnimator::~T3DAnimator()
 {
     Close();
@@ -2159,16 +3524,84 @@ void T3DAnimator::Initialize()
     inst->SetFlags(OF_MOVING);
 
     SetupObjects();
+    if(inst->ObjId()==0x82aeb30fu && inst->GetState()==0 && Get3DImagery()->HasRetailImmortalmightPartSysProfile()) {
+        if(auto* prototype=GetObject(0))prototype->flags|=OBJ3D_GOLD_CAMERA_FACING;
+        // Retail409e57..5c skips material-alpha detection when texture alpha
+        // mask0. Keep only '#' camera; no forced blend metadata on the base.
+        if(auto* flare=GetObject(2))flare->flags|=OBJ3D_GOLD_CAMERA_FACING;
+        log_info("[immortalmight-base] incoming=%d explicit=%d cold-policy=%s",StartupPartSysIncomingBlend,
+                 StartupPartSysIncomingBlend!=0,StartupPartSysIncomingBlend==16?"measured16":StartupPartSysIncomingBlend==80?"explicit80-diagnostic":"ordinary-opaque-compatibility-unmeasured");
+    }
+    if(inst->ObjId()==0xb0e024dfu && inst->GetState()==0 && Get3DImagery()->HasRetailFmasteryPartSysProfile()) {
+        if(auto* prototype=GetObject(0))prototype->flags|=OBJ3D_GOLD_CAMERA_FACING;
+        // Retail409e57..5c skips material-alpha detection when texture alpha
+        // mask0. Keep only '#' camera; no forced blend metadata on the base.
+        if(auto* flare=GetObject(2))flare->flags|=OBJ3D_GOLD_CAMERA_FACING;
+        log_info("[fmastery-base] incoming=%d explicit=%d cold-policy=%s",StartupPartSysIncomingBlend,
+                 StartupPartSysIncomingBlend!=0,StartupPartSysIncomingBlend==16?"measured16":StartupPartSysIncomingBlend==80?"explicit80-diagnostic":"ordinary-opaque-compatibility-unmeasured");
+    }
+    if(inst->ObjId()==0x5be39ae0u && inst->GetState()==0 && Get3DImagery()->HasRetailMightPartSysProfile())
+        if(auto* prototype=GetObject(0))prototype->flags|=OBJ3D_GOLD_CAMERA_FACING;
+
+    if (inst->ObjId()==0xad99fdf2u && inst->GetState()==0 && Get3DImagery()->HasRetailMPAppearStartProfile())
+    {
+        // Retail blendcont Initialize405940 writes immediately on state entry;
+        // tag frame20 is metadata, not delayed activation. Pulse/Render are RET.
+        for (int object=0;object<NumObjects();++object) if (auto* bone=GetObject(object)) {
+            const char* name=Get3DImagery()->GetObjectName(object);
+            if (name[0]=='#') bone->flags|=OBJ3D_GOLD_CAMERA_FACING;
+            if (name[0]=='#' && std::strchr(name,'$')) bone->blend|=0x40u;
+            bone->flags|=OBJ3D_BLEND;
+            bone->blend=(bone->blend&0x40u)|80u;
+        }
+        log_info("[blendcont] init type=MPAppear id=ad99fdf2 map_index=%d state=0 tagframe=20 mode=80 objects=7 profile=appear-start",inst->GetMapIndex());
+    }
+    if (inst->ObjId()==0x550decafu && inst->GetState()==0 && Get3DImagery()->HasRetailShadowfistProfile())
+    {
+        // Retail409f7b '#' only sets camera flag; '$'409fa9 is the sole
+        // source bit40 writer. These eight exact names have no '$'.
+        // Blendcont405940 initializes immediately, not at metadata frame10.
+        for (int object=0;object<NumObjects();++object) if (auto* bone=GetObject(object)) {
+            bone->flags|=OBJ3D_GOLD_CAMERA_FACING|OBJ3D_BLEND;
+            bone->blend=(bone->blend&0x40u)|16u;
+        }
+        log_info("[blendcont] init type=Shadowfist id=550decaf map_index=%d state=0 tagframe=10 mode=16 objects=8 profile=sfist-loop",inst->GetMapIndex());
+    }
+    if (inst->ObjId()==0x9de2a0feu && inst->GetState()==0 && Get3DImagery()->HasRetailWarriorbornProfile())
+    {
+        // Retail409f7b '#' only sets camera flag; '$'409fa9 is the sole
+        // source bit40 writer. These eight exact names have no '$'.
+        // Blendcont405940 initializes immediately, not at metadata frame10.
+        for (int object=0;object<NumObjects();++object) if (auto* bone=GetObject(object)) {
+            bone->flags|=OBJ3D_GOLD_CAMERA_FACING|OBJ3D_BLEND;
+            bone->blend=(bone->blend&0x40u)|16u;
+        }
+        log_info("[blendcont] init type=Warriorborn id=9de2a0fe map_index=%d state=0 tagframe=10 mode=16 objects=8 profile=wborn-loop",inst->GetMapIndex());
+    }
+    if (inst->ObjId()==0xad92bd40u && inst->GetState()==0 && Get3DImagery()->HasRetailTeleportationProfile())
+    {
+        // Exact default Teleportation imagery, not the custom Teleporter animator.
+        // Retail blendcont405940 initializes immediately; metadata frame35 is not a delay.
+        // No source name contains #/$, so litadd16 remains depth-tested.
+        for (int object=0;object<NumObjects();++object) if (auto* bone=GetObject(object)) {
+            bone->flags|=OBJ3D_BLEND;
+            bone->blend=(bone->blend&0x40u)|16u;
+        }
+        log_info("[blendcont] init type=teleportation id=ad92bd40 map_index=%d state=0 tagframe=35 mode=16 objects=6 profile=teleportation-loop",inst->GetMapIndex());
+    }
     ConfigureI3DLegacyPoseLayout(Get3DImagery(), pose_layout);
     pose_current.Configure(pose_layout);
     pose_next.Configure(pose_layout);
     pose_blended.Configure(pose_layout);
+
+    RefreshPartSysControllers();
 
     animid = Scene3D.AddAnimator(this);
 }
 
 void T3DAnimator::Close()
 {
+    partsys_controllers.reset();
     Scene3D.RemoveAnimator(animid);
 
     for (int32_t c = 0; c < animobjs.NumItems(); c++)
@@ -2262,6 +3695,7 @@ void T3DAnimator::AnimateResetBoundRect()
 
 void T3DAnimator::Pulse()
 {
+    AdvancePartSysControllers();
     ((T3DImagery*)image)->PlaySound(inst, state, frame);
 }
 

@@ -137,6 +137,9 @@ class TComplexObject : public TObjectInstance
       // Main pulse (done before frame is drawn)
 
     bool IsInRoot() { return (doing == root); }
+    bool IsIdleInRoot() const { return doing && doing == root && desired == root && !doing->transition; }
+        // REVSYNC: the speech wait (0x00492d70 type 8) -- back in the root state, nothing
+        // else desired, not transitioning
         // Returns whether the object is in their root state or not
 
     void Try(const char *state)
@@ -184,9 +187,12 @@ class TComplexObject : public TObjectInstance
   protected:
     virtual void UpdateAction(int32_t bits = 0);
       // Called by pulse() to update the current action block
-    virtual int32_t TryCommand(PTActionBlock ab, int32_t bits = 0);
+    static constexpr uint32_t kCommandNoIncidentals = 0x1;
+      // TryCommand/ForceCommand flag (retail's third argument): use each state's
+      // 100% variant, never a random "NN:" one (an incidental animation)
+    virtual int32_t TryCommand(PTActionBlock ab, int32_t bits = 0, uint32_t flags = 0);
       // Main command function - attempt to go to desired state
-    virtual int32_t ForceCommand(PTActionBlock ab, int32_t bits = 0);
+    virtual int32_t ForceCommand(PTActionBlock ab, int32_t bits = 0, uint32_t flags = 0);
       // Called in some special cases to force a new state - be careful with this one
     virtual PTActionBlock GetRoot() { return root; }
       // Gets the current root action block

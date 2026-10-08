@@ -1,5 +1,11 @@
 # Save Game System
 
+> This describes the 1998 source (pre-release). Retail Revenant uses a
+> different `game.sav` format and save-slot layout; see
+> [gameflow/forensics/SAVE_GAME.md](gameflow/forensics/SAVE_GAME.md). In
+> the port the curmap functions below live on `TMapManager`, with file
+> storage in `SectorStore` (`src/sectorstore.h`).
+
 ## Overview
 
 The save game system in Revenant allows players to save and load their progress. Save games are stored as binary files with the extension `.sav` and follow a specific format that includes player data, automap information, and game state. The system also includes a sophisticated map save mechanism that tracks changes to the game world.

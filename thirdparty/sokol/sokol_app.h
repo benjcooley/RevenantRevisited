@@ -3616,7 +3616,24 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_frame();
     if (_sapp.quit_requested || _sapp.quit_ordered) {
-        [_sapp.macos.window performClose:nil];
+        if (_sapp.desc.hidden) {
+            /* [RevenantRevisited] A hidden capture window may be borderless,
+               so performClose: can do nothing. The headless hide shim also
+               suppresses termination after the last window closes. Honor the
+               normal cancellable quit event, then terminate through NSApp so
+               applicationWillTerminate still runs the cleanup callback. */
+            if (!_sapp.quit_ordered) {
+                _sapp_macos_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+                if (_sapp.quit_requested) {
+                    _sapp.quit_ordered = true;
+                }
+            }
+            if (_sapp.quit_ordered) {
+                [NSApp terminate:nil];
+            }
+        } else {
+            [_sapp.macos.window performClose:nil];
+        }
     }
 }
 
@@ -3789,6 +3806,21 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
     else {
         return NO;
+    }
+}
+
+/* [RevenantRevisited] hidden: sokol quits by closing its window and letting
+   AppKit terminate the app once the last window is gone. AppKit does not do
+   that for a window that was never on screen (it never asks
+   applicationShouldTerminateAfterLastWindowClosed:), so with desc.hidden a
+   quit request would close the window and leave the app running. Terminate
+   explicitly instead; applicationWillTerminate: then runs the usual cleanup.
+   Deferred to the next run-loop pass so the window finishes closing before
+   cleanup releases it. */
+- (void)windowWillClose:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
+    if (_sapp.desc.hidden) {
+        [NSApp performSelector:@selector(terminate:) withObject:nil afterDelay:0.0];
     }
 }
 

@@ -8,6 +8,8 @@
 
 #include "bitmap.h"
 
+#include <algorithm>
+
 namespace {
 
 inline void Decode555(uint16_t px, uint8_t* rgba_out)
@@ -33,7 +35,77 @@ inline void Decode565(uint16_t px, uint8_t* rgba_out)
     rgba_out[3] = 255;
 }
 
+// One pixel of retail's hue-change blit (FUN_004b21d0; the 1998 source is
+// PutHueChange in graphics.cpp, the same arithmetic). Channels are 5-bit
+// values times 8; a 16-bit pixel is read 5:5:5 with green's low bit dropped
+// (`>> 6`), as retail reads a 16-bit display. A green-dominant pixel keeps its
+// value (green) and saturation and takes `hue`; the HSV terms truncate as
+// retail's __ftol does. Other pixels, and hues of 360 and up, are unchanged.
+uint16_t HueChangePixel(uint16_t px, int32_t hue, bool rgb565)
+{
+    int32_t r = ((rgb565 ? px >> 11 : px >> 10) & 0x1f) << 3;
+    int32_t g = ((rgb565 ? px >> 6 : px >> 5) & 0x1f) << 3;
+    int32_t b = (px & 0x1f) << 3;
+    if (g <= r || g <= b)
+        return px;
+
+    const double v = double(g) / 255.0;
+    const double s = (double(g) - double((std::min)(r, b))) / double(g);
+    const int32_t range = hue / 60;
+    const double f = double(hue) / 60.0 - double(range);
+    const int32_t p  = int32_t((v * (1 - s)) * 255.0);
+    const int32_t q  = int32_t((v * (1 - (s * f))) * 255.0);
+    const int32_t t  = int32_t((v * (1 - (s * (1 - f)))) * 255.0);
+    const int32_t v0 = int32_t(v * 255.0);
+    switch (range)
+    {
+        case 0: r = v0; g = t;  b = p;  break;
+        case 1: r = q;  g = v0; b = p;  break;
+        case 2: r = p;  g = v0; b = t;  break;
+        case 3: r = p;  g = q;  b = v0; break;
+        case 4: r = t;  g = p;  b = v0; break;
+        case 5: r = v0; g = p;  b = q;  break;
+        default: return px;
+    }
+    r >>= 3;
+    g >>= 3;
+    b >>= 3;
+    return rgb565 ? uint16_t((r << 11) | (g << 6) | b) : uint16_t((r << 10) | (g << 5) | b);
+}
+
 }  // namespace
+
+bool DecodeBitmapHueChangedToRGBA(const TBitmap* bm, int32_t hue,
+                                  uint8_t* dst, int32_t dst_pitch)
+{
+    if (!bm || !dst || bm->width <= 0 || bm->height <= 0 || hue < 0)
+        return false;
+    if (!(bm->flags & (BM_15BIT | BM_16BIT)) || (bm->flags & (BM_COMPRESSED | 0x10000)))
+        return false;
+
+    const bool rgb565 = (bm->flags & BM_16BIT) != 0;
+    const uint16_t key = uint16_t(bm->keycolor);
+    const uint16_t* src = bm->data16;
+    for (int32_t y = 0; y < bm->height; y++)
+    {
+        uint8_t* row = dst + y * dst_pitch;
+        for (int32_t x = 0; x < bm->width; x++, row += 4)
+        {
+            const uint16_t px = src[y * bm->width + x];
+            const uint16_t out = px == key ? 0 : HueChangePixel(px, hue, rgb565);
+            if (out == 0)
+            {
+                row[0] = row[1] = row[2] = row[3] = 0;     // DM_TRANSPARENT skips 0
+                continue;
+            }
+            if (rgb565)
+                Decode565(out, row);
+            else
+                Decode555(out, row);
+        }
+    }
+    return true;
+}
 
 bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
                         int32_t ox, int32_t oy, bool prefer_alias)

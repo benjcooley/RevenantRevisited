@@ -7,6 +7,7 @@
 #include "revenant.h"
 #include "audio_backend.h"
 #include "logging.h"
+#include "module.h"
 #include "parse.h"
 #include "sound.h"
 #include "mappane.h"
@@ -537,6 +538,7 @@ void TArea::Enter()
         const float int_mul   = float(RevisitedSettings.point_light_int_mul   * point_light_int_mul);
         const float range_mul = float(RevisitedSettings.point_light_range_mul * point_light_range_mul);
         mr->SetPointLightMultipliers(int_mul, range_mul);
+        mr->SetDaylightCycle((flags & AREA_DONIGHT) != 0);
     }
 
   // Load local scripts
@@ -600,17 +602,20 @@ bool TAreaManager::Initialize()
     return true;
 }
 
-// Closes the area manager
+// Closes the area manager. The next Initialize reloads area.def (each game
+// starts with its module's areas).
 void TAreaManager::Close()
 {
     areas.DeleteAll();
+    initialized = false;
 }
 
 // Loads all areas from the "AREA.DEF" file
+// REVSYNC: Load @ 0x0041c000 — the active module's area.def, else the shared one.
 bool TAreaManager::Load()
 {
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%s%s", ClassDefPath, "area.def");
+    const std::string fname_str = ModuleManager.DataFilePath("area.def");
+    const char *fname = fname_str.c_str();
 
     FILE *fp = rev_fopen(fname, "rb");
     if (!fp)
@@ -696,6 +701,12 @@ void TAreaManager::Pulse()
   // can decide between snap and FadeAmbient.
     lastpos = pos;
     lastlevel = level;
+}
+
+void TAreaManager::ExitAll()
+{
+    for (int32_t c = 0; c < areas.NumItems(); c++)
+        areas[c]->Exit();
 }
 
 PTArea TAreaManager::CurrentArea()

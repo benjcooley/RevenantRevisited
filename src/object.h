@@ -109,17 +109,23 @@ class obj##Builder : public TObjectBuilder                                      
 // * TInventoryIterator *
 // **********************
 
+// How an inventory walk treats bags. Direct visits the object's own items.
+// Nested also enters each item's inventory right after the item, depth
+// first, and climbs back out: retail's walk 0x0046dfb0 with flag 1, as
+// retail's searches (by name, class or id) and amount count use it.
+enum class EInvWalk : uint8_t { Direct, Nested };
+
 _CLASSDEF(TInventoryIterator)
 class TInventoryIterator
 {
   public:
-    TInventoryIterator(TObjectInstance* own)
-        { owner = own; invindex = 0; item = nullptr; NextItem(); }
+    explicit TInventoryIterator(TObjectInstance* own, EInvWalk how = EInvWalk::Direct)
+        { owner = container = own; walk = how; NextItem(); }
 
     TObjectInstance* Item() const { return item; }
       // Returns current item.
     int32_t InvIndex() const { return invindex - 1; }
-      // Returns current inventory index
+      // Returns the current item's index in its container's inventory
     TObjectInstance* NextItem();
       // Advance to the next item, and return it (nullptr if end of list)
     bool operator ++ (int32_t) { return (NextItem() != nullptr); }
@@ -132,22 +138,24 @@ class TInventoryIterator
       // Dereferencing operator
 
   protected:
-    TObjectInstance* owner;     // inventory parent
-    int32_t invindex;           // index into inventory
-    TObjectInstance* item;      // current object
+    TObjectInstance* owner = nullptr;       // inventory parent: where the walk starts and ends
+    TObjectInstance* container = nullptr;   // whose inventory the walk is in (a bag, nested)
+    int32_t invindex = 0;                   // index into container's inventory
+    TObjectInstance* item = nullptr;        // current object
+    EInvWalk walk = EInvWalk::Direct;
 };
 
 _CLASSDEF(TConstInventoryIterator)
 class TConstInventoryIterator
 {
   public:
-    TConstInventoryIterator(const TObjectInstance* own)
-        { owner = own; invindex = 0; item = nullptr; NextItem(); }
+    explicit TConstInventoryIterator(const TObjectInstance* own, EInvWalk how = EInvWalk::Direct)
+        { owner = container = own; walk = how; NextItem(); }
 
     TObjectInstance* Item() const { return item; }
       // Returns current item.
     int32_t InvIndex() const { return invindex - 1; }
-      // Returns current inventory index
+      // Returns the current item's index in its container's inventory
     const TObjectInstance* NextItem() const;
       // Advance to the next item, and return it (nullptr if end of list)
     bool operator ++ (int32_t) const { return (NextItem() != nullptr); }
@@ -160,9 +168,11 @@ class TConstInventoryIterator
       // Dereferencing operator
 
   protected:
-    const TObjectInstance* owner;   // inventory parent
-    mutable int32_t invindex;       // index into inventory
-    mutable TObjectInstance* item;  // current object
+    const TObjectInstance* owner = nullptr;             // inventory parent
+    mutable const TObjectInstance* container = nullptr; // whose inventory the walk is in
+    mutable int32_t invindex = 0;                       // index into container's inventory
+    mutable TObjectInstance* item = nullptr;            // current object
+    EInvWalk walk = EInvWalk::Direct;
 };
 
 // ************************************************
@@ -549,17 +559,37 @@ class TObjectClass
 #define OF_NOCOLLISION   (1<<24)    // Let the object go through boundries
 #define OF_ICED          (1<<25)    // Used to know when to end the iced effect
 
+// Flags the shipped game added (names from retail's flag table at 0x005d4770;
+// docs/gameflow/forensics/SAVE_GAME.md §11.2).
+constexpr uint32_t OF_VIRGIN       = 1u << 26;  // Untouched since placed: Load resets stats except health/fatigue/mana to the type's
+constexpr uint32_t OF_LOADING      = 1u << 27;  // Being built by LoadObject; gets its script when Load finishes
+constexpr uint32_t OF_INVULNERABLE = 1u << 28;
+constexpr uint32_t OF_BACKGROUND   = 1u << 29;
+constexpr uint32_t OF_INVENTORY    = 1u << 30;  // An item: can be carried (set by the constructor for the item classes)
+constexpr uint32_t OF_CALLEDPREDEL = 1u << 31;
+
 // !!! Remember to put your flags in arrays below too !!!
 
 
-// These flags are set by the object constructor and shouldn't ever be changed
-// Note: Put any flags in here that you ALWAYS want set for objects of a given class
-#define OF_FIXEDFLAGS (OF_COMPLEX | OF_NOTIFY | OF_NONMAP | OF_AI | OF_MOVING)
+// These flags are set by the object constructor and Load keeps them
+// (retail TObjectInstance::Load @ 0x00472430 takes every other bit from the file).
+constexpr uint32_t OF_FIXEDFLAGS = OF_COMPLEX | OF_NOTIFY | OF_NONMAP | OF_AI | OF_MOVING |
+                                   OF_INVENTORY | OF_CALLEDPREDEL;
 
 #define OBJFLAGNAMES { "IMMOBILE", "EDITORLOCK", "LIGHT", "MOVING", "ANIMATING", "AI", "DISABLED",\
             "INVISIBLE", "EDITOR", "DRAWFLIP", "SELDRAW", "REVEAL", "KILL", "GENERATED",\
             "ANIMATE", "PULSE", "WEIGHTLESS", "COMPLEX", "NOTIFY", "NONMAP", "ONEXIT",\
-            "PAUSE", "NOWALK", "PARALIZE", "NOCOLLISION", "ICED"}
+            "PAUSE", "NOWALK", "PARALIZE", "NOCOLLISION", "ICED", "VIRGIN", "LOADING",\
+            "INVULNERABLE", "BACKGROUND", "INVENTORY", "CALLEDPREDEL"}
+
+// Object stream options, threaded through SaveObject/LoadObject and the
+// Save/Load overrides that write sub-objects. Retail kept them in globals
+// (DAT_0065a250 while saving, DAT_0065a254 while loading).
+enum EObjectStream : uint32_t
+{
+    OSTREAM_MAP         = 1u << 0,  // a sector file: NONMAP objects are left out
+    OSTREAM_NOINVENTORY = 1u << 1,  // inventories are left out (the sector hash)
+};
 
 // NOTE: OF_NONMAP
 // ----------------
@@ -664,9 +694,6 @@ class SObjectDef
     // special damage
 #define DAMAGE_POISON       20      // taking poison damage
 
-#define LOAD_BASE(n) { uint8_t n##ver; is >> n##ver; n::Load(is, version, n##ver); }
-#define SAVE_BASE(n) { os << (uint8_t)n::ObjVersion(); n::Save(os); }
-
 _CLASSDEF(TObjectInstance)
 class TObjectInstance : protected SObjectDef
 {
@@ -737,6 +764,8 @@ class TObjectInstance : protected SObjectDef
         // coherent -- but skips the side effects.
     virtual void MoveTo(const S3DPoint& newpos) { SetPos(newpos, -1, false); }
         // Moves object to new position (does walk checking for characters).
+    void Teleport(const S3DPoint& to, int32_t tolevel = -1, bool override = false);
+        // Puts the object somewhere else at once: an exit or `pos` (EXITS.md §3.1)
         // Use this function instead of SetPos() to avoid moving objects through or onto
         // barriers.
     void GetSnapPos(const TObjectInstance* oi, int32_t dist, S3DPoint &p) const;
@@ -750,7 +779,7 @@ class TObjectInstance : protected SObjectDef
         // Sets the level of the object
         // Note: Only OF_NONMAP objects can move between levels!
     void ForceLevel(int32_t newlevel) { level = newlevel; }
-        // Sets the level variable of an object directly (useful for various load/save functions) 
+        // Sets the level variable of an object directly (useful for various load/save functions)
     void ClearAccum() { memset(&accum, 0, sizeof(S3DPoint)); }
         // Clear out object's movement accumulator
     uint32_t GetNotify() const { return notifyflags; }
@@ -918,20 +947,40 @@ class TObjectInstance : protected SObjectDef
     virtual void RepaintObject();
         // Cause object to repaint itself on the screen
     virtual bool AddToInventory(TObjectInstance* inst, int32_t slot = -1);
-        // Add inst to this object's inventory, in the given slot (first free slot if none specified)
+        // REVSYNC: 0x0046f3d0 (vtable 0x58). Moves inst into this object's
+        // inventory at `slot` (a free carried slot when negative), out of
+        // the inventory it was in. Rules in docs/gameflow/forensics/INVENTORY.md:
+        // a player's new item joins a Pouch holding its kind, the item in
+        // `slot` makes room, and an item that merges into a pile of its kind
+        // (MergeInto) is deleted. On true inst may be gone: don't touch it.
     virtual bool AddToInventory(const char *name, int32_t number = 1, int32_t slot = -1);
-        // Add object of type 'name', amount of 'number' to this objects inventory at slot 'slot'
+        // REVSYNC: 0x0046f940 (vtable 0x54). A new object of type 'name',
+        // amount 'number', through AddToInventory above.
+    void PlaceInInventory(TObjectInstance* inst, int32_t slot);
+        // Puts inst, in no inventory, at `slot` as it stands: no pouch, no
+        // merge, no room made. AddToInventory's last step; also a fixture's
+        // way to lay out an inventory exactly, as a load would.
+    bool Holds(const TObjectInstance* item) const;
+        // True if item is in this object's inventory, bags included
+        // (retail's search by id, vtable 0xac, from the inventory's top)
     virtual void RemoveFromInventory();
         // Remove this object from whatever inventory it is in
+    virtual void OnInventoryRemove(TObjectInstance* item) { (void)item; }
+        // `item` is leaving this object's inventory (called before it goes).
+        // TPlayer unequips it. A virtual, not a class test: during this
+        // object's own destruction it resolves to this no-op.
     virtual int32_t GiveInventoryTo(TObjectInstance* to, const char *name, int32_t number = 1);
         // Gives the object 'name' to another object.  Will move multiple objects, 
         // or objects with varying amounts if 'number' > 1.
+    void GiveWeapons(TObjectInstance* to);
+        // REVSYNC: 0x00477780 -- the weapons, ranged weapons and ammo this object
+        // carries, in its bags too, move to `to`'s inventory.
     virtual int32_t DeleteFromInventory(const char *name, int32_t number = 1)
       { return GiveInventoryTo(nullptr, name, number); }
         // Uses the GiveInventoryTo function with a null destination to delete inventory objects
         // from an object.  
     virtual int32_t GetInventoryAmount(const char *name) const;
-        // Returns how many 'name' objects are in inventory
+        // Returns how many 'name' objects are in inventory, bags included
     virtual bool HasEmptySlot() const;
         // Returns true if there is an empty slot available
     virtual bool AddToMap();
@@ -940,19 +989,26 @@ class TObjectInstance : protected SObjectDef
         // Remove this object from the map pane
     virtual int32_t FindFreeInventorySlot() const;
         // Find the first free inventory slot in the object's inventory
+    virtual bool MergeInto(TObjectInstance* newowner) { (void)newowner; return false; }
+        // REVSYNC: vtable 0x98 (base 0x0046fee0). Asked by AddToInventory
+        // once this item has left its old inventory: an item that joins a
+        // pile of its kind in newowner's inventory adds its amount to the
+        // pile and returns true, and AddToInventory deletes it. TMoney and
+        // TFood (so TPotion) merge; everything else never does.
     virtual void SignalAddedToInventory();
         // Called to signal object that it was added to a new inventory
     virtual TObjectInstance* FindObjInventory(const char *name) const;
-        // Find an object by name in inventory
+        // Find an object by name in inventory, bags included
     virtual TObjectInstance* FindObjInventory(int32_t objclass, int32_t type = -1) const;
-        // Find an object by class and type in inventory
+        // Find an object by class and type in inventory, bags included
     virtual bool IsInInventory() const { return (inventnum >= 0); }
       // Returns true if the object is in another object's inventory and should not be drawn
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Uses object (user is the person using it, with is the object to use with this)
         // Returns true if the object was actually used, false if nothing could be done with it
-    virtual int32_t CursorType(TObjectInstance* with = nullptr) const { return CURSOR_NONE; }
+    virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
         // Returns type of cursor that should appear when mouse arrow is over the object
+        // (not const: the overrides read stats through non-const accessors)
     virtual void UseRange(int32_t &mindist, int32_t &maxdist, int32_t &minang, int32_t &maxang)
         { mindist = 20; maxdist = 50; minang = 0; maxang = 255; }
         // Valid locations character can be standing in order to use the object
@@ -989,24 +1045,31 @@ class TObjectInstance : protected SObjectDef
         // Finds a stat and returns its stat id or -1 if not found
     const char *ObjStatName(int32_t statid) const { return cl->ObjStatName(statid); }
         // Returns a statistic for an class
-    int32_t GetObjStat(int32_t statid) const { if ((uint32_t)statid < (uint32_t)stats.NumItems()) return stats[statid]; else return 0; }
-        // Returns a statistic for an object
-    int32_t FindObjStat(char *statname) const { return cl->FindObjStat(statname); }
+    virtual int32_t GetObjStat(int32_t statid) const { if ((uint32_t)statid < (uint32_t)stats.NumItems()) return stats[statid]; else return 0; }
+        // Returns a statistic for an object (retail vtable +0xdc; a player
+        // answers from its equipment- and spell-modified copy)
+    int32_t FindObjStat(const char *statname) const { return cl->FindObjStat(statname); }
         // Finds a stat and returns its stat id or -1 if not found
     void SetStat(int32_t statid, int32_t value) { cl->SetStat(objtype, statid, value); }
         // Sets a class statistic
-    void SetObjStat(int32_t statid, int32_t value) { if ((uint32_t)statid < (uint32_t)stats.NumItems()) stats[statid] = value; }
-        // Sets an object statistic
+    virtual void SetObjStat(int32_t statid, int32_t value) { if ((uint32_t)statid < (uint32_t)stats.NumItems()) stats[statid] = value; }
+        // Sets an object statistic (retail vtable +0xe8; a player sets its
+        // modified copy too)
     void ResetStat(int32_t statid) { cl->ResetStat(objtype, statid); }
         // Resets class stat to default value
     void ResetObjStat(int32_t statid) { stats[statid] = cl->GetObjStat(objtype, statid); }
         // Resets object stat to default value
     int32_t GetStat(const char *statname) const;
         // Returns a statistic given the statistic name (stat can be object or class stat)
+    bool HasStat(const char *statname) const;
+        // REVSYNC: 0x00473900 -- true if the name is one of this object's object or class statistics
     int32_t GetStat(const char *statname, char *str, int32_t id = -1) const;
         // Returns a statistic via sprintf format 'StatnameId.Str' (stat can be object or class stat)
     void SetStat(const char *statname, int32_t value);
         // Sets a statistic given the stat name (stat can be object or class stat)
+    virtual bool GetFieldText(const char *field, char *buf, int32_t buflen);
+        // Text of a named field as the stat sheet shows it (retail vtable +0xc8,
+        // 0x00472f80); false when the object has no such field
     void DelStat(int32_t statid) { stats.Collapse(statid); }
         // Deletes a stat in stat array (Used by classes DeleteStat(), don't call directly)
 
@@ -1071,9 +1134,9 @@ class TObjectInstance : protected SObjectDef
     virtual bool IsInventoryItem();
         // Inventory-eligible iff InventoryImage() would return non-null (matches retail's
         // semantics: a baked invitem OR an invanim with at least one frame).
-    virtual int32_t FindState(const char *name) const { return imagery ? imagery->FindState(name) : -1; }
-        // Find a state in the object's imagery
-    virtual int32_t FindTransitionState(const char *from, const char *to) const { return imagery ? imagery->FindTransitionState(from, to) : -1; }
+    virtual int32_t FindState(const char *name, int32_t pcnt = -1) const { return imagery ? imagery->FindState(name, pcnt) : -1; }
+        // Find a state in the object's imagery ('pcnt' picks among "NN:" variants; -1 rolls one)
+    virtual int32_t FindTransitionState(const char *from, const char *to, int32_t pcnt = -1) const { return imagery ? imagery->FindTransitionState(from, to, pcnt) : -1; }
         // Find a state in the object's imagery
     const char *GetAniName() const { return imagery ? imagery->GetAniName(GetState()) : nullptr; }
         // Gets current animation name
@@ -1088,10 +1151,18 @@ class TObjectInstance : protected SObjectDef
 
   // Script functions
     void InitScript(PTScript newscr);
-      // Set script to newscr and initialize
+      // Replace the script with newscr (taking ownership) and reset it to
+      // wait for a trigger;
+      // deletes newscr when this object can't have a script
+    [[nodiscard]] bool CanHaveScript() const;
+      // Carried items and tiles that keep their type's name have no script
     void ResetScript();
-      // Reset the current script
-    void ContinueScript();
+      // Reset the current script (TScript::Reset)
+    // REVSYNC: TObjectInstance::Pulse @ 0x004708e0 — run the script, telling
+    // it whether this object's current action has finished.
+    void ContinueScript(bool commanddone);
+    // REVSYNC: 0x00471390 — the script is waiting for something.
+    [[nodiscard]] bool IsScriptWaiting() const;
       // Continue script execution (call every frame)
     void ScriptJump(char *label);
       // Jump to a given label in the script
@@ -1149,32 +1220,26 @@ class TObjectInstance : protected SObjectDef
     virtual void SetCommandDone(bool newcmd);
 
   // Streaming functions
-    static TObjectInstance* LoadObject(RTInputStream is, int32_t version, bool ismap = false);
-        // Loads and creates a new object from stream 
-        // (objs with OF_NOSAVEMAP i.e. players will be ignored if ismap is true)
-    static void SaveObject(TObjectInstance* inst, RTOutputStream os, bool ismap = false);
-        // Saves object to stream (includes header and block information)
-        // (objs with OF_NOSAVEMAP i.e. players will be ignored if ismap is true)
+    static TObjectInstance* LoadObject(RTInputStream is, int32_t version, uint32_t streamflags = 0);
+        // Loads and creates a new object from stream (EObjectStream flags;
+        // with OSTREAM_MAP, NONMAP objects i.e. players are discarded)
+    static void SaveObject(TObjectInstance* inst, RTOutputStream os, uint32_t streamflags = 0);
+        // Saves object to stream (includes header and block information;
+        // with OSTREAM_MAP, NONMAP objects i.e. players become a placeholder)
     virtual int32_t ObjVersion() { return 0; }
         // The version id of the object for the Load()/Save() functions.
         // This version number allows objects to change what they stream to the map
         // while still being able to load previous versions of the object.
-        // !!!!! IMPORTANT !!!!! When you override the ObjVersion() function, you
-        // MUST use the LOAD_BASE() and SAVE_BASE() macros to load and save the base
-        // class or the object version for your base class will be WRONG!
+        // A class that overrides it streams its base class with a one-byte
+        // version prefix: Save writes Base::ObjVersion() then Base::Save,
+        // Load reads the byte and passes it to Base::Load.
     virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
-        // Loads object data from the sector 
-        // NOTE: When you need to call the base class load function, make sure you 
-        // use LOAD_BASE(TBaseClass) instead of TBaseClass:Load(is, version, objversion)
-        // or the base class version number will be WRONG!!
+        // Loads object data from the sector
     virtual void Save(RTOutputStream os);
         // Saves object data to the sector
-        // NOTE: When you need to call the base class load function, make sure you 
-        // use SAVE_BASE(TBaseClass) instead of TBaseClass::Save(os)
-        // or the base class version number will be WRONG!!
-    virtual void LoadInventory(RTInputStream is, int32_t version);
+    virtual void LoadInventory(RTInputStream is, int32_t version, uint32_t streamflags);
         // Load inventory recursively
-    virtual void SaveInventory(RTOutputStream os);
+    virtual void SaveInventory(RTOutputStream os, uint32_t streamflags);
         // Save inventory recursively
 
   // Inventory access functions
@@ -1186,12 +1251,12 @@ class TObjectInstance : protected SObjectDef
         // Number of objects in the array
     int32_t RealNumInventoryItems();
         // Number of *used* objects in the array
-    int32_t InventNum() { return inventnum; }
-    int32_t InvIndex() { return invindex; }
+    int32_t InventNum() const { return inventnum; }
+    int32_t InvIndex() const { return invindex; }
     void SetInventNum(short i) { inventnum = i; }
 
   // Owner functions
-    TObjectInstance* GetOwner() { return owner; }
+    TObjectInstance* GetOwner() const { return owner; }
     TObjectInstance* GetTopOwner()
         { TObjectInstance* inst = this;
           while (inst->owner) inst = inst->owner;
@@ -1203,6 +1268,8 @@ class TObjectInstance : protected SObjectDef
     void SetMapIndex(int32_t newindex);   // out-of-line: also syncs the
                                           // MapPane mapindex→instance registry
     int32_t GetMapIndex() const { return mapindex; }
+    int32_t FileMapIndex() const { return filemapindex >= 0 ? filemapindex : mapindex; }
+        // The instance id sector and save files record for this object
 
   // TSafeRef<T> contract -- see comment block before TSafeRef in this file.
   // SafeRefId is the mapindex (the existing stable id for instances).
@@ -1275,6 +1342,9 @@ class TObjectInstance : protected SObjectDef
     char *name;                 // What is my name
     uint32_t notifyflags;       // Notify Objects of changes
     int32_t mapindex;           // Unique instance id
+    int32_t filemapindex = -1;  // The id the object was loaded with when another object
+                                // already held it and the registry had to give this one
+                                // a fresh id (retail allowed duplicates); -1 otherwise
     uint32_t safe_ref_gen;      // Per-instance generation; TSafeRef<T>
                                 // captures (id, gen) and rejects lookups
                                 // where gen mismatches the current
@@ -1340,8 +1410,15 @@ class TObjectInstance : protected SObjectDef
   // Light
     SLightDef lightdef;         // Current light definition
 
-  // Statistics                 
+  // Statistics
     TStatisticList stats;       // Stats for object
+
+  // Stream
+    void KeepUnreadClassData(RTInputStream is, int32_t from, int32_t to);
+    void SaveUnreadClassData(RTOutputStream os) const;
+    std::unique_ptr<std::vector<uint8_t>> unreadClassData;
+        // Class data in the object's file block that its port class doesn't
+        // read (a retail class not ported yet); written back unchanged
 
   // Working members
     int32_t                 moveangle;  // Angle to move next move

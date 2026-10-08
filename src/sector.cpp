@@ -10,13 +10,18 @@
 #include "logging.h"
 #include "parse.h"
 #include "revutils.h"
+#include "sectorstore.h"
 #include "stream.h"
 #include "textbar.h"
 
+#include <algorithm>
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <vector>
+
+#include <algorithm>
 
 char sectorfilename[80] = "%d_%d_%d.DAT";
 uint32_t SectrorMapFCC = (('M' << 0) | ('A' << 8) | ('P' << 16) | (' ' << 24));
@@ -41,13 +46,12 @@ TSector::TSector(int32_t newlevel, int32_t newsectorx, int32_t newsectory)
 
     memset(walkmap, 0, sizeof(uint16_t) * WALKMAPSIZE);
 
-    sprintf(filename, sectorfilename, level, sectorx, sectory);
+    snprintf(filename, sizeof(filename), sectorfilename, level, sectorx, sectory);
 }
 
 TSector::~TSector()
 {
-    if (walkmap)
-        delete walkmap;
+    delete[] walkmap;
 
     for (int32_t c = 1; c < NUMOBJSETS; c++)
         objsets[c-1].Clear();
@@ -90,7 +94,18 @@ TSector* TSector::LoadSector(int32_t newlevel, int32_t newsectorx, int32_t newse
     }
 
     sector = new TSector(newlevel, newsectorx, newsectory);
-    sector->Load(); // Assume this works
+
+    // REVSYNC-DIVERGENCE: retail LoadSector @ 0x004982b0 ignored Load's
+    // result and kept the sector, empty or half read. The port loads only
+    // sectors whose files exist (TGameMap::Load), so a failure means the file
+    // is unreadable or malformed, and keeping the sector would write the
+    // partial copy over it when the map unloads. The sector is dropped; the
+    // map leaves it out and logs it.
+    if (!sector->Load())
+    {
+        delete sector;
+        return nullptr;
+    }
 
     return sector;
 }
@@ -107,59 +122,52 @@ void TSector::CloseSector(TSector* sector)
         sector->usecount--;
 }
 
+// Delete the sector without saving it: its working-set copy is about to be
+// replaced (a new or loaded game).
+void TSector::DiscardSector(TSector* sector)
+{
+    if (!sector->preloaded)
+        delete sector;
+    else
+        sector->usecount--;
+}
+
 // Straight (no preloaded sectors) load/save functions
 
 #define MAKEINDEX(level, sx, sy, item)  ((level<<24) | (sx<<18) | (sy<<12) | (item & 0xFFF))
 
+// REVSYNC: TSector::Load @ 0x004984d0 + LoadFromStream @ 0x00498780.
+// Returns false when the file is missing, can't be read, or is malformed as
+// far as the sector can tell (header, object count, stream running out);
+// retail rejected only a missing "MAP " header. Objects read before a
+// failure stay in the sector: LoadSector discards such a sector.
 bool TSector::Load(bool lock)
 {
     int32_t version = 0;
-    FILE *fp;
 
-    char mappath[MAXPATHLEN];
-
-    // rev_fopen handles SavePath/RunPath/data-root/VFS fallbacks so both the
-    // loose .DAT under data/Curmap and rvr-packed sectors resolve cleanly.
-    strcpy(mappath, CurMapPath);
-    strcat(mappath, CURMAPDIR "\\");
-    strcat(mappath, filename);
-    fp = rev_fopen(mappath, "rb");
-
+    // The working set's copy if this game has written one, else the base map.
+    FILE* fp = SectorStore::OpenForRead(filename);
     if (!fp)
-    {
-        strcpy(mappath, BaseMapPath);
-        strcat(mappath, BASEMAPDIR "\\");
-        strcat(mappath, filename);
-        fp = rev_fopen(mappath, "rb");
-
-        if (!fp)
-            return false;
-    }
+        return false;
 
     fseek(fp, 0, SEEK_SET);
 
-    int32_t bufsize = flen(fp);
-    uint8_t *buf;
+    // An empty file reads as a sector with no objects (the 1998 format had
+    // no header). The buffer outlives `is`, which doesn't own it (retail
+    // freed it after the read; the 1998 code leaked it).
+    const int32_t filesize = flen(fp);
+    std::vector<uint8_t> buf((size_t)std::max<int32_t>(filesize, sizeof(int32_t)), 0);
+    const bool readok = filesize <= 0 || fread(buf.data(), (size_t)filesize, 1, fp) == 1;
+    fclose(fp);
 
-    if (bufsize > 0)
-    {
-        buf = (uint8_t *)malloc(bufsize);
-        fread(buf, bufsize, 1, fp);
-    }
-    else
-    {
-        buf = (uint8_t *)malloc(sizeof(int32_t));
-        bufsize = 4;
-        *((int32_t *)buf) = 0;
-    }
+    auto malformed = [this](const char* why) {
+        log_error("[sector] %s: %s", filename, why);
+        return false;
+    };
+    if (!readok)
+        return malformed("read failed");
 
-    //if (!lock)
-    {
-        fclose(fp);
-        fp = nullptr;
-    }
-
-    TInputStream is(buf, bufsize);
+    TInputStream is(buf.data(), (int32_t)buf.size());
 
     int32_t numobjects;
     is >> numobjects;
@@ -168,27 +176,41 @@ bool TSector::Load(bool lock)
     if ((uint32_t)numobjects == SectrorMapFCC)
     {
         // Get which sector map version this is
+        if (is.Remaining() < 4)
+            return malformed("truncated header");
         is >> version;
 
         // v14+ adds a 4-byte hash (statehash) between version and
         // numobjects. See TSector in sector.h and
         // recon/docs/SECTOR_FILE_FORMAT.md. Gate matches retail
         // (FUN_00498780 @ 0x498780): `if (version > 13)`.
+        if (is.Remaining() < (version > 13 ? 8 : 4))
+            return malformed("truncated header");
         if (version > 13)
             is >> statehash;
 
         is >> numobjects;
     }
 
+    if (numobjects < 0 || numobjects > MAXSECTOROBJECTS)
+        return malformed("bad object count");
+
     for (int32_t c = 0; c < numobjects; c++)
     {
-        TObjectInstance* inst = TObjectInstance::LoadObject(is, version, true);
+        // Every object record starts with a 16-bit field (objversion, or the
+        // objclass in pre-v8 maps). A record that runs past the end of the
+        // file marks the stream overrun (below).
+        if (is.Remaining() < 2)
+            return malformed("object data ends early");
+
+        TObjectInstance* inst = TObjectInstance::LoadObject(is, version, OSTREAM_MAP);
         // Note: inst can be nullptr here if a placeholder (-1) was saved for the obj class id
 
         if (inst)
         {
             inst->ForceSector(this);
             inst->ForceLevel(level); // Directly sets the inst's level variable
+            KeepInside(inst);
             // World positions stay in tile-Z space (matches the tile
             // draw path). The mesh-only 1.5 scaling lives entirely in
             // the per-instance mesh model matrix at draw time, so a
@@ -211,6 +233,9 @@ bool TSector::Load(bool lock)
             inst->SetMapIndex(MAKEINDEX(level, sectorx, sectory, c));
     }
 
+    if (is.Overrun())
+        return malformed("object data overruns the file");
+
     // Load is the initial "contents are populated" event.
     contentver = 1;
     return true;
@@ -223,54 +248,121 @@ bool TSector::Load(bool lock)
 // the rest of the engine is still alive, so by the time the global dtor
 // fires the cache is already empty and Save isn't reached.)
 
+// REVSYNC: the position fix-up in TSector::Load @ 0x00498780: an object
+// whose position lies outside the sector is moved into it by whole sectors
+// on x and y (z unchanged).
+void TSector::KeepInside(TObjectInstance* inst) const
+{
+    auto inside = [](int32_t v, int32_t lo, int32_t size) {
+        const int32_t offset = (v - lo) % size;
+        return lo + (offset < 0 ? offset + size : offset);
+    };
+    S3DPoint p = inst->Pos();
+    const int32_t x = inside(p.x, sectorx * SECTORWIDTH, SECTORWIDTH);
+    const int32_t y = inside(p.y, sectory * SECTORHEIGHT, SECTORHEIGHT);
+    if (x != p.x || y != p.y)
+    {
+        p.x = x;
+        p.y = y;
+        inst->ForcePos(p);
+    }
+}
+
+namespace {
+
+// Adler-32 as retail computes it (0x0056ff60 / 0x0056ff80): the bytes are
+// signed chars, and the sums are reduced mod 65521 only after each
+// 5552-byte chunk, with 32-bit wraparound in between.
+class TRetailAdler32
+{
+  public:
+    void Update(const void* data, size_t count)
+    {
+        const int8_t* bytes = static_cast<const int8_t*>(data);
+        uint32_t a = state & 0xffff;
+        uint32_t b = state >> 16;
+        while (count > 0)
+        {
+            const size_t chunk = std::min<size_t>(count, kChunk);
+            for (size_t i = 0; i < chunk; i++)
+            {
+                a += (uint32_t)(int32_t)bytes[i];
+                b += a;
+            }
+            bytes += chunk;
+            count -= chunk;
+            a %= kModulus;
+            b %= kModulus;
+        }
+        state = (b << 16) | a;
+    }
+
+    [[nodiscard]] uint32_t Value() const { return state; }
+
+  private:
+    static constexpr size_t   kChunk   = 5552;
+    static constexpr uint32_t kModulus = 65521;
+    uint32_t state = 1;
+};
+
+}  // namespace
+
+// REVSYNC: the sector state hash @ 0x00499e90 (SAVE_GAME.md §11.6): the
+// sector's coordinates and object count, then the stream of each character
+// and player in it, saved as for a map without inventories.
+uint32_t TSector::StateHash()
+{
+    TRetailAdler32 hash;
+    const int32_t header[4] = { level, sectorx, sectory, objects.NumItems() };
+    for (int32_t value : header)
+        hash.Update(&value, sizeof(value));
+
+    TOutputStream os(0x8000, 0x3f9c);
+    for (TPointerIterator<TObjectInstance> i(&objects); i; i++)
+    {
+        TObjectInstance* inst = i.Item();
+        if (!inst || (inst->ObjClass() != OBJCLASS_CHARACTER && inst->ObjClass() != OBJCLASS_PLAYER))
+            continue;
+        os.Reset();
+        TObjectInstance::SaveObject(inst, os, OSTREAM_MAP | OSTREAM_NOINVENTORY);
+        hash.Update(os.Buffer(), os.DataSize());
+    }
+
+    constexpr uint32_t kZeroHash = 0xf0f0f0f0;
+    return hash.Value() != 0 ? hash.Value() : kZeroHash;
+}
+
+// REVSYNC: TSector::Save @ 0x00498c90 + file write @ 0x00498a40. Retail
+// writes empty sectors too (a retail curmap holds 2_8_10.DAT with 0 objects);
+// the 1998 source deleted the file instead, which let a sector the player
+// emptied fall back to its base-map contents. The state hash is computed
+// after the objects are written, as retail (a lit object's Save sets flags).
 void TSector::Save()
 {
-    int32_t version = MAP_VERSION; // Current sector map version #
-
-    if (objects.NumItems() == 0)
-    {
-        // don't save empty sectors, and clear out old save file
-        std::remove(filename);
-        return;
-    }
-
-    bool closeit = false;
     TOutputStream os(STARTSIZE, GROWSIZE);
-    TPointerIterator<TObjectInstance> i(&objects);
 
-    // Write out the "header" with "MAP " followed by the version #
     os << SectrorMapFCC;
-    os << version;
-
-    // v14+ writes statehash between version and numobjects. Retail
-    // regenerates this hash at save time (FUN_00499e90). We round-trip
-    // the last-loaded value for now.
-    if (version > 13)
-        os << statehash;
-
+    os << (int32_t)MAP_VERSION;
+    const int32_t hashpos = os.GetPos();
+    os << (uint32_t)0;
     os << objects.NumItems();
 
-    for ( ; i; i++)
+    for (TPointerIterator<TObjectInstance> i(&objects); i; i++)
+        TObjectInstance::SaveObject(i.Item(), os, OSTREAM_MAP);
+
+    statehash = (int32_t)StateHash();
+    const int32_t end = os.GetPos();
+    os.SetPos(hashpos);
+    os << (uint32_t)statehash;
+    os.SetPos(end);
+
+    FILE *fp = SectorStore::OpenForWrite(filename);
+    if (!fp)
     {
-        TObjectInstance::SaveObject(i.Item(), os, true);
+        log_error("[sector] can't write %s to the working set", filename);
+        return;
     }
 
-    char mappath[MAXPATHLEN];
-
-    // mirror TSector::Load — three-step concat. The original second line
-    // here was `strcpy` (clobbering CurMapPath); that's why every saved
-    // sector landed at `curmap\<file>.DAT` relative to CWD instead of
-    // `<CurMapPath>curmap\<file>.DAT`. Route through rev_fopen so the
-    // SavePath/separator-normalization layers apply on writes too.
-    strcpy(mappath, CurMapPath);
-    strcat(mappath, CURMAPDIR "\\");
-    strcat(mappath, filename);
-
-    FILE *fp = rev_fopen(mappath, "wb");
-    if (!fp)
-        return;
-
-    fseek(fp, 0, 0);
     fwrite(os.Buffer(), os.DataSize(), 1, fp);
     fclose(fp);
 }
@@ -337,10 +429,18 @@ int32_t TSector::AddObject(TObjectInstance* oi, int32_t item)
     oi->ForceSector(this);
     oi->ForceLevel(level);
 
+    // REVSYNC: TSector::AddObject @ 0x00498fb0 adds with retail's array Add
+    // (0x0041c840), which takes the first empty slot; TPointerArray::Add
+    // appends. The difference shows in the sector file: an object that
+    // leaves and comes back (the player crossing a sector) is written
+    // where retail writes it.
     if (item < 0)
-        item = objects.Add(oi);
-    else
-        item = objects.Set(oi, item);
+    {
+        item = 0;
+        while (item < objects.NumItems() && objects[item])
+            ++item;
+    }
+    item = objects.Set(oi, item);
 
     for (int32_t d = 1; d < NUMOBJSETS; d++)
     {
@@ -407,6 +507,17 @@ TObjectInstance* TSector::RemoveObject(int32_t item)
     return oi;
 }
 
+// REVSYNC: TSector::RemoveObject @ 0x00499250 (retail removes by object).
+int32_t TSector::RemoveObject(TObjectInstance* oi)
+{
+    if (!oi)
+        return -1;
+    const int32_t item = GetObjIndex(oi);
+    if (item >= 0)
+        RemoveObject(item);
+    return item;
+}
+
 int32_t TSector::GetObjIndex(const TObjectInstance* oi) const
 {
     for (int32_t i = 0; i < objects.NumItems(); i++)
@@ -417,20 +528,40 @@ int32_t TSector::GetObjIndex(const TObjectInstance* oi) const
     return -1;
 }
 
+// REVSYNC: TSector::ObjectFlagsChanged @ 0x00499360. The object keeps its
+// slot; only its object-set memberships follow the new flags. (The 1998
+// source removed and re-added the object, which moved it to the end of the
+// sector, so a sector saved after a flag change listed its objects in a
+// different order than retail.)
 void TSector::ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32_t newflags)
 {
-    if (oi->GetSector() != this)
+    if (oi->GetSector() != this || !(OBJSETOBJFLAGS & (oldflags ^ newflags)))
         return;
 
-    if (OBJSETOBJFLAGS & (oldflags ^ newflags))
-    {
-        int32_t index = GetObjIndex(oi);
-        if (index < 0)
-            return;
+    int32_t index = GetObjIndex(oi);
+    if (index < 0)
+        return;
 
-        RemoveObject(index);
-        AddObject(oi);
+    for (int32_t d = 1; d < NUMOBJSETS; d++)
+    {
+        TObjSetArray& set = objsets[d-1];
+        int32_t at = -1;
+        for (int32_t c = 0; c < set.NumItems(); c++)
+        {
+            if (set[c] == index)
+            {
+                at = c;
+                break;
+            }
+        }
+
+        const bool wanted = InObjSet(oi, d);
+        if (at >= 0 && !wanted)
+            set.Collapse(at);
+        else if (at < 0 && wanted)
+            set.Set(index, set.NumItems());
     }
+    ++contentver;
 }
 
 // *****************
@@ -586,10 +717,9 @@ bool TSector::LoadPreloadSectors(int32_t level, int32_t numrects, SRect *rects)
           // If not already in sector list, load it
             if (!alreadyloaded)
             {
-                TSector* sector = new TSector(level, x, y);
-                if (sector)
+                // Retail loads through LoadSector here too (0x004998b0).
+                if (TSector* sector = LoadSector(level, x, y, false))
                 {
-                    sector->Load();
                     sector->preloaded = true;
                     preloads.Add(sector);
                 }
@@ -600,7 +730,7 @@ bool TSector::LoadPreloadSectors(int32_t level, int32_t numrects, SRect *rects)
             {
                 int32_t level = 300 * count / (maxcount * 2);
                 TextBar.SetLevels(level, level);
-                TextBar.Draw();
+                TextBar.DrawImmediate();
                 TextBar.PutToScreen();
             }
             count++;
@@ -632,7 +762,7 @@ bool TSector::LoadPreloadSectors(int32_t level, int32_t numrects, SRect *rects)
                     {
                         int32_t level = 300 * count / (maxcount * 2);
                         TextBar.SetLevels(level, level);
-                        TextBar.Draw();
+                        TextBar.DrawImmediate();
                         TextBar.PutToScreen();
                     }
                     count++;

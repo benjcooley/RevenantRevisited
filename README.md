@@ -40,7 +40,12 @@ RevenantRevisited/
 ├── data/            ← user's existing Revenant install (dev only — symlink
 │                      or copy of a GoG/CD install). Shipped builds DO NOT
 │                      include this; the user provides their own legally-
-│                      owned copy.
+│                      owned copy. Kept stock: nothing the port authors
+│                      lives here (docs/DATA_LAYOUT.md has the inventory).
+├── assets/          ← engine-owned runtime data the port authors or supplies
+│                      and needs in every mode (effects.def,
+│                      render_metadata.def, editor icons, fonts/). Ships
+│                      beside the binary.
 ├── revisited/       ← our enhancement layer. Sibling to src/. Strictly
 │   │                  opt-in: empty/missing means the engine plays vanilla
 │   │                  retail. See revisited/README.md for the contract.
@@ -73,13 +78,39 @@ The engine resolves three platform-aware paths at boot:
 | RunPath  | User's existing Revenant install (read-only)      | env `$REVENANT_DATA_PATH`, else exe-dir / cwd / repo `data/` heuristic |
 | SavePath | User saves, INI, prefs (writable, per-user)       | macOS `~/Library/Application Support/Revenant/` · Linux `$XDG_DATA_HOME/Revenant/` · Windows `%LOCALAPPDATA%\Revenant\` |
 | Overlay  | Our enhancement pack (optional)                   | env `$REVENANT_REVISITED_PATH`, else `<exe-dir>/RevenantRevisited.rvr`, else dev `<repo>/revisited/resources/` |
+| Assets   | Engine-owned data (required)                      | env `$REVENANT_ASSETS_PATH`, else `<exe-dir>/assets/`, else `.app` `Resources/assets/`, else dev `<repo>/assets/` |
 
-`rev_fopen` resolution order is **SavePath → Overlay → RunPath → mounted
-archives**, so user saves always win over overlay, overlay always wins
-over original assets. Overlay is read-only — writes never go there.
+`rev_fopen` reads walk **SavePath → Overlay → RunPath**. A mounted pack
+answers for the directory it names (`resources.rvr` for `Resources\…`,
+`Modules/Ahkuilon.rvm` for `Modules\Ahkuilon\…`) and, as in retail, wins
+over a loose file at the same path unless the caller asks for loose-first.
+User saves win over overlay; overlay wins over original assets. Overlay is
+read-only — writes never go there. Details and the retail forensics:
+[docs/DATA_LAYOUT.md](docs/DATA_LAYOUT.md).
 
 The engine refuses to run if SavePath isn't writable (no installs on
 read-only media). It runs fine without the overlay (vanilla retail).
+
+### Fonts
+
+The TrueType faces the port draws with are engine assets, kept in
+`assets/fonts/` beside their licence files. Arimo and Tinos are the
+metric-compatible stand-ins for retail's Arial and Times New Roman (the
+text bar, dialog, HUD numbers and .def screens draw with them); Inter,
+JetBrains Mono and Material Symbols serve the editor and capture labels.
+They belong to Assets rather than the Overlay because Classic mode draws
+with them, and the engine must run without the opt-in overlay.
+
+Every load names a face by file name and asks one resolver,
+`TTFFilePath("Arimo-Regular.ttf")` in `src/font.h`, which returns
+`rev_engine_asset("fonts/<file>")`. The faces are therefore found from
+any working directory: `<exe-dir>/assets/fonts/` in a GOG install, the
+`.app` bundle's `Resources/assets/fonts/`, or, in development, the
+source tree's `assets/fonts/` above `build/`. They ship as loose files
+and are read with `fopen` like every engine asset, so no pack or VFS
+read is involved. If the overlay ever carries an alternate face (the
+"Enhanced UI" category in revisited/README.md), that lookup belongs in
+`TTFFilePath`, ahead of the asset.
 
 ### SavePath layout
 
@@ -132,6 +163,7 @@ We ship per-platform binaries plus a single optional pack:
 RevenantRevisitedOSX             ← our binary (one of these per OS)
 RevenantRevisitedLinux
 RevenantRevisitedWindows.exe
+assets/                          ← required: engine-owned data (the repo's assets/)
 RevenantRevisited.rvr            ← optional: enhancement overlay (zipped revisited/resources/)
 ```
 
@@ -151,6 +183,9 @@ cmake --build build
 ```
 
 On macOS, the project links Metal/Cocoa/AppKit frameworks through `CMakeLists.txt`.
+
+For the ASan + UBSan build, headless test runs and lldb setup, see
+`docs/DEBUG_TOOLING.md`.
 
 ## Running
 

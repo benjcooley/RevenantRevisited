@@ -4,6 +4,10 @@
 
 This document covers the development tools present in the codebase and the file formats that need to be supported for reading game data. For a preservation port, the focus is on **reading existing data files** rather than rebuilding the original data pipeline.
 
+For the thin retail emulator, scripted effect controls and A/B testing, see
+[Retail A/B testing](RETAIL_AB_TESTING.md). The historical Windows 98 guest
+helper remains in the local lab for targeted device diagnostics.
+
 ## Available Resources
 
 ### RevenantBin - Game Binary Distribution
@@ -13,7 +17,7 @@ Contains the complete game distribution with:
 - **Revenant.exe** - The main game executable (2.0MB)
 - **Resources/** - Game data files including:
   - `rules.def` - Complete game rules and mechanics
-  - `spell.def` - Magic system definitions  
+  - `spell.def` - Magic system definitions
   - `options.def` - Game configuration options
   - `statpane.def` - Statistics panel definitions
   - `master.s` - Master script file
@@ -194,4 +198,4 @@ The addition of **RevenantBin** and **RevenantGhidra** provides invaluable resou
 3. **Reference Implementation** - Working game to compare against
 4. **Complete Asset Set** - All graphics, sounds, and data files
 
-This combination of source code, binary analysis, and actual game files provides a comprehensive foundation for implementing modern file format readers without needing the original development tools. 
+This combination of source code, binary analysis, and actual game files provides a comprehensive foundation for implementing modern file format readers without needing the original development tools.

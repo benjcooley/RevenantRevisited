@@ -6,14 +6,13 @@
 
 #include "editorfonts.h"
 
+#include "font.h"       // TTFFilePath
 #include "logging.h"
 #include "renderer.h"
 
 #include <imgui.h>
 
-#ifndef REV_FONTS_DIR
-#  define REV_FONTS_DIR "thirdparty/fonts"
-#endif
+#include <string>
 
 namespace {
 
@@ -51,12 +50,15 @@ bool UploadAtlasToRenderer(ImFontAtlas* atlas)
     return true;
 }
 
-ImFont* AddTTF(ImFontAtlas* atlas, const char* path, float px,
+// Adds one of the faces the port ships, named by file (see TTFFilePath).
+ImFont* AddTTF(ImFontAtlas* atlas, const char* file, float px,
                const ImFontConfig* cfg = nullptr,
                const ImWchar* ranges = nullptr)
 {
-    ImFont* f = atlas->AddFontFromFileTTF(path, px, cfg, ranges);
-    if (!f) log_warn("[fonts] failed to load '%s'", path);
+    const std::string path = TTFFilePath(file);
+    ImFont* f = path.empty() ? nullptr
+                             : atlas->AddFontFromFileTTF(path.c_str(), px, cfg, ranges);
+    if (!f) log_warn("[fonts] failed to load '%s' ('%s')", file, path.c_str());
     return f;
 }
 
@@ -74,7 +76,7 @@ void EditorFonts::Build()
     const float kMonoPx = 14.0f;
 
     // -- Default UI font: Inter ---------------------------------------------
-    ImFont* def = AddTTF(atlas, REV_FONTS_DIR "/Inter-Regular.ttf", kUiPx);
+    ImFont* def = AddTTF(atlas, "Inter-Regular.ttf", kUiPx);
     if (!def) {
         atlas->AddFontDefault();
     }
@@ -90,12 +92,11 @@ void EditorFonts::Build()
         cfg.PixelSnapH       = true;
         cfg.GlyphMinAdvanceX = kIconPx;     // monospace icon column
         cfg.GlyphOffset.y    = 2.0f;        // align baseline visually with text
-        AddTTF(atlas, REV_FONTS_DIR "/MaterialSymbolsOutlined.ttf",
-               kIconPx, &cfg, kIconRange);
+        AddTTF(atlas, "MaterialSymbolsOutlined.ttf", kIconPx, &cfg, kIconRange);
     }
 
     // -- JetBrains Mono (separate font for log / console) -------------------
-    s_mono_font = AddTTF(atlas, REV_FONTS_DIR "/JetBrainsMono-Regular.ttf", kMonoPx);
+    s_mono_font = AddTTF(atlas, "JetBrainsMono-Regular.ttf", kMonoPx);
     if (!s_mono_font) s_mono_font = atlas->Fonts.empty() ? nullptr : atlas->Fonts[0];
 
     // -- Material Symbols at 28px for toolbar / icon-only buttons ----------
@@ -107,8 +108,7 @@ void EditorFonts::Build()
         cfg.PixelSnapH       = true;
         cfg.GlyphMinAdvanceX = 28.0f;
         cfg.GlyphOffset.y    = -3.0f;
-        s_icon_font = AddTTF(atlas, REV_FONTS_DIR "/MaterialSymbolsOutlined.ttf",
-                             28.0f, &cfg, kIconRange);
+        s_icon_font = AddTTF(atlas, "MaterialSymbolsOutlined.ttf", 28.0f, &cfg, kIconRange);
     }
 
     if (!UploadAtlasToRenderer(atlas))

@@ -26,11 +26,11 @@
 #include "stb_vorbis.c"
 
 // ---- miniaudio implementation -------------------------------------------
-// Tighten: we don't need flac/mp3 (no game data in those formats), we
-// only ship the engine API (not the low-level device API directly), and
-// we skip the WAV writer (we never write audio).
+// Decoders: WAV (sound effects), MP3 (the dialog voices, Sound/<Language>/
+// in resources.rvr and the module packs; retail decoded them with Miles'
+// mp3dec.asi), Ogg Vorbis (music). No FLAC data exists. We skip the WAV
+// writer (we never write audio).
 #define MA_NO_FLAC
-#define MA_NO_MP3
 #define MA_NO_ENCODING
 #define MA_NO_GENERATION
 // Default null backend off so missing-device errors are not silent.
@@ -63,9 +63,15 @@ struct State {
     // (multiple Sources share the same PCM); ref-counted through SharedPCM.
     std::mutex       sources_mtx;          // guards source bookkeeping
 
+    // Group volumes as last set. A setting read before the device opens
+    // (the player's [Options] levels at boot) takes effect when it does.
+    float            sfx_group_volume   = 1.0f;
+    float            music_group_volume = 1.0f;
+
     // The active music track (one at a time).
     bool             music_loaded = false;
     ma_sound         music{};
+    float            music_volume = 1.0f;  // MusicSetVolume scale, every track
 };
 
 State& state() { static State s; return s; }
@@ -152,6 +158,10 @@ bool BindSoundToBuffer(audio::Source* src) {
         src->pcm->frames,
         src->pcm->bytes,
         /*allocationCallbacks*/ nullptr);
+    // The buffer must report the PCM's own rate: config_init leaves it 0,
+    // and the engine then plays the frames at its device rate -- a 22,050 Hz
+    // voice through a 44,100 Hz device came out an octave high.
+    bcfg.sampleRate = src->pcm->sample_rate;
     if (ma_audio_buffer_init(&bcfg, &src->buffer) != MA_SUCCESS) {
         log_error("audio: ma_audio_buffer_init failed");
         return false;
@@ -226,6 +236,9 @@ bool audio::Init() {
         return false;
     }
 
+    ma_sound_group_set_volume(&s.sfx_group, s.sfx_group_volume);
+    ma_sound_group_set_volume(&s.music_group, s.music_group_volume);
+
     ma_engine_listener_set_position(&s.engine, 0, 0.0f, 0.0f, 0.0f);
 
     // Force the playback device to a started state. ma_engine_init normally
@@ -267,6 +280,84 @@ void audio::Shutdown() {
 
 bool audio::Functioning() { return state().init_ok; }
 
+// ============================================================ decoding
+
+namespace {
+
+// A miniaudio decoder over an encoded file in memory, producing signed
+// 16-bit PCM at the file's own rate and channel count. Independent of the
+// engine, so it works when output is silenced or offline.
+struct MemoryDecoder {
+    ma_decoder decoder{};
+    bool       ok = false;
+
+    MemoryDecoder(const uint8_t* data, size_t bytes) {
+        const ma_decoder_config cfg = ma_decoder_config_init(ma_format_s16, 0, 0);
+        ok = data && bytes &&
+             ma_decoder_init_memory(data, bytes, &cfg, &decoder) == MA_SUCCESS;
+    }
+    ~MemoryDecoder() { if (ok) ma_decoder_uninit(&decoder); }
+
+    MemoryDecoder(const MemoryDecoder&) = delete;
+    MemoryDecoder& operator=(const MemoryDecoder&) = delete;
+
+    bool Format(ma_uint32& channels, ma_uint32& rate) {
+        return ok &&
+               ma_decoder_get_data_format(&decoder, nullptr, &channels, &rate,
+                                          nullptr, 0) == MA_SUCCESS &&
+               channels > 0 && rate > 0;
+    }
+};
+
+}  // namespace
+
+bool audio::DecodeToPCM16(const uint8_t* data, size_t bytes,
+                          tWAVEFORMATEX* format, std::vector<uint8_t>& pcm) {
+    pcm.clear();
+    MemoryDecoder dec(data, bytes);
+    ma_uint32 channels = 0, rate = 0;
+    if (!format || !dec.Format(channels, rate)) return false;
+
+    const size_t frame_bytes = channels * sizeof(int16_t);
+    ma_uint64 total = 0;
+    if (ma_decoder_get_length_in_pcm_frames(&dec.decoder, &total) == MA_SUCCESS)
+        pcm.reserve(static_cast<size_t>(total) * frame_bytes);
+
+    constexpr ma_uint64 kChunkFrames = 4096;
+    for (;;) {
+        const size_t at = pcm.size();
+        pcm.resize(at + kChunkFrames * frame_bytes);
+        ma_uint64 got = 0;
+        const ma_result r = ma_decoder_read_pcm_frames(&dec.decoder, pcm.data() + at,
+                                                       kChunkFrames, &got);
+        pcm.resize(at + static_cast<size_t>(got) * frame_bytes);
+        if (r != MA_SUCCESS || got < kChunkFrames) break;
+    }
+    // A file with a valid format and no frames decodes to no samples:
+    // Resources/sound/effects/blank.wav is such a file, the silent entry of
+    // the characters' random grunt lists (Miles loaded and played it, as
+    // nothing).
+
+    format->wFormatTag      = 1;  // WAVE_FORMAT_PCM
+    format->nChannels       = static_cast<uint16_t>(channels);
+    format->nSamplesPerSec  = rate;
+    format->wBitsPerSample  = 16;
+    format->nBlockAlign     = static_cast<uint16_t>(frame_bytes);
+    format->nAvgBytesPerSec = rate * static_cast<uint32_t>(frame_bytes);
+    format->cbSize          = 0;
+    return true;
+}
+
+std::optional<uint32_t> audio::DecodedLengthMs(const uint8_t* data, size_t bytes) {
+    MemoryDecoder dec(data, bytes);
+    ma_uint32 channels = 0, rate = 0;
+    ma_uint64 frames = 0;
+    if (!dec.Format(channels, rate) ||
+        ma_decoder_get_length_in_pcm_frames(&dec.decoder, &frames) != MA_SUCCESS)
+        return std::nullopt;
+    return static_cast<uint32_t>(frames * 1000 / rate);
+}
+
 // ============================================================ mixer
 
 void audio::SetMasterVolume(float v) {
@@ -277,12 +368,14 @@ void audio::SetMasterVolume(float v) {
 
 void audio::SetSfxVolume(float v) {
     State& s = state();
+    s.sfx_group_volume = v;
     if (!s.init_ok) return;
     ma_sound_group_set_volume(&s.sfx_group, v);
 }
 
 void audio::SetMusicVolume(float v) {
     State& s = state();
+    s.music_group_volume = v;
     if (!s.init_ok) return;
     ma_sound_group_set_volume(&s.music_group, v);
 }
@@ -383,6 +476,11 @@ void audio::StopSource(Source* src) {
     ma_sound_stop(&src->sound);
 }
 
+void audio::ResumeSource(Source* src) {
+    if (!src || !src->sound_inited) return;
+    ma_sound_start(&src->sound);
+}
+
 bool audio::IsPlaying(const Source* src) {
     if (!src || !src->sound_inited) return false;
     // ma_sound_is_playing wants a non-const pointer; the operation itself
@@ -425,6 +523,7 @@ bool audio::MusicPlayFile(const char* path, bool looping) {
         return false;
     }
     s.music_loaded = true;
+    ma_sound_set_volume(&s.music, s.music_volume);
     ma_sound_set_looping(&s.music, looping ? MA_TRUE : MA_FALSE);
     if (ma_sound_start(&s.music) != MA_SUCCESS) {
         ma_sound_uninit(&s.music);
@@ -452,6 +551,7 @@ bool audio::MusicPlaying() {
 
 void audio::MusicSetVolume(float v) {
     State& s = state();
+    s.music_volume = v;   // kept for the next track, even while silenced
     if (!s.init_ok || !s.music_loaded) return;
     ma_sound_set_volume(&s.music, v);
 }

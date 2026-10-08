@@ -35,6 +35,8 @@
 #include "hudstate.h"
 #include "logging.h"
 #include "multi.h"
+#include "player.h"
+#include "playscreen.h"
 #include "renderer.h"
 #include "revdefs.h"
 #include "revenant.h"
@@ -221,7 +223,7 @@ void DriveSyntheticState()
     // When an input-script was provided on the command line, the script owns
     // state for the entire run. It may drain before sapp_request_quit()
     // finishes, so gate on the startup arg in addition to live queue state.
-    if (StartupInputScript[0] || TestModes::InputScriptActive()) return;
+    if (!StartupInputScript.empty() || TestModes::InputScriptActive()) return;
 
     SHudState& s = GetHudState();
 
@@ -285,8 +287,11 @@ void TabStripOrigin(int32_t& x, int32_t& y)
     const int32_t dh = Display.Height();
     const int32_t playfieldRight  = (dw > 0 ? dw : kStripW)
                                   - (s.sidebarState == HUD_SIDEBAR_OPEN ? kPaneW : 0);
+    // The bottom drawer (the bottom bar, or the shop) sits under the
+    // playfield; PlayScreen owns it (retail lays the side tabs out from its
+    // drawer code, 0x0047b4d0).
     const int32_t playfieldBottom = (dh > 0 ? dh : kStripH + kBottomBarH)
-                                  - (s.bottomBarOpen ? kBottomBarH : 0);
+                                  - PlayScreen.DrawerHeight();
     x = playfieldRight  - kStripW - kTabsRightInset;
     y = playfieldBottom - kStripH - kTabsBottomInset;
 }
@@ -528,7 +533,7 @@ void ToggleUIBottomPanel()
              s.bottomBarOpen ? "OPEN" : "CLOSED");
 }
 
-// Hit-test the inventory 4x3 grid. Returns column-major harness slot index
+// Hit-test the inventory 4x3 grid. Returns the carried slot number
 // (page + col*3 + row) when (x,y) is inside a cell, -1 otherwise.
 // Per InventoryPane_SPEC: origin pane-local (8, 42), pitch 45x44,
 // interior 40x40, column-major.
@@ -644,6 +649,15 @@ static int32_t HitEquipSlot(int32_t x, int32_t y)
     return HitEquipSlotRect(x, y, slot, sx, sy) ? slot : -1;
 }
 
+// The equip pane's whole rect (top slot, 188x306), the area retail's
+// button-up bounds test covers (0x005363e0: 0 <= x < w, 0 <= y < h).
+static bool InEquipPane(int32_t x, int32_t y)
+{
+    const int32_t dw     = Display.Width();
+    const int32_t pane_x = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+    return x >= pane_x && x < pane_x + kPaneW && y >= 0 && y < kTopH;
+}
+
 bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
 {
     SHudState& s = GetHudState();
@@ -665,17 +679,16 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
             return true;
         }
 
-        // Drop targets in priority order: Equip (most specific) → BarInv →
-        // Inventory grid. First one to hit wins. Each could refuse on a
-        // real-item type-filter; the test harness accepts all.
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+        // Drop targets in priority order: Equip → BarInv → Inventory grid.
+        // First one to hit wins; the manager refuses a drop the destination
+        // can't take. The equip pane takes a drop anywhere on it (retail
+        // 0x005363e0): the item goes to its own slot, not the cell under
+        // the cursor.
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP &&
+            InEquipPane(x, y))
         {
-            const int32_t es = HitEquipSlot(x, y);
-            if (es >= 0)
-            {
-                UIDragState::CompleteDrag(EDragSource::Equip, es, true);
-                return true;
-            }
+            UIDragState::CompleteDrag(EDragSource::Equip, HitEquipSlot(x, y), true);
+            return true;
         }
         if (s.bottomBarOpen)
         {
@@ -701,23 +714,28 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         return true;
     }
 
-    // ---- Right-click: Use / Open-bag (retail eventType == 5) ---------
-    if (button == MB_RIGHTDOWN)
+    // ---- Right button up on a pack item: equip it ---------------------
+    // REVSYNC: InventoryPane MouseClick 0x00538210, button 5 (right up) with
+    // nothing held: the item goes to its own equipment slot, or the text bar
+    // says EQUIPUNABLE. Not ported: a talisman of the player's goes into his
+    // Spell Pouch instead, and the item info of "stats mode"
+    // (DAT_0065c9e0, 0x005496a0).
+    if (button == MB_RIGHTUP)
     {
+        if (UIDragState::IsActive())
+            return false;
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
         {
             const int32_t slot = HitInvSlot(x, y, s.inventoryPage);
             if (slot >= 0)
             {
-                // For the test harness, any right-clicked slot is treated
-                // as a bag-open toggle. Real impl would inspect the slot's
-                // item type: bag → swap inventoryContainer; consumable →
-                // Use(); equipment → SetInventorySlot to auto-equip.
-                const int32_t was = s.inventoryContainer;
-                s.inventoryContainer = (was == slot + 1) ? 0 : (slot + 1);
-                log_info("[ui-sidebar] right-click inv slot=%d -> container=%d (was %d, %s)",
-                         slot, s.inventoryContainer, was,
-                         s.inventoryContainer == 0 ? "back to root" : "opened bag");
+                TObjectInstance* item = Player ? Player->GetInventorySlot(slot) : nullptr;
+                if (item && item->ObjClass() != OBJCLASS_TALISMAN)
+                {
+                    const bool equipped = UIDragState::EquipInOwnSlot(item);
+                    log_info("[ui-sidebar] right-click inv slot=%d '%s' -> %s",
+                             slot, item->GetName(), equipped ? "equipped" : "not equipped");
+                }
                 return true;
             }
         }
@@ -763,16 +781,17 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         }
     }
 
-    // ---- Inventory grid: click-down on a cell starts a drag ----------
+    // ---- Item slots: click-down on an item starts a drag. The items are
+    // the main player's: carried slot, belt slot 0x10b + n, equipment.
+    // ---- Inventory grid ------------------------------------------------
     if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
     {
         int32_t slot = -1, sx = 0, sy = 0;
         if (HitInvSlotRect(x, y, s.inventoryPage, slot, sx, sy))
         {
-            TObjectInstance* fake_item =
-                reinterpret_cast<TObjectInstance*>(uintptr_t(slot + 1));
+            TObjectInstance* item = Player ? Player->GetInventorySlot(slot) : nullptr;
             UIDragState::BeginDrag(EDragSource::Inventory, slot,
-                                   fake_item, x, y,
+                                   item, x, y,
                                    nullptr, x - sx, y - sy);
             return true;
         }
@@ -784,10 +803,10 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         int32_t bs = -1, sx = 0, sy = 0;
         if (HitBarInvSlotRect(x, y, bs, sx, sy))
         {
-            TObjectInstance* fake_item =
-                reinterpret_cast<TObjectInstance*>(uintptr_t(0x100 + bs));
+            TObjectInstance* item =
+                Player ? Player->GetInventorySlot(kInvSlotBeltFirst + bs) : nullptr;
             UIDragState::BeginDrag(EDragSource::BarInv, bs,
-                                   fake_item, x, y,
+                                   item, x, y,
                                    nullptr, x - sx, y - sy);
             return true;
         }
@@ -799,10 +818,9 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         int32_t es = -1, sx = 0, sy = 0;
         if (HitEquipSlotRect(x, y, es, sx, sy))
         {
-            TObjectInstance* fake_item =
-                reinterpret_cast<TObjectInstance*>(uintptr_t(0x200 + es));
+            TObjectInstance* item = Player ? Player->GetEquip(es) : nullptr;
             UIDragState::BeginDrag(EDragSource::Equip, es,
-                                   fake_item, x, y,
+                                   item, x, y,
                                    nullptr, x - sx, y - sy);
             return true;
         }
