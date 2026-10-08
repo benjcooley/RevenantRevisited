@@ -9,14 +9,10 @@
 // *   TGameState       inlined in TScriptManager (32 KB)                  *
 // *   TScriptManager   @ size 0x8044 (TGameState + 3x TVirtualArray)      *
 // *                                                                       *
-// * Trigger interpreter (TScript::Continue / Triggered) retains the       *
-// * pre-release C++ implementation because the retail versions are        *
-// * entangled with engine subsystems (dialog HUD, player combat FSM,      *
-// * many context-vftable hooks) that are not yet ported. The trigger      *
-// * matching shape — TRIGGER_* opcodes, per-proto array, priority/depth   *
-// * stack, infinite-loop guard — matches retail. See                      *
-// * recon/discovered/cls_TScript_Continue_4933d0.cpp for the retail body  *
-// * and inline TODO(revsync) comments at the divergence points.           *
+// * The trigger test, the trigger scan, the line loop and Jump follow      *
+// * retail (docs/gameflow/forensics/SCRIPT_ENGINE.md; checked against the *
+// * original code by tools/retail_ab, docs/gameflow/RETAIL_AB.md). What    *
+// * isn't ported is listed at each function.                              *
 // *************************************************************************
 
 #pragma once
@@ -125,7 +121,8 @@ class TScriptProto
     bool ParseCriteria(TToken &t);
     // REVSYNC: ParseScript @ 0x00494e20 (triggers + body extraction)
     int32_t ParseScript(TToken &t);
-    // REVSYNC: implicit via Save @ 0x00496690 (per-proto fprintf body)
+    // REVSYNC: TScriptManager::Save @ 0x00496690 -- the text as is, then a
+    // line break.
     bool WriteScript(FILE *fp);
     void SetBuffer(char *buffer);
     void GetBuffer(char *buffer, int32_t buflen);
@@ -142,12 +139,15 @@ class TScriptProto
     [[nodiscard]] SScriptVariable* FindVariable(const char *varname);
 
     char *name        = nullptr;            // Text for criteria (OBJECT/CONTEXT identifier)
-    char *text        = nullptr;            // Text of script body (post-BEGIN..pre-END)
+    // The whole block as the file has it, from the OBJECT line's first token
+    // through the object's END and its line break (retail +0x04, 0x00494e20).
+    // Trigger positions, the ip and Jump's block count are relative to it.
+    char *text        = nullptr;
     TScriptProto* parent = nullptr;         // The parent in the proto chain
     TTriggerArray triggers;                 // Parsed trigger table
     void *owner       = nullptr;            // Opaque owner (TArea*, editor, ...)
     char *filename    = nullptr;            // Source filename
-    int32_t len       = 0;                  // Body length in bytes (excludes trailing END)
+    int32_t len       = 0;                  // Length of `text` (retail +0x40)
     int32_t numtriggers = 0;                // Live count beside triggers (retail mirrors this)
     std::vector<SScriptVariable> variables; // DATA block (retail +0x24 count, +0x34 records)
 };
@@ -166,15 +166,24 @@ typedef TPointerArray<TScriptProto, 64, 64> TScriptProtoArray;
 
 #define SCRIPT_PAUSED       (1 << 16)       // indicates script is currently on hold
 
+// Retail's block stack holds ten levels (+0x54, 8 bytes each, up to the depth
+// at +0xa4). The object's own BEGIN is one of them, so a label nested nine
+// blocks into a trigger is at depth 10, where retail's slot is the depth
+// field itself; the port refuses that depth instead (SCRIPT_ENGINE.md §4.2).
 #define MAXDEPTH        10
 
 #define COND_UNDEF      0xDEAF      // arbitrary, as int32_t as it is not true or false
 
+// A block level: where a WHILE loops back to, and the IF state an ELSE
+// reads. A new script's levels are zero, as retail's allocator (0x00482fb0)
+// leaves them, and the constructor marks level 0 COND_UNDEF; BEGIN marks the
+// level it opens COND_UNDEF. A level a jump lands in keeps what it last held:
+// in a fresh script false, so an ELSE there runs its body.
 _STRUCTDEF(SScriptBlock)
 struct SScriptBlock
 {
-    uint32_t loopstart   = 0;          // Location to loop back to
-    int32_t  conditional = COND_UNDEF; // State of conditional for block (uses COND_UNDEF + true/false)
+    uint32_t loopstart   = 0;          // Location to loop back to (0: none)
+    int32_t  conditional = 0;          // true, false or COND_UNDEF
 };
 
 // What a script is waiting for (retail TScript +0xb4; SCRIPT_ENGINE.md §5).
@@ -215,12 +224,10 @@ class TScript
 
     void Start(TScriptProto* proto = nullptr, int32_t pos = 0, int32_t newpriority = 0);
     void StartTrigger(TObjectInstance* context, TScriptProto* proto, PSScriptTrigger st);
-    // REVSYNC: Continue @ 0x004933d0 — retail body weaves in dialog/combat
-    //   notify hooks via context vftable slots 0x148/0x14c/0x154 that don't
-    //   exist on our TObjectInstance yet; we keep the pre-release loop which
-    //   has identical observable semantics for the trigger types we exercise.
-    //   TODO(revsync): re-port Continue when PlayerFSM + DialogPane are
-    //   retail-synced and their vftable slots stabilise.
+    // REVSYNC: Continue @ 0x004933d0 — the wait gate, the trigger scan and
+    //   the line loop are retail's (SCRIPT_ENGINE.md §4); the "script started"
+    //   / "ended" hooks (vtable 0x148/0x14c) and the pending `say` are not
+    //   ported.
     // `commanddone`: the owner's current action has finished. Lines run only
     // when it has and nothing is being waited for, or when the wait is over.
     void Continue(TObjectInstance* context, bool commanddone);
@@ -266,17 +273,17 @@ class TScript
     static void SetStepObserver(IStepObserver* observer) { stepobserver = observer; }
 
     // What the trigger test reads of the world besides the owner: the main
-    // player (retail 0x00667fcc) and, for a CUBE trigger, the first of the
-    // map pane's moving objects inside the cube (MapPane.ObjectInCube;
-    // retail asks 0x00452480 on the owner's level). Unset, these are Player
-    // and the map pane; the retail A/B (retailab.cpp, `trigger-test`) sets a
-    // fixture world. Nothing sets it in the game.
+    // player (retail 0x00667fcc) and, for a CUBE trigger, the first object
+    // of `objset` inside the cube on `level`, the owner's (retail 0x00452480).
+    // Unset, the game's: Player, and MapPane.ObjectInCube over that level's
+    // loaded sectors. The retail A/B (retailab.cpp, `trigger-test`) sets a
+    // fixture world; nothing sets it in the game.
     class ITriggerWorld
     {
       public:
         virtual ~ITriggerWorld() = default;
         [[nodiscard]] virtual TObjectInstance* MainPlayer() const = 0;
-        [[nodiscard]] virtual TObjectInstance* ObjectInCube(PS3DRect cube, int32_t objset) const = 0;
+        [[nodiscard]] virtual TObjectInstance* ObjectInCube(PS3DRect cube, int32_t level, int32_t objset) const = 0;
     };
     static void SetTriggerWorld(const ITriggerWorld* world) { triggerworld = world; }
 
@@ -341,6 +348,8 @@ class TScript
     [[nodiscard]] bool HasTrigger(int32_t type, const char *str, const char *str2) const;
     // REVSYNC: 0x00492d70 — is the current wait over?
     bool WaitSatisfied(bool commanddone);
+    // The trigger test's world: the one set, else the game's.
+    [[nodiscard]] static const ITriggerWorld& TriggerWorld();
 
     static bool pauseall;                          // True if all scripts paused
     static inline IStepObserver* stepobserver = nullptr;

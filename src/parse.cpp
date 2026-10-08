@@ -79,6 +79,25 @@ char *keywords[NUMKEYWORDS] =
     "#include"
 };
 
+// REVSYNC: 0x00478a10 reads every character this way: carriage returns are
+// skipped wherever they are, and a line feed counts a line as it is read.
+// So the character a token holds after it is never a CR: after an identifier
+// that ends a CRLF line the stream has passed the line feed, and the line is
+// already counted. (The 1998 tokenizer skipped a CR only at a token's start
+// and counted a line when it returned the line break.) Script stepping
+// depends on it: where Jump resumes, what a token held across a SetPos reads
+// next (Continue's `ELSE IF`), the line numbers of script errors.
+int32_t TToken::ReadChar()
+{
+    int32_t ch;
+    do
+        ch = stream->GetChar();
+    while (ch == '\r');
+    if (ch == '\n')
+        linenum++;
+    return ch;
+}
+
 void TToken::Get()
 {
     char ch;
@@ -90,21 +109,15 @@ void TToken::Get()
         ch = lastch;
         lastch = 0;
     }
-    else ch = stream->GetChar();
-
-    while (ch == 0xD)               // skip CR altogether, \n will be line terminator
-        ch = stream->GetChar();
+    else ch = ReadChar();
 
   // Line continuation char
     if (ch == '\\')
     {
         while (ch != '\n' && ch != EOF)
-            ch = stream->GetChar();
+            ch = ReadChar();
         if (ch == '\n')
-        {
-            linenum++;
-            ch = stream->GetChar();
-        }
+            ch = ReadChar();
     }
 
   // End of file
@@ -118,28 +131,27 @@ void TToken::Get()
   // Remark
     else if (ch == '/')
     {
-        lastch = stream->GetChar();
+        lastch = ReadChar();
         if (lastch == '/')
         {
             while (lastch != '\n' && lastch != EOF)
-                lastch = stream->GetChar();
+                lastch = ReadChar();
             lastch = 0;
             type = TKN_RETURN;
             text[0] = '\n';
             text[1] = 0;
-            linenum++;
             return;
         }
         else if (lastch == '*')
         {
-            lastch = stream->GetChar();
+            lastch = ReadChar();
             do
             {
               while (lastch != '*' && lastch != EOF)
-                lastch = stream->GetChar();
-              lastch = stream->GetChar();
+                lastch = ReadChar();
+              lastch = ReadChar();
             } while (lastch != '/' && lastch != EOF);
-            lastch = stream->GetChar();
+            lastch = ReadChar();
         }
         else
         {
@@ -165,7 +177,7 @@ void TToken::Get()
         text[pos++] = ch;
         do
         {
-            ch = stream->GetChar();
+            ch = ReadChar();
             if (pos < MAXTOKENTEXT - 1)
                 text[pos++] = ch;
         }
@@ -181,7 +193,6 @@ void TToken::Get()
         type = TKN_RETURN;
         text[0] = '\n';
         text[1] = 0;
-        linenum++;
         return;
     }
 
@@ -191,18 +202,18 @@ void TToken::Get()
     {
         pos = 0;
 moretext:
-        ch = stream->GetChar();
+        ch = ReadChar();
         while (ch != EOF && ch != '\"' && ch != '\n')
         {
             if (pos >= MAXTOKENTEXT - 1)
                 Error("String too int32_t");
             if (ch == '\\')
             {
-                ch = stream->GetChar();
+                ch = ReadChar();
                 if (ch == 'n')
                 {
                     text[pos++] = '\n';
-                    ch = stream->GetChar();
+                    ch = ReadChar();
                 }
                 else
                     text[pos++] = '\\';
@@ -210,21 +221,21 @@ moretext:
             else
             {
                 text[pos++] = ch;
-                ch = stream->GetChar();
+                ch = ReadChar();
             }
         }
         /*
         if (ch != '\"')
             Error("ERROR: Unterminated string");
         */
-        lastch = stream->GetChar();
+        lastch = ReadChar();
         if (lastch == '\\')
         {
             while (lastch != '\n' && lastch != EOF)
-                lastch = stream->GetChar();
+                lastch = ReadChar();
             do
             {
-                ch = stream->GetChar();  // Skip whitespace (note, will not return a whitespace token)
+                ch = ReadChar();  // Skip whitespace (note, will not return a whitespace token)
             }
             while ((ch == ' ') || (ch == '\t'));
             lastch = ch;
@@ -245,7 +256,7 @@ moretext:
         if (ch == '#')
         {
             text[pos++] = ch;
-            ch = stream->GetChar();
+            ch = ReadChar();
             if (toupper(ch) < 'A' || toupper(ch) > 'Z')
             {
                 type = TKN_SYMBOL;
@@ -258,7 +269,7 @@ moretext:
         do
         {
             text[pos++] = ch;
-            ch = stream->GetChar();
+            ch = ReadChar();
             upch = toupper(ch);
         } while ((upch >= 'A' && upch <= 'Z') ||
           (ch >= '0' && ch <= '9') ||
@@ -308,12 +319,12 @@ moretext:
         if (ch == '0')
         {
             text[pos++] = ch;
-            ch = stream->GetChar();
+            ch = ReadChar();
             if (ch == 'x')
             {
                 ishex = true;
                 text[pos++] = ch;
-                ch = stream->GetChar();
+                ch = ReadChar();
                 number = 0;
                 while ((ch >= '0' && ch <= '9') ||
                     (ch >= 'A' && ch <= 'F') ||
@@ -323,7 +334,7 @@ moretext:
                     if (ch <=  '9') number = number * 16 + ch - '0';
                       else number = number * 16 + 10 + ch - 'A';
                     text[pos++] = ch;
-                    ch = stream->GetChar();
+                    ch = ReadChar();
                 }
                 if (pos <= 2)
                     Error("Invalid HEX constant"); 
@@ -337,7 +348,7 @@ moretext:
             if (ch == '-')
             {
                 text[pos++] = ch;
-                ch = stream->GetChar();
+                ch = ReadChar();
                 if (!(ch >= '0' && ch <= '9'))
                 {
                     lastch = ch;
@@ -349,7 +360,7 @@ moretext:
             while ((ch >= '0' && ch <= '9') || (ch == '.' && numdec <= 1))
             {
                 text[pos++] = ch;
-                ch = stream->GetChar();
+                ch = ReadChar();
                 if (ch == '.') numdec++;
             }
             text[pos] = 0;
