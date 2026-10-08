@@ -13,6 +13,7 @@
 #include "mappane.h"
 #include "parse.h"
 #include "timer.h"
+#include "vfspathindex.h"
 
 #include <chrono>
 #include <math.h>
@@ -1290,13 +1291,12 @@ struct VFSArchive
 
 std::vector<std::unique_ptr<VFSArchive>> g_base_archives;
 std::unique_ptr<VFSArchive> g_module_archive;
-// Legacy flat lookup: entries by bare file name, module first, then base.
-// REVSYNC-DIVERGENCE: retail has no by-name lookup — a request either lies in
-// a pack's directory or it is a loose file. The port's pre-release call sites
-// and older port INIs (ClassDefPath / ResourcePath = ".") name files with no
-// pack directory, so rev_fopen keeps this as its last resort.
-std::unordered_map<std::string, VFSEntry> g_base_map;
-std::unordered_map<std::string, VFSEntry> g_module_map;
+// Compatibility lookup retains distinct archive paths and only unambiguous
+// basename aliases, module first, then base. Mounted-directory lookup remains
+// authoritative; this fallback supports pre-release call sites/older port INIs
+// without selecting the first unrelated asset when basenames collide.
+TVfsPathIndex<VFSEntry> g_base_map;
+TVfsPathIndex<VFSEntry> g_module_map;
 // Pre-release modules ship unpacked as data/Modules/<name>/; retail uses
 // data/Modules/<name>.rvm ZIPs. MountModule detects which and we fall back
 // to filesystem lookup from this directory when set.
@@ -1434,11 +1434,11 @@ std::unique_ptr<VFSArchive> vfs_open_archive(const std::filesystem::path &path)
     return arc;
 }
 
-// Adds a pack's entries to a legacy by-name map. First wins within a pack.
-void vfs_index_by_name(const VFSArchive &arc, std::unordered_map<std::string, VFSEntry> &map)
+// Index full paths for legacy fallback, retaining only unique basename aliases.
+void vfs_index_by_name(const VFSArchive &arc, TVfsPathIndex<VFSEntry> &map)
 {
     for (const auto &[path, entry] : arc.entries)
-        map.try_emplace(vfs_basename_lower(path.c_str()), entry);
+        map.Add(path.c_str(), entry);
 }
 
 // The entry for `path` in whichever mounted pack's directory holds it, or
@@ -1531,15 +1531,10 @@ FILE *vfs_open_entry(const VFSEntry &entry)
     return fp;
 }
 
-// The legacy by-name lookup (see g_base_map): module first, then base.
+// Legacy fallback: exact/longest archive path, then unique basename aliases.
 FILE *vfs_open_by_name(const char *name)
 {
-    const auto key = vfs_basename_lower(name);
-    const VFSEntry *entry = nullptr;
-    if (auto it = g_module_map.find(key); it != g_module_map.end())
-        entry = &it->second;
-    else if (auto it = g_base_map.find(key); it != g_base_map.end())
-        entry = &it->second;
+    const VFSEntry *entry = ResolveVfsArchivePath(name, g_module_map, g_base_map);
     if (!entry)
         return nullptr;
     if (vfs_trace_enabled())

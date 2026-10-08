@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cctype>
+#include <chrono>
 #include <fcntl.h>
 #include <math.h>
 #include <sstream>
@@ -1556,7 +1557,8 @@ void GetParameters(int argc, char **argv)
         "gamespeed", "monitor", "violencelevel", "preloadsize",
         "chunkcachesize", "driver", "device", "videocap", "fastlock",
         "loadmap", "lang", "test", "level", "resolution", "res",
-        "cinematic", "menu", "exec", "seed", "combattrace",
+        "cinematic", "menu", "exec", "vfx-lighting-mode", "partsys-quality", "partsys-incoming-blend",
+        "seed", "combattrace",
     });
     cmd.parse(argc, argv);
 
@@ -1754,12 +1756,63 @@ void GetParameters(int argc, char **argv)
         g_fx_wireframe_override = true;
     }
 
+  // VFX-only lighting diagnostic. Reject invalid/missing values so a capture
+  // cannot silently use a different mode than its recorded command line.
+    {
+        std::string p;
+        if (arg_param(cmd, "vfx-lighting-mode", p))
+        {
+            if (p == "auto") StartupVfxLightingMode = -1;
+            else if (p == "classic") StartupVfxLightingMode = 0;
+            else if (p == "modern") StartupVfxLightingMode = 1;
+            else FatalError("Invalid --vfx-lighting-mode: expected auto, classic or modern", nullptr);
+        }
+        else if (arg_flag(cmd, "vfx-lighting-mode"))
+            FatalError("Missing --vfx-lighting-mode value; expected auto, classic or modern", nullptr);
+    }
+
+    {
+        std::string p;
+        if (arg_param(cmd, "partsys-quality", p))
+        {
+            if (p == "0") StartupPartSysQuality = 0;
+            else if (p == "1") StartupPartSysQuality = 1;
+            else if (p == "2") StartupPartSysQuality = 2;
+            else FatalError("Invalid --partsys-quality: expected 0, 1 or 2", nullptr);
+        }
+        else if (arg_flag(cmd, "partsys-quality"))
+            FatalError("Missing --partsys-quality value; expected 0, 1 or 2", nullptr);
+    }
+
+    {
+        std::string p;
+        if(arg_param(cmd,"partsys-incoming-blend",p)) {
+            if(p=="auto")StartupPartSysIncomingBlend=0;
+            else if(p=="16")StartupPartSysIncomingBlend=16;
+            else if(p=="80")StartupPartSysIncomingBlend=80;
+            else FatalError("Invalid --partsys-incoming-blend: expected auto, 16 or 80",nullptr);
+        } else if(arg_flag(cmd,"partsys-incoming-blend"))
+            FatalError("Missing --partsys-incoming-blend value; expected auto, 16 or 80",nullptr);
+    }
+
   // VFX-BG=<black|ltgray|forest|dungeon> — pre-select the diagnostic
   // backdrop for --test=vfx (for scripted multi-BG captures).
     {
         std::string p;
         if (arg_param(cmd, "vfx-bg", p))
             strncpyz(StartupVfxBackground, p.c_str(), sizeof(StartupVfxBackground));
+    }
+
+  // Explicit retail VFX comparison framing (does not scale effect geometry).
+    {
+        std::string p;
+        if (arg_param(cmd, "vfx-backdrop", p))
+            strncpyz(StartupVfxBackdrop, p.c_str(), MAXPATHLEN);
+        if (arg_param(cmd, "vfx-camera", p))
+            sscanf(p.c_str(), "%f,%f", &StartupVfxCamera[0], &StartupVfxCamera[1]);
+        if (arg_param(cmd, "vfx-origin", p))
+            StartupVfxOriginSet = sscanf(p.c_str(), "%d,%d,%d", &StartupVfxOrigin[0],
+                                        &StartupVfxOrigin[1], &StartupVfxOrigin[2]) == 3;
     }
 
   // INPUT-SCRIPT="..." (alias --mouse-script) — replay a scripted synthetic
@@ -1786,6 +1839,20 @@ void GetParameters(int argc, char **argv)
         std::string p;
         if (arg_param(cmd, "level", p))
             strncpyz(StartupLevelId, p.c_str(), sizeof(StartupLevelId));
+        if (arg_param(cmd, "scene-camera", p))
+            StartupSceneCameraSet = sscanf(p.c_str(), "%d,%d,%d,%d", &StartupSceneCamera[0],
+                &StartupSceneCamera[1], &StartupSceneCamera[2], &StartupSceneCamera[3]) == 4;
+        if (arg_param(cmd, "scene-module", p))
+            strncpyz(StartupSceneModule, p.c_str(), sizeof(StartupSceneModule));
+        if (arg_param(cmd, "scene-command-file", p))
+            strncpyz(StartupSceneCommandFile, p.c_str(), sizeof(StartupSceneCommandFile));
+        if (arg_param(cmd, "scene-ambient", p))
+        {
+            StartupSceneAmbientSet = sscanf(p.c_str(), "%d,%d,%d,%d", &StartupSceneAmbient[0],
+                &StartupSceneAmbient[1], &StartupSceneAmbient[2], &StartupSceneAmbient[3]) == 4;
+            for (const int32_t channel : StartupSceneAmbient)
+                StartupSceneAmbientSet = StartupSceneAmbientSet && channel >= 0 && channel <= 255;
+        }
     }
 
   // ASSET=path — which imagery --test=i3d3d loads.
@@ -2197,9 +2264,13 @@ bool InitGlobals()
     if (!Rules.Initialize())
         FatalError("Unable to load game rules");
 
-  // (19) DialogList — Initialize() loads the base table,
-  // <ClassDefPath><Language>.def; the module's table loads when the module
-  // is mounted (TModuleManager::SetCurModule).
+    // Spell lookup must be live before gameplay/story CastByName dispatch.
+    // TSpellList::Initialize is idempotent and loads authored spell.def.
+    if (!SpellList.Initialize())
+        FatalError("Unable to load spell list");
+
+  // (19) DialogList loads the base <ClassDefPath><Language>.def table.
+  // The module table loads when TModuleManager mounts the module.
     if (!DialogList.Initialize())
         FatalError("Unable to load dialog list");
 
@@ -2306,6 +2377,9 @@ void ShutdownGlobals()
 
   // (19) DialogList
     DialogList.Close();
+
+  // Spell definitions depend on Rules and must close first.
+    SpellList.Close();
 
   // (18) Rules
     Rules.Close();
@@ -2526,6 +2600,7 @@ static void AppInit()
         if (FrameSnap::ParseArgs(g_argc, g_argv, snapCfg))
         {
             FrameSnap::SetConfig(snapCfg);
+            if (snapCfg.seed_set) SeedRandom(snapCfg.seed);
             log_info("[framesnap] active: %s frames=%d interval=%.3fs prefix='%s' out='%s'",
                      snapCfg.is_filmstrip ? "filmstrip" : "single-snap",
                      snapCfg.frames, snapCfg.interval_sec,
@@ -2556,6 +2631,8 @@ static void AppInit()
         FatalError("No playable modules found under data/Modules/", nullptr);
     if (!ModuleManager.SetCurModule(ModuleManager.MainIndex()))
         FatalError("Unable to mount main module", nullptr);
+    if (StartupSceneModule[0] && !ModuleManager.SetCurModule(StartupSceneModule))
+        FatalError("Unable to mount requested scene module", nullptr);
 
     if (!InitMonitor())
         FatalError("Invalid monitor selected", nullptr);
@@ -2644,9 +2721,14 @@ static void AppInit()
 // for agent runs (paired with the input-script auto-exit). 0 = disabled.
 // Parsed once in GetParameters; consumed by AppFrame.
 static double g_max_runtime_sec = 0.0;
-static double g_max_runtime_start_ms = 0.0;
+static std::chrono::steady_clock::time_point g_max_runtime_start;
+static bool g_max_runtime_started = false;
 
-void SetMaxRuntimeSeconds(double s) { g_max_runtime_sec = s; }
+void SetMaxRuntimeSeconds(double s)
+{
+    g_max_runtime_sec = s;
+    g_max_runtime_started = false;
+}
 
 static void AppFrame()
 {
@@ -2662,10 +2744,14 @@ static void AppFrame()
     if (!SystemInitialized || Closing)
         return;
 
+    // --fixedstep: one game tick per frame on an integer count; otherwise
+    // a frame capture's --snapstep, otherwise the live clock.
+    const auto& snap_config = FrameSnap::GetConfig();
     if (FixedStep)
         TTime::BeginFixedFrame();
     else
-        TTime::BeginFrame(sapp_frame_duration());
+        TTime::BeginFrame(FrameSnap::Active() && snap_config.fixed_step_sec > 0.0
+                         ? snap_config.fixed_step_sec : sapp_frame_duration());
 
     // --max-runtime hard ceiling: if a positive limit was passed, hard-
     // exit when wall-clock elapsed since first frame exceeds it. Belt-
@@ -2679,9 +2765,13 @@ static void AppFrame()
     // the run was already broken.
     if (g_max_runtime_sec > 0.0)
     {
-        const double now_ms = TTime::Time() * 1000.0;
-        if (g_max_runtime_start_ms == 0.0) g_max_runtime_start_ms = now_ms;
-        const double elapsed_sec = (now_ms - g_max_runtime_start_ms) / 1000.0;
+        const auto now = std::chrono::steady_clock::now();
+        if (!g_max_runtime_started)
+        {
+            g_max_runtime_start = now;
+            g_max_runtime_started = true;
+        }
+        const double elapsed_sec = std::chrono::duration<double>(now - g_max_runtime_start).count();
         if (elapsed_sec >= g_max_runtime_sec)
         {
             log_info("[max-runtime] hit %.1fs limit -- hard exit",

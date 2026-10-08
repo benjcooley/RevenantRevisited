@@ -334,6 +334,23 @@ struct SStripDrawItem
     EFxLightMode         light_mode   = EFxLightMode::Unlit;
 };
 
+// Authored quad geometry: corners are already in world space. Unlike a
+// billboard, this preserves the asset's tilt, shear, and per-corner depth.
+// Corner order is top-left, top-right, bottom-left, bottom-right in UV space.
+// The existing strip vertex pipeline projects these vertices without extrusion.
+struct SQuadDrawItem
+{
+    float world_pos[4][3] = {};
+    float uv[4][2] = {{0.0f, 0.0f}, {1.0f, 0.0f},
+                       {0.0f, 1.0f}, {1.0f, 1.0f}};
+    float color_rgba[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    SFxBatchKey key = {};
+    uint8_t corner_count = 4; // 3 preserves one authored triangle; 4 uses the quad diagonal.
+    uint8_t retail_texture = 0; // 1: Blue software nearest texels with wrapped UVs.
+    EFxDebugMode debug_mode = EFxDebugMode::Normal;
+    EFxLightMode light_mode = EFxLightMode::Unlit;
+};
+
 class TParticleBucket;   // forward, see particlefx.h
 
 // Renderer-owned paired images, currently used by world sprites that need both
@@ -437,6 +454,12 @@ struct SMeshSubmit
     float      world[16] = {};   // row-major 4x4
     float      tint[4] = { 1.0f, 1.0f, 1.0f, 1.0f };   // rgba multiplier; alpha < kOpaqueMeshAlpha = translucent
     uint32_t   obj_id = 0;    // packed into id_target (RGBA8) for picking
+    float      uv_offset[2] = {0.0f, 0.0f}; // authored scrolltex, per instance
+    // Classic software I3D: 0 deferred, 1 RGB565 vertex-lit, 2 ARGB unlit.
+    int32_t    retail_lighting = 0;
+    // Opt-in source positive screen-down faces. Ordinary opaque depth/write
+    // policy is retained; default meshes keep their existing two-sided path.
+    bool retail_positive_face_cull = false;
     float      sort_depth = 0.0f;   // translucent only: camera depth, wu (greater is farther)
     uint32_t   surface_id = 0;      // translucent only: shared by one surface's meshes; 0 = its own surface
 };
@@ -469,6 +492,12 @@ struct SHelperMeshSubmit
     float      emissive[4] = {};
     float      power = 0.0f;
     float      sort_depth = 0.0f;
+    // 0: existing helper material shader. 1: Blue SW RGB565 normal lighting,
+    // five-bit vertex Gouraud modulation, nearest wrapped texture sampling.
+    // Material specular/emissive are not implemented by the source SW path.
+    int32_t    retail_lighting = 0;
+    bool       retail_gold_no_depth = false; // audited authored mode80, no depth test/write
+    bool       retail_positive_face_cull = false; // source positive screen-down; opt-in only
 };
 
 enum class ETransparentWorldKind : uint8_t
@@ -556,6 +585,9 @@ public:
     void SubmitOverlay(const SOverlaySubmit& t);
     void SubmitMesh(const SMeshSubmit& m);
     void SubmitHelperMesh(const SHelperMeshSubmit& m);
+    // Exact Goldp default animator: retail draws alpha coins before its base
+    // additive flare. Normal helper queue and shader modes are unchanged.
+    void SubmitGoldFlareAfterFx(const SHelperMeshSubmit& m);
     void EndTilePass();
     [[nodiscard]] SRendererTilePassStats GetLastTilePassStats() const
     {
@@ -592,7 +624,8 @@ public:
                                         int32_t height,
                                         ERendererTextureFormat format,
                                         uint64_t gpu_bytes,
-                                        ERendererTextureFilter filter = ERendererTextureFilter::Linear);
+                                        ERendererTextureFilter filter = ERendererTextureFilter::Linear,
+                                        bool repeat = false);
     const SRendererTextureInfo* TextureInfo(TTextureHandle handle) const;
     void AddTextureAssetRef(TTextureHandle handle, uint32_t count = 1);
     void ReleaseTextureAssetRef(TTextureHandle handle, uint32_t count = 1);
@@ -648,6 +681,7 @@ public:
     // path match retail's non-linear palette boost) while still capping
     // stacked point-light blow-out. Range typical [0.5..4.0].
     void SetLightCeiling(float ceiling);
+    void SetRetailMeshLighting(const float ambient[3], const float directional[3], bool rgb_enabled);
     // Z-buffer-based screen-space ambient occlusion.
     void SetAmbientOcclusion(bool enable, float radius_px, float strength,
                              float bias, float max_dist_wu);
@@ -782,6 +816,7 @@ public:
     void SubmitFxParticleBucket(const TParticleBucket& bucket,
                                 EFxDebugMode debug_mode = EFxDebugMode::Normal);
     void SubmitFxStrip(const SStripDrawItem& item);
+    void SubmitFxQuad(const SQuadDrawItem& item);
 
     // ---- Composite (UI blit + swapchain present) ------------------------
     // Fullscreen blit of a TSurface into the current render pass (used by
@@ -1206,6 +1241,7 @@ private:
     // EndTilePass. Capacity is preserved across frames to avoid churn.
     std::vector<STileSubmit> tile_queue;
     std::vector<STransparentWorldSubmit> transparent_world_queue;
+    std::vector<SHelperMeshSubmit> gold_flare_after_fx_queue;
     std::vector<SOverlaySubmit> overlay_queue;
     std::vector<SMeshSubmit> mesh_queue;
     SRendererTilePassStats current_tile_pass_stats = {};
@@ -1214,6 +1250,7 @@ private:
     // ---- Mesh pipeline -------------------------------------------------
     sg_shader   mesh_shader      = {};
     sg_pipeline mesh_pipeline    = {};
+    sg_pipeline mesh_source_cull_pipeline = {};
     // Translucent meshes, in the transparent-world pass: a depth-only pass
     // per surface, then its lit colour where that left the nearest depth.
     sg_shader   mesh_depth_shader          = {};
@@ -1227,6 +1264,8 @@ private:
     sg_pipeline helper_mesh_front_pipeline = {};
     sg_pipeline helper_mesh_add_back_pipeline = {};
     sg_pipeline helper_mesh_add_front_pipeline = {};
+    sg_pipeline helper_gold_no_depth_back_pipeline = {};
+    sg_pipeline helper_gold_no_depth_front_pipeline = {};
     std::vector<float> mesh_instance_scratch;
     static constexpr int32_t kMaxMeshInstances = 2048;
     static constexpr int32_t kMeshInstanceVBCount = 8;
@@ -1306,6 +1345,9 @@ private:
     int32_t shadow_height = 0;
 
     // ---- Lighting state (uploaded by RunLightingPass) -------------------
+    float retail_mesh_ambient[3] = {38.0f/255, 38.0f/255, 38.0f/255};
+    float retail_mesh_directional[3] = {1,1,1};
+    bool retail_mesh_rgb_enabled = true;
     struct SLightState {
         float dir[3]           = { 0.6f, -0.6f, 0.4f };
         float intensity        = 1.0f;
@@ -1389,7 +1431,7 @@ private:
     // Next buffer of the instance-row stream ring (one upload per buffer per frame).
     sg_buffer NextMeshInstanceBuffer();
     // The mesh vertex shader's uniform block (vp / camz / camw), 12 floats.
-    void PackMeshVsUniforms(float (&u)[12]) const;
+    void PackMeshVsUniforms(float (&u)[20]) const;
     void EmitTransparentTile(const STileSubmit& t);
     void EmitTransparentHelper(const SHelperMeshSubmit& s);
     // Uploads the instance rows of the queue's translucent meshes; null if none.
@@ -1398,6 +1440,7 @@ private:
     void EmitTranslucentMeshSurface(const STransparentWorldSubmit* first, size_t count,
                                     sg_buffer instances, const float* light_uniforms);
     void DrainTransparentWorldQueue();
+    void DrainGoldFlareAfterFxQueue();
     // The light uniform block (lightmodel.*.h `params`), shared by the
     // deferred light pass and the translucent mesh pass.
     void PackLightUniforms(float* u) const;
@@ -1436,6 +1479,7 @@ private:
     std::vector<SFxBillboardQueueEntry> fx_billboard_queue;
     std::vector<SFxParticleQueueEntry>  fx_particle_queue;
     std::vector<SFxStripQueueEntry>     fx_strip_queue;
+    std::vector<SQuadDrawItem>          fx_quad_queue;
 
     sg_pass     fx_pass         = {};   // color = lit_target, depth = scene_z_target (read)
     // Pipeline cross-product: [blend][depth_mode]. Light mode is

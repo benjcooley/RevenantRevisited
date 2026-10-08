@@ -66,7 +66,7 @@ void main() {
     vec4  nrm = texture(normal_tex, v_uv);
     vec3  np  = nrm.xyz;
     vec3  N   = normalize(np * 2.0 - 1.0);
-    bool  is_mesh = nrm.a < 0.5;     // G-buffer surface class: 1 tile, 0 mesh
+    bool  is_mesh = (nrm.a < 0.5 || nrm.a > 1.5);     // G-buffer surface class: 1 tile, 0 mesh
     float ao  = texture(ao_tex, v_uv).r;
     vec2  ts  = vec2(textureSize(albedo_tex, 0));
     float fbw = ts.x, fbh = ts.y;
@@ -120,6 +120,8 @@ void main() {
         if ((uint(texelFetch(id_tex, ip, 0).a * 255.0 + 0.5) & 0x20u) != 0u)
             s.lit = alb.rgb;
     }
+    // Marker2 is already vertex-lit RGB565 or source-unlit ARGB; Classic must not light it twice.
+    if (int(settings.z) == 0 && nrm.a > 1.5) s.lit = alb.rgb;
     if (vm == 4) { frag_color = vec4(s.points, 1.0); return; }
     if (vm == 6) { frag_color = vec4(vec3(s.sun_shadow), 1.0); return; }
     frag_color = vec4(s.lit, 1.0);

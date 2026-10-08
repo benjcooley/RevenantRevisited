@@ -69,7 +69,7 @@ float4 main_ps(vs_out in_) : SV_Target0 {
     float4 nrm = normal_tex.Sample(smp, in_.uv);
     float3 np  = nrm.xyz;
     float3 N   = normalize(np * 2.0 - 1.0);
-    bool   is_mesh = nrm.a < 0.5;     // G-buffer surface class: 1 tile, 0 mesh
+    bool   is_mesh = (nrm.a < 0.5 || nrm.a > 1.5);     // G-buffer surface class: 1 tile, 0 mesh
     float  ao  = ao_tex.Sample(smp, in_.uv).r;
     float  fbw, fbh; albedo_tex.GetDimensions(fbw, fbh);
     float3 W = reconstruct_world(in_.uv, d, fbw, fbh);
@@ -119,6 +119,8 @@ float4 main_ps(vs_out in_) : SV_Target0 {
         if ((uint(id_tex.Load(int3(ip, 0)).a * 255.0 + 0.5) & 0x20u) != 0u)
             s.lit = alb.rgb;
     }
+    // Marker2 carries an already lit/unlit authored retail mesh.
+    if ((int)settings.z == 0 && nrm.a > 1.5) s.lit = alb.rgb;
     if (vm == 4) return float4(s.points, 1.0);
     if (vm == 6) return float4(s.sun_shadow, s.sun_shadow, s.sun_shadow, 1.0);
     return float4(s.lit, 1.0);

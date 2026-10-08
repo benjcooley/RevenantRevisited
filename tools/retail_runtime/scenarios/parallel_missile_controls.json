@@ -1,0 +1,50 @@
+{
+  "sessions": [
+    {
+      "name": "impact-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": {
+        "build_id": "unchanged-retail-shared-missile",
+        "executable": "../../../recon/retail_asm/baseline/Revenant.rebuilt.exe",
+        "executable_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+        "baseline_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+        "patch_manifest": {"kind": "unchanged-baseline"}
+      },
+      "setup": [
+        {"op": "create_entity", "id": "source", "position": [0, 0, 128]},
+        {"op": "create_entity", "id": "target", "position": [320, 0, 128], "stats": {"hp": 100, "enemy": true}},
+        {"op": "spawn_effect", "id": "missile", "type": "shared_missile_base", "source_id": "source", "destination_id": "target"}
+      ]
+    },
+    {
+      "name": "range-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": {
+        "build_id": "unchanged-retail-shared-missile",
+        "executable": "../../../recon/retail_asm/baseline/Revenant.rebuilt.exe",
+        "executable_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+        "baseline_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+        "patch_manifest": {"kind": "unchanged-baseline"}
+      },
+      "setup": [
+        {"op": "create_entity", "id": "source", "position": [0, 0, 128]},
+        {"op": "create_entity", "id": "target", "position": [320, 0, 128], "stats": {"hp": 0, "enemy": true}},
+        {"op": "spawn_effect", "id": "missile", "type": "shared_missile_base", "source_id": "source", "destination_id": "target"}
+      ]
+    }
+  ],
+  "jobs": [
+    {"session": "impact-agent", "name": "impact-primary", "scenario": {"operations": [
+      {"op": "advance_ticks", "id": "missile", "ticks": 40},
+      {"op": "validate_execution_contract", "id": "missile"},
+      {"op": "capture", "id": "missile", "output": "missile-state.json"}
+    ]}},
+    {"session": "range-agent", "name": "dead-target-flight-primary", "scenario": {"operations": [
+      {"op": "advance_ticks", "id": "missile", "ticks": 40},
+      {"op": "validate_execution_contract", "id": "missile"},
+      {"op": "capture", "id": "missile", "output": "missile-state.json"}
+    ]}}
+  ]
+}
