@@ -4999,11 +4999,17 @@ void TRenderer::SetFxCamera(const float right_wu[3], const float up_wu[3],
     fx_camera.set = true;
 }
 
+// Global wireframe override toggle (CLI --vfx-wireframe). When true,
+// every FX submit clamps debug_mode to Wireframe so the fragment shader
+// renders only thin edge fragments.
+bool g_fx_wireframe_override = false;
+
 void TRenderer::SubmitFxBillboard(const SBillboardDrawItem& item)
 {
     if (int32_t(fx_billboard_queue.size()) >= kMaxFxInstances) return;
     SFxBillboardQueueEntry e{};
     e.item = item;
+    if (g_fx_wireframe_override) e.item.debug_mode = EFxDebugMode::Wireframe;
     if (e.item.key.texture == kInvalidTexture && white_texture != kInvalidTexture)
         e.item.key.texture = white_texture;
     // Sort along camera forward: greater distance = further away = draw first.
@@ -5022,6 +5028,7 @@ void TRenderer::SubmitFxParticle(const SParticleDrawItem& item)
     if (int32_t(fx_particle_queue.size()) >= kMaxFxInstances) return;
     SFxParticleQueueEntry e{};
     e.item = item;
+    if (g_fx_wireframe_override) e.item.debug_mode = EFxDebugMode::Wireframe;
     if (e.item.key.texture == kInvalidTexture && white_texture != kInvalidTexture)
         e.item.key.texture = white_texture;
     if (fx_camera.set)
@@ -5458,6 +5465,10 @@ void TRenderer::DrainFxQueue()
                 auto emit = [&](const float* wp, const float* color,
                                 const float* tan,
                                 float half_w, float u, float v) {
+                    // uv_swapped: along-length samples texture V, across-
+                    // width samples texture U (transposed authored art —
+                    // see SStripSegment in renderer.h).
+                    if (seg.uv_swapped) { const float t = u; u = v; v = t; }
                     scratch.push_back(wp[0]); scratch.push_back(wp[1]); scratch.push_back(wp[2]);
                     scratch.push_back(tan[0]); scratch.push_back(tan[1]); scratch.push_back(tan[2]);
                     scratch.push_back(half_w);
