@@ -239,6 +239,15 @@ class TPlayScreen : public TScreen
     // and after Close().
     [[nodiscard]] TMapRenderer* MapRenderer() const { return mapRenderer.get(); }
 
+    // ---- Map input ------------------------------------------------------
+    // Whether the map has the pointer at (x, y): no modal holding the mouse,
+    // no load, not over the shop or a HUD panel, no HUD drag. The play
+    // field's clicks, moves and cursor go to the map pane only then.
+    [[nodiscard]] bool MapHasPointer(int32_t x, int32_t y) const;
+    // The control map's mode for the player's state (walk, combat, bow,
+    // sneak): which binding a key's command comes from.
+    [[nodiscard]] uint32_t ControlModeMask() const;
+
     // ---- TScreen pulse-driver hook -------------------------------------
     static TScreen* ShowScreen(TScreen* screen, int32_t ticks);
 

@@ -27,6 +27,8 @@
 #include "spell.h"
 #endif
 
+#include <vector>
+
 // FindChar flags
 #define FINDCHAR_ENEMY     1    // Find only enemies
 #define FINDCHAR_HEAR      2    // Find only characters we can hear
@@ -75,11 +77,15 @@ class TCharacter : public TComplexObject
     using CanSeeSeam = bool (*)(TCharacter* self, TCharacter* chr, int32_t angle);
     static inline CanSeeSeam canSeeSeam = nullptr;
       // Likewise for CanSeeCharacter (retail 0x004cd540)
+    using NearbyCharactersSeam = std::vector<TCharacter*> (*)(const S3DPoint& pos, int32_t range);
+    static inline NearbyCharactersSeam nearbyCharactersSeam = nullptr;
+      // Likewise for the characters CharBlocking walks (retail's map iterator
+      // 0x0044ceb0 / 0x0044d080), in map order
     using CastSeam = bool (*)(TCharacter* self, const char* kind, const char* text, TObjectInstance** targets,
         int32_t numtargs, const S3DPoint* sourcepos);
     static inline CastSeam castSeam = nullptr;
       // Likewise for CastByTalismans / CastByName (retail 0x004d5c20 /
-      // 0x004d5b90): `kind` names which
+      // 0x004d5b90); `kind` names the entry point
       // Retail A/B fixtures only (retailab_combat.cpp): when set, it answers
       // FindCharacters instead of the map, as the retail fixture's seam at
       // FindCharacters 0x004cd690 does (docs/gameplay/COMBAT_DOJO.md §6.3).
@@ -143,8 +149,8 @@ class TCharacter : public TComplexObject
       // Start a character moving in the given angle and speed (entry point)
     bool Go(S3DPoint vect);
       // Start a character moving in the given movement vector
-    bool Goto(int32_t x, int32_t y);
-      // Causes character to go to x,y.
+    bool Goto(int32_t x, int32_t y, TObjectInstance* pickup = nullptr);
+      // Causes character to go to x,y; an item given is picked up on arrival
     bool Stop(char *name = nullptr);
       // Stops specified action, or any action if name is nullptr
     bool Disable();
@@ -341,6 +347,8 @@ class TCharacter : public TComplexObject
         // Calls static function above with this chars parameters
     bool Blocked(S3DPoint& pos, S3DPoint& newpos, uint32_t bits = 0, int32_t* height = nullptr, TCharacter** bychar = nullptr);
       // Returns true if character would be blocked when going to new position
+    uint32_t MoveStep();
+      // One tick's displacement (Move repeats it toward a MoveTo target)
     
   // Miscellaneous functions
     virtual void MoveTo(S3DPoint& newpos) { movepos = newpos; movetopos = true; }
@@ -695,6 +703,11 @@ protected:
   // wander_target as a TSafeRef for safe-pointer semantics.
     TSafeRef<TObjectInstance> wander_target;
     int32_t  wander_commit = 0;
+
+  // retail +0x288: the item a Goto carries (the map pane's walk to an item
+  // out of reach, 0x004cedb0), picked up when that walk arrives (0x004c6155,
+  // 0x004c7fc3). Kept until then, or until a Goto carries another.
+    TSafeRef<TObjectInstance> gotoitem;
 
   // field_map.md: 0x254 = target_out_of_sight (retail mbr_0x95)
   // field_map.md: 0x258 = target_out_of_sight_prev (retail mbr_0x96)

@@ -35,6 +35,18 @@ Seams (each call recorded in `world.seams`, in order):
   GetAniFlags +0x8c; any other slot fails the case) and whose header holds
   each state's frame count. A state in the case is a name or
   {"name", "frames" (default 10), "aniflags" (default 0)}.
+- The ground (`set_ground`, a case's `ground`): the sector lookup `0x499e10`
+  answers a stand-in sector (or none, for the case's `nosector`), and
+  TSector::ReturnWalkmap `0x499720` the case's height for the walk cell --
+  `z`, or the last of its `cells` boxes [gx0, gy0, gx1, gy1, height] that
+  holds it. Not recorded (a read of map data). GetWalkHeight `0x452e10`
+  and GetWalkHeightRadius `0x4530a0` run as original over it.
+- The characters near a point: the map iterator CharBlocking walks
+  (`0x44ceb0` init, `0x44d080` next; the item at +0x0c) gives the case's
+  `nearby` names, else every character, in case order. Recorded
+  (NearbyCharacters: pos, range).
+- SetPos `0x46ed70` (slot 8; sector moves, walkmaps, redraw): recorded, the
+  position stored at +0x10.
 """
 from __future__ import annotations
 
@@ -54,11 +66,21 @@ O_MOVEANGLE = 0xb0
 O_DOING, O_DESIRED, O_ROOT = 0xd8, 0xdc, 0xe0
 O_CHARDATA, O_CHARFLAGS, O_OUT_OF_SIGHT, O_MONSTER = 0xfc, 0x110, 0x254, 0x280
 O_PLAYERSTATE = 0x36c
+# Motion (forensics/COMBAT_MOTION.md §3.8): vel and the carried fraction in
+# 1/0x10000 units, the animation's move (GetNextMove 0x470c30), a MoveTo, the
+# shove side, and the three fields a blocked step clears (+0x254..+0x25c).
+O_VEL, O_ACCUM, O_INVENTNUM = 0x1c, 0x28, 0x7c
+O_MOVEDIST, O_MOVEVERT = 0xb4, 0xb8
+O_MOVETOPOS, O_MOVEPOS, O_FORCENOMOVE, O_SHOVEDIR = 0xec, 0xf0, 0x10c, 0x11c
+O_OUT_OF_SIGHT_PREV, O_SIGHT_LOST_TICKS = 0x258, 0x25c
 CHAR_SIZE, PLAYER_SIZE = 0x2a0, 0x674
 CHAR_VTABLE, PLAYER_VTABLE = 0x5a7848, 0x5b4f30
 CLASS_PLAYER, CLASS_CHARACTER = 0x0b, 0x0c
 CHARDATA_SIZE = 0x600
 CD_DAMAGEMODS, CD_COMBATRANGEMAX, CD_ARMOR = 0xe4, 0x15c, 0x1c4
+# Walk speeds: -1 in the shipped char.def (the parser's default), so the
+# animation moves every character.
+CD_SPEEDS = dict(walkspeed=0x1ec, runspeed=0x1f0, sneakspeed=0x1f4, combatwalkspeed=0x1f8)
 
 # TActionBlock (§6.2)
 AB_SIZE, AB_CTOR = 100, 0x4da9f0                 # ctor thiscall (name, action), ret 8
@@ -68,14 +90,14 @@ AB = dict(action=0x00, name=0x04, frame=0x24, wait=0x28, angle=0x2c, moveangle=0
 # Retail's flag bits by meaning. Confirmed from SetRoot/SetDoing/SetDesired/
 # UpdateAction, ForceCommand and Go/ResolveCombat (COMBAT_DOJO.md §5.4):
 # firsttime, transition, priority, interrupt, nowaitdone, dontforce, stop
-# (ResolveCombatMove 0x4c7f80), waitpivot, noroot, pickup (walking to an
+# (ResolveCombatMove 0x4c7f80), waitpivot, noroot, walkto (walking to an
 # item, Goto's third argument). The rest are
 # the 1998 names shifted up one bit past the inserted one -- unconfirmed,
 # so they keep a `?`, and a block that sets one shows up as a difference.
 AB_FLAGS = {0x1: 'firsttime', 0x2: 'transition', 0x4: 'forced', 0x8: 'retail-0x8',
             0x10: 'priority', 0x20: 'interrupt', 0x40: 'nowaitdone', 0x80: 'dontforce',
             0x100: 'stop', 0x200: 'waitpivot', 0x400: 'noroot', 0x800: 'loop?',
-            0x1000: 'pickup'}
+            0x1000: 'walkto'}
 
 # Globals
 G_COMBATFACE = 0x5d7a64                          # Revenant.ini CombatFace (default 1)
@@ -88,7 +110,14 @@ G_PLAYSCREEN = 0x65caf0                          # GameFrame = [+0x688] - [+0x68
 # +0x5d8 (set by 0x47c550; meaning unknown), is set.
 G_PS_5D8, G_PS_CONTROL = 0x65d0c8, 0x65d0d0
 G_PLAYER = 0x667fcc
-OBJSTAT_IDS = {'health': (0x66ca4c, 0x101), 'fatigue': (0x66ca3c, 0x102), 'mana': (0x66ca38, 0x103)}
+OBJSTAT_IDS = {'health': (0x66ca4c, 0x101), 'fatigue': (0x66ca3c, 0x102), 'mana': (0x66ca38, 0x103),
+               'sleeping': (0x66ca58, 0x104)}
+# SetObjStat (slot 0xe8, thiscall (id, value) ret 8): recorded, the value stored.
+SET_OBJSTAT = {CLASS_CHARACTER: 0x4d74b0, CLASS_PLAYER: 0x51adb0}
+G_AMBIENT = 0x6671a4                             # MapPane ambient light (Visibility 0x4c5aa0)
+# The action state UpdateAction reads: commanddone, the animator (only
+# tested for null: a case's `animator` gives a stand-in), the stealth values.
+O_COMMANDDONE, O_ANIMATOR, O_GLIMPSE, O_NOISE = 0x80, 0x58, 0x130, 0x134
 # Type stats, read through slot 0xd8. Radius: TCharacter::Radius (slot
 # 0x258, 0x4d6e40), which Distance (0x4d61b0) subtracts.
 CLASSSTAT_IDS = {'radius': (0x66ca30, 0x201)}
@@ -104,6 +133,20 @@ IM_HEADER, HDR_STATES, STATE_SIZE, ST_FRAMES = 0x04, 0x54, 0x4c, 0x32
 GET_STAT = 0x4d74d0                              # slot 0xd8, thiscall (id), ret 4
 RANDOM, RAND = 0x483300, 0x58c582                 # random(lo, hi) cdecl; MSVC rand()
 GET_OBJSTAT = {CLASS_CHARACTER: 0x4d7520, CLASS_PLAYER: 0x51ae30}
+FIND_SECTOR, RETURN_WALKMAP = 0x499e10, 0x499720  # cdecl (level, sx, sy); thiscall (x, y) ret 8
+ITER_INIT, ITER_NEXT, ITER_ITEM = 0x44ceb0, 0x44d080, 0x0c   # init thiscall, 6 args, ret 0x18
+SET_POS = 0x46ed70                               # slot 8, thiscall (pos*, level, override), ret 0xc
+SLOT_MOVE = 0x114                                # TCharacter::Move 0x4c46d0, TPlayer::Move 0x518df0
+
+
+def ground_height(ground, gx, gy):
+    """A walk cell's height in the case's ground: `z`, or the last `cells`
+    box [gx0, gy0, gx1, gy1, height] holding (gx, gy)."""
+    h = ground.get('z', 0)
+    for gx0, gy0, gx1, gy1, ch in ground.get('cells', []):
+        if gx0 <= gx <= gx1 and gy0 <= gy <= gy1:
+            h = ch
+    return h
 
 
 def start(executable):
@@ -169,9 +212,16 @@ class CombatWorld:
         for objclass, address in GET_OBJSTAT.items():
             b.add(address, 'GetObjStat', 4, self._get_objstat)
         b.add(GET_STAT, 'GetStat', 4, self._get_stat)
+        for objclass, address in SET_OBJSTAT.items():
+            b.add(address, 'SetObjStat', 8, self._set_objstat)
         b.add(SET_STATE, 'SetState', 4, self._set_state)
         b.add(RANDOM, 'random', 0, self._random)
         b.add(RAND, 'rand', 0, self._rand)
+        b.add(FIND_SECTOR, 'FindSector', 0, self._find_sector)
+        b.add(RETURN_WALKMAP, 'ReturnWalkmap', 8, self._return_walkmap)
+        b.add(ITER_INIT, 'MapIterator', 0x18, self._iter_init)
+        b.add(ITER_NEXT, 'MapIterator.Next', 0, self._iter_next)
+        b.add(SET_POS, 'SetPos', 0xc, self._set_pos)
         self._imagery_stubs()
         self.reset()
 
@@ -187,6 +237,11 @@ class CombatWorld:
         self.draws = []
         self.tape = []
         self.vm.rng_seed = 1
+        self.ground = None         # the case's walkmap, if it has one
+        self.nearby = None         # names the map iterator gives, else every character
+        self.sectors = {}          # (sx, sy) -> stand-in sector, and back
+        self.sector_at = {}
+        self.iters = {}            # iterator address -> characters still to give
 
     def set_rng(self, case):
         """The case's RNG: `tape` first, then retail's generator from `seed`."""
@@ -214,7 +269,48 @@ class CombatWorld:
         self.draws.append(dict(rand=value))
         return value
 
+    def set_ground(self, case):
+        """The case's walkmap (`ground`) and the characters the map gives
+        near a point (`nearby`)."""
+        self.ground = case.get('ground')
+        self.nearby = case.get('nearby')
+
     # -- seams ------------------------------------------------------------
+    def _find_sector(self, args, ecx):
+        if self.ground is None:
+            raise RuntimeError('the walkmap was read, but the case has no ground')
+        key = (s32(args[1]), s32(args[2]))
+        if list(key) in self.ground.get('nosector', []):
+            return 0
+        if key not in self.sectors:
+            sector = self.vm.allocate(0x10)
+            self.sectors[key] = sector
+            self.sector_at[sector] = key
+        return self.sectors[key]
+
+    def _return_walkmap(self, args, ecx):
+        sx, sy = self.sector_at[ecx]
+        return ground_height(self.ground, sx * 64 + s32(args[0]), sy * 64 + s32(args[1]))
+
+    def _iter_init(self, args, ecx):
+        pos = list(struct.unpack('<3i', self.vm.uc.mem_read(args[0], 12)))
+        self.seams.append(dict(seam='NearbyCharacters', pos=pos, range=s32(args[1])))
+        names = self.nearby if self.nearby is not None else list(self.by_name)
+        self.iters[ecx] = [self.by_name[n] for n in names]
+        self._iter_next(args, ecx)
+        return ecx
+
+    def _iter_next(self, args, ecx):
+        items = self.iters.get(ecx, [])
+        self.vm.put_u32(ecx + ITER_ITEM, items.pop(0) if items else 0)
+        return 0
+
+    def _set_pos(self, args, ecx):
+        pos = list(struct.unpack('<3i', self.vm.uc.mem_read(args[0], 12)))
+        self.vm.write(ecx + O_POS, struct.pack('<3i', *pos))
+        self.seams.append(dict(seam='SetPos', who=self._name(ecx), pos=pos))
+        return 1
+
     def _name(self, address):
         return self.objects.get(address, f'{address:#x}')
 
@@ -244,6 +340,13 @@ class CombatWorld:
 
     def _get_objstat(self, args, ecx):
         return self._stat('GetObjStat', self.stats, OBJSTAT_IDS, args, ecx)
+
+    def _set_objstat(self, args, ecx):
+        sid, value = s32(args[0]), s32(args[1])
+        names = {v[1]: k for k, v in OBJSTAT_IDS.items()}
+        self.stats.setdefault(ecx, {})[sid] = value
+        self.seams.append(dict(seam='SetObjStat', who=self._name(ecx), stat=names.get(sid, sid), value=value))
+        return 0
 
     def _get_stat(self, args, ecx):
         return self._stat('GetStat', self.classstats, CLASSSTAT_IDS, args, ecx)
@@ -323,6 +426,7 @@ class CombatWorld:
         vm.put_u32(G_PLAYSCREEN + 0x688, 0)
         vm.put_u32(G_PS_5D8, int(g.get('ps_5d8', 0)))
         vm.put_u32(G_PS_CONTROL, int(g.get('control', 1)))
+        vm.put_u32(G_AMBIENT, int(g.get('ambient', 128)))
 
     # -- objects ----------------------------------------------------------
     def new_block(self, spec, objmap):
@@ -356,7 +460,26 @@ class CombatWorld:
         vm.write(obj + O_FACING, bytes([spec.get('facing', 0) & 0xff]))
         vm.put_u32(obj + O_MOVEANGLE, spec.get('moveangle', spec.get('facing', 0)) & 0xffffffff)
         vm.put_u32(obj + O_CHARFLAGS, spec.get('charflags', 0))
+        vm.put_u32(obj + O_FLAGS, spec.get('objflags', 0))
+        vm.write(obj + O_INVENTNUM, struct.pack('<h', spec.get('inventnum', -1)))
+        vm.write(obj + O_VEL, struct.pack('<3i', *spec.get('vel', (0, 0, 0))))
+        vm.write(obj + O_ACCUM, struct.pack('<3i', *spec.get('accum', (0, 0, 0))))
+        vm.put_u32(obj + O_MOVEDIST, spec.get('movedist', 0) & 0xffffffff)
+        vm.put_u32(obj + O_MOVEVERT, spec.get('movevert', 0) & 0xffffffff)
+        if 'moveto' in spec:
+            vm.put_u32(obj + O_MOVETOPOS, 1)
+            vm.write(obj + O_MOVEPOS, struct.pack('<3i', *spec['moveto']))
+        vm.put_u32(obj + O_FORCENOMOVE, int(spec.get('forcenomove', 0)))
+        vm.put_u32(obj + O_SHOVEDIR, spec.get('shovedir', -1) & 0xffffffff)
         vm.put_u32(obj + O_OUT_OF_SIGHT, int(spec.get('out_of_sight', 0)))
+        vm.put_u32(obj + O_OUT_OF_SIGHT_PREV, int(spec.get('out_of_sight_prev', 0)))
+        vm.put_u32(obj + O_SIGHT_LOST_TICKS, spec.get('sight_lost_ticks', 0))
+        vm.put_u32(obj + O_COMMANDDONE, int(spec.get('commanddone', 0)))
+        if spec.get('animator'):
+            vm.put_u32(obj + O_ANIMATOR, vm.allocate(0x40))   # never called: a null vtable would fault
+        vm.put_u32(obj + O_GLIMPSE, spec.get('glimpse', 0) & 0xffffffff)
+        vm.put_u32(obj + O_NOISE, spec.get('noise', 0) & 0xffffffff)
+        vm.write(obj + O_FRAME, struct.pack('<h', spec.get('frame', 0)))
         vm.put_u32(obj + O_MONSTER, spec.get('monsterkind', 0))
         if player:
             vm.put_u32(obj + O_PLAYERSTATE, spec.get('playerstate', 0))
@@ -371,6 +494,8 @@ class CombatWorld:
         vm.put_u32(cd + CD_ARMOR, chardata.get('armor', 0))
         for i, v in enumerate(chardata.get('damagemods', [])):
             vm.put_u32(cd + CD_DAMAGEMODS + 4 * i, v & 0xffffffff)
+        for key, off in CD_SPEEDS.items():
+            vm.put_u32(cd + off, chardata.get(key, -1) & 0xffffffff)
         vm.put_u32(obj + O_CHARDATA, cd)
         self.objects[obj] = spec['name']
         self.by_name[spec['name']] = obj
@@ -418,6 +543,19 @@ class CombatWorld:
                     target=list(struct.unpack('<3i', vm.uc.mem_read(ab + AB['target'], 12))),
                     obj=None if not obj else self._name(obj),
                     flags=flag_names(vm.u32(ab + AB['flags'])))
+
+    def motion_dump(self, obj):
+        """What a move changes beyond the character dump."""
+        vm = self.vm
+        return dict(vel=list(struct.unpack('<3i', vm.uc.mem_read(obj + O_VEL, 12))),
+                    accum=list(struct.unpack('<3i', vm.uc.mem_read(obj + O_ACCUM, 12))),
+                    movetopos=vm.u32(obj + O_MOVETOPOS), forcenomove=vm.u32(obj + O_FORCENOMOVE),
+                    shovedir=s32(vm.u32(obj + O_SHOVEDIR)),
+                    out_of_sight=vm.u32(obj + O_OUT_OF_SIGHT),
+                    out_of_sight_prev=vm.u32(obj + O_OUT_OF_SIGHT_PREV),
+                    sight_lost_ticks=s32(vm.u32(obj + O_SIGHT_LOST_TICKS)),
+                    movedist=s32(vm.u32(obj + O_MOVEDIST)), commanddone=vm.u32(obj + O_COMMANDDONE),
+                    glimpse=s32(vm.u32(obj + O_GLIMPSE)), noise=s32(vm.u32(obj + O_NOISE)))
 
     def character_dump(self, obj, new_blocks):
         vm = self.vm

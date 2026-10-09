@@ -16,6 +16,14 @@ fixture world (docs/gameplay/COMBAT_DOJO.md on feature/combat). The case's
   `0x4c7980` / ResolveCombatMove `0x4c7f80` (thiscall (ab, bits), ret 8),
   the per-tick resolvers of the combat root and of a combat step, called
   on the character's doing block. Case: `bits`.
+- `move` (kata M7): the Move slot (0x114: TCharacter::Move `0x4c46d0`,
+  TPlayer::Move `0x518df0`) -- MoveStep `0x4c3bc0`, FindClearPath and
+  CharBlocking `0x4d4db0` as original over the case's `ground` and
+  `nearby` (guest.py). Adds `motion` to the result.
+- `update-action` (kata M1u): UpdateAction `0x4c3260` (slot 0x210) with
+  the case's `bits` (the last Move's): ResolveAction and the resolvers,
+  ResetStealthValues, TryCommand / ForceCommand as original; Sleeping /
+  SetSleeping through the object-stat seams. Adds `motion`.
 
 Schema `combat.call.v1`, shared with the port's `Revenant
 --retail-ab=combat-go` / `combat-resolve`.
@@ -29,7 +37,8 @@ engine allocator.
 Seams (guest.py for the shared ones), recorded in order:
 - FindState / FindTransitionState / GetStat (guest.py);
 - FindClearPath `0x4c39d0` (thiscall, 5 args): the case's `blocked`
-  (default clear), the probe point recorded;
+  (default clear), the probe point recorded -- except in a case with a
+  `ground`, where it runs as original;
 - FindCharacters `0x4cd690` (thiscall, 6 args): an empty world (M3); the
   query recorded. M4 gives it a world;
 - TPlayer SetPlayerState `0x51d680` (thiscall, 1 arg): recorded, the value
@@ -51,7 +60,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from guest import CombatWorld, call, s32, serve, start  # noqa: E402
+from guest import SLOT_MOVE, Boundaries, CombatWorld, call, s32, serve, start  # noqa: E402
 
 SCHEMA = 'combat.call.v1'
 GO = 0x4ce350
@@ -60,6 +69,7 @@ CALCULATE_DAMAGE = 0x4c4860
 FIND_CLEAR_PATH = 0x4c39d0
 FIND_CHARACTERS = 0x4cd690
 SET_PLAYER_STATE = 0x51d680
+SLOT_UPDATE_ACTION = 0x210                       # TCharacter::UpdateAction 0x4c3260 (both classes)
 CAN_SEE = 0x4cd540
 
 
@@ -79,6 +89,8 @@ class CallFixture:
 
     # -- seams --------------------------------------------------------------
     def _find_clear_path(self, args, ecx):
+        if 'ground' in self.case:
+            return Boundaries.ORIGINAL
         point = list(struct.unpack('<3i', self.vm.uc.mem_read(args[1], 12)))
         blocked = int(bool(self.case.get('blocked', False)))
         self.world.seams.append(dict(seam='FindClearPath', who=self.world._name(ecx), to=point, result=blocked))
@@ -109,6 +121,7 @@ class CallFixture:
         self.case = case
         world.set_globals(case.get('globals', {}))
         world.set_rng(case)
+        world.set_ground(case)
         for spec in case['chars']:
             world.new_character(spec)
         for spec in case['chars']:
@@ -122,15 +135,23 @@ class CallFixture:
             entry = RESOLVE_COMBAT if kind == 'resolve-combat' else RESOLVE_COMBAT_MOVE
             doing = vm.u32(me + 0xd8)
             result = s32(call(vm, entry, (doing, case.get('bits', 0) & 0xffffffff), this=me))
+        elif kind == 'move':
+            result = s32(call(vm, vm.u32(vm.u32(me) + SLOT_MOVE), (), this=me))
+        elif kind == 'update-action':
+            call(vm, vm.u32(vm.u32(me) + SLOT_UPDATE_ACTION), (case.get('bits', 0) & 0xffffffff,), this=me)
+            result = 0
         elif kind == 'calculate-damage':
             result = [s32(call(vm, CALCULATE_DAMAGE, tuple(v & 0xffffffff for v in inp), this=me))
                       for inp in case['inputs']]
         else:
             raise ValueError(f'unknown call {kind!r}')
         new_blocks = []
-        return dict(schema=SCHEMA, side='retail', returned=result,
-                    self=world.character_dump(me, new_blocks), seams=list(world.seams),
-                    draws=list(world.draws))
+        out = dict(schema=SCHEMA, side='retail', returned=result,
+                   self=world.character_dump(me, new_blocks), seams=list(world.seams),
+                   draws=list(world.draws))
+        if kind in ('move', 'update-action'):
+            out['motion'] = world.motion_dump(me)
+        return out
 
 
 def main():

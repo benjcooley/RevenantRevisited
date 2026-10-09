@@ -28,6 +28,7 @@
 #include <stdexcept>
 #include <string>
 #include <strings.h>
+#include <type_traits>
 #include <vector>
 
 namespace RetailAB::Fixture
@@ -132,6 +133,9 @@ class IFixtureChar
     // The resolvers ResolveAction would call on the doing block.
     virtual int32_t ResolveCombat(int32_t bits) = 0;
     virtual int32_t ResolveCombatMove(int32_t bits) = 0;
+    virtual void RunUpdateAction(int32_t bits) = 0;
+    // What a move changes beyond the character dump ("motion").
+    virtual void WriteMotion(JsonOut& j) = 0;
 };
 
 // A TCharacter or TPlayer built from the case, without a class record or
@@ -164,7 +168,39 @@ class TFixtureChar : public Base, public IFixtureChar
         cd->armorvalue = (int32_t)c["armor"].Int();
         for (size_t i = 0; i < c["damagemods"].Items().size() && i < NUMDAMAGETYPES; ++i)
             cd->damagemods[i] = (int32_t)c["damagemods"][i].Int();
+        cd->walkspeed = (int32_t)c["walkspeed"].Int(-1);
+        cd->runspeed = (int32_t)c["runspeed"].Int(-1);
+        cd->sneakspeed = (int32_t)c["sneakspeed"].Int(-1);
+        cd->combatwalkspeed = (int32_t)c["combatwalkspeed"].Int(-1);
         this->chardata = cd.get();
+
+        // Motion (kata M7): object flags, inventory slot, vel and accum,
+        // the animation's move, a MoveTo, the shove side, the sight fields.
+        this->flags |= (uint32_t)spec["objflags"].Int();
+        this->SetInventNum((short)spec["inventnum"].Int(-1));
+        this->vel = Point(spec["vel"]);
+        this->accum = Point(spec["accum"]);
+        this->SetMoveDist((int32_t)spec["movedist"].Int());
+        this->SetMoveVert((int32_t)spec["movevert"].Int());
+        if (spec.Has("moveto"))
+        {
+            this->movepos = Point(spec["moveto"]);
+            this->movetopos = true;
+        }
+        this->forcenomove = spec["forcenomove"].Bool();
+        this->shovedir = (int32_t)spec["shovedir"].Int(-1);
+        this->target_out_of_sight_prev = spec["out_of_sight_prev"].Bool();
+        this->sight_lost_ticks = (int32_t)spec["sight_lost_ticks"].Int();
+        if constexpr (std::is_same_v<Base, TPlayer>)
+            this->TPlayer::SetPlayerState((int32_t)spec["playerstate"].Int(0));   // as the retail fixture's zeroed +0x36c
+
+        // Action state (kata M1u): commanddone, an animator (only its
+        // presence is read), the frame, the stealth values.
+        this->commanddone = spec["commanddone"].Bool();
+        animated = spec["animator"].Bool();
+        this->frame = (short)spec["frame"].Int();
+        this->glimpse = (int32_t)spec["glimpse"].Int();
+        this->noise = (int32_t)spec["noise"].Int();
     }
     TFixtureChar(const TFixtureChar&) = delete;
     TFixtureChar& operator=(const TFixtureChar&) = delete;
@@ -201,6 +237,34 @@ class TFixtureChar : public Base, public IFixtureChar
     TActionBlock* Desired() override { return this->desired; }
     int32_t ResolveCombat(int32_t bits) override { return Base::ResolveCombat(this->doing, bits); }
     int32_t ResolveCombatMove(int32_t bits) override { return Base::ResolveCombatMove(this->doing, bits); }
+    void RunUpdateAction(int32_t bits) override { this->UpdateAction(bits); }
+
+    void WriteMotion(JsonOut& j) override
+    {
+        j.Key("motion").Begin('{');
+        j.Key("vel").Begin('[').Value(this->vel.x).Value(this->vel.y).Value(this->vel.z).End(']');
+        j.Key("accum").Begin('[').Value(this->accum.x).Value(this->accum.y).Value(this->accum.z).End(']');
+        j.Field("movetopos", this->movetopos ? 1 : 0).Field("forcenomove", this->forcenomove ? 1 : 0);
+        j.Field("shovedir", this->shovedir);
+        j.Field("out_of_sight", this->target_out_of_sight ? 1 : 0);
+        j.Field("out_of_sight_prev", this->target_out_of_sight_prev ? 1 : 0);
+        j.Field("sight_lost_ticks", this->sight_lost_ticks);
+        j.Field("movedist", this->GetMoveDist()).Field("commanddone", this->commanddone ? 1 : 0);
+        j.Field("glimpse", this->glimpse).Field("noise", this->noise);
+        j.End('}');
+    }
+
+    // Retail's SetPos (slot 8) moves sectors, walkmaps and the redraw; here
+    // it is recorded and the position stored.
+    int32_t SetPos(const S3DPoint& p, int32_t newlevel = -1, bool override = false) override
+    {
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "SetPos").FieldString("who", who);
+        j.Key("pos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']').End('}');
+        Seam(j.str());
+        this->ForcePos(p);
+        return 1;
+    }
 
     int32_t FindState(const char* n, int32_t pcnt = -1) const override
     {
@@ -250,12 +314,29 @@ class TFixtureChar : public Base, public IFixtureChar
         return true;
     }
 
+    bool HasAnimator() const override { return animated; }
+
+    int32_t Sleeping() override { return ObjStat("sleeping"); }
+    void SetSleeping(int32_t v) override
+    {
+        stats["sleeping"] = v;
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "SetObjStat").FieldString("who", who).FieldString("stat", "sleeping");
+        j.Field("value", v).End('}');
+        Seam(j.str());
+    }
+
     int32_t Health() override { return ObjStat("health"); }
     int32_t Fatigue() override { return ObjStat("fatigue"); }
     int32_t Mana() override { return ObjStat("mana"); }
     int32_t Radius() override { return ClassStat("radius"); }
 
   private:
+    static S3DPoint Point(const JsonValue& v)
+    {
+        return S3DPoint((int32_t)v[0].Int(), (int32_t)v[1].Int(), (int32_t)v[2].Int());
+    }
+
     int32_t ObjStat(const char* stat) { return StatSeam("GetObjStat", stats, stat); }
     int32_t ClassStat(const char* stat) { return StatSeam("GetStat", classstats, stat); }
 
@@ -275,6 +356,7 @@ class TFixtureChar : public Base, public IFixtureChar
     std::vector<SFixtureState> states;
     std::map<std::string, int32_t> stats, classstats;
     std::unique_ptr<SCharData> cd;
+    bool animated = false;
 };
 
 // ---- The fixture world ------------------------------------------------------
@@ -316,6 +398,7 @@ class TFixtureWorld
     }
 
     IFixtureChar* Fixture(const TCharacter* c) const { return fixtures.at(c); }
+    const std::vector<TCharacter*>& Order() const { return order; }
 
     TCharacter* Get(const std::string& name) const
     {
@@ -437,8 +520,11 @@ class TFixtureWorld
 
 // The case's globals and seams for one call: CombatFace, the PlayScreen frame
 // and control flags, an empty FindCharacters world, the case's `blocked`
-// (FindClearPath / Blocked) and `sees` (CanSeeCharacter), the RNG tape.
-// Removed when the scope ends.
+// (FindClearPath / Blocked) and `sees` (CanSeeCharacter), the RNG tape. A
+// case with a `ground` runs Blocked itself over that walkmap (walk cells:
+// `z`, or the last of its `cells` boxes [gx0, gy0, gx1, gy1, height]; no
+// sector in `nosector`) with CharBlocking walking the case's `nearby`
+// characters (else all of them, in case order). Removed when the scope ends.
 class SCaseScope
 {
   public:
@@ -446,6 +532,9 @@ class SCaseScope
     ~SCaseScope();
     SCaseScope(const SCaseScope&) = delete;
     SCaseScope& operator=(const SCaseScope&) = delete;
+
+  private:
+    int32_t savedAmbient = 0;
 };
 
 }  // namespace RetailAB::Fixture

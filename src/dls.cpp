@@ -23,7 +23,6 @@ uint8_t IntTable[256];
 extern SColor LightColors[NUMBASELIGHTS];
 extern int32_t LightUseCount[NUMBASELIGHTS];
 
-extern uint8_t  DistTable[256][256];
 extern uint8_t  AngleTable[256][256];
 extern uint8_t  CosCos[64*256];
 extern uint8_t  IntCos[256*256];
