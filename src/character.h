@@ -315,6 +315,9 @@ class TCharacter : public TComplexObject
 
     static constexpr uint32_t kCharFlagNoIncidentals = 0x2;
     // Retail charflags (+0x110) bits the combat code reads:
+    static constexpr uint32_t kCharFlagDamageSeventh = 0x10;      // CalculateDamage /7 (not freeze); setter unidentified
+    static constexpr uint32_t kCharFlagHalfPhysical  = 0x100;     // CalculateDamage halves physical; setter unidentified
+    static constexpr uint32_t kCharFlagHalfMagic     = 0x200;     // CalculateDamage halves magic (6-9); setter unidentified
     static constexpr uint32_t kCharFlagNotTargetable = 0x8000;    // IsValidTarget refuses (setter unidentified)
     static constexpr uint32_t kCharFlagInteractive   = 0x80000;   // in an interactive move: Go skips its gates
     static constexpr uint32_t kCharFlagPlayerAI      = 0x100000;  // the player runs AI() (retail: set for
@@ -709,6 +712,9 @@ protected:
   // Retail +0x28c / +0x290: the player's last attack button and how many
   // times running it was pressed (ButtonAttack 0x004d2480's same-button
   // rule); SetFighting resets them.
+  // Retail +0x280: the per-monster AI kind (AI_PerMonster 0x004c9b70 sets
+  // it; 1 is Baez, whom magic can't hurt). No port writer yet.
+    int32_t monsterkind  = 0;
     int32_t lastbutton   = -1;
     int32_t buttonrepeat = 0;
     int32_t  sight_lost_ticks = 0;

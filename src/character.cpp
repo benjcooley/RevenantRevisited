@@ -1018,19 +1018,35 @@ int32_t TCharacter::GetDamageType(int32_t weapontype, int32_t attackflags)
     return DT_NONE;
 }
 
-// Get the total damage amount (based on this function)
+// REVSYNC: CalculateDamage @ 0x004c4860 -- the damage taken from `damage`
+// of `damagetype` with the attacker's `modifier` percent: the modifier,
+// then this character's resistance (percent off) and armour (points off),
+// at least 1; then magic (6-9) halved by kCharFlagHalfMagic and nothing at
+// all for Baez, physical halved by kCharFlagHalfPhysical; then a seventh
+// with kCharFlagDamageSeventh unless it's freezing. No type: no damage.
 int32_t TCharacter::CalculateDamage(int32_t damage, int32_t damagetype, int32_t modifier)
 {
-    int32_t attackdamage, totaldamage;
     if (damagetype == DT_NONE)
         return 0;
-    else
-    {
-        attackdamage = damage * (100 + modifier) / 100;
-        totaldamage = attackdamage * (100 + DamageModifier(damagetype)) / 100;
-    }
 
-    return totaldamage;
+    const int32_t modified = (modifier + 100) * damage / 100;
+    int32_t taken = (100 - DamageModifier(damagetype)) * modified / 100 - ArmorValue();
+    if (taken < 1)
+        taken = 1;
+
+    if (damagetype >= DT_MAGICAL && damagetype <= DT_POISON)
+    {
+        if (charflags & kCharFlagHalfMagic)
+            taken /= 2;
+        if (monsterkind == 1)
+            taken = 0;
+    }
+    else if (charflags & kCharFlagHalfPhysical)
+        taken /= 2;
+
+    if ((charflags & kCharFlagDamageSeventh) && damagetype != DT_FREEZE)
+        taken /= 7;
+    return taken;
 }
 
 void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,

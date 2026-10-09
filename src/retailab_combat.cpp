@@ -249,6 +249,7 @@ class TFixtureChar : public Base, public IFixtureChar
         this->state = (uint16_t)spec["state"].Int(0);
         this->charflags = (uint32_t)spec["charflags"].Int();
         this->target_out_of_sight = spec["out_of_sight"].Bool();
+        this->monsterkind = (int32_t)spec["monsterkind"].Int(0);
         for (const auto& [k, v] : spec["stats"].Members())
             stats[k] = (int32_t)v.Int();
         for (const auto& [k, v] : spec["classstats"].Members())
@@ -611,8 +612,12 @@ std::string CombatCall(const Case& c, std::string& error)
         IFixtureChar* fx = world.Fixture(me);
         g_seams.clear();
         const std::string call = cs.Has("call") ? cs["call"].Str() : "go";
-        int32_t returned;
-        if (call == "go")
+        int32_t returned = 0;
+        std::vector<int32_t> outputs;
+        if (call == "calculate-damage")
+            for (const JsonValue& in : cs["inputs"].Items())
+                outputs.push_back(me->CalculateDamage((int32_t)in[0].Int(), (int32_t)in[1].Int(), (int32_t)in[2].Int()));
+        else if (call == "go")
             returned = me->Go((int32_t)cs["angle"].Int()) ? 1 : 0;
         else if (call == "resolve-combat")
             returned = fx->ResolveCombat((int32_t)cs["bits"].Int());
@@ -626,7 +631,15 @@ std::string CombatCall(const Case& c, std::string& error)
 
         JsonOut j;
         j.Begin('{').FieldString("schema", "combat.call.v1").FieldString("side", "port");
-        j.Field("returned", returned);
+        if (call == "calculate-damage")
+        {
+            j.Key("returned").Begin('[');
+            for (int32_t v : outputs)
+                j.Value(v);
+            j.End(']');
+        }
+        else
+            j.Field("returned", returned);
         world.WriteCharacter(j, "self", me);
         WriteSeams(j);
         j.End('}');
@@ -705,7 +718,7 @@ std::string CombatKernels(const Case& c, std::string& error)
 
 Target CombatTarget(const std::string& name)
 {
-    if (name == "combat-go" || name == "combat-resolve")
+    if (name == "combat-go" || name == "combat-resolve" || name == "combat-damage")
         return CombatCall;
     if (name == "combat-kernels")
         return CombatKernels;
