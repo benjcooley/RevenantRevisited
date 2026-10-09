@@ -2818,6 +2818,11 @@ void T3DImagery::SetObjectMotion(TObjectInstance* inst)
 
 // ****************** NORMAL IMAGERY STUFF **********************
 
+// REVSYNC: 0x0040ce60. An object has one icon whatever its state: once the
+// body has loaded, retail keeps a copy of state 0's -- its invitem, else the
+// first frame of its invanim (TObjectImagery::LoadBody 0x00447ac0, imagery
+// entry +0x74) -- and answers with that. Without one, the state's own
+// invitem, else state 0's (null).
 TBitmap* T3DImagery::GetInvImage(int32_t state, int32_t /*num*/)
 {
     if (!meshinitialized)
@@ -2826,15 +2831,22 @@ TBitmap* T3DImagery::GetInvImage(int32_t state, int32_t /*num*/)
 
     if (!icons)
         return nullptr;
+    if (TBitmap* icon = icons[0].invitem)
+        return icon;
+    if (TBitmap* frame = icons[0].invanim ? icons[0].invanim->GetFrame(0) : nullptr)
+        return frame;
+    if (state < 0 || state >= NumStates())
+        return nullptr;
     return icons[state].invitem;
 }
 
+// REVSYNC: 0x0040cef0 -- the state's own invanim; none for a state out of range.
 TAnimation* T3DImagery::GetInvAnimation(int32_t state)
 {
     if (!meshinitialized)
         InitializeMesh((S3DImageryBody*)GetBody());
 
-    if (!icons)
+    if (!icons || state < 0 || state >= NumStates())
         return nullptr;
     return icons[state].invanim;
 }
