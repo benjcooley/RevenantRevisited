@@ -94,9 +94,9 @@ void Seam(const std::string& record) { g_seams.push_back(record); }
 // numbers differ; the names are what's compared. A `?` marks a name not yet
 // confirmed on the retail side.
 const std::pair<uint32_t, const char*> kPortFlags[] = {
-    {0x001, "firsttime"}, {0x002, "transition"}, {0x004, "terminating?"}, {0x008, "priority"},
+    {0x001, "firsttime"}, {0x002, "transition"}, {0x004, "forced"}, {0x008, "priority"},
     {0x010, "interrupt"}, {0x020, "nowaitdone"}, {0x040, "dontforce"},   {0x080, "stop"},
-    {0x100, "waitpivot"}, {0x200, "noroot"},     {0x400, "loop?"},
+    {0x100, "waitpivot"}, {0x200, "noroot"},     {0x400, "loop?"}, {0x800, "pickup"},
 };
 
 uint32_t FlagBits(const JsonValue& names)
@@ -550,6 +550,18 @@ int32_t EmptyWorld(TCharacter* self, TCharacter* chars[], int32_t maxchars, int3
 // The case's `blocked` answers FindClearPath (retail) / Blocked (port).
 bool g_blocked = false;
 
+// The case's `sees` answers CanSeeCharacter (both sides).
+bool g_sees = true;
+
+bool CaseSees(TCharacter* self, TCharacter* chr, int32_t angle)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "CanSeeCharacter").FieldString("who", g_world->NameOf(self));
+    j.FieldString("target", g_world->NameOf(chr)).Field("result", g_sees ? 1 : 0).End('}');
+    Seam(j.str());
+    return g_sees;
+}
+
 bool CaseBlocked(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, uint32_t bits)
 {
     JsonOut j;
@@ -592,7 +604,9 @@ std::string CombatCall(const Case& c, std::string& error)
         g_world = &world;
         TCharacter::findCharactersSeam = EmptyWorld;
         TCharacter::blockedSeam = CaseBlocked;
+        TCharacter::canSeeSeam = CaseSees;
         g_blocked = cs["blocked"].Bool(false);
+        g_sees = cs["sees"].Bool(true);
         TCharacter* me = world.Get(cs["self"].Str());
         IFixtureChar* fx = world.Fixture(me);
         g_seams.clear();
@@ -608,6 +622,7 @@ std::string CombatCall(const Case& c, std::string& error)
             throw std::runtime_error("unknown call '" + call + "'");
         TCharacter::findCharactersSeam = nullptr;
         TCharacter::blockedSeam = nullptr;
+        TCharacter::canSeeSeam = nullptr;
 
         JsonOut j;
         j.Begin('{').FieldString("schema", "combat.call.v1").FieldString("side", "port");
@@ -622,6 +637,7 @@ std::string CombatCall(const Case& c, std::string& error)
     {
         TCharacter::findCharactersSeam = nullptr;
         TCharacter::blockedSeam = nullptr;
+        TCharacter::canSeeSeam = nullptr;
         g_world = nullptr;
         error = e.what();
         return {};

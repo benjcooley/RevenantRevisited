@@ -85,6 +85,22 @@ extern TDialogPane DialogPane;
 
 #define MAXSEENTIME (FRAMERATE * 10)
 
+namespace
+{
+// Retail's three moving actions (walk, combat, bow steps).
+bool IsMoveAction(const TActionBlock* ab)
+{
+    return ab && (ab->action == ACTION_MOVE || ab->action == ACTION_COMBATMOVE || ab->action == ACTION_BOWMOVE);
+}
+
+// The turn rate retail gives a step or pivot for an angle `diff` (0..128)
+// still to turn: 8 up to 45 degrees, +4 per further 45.
+int32_t StepTurnRate(int32_t diff)
+{
+    return (std::max)(0, diff - 32) / 32 * 4 + 8;
+}
+}
+
 // *************************************************************
 // *                          Character                        *
 // *************************************************************
@@ -1994,148 +2010,169 @@ int32_t TCharacter::ResolveDead(TActionBlock* ab, int32_t bits)
     return COM_EXECUTING;
 }
 
+// REVSYNC: ResolveCombat @ 0x004c7980 -- every tick of a combat root or
+// combat step (TPlayer's 0x00519210 only forwards here). Retarget on the
+// frame cadence (the player every 8 frames, everyone every 32 while the AI
+// is on), take the root's target, then: a pivot block turns until it faces
+// and becomes the strafe step; a moving player whose step no longer fits
+// gets a new step at the target (the orbit); a standing player or a
+// monster turns in place. docs/gameplay/forensics/COMBAT_MOVEMENT.md §3.
 int32_t TCharacter::ResolveCombat(TActionBlock* ab, int32_t bits)
 {
-  // Clear goto's when in combat
-    ab->target.x = ab->target.y = ab->target.z = 0;
+  // No item to walk to (retail +0x288, not ported): no goto target.
+    ab->target = S3DPoint(0, 0, 0);
 
-  // If target is dead, change to new target, or end combat
-    TCharacter* targ = (TCharacter*)ab->obj;
-    TCharacter* newtarg;
-    if (!targ || targ->IsDead() || targ->IsInvisibleSpell() ||Distance(targ) > chardata->combatrangemax)
+    const int32_t slot = PlayScreen.GameFrame() ^ GetMapIndex();
+    const bool cadence = (ObjClass() == OBJCLASS_PLAYER && (slot & 7) == 0) || (!NoAI && (slot & 0x1f) == 0);
+
+    auto* targ = static_cast<TCharacter*>(ab->obj);
+    TCharacter* found = nullptr;
+    if (!targ || !IsValidTarget(targ))
     {
-        newtarg = FindClosestEnemy();
-        if (newtarg && !newtarg->IsDead())
-            SetFighting(newtarg);
-        else if (targ && targ->IsDoing(ACTION_DEAD) && !(targ->doing->transition))
+        if (cadence && FindCharacters(&found, 1, -1, -1, 32, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) < 1)
+            found = nullptr;
+        SetFighting(found);
+    }
+    if (!ai_lookat)
+    {
+        if (cadence)
         {
-            EndCombat();
-            return 0;
+            TCharacter* ahead = nullptr;
+            found = FindCharacters(&ahead, 1, -1, ab->moveangle, 32,
+                                   FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) >= 1 ? ahead : nullptr;
+        }
+        if (found && found != targ)
+        {
+          // Switch unless the current target is near (within 32) or in the
+          // direction moved (within 45 degrees), and no farther.
+            const int32_t dfound = Distance(found);
+            bool keep = false;
+            if (targ)
+            {
+                const int32_t dtarg = Distance(targ);
+                const int32_t off = std::abs(AngleDiff(AngleTo(targ), ab->moveangle));
+                keep = (dtarg <= 32 || off <= 32) && dfound >= dtarg;
+            }
+            if (!keep)
+                SetFighting(found);
         }
     }
 
-  // Switch to new target?
-    newtarg = FindClosestEnemy(ab->moveangle, 32);
-    if (newtarg && newtarg != targ)
-    {
-      // Switch targets if new target is MUCH (64) closer than old target
-        if (!targ || Distance(newtarg) < (Distance(targ) - 64))
-        {
-            targ = newtarg;
-            ab->obj = newtarg;
-        }
-    }
+    TObjectInstance* obj = (root && (root->action == ACTION_COMBAT || root->action == ACTION_BOW)) ? root->obj : nullptr;
+    ab->obj = obj;
 
-  // Get angle to current target
-    int32_t angle = ab->moveangle;
-    int32_t faceangle = ((ab->moveangle + 15) & 0xE0);
-    if (targ)
-    {
-        S3DPoint target;
-        targ->GetPos(target);
-        if (targ && Distance(targ) <= chardata->combatrangemax)
-            angle = ConvertToFacing(pos, target);
-        faceangle = ((angle + 15) & 0xE0);
-    }
-
-  // Do pivoting before moving (character stays in root neutral state until pivot is done, 
-  // then sets the first step action block.  No block checking is done when pivoting
     if (ab->waitpivot)
     {
-        Halt(); // Make sure there's no movement
-
-        ab->angle = faceangle;              // round to 8 dirs
-
-        bool pivotdone = false;
-        if (!stricmp(ab->name, root->name)) // Is a normal root animation we're manually turning...
+        Halt();
+        if (!stricmp(ab->name, root->name))
         {
-            if (GetFace() == ab->angle)
-                pivotdone = true;
-            else
-                AdvanceAngles(ab->angle, ab->moveangle, ab->turnrate);
-        }
-        else if (commanddone)               // Is a special pivot animation which turns itself!
-            pivotdone = true;
-
-        if (!pivotdone)
-            return 0;
-        else                // Now that pivot is done, start us moving in right direction
-        {
-            char animname[RESNAMELEN];
-            GetAngleMoveAnim(ab->moveangle, angle, root->name, animname, RESNAMELEN);
-            TActionBlock* newab = new TActionBlock(animname, doing->action);
-            newab->angle = ab->angle;
-            newab->moveangle = ab->moveangle;
-            newab->obj = ab->obj;
-            newab->waitpivot = false;
-            newab->turnrate = MAXTURNRATE;
-            ForceCommand(newab);            // Does this command again
-
-            return 0;
-        }
-    }
-
-  // Do movement pivoting (works different for players/monsters)
-    if (ObjClass() == OBJCLASS_PLAYER)
-    {
-        if (IsMoving()) // If player, pivot when 8 direction facing changes
-        {
-            if (ab->angle != faceangle)
+            if (GetFace() != ab->angle)
             {
-                char animname[RESNAMELEN];
-                GetAngleMoveAnim(ab->moveangle, faceangle, root->name, animname, RESNAMELEN);
-                TActionBlock* newab = new TActionBlock(animname, doing->action);
-                newab->angle = faceangle;
-                newab->moveangle = ab->moveangle;
-                int32_t anglediff = abs(AngleDiff(GetFace(), newab->angle));
-                newab->turnrate = MAKETURNRATE(anglediff);
-                newab->obj = ab->obj;
-                SetMoveAngle(newab->moveangle);
-//              FaceOnly(newab->angle);
-                ForceCommand(newab);            // Does this command again
-
+                AdvanceAngles(ab->angle, ab->moveangle, ab->turnrate);
                 return 0;
             }
         }
-        else if (ab->angle != angle)    // Do non movement player pivoting in all directions
+        else if (!commanddone)          // a pivot animation turns by itself
+            return 0;
+
+      // Turned: the step for the way to go.
+        char animname[RESNAMELEN];
+        GetAngleMoveAnim(ab->moveangle, ab->angle, root->name, animname, RESNAMELEN);
+        auto* step = new TActionBlock(animname, doing->action);
+        if (!HasActionAni(animname))
         {
-            int32_t anglediff = abs(AngleDiff(GetFace(), angle));
-            ab->turnrate = MAKETURNRATE(anglediff);
-            ab->angle = ab->moveangle = angle;
+            delete step;                // REVSYNC-DIVERGENCE: retail leaks it
+            return 0;
         }
-    }
-    else
-    {
-        if (ab->angle != angle) // Do movement/non-movement monster pivoting in all directions
+        step->moveangle = ab->moveangle;
+        step->obj = ab->obj;
+        step->angle = ab->angle;
+        step->waitpivot = false;
+        step->turnrate = 8;
+        if (doing && doing->priority && desired != doing)
         {
-            int32_t anglediff = abs(AngleDiff(GetFace(), angle));
-            ab->turnrate = MAKETURNRATE(anglediff);
-            ab->angle = angle;
-            if (ab->action == ACTION_COMBATMOVE)
-                ab->moveangle = angle;
-            else
-                ab->moveangle = GetMoveAngle();
+            delete step;
+            return 0;
         }
+        ForceCommand(step);
+        return 0;
     }
 
-  // Update facing and moving angles
+  // Whom to face: the target when allowed and visible, else the AI's goal.
+    const int32_t blockangle = ab->angle;
+    int32_t angle = blockangle;          // retail keeps both the block's angle
+    int32_t angle8 = blockangle & 0xff;  // and its low byte until a facing is found
+    bool face = ObjClass() == OBJCLASS_CHARACTER ||
+                (ObjClass() == OBJCLASS_PLAYER && (CombatFace || !IsMoveAction(doing)));
+    if (ab->pickup)
+        face = false;
+    TObjectInstance* look = nullptr;
+    if (obj)
+    {
+        if (!CanSeeCharacter(static_cast<TCharacter*>(obj), -1) && ai_lookat)
+            face = false;
+        if (face && !target_out_of_sight)
+            look = obj;
+    }
+    if (!look)
+        look = ai_lookat;
+    if (look)
+        angle = angle8 = ConvertToFacing(pos, look->Pos());
+
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        if (IsMoveAction(doing))
+        {
+          // Moving: the step for moving one way and facing the other.
+            char animname[RESNAMELEN];
+            GetAngleMoveAnim(ab->moveangle, angle, root->name, animname, RESNAMELEN);
+            if (stricmp(ab->name, animname) != 0)
+            {
+                auto* step = new TActionBlock(animname, doing->action);
+                step->angle = (angle8 + 15) & 0xe0;
+                step->moveangle = ab->moveangle;
+                const int32_t diff = std::abs(AngleDiff(GetFace(), step->angle));
+                step->obj = ab->obj;
+                step->turnrate = (std::max)(0, diff - 32) / 32 * 8 + 16;
+                SetMoveAngle(step->moveangle);
+                ForceCommand(step);
+                return 0;
+            }
+        }
+        else if (ab->angle != angle8)
+        {
+            const int32_t diff = std::abs(AngleDiff(GetFace(), angle8));
+            ab->moveangle = ab->angle = angle8;
+            ab->turnrate = StepTurnRate(diff);
+        }
+    }
+    else if (ab->angle != angle8)
+    {
+        const int32_t diff = std::abs(AngleDiff(GetFace(), angle8 & 0xff));
+        ab->angle = angle8;
+        ab->turnrate = StepTurnRate(diff);
+        ab->moveangle = ab->action == ACTION_COMBATMOVE ? angle8 : GetMoveAngle();
+    }
+
     SetMoveAngle(ab->moveangle);
     AdvanceAngles(ab->angle, ab->moveangle, ab->turnrate);
-
     return 0;
 }
 
+// REVSYNC: ResolveCombatMove @ 0x004c7f80 -- a combat step: blocked or
+// stopped, back to the root; re-desire the step while the root is desired;
+// arrival at an item to pick up (retail +0x288, not ported); then
+// ResolveCombat.
 int32_t TCharacter::ResolveCombatMove(TActionBlock* ab, int32_t bits)
 {
-    if (bits & MOVE_BLOCKED || ab->stop)
+    if ((bits & MOVE_BLOCKED) || ab->stop)
     {
+        Halt();
         ForceCommand(root);
-        return COM_COMPLETED;
+        return 0;
     }
-
-    if (!IsDesired(GetMoveAction(root->action)) && !ab->stop) // Set next step if not stopped
-        SetDesired(doing);  
-
+    if (desired == root)
+        SetDesired(doing);
     return ResolveCombat(ab, bits);
 }
 
@@ -2802,6 +2839,8 @@ bool TCharacter::CanHearCharacter(TCharacter* chr)
 
 bool TCharacter::CanSeeCharacter(TCharacter* chr, int32_t angle)
 {
+    if (canSeeSeam)
+        return canSeeSeam(this, chr, angle);
     bool see = true;
 
     if (angle < 1)
@@ -3160,22 +3199,6 @@ void TCharacter::SetOnExit()
 // ***********************************************************************************
 // * Access functions - called by script or player to make the character do whatever *
 // ***********************************************************************************
-
-namespace
-{
-// Retail's three moving actions (walk, combat, bow steps).
-bool IsMoveAction(const TActionBlock* ab)
-{
-    return ab && (ab->action == ACTION_MOVE || ab->action == ACTION_COMBATMOVE || ab->action == ACTION_BOWMOVE);
-}
-
-// The turn rate retail gives a step or pivot for an angle `diff` (0..128)
-// still to turn: 8 up to 45 degrees, +4 per further 45.
-int32_t StepTurnRate(int32_t diff)
-{
-    return (std::max)(0, diff - 32) / 32 * 4 + 8;
-}
-}
 
 // REVSYNC: TCharacter::Go @ 0x004ce350 -- walk in direction `angle` (held
 // input, AI and Goto all come here). docs/gameplay/forensics/COMBAT_MOVEMENT.md
@@ -4941,25 +4964,45 @@ bool TCharacter::EndFighting()
 // teleport does (EXITS.md §3.1); 1998 entered combat with nobody. Retail's
 // gates for a live target (busy attack/impact blocks, the player's pending
 // attack fields) aren't compared yet.
+// REVSYNC: SetFighting @ 0x004d4790 -- fight `newtarget` (nullptr: no one).
+// Refused while dead or in an interactive move, for itself or a dead
+// target; outside a combat/bow root a target starts the fight
+// (BeginFighting); else every block takes the target and faces it (not
+// while it's out of sight). The network message (0x21) isn't ported.
 bool TCharacter::SetFighting(TCharacter* newtarget)
 {
-    if (newtarget && newtarget->IsDead())   // Can't target dead guys
+    if (Health() <= 0)
         return false;
-    if (!IsFighting() && newtarget)
-        return BeginCombat(newtarget);
+    if (!(charflags & kCharFlagInteractive))
+    {
+        if (doing->attack && (doing->attack->flags & CA_INTERACTIVE))
+            return false;
+        if (doing->impact && (doing->impact->flags & CAI_INTERACTIVE))
+            return false;
+    }
+    if (newtarget == this)
+        return false;
+    if (newtarget && newtarget->Health() <= 0)
+        return false;
+
+    const bool fighting = root && (root->action == ACTION_COMBAT || root->action == ACTION_BOW);
+    if (!fighting && newtarget)
+        return BeginFighting(newtarget, ACTION_COMBAT);
+
     if (doing->obj == newtarget)
         return true;
-    doing->obj = newtarget;
-    desired->obj = newtarget;
-    root->obj = newtarget;
+    doing->obj = desired->obj = root->obj = newtarget;
     if (newtarget)
     {
-        int32_t newangle = AngleTo(newtarget);
-        doing->angle = newangle;
-        desired->angle = newangle;
-        root->angle = newangle;
+        const int32_t angle = AngleTo(newtarget);
+        if (!target_out_of_sight)
+            doing->angle = desired->angle = root->angle = angle;
     }
-
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        lastbutton = -1;
+        buttonrepeat = 0;
+    }
     return true;
 }
 
