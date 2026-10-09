@@ -82,7 +82,7 @@
 #define DT_POISON   9       // Poison damage
 
 #define ANIMLISTLEN 48
-#define CHARGROUPLEN 48
+#define CHARGROUPLEN 80     // GROUPS / ENEMIES: retail `%80s` (0x0048a14d, 0x0048a17c)
 
 #define CAI_STUN        0x0001  // Results in a looping stun using 'loopname' and 'loopwait'
 #define CAI_KNOCKDOWN   0x0002  // Results in a looping knockdown using 'loopname' and 'loopwait'
@@ -93,13 +93,30 @@
 #define CAI_BLOOD       0x0040  // This impact spouts blood
 #define CAI_INTERACTIVE 0x0080  // Interactive impact (retail char.def; Go refuses to step out of one)
 
+#define CAI_CHARIMPACT  0x1000  // Set on a CHARIMPACT, cleared on an IMPACT (retail 0x0048a926 / 0x0048a95e)
+
+#define CA_FATIGUEATTACK 0x10000 // A FATIGUEATTACK (retail 0x00489ca2); not among char.def's CA_ defines
+
+// MAGICATTACK conditions (char.def MASTAT_*): when the AI may cast it
+#define MASTAT_NONE     1
+#define MASTAT_HEALTHLT 2
+#define MASTAT_HEALTHGT 3
+#define MASTAT_MANALT   4
+#define MASTAT_MANAGT   5
+
 #define MAXATTACKIMPACTS 6
 #define MAXCHARIMPACTS   6
+#define MAXATTACHEFFECTS 4
 
+// The attack and impact records are plain data: the loaders zero a record
+// and fill it from one tag (retail builds them on the stack the same way).
+
+// REVSYNC: impact record, 0x5c bytes (IMPACT / CHARIMPACT, 0x00489850)
 _STRUCTDEF(SCharAttackImpact)
 struct SCharAttackImpact
 {
     char impactname[MAXANIMNAME];   // Impact name for this impact
+    int32_t index;                      // Its slot in the attack's / character's impact list (retail +0x20)
     int32_t flags;
     char loopname[MAXANIMNAME];     // Animation played when opponent stunned, knocked down, killed
     int32_t looptime;                   // Amount of time to play loop animation
@@ -107,6 +124,10 @@ struct SCharAttackImpact
     int32_t snapdist, snaptime;         // Dist from chr to snapto (or pushto) in snaptime frames
 };
 
+// REVSYNC: attack record, 0x320 bytes (ATTACK / FATIGUEATTACK / MAGICATTACK /
+// PLAYANIM, 0x00489850; added by TCharAttackArray::Add 0x0048d230). Retail
+// also has an index at +0x20 that the stored copy never receives (it is
+// written into the loader's local copy after the add), so it is always 0.
 _STRUCTDEF(SCharAttackData)
 struct SCharAttackData
 {
@@ -135,12 +156,17 @@ struct SCharAttackData
         int32_t weaponmask;                 // PLAYER: Weapon mask for this attack
         int32_t weaponskill;                // PLAYER: Min weapon skill level to enable attack
         int32_t numimpacts;                 // Number of impacts for attack
+        int32_t swipeframeon;               // Weapon swipe from this frame (ATTACK field 23)
+        int32_t swipeframeoff;              // ... to this frame (ATTACK field 24)
+        int32_t maxfatigue;                 // FATIGUEATTACK field 23 (0 for an ATTACK)
         SCharAttackImpact impacts[MAXATTACKIMPACTS];  // Impacts for attack
      };
      struct     // Information for magical attack
      {
         char spellname[RESNAMELEN];     // Name of spell to cast
         S3DPoint spellsource;           // Offset of spell source for this character
+        int32_t condition;              // MASTAT_*: when the AI may cast it
+        int32_t conditionvalue;         // The health / mana the condition compares with
      };
     };
 };
@@ -159,6 +185,7 @@ struct SClassData
     int32_t  healthmod  = 0;
     int32_t  fatiguemod = 0;
     int32_t  manamod    = 0;
+    int32_t  weapons    = 0xffff;         // WEAPONS: the WM_* weapons the class may use (retail +0x70)
 };
 
 typedef TPointerArray<SClassData, 16, 16> TClassDataArray;
@@ -178,11 +205,26 @@ struct SItemData
     std::string statline;                   // STATLINE as retail stores it (PlayerStats::ReadStatLine); empty when none
 };
 
+// REVSYNC: one ATTACHEFFECT slot of a character (0x4c bytes at +0x458,
+// 0x00489850). Nothing in the shipped data uses the tag and its readers are
+// not traced, so the fields keep the tag's order rather than meanings.
+struct SCharAttachEffect
+{
+    int32_t values[3]  = {};                // fields 2-4
+    char    arg5[20]   = {};                // field 5 ("none" -> "")
+    char    arg6[20]   = {};                // field 6 ("none" -> "")
+    char    name[20]   = {};                // field 1
+    bool    used       = false;
+};
+
+// REVSYNC: SCharData, 0x590 bytes. The member initializers are retail's
+// defaults: malloc's zero fill plus SetDefaults 0x004895d0. The loader then
+// sets objtype / objclass (0x00489850: "Default" -1 / -1, any other name -2
+// / -2 until TRules::BindTypes finds its object type).
 _STRUCTDEF(SCharData)
 struct SCharData
 {
-    SCharData();
-      // Sets default values
+    SCharData() = default;
     ~SCharData();
       // Kills attack array
     bool Load(char *aname, TToken &t);
@@ -191,52 +233,64 @@ struct SCharData
     char     name[RESNAMELEN]                = {}; // Name of character type (not individual name)
     char     groups[CHARGROUPLEN]            = {}; // Groups this character belongs to (not including char type)
     char     enemies[CHARGROUPLEN]           = {}; // Groups this character attacks (can include char types as well as groups)
-    int32_t  objtype                          = -1; // Type data is associated with (-1 = default)
+    int32_t  objtype                          = -1; // Type data is associated with (-1 = default, -2 = no such type)
     int32_t  objclass                         = OBJCLASS_CHARACTER; // Class data is associated with
     int32_t  flags                            = 0;
     TCharAttackArray attacks;
     int32_t  damagemods[NUMDAMAGETYPES]      = {}; // Damage modifiers (100=100% of damage value)
-    char     blocksounds[SOUNDLISTLEN]       = {};
+    char     blocksounds[SOUNDLISTLEN]       = "block1,block2,block2";
     char     misssounds[SOUNDLISTLEN]        = {};
-    int32_t  playerblockmin                  = 0;
-    int32_t  playerblockstep                 = 0;
-    int32_t  playerblockinc                  = 0;
-    int32_t  combatrangemin                  = 0;
-    int32_t  combatrangemax                  = 0;
-    int32_t  maxattackrange                  = 0;
+    int32_t  playerblockmin                  = 10;
+    int32_t  playerblockstep                 = 5;
+    int32_t  playerblockinc                  = 10;
+    int32_t  combatrangemin                  = 128;
+    int32_t  combatrangemax                  = 128 + 64;
+    int32_t  maxattackrange                  = 32;
+    int32_t  bleeder                         = 1;   // BLEEDER / BLEADER
     SColor   swipecolor                      = {};  // Sword swipe color
-    char     bodytype[MAXANIMNAME]           = {};  // PLAYER: Type of body
+    uint8_t  swipefull                       = 0;   // SWIPEFULL
+    char     bodytype[MAXANIMNAME]           = "normal"; // PLAYER: Type of body
     PSClassData classdata                    = nullptr; // PLAYER: Class of character
-    int32_t  blockfreq                       = 0;
-    int32_t  blockmin                        = 0;
-    int32_t  blockmax                        = 0;
-    int32_t  sightmin                        = 0;
-    int32_t  sightmax                        = 0;
-    int32_t  sightrange                      = 0;
-    int32_t  sightangle                      = 0;
-    int32_t  hearingmin                      = 0;
-    int32_t  hearingmax                      = 0;
-    int32_t  hearingrange                    = 0;
-    int32_t  weapontype                      = 0;
-    int32_t  weapondamage                    = 0;
-    int32_t  armorvalue                      = 0;
+    int32_t  blockfreq                       = 10;
+    int32_t  blockmin                        = 5;
+    int32_t  blockmax                        = 15;
+    int32_t  sightmin                        = 30;
+    int32_t  sightmax                        = 100;
+    int32_t  sightrange                      = 64 * 5;
+    int32_t  sightangle                      = 64;
+    int32_t  hearingmin                      = 10;
+    int32_t  hearingmax                      = 50;
+    int32_t  hearingrange                    = 64 * 5;
+    int32_t  weapontype                      = 0;   // WT_HAND
+    int32_t  weapondamage                    = 2;
+    int32_t  armorvalue                      = 1;
     int32_t  defensemod                      = 0;
     int32_t  attackmod                       = 0;
-    int32_t  minattackfreq                   = 0;
-    int32_t  maxattackfreq                   = 0;
+    int32_t  minattackfreq                   = 100;
+    int32_t  maxattackfreq                   = 250;
+    int32_t  minmagicfreq                    = 100; // MAGICFREQ
+    int32_t  maxmagicfreq                    = 250;
     int32_t  mana                            = 0;
-    int32_t  fatigue                         = 0;
-    int32_t  health                          = 0;
-    int32_t  walkspeed                       = 0;
-    int32_t  runspeed                        = 0;
-    int32_t  sneakspeed                      = 0;
-    int32_t  combatwalkspeed                 = 0;
-    S3DPoint arrowpos                        = {};
-    int32_t  arrowspeed                      = 0;
-    int32_t  bowwait                         = 0;
-    int32_t  bowaimspeed                     = 0;
+    int32_t  fatigue                         = 25;
+    int32_t  health                          = 25;
+    int32_t  walkspeed                       = -1;
+    int32_t  runspeed                        = -1;
+    int32_t  sneakspeed                      = -1;
+    int32_t  combatwalkspeed                 = -1;
+    S3DPoint arrowpos                        = {-1, -1, -1}; // -1: set by name after the block (Load)
+    int32_t  arrowspeed                      = 20;  // 20 units per tick for arrow speed
+    int32_t  bowwait                         = 12;  // Half a second
+    int32_t  bowaimspeed                     = 8;   // Pivot speed when aiming bow
     int32_t  numimpacts                      = 0;
     SCharAttackImpact impacts[MAXCHARIMPACTS] = {};
+    int32_t  retreatat                       = 0;   // RETREATAT
+    int32_t  retreatatmana                   = 0;   // RETREATATMANA
+    int32_t  retreatfor                      = -1;  // RETREATFOR
+    int32_t  runfatigue[2]                   = {1, 100}; // RUNFATIGUE (readers not traced)
+    bool     noparalyze                      = false; // NOPARALYZE
+    SCharAttachEffect attacheffects[MAXATTACHEFFECTS] = {};
+    int32_t  poisonchance                    = 0;   // POISONCHANCE
+    int32_t  labelheight                     = -1;  // LABELHEIGHT; -1: set by name after the block (Load)
 };
 
 typedef TPointerArray<SCharData, 16, 16> TCharDataArray;
@@ -245,13 +299,13 @@ _CLASSDEF(TRules)
 class TRules
 {
   private:
-    bool initialized;               // Are we ready
+    bool initialized = false;       // Are we ready
     TClassDataArray classdata;      // Class data
     TCharDataArray chardata;        // Data array
-    PSCharData def;                 // Default data object (used for ordinary chars)
+    PSCharData def = nullptr;       // Default data object (used for ordinary chars)
 
   public:
-    TRules() { initialized = false; }
+    TRules() = default;
     // Trivial dtor: explicit Close() runs from ShutdownGlobals, so by the
     // time the global is destroyed the data arrays are already empty.
     // We can't walk chardata/classdata from the dtor without risking
@@ -286,29 +340,64 @@ class TRules
       // The STATLEVEL percent of attribute 'plyrstat' (PLRSTAT_*) at 'value' (retail 0x0048cc20)
     const SItemData *GetItemData(int32_t objclass, const char *type) const;
       // The WEAPON.DEF / ARMOR.DEF entry of a weapon or armor type; null if none (retail 0x0048cb50)
+    const std::vector<SItemData> &Weapons() const { return weapons; }
+    const std::vector<SItemData> &Armors() const { return armors; }
+      // Every WEAPON.DEF / ARMOR.DEF entry, in load order
+    const SCharData *DefaultCharData() const { return def; }
+      // The "Default" CHARACTER; null if none
     bool Load();
-      // Loads character data and class data from rules.def + char.def
-    bool LoadFile(const char* fname, bool required);
-      // Internal: parses one .def (global rules tags + CHARACTER blocks).
+      // Loads the six rules files (retail 0x0048b990)
+    void BindTypes();
+      // Binds every CHARACTER to the object type of its name (retail 0x0048cab0)
+    bool LoadFile(const char* fname);
+      // Internal: parses one .def through the shared tag loop
 
   // Daytime...
-    int32_t daylength;                  // Length of day in 100ths of a second
-    int32_t twilight, twilightsteps;    // Length of twilight period (morning/evening) in 100ths of a second
+    int32_t daylength = 0;              // Length of day in 100ths of a second
+    int32_t twilight = 0, twilightsteps = 0; // Length of twilight period (morning/evening) in 100ths of a second
+
+  // The values below are zero until Initialize, which gives the recovery
+  // and poison rates, TOHIT* and AMMODATA their defaults before loading.
 
   // Health recovery values
-    int32_t healthperlevel, fatigueperlevel, manaperlevel;
-    int32_t healthrecovval, fatiguerecovval, manarecovval;
-    int32_t healthrecovrate, fatiguerecovrate, manarecovrate;
+    int32_t healthperlevel = 0, fatigueperlevel = 0, manaperlevel = 0;
+    int32_t healthrecovval = 0, fatiguerecovval = 0, manarecovval = 0;
+    int32_t healthrecovrate = 0, fatiguerecovrate = 0, manarecovrate = 0;
 
   // Poison damage values
-    int32_t poisondamageval;
-    int32_t poisondamagerate;
+    int32_t poisondamageval = 0;
+    int32_t poisondamagerate = 0;
 
+  // To-hit values (rules.def TOHIT*). The rules.def comment block gives the
+  // formula: tohit = ((TOHITCENTER - Def) + Off + FacingBonus) - BlockBonus,
+  // Off / Def adding level * TOHITRANGECHAR (characters) or TOHITRANGEPLYR.
+    int32_t tohitcenter = 0;
+    int32_t tohitrangechar = 0;
+    int32_t tohitrangeplyr = 0;
+    int32_t tohitblock = 0;
+    int32_t tohitface = 0;
+
+  // TOHITDAMAGE: five {MinValue, DamagePercent} rows (no defaults).
+    struct SToHitDamage
+    {
+        int32_t minvalue = 0;
+        int32_t damagepercent = 0;
+    };
+    static constexpr int32_t kToHitDamageRows = 5;
+    std::array<SToHitDamage, kToHitDamageRows> tohitdamage{};
 
   // Stealth mode values
-    int32_t maxstealth, sneakstealth, minstealth;
+    int32_t maxstealth = 0, sneakstealth = 0, minstealth = 0;
+
+  // AMMODATA (rules.def comment: base value, per monster level, per character
+  // level, per skill level, minimum damage % per hit). The tag parses four
+  // values; the fifth only ever holds its default.
+    std::array<int32_t, 5> ammodata{};
 
   private:
+    void BindType(const char *name, int32_t objtype);
+      // One type of BindTypes: the CHARACTER of that name (retail 0x0048c930)
+
     PlayerStats::TStatLevels statlevels;    // STATLEVEL tables (rules.def)
     std::vector<SItemData> weapons;         // WEAPON.DEF entries
     std::vector<SItemData> armors;          // ARMOR.DEF entries

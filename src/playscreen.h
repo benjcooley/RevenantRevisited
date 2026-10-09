@@ -320,7 +320,7 @@ class TPlayScreen : public TScreen
     TObjectImagery* sparksimagery = nullptr;
 };
 
-// Helpers used by save-game + scripting code. Conversion uses the engine's
-// fixed game-frame rate (see playscreen.cpp).
+// The day clock: game minutes against rules.def DAYLENGTH units, a day being
+// 1440 minutes (retail 0x0047eb30 / 0x0047eb50; see playscreen.cpp).
 int32_t ConvertFramesToMinutes(int32_t frames);
 int32_t ConvertMinutesToFrames(int32_t minutes);

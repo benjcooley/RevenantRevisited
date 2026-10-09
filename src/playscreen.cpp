@@ -239,10 +239,6 @@ void InitDefaultControlMap()
     ControlMap.Load(const_cast<char*>("Controls"));
 }
 
-// Game runs at this many internal ticks per real-time second. Used by
-// time-of-day + the frame-to-minutes helpers.
-static constexpr int32_t kGameFrameRate = 30;
-
 // One in-game day = 24 game-minutes of game time. The legacy clamp says
 // "morning starts at 6", "noon at 12", etc.; reuse the same buckets so
 // scripted lighting checks keep working.
@@ -255,16 +251,22 @@ static int32_t TimeOfDayMinutes(int32_t gametime_centi_secs)
     return in_game_seconds / 60;
 }
 
+// The day clock: rules.def's DAYLENGTH units make one day of 1440 game
+// minutes. Both truncate toward zero; the products wrap at 32 bits as
+// retail's imul does.
+// REVSYNC: ConvertFramesToMinutes @ 0x0047eb30 -- frames * 1440 / daylength
 int32_t ConvertFramesToMinutes(int32_t frames)
 {
-    if (frames <= 0) return 0;
-    return frames / kGameFrameRate / 60;
+    const auto day = static_cast<int32_t>(static_cast<uint32_t>(frames) * 1440u);
+  // REVSYNC-DIVERGENCE: retail divides by zero before rules.def is loaded.
+    return Rules.daylength ? day / Rules.daylength : 0;
 }
 
+// REVSYNC: ConvertMinutesToFrames @ 0x0047eb50 -- minutes * daylength / 1440
 int32_t ConvertMinutesToFrames(int32_t minutes)
 {
-    if (minutes <= 0) return 0;
-    return minutes * 60 * kGameFrameRate;
+    const auto product = static_cast<int32_t>(static_cast<uint32_t>(minutes) * static_cast<uint32_t>(Rules.daylength));
+    return product / 1440;
 }
 
 // *************************************************************************
@@ -817,8 +819,7 @@ void TPlayScreen::Update()
     // REVSYNC: TPlayScreen::Animate @ 0x0047c2c0 -- the frame count, then
     // game time in hundredths of a second at 24 frames a second
     // (frames * 100 / 24, 0x0047c38d..0x0047c39e; the regen, poison and
-    // recovery timers read it). kGameFrameRate (30) still drives the
-    // frame/minute helpers below, which this change doesn't touch.
+    // recovery timers read it).
     ++gameframes;
     gametime = lastsessionframes
              + (int32_t)((int64_t)(gameframes - sessionstart) * 100 / 24);

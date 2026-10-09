@@ -3678,6 +3678,9 @@ bool TObjectClass::LoadClasses(bool lock, bool reload)
 
     classesdirty = false;
 
+  // The rules' CHARACTERs take their object types by name (retail 0x0047654f).
+    Rules.BindTypes();
+
     return true;
 }
 
