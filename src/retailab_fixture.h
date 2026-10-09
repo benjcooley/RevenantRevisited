@@ -248,6 +248,9 @@ class IFixtureChar
     // The attack bookkeeping (timers, request bits, the player's button
     // repeats, the chain, the last attack by index), by retail's names.
     virtual void WriteAttackState(JsonOut& j) = 0;
+    // Another resolver on the doing block: "attack", "impact", "block",
+    // "dead" (ResolveAction's dispatch, retail 0x004c3490).
+    virtual int32_t RunResolver(const std::string& which, int32_t bits) = 0;
     virtual void RunUpdateAction(int32_t bits) = 0;
     virtual void RunComplexPulse() = 0;         // TComplexObject::Pulse (UpdateAction with the move bits)
     // What a move changes beyond the character dump ("motion").
@@ -527,6 +530,19 @@ class TFixtureChar : public Base, public IFixtureChar
         return ValueSeam("WeaponDamage", weapondamage);
     }
 
+    int32_t RunResolver(const std::string& which, int32_t bits) override
+    {
+        if (which == "attack")
+            return Base::ResolveAttack(this->doing, bits);
+        if (which == "impact")
+            return Base::ResolveImpact(this->doing, bits);
+        if (which == "block")
+            return Base::ResolveBlock(this->doing, bits);
+        if (which == "dead")
+            return Base::ResolveDead(this->doing, bits);
+        throw std::runtime_error("no resolver '" + which + "'");
+    }
+
     void WriteAttackState(JsonOut& j) override
     {
         j.Key("attackstate").Begin('{');
@@ -534,7 +550,8 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Field("requestbits", this->requestbits).Field("attackcount", this->attackcount);
         j.Field("lastbutton", this->lastbutton).Field("buttonrepeat", this->buttonrepeat);
         j.Field("chainhits", this->chainhits).Field("lastattackticks", this->lastattackticks);
-        j.Field("lasthit", this->lasthit);
+        j.Field("lasthit", this->lasthit).Field("flashticks", this->combatflashticks);
+        j.Field("autocombat", this->autocombat ? 1 : 0).Field("movevert", this->GetMoveVert());
         j.Key("lastattack");
         const int32_t last = AttackIndex(this->lastattack);
         if (last >= 0)
@@ -542,6 +559,7 @@ class TFixtureChar : public Base, public IFixtureChar
         else
             j.Null();
         j.End('}');
+        WriteMotion(j);
     }
 
     // The index of an attack record in this character's table, -1 if none.
@@ -594,6 +612,8 @@ class TFixtureChar : public Base, public IFixtureChar
         this->chainhits = (int32_t)a["chainhits"].Int(this->chainhits);
         this->lastattackticks = (int32_t)a["lastattackticks"].Int(this->lastattackticks);
         this->lasthit = (int32_t)a["lasthit"].Int(this->lasthit);
+        this->combatflashticks = (int32_t)a["flashticks"].Int(0);
+        this->autocombat = a["autocombat"].Bool(true);
         if (a.Has("lastattack") && !a["lastattack"].IsNull())
             this->lastattack = &cd->attacks[(int32_t)a["lastattack"].Int()];
     }

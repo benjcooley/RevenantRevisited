@@ -84,6 +84,19 @@ class TCharacter : public TComplexObject
     using CastSeam = bool (*)(TCharacter* self, const char* spell, TObjectInstance** targets, int32_t numtargs,
         const S3DPoint* source);
     static inline CastSeam castSeam = nullptr;
+    using IsEnemySeam = bool (*)(TCharacter* self, TCharacter* other);
+    static inline IsEnemySeam isEnemySeam = nullptr;
+      // Likewise for IsEnemy (retail 0x004c89c0)
+    using BeginFightingSeam = bool (*)(TCharacter* self, TCharacter* target, ACTION action);
+    static inline BeginFightingSeam beginFightingSeam = nullptr;
+      // Likewise for BeginFighting (retail 0x004d3b90)
+    using DamageSeam = void (*)(TCharacter* self, int32_t damage, int32_t damagetype, int32_t modifier,
+        TActionBlock* action, TCharacter* attacker);
+    static inline DamageSeam damageSeam = nullptr;
+      // Likewise for Damage (retail 0x004c4950); the seam owns `action` as Damage does
+    using EffectBurstSeam = void (*)(TCharacter* self, const char* name, int32_t height);
+    static inline EffectBurstSeam effectBurstSeam = nullptr;
+      // Likewise for EffectBurst (retail 0x004c85d0)
       // Likewise for CastByName (retail SpellList::Find 0x0053f010 + Cast
       // 0x004d5c20), which DoAttack calls for a MAGICATTACK
       // Likewise for CanSeeCharacter (retail 0x004cd540)
@@ -140,8 +153,8 @@ class TCharacter : public TComplexObject
         // Actor is moving
     virtual void SignalHostility(TObjectInstance* actor, TObjectInstance* target);
         // Actor is hostile to target
-    virtual void SignalAttack(TObjectInstance* actor, TObjectInstance* target);
-        // Actor is attacking target
+    virtual void SignalAttack(TObjectInstance* actor, TObjectInstance* target, int32_t flag = 0);
+        // Actor is attacking target (retail OnAttacked 0x004cdce0, slot 0x240; flag 2 for a spell)
 
   // ActionBlock generic function callers
     bool SetWalkMode();
@@ -297,6 +310,10 @@ class TCharacter : public TComplexObject
       // Character leaps in the given direction (combat mode only)
     bool PlayAnim(char *string);
       // Causes character to play animation name.
+    bool ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAttackImpact* impact, int32_t damage,
+        int32_t tohit, int32_t roll);
+      // REVSYNC: 0x004c62b0 -- one character struck by an attack at its impact frame
+      // (ResolveAttack calls it for the target and each character in reach)
 
   // Info functions specific to characters
     bool IsFighting() { return IsCombat() || IsBowMode(); }
@@ -575,11 +592,6 @@ class TCharacter : public TComplexObject
     virtual void UpdateAction(int32_t bits = 0);
       // Called by Pulse() to update the action blocks
 
-    bool ResolveHit(TCharacter* targ, 
-        PSCharAttackData attack, PSCharAttackImpact attackimpact, int32_t attackdamage);
-    // This function is called by the ResolveAttack() function to resolve hits for
-    // multiple characters.  The characters are usually found by calling the FindCharacters()
-    // function, then calling this function for each character found.
 
     // Resolve functions - redefine these in derived classes for different functionality
     virtual int32_t ResolveAction(int32_t bits = 0);

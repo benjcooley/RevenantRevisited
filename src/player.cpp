@@ -594,6 +594,11 @@ int32_t TPlayer::KillExp(int32_t value)
 // animation (0x004d5900) and the network forwarding.
 void TPlayer::AwardKillExp(TCharacter *victim)
 {
+    if (killExpSeam)
+    {
+        killExpSeam(this, victim);
+        return;
+    }
     if (!victim || victim->Health() > 0)
         return;
 
@@ -680,6 +685,11 @@ void TPlayer::AwardKillExp(TCharacter *victim)
 // dead victim, by its Value.
 void TPlayer::AwardSkillExp(int32_t skillnum, TCharacter *victim)
 {
+    if (awardSkillExpSeam)
+    {
+        awardSkillExpSeam(this, skillnum, victim);
+        return;
+    }
     if (!victim || victim->Health() > 0)
         return;
     AddSkillExp(skillnum, KillExp(victim->GetStat("Value")));
@@ -689,6 +699,11 @@ void TPlayer::AwardSkillExp(int32_t skillnum, TCharacter *victim)
 // victim that never saw the player (0x004c58f0).
 void TPlayer::AwardStealthExp(TCharacter *victim)
 {
+    if (stealthExpSeam)
+    {
+        stealthExpSeam(this, victim);
+        return;
+    }
     if (victim && !victim->HasSeenMe(this))
         AwardSkillExp(SK_STEALTH, victim);
 }
@@ -1414,6 +1429,8 @@ bool TPlayer::LearnSpell(const char* talismans)
 // multiplayer control and message handling.
 void TPlayer::SetPlayerState(int32_t newstate)
 {
+    if (playerStateSeam)
+        playerStateSeam(this, newstate);
     playerstate = newstate;
 }
 

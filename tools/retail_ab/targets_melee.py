@@ -813,7 +813,341 @@ def attack_choice_cases(data: Path, workdir: Path) -> list[dict]:
     search_cases(data, add)
     making_cases(data, add)
     return finish(cases)
+# ---- C4: hit resolution ------------------------------------------------------------------
+
+def hit_world(data, me, tg, *, dist=10, bearing=64, target_facing=None, **kw):
+    """A duel set up for a blow: both sides know each other's impacts."""
+    chars, rules = full_world(data, me, tg, dist=dist, bearing=bearing, **kw)
+    if target_facing is not None:
+        chars[1]['facing'] = chars[1]['moveangle'] = target_facing
+    return chars, rules
+
+
+def hit_cases(data: Path, workdir: Path) -> list[dict]:
+    s = shipped(data, workdir)
+    cases = []
+    seed = 7
+
+    def add(name, call, chars, rules, **kw):
+        nonlocal seed
+        seed += 1
+        cases.append(case(name, call, chars, rules, seed=seed * 104729 + 3, **kw))
+
+    rules0 = s['rules']
+    keys = [row[0] for row in rules0['tohitdamage']]
+    # Margins (to-hit less roll) around every tier key, both ways.
+    margins = sorted({k + d for k in keys for d in (-1, 0, 1)} | {60, -60})
+
+    # ResolveHit, one blow at a time: each kind of impact the tables have,
+    # hit / glance at every tier edge, lethal or not, the gates.
+    pairs = (('Araknid', 'Locke'), ('Locke', 'Araknid'), ('Locke', 'Rahul'), ('Pale Ogrok', 'Locke'),
+             ('Kantha', 'Locke'), ('Navarro', 'Rahul'), ('Jong', 'Locke'), ('Bayne', 'Pale Ogrok'))
+    for me, tg in pairs:
+        mcd = s['chars'][me]
+        key = f"{me.replace(' ', '_')}.vs.{tg.replace(' ', '_')}"
+        picks = {}
+        for i, ad in enumerate(mcd['attacks']):
+            if ad['flags'] & (CA_MAGICATTACK | CA_PLAYANIM):
+                continue
+            imps = tuple((imp['flags'], bool(imp['loopname'])) for imp in ad.get('impacts', []))
+            shape = (ad['flags'] & (CA_INTERACTIVE | CA_FATIGUEATTACK | CA_DEATH), imps)
+            picks.setdefault(shape, i)
+        for i in picks.values():
+            ad = mcd['attacks'][i]
+            reach = max(ad['hitminrange'], min(ad['hitmaxrange'], 10))
+            nimp = len(ad.get('impacts', []))
+            for imp in range(-1, nimp):
+                for margin in margins:
+                    for health in (100, 3):
+                        chars, rules = hit_world(data, me, tg, dist=reach, target_stats=dict(health=health))
+                        tohit = 60
+                        add(f'resolve-hit.{key}.a{i}.i{imp}.m{margin}.h{health}', 'resolve-hit', chars, rules,
+                            args=dict(attack=i, impact=imp, targ='Target', damage=12, tohit=tohit,
+                                      roll=tohit - margin))
+            # Guarding (blocking / dodging), facing the blow or not.
+            for action, label in ((8, 'block'), (9, 'dodge'), (0xc, 'impact')):
+                for facing in (None, 64):
+                    for margin in (45, 30, 5, -5, -30):
+                        chars, rules = hit_world(data, me, tg, dist=reach, target_doing=block('cguard', action),
+                                                 target_facing=facing)
+                        add(f'resolve-hit.{key}.a{i}.{label}.f{facing}.m{margin}', 'resolve-hit', chars, rules,
+                            args=dict(attack=i, impact=nimp - 1, targ='Target', damage=20, tohit=70,
+                                      roll=70 - margin))
+            # Reach, height, angle, the enemy test, a target that can't be fought.
+            for label, kw, extra in (
+                    ('tooclose', dict(dist=ad['hitminrange'] - 1), {}),
+                    ('mindist', dict(dist=ad['hitminrange']), {}),
+                    ('maxdist', dict(dist=ad['hitmaxrange']), {}),
+                    ('toofar', dict(dist=ad['hitmaxrange'] + 1), {}),
+                    ('friend', {}, dict(friends=[['Me', 'Target']])),
+                    ('dead', dict(target_stats=dict(health=0)), {}),
+                    ('untargetable', dict(target_flags=0x8000), {}),
+                    ('fighting', dict(target_root=block('combat', 3, obj='Me')), {}),
+                    ('fightingother', dict(target_root=block('combat', 3, obj='Target')), {}),
+                    ('autocombat0', dict(me_state=dict(autocombat=0)), {}),
+                    ('far', dict(dist=max(reach, 200)), {}),
+                    ('moving', dict(target_accum=[3, 0, 0]), {}),
+                    ('moving.blocking', dict(target_accum=[0, 2, 0], target_doing=block('cblock', 8)), {}),
+                    ('held.byme', dict(target_doing=block('cheld', 7, attack=0, attack_of='Me'),
+                                       target_root=block('combat', 3, obj='Me')), {}),
+                    ('held.byother', dict(target_doing=block('cheld', 7, attack=0, attack_of='Me')), {}),
+                    ('held.self', dict(target_doing=block('cheld', 7, attack=0, attack_of='Me'), target_flags=0x80000),
+                     {}),
+                    ('nocombatresults', {}, dict(nocombatresults=1)),
+                    ('target.bowroot', dict(target_root=block('bow', 0x19, obj='Me')), {}),
+                    ('target.blocking', dict(target_doing=block('cblock', 8)), {})):
+                for margin in (30, -30):
+                    for health in (100, 3):
+                        kw2 = dict(dict(dist=reach), **kw)
+                        accum = kw2.pop('target_accum', None)
+                        nocr = extra.get('nocombatresults', 0)
+                        stats = dict(dict(health=health), **kw2.pop('target_stats', {}))
+                        chars, rules = hit_world(data, me, tg, **kw2, target_stats=stats)
+                        if accum is not None:
+                            chars[1]['accum'] = accum
+                        c_extra = {k: v for k, v in extra.items() if k != 'nocombatresults'}
+                        add(f'resolve-hit.{key}.a{i}.{label}.m{margin}.h{health}', 'resolve-hit', chars, rules,
+                            args=dict(attack=i, impact=nimp - 1, targ='Target', damage=15, tohit=60,
+                                      roll=60 - margin), nocombatresults=nocr, **c_extra)
+            # Height.
+            for dz in (40, 41, -41):
+                chars, rules = hit_world(data, me, tg, dist=reach)
+                chars[1]['pos'][2] += dz
+                add(f'resolve-hit.{key}.a{i}.dz{dz}', 'resolve-hit', chars, rules,
+                    args=dict(attack=i, impact=nimp - 1, targ='Target', damage=15, tohit=60, roll=30))
+            # Angle: the target off to the side by the attack's hit angle.
+            for off in (ad['hitangle'], ad['hitangle'] + 1):
+                chars, rules = hit_world(data, me, tg, dist=reach, bearing=64)
+                chars[0]['facing'] = chars[0]['moveangle'] = (64 - off) & 0xff
+                add(f'resolve-hit.{key}.a{i}.angle{off}', 'resolve-hit', chars, rules,
+                    args=dict(attack=i, impact=nimp - 1, targ='Target', damage=15, tohit=60, roll=30))
+        # No target, a target missing its impact animations.
+        chars, rules = hit_world(data, me, tg)
+        add(f'resolve-hit.{key}.notarget', 'resolve-hit', chars, rules,
+            args=dict(attack=next(iter(picks.values())), impact=-1, targ=None, damage=5, tohit=50, roll=10))
+        for i in picks.values():
+            nimp = len(mcd['attacks'][i].get('impacts', []))
+            for health in (100, 3):
+                chars, rules = hit_world(data, me, tg, target_states=['combat'], target_stats=dict(health=health))
+                add(f'resolve-hit.{key}.a{i}.bare.h{health}', 'resolve-hit', chars, rules,
+                    args=dict(attack=i, impact=nimp - 1, targ='Target', damage=9, tohit=60, roll=30))
+    # The rarer turns of ResolveHit: the target to the left, held only by an
+    # impact, in a bow root; a to-hit pushed past 100 by the guard's take; no
+    # damage; drawn into the fight (no target, autocombat off, close); a
+    # moving target forced hit at a glancing margin, through a dodge.
+    pcd = s['chars']['Pale Ogrok']
+    pi = first_with(pcd, CA_INTERACTIVE)
+    pk = next(k for k, imp in enumerate(pcd['attacks'][pi]['impacts']) if imp['flags'] & CAI_INTERACTIVE)
+    for me, tg in (('Araknid', 'Locke'), ('Pale Ogrok', 'Locke'), ('Locke', 'Rahul')):
+        mcd = s['chars'][me]
+        a0 = next(i for i, ad in enumerate(mcd['attacks']) if not ad['flags'] & (CA_MAGICATTACK | CA_PLAYANIM))
+        ai = first_with(mcd, CA_INTERACTIVE)
+        ad0 = mcd['attacks'][a0]
+        reach = max(ad0['hitminrange'], min(ad0['hitmaxrange'], 10))
+        nimp0 = len(ad0.get('impacts', []))
+        for off in (-ad0['hitangle'], -ad0['hitangle'] - 1, -1):
+            chars, rules = hit_world(data, me, tg, dist=reach)
+            chars[0]['facing'] = chars[0]['moveangle'] = (64 - off) & 0xff
+            add(f'resolve-hit.{me}.leftangle{off}', 'resolve-hit', chars, rules,
+                args=dict(attack=a0, impact=nimp0 - 1, targ='Target', damage=15, tohit=60, roll=30))
+        for label, kw in (('heldimpact.other', dict(target_doing=block('cheld', 0xc, impact=pk, impact_attack=pi,
+                                                                             impact_of='Third'))),
+                          ('heldimpact.me', dict(target_doing=block('cheld', 0xc, impact=pk, impact_attack=pi,
+                                                                          impact_of='Third'),
+                                                 target_root=block('combat', 3, obj='Me'))),
+                          ('heldimpact.bowroot', dict(target_doing=block('cheld', 0xc, impact=pk, impact_attack=pi,
+                                                                               impact_of='Third'),
+                                                      target_root=block('bow', 0x19, obj='Me'))),
+                          ('held.walkroot', dict(target_doing=block('cheld', 0xc, impact=pk, impact_attack=pi,
+                                                                          impact_of='Third'),
+                                                 target_root=block('walk', 1, obj='Me')))):
+            chars, rules = hit_world(data, me, tg, dist=reach, **kw)
+            chars.append(make_char('Third', 12, [3000, 3000, 0], 0, chardata(pcd), states=['combat'],
+                                   stats=dict(MONSTER_STATS), ident=0x30))
+            add(f'resolve-hit.{me}.{label}', 'resolve-hit', chars, rules,
+                args=dict(attack=a0, impact=nimp0 - 1, targ='Target', damage=15, tohit=60, roll=30))
+        for tohit, roll in ((160, 1), (155, 100), (151, 60)):
+            chars, rules = hit_world(data, me, tg, dist=reach, target_doing=block('cblock', 8))
+            add(f'resolve-hit.{me}.guard.tohit{tohit}.r{roll}', 'resolve-hit', chars, rules,
+                args=dict(attack=a0, impact=nimp0 - 1, targ='Target', damage=15, tohit=tohit, roll=roll))
+        for dmg in (0, -3):
+            chars, rules = hit_world(data, me, tg, dist=reach)
+            add(f'resolve-hit.{me}.damage{dmg}', 'resolve-hit', chars, rules,
+                args=dict(attack=a0, impact=nimp0 - 1, targ='Target', damage=dmg, tohit=60, roll=30))
+        for auto in (0, 1):
+            for dist in (reach, 200):
+                chars, rules = hit_world(data, me, tg, dist=dist, target_root=block('combat', 3),
+                                         me_state=dict(autocombat=auto))
+                for margin in (20, -20):
+                    add(f'resolve-hit.{me}.engage.auto{auto}.d{dist}.m{margin}', 'resolve-hit', chars, rules,
+                        args=dict(attack=a0, impact=nimp0 - 1, targ='Target', damage=15, tohit=60, roll=60 - margin))
+        if ai is not None:
+            nimpi = len(mcd['attacks'][ai].get('impacts', []))
+            for margin in (-35, -45, -55):
+                for guard in (None, 9):
+                    kw = dict(target_doing=block('cdodge', guard)) if guard else {}
+                    chars, rules = hit_world(data, me, tg, dist=5, **kw)
+                    chars[1]['accum'] = [4, 0, 0]
+                    add(f'resolve-hit.{me}.forced.g{guard}.m{margin}', 'resolve-hit', chars, rules,
+                        args=dict(attack=ai, impact=nimpi - 1, targ='Target', damage=5, tohit=60, roll=60 - margin))
+    for flags in (1, 2, 0x80):
+        cd = copy.deepcopy(s['chars']['Araknid'])
+        cd['attacks'][0]['impacts'] = [impact('imph', flags, 'sloop' if flags & 3 else '')]
+        chars, rules = hit_world(data, 'Araknid', 'Locke', target_states=['combat', 'cimph', 'imph', 'sloop'])
+        chars[0]['chardata'] = cd
+        add(f'resolve-hit.glance.impactflags{flags:#x}', 'resolve-hit', chars, rules,
+            args=dict(attack=0, impact=0, targ='Target', damage=9, tohit=30, roll=60))
+
+    # The fatigue attack's own result tag; a stun and a knockdown impact.
+    lcd = s['chars']['Locke']
+    fa = next(i for i, ad in enumerate(lcd['attacks']) if ad['flags'] & CA_FATIGUEATTACK)
+    for margin in (30, -30):
+        chars, rules = hit_world(data, 'Locke', 'Araknid')
+        add(f'resolve-hit.fatigueattack.m{margin}', 'resolve-hit', chars, rules,
+            args=dict(attack=fa, impact=0, targ='Target', damage=9, tohit=60, roll=60 - margin))
+    for flags, loop in ((1, 'sloop'), (2, 'dloop'), (0x81, 'sloop'), (0x82, '')):
+        cd = copy.deepcopy(s['chars']['Araknid'])
+        cd['attacks'][0]['impacts'] = [impact('imph', flags, loop)]
+        for states in (['combat', 'cimph', 'imph', 'sloop', 'dloop'], ['combat']):
+            chars, rules = hit_world(data, 'Araknid', 'Locke', target_states=states)
+            chars[0]['chardata'] = cd
+            add(f'resolve-hit.impactflags{flags:#x}.{len(states)}', 'resolve-hit', chars, rules,
+                args=dict(attack=0, impact=0, targ='Target', damage=9, tohit=60, roll=30))
+
+    # ResolveAttack: a tick of an attack block before, at and after its
+    # impact frame; who it strikes; the miss, the guard's clash, fatigue.
+    for me, tg in (('Araknid', 'Locke'), ('Locke', 'Araknid'), ('Pale Ogrok', 'Locke'), ('Navarro', 'Rahul'),
+                   ('Jong', 'Locke'), ('Locke', 'Rahul')):
+        mcd = s['chars'][me]
+        key = f"{me.replace(' ', '_')}.vs.{tg.replace(' ', '_')}"
+        picks = {}
+        for i, ad in enumerate(mcd['attacks']):
+            shape = ad['flags'] & (CA_INTERACTIVE | CA_PLAYANIM | CA_MAGICATTACK | 0x200000 | 0x1000 | 0x400000)
+            picks.setdefault((shape, bool(ad.get('missname'))), i)
+        for i in picks.values():
+            ad = mcd['attacks'][i]
+            it = ad.get('impacttime', 0) or 0
+            nimp = len(ad.get('impacts', []))
+            reach = max(ad.get('hitminrange', 0), min(ad.get('hitmaxrange', 0), 8))
+            for frame, first in ((0, True), (max(0, it - 1), False), (it, False), (it, True), (it + 1, False)):
+                for margin, health in ((30, 100), (-30, 100), (30, 2)):
+                    doing = block(ad['name'], 7, attack=i, impact=nimp - 1 if nimp else None, damage=11, tohit=60,
+                                  roll=60 - margin, obj='Target', flags=['firsttime'] if first else [])
+                    if nimp == 0:
+                        del doing['impact']
+                    chars, rules = hit_world(data, me, tg, dist=reach, me_doing=doing, me_frame=frame,
+                                             target_stats=dict(health=health))
+                    add(f'resolve-attack.{key}.a{i}.f{frame}.{"first" if first else "next"}.m{margin}.h{health}',
+                        'resolve-attack', chars, rules, args=dict(bits=0), tape=[3, 7, 11, 13])
+            # At the impact frame: a guard, others in reach, no target.
+            doing = block(ad['name'], 7, attack=i, damage=11, tohit=40, roll=90, obj='Target')
+            for label, kw, extra in (
+                    ('guard', dict(target_doing=block('cblock', 8)), {}),
+                    ('guard.far', dict(target_doing=block('cblock', 8), dist=200), {}),
+                    ('guard.armed', dict(target_doing=block('cblock', 8), weapon=dict(type=2, damage=9)), {}),
+                    ('others', {}, dict(found='Target')),
+                    ('notarget', dict(me_doing=dict(doing, obj=None)), {}),
+                    ('iced', dict(me_objflags=0x2000000), {}),
+                    ('noturn', dict(me_flags=4), {}),
+                    ('tired', dict(me_stats=dict(fatigue=3)), {}),
+                    ('nomiss.anim', dict(me_states=['combat', ad['name'], ad.get('missname') or 'cmiss']), {})):
+                kw = dict(dict(me_doing=doing, me_frame=it, dist=reach), **kw)
+                chars, rules = hit_world(data, me, tg, **kw)
+                if label == 'others':
+                    chars.append(make_char('Third', 12, _toward(ME_AT, chars[0]['facing'], reach + 32), 0,
+                                           chardata(s['chars']['Araknid']), states=['combat', 'cimph', 'cimpl'],
+                                           stats=dict(MONSTER_STATS), ident=0x30))
+                    extra = dict(found='Third')
+                add(f'resolve-attack.{key}.a{i}.{label}', 'resolve-attack', chars, rules, args=dict(bits=0),
+                    tape=[1, 2, 3, 4], **extra)
+    # The block clash's sound by both weapons.
+    for mine in range(0, 9):
+        for theirs in (0, 1, 2, 3, 4, 5):
+            cd = copy.deepcopy(s['chars']['Araknid'])
+            cd['weapontype'] = mine
+            tcd = copy.deepcopy(s['chars']['Rahul'])
+            tcd['weapontype'] = theirs
+            doing = block(cd['attacks'][0]['name'], 7, attack=0, damage=11, tohit=40, roll=90, obj='Target')
+            chars, rules = hit_world(data, 'Araknid', 'Rahul', me_doing=doing,
+                                     me_frame=cd['attacks'][0]['impacttime'], target_doing=block('cblock', 8))
+            chars[0]['chardata'] = cd
+            chars[1]['chardata'] = tcd
+            add(f'resolve-attack.clash.w{mine}.vs{theirs}', 'resolve-attack', chars, rules, args=dict(bits=0),
+                tape=[mine % 2, 5])
+
+    # OnAttacked: a monster told it is attacked.
+    for me in ('Araknid', 'Pale Ogrok', 'Rahul'):
+        mcd = s['chars'][me]
+        for attacker in ('Locke', 'Jong'):
+            acd = s['chars'][attacker]
+            fat = next((i for i, ad in enumerate(acd['attacks']) if ad['flags'] & CA_FATIGUEATTACK), None)
+            plain = next(i for i, ad in enumerate(acd['attacks']) if not ad['flags'] & (CA_PLAYANIM | CA_MAGICATTACK))
+            for label, adoing in (('noattack', block('combat', 3)),
+                                  ('plain', block('swing', 7, attack=plain)),
+                                  ('fatigue', block('cfatigue', 7, attack=fat if fat is not None else plain))):
+                for state in (dict(lastbutton=-1, buttonrepeat=0), dict(lastbutton=acd['attacks'][plain]['button'],
+                                                                       buttonrepeat=1),
+                              dict(lastbutton=acd['attacks'][plain]['button'], buttonrepeat=2)):
+                    for flag in (0, 2):
+                        for roll in (0, 99):
+                            for root in ('me', 'other', 'none'):
+                                chars, rules = hit_world(data, attacker, me, dist=20,
+                                                         me_doing=dict(adoing, obj='Target'),
+                                                         target_state=state,
+                                                         target_root=block('combat', 3, obj={'me': 'Me', 'other': 'Target', 'none': None}[root]))
+                                add(f'on-attacked.{me}.by{attacker}.{label}.lb{state["lastbutton"]}r{state["buttonrepeat"]}'
+                                    f'.f{flag}.roll{roll}.root{root}', 'on-attacked', chars, rules, self_='Target',
+                                    args=dict(attacker='Me', victim='Target', flag=flag), tape=[roll, 5])
+        # Distances: retarget when the attacker is under 75% of the current target's.
+        for d1 in (10, 40, 100):
+            chars, rules = hit_world(data, 'Locke', me, dist=d1, target_root=block('combat', 3, obj='Third'))
+            third = make_char('Third', 12, _toward(chars[1]['pos'], 0, 60 + 32), 0, chardata(s['chars']['Araknid']),
+                              states=['combat'], stats=dict(MONSTER_STATS), ident=0x30)
+            chars.append(third)
+            add(f'on-attacked.{me}.retarget.d{d1}', 'on-attacked', chars, rules, self_='Target',
+                args=dict(attacker='Me', victim='Target'), tape=[50])
+        # Not for me, the player, held, nobody.
+        for label, kw, args in (('notme', {}, dict(attacker='Me', victim='Me')),
+                                ('noattacker', {}, dict(attacker=None, victim='Target')),
+                                ('held', dict(target_doing=block('cheld', 0xc, attack=0, attack_of='Target')),
+                                 dict(attacker='Me', victim='Target')),
+                                ('attacker.held', dict(me_doing=block('cheld', 0xc, attack=0, attack_of='Target')),
+                                 dict(attacker='Me', victim='Target'))):
+            chars, rules = hit_world(data, 'Locke', me, dist=20, target_root=block('combat', 3, obj='Me'), **kw)
+            add(f'on-attacked.{me}.{label}', 'on-attacked', chars, rules, self_='Target', args=args, tape=[0])
+    chars, rules = hit_world(data, 'Araknid', 'Locke', dist=20)
+    add('on-attacked.player', 'on-attacked', chars, rules, self_='Target', args=dict(attacker='Me', victim='Target'))
+    # A victim in a bow root, or held only by an impact.
+    for label, kw in (('bowroot', dict(target_root=block('bow', 0x19, obj='Me'))),
+                      ('walkroot', dict(target_root=block('walk', 1, obj='Me'))),
+                      ('heldimpact', dict(target_doing=block('cheld', 0xc, impact=pk, impact_attack=pi,
+                                                                impact_of='Third')))):
+        for roll in (0, 99):
+            chars, rules = hit_world(data, 'Locke', 'Araknid', dist=20,
+                                     me_doing=block('swing', 7, attack=0, obj='Target'), **kw)
+            chars.append(make_char('Third', 12, [3000, 3000, 0], 0, chardata(pcd), states=['combat'],
+                                   stats=dict(MONSTER_STATS), ident=0x30))
+            add(f'on-attacked.{label}.roll{roll}', 'on-attacked', chars, rules, self_='Target',
+                args=dict(attacker='Me', victim='Target'), tape=[roll])
+    # ResolveAttack from a bow or walk root: the guard's clash with no
+    # fighting target, a PLAYANIM's turn to face.
+    acd = s['chars']['Araknid']
+    play = next(i for i, ad in enumerate(acd['attacks']) if ad['flags'] & CA_PLAYANIM)
+    for root in (('bow', 0x19), ('walk', 1), ('combat', 3)):
+        for which, label in ((0, 'swing'), (play, 'playanim')):
+            ad = acd['attacks'][which]
+            doing = block(ad['name'], 7, attack=which, damage=11, tohit=40, roll=90, obj='Target')
+            chars, rules = hit_world(data, 'Araknid', 'Locke', dist=5, me_doing=doing,
+                                     me_frame=ad.get('impacttime', 0) or 0, target_doing=block('cblock', 8),
+                                     me_root=block(root[0], root[1], obj='Target'))
+            add(f'resolve-attack.root{root[0]}.{label}', 'resolve-attack', chars, rules, args=dict(bits=0),
+                tape=[1, 2])
+    return finish(cases)
+
+
 TARGETS = {
     'melee-attack-choice': dict(fixture='slots/combat/melee_attack.py', cases=attack_choice_cases, compare=compare,
                                 port_fields=port_fields, unit=lambda r: len(r.get('calls', [])) or 1),
+    'melee-hit': dict(fixture='slots/combat/melee_attack.py', cases=hit_cases, compare=compare,
+                      port_fields=port_fields, unit=lambda r: 1),
 }

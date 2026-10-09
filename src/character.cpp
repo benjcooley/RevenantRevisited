@@ -99,6 +99,46 @@ int32_t StepTurnRate(int32_t diff)
 {
     return (std::max)(0, diff - 32) / 32 * 4 + 8;
 }
+
+// The TOHITDAMAGE row a to-hit margin (to-hit less the roll) falls in, as
+// IsValidAttack (0x004d18d2) and ResolveHit (0x004c64e0) look it up: the
+// margin held to the first and last rows' keys, then the first row it
+// reaches. Its damage factor is (100 + DamagePercent); false when no row is
+// reached, which only keys out of order allow.
+bool ToHitDamageFactor(int32_t margin, int32_t& factor)
+{
+    const auto& table = Rules.tohitdamage;
+    if (margin >= table.front().minvalue)
+        margin = table.front().minvalue;
+    if (margin <= table.back().minvalue)
+        margin = table.back().minvalue;
+    for (const TRules::SToHitDamage& row : table)
+        if (margin >= row.minvalue)
+        {
+            factor = row.damagepercent + 100;
+            return true;
+        }
+    return false;
+}
+
+// REVSYNC: 0x0046e7d0 / 0x0046e7f0 -- a name as the text bar shows it: its
+// letters and digits read as a dialog tag, the name itself on a miss; at
+// most 99 characters.
+std::string ShownName(const char* name)
+{
+    constexpr size_t kLength = 100;
+    if (!name)
+        return {};
+    std::string tag;
+    for (const char* c = name; *c && tag.size() < kLength - 2; ++c)
+        if (isalnum((unsigned char)*c))
+            tag.push_back(*c);
+    const char* line = DialogList.GetLine(tag.c_str());
+    std::string shown = (line && line[0] != '[') ? line : name;
+    if (shown.size() > kLength - 1)
+        shown.resize(kLength - 1);
+    return shown;
+}
 }
 
 // *************************************************************
@@ -966,6 +1006,11 @@ int32_t TCharacter::CalculateDamage(int32_t damage, int32_t damagetype, int32_t 
 void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
     TActionBlock* action, TCharacter* attacker)
 {
+    if (damageSeam)
+    {
+        damageSeam(this, damage, damagetype, modifier, action, attacker);
+        return;
+    }
   // Calculate total damage
     if (damagetype >= 0)
         damage = CalculateDamage(damage, damagetype, modifier);
@@ -1536,280 +1581,345 @@ int32_t TCharacter::ResolveMove(TActionBlock* ab, int32_t bits)
 // This function is called by the ResolveAttack() function to resolve hits for
 // multiple characters.  The characters are usually found by calling the FindCharacters()
 // function, then calling this function for each character.  Returns true if hit.
-bool TCharacter::ResolveHit(TCharacter* targ, 
-    SCharAttackData* attack, SCharAttackImpact* attackimpact, int32_t attackdamage)
+// REVSYNC: TCharacter::ResolveHit @ 0x004c62b0 -- one character struck by an
+// attack at its impact frame (COMBAT_HIT.md §3.3). No dice: the to-hit and
+// the roll were fixed when the attack was chosen. A target blocking or
+// dodging and facing the blow takes 50 off the to-hit (the damage re-tiered
+// at the new margin). A failed roll is a glance, not a miss: the target
+// still takes the damage and plays the impact for it -- all but a blocking
+// player -- and the attacker plays its miss. The player and his foes get
+// the result on the text bar; the player earns experience.
+bool TCharacter::ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAttackImpact* impact,
+    int32_t damage, int32_t tohit, int32_t roll)
 {
-    int32_t damage = 0;
-    SCharAttackImpact* impact = nullptr;
+    if (!targ || !IsEnemy(targ))
+        return false;
+    const int32_t dist = Distance(targ);
+    const int32_t angle = FaceAngleTo(targ);
+    if (dist < attack->hitminrange || dist > attack->hitmaxrange)
+        return false;
+    if (abs(targ->pos.z - pos.z) > MAXZHITRANGE)
+        return false;
+    if (abs(angle) > attack->hitangle)
+        return false;
+    if (!IsValidTarget(targ))
+        return false;
+  // Someone held in an interactive move can only be struck by its maker.
+    if (targ->InteractiveLocked() && targ->Fighting() != this)
+        return false;
 
-    if (targ)
+    targ->SetHasSeen(this);
+    S3DPoint push;
+    ConvertToVector(GetFace(), 4 * ROLLOVER, push);
+    targ->vel += push;
+
+    bool hit = tohit >= roll;
+    int32_t dmg = damage;
+    bool blocked = false;
+    const int32_t facing = targ->FaceAngleTo(this);
+    if (!(impact && (impact->flags & CAI_DEATH)) && abs(facing) < 0x30 && targ->doing &&
+        (targ->doing->action == ACTION_BLOCK || targ->doing->action == ACTION_DODGE))
     {
-        int32_t dist = Distance(targ);
-        int32_t angle = FaceAngleTo(targ);
+      // Undo the tier the damage carries, take the guard's 50 off the
+      // to-hit, and tier it again.
+        int32_t factor;
+        if (damage > 0 && ToHitDamageFactor(tohit - roll, factor))
+            dmg = damage * 100 / factor;
+        tohit = std::clamp(tohit - 50, 10, 100);
+        if (ToHitDamageFactor(tohit - roll, factor))
+            dmg = (std::max)(1, factor * dmg / 100);
+        hit = tohit >= roll;
+        blocked = !hit;
+    }
+  // An interactive move lands on a target that is moving and not blocking.
+    if ((attack->flags & CA_INTERACTIVE) && (targ->accum.x || targ->accum.y) &&
+        !(targ->doing && targ->doing->action == ACTION_BLOCK))
+        hit = true;
 
-        // Check to see if impact is even possible? 
-        if (dist >= attack->hitminrange &&
-            dist <= attack->hitmaxrange && 
-            abs(targ->pos.z - pos.z) <= MAXZHITRANGE && 
-            abs(angle) <= attack->hitangle &&
-            !targ->IsDead() &&
-            !targ->IsInvisibleSpell())
+    int32_t def = targ->LuckMod();
+    def += targ->Defense();
+    int32_t off = LuckMod();
+    off += Offense();
+    if (dmg < 1)
+        dmg = 1;
+
+  // An interactive move can't kill without a death impact.
+    if (hit && (attack->flags & CA_INTERACTIVE) && targ->Health() - dmg < 1 &&
+        !(impact && (impact->flags & CAI_DEATH)))
+        hit = false;
+    if (!hit && (attack->flags & CA_INTERACTIVE))
+        return false;
+    CombatTrace::Event(this, hit ? "hit" : "miss", "target=%s\troll=%d\ttohit=%d\tdamage=%d",
+                       targ->GetName() ? targ->GetName() : "-", roll, tohit, dmg);
+
+  // The block the target plays: a death named by the impact when the blow
+  // kills, else the impact itself; a real hit (not a glance) also draws
+  // the target into the fight.
+    TActionBlock* hitab = nullptr;
+    const char* tag = "BASEGLANCE";
+    if (targ->Health() - dmg < 1)
+    {
+        if (impact && (impact->flags & CAI_DEATH) && targ->HasActionAni(impact->impactname))
         {
-            // If within hit range, set has seen to true!
-            targ->SetHasSeen(this);
-
-            S3DPoint vect;
-            ConvertToVector(facing, 4 * ROLLOVER, vect);
-            targ->vel += vect;
-
-          // Chance to hit is concatenation of all the below
-          // Note: To hit value is based on the following formula
-          // 
-          //    Armor + DefenseModifier + FatigueModifier(always negative) - AttackModifier
-          // 
-          //    This TOHIT value should 'almost' always be less than 25.  If it is greater,
-          //    the random value will be 1-(tohit + 1) to always give the char a chance to hit.  
-          // 
-            int32_t targangle = targ->FaceAngleTo(this);
-            int32_t tohit = targ->ArmorValue() + targ->DefenseModifier() + 
-                targ->FatigueModifier() - AttackModifier();
-            int32_t maxroll = max(25, tohit + 1);           
-            if (abs(targangle) < 48  &&                 // HALVE hit chances if blocking/dodging
-                (targ->IsDoing(ACTION_BLOCK) || targ->IsDoing(ACTION_DODGE)))
-                tohit += (maxroll - tohit + 1) * 3 / 4;
-            if (abs(targ->FaceAngleTo(this)) >= 48 ||   // If not facing us or...
-                targ->IsDoing(ACTION_ATTACK))           // is currently trying to do an attack
-                tohit -= (maxroll - tohit + 1) / 2;     // Then DOUBLE hit chances
-
-            // We hit, so set damage value to precalculated attack damage!
-            const int32_t roll = random(1, maxroll);
-            if (roll > tohit)
-            {
-                damage = attackdamage; 
-                impact = attackimpact; // This can be nullptr;
-            }
-            CombatTrace::Event(this, roll > tohit ? "hit" : "miss", "target=%s\troll=%d\ttohit=%d\tmaxroll=%d\tdamage=%d",
-                               targ->GetName() ? targ->GetName() : "-", roll, tohit, maxroll, damage);
-
-            // We hit the character (though we may not have done much damage)!
-            if (!targ->IsDoing(ACTION_BLOCK) || damage > 0) // ****** CODE FOR IMPACT *******
-            {
-                // Get interactive DEATH
-                TActionBlock* deathab = nullptr;
-                TActionBlock* impactab = nullptr;
-                TActionBlock* hitab = nullptr;
-                if (targ->Health() - damage < 1)
-                {
-                    if (impact)
-                        if ((impact->flags & CAI_DEATH) &&
-                            targ->HasActionAni(impact->impactname))
-                        {
-                            deathab = new TActionBlock(impact->impactname, ACTION_DEAD);
-                            deathab->obj = this;
-                            deathab->priority = true;   // Don't interrupt period!
-                            deathab->attack = attack;
-                            deathab->impact = impact;
-                            deathab->damage = damage;
-                            targ->SetFighting(this);
-                        }
-                    hitab = deathab;
-                }
-                else    // Get interactive IMPACT
-                {
-                    // If we're not fighting anyone, fight the guy who just hit us
-                    if ((!targ->Fighting()) && (!GetAutoCombat()))
-                    {
-                        // not fighting - shall we engage this target?
-                        if (dist <= targ->chardata->combatrangemin)
-                            targ->BeginCombat(this);
-                    }
-
-                    // Get impact animations
-                    if (impact && targ->HasActionAni(impact->impactname))
-                    {
-                        ACTION a;
-                        if (!impact)
-                            a = ACTION_IMPACT;
-                        else if (impact->flags & CAI_STUN)
-                            a = ACTION_STUN;
-                        else if (impact->flags & CAI_KNOCKDOWN)
-                            a = ACTION_KNOCKDOWN;
-                        else
-                            a = ACTION_IMPACT;
-                        impactab = new TActionBlock(impact->impactname, a);
-                        impactab->obj = this;
-                        impactab->interrupt = true; // Interrupt current char 'doing'
-                        impactab->priority = true;  // Don't imterrupt until done!
-                        impactab->attack = attack;
-                        impactab->impact = impact;
-                        impactab->damage = damage;
-                        if (impact)
-                            impactab->wait = impact->looptime;
-                        targ->SetFighting(this); // If special impact, face char to impact
-                    }
-                    hitab = impactab;
-                }
-
-        //        Don't use this anymore... see below...
-        //          targ->Damage(damage, 
-        //                  GetDamageType(WeaponType(), attack->flags),  
-        //                  attack->damagemod,
-        //                  impactab, deathab);
-
-          // Note: DamageType and damagemod's are already reflected in 'damage' total so we can get
-          // the right impact/death for this attack.  This means we have to use DT_NONE to avoid
-          // recalculating damage with damagetype modifiers, etc.
-                targ->Damage(damage, DT_NONE, 0, hitab, this);
-
-            }
-
-          // REVSYNC: the end of retail's hit resolution (0x004c62b0): a
-          // player earns experience from the target -- for the kill, in the
-          // weapon's skill, and in stealth if the target never saw it
-          // coming (TPlayer vtable +0x414, +0x41c, +0x420; each checks the
-          // target is dead). docs/gameplay/forensics/PLAYER_STATS.md §7.
-            if (ObjClass() == OBJCLASS_PLAYER)
-            {
-                TPlayer* player = static_cast<TPlayer*>(this);
-                player->AwardKillExp(targ);
-                player->AwardSkillExp(SK_WEAPONSKILLS + player->WeaponType(), targ);
-                player->AwardStealthExp(targ);
-            }
+            hitab = new TActionBlock(impact->impactname, ACTION_DEAD);
+            hitab->priority = true;
+            hitab->attack = attack;
+            hitab->obj = this;
+            hitab->impact = nullptr;
+            hitab->damage = dmg;
+            targ->SetFighting(this);
         }
-    }
-
-    return damage > 0;              // Did we miss?
-}
-
-// Maximum number of characters we can hit at a time
-#define MAXHITCHARS 32  // This should do it
-
-int32_t TCharacter::ResolveAttack(TActionBlock* ab, int32_t bits)
-{
-    TCharacter* targ = (TCharacter*)ab->obj;
-    SCharAttackData* attack = ab->attack;
-    SCharAttackImpact* impact = ab->impact;
-
-  // Set last attack stuff
-    if (ab->firsttime)
-    {
-        lastattack = attack;
-        lastattackticks = PlayScreen.GameFrame();
-    }
-
-  // Make sure moving angle equals face (it doesn't during a combat move)
-    SetMoveAngle(GetFace());
-
-    int32_t dist, angle;
-    if (targ)
-    {
-        dist = Distance(targ);
-        angle = FaceAngleTo(targ);
+        targ->combatflashticks = 5;
     }
     else
     {
-        dist = 0;
-        angle = 0;
+        if (hit && !targ->Fighting() && !autocombat && dist <= targ->chardata->combatrangemin)
+            targ->BeginFighting(this, ACTION_COMBAT);
+        if (impact)
+        {
+            char name[RESNAMELEN];
+            if (impact->flags & (CAI_DEATH | CAI_INTERACTIVE))
+                strncpyz(name, impact->impactname, RESNAMELEN);
+            else
+                targ->CombatAnimName(name, impact->impactname);
+            if (targ->HasActionAni(name))
+            {
+                targ->doing->priority = targ->doing->interrupt = false;
+                const ACTION action = (impact->flags & CAI_STUN) ? ACTION_STUN
+                                    : (impact->flags & CAI_KNOCKDOWN) ? ACTION_KNOCKDOWN : ACTION_IMPACT;
+                hitab = new TActionBlock(name, action);
+                hitab->priority = hitab->interrupt = true;
+                hitab->attack = attack;
+                hitab->impact = impact;
+                hitab->wait = impact->looptime;
+                hitab->obj = this;
+                hitab->damage = dmg;
+                targ->SetFighting(this);
+            }
+        }
+    }
+    if (hit)
+    {
+        const int32_t margin = tohit - roll;
+        const auto& tiers = Rules.tohitdamage;
+        tag = (attack->flags & CA_FATIGUEATTACK) ? "BASEFATIGUE"
+            : margin > tiers[0].minvalue ? "BASEDOUBLE"
+            : margin > tiers[1].minvalue ? "BASEHIT"
+            : margin > tiers[2].minvalue ? "BASEMINOR"
+            : margin > tiers[3].minvalue ? "BASESMALL" : "BASEGLANCE";
     }
 
-  // Do this
+  // The result line, for fights the player is in.
+    if ((!blocked || ((attack->flags & CA_INTERACTIVE) && hit)) &&
+        (this == Player || targ == Player) && !NoCombatResults)
+    {
+        char line[100];
+        if (DialogList.FindLine("FULLCOMBATRES") >= 0)
+        {
+            const char* what = DialogList.GetLine(tag);
+            const char* format = DialogList.GetLine("FULLCOMBATRES");
+            snprintf(line, sizeof(line), format, what, targ->GetName(), dmg, def, off);
+        }
+        else
+        {
+            const char* offense = DialogList.GetLine("BASEOFF");
+            const char* defense = DialogList.GetLine("BASEDEF");
+            const char* damaged = DialogList.GetLine("BASEDMG");
+            const char* what = DialogList.GetLine(tag);
+            snprintf(line, sizeof(line), "%s %s %s:%d %s:%d %s:%d", what, ShownName(targ->GetName()).c_str(), damaged, dmg,
+                     defense, def, offense, off);
+        }
+        TextBar.Print("%s", line);
+    }
+
+  // The damage: a blocking player takes none from a glance. Damage keeps
+  // or frees the block it is given (retail frees it here when Damage
+  // didn't install it, after a Damage that may have freed it already).
+    if (hit || !(targ->ObjClass() == OBJCLASS_PLAYER && targ->doing && targ->doing->action == ACTION_BLOCK))
+        targ->Damage(dmg, DT_NONE, 0, hitab, this);
+    else
+        delete hitab;   // REVSYNC-DIVERGENCE: ownership passes to Damage (no double free; see TCharacter::Damage)
+
+    if (targ->ObjClass() == OBJCLASS_PLAYER && targ->root && targ->root->action == ACTION_BOW)
+        targ->BeginFighting(nullptr, ACTION_COMBAT);
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        TPlayer* player = static_cast<TPlayer*>(this);
+        player->AwardKillExp(targ);
+        player->AwardSkillExp(SK_WEAPONSKILLS + WeaponType(), targ);
+        player->AwardStealthExp(targ);
+    }
+    return hit;
+}
+
+// Maximum number of characters an attack strikes at once (retail's 0x20).
+constexpr int32_t kMaxHitChars = 32;
+
+// REVSYNC: TCharacter::ResolveAttack @ 0x004c6dd0 -- every tick of an ATTACK
+// block (COMBAT_HIT.md §3.2): the first tick tells the target, until the
+// impact frame a close target holds still, at the impact frame each
+// character in reach is struck (ResolveHit), a miss plays the miss
+// animation (and against a guard sparks and a block sound), and the attack's
+// fatigue is paid -- a quarter for a missed interactive move.
+int32_t TCharacter::ResolveAttack(TActionBlock* ab, int32_t bits)
+{
+    if (flags & (OF_ICED | OF_PARALIZE))
+        return COM_DONE;
+    if (charflags & kCharFlagNoTurn)
+        return COM_DONE;
+    SCharAttackImpact* impact = ab->impact;
+    SCharAttackData* attack = ab->attack;
+    TCharacter* targ = (TCharacter*)ab->obj;
     if (ab->firsttime)
     {
-      // Signal our opponent that he's getting wailed on
-        if (targ)
-            targ->SignalAttack(this, ab->obj);
+        lastattack = attack;
+        lasthit = 0;
+        lastattackticks = PlayScreen.GameFrame();
+    }
+    int32_t dist = 0;
+    if (targ)
+    {
+        dist = Distance(targ);
+        FaceAngleTo(targ);      // retail computes it and drops it
+    }
+    if (ab->firsttime && targ && ab->attack && !(ab->attack->flags & CA_PLAYANIM))
+        targ->SignalAttack(this, ab->obj, (ab->attack->flags & CA_MAGICATTACK) ? 2 : 0);
+    if (!attack)
+        return COM_DONE;        // REVSYNC-DIVERGENCE: retail reads through the null record
+    if (targ && !(attack->flags & (CA_INTERACTIVE | CA_NOPUSH)) && !(GetAniFlags() & AF_FLY) &&
+        !(targ->GetAniFlags() & AF_FLY) && !(impact && impact->snapdist > 0) && targ->Health() > 0 &&
+        !targ->invisible_spell && dist <= 10 && GetFrame() < attack->impacttime)
+    {
+      // Close in: hold still until the blow lands.
+        S3DPoint next;
+        GetNextMove(next);
+        next.x = next.y = 0;
+        SetNextMove(next);
     }
 
-  // Cause attack to push character... ONLY IF THERE IS SOMETHING *TO* KNOCK BACK!!!!
-    if (targ)
-        if (attack && 
-            !(attack->flags & CA_NOPUSH) && 
-            !(attack->flags & CA_INTERACTIVE) && 
-            !(GetAniFlags() & AF_FLY) && 
-            !(targ->GetAniFlags() & AF_FLY) && 
-            (!impact || impact->snapdist <= 0) &&
-            !targ->IsDead() &&
-            !targ->IsInvisibleSpell() &&
-            targ && dist <= (Radius() + targ->Radius() + 10))
-        {
-            S3DPoint nm;
-            if (frame < attack->impacttime) // Before impact.. don't move
-            {
-                GetNextMove(nm);
-                nm.x = nm.y = 0;
-                SetNextMove(nm);
-            }
-            else
-            {                                           // After impact, move monster (if not already moving)
-                targ->Face((GetFace() + 128) & 255);
-                targ->SetMoveAngle(GetFace());
-                targ->SetMoveDist(targ->GetMoveDist() + GetMoveDist());
-            }
-        }
-
-  // If we have target, and frame has reached trigger time for impact, then do the impact.
-    if (attack && frame == attack->impacttime)
+    if (GetFrame() == attack->impacttime && !(attack->flags & (CA_PLAYANIM | CA_MAGICATTACK)))
     {
-        bool hit;
-
-      // Do main target character
+        bool hit = false;
         if (targ)
-            hit = ResolveHit(targ, ab->attack, ab->impact, ab->damage);
-
-      // If this attack allows hits for other characters, do them too...
+            hit = ResolveHit(targ, ab->attack, ab->impact, ab->damage, ab->tohit, ab->roll);
+        lasthit = hit;
         if (!(attack->flags & CA_ONETARGET))
         {
-            int32_t numchars;
-            TCharacter* chars[MAXHITCHARS];
-
-            numchars = FindCharacters(chars, MAXHITCHARS, 
-                attack->hitmaxrange, GetFace(), attack->hitangle, FINDCHAR_ENEMY);
-
-            for (int32_t c = 0; c < numchars; c++)
-            {
+            TCharacter* chars[kMaxHitChars];
+            const int32_t n = FindCharacters(chars, kMaxHitChars, attack->hitmaxrange, GetFace(), attack->hitangle,
+                                             FINDCHAR_ENEMY);
+            for (int32_t c = 0; c < n; c++)
                 if (chars[c] != targ)
-                    hit = (hit | ResolveHit(chars[c], ab->attack, ab->impact, ab->damage));
-            }
+                    hit |= ResolveHit(chars[c], ab->attack, ab->impact, ab->damage, ab->tohit, ab->roll);
         }
 
-      // Do miss if we failed to hit anything   
+        int32_t cost = attack->fatigue;
         if (!hit)
         {
-            TActionBlock* missab;
-
-          // Do we play miss animation, or return straightway to combat state? 
             if (!(attack->flags & CA_NOMISS))
             {
+                TActionBlock* miss;
                 if (HasActionAni(attack->missname))
                 {
-                    missab = new TActionBlock(attack->missname, ACTION_MISS);
-                    missab->attack = attack;
+                    miss = new TActionBlock(attack->missname, ACTION_MISS);
+                    miss->attack = attack;
                 }
                 else
-                {
-                    missab = new TActionBlock(root->name, ACTION_COMBAT);
-                    PlayWave(listrnd(chardata->misssounds));  // Play default sounds
-                }
-                missab->interrupt = true;
-                missab->obj = ab->obj;
-                SetDesired(missab);
+                    miss = new TActionBlock(root->name, ACTION_COMBAT);
+                miss->obj = ab->obj;
+                doing->priority = false;
+                miss->priority = true;
+                SetMoveDist(0);
+                ForceCommand(miss);
+                PlayWave(listrnd(chardata->misssounds));
             }
-            
-          // Play block sound do sparks
-            if (targ && targ->doing->action == ACTION_BLOCK)
+          // Struck a guard: sparks between two weapons, and the clash.
+            if (targ && targ->doing->action == ACTION_BLOCK && Distance(targ) <= attack->hitmaxrange)
             {
-                if (attack->flags & CA_SPARKS)
-                    EffectBurst("sparks");
-                PlayWave(listrnd(chardata->blocksounds));
+                if (WeaponType() && targ->WeaponType())
+                    EffectBurst("sparks", 0x32);
+                if (TCharacter* opponent = Fighting())
+                {
+                    const int32_t mine = WeaponType();
+                    const int32_t theirs = opponent->WeaponType();
+                    const int32_t which = random(1, 2);
+                    const bool edged = theirs == WT_KNIFE || theirs == WT_SWORD || theirs == WT_AXE;
+                    const char* clash = "dull";
+                    if (mine == WT_KNIFE || mine == WT_SWORD || mine == WT_AXE)
+                        clash = theirs ? "sword" : "dull";
+                    else if (mine >= WT_BLUDGEON && mine <= 7)
+                        clash = edged ? "sword" : "dull";
+                    char sound[32];
+                    snprintf(sound, sizeof(sound), "block%d%s", which, clash);
+                    PlayWave(sound);
+                }
             }
+            if (attack->flags & CA_INTERACTIVE)
+                cost = attack->fatigue / 4;
         }
-
-       // Subtract from fatigue value
-//      SetFatigue(max(Fatigue() - attack->fatigue, 0));    
-
+        if (Fatigue() - cost > 0)
+            SetFatigue(Fatigue() - cost);
+        else
+            SetFatigue(0);
     }
 
-    return 0;
+    if ((attack->flags & CA_PLAYANIM) && Fighting())
+        SetRotateZ(AngleTo(Fighting()));
+    return COM_DONE;
+}
+
+// REVSYNC: TCharacter::OnAttacked @ 0x004cdce0 (slot 0x240) -- a monster told
+// an attack on it has begun (COMBAT_ATTACK_CHOICE.md §3.13): it turns on the
+// attacker unless its own target is much closer, counts the attacker's
+// repeats of one button, answers a fatigue attack with an attack of its own
+// and a third repeat with its guard, and else blocks by its BLOCK
+// frequency. The player isn't told.
+void TCharacter::SignalAttack(TObjectInstance* actor, TObjectInstance* target, int32_t flag)
+{
+    if (target != this || InteractiveLocked() || objclass == OBJCLASS_PLAYER || !actor)
+        return;
+    TCharacter* attacker = static_cast<TCharacter*>(actor);
+    if (TCharacter* current = Fighting())
+    {
+        const int32_t nearer = Distance(current) * 75 / 100;
+        if (Distance(attacker) < nearer)
+            SetFighting(attacker);
+    }
+    else
+        SetFighting(attacker);
+
+    bool repeat = false;
+    const SCharAttackData* a = attacker->GetDoing()->attack;
+    if (a)
+    {
+        if (a->button == lastbutton)
+        {
+            if (++buttonrepeat >= 3)
+                repeat = true;
+        }
+        else
+            buttonrepeat = 1;
+        lastbutton = a->button;
+    }
+    else
+    {
+        lastbutton = -1;
+        buttonrepeat = 0;
+    }
+    if (a && (a->flags & CA_FATIGUEATTACK))
+    {
+        requestbits |= kRequestAttackNow | kRequestNoPlayAnim | kRequestInteractive;
+        return;
+    }
+    if (!repeat)
+    {
+        if (flag || Fighting() != attacker)
+            return;
+        const int32_t chance = BlockPcnt();
+        if (random(1, 100) > chance || attacker->InteractiveLocked())
+            return;
+    }
+    Block(-1);
 }
 
 int32_t TCharacter::ResolveImpact(TActionBlock* ab, int32_t bits)
@@ -2253,6 +2363,11 @@ int32_t TCharacter::ResolvePivot(TActionBlock* ab, int32_t bits)
 
 void TCharacter::EffectBurst(char *name, int32_t height)
 {
+    if (effectBurstSeam)
+    {
+        effectBurstSeam(this, name, height);
+        return;
+    }
 //  return;
     // hack? maybe not... just no blood if i'm burning
     if (burning && !stricmp(name, "blood"))
@@ -2376,6 +2491,8 @@ bool TCharacter::IsFinalState()
 
 bool TCharacter::IsEnemy(TCharacter* chr)
 {
+    if (isEnemySeam)
+        return isEnemySeam(this, chr);
   // Is this character attacking me
     if (chr->IsFighting() && chr->Fighting() == this)
         return true;    // That makes me hostile no matter what
@@ -3060,33 +3177,6 @@ void TCharacter::SignalHostility(TObjectInstance* actor, TObjectInstance* target
         return;
 }
 
-void TCharacter::SignalAttack(TObjectInstance* actor, TObjectInstance* target)
-{
-    if (target != this)
-        return;
-
-    if (actor == doing->obj &&
-        random(1, 100) <= BlockPcnt())
-          Block();
-
-    if (ObjClass() != OBJCLASS_PLAYER)
-    {
-        // Monsters auto-target whoever swung at them.
-        SetFighting((TCharacter*)actor);
-    }
-    else
-    {
-        // Players auto-flip into combat mode when attacked. This is
-        // the retail behavior -- the moment a hostile lands a swing
-        // (or even attempts one) the player drops out of walk root
-        // into combat root, ready to swing back. BeginCombat is
-        // idempotent: if we're already in combat targeted at the
-        // actor it's a no-op, otherwise it sets fighting + flips
-        // root to "combat".
-        if (actor && actor != (TObjectInstance*)this)
-            BeginCombat((TCharacter*)actor);
-    }
-}
 
 void TCharacter::SetOnExit()
 {
@@ -3824,29 +3914,6 @@ bool TCharacter::IsBowDrawn()
 //
 // docs/gameplay/forensics/COMBAT_ATTACK_CHOICE.md §3.1-§3.6 (the searches)
 // and COMBAT_HIT.md §3.1 (the numbers an attack carries).
-
-namespace
-{
-// The TOHITDAMAGE row a to-hit margin (to-hit less the roll) falls in: the
-// margin held to the first and last rows' keys, then the first row it
-// reaches. Its damage factor is (100 + DamagePercent); false when no row is
-// reached, which only keys out of order allow.
-bool ToHitDamageFactor(int32_t margin, int32_t& factor)
-{
-    const auto& table = Rules.tohitdamage;
-    if (margin >= table.front().minvalue)
-        margin = table.front().minvalue;
-    if (margin <= table.back().minvalue)
-        margin = table.back().minvalue;
-    for (const TRules::SToHitDamage& row : table)
-        if (margin >= row.minvalue)
-        {
-            factor = row.damagepercent + 100;
-            return true;
-        }
-    return false;
-}
-}
 
 // REVSYNC: the five-line gate retail opens ButtonAttack 0x004d2480,
 // RandomAttack 0x004d2900, SpecificAttack 0x004d2a60 (and SetFighting, Go,
@@ -4793,6 +4860,8 @@ ACTION TCharacter::GetLeapAction(ACTION action)
 
 bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
 {
+    if (beginFightingSeam)
+        return beginFightingSeam(this, target, action);
   // Prevent auto combat from being called again for 
   // all currently visible characters.
     SetHasSeenAutoCombat(false);
