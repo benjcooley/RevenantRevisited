@@ -108,6 +108,7 @@ class CallFixture:
         world.reset()
         self.case = case
         world.set_globals(case.get('globals', {}))
+        world.set_rng(case)
         for spec in case['chars']:
             world.new_character(spec)
         for spec in case['chars']:
@@ -128,7 +129,8 @@ class CallFixture:
             raise ValueError(f'unknown call {kind!r}')
         new_blocks = []
         return dict(schema=SCHEMA, side='retail', returned=result,
-                    self=world.character_dump(me, new_blocks), seams=list(world.seams))
+                    self=world.character_dump(me, new_blocks), seams=list(world.seams),
+                    draws=list(world.draws))
 
 
 def main():

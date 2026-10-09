@@ -140,7 +140,11 @@ Conventions are taken from `ret N`. "thiscall(a, b) ret 8" means `ecx = this`.
 | `0x5101b0` | TMissileEffect init (`+0x1fc`) | thiscall | high |
 | `0x510400` / `0x510450` | Photon init (`+0x1fc`) / Pulse (`+0x110`), vtable `0x5b3c18` | thiscall | high (builder "Photon" `0x5b3c14`) |
 | `0x510bd0` / `0x510c10` | FireBall init / Pulse, vtable `0x5b408c` | thiscall | high (builder "FireBall" `0x5b4088`) |
-| `0x4c8130` / `0x4c80c0` / `0x4c01f0` | bow shoot (slot `0x330`) / bow aim / arrow hit | — | **not read** (§2.18) |
+| `0x53f920` | TSpellManager::CastByName(name, invoker, targets, numtargs, sourcepos, master) | thiscall ret 0x18 | high: GetSpellDataByName `0x53ede0`, the same gates as `0x53fe80`, SetCast. Only callers: the arrow hit (`0x4c06a6`, `0x4c070b`) |
+| `0x4c8130` | TCharacter::ResolveBowShoot(ab, bits) (slot `0x330`) | thiscall ret 8 | high: AMMO def (class `0x15`), "bowshoot*", ammo count |
+| `0x4c80c0` | bow aim resolver(ab, bits) | thiscall ret 8 | medium: AdvanceAngles, writes the root/doing angles, returns 2 |
+| `0x4c01f0` | TAmmo/arrow Move (slot `0x114` in 5 vtables: `0x5a6b68`, `0x5a6d8c`, `0x5a6fb0`, `0x5a71d4`, `0x5a73f8`) | thiscall ret 0 | high: "ice arrow", FULLARROWDMG, AMMODATA rules fields |
+| `0x4c00b0` | arrow SetShooter(obj): `+0xd8 = obj->id (+0x40)` | thiscall ret 4 | high |
 
 ## 2. Behaviour
 
@@ -624,14 +628,101 @@ Shipped data notes:
 - REPEATDAMAGE isn't used.
 - Quicksand and Swamp Pit have WAIT 10; Meteor Storm WAIT 48.
 
-### 2.18 Arrows (not read)
+### 2.18 Arrows
 
-`0x4c8130` (slot `0x330`), `0x4c80c0` and `0x4c01f0` were not
-disassembled for this doc. The brief's string anchors for `0x4c01f0` are
-ice_arrow, Solifuge, skywalk, damagemod, Poison, Fire_Flash and
-FULLARROWDMG/BASEARROW, with 4 random calls. The port's `TArrow3D::Move`
-(`ammo.cpp:306`) does `Damage(random(20, 50), DAMAGE_PIERCING)`, which is
-certainly not retail. **Open: a follow-up pass.**
+**AMMODATA** (Rules `0x65d7a8`; the fields `+0xdc..+0xec` are
+`0x65d884..0x65d894`).
+
+- The defaults are set in the Rules clear (`0x48b6..`): base `+0xdc` = 20,
+  per monster or victim level `+0xe0` = 6, per player level `+0xe4` = 4,
+  per bow skill `+0xe8` = 1, min-damage percent `+0xec` = eax. eax was
+  loaded with `0x19` (25) just before; that eax still holds 25 at the store
+  is **unverified**.
+- The keyword `AMMODATA` (format `%i, %i, %i, %i`, which reads four
+  fields, `+0xdc..+0xe8`) is **commented out** in the shipped rules.def
+  (`//AMMODATA 20, 6, 3, 2, 25`), so the defaults are what plays.
+
+**ResolveBowShoot `0x4c8130`** (slot `0x330`, thiscall(ab, bits) ret 8;
+players only, others return 0):
+
+1. A shot is due when `GameFrame − last (+0x22c) > chardata+0x20c` (the
+   shot interval). With no shots left (`+0x230 <= 0`) or not due, it
+   returns at once (`+0x230 <= 0 ? 0 : 2`).
+2. Ammo = `+0x2c0` (equipped ammo).
+   - When there is ammo and this is single player or the server:
+     - facing `+0x36` = moveangle `+0xb0` = `ab->angle`;
+     - a def of class `0x15` (AMMO) with type =
+       AmmoClass(`0x66b160`).FindObjType(ammo name), flags `|= 0x10000`;
+     - pos = shooter pos + chardata `+0x1fc` offset rotated by the facing
+       (`0x46dbe0` / `0x46de10` / `0x46db20`), z + chardata `+0x204`;
+     - velocity = ConvertToVector(facing, chardata `+0x208` << 16);
+     - NewObject; when it is ammo, SetShooter(this) (`0x4c00b0`) and the
+       map add `0x451090`.
+   - With any ammo: `ammo->slot 0x198()` (count left) and `slot 0x78(name,
+     1)` (remove one). At 1 left, Equip(0, 8) unequips the ammo slot.
+   - Sound "bowshoot" + `'1' + random(0, 5)`. `[0x65b830] = 1`.
+3. `+0x22c = GameFrame`, `+0x230 -= 1`. Return `+0x230 <= 0 ? 0 : 2`.
+
+**Bow aim `0x4c80c0`** (thiscall(ab, bits) ret 8): `+0xb4 = 0`.
+
+- When `ab->flags & 0x100` (stop) and the facing equals `ab->angle`:
+  return 0.
+- Otherwise AdvanceAngles(angle, angle, turnrate), and the angle and
+  moveangle of both root and doing are set to `ab->angle`. Return 2.
+
+**Arrow Move `0x4c01f0`** (slot `0x114` of the ammo classes; it returns the
+base Move's bits):
+
+1. bits = TObjectInstance::Move (`0x470920`). Nothing more unless the
+   arrow is flying (flags `0x10000`).
+2. Hit test:
+   - victim = `0x4d4db0(this, pos, level, 0)` (the character at the
+     arrow's position; seam). A victim with `|Δz| > 80` counts as no hit.
+   - Continue only when `+0xdc < 0` (not handled yet) and (bits `& 2`
+     (blocked) or there is a victim).
+3. **Ice arrow** (type name "ice arrow"):
+   - FindObjectsInRange(pos, 200, ...) (`0x452060`). Each object is
+     skipped when it is a Solifuge, the main player, dead, attack/impact
+     gated, or its state name contains "skywalk".
+   - Every other one gets an `Iced` effect at its position (init, then
+     `0x4ec930(obj)`).
+   - Ice arrows deal **no damage** (step 7).
+4. Sound "impact*bow" with `'1' + random(0, 2)`: drawn for every hit, before
+   the damage.
+5. shooter = GetInstance(`+0xd8`) when it is a character or player.
+   - With a shooter: no victim, or a victim that is not
+     `IsEnemy(shooter, victim)` → `+0xdc = 0`, return.
+   - Without a shooter: no victim → same.
+6. Knockback point = arrow pos − 2 × velocity (`+0x1c..+0x24`).
+7. base:
+   - **player shooter:** `20 + 4·Level (slot 0x354) + 1·GetStat("bows")
+     (slot 0xd4)`. Then `m = arrow->slot 0x208()`, plus the shooter's bow
+     (`+0x2bc`) GetStat("damagemod") when there is one, and
+     `base += (m · base) / 100`. Then `shooter->slot 0x41c(8, victim)`
+     (bow skill exp).
+   - **character shooter:** `20 + 6·slot 0x190()` (level, unverified name).
+   - **no shooter (traps):** `20 + 6·victim's Level (player) or slot 0x190
+     (character)`.
+8. **d = random(base · 25 / 100, base)**. Then, when `d != 0` and the arrow
+   is not an ice arrow:
+   - arrow damage type (slot `0x200`) 9 (poison) and **random(0, 100) < 33**:
+     `victim->spells(+0x170).CastByName("Poison", shooter, &victim, 1, 0,
+     0)` (`0x53f920`). On success, the network echo.
+   - else type 7 (burn) and **random(0, 100) < 66**: the same with "Fire
+     Flash".
+   - `victim->Damage(d, type, 0, 0, 0)`. **No attacker is passed**, so
+     Damage makes no IsEnemy check.
+   - KnockBack(victim, point, −1).
+   - The proc casts run the full gated cast with the **shooter** as
+     invoker: the shooter's mana, the skill roll, ManaDrain, SetCast on the
+     shooter. The cooldown is the victim's manager. That this is really
+     what happens in play is **unverified (run it)**.
+9. A main-player shooter gets text: `FULLARROWDMG` (formatted with the
+   victim's name and d) when the key exists, else
+   `"%s %s %s:%d"` (BASEARROW, name, BASEDMG, d).
+10. With a shooter: `victim->slot 0x240(shooter, victim, 1)` (unverified;
+    probably "attacked by"). Then arrow flags `|= 0x1000` (OF_KILL).
+    Return bits.
 
 ## 3. RNG draws (all `random()` `0x483300` unless noted)
 
@@ -645,6 +736,12 @@ certainly not retail. **Open: a follow-up pass.**
 | `0x4de495` | (min, max) | AreaDamage per target | each target in range |
 | `0x4de724`, `0x4de72d` | (7, 12), (6, 16) | corpse knockback | `0x4de610` |
 | `0x5412bb` and others in `0x540eb0` | (0, WAIT) and pattern draws | Strike effect stagger / placement | Strike Timer at effect start (**unverified count**) |
+| `0x4c833b` | (0, 5) | bow-shot sound pick | each arrow shot (player) |
+| `0x4c045f` | (0, 2) | arrow impact sound pick | each arrow hit, before the damage |
+| `0x4c0636` | (base·25/100, base) | arrow damage | each arrow hit on an enemy (or with no shooter) |
+| `0x4c0676` | (0, 100) | poison-arrow proc `< 33` | damage type 9, d ≠ 0 |
+| `0x4c06df` | (0, 100) | fire-arrow proc `< 66` | damage type 7, d ≠ 0 |
+| (proc cast) | (1, 100), (0, 100)… | the proc spell's skill roll and poison rolls | when a proc fires |
 | effect Pulses (§2.14 not read) | ? | ? | unverified |
 
 Quick-spell flow order: HasTalismans (none) → CastByTalismans: the skill
@@ -678,6 +775,7 @@ rolls → Damage's roll.
 | damage | slot `0x228` (d, type, a3, a4, attacker), SetPoisoned slot `0x1b4`, Burn `0x4d3590`, KnockBack `0x4d3750` | args, order |
 | sound | `0x667548` methods `0x49c430` / `0x49bd90` / `0x49b650` / `0x49b990` | name |
 | motion | Move slot `0x114` (return bits), Distance slot 4 / `0x46de60` | answers |
+| arrows | base Move `0x470920` (bits), hit finder `0x4d4db0`, FindObjectsInRange `0x452060`, GetStat(name) slot `0xd4` ("bows", "damagemod"), Level slot `0x354` / `0x190`, arrow slots `0x200` (type) / `0x208` (damagemod), bow skill exp slot `0x41c`, slot `0x240`, ammo count / remove slots `0x198` / `0x78`, Equip `0x5199b0` | args and answers; AMMODATA fields `0x65d884..94` = 20, 6, 4, 1, 25 |
 
 **Globals and realistic values:**
 
@@ -767,8 +865,20 @@ Port files: `src/spell.cpp/.h`, `src/character.cpp`, `src/player.cpp`,
     is described in §2.16: life 480 / speed, hit at ≤ 32 on a living enemy,
     explode on blocked or timeout, FireBall area damage 150.
 13. **Arrows.** `TArrow3D::Move` (ammo.cpp:306) deals `random(20, 50)`
-    piercing. The retail formula is in `0x4c01f0`, which was not read
-    (§2.18).
+    piercing. Retail (§2.18):
+    - damage `random(base/4, base)` with `base = 20 + 4·Level + Bows` (×
+      the arrow's and the bow's damagemod), for monsters / traps
+      `20 + 6·level`;
+    - the arrow's own damage type, with no attacker passed;
+    - poison 33% / fire 66% spell procs;
+    - ice arrows freeze everything within 200 and do no damage;
+    - IsEnemy gate on the shooter;
+    - knockback from 2 × velocity back;
+    - bow skill exp;
+    - two sound draws.
+    The bow shot itself (interval chardata `+0x20c`, launch offset
+    `+0x1fc` / `+0x204`, speed `+0x208`) also needs comparing with the
+    port's bow code (not located in this pass).
 14. **InvokeQuickSpell** (player.cpp:1079):
     - the texts are hard-coded English instead of SPL* keys;
     - on cast failure the port fizzles once, retail fizzles twice (§2.1);
@@ -789,7 +899,10 @@ Port files: `src/spell.cpp/.h`, `src/character.cpp`, `src/player.cpp`,
 5. Target selection and RNG in FIRECONE, Quicksand, Paralize1, RockStorm,
    LightningStorm, JhagaAttack, DragonAttack, WindStrip, Puke; the full
    Strike Timer; the Strike Kill `0x542340`.
-6. Arrows: `0x4c8130`, `0x4c80c0`, `0x4c01f0`.
+6. Arrows: the `+0xec` default (25?), the identity of slot `0x190`
+   (character level?) and slot `0x240`, and whether a proc cast really
+   drains the shooter's mana and plays the shooter's invoke animation.
+   Character hit-finder `0x4d4db0` not read.
 7. Can class.def effect types carry OF_PULSE, so that some spell effects
    are pulsed by the map as well as by their spell?
 

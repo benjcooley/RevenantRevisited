@@ -169,6 +169,13 @@ uint64_t RandomDraws();
     // Values drawn since start: a run's draw count is part of its trace
 using RandomObserver = void (*)(int32_t value, const void* caller);
 void SetRandomObserver(RandomObserver observer);
+using RandomSource = int32_t (*)();
+void SetRandomSource(RandomSource source);
+    // Retail A/B fixtures (the dojo's RNG tape): when set, every value
+    // comes from `source` (0..32767) instead of the generator
+using RandomRangeObserver = void (*)(int32_t lo, int32_t hi, int32_t result);
+void SetRandomRangeObserver(RandomRangeObserver observer);
+    // Retail A/B fixtures: told every random(lo, hi) and its result
     // Determinism debugging (--combattrace-rng): told every draw and the
     // code address that asked for it (random()'s caller, or GameRand's)
 
