@@ -39,7 +39,9 @@ void HideAllWindows();
 // Dock icon -- what App Nap throttles, which can hold back the frame timer
 // for minutes (seen: a run that never reached its first frame, another
 // stalled ~10 min). Opts the process out for the rest of the run with an
-// NSProcessInfo activity. Call once, before sokol_app runs (sokol_main).
+// NSProcessInfo activity that also holds off idle system sleep (an
+// unattended run froze when the Mac idle-slept on battery); the display may
+// still sleep. Call once, before sokol_app runs (sokol_main).
 // No-op on other platforms.
 void KeepAwake();
 
