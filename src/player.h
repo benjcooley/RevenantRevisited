@@ -143,7 +143,6 @@ class TPlayer : public TCharacter
     void Pulse() override;
     uint32_t Move() override;
 
-    void AI() override { }
 
     void Damage(int32_t damage, int32_t type = DAMAGE_UNDEFINED) override;
         // Apply damage to the player

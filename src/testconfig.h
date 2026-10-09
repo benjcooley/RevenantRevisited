@@ -43,6 +43,10 @@ extern char StartupDumpGltfOutPath[MAXPATHLEN];
 // sub-objects (Wavefront OBJ) + manifest.txt from one I3D file.
 // Default output: ./i3d_dump/<asset-basename>/. Triggers --test=i3ddump.
 extern char StartupDumpI3DPath[MAXPATHLEN];
+// --playerai — the player runs the character AI (retail charflags 0x100000,
+// which the shipped game set for network players): Locke fights on his own
+// in the combat arena (tools/combatarena, docs/gameplay/COMBAT_DOJO.md).
+extern bool StartupPlayerAI;
 extern char StartupDumpI3DOutPath[MAXPATHLEN];
 // --vfx=<id> — pre-select an effect by id in --test=vfx (e.g.
 // --vfx=TStripEffect). Empty = first alphabetically-sorted entry.

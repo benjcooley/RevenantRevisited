@@ -12,6 +12,7 @@
 #include "spell.h"
 #include "sound.h"
 #include "playscreen.h"
+#include "gameoptions.h"
 #include "multi.h"
 #include "animation.h"
 #include "statusbar.h"
@@ -28,6 +29,7 @@
 #include "ammo.h"
 #include "player.h"
 #include "logging.h"
+#include "combattrace.h"
 
 #include <algorithm>
 #include <math.h>
@@ -82,6 +84,22 @@ extern TDialogPane DialogPane;
 #define MAKETURNRATE(diff) (MAXTURNRATE + max(0, (diff) - 32) / 32 * (MAXTURNRATE / 2))
 
 #define MAXSEENTIME (FRAMERATE * 10)
+
+namespace
+{
+// Retail's three moving actions (walk, combat, bow steps).
+bool IsMoveAction(const TActionBlock* ab)
+{
+    return ab && (ab->action == ACTION_MOVE || ab->action == ACTION_COMBATMOVE || ab->action == ACTION_BOWMOVE);
+}
+
+// The turn rate retail gives a step or pivot for an angle `diff` (0..128)
+// still to turn: 8 up to 45 degrees, +4 per further 45.
+int32_t StepTurnRate(int32_t diff)
+{
+    return (std::max)(0, diff - 32) / 32 * 4 + 8;
+}
+}
 
 // *************************************************************
 // *                          Character                        *
@@ -201,6 +219,14 @@ void TCharacter::ClearChar()
 void TCharacter::Pulse()
 {
     ai_pulse_count++;
+
+  // REVSYNC: TCharacter::Pulse @ 0x004c1bb0 -- the spells first: the
+  // manager's cooldown and each spell's timers and effects run on the game
+  // tick (TSpellManager::Pulse 0x00540750, whose only caller this is), not
+  // in the draw. Retail skips it while PlayScreen +0x5d4 (0x0065d0c4) is
+  // set; that flag isn't identified in the port yet.
+  // (docs/gameplay/forensics/SPELLS_MISSILES.md)
+    SpellManager.Pulse();
 //  if (!HasAnimator())  // Quick hack to fix super slodown... BEN  (if not on screen, ignore me)
 //      return;
 
@@ -441,104 +467,91 @@ void TCharacter::Pulse()
 */
 }
 
+// REVSYNC: TCharacter::UpdateAction @ 0x004c3260 -- one tick of the
+// action state machine, after the last Move (`bits`). The doing block's
+// resolver; with no opinion, done when the animation is (or there is no
+// animator, or the character is invisible), and always done for the root
+// unless it is mid-transition; a done block loses its priority. Then the
+// script hears whether it's done. Falling: the "fall" animation, unless the
+// doing block has priority. Otherwise the desired block is tried.
 void TCharacter::UpdateAction(int32_t bits)
 {
-  // Reset stealth values for every move (when not in root state)
-    if (PlayScreen.GameFrame() % FRAMERATE)
+  // ResetStealthValues @ 0x004cdbb0 off the 24-frame beat, and on it for a
+  // finished non-root action or a negative glimpse / noise.
+    if (PlayScreen.GameFrame() % 24 != 0 || (commanddone && root != doing) || glimpse < 0 || noise < 0)
         ResetStealthValues();
-//  if ((commanddone && root != doing) || glimpse < 0 || noise < 0)
-//      ResetStealthValues();
 
-  // Set sleep to awake if doing non sleeping root states
-    if (!root->Is(ACTION_SLEEP))
+    if (root->action != ACTION_SLEEP && Sleeping())
         SetSleeping(0);
 
-  // ********************************************************************
-  // Animation 'commanddone' state is set, now process this state through
-  // the ACTION handlers.  If nothing sets the command state, we set it by
-  // seeing if the character is doing anything.  This is defined as either
-  // being in the root state, having the current animation completed.
     int32_t comstate = ResolveAction(bits);
-    if (comstate == 0)
-        comstate = (commanddone || !HasAnimator() || (flags & OF_INVISIBLE)) ? // If done, or not animating..                                        // Done if finished animating
-            COM_COMPLETED : COM_EXECUTING;
+    if (comstate == COM_DONE)
+    {
+        comstate = (commanddone || !HasAnimator() || (flags & OF_INVISIBLE)) ? COM_DONE : COM_EXECUTING;
+        if (doing == root && !doing->transition)
+            comstate = COM_DONE;
+        if (comstate == COM_DONE)
+            doing->priority = false;
+    }
+    doing->firsttime = false;
 
-  // Reset priority when command complete   
-    if (comstate == COM_COMPLETED && doing->priority)
-        doing->priority = false;
+  // REVSYNC: 0x004c3371 -- run the script, telling it whether the current
+  // action is done. Waits belong to the script (SCRIPT_ENGINE.md §5).
+    ContinueScript(comstate == COM_DONE);
 
-  // Set firstime flag to false
-    if (doing->firsttime)
-        doing->firsttime = false;
-
-  // REVSYNC: TCharacter::Pulse @ 0x004c3371 — run the script, telling it
-  // whether the current action has completed. Waits belong to the script
-  // (SCRIPT_ENGINE.md §5); the 1998 character-side waits are gone.
-    ContinueScript(comstate == COM_COMPLETED);
-
-  // ********************************************************************
-  // Now set the action blocks for the next frame.  The rules are:
-  //
-  // If an action block is compleded, and it's not a ROOT2ROOT block, it
-  // just sits there with the desired and doing doing the same thing.
-  // If the animation is a looping animation, it resets the frame and does
-  // it again.  If the animation is ROOT2ROOT, it just transitions back to
-  // the root state.
-
-  // Cause character to fall if move bits flag has fall
+    if (bits & MOVE_FALLING)
+    {
+        if (HasActionAni("fall") && !doing->priority)
+        {
+            auto* fall = new TActionBlock("fall", ACTION_MOVE);
+            if (ForceCommand(fall, 0, 0) != COM_EXECUTING && fall != root && fall != doing && fall != desired)
+                delete fall;
+        }
+    }
   // REVSYNC: 0x004c3429 -- with incidentals off the next state is always
   // the 100% variant (TryCommand's flag).
-    if (bits & MOVE_FALLING)
-        comstate = ForceCommand(new TActionBlock("fall"), bits);
     else
-        comstate = TryCommand(desired, bits, Incidentals() ? 0 : kCommandNoIncidentals);
-
-  // ********************************************************************
-  // Decrement the wait value (if any)
+        TryCommand(desired, bits, Incidentals() ? 0 : kCommandNoIncidentals);
 
     if (doing && doing->wait > 0)
         doing->wait--;
 }
 
+// REVSYNC: TCharacter::ResolveAction @ 0x004c3490 -- the doing block's
+// resolver by action: walking (and a running root's steps) to ResolveMove,
+// then attack, impact / knockdown / stun, block, combat steps, the combat
+// root, leap, bow aim and shot, say, pivot, dead.
 int32_t TCharacter::ResolveAction(int32_t bits)
 {
     int32_t comstate = TComplexObject::ResolveAction(bits);
-    if (comstate != 0)
+    if (comstate != COM_DONE)
         return comstate;
 
-  // Check for movement 
     if (doing->action == ACTION_MOVE || (IsRunMode() && IsMoving()))
-        comstate = ResolveMove(doing, bits);
-    else if (doing->action == ACTION_ATTACK) 
-        comstate = ResolveAttack(doing, bits);
-    else if (doing->action == ACTION_IMPACT || 
-             doing->action == ACTION_KNOCKDOWN || 
-             doing->action == ACTION_STUN)
-        comstate = ResolveImpact(doing, bits);
-    else if (doing->action == ACTION_BLOCK)
-        comstate = ResolveBlock(doing, bits);
-    else if (doing->action == ACTION_COMBATMOVE || 
-             doing->action == ACTION_BOWMOVE)
-        comstate = ResolveCombatMove(doing, bits);
-    else if (doing->action == ACTION_COMBAT || 
-             doing->action == ACTION_BOW)
-        comstate = ResolveCombat(doing, bits);
-    else if (doing->action == ACTION_COMBATLEAP)
-        comstate = ResolveLeap(doing, bits);
-    else if (doing->action == ACTION_BOWAIM)
-        comstate = ResolveBowAim(doing, bits);
-    else if (doing->action == ACTION_BOWSHOOT)
-        comstate = ResolveBowShoot(doing, bits);
-    else if (doing->action == ACTION_SAY)
-        comstate = ResolveSay(doing, bits);
-    else if (doing->action == ACTION_PULL)
-        comstate = ResolvePull(doing, bits);
-    else if (doing->action == ACTION_PIVOT)
-        comstate = ResolvePivot(doing, bits);
-    else if (doing->action == ACTION_DEAD)
-        comstate = ResolveDead(doing, bits);
-    
-    return comstate;
+        return ResolveMove(doing, bits);
+    switch (doing->action)
+    {
+      case ACTION_ATTACK: return ResolveAttack(doing, bits);
+      case ACTION_IMPACT:
+      case ACTION_KNOCKDOWN:
+      case ACTION_STUN: return ResolveImpact(doing, bits);
+      case ACTION_BLOCK: return ResolveBlock(doing, bits);
+      case ACTION_COMBATMOVE:
+      case ACTION_BOWMOVE: return ResolveCombatMove(doing, bits);
+      case ACTION_COMBAT:
+      case ACTION_BOW: return ResolveCombat(doing, bits);
+      case ACTION_COMBATLEAP: return ResolveLeap(doing, bits);
+      case ACTION_BOWAIM: return ResolveBowAim(doing, bits);
+      case ACTION_BOWSHOOT: return ResolveBowShoot(doing, bits);
+      case ACTION_SAY: return ResolveSay(doing, bits);
+      // REVSYNC-DIVERGENCE: retail never dispatches ACTION_PULL (its
+      // ResolvePull @ 0x004c83f0 returns 0) and pulls levers elsewhere, not
+      // yet found; the port's lever pull stays here until that is.
+      case ACTION_PULL: return ResolvePull(doing, bits);
+      case ACTION_PIVOT: return ResolvePivot(doing, bits);
+      case ACTION_DEAD: return ResolveDead(doing, bits);
+      default: return COM_DONE;
+    }
 }
 
 void TCharacter::Animate(bool draw)
@@ -567,8 +580,6 @@ void TCharacter::Animate(bool draw)
 
         PlayScreen.AddPostCharText((char *)doing->data, x, y - 120, &color, r.right - r.left + 1 - 32);
     }
-
-    SpellManager.Pulse();
 }
 
 void TCharacter::Notify(int32_t notify, void *ptr)
@@ -597,357 +608,326 @@ void TCharacter::Notify(int32_t notify, void *ptr)
     }
 }
 
-#define MAXZMOVE 32
+namespace
+{
+constexpr int32_t kMaxStepHeight = 0x20;        // a step up or down a mover takes
+constexpr int32_t kMaxMoveSteps = 10;           // MoveSteps toward a MoveTo target
+constexpr int32_t kStepSpan = 8;                // units a substep may cover
+constexpr int32_t kStepCorrection = 100;        // the substep nudge, in 1/0x10000 units
 
-// REVSYNC: retail TCharacter::Blocked @ 0x4c39d0
-//   recon/discovered/cls_0x5a7b98_TCharacter_Blocked_4c39d0.cpp (size 490).
-//   Vetted — same shape as retail: GetWalkHeightRadius if moving (else
-//   GetWalkHeight), reject on |dz| > 0x21 (= MAXZMOVE+1=33), then char-vs-char
-//   blocking via CharBlocking which iterates a 128-radius TMapIterator and
-//   returns the closest blocking character.
-//
-// Retail differences we have NOT folded in (low-impact for AI parity):
-//   - Retail tests `param_1[0x3b] != 0` (movetopos active) and SKIPS the
-//     char-blocking pass — i.e. ignore other characters as obstacles when
-//     moving to a scripted target. Our version always char-blocks. This
-//     can manifest as scripted moves stuck behind another NPC; not seen
-//     in Demo 1 because nothing scripts MoveTo() through a crowd.
-//   - Retail also masks against `(*(byte *)(param_1 + 2) & 0x80)` which
-//     is OF_PARALIZE — we already test OF_PARALIZE in Move() before
-//     calling Blocked() so the gate is effectively the same.
+// x * y in 32 bits as retail's imul wraps, then / 0x10000 toward zero.
+int32_t FixedTimes(int32_t x, int32_t y)
+{
+    return (int32_t)((uint32_t)x * (uint32_t)y) / ROLLOVER;
+}
+}  // namespace
+
+// REVSYNC: FindClearPath @ 0x004c39d0 -- is the step from pos to newpos
+// blocked: by the ground (a hole, a step of more than 0x20 between pos and
+// the ground at newpos, or between two walk cells within the Radius of it,
+// or no walkmap), or by a character standing there -- unless this one is
+// dead, in an interactive attack, flying, invisible or on a MoveTo, or the
+// two already overlap (so they can part). `height` gets the ground at
+// newpos, `bychar` the character in the way. MOVE_NOTMOVING asks for the
+// ground under newpos alone.
 bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t *height, TCharacter* *bychar)
 {
+    if (blockedSeam)
+        return blockedSeam(this, pos, newpos, bits);
+
     int32_t h;
     if (!height)
         height = &h;
+    TCharacter* by;
+    if (!bychar)
+        bychar = &by;
+    *bychar = nullptr;
+    *height = pos.z;
+    blockedby = EBlockedBy::None;
 
-  // Get walk map values in current area
-    int32_t mindelta, maxdelta;
+    int32_t maxdelta;
     if (bits & MOVE_NOTMOVING)
     {
-        *height = MapPane.GetWalkHeight(newpos);  // If not moving, just get what's under us
-        maxdelta = mindelta = 0;
+        *height = MapPane.GetWalkHeight(newpos);
+        maxdelta = 0;
     }
     else
     {
-      // If moving, check Radius() around us to see if changes (deltas) between walk
-      // grids go to far up (maxdelta - walls, barriers), or too far down (mindelta -
-      // holes, etc.)  Also returns height underneath us.
-        MapPane.GetWalkHeightRadius(newpos, Radius(), mindelta, maxdelta, *height);
+        bool hole;
+        MapPane.GetWalkHeightRadius(newpos, Radius(), maxdelta, *height, hole);
+        if (hole)
+        {
+            blockedby = EBlockedBy::Hole;
+            return true;
+        }
+    }
+    if (abs(pos.z - *height) > kMaxStepHeight || maxdelta > kMaxStepHeight || *height == 0)
+    {
+        blockedby = abs(pos.z - *height) > kMaxStepHeight ? EBlockedBy::Height
+                  : maxdelta > kMaxStepHeight            ? EBlockedBy::Step
+                                                         : EBlockedBy::NoWalkmap;
+        return true;
     }
 
-    int32_t aniflags = GetAniFlags();
-
-    TCharacter* dummybychar;
-    if (!bychar)
-        bychar = &dummybychar;
-    *bychar = nullptr;
-
-  // Are we blocked by other characters?
-    bool charblocking = true;
-    if (doing->attack && doing->attack->flags & CA_INTERACTIVE)
-        charblocking = false;           // No blocking on interactive attacks
-    if (aniflags & AF_FLY)
-        charblocking = false;           // No blocking on flying moves
-
-  // Are we blocked? 
-    bool blocked = !(bits & MOVE_FALLING) && 
-        (abs(pos.z - *height) > MAXZMOVE || 
-        abs(maxdelta) > MAXZMOVE || abs(mindelta) > MAXZMOVE ||
-        *height == 0 || (charblocking && (*bychar = CharBlocking(this, newpos, Radius()))));
-         
-    return blocked;
+    if (Health() <= 0)
+        return false;
+    if (doing->attack && (doing->attack->flags & CA_INTERACTIVE))
+        return false;
+    if (GetAniFlags() & AF_FLY)
+        return false;
+    if (flags & OF_INVISIBLE)
+        return false;
+    if (movetopos)
+        return false;
+    // (A remote player in a network game is never blocked; offline, nothing.)
+    TCharacter* b = CharBlocking(this, newpos, Radius());
+    *bychar = b;
+    if (!b || ::Distance(pos, b->Pos()) < b->Radius() + Radius())
+        return false;
+    blockedby = EBlockedBy::Character;
+    return true;
 }
 
+namespace
+{
+const char* BlockedByName(TCharacter::EBlockedBy why)
+{
+    switch (why)
+    {
+      case TCharacter::EBlockedBy::Hole: return "a cell with no walkmap in reach";
+      case TCharacter::EBlockedBy::Height: return "the ground there more than 0x20 above or below";
+      case TCharacter::EBlockedBy::Step: return "a step over 0x20 between cells in reach";
+      case TCharacter::EBlockedBy::NoWalkmap: return "no walkmap there";
+      case TCharacter::EBlockedBy::Character: return "a character";
+      default: return "nothing";
+    }
+}
+}  // namespace
 
-#define CHARMOVE_MULTIPLIER     (1.0)
+// REVSYNC: TCharacter::Move @ 0x004c46d0 -- MoveStep, repeated (at most ten
+// times) while a MoveTo target is still ahead and the last step moved; the
+// MoveTo is spent either way. The network bookkeeping in between is inert
+// offline.
 uint32_t TCharacter::Move()
 {
-    if (flags & OF_IMMOBILE || inventnum >= 0 || flags & OF_PARALIZE)
-        return MOVE_NOTHING;                
-
-    uint32_t retval = 0;
-
-  // Falling stuff  
-    int32_t h = MapPane.GetWalkHeight(pos);
-    int32_t d = pos.z - h;
-    if (d < -16)
+    uint32_t bits;
+    int32_t steps = kMaxMoveSteps;
+    do
     {
-        S3DPoint p = pos;
-        p.z = h;
-        ForcePos(p);
-    }
-    else if (d > 16)
+        bits = MoveStep();
+        --steps;
+    } while (movetopos && pos != movepos && (bits & MOVE_MOVED) && steps > 0);
+    movetopos = false;
+    return bits;
+}
+
+// REVSYNC: TCharacter::MoveStep @ 0x004c3bc0 -- one tick's displacement.
+// The ground first: more than 16 below it snaps up at once, more than 16
+// above it drops to it at once (MOVE_FALLING, vel.z gathering gravity).
+// Then the move: toward a MoveTo target, or the walk speed of the root (all
+// -1 in the shipped char.def, so never), or the animation's motion
+// (GetNextMove), plus vel and the fraction carried in accum, in 1/0x10000
+// units. Split into substeps of at most 8 units (nudged so they land on the
+// target exactly), each one checked by FindClearPath: blocked, the
+// character shoves sideways (+-0x20, then +-0x40 of the move angle, 2..6
+// units, keeping the side it picked) unless a character stands in its way
+// in combat; still blocked, it stays put. Every substep reports MOVED.
+uint32_t TCharacter::MoveStep()
+{
+    if ((flags & OF_IMMOBILE) || inventnum >= 0 || (flags & OF_PARALIZE))
+        return MOVE_NOTHING;
+
+    uint32_t r = 0;
+    const int32_t ground = MapPane.GetWalkHeight(pos);
+    const int32_t above = pos.z - ground;
+    if (above < -16)
+        ForcePos(S3DPoint(pos.x, pos.y, ground));       // retail writes pos.z, no SetPos
+    else if (above > 16)
     {
-        vel.z = max(vel.z - GRAVITY, -TERMINAL_VELOCITY);
-//      vel.z = max(vel.z, d);
-        retval |= MOVE_FALLING;
+        vel.z = (std::max)(vel.z - GRAVITY, -TERMINAL_VELOCITY);
+        SetPos(S3DPoint(pos.x, pos.y, ground));
+        r = MOVE_FALLING;
     }
-    if (d < 1)
+    if (above < 1)
         vel.z = 0;
 
-    int32_t targdist = 0;
-    if (doing->obj)
-        targdist = Distance(doing->obj);
-
-  // Get nextmove
-    S3DPoint nextmove;
-    GetNextMove(nextmove);
-
-  // Get movement and add to accumulator
-    S3DPoint newaccum;
-    if (movetopos)              // If movetopos is set, set newaccum to correct deltas
+    if (forcenomove)
     {
-        newaccum.x = (movepos.x - pos.x) * ROLLOVER;
-        newaccum.y = (movepos.y - pos.y) * ROLLOVER;
-        newaccum.z = (movepos.z - pos.z) * ROLLOVER;
-
-        movepos.x = movepos.y = movepos.z = 0;
-
-        movetopos = false;
-    }   
-    else                        // Otherwise use nextmove and velocity
-    { 
-        
-        newaccum = accum;
-        if (forcenomove)
-            forcenomove = false;
-        else
-        {
-            if (IsDoing(ACTION_COMBATMOVE) && !doing->waitpivot && chardata->combatwalkspeed > 0)   // Set combat move speed
-                ConvertToVector(moveangle, ROLLOVER * chardata->combatwalkspeed, nextmove);
-
-            else if (IsDoing(ACTION_MOVE) && !doing->waitpivot && root->Is("walk") && chardata->walkspeed > 0)
-                ConvertToVector(moveangle, ROLLOVER * chardata->walkspeed, nextmove);
-
-            else if (IsDoing(ACTION_MOVE) && !doing->waitpivot && root->Is("sneak") && chardata->sneakspeed > 0)
-                ConvertToVector(moveangle, ROLLOVER * chardata->sneakspeed, nextmove);
-
-            else if (IsDoing(ACTION_MOVE) && !doing->waitpivot && root->Is("run") && chardata->runspeed > 0)
-                ConvertToVector(moveangle, ROLLOVER * chardata->runspeed, nextmove);
-            newaccum += nextmove;
-        }
-        newaccum += vel;
+        forcenomove = false;
+        return MOVE_NOTMOVING;
     }
 
-
-  // Clear snap if snap time expired
-//  if (snapticks == 0 || Editor || IsDead())
-//  {
-//      snapticks = -1;
-//      S3DPoint newvel;
-//      GetVel(newvel);
-//      newvel.x = newvel.y = 0;
-//      SetVel(newvel);
-//  } else if (snapticks > 0)
-//      snapticks--;
-
-  // Split into smaller moves if this move too big
-    S3DPoint smallaccum;
-    int32_t nummoves;
-    if (abs(newaccum.x) > abs(newaccum.y) && abs(newaccum.x) >= (MOVECHECKDIST * ROLLOVER))
-    {  
-        nummoves = 
-            (abs(newaccum.x) + (MOVECHECKDIST * ROLLOVER - 1)) / 
-                (MOVECHECKDIST * ROLLOVER); // Get rounded up number of moves
-        smallaccum.x = newaccum.x / nummoves;
-        smallaccum.y = newaccum.y / nummoves;
-        smallaccum.z = newaccum.z / nummoves;
-    }
-    else if (abs(newaccum.y) > abs(newaccum.x) && abs(newaccum.y) >= (MOVECHECKDIST * ROLLOVER))
-
+    S3DPoint total;                                     // this tick's move, 1/0x10000 units
+    if (movetopos)
     {
-        nummoves = 
-            (abs(newaccum.y) + (MOVECHECKDIST * ROLLOVER - 1)) / 
-                (MOVECHECKDIST * ROLLOVER); // Get rounded up number of moves
-        smallaccum.x = newaccum.x / nummoves;
-        smallaccum.y = newaccum.y / nummoves;
-        smallaccum.z = newaccum.z / nummoves;
+        total = S3DPoint((movepos.x - pos.x) * ROLLOVER, (movepos.y - pos.y) * ROLLOVER,
+                         (movepos.z - pos.z) * ROLLOVER);
+        accum = S3DPoint();
+        if (total.x == 0 && total.y == 0 && total.z == 0)
+            return r | MOVE_NOTMOVING;
+        shovedir = -1;
     }
-
     else
     {
-        smallaccum = newaccum;  // Fits within maximum move range for single step
-        nummoves = 1;
+        S3DPoint next;
+        const bool waitpivot = doing && doing->waitpivot;
+        if (chardata->combatwalkspeed > 0 && IsDoing(ACTION_COMBATMOVE) && !waitpivot)
+            ConvertToVector(moveangle, chardata->combatwalkspeed * ROLLOVER, next);
+        // REVSYNC-DIVERGENCE: retail asks the class for its walk root (slot
+        // 0x30c): "walk", or for the player "torch" with a light in hand
+        // (+0x2b8, slot not yet confirmed). Only reached with a positive
+        // walk speed, which the shipped char.def never gives.
+        else if (chardata->walkspeed > 0 && IsDoing(ACTION_MOVE) && !waitpivot && root->Is("walk"))
+            ConvertToVector(moveangle, chardata->walkspeed * ROLLOVER, next);
+        // Retail gates sneaking on the walk speed, then moves at the sneak speed.
+        else if (chardata->walkspeed > 0 && IsDoing(ACTION_MOVE) && !waitpivot && root->Is("sneak"))
+            ConvertToVector(moveangle, chardata->sneakspeed * ROLLOVER, next);
+        else if (chardata->runspeed > 0 && IsDoing(ACTION_MOVE) && !waitpivot && root->Is("run"))
+            ConvertToVector(moveangle, chardata->runspeed * ROLLOVER, next);
+        else
+            GetNextMove(next);
+        if (next.x == 0 && next.y == 0 && next.z == 0 && vel.x == 0 && vel.y == 0 && vel.z == 0)
+        {
+            accum = S3DPoint();
+            shovedir = -1;
+            return r | MOVE_NOTMOVING;
+        }
+        total = accum + next + vel;
     }
 
-  // Loop through small moves do to complete move (usually only one loop for normal moves)
-    for (int32_t move = 0; move < nummoves; move++)
+    const S3DPoint target(pos.x + total.x / ROLLOVER, pos.y + total.y / ROLLOVER, pos.z + total.z / ROLLOVER);
+
+    // Substeps: the longer axis (x on a tie) decides how many.
+    int32_t steps = 1;
+    const int32_t ax = abs(total.x), ay = abs(total.y);
+    constexpr int32_t kSpan = kStepSpan * ROLLOVER;
+    if (ax >= ay && ax >= kSpan)
+        steps = (ax + kSpan - 1) / kSpan;
+    else if (ay > ax && ay >= kSpan)
+        steps = (ay + kSpan - 1) / kSpan;
+    S3DPoint step(total.x / steps, total.y / steps, total.z / steps);
+
+    // Nudge each axis until the substeps land on the target exactly.
+    auto land = [steps](int32_t& per, int32_t from, int32_t to) {
+        while (from + FixedTimes(steps, per) < to)
+            per += kStepCorrection;
+        while (from + FixedTimes(steps, per) > to)
+            per -= kStepCorrection;
+    };
+    land(step.x, pos.x, target.x);
+    land(step.y, pos.y, target.y);
+    land(step.z, pos.z, target.z);
+
+    for (int32_t i = 0; i < steps; ++i)
     {
-        S3DPoint moveaccum = smallaccum;
-        S3DPoint newpos = pos;
-        rollover(moveaccum.x, newpos.x);
-        rollover(moveaccum.y, newpos.y);
-        rollover(moveaccum.z, newpos.z);
+        S3DPoint m = step;
+        S3DPoint np = pos;
+        rollover(m.x, np.x);
+        rollover(m.y, np.y);
+        rollover(m.z, np.z);
 
-        if (newpos == pos &&
-            nextmove.x == 0 && nextmove.y == 0 && nextmove.z == 0 &&
-            vel.x == 0 && vel.y == 0 && vel.z == 0)
-                retval |= MOVE_NOTMOVING;
-
-        int32_t nh;
-
-      // Check to see if character is blocked
-        if (Blocked(pos, newpos, retval, &nh)) // New position is blocked
+        int32_t h1;
+        TCharacter* by1;
+        const S3DPoint wanted = np;
+        EBlockedBy why = EBlockedBy::None;
+        if (Blocked(pos, np, r, &h1, &by1))
         {
-          // Check to see if character is totally stuck...
-            if (!Blocked(pos, pos, retval, &nh))
-                retval |= MOVE_BLOCKED; // If he's not totally stuck, report him as blocked
+            why = blockedby;
+            r |= MOVE_BLOCKED;
+            int32_t h2;
+            TCharacter* by2;
+            Blocked(pos, pos, r, &h2, &by2);             // asks only who stands here
+            if (by1 && by2)
+                r &= ~MOVE_BLOCKED;                     // already in someone: let him through
         }
         else
         {
-            shovedir = -1;      // Not blocked anymore!  Reset block direction choice
-
-            vel.x = vel.y = vel.z = 0;
-
-            if (newpos.z != nh)
-                if (vel.z < 0)
-                    newpos.z = (int32_t)(nh * CHARMOVE_MULTIPLIER);
-                else
-                    newpos.z += (int32_t)(((nh - newpos.z) / 2) * CHARMOVE_MULTIPLIER);
-
-            if (retval & MOVE_NOTMOVING)
-            {
-                accum = moveaccum;
-                return MOVE_NOTHING;        // can only check this _after_ gravity
-            }
+            shovedir = -1;
+            vel = S3DPoint();
+            if (np.z != h1)
+                np.z += (h1 - np.z) / 2;
+            // (Retail would end here with MOVE_NOTMOVING set; it never is by now.)
         }
 
-        // If blocked, check in front of char at walk granularity intervals for an open
-        // path, if we find one, shove the character in that direction, and save the dir
-        // in 'shovedir' so we keep shoving in the same direction until the character is 
-        // stuck, or he's around the obstacle.
-
-        if (retval & MOVE_BLOCKED) // Try to nudge!
+        bool shoved = false;
+        if (r & MOVE_BLOCKED)
         {
-          // REVSYNC: retail TCharacter::MoveStep shove probe @ 0x4c3bc0:304-381
-          // (recon/discovered/cls_0x5a7b98_TCharacter_MoveStep_4c3bc0.cpp).
-          //
-          // shovedir is an *angle offset* (-0x20, +0x20, -0x40, +0x40)
-          // relative to moveangle, NOT a final angle. Retail field +0x47.
-          // -1 means "not yet committed". When uncommitted, probe all 4
-          // offsets at distances 2, 4, 6; pick the (offset, distance)
-          // pair with the largest unblocked reach. Once committed, on
-          // subsequent ticks only re-probe the committed offset until it
-          // either clears (move forward) or fails (stay blocked).
-          //
-          // Action-state gate (retail 0x4c3bc0:307-309): SKIP the probe
-          // entirely when the character is committed to a combat-anchored
-          // action with a target — the AI body owns repositioning in that
-          // case (e.g. circling, dodging) and a sidestep would fight it.
-          // Negated (skip when ALL true): root != null && root->action is
-          // ACTION_COMBAT or ACTION_BOW && root->obj != null && local_2c.
-          // local_2c is set elsewhere in MoveStep and we don't yet know
-          // what it tracks (probably "doing has obstacle awareness");
-          // for now we approximate the gate without it.
-          // TODO retail: pin down local_2c semantics and add to the gate.
-            const bool combat_anchored =
-                root && (root->action == ACTION_COMBAT || root->action == ACTION_BOW)
-                     && root->obj != nullptr;
-
-            if (!combat_anchored)
+            const bool facingfoe = root && (root->action == ACTION_COMBAT || root->action == ACTION_BOW) &&
+                                   root->obj && by1;
+            if (!facingfoe)
             {
-                constexpr int32_t kOffsets[4] = { -32, +32, -64, +64 };
-
-                int32_t numoffsets;
-                const int32_t *which;
-                int32_t single[1] = { shovedir };
-                if (shovedir == -1) {
-                    numoffsets = 4;
-                    which      = kOffsets;
-                } else {
-                    numoffsets = 1;
-                    which      = single;
-                }
-
-                int32_t best_step = 0;        // 0 = nothing reachable yet
-                int32_t best_off  = -1;
-                S3DPoint best_pos = newpos;   // committed candidate position
-
-                for (int32_t k = 0; k < numoffsets; k++)
-                {
-                    const int32_t off = which[k];
-                    for (int32_t step = 2; step < 8; step += 2)  // 2, 4, 6
+                constexpr int32_t kSides[4] = {-0x20, 0x20, -0x40, 0x40};
+                const int32_t committed[1] = {shovedir};
+                const int32_t* sides = shovedir == -1 ? kSides : committed;
+                const int32_t nsides = shovedir == -1 ? 4 : 1;
+                int32_t best = 0;
+                S3DPoint bestpos;
+                for (int32_t k = 0; k < nsides; ++k)
+                    for (int32_t d = 2; d < 8; d += 2)
                     {
                         S3DPoint v;
-                        ConvertToVector((moveangle + off) & 0xff, step, v);
-                        S3DPoint cand = pos;
-                        cand += v;
-
-                        uint32_t probe_bits = retval;  // preserve falling/etc
-                        if (Blocked(pos, cand, probe_bits))
-                            break;  // this offset's clearance ends here — stop
-                                    // probing further distances on the same offset
-                        if (step > best_step)
+                        ConvertToVector((sides[k] + moveangle) & 0xff, d, v);
+                        const S3DPoint c = pos + v;
+                        S3DPoint probe = c;
+                        if (Blocked(pos, probe, 0))
+                            break;
+                        if (d > best)
                         {
-                            best_step = step;
-                            best_off  = off;
-                            best_pos  = cand;
+                            best = d;
+                            shovedir = sides[k];        // retail commits the side as it probes
+                            bestpos = c;
                         }
                     }
-                }
-
-                if (best_step > 0)
+                if (best > 0)
                 {
-                  // Sanity-recheck the chosen candidate (retail 0x4c3bc0:352
-                  // — catches char-blocking races between probe and commit).
-                    uint32_t recheck_bits = retval;
-                    if (!Blocked(pos, best_pos, recheck_bits))
+                    np = bestpos;
+                    if (!Blocked(pos, np, 0))
                     {
-                      // Commit (retail 0x4c3bc0:354-362): zero velocity and
-                      // accumulator so we don't carry forward momentum into
-                      // the obstacle. Without this monsters jitter against
-                      // the wall as their forward velocity fights the
-                      // sideways shove.
-                        shovedir   = best_off;
-                        newpos     = best_pos;
-                        moveaccum  = S3DPoint{};      // zero accum
-                        accum      = S3DPoint{};
-                        vel        = S3DPoint{};      // zero velocity
-                        retval    &= ~MOVE_BLOCKED;
+                        r &= ~MOVE_BLOCKED;
+                        shoved = true;
+                        m = S3DPoint();
+                        accum = S3DPoint();
+                        i = steps;                      // this was the last substep
                     }
-                  // else: leave shovedir as-is and stay blocked this tick;
-                  // next tick will re-probe the committed offset.
+                    else
+                        np = pos;
                 }
+                else
+                    r |= MOVE_BLOCKED;
             }
-
-          // If after the probe (or the gate-skip) we're STILL blocked,
-          // retail 0x4c3bc0:371-379 invalidates sight tracking — the path
-          // to whatever we were tracking is broken, drop the cached sight
-          // state so the AI body re-acquires next tick.
-            if (retval & MOVE_BLOCKED)
+            if (r & MOVE_BLOCKED)
             {
+                np = pos;
+                // Diagnostics: the player's refused step, once per place and reason.
+                static S3DPoint lastpos;
+                static EBlockedBy lastwhy = EBlockedBy::None;
+                if (this == Player && (pos != lastpos || why != lastwhy))
+                {
+                    log_debug("[move] %s blocked at (%d,%d,%d) toward (%d,%d,%d), move angle %d: %s%s%s", name,
+                              pos.x, pos.y, pos.z, wanted.x, wanted.y, wanted.z, moveangle, BlockedByName(why),
+                              by1 ? " " : "", by1 ? by1->name : "");
+                    lastpos = pos;
+                    lastwhy = why;
+                }
                 if (target_out_of_sight)
                 {
-                    target_out_of_sight      = false;
+                    sight_lost_ticks = 0;
+                    target_out_of_sight = false;
                     target_out_of_sight_prev = false;
-                    sight_lost_ticks         = 0;
                 }
             }
         }
 
-      // We've done what we could to go forward... now..
-        if (retval & MOVE_BLOCKED)
-        {
-            break;      // We're blocked.. end the loop
-        }
-        else            // Set new position add add accumulator
-        {
-            retval |= MOVE_MOVED;
-
-            accum = moveaccum;
-
-            if (newpos.z < (MapPane.GetWalkHeight(pos) * CHARMOVE_MULTIPLIER))
-                newpos.z = (int32_t)(MapPane.GetWalkHeight(pos) * CHARMOVE_MULTIPLIER);
-
-            if (newpos != pos)
-                SetPos(newpos);
-
-        }
+        accum = m;                                      // the fraction left, blocked or not
+        if (np.z < MapPane.GetWalkHeight(pos))
+            np.z = MapPane.GetWalkHeight(pos);          // the ground at the old position
+        if (np != pos)
+            SetPos(np);
+        r |= MOVE_MOVED;
+        if (shoved && movetopos)
+            return r;
     }
-
-
-    return retval;
+    return r;
 }
 
 int32_t TCharacter::GetDamageType(int32_t weapontype, int32_t attackflags)
@@ -991,19 +971,35 @@ int32_t TCharacter::GetDamageType(int32_t weapontype, int32_t attackflags)
     return DT_NONE;
 }
 
-// Get the total damage amount (based on this function)
+// REVSYNC: CalculateDamage @ 0x004c4860 -- the damage taken from `damage`
+// of `damagetype` with the attacker's `modifier` percent: the modifier,
+// then this character's resistance (percent off) and armour (points off),
+// at least 1; then magic (6-9) halved by kCharFlagHalfMagic and nothing at
+// all for Baez, physical halved by kCharFlagHalfPhysical; then a seventh
+// with kCharFlagDamageSeventh unless it's freezing. No type: no damage.
 int32_t TCharacter::CalculateDamage(int32_t damage, int32_t damagetype, int32_t modifier)
 {
-    int32_t attackdamage, totaldamage;
     if (damagetype == DT_NONE)
         return 0;
-    else
-    {
-        attackdamage = damage * (100 + modifier) / 100;
-        totaldamage = attackdamage * (100 + DamageModifier(damagetype)) / 100;
-    }
 
-    return totaldamage;
+    const int32_t modified = (modifier + 100) * damage / 100;
+    int32_t taken = (100 - DamageModifier(damagetype)) * modified / 100 - ArmorValue();
+    if (taken < 1)
+        taken = 1;
+
+    if (damagetype >= DT_MAGICAL && damagetype <= DT_POISON)
+    {
+        if (charflags & kCharFlagHalfMagic)
+            taken /= 2;
+        if (monsterkind == 1)
+            taken = 0;
+    }
+    else if (charflags & kCharFlagHalfPhysical)
+        taken /= 2;
+
+    if ((charflags & kCharFlagDamageSeventh) && damagetype != DT_FREEZE)
+        taken /= 7;
+    return taken;
 }
 
 void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
@@ -1015,6 +1011,8 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
 
   // Apply damage to low level object
     TObjectInstance::Damage(damage);
+    CombatTrace::Event(this, "damage", "amount=%d\ttype=%d\thp=%d\tby=%s", damage, damagetype, Health(),
+                       attacker && attacker->GetName() ? attacker->GetName() : "-");
 
   // Get impact pointer
     SCharAttackImpact* impactdata = nullptr;
@@ -1022,6 +1020,7 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
   // Do death...
     if (Health() < 1)
     {
+        CombatTrace::Event(this, "death", "by=%s", attacker && attacker->GetName() ? attacker->GetName() : "-");
 /*      if (!random(0, 2))
         {
             S3DPoint vel;
@@ -1265,25 +1264,12 @@ int32_t TCharacter::Transparency()
     return std::clamp(fade, 0, 100);
 }
 
-// DLS brightness routine (gives brightness given distance)
-extern double GetLightBrightness(int32_t dist, int32_t intensity, int32_t multiplier);
-
-// Returns the total visibility 1-100 for character (based on lights, ambient, and fog, etc.)
+// REVSYNC: Visibility @ 0x004c5aa0 -- the map's ambient light, capped at
+// 255, as a percentage. (The 1998 sum of the lights' illumination and the
+// ambient colour is gone.)
 int32_t TCharacter::Visibility()
 {
-    int32_t brightness = 0;
-
-    SColor color = MapPane.GetAmbientColor();
-    int32_t colorbrightness = ((int32_t)color.red + (int32_t)color.green + (int32_t)color.blue) / 3;
-    brightness = MapPane.GetAmbientLight() * colorbrightness / 38;
-
-    for (TMapIterator i(*this, CHECK_MAPRECT | CHECK_NOINVENT, OBJSET_LIGHTS); i; i++)
-        brightness += i->GetIllumination(this);
-    
-    if (brightness > 255)
-        brightness = 255;
-
-    return brightness * 100 / 255;
+    return (std::min)(MapPane.GetAmbientLight(), 255) * 100 / 255;
 }
 
 void TCharacter::AdvanceAngles(int32_t faceang, int32_t moveang, int32_t maxturn)
@@ -1486,62 +1472,73 @@ TObjectInstance* TCharacter::FindObjAhead()
 // * General AI Routines *
 // ***********************
 
+// REVSYNC: ResolveMove @ 0x004c5e90 -- a walk's tick.
+// - Pivoting first (waitpivot): stand still and turn to the block's angle
+//   (the root animation turned by hand, or a pivot animation that turns
+//   itself); then the first step, "f", else "l", else "r" (none: back to
+//   the root).
+// - Blocked by the last Move: bounce off at an angle by octant, a little to
+//   the right, and back to the root.
+// - A Goto: there within 8 (MoveTo onto the point, and the item it carries
+//   is picked up), else head for it.
+// - Then turn toward the block's angle and, each time a step's animation
+//   ends, take the next step, left and right in turn, until stopped.
 int32_t TCharacter::ResolveMove(TActionBlock* ab, int32_t bits)
 {
-  // Do pivoting before moving (character stays in root neutral state until pivot is done, 
-  // then sets the first step action block.  No block checking is done when pivoting
     if (ab->waitpivot)
     {
-        Halt(); // Make sure there's no movement
-
-        bool pivotdone = false;
-        if (!stricmp(ab->name, root->name)) // Is a normal root animation we're manually turning...
+        Halt();
+        if (!stricmp(ab->name, root->name))
         {
-            if (GetFace() == ab->angle)
-                pivotdone = true;
-            else
-                AdvanceAngles(ab->angle, ab->angle, ab->turnrate);
-        }
-        else if (commanddone)               // Is a special pivot animation which turns itself!
-            pivotdone = true;
-
-        if (!pivotdone)
-            return 0;
-        else
-        {
-            TActionBlock* newab = nullptr;
-
-            if (HasActionAni(StName(root->name, "f")))
-                newab = new TActionBlock(*doing, StName(root->name, "f"));
-            else if (HasActionAni(StName(root->name, "l")))
-                newab = new TActionBlock(*doing, StName(root->name, "l"));
-            else if (HasActionAni(StName(root->name, "r")))
-                newab = new TActionBlock(*doing, StName(root->name, "r"));
-            else
+            if (GetFace() != ab->angle)
             {
-                SetDesired(root);
-                return COM_COMPLETED;
+                AdvanceAngles(ab->angle, ab->angle, ab->turnrate);
+                return COM_DONE;
             }
-
-            newab->waitpivot = false;
-            newab->turnrate = MAXTURNRATE;
-            newab->angle = newab->moveangle = ab->angle;
-            ForceCommand(newab);            // Does this command again
-            return 0;
         }
+        else if (!commanddone)
+            return COM_DONE;
+
+        TActionBlock* step = nullptr;
+        for (const char* side : {"f", "l", "r"})
+            if (HasActionAni(StName(root->name, side)))
+            {
+                step = new TActionBlock(*doing, StName(root->name, side));
+                break;
+            }
+        if (!step)
+        {
+            SetDesired(root);
+            return COM_DONE;
+        }
+        step->waitpivot = false;
+        step->turnrate = MAXTURNRATE;
+        step->angle = step->moveangle = ab->angle;
+        ForceCommand(step);
+        return COM_DONE;
     }
 
-  // Character is actually moving... check for blocked!
     if (bits & MOVE_BLOCKED)
     {
-        Face(ab->angle);
-        ForceCommand(root);
-        return COM_COMPLETED;
+        int32_t a = ab->angle;
+        if (a >= 0x7f)
+        {
+            if (a <= 0xa0)
+                a += 0x20;
+            else if (a > 0xe0 || a < 0xbf)
+                a -= 0x20;
+        }
+        else if (a >= 0x60)
+            a -= 0x20;
+        else if (a < 0x20 || a > 0x40)
+            a += 0x20;
+        a = (a + 0x10) & 0xff;
+        ab->angle = a;
+        Face(a);
+        ForceCommand(root, 0, 0);
+        return COM_DONE;
     }
 
-    bool advanceang = true;
-
-  // Do goto position
     if (ab->target.x != 0 || ab->target.y != 0 || ab->target.z != 0)
     {
         if (dist(pos.x, pos.y, ab->target.x, ab->target.y) < 8)
@@ -1549,41 +1546,29 @@ int32_t TCharacter::ResolveMove(TActionBlock* ab, int32_t bits)
             ab->target.z = pos.z;
             MoveTo(ab->target);
             ab->nowaitdone = true;
-            // A Goto's walk arrives: the item it carries is picked up
-            // (retail 0x004c7fc3).
-            if (ab->walkto)
+            // A Goto's item is picked up on arrival (retail 0x004c6155).
+            if (TObjectInstance* item = gotoitem.Get())
             {
-                ab->walkto = false;
-                if (TObjectInstance* item = gotoitem.Get())
-                {
-                    gotoitem = nullptr;
-                    Pickup(item);
-                }
+                Pickup(item);
+                gotoitem = nullptr;
             }
-            return COM_COMPLETED;
+            return COM_DONE;
         }
-        else
-        {
-            ab->angle = ab->moveangle = ConvertToFacing(pos, ab->target);
-        }
+        ab->angle = ab->moveangle = ConvertToFacing(pos, ab->target);
     }
 
-    SetMoveAngle(GetFace());    // Force move to same direction as face
-    if (advanceang)
-        AdvanceAngles(ab->angle, ab->angle, ab->turnrate);
+    SetMoveAngle(GetFace());
+    AdvanceAngles(ab->angle, ab->angle, ab->turnrate);
 
-    if (commanddone && !ab->stop) // Take another step unless we were stopped
+    if (commanddone && !ab->stop)
     {
-        TActionBlock* newab = new TActionBlock(*doing);
-      // Left step
+        auto* step = new TActionBlock(*doing);
         if (doing->IsLeft(root->name))
-            strcpy(newab->name, StName(root->name, "r"));
-      // Right step   
+            strcpy(step->name, StName(root->name, "r"));
         else if (doing->IsRight(root->name))
-            strcpy(newab->name, StName(root->name, "l"));
-        ForceCommand(newab);
+            strcpy(step->name, StName(root->name, "l"));
+        ForceCommand(step);
     }
-
     return COM_EXECUTING;
 }
 
@@ -1636,11 +1621,14 @@ bool TCharacter::ResolveHit(TCharacter* targ,
                 tohit -= (maxroll - tohit + 1) / 2;     // Then DOUBLE hit chances
 
             // We hit, so set damage value to precalculated attack damage!
-            if (random(1, maxroll) > tohit)
+            const int32_t roll = random(1, maxroll);
+            if (roll > tohit)
             {
                 damage = attackdamage; 
                 impact = attackimpact; // This can be nullptr;
             }
+            CombatTrace::Event(this, roll > tohit ? "hit" : "miss", "target=%s\troll=%d\ttohit=%d\tmaxroll=%d\tdamage=%d",
+                               targ->GetName() ? targ->GetName() : "-", roll, tohit, maxroll, damage);
 
             // We hit the character (though we may not have done much damage)!
             if (!targ->IsDoing(ACTION_BLOCK) || damage > 0) // ****** CODE FOR IMPACT *******
@@ -1957,7 +1945,7 @@ int32_t TCharacter::ResolveBlock(TActionBlock* ab, int32_t bits)
     {
         ab->wait = 0;
         SetDesired(nullptr);
-        return COM_COMPLETED;
+        return COM_DONE;
     }
 
     return COM_EXECUTING;
@@ -1988,148 +1976,183 @@ int32_t TCharacter::ResolveDead(TActionBlock* ab, int32_t bits)
     return COM_EXECUTING;
 }
 
+// REVSYNC: ResolveCombat @ 0x004c7980 -- every tick of a combat root or
+// combat step (TPlayer's 0x00519210 only forwards here). Retarget on the
+// frame cadence (the player every 8 frames, everyone every 32 while the AI
+// is on), take the root's target, then: a pivot block turns until it faces
+// and becomes the strafe step; a moving player whose step no longer fits
+// gets a new step at the target (the orbit); a standing player or a
+// monster turns in place. docs/gameplay/forensics/COMBAT_MOVEMENT.md §3.
 int32_t TCharacter::ResolveCombat(TActionBlock* ab, int32_t bits)
 {
-  // Clear goto's when in combat
-    ab->target.x = ab->target.y = ab->target.z = 0;
+  // No item to walk to (retail +0x288, not ported): no goto target.
+    ab->target = S3DPoint(0, 0, 0);
 
-  // If target is dead, change to new target, or end combat
-    TCharacter* targ = (TCharacter*)ab->obj;
-    TCharacter* newtarg;
-    if (!targ || targ->IsDead() || targ->IsInvisibleSpell() ||Distance(targ) > chardata->combatrangemax)
+    const int32_t slot = PlayScreen.GameFrame() ^ GetMapIndex();
+    const bool cadence = (ObjClass() == OBJCLASS_PLAYER && (slot & 7) == 0) || (!NoAI && (slot & 0x1f) == 0);
+
+    auto* targ = static_cast<TCharacter*>(ab->obj);
+    TCharacter* found = nullptr;
+    if (!targ || !IsValidTarget(targ))
     {
-        newtarg = FindClosestEnemy();
-        if (newtarg && !newtarg->IsDead())
-            SetFighting(newtarg);
-        else if (targ && targ->IsDoing(ACTION_DEAD) && !(targ->doing->transition))
+        if (cadence && FindCharacters(&found, 1, -1, -1, 32, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) < 1)
+            found = nullptr;
+        SetFighting(found);
+    }
+    if (!ai_lookat)
+    {
+        if (cadence)
         {
-            EndCombat();
-            return 0;
+            TCharacter* ahead = nullptr;
+            found = FindCharacters(&ahead, 1, -1, ab->moveangle, 32,
+                                   FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) >= 1 ? ahead : nullptr;
+        }
+        if (found && found != targ)
+        {
+          // Switch unless the current target is near (within 32) or in the
+          // direction moved (within 45 degrees), and no farther.
+            const int32_t dfound = Distance(found);
+            bool keep = false;
+            if (targ)
+            {
+                const int32_t dtarg = Distance(targ);
+                const int32_t off = std::abs(AngleDiff(AngleTo(targ), ab->moveangle));
+                keep = (dtarg <= 32 || off <= 32) && dfound >= dtarg;
+            }
+            if (!keep)
+                SetFighting(found);
         }
     }
 
-  // Switch to new target?
-    newtarg = FindClosestEnemy(ab->moveangle, 32);
-    if (newtarg && newtarg != targ)
-    {
-      // Switch targets if new target is MUCH (64) closer than old target
-        if (!targ || Distance(newtarg) < (Distance(targ) - 64))
-        {
-            targ = newtarg;
-            ab->obj = newtarg;
-        }
-    }
+    TObjectInstance* obj = (root && (root->action == ACTION_COMBAT || root->action == ACTION_BOW)) ? root->obj : nullptr;
+    ab->obj = obj;
 
-  // Get angle to current target
-    int32_t angle = ab->moveangle;
-    int32_t faceangle = ((ab->moveangle + 15) & 0xE0);
-    if (targ)
-    {
-        S3DPoint target;
-        targ->GetPos(target);
-        if (targ && Distance(targ) <= chardata->combatrangemax)
-            angle = ConvertToFacing(pos, target);
-        faceangle = ((angle + 15) & 0xE0);
-    }
-
-  // Do pivoting before moving (character stays in root neutral state until pivot is done, 
-  // then sets the first step action block.  No block checking is done when pivoting
     if (ab->waitpivot)
     {
-        Halt(); // Make sure there's no movement
-
-        ab->angle = faceangle;              // round to 8 dirs
-
-        bool pivotdone = false;
-        if (!stricmp(ab->name, root->name)) // Is a normal root animation we're manually turning...
+        Halt();
+        if (!stricmp(ab->name, root->name))
         {
-            if (GetFace() == ab->angle)
-                pivotdone = true;
-            else
-                AdvanceAngles(ab->angle, ab->moveangle, ab->turnrate);
-        }
-        else if (commanddone)               // Is a special pivot animation which turns itself!
-            pivotdone = true;
-
-        if (!pivotdone)
-            return 0;
-        else                // Now that pivot is done, start us moving in right direction
-        {
-            char animname[RESNAMELEN];
-            GetAngleMoveAnim(ab->moveangle, angle, root->name, animname, RESNAMELEN);
-            TActionBlock* newab = new TActionBlock(animname, doing->action);
-            newab->angle = ab->angle;
-            newab->moveangle = ab->moveangle;
-            newab->obj = ab->obj;
-            newab->waitpivot = false;
-            newab->turnrate = MAXTURNRATE;
-            ForceCommand(newab);            // Does this command again
-
-            return 0;
-        }
-    }
-
-  // Do movement pivoting (works different for players/monsters)
-    if (ObjClass() == OBJCLASS_PLAYER)
-    {
-        if (IsMoving()) // If player, pivot when 8 direction facing changes
-        {
-            if (ab->angle != faceangle)
+            if (GetFace() != ab->angle)
             {
-                char animname[RESNAMELEN];
-                GetAngleMoveAnim(ab->moveangle, faceangle, root->name, animname, RESNAMELEN);
-                TActionBlock* newab = new TActionBlock(animname, doing->action);
-                newab->angle = faceangle;
-                newab->moveangle = ab->moveangle;
-                int32_t anglediff = abs(AngleDiff(GetFace(), newab->angle));
-                newab->turnrate = MAKETURNRATE(anglediff);
-                newab->obj = ab->obj;
-                SetMoveAngle(newab->moveangle);
-//              FaceOnly(newab->angle);
-                ForceCommand(newab);            // Does this command again
-
+                AdvanceAngles(ab->angle, ab->moveangle, ab->turnrate);
                 return 0;
             }
         }
-        else if (ab->angle != angle)    // Do non movement player pivoting in all directions
+        else if (!commanddone)          // a pivot animation turns by itself
+            return 0;
+
+      // Turned: the step for the way to go.
+        char animname[RESNAMELEN];
+        GetAngleMoveAnim(ab->moveangle, ab->angle, root->name, animname, RESNAMELEN);
+        auto* step = new TActionBlock(animname, doing->action);
+        if (!HasActionAni(animname))
         {
-            int32_t anglediff = abs(AngleDiff(GetFace(), angle));
-            ab->turnrate = MAKETURNRATE(anglediff);
-            ab->angle = ab->moveangle = angle;
+            delete step;                // REVSYNC-DIVERGENCE: retail leaks it
+            return 0;
         }
-    }
-    else
-    {
-        if (ab->angle != angle) // Do movement/non-movement monster pivoting in all directions
+        step->moveangle = ab->moveangle;
+        step->obj = ab->obj;
+        step->angle = ab->angle;
+        step->waitpivot = false;
+        step->turnrate = 8;
+        if (doing && doing->priority && desired != doing)
         {
-            int32_t anglediff = abs(AngleDiff(GetFace(), angle));
-            ab->turnrate = MAKETURNRATE(anglediff);
-            ab->angle = angle;
-            if (ab->action == ACTION_COMBATMOVE)
-                ab->moveangle = angle;
-            else
-                ab->moveangle = GetMoveAngle();
+            delete step;
+            return 0;
         }
+        ForceCommand(step);
+        return 0;
     }
 
-  // Update facing and moving angles
+  // Whom to face: the target when allowed and visible, else the AI's goal.
+    const int32_t blockangle = ab->angle;
+    int32_t angle = blockangle;          // retail keeps both the block's angle
+    int32_t angle8 = blockangle & 0xff;  // and its low byte until a facing is found
+    bool face = ObjClass() == OBJCLASS_CHARACTER ||
+                (ObjClass() == OBJCLASS_PLAYER && (CombatFace || !IsMoveAction(doing)));
+    if (ab->walkto)
+        face = false;
+    TObjectInstance* look = nullptr;
+    if (obj)
+    {
+        if (!CanSeeCharacter(static_cast<TCharacter*>(obj), -1) && ai_lookat)
+            face = false;
+        if (face && !target_out_of_sight)
+            look = obj;
+    }
+    if (!look)
+        look = ai_lookat;
+    if (look)
+        angle = angle8 = ConvertToFacing(pos, look->Pos());
+
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        if (IsMoveAction(doing))
+        {
+          // Moving: the step for moving one way and facing the other.
+            char animname[RESNAMELEN];
+            GetAngleMoveAnim(ab->moveangle, angle, root->name, animname, RESNAMELEN);
+            if (stricmp(ab->name, animname) != 0)
+            {
+                auto* step = new TActionBlock(animname, doing->action);
+                step->angle = (angle8 + 15) & 0xe0;
+                step->moveangle = ab->moveangle;
+                const int32_t diff = std::abs(AngleDiff(GetFace(), step->angle));
+                step->obj = ab->obj;
+                step->turnrate = (std::max)(0, diff - 32) / 32 * 8 + 16;
+                SetMoveAngle(step->moveangle);
+                ForceCommand(step);
+                return 0;
+            }
+        }
+        else if (ab->angle != angle8)
+        {
+            const int32_t diff = std::abs(AngleDiff(GetFace(), angle8));
+            ab->moveangle = ab->angle = angle8;
+            ab->turnrate = StepTurnRate(diff);
+        }
+    }
+    else if (ab->angle != angle8)
+    {
+        const int32_t diff = std::abs(AngleDiff(GetFace(), angle8 & 0xff));
+        ab->angle = angle8;
+        ab->turnrate = StepTurnRate(diff);
+        ab->moveangle = ab->action == ACTION_COMBATMOVE ? angle8 : GetMoveAngle();
+    }
+
     SetMoveAngle(ab->moveangle);
     AdvanceAngles(ab->angle, ab->moveangle, ab->turnrate);
-
     return 0;
 }
 
+// REVSYNC: ResolveCombatMove @ 0x004c7f80 -- a combat step: blocked or
+// stopped, back to the root; re-desire the step while the root is desired;
+// a Goto's walk to an item (the walkto mark) picks it up within 8 of the
+// point, else steps toward it; then ResolveCombat.
 int32_t TCharacter::ResolveCombatMove(TActionBlock* ab, int32_t bits)
 {
-    if (bits & MOVE_BLOCKED || ab->stop)
+    if ((bits & MOVE_BLOCKED) || ab->stop)
     {
+        Halt();
         ForceCommand(root);
-        return COM_COMPLETED;
+        return 0;
     }
-
-    if (!IsDesired(GetMoveAction(root->action)) && !ab->stop) // Set next step if not stopped
-        SetDesired(doing);  
-
+    if (desired == root)
+        SetDesired(doing);
+    if (gotoitem.Get() && ab->walkto && (ab->target.x != 0 || ab->target.y != 0 || ab->target.z != 0))
+    {
+        if (dist(pos.x, pos.y, ab->target.x, ab->target.y) < 8)
+        {
+            ab->target.z = pos.z;
+            MoveTo(ab->target);
+            ab->walkto = false;
+            ab->nowaitdone = true;
+            Pickup(gotoitem.Get());
+            gotoitem = nullptr;
+            return 0;
+        }
+        ab->moveangle = ConvertToFacing(pos, ab->target);
+    }
     return ResolveCombat(ab, bits);
 }
 
@@ -2138,7 +2161,7 @@ int32_t TCharacter::ResolveBowAim(TActionBlock* ab, int32_t bits)
     Halt(); // Make sure there's no movement
 
     if (ab->stop && GetFace() == ab->angle)
-        return COM_COMPLETED;
+        return COM_DONE;
 
   // Do turning
     AdvanceAngles(ab->angle, ab->angle, ab->turnrate);
@@ -2238,7 +2261,7 @@ int32_t TCharacter::ResolveSay(TActionBlock* ab, int32_t bits)
     {
         ab->wait = 0;
         ForceCommand(root, 0, Incidentals() ? 0 : kCommandNoIncidentals);   // REVSYNC: 0x004c8437
-        return COM_COMPLETED;
+        return COM_DONE;
     }
 
     return COM_EXECUTING;
@@ -2253,7 +2276,7 @@ int32_t TCharacter::ResolvePivot(TActionBlock* ab, int32_t bits)
         if (GetFace() == ab->angle)
         {
             SetDesired(nullptr);
-            return COM_COMPLETED;
+            return COM_DONE;
         }
         else
             AdvanceAngles(ab->angle, ab->angle, ab->turnrate);
@@ -2261,7 +2284,7 @@ int32_t TCharacter::ResolvePivot(TActionBlock* ab, int32_t bits)
     else if (commanddone)               // Is a special pivot animation which turns itself!
     {
         SetDesired(nullptr);
-        return COM_COMPLETED;
+        return COM_DONE;
     }
 
     return COM_EXECUTING;
@@ -2463,11 +2486,10 @@ void TCharacter::AI()
     if (Health() < 1)
         return;
 
-  // (2) Player object that's been "AI-disabled" via the player-state bit.
-  //     Retail: `if (objclass==0xb && (charflags & 0x100000) == 0) return;`
-  //     We don't have the 0x100000 flag yet, so just bail for the player
-  //     object — TPlayer overrides AI() anyway.
-    if (ObjClass() == OBJCLASS_PLAYER)
+  // (2) REVSYNC: AI @ 0x004c8b60 -- the player runs AI only with charflags
+  //     0x100000 (retail sets it for a net player, 0x0051efc4; the combat
+  //     arena's --playerai sets it to let Locke fight on his own).
+    if (ObjClass() == OBJCLASS_PLAYER && !(charflags & kCharFlagPlayerAI))
         return;
 
   // (3) Global / object-flag gates. Retail also tests DAT_00668110 (a
@@ -2797,6 +2819,8 @@ bool TCharacter::CanHearCharacter(TCharacter* chr)
 
 bool TCharacter::CanSeeCharacter(TCharacter* chr, int32_t angle)
 {
+    if (canSeeSeam)
+        return canSeeSeam(this, chr, angle);
     bool see = true;
 
     if (angle < 1)
@@ -2827,9 +2851,43 @@ bool TCharacter::CanSeeCharacter(TCharacter* chr, int32_t angle)
 }
 
 // Finds characters in range, with closest guy at head of list
+// REVSYNC: TCharacter::Distance @ 0x004d61b0 (slot 4) -- edge to edge.
+int32_t TCharacter::Distance(const TObjectInstance* inst) const
+{
+    auto* self = const_cast<TCharacter*>(this);         // Radius() is a stat accessor
+    int32_t d = ::Distance(pos, inst->Pos()) - self->Radius();
+    if (inst->IsCharacter())
+        d -= const_cast<TCharacter*>(static_cast<const TCharacter*>(inst))->Radius();
+    return (std::max)(d, 0);
+}
+
+// REVSYNC: IsValidTarget @ 0x004cd990 -- single player (the network branch,
+// a player-state bit 4 test, isn't ported).
+bool TCharacter::IsValidTarget(TCharacter* target)
+{
+    if (!target)
+        return false;
+    if (target->charflags & kCharFlagNotTargetable)
+        return false;
+    if (target->Health() <= 0)
+        return false;
+    if (target->IsInvisibleSpell())
+        return false;
+    if (target->flags & OF_INVISIBLE)
+        return false;
+    if (Distance(target) > chardata->combatrangemax)
+        return false;
+    if (PlayScreen.IsControlOn() || PlayScreen.IsDemoMode())
+        return true;
+    return target->ObjClass() != OBJCLASS_PLAYER;      // a script holds control: not the player
+}
+
 int32_t TCharacter::FindCharacters(TCharacter* chars[], int32_t maxchars, 
     int32_t range, int32_t angle, int32_t anglerange, int32_t flags)
 {
+    if (findCharactersSeam)
+        return findCharactersSeam(this, chars, maxchars, range, angle, anglerange, flags);
+
     if (maxchars < 1)
         return 0;
 
@@ -3052,26 +3110,19 @@ int32_t TCharacter::Sight(int32_t dist)
 }
 
 // Resets the noise and glimpse values to control whether monsters see you or not
+// REVSYNC: ResetStealthValues @ 0x004cdbb0 -- the noise and the glimpse
+// this tick's action gives off: 100 for an attack, else 70, halved when
+// sneaking, scaled by a draw of 1..25; the glimpse also by the visibility
+// plus that draw (10..100).
 void TCharacter::ResetStealthValues()
 {
-  // Figure out stealth!
-    int32_t stealthmod;
-    if (IsSneakMode())
-        stealthmod = Rules.sneakstealth;
-    else
-        stealthmod = Rules.maxstealth;
-    stealthmod = stealthmod * (100 - StealthMod()) / 100;
-    if (stealthmod < Rules.minstealth)
-        stealthmod = Rules.minstealth;  // Always aleast ten percent
-
-    int32_t r = random(1, 100);
-
-  // Get noise character made!
-    noise = r * stealthmod / 100;
-
-  // Get glimpse character made! 
-    int32_t visibility = Visibility();
-    glimpse = (visibility + (r * visibility / 100)) * stealthmod / 100;
+    int32_t loud = (doing && doing->action == ACTION_ATTACK) ? 100 : 70;
+    if (root && root->Is("sneak"))
+        loud /= 2;
+    const int32_t r = random(1, 25);
+    noise = 2 * r * loud / 100;
+    const int32_t seen = std::clamp(Visibility() + r, 10, 100);
+    glimpse = std::clamp(seen * loud / 100, 0, 100);
 }
 
 void TCharacter::SignalMovement(TObjectInstance* actor)
@@ -3122,132 +3173,193 @@ void TCharacter::SetOnExit()
 // * Access functions - called by script or player to make the character do whatever *
 // ***********************************************************************************
 
+// REVSYNC: TCharacter::Go @ 0x004ce350 -- walk in direction `angle` (held
+// input, AI and Goto all come here). docs/gameplay/forensics/COMBAT_MOVEMENT.md
+// section 2. In a combat or bow root (and not running) it is the orbit:
+// the facing stays on the target (CombatFace, monsters always) and the step
+// animation is the angle between moving and facing; a player never pivots.
+// Elsewhere it walks: monsters never pivot, a player does past 45/90 degrees.
+// On success the root keeps the held angle.
 bool TCharacter::Go(int32_t angle)
 {
+    const ACTION moveaction = GetMoveAction(root->action);
+    bool made = false;                     // the block is ours to free if refused
+
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        auto* player = static_cast<TPlayer*>(this);
+        if (player->PlayerState() & 2)
+            player->SetPlayerState(player->PlayerState() & ~2);
+    }
+
+  // An interactive move (charflags 0x80000) skips the gates.
+    if (!(charflags & kCharFlagInteractive))
+    {
+        if (!doing || (doing->action != root->action && doing->action != moveaction) || Health() <= 0)
+            return false;
+        if (doing->attack && (doing->attack->flags & CA_INTERACTIVE))
+            return false;
+        if (doing->impact && (doing->impact->flags & CAI_INTERACTIVE))
+            return false;
+    }
+
+  // Combat or bow root, not running: the orbit path.
+    const bool combat = (root->action == ACTION_COMBAT || root->action == ACTION_BOW) &&
+        !(root->action == ACTION_COMBAT && (root->Is("combatrun") || root->Is("handrun"))) &&
+        !(root->action == ACTION_BOW && root->Is("bowrun")) &&
+        !root->Is("run");
+
+  // Look 4 ahead before stepping off: always in combat with CombatFace, else
+  // only when already (nearly) facing the way.
+    if ((combat && CombatFace) || std::abs(AngleDiff(GetFace(), angle)) < 16)
+    {
+        S3DPoint ahead;
+        ConvertToVector(angle, 4, ahead);
+        ahead += pos;
+        if (Blocked(pos, ahead))
+            return false;
+    }
+
+  // Whoever is in the direction held (it may become the target).
+    TCharacter* found = nullptr;
+    if (FindCharacters(&found, 1, -1, angle, 32, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) < 1)
+        found = nullptr;
+
     TActionBlock* ab = nullptr;
 
-  // What is our moveaction for this mode
-    ACTION moveaction = GetMoveAction(root->action);
-
-    if (!IsDoing(root->action) && !IsDoing(moveaction))
-        return false; // Can't move right now
-
-  // Do we start fighting a new character?
-    TCharacter* newtarg = FindClosestEnemy(angle, 32); // Hack to get has seen setup
-
-    if (!IsFighting() || IsRunMode())
+    if (target_out_of_sight)
     {
-        if (doing->Is(moveaction) && doing->moveangle == angle && doing->angle == angle)
-            return true;
-
-      // Do we need to pivot
-        int32_t anglediff = abs(AngleDiff(GetFace(), angle));
-
-        if (IsMoving() && anglediff <= 64)                  // Pivot while moving!
+      // Hunting a target out of sight: turn toward the direction held at a
+      // speed scaled to the turn (retail's float, 0x004ceb13).
+        const int32_t diff = std::abs(AngleDiff(GetFace(), angle));
+        auto scaled = [diff](int32_t rate) {
+            return (int32_t)((double)rate / ((double)diff * (double)(1.0f / 127.0f)) * (double)2.2f);
+        };
+        if (diff < 32 || IsMoveAction(doing))
         {
-            doing->angle = doing->moveangle = doing->moveangle = angle;
-            doing->turnrate = MAKETURNRATE(anglediff);
-            return true;
+            if (IsMoveAction(doing))
+            {
+                doing->moveangle = doing->angle = angle;
+                doing->turnrate = scaled(StepTurnRate(diff));
+                return true;
+            }
+            // Standing, nearly facing: back to the root (ab stays null).
         }
-
-        else if (ObjClass() != OBJCLASS_CHARACTER &&
-            (anglediff > 64 ||                          // 90 degrees pivot when moving
-            (!IsDoing(moveaction) && anglediff > 32)))      // 45 degrees pivot when stopped
-        {
-            ab = new TActionBlock(root->name, moveaction);
-            ab->waitpivot = true;  // Causes move to wait till pivot done
-            ab->turnrate = MAKETURNRATE(anglediff);
-        }
-
-        else                                                // No pivot, just go
-        {
-            if (HasActionAni(StName(root->name, "f")))
-                ab = new TActionBlock(StName(root->name, "f"), moveaction);
-            else if (HasActionAni(StName(root->name, "l")))
-                ab = new TActionBlock(StName(root->name, "l"), moveaction);
-            else if (HasActionAni(StName(root->name, "r")))
-                ab = new TActionBlock(StName(root->name, "r"), moveaction);
-            else
-                return false;
-        }
-
-        SetMoveAngle(GetFace());        // Make sure move angle is what we expect it to be
-
-        ab->obj = doing->obj;
-        ab->angle = ab->moveangle = angle;
-        ab->interrupt = true;
-        ab->noroot = true;
-    }
-    else    // Do fighting (targeted) walking
-    {
-        if (IsMoving() && doing->moveangle == angle)
-            return true;
-
-        TCharacter* targ = (TCharacter*)doing->obj;
-
-      // Always check if we're pointing to a new target when we move in a new direction
-        if (newtarg && 
-            newtarg != (TCharacter*)doing->obj && 
-            !newtarg->IsDead() && 
-            !newtarg->IsInvisibleSpell() && 
-            (!targ || Distance(newtarg) < 64 || (Distance(newtarg) < Distance(targ))) )
-            SetFighting(newtarg);
-
-        int32_t facedir;
-        if (!doing || !doing->obj ||     // If we're not facing an enemy, set facing to move angle
-          (doing->obj && Distance(doing->obj) > chardata->combatrangemax)) // or if we're out of range
-            facedir = angle;
         else
         {
-            facedir = AngleTo(doing->obj);
-//          facedir = ((facedir + 15) & 0xE0);                  // round to 8 dirs
+            ab = new TActionBlock(root->name, moveaction);
+            ab->waitpivot = true;
+            ab->turnrate = scaled(StepTurnRate(diff));
+            ab->angle = ab->moveangle = angle;
+            ab->interrupt = true;
+            ab->noroot = true;
+            made = true;
         }
-        int32_t faceangle = ((facedir + 15) & 0xE0);
+    }
+    else if (combat)
+    {
+        if (IsMoveAction(doing) && doing->moveangle == angle)
+            return true;
 
-      // Must be doing root, or move, to work
+      // A new target in the direction held, as retail decides it (it only
+      // looks while the current target is valid; it keeps the current one
+      // when the new one is 48 or more away and no nearer).
+        auto* targ = static_cast<TCharacter*>(doing->obj);
+        if (found && found != targ && IsValidTarget(targ))
+        {
+            if (!targ || Distance(found) < 48 || Distance(found) < Distance(targ))
+            {
+                SetFighting(found);
+                targ = found;
+            }
+        }
+
+        int32_t face = angle;
+        if (targ && IsValidTarget(targ) && (CombatFace || ObjClass() == OBJCLASS_CHARACTER) &&
+            !target_out_of_sight)
+            face = AngleTo(doing->obj);
+        const int32_t face8 = (face + 15) & 0xe0;
+
         if (doing->action != root->action && doing->action != moveaction)
             return false;
 
-      // Get the proper move animation for facing and moving direction
         char animname[RESNAMELEN];
-        GetAngleMoveAnim(angle, facedir, root->name, animname, RESNAMELEN);
+        GetAngleMoveAnim(angle, face, root->name, animname, RESNAMELEN);
+        const int32_t diff = std::abs(AngleDiff(GetFace(), face8));
 
-      // Check for pivoting
-        int32_t anglediff = abs(AngleDiff(GetFace(), faceangle));
-        if (anglediff > 64 ||                           // 90 degrees pivot when moving
-            (!IsDoing(moveaction) && anglediff > 32))   // 45 degrees pivot when stopped
+        if (ObjClass() == OBJCLASS_PLAYER || (diff <= 64 && (doing->action == moveaction || diff <= 32)))
+        {
+            ab = doing;                    // already stepping: turn this step
+            if (doing == root)
+            {
+                ab = new TActionBlock(animname, moveaction);
+                ab->waitpivot = false;
+                made = true;
+            }
+        }
+        else
         {
             ab = new TActionBlock(root->name, moveaction);
-            ab->waitpivot = true;  // Causes move to wait till pivot done
+            ab->waitpivot = true;          // a monster turns first
+            made = true;
         }
-
-        else                                                // No pivot, just go
-        {
-            ab = new TActionBlock(animname, moveaction);
-            ab->waitpivot = false;
-        }
-
-        if (ab && doing) // Copy combat target
+        if (doing)
             ab->obj = doing->obj;
-
-        ab->turnrate = MAKETURNRATE(anglediff);
-        if (ObjClass() == OBJCLASS_CHARACTER)
-            ab->angle = facedir;    // All directions
-        else
-            ab->angle = faceangle;  // Only eight directions
         ab->moveangle = angle;
+        ab->turnrate = StepTurnRate(diff);
+        ab->angle = face;                  // unrounded
+    }
+    else
+    {
+        if (doing->action == moveaction && doing->moveangle == angle && doing->angle == angle)
+            return true;
+
+        const int32_t diff = std::abs(AngleDiff(GetFace(), angle));
+        if (IsMoveAction(doing) && diff <= 64)
+        {
+            doing->moveangle = doing->angle = angle;
+            doing->turnrate = StepTurnRate(diff);
+            return true;
+        }
+
+        if (ObjClass() == OBJCLASS_CHARACTER || (diff <= 64 && (doing->action == moveaction || diff <= 32)))
+        {
+            for (const char* step : {"f", "l", "r"})
+                if (HasActionAni(StName(root->name, step)))
+                {
+                    ab = new TActionBlock(StName(root->name, step), moveaction);
+                    break;
+                }
+            if (!ab)
+                return false;
+        }
+        else
+        {
+            ab = new TActionBlock(root->name, moveaction);
+            ab->waitpivot = true;          // a player turns first
+            ab->turnrate = StepTurnRate(diff);
+        }
+        made = true;
+        SetMoveAngle(GetFace());
+        ab->obj = doing->obj;
+        ab->moveangle = ab->angle = angle;
+    }
+
+    if (ab && !(target_out_of_sight))
+    {
         ab->interrupt = true;
         ab->noroot = true;
+        if (!HasActionAni(ab->name))
+        {
+            if (ab != doing && ab != desired && ab != root)
+                delete ab;
+            return false;
+        }
     }
 
-    if (!HasActionAni(ab->name)) // Can't do this
-    {
-        if (ab != doing && ab != desired && ab != root)
-            delete ab;
-        return false;
-    }
-
-    SetDesired(ab);
+    if (!SetDesired(ab) && made && ab)
+        delete ab;
+    root->moveangle = root->angle = angle;
     return true;
 }
 
@@ -3265,9 +3377,9 @@ bool TCharacter::Go(S3DPoint vect)
 // being done when nothing is queued (desired is the root): the walk started
 // at once, or Go turned the current step. The block is marked as a Goto's walk
 // (retail +0x60 bit 0x1000) and an item given (+0x288, kept when none is) is
-// picked up when that walk arrives (ResolveMove; retail 0x004c6155,
-// 0x004c7fc3): the map pane's walk to an item out of reach. Not ported: the
-// combat-mode move resolvers' other reads of the mark (0x004c7980).
+// picked up when that walk arrives (ResolveMove 0x004c6155, and in combat
+// ResolveCombatMove 0x004c7fc3, where ResolveCombat 0x004c7980 also stops
+// facing the target): the map pane's walk to an item out of reach.
 bool TCharacter::Goto(int32_t x, int32_t y, TObjectInstance* pickup)
 {
     const int32_t angle = ConvertToFacing(pos, S3DPoint(x, y, pos.z));
@@ -4294,7 +4406,13 @@ bool TCharacter::DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage)
 
   // Do magic attack
     if (ad->flags & CA_MAGICATTACK)
+    {
+        CombatTrace::Event(this, "cast", "spell=%s\ttarget=%s", ad->spellname,
+                           targ && targ->GetName() ? targ->GetName() : "-");
         return CastByName(ad->spellname, (TObjectInstance* *)&targ, (targ)?1:0, &(ad->spellsource));
+    }
+    CombatTrace::Event(this, "attack", "attack=%s\ttarget=%s\tdamage=%d", ad->attackname,
+                       targ && targ->GetName() ? targ->GetName() : "-", damage);
 
   // Get action type
     ACTION a;
@@ -4823,25 +4941,45 @@ bool TCharacter::EndFighting()
 // teleport does (EXITS.md §3.1); 1998 entered combat with nobody. Retail's
 // gates for a live target (busy attack/impact blocks, the player's pending
 // attack fields) aren't compared yet.
+// REVSYNC: SetFighting @ 0x004d4790 -- fight `newtarget` (nullptr: no one).
+// Refused while dead or in an interactive move, for itself or a dead
+// target; outside a combat/bow root a target starts the fight
+// (BeginFighting); else every block takes the target and faces it (not
+// while it's out of sight). The network message (0x21) isn't ported.
 bool TCharacter::SetFighting(TCharacter* newtarget)
 {
-    if (newtarget && newtarget->IsDead())   // Can't target dead guys
+    if (Health() <= 0)
         return false;
-    if (!IsFighting() && newtarget)
-        return BeginCombat(newtarget);
+    if (!(charflags & kCharFlagInteractive))
+    {
+        if (doing->attack && (doing->attack->flags & CA_INTERACTIVE))
+            return false;
+        if (doing->impact && (doing->impact->flags & CAI_INTERACTIVE))
+            return false;
+    }
+    if (newtarget == this)
+        return false;
+    if (newtarget && newtarget->Health() <= 0)
+        return false;
+
+    const bool fighting = root && (root->action == ACTION_COMBAT || root->action == ACTION_BOW);
+    if (!fighting && newtarget)
+        return BeginFighting(newtarget, ACTION_COMBAT);
+
     if (doing->obj == newtarget)
         return true;
-    doing->obj = newtarget;
-    desired->obj = newtarget;
-    root->obj = newtarget;
+    doing->obj = desired->obj = root->obj = newtarget;
     if (newtarget)
     {
-        int32_t newangle = AngleTo(newtarget);
-        doing->angle = newangle;
-        desired->angle = newangle;
-        root->angle = newangle;
+        const int32_t angle = AngleTo(newtarget);
+        if (!target_out_of_sight)
+            doing->angle = desired->angle = root->angle = angle;
     }
-
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        lastbutton = -1;
+        buttonrepeat = 0;
+    }
     return true;
 }
 
@@ -4952,43 +5090,38 @@ bool TCharacter::Use(TObjectInstance* user, int32_t with)
     return true;
 }
 
-// REVSYNC: retail TCharacter::CharBlocking / FindCharInLine @ 0x4d4db0
-//   recon/discovered/cls_0x5a7b98_TCharacter_CharBlocking_4d4db0.cpp (size 253).
-//   Iterates characters within a 0xe0 (224) radius of the search position,
-//   filters out self / dead / interactive-attack-flagged / paralised /
-//   movetopos-active / sleeping-with-flag-2 / fallen, then returns the
-//   first whose 2D distance minus radius minus their radius is <= 0.
-//   Our 128 range is tighter than retail's 224 but matches what the
-//   pre-snapshot source has shipped with. Retail-side filters we have
-//   NOT folded in (low-impact for AI parity):
-//     - doing->attack & 0x2000000 ("INTERACTIVE attack") suppression on
-//       the scanned char.
-//     - imagery flag 0x800 mask on the scanned char.
-//     - OF_PARALIZE / movetopos / sleeping-with-bit-2 gates on the
-//       scanned char.
-//   The Demo 1 Araknid case never hits these branches: no spider has
-//   INTERACTIVE attacks active in walk-mode, and the player isn't going
-//   to be paralised while a spider's running at it. Folding the rest in
-//   is a Tier-2 chore.
+// REVSYNC: CharBlocking @ 0x004d4db0 -- the first character, in map order
+// within 0x80 of pos, that would stop a mover of `radius` there: not inst,
+// alive, not in an interactive attack, not flying, visible, not on a MoveTo,
+// touching (edge to edge, 0 or less), and not an idle player (state bit 2).
 TCharacter* TCharacter::CharBlocking(TObjectInstance* inst, const S3DPoint& pos, int32_t radius)
 {
-    int32_t range = 128; // This should be about right
+    constexpr int32_t kRange = 0x80;
+    auto blocks = [&](TCharacter* c) {
+        if (!c || c == inst || c->Health() <= 0)
+            return false;
+        if (c->doing->attack && (c->doing->attack->flags & CA_INTERACTIVE))
+            return false;
+        if ((c->GetAniFlags() & AF_FLY) || (c->flags & OF_INVISIBLE) || c->movetopos)
+            return false;
+        if (::Distance(pos, c->Pos()) - radius - c->Radius() > 0)
+            return false;
+        return !(c->ObjClass() == OBJCLASS_PLAYER && (static_cast<TPlayer*>(c)->PlayerState() & 2));
+    };
 
-    for (TMapIterator i(pos, range, CHECK_NOINVENT | CHECK_MAPRECT, OBJSET_CHARACTER); i; i++)
+    if (nearbyCharactersSeam)
     {
-        TCharacter* chr = (TCharacter*)i.Item();
-
-        if (chr && chr != inst && !chr->IsDead())
-        {
-            int32_t dist = ::Distance(pos, chr->Pos());
-            dist -= radius;
-            dist -= chr->Radius();
-
-            if (dist < 1)
-                return chr;
-        }
+        for (TCharacter* c : nearbyCharactersSeam(pos, kRange))
+            if (blocks(c))
+                return c;
+        return nullptr;
     }
-
+    // Retail's iterator flags 0xe0: no inventories, the map rectangle, the
+    // loaded sectors -- what the level constructor sets.
+    SRect r{pos.x - kRange, pos.y - kRange, pos.x + kRange, pos.y + kRange};
+    for (TMapIterator i(inst->GetLevel(), &r, CHECK_NOINVENT, OBJSET_CHARACTER); i; i++)
+        if (TCharacter* c = static_cast<TCharacter*>(i.Item()); blocks(c))
+            return c;
     return nullptr;
 }
 

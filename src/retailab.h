@@ -15,9 +15,36 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 namespace RetailAB
 {
     // If argv asks for a retail A/B dump, run it and return true with the
     // process exit code in `exitcode`; else return false.
     bool Run(int argc, char* argv[], int& exitcode);
+
+    // One case per line of the case file, tab-separated: the name, then the
+    // target's fields.
+    struct Case
+    {
+        std::string name;
+        std::vector<std::string> fields;
+
+        [[nodiscard]] const std::string& Field(size_t i) const
+        {
+            static const std::string none;
+            return i < fields.size() ? fields[i] : none;
+        }
+    };
+
+    // A target: one case in, its JSON result out (or an error).
+    using Target = std::string (*)(const Case& c, std::string& error);
+
+    // Targets registered by name: each retailab_*.cpp registers its own at
+    // static initialisation (`static const bool r = RegisterTarget(...)`),
+    // so a new target touches only its own file. Run looks them up after
+    // the built-in gameflow targets.
+    bool RegisterTarget(const char* name, Target fn);
+    Target FindTarget(const std::string& name);
 }

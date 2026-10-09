@@ -74,8 +74,10 @@ void KeepAwake()
         return;
     @autoreleasepool {
         s_activity = [[NSProcessInfo processInfo]
-            beginActivityWithOptions:(NSActivityUserInitiatedAllowingIdleSystemSleep
-                                      | NSActivityLatencyCritical)
+            // UserInitiated (not ...AllowingIdleSystemSleep): a headless run
+            // is unattended, and the Mac idle-sleeping under it froze one
+            // mid-run (2026-10-09, on battery). The display may still sleep.
+            beginActivityWithOptions:(NSActivityUserInitiated | NSActivityLatencyCritical)
                               reason:@"Revenant --headless run"];
 #if !__has_feature(objc_arc)
         [s_activity retain];

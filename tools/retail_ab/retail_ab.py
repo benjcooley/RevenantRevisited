@@ -782,6 +782,10 @@ TARGETS = {
                          unit=lambda r: 1 + len(r.get('sweep', []))),
 }
 
+# The combat dojo's targets (combat_targets.py, docs/gameplay/COMBAT_DOJO.md).
+from combat_targets import TARGETS as COMBAT_TARGETS  # noqa: E402
+TARGETS.update(COMBAT_TARGETS)
+
 
 # =====================================================================
 # Driver
@@ -805,6 +809,8 @@ def main():
     parser.add_argument('--jobs', type=int, default=max(1, (os.cpu_count() or 2) // 2),
                         help='retail fixture processes at once (default: half the cores)')
     args = parser.parse_args()
+    # The port reads the same install the cases come from.
+    os.environ.setdefault('REVENANT_DATA_PATH', str(args.data))
 
     spec = TARGETS[args.target]
     workdir = (args.out / args.target).resolve()
@@ -814,13 +820,13 @@ def main():
         cases = [c for c in cases if any(s in c['name'] for s in args.case)]
     case_hash = hashlib.sha256(json.dumps([(c['name'], c['sha256']) for c in cases]).encode()).hexdigest()
 
+    fixture = RUNTIME / spec['fixture']
     if spec.get('port_first'):
         port_info, port = run_port(args.port, args.target, cases, workdir, spec['port_fields'])
         retail_cases = [spec['retail_case'](c, port.get(c['name'])) for c in cases]
-        retail_info, retail = run_retail(RUNTIME / spec['fixture'], retail_cases, args.jobs)
+        retail_info, retail = run_retail(fixture, retail_cases, args.jobs)
     else:
-        retail_info, retail = run_retail(RUNTIME / spec['fixture'], cases, args.jobs,
-                                         spec.get('split'), spec.get('merge'))
+        retail_info, retail = run_retail(fixture, cases, args.jobs, spec.get('split'), spec.get('merge'))
         port_info, port = run_port(args.port, args.target, cases, workdir, spec['port_fields'])
     # The retail dump beside the port's (<target>.port.jsonl), for reading
     # a run in full.

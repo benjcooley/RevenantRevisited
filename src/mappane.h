@@ -460,24 +460,26 @@ class TMapPane : public TPane
         // Clear out area of walkmap that object resides in
     void ExtractWalkmap(TObjectInstance* inst) { WalkmapHandler(inst, WALK_EXTRACT); }
         // Remove object's walkmap from the sector walkmap (by redrawing its rect)
-    int32_t GetWalkHeight(S3DPoint& pos);
+    int32_t GetWalkHeight(const S3DPoint& pos);
         // Gets walk height for a given walk map
     int32_t GetWalkGridHeight(int32_t x, int32_t y);
         // Gets walk height given walk grid x and y
+    using WalkGridSeam = int32_t (*)(int32_t x, int32_t y);
+    static inline WalkGridSeam walkGridSeam = nullptr;
+        // Retail A/B fixtures only: when set, it answers every walk cell's
+        // height (GetWalkGridHeight, so GetWalkHeight and
+        // GetWalkHeightRadius too), as the retail fixture's seam at the
+        // sector walkmap read does (docs/gameplay/COMBAT_DOJO.md §6.3)
     int32_t GetWalkHeightArea(S3DPoint& pos, int32_t width = 0, int32_t height = 0);
         // Gets walk height for a given walk map CENTERED on pos with given with and height
         // If width == 0, pos is treated as a point
         // Otherwise pos, width, and height define the box of walk area CENTERED on pos
-    void GetWalkHeightRadius(S3DPoint& pos, int32_t radius, 
-        int32_t &mindelta, int32_t &maxdelta, int32_t &curheight);
-        // Returns the minimum delta (fall), and maximum delta (rise) between any two walk grids 
-        // within the radius, and also the height at the current position.
-        // The mindelta value detects drops in the heightmap within the radius. (holes, downstairs)
-        // The maxdelta value detects rises in the heightmap (walls, columns, obstructions)
-        // The 'curheight' value gives the height under 'pos'
-        // Note that the 'deltas' only indicate differences in hieght between adjacent walk
-        // grids, so 'radius' may be scaled arbirarily large and still work correctly.
-        // This routine is somewhat processor intensive, so only use for moving chars and objs.
+    void GetWalkHeightRadius(const S3DPoint& pos, int32_t radius, int32_t& maxdelta, int32_t& height,
+        bool& hole);
+        // The walk height under pos, and over the walk cells whose nearest
+        // point lies within radius of pos: the largest height step between
+        // two such cells side by side (maxdelta: walls, ledges) and whether
+        // any of them has no walkmap (hole)
     bool LineOfSight(S3DPoint& pos, S3DPoint& to, S3DPoint* obst = nullptr);
         // Returns line of sight flags for line between positions
     void CalculateWalkmap();
