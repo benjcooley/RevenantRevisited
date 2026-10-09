@@ -77,6 +77,7 @@
 #pragma once
 
 #include "revenant.h"
+#include "bitmapdecode.h"
 #include "render3d_types.h"
 
 #include <sokol_gfx.h>
@@ -904,7 +905,7 @@ public:
     // PTBitmap -> registered bitmap atlas slice when available, otherwise
     // a fallback one-off texture. Bitmap atlas registration/build lives in
     // bitmapatlas.cpp so icon/imagery atlasing has a single owner.
-    void DrawBitmap (PTBitmap bm,    int32_t x, int32_t y, bool prefer_alias = false);
+    void DrawBitmap (PTBitmap bm,    int32_t x, int32_t y, EBitmapDecode decode = EBitmapDecode::Pixels);
     // Subrect variant — blits the (src_x, src_y, src_w, src_h) region of
     // bm to (dst_x, dst_y). Used for sprite-atlas panels (e.g. the
     // TPlyrStatusBar `Bars` 128x128 atlas that holds 3 bar colours
@@ -937,7 +938,8 @@ public:
                                    int32_t dst_x, int32_t dst_y,
                                    int32_t src_x, int32_t src_y,
                                    int32_t src_w, int32_t src_h,
-                                   int32_t target_w, int32_t target_h);
+                                   int32_t target_w, int32_t target_h,
+                                   EBitmapDecode decode = EBitmapDecode::Pixels);
     // Subrect → arbitrary dest-size variant — the bitmap's (sx,sy,sw,sh) region
     // is stretched to fill (dst_w,dst_h) at (dst_x,dst_y) in the target. This
     // is the to-target twin of the legacy retail `meth_0x4bd5e0` (the 7-arg
@@ -1144,7 +1146,7 @@ private:
     // Fallback PTBitmap -> one-off GPU texture. Atlased bitmap draws are owned
     // by bitmapatlas.cpp; this cache is used only for late/missed bitmaps.
     std::unordered_map<uint64_t, TTextureHandle> bitmap_texture_cache;
-    TTextureHandle BitmapAsTexture(PTBitmap bm, bool prefer_alias = false);
+    TTextureHandle BitmapAsTexture(PTBitmap bm, EBitmapDecode decode = EBitmapDecode::Pixels);
 
     // Registered HUD drawables + their z-order. Renderer owns this
     // metadata; the drawable itself doesn't carry z. Sorted on demand
