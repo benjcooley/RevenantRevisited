@@ -24,6 +24,8 @@
 //
 // *************************************************************************
 
+#include "combattrace.h"
+#include "testconfig.h"
 #include "playscreen.h"
 
 #include "audio_backend.h"
@@ -237,10 +239,6 @@ void InitDefaultControlMap()
     ControlMap.Load(const_cast<char*>("Controls"));
 }
 
-// Game runs at this many internal ticks per real-time second. Used by
-// time-of-day + the frame-to-minutes helpers.
-static constexpr int32_t kGameFrameRate = 30;
-
 // One in-game day = 24 game-minutes of game time. The legacy clamp says
 // "morning starts at 6", "noon at 12", etc.; reuse the same buckets so
 // scripted lighting checks keep working.
@@ -253,16 +251,22 @@ static int32_t TimeOfDayMinutes(int32_t gametime_centi_secs)
     return in_game_seconds / 60;
 }
 
+// The day clock: rules.def's DAYLENGTH units make one day of 1440 game
+// minutes. Both truncate toward zero; the products wrap at 32 bits as
+// retail's imul does.
+// REVSYNC: ConvertFramesToMinutes @ 0x0047eb30 -- frames * 1440 / daylength
 int32_t ConvertFramesToMinutes(int32_t frames)
 {
-    if (frames <= 0) return 0;
-    return frames / kGameFrameRate / 60;
+    const auto day = static_cast<int32_t>(static_cast<uint32_t>(frames) * 1440u);
+  // REVSYNC-DIVERGENCE: retail divides by zero before rules.def is loaded.
+    return Rules.daylength ? day / Rules.daylength : 0;
 }
 
+// REVSYNC: ConvertMinutesToFrames @ 0x0047eb50 -- minutes * daylength / 1440
 int32_t ConvertMinutesToFrames(int32_t minutes)
 {
-    if (minutes <= 0) return 0;
-    return minutes * 60 * kGameFrameRate;
+    const auto product = static_cast<int32_t>(static_cast<uint32_t>(minutes) * static_cast<uint32_t>(Rules.daylength));
+    return product / 1440;
 }
 
 // *************************************************************************
@@ -796,6 +800,10 @@ void TPlayScreen::Update()
     // the map pane's sector update).
     const bool levelready = GameFlow.Session().EnterLevel();
 
+    // --playerai: the player fights on his own (testconfig.h).
+    if (StartupPlayerAI && Player)
+        Player->SetRunsAI(true);
+
     // --exec console queue (no-op unless the flag was given).
     PulseStartupExec();
 
@@ -810,10 +818,22 @@ void TPlayScreen::Update()
 
     // Advance fixed-tick counters. CurrentMode()->Tick() owns gameplay frame
     // advancement; the renderer only samples/interpolates the current pose.
+    // REVSYNC: TPlayScreen::Animate @ 0x0047c2c0 -- the frame count, then
+    // game time in hundredths of a second at 24 frames a second
+    // (frames * 100 / 24, 0x0047c38d..0x0047c39e; the regen, poison and
+    // recovery timers read it).
     ++gameframes;
     gametime = lastsessionframes
-             + (gameframes - sessionstart) * 100 / kGameFrameRate;
+             + (int32_t)((int64_t)(gameframes - sessionstart) * 100 / 24);
     timeofday = TimeOfDayMinutes(gametime);
+
+    // REVSYNC: screen slot 0x24 (0x004902c0) -> NextFrameObjects 0x00457ef0:
+    // animation frames advance last in the tick, after Pulse and Move and
+    // the frame count, so the next tick's input sees the advanced frame.
+    MapPane.NextFrameObjects();
+
+    // --combattrace: the tick's fighters (no-op otherwise).
+    CombatTrace::Tick(gameframes);
 }
 
 namespace {
@@ -1103,13 +1123,13 @@ static void DrawPlayerStatusOverlay()
     const int32_t sx_world = p.x >> SECTORWSHIFT;
     const int32_t sy_world = p.y >> SECTORHSHIFT;
     const int32_t radius = ((TCharacter*)Player)->Radius();
-    int32_t r_min = 0, r_max = 0, r_h = 0;
-    MapPane.GetWalkHeightRadius(p, radius, r_min, r_max, r_h);
+    int32_t r_maxdelta = 0, r_h = 0;
+    bool r_hole = false;
+    MapPane.GetWalkHeightRadius(p, radius, r_maxdelta, r_h, r_hole);
     const TCharacter* blocker = ((TCharacter*)Player)->CharBlocking();
     const bool z_blocks    = std::abs(z_delta) > 32;
     const bool no_floor    = (walk == 0);
-    const bool slope_min   = std::abs(r_min) > 32;
-    const bool slope_max   = std::abs(r_max) > 32;
+    const bool step_blocks = r_maxdelta > 32;
     const bool char_blocks = (blocker != nullptr);
 
     TObjectInstance* pinst = static_cast<TObjectInstance*>(Player);
@@ -1152,16 +1172,16 @@ static void DrawPlayerStatusOverlay()
                 ImGui::Text("pos     : (%d, %d, %d)  level=%d", p.x, p.y, p.z, lvl);
                 ImGui::Text("sector  : %d_%d", sx_world, sy_world);
                 ImGui::Text("walkmap : %d  (z-walk = %d)", walk, z_delta);
-                ImGui::Text("radius  : %d   r_h=%d  min=%d  max=%d",
-                            radius, r_h, r_min, r_max);
-                ImGui::Text("would block: %s%s%s%s%s%s",
+                ImGui::Text("radius  : %d   r_h=%d  maxdelta=%d  hole=%d",
+                            radius, r_h, r_maxdelta, (int)r_hole);
+                ImGui::Text("would block: %s%s%s%s%s",
                             z_blocks    ? "Z>32 "       : "",
                             no_floor    ? "no-floor "   : "",
-                            slope_min   ? "min>32 "     : "",
-                            slope_max   ? "max>32 "     : "",
+                            r_hole      ? "hole "       : "",
+                            step_blocks ? "step>32 "    : "",
                             char_blocks ? "char-blk "   : "",
-                            (!z_blocks && !no_floor && !slope_min &&
-                             !slope_max && !char_blocks) ? "no" : "");
+                            (!z_blocks && !no_floor && !r_hole &&
+                             !step_blocks && !char_blocks) ? "no" : "");
                 ImGui::Text("moving  : %s   moveangle=%d   anim=%s",
                             Player->IsMoving() ? "yes" : "no",
                             Player->GetMoveAngle(),

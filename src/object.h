@@ -744,7 +744,9 @@ class TObjectInstance : protected SObjectDef
         // (cached afterwards). Returns by value -- the const-ref
         // overload is gone because the value is computed, not a
         // direct member reference.
-    int32_t Distance(const TObjectInstance* inst) const;
+    virtual int32_t Distance(const TObjectInstance* inst) const;
+      // Retail slot 4 (0x0046ea20): centre to centre; characters measure
+      // edge to edge (TCharacter::Distance)
         // Returns the distance on the x-y plane between this and inst
     int32_t SqrDist(const TObjectInstance* inst) const { return SQRDIST(pos, inst->pos); }
         // Returns the square of the distance between this and inst
