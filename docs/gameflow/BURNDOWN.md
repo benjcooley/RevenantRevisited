@@ -328,9 +328,9 @@ These items aren't part of any single track but block others:
       text bar each define the side tabs as 52 (`kSideTabsWidth`), and the
       dialog the status bar's bottom (0x70). Retail derives the text bar's
       rect from the panes (`TPlayScreen` layout `0x0047bc50`).
-- [~] Headless runs stalled while the Mac slept (2026-10-08: two builds hung
+- [x] Headless runs stalled while the Mac slept (2026-10-08: two builds hung
       80+ min; agent watchdog stalls line up with it). Two causes, both
-      fixed on feature/combat, to tick when it reaches main:
+      fixed (feature/combat, on main 2026-10-09):
       `--headless` took its frames from the display link (now an NSTimer at
       the display's rate while the window is hidden, 4c76a33), and
       `HeadlessWindow::KeepAwake` used
