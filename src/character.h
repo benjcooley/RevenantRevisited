@@ -70,6 +70,9 @@ class TCharacter : public TComplexObject
     using BlockedSeam = bool (*)(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, uint32_t bits);
     static inline BlockedSeam blockedSeam = nullptr;
       // Likewise for Blocked (retail FindClearPath 0x004c39d0)
+    using CanSeeSeam = bool (*)(TCharacter* self, TCharacter* chr, int32_t angle);
+    static inline CanSeeSeam canSeeSeam = nullptr;
+      // Likewise for CanSeeCharacter (retail 0x004cd540)
       // Retail A/B fixtures only (retailab_combat.cpp): when set, it answers
       // FindCharacters instead of the map, as the retail fixture's seam at
       // FindCharacters 0x004cd690 does (docs/gameplay/COMBAT_DOJO.md §6.3).
@@ -697,6 +700,15 @@ protected:
   // (target_out_of_sight is declared above at line ~606 with the existing
   // AI-fix sight tracking fields; the prev/lost_ticks pair lives here.)
     bool     target_out_of_sight_prev = false;
+  // Retail +0x234: an object the AI walks toward and ResolveCombat faces
+  // when no visible target overrides it (written by AI 0x004c8b60 and
+  // WanderToWaypoint 0x004c9790; no port writer yet).
+    TObjectInstance* ai_lookat = nullptr;
+  // Retail +0x28c / +0x290: the player's last attack button and how many
+  // times running it was pressed (ButtonAttack 0x004d2480's same-button
+  // rule); SetFighting resets them.
+    int32_t lastbutton   = -1;
+    int32_t buttonrepeat = 0;
     int32_t  sight_lost_ticks = 0;
 };
 
