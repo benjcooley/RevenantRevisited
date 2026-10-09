@@ -552,6 +552,17 @@ loose / by-name for each open.
 Port = `worktrees/combat` (feature/combat @ fa8f555); `main` noted where
 it differs.
 
+**Status 2026-10-08 (kata D1, `retail_ab.py combat-data`, all fields of
+four cases match):** fixed 5-7, 8 (ConvertMinutesToFrames and
+ConvertFramesToMinutes are retail's day clock), 9, 10, 11-17 and 18
+(retail's late binding: `TRules::BindTypes` at the end of LoadClasses and,
+because the port loads classes first, of Initialize; the port-only errors
+are gone). Open: 1-4 (file resolution, D0), the CHARACTER / WEAPON / ARMOR
+name parse is bounded where retail's `%s` overran a 64-byte stack buffer,
+weapons and armor still bind by name (GetItemData) rather than by type,
+GetCharData's static fallback, and FatalError exits the port, so the error
+cases of §10 (c) and the scrambled file (d) aren't in the kata.
+
 **File resolution**
 1. **main still opens loose files first.** `rev_fopen` on `main` tries
    SavePath, the overlay, RunPath, the module dir, the data root, and only
