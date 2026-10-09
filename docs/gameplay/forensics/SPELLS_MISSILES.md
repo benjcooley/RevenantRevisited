@@ -917,3 +917,48 @@ Port files: `src/spell.cpp/.h`, `src/character.cpp`, `src/player.cpp`,
   / `0x540750` / `0x5408d0` are TSpellManager methods.
 - The `TPlayScreen::meth_*` labels on `0x4d5c20`, `0x4d3590`, `0x4d3750`
   and `0x4de7d0` are TCharacter / TEffect methods.
+
+## 8. Port status / kata
+
+Katas built by the spells agent (2026-10-08), run with
+`python3 tools/retail_ab/retail_ab.py <target>`. Retail fixtures
+`tools/retail_runtime/slots/combat/spell_*.py` (shared pieces in
+`spell_guest.py`: retail's own TSpellList loaded from resources.rvr's
+spell.def), port `src/retailab_spells.cpp`, cases and compares
+`tools/retail_ab/targets_spells.py`.
+
+### D1s `spell-data`: the spell.def parse
+
+TSpellList::Load `0x53ead0` → SSpellData::Load `0x53e4e0` →
+LoadControlData `0x53dd10`, original code over the case's file (seams: the
+file layer, FatalError, the imagery lookup `0x446aa0`). Cases: the shipped
+file (resources.rvr), GOG's loose copy, and
+`tools/retail_ab/cases/spell_data/alltags` (every SPELL and CONTROLDATA tag,
+the defaults, six talisman codes, lower-case tags, partial LIGHT). 3/3.
+
+Port changes (`src/spell.{h,cpp}`, `src/parse.{h,cpp}`):
+
+- The loader is retail's: every tag (ICONNAME, LIGHT, CONTROLDATA and its
+  block, STATLINE) is read; an unknown tag is fatal again. NEXTSPELLWAIT is
+  kept raw (the port multiplied it by 24, so its cooldowns were 24 times
+  retail's). Talisman strings are cut at 5 codes.
+- `SSpellControlData` (retail's 0xc4-byte block) and the variant's
+  `controldata` / `statline` pointers; `SSpellLight`.
+- `TToken::GetRestOfLine` (`0x4799b0`, how STATLINE is stored); Parse's
+  `%\` field (`0x479d89`: strings read during the field keep their
+  backslashes); an absent `<...>` `%b` field is skipped, not written (the
+  port wrote the current token's number into it, `0x479ca5`).
+
+Corrections to this document, from the asm and the runs:
+
+- §2.3: talisman strings are duplicated in the shipped data: `MDR` five
+  times (Sid / Green / White / Blue / Red Dragon Attack) and `KBEF` twice
+  (Aura, Priest Aura). A cast by name of a later one casts the first.
+- §5.5: retail's GetSpellDataByName (`0x53ede0`) does match the SPELL name
+  first, then the variant names, as the port's does.
+- §2.17: LIGHT's INT is `+0xb0` and MULT `+0xac`; `<...>` fields must come
+  in the format's order (`FADEIN 3 COLOR ...` is fatal). Control data
+  `+0x40` is set to −1 and never parsed. IMAGERY is a lookup of an already
+  registered imagery by file name (`0x446aa0`), not a load. STATLINE is the
+  rest of the line with blanks collapsed and numbers re-printed
+  (`STRN  -2 ... TIME 0480` → `STRN -2 ... TIME 480`), no leading space.

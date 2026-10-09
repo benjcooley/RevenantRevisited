@@ -13,12 +13,11 @@
 #include "character.h"
 #include "complexobj.h"
 #include "effect.h"
+#include "imagery.h"
 #include "mappane.h"
 #include "parse.h"
 #include "statusbar.h"
 
-#include <set>
-#include <string>
 
 extern TObjectClass EffectClass;
 extern TObjectClass TalismanClass;
@@ -27,75 +26,72 @@ extern TObjectClass TalismanClass;
 // * SSpellData Object *
 // ********************
 
-// Construct SSpellData
-SSpellData::SSpellData()
-{
-    // clear all the values
-    flags = SF_NONE;
-    memset(name, 0, NAMELEN);
-    memset(objname, 0, RESNAMELEN);
-    desc = nullptr;
-    damagetype = 0;
-    memset(invoke, 0, RESNAMELEN);
-    effectstart = 0;
-    poisonchance = 0; // retail constructor 0x53da50
-}
-
-// destructor
 SSpellData::~SSpellData()
 {
-    if (desc)
-        delete [] desc;
+    delete [] desc;
+    for (int32_t i = 0; i < variants.NumItems(); i++)
+    {
+        SSpellVariant &var = variants[i];
+        if (var.controldata)
+            delete [] var.controldata->attachmultiple;
+        delete var.controldata;
+        delete [] var.statline;
+    }
 }
 
-// Loads the spells from the "RULES.DEF" file
+// REVSYNC: SSpellData::Load @ 0x0053e4e0 -- one SPELL block; any tag but
+// these is fatal. A VARIANT may be followed by its CONTROLDATA block.
 bool SSpellData::Load(char *aname, TToken &t)
 {
-    strncpyz(name, aname, RESNAMELEN);
+    strncpy(name, aname, NAMELEN - 1);
+    name[NAMELEN - 1] = 0;
+    objname[0] = 0;
+    iconname[0] = 0;
+    invoke[0] = 0;
 
     t.SkipBlanks();
     if (!t.Is("BEGIN"))
         t.Error("Spell def BEGIN expected");
-    
-  // Now get first trigger token
     t.LineGet();
-    
-  // Iterate through the triggers and setup trigger list
+
     while (t.Type() != TKN_EOF && !t.Is("END"))
     {
-      // Parse trigger tags now
         if (t.Type() != TKN_IDENT)
             t.Error("Spell def keyword expected");
 
-      // Tags...
         if (t.Is("NAME"))
         {
             if (!Parse(t, "NAME %30s\n", objname))
                 t.Error("Error parsing NAME tag");
+        }
+        else if (t.Is("POISONCHANCE"))
+        {
+            if (!Parse(t, "POISONCHANCE %i\n", &poisonchance))
+                t.Error("Error parsing POISONCHANCE tag");
+        }
+        else if (t.Is("ICONNAME"))
+        {
+            if (!Parse(t, "ICONNAME %30s\n", iconname))
+                t.Error("Error parsing NAME tag");          // retail's text
         }
         else if (t.Is("DESCRIPTION"))
         {
             char buf[1024];
             if (!Parse(t, "DESCRIPTION %s\n", buf))
                 t.Error("Error parsing DESCRIPTION tag");
-
+            delete [] desc;
             desc = new char[strlen(buf) + 1];
-            strcpy(desc, buf);  
+            strcpy(desc, buf);
         }
         else if (t.Is("DAMAGETYPE"))
         {
             if (!Parse(t, "DAMAGETYPE %i\n", &damagetype))
-              t.Error("Error parsing DAMAGETYPE tag");
+                t.Error("Error parsing DAMAGETYPE tag");
         }
         else if (t.Is("FLAGS"))
         {
             if (!Parse(t, "FLAGS %i\n", &flags))
                 t.Error("Error parsing FLAGS tag");
-        }
-        else if (t.Is("POISONCHANCE"))
-        {
-            if (!Parse(t, "POISONCHANCE %i\n", &poisonchance))
-                t.Error("Error parsing POISONCHANCE tag");
         }
         else if (t.Is("ANIMATION"))
         {
@@ -110,68 +106,192 @@ bool SSpellData::Load(char *aname, TToken &t)
         else if (t.Is("VARIANT"))
         {
             SSpellVariant var;
-            char temp[256];
-
-            if (!Parse(t, "VARIANT %s, %i, %s, %s, %i, %i, %i, %i, %i, %i, %i, %i\n", var.name, &var.type, temp, var.effect,
-              &var.mana, &var.nextspellwait, &var.mindamage, &var.maxdamage, &var.skilllevel, &var.height, &var.facing, &var.ani_delay))
+            char talismans[256];
+            if (!Parse(t, "VARIANT %s, %i, %s, %s, %i, %i, %i, %i, %i, %i, %i, %i\n", var.name, &var.type,
+                       talismans, var.effect, &var.mana, &var.nextspellwait, &var.mindamage, &var.maxdamage,
+                       &var.skilllevel, &var.height, &var.facing, &var.ani_delay))
                 t.Error("Error parsing VARIANT tag");
+            strncpy(var.talismans, talismans, kVariantTalismanCodes);
+            var.talismans[kVariantTalismanCodes] = 0;
 
-            var.nextspellwait *= 24;
-            
-            for(int32_t i = 0; i < MAXTALISMANLEN; ++i)
-                var.talismans[i] = 0;
-            
-            strncpyz(var.talismans, temp, MAXTALISMANLEN);
-
-            variants.Add(var);
-        }
-        else
-        {
-            // Retail added spell tags not in the pre-release source. Skip
-            // them rather than aborting. Tags come in two flavors: single-
-            // line (ICONNAME, LIGHT) and ones followed by a BEGIN/END block
-            // (CONTROLDATA). Detect the block form by peeking for BEGIN.
-            // One warning per tag name, not per spell.
-            static std::set<std::string> reported;
-            const char *tag = t.Text();
-            if (reported.insert(tag).second)
-                log_warn("[spell] skipping unknown tag '%s'", tag);
-
-            while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
-                t.Get();
-            t.LineGet();
-
-            // If the next line opens a nested BEGIN/END block (retail
-            // CONTROLDATA, etc.), skip until its matching END. BEGIN/END
-            // are TKN_KEYWORD tokens — use IsBegin()/IsEnd() not TKN_IDENT.
-            if (t.IsBegin())
+            // The CONTROLDATA block, when the next line opens one: each tag
+            // through SSpellControlData::Load until its END.
+            t.SkipBlanks();
+            if (t.Is("CONTROLDATA"))
             {
-                int depth = 1;
-                t.LineGet();
-                while (depth > 0 && t.Type() != TKN_EOF)
+                var.controldata = new SSpellControlData;
+                if (!Parse(t, "CONTROLDATA %s", var.controldata->name))
+                    t.Error("Error parsing CONTROLDATA tag");
+                t.SkipBlanks();
+                if (t.IsBegin())
                 {
-                    if (t.IsBegin())
-                        depth++;
-                    else if (t.IsEnd())
+                    t.DoBegin();
+                    do
                     {
-                        depth--;
-                        if (depth == 0)
-                        {
-                            t.LineGet();
-                            break;
-                        }
-                    }
-                    while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
-                        t.Get();
-                    t.LineGet();
+                        var.controldata->Load(t, var);
+                        t.SkipBlanks();
+                    } while (!t.IsEnd());
+                    t.DoEnd();
                 }
             }
+            variants.Add(var);
         }
+        else if (t.Is("LIGHT"))
+        {
+            if (!Parse(t, "LIGHT <COLOR %b,%b,%b> <INT %i> <MULT %i> <POS %i,%i,%i> <FADEIN %i> <FADEOUT %i>\n",
+                       &light.color[0], &light.color[1], &light.color[2], &light.intensity, &light.mult,
+                       &light.pos[0], &light.pos[1], &light.pos[2], &light.fadein, &light.fadeout))
+                t.Error("Error parsing spell LIGHT tag");
+        }
+        else
+            t.Error("Invalid spell tag %s", t.Text());
     }
 
     if (!t.Is("END"))
         t.Error("Spell def END expected");
+    t.WhiteGet();
 
+    return true;
+}
+
+// REVSYNC: LoadControlData @ 0x0053dd10 -- one tag of a CONTROLDATA block
+// (the caller skips to the next). STATLINE goes to the variant.
+bool SSpellControlData::Load(TToken &t, SSpellVariant &variant)
+{
+    char buf[256];
+    if (t.Is("RADIUS"))
+    {
+        if (!Parse(t, "RADIUS %i", &radius))
+            t.Error("Error parsing RADIUS tag");
+    }
+    else if (t.Is("HITS"))
+    {
+        if (!Parse(t, "HITS %i", &hits))
+            t.Error("Error parsing HITS tag");
+    }
+    else if (t.Is("DURATION"))
+    {
+        if (!Parse(t, "DURATION %i %i", &duration, &duration2))
+            t.Error("Error parsing DURATION tag");
+    }
+    else if (t.Is("SHAKE"))
+    {
+        if (!Parse(t, "SHAKE %i", &shake))
+            t.Error("Error parsing SHAKE tag");
+        flags |= SCF_SHAKE;
+    }
+    else if (t.Is("PLAY"))
+    {
+        if (!Parse(t, "PLAY %s", sound))
+            t.Error("Error parsing PLAY tag");
+        flags |= SCF_PLAY;
+    }
+    else if (t.Is("PLAYONCE"))
+    {
+        if (!Parse(t, "PLAYONCE %s", sound))
+            t.Error("Error parsing PLAY tag");             // retail's text
+        flags |= SCF_PLAYONCE;
+    }
+    else if (t.Is("POS"))
+    {
+        if (!Parse(t, "POS %i %i %i", &pos[0], &pos[1], &pos[2]))
+            t.Error("Error parsing POS tag");
+        posset = 1;
+    }
+    else if (t.Is("PATTERN"))
+    {
+        if (!Parse(t, "PATTERN %s", buf))
+            t.Error("Error parsing PATTERN tag");
+        static const char *const patterns[] = {"RANDOM", "CIRCLE", "LINE", "CLUSTER", "X", "SPIRAL"};
+        int32_t found = SPAT_NONE;
+        for (int32_t i = 0; i < 6 && found == SPAT_NONE; i++)
+            if (!stricmp(buf, patterns[i]))
+                found = SPAT_RANDOM + i;
+        if (found == SPAT_NONE)
+            t.Error("Unidentified PATTERN type.");
+        pattern = found;
+    }
+    else if (t.Is("ONCASTER"))
+    {
+        oncaster = 1;
+        t.Get();
+    }
+    else if (t.Is("HITTARGET"))
+    {
+        hittarget = 1;
+        t.Get();
+    }
+    else if (t.Is("FOLLOW"))
+    {
+        t.Get();
+        follow = 1;
+    }
+    else if (t.Is("ATTACHMULTIPLE"))
+    {
+        // One object-map name per HIT, so HITS must come first.
+        if (hits > kMaxAttachMultiple)
+            t.Error("Error parsing ATTACHMULTIPLE tag");
+        attachset = 1;
+        delete [] attachmultiple;
+        attachmultiple = new char[(hits > 0 ? hits : 0) * RESNAMELEN + 1]();
+        t.WhiteGet();
+        for (int32_t i = 0; i < hits; i++)
+        {
+            if (!Parse(t, "%s ", buf))
+                t.Error("Error parsing ATTACHMULTIPLE tag");
+            else
+                strcpy(attachmultiple + i * RESNAMELEN, buf);
+        }
+    }
+    else if (t.Is("ATTACH"))
+    {
+        if (!Parse(t, "ATTACH %s", buf))
+            t.Error("Error parsing ATTACH tag");
+        attachset = 1;
+        strncpyz(attach, buf, RESNAMELEN);
+    }
+    else if (t.Is("MULTIPLETARGETS"))
+    {
+        t.Get();
+        multipletargets = 1;
+    }
+    else if (t.Is("REPEATDAMAGE"))
+    {
+        if (!Parse(t, "REPEATDAMAGE %i", &repeatdamage))
+            t.Error("Error parsing REPEATDAMAGE tag");
+        repeatset = 1;
+    }
+    else if (t.Is("STATLINE"))
+    {
+        constexpr int32_t kStatLineLen = 100;
+        delete [] variant.statline;
+        variant.statline = new char[kStatLineLen]();
+        t.WhiteGet();
+        t.GetRestOfLine(variant.statline, kStatLineLen);
+    }
+    else if (t.Is("IMAGERY"))
+    {
+        if (!Parse(t, "IMAGERY %\\s", buf))
+            t.Error("Error parsing IMAGERY tag");
+        strncpyz(imageryname, buf, MAXPATHLEN);
+        imagery = TObjectImagery::FindImagery(buf);
+    }
+    else if (t.Is("WAIT"))
+    {
+        if (!Parse(t, "WAIT %i", &wait))
+            t.Error("Error parsing WAIT tag");
+    }
+    else if (t.Is("RANGEDAMAGE"))
+    {
+        if (!Parse(t, "RANGEDAMAGE %i %i", &rangedamage[0], &rangedamage[1]))
+            t.Error("Error parsing RANGEDAMAGE tag");
+    }
+    else
+    {
+        snprintf(buf, sizeof(buf), "Invalid Control tag in Spell.def: %s", t.Text());
+        t.Error(buf);
+        t.WhiteGet();
+    }
     return true;
 }
 
@@ -204,7 +324,8 @@ void TSpellList::Close()
     initialized = false;
 }
 
-// Loads all areas from the "SPELL.DEF" file
+// REVSYNC: TSpellList::Load @ 0x0053ead0 -- every SPELL block of
+// <ClassDefPath>spell.def (the packs first, as every rules file).
 bool TSpellList::Load()
 {
     char fname[MAXPATHLEN];
@@ -230,135 +351,83 @@ bool TSpellList::Load()
 
         if (!data->Load(spellname, t))
             t.Error("Error loading spell data");
-        
+
         spelldata.Add(data);
 
         if (!t.DefineGet())
             t.Error("Syntax error between spell blocks");
     }
-    
+
     fclose(fp);
 
     return true;
 }
 
-// return spell by talismans list
-PSSpellData TSpellList::GetSpellDataByTalismans(char* talismans)
+PSSpellData TSpellList::GetSpellDataByTalismans(const char* talismans)
 {
-    PSSpellData return_spell = nullptr;
-    int32_t *tal = (int32_t *)malloc(TalismanClass.NumTypes() * sizeof(int32_t));
-    int32_t *cmp = (int32_t *)malloc(TalismanClass.NumTypes() * sizeof(int32_t));
-    
-    TSpellList::GetTalList(talismans, tal);
-
-    for(int32_t i = 0; i < spelldata.NumItems(); i++)
-    {
-        for(int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
-        {
-            TSpellList::GetTalList(spelldata[i]->variants[j].talismans, cmp);
-
-            if (TSpellList::CompareTalList(tal, cmp))
-                return_spell = spelldata[i];
-        }
-    }
-
-    free(tal);
-    free(cmp);
-    
-    return return_spell;
-}
-
-// return spell data based on name
-PSSpellData TSpellList::GetSpellDataByName(char* name)
-{
-    for(int32_t i = 0; i < spelldata.NumItems(); i++)
-    {
-        if (!stricmp(spelldata[i]->name, name))
-            return spelldata[i];
-
-        for(int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
-        {           
-            if (!stricmp(spelldata[i]->variants[j].name, name))
+    for (int32_t i = 0; i < spelldata.NumItems(); i++)
+        for (int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
+            if (!stricmp(spelldata[i]->variants[j].talismans, talismans))
                 return spelldata[i];
-        }
-    }
-
     return nullptr;
 }
 
-// return an talisman array, this is a static function
-void TSpellList::GetTalList(char* string, int32_t* tal)
+PSSpellData TSpellList::GetSpellDataByName(const char* name)
 {
-    int32_t i, j;
+    for (int32_t i = 0; i < spelldata.NumItems(); i++)
+    {
+        if (!stricmp(spelldata[i]->name, name))
+            return spelldata[i];
+        for (int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
+            if (!stricmp(spelldata[i]->variants[j].name, name))
+                return spelldata[i];
+    }
+    return nullptr;
+}
 
-    for(i = 0; i < TalismanClass.NumTypes(); i++)
+// REVSYNC: 0x0053ee70 (no callers in retail) -- each code counted against
+// its TALISMAN type's Code stat, case-blind.
+void TSpellList::GetTalList(const char* string, int32_t* tal)
+{
+    for (int32_t i = 0; i < TalismanClass.NumTypes(); i++)
         tal[i] = 0;
 
-    for(i = 0; i < (signed)strlen(string); i++)
-    {
-        for(j = 0; j < TalismanClass.NumTypes(); j++)
+    for (size_t i = 0; i < strlen(string); i++)
+        for (int32_t j = 0; j < TalismanClass.NumTypes(); j++)
         {
-            char code = TalismanClass.GetStat(j, "Code");
-
+            const char code = (char)TalismanClass.GetStat(j, "Code");
             if (toupper(code) == toupper(string[i]))
             {
                 ++tal[j];
                 break;
             }
         }
-    }
 }
 
-// compare tal lists
-bool TSpellList::CompareTalList(int32_t* tal1, int32_t* tal2)
+// REVSYNC: 0x0053ef50 (no callers in retail)
+bool TSpellList::CompareTalList(const int32_t* tal1, const int32_t* tal2)
 {
-    for(int32_t i = 0; i < TalismanClass.NumTypes(); i++)
-    {
+    for (int32_t i = 0; i < TalismanClass.NumTypes(); i++)
         if (tal1[i] != tal2[i])
             return false;
-    }
-
     return true;
 }
 
-// return variant data based on talismans
-PSSpellVariant TSpellList::GetVariantDataByTalismans(char* talismans)
+PSSpellVariant TSpellList::GetVariantDataByTalismans(const char* talismans)
 {
-    PSSpellVariant return_variant = nullptr;
-    int32_t *tal = (int32_t *)malloc(TalismanClass.NumTypes() * sizeof(int32_t));
-    int32_t *cmp = (int32_t *)malloc(TalismanClass.NumTypes() * sizeof(int32_t));
-
-    TSpellList::GetTalList(talismans, tal);
-
-    for(int32_t i = 0; i < spelldata.NumItems(); i++)
-    {
-        for(int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
-        {
-            TSpellList::GetTalList(spelldata[i]->variants[j].talismans, cmp);
-
-            if (TSpellList::CompareTalList(tal, cmp))
-                return_variant = &spelldata[i]->variants[j];
-        }
-    }
-
-    free(tal);
-    free(cmp);
-
-    return return_variant;
+    for (int32_t i = 0; i < spelldata.NumItems(); i++)
+        for (int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
+            if (!stricmp(spelldata[i]->variants[j].talismans, talismans))
+                return &spelldata[i]->variants[j];
+    return nullptr;
 }
 
-// return variant data based on name
-PSSpellVariant TSpellList::GetVariantDataByName(char* name)
+PSSpellVariant TSpellList::GetVariantDataByName(const char* name)
 {
-    for(int32_t i = 0; i < spelldata.NumItems(); i++)
-    {
-        for(int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
-        {           
+    for (int32_t i = 0; i < spelldata.NumItems(); i++)
+        for (int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
             if (!stricmp(spelldata[i]->variants[j].name, name))
                 return &spelldata[i]->variants[j];
-        }
-    }
-
     return nullptr;
 }
 

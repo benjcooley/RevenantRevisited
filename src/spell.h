@@ -20,21 +20,81 @@
 #define SPELLSIZE       (6)
 #define MAXTALISMANLEN  (SPELLSIZE + 1)
 
+// A VARIANT's talisman string holds at most this many codes: retail's is a
+// char[6] at SSpellVariant+0x24, filled by strncpy(.., 5) (0x0053e82c).
+constexpr int32_t kVariantTalismanCodes = 5;
+
+// CONTROLDATA: how a variant's spell class (retail registers "Spell" and
+// "Strike") runs its effects. Retail SSpellControlData, 0xc4 bytes, zeroed,
+// built by SSpellData::Load (0x0053e856) and filled by LoadControlData
+// (0x0053dd10), one tag per call.
+enum ESpellControlFlags : int32_t
+{
+    SCF_SHAKE    = 0x2,                 // SHAKE given
+    SCF_PLAY     = 0x4,                 // PLAY: loop the sound
+    SCF_PLAYONCE = 0x8,                 // PLAYONCE: play the sound once
+};
+
+// PATTERN names, in retail's order (1..6; 0 when none is given).
+enum ESpellPattern : int32_t
+{
+    SPAT_NONE, SPAT_RANDOM, SPAT_CIRCLE, SPAT_LINE, SPAT_CLUSTER, SPAT_X, SPAT_SPIRAL
+};
+
+constexpr int32_t kMaxAttachMultiple = 20;  // ATTACHMULTIPLE refuses HITS above this
+
+struct SSpellVariant;
+
+struct SSpellControlData
+{
+    char name[RESNAMELEN] = {};         // +0x00 spell class: CONTROLDATA "Strike"
+    int32_t flags = 0;                  // +0x20 ESpellControlFlags
+    int32_t radius = 0;                 // +0x24 RADIUS
+    int32_t hits = 1;                   // +0x28 HITS
+    int32_t duration = -1;              // +0x2c DURATION, first number
+    int32_t wait = 0;                   // +0x30 WAIT
+    int32_t duration2 = 0;              // +0x34 DURATION, second number
+    int32_t pattern = SPAT_NONE;        // +0x38 PATTERN
+    int32_t shake = 0;                  // +0x3c SHAKE
+    int32_t unknown40 = -1;             // +0x40 set to -1 by the loader, never parsed
+    int32_t repeatdamage = 0;           // +0x44 REPEATDAMAGE
+    int32_t rangedamage[2] = {};        // +0x48 RANGEDAMAGE
+    char attach[RESNAMELEN] = {};       // +0x50 ATTACH
+    char *attachmultiple = nullptr;     // +0x70 ATTACHMULTIPLE: HITS names of 32 bytes (new[])
+    char sound[RESNAMELEN] = {};        // +0x74 PLAY / PLAYONCE
+    int32_t imagery = -1;               // +0x94 IMAGERY, the registered imagery id (or -1)
+    char imageryname[MAXPATHLEN] = {};  // the IMAGERY file named (retail keeps only the id)
+    int32_t hittarget = 0;              // +0x9c HITTARGET
+    int32_t oncaster = 0;               // +0xa0 ONCASTER
+    int32_t attachset = 0;              // +0xa4 ATTACH or ATTACHMULTIPLE given
+    int32_t follow = 0;                 // +0xa8 FOLLOW
+    int32_t posset = 0;                 // +0xac POS given
+    int32_t repeatset = 0;              // +0xb0 REPEATDAMAGE given
+    int32_t multipletargets = 0;        // +0xb4 MULTIPLETARGETS
+    int32_t pos[3] = {};                // +0xb8 POS x y z
+
+    bool Load(TToken &t, SSpellVariant &variant);
+      // One tag of the CONTROLDATA block (retail 0x0053dd10)
+};
+
+// A VARIANT line. Retail SSpellVariant, 0x78 bytes; offsets noted.
 _STRUCTDEF(SSpellVariant)
 struct SSpellVariant
 {
-    int32_t flags;                      // Spell variant flags
-    char name[RESNAMELEN];          // Name of spell variant
-    char talismans[MAXTALISMANLEN]; // Talismans for this variant
-    char effect[RESNAMELEN];        // Number of effect id for this variant (0-whatever)
-    int32_t mana;                       // Amount of mana for this variant
-    int32_t nextspellwait;              // Amount of time to wait before next spell
-    int32_t mindamage,maxdamage;        // Damage values for this variant
-    int32_t skilllevel;                 // What skill you must be to cast this spell
-    int32_t type;                       // the type of variant
-    int32_t height;                     // the height of the spell
-    int32_t facing;                     // the facing of the spell
-    int32_t ani_delay;                  // animation delay
+    int32_t flags = 0;                          // +0x00 Spell variant flags
+    char name[RESNAMELEN] = {};                 // +0x04 Name of spell variant
+    char talismans[MAXTALISMANLEN] = {};        // +0x24 Talisman codes (kVariantTalismanCodes at most)
+    char effect[RESNAMELEN] = {};               // +0x2a Effect object type made when the spell starts
+    int32_t mana = 0;                           // +0x4c Mana it costs
+    int32_t nextspellwait = 0;                  // +0x50 Pulses before the caster's next spell (raw)
+    int32_t mindamage = 0, maxdamage = 0;       // +0x54 / +0x58 Damage range
+    int32_t skilllevel = 0;                     // +0x5c Invoke skill needed (-1: no skill roll)
+    int32_t type = 0;                           // +0x60 Variant type (TP_BASIC)
+    int32_t height = 0;                         // +0x64
+    int32_t facing = 0;                         // +0x68 The effect takes the caster's facing
+    int32_t ani_delay = 0;                      // +0x6c Invoke animation delay
+    SSpellControlData *controldata = nullptr;   // +0x70 CONTROLDATA block (owned by the SSpellData)
+    char *statline = nullptr;                   // +0x74 STATLINE, 100 bytes (owned by the SSpellData)
 };
 
 typedef TVirtualArray<SSpellVariant, 16, 16> TSpellVariantArray;
@@ -42,26 +102,41 @@ typedef TVirtualArray<SSpellVariant, 16, 16> TSpellVariantArray;
 // Spell flags
 #define SF_NONE 0
 
+// LIGHT <COLOR r,g,b> <INT i> <MULT m> <POS x,y,z> <FADEIN f> <FADEOUT f>:
+// retail SSpellData+0xa8..+0xc7, with the constructor's defaults.
+struct SSpellLight
+{
+    uint8_t color[3] = {};              // +0xaa / +0xa9 / +0xa8: r, g, b
+    int32_t mult = 0;                   // +0xac MULT
+    int32_t intensity = 0;              // +0xb0 INT
+    int32_t pos[3] = {65, 65, 65};      // +0xb4 POS
+    int32_t fadein = 5;                 // +0xc0 FADEIN
+    int32_t fadeout = 5;                // +0xc4 FADEOUT
+};
+
+// A SPELL block. Retail SSpellData, 0xcc bytes; offsets noted.
 _STRUCTDEF(SSpellData)
 struct SSpellData
 {
-    SSpellData();
-      // Sets default values
+    SSpellData() = default;
     ~SSpellData();
+    SSpellData(const SSpellData&) = delete;
+    SSpellData& operator=(const SSpellData&) = delete;
     bool Load(char *aname, TToken &t);
       // Loads the spell from the "SPELL.DEF" file
 
-    TSpellVariantArray variants;        // Spell variants
+    TSpellVariantArray variants;            // +0x00 Spell variants
 
-    int32_t flags;                          // Spell flags
-    char name[NAMELEN];                 // Name of spell type (not individual name)
-    char objname[RESNAMELEN];           // Name of spell object to build when spell is cast
-    char *desc;                         // Spell description for spell book
-//  PTBitmap icon;                      // Spell book icon for spell
-    int32_t damagetype;                     // Type of damage spell does
-    char invoke[RESNAMELEN];            // Invoke animation
-    int32_t effectstart;                    // Frames after starting invoke to start effect
-    int32_t poisonchance;                   // Retail SSpellData+0xc8, POISONCHANCE
+    int32_t flags = SF_NONE;                // +0x18 FLAGS
+    char name[NAMELEN] = {};                // +0x1c Name of spell type (not individual name)
+    char objname[RESNAMELEN] = {};          // +0x3c NAME
+    char iconname[RESNAMELEN] = {};         // +0x5c ICONNAME
+    char *desc = nullptr;                   // +0x7c DESCRIPTION
+    int32_t damagetype = 0;                 // +0x80 DAMAGETYPE
+    char invoke[RESNAMELEN] = {};           // +0x84 ANIMATION: the invoke animation
+    int32_t effectstart = 0;                // +0xa4 DELAY: pulses after the cast before the effect
+    SSpellLight light;                      // +0xa8 LIGHT
+    int32_t poisonchance = 0;               // +0xc8 POISONCHANCE
 };
 
 typedef TPointerArray<SSpellData, 16, 16> TSpellDataArray;
@@ -89,23 +164,28 @@ class TSpellList
     int32_t NumSpells() { return spelldata.NumItems(); }
       // Returns number of spells
     PSSpellData GetSpellData(int32_t num) { return spelldata[num]; }
-      // Gets pointer to spell data based on talisman list
-    PSSpellData GetSpellDataByTalismans(char *talismans);
-      // Gets pointer to spell data based on talisman list
-    PSSpellData GetSpellDataByName(char *name);
-      // Gets pointer to spell data based on spell name
-    PSSpellVariant GetVariantDataByName(char *name);
-      // Gets pointer to a variant data based on spell name
-    PSSpellVariant GetVariantDataByTalismans(char *talismans);
-      // Gets pointer to a variant data based on talismans name
+      // The num'th SPELL block, in file order
+
+    // The lookups. Each is a first match in file order (spells, then their
+    // variants), compared case-blind (_stricmp); talismans match as a whole
+    // string, so order matters ("IL" is not "LI").
+    PSSpellData GetSpellDataByTalismans(const char *talismans);
+      // REVSYNC: TSpellList::GetSpellDataByTalismans @ 0x0053ed70 -- the
+      // spell holding the first variant with these talismans
+    PSSpellData GetSpellDataByName(const char *name);
+      // REVSYNC: TSpellList::GetSpellDataByName @ 0x0053ede0 -- the first
+      // spell whose SPELL name, or one of whose variant names, matches
+    PSSpellVariant GetVariantDataByName(const char *name);
+      // REVSYNC: TSpellList::GetVariantDataByName @ 0x0053f010
+    PSSpellVariant GetVariantDataByTalismans(const char *talismans);
+      // REVSYNC: TSpellList::GetVariantDataByTalismans @ 0x0053ef90
     bool Load();
       // Loads spell data from SPELL.DEF file
 
-    // return an array of MAXTALISMANLEN filled with appropriate stuff
-    static void GetTalList(char* string, int32_t* tal);
-    
-    // compare talisman lists, return true for same, false otherwise
-    static bool CompareTalList(int32_t* tal1, int32_t* tal2);
+    // Talisman counts by TALISMAN type (one int per type) and their compare.
+    // Retail has both (0x0053ee70, 0x0053ef50) but nothing calls them.
+    static void GetTalList(const char* string, int32_t* tal);
+    static bool CompareTalList(const int32_t* tal1, const int32_t* tal2);
 };
 
 // ***************************************************

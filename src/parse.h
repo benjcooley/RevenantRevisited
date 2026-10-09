@@ -166,6 +166,8 @@ class TToken
     bool IsEnd() const { return type == TKN_KEYWORD && code == KEY_END; }
     void DoBegin();                 // Call to compile BEGIN
     void DoEnd();                   // Call to compile END
+    bool GetRestOfLine(char *buf, int32_t len);
+      // The current token and the rest of its line as text (retail 0x004799b0)
     int32_t LineNum() const { return linenum; }
 
     uint32_t GetPos() const { return stream->GetPos(); }
@@ -173,6 +175,10 @@ class TToken
 
     void Error(const char *err, const char *extra = nullptr);
       // Fatal error at line number
+
+    bool literalbackslash = false;
+      // Strings keep their backslashes (retail token flags +0x00 bit 0, set
+      // by a `%\` field in Parse): no `\n` escapes, for file paths
 
   private:
     int32_t ReadChar();             // the next character: CRs skipped, lines counted
