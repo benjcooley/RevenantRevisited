@@ -134,6 +134,32 @@ worker:
         vm.call(api(vm,'LeaveCriticalSection'),(section,));vm.call(api(vm,'LeaveCriticalSection'),(section,))
         with self.assertRaises(ValueError):vm.call(api(vm,'LeaveCriticalSection'),(section,))
 
+    def test_create_thread_ignores_undefined_flag_bits(self):
+        vm=Runtime(BASELINE);entry=assemble(vm,'xor eax, eax\nret 4\n')
+        handle=vm.call(api(vm,'CreateThread'),(0,0,entry,0,1,0))
+        tid=vm.scheduler.objects[handle]['tid']
+        self.assertEqual(vm.scheduler.threads[tid].state,'ready')
+        suspended=vm.call(api(vm,'CreateThread'),(0,0,entry,0,4|1,0))
+        self.assertEqual(vm.scheduler.threads[vm.scheduler.objects[suspended]['tid']].state,'suspended')
+        with self.assertRaises(ValueError):vm.call(api(vm,'CreateThread'),(vm.allocate(12),0,entry,0,0,0))
+
+    def test_mutex_recursive_ownership_release_and_checkpoint(self):
+        vm=Runtime(BASELINE)
+        mutex=vm.call(api(vm,'CreateMutexA'),(0,0,0))
+        vm.checkpoint()
+        self.assertEqual(vm.call(api(vm,'WaitForSingleObject'),(mutex,0)),0)
+        self.assertEqual(vm.call(api(vm,'WaitForSingleObject'),(mutex,0)),0)
+        self.assertEqual(vm.scheduler.objects[mutex]['depth'],2)
+        self.assertEqual(vm.call(api(vm,'ReleaseMutex'),(mutex,)),1)
+        self.assertEqual(vm.call(api(vm,'ReleaseMutex'),(mutex,)),1)
+        self.assertEqual(vm.call(api(vm,'ReleaseMutex'),(mutex,)),0)
+        self.assertEqual(vm.call(api(vm,'GetLastError')),288)
+        vm.restore()
+        self.assertIsNone(vm.scheduler.objects[mutex]['owner'])
+        owned=vm.call(api(vm,'CreateMutexA'),(0,1,0))
+        self.assertEqual(vm.scheduler.objects[owned]['owner'],vm.scheduler.current)
+        with self.assertRaises(ValueError):vm.call(api(vm,'ReleaseMutex'),(0x7fff,))
+
     def test_named_event_final_close_recreates_and_checkpoint_preserves_live_aliases(self):
         vm=Runtime(BASELINE);name=vm.allocate(32);vm.write(name,b'close-recreate-event\0')
         create=lambda manual,initial:vm.call(api(vm,'CreateEventA'),(0,manual,initial,name))
