@@ -296,6 +296,9 @@ std::vector<SFixtureState> ReadStates(const JsonValue& list)
             st.name = s["name"].Str();
             st.frames = (int32_t)s["frames"].Int(10);
             st.aniflags = (int32_t)s["aniflags"].Int(0);
+            for (const JsonValue& m : s["motion"].Items())
+                st.motion.push_back({(int32_t)m[0].Int(), (int32_t)m[1].Int(), (int32_t)m[2].Int(),
+                                     (int32_t)m[3].Int(), (int32_t)m[4].Int(), (int32_t)m[5].Int()});
         }
         states.push_back(st);
     }
@@ -390,9 +393,19 @@ std::vector<TCharacter*> CaseNearby(const S3DPoint& pos, int32_t range)
 
 void WriteSeams(JsonOut& j)
 {
+    WriteSeamsSince(j, 0);
+}
+
+size_t SeamCount()
+{
+    return g_seams.size();
+}
+
+void WriteSeamsSince(JsonOut& j, size_t first)
+{
     j.Key("seams").Begin('[');
-    for (const std::string& s : g_seams)
-        j.Raw(s);
+    for (size_t i = first; i < g_seams.size(); ++i)
+        j.Raw(g_seams[i]);
     j.End(']');
 }
 
