@@ -21,13 +21,16 @@
 #include "rules.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <strings.h>
+#include <type_traits>
 #include <vector>
 
 namespace RetailAB::Fixture
@@ -50,6 +53,15 @@ void WriteDraws(JsonOut& j);
 // Action block flags by meaning (the port's bits under retail's names).
 uint32_t FlagBits(const JsonValue& names);
 void WriteFlags(JsonOut& j, uint32_t bits);
+
+// A case's character data, by the field names of the combat-data dump
+// (retailab_data.cpp): only the fields given are set, over SCharData's
+// defaults. `attacks` and `impacts` replace the tables.
+void ReadCharData(const JsonValue& c, SCharData& cd);
+
+// The name a case gives an object stat (retail's stat ids: charstats.h),
+// as the retail fixture names them; null for one it doesn't name.
+const char* ObjStatName(int32_t statid);
 
 // ---- Fixture imagery ------------------------------------------------------
 
@@ -132,6 +144,9 @@ class IFixtureChar
     // The resolvers ResolveAction would call on the doing block.
     virtual int32_t ResolveCombat(int32_t bits) = 0;
     virtual int32_t ResolveCombatMove(int32_t bits) = 0;
+    // The attack bookkeeping (timers, request bits, the player's button
+    // repeats, the chain, the last attack by index), by retail's names.
+    virtual void WriteAttackState(JsonOut& j) = 0;
 };
 
 // A TCharacter or TPlayer built from the case, without a class record or
@@ -152,6 +167,9 @@ class TFixtureChar : public Base, public IFixtureChar
         this->SetMoveAngle((int32_t)spec["moveangle"].Int(spec["facing"].Int()));
         this->state = (uint16_t)spec["state"].Int(0);
         this->charflags = (uint32_t)spec["charflags"].Int();
+        // The object flags combat code tests (immobile, paralysed, iced), as the case gives them.
+        constexpr uint32_t caseflags = OF_IMMOBILE | OF_PARALIZE | OF_ICED;
+        this->flags = (this->flags & ~caseflags) | ((uint32_t)spec["objflags"].Int(0) & caseflags);
         this->target_out_of_sight = spec["out_of_sight"].Bool();
         this->monsterkind = (int32_t)spec["monsterkind"].Int(0);
         for (const auto& [k, v] : spec["stats"].Members())
@@ -164,7 +182,22 @@ class TFixtureChar : public Base, public IFixtureChar
         cd->armorvalue = (int32_t)c["armor"].Int();
         for (size_t i = 0; i < c["damagemods"].Items().size() && i < NUMDAMAGETYPES; ++i)
             cd->damagemods[i] = (int32_t)c["damagemods"][i].Int();
+        ReadCharData(c, *cd);
         this->chardata = cd.get();
+        this->frame = (short)spec["frame"].Int(0);
+        ReadAttackState(spec["attackstate"]);
+        if constexpr (std::is_base_of_v<TPlayer, Base>)
+        {
+            const JsonValue& r = spec["resists"];
+            for (int32_t i = 0; i < NUMDAMAGETYPES; ++i)
+                Base::SetObjStat(CHRRESIST_FIRST + i, (int32_t)r[i].Int(0));
+            if (spec.Has("weapon"))
+            {
+                weapon = true;
+                weapontype = (int32_t)spec["weapon"]["type"].Int();
+                weapondamage = (int32_t)spec["weapon"]["damage"].Int();
+            }
+        }
     }
     TFixtureChar(const TFixtureChar&) = delete;
     TFixtureChar& operator=(const TFixtureChar&) = delete;
@@ -255,11 +288,92 @@ class TFixtureChar : public Base, public IFixtureChar
     int32_t Mana() override { return ObjStat("mana"); }
     int32_t Radius() override { return ClassStat("radius"); }
 
+    // Any other object stat the case names (retail's GetObjStat seam, slot
+    // 0xdc); the rest as the port has them, unrecorded.
+    int32_t GetObjStat(int32_t statid) const override
+    {
+        const char* stat = ObjStatName(statid);
+        if (!stat || !stats.count(stat))
+            return Base::GetObjStat(statid);
+        return StatSeam("GetObjStat", stats, stat);
+    }
+
+    // Setting one (retail's SetObjStat seam, slot 0xe8): recorded, and the
+    // case's value follows.
+    void SetObjStat(int32_t statid, int32_t value) override
+    {
+        const char* stat = ObjStatName(statid);
+        if (!stat || !stats.count(stat))
+        {
+            Base::SetObjStat(statid, value);
+            return;
+        }
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "SetObjStat").FieldString("who", who).FieldString("stat", stat);
+        j.Field("value", value).End('}');
+        Seam(j.str());
+        stats[stat] = value;
+    }
+
+    // A type stat by name (retail's GetStat seam at slot 0xd4), when the
+    // case gives it.
+    using Base::GetStat;
+    int32_t GetStat(const char* statname) const override
+    {
+        std::string stat = statname;
+        for (char& ch : stat)
+            ch = (char)tolower((unsigned char)ch);
+        if (!classstats.count(stat))
+            return Base::GetStat(statname);
+        return StatSeam("GetStat", classstats, stat.c_str());
+    }
+
+    // The player's weapon, when the case gives one (retail's seams at
+    // TPlayer::WeaponType 0x00520810 / WeaponDamage 0x00520830).
+    int32_t WeaponType() override
+    {
+        if (!weapon)
+            return Base::WeaponType();
+        return ValueSeam("WeaponType", weapontype);
+    }
+    int32_t WeaponDamage() override
+    {
+        if (!weapon)
+            return Base::WeaponDamage();
+        return ValueSeam("WeaponDamage", weapondamage);
+    }
+
+    void WriteAttackState(JsonOut& j) override
+    {
+        j.Key("attackstate").Begin('{');
+        j.Field("nextattack", this->nextattack).Field("magictimer", this->magictimer);
+        j.Field("requestbits", this->requestbits).Field("attackcount", this->attackcount);
+        j.Field("lastbutton", this->lastbutton).Field("buttonrepeat", this->buttonrepeat);
+        j.Field("chainhits", this->chainhits).Field("lastattackticks", this->lastattackticks);
+        j.Field("lasthit", this->lasthit);
+        j.Key("lastattack");
+        const int32_t last = AttackIndex(this->lastattack);
+        if (last >= 0)
+            j.Value(last);
+        else
+            j.Null();
+        j.End('}');
+    }
+
+    // The index of an attack record in this character's table, -1 if none.
+    int32_t AttackIndex(const SCharAttackData* ad) const
+    {
+        for (int32_t i = 0; ad && i < cd->attacks.NumItems(); ++i)
+            if (&cd->attacks[i] == ad)
+                return i;
+        return -1;
+    }
+
   private:
     int32_t ObjStat(const char* stat) { return StatSeam("GetObjStat", stats, stat); }
     int32_t ClassStat(const char* stat) { return StatSeam("GetStat", classstats, stat); }
 
-    int32_t StatSeam(const char* seam, const std::map<std::string, int32_t>& from, const char* stat)
+    int32_t StatSeam(const char* seam, const std::map<std::string, int32_t>& from, const char* stat) const
     {
         auto it = from.find(stat);
         if (it == from.end())
@@ -271,9 +385,37 @@ class TFixtureChar : public Base, public IFixtureChar
         return it->second;
     }
 
+    int32_t ValueSeam(const char* seam, int32_t value) const
+    {
+        JsonOut j;
+        j.Begin('{').FieldString("seam", seam).FieldString("who", who).Field("result", value).End('}');
+        Seam(j.str());
+        return value;
+    }
+
+    // The case's attack bookkeeping, where given (retail +0x120 ... +0x290).
+    void ReadAttackState(const JsonValue& a)
+    {
+        this->nextattack = (int32_t)a["nextattack"].Int(this->nextattack);
+        this->magictimer = (int32_t)a["magictimer"].Int(this->magictimer);
+        this->requestbits = (uint32_t)a["requestbits"].Int(this->requestbits);
+        this->attackcount = (int32_t)a["attackcount"].Int(this->attackcount);
+        this->lastbutton = (int32_t)a["lastbutton"].Int(this->lastbutton);
+        this->buttonrepeat = (int32_t)a["buttonrepeat"].Int(this->buttonrepeat);
+        this->chainhits = (int32_t)a["chainhits"].Int(this->chainhits);
+        this->lastattackticks = (int32_t)a["lastattackticks"].Int(this->lastattackticks);
+        this->lasthit = (int32_t)a["lasthit"].Int(this->lasthit);
+        if (a.Has("lastattack") && !a["lastattack"].IsNull())
+            this->lastattack = &cd->attacks[(int32_t)a["lastattack"].Int()];
+    }
+
+    bool weapon = false;
+    int32_t weapontype = 0, weapondamage = 0;
+
     std::string who;
     std::vector<SFixtureState> states;
-    std::map<std::string, int32_t> stats, classstats;
+    mutable std::map<std::string, int32_t> stats;
+    std::map<std::string, int32_t> classstats;
     std::unique_ptr<SCharData> cd;
 };
 
@@ -368,8 +510,15 @@ class TFixtureWorld
         else
             j.Null();
         WriteFlags(j, ab->flags);
+        if (blockExtra)
+            blockExtra(j, *ab);
         j.End('}');
     }
+
+    // Optional extras a target adds to its dumps: fields of each block, and
+    // each character's attack bookkeeping (IFixtureChar::WriteAttackState).
+    std::function<void(JsonOut&, const TActionBlock&)> blockExtra;
+    bool writeAttackState = false;
 
     void WriteCharacter(JsonOut& j, const char* key, TCharacter* c) const
     {
@@ -383,6 +532,8 @@ class TFixtureWorld
         WriteBlock(j, "root", fx->Root(), made);
         WriteBlock(j, "doing", fx->Doing(), made);
         WriteBlock(j, "desired", fx->Desired(), made);
+        if (writeAttackState)
+            fx->WriteAttackState(j);
         j.End('}');
     }
 

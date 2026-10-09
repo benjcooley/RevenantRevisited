@@ -530,6 +530,50 @@ int32_t TPlayer::ArmorValue()
     return armor;
 }
 
+// REVSYNC: TPlayer::WeaponDamage @ 0x00520830 (the item's class isn't checked)
+int32_t TPlayer::WeaponDamage()
+{
+    return PrimeHand() ? PrimeHand()->GetStat("Damage") : chardata->weapondamage;
+}
+
+// REVSYNC: TPlayer::AttackModifier @ 0x0051a480
+int32_t TPlayer::AttackModifier()
+{
+    int32_t mod = chardata->attackmod;
+    mod += Rules.StatLevel(PLRSTAT_AGIL, Agil());
+    mod += SpellManager.GetOffense();
+    return mod + GetObjStat(SK_FIRST + SK_WEAPONSKILLS + WeaponType());
+}
+
+// REVSYNC: TPlayer::DefenseModifier @ 0x0051a4e0
+int32_t TPlayer::DefenseModifier()
+{
+    int32_t mod = chardata->defensemod;
+    mod += Rules.StatLevel(PLRSTAT_RFLX, Rflx());
+    return mod + SpellManager.GetDefense();
+}
+
+// REVSYNC: TPlayer::Offense @ 0x0051a520
+int32_t TPlayer::Offense()
+{
+    const int32_t level = Level() * Rules.tohitrangeplyr;
+    return level + AttackModifier();
+}
+
+// REVSYNC: TPlayer::Defense @ 0x0051a550
+int32_t TPlayer::Defense()
+{
+    const int32_t level = Level() * Rules.tohitrangeplyr;
+    return level + DefenseModifier();
+}
+
+// REVSYNC: TPlayer::HoldsLight @ 0x00519970
+bool TPlayer::HoldsLight()
+{
+    TObjectInstance* item = equipment[EQ_L_ACCESSORY];
+    return item && item->ObjClass() == OBJCLASS_LIGHTSOURCE;
+}
+
 // **************
 // * Experience *
 // **************
@@ -728,9 +772,12 @@ void TPlayer::Damage(int32_t damage, int32_t type)
     TCharacter::Damage(damage, type);
 }
 
-int32_t TPlayer::GetResistance(int32_t type)
+// REVSYNC: TPlayer::Resist @ 0x005208d0 -- CalculateDamage's percent off:
+// read straight from the modified copy (+0x34c), not through GetObjStat.
+int32_t TPlayer::DamageModifier(int32_t damagetype)
 {
-    return 0; // Huhh?
+    const int32_t id = CHRRESIST_FIRST + damagetype;
+    return (uint32_t)id < (uint32_t)modstats.size() ? modstats[id] : 0;
 }
 
 // REVSYNC: TPlayer::GetFieldText = retail 0x0051dfb0 (vtable +0xc8).

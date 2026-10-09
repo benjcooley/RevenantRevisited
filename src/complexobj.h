@@ -94,6 +94,8 @@ class TActionBlock
     PSCharAttackData attack;              // Attack info (if is attack/impact/death/stun/knockdown action)
     PSCharAttackImpact impact;            // Impact info (if is attack/impact/death/stun/knockdown action)
     int32_t damage;                       // Damage attack will do (if hits)
+    int32_t tohit = 0;                    // Attack's to-hit, fixed when chosen (retail +0x54, DoAttack 0x004d2120)
+    int32_t roll = 0;                     // Attack's 1..100 roll, fixed when chosen (retail +0x58)
     void *data;                           // Data field (such as text for say)
     union
     {
