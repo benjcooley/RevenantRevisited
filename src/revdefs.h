@@ -310,6 +310,12 @@ constexpr int kInvSlotLast        = 0x115;
 #define BM_5BITPAL     0x1000   // Bitmap palette is 5 bit for r,g,b instead of 8 bit
 #define BM_COMPRESSED  0x4000   // Bitmap is compressed.
 #define BM_CHUNKED     0x8000   // Bitmap is chunked out
+// Retail's texture formats (the TSurface +0x38 / TBitmap flag values the
+// shipped Draw routine selector 0x004ad1d0 tests). The HUD archives store
+// their art as ARGB4444 (StatusBar.dat, SideBarTabs.dat, ...).
+#define BM_ARGB4444    0x10000  // Bitmap data is 16 bit A4 R4 G4 B4.
+#define BM_ARGB1555    0x20000  // Bitmap data is 16 bit A1 R5 G5 B5.
+#define BM_2BYTEFORMATS (BM_15BIT | BM_16BIT | BM_ARGB4444 | BM_ARGB1555)
 
 // Animation Drawing mode flags
 #define DM_DEFAULT      0x00000000  // Default is always defined as 0
