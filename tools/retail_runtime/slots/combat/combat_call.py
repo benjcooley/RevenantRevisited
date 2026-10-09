@@ -27,6 +27,8 @@ fixture world (docs/gameplay/COMBAT_DOJO.md on feature/combat). The case's
   frame, NextFrame. SetState, ResetState and the imagery's
   SetObjectMotion run as original over the case's motion tables
   (guest.py); a record per tick (`ticks`: self, motion, bits, seams).
+- `sidestep` (kata M10): SideStep `0x4d6220` with the case's `dir`
+  ('l', 'r', or none: retail's random pick), as original.
 - `update-move` (kata M6): TPlayScreen::UpdateMove `0x47de30` with the
   case's held controls (`controls`: state, changed; the debug camera off):
   Go / Leap / Stop as original, the map pane's MouseClick (the player's
@@ -88,6 +90,7 @@ PLAY_MOUSE_CLICK = 0x44f140                      # TMapPane::MouseClick (thiscal
 # here, recorded: a case that reaches them shows it).
 INPUT_SEAMS = ((0x4d2e30, 'Block', 4), (0x4d30f0, 'StopBlock', 0), (0x4d1050, 'IsBowDrawn', 0),
                (0x4d0dc0, 'AimBowLeft', 0), (0x4d0de0, 'AimBowRight', 0))
+SIDE_STEP = 0x4d6220                             # TCharacter::SideStep (thiscall (char dir), ret 4)
 COMPLEX_PULSE = 0x4db190                         # TComplexObject::Pulse (UpdateAction with +0xbc)
 SET_OBJECT_MOTION, NEXT_FRAME = 0x470bb0, 0x470cc0
 CAN_SEE = 0x4cd540
@@ -170,6 +173,9 @@ class CallFixture:
             result = s32(call(vm, vm.u32(vm.u32(me) + SLOT_MOVE), (), this=me))
         elif kind == 'sequence':
             return self._sequence(case, me)
+        elif kind == 'sidestep':
+            call(vm, SIDE_STEP, (ord(case['dir']) if case.get('dir') else 0,), this=me)
+            result = 0                            # retail's return is a leftover register
         elif kind == 'update-move':
             controls = case.get('controls', {})
             vm.put_u32(G_CMDSTATE, controls.get('state', 0))

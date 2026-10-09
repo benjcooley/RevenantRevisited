@@ -117,6 +117,11 @@ std::string CombatCall(const Case& c, std::string& error)
             return Sequence(cs, world, me);
         else if (call == "update-action")
             fx->RunUpdateAction((int32_t)cs["bits"].Int());
+        else if (call == "sidestep")
+        {
+            const std::string dir = cs["dir"].Str();
+            me->SideStep(dir.empty() ? 0 : dir[0]);    // the result isn't compared: retail's is a leftover
+        }
         else if (call == "update-move")
         {
             const JsonValue& ctl = cs["controls"];
@@ -231,6 +236,7 @@ static const bool registered = RegisterTarget("combat-go", CombatCall) &&
                                RegisterTarget("combat-update", CombatCall) &&
                                RegisterTarget("combat-sequence", CombatCall) &&
                                RegisterTarget("combat-input", CombatCall) &&
+                               RegisterTarget("combat-steps", CombatCall) &&
                                RegisterTarget("combat-kernels", CombatKernels);
 
 }  // namespace RetailAB
