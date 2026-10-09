@@ -7,7 +7,7 @@ state, geometry, animation, motion and comparisons stay in this fast loop.
 Existing guest recordings remain evidence. Unsupported fixtures stay queued
 while the next easy effect moves forward.
 
-Latest bounded rendered coverage is 47/176. StillWater and all active watcher
+Latest bounded rendered coverage is 49/176. StillWater and all active watcher
 texture frames pass original-selector/matrix/raster comparisons; CharUtility
 and SewerWater pass all-part static comparisons and actual native animator
 lookup. Use `static_texture_probe.py` and `default_static_probe.py`.
@@ -653,3 +653,20 @@ include two exact warm replays. `test_drip_ripple_composite.py` also compiles a
 broken child-link driver and confirms its slipped age and missing removal are
 rejected. This narrowly extends the earlier request-boundary result; it does not
 expand the length64 or map-context claims.
+
+
+### Ripple splashes and recursive children
+
+[`ripple_splash_probe.py`](ripple_splash_probe.py) checks the length 64/96 path,
+including splash allocation, actual native RNG and independently generated
+children/grandchildren. Three profiles (origin and both opposing-sign XY poses)
+match over 363 state frames and 105 original-software image/depth pairs, replayed
+twice. Four tests include an isolated truncate-before-owner-add mutation rejected
+by actual native child coordinates. Production source passes unchanged.
+
+[Instructions and scope](../../recon/retail_asm/runtime/effects/ripple-splash-family-ab/README.md)
+and [report](../../recon/retail_asm/runtime/effects/ripple-splash-family-ab/manifest.json)
+retain raw removal journals: identity/tick matches, while flag-observation versus
+vector-destructor ordering within a tick is not claimed. Original sector/map
+installation, full world transformation, natural lighting and modern GPU pixels
+remain separate gates.

@@ -9,17 +9,17 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 74,
-    "port_smoke_preview_ids": 34,
-    "retail_rows_with_port_smoke": 36,
+    "retail_rows_with_source_fixes_recorded": 76,
+    "port_smoke_preview_ids": 36,
+    "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 60,
+    "actual_runtime_verified_rows": 62,
     "visual_fidelity_confirmed_rows": 16,
     "repeatable_ab_rows": 8,
-    "thin_bounded_render_frontend_rows": 47
+    "thin_bounded_render_frontend_rows": 49
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -256,6 +256,96 @@
         60,
         72
       ]
+    },
+    "recon/retail_asm/runtime/effects/sewer-dispatch-next-20261008/sewer-dispatch-verification.json": {
+      "sha256": "d3886c8478f25baf0d1ca50f0cf00c2779e5299e53558fe8164eefbb6af86d47",
+      "retail_rows": [
+        "SewerWater:0xadbcef19"
+      ],
+      "check": "sewer_actual_preview_and_map_dispatch",
+      "status": "pass",
+      "scope": "Correct real preview dispatch/static mesh and actual map create/frame/move/delete. Existing native-raster geometry proof retained; natural map setting and full retail/Metal fidelity remain open."
+    },
+    "recon/retail_asm/runtime/effects/sewer-dispatch-next-20261008/sewer-map-reviewed/manifest.json": {
+      "sha256": "c26656e11f2fbea9e0c3fd7f6c763bf0b82c09961153d5761d5a85f90393945b",
+      "retail_rows": [
+        "SewerWater:0xadbcef19"
+      ],
+      "check": "sewer_actual_preview_and_map_dispatch",
+      "status": "pass",
+      "scope": "Actual map NewObject/default animator/NextFrame/MOVE/DELETE and Metal output. Synthetic ground-only module; natural context and retail device fidelity remain open."
+    },
+    "recon/retail_asm/runtime/effects/sewer-dispatch-next-20261008/sewer-preview-after/manifest.json": {
+      "sha256": "ec6a5e716321207f8754b93d609aa0bd16acbd4bb627486c0b7e695bd42e6be1",
+      "retail_rows": [
+        "SewerWater:0xadbcef19"
+      ],
+      "check": "sewer_actual_preview_and_map_dispatch",
+      "status": "pass",
+      "scope": "Actual Revisited GPU output for the explicit scenario; comparison/acceptance is separate."
+    },
+    "recon/retail_asm/runtime/effects/ripple-splash-family-ab/manifest.json": {
+      "sha256": "7b26d2c3c0d893acc8c8eacbeb9436ec71bdb77017a78e6e78e1db20fbe228c1",
+      "retail_rows": [
+        "Ripple:0x12309867"
+      ],
+      "check": "ripple_recursive_splash_family",
+      "status": "pass",
+      "scope": "Actual native splash allocation/range+raw RNG/Animate/Render and recursive child Init in one shared Runtime; independent compiled actual production Ripple factory/Advance/Submit and strict observed raw draws. Explicit children-before-parent component order; original sector/map allocation/install, natural lighting, modern GPU separate. Compare removal identities/ticks; preserve raw flag/destructor journals without claiming within-tick destructor order. Identity facing, origin selected without fitting; native 43ad80 local transforms plus declared integer owner translation adapter, not the full retail map world-render path."
+    },
+    "recon/retail_asm/runtime/effects/faultfire-render-next-20261008/manifest.json": {
+      "sha256": "fa92387916f74afa4e794a3423f85e3ee1600edd690b56f5fbcefd5be54127c5",
+      "retail_rows": [
+        "Faultfire:0x51753bce"
+      ],
+      "check": "faultfire_two_pass_uv_phase_frontend",
+      "status": "pass",
+      "scope": "Nullspell stationaryTEffect, identityowner, actualauthoredfourvertices/twofaces/ARGB4444texture; sharedcompiledAdvance/Submit, originalSetup/FCOS/UV accumulation/matrix/projection/raster. OriginalsoftwareblendSave/Set/Restore execute; whitevertex fixture. Assetloader/completeconstructor/caller/device/normal-light/modernGPU remain separate."
+    },
+    "recon/retail_asm/runtime/effects/water-final-interpolated-20261008-ab/manifest.json": {
+      "sha256": "0c3b364a622a8ebb4f96fd9d8c4d72d4cee76366692aa263e3d7811514b85391",
+      "retail_rows": [
+        "Water:0x1903abcd"
+      ],
+      "check": "literal_water_25_drop_frontend",
+      "status": "pass",
+      "scope": "Literal Water25drop original Init/warmup/Animate/RNG/Render matrices vs compiled actual production methods and packets. Exact authored XYZ/UV/RGB565/original indices; identity owner/face0/white common software raster. Copied lighting callback boundary omitted; source initialization/assets/renderer adapted. Actual additive device arithmetic, normal illumination, modern triangulation, map/component and Metal separate; no FlowWater mapping claim."
+    },
+    "recon/retail_asm/runtime/effects/water-runtime-next-20261008/water-map-runtime/manifest.json": {
+      "sha256": "f0ebadae0889e008cf664c9ebbc2a971fec2578c4ca02aa8aa67004b27a4a40f",
+      "retail_rows": [
+        "Water:0x1903abcd"
+      ],
+      "check": "water_actual_preview_map_lifecycle",
+      "status": "pass",
+      "scope": "Actual ADDAT/typed Water component/normal map pulse/render/MOVE/DELETE,64frames,restored clean floor. Synthetic grounded module; natural environment/lighting and retail versus Metal parity remain open."
+    },
+    "recon/retail_asm/runtime/effects/water-runtime-next-20261008/water-preview-final/manifest.json": {
+      "sha256": "1deeb5f12064f3e18c40fcdfd1f1f6fbd0b91d4bc3448e8e1752943a64a994d6",
+      "retail_rows": [
+        "Water:0x1903abcd"
+      ],
+      "check": "water_actual_preview_map_lifecycle",
+      "status": "pass",
+      "scope": "Actual Revisited GPU output for the explicit scenario; comparison/acceptance is separate."
+    },
+    "recon/retail_asm/runtime/effects/water-runtime-next-20261008/waterfall-preview-final/manifest.json": {
+      "sha256": "fce386b945c321311822b3dc94031d663fd2f14fff9ef73bb5308d68eb860c0d",
+      "retail_rows": [
+        "Waterfall:0xa907dabf"
+      ],
+      "check": "water_actual_preview_map_lifecycle",
+      "status": "pass",
+      "scope": "Actual Revisited GPU output for the explicit scenario; comparison/acceptance is separate."
+    },
+    "recon/retail_asm/runtime/effects/water-final-identity-safe-20261008-ab/manifest.json": {
+      "sha256": "b0e309da620e4f1102e0b4f5c71679bbf3329d1326b1828318bd14c80a913b95",
+      "retail_rows": [
+        "Water:0x1903abcd"
+      ],
+      "check": "literal_water_25_drop_frontend",
+      "status": "pass",
+      "scope": "Literal Water25drop original Init/warmup/Animate/RNG/Render matrices vs compiled actual production methods and packets. Exact authored XYZ/UV/RGB565/original indices; identity owner/face0/white common software raster. Copied lighting callback boundary omitted; source initialization/assets/renderer adapted. Actual additive device arithmetic, normal illumination, modern triangulation, map/component and Metal separate; no FlowWater mapping claim."
     }
   }
 }

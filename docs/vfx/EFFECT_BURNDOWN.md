@@ -9,7 +9,15 @@ Prioritize speed and repeatability, with known renderer limits recorded
 separately from VFX defects. The counts and earlier captures below are retained
 historical evidence; this migration alone grants no additional acceptance.
 
-**Latest thin-emulator coverage: 47 / 176 bounded rendered frontends.**
+**Latest thin-emulator coverage: 49 / 176 bounded rendered frontends.**
+
+[SewerWater preview/map dispatch](../../recon/retail_asm/runtime/effects/sewer-dispatch-next-20261008/sewer-dispatch-verification.json)
+now uses the verified static authored quad rather than the unrelated moving-water
+particle code. The actual browser changes from 12 moving images to 12 identical
+nonempty images; the normal map passes ten create/frame/move/delete observations
+and restores its original clean floor. Source-fix rows rise74→75 and controlled
+runtime rows60→61. This extends an existing retail row; bounded coverage remains
+47/176 and natural setting/device acceptance remains open.
 
 [StillWater and all three watcher textures](../../recon/retail_asm/runtime/effects/static-texture-next-20261007/manifest.json)
 add 52 original texture-selector checks, 1,040 corner/UV comparisons and 26
@@ -32,6 +40,15 @@ controlled runtime rows56→60 and source-fix rows71→74. Natural placement,
 lighting/culling and retail-versus-Metal device parity remain open; full
 acceptance is still0/176. [Map-texture audit](forensics/MAP_TEXTURE_ANIMATION.md).
 
+[Longer Ripple families](../../recon/retail_asm/runtime/effects/ripple-splash-family-ab/manifest.json)
+now verify length64/96 recursively through three profiles, including both signs
+of owner translation: 363 states, 12,528 splash float fields, 36 births/removals,
+120 observed RNG calls and 105 exact image/depth pairs, twice replayed. A wrong
+truncate-before-owner-add mutation fails at the first translated birth. No
+production change was needed. Original sector/component scheduling, natural
+illumination/occlusion and Metal remain open; no duplicate row credit.
+[Scope](forensics/RIPPLE_SPLASH_FAMILY_THIN.md).
+
 [Linked Drip → Ripple](../../recon/retail_asm/runtime/effects/drip-ripple-composite-ab/manifest.json)
 now verifies the actual production child factory/Advance/Submit against original
 retail children: 145 state frames, five complete child lifecycles and 43 exact
@@ -40,6 +57,30 @@ fails the new regression. This closes the no-splash length20 rendered-child
 gap without increasing the effect-row count. Sector scheduling, audio/RNG,
 length64 splashes, natural context and full Metal parity remain separate.
 [Scope](forensics/DRIP_RIPPLE_LINKED_THIN.md).
+
+Actual Water map ownership now passes eight identity/component/movement/delete
+observations over64frames, with59changingactiveimages and exact clean-floor
+restoration. Water and Waterfall previews both complete12nonemptychangingframes
+and clean shutdown after fixing identity-less diagnostic logging. Waterfall
+physics/material are unchanged. Controlled runtime rows are now62; full device
+and natural-setting acceptance remain separate.
+
+[Literal Water](../../recon/retail_asm/runtime/effects/water-final-identity-safe-20261008-ab/manifest.json)
+now uses its authored XY quad, native scale/translation/mode16 and true24Hz
+state clock. The previous41ms clock first drifted at tick62; its billboards
+also used invented16wu geometry. Corrected native/production97states compare
+all25drops/24,250fields and420RNGcalls, with eight exact repeated image/depth
+pairs. Preview/map share one initializer/producer, and rendering-only motion
+is smooth between original ticks. Natural lighting/material/device and setting
+remain open. [Audit](forensics/LITERAL_WATER_THIN.md).
+
+[FaultFire](../../recon/retail_asm/runtime/effects/faultfire-render-next-20261008/manifest.json)
+now passes129ticks/645exactphase-and-UVfields,128orderedRNGcalls and12nonempty
+repeated two-pass image/depth pairs. Per-vertex U accumulation and extended
+phase-wrap intermediates remove325source/packet mismatches. Selected images
+already matched before the fix, so field equality supplies the causal evidence;
+this is no brightness/size/material fit. Natural context and upper-mesh/device
+transparency remain open.
 
 [FireSwarm](../../recon/retail_asm/runtime/effects/fireswarm-render-next-20261008/manifest.json)
 adds a stationary-cylinder frontend: 79 exact lifecycle ticks, 237 float32
@@ -686,7 +727,7 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 - [ ] **Sparks** `0x14db0f2e` — `Misc\Sparks.I3D`. Candidates: `TSparkEffect_EDITOR_DEFAULT`, `TSparkEffect`, `TSparkAnimator_SHIM`, `TSparksEffect_BESPOKE`. Progress: clean FPS-enabled editor-default reference has34 changing images and exact ground; own240-frame authored FX-quad pair passes root isolated visual review across six active samples with independent RNG/no fitting. Old trail diagnostic retained. Next: real ResolveAttack blocked miss→CA_SPARKS→EffectBurst in loaded combat, including15–25/single variant/trails2/bounce and actor/audio/lifetime. Editor appearance grants no blocked-combat acceptance. See [audit](forensics/SPARKS_TSparkAnimator.md).
 - [ ] **Burn** `0x55471bff` — `Magic\Burnbabyburn.I3D`. Candidates: `TBurnEffect_BESPOKE`, `TBurnAnimator_SHIM`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **Drip** `0x5975abde` — `Magic\Drip.i3d`. Candidates: `TDripEffect`, `TDripEffect_AB`, `TDripEffect.OnHand`. Progress: accurate SW reference and steady-state emitted Ripple appearance pass; exact0x5975abde real ADDAT/setdrip/MOVE/DELETE passes7 checks, animation at both positions and17 exact-ground cleanup frames. Next: falling Drip visual fidelity and natural map context separately; advance the easy reference queue.
-- [ ] **Ripple** `0x12309867` — `Magic\Ripples.I3D`. Candidates: `TRippleEffect`. Progress: source fix recorded; user confirms the Drip-emitted Ripple matches retail visually despite different random seeds. Next: standalone type dispatch and natural runtime/context checks; no further ring appearance or random placement tuning needed. Latest user reconfirms identical appearance despite independent randomseeds; same scopedpass, no duplicatecount/cadence/full claim.
+- [ ] **Ripple** `0x12309867` — `Magic\Ripples.I3D`. Candidates: `TRippleEffect`. Progress: user-confirmed independent-seed appearance plus native length64/96 recursive splash/child/RNG proofs and105exact image/depthpairs. Next: actual sector/component installation/scheduling, natural illumination/occlusion and Metal; no additional ring geometry fitting.
 
 ## Batch 3 — Environment, water, signs and simple reusable variants (51 retail rows)
 
@@ -704,7 +745,7 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 - [ ] **Smoke** `0x224a5ccc` — `Misc\smoke.I3D`. Candidates: none identified. Progress: Additional Z35 placement/camera probe remains invisible; owner context was not retained after add. Four exact saved Smoke IDs occur at Z35 in Ahkuilon; placement-probe.json retains coordinates. S08 MistFog is not Smoke. Next: Return later with actual shipped setting/controller and stable background; bounded standalone probe is diagnostic only. Advance easy retail A/B.
 - [ ] **Flies** `0xa21d9d00` — `Misc\Flies.I3D`. Candidates: `TFlyEffect_BESPOKE`. Progress: 2026-10-05: No useful animated visible reference in bounded standalone recipe. No accurate-reference or visual-acceptance credit. Next: Return later with actual shipped setting/controller and stable background; bounded standalone probe is diagnostic only. Advance easy retail A/B.
 - [ ] **Fog** `0xc24b2a85` — `Misc\Fog.I3D`. Candidates: `TFogEffect_BESPOKE`. Progress: native standalone probe invisible; shipped asset/source require an untextured36-vertex grid, unlike current billboard. Next: defer difficult reference and restore source mesh path later. See [audit](forensics/DUST_FOG.md).
-- [ ] **Water** `0x1903abcd` — `misc\Water.i3d`. Candidates: `TWaterEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
+- [ ] **Water** `0x1903abcd` — `misc\Water.i3d`. Candidates: `TWaterEffect_BESPOKE`. Progress: exact native25drop/warmup/RNG/authored quad frontend passes; actual sharedpreview/map producer and eight map lifecycle checks pass. Next: natural environment, material illumination/culling and original/Metal device parity separately.
 - [ ] **Waterfall** `0xa907dabf` — `misc\Water.i3d`. Candidates: `TWaterFallEffect_BESPOKE`, `TWaterFallEffect_BESPOKE__Waterfall`. Progress: source/state/runtime fixes pass; retail flags0x100 select authored FVF0x112 vertices/material, so ignored CPU grayscale has now been removed from the port. Corrected render/opcode tests and fresh saved/command recaptures pass: 121/49 distinct images, seven lifecycle rows and one reference component. Prior captures retain pre-color-fix lifecycle proof. Next: visible native reference and authored-normal/material/device parity in original setting. Ambient 128 native attempt also failed. See [H02 evidence](forensics/H02_WATERFALL_RUNTIME.md).
 - [ ] **MistFog** `0x180674ba` — `misc\Mistfog.i3d`. Candidates: `TFogEffect_Bespoke__MistFog_BESPOKE`. Progress: wrong Magic asset replaced by exact Misc RGB565; authored geometry, gravity -.01, RNG order and 24Hz state restored; 1,600 state cases pass. Original saved identity and actual ADDAT/move/persist/delete regressions pass with one reference component; 121/49 distinct saved/command images and clean post-delete tail. Next: visible native reference, authored-normal SW illumination/device parity and original map setting. Unlit is not SW illumination parity; failed native attempts are diagnostics. See [M06 evidence](forensics/M06_MISTFOG_RUNTIME.md).
 - [ ] **Pixie** `0x89abcde1` — `misc\Pixies.i3d`. Candidates: `TPixieEffect_BESPOKE`. Progress: two authored meshes/textures, source timing/object switching, no invented light, exact typed owner;6 lifecycle checks, animation at both poses, source XY restoration and17 ground-only deletion frames pass. Next: isolated appearance now passes; nearby-character interaction, repeat protocol and original context remain open. See [audit](forensics/PIXIE_AUTHORED.md).
@@ -712,7 +753,7 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 - [ ] **FlowWater** `0xadbcef15` — `Misc\FlowWater.I3D`. Candidates: `TWaterEffect_BESPOKE__FlowWater`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **BendWater1** `0xadbcef16` — `Misc\BendWater1.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **BendWater2** `0xadbcef17` — `Misc\BendWater2.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **SewerWater** `0xadbcef19` — `Misc\SewerW.I3D`. Candidates: `TWaterEffect_BESPOKE__SewerWater`. Progress: exact default-animator/asset and bounded original-raster A/B pass (2026-10-07). All authored parts/materials retained in compiled-production fixture. Next: natural caller/map or character context, illumination/culling and full device/backend parity. Full acceptance remains open.
+- [ ] **SewerWater** `0xadbcef19` — `Misc\SewerW.I3D`. Candidates: `TWaterEffect_BESPOKE__SewerWater`. Progress: exact default-animator/asset and bounded original-raster A/B pass. SewerWater browser now uses its static authored quad;12nonemptyidenticalGPUframes and10real map create/frame/move/delete checks pass. Next: natural setting, illumination/culling and full device/backend parity. Full acceptance remains open.
 - [ ] **Wave** `0x9d92bc1d` — `Misc\Wave.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **WaveS** `0x9d92bc1e` — `Misc\WaveS.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **WaveM** `0x9d92bc1f` — `Misc\WaveM.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
@@ -768,7 +809,7 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 - [ ] **Sandswirl** `0xbecefeda` — `Magic\Sandswirl.i3d`. Candidates: `TSandswirlEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **WindStrip** `0xded3dbed` — `Magic\Wind.I3D`. Candidates: `TWindStripAnimator_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **Halo** `0xdedbdbed` — `Magic\Halo.I3D`. Candidates: `THaloEffect`. Progress: Bounded software standalone probe invisible; exact cleanup and authored asset dump retained. Next: defer caller/device investigation; no accurate-reference credit.
-- [ ] **Faultfire** `0x51753bce` — `Magic\Faultfire.i3d`. Candidates: `TFaultFireAnimator_SHIM`, `TFaultFireEffect_BESPOKE`. Progress: own native122-image reference and current authored vertical two-pass mesh retained;6 exact-type runtime checks, animation/movement and17-frame exact cleanup pass. Next: defer remaining native-solid/port-translucent alpha/raster difference and natural context; advance easy effects. See [audit](forensics/F06_TFaultFireEffect.md).
+- [ ] **Faultfire** `0x51753bce` — `Magic\Faultfire.i3d`. Candidates: `TFaultFireAnimator_SHIM`, `TFaultFireEffect_BESPOKE`. Progress: native theta-wrap/per-vertexU arithmetic corrected;129ticks/645exactfields and12nonemptytwo-pass image/depthpairs pass. Next: natural context and original upper-mesh/device material-opacity issue, full Metal parity.
 - [ ] **FireCone** `0xab92cd01` — `Magic\FireCone.I3D`. Candidates: `TFireConeEffect_BESPOKE`. Progress: source fire80/smoke80/burst100 pools, authored meshes/materials,24Hz and idempotent ownerZ+100 restored;39 controller checks and11 real lifecycle rows pass. Clean native/current software-helper pair retained with backgrounds0. Next: port brighter/denser white core versus native orange flame/smoke scatter remains bounded software blend/raster/initial-phase deferral; actual caster/target/context and full acceptance remain open. See [audit](forensics/FIRE_CONE_AUTHORED.md).
 - [ ] **Aura** `0x00ab1d1d` — `Magic\Aura.I3D`. Candidates: `TAuraEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **CharUtility** `0xadbcef13` — `Misc\CharUtility.I3D`. Candidates: none identified. Progress: exact default-animator/asset and bounded original-raster A/B pass (2026-10-07). All authored parts/materials retained in compiled-production fixture. Next: natural caller/map or character context, illumination/culling and full device/backend parity. Full acceptance remains open.
