@@ -9,11 +9,11 @@
 #include <stdio.h>
 #include <string.h>
 
-void *TMulti::Object(char *name)
+void *TMulti::Object(const char *name)
 {
     for (int32_t c = 0; c < numoffsets; c++)
     {
-        char *p = (char *)((void *)names[c]);
+        const char *p = (const char *)((void *)names[c]);
         if (p && !stricmp(p, name))
             return (void *)offsets[c]; 
     }
