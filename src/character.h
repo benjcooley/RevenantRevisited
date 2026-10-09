@@ -75,6 +75,11 @@ class TCharacter : public TComplexObject
     using CanSeeSeam = bool (*)(TCharacter* self, TCharacter* chr, int32_t angle);
     static inline CanSeeSeam canSeeSeam = nullptr;
       // Likewise for CanSeeCharacter (retail 0x004cd540)
+    using CastSeam = bool (*)(TCharacter* self, const char* kind, const char* text, TObjectInstance** targets,
+        int32_t numtargs, const S3DPoint* sourcepos);
+    static inline CastSeam castSeam = nullptr;
+      // Likewise for CastByTalismans / CastByName (retail 0x004d5c20 /
+      // 0x004d5b90): `kind` names which
       // Retail A/B fixtures only (retailab_combat.cpp): when set, it answers
       // FindCharacters instead of the map, as the retail fixture's seam at
       // FindCharacters 0x004cd690 does (docs/gameplay/COMBAT_DOJO.md §6.3).
