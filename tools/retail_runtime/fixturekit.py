@@ -45,7 +45,11 @@ def start(executable):
 
 
 class Boundaries:
-    """Original function entries answered by the host, every call recorded."""
+    """Original function entries answered by the host, every call recorded.
+    A handler that returns `Boundaries.ORIGINAL` lets the original run (a
+    seam some cases answer and others don't)."""
+
+    ORIGINAL = object()
 
     def __init__(self, vm):
         self.vm = vm
@@ -76,6 +80,8 @@ class Boundaries:
         except Exception as error:      # surface as a fixture error
             vm.error = error
             uc.emu_stop()
+            return
+        if result is Boundaries.ORIGINAL:
             return
         self.calls.append(name)
         uc.reg_write(UC_X86_REG_EAX, (result or 0) & 0xffffffff)

@@ -196,6 +196,37 @@ class TMapRenderer
     void ScreenToWorld(int32_t screen_x, int32_t screen_y,
                        int32_t z_floor, S3DPoint &out) const;
 
+    // ---- The map pane's pick (docs/gameflow/forensics/MAP_INPUT.md §7) --
+    // What the last drawn frame showed at a viewport pixel (the map view's
+    // pixels: the pointer's, the view sitting at 0,0). TMapPane::OnObject
+    // applies retail's rules on top; the renderer only reports.
+    struct SPick
+    {
+        // The object whose pixel won the depth test at the point (opaque
+        // tiles and meshes; translucent tiles don't write ids). Retail's
+        // GetZ (a z-find in the frame's z-buffer) asks the same question.
+        class TObjectInstance* frontmost = nullptr;
+        // A 3D mesh visible at retail's 9 probe pixels around the point
+        // (T3DScene::DrawScene 0x00412db0): the point's own pixel first,
+        // then the probe pixels in retail's order. Effects aren't picked.
+        class TObjectInstance* mesh = nullptr;
+    };
+    // The point the map pane will pick at (the pointer), or (-1, -1): each
+    // RenderFrame copies the ids around it back without waiting.
+    void SetPickPoint(int32_t x, int32_t y);
+    // The pick at (x, y): that copy when it was taken at (x, y) under the
+    // current draw list, else a direct read of the last drawn frame.
+    [[nodiscard]] bool Pick(int32_t x, int32_t y, SPick& out) const;
+    // The map-screen point (WorldToScreen's space, TObjectInstance::
+    // GetScreenPos's) under a viewport pixel, as the last frame drew it:
+    // retail's (x + posx, y + posy). False outside the viewport. Exact for
+    // the orthographic camera at any zoom; the perspective camera is not
+    // linear and only approximates.
+    [[nodiscard]] bool ScreenToMapScreen(int32_t screen_x, int32_t screen_y,
+                                         int32_t& map_x, int32_t& map_y) const;
+    // The map view's size in viewport pixels (the last frame's).
+    void GetViewportSize(int32_t& w, int32_t& h) const;
+
     // Find the loaded TSector covering (level, sector_x, sector_y).
     // Editor commands that create/remove instances need this because
     // MapPane's standard add/remove path scans MapPane.sectors[][]

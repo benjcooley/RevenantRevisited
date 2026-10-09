@@ -25,7 +25,8 @@ using namespace Fixture;
 // Case (field 0, JSON): {"globals", "chars": [...], "self", "call", ...};
 // see slots/combat/combat_call.py. `call`: "go" (Go(angle), kata M3),
 // "resolve-combat" / "resolve-combat-move" (the resolvers on the doing
-// block with `bits`, kata M5). Not modelled on the port side, because the
+// block with `bits`, kata M5), "move" (Move, kata M7: the case's ground and
+// nearby characters, retailab_fixture.h; adds "motion"). Not modelled on the port side, because the
 // port has no such thing yet: CombatFace (the case's value is ignored),
 // FindClearPath (the port's Go doesn't probe ahead), CanSeeCharacter in the
 // resolvers, the frame cadence of retargeting.
@@ -52,6 +53,10 @@ std::string CombatCall(const Case& c, std::string& error)
             returned = fx->ResolveCombat((int32_t)cs["bits"].Int());
         else if (call == "resolve-combat-move")
             returned = fx->ResolveCombatMove((int32_t)cs["bits"].Int());
+        else if (call == "move")
+            returned = (int32_t)me->Move();
+        else if (call == "update-action")
+            fx->RunUpdateAction((int32_t)cs["bits"].Int());
         else
             throw std::runtime_error("unknown call '" + call + "'");
 
@@ -69,6 +74,8 @@ std::string CombatCall(const Case& c, std::string& error)
         world.WriteCharacter(j, "self", me);
         WriteSeams(j);
         WriteDraws(j);
+        if (call == "move" || call == "update-action")
+            fx->WriteMotion(j);
         j.End('}');
         return j.str();
     }
@@ -138,6 +145,8 @@ std::string CombatKernels(const Case& c, std::string& error)
 static const bool registered = RegisterTarget("combat-go", CombatCall) &&
                                RegisterTarget("combat-resolve", CombatCall) &&
                                RegisterTarget("combat-damage", CombatCall) &&
+                               RegisterTarget("combat-move", CombatCall) &&
+                               RegisterTarget("combat-update", CombatCall) &&
                                RegisterTarget("combat-kernels", CombatKernels);
 
 }  // namespace RetailAB

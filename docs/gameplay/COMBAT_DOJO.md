@@ -63,12 +63,13 @@ only).
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
 | M1 | action-state core: SetRoot / SetDoing / SetDesired / TryCommand / ForceCommand / UpdateAction | `0x4db2d0` `0x4db340` `0x4db3a0` `0x4db450` (Try) `0x4db4d0` (Force) `0x4db1d0` | `TComplexObject::*` | [~] SetDesired, ForceCommand ported (exercised by M3/M5); own kata open |
+| M1u | the action tick: UpdateAction (stealth reset, sleep, ResolveAction dispatch, the done rule, the fall, TryCommand), ResolveMove, ResolvePivot, ResolveSay, ResetStealthValues, Visibility | `0x4c3260` `0x4c3490` `0x4c5e90` `0x4c8470` `0x4c8400` `0x4cdbb0` `0x4c5aa0` | `TCharacter::UpdateAction` and the resolvers | [x] 255/255 (`combat-update`; six mutations caught) |
 | M2 | angle/distance kernels: AngleDiff, ConvertToFacing, Distance, ConvertToVector, object Distance/AngleTo | `0x46ded0` `0x46dc60` `0x46de60` `0x46db20` `0x46ea20` `0x46ea90` | `AngleDiff`, `ConvertToFacing`, `Distance`, `ConvertToVector`, `TObjectInstance::Distance/AngleTo` | [x] 30 batches, every angle pair, ~28k vectors |
 | M3 | combat walking: Go(angle), empty world | `0x4ce350` | `TCharacter::Go(int)` | [x] 762/762 |
 | M4 | combat walking with retargeting (world + sight/hearing seams) | `0x4ce350`, FindCharacters `0x4cd690` | same | [ ] |
 | M5 | combat resolve tick: ResolveCombat / ResolveCombatMove (+ SetFighting `0x4d4790`) | `0x4c7980` `0x4c7f80` | `ResolveCombat`, `ResolveCombatMove` | [x] 654/654 |
 | M6 | player input per tick: UpdateMove → Go / Stop / Block / Leap | `0x47de30` | `TPlayScreen::UpdateMove` | [ ] |
-| M7 | displacement: Move / MoveStep (velocity, blocking, shove) | `0x4c46d0` `0x4c3bc0`, TPlayer `0x518df0` | `TCharacter::Move`, `MoveStep` | [ ] |
+| M7 | displacement: Move / MoveStep (velocity, blocking, shove), FindClearPath, CharBlocking, GetWalkHeight / GetWalkHeightRadius | `0x4c46d0` `0x4c3bc0`, TPlayer `0x518df0`, `0x4c39d0` `0x4d4db0` `0x452e10` `0x4530a0` | `TCharacter::Move`, `MoveStep`, `Blocked`, `CharBlocking`, `TMapPane::GetWalkHeight*` | [x] 786/786 (`combat-move`; six mutations caught) |
 | M8 | orbit sequence: N ticks of Pulse → UpdateAction → Resolve* → Move, player strafing around a stationary target, monster approaching and circling | the above, chained | the above | [ ] |
 | M9 | AI combat movement: approach, combat range, retreat, wander | `0x4c8b60`, `0x4c9790` | `TCharacter::AI` | [ ] |
 | M10 | leap, side step, knock back, pivot, stop | `0x4d2be0` `0x4d6220` `0x4d3750` `0x4c8470` `0x4cee70` | same | [ ] |
@@ -226,6 +227,60 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
    (slot 4), so a character's distance there is edge to edge in retail
    too; the trigger test doesn't use object Distance. The port's virtual
    Distance matches all three.
+8. **The displacement step (kata M7, 2026-10-09).** The port's Move was
+   the 1998 MoveStep without retail's changes (forensics/COMBAT_MOTION.md
+   §6 #10-#20); now retail's, verified per case:
+   - the ground: more than 16 above it drops to it at once (MOVE_FALLING)
+     rather than falling over ticks;
+   - no motion and no velocity: NOTMOVING with accum and shovedir reset,
+     before any probe;
+   - a MoveTo repeats MoveStep up to ten times, ignoring characters;
+   - substeps split on `|x| >= |y|` (ties to x) and are nudged to land
+     on the target exactly;
+   - a blocked substep still reports MOVED, keeps its fraction and the
+     loop goes on;
+   - blocked steps go through when both the new and the current position
+     touch someone; overlapping characters never block each other (so
+     they can part);
+   - the shove is skipped only when a character blocks in combat, commits
+     its side as it probes, and keeps vel;
+   - FindClearPath has retail's gates (a hole, a signed step of 0x20
+     between cells, dead / interactive attack / flying / invisible /
+     MoveTo movers pass characters) and no FALLING exemption;
+   - CharBlocking walks the loaded sectors (iterator flags 0xe0) within
+     0x80 and skips interactive attackers, fliers, the invisible, MoveTo
+     movers and idle players.
+   GetWalkHeightRadius is retail's (absolute steps between in-range
+   neighbouring cells, a hole flag) instead of the 1998 signed min/max.
+   Open: retail's ReturnWalkmap masks heights to 10 bits (`& 0x3ff`,
+   the top 6 bits are a field GetWalkHeight's third argument returns),
+   the port's walkmap holds 16; the walk root asks the class (slot
+   `0x30c`: a player with a light in hand walks "torch", `+0x2b8`
+   unconfirmed), which matters only with a positive walk speed. Arena
+   effect: fighters now reach each other, so the AI attack spam (C3,
+   IsValidAttack's next-attack gate) shows in full (1866 attacks).
+9. **The action tick (kata M1u, 2026-10-09).** The port's command states
+   were the 1998 set (pending 0, executing 1, completed 2) while retail's
+   resolvers, TryCommand and ForceCommand use 0 done / no opinion, 2
+   executing, 3 impossible; the port now uses retail's (`COM_DONE`,
+   `COM_EXECUTING`, `COM_IMPOSSIBLE`). UpdateAction is retail's:
+   - a resolver's "done" still waits for the animation, but the root is
+     done unless mid-transition, and only "done" drops priority;
+   - the fall needs a "fall" animation and no priority, and no desired
+     block is tried that tick;
+   - ResetStealthValues runs off the 24-frame beat (and on it for a
+     finished non-root action or negative values): 100 for an attack,
+     else 70, halved sneaking, `random(1, 25)` -- a draw per character
+     nearly every tick, where the port drew `random(1, 100)` with the 1998
+     formula;
+   - Visibility is the ambient light alone (`min(ambient, 255) * 100 /
+     255`), not the 1998 sum of lights and ambient colour.
+   ResolveMove bounces off a block (the angle by octant, +0x10, facing and
+   move angle with it, back to the root) instead of facing the same way;
+   a Goto picks its item up on arrival (ResolveMove, and in combat
+   ResolveCombatMove, which also steps toward it). TComplexObject::Pulse
+   drops the forced and transition marks at frame 5. ResolvePull is still
+   dispatched (retail's is empty; where retail pulls levers is open).
 
 ## 6. Layouts used by the fixtures
 
@@ -240,9 +295,15 @@ Retail, verified against the disassembly where a fixture relies on them.
 - TComplexObject: doing `+0xd8`, desired `+0xdc`, root `+0xe0`.
 - TCharacter (0x2a0 bytes, vtable `0x5a7848`): chardata `+0xfc`,
   charflags `+0x110`, combat-engage `+0x254`, per-monster id `+0x280`.
+  Motion: vel `+0x1c`, accum `+0x28` (1/0x10000 units), inventnum
+  `+0x7c` (short), movedist `+0xb4`, movevert `+0xb8`, movetopos `+0xec`,
+  movepos `+0xf0`, forcenomove `+0x10c`, shovedir `+0x11c`, the sight
+  fields a blocked step clears `+0x254` / `+0x258` / `+0x25c`. Move is
+  slot `0x114`, SetPos slot 8 (`0x46ed70`).
 - TPlayer (0x674 bytes, vtable `0x5b4f30`): state bits `+0x36c`.
 - SCharData: damagemods `+0xe4`, combat range max `+0x15c` (read by
-  IsValidTarget), armor `+0x1c4`.
+  IsValidTarget), armor `+0x1c4`, walk / run / sneak / combat walk speeds
+  `+0x1ec` / `+0x1f0` / `+0x1f4` / `+0x1f8` (-1 as shipped).
 
 ### 6.2 TActionBlock (100 bytes, ctor `0x4da9f0(name, action)`)
 
@@ -260,9 +321,13 @@ flag bits (§5.4): dumps name the flags, each side mapping its own bits.
 | animation layer | SetState `0x46f250` (slot `0x18`, recorded, state stored); stand-in imagery at `+0x54`: NumStates `+0x3c`, GetAniFlags `+0x8c`, header frame counts | SetState override; a registered header from the same table, NumStates / GetAniFlags recorded | the case's state table (frames, aniflags) |
 | object stats | GetObjStat `0x4d7520` (TPlayer `0x51ae30`), slot `0xdc` | Health / Fatigue / Mana overrides | the case's `stats` |
 | type stats | GetStat `0x4d74d0`, slot `0xd8` | Radius override | the case's `classstats` |
-| clear path | FindClearPath `0x4c39d0` | (none in the port's Go) | the case's `blocked` |
-| sight | CanSeeCharacter `0x4cd540` | (none in the port's resolvers) | the case's `sees` |
+| clear path | FindClearPath `0x4c39d0` (cases without a `ground`) | `TCharacter::blockedSeam` | the case's `blocked` |
+| sight | CanSeeCharacter `0x4cd540` | `TCharacter::canSeeSeam` | the case's `sees` |
 | world | FindCharacters `0x4cd690` (M3/M5: empty world) | `TCharacter::findCharactersSeam` | the case's characters |
+| walkmap | sector lookup `0x499e10` + ReturnWalkmap `0x499720` (not recorded) | `TMapPane::walkGridSeam` (GetWalkGridHeight) | the case's `ground`: `z`, `cells` boxes, `nosector` |
+| characters near a point | map iterator `0x44ceb0` / `0x44d080` (CharBlocking) | `TCharacter::nearbyCharactersSeam` | the case's `nearby`, else every character |
+| position | SetPos `0x46ed70` (slot 8) | SetPos override | recorded, position stored |
+| random draws | random `0x483300`, rand `0x58c582` | revutils `SetRandomSource` / `SetRandomRangeObserver` | the case's `tape`, then retail's generator from `seed`; every draw in `draws` |
 
 ## 7. The arena: deterministic auto-battles in the port
 
@@ -299,6 +364,8 @@ after building the port (`cmake --build build --target Revenant`):
 python3 tools/retail_ab/retail_ab.py combat-kernels     # M2
 python3 tools/retail_ab/retail_ab.py combat-go          # M3, first difference per case
 python3 tools/retail_ab/retail_ab.py combat-resolve     # M5
+python3 tools/retail_ab/retail_ab.py combat-move        # M7
+python3 tools/retail_ab/retail_ab.py combat-update      # M1u
 python3 tools/retail_ab/retail_ab.py combat-data        # D1, every record field by field
 python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2
 python3 tools/retail_ab/retail_ab.py combat-go --all --case go.player.cf1.f0.b64

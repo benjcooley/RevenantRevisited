@@ -400,7 +400,7 @@ class T3DImagery : public TObjectImagery
       // The draw blend (BLEND3D_*) the objects of this state take from a
       // "blendcont" tag; 0 when the state has none
 
-    virtual bool GetZ(TObjectInstance* oi, TSurface* surface) { return true; }
+    bool GetZ(TObjectInstance* oi, const TObjectInstance* frontmost) override { return true; }
     virtual bool AlwaysOnTop(TObjectInstance* oi) { return true; }
     TBitmap* GetInvImage(int32_t state, int32_t num = 0) override;
     TAnimation* GetInvAnimation(int32_t state) override;
