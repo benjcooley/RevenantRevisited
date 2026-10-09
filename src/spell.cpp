@@ -15,7 +15,6 @@
 #include "effect.h"
 #include "mappane.h"
 #include "parse.h"
-#include "statusbar.h"
 
 #include <set>
 #include <string>
@@ -519,8 +518,6 @@ void TSpell::ManaDrain()
     ((PTCharacter)invoker)->SetMana(((PTCharacter)invoker)->Mana() - variant->mana);
     if (((PTCharacter)invoker)->Mana() > ((PTCharacter)invoker)->MaxMana())
         ((PTCharacter)invoker)->SetMana(((PTCharacter)invoker)->MaxMana());
-    if (((PTCharacter)invoker) == ((PTCharacter)Player))
-        StaminaBar.ChangeLevel(((PTCharacter)invoker)->Mana() * 1000 / ((PTCharacter)invoker)->MaxMana());
 }
 
 // *********************

@@ -141,7 +141,6 @@ bool RestoreBlendState() { return true; }
 #include "effect.h"
 #include "mappane.h"
 #include "character.h"
-#include "statusbar.h"
 #include "missileeffect.h"
 #include "stripeffect.h"
 #include "food.h"
@@ -654,16 +653,6 @@ void THealAnimator::Initialize()
             heal_num = 0;
             glow_num = 1;
             break;
-    }
-
-    // change the health level
-    if (spell)
-    {
-        PTCharacter invoker = (PTCharacter)(spell->GetInvoker());
-
-
-        if (invoker == ((PTCharacter)Player))
-            HealthBar.ChangeLevel(invoker->Health() * 1000 / invoker->MaxHealth());
     }
 
     // Initialize the glow object at the players feet

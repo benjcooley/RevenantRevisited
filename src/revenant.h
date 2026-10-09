@@ -219,8 +219,6 @@ extern TDisplay     Display;            // Display object
 extern TPlayScreen  PlayScreen;         // PlayScreen Object
 extern TLogoScreen  LogoScreen;         // LogoScreen Object
 extern TMapPane     MapPane;            // Main map pane for PlayScreen
-extern THealthBar   HealthBar;          // Character's health
-extern TStaminaBar  StaminaBar;         // Character's fatigue
 extern TInventory   Inventory;          // Inventory of objects
 extern TTextBar     TextBar;            // Info line for player
 extern TMultiCtrlPane   MultiCtrl;      // Multipane control panel (buttons)
