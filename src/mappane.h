@@ -165,6 +165,11 @@ class TMapPane : public TPane
   // Virtual handler functions  
     virtual void KeyPress(int32_t key, bool down);
     virtual void MouseClick(int32_t button, int32_t x, int32_t y);
+    void PlayMouseClick(int32_t button, int32_t x, int32_t y);
+        // MouseClick outside the editor (retail 0x0044f140; also the player's Stop, its right button up)
+    using PlayMouseClickSeam = void (*)(int32_t button, int32_t x, int32_t y);
+    static inline PlayMouseClickSeam playMouseClickSeam = nullptr;
+        // Retail A/B fixtures only: answers PlayMouseClick (the player's Stop calls it)
     virtual void MouseMove(int32_t button, int32_t x, int32_t y);
     virtual void Update() { TPane::Update(); RedrawAll(); }
 
@@ -557,8 +562,6 @@ class TMapPane : public TPane
         // Borrow the window's sectors from `map` and follow its Unloaded event
 
   // Play input (docs/gameflow/forensics/MAP_INPUT.md §4)
-    void PlayMouseClick(int32_t button, int32_t x, int32_t y);
-        // MouseClick outside the editor (retail 0x0044f140)
     void PlayMouseRelease(int32_t x, int32_t y, bool attackcursor);
         // The left button's release: use, pick up, walk to, or let go of a held item
     void WalkToward(int32_t x, int32_t y, TObjectInstance* on);
