@@ -103,7 +103,7 @@ void Tick(int64_t tick)
         auto* c = static_cast<TCharacter*>(i.Item());
         if (!c || !c->IsCharacter())
             continue;
-        if (c->IsFighting())
+        if (c->IsFighting() || c->ObjClass() == OBJCLASS_PLAYER)     // the player always (walk tests)
             g_traced.insert(c->GetMapIndex());
         if (g_traced.count(c->GetMapIndex()))
             Character(c);

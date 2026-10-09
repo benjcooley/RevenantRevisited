@@ -68,11 +68,11 @@ only).
 | M3 | combat walking: Go(angle), empty world | `0x4ce350` | `TCharacter::Go(int)` | [x] 762/762 |
 | M4 | combat walking with retargeting (world + sight/hearing seams) | `0x4ce350`, FindCharacters `0x4cd690` | same | [ ] |
 | M5 | combat resolve tick: ResolveCombat / ResolveCombatMove (+ SetFighting `0x4d4790`) | `0x4c7980` `0x4c7f80` | `ResolveCombat`, `ResolveCombatMove` | [x] 654/654 |
-| M6 | player input per tick: UpdateMove → Go / Stop / Block / Leap | `0x47de30` | `TPlayScreen::UpdateMove` | [ ] |
+| M6 | player input per tick: UpdateMove → Go / Stop / Leap (Block and the bow aim seamed: their tracks), and Stop | `0x47de30`, `0x4cee70` | `TPlayScreen::UpdateMove`, `TCharacter::Stop` | [x] 280/280 (`combat-input`; two mutations caught) |
 | M7 | displacement: Move / MoveStep (velocity, blocking, shove), FindClearPath, CharBlocking, GetWalkHeight / GetWalkHeightRadius | `0x4c46d0` `0x4c3bc0`, TPlayer `0x518df0`, `0x4c39d0` `0x4d4db0` `0x452e10` `0x4530a0` | `TCharacter::Move`, `MoveStep`, `Blocked`, `CharBlocking`, `TMapPane::GetWalkHeight*` | [x] 786/786 (`combat-move`; six mutations caught) |
 | M8 | orbit sequence: N ticks of Go → Pulse (UpdateAction) → Move → SetObjectMotion → frame → NextFrame, with SetState / ResetState / T3DImagery::SetObjectMotion / NextFrame as original over motion tables; walking, strafing round a target, a monster curving, walls, loop / ping-pong / reverse roots | `0x490bd0` order; `0x46f250` `0x46f1e0` `0x40cd20` `0x40cc40` `0x470cc0` | the tick, `TObjectInstance::SetState` / `NextFrame`, `T3DImagery::SetObjectMotion` | [~] 32/32 sequences, ~1,500 ticks (`combat-sequence`); motion tables synthetic, real I3D motion next |
 | M9 | AI combat movement: approach, combat range, retreat, wander | `0x4c8b60`, `0x4c9790` | `TCharacter::AI` | [ ] |
-| M10 | leap, side step, knock back, pivot, stop | `0x4d2be0` `0x4d6220` `0x4d3750` `0x4c8470` `0x4cee70` | same | [ ] |
+| M10 | leap, side step, knock back, pivot, stop | `0x4d2be0` `0x4d6220` `0x4d3750` `0x4c8470` `0x4cee70` | same | [~] SideStep 82/82 (`combat-steps`; two mutations caught); Stop in M6; the rest open |
 
 ### C — melee
 
@@ -295,6 +295,20 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
     animator (every character has one in play). SetState's FreeAnimator
     for permanent-animator types stays a divergence (3D characters always
     need theirs).
+11. **The held direction (kata M6, 2026-10-09).** Holding a direction calls
+    Go once: UpdateMove skips it while the doing block is a move (walk,
+    combat step, bow step) whose move angle is the held one. The port
+    compared the object's move angle, which a step's motion data keeps
+    nudging (Locke's `combatr` moves at 63), so it called Go almost every
+    tick of a strafe. Stop is retail's: the root takes the doing block's
+    angles with incidentals off, and the player lets go of every held
+    control and of the right-button walk (the map pane's right button up,
+    0x0044f140). The right-button walk is the numpad direction of the
+    pointer's 45° sector (MAP_INPUT.md §5), so mouse walking and the keys
+    meet here. Kept as a divergence: two adjacent arrows walk their
+    diagonal (retail: the lowest bit), for keyboards with no numpad. Not
+    ported: the debug camera's turn of the direction (0x006671f0, the dev
+    'X' key).
 
 ## 6. Layouts used by the fixtures
 
@@ -381,6 +395,8 @@ python3 tools/retail_ab/retail_ab.py combat-resolve     # M5
 python3 tools/retail_ab/retail_ab.py combat-move        # M7
 python3 tools/retail_ab/retail_ab.py combat-update      # M1u
 python3 tools/retail_ab/retail_ab.py combat-sequence    # M8
+python3 tools/retail_ab/retail_ab.py combat-input       # M6
+tools/walktest/walktest.py "<slot dir>" [--pattern sweep|walks|both|none] [--exec "player.goto X Y; ..."]
 python3 tools/retail_ab/retail_ab.py combat-data        # D1, every record field by field
 python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2
 python3 tools/retail_ab/retail_ab.py combat-go --all --case go.player.cf1.f0.b64

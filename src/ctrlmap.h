@@ -65,6 +65,10 @@ class TControlMap
       { state = cmdflagstate; changed = cmdflagchanged; }
       // Returns the current command flags (for 'hold down' style controls such as cursor
       // keys, run mode keys, where the OFF state is all controls up.)
+    void ReleaseAll() { cmdflagchanged |= cmdflagstate; cmdflagstate = 0; }
+      // Lets go of every held control (retail Stop 0x004cef6d for the player)
+    void SetCommandFlags(uint32_t state, uint32_t changed) { cmdflagstate = state; cmdflagchanged = changed; }
+      // Retail A/B fixtures only: the held controls a case gives
     bool CommandOn(int32_t command, uint32_t modemask = ALLMODES);
       // Returns true if the command is currently active (down command and buttons are down,
       // or up command and buttons are up)

@@ -341,10 +341,18 @@ The port's design and state: §7.
   walks again; a click on the floor nearer the door, then the door, opens
   it. Retail's math (`FindClickPos` `0x0044e930`, `Distance` `0x0046ea20`,
   not overridden by TExit's vtable `0x5b27cc`) gives the same.
-- **Lift gate by mouse** (`soldoor`, `InportEW`, level 31): the door
-  cursor, and a click runs `INPORTEW` (`STATE "OPENING"`, `WOPENPORT`,
-  walk through, `CLOSING`, `CLOSED`). The gate sits in the giant
-  Solifuge's arena; the bars' lift isn't yet confirmed by eye.
+- **Lift gates (portcullises) by mouse.** `soldoor` (`InportEW`, level 31,
+  the giant Solifuge's arena): the door cursor, and a click runs
+  `INPORTEW`. The quiet test spot is the level-46 gatehouse (two
+  `InportNS`, no character within ~700): `player.pos 7137 9400 16 46`,
+  the gate at (7137, 9451) shows the door cursor at about (190, 185);
+  locked, a click says "It seems to be locked" (retail's line); after
+  `InportNS.stat locked = 0` a click runs `INPORTNS` (`OPENING`, 38
+  frames; `WOPENPORT`; Locke walks through; `CLOSING`; `CLOSED`) and the
+  snapshots show the bars rising, Locke under the arch and the bars coming
+  down behind him. The 47 portcullises are on levels 31 and 41–48
+  (PortNS/PortEW exits, InportNS/InportEW walk-throughs); a PortNS/EW by
+  mouse is still to run.
 - The opening still plays to `SardokR: END` with no ERROR lines.
 - `[mapinput] over …` (hover changes) and `[mapinput] release …` (what a
   click acted on, positions, distance) are in the log for test runs.
@@ -356,6 +364,6 @@ Open:
   frame when the pointer has moved since the last probe: a small GPU
   wait while the mouse moves. Hover can keep its last answer until the
   asynchronous probe at the new point arrives.
-- The portcullis lift seen in a quiet place (level 45/46 `Inport*`).
+- A PortNS/PortEW (gate with an exit) by mouse.
 - Input-simulator note: `move X Y` glides for `kDefaultMoveMs`; sweeps
   want `move X Y 0`.

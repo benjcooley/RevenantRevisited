@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "character.h"
+#include "ctrlmap.h"
 
 #include "rules.h"
 #include "mappane.h"
@@ -684,6 +685,7 @@ bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t
         bychar = &by;
     *bychar = nullptr;
     *height = pos.z;
+    blockedby = EBlockedBy::None;
 
     int32_t maxdelta;
     if (bits & MOVE_NOTMOVING)
@@ -696,10 +698,18 @@ bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t
         bool hole;
         MapPane.GetWalkHeightRadius(newpos, Radius(), maxdelta, *height, hole);
         if (hole)
+        {
+            blockedby = EBlockedBy::Hole;
             return true;
+        }
     }
     if (abs(pos.z - *height) > kMaxStepHeight || maxdelta > kMaxStepHeight || *height == 0)
+    {
+        blockedby = abs(pos.z - *height) > kMaxStepHeight ? EBlockedBy::Height
+                  : maxdelta > kMaxStepHeight            ? EBlockedBy::Step
+                                                         : EBlockedBy::NoWalkmap;
         return true;
+    }
 
     if (Health() <= 0)
         return false;
@@ -714,10 +724,27 @@ bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t
     // (A remote player in a network game is never blocked; offline, nothing.)
     TCharacter* b = CharBlocking(this, newpos, Radius());
     *bychar = b;
-    if (!b)
+    if (!b || ::Distance(pos, b->Pos()) < b->Radius() + Radius())
         return false;
-    return ::Distance(pos, b->Pos()) >= b->Radius() + Radius();
+    blockedby = EBlockedBy::Character;
+    return true;
 }
+
+namespace
+{
+const char* BlockedByName(TCharacter::EBlockedBy why)
+{
+    switch (why)
+    {
+      case TCharacter::EBlockedBy::Hole: return "a cell with no walkmap in reach";
+      case TCharacter::EBlockedBy::Height: return "the ground there more than 0x20 above or below";
+      case TCharacter::EBlockedBy::Step: return "a step over 0x20 between cells in reach";
+      case TCharacter::EBlockedBy::NoWalkmap: return "no walkmap there";
+      case TCharacter::EBlockedBy::Character: return "a character";
+      default: return "nothing";
+    }
+}
+}  // namespace
 
 // REVSYNC: TCharacter::Move @ 0x004c46d0 -- MoveStep, repeated (at most ten
 // times) while a MoveTo target is still ahead and the last step moved; the
@@ -843,8 +870,11 @@ uint32_t TCharacter::MoveStep()
 
         int32_t h1;
         TCharacter* by1;
+        const S3DPoint wanted = np;
+        EBlockedBy why = EBlockedBy::None;
         if (Blocked(pos, np, r, &h1, &by1))
         {
+            why = blockedby;
             r |= MOVE_BLOCKED;
             int32_t h2;
             TCharacter* by2;
@@ -910,6 +940,17 @@ uint32_t TCharacter::MoveStep()
             if (r & MOVE_BLOCKED)
             {
                 np = pos;
+                // Diagnostics: the player's refused step, once per place and reason.
+                static S3DPoint lastpos;
+                static EBlockedBy lastwhy = EBlockedBy::None;
+                if (this == Player && (pos != lastpos || why != lastwhy))
+                {
+                    log_debug("[move] %s blocked at (%d,%d,%d) toward (%d,%d,%d), move angle %d: %s%s%s", name,
+                              pos.x, pos.y, pos.z, wanted.x, wanted.y, wanted.z, moveangle, BlockedByName(why),
+                              by1 ? " " : "", by1 ? by1->name : "");
+                    lastpos = pos;
+                    lastwhy = why;
+                }
                 if (target_out_of_sight)
                 {
                     sight_lost_ticks = 0;
@@ -3409,21 +3450,28 @@ bool TCharacter::Goto(int32_t x, int32_t y, TObjectInstance* pickup)
     return true;
 }
 
+// REVSYNC: Stop @ 0x004cee70 -- end a walk, a step or a pivot (or the
+// named action): the root, interrupting, takes the doing block's angles and
+// becomes desired (with incidentals off, its 100% variant). The player also
+// lets go of every held control and of the right-button walk (the map
+// pane's right button up). The network notify is inert offline.
 bool TCharacter::Stop(char *name)
 {
     if (!IsMoving() && !IsDoing(ACTION_PIVOT) &&
         (!name || !doing->Is(name)))                                   // Is a use specified command
         return false;
 
-//  if (doing)
-//      doing->stop = true;
-
     root->interrupt = true;
     root->angle = doing->angle;
     root->moveangle = doing->moveangle;
 
-    SetDesired(root);
+    SetDesired(root, Incidentals() ? 0 : kCommandNoIncidentals);
 
+    if (this == static_cast<TCharacter*>(Player))
+    {
+        ControlMap.ReleaseAll();
+        MapPane.PlayMouseClick(MB_RIGHTUP, 0, 0);
+    }
     return true;
 }
 
@@ -4643,68 +4691,39 @@ bool TCharacter::Dodge()
     return true;
 }
 
-// REVSYNC: retail TCharacter::SideStep @ 0x4d6220
-//   recon/discovered/cls_0x5a7b98_TCharacter_GoCmd_4d6220.cpp (size 398).
-// Cartwheel sidestep: queues a "sidestepl" / "sidestepr" animation that
-// steps the character ~90 degrees off facing. Used by the AI body to
-// dodge blockers and by the in-range attack tree when a character is in
-// the line of attack. When called with dir=0 (or any non-l/r byte),
-// retail picks L/R at random — fed twice in a row, that's the
-// "cartwheel both ways" pattern.
-//
-// Retail uses bare anim names ("sidestepl", not "comhand_sidestepl");
-// HasActionAni resolves transitions from the current root via
-// FindTransitionState.
+// REVSYNC: SideStep @ 0x004d6220 -- a step to the side, "sidestepl" or
+// "sidestepr" (either at random when `dir` names neither), unless one is
+// already under way. The block keeps the doing block's target and angle,
+// and the character faces that angle at once; it moves off the move angle
+// by a quarter turn (left +0x40), with priority and a pivot first
+// (waitpivot), turn rate 8. A block SetDesired refuses is dropped. (The
+// return value is retail's leftover register; here, whether it was taken.)
 bool TCharacter::SideStep(char dir)
 {
-    if (!doing)
+    if (!doing || strncasecmp(doing->name, "sidestep", 8) == 0)
         return false;
-
-  // Retail FUN_004d6220:26 — gate: only proceed if doing->name is NOT
-  // already prefixed with "sidestep" (i.e. we're not already in a
-  // sidestep). Prevents re-queuing a fresh sidestep on top of an
-  // in-progress one.
-    if (doing->name && strncmp(doing->name, "sidestep", 8) == 0)
-        return false;
-
-  // Retail randomises L/R when caller didn't specify (lines 28-31).
     if (dir != 'l' && dir != 'r')
         dir = random(0, 1) ? 'l' : 'r';
 
-    char animname[10];
-    animname[0] = 's'; animname[1] = 'i'; animname[2] = 'd'; animname[3] = 'e';
-    animname[4] = 's'; animname[5] = 't'; animname[6] = 'e'; animname[7] = 'p';
-    animname[8] = dir; animname[9] = '\0';
-
-  // Retail FUN_004d6220:33 calls vftbl[0x1f0/4] which is HasActionAni
-  // (or its variant) on the bare anim name — so transitions from the
-  // current root are searched automatically.
-    if (!HasActionAni(animname))
+    char name[16] = "sidestep";
+    name[8] = dir;
+    if (!HasActionAni(name))
         return false;
 
-  // Retail uses action=3 (ACTION_COMBAT) — the sidestep stays inside the
-  // combat root rather than swapping to ACTION_DODGE; keeps the character
-  // ready to attack again on the next tick.
-    TActionBlock* ab = new TActionBlock(animname, ACTION_COMBAT);
-    ab->obj       = doing->obj;
-    ab->moveangle = doing->moveangle;
-
-  // Step direction: 90° left or right of facing. Retail FUN_004d6220:49
-  //   ab->angle = (dir == 'l' ? face + 0x40 : face + 0xc0) & 0xff
-    int32_t face = GetFace();
-    if (dir == 'l') ab->angle = (face + 0x40) & 0xff;
-    else            ab->angle = (face + 0xc0) & 0xff;
-
-  // Retail FUN_004d6220:51 — turnrate=8 (limits in-step turn speed).
+    auto* ab = new TActionBlock(name, ACTION_COMBAT);
+    ab->obj = doing->obj;
+    ab->angle = doing->angle;
+    FaceOnly(doing->angle);
+    ab->moveangle = (moveangle + (dir == 'l' ? 0x40 : 0xc0)) & 0xff;
+    ab->interrupt = false;
+    ab->priority = true;
+    ab->waitpivot = true;
     ab->turnrate = 8;
-
-  // Retail FUN_004d6220:52 — flags = (flags & ~nowaitdone) | interrupt | noroot
-  //   bit 0x10 = interrupt, bit 0x20 = nowaitdone, bit 0x200 = noroot.
-    ab->interrupt  = 1;
-    ab->noroot     = 1;
-    ab->nowaitdone = 0;
-
-    SetDesired(ab);
+    if (!SetDesired(ab, 0))
+    {
+        delete ab;
+        return false;
+    }
     return true;
 }
 

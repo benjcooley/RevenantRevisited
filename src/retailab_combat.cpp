@@ -12,7 +12,10 @@
 #include "retailab_fixture.h"
 
 #include "dls.h"                  // MakeColorTables (the trig tables too)
-#include "playscreen.h"           // the game frame (kata M8)
+#include "ctrlmap.h"              // the held controls (kata M6)
+#include "mappane.h"
+#include "player.h"
+#include "playscreen.h"           // the game frame (kata M8), UpdateMove (M6)
 
 namespace RetailAB
 {
@@ -114,6 +117,27 @@ std::string CombatCall(const Case& c, std::string& error)
             return Sequence(cs, world, me);
         else if (call == "update-action")
             fx->RunUpdateAction((int32_t)cs["bits"].Int());
+        else if (call == "sidestep")
+        {
+            const std::string dir = cs["dir"].Str();
+            me->SideStep(dir.empty() ? 0 : dir[0]);    // the result isn't compared: retail's is a leftover
+        }
+        else if (call == "update-move")
+        {
+            const JsonValue& ctl = cs["controls"];
+            ControlMap.SetCommandFlags((uint32_t)ctl["state"].Int(), (uint32_t)ctl["changed"].Int());
+            TPlayer* const was = Player;
+            Player = me->ObjClass() == OBJCLASS_PLAYER ? static_cast<TPlayer*>(me) : nullptr;
+            TMapPane::playMouseClickSeam = [](int32_t button, int32_t x, int32_t y) {
+                JsonOut r;
+                r.Begin('{').FieldString("seam", "PlayMouseClick").Field("button", button).Field("x", x);
+                r.Field("y", y).End('}');
+                Seam(r.str());
+            };
+            PlayScreen.UpdateMove();
+            TMapPane::playMouseClickSeam = nullptr;
+            Player = was;
+        }
         else
             throw std::runtime_error("unknown call '" + call + "'");
 
@@ -133,6 +157,12 @@ std::string CombatCall(const Case& c, std::string& error)
         WriteDraws(j);
         if (call == "move" || call == "update-action")
             fx->WriteMotion(j);
+        if (call == "update-move")
+        {
+            uint32_t state, changed;
+            ControlMap.GetCommandFlags(state, changed);
+            j.Key("controls").Begin('{').Field("state", (int32_t)state).Field("changed", (int32_t)changed).End('}');
+        }
         j.End('}');
         return j.str();
     }
@@ -205,6 +235,8 @@ static const bool registered = RegisterTarget("combat-go", CombatCall) &&
                                RegisterTarget("combat-move", CombatCall) &&
                                RegisterTarget("combat-update", CombatCall) &&
                                RegisterTarget("combat-sequence", CombatCall) &&
+                               RegisterTarget("combat-input", CombatCall) &&
+                               RegisterTarget("combat-steps", CombatCall) &&
                                RegisterTarget("combat-kernels", CombatKernels);
 
 }  // namespace RetailAB
