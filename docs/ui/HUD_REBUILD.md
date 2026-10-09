@@ -24,45 +24,44 @@ corrected where the emulator shows otherwise.
 Out of scope: Revisited (1920×1080) re-layout. It comes after Classic is
 exact and builds on the same panes through anchors.
 
-## 2. Where we start (survey 2026-10-07, main @ d876a3f)
+## 2. Where we start (GitHub main @ f049de4, 2026-10-07)
 
-- The live HUD is the `--test=ui-hud` harness. `TPlayScreen::Initialize`
-  calls `InitializeUIHudMode()` and `Animate` calls
-  `RenderUIHudModeEmbedded()`. Every pane is a `THudDrawable` in the
-  anonymous namespace of a `src/ui*test.cpp`; none is a `TPane`.
-- **No pane reads live game state.** The status bar draws a hard-coded
-  "Locke 26" plus a synthetic "Vermis" target that cycles 5 s present /
-  2 s absent *in the real game*. The potion shelf, quickspells, inventory,
-  stats and map show demo data. Gameplay writes to `HealthBar`,
-  `StaminaBar` and `TextBar`, which nothing displays. Mana goes to
-  `StaminaBar`.
-- `TTextBar` runs a scripted Print/SetHealthDisplay contract test at
-  every game boot and draws a debug rect at the pre-release
-  `TEXTBARX/Y`.
-- **Text:**
-  - Every HUD string except gold uses Arimo TTF at 10, 11 or 12 px,
-    inconsistently.
-  - Retail uses GDI WINFONTs (`font.def`: Small/Numbers = Arial 12,
-    Med = Arial 16 Bold, Dialog/Large = Times New Roman 20,
-    SpellTitle = Times New Roman 18).
-  - Retail uses BMFONTs (`smallgold`, `medgold`, `scrlfont`, `sysfont`)
-    for gold, scroll and system text.
-- **Debug and tuning in the live path:**
+- **Live binding is done.** The gameflow track did it on 2026-10-05; see
+  [HUD_LIVE_BINDING.md](HUD_LIVE_BINDING.md).
+  - Every pane reads the main player (`Player`, retail `DAT_00667fcc`).
+  - `src/uidemoplayer.*` builds a real demo `TPlayer` (and an opponent) for
+    the `--test=ui-*` modes.
+  - The `harness_*` inventory arrays are gone.
+  - `TTextBar` is a production pane on `TPlayScreen` (149cc0a).
+  - Its §5 lists the deviations still open: portrait fallback, paperdoll
+    pose, spell icon key, quick-spell label wrap.
+- **Still the test harness.** The pane code lives in the anonymous
+  namespaces of `src/ui*test.cpp`, and `TPlayScreen` embeds the
+  `--test=ui-hud` harness (`InitializeUIHudMode` /
+  `RenderUIHudModeEmbedded`). Moving it into production pane classes and
+  retiring the harness from `TPlayScreen` was explicitly left for this
+  rebuild (HUD_LIVE_BINDING §4, gameflow ARCHITECTURE §9 step 4).
+- **Pixels are off.** Panes are built from the decomp by reading, with
+  measured fudges: `kChipInset`, `kTargetBarXFix`, tab insets, "≈" offsets.
+  - The status bar loads the NoTex archives, while Classic is the
+    texture-overlay path (§3).
+  - The first emulator capture (2026-10-08) shows the port's chip 6 px low
+    and 2–3 px right, with bars and the health tail off.
+- **Text.**
+  - Retail draws WINFONTs (FONT.DEF: Small/Numbers = Arial 12, Med = Arial
+    16 Bold, Dialog/Large = Times New Roman 20, SpellTitle = Times New Roman
+    18) with GDI `DrawTextA`.
+  - The port draws them with Arimo/Tinos stb atlases: 2×2 oversampled and
+    antialiased ([TEXT_RENDERING.md](TEXT_RENDERING.md)).
+  - BMFONTs (`smallgold`, `medgold`, `scrlfont`, `sysfont`) are retail
+    glyphs in both.
+- **Debug and duplication in the harness files:**
   - env knobs `REVENANT_EQUIP_FACING` and `REVENANT_EQUIP_FREEZE`
-  - "measured against retail" offsets (`kChipInset`, `kTargetBarXFix`,
-    tab insets)
   - per-click log spam
-- **Duplication:**
-  - layout constants (188/60/…) in 9+ files
+  - layout constants (188/60/…) repeated across files
   - `LookupByName` copied 12×
-  - hit-test geometry copied away from the painters; inventory paint and
-    hit-test disagree at heights other than 480
   - mouse dispatch copied between `playscreen.cpp` and `testmodes.cpp`
-- **Dead:** pre-release `statusbar.cpp`, `textbar.cpp` drawing,
-  `equip/statpane/spellpane/inventory/automap/multictrl.cpp`,
-  `SaveHudState`/`LoadHudState` (no callers).
-- **No 640×480 Classic canvas.** Panes lay out in display pixels, with a
-  mix of right-anchored and fixed-640 literals.
+- **No 640×480 Classic canvas.** Panes lay out in display pixels.
 
 ## 3. What retail does (verified in the decomp 2026-10-07)
 
@@ -211,10 +210,28 @@ documented, never tuned around.
   spell bindings) through the same accessors retail uses. Gameplay's
   `HealthBar/StaminaBar/TextBar` writes are re-targeted to the real panes
   and the pre-release tube classes are removed.
-- **Drawing primitives** reproduce the retail draw modes (transparent,
-  alpha, translucent, tint, fade) with nearest sampling and RGB565-exact
-  results at Classic. The existing `DrawBitmap*ToTarget` family is
-  cleaned up rather than replaced.
+- **Classic rendering = retail's 2D raster plus quads.** Measured in the
+  emulator (2026-10-08):
+  - Retail composes each pane's textures in software: chrome and bars in
+    **ARGB4444**, text cells in **RGB565** keyed on magenta `0xf81f`.
+  - It uses its draw-routine selector (`FUN_004ad1d0`, under `Draw`
+    `FUN_004ad0d0`) over draw modes (default, transparent `0x100`, alpha
+    `0x2000`, translucent, fade, change-colour) and destination formats
+    (565/555/4444/1555/32).
+  - It then draws the textures as 1:1 quads.
+  - The port matches this the same way:
+    - Panes compose into 16-bit CPU surfaces with the **port's existing
+      `TSurface`/`graphics.cpp` software blitters** (the 1998 ancestors of
+      retail's), retail-synced and extended with the 4444/1555
+      destinations.
+    - Composition happens only when content changes, as retail does.
+    - The GPU draws the finished textures as nearest-sampled quads, with the
+      tint alpha. Opaque texels come out exact; alpha-blended edges are
+      exact to ±1 LSB (a recorded renderer limit).
+  - Each draw routine is A/B'd as a unit against retail's own `Draw` in the
+    emulator (crafted bitmaps, buffers and modes), before any pane uses
+    it.
+  - Revisited can later feed the same panes full-precision assets.
 - **Classic canvas.** The HUD renders into a 640×480 logical canvas,
   presented integer-scaled. The A/B renders that canvas offscreen 1:1.
 - **Test modes** host the production panes over a fixture world built
@@ -233,7 +250,8 @@ Each pane goes through the same loop:
 | Phase | Scope | Gate |
 |---|---|---|
 | **P0** | HUD slot (display env, loader, fixture objects, GDI boundary); port `--retail-ab=hud-*`; `hud_ab.py` | the retail status bar paints real pixels from `StatusBar.dat`; the port side round-trips one case; the triptych renders |
-| **P1** | `TPlyrStatusBar`: player + target sides, bars (kernel `0x54a5d0`), chrome/rings/icons, portrait frame, fades `+0xd4/+0xdc` | zero non-text diff across stat sweeps × target present/absent × fade ticks |
+| **P1a** | Retail 2D raster parity: `graphics.cpp` `Draw` selector + the routines the status bar uses (Box fill; Put default/transparent and alpha into 565 and 4444; surface-from-bitmap into 4444; 4444/565 copies; keyed 565 blit), retail-synced, unit A/B in the emulator | every routine bit-exact on randomized inputs |
+| **P1b** | `TPlyrStatusBar` production class (compose recipe recorded from retail: see `slots/hud/plyrstatusbar.py`), fades, bars kernel `0x54a5d0` (slices verified against traces), player + target sides | zero non-text diff across stat sweeps × target present/absent × fade ticks |
 | **P2** | Bottom bar: quickspell row, potion shelf + counts, end cap | same |
 | **P3** | `TSideTabsPane` + the sidebar mode cascade (`DAT_0065d1b8/bc`) | same, plus hover/pressed states |
 | **P4** | Sidebar panes: Stats, Equip, Spellbook, Inventory, Map, SpellCreate | same, per pane |
@@ -248,3 +266,12 @@ each, merged back after their A/B report is clean.
 ## 7. Status
 
 - 2026-10-07: survey done; retail pipeline verified (§3); P0 started.
+- 2026-10-08:
+  - Retail boots for real in the emulator, from a 0.5 s boot image (HUD slot).
+  - `plyrstatusbar.py` runs cases in about 2 s each: the capture, the
+    primitive recipe of the last frame (Put / ParamBlit / Box / Quad / Text
+    with arguments) and the text calls.
+  - Rendering architecture decided (§5, P1a/P1b).
+  - First light: retail's status bar paints (chrome, icons, bars).
+  - GDI text calls are recorded.
+  - §2 corrected after merging GitHub main (gameflow's live binding).
