@@ -966,6 +966,11 @@ int32_t TCharacter::CalculateDamage(int32_t damage, int32_t damagetype, int32_t 
 void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
     TActionBlock* action, TCharacter* attacker)
 {
+    if (damageSeam)
+    {
+        damageSeam(this, damage, damagetype, modifier, action, attacker);
+        return;
+    }
   // Calculate total damage
     if (damagetype >= 0)
         damage = CalculateDamage(damage, damagetype, modifier);
@@ -2376,6 +2381,8 @@ bool TCharacter::IsFinalState()
 
 bool TCharacter::IsEnemy(TCharacter* chr)
 {
+    if (isEnemySeam)
+        return isEnemySeam(this, chr);
   // Is this character attacking me
     if (chr->IsFighting() && chr->Fighting() == this)
         return true;    // That makes me hostile no matter what

@@ -444,6 +444,8 @@ void TapeRange(int32_t lo, int32_t hi, int32_t result)
 }
 }  // namespace
 
+void ClearDraws() { g_draws.clear(); }
+
 void WriteDraws(JsonOut& j)
 {
     j.Key("draws").Begin('[');

@@ -1065,3 +1065,33 @@ Retail details the asm settled (corrections and additions to §2.4, §2.5):
   (a crash); with an empty target array and POISONCHANCE the constructor
   rolls for the copied empty slot and calls through null. The port guards
   both (REVSYNC-DIVERGENCE); the kata leaves those cases out.
+
+### S3 `spell-new`, `spell-damage`: the spell and its damage
+
+Fixture `spell_damage.py` (built on spell_cast.py's): a spell made by its
+class's registered creator (`0x542200` "Spell" / `0x542290` "Strike"),
+dumped (`spell-new`), or then TSpell::Damage `0x53f560` on a target
+(`spell-damage`). Seams beyond S2's: TCharacter::Damage `0x4c4950`
+recorded as the melee kata records it (`{"seam":"Damage", who, damage,
+type, mod, attacker, block}`, not run; on the port side melee's
+`TCharacter::damageSeam`), AwardKillExp `0x51a630`. A player target's
+DmgResMagical is read from its modified copy (Resist `0x5208d0`), as the
+melee fixture lays it out; a target's magic resistance (the float at
+`+0x190`) comes per mille from the case.
+
+- `spell-new`, 426/426: every shipped variant through both classes with a
+  player, a monster (no targets, a source) and no invoker; the poison roll
+  at 89/90/0/100 for one to three targets; numtargs fewer than given, 0,
+  negative; a STATLINE on a player, a monster, no invoker.
+- `spell-damage`, 1090/1090: every variant from a player at a monster
+  (kill experience offered), from a monster at the player (DmgResMagical
+  20), with no caster; a grid over magic resistance (none, 0, 0.001, 0.1,
+  0.25, 0.333, 0.5, 0.999, 1, 1.5, -0.2), SpellDamageInc (0, 25, -50),
+  DmgResMagical (0, 30, 100, -50) and the roll's two ends on three
+  variants; no target.
+
+Port changes: TSpell::Damage is retail's (before: no SpellDamageInc, no
+player DmgResMagical, no attacker passed -- so no IsEnemy check in
+Damage -- no kill experience, no null check). The magic-resistance cut
+works in double (retail: the float times the int on the x87, truncated),
+exact for every damage spell.def gives.

@@ -584,19 +584,36 @@ bool TSpell::Timer()
     return timer == 0; 
 }
 
+// REVSYNC: TSpell::Damage @ 0x0053f560 -- the variant's damage range, each
+// end cut by the target's magic resistance, rolled; a player caster's
+// SpellDamageInc adds its percent, a player target's DmgResMagical takes
+// its percent away; the target takes it with the spell's damage type and
+// the caster as attacker, and a player caster is offered the kill.
 void TSpell::Damage(TObjectInstance* ch)
 {
     int32_t mindam = variant->mindamage;
     int32_t maxdam = variant->maxdamage;
-
-    if (((PTCharacter)ch)->IsMagicResistant())
+    if (!ch)
+        return;
+    auto* target = static_cast<TCharacter*>(ch);
+    if (target->IsMagicResistant())
     {
-        // take the magic resistance as the percentage of damage to allow...
-        mindam -= (int32_t)(mindam * ((PTCharacter)ch)->GetMagicResistance());
-        maxdam -= (int32_t)(maxdam * ((PTCharacter)ch)->GetMagicResistance());
+        // x87 in retail: the float times the int, truncated. A double holds
+        // the product exactly for any damage spell.def gives.
+        const double resist = target->GetMagicResistance();
+        mindam -= (int32_t)(resist * mindam);
+        maxdam -= (int32_t)(resist * maxdam);
     }
-
-    ((PTCharacter)ch)->Damage(random(mindam, maxdam), spell->damagetype);
+    int32_t damage = random(mindam, maxdam);
+    auto* caster = static_cast<TCharacter*>(invoker);
+    TPlayer* player = (caster && caster->ObjClass() == OBJCLASS_PLAYER) ? static_cast<TPlayer*>(caster) : nullptr;
+    if (player)
+        damage = (player->SpellDamageInc() + 100) * damage / 100;
+    if (target->ObjClass() == OBJCLASS_PLAYER)
+        damage = (100 - target->DamageModifier(DT_MAGICAL)) * damage / 100;
+    target->Damage(damage, spell->damagetype, 0, nullptr, caster);
+    if (player)
+        player->AwardKillExp(target);
 }
 
 namespace
