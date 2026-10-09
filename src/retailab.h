@@ -41,7 +41,10 @@ namespace RetailAB
     // A target: one case in, its JSON result out (or an error).
     using Target = std::string (*)(const Case& c, std::string& error);
 
-    // The combat targets (retailab_combat.cpp, docs/gameplay/COMBAT_DOJO.md),
-    // by name; nullptr if `name` isn't one.
-    Target CombatTarget(const std::string& name);
+    // Targets registered by name: each retailab_*.cpp registers its own at
+    // static initialisation (`static const bool r = RegisterTarget(...)`),
+    // so a new target touches only its own file. Run looks them up after
+    // the built-in gameflow targets.
+    bool RegisterTarget(const char* name, Target fn);
+    Target FindTarget(const std::string& name);
 }
