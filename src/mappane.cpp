@@ -2586,9 +2586,9 @@ void TMapPane::Pulse()
   // Pulse fading ambient values
     PulseFadeAmbient(); 
 
-  // Do next frame for objects except if first frame of screen
-    if (!CurrentScreen->FirstFrame())
-        NextFrameObjects();
+  // REVSYNC: TMapPane::Pulse @ 0x00454390 -- objects pulse then move; their
+  // animation frames advance at the end of the tick (TPlayScreen::Pulse,
+  // retail's screen slot 0x24), not here.
 
   // Pulse objects (does object AI)
     PulseObjects();

@@ -814,10 +814,20 @@ void TPlayScreen::Update()
 
     // Advance fixed-tick counters. CurrentMode()->Tick() owns gameplay frame
     // advancement; the renderer only samples/interpolates the current pose.
+    // REVSYNC: TPlayScreen::Animate @ 0x0047c2c0 -- the frame count, then
+    // game time in hundredths of a second at 24 frames a second
+    // (frames * 100 / 24, 0x0047c38d..0x0047c39e; the regen, poison and
+    // recovery timers read it). kGameFrameRate (30) still drives the
+    // frame/minute helpers below, which this change doesn't touch.
     ++gameframes;
     gametime = lastsessionframes
-             + (gameframes - sessionstart) * 100 / kGameFrameRate;
+             + (int32_t)((int64_t)(gameframes - sessionstart) * 100 / 24);
     timeofday = TimeOfDayMinutes(gametime);
+
+    // REVSYNC: screen slot 0x24 (0x004902c0) -> NextFrameObjects 0x00457ef0:
+    // animation frames advance last in the tick, after Pulse and Move and
+    // the frame count, so the next tick's input sees the advanced frame.
+    MapPane.NextFrameObjects();
 
     // --combattrace: the tick's fighters (no-op otherwise).
     CombatTrace::Tick(gameframes);
