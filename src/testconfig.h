@@ -130,3 +130,8 @@ extern bool StartupVfxOriginSet;
 //   --filmstrip=6,0 --input-script="moveto 435 161; pause 300; take_snapshot;
 //     left_down; pause 150; take_snapshot; left_up; pause 300; ..."
 extern std::string StartupInputScript;      // any length
+// --ab-case="..." --ab-out=<file> -- one case of a HUD A/B, for the --test=ab-*
+// hosts (tools/retail_ab/hud_ab.py): the case's settings, and where the host
+// writes what it showed (JSON).
+extern std::string StartupAbCase;
+extern std::string StartupAbOut;

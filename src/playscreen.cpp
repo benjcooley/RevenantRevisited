@@ -59,6 +59,7 @@
 #include "runtimemode.h"
 #include "sector.h"
 #include "spell.h"
+#include "statusbar.h"
 #include "textbar.h"
 #include "time.h"
 #include "uidragstate.h"
@@ -269,7 +270,11 @@ int32_t ConvertMinutesToFrames(int32_t minutes)
 // * Construction / lifetime                                               *
 // *************************************************************************
 
-TPlayScreen::TPlayScreen() : ingamemenu(std::make_unique<TInGameMenu>(*this)) {}
+TPlayScreen::TPlayScreen()
+    : ingamemenu(std::make_unique<TInGameMenu>(*this))
+    , statusbar(std::make_unique<TPlyrStatusBar>())
+{
+}
 TPlayScreen::~TPlayScreen() = default;
 
 bool TPlayScreen::Initialize()
@@ -344,11 +349,14 @@ bool TPlayScreen::Initialize()
              g_playHudInitialized ? "OK" : "FAIL");
 
     // REVSYNC: 0x0047abf8 / 0x0047adab -- the text bar, added after the side
-    // tabs and before the player status bar, so it draws over the dialog
-    // entries. After the HUD so it anchors to the HUD's map view.
+    // tabs, so it draws over the dialog entries, then the player status bar.
+    // After the HUD, so they anchor to the HUD's map view.
     if (!TextBar.Initialize())
         log_error("[playscreen] Trouble initializing text bar");
     AddPane(&TextBar);
+    if (!statusbar->Initialize())
+        log_error("[playscreen] Trouble initializing the status bar");
+    AddPane(statusbar.get());
 
     // The HUD starts as the loaded game left it (building the HUD resets it).
     if (Player)
@@ -651,6 +659,8 @@ void TPlayScreen::Close()
     BuySellPane.Close();
     buysellrequest = false;
     drawerclose    = false;
+    RemovePane(statusbar.get());
+    statusbar->Close();
     RemovePane(&TextBar);
     TextBar.Close();                        // REVSYNC: 0x0047b30c
     RemovePane(&DialogPane);

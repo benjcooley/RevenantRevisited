@@ -20,6 +20,7 @@
 #include "time.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <vector>
 
@@ -34,6 +35,13 @@ constexpr int32_t kPaneHeight = 0x70;
 // once that passes 128, from fade 4.
 constexpr int32_t kFadeSteps = 6;
 constexpr bool TextShown(int32_t fade) { return fade * 255 / kFadeSteps > 128; }
+
+// The tint's alpha for a fade, in retail's whole steps of 1/255: 42/255 at
+// fade 1. Between ticks the fade is fractional and so is the step it lands on.
+float FadeAlpha(float fade)
+{
+    return std::floor(fade * 255.0f / float(kFadeSteps)) / 255.0f;
+}
 
 // Where a chip's pieces go. The player's x values run from the pane's left
 // edge, the opponent's from its right edge (FromEdge); x values inside a
@@ -58,10 +66,13 @@ constexpr SChipLayout kLayouts[] = {
     { 0x88, 0x62, 0x3a, 0x80, 0x00, ETextAlign::Right, 0x3c },     // opponent
 };
 
-// REVSYNC: the art layer is one of Initialize's 0x80 x 0x40 surfaces
-// (0x00549740). The portrait goes through a 0x28 x 0x28 scratch surface
-// blitted with its centre on the ring's; the icons' rows are 3, 0x11 and
-// 0x20 (0x0054a0a0).
+// REVSYNC: the art layer is one of Initialize's 0x80 x 0x40 ARGB4444
+// surfaces (0x00549740). The portrait goes through a 0x28 x 0x28 16-bit
+// scratch surface: copied in whole, then blitted with its centre on the
+// ring's and the surface's key into the art, so only its magenta is
+// transparent (its own key, black for the character icons, stays opaque)
+// and its colour drops to 4 bits a channel: EBitmapDecode::Overlay4444. The
+// icons' rows are 3, 0x11 and 0x20 (0x0054a0a0).
 constexpr int32_t kArtTop = 4;
 constexpr int32_t kArtWidth = 0x80;
 constexpr int32_t kArtHeight = 0x40;
@@ -137,6 +148,7 @@ std::string NameCell(const std::string& name, int32_t level)
 
 }  // namespace
 
+TPlyrStatusBar::TPlyrStatusBar() = default;
 TPlyrStatusBar::~TPlyrStatusBar() = default;
 
 // REVSYNC: 0x00549740. Retail makes its surfaces here and takes StatusBar.dat
@@ -319,7 +331,7 @@ void TPlyrStatusBar::ComposeArt(ESide side)
                                             kRingCenterY - kPortraitSize / 2, 0, 0,
                                             (std::min)(portrait->width, kPortraitSize),
                                             (std::min)(portrait->height, kPortraitSize),
-                                            kArtWidth, kArtHeight);
+                                            kArtWidth, kArtHeight, EBitmapDecode::Overlay4444);
     Renderer->DrawBitmapToTarget(ring, layout.ringCenterX - ring->width / 2, kRingCenterY - ring->height / 2,
                                  kArtWidth, kArtHeight);
     for (size_t bar = kNumBars; bar-- > 0;)
@@ -370,10 +382,10 @@ void TPlyrStatusBar::DrawChip(ESide side, float frac) const
     const SChip& chip = Chip(side);
     if (!chip.present || !chip.art)
         return;
-    const float fade = StepTowardPerTick(float(chip.fade), float(chip.fadeGoal), frac * TTime::LegacyFrameSeconds);
-    if (fade <= 0.0f)
+    const float alpha = FadeAlpha(StepTowardPerTick(float(chip.fade), float(chip.fadeGoal),
+                                                    frac * TTime::LegacyFrameSeconds));
+    if (alpha <= 0.0f)
         return;
-    const float alpha = fade / float(kFadeSteps);
     Renderer->DrawSurfaceTinted(chip.art.get(), GetPosX() + FromEdge(side, kLayouts[size_t(side)].artEdge),
                                 GetPosY() + kArtTop, 1.0f, 1.0f, 1.0f, alpha);
     for (size_t bar = 0; bar < kNumBars; ++bar)
