@@ -266,6 +266,47 @@ struct TMapRenderer::Impl
     // The viewport pixel the map pane picks at this frame (the pointer), or
     // -1: RenderFrame asks the renderer for the id probe there.
     int32_t pickX = -1, pickY = -1;
+    // What each draw id named in the lists recent frames were drawn with,
+    // newest first. An id probe arrives a frame or two after its frame, and
+    // the pane may read the last frame back at once; either can follow a
+    // rebuild, so a probe is decoded against the list of the version it was
+    // drawn under (its tag), not the current one.
+    struct SPickRecord
+    {
+        TSafeRef<> src;
+        ESectorDrawableKind kind = ESectorDrawableKind::Tile;
+    };
+    struct SPickTable
+    {
+        uint64_t version = 0;
+        std::vector<SPickRecord> records;   // draw id - 1
+    };
+    static constexpr size_t kPickTables = 3;
+    std::vector<SPickTable> pickTables;
+    uint64_t renderedDrawListVersion = 0;   // the list the last frame drew
+
+    // Called as a frame is drawn: keep the current list's pick table.
+    void notePickTable()
+    {
+        renderedDrawListVersion = drawListVersion;
+        if (!pickTables.empty() && pickTables.front().version == drawListVersion)
+            return;
+        SPickTable table;
+        table.version = drawListVersion;
+        table.records.reserve(sectorDrawInst.size());
+        for (const SSectorDrawableInst& r : sectorDrawInst)
+            table.records.push_back({ r.src, r.kind });
+        pickTables.insert(pickTables.begin(), std::move(table));
+        if (pickTables.size() > kPickTables)
+            pickTables.pop_back();
+    }
+    [[nodiscard]] const SPickTable* pickTable(uint64_t version) const
+    {
+        for (const SPickTable& t : pickTables)
+            if (t.version == version)
+                return &t;
+        return nullptr;
+    }
     std::unordered_map<int64_t, std::vector<int32_t>> sectorDrawBins;
     // Per-frame visible/padded-sector candidate list. Capacity is retained so
     // camera movement only rewrites indices; it does not allocate draw records.

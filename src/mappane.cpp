@@ -1121,6 +1121,16 @@ void TMapPane::PlayMouseRelease(int32_t x, int32_t y, bool attackcursor)
 
     TObjectInstance* on = OnObject(x, y, inst);
     const int32_t objindex = on ? on->GetMapIndex() : -1;
+    if (on)
+    {
+        S3DPoint op, pp;
+        on->GetPos(op);
+        Player->GetPos(pp);
+        log_info("[mapinput] release (%d, %d) on %s at (%d,%d,%d), Locke at (%d,%d,%d), distance %d, pressed on %d",
+                 x, y, on->GetName(), op.x, op.y, op.z, pp.x, pp.y, pp.z, on->Distance(Player), onobject);
+    }
+    else
+        log_info("[mapinput] release (%d, %d) on nothing, pressed on %d", x, y, onobject);
 
     if (clicked)
     {
