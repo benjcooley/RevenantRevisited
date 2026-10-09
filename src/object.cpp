@@ -112,7 +112,6 @@ TObjectBuilder* TObjectBuilder::builders[MAXOBJECTTYPES];
 
 // Tables for ConvertToFacing, Move, and other angle/distance related functions
 extern uint8_t AngleTable[256][256];
-extern uint8_t DistTable[256][256];
 extern short DistX[256];
 extern short DistY[256];
 

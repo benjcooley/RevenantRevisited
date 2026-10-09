@@ -1121,13 +1121,13 @@ static void DrawPlayerStatusOverlay()
     const int32_t sx_world = p.x >> SECTORWSHIFT;
     const int32_t sy_world = p.y >> SECTORHSHIFT;
     const int32_t radius = ((TCharacter*)Player)->Radius();
-    int32_t r_min = 0, r_max = 0, r_h = 0;
-    MapPane.GetWalkHeightRadius(p, radius, r_min, r_max, r_h);
+    int32_t r_maxdelta = 0, r_h = 0;
+    bool r_hole = false;
+    MapPane.GetWalkHeightRadius(p, radius, r_maxdelta, r_h, r_hole);
     const TCharacter* blocker = ((TCharacter*)Player)->CharBlocking();
     const bool z_blocks    = std::abs(z_delta) > 32;
     const bool no_floor    = (walk == 0);
-    const bool slope_min   = std::abs(r_min) > 32;
-    const bool slope_max   = std::abs(r_max) > 32;
+    const bool step_blocks = r_maxdelta > 32;
     const bool char_blocks = (blocker != nullptr);
 
     TObjectInstance* pinst = static_cast<TObjectInstance*>(Player);
@@ -1170,16 +1170,16 @@ static void DrawPlayerStatusOverlay()
                 ImGui::Text("pos     : (%d, %d, %d)  level=%d", p.x, p.y, p.z, lvl);
                 ImGui::Text("sector  : %d_%d", sx_world, sy_world);
                 ImGui::Text("walkmap : %d  (z-walk = %d)", walk, z_delta);
-                ImGui::Text("radius  : %d   r_h=%d  min=%d  max=%d",
-                            radius, r_h, r_min, r_max);
-                ImGui::Text("would block: %s%s%s%s%s%s",
+                ImGui::Text("radius  : %d   r_h=%d  maxdelta=%d  hole=%d",
+                            radius, r_h, r_maxdelta, (int)r_hole);
+                ImGui::Text("would block: %s%s%s%s%s",
                             z_blocks    ? "Z>32 "       : "",
                             no_floor    ? "no-floor "   : "",
-                            slope_min   ? "min>32 "     : "",
-                            slope_max   ? "max>32 "     : "",
+                            r_hole      ? "hole "       : "",
+                            step_blocks ? "step>32 "    : "",
                             char_blocks ? "char-blk "   : "",
-                            (!z_blocks && !no_floor && !slope_min &&
-                             !slope_max && !char_blocks) ? "no" : "");
+                            (!z_blocks && !no_floor && !r_hole &&
+                             !step_blocks && !char_blocks) ? "no" : "");
                 ImGui::Text("moving  : %s   moveangle=%d   anim=%s",
                             Player->IsMoving() ? "yes" : "no",
                             Player->GetMoveAngle(),

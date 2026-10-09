@@ -738,3 +738,15 @@ offsets and distances, MOVECHECKDIST (8 units = `0x80000`), rollover.
 - `0x47e0f0` after UpdateMove: camera keys, from a short read only.
 - GetWalkHeight `0x452e10` and SetPos `0x46ed70` internals were not read;
   both are seams here.
+
+## 8. Port status (2026-10-09)
+
+Kata M7 (`combat-move`, 786/786): Move, MoveStep, FindClearPath,
+CharBlocking, GetWalkHeight and GetWalkHeightRadius are retail's, which
+settles §6 #10-#20 (the fall snap, the no-motion return, the MoveTo loop,
+the substep split and nudge, the blocked rule and its MOVED, the shove
+gate and commit, FindClearPath's and CharBlocking's gates). Still open from
+§6: #1-#9 (tick order inside UpdateAction and the resolvers' returns:
+kata M8), #21 (the walk root by class), #22-#28. Not in §6: retail's
+ReturnWalkmap keeps 10 bits of a walkmap entry (`& 0x3ff`), the port's
+whole 16.

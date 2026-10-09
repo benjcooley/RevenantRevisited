@@ -27,6 +27,8 @@
 #include "spell.h"
 #endif
 
+#include <vector>
+
 // FindChar flags
 #define FINDCHAR_ENEMY     1    // Find only enemies
 #define FINDCHAR_HEAR      2    // Find only characters we can hear
@@ -75,6 +77,10 @@ class TCharacter : public TComplexObject
     using CanSeeSeam = bool (*)(TCharacter* self, TCharacter* chr, int32_t angle);
     static inline CanSeeSeam canSeeSeam = nullptr;
       // Likewise for CanSeeCharacter (retail 0x004cd540)
+    using NearbyCharactersSeam = std::vector<TCharacter*> (*)(const S3DPoint& pos, int32_t range);
+    static inline NearbyCharactersSeam nearbyCharactersSeam = nullptr;
+      // Likewise for the characters CharBlocking walks (retail's map iterator
+      // 0x0044ceb0 / 0x0044d080), in map order
       // Retail A/B fixtures only (retailab_combat.cpp): when set, it answers
       // FindCharacters instead of the map, as the retail fixture's seam at
       // FindCharacters 0x004cd690 does (docs/gameplay/COMBAT_DOJO.md §6.3).
@@ -336,6 +342,8 @@ class TCharacter : public TComplexObject
         // Calls static function above with this chars parameters
     bool Blocked(S3DPoint& pos, S3DPoint& newpos, uint32_t bits = 0, int32_t* height = nullptr, TCharacter** bychar = nullptr);
       // Returns true if character would be blocked when going to new position
+    uint32_t MoveStep();
+      // One tick's displacement (Move repeats it toward a MoveTo target)
     
   // Miscellaneous functions
     virtual void MoveTo(S3DPoint& newpos) { movepos = newpos; movetopos = true; }
