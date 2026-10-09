@@ -4469,6 +4469,14 @@ void* AuthoredTextureMeshVariantSpawn(const S3DPoint& origin)
     return c;
 }
 
+template <const char* kAsset>
+void* AuthoredScrollMeshVariantSpawn(const S3DPoint& origin)
+{
+    auto* c = new SGlobeBespokeCtx();
+    c->eff = TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(origin, kAsset, false, true);
+    return c;
+}
+
 struct SPunchAndJudyBespokeCtx { TPunchAndJudyEffect_Bespoke* eff = nullptr; };
 void* PunchAndJudyBespokeSpawn(const S3DPoint& origin)
 {
@@ -6222,11 +6230,12 @@ struct SVfxTestBootstrap {
             VfxTest::SEffect e = {};
             e.id            = "TWaterEffect_BESPOKE__FlowWater";
             e.family        = "water";
-            e.pipeline      = "FB";
+            e.pipeline      = "WORLD";
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
-            e.factory       = [](const S3DPoint& o) -> void* { return WaterBespokeVariantSpawn<kVariantFlowWater_I3D>(o); };
-            e.submit        = [](void* c, EFxDebugMode d) { WaterBespokeSubmit(c, d); };
-            e.destroy       = [](void* c) { WaterBespokeDestroy(c); };
+            e.factory       = [](const S3DPoint& o) -> void* { return AuthoredScrollMeshVariantSpawn<kVariantFlowWater_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { GlobeBespokeSubmit(c, d); };
+            e.submit_world  = [](void* c, EFxDebugMode d) { GlobeBespokeSubmitWorld(c, d); };
+            e.destroy       = [](void* c) { GlobeBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
         {

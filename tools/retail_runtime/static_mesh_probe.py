@@ -102,6 +102,7 @@ struct T3DImagery {
  bool GetUninterpolatedAniKey(int,int,int,hmm_vec3&,hmm_vec3&,hmm_vec3&);
  bool GetAniKey(int,int,int,hmm_vec3&,hmm_vec3&,hmm_vec3&);
  bool CalcObjectMatrix(S3DAnimObj*,int,int,hmm_mat4*,bool);
+ bool ScrollTexOffset(int,int,int,int64_t,float*)const{throw std::runtime_error("Unexpected scroll in static fixture");}
 };
 #define OBJ3D_ROTMASK 0x30
 #define OBJ3D_POSMASK 0x0c
@@ -117,12 +118,13 @@ struct T3DImagery {
 #define OBJ3D_SCL1 0x40
 #define OBJ3D_SCL2 0x80
 #define OBJ3D_SCL3 0xc0
-struct SMeshSubmit {int mesh=1,retail_lighting=0;float world[16]{},tint[4]{};};
+struct SMeshSubmit {int mesh=1,retail_lighting=0;float world[16]{},tint[4]{},uv_offset[2]{};};
 struct TRenderer {SMeshSubmit last;void SubmitMesh(const SMeshSubmit& s){last=s;}};
 TRenderer renderer;TRenderer*Renderer=&renderer;
+struct TTime{static int64_t LegacyFrameCount(){return 0;}};
 struct World {hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4& Matrix()const{return m;}};
-struct TAuthoredStaticMeshEffect {World root;struct SStaticPart {int mesh=1,retail_lighting=0;float local_matrix[16]{};std::vector<int> frame_meshes;};
- std::vector<SStaticPart> parts_;int frame_{0};int GetFrame()const{return frame_;}const World&Transform()const{return root;}
+struct TAuthoredStaticMeshEffect {World root;struct SStaticPart {int mesh=1,retail_lighting=0,object_index=0;float local_matrix[16]{};std::vector<int> frame_meshes;};
+ std::vector<SStaticPart> parts_;T3DImagery*scroll_imagery_=nullptr;int frame_{0};int GetFrame()const{return frame_;}const World&Transform()const{return root;}
  void SubmitWorldMeshForTest_BESPOKE(EFxDebugMode);};
 '''
     trailer=r'''
