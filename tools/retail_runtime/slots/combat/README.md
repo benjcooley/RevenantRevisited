@@ -14,6 +14,7 @@ case. The port side and the compare live on the combat branch
 |---|---|---|
 | `combat_call.py` `call: go` (kata M3) | Go(angle) `0x4ce350` and what it calls: HasActionAni, GetAngleMoveAnim, IsValidTarget, Distance, SetDesired, ForceCommand | the shared ones below; FindClearPath `0x4c39d0`, FindCharacters `0x4cd690` (empty world), TPlayer SetPlayerState `0x51d680`, CanSeeCharacter `0x4cd540` |
 | `combat_call.py` `call: resolve-combat` / `resolve-combat-move` (kata M5) | ResolveCombat `0x4c7980` / ResolveCombatMove `0x4c7f80` on the doing block, with SetFighting, AdvanceAngles | as above |
+| `data_parse.py` (kata D1, `combat-data`) | TRules ctor `0x488160` (static init isn't run), Initialize `0x48b690` with Load `0x48b990` and every block loader, the tokenizer and Parse, BindTypes `0x48cab0` | the file layer (zfopen_rel `0x4a13f0`, length / read / close, FileExists `0x4a1c00`) onto the case's folder, FatalError `0x481c10` / `0x481d10` (stops the case), FindObjType `0x475210` and the class registry from class.def's type names, the item halves of BindTypeData `0x48af30` / `0x48b4a0` |
 
 ## Reusable pieces (`guest.py`)
 
