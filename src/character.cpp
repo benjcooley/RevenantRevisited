@@ -1549,6 +1549,17 @@ int32_t TCharacter::ResolveMove(TActionBlock* ab, int32_t bits)
             ab->target.z = pos.z;
             MoveTo(ab->target);
             ab->nowaitdone = true;
+            // A Goto's walk arrives: the item it carries is picked up
+            // (retail 0x004c7fc3).
+            if (ab->walkto)
+            {
+                ab->walkto = false;
+                if (TObjectInstance* item = gotoitem.Get())
+                {
+                    gotoitem = nullptr;
+                    Pickup(item);
+                }
+            }
             return COM_COMPLETED;
         }
         else
@@ -3252,11 +3263,12 @@ bool TCharacter::Go(S3DPoint vect)
 // the walk its target, which ResolveMove walks to and snaps onto within 8.
 // The target goes on the block Go queued, the desired one, or on the one
 // being done when nothing is queued (desired is the root): the walk started
-// at once, or Go turned the current step. Not ported: retail's third argument,
-// an item to pick up on arrival (+0x288, set only when given), and flag
-// 0x1000 on the block, which the combat-mode move resolvers read (0x004c7f80,
-// 0x004c7980).
-bool TCharacter::Goto(int32_t x, int32_t y)
+// at once, or Go turned the current step. The block is marked as a Goto's walk
+// (retail +0x60 bit 0x1000) and an item given (+0x288, kept when none is) is
+// picked up when that walk arrives (ResolveMove; retail 0x004c6155,
+// 0x004c7fc3): the map pane's walk to an item out of reach. Not ported: the
+// combat-mode move resolvers' other reads of the mark (0x004c7980).
+bool TCharacter::Goto(int32_t x, int32_t y, TObjectInstance* pickup)
 {
     const int32_t angle = ConvertToFacing(pos, S3DPoint(x, y, pos.z));
     if (!Go(angle))
@@ -3264,6 +3276,9 @@ bool TCharacter::Goto(int32_t x, int32_t y)
 
     TActionBlock* ab = desired != root ? desired : doing;
     ab->target = S3DPoint(x, y, pos.z);
+    ab->walkto = true;
+    if (pickup)
+        gotoitem = pickup;
     return true;
 }
 
