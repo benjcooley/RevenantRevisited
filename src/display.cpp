@@ -254,6 +254,11 @@ bool TDisplay::FlipPage(bool /*Wait*/)
     sg_end_pass();
     sg_commit();
 
+    // The frame's id probe (the map pane's pick under the pointer) copies
+    // back now that the frame that drew it is committed.
+    if (Renderer)
+        Renderer->ResolveIdProbe();
+
     // ---- Mirror pass ------------------------------------------------------
     // Re-run the composite into an offscreen RT we own so it can be read
     // back via Metal blit: every frame while --snap / --filmstrip is active

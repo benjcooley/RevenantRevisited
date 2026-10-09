@@ -1562,6 +1562,31 @@ S3DPoint TMapRenderer::CameraWorld() const
     return impl ? impl->sectorCameraWorld : S3DPoint{0, 0, 0};
 }
 
+// The view the last frame was drawn with, as needed to unwrap a viewport
+// pixel: the viewport, the camera origin in viewport pixels and the
+// effective zoom (RenderFrame computes the same).
+struct SViewUnwrap
+{
+    int32_t vw = 0, vh = 0;
+    int32_t cam_ox = 0, cam_oy = 0;
+    float   zoom = 1.0f;
+};
+
+template <typename TImpl>
+static SViewUnwrap ComputeViewUnwrap(const TImpl& s)
+{
+    SViewUnwrap v;
+    v.vw = EffectiveViewportW(s);
+    v.vh = EffectiveViewportH(s);
+    const SMapCameraViewport camera_view = ComputeMapCameraViewport(v.vw, v.vh);
+    v.zoom = (std::max)(s.sectorCameraZoom * camera_view.scale, 0.0001f);
+    int32_t cam_ox_logical = 0, cam_oy_logical = 0;
+    s.sectorCameraOriginScreen(cam_ox_logical, cam_oy_logical);
+    v.cam_ox = int32_t(std::lround(camera_view.offset_x + float(cam_ox_logical) * camera_view.scale));
+    v.cam_oy = int32_t(std::lround(camera_view.offset_y + float(cam_oy_logical) * camera_view.scale));
+    return v;
+}
+
 void TMapRenderer::ScreenToWorld(int32_t screen_x, int32_t screen_y,
                                  int32_t z_floor, S3DPoint &out) const
 {
@@ -1569,18 +1594,7 @@ void TMapRenderer::ScreenToWorld(int32_t screen_x, int32_t screen_y,
     if (!impl || !Display.IsActive()) return;
 
     const Impl& s = *impl;
-    const int32_t vw = EffectiveViewportW(s);
-    const int32_t vh = EffectiveViewportH(s);
-    const SMapCameraViewport camera_view = ComputeMapCameraViewport(vw, vh);
-    const float effective_camera_zoom =
-        (std::max)(s.sectorCameraZoom * camera_view.scale, 0.0001f);
-
-    int32_t cam_ox_logical = 0, cam_oy_logical = 0;
-    s.sectorCameraOriginScreen(cam_ox_logical, cam_oy_logical);
-    const int32_t cam_ox = int32_t(std::lround(
-        camera_view.offset_x + float(cam_ox_logical) * camera_view.scale));
-    const int32_t cam_oy = int32_t(std::lround(
-        camera_view.offset_y + float(cam_oy_logical) * camera_view.scale));
+    const SViewUnwrap v = ComputeViewUnwrap(s);
 
     // Same projection unwrap the editor's light-drag uses:
     //   1) subtract the camera origin -> camera-local screen pixels
@@ -1588,12 +1602,88 @@ void TMapRenderer::ScreenToWorld(int32_t screen_x, int32_t screen_y,
     //   3) ScreenToWorld with the target z_floor -> world *relative to camera*
     //   4) add the camera's world position -> absolute world.
     S3DPoint wp_rel;
-    ::ScreenToWorld(int32_t(std::lround(float(screen_x - cam_ox) / effective_camera_zoom)),
-                    int32_t(std::lround(float(screen_y - cam_oy) / effective_camera_zoom)),
+    ::ScreenToWorld(int32_t(std::lround(float(screen_x - v.cam_ox) / v.zoom)),
+                    int32_t(std::lround(float(screen_y - v.cam_oy) / v.zoom)),
                     wp_rel, z_floor);
     out.x = wp_rel.x + s.sectorCameraWorld.x;
     out.y = wp_rel.y + s.sectorCameraWorld.y;
     out.z = z_floor;
+}
+
+// Map-screen = camera-local logical pixels + the camera's own map-screen
+// position at z 0: the tile pass draws an object at WorldToScreen(world -
+// camera.xy) * zoom + camera origin (SSectorDrawableInst::Submit), and
+// WorldToScreen is linear.
+bool TMapRenderer::ScreenToMapScreen(int32_t screen_x, int32_t screen_y,
+                                     int32_t& map_x, int32_t& map_y) const
+{
+    if (!impl || !Display.IsActive()) return false;
+    const Impl& s = *impl;
+    const SViewUnwrap v = ComputeViewUnwrap(s);
+    if (screen_x < 0 || screen_y < 0 || screen_x >= v.vw || screen_y >= v.vh)
+        return false;
+    int32_t cam_sx = 0, cam_sy = 0;
+    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x, s.sectorCameraWorld.y, 0), cam_sx, cam_sy);
+    map_x = cam_sx + int32_t(std::lround(float(screen_x - v.cam_ox) / v.zoom));
+    map_y = cam_sy + int32_t(std::lround(float(screen_y - v.cam_oy) / v.zoom));
+    return true;
+}
+
+void TMapRenderer::GetViewportSize(int32_t& w, int32_t& h) const
+{
+    w = impl ? EffectiveViewportW(*impl) : WIDTH;
+    h = impl ? EffectiveViewportH(*impl) : HEIGHT;
+}
+
+void TMapRenderer::SetPickPoint(int32_t x, int32_t y)
+{
+    if (!impl) return;
+    impl->pickX = x;
+    impl->pickY = y;
+}
+
+bool TMapRenderer::Pick(int32_t x, int32_t y, SPick& out) const
+{
+    out = {};
+    if (!impl || !Renderer) return false;
+    const Impl& s = *impl;
+
+    // The probe copied back at this point, else the last drawn frame read
+    // at once; either is decoded with the list its frame was drawn under.
+    TRenderer::SIdProbe probe;
+    const bool cached = Renderer->LatestIdProbe(probe) && probe.x == x && probe.y == y &&
+                        s.pickTable(probe.tag);
+    if (!cached && !Renderer->ReadIdProbe(x, y, s.renderedDrawListVersion, probe))
+        return false;
+    const Impl::SPickTable* table = s.pickTable(probe.tag);
+    if (!table)
+        return false;
+
+    const auto record = [&](uint32_t id) -> const Impl::SPickRecord*
+    {
+        const uint32_t raw = id & kObjIdMask;
+        if (raw == 0 || raw > table->records.size()) return nullptr;
+        return &table->records[raw - 1];
+    };
+    if (const Impl::SPickRecord* r = record(probe.At(0, 0)))
+        out.frontmost = r->src.Get();
+
+    // Retail's probe pixels (0x00412db0), the pointer's own first. Retail
+    // kept the last mesh drawn over any of them; draw order means nothing to
+    // the GPU's opaque passes, so the point's own pixel, then this order,
+    // decides between meshes.
+    static constexpr int8_t kProbe[9][2] =
+        { {0, 0}, {-1, 1}, {1, 1}, {-1, -1}, {1, -1}, {0, -2}, {0, 2}, {-2, 0}, {2, 0} };
+    for (const auto& d : kProbe)
+    {
+        const Impl::SPickRecord* r = record(probe.At(d[0], d[1]));
+        if (!r || r->kind != ESectorDrawableKind::Mesh) continue;
+        TObjectInstance* oi = r->src.Get();
+        if (!oi || oi->ObjClass() == OBJCLASS_EFFECT) continue;
+        out.mesh = oi;
+        break;
+    }
+    return true;
 }
 
 void TMapRenderer::GetWorldToPixel(int32_t dst_x, int32_t dst_y,
@@ -2800,6 +2890,7 @@ void TMapRenderer::RebuildForCurrentMap()
     }
     s.sectorSceneZMin = sz_min; s.sectorSceneZMax = sz_max;
     s.sectorDrawInst = std::move(draw_work);
+    ++s.drawListVersion;
     RecomputeLoadedMapAssetRefs(s);
     int32_t resident_lights = 0;
     for (auto& Ls : loaded)
@@ -3388,6 +3479,11 @@ void TMapRenderer::RenderFrame()
     s.last_draw_counts.offscreen_culled = stats.draw_offscreen;
 
     Renderer->EndTilePass();
+    // The id target is drawn: copy the ids around the map pane's pick point
+    // back (retail picked while T3DScene::DrawScene drew, 0x00412db0).
+    s.notePickTable();
+    if (s.pickX >= 0 && s.pickY >= 0)
+        Renderer->RequestIdProbe(s.pickX, s.pickY, s.drawListVersion);
     mark_phase(timings.end_tile_pass_ms);
     Renderer->RunLightingPass();
     mark_phase(timings.lighting_pass_ms);

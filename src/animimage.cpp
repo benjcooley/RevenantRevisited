@@ -148,36 +148,23 @@ void TAnimImagery::DrawUnlit(TObjectInstance* oi, TSurface* surface)
                       screenpos.z - GetRegZ(state), bm, flags);
 }
 
-bool TAnimImagery::GetZ(TObjectInstance* oi, TSurface* surface)
+// REVSYNC: 0x00418b70. The gates are retail's: no still, false; a lit state
+// whose still has no z-buffer, true (drawn over everything); a state neither
+// lit nor unlit, or an alpha still without a z-buffer, only in the editor.
+// Retail then z-found the still in the frame's z-buffer inside a 1x1 clip at
+// the point; the map renderer's id buffer answers the same question
+// (`frontmost`, docs/gameflow/forensics/MAP_INPUT.md §2.3, §7).
+bool TAnimImagery::GetZ(TObjectInstance* oi, const TObjectInstance* frontmost)
 {
-    int32_t state = oi->GetState();
-
+    const int32_t state = oi->GetState();
     if (state >= NumStates())
         return false;
 
-    /*
-    if (GetImageFlags(state) & ANIIM_CUTOFF && !Editor)
-    {
-        if (SmoothScroll)
-            return false;               // never show trees on smoothscrolling mode
-
-        // make sure the bitmap is cut off at the top of the screen
-        SRect r;
-        oi->GetScreenRect(r);
-        if (r.top > MapPane.GetScrollY())
-            return false;
-    }
-    */
-
-    PTBitmap bm = oi->GetStillImage();
+    const PTBitmap bm = oi->GetStillImage();
     if (!bm)
         return false;
 
-    S3DPoint screenpos;
-    oi->GetScreenPos(screenpos);
-
-    uint32_t stateflags = GetImageFlags(state);
-
+    const uint32_t stateflags = GetImageFlags(state);
     if (stateflags & ANIIM_LIT)
     {
         if (!(bm->flags & BM_ZBUFFER))
@@ -186,21 +173,10 @@ bool TAnimImagery::GetZ(TObjectInstance* oi, TSurface* surface)
     else if (!(stateflags & ANIIM_UNLIT))
         return Editor;
 
-    uint32_t flags = DM_TRANSPARENT;
-
-    if (bm->flags & BM_ZBUFFER)
-        flags |= DM_ZBUFFER;
-    else if (bm->flags & BM_ALPHA)
+    if (!(bm->flags & BM_ZBUFFER) && (bm->flags & BM_ALPHA))
         return Editor;
-    else    
-        flags |= DM_ZSTATIC;
 
-    if (oi->GetFlags() & OF_DRAWFLIP)
-        flags |= DM_REVERSEHORZ;
-
-    return surface->ZFind(screenpos.x - GetRegX(state),
-                          screenpos.y - GetRegY(state),
-                          screenpos.z - GetRegZ(state), bm, flags);
+    return frontmost == oi;
 }
 
 void TAnimImagery::DrawSelected(TObjectInstance* oi, TSurface* surface)
