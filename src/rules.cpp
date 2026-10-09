@@ -6,99 +6,91 @@
 
 #include <algorithm>
 #include <array>
+#include <string>
 
 #include "revenant.h"
 #include "parse.h"
-#include "character.h"
-#include "player.h"
-#include "weapon.h"
+#include "object.h"
 #include "playscreen.h"
 #include "rules.h"
 #include "revutils.h"
 #include "logging.h"
-
-extern TObjectClass CharacterClass;
-extern TObjectClass PlayerClass;
 
 static char errorparsingtag[] = "Error parsing tag %s";
 
 // Tag is tester
 #define TAGIS(t) (!stricmp(tag, t))
 
+// REVSYNC: the raw number rows of DAMAGEMODS, STATREQS and SKILLMODS
+// (0x00489e55, 0x0048927e, 0x004892f2): NUMBER tokens with ',' between them,
+// no expressions or #defines.
+static void ReadNumberRow(TToken &t, int32_t *values, int32_t count, const char *expected)
+{
+    for (int32_t c = 0; c < count; c++)
+    {
+        if (c > 0)
+        {
+            if (!t.Is(","))
+                t.Error("',' Expected");
+            t.WhiteGet();
+        }
+        if (t.Type() != TKN_NUMBER)
+            t.Error(expected);
+        values[c] = t.Index();
+        t.WhiteGet();
+    }
+}
+
 // *********************
 // * SClassData Object *
 // *********************
 
-// Loads the character from the "CHAR.DEF" file
+// REVSYNC: SClassData::Load @ 0x004891c0
+// Loads the class info from the "RULES.DEF" file
 bool SClassData::Load(char *aname, TToken &t)
 {
     strncpyz(name, aname, RESNAMELEN);
+    weapons = 0xffff;
 
     t.SkipBlanks();
     if (!t.Is("BEGIN"))
         t.Error("Char block BEGIN expected");
-    
-  // Now get first trigger token
     t.LineGet();
-    
-  // Iterate through the triggers and setup trigger list
-    bool ok;
+
     while (t.Type() != TKN_EOF && !t.Is("END"))
     {
-      // Parse trigger tags now
         if (t.Type() != TKN_IDENT)
             t.Error("Class data keyword expected");
 
         char tag[40];
         strncpyz(tag, t.Text(), 40);
-
         t.WhiteGet();
-        ok = true;
 
-      // Tags...
+        bool ok = true;
         if (TAGIS("STATREQS"))
         {
-            // REVSYNC: 0x004891c0 reads the six values in file order, and
             // ClearPlayer / SetPlayerLevel apply value i to attribute
             // PLRSTAT_FIRST + i (Strn Cons Agil Rflx Mind Luck). rules.def's
             // comment row says "str,con,agl,rflx,luck,mind"; the shipped
             // code gives the fifth value to Mind and the sixth to Luck.
-            ok = Parse(t, "%i, %i, %i, %i, %i, %i",
-                       &statreqs[0], &statreqs[1], &statreqs[2],
-                       &statreqs[3], &statreqs[4], &statreqs[5]);
             static_assert(NUM_PLRSTATS == 6, "STATREQS row width changed");
+            ReadNumberRow(t, statreqs, NUM_PLRSTATS, "Stat requirement value expected");
         }
         else if (TAGIS("SKILLMODS"))
         {
-            ok = Parse(t, "%i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i",
-                       &skillmods[0], &skillmods[1], &skillmods[2],
-                       &skillmods[3], &skillmods[4], &skillmods[5],
-                       &skillmods[6], &skillmods[7], &skillmods[8],
-                       &skillmods[9], &skillmods[10]);
             static_assert(NUM_SKILLS == 11, "SKILLMODS row width changed");
+            ReadNumberRow(t, skillmods, NUM_SKILLS, "Skill modifier expected");
         }
         else if (TAGIS("HEALTHMOD"))
-        {
             ok = Parse(t, "%i", &healthmod);
-        }
         else if (TAGIS("FATIGUEMOD"))
-        {
             ok = Parse(t, "%i", &fatiguemod);
-        }
         else if (TAGIS("MANAMOD"))
-        {
             ok = Parse(t, "%i", &manamod);
-        }
+        else if (TAGIS("WEAPONS"))
+            ok = Parse(t, "%i", &weapons);  // e.g. WM_BLUDGEON | WM_BOW | WM_CROSSBOW
         else
-        {
-            // Retail added per-class tags (WM_*, etc.) that didn't exist
-            // in the pre-release source. Skip the line.
-            log_warn("[rules] skipping unknown class tag '%s'", tag);
-            while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
-                t.Get();
-            t.LineGet();
-            continue;
-        }
+            t.Error("Invalid class tag %s", t.Text());  // retail names the token after the tag
 
         if (!ok)
             t.Error(errorparsingtag, tag);
@@ -180,65 +172,15 @@ bool SItemData::Load(const char *aname, TToken &t)
 // * SCharData Object *
 // ********************
 
-// Construct SCharData
-SCharData::SCharData()
-{
-    objtype = -1;
-    objclass = OBJCLASS_CHARACTER;
-
-    flags = 0;
-    for (int32_t c = 0; c < NUMDAMAGETYPES; c++)
-        damagemods[0] = 0;
-
-    health = 25;
-    fatigue = 25;
-    mana = 0;
-
-    blockfreq = 10;
-    blockmin = 5;
-    blockmax = 15;
-
-    combatrangemin = 128;
-    combatrangemax = combatrangemin + 64;
-    
-    playerblockmin = 10;
-    playerblockstep = 5;
-    playerblockinc = 10;
-
-    strcpy(blocksounds, "clang1,clang2,clang3");
-    strcpy(misssounds, "");
-
-    weapontype = WT_HAND;
-    weapondamage = 2;
-    armorvalue = 1;
-    defensemod = 0;
-    attackmod = 0;
-
-    sightmin = 30; sightmax = 100; sightrange = 64 * 5; sightangle = 64;
-    hearingmin = 10; hearingmax = 50; hearingrange = 64 * 5;
-
-    minattackfreq = 100; maxattackfreq = 250;
-
-    walkspeed = -1; runspeed = -1; sneakspeed = -1; combatwalkspeed = -1; 
-
-    arrowpos.x = 15; arrowpos.y = 15; arrowpos.z = 60;  // In front of by 15, and up at 45
-    arrowspeed = 20;                       // 20 units per tick for arrow speed
-
-    bowwait = 12;                          // Half a second
-    bowaimspeed = 8;                       // Pivot speed when aiming bow
-
-    maxattackrange = 32;
-
-    strcpy(bodytype, "normal"); // Default male normal size
-}
-
 // Destroy SCharData
 SCharData::~SCharData()
 {
     attacks.Clear();
 }
 
-// Loads the character from the "CHAR.DEF" file
+// REVSYNC: SCharData::Load @ 0x00489850
+// Loads the character from the "CHAR.DEF" file. Every tag is parsed into its
+// field here; the object type is found later by name (TRules::BindTypes).
 bool SCharData::Load(char *aname, TToken &t)
 {
     strncpyz(name, aname, RESNAMELEN);
@@ -249,32 +191,19 @@ bool SCharData::Load(char *aname, TToken &t)
     }
     else
     {
-        objtype = CharacterClass.FindObjType(name);
-        if (objtype < 0)
-        {
-            objtype = PlayerClass.FindObjType(name);
-            if (objtype < 0)
-                t.Error("Invalid character type %s", name);
-            else
-                objclass = OBJCLASS_PLAYER;
-        }
-        else
-            objclass = OBJCLASS_CHARACTER;
+        objtype = -2; objclass = -2;
     }
 
     t.SkipBlanks();
     if (!t.Is("BEGIN"))
         t.Error("Char block BEGIN expected");
-    
+
   // Now get first trigger token
     t.LineGet();
-    
-  // Iterate through the triggers and setup trigger list
-    bool ok;
+
     PSCharAttackData lastattack = nullptr;
     while (t.Type() != TKN_EOF && !t.Is("END"))
     {
-      // Parse trigger tags now
         if (t.Type() != TKN_IDENT)
             t.Error("Char data keyword expected");
 
@@ -282,95 +211,87 @@ bool SCharData::Load(char *aname, TToken &t)
         strncpyz(tag, t.Text(), 40);
 
         t.WhiteGet();
-        ok = true;
+        bool ok = true;
 
-      // Tags...
-      // FATIGUEATTACK is a retail variant of ATTACK with the same field
-      // layout — just used by the AI to choose lower-impact moves when
-      // the character is tired. We don't have a dedicated CA_FATIGUE flag
-      // (that's a Demo-2+ concern); treat it as a plain ATTACK for now so
-      // the parse advances and the trailing IMPACT attaches correctly.
-        if (TAGIS("ATTACK") || TAGIS("FATIGUEATTACK"))
+      // The attack tags. Each fills a zeroed record, which the array copies;
+      // the IMPACT tags after it add to the stored copy.
+        if (TAGIS("ATTACK"))
         {
             SCharAttackData ad;
+            memset(static_cast<void *>(&ad), 0, sizeof(ad));
 
-            memset(&ad, 0, sizeof(SCharAttackData));
-
-          // Pre-release ATTACK ends at attackpcnt (22 fields). Retail char.def
-          // appends swipeframeon, swipeframeoff (24 fields) and FATIGUEATTACK
-          // adds one more trailing int (25 fields, likely fatigue cost).
-          // Parse the 22-field base, then consume any trailing tokens up
-          // to end-of-line so the outer "Return expected" check doesn't
-          // trip on the retail extras.
             ok = Parse(t, "%30s, %i, %i, %30s, %30s, %30s, %30s, "
-                "%i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i",
+                "%i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i",
                 ad.attackname, &ad.flags, &ad.button,
                 ad.responsename, ad.blockname, ad.missname, ad.chainname,
                 &ad.blocktime, &ad.impacttime, &ad.nextwait, &ad.chainexptime,
                 &ad.mindist, &ad.maxdist, &ad.hitminrange, &ad.hitmaxrange,
                 &ad.hitangle, &ad.damagemod, &ad.fatigue, &ad.attackskill,
-                &ad.weaponmask, &ad.weaponskill, &ad.attackpcnt);
-            if (ok)
-            {
-              // Eat any trailing fields the retail format added.
-                while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
-                    t.Get();
-            }
-
+                &ad.weaponmask, &ad.weaponskill, &ad.attackpcnt,
+                &ad.swipeframeon, &ad.swipeframeoff);
             if (ok)
             {
                 if (ad.responsename[0] != 0)
                     ad.flags = (ad.flags & ~CA_SPECIAL) | CA_RESPONSE;
-
-                int32_t num = attacks.Add(ad);
-                lastattack = &(attacks[num]);
+                lastattack = &attacks[attacks.Add(ad)];
             }
         }
         else if (TAGIS("MAGICATTACK"))
         {
             SCharAttackData ad;
+            memset(static_cast<void *>(&ad), 0, sizeof(ad));
 
-            memset(&ad, 0, sizeof(SCharAttackData));
-
-            ok = Parse(t, "%30s, %i, %i, %i, %i, %i, %31s, %i, %i, %i",
+            ok = Parse(t, "%30s, %i, %i, %i, %i, %i, %31s, %i, %i, %i, %i, %i",
                 ad.attackname, &ad.flags, &ad.button,
                 &ad.attackpcnt, &ad.mindist, &ad.maxdist,
-                ad.spellname, &ad.spellsource.x, &ad.spellsource.y, &ad.spellsource.z);
-
+                ad.spellname, &ad.spellsource.x, &ad.spellsource.y, &ad.spellsource.z,
+                &ad.condition, &ad.conditionvalue);
             if (ok)
             {
-              // Retail MAGICATTACK adds two trailing fields (stat requirement,
-              // stat value). Discard them — Demo 1 doesn't gate magic on stats.
-                while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
-                    t.Get();
-
                 ad.flags |= CA_MAGICATTACK;
+                lastattack = &attacks[attacks.Add(ad)];
+            }
+        }
+        else if (TAGIS("FATIGUEATTACK"))
+        {
+          // An ATTACK with maxfatigue before the swipe frames; no response
+          // rule.
+            SCharAttackData ad;
+            memset(static_cast<void *>(&ad), 0, sizeof(ad));
 
-                int32_t num = attacks.Add(ad);
-                lastattack = &(attacks[num]);
+            ok = Parse(t, "%30s, %i, %i, %30s, %30s, %30s, %30s, "
+                "%i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i, %i",
+                ad.attackname, &ad.flags, &ad.button,
+                ad.responsename, ad.blockname, ad.missname, ad.chainname,
+                &ad.blocktime, &ad.impacttime, &ad.nextwait, &ad.chainexptime,
+                &ad.mindist, &ad.maxdist, &ad.hitminrange, &ad.hitmaxrange,
+                &ad.hitangle, &ad.damagemod, &ad.fatigue, &ad.attackskill,
+                &ad.weaponmask, &ad.weaponskill, &ad.attackpcnt, &ad.maxfatigue,
+                &ad.swipeframeon, &ad.swipeframeoff);
+            if (ok)
+            {
+                ad.flags |= CA_FATIGUEATTACK;
+                lastattack = &attacks[attacks.Add(ad)];
             }
         }
         else if (TAGIS("PLAYANIM"))
         {
             SCharAttackData ad;
-
-            memset(&ad, 0, sizeof(SCharAttackData));
+            memset(static_cast<void *>(&ad), 0, sizeof(ad));
 
             ok = Parse(t, "%30s, %i, %i, %i, %i, %i",
-                ad.attackname, &ad.flags, &ad.button,        
+                ad.attackname, &ad.flags, &ad.button,
                 &ad.mindist, &ad.maxdist, &ad.attackpcnt);
-
             if (ok)
             {
                 ad.flags |= CA_PLAYANIM;
-
-                int32_t num = attacks.Add(ad);
-                lastattack = &(attacks[num]);
+                lastattack = &attacks[attacks.Add(ad)];
             }
         }
         else if (TAGIS("IMPACT") || TAGIS("CHARIMPACT"))
         {
-            if (TAGIS("CHARIMPACT"))
+            const bool charimpact = TAGIS("CHARIMPACT");
+            if (charimpact)
             {
                 if (numimpacts >= MAXCHARIMPACTS)
                     t.Error("Too many CHARIMPACT tags for this character");
@@ -387,139 +308,92 @@ bool SCharData::Load(char *aname, TToken &t)
             }
 
             SCharAttackImpact ai;
-
-            memset(&ai, 0, sizeof(SCharAttackImpact));
+            memset(static_cast<void *>(&ai), 0, sizeof(ai));
 
             ok = Parse(t, "%30s, %i, %30s, %i, %i, %i, %i, %i",
-                ai.impactname, &ai.flags, ai.loopname, 
+                ai.impactname, &ai.flags, ai.loopname,
                 &ai.looptime, &ai.damagemin, &ai.damagemax, &ai.snapdist, &ai.snaptime);
 
-            if (ai.loopname[0] != 0)
-            {
-                if (!(ai.flags & (CAI_STUN | CAI_KNOCKDOWN | CAI_DEATH)))
-                    t.Error("Used 'loop' animation for impact with no STUN, KNOCKDOWN, or DEATH flag");
-            }
+            if (ai.loopname[0] != 0 && !(ai.flags & (CAI_STUN | CAI_KNOCKDOWN | CAI_DEATH)))
+                t.Error("Used 'loop' animation for impact with no STUN, KNOCKDOWN, or DEATH flag");
 
             if (ok)
             {
-                if (TAGIS("CHARIMPACT"))
+                if (charimpact)
                 {
-                    memcpy(&(impacts[numimpacts]), &ai, 
-                        sizeof(SCharAttackImpact));
-                    numimpacts++;
+                    ai.index = numimpacts;
+                    ai.flags |= CAI_CHARIMPACT;
+                    impacts[numimpacts++] = ai;
                 }
                 else
                 {
-                    memcpy(&(lastattack->impacts[lastattack->numimpacts]), &ai, 
-                        sizeof(SCharAttackImpact));
-                    lastattack->numimpacts++;
+                    ai.index = lastattack->numimpacts;
+                    ai.flags &= ~CAI_CHARIMPACT;
+                    lastattack->impacts[lastattack->numimpacts++] = ai;
                 }
             }
         }
         else if (TAGIS("CLASS"))
         {
-            if (objclass == OBJCLASS_CHARACTER)
-                t.Error("Monsters/NPC's do not have character classes");
-
-            char classname[RESNAMELEN];
+          // The class by name, among the CLASS blocks loaded so far (the
+          // lookup is GetClass's, inline); a name that isn't one is fatal.
+            char classname[RESNAMELEN] = {};
             ok = Parse(t, "%30s", classname);
             if (ok)
                 classdata = Rules.GetClass(classname);
+            if (!classdata)
+                FatalError("Unable to find character class \"%s\"", classname);
         }
         else if (TAGIS("DAMAGEMODS"))
         {
-            for (int32_t c = 0; c < NUMDAMAGETYPES; c++)
-            {
-                if (c > 0)
-                {
-                    if (!t.Is(","))
-                        t.Error("',' Expected");
-
-                    t.WhiteGet();
-                }
-            
-                if (t.Type() != TKN_NUMBER)
-                    t.Error("Damage type modifier expected");
-
-                damagemods[c] = t.Index();
-
-                t.WhiteGet();
-            }
+            ReadNumberRow(t, damagemods, NUMDAMAGETYPES, "Damage type modifier expected");
         }
         else if (TAGIS("FLAGS"))
         {
+          // REVSYNC: 0x00489ecb passes the flags' value, not their address,
+          // so the parse writes through a pointer equal to the current flags.
+          // No shipped CHARACTER uses the tag.
             ok = Parse(t, "%i", flags);
         }
         else if (TAGIS("BLOCK"))
-        {
             ok = Parse(t, "%i, %i, %i", &blockfreq, &blockmin, &blockmax);
-        }
         else if (TAGIS("PLAYERBLOCK"))
-        {
             ok = Parse(t, "%i, %i, %i", &playerblockmin, &playerblockstep, &playerblockinc);
-        }
         else if (TAGIS("ARMOR"))
-        {
             ok = Parse(t, "%i", &armorvalue);
-        }
         else if (TAGIS("DEFENSEMOD"))
-        {
             ok = Parse(t, "%i", &defensemod);
-        }
         else if (TAGIS("ATTACKMOD"))
-        {
             ok = Parse(t, "%i", &attackmod);
-        }
         else if (TAGIS("ATTACKFREQ"))
-        {
             ok = Parse(t, "%i, %i", &minattackfreq, &maxattackfreq);
-        }
+        else if (TAGIS("MAGICFREQ"))
+            ok = Parse(t, "%i, %i", &minmagicfreq, &maxmagicfreq);
         else if (TAGIS("WEAPONTYPE"))
-        {
             ok = Parse(t, "%i", &weapontype);
-        }
         else if (TAGIS("WEAPONDAMAGE"))
-        {
             ok = Parse(t, "%i", &weapondamage);
-        }
         else if (TAGIS("BLOCKSOUNDS"))
-        {
             ok = Parse(t, "%31s", blocksounds);
-        }
         else if (TAGIS("MISSSOUNDS"))
-        {
             ok = Parse(t, "%31s", misssounds);
-        }
         else if (TAGIS("GROUPS"))
-        {
-            ok = Parse(t, "%48s", groups);
-        }
+            ok = Parse(t, "%80s", groups);
         else if (TAGIS("ENEMIES"))
-        {
-            ok = Parse(t, "%48s", enemies);
-        }
+            ok = Parse(t, "%80s", enemies);
         else if (TAGIS("SIGHT"))
-        {
             ok = Parse(t, "%i, %i, %i, %i", &sightmin, &sightmax, &sightrange, &sightangle);
-        }
         else if (TAGIS("HEARING"))
-        {
             ok = Parse(t, "%i, %i, %i", &hearingmin, &hearingmax, &hearingrange);
-        }
         else if (TAGIS("MANA"))
-        {
             ok = Parse(t, "%i", &mana);
-        }
         else if (TAGIS("FATIGUE"))
-        {
             ok = Parse(t, "%i", &fatigue);
-        }
         else if (TAGIS("HEALTH"))
-        {
             ok = Parse(t, "%i", &health);
-        }
         else if (TAGIS("COMBATRANGE"))
         {
+          // One value: the far end is 64 past it (also when the parse fails).
             ok = Parse(t, "%i", &combatrangemin);
             if (ok && t.Is(","))
                 ok = Parse(t, ", %i", &combatrangemax);
@@ -532,63 +406,67 @@ bool SCharData::Load(char *aname, TToken &t)
             if (!ok)
                 maxattackrange = 32;
         }
+        else if (TAGIS("BLEEDER") || TAGIS("BLEADER"))
+        {
+            ok = Parse(t, "%i", &bleeder);
+            if (!ok)
+                flags |= 0x10;  // retail 0x0048a815, then the parse error
+        }
         else if (TAGIS("WALKSPEED"))
-        {
             ok = Parse(t, "%i", &walkspeed);
-        }
         else if (TAGIS("SNEAKSPEED"))
-        {
             ok = Parse(t, "%i", &sneakspeed);
-        }
         else if (TAGIS("RUNSPEED"))
-        {
             ok = Parse(t, "%i", &runspeed);
-        }
         else if (TAGIS("COMBATWALKSPEED"))
-        {
             ok = Parse(t, "%i", &combatwalkspeed);
-        }
         else if (TAGIS("BODYTYPE"))
-        {
             ok = Parse(t, "%30s", bodytype);
-        }
         else if (TAGIS("SWIPECOLOR"))
-        {
             ok = Parse(t, "%b, %b, %b", &swipecolor.red, &swipecolor.green, &swipecolor.blue);
+        else if (TAGIS("SWIPEFULL"))
+            ok = Parse(t, "%b", &swipefull);
+        else if (TAGIS("ATTACHEFFECT"))
+        {
+          // The first free slot; with all four used the line isn't parsed
+          // (and the "Return expected" check below stops the load).
+            auto free = std::find_if(std::begin(attacheffects), std::end(attacheffects),
+                                     [](const SCharAttachEffect &e) { return !e.used; });
+            if (free != std::end(attacheffects))
+            {
+                ok = Parse(t, "%20s, %i, %i, %i, %20s, %20s", free->name,
+                           &free->values[0], &free->values[1], &free->values[2], free->arg5, free->arg6);
+                if (!stricmp(free->arg5, "none"))
+                    free->arg5[0] = 0;
+                if (!stricmp(free->arg6, "none"))
+                    free->arg6[0] = 0;
+                free->used = true;
+            }
         }
         else if (TAGIS("ARROWPOS"))
-        {
             ok = Parse(t, "%i, %i, %i", &arrowpos.x, &arrowpos.y, &arrowpos.z);
-        }
         else if (TAGIS("ARROWSPEED"))
-        {
             ok = Parse(t, "%i", &arrowspeed);
-        }
         else if (TAGIS("BOWWAIT"))
-        {
             ok = Parse(t, "%i", &bowwait);
-        }
         else if (TAGIS("BOWAIMSPEED"))
-        {
             ok = Parse(t, "%i", &bowaimspeed);
-        }
+        else if (TAGIS("RETREATAT"))
+            ok = Parse(t, "%i", &retreatat);
+        else if (TAGIS("RETREATATMANA"))
+            ok = Parse(t, "%i", &retreatatmana);
+        else if (TAGIS("RETREATFOR"))
+            ok = Parse(t, "%i", &retreatfor);
+        else if (TAGIS("RUNFATIGUE"))
+            ok = Parse(t, "%i, %i", &runfatigue[0], &runfatigue[1]);
+        else if (TAGIS("POISONCHANCE"))
+            ok = Parse(t, "%i", &poisonchance);
+        else if (TAGIS("NOPARALYZE"))
+            noparalyze = true;
+        else if (TAGIS("LABELHEIGHT"))
+            ok = Parse(t, "%i", &labelheight);
         else
-        {
-          // Retail char.def added per-character tags the pre-release source
-          // doesn't recognize (MAGICFREQ, RUNFATIGUE, ATTRACTABLEWITH, ...).
-          // Skip the payload through end-of-line (and a BEGIN/END block if
-          // present) so the load doesn't fatal-error on Locke at line 119.
-            fprintf(stderr, "[rules] skipping unknown char tag '%s'\n", tag);
-            while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
-                t.Get();
-            t.LineGet();
-            if (t.Type() == TKN_KEYWORD && t.Code() == KEY_BEGIN)
-            {
-                t.SkipBlock();
-                t.LineGet();
-            }
-            continue;
-        }
+            t.Error("Invalid character tag %s", t.Text());  // retail names the token after the tag
 
         if (!ok)
             t.Error(errorparsingtag, tag);
@@ -599,8 +477,28 @@ bool SCharData::Load(char *aname, TToken &t)
         t.LineGet();
     }
 
-    if (objclass == OBJCLASS_PLAYER && !classdata)
-        t.Error("Class required for player characters");
+  // The label height and the arrow's start, by character when the block
+  // didn't give them (names case-blind).
+    if (labelheight == -1)
+    {
+        if (!stricmp(aname, "bayne"))
+            labelheight = 120;
+        else if (!stricmp(aname, "navarro"))
+            labelheight = 80;
+        else
+            labelheight = 100;
+    }
+    if (arrowpos.x == -1)
+    {
+        if (!stricmp(aname, "bayne"))
+            arrowpos = S3DPoint(-5, -15, 80);
+        else if (!stricmp(aname, "morganna"))
+            arrowpos = S3DPoint(-10, -15, 50);
+        else if (!stricmp(aname, "navarro"))
+            arrowpos = S3DPoint(-10, -15, 30);
+        else
+            arrowpos = S3DPoint(-5, -15, 60);
+    }
 
     if (!t.Is("END"))
         t.Error("Char block END expected");
@@ -613,7 +511,9 @@ bool SCharData::Load(char *aname, TToken &t)
 // * TRules Object *
 // *****************
 
-// Initializes character data stuff
+// REVSYNC: TRules::Initialize @ 0x0048b690
+// Initializes character data stuff: the defaults rules.def may override,
+// then the files.
 bool TRules::Initialize()
 {
     if (initialized)
@@ -626,10 +526,25 @@ bool TRules::Initialize()
     weapons.clear();
     armors.clear();
 
+    healthrecovrate = fatiguerecovrate = manarecovrate = 1;
+    poisondamagerate = 1;
+    tohitcenter = 50;
+    tohitrangechar = 10;
+    tohitrangeplyr = 10;
+    tohitblock = 25;
+    tohitface = 25;
+    ammodata = {20, 6, 4, 1, 25};
+
     if (!Load())
         return false;
 
     initialized = true;
+
+  // REVSYNC-DIVERGENCE: 0x0048b690 doesn't bind; retail binds at the end of
+  // LoadClasses (0x0047654f), which runs after Initialize (0x004861cb, then
+  // 0x00486202). The port loads the classes first, so it binds here too.
+  // Binding is idempotent: whichever of the two loads comes second binds.
+    BindTypes();
 
     return true;
 }
@@ -648,26 +563,40 @@ void TRules::Close()
     initialized = false;
 }
 
-// Loads the game rules from "RULES.DEF" plus the character roster in
-// "CHAR.DEF". rules.def is required (global rules tags); char.def is optional
-// but holds the 60-character retail roster (Araknid, Issathi, Druhgs, Golems,
-// etc.). When both files define the same CHARACTER name, the later load
-// replaces the earlier one, so char.def wins (retail-authoritative).
-// REVSYNC: Load @ 0x0048b990 — rules.def from ClassDefPath; char.def,
-// weapon.def and armor.def from ImageryPath when it has them (imagery.rvi
-// does), else ClassDefPath. All go through the same tag loop. Retail also
-// tries equip.def, which no install ships, and stats.def ("no longer used").
+// REVSYNC: TRules::Load @ 0x0048b990
+// Loads the game rules: six files through the same tag loop, so any of them
+// may hold any block. rules.def from ClassDefPath (required); stats.def from
+// ClassDefPath when it's there ("no longer used"); char.def, weapon.def,
+// armor.def and equip.def from ImageryPath when it has them (imagery.rvi
+// does), else ClassDefPath, else not at all. No install ships equip.def.
 bool TRules::Load()
 {
-    const std::string rules_file = std::string(ClassDefPath) + "rules.def";
-    if (!LoadFile(rules_file.c_str(), /*required=*/true))
-        return false;
+    chardata.DeleteAll();
+    classdata.DeleteAll();
+    weapons.clear();
+    armors.clear();
+  // REVSYNC-DIVERGENCE: retail leaves `def` pointing at the freed "Default"
+  // until the files give a new one.
+    def = nullptr;
 
-    for (const char *name : { "char.def", "weapon.def", "armor.def" })
+    struct SRulesFile
     {
-        const std::string file = rev_first_existing(ImageryPath, ClassDefPath, name);
-        if (rev_file_exists(file.c_str()))
-            LoadFile(file.c_str(), /*required=*/false);
+        const char *name;
+        bool imagery;           // ImageryPath first
+    };
+    static constexpr SRulesFile kFiles[] = {
+        {"rules.def", false}, {"stats.def", false}, {"char.def", true},
+        {"weapon.def", true}, {"armor.def", true}, {"equip.def", true},
+    };
+    for (const SRulesFile &f : kFiles)
+    {
+        const std::string file = f.imagery ? rev_first_existing(ImageryPath, ClassDefPath, f.name)
+                                           : std::string(ClassDefPath) + f.name;
+      // rules.def is required (LoadFile stops on a missing one); the rest are read when they're there.
+        if (&f != &kFiles[0] && !rev_file_exists(file.c_str()))
+            continue;
+        if (!LoadFile(file.c_str()))
+            return false;
     }
 
     const auto with_statline = [](const std::vector<SItemData> &items)
@@ -680,15 +609,15 @@ bool TRules::Load()
     return true;
 }
 
-bool TRules::LoadFile(const char* fname, bool required)
+// One rules file through the tag loop of 0x0048b990. A block's name is
+// parsed with a bounded %Ns where retail's `%s\n` copies it whole.
+// REVSYNC-DIVERGENCE: retail's name buffers are 64 bytes (32 for CLASS) on
+// its stack; a longer name overran them. The port truncates it instead.
+bool TRules::LoadFile(const char* fname)
 {
     FILE *fp = rev_fopen(fname, "rb");
     if (!fp)
-    {
-        if (required)
-            FatalError("Unable to find character info file %s", fname);
-        return false;
-    }
+        FatalError("Unable to find file %s", fname);    // TToken::Open 0x004789c0
 
     TFileParseStream s(fp, fname);
     TToken t(s);
@@ -696,11 +625,8 @@ bool TRules::LoadFile(const char* fname, bool required)
     if (!t.DefineGet())
         t.Error("Syntax error in header");
 
-  // Do block loop
-    bool ok;
     while (t.Type() != TKN_EOF)
     {
-      // Parse trigger tags now
         if (t.Type() != TKN_IDENT)
             t.Error("Rules block name or tag expected");
 
@@ -708,71 +634,37 @@ bool TRules::LoadFile(const char* fname, bool required)
         strncpyz(tag, t.Text(), 40);
 
         t.WhiteGet();
-        ok = true;
+        bool ok = true;
 
-      // Tags...
         if (TAGIS("DAYLENGTH"))
-        {
             ok = Parse(t, "%i", &daylength);
-        }
         else if (TAGIS("TWILIGHT"))
         {
             ok = Parse(t, "%i, %i", &twilight, &twilightsteps);
             if (GameSpeed == 5)
                 twilightsteps = ConvertMinutesToFrames(twilight); // Smooth ambient fading
         }
-        else if (TAGIS("HEALTHDATA"))
-        {
-            ok = Parse(t, "%i, %i, %i", &healthperlevel, &healthrecovval, &healthrecovrate);
-        }
-        else if (TAGIS("FATIGUEDATA"))
-        {
-            ok = Parse(t, "%i, %i, %i", &fatigueperlevel, &fatiguerecovval, &fatiguerecovrate);
-        }
-        else if (TAGIS("MANADATA"))
-        {
-            ok = Parse(t, "%i, %i, %i", &manaperlevel, &manarecovval, &manarecovrate);
-        }
-        else if (TAGIS("POISONDATA"))
-        {
-            ok = Parse(t, "%i, %i", &poisondamageval, &poisondamagerate);
-        }
         else if (TAGIS("STEALTH"))
-        {
             ok = Parse(t, "%i, %i, %i", &maxstealth, &sneakstealth, &minstealth);
-        }
         else if (TAGIS("CHARACTER"))
         {
-
             char charname[MAXNAMELEN];
-            ok = Parse(t, "%s\n", charname);
-            
+            ok = Parse(t, "%64s\n", charname);
             if (ok)
             {
-                PSCharData data = new SCharData;
-
-              // If the same CHARACTER name was already loaded (e.g. rules.def
-              // had it and char.def has it too), the later definition wins.
-              // Drop the earlier slot before adding the new one.
-                int32_t existing = -1;
                 for (int32_t c = 0; c < chardata.NumItems(); c++)
                 {
                     if (chardata.Used(c) && !stricmp(chardata[c]->name, charname))
-                    {
-                        existing = c;
-                        break;
-                    }
+                        t.Error("More than one %s in CHAR.DEF file", charname);
                 }
 
+                PSCharData data = new SCharData;
                 if (!data->Load(charname, t))
                     t.Error("Error loading char data");
-
-                if (existing >= 0)
-                    chardata.Delete(existing);
                 chardata.Add(data);
 
-              // Set default char data object (-1 for objtype)
-                if (data->objtype < 0)
+              // The default char data object ("Default": objtype -1)
+                if (data->objtype == -1)
                     def = data;
 
                 t.Get();
@@ -781,51 +673,97 @@ bool TRules::LoadFile(const char* fname, bool required)
         else if (TAGIS("CLASS"))
         {
             char classname[RESNAMELEN];
-            ok = Parse(t, "%s\n", classname);
-
+            ok = Parse(t, "%32s\n", classname);
             if (ok)
             {
                 PSClassData cl = new SClassData;
-
                 if (!cl->Load(classname, t))
                     t.Error("Error loading class data");
-                
                 classdata.Add(cl);
-
                 t.Get();
             }
         }
         else if (TAGIS("WEAPON") || TAGIS("ARMOR"))
         {
-          // REVSYNC: 0x0048b990 -- one WEAPON.DEF / ARMOR.DEF entry. Retail
-          // stops on a name given twice; the port keeps the later entry.
+          // One WEAPON.DEF / ARMOR.DEF entry. After a weapon block retail gets
+          // the next token, after an armor block the next non-blank one.
             const bool weapon = TAGIS("WEAPON");
             char itemname[MAXNAMELEN];
             ok = Parse(t, "%64s\n", itemname);
-
             if (ok)
             {
+                std::vector<SItemData> &items = weapon ? weapons : armors;
+                for (const SItemData &d : items)
+                {
+                    if (!stricmp(d.name.c_str(), itemname))
+                        t.Error(weapon ? "More than one %s in WEAPON.DEF file" : "More than one %s in ARMOR.DEF file",
+                                itemname);
+                }
+
                 SItemData item;
                 if (!item.Load(itemname, t))
                     t.Error(weapon ? "Error loading weapon data" : "Error loading armor data");
+                items.push_back(std::move(item));
 
-                std::vector<SItemData> &items = weapon ? weapons : armors;
-                const auto same = std::find_if(items.begin(), items.end(),
-                    [&](const SItemData &d) { return stricmp(d.name.c_str(), itemname) == 0; });
-                if (same != items.end())
-                    *same = std::move(item);
+                if (weapon)
+                    t.Get();
                 else
-                    items.push_back(std::move(item));
-
-                t.WhiteGet();           // retail 0x00479580: a blank after END is allowed
+                    t.WhiteGet();
             }
+        }
+        else if (TAGIS("HEALTHDATA"))
+            ok = Parse(t, "%i, %i, %i", &healthperlevel, &healthrecovval, &healthrecovrate);
+        else if (TAGIS("FATIGUEDATA"))
+            ok = Parse(t, "%i, %i, %i", &fatigueperlevel, &fatiguerecovval, &fatiguerecovrate);
+        else if (TAGIS("MANADATA"))
+            ok = Parse(t, "%i, %i, %i", &manaperlevel, &manarecovval, &manarecovrate);
+        else if (TAGIS("POISONDATA"))
+            ok = Parse(t, "%i, %i", &poisondamageval, &poisondamagerate);
+        else if (TAGIS("AMMODATA"))
+        {
+          // Four values; the fifth keeps its default.
+            ok = Parse(t, "%i, %i, %i, %i", &ammodata[0], &ammodata[1], &ammodata[2], &ammodata[3]);
+        }
+        else if (TAGIS("TOHITCENTER"))
+            ok = Parse(t, "%i", &tohitcenter);
+        else if (TAGIS("TOHITRANGECHAR"))
+            ok = Parse(t, "%i", &tohitrangechar);
+        else if (TAGIS("TOHITRANGEPLYR"))
+            ok = Parse(t, "%i", &tohitrangeplyr);
+        else if (TAGIS("TOHITBLOCK"))
+            ok = Parse(t, "%i", &tohitblock);
+        else if (TAGIS("TOHITFACE"))
+            ok = Parse(t, "%i", &tohitface);
+        else if (TAGIS("TOHITDAMAGE"))
+        {
+          // A BEGIN/END block of exactly five `ENTRY <MinValue> <DamagePercent>`
+          // lines: fewer is a parse error; the tag's result is the last
+          // entry's.
+            t.WhiteGet();
+            t.DoBegin();
+            for (int32_t i = 0; i < kToHitDamageRows; i++)
+            {
+                if (!t.Is("ENTRY"))
+                {
+                    ok = false;
+                    break;
+                }
+                t.Get();
+                t.WhiteGet();
+                int32_t minvalue = 0, damagepercent = 0;
+                ok = Parse(t, "%i %i", &minvalue, &damagepercent);
+                if (ok)
+                    tohitdamage[i] = {minvalue, damagepercent};
+                t.WhiteGet();
+            }
+            t.Get();
+            t.WhiteGet();
         }
         else if (TAGIS("STATLEVEL"))
         {
           // REVSYNC: 0x0048b990 -> 0x0049c9f0
             char tablename[RESNAMELEN];
             ok = Parse(t, "%32s\n", tablename);
-
             if (ok)
             {
                 const int32_t table = PlayerStats::TStatLevels::FindTable(tablename);
@@ -837,37 +775,72 @@ bool TRules::LoadFile(const char* fname, bool required)
             }
         }
         else
-        {
-            // Retail added rules tags (TOHIT*, AMMODATA, etc.) that didn't
-            // exist in the pre-release source. Skip the tag's payload. If
-            // the tag introduces a BEGIN/END block, skip the whole block;
-            // otherwise just skip to end-of-line. Leave current token at the
-            // trailing RETURN so the "Return expected" check below passes.
-            log_warn("[rules] skipping unknown tag '%s'", tag);
-            while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
-                t.Get();
-            t.LineGet();
-            if (t.Type() == TKN_KEYWORD && t.Code() == KEY_BEGIN)
-            {
-                t.SkipBlock();
-                t.LineGet();
-            }
-            continue;
-        }
+            t.Error("Invalid block or tag %s", t.Text());  // retail names the token after the tag
 
         if (!ok)
             t.Error(errorparsingtag, tag);
 
         if (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
             t.Error("Return expected");
-            
+
         if (!t.DefineGet())
-            t.Error("RULES.DEF syntax error");
+            t.Error("Rules file syntax error");
     }
-    
+
     fclose(fp);
 
     return true;
+}
+
+// REVSYNC: TRules::BindTypes @ 0x0048cab0
+// Every type of every object class, by name: a CHARACTER whose name is a
+// player or character type takes that type (BindType 0x0048c930). A name
+// that is no type keeps -2 and is never returned by GetCharData.
+void TRules::BindTypes()
+{
+    for (int32_t c = 0; c < TObjectClass::NumClasses(); c++)
+    {
+        const TObjectClass *cl = TObjectClass::GetClass(c);
+        if (!cl)
+            continue;
+        for (int32_t type = 0; type < cl->NumTypes(); type++)
+        {
+            if (const SObjectInfo *info = cl->GetObjType(type))
+                BindType(info->name, type);
+        }
+    }
+}
+
+// REVSYNC: TRules::BindType @ 0x0048c930
+// The class is the first one (by id) with a type of that name, whichever
+// class the type index came from. Weapons and armor bind too in retail
+// (+0xc4/+0xc8, +0xc0/+0xc4 of their records, and 0x0048c7f0 copies their
+// numbers into the class); the port finds those entries by name instead
+// (GetItemData).
+void TRules::BindType(const char *name, int32_t objtype)
+{
+    int32_t objclass = -1;
+    for (int32_t c = 0; c < TObjectClass::NumClasses(); c++)
+    {
+        const TObjectClass *cl = TObjectClass::GetClass(c);
+        if (cl && cl->FindObjType(name) >= 0)
+        {
+            objclass = cl->ClassId();
+            break;
+        }
+    }
+    if (objclass != OBJCLASS_PLAYER && objclass != OBJCLASS_CHARACTER)
+        return;
+
+    for (int32_t c = 0; c < chardata.NumItems(); c++)
+    {
+        if (chardata.Used(c) && !stricmp(chardata[c]->name, name))
+        {
+            chardata[c]->objtype = objtype;
+            chardata[c]->objclass = objclass;
+            return;
+        }
+    }
 }
 
 PSClassData TRules::GetClass(char *name)
