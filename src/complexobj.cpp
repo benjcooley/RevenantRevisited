@@ -281,14 +281,17 @@ void TComplexObject::SetDoing(PTActionBlock ab)
     root->interrupt = false;    // Now that we're doing, don't interrupt
 }
 
-void TComplexObject::SetDesired(PTActionBlock ab)
+// REVSYNC: SetDesired @ 0x004db3a0 -- a block already waiting stays while
+// the one being done has priority (retail tests doing's priority; the 1998
+// code tested the waiting block's); false then, and the caller keeps `ab`.
+// An interrupting block is forced at once (ForceCommand with `flags`).
+bool TComplexObject::SetDesired(PTActionBlock ab, uint32_t flags)
 {
     if (ab == nullptr)             // nullptr indicates we want to go back to root
         ab = root;
 
-    if (desired && desired != doing &&  // If we have a priority action, and we aren't already
-        desired->priority)              // playing it, don't replace it.
-            return;
+    if (desired && desired != doing && doing && doing->priority)
+        return false;
 
     if (ab != desired)                  // Set the desired command
     {
@@ -306,9 +309,10 @@ void TComplexObject::SetDesired(PTActionBlock ab)
 
     if (ab->interrupt && doing != ab && !doing->priority) // Interrupt flag means DO IT RIGHT NOW
     {
-        ForceCommand(ab);
+        ForceCommand(ab, 0, flags);
         ab->interrupt = false;
     }
+    return true;
 }
 
 // Have object attempt to move into a new state
@@ -332,9 +336,25 @@ int32_t TComplexObject::TryCommand(PTActionBlock ab, int32_t bits, uint32_t flag
 // third argument whose bit 0 (kCommandNoIncidentals) looks every state up
 // with pcnt 100 instead of a random roll: the 100% variant, never an "NN:"
 // incidental. The rest of this body is still the pre-release one.
+// REVSYNC: ForceCommand @ 0x004db4d0 -- start `ab` now (root when null):
+// refused while doing has priority and a block waits; the state is the
+// transition from doing (the root itself for a root-to-root animation going
+// home), else, unless dontforce, forced (flag `forced`): the state, a
+// transition from or to the root, the root's own. With no incidentals
+// (flags & kCommandNoIncidentals) each lookup tries percent 100 first, then
+// a random percent. Then the frame, synchronised frames, the root, and what
+// comes next (itself if it loops or is a root, else the root).
 int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits, uint32_t flags)
 {
-    const int32_t pcnt = (flags & kCommandNoIncidentals) ? 100 : -1;
+    const bool exact = (flags & kCommandNoIncidentals) != 0;
+    auto state = [&](const char* name) {
+        int32_t s = exact ? FindState(name, 100) : -1;
+        return s >= 0 ? s : FindState(name, -1);
+    };
+    auto transition = [&](const char* from, const char* to) {
+        int32_t s = exact ? FindTransitionState(from, to, 100) : -1;
+        return s >= 0 ? s : FindTransitionState(from, to, -1);
+    };
 
     if (doing && doing->priority && desired != doing)
         return COM_EXECUTING;
@@ -348,44 +368,40 @@ int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits, uint32_t fl
             desname1, desname2, desname3, desname4);
 #endif
 
-    ab->interrupt = false;  // Now that we've interrupted... set this to false.
+    ab->interrupt = false;
+    ab->transition = false;
+    ab->forced = false;
 
-    int32_t newstate = -1;
-
+    int32_t newstate;
     if (doing == nullptr)
-        newstate = FindState(ab->name, pcnt);
+        newstate = exact ? FindState(ab->name, 100) : FindState(ab->name, -1);
     else
     {
-      // ROOT2ROOT means don't do a transition back to the root state because the 
-      // transition TO animation (i.e. "walk to say") has the transition BACK animation
-      // in it already (has "say to walk" in it).  If current animation is root2root, and user
-      // actually wants to go back to the root, don't bother looking for a transition ani,
-      // just set directly back to root..
+      // ROOT2ROOT: the transition into this animation already brings it home,
+      // so going back to the root needs no transition of its own.
         if ((GetAniFlags() & AF_ROOT2ROOT) && desired && desired == root)
         {
-            ab = root; // Return back too root right now
-            newstate = FindState(ab->name, pcnt);
+            ab = root;
+            newstate = exact ? FindState(ab->name, 100) : FindState(ab->name, -1);
         }
         else
+            newstate = exact ? FindTransitionState(doing->name, ab->name, 100)
+                             : FindTransitionState(doing->name, ab->name, -1);
+
+        ab->transition = stricmp(doing->name, ab->name) != 0;
+        if (newstate < 0)
         {
-      // Try to find a transition from the current action to the new action.  If we can't
-      // find one, we will just force it (see below).
-            newstate = FindTransitionState(doing->name, ab->name, pcnt);
+            if (ab->dontforce)
+                return COM_IMPOSSIBLE;
+            ab->forced = ab->transition;
+            newstate = state(ab->name);
+            if (newstate < 0)
+                newstate = transition(root->name, ab->name);
+            if (newstate < 0)
+                newstate = transition(ab->name, root->name);
+            if (newstate < 0)
+                newstate = transition(root->name, root->name);
         }
-
-      // Can't find a transition, well then we go ahead and force it... 
-        if (newstate < 0 && !ab->dontforce)
-        {   
-          // One of these things is bound to work!!
-          newstate = FindState(ab->name, pcnt);   // Use end state name
-          if (newstate < 0)
-            newstate = FindTransitionState(root->name, ab->name, pcnt);  // Try transition from root
-          if (newstate < 0)
-            newstate = FindTransitionState(ab->name, root->name, pcnt);  // Try transition to root
-        }
-
-        // flag transition if the two states aren't the same
-        ab->transition = (stricmp(doing->name, ab->name) != 0);
     }
 
     if (newstate < 0)
@@ -401,15 +417,12 @@ int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits, uint32_t fl
         ab->frame = -1;
     }
 
-
-  // If the sychronize flag is set, synchronize frames with 'obj'.
-  // Use for block/impact animations which must match the frame number of an associated
-  // opponents attack animation.  Useful for any other synchronized animations as well.
+  // Synchronise with the opponent's animation (block / impact to an attack).
     if (ab->obj && GetAniFlags() & AF_SYNCHRONIZE)
         SetFrame(ab->obj->GetFrame() + 1);
 
   // Make this block the root block if current or next animation is a root animation
-    uint32_t nextaniflags = imagery ? imagery->GetAniFlags(FindState(ab->name, pcnt)) : 0;
+    uint32_t nextaniflags = imagery ? imagery->GetAniFlags(exact ? FindState(ab->name, 100) : FindState(ab->name, -1)) : 0;
     if ((GetAniFlags() & AF_ROOT || nextaniflags & AF_ROOT) && !ab->noroot)
         SetRoot(ab);
 

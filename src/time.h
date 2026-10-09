@@ -55,6 +55,11 @@ class TTime
     // Call once at the top of each render frame.
     static void BeginFrame(double dt_seconds);
 
+    // Deterministic runs (--fixedstep): call instead of BeginFrame. Exactly
+    // one legacy tick per render frame, counted as an integer (no
+    // floating-point accumulation), whatever the wall clock or TimeScale.
+    static void BeginFixedFrame();
+
   private:
     static double  m_time;
     static double  m_deltaTime;

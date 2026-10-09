@@ -63,6 +63,7 @@
 #define CA_BOWMODE       0x10000000 // This attack works in bow mode
 #define CA_RUNNING       0x20000000 // This attack is a running attack
 #define CA_ACTION        0x40000000 // This is an action, not an attack
+#define CA_NOINTERRUPT   0x80000000 // This is an uninterruptable animation (retail char.def)
 
 // Damage types
 
@@ -90,6 +91,7 @@
 #define CAI_WHENDOWN    0x0010  // This impact will only be used when the character is knocked down
 #define CAI_FLYBACK     0x0020  // This impact causes character to fly back (use with CAI_KNOCKDOWN!)
 #define CAI_BLOOD       0x0040  // This impact spouts blood
+#define CAI_INTERACTIVE 0x0080  // Interactive impact (retail char.def; Go refuses to step out of one)
 
 #define MAXATTACKIMPACTS 6
 #define MAXCHARIMPACTS   6
