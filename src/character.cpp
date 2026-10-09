@@ -4631,68 +4631,39 @@ bool TCharacter::Dodge()
     return true;
 }
 
-// REVSYNC: retail TCharacter::SideStep @ 0x4d6220
-//   recon/discovered/cls_0x5a7b98_TCharacter_GoCmd_4d6220.cpp (size 398).
-// Cartwheel sidestep: queues a "sidestepl" / "sidestepr" animation that
-// steps the character ~90 degrees off facing. Used by the AI body to
-// dodge blockers and by the in-range attack tree when a character is in
-// the line of attack. When called with dir=0 (or any non-l/r byte),
-// retail picks L/R at random — fed twice in a row, that's the
-// "cartwheel both ways" pattern.
-//
-// Retail uses bare anim names ("sidestepl", not "comhand_sidestepl");
-// HasActionAni resolves transitions from the current root via
-// FindTransitionState.
+// REVSYNC: SideStep @ 0x004d6220 -- a step to the side, "sidestepl" or
+// "sidestepr" (either at random when `dir` names neither), unless one is
+// already under way. The block keeps the doing block's target and angle,
+// and the character faces that angle at once; it moves off the move angle
+// by a quarter turn (left +0x40), with priority and a pivot first
+// (waitpivot), turn rate 8. A block SetDesired refuses is dropped. (The
+// return value is retail's leftover register; here, whether it was taken.)
 bool TCharacter::SideStep(char dir)
 {
-    if (!doing)
+    if (!doing || strncasecmp(doing->name, "sidestep", 8) == 0)
         return false;
-
-  // Retail FUN_004d6220:26 — gate: only proceed if doing->name is NOT
-  // already prefixed with "sidestep" (i.e. we're not already in a
-  // sidestep). Prevents re-queuing a fresh sidestep on top of an
-  // in-progress one.
-    if (doing->name && strncmp(doing->name, "sidestep", 8) == 0)
-        return false;
-
-  // Retail randomises L/R when caller didn't specify (lines 28-31).
     if (dir != 'l' && dir != 'r')
         dir = random(0, 1) ? 'l' : 'r';
 
-    char animname[10];
-    animname[0] = 's'; animname[1] = 'i'; animname[2] = 'd'; animname[3] = 'e';
-    animname[4] = 's'; animname[5] = 't'; animname[6] = 'e'; animname[7] = 'p';
-    animname[8] = dir; animname[9] = '\0';
-
-  // Retail FUN_004d6220:33 calls vftbl[0x1f0/4] which is HasActionAni
-  // (or its variant) on the bare anim name — so transitions from the
-  // current root are searched automatically.
-    if (!HasActionAni(animname))
+    char name[16] = "sidestep";
+    name[8] = dir;
+    if (!HasActionAni(name))
         return false;
 
-  // Retail uses action=3 (ACTION_COMBAT) — the sidestep stays inside the
-  // combat root rather than swapping to ACTION_DODGE; keeps the character
-  // ready to attack again on the next tick.
-    TActionBlock* ab = new TActionBlock(animname, ACTION_COMBAT);
-    ab->obj       = doing->obj;
-    ab->moveangle = doing->moveangle;
-
-  // Step direction: 90° left or right of facing. Retail FUN_004d6220:49
-  //   ab->angle = (dir == 'l' ? face + 0x40 : face + 0xc0) & 0xff
-    int32_t face = GetFace();
-    if (dir == 'l') ab->angle = (face + 0x40) & 0xff;
-    else            ab->angle = (face + 0xc0) & 0xff;
-
-  // Retail FUN_004d6220:51 — turnrate=8 (limits in-step turn speed).
+    auto* ab = new TActionBlock(name, ACTION_COMBAT);
+    ab->obj = doing->obj;
+    ab->angle = doing->angle;
+    FaceOnly(doing->angle);
+    ab->moveangle = (moveangle + (dir == 'l' ? 0x40 : 0xc0)) & 0xff;
+    ab->interrupt = false;
+    ab->priority = true;
+    ab->waitpivot = true;
     ab->turnrate = 8;
-
-  // Retail FUN_004d6220:52 — flags = (flags & ~nowaitdone) | interrupt | noroot
-  //   bit 0x10 = interrupt, bit 0x20 = nowaitdone, bit 0x200 = noroot.
-    ab->interrupt  = 1;
-    ab->noroot     = 1;
-    ab->nowaitdone = 0;
-
-    SetDesired(ab);
+    if (!SetDesired(ab, 0))
+    {
+        delete ab;
+        return false;
+    }
     return true;
 }
 
