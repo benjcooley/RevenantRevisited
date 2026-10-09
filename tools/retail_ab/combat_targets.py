@@ -280,3 +280,16 @@ TARGETS = {
     'combat-resolve': dict(fixture='slots/combat/combat_call.py', cases=resolve_cases, compare=compare,
                            port_fields=port_fields, unit=lambda r: 1),
 }
+
+
+# ---- More dojo targets ----------------------------------------------------------
+# Each kata family can live in its own module, tools/retail_ab/targets_<name>.py,
+# with a TARGETS dict of its own (it may import the helpers above: finish,
+# port_fields, compare, _char, _toward). They're merged here, so adding one
+# touches no shared file.
+import importlib as _importlib
+import sys as _sys
+
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+for _path in sorted(Path(__file__).resolve().parent.glob('targets_*.py')):
+    TARGETS.update(_importlib.import_module(_path.stem).TARGETS)
