@@ -108,7 +108,11 @@ work without a visible window. A hidden, silent app with no Dock icon is
 what macOS App Nap throttles, which held back the frame timer for minutes
 (a run that never reached its first frame; another stalled ~10 min), so
 `--headless` also takes an `NSProcessInfo` activity that opts out
-(`HeadlessWindow::KeepAwake`, from `sokol_main`).
+(`HeadlessWindow::KeepAwake`, from `sokol_main`). The activity also holds
+off idle system sleep: on 2026-10-09 an unattended run froze for ten
+minutes because the Mac (on battery) idle-slept under it, about five
+seconds after the display turned off (`pmset -g log` shows "Entering Sleep
+state due to 'Idle Sleep'"). The display may still sleep.
 
 A headless run paces its own frames. MTKView draws from the display's
 refresh, which stops while the Mac's display sleeps. A run started in
@@ -117,9 +121,10 @@ until its watchdog fired (2026-10-08: arena runs and builds hung for
 minutes or more). For `desc.hidden` our sokol patch therefore pauses the
 view and draws it from a run-loop timer at the display's rate
 (`headlessTimerFired:`). Verified with the display on (the arena's 1440
-ticks in ~41 s); the display-off case was verified only by its cause so
-far. If a run still stalls with the display off, look next at
-`CAMetalLayer nextDrawable` blocking on a layer that is never composited.
+ticks in ~41 s), and a run kept logging with the display off until the
+system slept (2026-10-09). If a run stalls with the display off and the
+Mac awake, look next at `CAMetalLayer nextDrawable` blocking on a layer
+that is never composited.
 
 Each of these quit requests ends the process through the normal path
 (`AppCleanup` → `ShutdownGlobals`):

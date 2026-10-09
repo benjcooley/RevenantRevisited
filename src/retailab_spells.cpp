@@ -361,7 +361,7 @@ void BuildInventory(TObjectInstance* owner, const JsonValue& items)
         if (def.objtype < 0)
             throw std::runtime_error("class.def has no type '" + type + "' in class " + std::to_string(def.objclass));
         // Imagery with no states, as the fixture's characters have: nothing draws.
-        auto* item = new TObjectInstance(&def, new TFixtureImagery(TFixtureImagery::Register({}), name));
+        auto* item = new TObjectInstance(&def, new TFixtureImagery(TFixtureImagery::Register({}), name, {}, false));
         item->SetName(const_cast<char*>(name.c_str()));
         owner->PlaceInInventory(item, slot++);
         if (!plain && spec.Has("items"))
