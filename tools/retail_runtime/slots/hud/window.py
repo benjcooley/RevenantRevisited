@@ -15,6 +15,7 @@ startup what it asks for, deterministically:
 """
 from __future__ import annotations
 
+import copy
 import struct
 
 DESKTOP = (800, 600)
@@ -29,7 +30,7 @@ SYSTEM_METRICS = {0: DESKTOP[0], 1: DESKTOP[1],          # SM_CXSCREEN / SM_CYSC
 
 
 class Windows:
-    def __init__(self, vm):
+    def __init__(self, vm, state=None):
         self.vm = vm
         self.classes = {}                     # name -> WndProc
         self.created = []                     # (hwnd, class, title, style, x, y, w, h)
@@ -56,6 +57,8 @@ class Windows:
             vm.handlers[name] = (argc, fn)
             vm.api_dlls[name] = user32
         self.cursor_count = 0
+        if state is not None:
+            self.set_state(state)
 
     def _recorded(self, name, result):
         def handler(args):
@@ -107,9 +110,11 @@ class Windows:
         self.vm.write(rect, struct.pack('<4i', 0, 0, 640, 480))
         return 1
 
-    def snapshot(self):
-        return dict(self.classes), list(self.created), self.next_hwnd, self.cursor_count
+    STATE = ('classes', 'created', 'next_hwnd', 'calls', 'cursor_count')
 
-    def restore(self, state):
-        classes, created, self.next_hwnd, self.cursor_count = state
-        self.classes, self.created = dict(classes), list(created)
+    def state(self):
+        return copy.deepcopy({name: getattr(self, name) for name in self.STATE})
+
+    def set_state(self, state):
+        for name, value in copy.deepcopy(state).items():
+            setattr(self, name, value)

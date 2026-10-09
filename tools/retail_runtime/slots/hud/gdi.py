@@ -18,6 +18,7 @@ its own shadow / color pass over the result (`0x004be2b0`). This module:
 """
 from __future__ import annotations
 
+import copy
 import struct
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -55,6 +56,8 @@ class DeviceContext:
     back_color: int = 0xffffff
     back_mode: int = OPAQUE
     align: int = 0
+    char_extra: int = 0               # SetTextCharacterExtra: added after every character
+    position: tuple = (0, 0)          # MoveToEx current position
 
 
 @dataclass
@@ -72,7 +75,7 @@ class TextCall:
 
 
 class Gdi:
-    def __init__(self, vm):
+    def __init__(self, vm, state=None):
         self.vm = vm
         self.fonts: dict[int, Font] = {}
         self.dcs: dict[int, DeviceContext] = {}
@@ -90,7 +93,10 @@ class Gdi:
                 ('SetBkColor', 2, lambda a: self._swap(a, 'back_color'), gdi32),
                 ('SetBkMode', 2, lambda a: self._swap(a, 'back_mode'), gdi32),
                 ('SetTextAlign', 2, lambda a: self._swap(a, 'align'), gdi32),
+                ('SetTextCharacterExtra', 2, lambda a: self._swap(a, 'char_extra'), gdi32),
                 ('GetDeviceCaps', 2, self._device_caps, gdi32),
+                ('GetCurrentPositionEx', 2, self._current_position, gdi32),
+                ('MoveToEx', 4, self._move_to, gdi32),
                 ('GetTextMetricsA', 2, self._text_metrics, gdi32),
                 ('GetTextExtentPoint32A', 4, self._text_extent, gdi32),
                 ('TextOutA', 5, self._text_out, gdi32),
@@ -102,6 +108,8 @@ class Gdi:
                 ('ReleaseDC', 2, lambda a: self.release_dc(a[1]), user32)]:
             vm.handlers[name] = (argc, fn)
             vm.api_dlls[name] = dlls
+        if state is not None:
+            self.set_state(state)
 
     # ---- objects -------------------------------------------------------
 
@@ -166,6 +174,17 @@ class Gdi:
             raise ValueError(f'GetDeviceCaps index {index}')
         return caps[index]
 
+    def _current_position(self, args):
+        self.vm.write(args[1], struct.pack('<ii', *self._dc(args[0]).position))
+        return 1
+
+    def _move_to(self, args):
+        dc = self._dc(args[0])
+        if args[3]:
+            self.vm.write(args[3], struct.pack('<ii', *dc.position))
+        dc.position = struct.unpack('<ii', struct.pack('<II', args[1], args[2]))
+        return 1
+
     def _font(self, dc):
         font = self.fonts.get(dc.font)
         if font is None:
@@ -186,11 +205,17 @@ class Gdi:
         self.vm.write(args[1], block[:56])
         return 1
 
+    def width(self, dc, data):
+        """Advance width of a byte string in `dc`'s font, with its
+        character extra (GDI adds it after every character)."""
+        m = self._font(dc).metrics
+        return sum(m.advance(b) + dc.char_extra for b in data)
+
     def _text_extent(self, args):
         dc, text, count, size = args
-        m = self._font(self._dc(dc)).metrics
+        dc = self._dc(dc)
         data = bytes(self.vm.uc.mem_read(text, count))
-        self.vm.write(size, struct.pack('<ii', sum(m.advance(b) for b in data), m.height))
+        self.vm.write(size, struct.pack('<ii', self.width(dc, data), self._font(dc).metrics.height))
         return 1
 
     # ---- text ----------------------------------------------------------
@@ -219,15 +244,15 @@ class Gdi:
         self._record('DrawTextA', dc, string, box[0], box[1], box, fmt)
         if fmt & 0x400:                               # DT_CALCRECT: report the bounding box
             m = self._font(self._dc(dc)).metrics
-            width = sum(m.advance(b) for b in string.encode('cp1252'))
+            width = self.width(self._dc(dc), string.encode('cp1252'))
             self.vm.write(rect, struct.pack('<4i', box[0], box[1], box[0] + width, box[1] + m.height))
         return self._font(self._dc(dc)).metrics.height
 
-    def snapshot(self):
-        import copy
-        return copy.deepcopy((self.fonts, self.dcs, self.next_handle, len(self.text_calls)))
+    STATE = ('fonts', 'dcs', 'text_calls', 'next_handle')
 
-    def restore(self, state):
-        import copy
-        self.fonts, self.dcs, self.next_handle, calls = copy.deepcopy(state)
-        del self.text_calls[calls:]
+    def state(self):
+        return copy.deepcopy({name: getattr(self, name) for name in self.STATE})
+
+    def set_state(self, state):
+        for name, value in copy.deepcopy(state).items():
+            setattr(self, name, value)
