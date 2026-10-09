@@ -9,6 +9,9 @@ fixture world (docs/gameplay/COMBAT_DOJO.md on feature/combat). The case's
   target (CombatFace `0x5d7a64`; monsters always), the step animation comes
   from the angle between moving and facing (GetAngleMoveAnim `0x4d39f0`),
   and whether to pivot first. Case: `angle`.
+- `calculate-damage` (kata C1): CalculateDamage `0x4c4860` (thiscall
+  (damage, type, modifier), ret 0xc) over the case's `inputs`, with the
+  character's own resistance / armour slots (chardata) as original code.
 - `resolve-combat` / `resolve-combat-move` (kata M5): ResolveCombat
   `0x4c7980` / ResolveCombatMove `0x4c7f80` (thiscall (ab, bits), ret 8),
   the per-tick resolvers of the combat root and of a combat step, called
@@ -53,6 +56,7 @@ from guest import CombatWorld, call, s32, serve, start  # noqa: E402
 SCHEMA = 'combat.call.v1'
 GO = 0x4ce350
 RESOLVE_COMBAT, RESOLVE_COMBAT_MOVE = 0x4c7980, 0x4c7f80
+CALCULATE_DAMAGE = 0x4c4860
 FIND_CLEAR_PATH = 0x4c39d0
 FIND_CHARACTERS = 0x4cd690
 SET_PLAYER_STATE = 0x51d680
@@ -117,6 +121,9 @@ class CallFixture:
             entry = RESOLVE_COMBAT if kind == 'resolve-combat' else RESOLVE_COMBAT_MOVE
             doing = vm.u32(me + 0xd8)
             result = s32(call(vm, entry, (doing, case.get('bits', 0) & 0xffffffff), this=me))
+        elif kind == 'calculate-damage':
+            result = [s32(call(vm, CALCULATE_DAMAGE, tuple(v & 0xffffffff for v in inp), this=me))
+                      for inp in case['inputs']]
         else:
             raise ValueError(f'unknown call {kind!r}')
         new_blocks = []

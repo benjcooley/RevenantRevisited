@@ -319,6 +319,7 @@ class CombatWorld:
         vm.put_u32(obj + O_MOVEANGLE, spec.get('moveangle', spec.get('facing', 0)) & 0xffffffff)
         vm.put_u32(obj + O_CHARFLAGS, spec.get('charflags', 0))
         vm.put_u32(obj + O_OUT_OF_SIGHT, int(spec.get('out_of_sight', 0)))
+        vm.put_u32(obj + O_MONSTER, spec.get('monsterkind', 0))
         if player:
             vm.put_u32(obj + O_PLAYERSTATE, spec.get('playerstate', 0))
             vm.put_u32(G_PLAYER, obj)

@@ -248,7 +248,31 @@ def compare_kernels(case: dict, retail: dict, port: dict) -> list[dict]:
     return out
 
 
+# ---- C1: CalculateDamage ---------------------------------------------------------
+
+def damage_cases(data: Path, workdir: Path) -> list[dict]:
+    """A monster's damage taken: resistances (each type its own, positive
+    and negative), armour, the three damage-reducing charflags and Baez's
+    kind, over damage x type x modifier."""
+    inputs = [[d, t, m] for d in (0, 1, 2, 3, 7, 10, 37, 100, 999)
+              for t in range(-1, 10) for m in (-100, -60, 0, 15, 50, 100)]
+    cases = []
+    for mods, armor in (([0] * 10, 0), ([0, 10, -10, 25, 50, 100, -50, 0, 30, 75], 0),
+                        ([0, 10, -10, 25, 50, 100, -50, 0, 30, 75], 5), ([5] * 10, 40)):
+        for flags in (0, 0x10, 0x100, 0x200, 0x310):
+            for kind in (0, 1):
+                ch = _char('Araknid', 12, [1000, 1000, 0], 0, chardata=None)
+                ch['chardata'] = dict(combatrangemax=300, armor=armor, damagemods=mods)
+                ch['charflags'] = flags
+                ch['monsterkind'] = kind
+                cases.append(dict(name=f'dmg.m{mods[1]}.a{armor}.f{flags:#x}.k{kind}', call='calculate-damage',
+                                  globals=dict(combatface=1, frame=0), self='Araknid', chars=[ch], inputs=inputs))
+    return finish(cases)
+
+
 TARGETS = {
+    'combat-damage': dict(fixture='slots/combat/combat_call.py', cases=damage_cases, compare=compare,
+                          port_fields=port_fields, unit=lambda r: len(r['returned'])),
     'combat-kernels': dict(fixture='slots/combat/kernels.py', cases=kernel_cases, compare=compare_kernels,
                            port_fields=port_fields, unit=lambda r: len(r['outputs'])),
     'combat-go': dict(fixture='slots/combat/combat_call.py', cases=go_cases, compare=compare,

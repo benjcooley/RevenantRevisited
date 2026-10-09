@@ -77,7 +77,7 @@ only).
 
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
-| C1 | CalculateDamage | `0x4c4860` | `TCharacter::CalculateDamage` | [ ] formula read (§5.5) |
+| C1 | CalculateDamage | `0x4c4860` | `TCharacter::CalculateDamage` | [x] 40 cases x 594 inputs (characters; the player's resist/armour slots open) |
 | C2 | Damage (impact / death choice) | `0x4c4950` | `TCharacter::Damage` | [ ] |
 | C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [ ] |
 | C4 | hit resolution: ResolveAttack → ResolveHit (to-hit, tiers) | `0x4c6dd0` `0x4c62b0` | same | [ ] |
