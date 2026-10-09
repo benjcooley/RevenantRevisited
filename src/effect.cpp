@@ -17102,9 +17102,11 @@ void TFireFlashEffect_Bespoke::Initialize(bool attach_runtime_component)
     for (auto& p : particles_) p = {};
     for (int i = 0; i < 75; ++i) {
         auto& p = particles_[i];
-        p.angle.X = float(random(0, 359)) / 360.0f * float(M_2PI);
-        p.angle.Y = float(random(0, 359)) / 360.0f * float(M_2PI);
-        p.angle.Z = float(random(0, 359)) / 360.0f * float(M_2PI);
+        // Native4e1a6a/87/a3: FILD × float5a39f0, one float store.
+        constexpr float native_angle_step = 0.01745329238474369f;
+        p.angle.X = float(static_cast<long double>(random(0, 359)) * native_angle_step);
+        p.angle.Y = float(static_cast<long double>(random(0, 359)) * native_angle_step);
+        p.angle.Z = float(static_cast<long double>(random(0, 359)) * native_angle_step);
         p.angvel.X = p.angvel.Y = p.angvel.Z = 0.12f;
         p.state = 2;
     }
@@ -17231,7 +17233,10 @@ void TFireFlashEffect_Bespoke::Submit(EFxDebugMode debug_mode)
             j = p.stopfade - p.life >= (p.stopfade - p.startfade) * 70 / 100 ? 0 : 1;
             if (p.life > 0) {
                 if (p.stopfade - p.life >= p.startfade)
-                    p.scale = mainscale_ * p.life / (p.stopfade - p.startfade) + 0.05f;
+                    // Native4e203b..55 keeps the product/division/addition
+                    // extended until its single float store.
+                    p.scale = float(static_cast<long double>(mainscale_) * p.life /
+                                    (p.stopfade - p.startfade) + 0.05000000074505806f);
                 else p.scale = mainscale_;
             }
         } else if (p.state == 2) {

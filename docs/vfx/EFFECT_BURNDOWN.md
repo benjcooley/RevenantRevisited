@@ -11,6 +11,33 @@ historical evidence; this migration alone grants no additional acceptance.
 
 **Latest thin-emulator coverage: 55 / 176 bounded rendered frontends.**
 
+**2026-10-09 FireFlash precision checkpoint:** native initialization and fade
+arithmetic exposed two local rounding differences. The corrected production
+code now matches all birth angles and fade scales across 101 samples of the
+150-slot pool; frame, integer state, 759 range calls and sampled draw counts
+also match. Binary32 discrepancies fall from 8,120 to 1,124, confined to sphere
+positions from shared matrix accumulation (maximum error 3.78994e-6). Original
+Scene mode8 explicitly maps to ONE/ONE; the earlier numeric-mode mismatch claim
+is withdrawn. [Evidence and remaining gates](forensics/FIREFLASH_THIN_PREFLIGHT.md).
+No shared matrix/rendering change, pixel parity or new effect-row credit follows.
+
+Live capture validation now rejects empty black-background previews, invalid
+images and explicit asset/controller rejection even when files were written
+and the process exited normally. An intentional empty control must declare
+`expect_visible: false`. The runtime regression suite passes 94 tests; the final
+FireFlash preview has 69 nonblack frames out of 96, 70 distinct images and a
+clean shutdown in 16.7 seconds. This smoke result does not establish retail
+pixel parity.
+
+Rift1's shipped `animtex obj=rift,u=4,d=4` is rejected by the original parser;
+its failed-initialization cleanup faults on unallocated UV storage in the
+isolated cold-heap fixture. Actual gameplay heap behavior is not established. Defer
+that [case](forensics/RIFT1_FAILED_ANIMTEX.md) without repairing the authored tag
+or claiming animation. Standalone
+[Flare](forensics/FLARE_PREFLIGHT_20261009.md) also remains deferred because no
+exact asset binding exists in the shipped EFFECT registry/archive. Counts
+remain 55 bounded rendered rows, 69 controlled runtime rows and 0 fully accepted.
+
 [Six generic scrolling-water effects](../../recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json)
 now pass84whole-image/depth pairs, all visiblynonempty, twice replayed. Original
 factory/parser/controller execution confirms fallback to every object when a

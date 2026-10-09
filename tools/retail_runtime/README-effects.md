@@ -687,3 +687,28 @@ compiled regression tests pass. [Instructions/results](../../recon/retail_asm/ru
 and [report](../../recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json)
 retain pre-fix traces. Original lighting, map/sampler device fidelity and Metal
 pixel equivalence remain separate; Rift1 animtex is deferred.
+
+### Live capture validity
+
+`port_capture.py` now decodes and hashes the actual PNG pixels. Black-background
+visual captures must contain at least one nonblack frame, and a rejected
+asset/controller cannot pass just by writing image files. Empty/control recordings
+set `expect_visible: false` explicitly. Nonblack scene backgrounds still require
+an effect-free backdrop/ROI comparison to prove visibility. Clean exit and
+fixed-step timing checks remain required. Pillow is already part of the local
+runtime requirements; install them using `SETUP.md` before running capture tests.
+
+
+### Deferred Rift1: native animtex initialization failure
+
+[`rift_failed_animtex_probe.py`](rift_failed_animtex_probe.py) reproduces the
+unchanged shipped `obj=rift,u=4,d=4` tag failure. Actual native parser accepts
+u/v/g, so Initialize returns zero; actual RefreshControllers chooses deletion
+and admits zero controllers. A separate cold-heap execution faults in native
+cleanup at 0x405c14 because its saved-UV array was never allocated. Two fresh
+isolated runs reproduce both the stop-before-delete and unmodified fault traces.
+
+[Forensics and reproducible command](../../docs/vfx/forensics/RIFT1_FAILED_ANIMTEX.md)
+and [report](../../recon/retail_asm/runtime/effects/rift-failed-animtex-preflight/manifest.json)
+grant no animation/static-render acceptance and make no whole-game crash claim.
+Do not repair d→v or execute Render on the failed controller to invent fidelity.
