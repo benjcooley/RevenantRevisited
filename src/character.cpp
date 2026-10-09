@@ -643,6 +643,7 @@ bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t
         bychar = &by;
     *bychar = nullptr;
     *height = pos.z;
+    blockedby = EBlockedBy::None;
 
     int32_t maxdelta;
     if (bits & MOVE_NOTMOVING)
@@ -655,10 +656,18 @@ bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t
         bool hole;
         MapPane.GetWalkHeightRadius(newpos, Radius(), maxdelta, *height, hole);
         if (hole)
+        {
+            blockedby = EBlockedBy::Hole;
             return true;
+        }
     }
     if (abs(pos.z - *height) > kMaxStepHeight || maxdelta > kMaxStepHeight || *height == 0)
+    {
+        blockedby = abs(pos.z - *height) > kMaxStepHeight ? EBlockedBy::Height
+                  : maxdelta > kMaxStepHeight            ? EBlockedBy::Step
+                                                         : EBlockedBy::NoWalkmap;
         return true;
+    }
 
     if (Health() <= 0)
         return false;
@@ -673,10 +682,27 @@ bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t
     // (A remote player in a network game is never blocked; offline, nothing.)
     TCharacter* b = CharBlocking(this, newpos, Radius());
     *bychar = b;
-    if (!b)
+    if (!b || ::Distance(pos, b->Pos()) < b->Radius() + Radius())
         return false;
-    return ::Distance(pos, b->Pos()) >= b->Radius() + Radius();
+    blockedby = EBlockedBy::Character;
+    return true;
 }
+
+namespace
+{
+const char* BlockedByName(TCharacter::EBlockedBy why)
+{
+    switch (why)
+    {
+      case TCharacter::EBlockedBy::Hole: return "a cell with no walkmap in reach";
+      case TCharacter::EBlockedBy::Height: return "the ground there more than 0x20 above or below";
+      case TCharacter::EBlockedBy::Step: return "a step over 0x20 between cells in reach";
+      case TCharacter::EBlockedBy::NoWalkmap: return "no walkmap there";
+      case TCharacter::EBlockedBy::Character: return "a character";
+      default: return "nothing";
+    }
+}
+}  // namespace
 
 // REVSYNC: TCharacter::Move @ 0x004c46d0 -- MoveStep, repeated (at most ten
 // times) while a MoveTo target is still ahead and the last step moved; the
@@ -802,8 +828,11 @@ uint32_t TCharacter::MoveStep()
 
         int32_t h1;
         TCharacter* by1;
+        const S3DPoint wanted = np;
+        EBlockedBy why = EBlockedBy::None;
         if (Blocked(pos, np, r, &h1, &by1))
         {
+            why = blockedby;
             r |= MOVE_BLOCKED;
             int32_t h2;
             TCharacter* by2;
@@ -869,6 +898,17 @@ uint32_t TCharacter::MoveStep()
             if (r & MOVE_BLOCKED)
             {
                 np = pos;
+                // Diagnostics: the player's refused step, once per place and reason.
+                static S3DPoint lastpos;
+                static EBlockedBy lastwhy = EBlockedBy::None;
+                if (this == Player && (pos != lastpos || why != lastwhy))
+                {
+                    log_debug("[move] %s blocked at (%d,%d,%d) toward (%d,%d,%d), move angle %d: %s%s%s", name,
+                              pos.x, pos.y, pos.z, wanted.x, wanted.y, wanted.z, moveangle, BlockedByName(why),
+                              by1 ? " " : "", by1 ? by1->name : "");
+                    lastpos = pos;
+                    lastwhy = why;
+                }
                 if (target_out_of_sight)
                 {
                     sight_lost_ticks = 0;
