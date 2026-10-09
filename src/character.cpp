@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "character.h"
+#include "ctrlmap.h"
 
 #include "rules.h"
 #include "mappane.h"
@@ -3366,21 +3367,28 @@ bool TCharacter::Goto(int32_t x, int32_t y, TObjectInstance* pickup)
     return true;
 }
 
+// REVSYNC: Stop @ 0x004cee70 -- end a walk, a step or a pivot (or the
+// named action): the root, interrupting, takes the doing block's angles and
+// becomes desired (with incidentals off, its 100% variant). The player also
+// lets go of every held control and of the right-button walk (the map
+// pane's right button up). The network notify is inert offline.
 bool TCharacter::Stop(char *name)
 {
     if (!IsMoving() && !IsDoing(ACTION_PIVOT) &&
         (!name || !doing->Is(name)))                                   // Is a use specified command
         return false;
 
-//  if (doing)
-//      doing->stop = true;
-
     root->interrupt = true;
     root->angle = doing->angle;
     root->moveangle = doing->moveangle;
 
-    SetDesired(root);
+    SetDesired(root, Incidentals() ? 0 : kCommandNoIncidentals);
 
+    if (this == static_cast<TCharacter*>(Player))
+    {
+        ControlMap.ReleaseAll();
+        MapPane.PlayMouseClick(MB_RIGHTUP, 0, 0);
+    }
     return true;
 }
 
