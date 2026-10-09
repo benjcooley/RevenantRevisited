@@ -34,7 +34,7 @@
     "actual_runtime_verified_rows": 60,
     "visual_fidelity_confirmed_rows": 16,
     "repeatable_ab_rows": 8,
-    "thin_bounded_render_frontend_rows": 46
+    "thin_bounded_render_frontend_rows": 47
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -12417,11 +12417,12 @@
         "accepted": false
       },
       "runtime_dispatch": "exact_fireswarm_builder_authored_cylinder_component_verified",
-      "next_action": "Retain clean FPS-enabled reference and repeat. Review native first-visible phase/cadence without fitting the established source clock; verify natural caller/context later. Prior frozen-trail diagnostic is superseded as the active reference.",
+      "next_action": "Retain bounded stationary cylinder native state/render proof; verify early visible phases with a suitable original device and natural owner/map/lighting plus full Metal parity. This leaf has no missile/source-destination contract.",
       "notes": [
         "2026-10-05: source geometry/texture/timing and actual runtime repaired. Port240frames/76distinct/120exact-ground tail;5 natural expiry and6 explicit deletion checks pass. Retail43.65sec/26distinct retains large cylinder residue; exact camera-nudge floor reset proves cache residue. Diagnostic only, no accurate reference/visual acceptance. Historical combined runtime fixture failed because its generation-bound selector refused a recreated owner; separate corrected fixtures preserve identity checks.",
         "Current source winding correction changes rendered surface selection; earlier mesh captures are historical. Current-binary cylinder preview/runtime regressions retained separately after correction.",
-        "FPS redraw prerequisite was absent in the previous frozen-trail capture. Enabling Ctrl+Shift+F recovered two clean native lifecycles, exact ground cleanup without camera nudge, and a stable-background A/B. First pair binary7018fc568d28 predates SetVortex build; retained provenance is unchanged."
+        "FPS redraw prerequisite was absent in the previous frozen-trail capture. Enabling Ctrl+Shift+F recovered two clean native lifecycles, exact ground cleanup without camera nudge, and a stable-background A/B. First pair binary7018fc568d28 predates SetVortex build; retained provenance is unchanged.",
+        "Fresh stationary FireSwarm tube frontend passes79ticks/kill76/237floatfields and12selectedimage-depthpairs; onlyfive nonempty matchingticks30/36/48/60/72 earn rendered-sample credit. Empty early source-software samples retain renderer-limit scope."
       ],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "runtime_regression": {
@@ -12611,7 +12612,43 @@
           "port": 0.0
         },
         "scope": "Independent second FPS-enabled native lifecycle paired with current authored port; no phase fitting. Operational repetition only; initial phase/cadence and visual sign-off remain open."
-      }
+      },
+      "thin_emulator_checks": [
+        {
+          "name": "fireswarm_stationary_tube_lifecycle_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/fireswarm-render-next-20261008/manifest.json",
+          "lifecycle_ticks": 79,
+          "native_float32_checks": 237,
+          "sampled_pixel_pairs": 12,
+          "visible_pixel_pair_ticks": [
+            30,
+            36,
+            48,
+            60,
+            72
+          ],
+          "empty_samples_not_appearance_credit": [
+            0,
+            1,
+            12,
+            24,
+            75,
+            76,
+            78
+          ],
+          "warm_replays": 2,
+          "runtime_producer_compared": true,
+          "modern_gpu_backend_compared": false,
+          "scope": "Original one-shot scale/yaw/lifecycle and tube01 object1 authored mesh/texture versus compiled shared preview/map producer. No RNG/audio; owner spell null, identity world. Current frontend triangle-culling formula provided at imagery boundary; independent device culling not asserted. Original matrix/vertex/projection/raster executes unmodified with selected 1024x2048 viewport, camera zero/zdist1925/white input vertices, no shape or camera fitting. Original software skips triangle edges above640px X/480px Y: early tall-cylinder samples are empty, so early visible appearance is not verified. Later nonempty samples, lifecycle/pose/mesh and size-rejection diagnostic are retained separately. Real loader/component/map context, normals/lighting/blend/modern GPU remain separate.",
+          "open": [
+            "early visible appearance beyond original software triangle-span limit",
+            "real owner/map/light/culling context",
+            "Metal/device backend parity"
+          ],
+          "full_acceptance_granted": false
+        }
+      ]
     },
     {
       "index": 59,

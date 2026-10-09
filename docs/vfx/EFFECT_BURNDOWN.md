@@ -9,7 +9,7 @@ Prioritize speed and repeatability, with known renderer limits recorded
 separately from VFX defects. The counts and earlier captures below are retained
 historical evidence; this migration alone grants no additional acceptance.
 
-**Latest thin-emulator coverage: 46 / 176 bounded rendered frontends.**
+**Latest thin-emulator coverage: 47 / 176 bounded rendered frontends.**
 
 [StillWater and all three watcher textures](../../recon/retail_asm/runtime/effects/static-texture-next-20261007/manifest.json)
 add 52 original texture-selector checks, 1,040 corner/UV comparisons and 26
@@ -40,6 +40,14 @@ fails the new regression. This closes the no-splash length20 rendered-child
 gap without increasing the effect-row count. Sector scheduling, audio/RNG,
 length64 splashes, natural context and full Metal parity remain separate.
 [Scope](forensics/DRIP_RIPPLE_LINKED_THIN.md).
+
+[FireSwarm](../../recon/retail_asm/runtime/effects/fireswarm-render-next-20261008/manifest.json)
+adds a stationary-cylinder frontend: 79 exact lifecycle ticks, 237 float32
+scale/yaw fields, kill76 and 12 repeated image/depth pairs. Only the five
+nonempty matching samples at ticks30/36/48/60/72 earn rendered-sample credit.
+Early empty images retain the original software triangle-span limitation;
+actual device/culling/lighting, natural setting and early visible phases remain
+open. Native class/caller analysis finds no missile or two-endpoint contract.
 
 [Streamer](../../recon/retail_asm/runtime/effects/streamer-frontend-ab/manifest.json)
 adds 104 exact lifecycle ticks in both production ownership modes and 11 sampled

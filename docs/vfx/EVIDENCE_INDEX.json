@@ -19,7 +19,7 @@
     "actual_runtime_verified_rows": 60,
     "visual_fidelity_confirmed_rows": 16,
     "repeatable_ab_rows": 8,
-    "thin_bounded_render_frontend_rows": 46
+    "thin_bounded_render_frontend_rows": 47
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -239,6 +239,22 @@
       "retail_rows": [
         "Drip:0x5975abde",
         "Ripple:0x12309867"
+      ]
+    },
+    "recon/retail_asm/runtime/effects/fireswarm-render-next-20261008/manifest.json": {
+      "sha256": "52895e29063ccccecf25a25a5a3138cc08e00ac3b5b568311aeaa55504d7ebcc",
+      "retail_rows": [
+        "FireSwarm:0x582c1e78"
+      ],
+      "check": "fireswarm_stationary_tube_lifecycle_frontend",
+      "status": "pass",
+      "scope": "Original one-shot scale/yaw/lifecycle and tube01 object1 authored mesh/texture versus compiled shared preview/map producer. No RNG/audio; owner spell null, identity world. Current frontend triangle-culling formula provided at imagery boundary; independent device culling not asserted. Original matrix/vertex/projection/raster executes unmodified with selected 1024x2048 viewport, camera zero/zdist1925/white input vertices, no shape or camera fitting. Original software skips triangle edges above640px X/480px Y: early tall-cylinder samples are empty, so early visible appearance is not verified. Later nonempty samples, lifecycle/pose/mesh and size-rejection diagnostic are retained separately. Real loader/component/map context, normals/lighting/blend/modern GPU remain separate.",
+      "visible_pixel_pair_ticks": [
+        30,
+        36,
+        48,
+        60,
+        72
       ]
     }
   }
