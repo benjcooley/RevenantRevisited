@@ -1648,19 +1648,24 @@ bool TMapRenderer::Pick(int32_t x, int32_t y, SPick& out) const
     if (!impl || !Renderer) return false;
     const Impl& s = *impl;
 
+    // The probe copied back at this point, else the last drawn frame read
+    // at once; either is decoded with the list its frame was drawn under.
     TRenderer::SIdProbe probe;
     const bool cached = Renderer->LatestIdProbe(probe) && probe.x == x && probe.y == y &&
-                        probe.tag == s.drawListVersion;
-    if (!cached && !Renderer->ReadIdProbe(x, y, s.drawListVersion, probe))
+                        s.pickTable(probe.tag);
+    if (!cached && !Renderer->ReadIdProbe(x, y, s.renderedDrawListVersion, probe))
+        return false;
+    const Impl::SPickTable* table = s.pickTable(probe.tag);
+    if (!table)
         return false;
 
-    const auto record = [&](uint32_t id) -> const SSectorDrawableInst*
+    const auto record = [&](uint32_t id) -> const Impl::SPickRecord*
     {
         const uint32_t raw = id & kObjIdMask;
-        if (raw == 0 || raw > s.sectorDrawInst.size()) return nullptr;
-        return &s.sectorDrawInst[raw - 1];
+        if (raw == 0 || raw > table->records.size()) return nullptr;
+        return &table->records[raw - 1];
     };
-    if (const SSectorDrawableInst* r = record(probe.At(0, 0)))
+    if (const Impl::SPickRecord* r = record(probe.At(0, 0)))
         out.frontmost = r->src.Get();
 
     // Retail's probe pixels (0x00412db0), the pointer's own first. Retail
@@ -1671,7 +1676,7 @@ bool TMapRenderer::Pick(int32_t x, int32_t y, SPick& out) const
         { {0, 0}, {-1, 1}, {1, 1}, {-1, -1}, {1, -1}, {0, -2}, {0, 2}, {-2, 0}, {2, 0} };
     for (const auto& d : kProbe)
     {
-        const SSectorDrawableInst* r = record(probe.At(d[0], d[1]));
+        const Impl::SPickRecord* r = record(probe.At(d[0], d[1]));
         if (!r || r->kind != ESectorDrawableKind::Mesh) continue;
         TObjectInstance* oi = r->src.Get();
         if (!oi || oi->ObjClass() == OBJCLASS_EFFECT) continue;
@@ -3476,6 +3481,7 @@ void TMapRenderer::RenderFrame()
     Renderer->EndTilePass();
     // The id target is drawn: copy the ids around the map pane's pick point
     // back (retail picked while T3DScene::DrawScene drew, 0x00412db0).
+    s.notePickTable();
     if (s.pickX >= 0 && s.pickY >= 0)
         Renderer->RequestIdProbe(s.pickX, s.pickY, s.drawListVersion);
     mark_phase(timings.end_tile_pass_ms);
