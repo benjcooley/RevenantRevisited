@@ -54,6 +54,7 @@ void TActionBlock::ClearBlock()
     data = nullptr;
     flags = 0;
     damage = 0;
+    tohit = roll = 0;
     firsttime = true;
     attack = nullptr;
     impact = nullptr;
