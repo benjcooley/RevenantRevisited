@@ -5316,188 +5316,95 @@ void TCharacter::SetInvisibleSpell(bool on)
     }
 }
 
-// set to cast mode
+// The invoke animation named by the spell's ANIMATION: one with "inv" in
+// it becomes the character's own "<prefix>inv<last char>" (invoke2 ->
+// "cinv2", "hinv2", ...); without it, "invoke"; without that, none. A
+// priority-free ACTION_INVOKE block waits the invoke delay, which the
+// character keeps too, and is forced; one ForceCommand didn't take (doing
+// has priority) is dropped.
 bool TCharacter::SetCast(char* ani, TObjectInstance* target, int32_t invoke_delay)
 {
-//  int32_t incombat = IsFighting();
-    char puthere[50];
-    strcpy(puthere, ani);
-    if (!stricmp(ani, "invoke1"))
+    char name[RESNAMELEN];
+    if (strstr(ani, "inv"))
     {
-        strcpy(puthere,"cinv1");
-        puthere[4] = '1';
-        puthere[5] = '\0';
-        if (IsCombat())
-        {
-            if (IsRunMode())
-                strcpy(puthere,"crinv1");
-        }
-        else if (IsHandCombat())
-        {
-            puthere[0] = 'h';
-            if (IsRunMode())
-                puthere[0] = 'r';
-        }
-        else if (IsBowMode())
-        {
-            puthere[0] = 'b';
-            if (IsRunMode())
-                strcpy(puthere,"brinv1");
-        }
-        else if (IsWalkMode())
-            puthere[0] = 'w';
-        else if (IsSneakMode())
-            puthere[0] = 's';
+        char base[RESNAMELEN];
+        snprintf(base, sizeof(base), "inv%s", ani + strlen(ani) - 1);
+        CombatAnimName(name, base);
     }
-    if (!stricmp(ani, "invoke2"))
+    else
+        strncpyz(name, ani, RESNAMELEN);
+    if (!HasActionAni(name))
     {
-        strcpy(puthere,"cinv2");
-        puthere[4] = '2';
-        puthere[5] = '\0';
-        if (IsCombat())
-        {
-            if (IsRunMode())
-                strcpy(puthere,"crinv2");
-        }
-        else if (IsHandCombat())
-        {
-            puthere[0] = 'h';
-            if (IsRunMode())
-                puthere[0] = 'r';
-        }
-        else if (IsBowMode())
-        {
-            puthere[0] = 'b';
-            if (IsRunMode())
-                strcpy(puthere,"brinv2");
-        }
-        else if (IsWalkMode())
-            puthere[0] = 'w';
-        else if (IsSneakMode())
-            puthere[0] = 's';
-    }
-    if (!stricmp(ani, "invoke3"))
-    {
-        strcpy(puthere,"cinv3");
-        puthere[4] = '3';
-        puthere[5] = '\0';
-        if (IsCombat())
-        {
-            if (IsRunMode())
-                strcpy(puthere,"crinv3");
-        }
-        else if (IsHandCombat())
-        {
-            puthere[0] = 'h';
-            if (IsRunMode())
-                puthere[0] = 'r';
-        }
-        else if (IsBowMode())
-        {
-            puthere[0] = 'b';
-            if (IsRunMode())
-                strcpy(puthere,"brinv3");
-        }
-        else if (IsWalkMode())
-            puthere[0] = 'w';
-        else if (IsSneakMode())
-            puthere[0] = 's';
-    }
-    if (!stricmp(ani, "invoke4"))
-    {
-        strcpy(puthere,"cinv4");
-        puthere[4] = '4';
-        puthere[5] = '\0';
-        if (IsCombat())
-        {
-            if (IsRunMode())
-                strcpy(puthere,"crinv4");
-        }
-        else if (IsHandCombat())
-        {
-            puthere[0] = 'h';
-            if (IsRunMode())
-                puthere[0] = 'r';
-        }
-        else if (IsBowMode())
-        {
-            puthere[0] = 'b';
-            if (IsRunMode())
-                strcpy(puthere,"brinv4");
-        }
-        else if (IsWalkMode())
-            puthere[0] = 'w';
-        else if (IsSneakMode())
-            puthere[0] = 's';
-    }
-    if (!stricmp(ani, "invoke5"))
-    {
-        strcpy(puthere,"cinv5");
-        puthere[4] = '1';
-        puthere[5] = '\0';
-        if (IsCombat())
-        {
-            if (IsRunMode())
-                strcpy(puthere,"crinv5");
-        }
-        else if (IsHandCombat())
-        {
-            puthere[0] = 'h';
-            if (IsRunMode())
-                puthere[0] = 'r';
-        }
-        else if (IsBowMode())
-        {
-            puthere[0] = 'b';
-            if (IsRunMode())
-                strcpy(puthere,"brinv5");
-        }
-        else if (IsWalkMode())
-            puthere[0] = 'w';
-        else if (IsSneakMode())
-            puthere[0] = 's';
-    }
-
-        
-    if (!HasActionAni(puthere))
-    {
-        strcpy(puthere, "invoke");
-        if (!HasActionAni(puthere))
+        strncpyz(name, "invoke", RESNAMELEN);
+        if (!HasActionAni(name))
             return false;
     }
 
-    // create the action block
-    TActionBlock* ab = new TActionBlock(puthere, ACTION_INVOKE);
-    ab->obj = target;
-    ab->priority = true;
-    ForceCommand(ab);
+    auto* ab = new TActionBlock(name, ACTION_INVOKE);
+    ab->priority = false;
     invokedelay = invoke_delay;
-
+    ab->wait = invoke_delay;
+    ab->obj = target;
+    ForceCommand(ab, 0, 0);
+    if (doing && doing->priority && desired != doing)
+        delete ab;
     return true;
 }
 
-// cast a spell using talismans, automating the targeting
-bool TCharacter::Cast(char* talismans, S3DPoint* sourcepos)
+bool TCharacter::MayCast()
 {
-    TObjectInstance* targ = Fighting();
-
-    return CastByTalismans(talismans, &targ, (targ)?1:0, sourcepos);
+    return Health() > 0 && !InteractiveLocked() && !(flags & OF_IMMOBILE) && !(flags & (OF_ICED | OF_PARALIZE));
 }
 
-// cast a spell by using its name
+bool TCharacter::Cast(char* talismans, S3DPoint* sourcepos)
+{
+    if (!MayCast())
+        return false;
+    TObjectInstance* targ = nullptr;
+    if (root && (root->action == ACTION_COMBAT || root->action == ACTION_BOW))
+        targ = root->obj;
+    return CastByTalismans(talismans, &targ, targ ? 1 : 0, sourcepos);
+}
+
 bool TCharacter::CastByName(char* name, TObjectInstance* *target, int32_t numtargs, S3DPoint* sourcepos)
 {
     if (castSeam)
         return castSeam(this, name, target, numtargs, sourcepos);
-    return SpellManager.CastByName(name, this, target, numtargs, sourcepos);
+    if (!MayCast())
+        return false;
+    SSpellVariant* variant = SpellList.GetVariantDataByName(name);
+    if (!variant)
+        return false;
+    return CastByTalismans(variant->talismans, target, numtargs, sourcepos);
 }
 
-// cast a spell by using a list of talismans
+// A player's state bit 2 goes off before the cast. Network play -- the
+// cast's authority test, the echo to the other players, their SPLCASTOK /
+// SPLCASTFAIL notes -- isn't ported: the port is single player, where retail
+// casts locally.
 bool TCharacter::CastByTalismans(char* talismans, TObjectInstance* *target, int32_t numtargs, S3DPoint* sourcepos)
 {
     if (castByTalismansSeam)
         return castByTalismansSeam(this, talismans, target, numtargs, sourcepos);
-    return SpellManager.CastByTalismans(talismans, this, target, numtargs, sourcepos);
+    if (!MayCast())
+        return false;
+    if (objclass == OBJCLASS_PLAYER)
+    {
+        auto* player = static_cast<TPlayer*>(this);
+        if (player->PlayerState() & 2)
+            player->SetPlayerState(player->PlayerState() & ~2);
+    }
+    if (SpellManager.CastByTalismans(talismans, this, target, numtargs, sourcepos))
+        return true;
+
+    if (objclass != OBJCLASS_PLAYER)
+        return false;
+    const SSpellVariant* variant = SpellList.GetVariantDataByTalismans(talismans);
+    if (!variant || variant->mana <= 0 || !MayCast())
+        return false;
+    if (SSpellVariant* fizzle = SpellList.GetVariantDataByName("fizzle"))
+        CastByTalismans(fizzle->talismans, nullptr, 0, nullptr);
+    return false;
 }
 
 // Flail - Make the character act a fool

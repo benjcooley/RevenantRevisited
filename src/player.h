@@ -187,6 +187,19 @@ class TPlayer : public TCharacter
     void AddStatEffect(const char *statline);
       // Starts a stat effect, a STATLINE that may last a TIME (retail 0x0051c2c0)
 
+    // Retail A/B fixtures only: when set, each answers its call as the
+    // retail fixture's seam does -- recorded, not run: AddSkillExp (vtable
+    // +0x418), AwardKillExp (+0x414), AddStatEffect (0x0051c2c0).
+    using SkillExpSeam = void (*)(TPlayer* self, int32_t skillnum, int32_t exp);
+    static inline SkillExpSeam skillExpSeam = nullptr;
+    using KillExpSeam = void (*)(TPlayer* self, TCharacter* victim);
+    static inline KillExpSeam killExpSeam = nullptr;
+    using StatEffectSeam = void (*)(TPlayer* self, const char* statline);
+    static inline StatEffectSeam statEffectSeam = nullptr;
+    using PlayerStateSeam = void (*)(TPlayer* self, int32_t newstate);
+    static inline PlayerStateSeam playerStateSeam = nullptr;
+      // SetPlayerState (0x0051d680): recorded, and the state still set
+
     // Experience
     [[nodiscard]] int32_t KillExp(int32_t value);
       // What overcoming something worth 'value' earns at this level (retail 0x0051a5b0)

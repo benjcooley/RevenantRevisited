@@ -295,6 +295,11 @@ void TPlayer::LogStats(const char *why)
 // experience read are the modified stats', as retail's.
 void TPlayer::AddSkillExp(int32_t skillnum, int32_t exp)
 {
+    if (skillExpSeam)
+    {
+        skillExpSeam(this, skillnum, exp);
+        return;
+    }
     const int32_t have = GetObjStat(SKE_FIRST + skillnum);
     const int32_t level = GetObjStat(SK_FIRST + skillnum);
     if (level >= TRules::kMaxSkillLevel)
@@ -465,6 +470,11 @@ void TPlayer::ApplyStatLine(const char *statline, int32_t effect)
 // has lost its INITIALIZE, so in practice all of them: one effect at a time.
 void TPlayer::AddStatEffect(const char *statline)
 {
+    if (statEffectSeam)
+    {
+        statEffectSeam(this, statline);
+        return;
+    }
     if (!statline)
         return;
 
@@ -594,6 +604,11 @@ int32_t TPlayer::KillExp(int32_t value)
 // animation (0x004d5900) and the network forwarding.
 void TPlayer::AwardKillExp(TCharacter *victim)
 {
+    if (killExpSeam)
+    {
+        killExpSeam(this, victim);
+        return;
+    }
     if (!victim || victim->Health() > 0)
         return;
 
@@ -1433,6 +1448,8 @@ bool TPlayer::LearnSpell(const char* talismans)
 // multiplayer control and message handling.
 void TPlayer::SetPlayerState(int32_t newstate)
 {
+    if (playerStateSeam)
+        playerStateSeam(this, newstate);
     playerstate = newstate;
 }
 

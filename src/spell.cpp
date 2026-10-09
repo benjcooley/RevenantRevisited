@@ -12,12 +12,16 @@
 #include "3dimage.h"
 #include "character.h"
 #include "complexobj.h"
+#include "dialog.h"
 #include "effect.h"
 #include "imagery.h"
 #include "mappane.h"
 #include "parse.h"
-#include "statusbar.h"
+#include "player.h"
+#include "sound.h"
+#include "textbar.h"
 
+#include <vector>
 
 extern TObjectClass EffectClass;
 extern TObjectClass TalismanClass;
@@ -435,11 +439,14 @@ PSSpellVariant TSpellList::GetVariantDataByName(const char* name)
 // *** TSpell ***
 // **************
 
-// TSpell Constructor
-TSpell::TSpell(TObjectInstance* invoke, 
-    TObjectInstance* *targ, int32_t numtargs, S3DPoint* sourcepos, 
+// REVSYNC: TSpell::TSpell @ 0x0053f090 -- the targets (1 to 64; with no
+// array, the invoker), each rolled for POISONCHANCE (random(0, 100) below it
+// poisons); then a STATLINE on a player invoker: his buff flag and the stat
+// effect.
+TSpell::TSpell(TObjectInstance* invoke,
+    TObjectInstance* *targ, int32_t numtargs, S3DPoint* sourcepos,
     PSSpellData dat, PSSpellVariant var, PTSpell mtr)
-{ 
+{
     invoker = invoke;
     invoker_ref = invoke;
     effect.Clear();
@@ -451,7 +458,7 @@ TSpell::TSpell(TObjectInstance* invoke,
         numtargs = 1;
     if (numtargs >= MAXSPELLTARGETS)
         numtargs = MAXSPELLTARGETS;
-    targetnum = numtargs; 
+    targetnum = numtargs;
     if (!targ)
         targets[0] = invoker;
     else
@@ -460,20 +467,29 @@ TSpell::TSpell(TObjectInstance* invoke,
     spell = dat;
     for (int32_t i = 0; i < targetnum; ++i)
         target_refs[i] = targets[i];
-    // Retail 0x53f10b..143 procs only with an explicit target array. The
-    // inclusive roll and strict comparison intentionally preserve chance100.
-    if (targ && dat && dat->poisonchance != 0)
+    // Only with a target array. The inclusive roll and strict comparison
+    // keep a chance of 100 short of certain.
+    // REVSYNC-DIVERGENCE: retail calls SetPoisoned (slot 0x1b4) on whatever
+    // the target is; the port only on characters (spells target nothing else).
+    if (targ && dat->poisonchance != 0)
         for (int32_t i = 0; i < targetnum; ++i)
         {
             const int32_t roll = random(0, 100);
             if (roll < dat->poisonchance)
                 if (auto* character = dynamic_cast<TCharacter*>(targets[i]))
-                    character->SetPoisoned(true);
+                    character->SetPoisoned(1);
         }
-    variant = var; 
-    timer = -1; 
+    variant = var;
+    timer = -1;
     master = mtr;
     wait = dat->effectstart;
+
+    if (variant->statline && invoker && invoker->ObjClass() == OBJCLASS_PLAYER)
+    {
+        auto* player = static_cast<TPlayer*>(invoker);
+        player->SetBuffed();
+        player->AddStatEffect(variant->statline);
+    }
 
     if (sourcepos)
         source = *sourcepos;
@@ -583,62 +599,239 @@ void TSpell::Damage(TObjectInstance* ch)
     ((PTCharacter)ch)->Damage(random(mindam, maxdam), spell->damagetype);
 }
 
+namespace
+{
+// A player's cost: ManaCostPct percent less (truncated), as the cast gate
+// and ManaDrain both work it out (0x0053ff9a, 0x0053f6b6).
+int32_t ManaCost(TCharacter* caster, int32_t mana)
+{
+    if (caster->ObjClass() == OBJCLASS_PLAYER)
+        mana += -(static_cast<TPlayer*>(caster)->ManaCostPct() * mana) / 100;
+    return mana;
+}
+}  // namespace
+
 void TSpell::ManaDrain()
-{   
-    ((PTCharacter)invoker)->SetMana(((PTCharacter)invoker)->Mana() - variant->mana);
-    if (((PTCharacter)invoker)->Mana() > ((PTCharacter)invoker)->MaxMana())
-        ((PTCharacter)invoker)->SetMana(((PTCharacter)invoker)->MaxMana());
-    if (((PTCharacter)invoker) == ((PTCharacter)Player))
-        StaminaBar.ChangeLevel(((PTCharacter)invoker)->Mana() * 1000 / ((PTCharacter)invoker)->MaxMana());
+{
+    if (!invoker)
+        return;
+    if (MagicCheat && invoker->ObjClass() == OBJCLASS_PLAYER)
+        return;
+    auto* caster = static_cast<TCharacter*>(invoker);
+    const int32_t cost = ManaCost(caster, variant->mana);
+    caster->SetMana(caster->Mana() - cost);
+    const int32_t max = caster->MaxMana();
+    if (caster->Mana() > max)
+        caster->SetMana(caster->MaxMana());
 }
 
 // *********************
 // *** TSpellManager ***
 // *********************
 
-// cast a spell by using its name
-bool TSpellManager::CastByName(char* name, TObjectInstance* invoker, 
+bool MagicCheat = false;
+
+namespace
+{
+TSpell* CreateSpell(TObjectInstance* invoker, TObjectInstance** targets, int32_t numtargs, S3DPoint* sourcepos,
+                    SSpellData* dat, SSpellVariant* var, TSpell* master)
+{
+    return new TSpell(invoker, targets, numtargs, sourcepos, dat, var, master);
+}
+
+TSpell* CreateStrike(TObjectInstance* invoker, TObjectInstance** targets, int32_t numtargs, S3DPoint* sourcepos,
+                     SSpellData* dat, SSpellVariant* var, TSpell* master)
+{
+    return new TStrikeSpell(invoker, targets, numtargs, sourcepos, dat, var, master);
+}
+
+// REVSYNC: the registry 0x00670220 -- "Spell" (0x00540b80 -> creator
+// 0x00542200), "Strike" (0x00540ba0 -> 0x00542290), in registration order.
+const SSpellClass kSpellClasses[] = {{"Spell", CreateSpell}, {"Strike", CreateStrike}};
+}  // namespace
+
+const SSpellClass* FindSpellClass(const char* name)
+{
+    for (const SSpellClass& c : kSpellClasses)
+        if (!stricmp(name, c.name))
+            return &c;
+    return nullptr;
+}
+
+// The mana gate (0x0053ff7f, 0x0053f9c4): the cost against the caster's mana
+// unless the cheat is on. The main player hears why.
+// REVSYNC-DIVERGENCE: retail prints the dialog line as the text bar's format
+// (0x005400fe); the port passes it as text. The shipped lines have no '%'.
+bool TSpellManager::CanAfford(TCharacter* caster, const SSpellVariant& variant, bool byname) const
+{
+    (void)byname;
+    const int32_t cost = ManaCost(caster, variant.mana);
+    if (caster->Mana() >= cost || MagicCheat)
+        return true;
+    if (caster == Player)
+        TextBar.Print("%s", DialogList.GetLine("SPLMANA"));
+    return false;
+}
+
+// The skill roll for a player (0x0054004b, 0x0053faa2): Invoke against the
+// variant's skill gives the chance -- 100 at or above it, then 80, 40, 20
+// for 1, 2, 3 below, 0 further down -- and a roll above it fails. By
+// talismans only the main player can fail (any other player casts anyway);
+// by name every player can. The main player hears why.
+bool TSpellManager::SkillRollPasses(TCharacter* caster, const SSpellVariant& variant, int32_t roll, bool byname) const
+{
+    const int32_t d = static_cast<TPlayer*>(caster)->Skill(SK_INVOKE) - variant.skilllevel;
+    const int32_t chance = d >= 0 ? 100 : d == -1 ? 80 : d == -2 ? 40 : d == -3 ? 20 : 0;
+    if (chance >= roll)
+        return true;
+    if (caster != Player)
+        return !byname;
+    TextBar.Print("%s", DialogList.GetLine(chance == 0 ? "SPLLVLNEG" : "SPLLVLLOW"));
+    return false;
+}
+
+// The Invoke skill experience a player earns by casting (0x00540128,
+// 0x0053fbab), before the spell exists and whether or not it works: for a
+// skill above 0, the level's base (5 Invoke + 15) x 20 / 8, weighted by how
+// far the skill is above Invoke (clamped to 9 either way).
+void TSpellManager::AwardInvokeExp(TPlayer* player, const SSpellVariant& variant)
+{
+    (void)player->SkillExp(SK_INVOKE);              // read and unused, as retail does
+    const int32_t invoke = player->Skill(SK_INVOKE);
+    if (variant.skilllevel <= 0)
+        return;
+    const int32_t base = (5 * invoke + 15) * 20 / 8;
+    int32_t above = variant.skilllevel - invoke;
+    above = above < -9 ? -9 : above > 9 ? 9 : above;
+    player->AddSkillExp(SK_INVOKE, (above + 10) * base * 10 / 100);
+}
+
+// A buff cast by a caster with a buff on (0x005401e5, 0x0053fc23): every
+// buff effect around him has its sound stopped, and his own are ended.
+// REVSYNC-DIVERGENCE: retail reads the flag through a null caster (a crash);
+// the port asks only when there is one.
+void TSpellManager::EndOtherBuffs(TCharacter* caster)
+{
+    std::vector<TObjectInstance*> around;
+    if (nearbySeam)
+        around = nearbySeam(caster);
+    else
+        for (TMapIterator i(*caster, CHECK_NONE, OBJSET_ANIMATE); i; i++)
+            around.push_back(i.Item());
+    for (TObjectInstance* obj : around)
+    {
+        if (obj->ObjClass() != OBJCLASS_EFFECT)
+            continue;
+        auto* fx = static_cast<TEffect*>(obj);
+        TSpell* other = fx->GetSpell();
+        if (!other || !other->VariantData() || !other->VariantData()->statline)
+            continue;
+        if (const SSpellControlData* cd = other->VariantData()->controldata)
+        {
+            const int32_t sound = SoundPlayer.FindSound(cd->sound);
+            if (sound)
+                SoundPlayer.Stop(sound);
+        }
+        if (other->GetInvoker() == caster)
+            fx->KillThisEffect();
+    }
+}
+
+// The cast once it's paid for (0x005403e2 / 0x0053fe05 on): the invoke
+// animation with the first target, the cooldown, the mana, the list.
+void TSpellManager::Commit(TSpell* spell, TCharacter* caster, TObjectInstance** targets, SSpellData* spelldata,
+                           SSpellVariant* variant)
+{
+    if (caster)
+        caster->SetCast(spelldata->invoke, targets ? targets[0] : nullptr, variant->ani_delay);
+    wait = variant->nextspellwait;
+    spell->ManaDrain();
+    spells.Add(spell);
+}
+
+// The first spell and variant with these talismans; the cooldown, unless
+// in the editor; with an invoker the mana, the skill roll (not for a skill
+// below 0 or under the cheat; only the main player can fail it) and a
+// player's Invoke experience; a buff ends the caster's others; the spell of
+// its CONTROLDATA class (else "Spell").
+// REVSYNC-DIVERGENCE: an unknown CONTROLDATA class calls through null in
+// retail (0x005402c5); the port refuses the cast. Shipped data names only
+// "Strike".
+bool TSpellManager::CastByTalismans(char* talismans, TObjectInstance* invoker,
     TObjectInstance* *targets, int32_t numtargs, S3DPoint* sourcepos, PTSpell mst)
 {
-    PSSpellData spell_data = SpellList.GetSpellDataByName(name);
-    PSSpellVariant variant_data = SpellList.GetVariantDataByName(name);
-
-    if (!spell_data || !variant_data || wait || ((PTCharacter)invoker)->Mana() < variant_data->mana)
+    SSpellData* spelldata = SpellList.GetSpellDataByTalismans(talismans);
+    SSpellVariant* variant = SpellList.GetVariantDataByTalismans(talismans);
+    if (!spelldata || !variant)
+        return false;
+    if (wait != 0 && !Editor)
         return false;
 
-    PTSpell spell = new TSpell(invoker, targets, numtargs, sourcepos, spell_data, variant_data, mst);
-    spell->SetByName(name);
+    auto* caster = static_cast<TCharacter*>(invoker);
+    if (caster)
+    {
+        if (!CanAfford(caster, *variant, false))
+            return false;
+        const bool player = caster->ObjClass() == OBJCLASS_PLAYER;
+        if (variant->skilllevel >= 0 && !MagicCheat)
+        {
+            const int32_t roll = random(1, 100);
+            if (player && !SkillRollPasses(caster, *variant, roll, false))
+                return false;
+        }
+        if (player)
+            AwardInvokeExp(static_cast<TPlayer*>(caster), *variant);
+    }
 
-    ((PTCharacter)invoker)->SetCast(spell_data->invoke, (targets)?(targets[0]):nullptr, variant_data->ani_delay);
-    wait = variant_data->nextspellwait;
-
-    spell->ManaDrain();
-
-    spells.Add(spell);
-
+    const SSpellClass* cls = FindSpellClass(variant->controldata ? variant->controldata->name : "spell");
+    if (variant->statline && caster && caster->IsBuffed())
+        EndOtherBuffs(caster);
+    if (!cls)
+        return false;
+    TSpell* spell = cls->create(invoker, targets, numtargs, sourcepos, spelldata, variant, mst);
+    spell->SetData(SpellList.GetSpellDataByTalismans(talismans), SpellList.GetVariantDataByTalismans(talismans));
+    Commit(spell, caster, targets, spelldata, variant);
     return true;
 }
 
-// cast a spell by using the talismans
-bool TSpellManager::CastByTalismans(char* talismans, TObjectInstance* invoker, 
+// As CastByTalismans, by name: the spell whose SPELL or variant name
+// matches, the first variant of that name; a cooldown even in the editor;
+// the skill roll drawn for every invoker, a player's chance and experience
+// skipped under the cheat; a spell the class didn't make refuses.
+bool TSpellManager::CastByName(char* name, TObjectInstance* invoker,
     TObjectInstance* *targets, int32_t numtargs, S3DPoint* sourcepos, PTSpell mst)
 {
-    PSSpellData spell_data = SpellList.GetSpellDataByTalismans(talismans);
-    PSSpellVariant variant_data = SpellList.GetVariantDataByTalismans(talismans);
-
-    if (!spell_data || !variant_data || wait || ((PTCharacter)invoker)->Mana() < variant_data->mana)
+    SSpellData* spelldata = SpellList.GetSpellDataByName(name);
+    SSpellVariant* variant = SpellList.GetVariantDataByName(name);
+    if (!spelldata || !variant)
+        return false;
+    if (wait != 0)
         return false;
 
-    PTSpell spell = new TSpell(invoker, targets, numtargs, sourcepos, spell_data, variant_data, mst);
-    spell->SetByTalismans(talismans);
+    auto* caster = static_cast<TCharacter*>(invoker);
+    if (caster)
+    {
+        if (!CanAfford(caster, *variant, true))
+            return false;
+        const int32_t roll = random(1, 100);
+        if (caster->ObjClass() == OBJCLASS_PLAYER && !MagicCheat)
+        {
+            if (!SkillRollPasses(caster, *variant, roll, true))
+                return false;
+            AwardInvokeExp(static_cast<TPlayer*>(caster), *variant);
+        }
+    }
 
-    ((PTCharacter)invoker)->SetCast(spell_data->invoke, (targets)?(targets[0]):nullptr, variant_data->ani_delay);
-    wait = variant_data->nextspellwait;
-
-    spell->ManaDrain();
-    
-    spells.Add(spell);
-
+    const SSpellClass* cls = FindSpellClass(variant->controldata ? variant->controldata->name : "spell");
+    if (variant->statline && caster && caster->IsBuffed())
+        EndOtherBuffs(caster);
+    if (!cls)
+        return false;
+    TSpell* spell = cls->create(invoker, targets, numtargs, sourcepos, spelldata, variant, mst);
+    if (!spell)
+        return false;
+    spell->SetData(SpellList.GetSpellDataByName(name), SpellList.GetVariantDataByName(name));
+    Commit(spell, caster, targets, spelldata, variant);
     return true;
 }
 

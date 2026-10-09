@@ -246,13 +246,14 @@ Callers: script `cast` (`0x42114c`), monster AI "Priest Fireball"
    (`+0x24`) stricmp-equal `tal`. variant = the first such variant
    (variants in order, `0x540ad0`). Either null → 0. **Order-sensitive,
    case-insensitive, first match wins.**
-2. `wait != 0 && [0x668154] == 0` → 0 (`0x668154` is a debug no-wait flag,
-   0 in play).
+2. `wait != 0 && [0x668154] == 0` → 0 (`0x668154` is the Editor flag: no
+   cooldown in the editor; 0 in play).
 3. cost = `variant->mana` (`+0x4c`). With an invoker:
    1. Player: `cost += trunc(-(ManaCostPct · cost) / 100)` (slot `0x3c4`,
       ManaCostPct, TPlayer only).
-   2. `Mana()` (slot `0x1d0`) `< cost` and `[0x66810c] == 0` (no-mana
-      cheat): the main player gets text `SPLMANA` (the multiplayer server
+   2. `Mana()` (slot `0x1d0`) `< cost` and `[0x66810c] == 0` (the
+      "abracadabra" text cheat, `0x54d988`, which also fills a spell pouch
+      with every talisman): the main player gets text `SPLMANA` (the multiplayer server
       variant goes through `0x587280`). Return 0 for every invoker.
    3. `variant->skill` (`+0x5c`) `>= 0` and no cheat:
       - **r = random(1, 100)**, drawn for every invoker.
@@ -784,8 +785,8 @@ rolls → Damage's roll.
 | `0x667c38` | TSpellList (`+4` count, `+0x14` items) | loaded from spell.def |
 | `0x670220` / `0x67021c` | spell-class registry | "Spell", "Strike" |
 | `0x667fcc` | main player | the player |
-| `0x668154` | no-wait cheat | 0 |
-| `0x66810c` | no-mana / no-skill cheat | 0 |
+| `0x668154` | Editor (the editor is running: no spell cooldown) | 0 |
+| `0x66810c` | the "abracadabra" cheat (no mana, no skill failure) | 0 |
 | `0x66829c` | multiplayer | 0 |
 | `0x676828`, `0x67682c` | session up / server | 0 |
 | `0x676838` | local authority | 3 (unverified, must be ≥ 2) |
@@ -997,3 +998,70 @@ Fixture fix: `RetailAB::Fixture::LoadGameData` set the imagery path to
 `NORMAL\`; the game uses `IMAGERY\` (NoNormals, InitGlobals step 8). With
 the wrong one 18 class.def types whose headers aren't in the quick-load
 cache didn't register, the Chaos talisman among them.
+
+### S2 `spell-cast`: the cast
+
+Fixture `spell_cast.py`: TCharacter::CastByTalismans `0x4d5c20`,
+CastByName `0x4d5b90`, Cast `0x4d5ae0`, and the managers' CastByName
+`0x53f920` / CastByTalismans `0x53fe80`, with everything under them as
+original code -- the gates, the lookups, the cooldown, mana and skill
+roll, the spell class registry (its static init run at setup) and both
+creators, the TSpell constructor, ManaDrain, SetCast with CombatAnimName /
+AnimPrefix / HasActionAni and ForceCommand. Seams: object stats (melee's
+GetObjStat / SetObjStat, with poisoned, manacostpct, spelldamageinc and
+invokeexp added), TPlayer::MaxMana, AddSkillExp, AddStatEffect,
+SetPlayerState, the text bar, the buff walk's map iterator. Globals:
+authority `0x676838` = 3, the Editor flag and the cheat from the case.
+
+2071 cases, 2071/2071: every shipped variant cast by talismans (a player,
+a monster), by name, and through the manager's by-name cast for another
+invoker (an arrow's proc); every SPELL name; the gates; the cooldown with
+and without the editor; mana at each cost's edge with ManaCostPct and the
+cheat; the skill roll at every chance and both edges, main player or not;
+the Invoke experience across its clamp; the invoke animation by root, by
+which states exist, under a doing block with priority, the walk prefix;
+targets and numtargs (none, an empty array, 1-3, fewer than given); the
+poison roll's edges; Cast's target by root; a buff with the buff flag on.
+
+Port changes (`src/spell.{h,cpp}`, `src/character.{h,cpp}`):
+
+- TSpellManager::CastByTalismans / CastByName are retail's (§2.5 and the
+  differences below). Before: no cooldown exception, no ManaCostPct, no
+  skill roll or SPLLVL* texts, no Invoke experience, no buff handling, a
+  plain TSpell always, no cheat.
+- The spell class registry (`FindSpellClass`: "Spell", "Strike") and
+  `TStrikeSpell` (its own Timer / Pulse / Kill not ported yet: TSpell's
+  run).
+- The TSpell constructor's STATLINE step (charflags `0x20`,
+  AddStatEffect on a player invoker); ManaDrain's ManaCostPct and cheat
+  (and no stamina bar push).
+- TCharacter::CastByTalismans / CastByName / Cast with their gates (alive,
+  not interactive-locked, not OF_IMMOBILE, OF_PARALIZE or OF_ICED), the
+  player state bit, the fizzle after a player's failed cast of a spell
+  that costs mana. **CastByName now casts the first variant with the named
+  variant's talismans** (so every dragon attack casts Sid's, and Priest
+  Aura casts Aura), as retail does; only the managers' CastByName (the
+  arrow procs) takes the named variant.
+- SetCast is retail's: `<prefix>inv<n>` from the ANIMATION's last
+  character through CombatAnimName (any name containing "inv"), else
+  "invoke"; the block has no priority (the port gave it priority); a
+  block ForceCommand didn't take is freed.
+- `MagicCheat` (retail `0x66810c`) exists; the text cheat that sets it
+  isn't ported.
+
+Retail details the asm settled (corrections and additions to §2.4, §2.5):
+
+- `0x668154` is the Editor flag, `0x66810c` the "abracadabra" cheat.
+- The object-flag gate `& 1`, `& 0x2800000` is OF_IMMOBILE, OF_PARALIZE |
+  OF_ICED.
+- The manager's CastByName differs from CastByTalismans: its cooldown
+  holds even in the editor; the skill roll is drawn for every invoker
+  whatever the variant's skill; a failed chance fails **any** player (only
+  the main player is told), where CastByTalismans lets every player but the
+  main one through; under the cheat the chance and the Invoke experience
+  are skipped (CastByTalismans still awards it); a class that makes no
+  spell refuses.
+- With a null invoker and a STATLINE, both read the invoker's charflags
+  (a crash); with an empty target array and POISONCHANCE the constructor
+  rolls for the copied empty slot and calls through null. The port guards
+  both (REVSYNC-DIVERGENCE); the kata leaves those cases out.

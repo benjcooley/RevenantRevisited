@@ -10,6 +10,8 @@
 
 #include "object.h"
 
+#include <vector>
+
 // *************************************************************
 // * TSpellData/Variant - Describes the static info for spells *
 // *************************************************************
@@ -194,26 +196,38 @@ class TSpellList
 
 #define MAXSPELLTARGETS 64
 
+// The "abracadabra" text cheat (retail 0x0066810c): a cast costs no mana and
+// can't fail its skill roll, and ManaDrain leaves a player's mana alone. The
+// cheat command itself isn't ported, so nothing sets it yet.
+extern bool MagicCheat;
+
+class TCharacter;
+class TPlayer;
+
+// Retail TSpell, 0x150 bytes (vtable 0x005b99c0); offsets noted.
 _CLASSDEF(TSpell)
 class TSpell
 {
   public:
-    // The constructor for the tspell object
+    // REVSYNC: TSpell::TSpell @ 0x0053f090
     TSpell(TObjectInstance* invoke, TObjectInstance* *targ, int32_t numtargs, S3DPoint* sourcepos, PSSpellData dat, PSSpellVariant var, PTSpell mtr = nullptr);
     TSpell()
     { invoker = nullptr; effect.Clear();
       for (auto& target : targets) target = nullptr;
       targetnum = 0; wait = -1;
-      timer = 0; master = nullptr; spell = nullptr; variant = nullptr; frame = 0; 
+      timer = 0; master = nullptr; spell = nullptr; variant = nullptr; frame = 0;
       magic_offense = 0; magic_defense = 0;
       source.x = source.y = source.z = -1; }
     virtual ~TSpell();
+
+    // The registry name of the spell's class (CONTROLDATA's, or "Spell").
+    [[nodiscard]] virtual const char* ClassName() const { return "Spell"; }
 
     // Functions to return current spell values
     TObjectInstance* GetInvoker() { return invoker; }
     TSafeRef<TObjectInstance> GetInvokerRef() const { return invoker_ref; }
       // Returns the character that invoked the spell
-    TObjectInstance* GetTarget(int32_t numtarg = 0) 
+    TObjectInstance* GetTarget(int32_t numtarg = 0)
         { if (numtarg >= targetnum) return nullptr; else return targets[numtarg]; }
       // Returns the target for the spell
     int32_t GetTargetNum() { return targetnum; }
@@ -230,6 +244,15 @@ class TSpell
       // The spell data structure from the SPELL.DEF file
     PSSpellVariant VariantData() { return variant; }
       // The variant structure from the SPELL.DEF file
+    void SetData(PSSpellData dat, PSSpellVariant var) { spell = dat; variant = var; }
+      // The cast sets them again after building the spell (retail +0x11c / +0x120)
+
+    // The state a spell runs on, as retail lays it out (the A/B dumps read it).
+    [[nodiscard]] int32_t TimerValue() const { return timer; }
+    [[nodiscard]] int32_t WaitValue() const { return wait; }
+    [[nodiscard]] int32_t FrameValue() const { return frame; }
+    [[nodiscard]] TSpell* Master() const { return master; }
+    [[nodiscard]] const S3DPoint& Source() const { return source; }
 
     void Timer(int32_t value) { timer = value; }
     void SetByName(char* name);
@@ -244,7 +267,7 @@ class TSpell
       // returns true if spell is done
 
     virtual void Kill() { timer = 0; }
-      // Kills this spell    
+      // Kills this spell
 
     int32_t GetDefense()        { return magic_defense; }
     void SetDefense(int32_t i)  { magic_defense = i; }
@@ -252,30 +275,62 @@ class TSpell
     int32_t GetOffense()        { return magic_offense; }
     void SetOffense(int32_t i)  { magic_offense = i; }
 
-    // drain off the character's mana
+    // REVSYNC: TSpell::ManaDrain @ 0x0053f680 -- the invoker pays the
+    // variant's mana (a player less ManaCostPct percent; nothing under the
+    // cheat), kept within MaxMana
     void ManaDrain();
 
   protected:
-    TObjectInstance* invoker;               // Object that invoked the spell
+    TObjectInstance* invoker;               // +0x04 Object that invoked the spell
     TSafeRef<TObjectInstance> invoker_ref;
     TSafeRef<TObjectInstance> target_refs[MAXSPELLTARGETS];
-    TSafeRef<TObjectInstance> effect;       // Weak identity; reaping/reuse cannot dangle
+    TSafeRef<TObjectInstance> effect;       // +0x08 the last effect made; weak identity, reaping/reuse cannot dangle
 
-    int32_t targetnum;                      // Number of targets in target list
-    TObjectInstance* targets[MAXSPELLTARGETS]; // Spell's target list
+    int32_t targetnum;                      // +0x0c Number of targets in target list
+    TObjectInstance* targets[MAXSPELLTARGETS]; // +0x10 Spell's target list
 
-    int32_t timer;                          // Nice timer value for time based spells
-    int32_t frame;                          // Frame number for spells
-    PTSpell master;                         // Master spell object (if slave)
-    
-    PSSpellData spell;                      // Data for spell
-    PSSpellVariant variant;                 // Variant
-    int32_t wait;                           // Wait before the spell starts
-    S3DPoint source;                        // Source of spell relative to char pos (-1,-1,-1 if not used)
+    int32_t timer;                          // +0x110 -1 until Kill; the spell ends at 0
+    int32_t frame;                          // +0x114 Pulses so far (the Strike class's)
+    PTSpell master;                         // +0x118 Master spell object (if slave)
 
-    int32_t magic_defense;
-    int32_t magic_offense;
+    PSSpellData spell;                      // +0x11c Data for spell
+    PSSpellVariant variant;                 // +0x120 Variant
+    int32_t wait;                           // +0x124 DELAY: pulses before the effect starts
+    S3DPoint source;                        // +0x128 Source of spell relative to char pos (-1,-1,-1 if not used)
+
+    int32_t magic_defense;                  // +0x134
+    int32_t magic_offense;                  // +0x138
 };
+
+// The CONTROLDATA "Strike" class (retail 0x154 bytes, vtable 0x005b9bdc,
+// built by 0x00542290): a TSpell plus the target it strikes (+0x150).
+// REVSYNC: its Timer 0x00540eb0, Pulse 0x00540d70 and Kill 0x00542340 are
+// not ported yet; TSpell's run.
+class TStrikeSpell : public TSpell
+{
+  public:
+    TStrikeSpell(TObjectInstance* invoke, TObjectInstance** targ, int32_t numtargs, S3DPoint* sourcepos,
+                 SSpellData* dat, SSpellVariant* var, TSpell* mtr)
+        : TSpell(invoke, targ, numtargs, sourcepos, dat, var, mtr) {}
+
+    [[nodiscard]] const char* ClassName() const override { return "Strike"; }
+    [[nodiscard]] TObjectInstance* StrikeTarget() const { return striketarget; }
+
+  protected:
+    TObjectInstance* striketarget = nullptr;    // +0x150 the target struck
+};
+
+// The spell classes, by the name CONTROLDATA gives (retail's registry
+// 0x00670220 / count 0x0067021c, filled at static init: "Spell" by
+// 0x00540b80, "Strike" by 0x00540ba0).
+struct SSpellClass
+{
+    const char* name;
+    TSpell* (*create)(TObjectInstance* invoker, TObjectInstance** targets, int32_t numtargs, S3DPoint* sourcepos,
+                      SSpellData* dat, SSpellVariant* var, TSpell* master);
+};
+[[nodiscard]] const SSpellClass* FindSpellClass(const char* name);
+  // The class of that name, case-blind; nullptr if none
 
 typedef TPointerArray<TSpell, 32, 16> TSpellArray;
 
@@ -283,6 +338,8 @@ typedef TPointerArray<TSpell, 32, 16> TSpellArray;
 // * TSpellManager - Contains a list of spells *
 // *********************************************
 
+// Retail: at TCharacter+0x170, the spell array (count +0x00, items +0x10)
+// and the cooldown (+0x14).
 _CLASSDEF(TSpellManager)
 class TSpellManager
 {
@@ -298,12 +355,34 @@ class TSpellManager
     void Pulse();
       // pulse through all the spells
 
+    // REVSYNC: TSpellManager::CastByName @ 0x0053f920
     bool CastByName(char* name, TObjectInstance* invoker, TObjectInstance* *targets, int32_t numtargs, S3DPoint* sourcepos = nullptr, PTSpell mst = nullptr);
       // cast a spell by its name, returns success or failure
+    // REVSYNC: TSpellManager::CastByTalismans @ 0x0053fe80
     bool CastByTalismans(char* talismans, TObjectInstance* invoker, TObjectInstance* *targets, int32_t numtargs, S3DPoint* sourcepos = nullptr, PTSpell mst = nullptr);
       // cast a spell by its talismans, returns success or failure
 
     int32_t GetDefense();
     int32_t GetOffense();
     int32_t GetSpellCount(char* spell);
+
+    // The cooldown and the spells, as the A/B fixtures set and read them.
+    [[nodiscard]] int32_t Wait() const { return wait; }
+    void SetWait(int32_t w) { wait = w; }
+    [[nodiscard]] int32_t NumSpells() const { return spells.NumItems(); }
+    [[nodiscard]] TSpell* GetSpell(int32_t i) { return spells.Used(i) ? spells[i] : nullptr; }
+
+    // Retail A/B fixtures only: when set, the objects around a caster that
+    // a buff cast looks through (retail's map iterator 0x0044cf10 /
+    // 0x0044d080 over OBJSET_ANIMATE), instead of the map.
+    using NearbySeam = std::vector<TObjectInstance*> (*)(TObjectInstance* center);
+    static inline NearbySeam nearbySeam = nullptr;
+
+  private:
+    bool CanAfford(TCharacter* caster, const SSpellVariant& variant, bool byname) const;
+    bool SkillRollPasses(TCharacter* caster, const SSpellVariant& variant, int32_t roll, bool byname) const;
+    static void AwardInvokeExp(TPlayer* player, const SSpellVariant& variant);
+    static void EndOtherBuffs(TCharacter* caster);
+    void Commit(TSpell* spell, TCharacter* caster, TObjectInstance** targets, SSpellData* spelldata,
+                SSpellVariant* variant);
 };

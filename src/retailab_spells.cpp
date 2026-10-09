@@ -17,6 +17,7 @@
 #include "player.h"
 #include "revenant.h"
 #include "revutils.h"
+#include "sector.h"
 #include "spell.h"
 #include "textencoding.h"
 
@@ -230,13 +231,65 @@ bool CaseCastByTalismans(TCharacter* self, const char* talismans, TObjectInstanc
     return RecordCast("CastByTalismans", self, talismans, targets, numtargs, sourcepos);
 }
 
+// The player's experience, stat effects and state (retail's seams at
+// AddSkillExp 0x0051ac90, AddStatEffect 0x0051c2c0, SetPlayerState
+// 0x0051d680): recorded.
+void CaseSkillExp(TPlayer* self, int32_t skill, int32_t exp)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "AddSkillExp").FieldString("who", g_spellWorld->NameOf(self));
+    j.Field("skill", skill).Field("exp", exp).End('}');
+    Seam(j.str());
+}
+
+void CaseStatEffect(TPlayer* self, const char* line)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "AddStatEffect").FieldString("who", g_spellWorld->NameOf(self)).Key("line");
+    if (line)
+        j.String(ToUtf8(line));
+    else
+        j.Null();
+    j.End('}');
+    Seam(j.str());
+}
+
+void CasePlayerState(TPlayer* self, int32_t value)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "SetPlayerState").FieldString("who", g_spellWorld->NameOf(self));
+    j.Field("value", value).End('}');
+    Seam(j.str());
+}
+
+// The objects around a caster a buff cast walks (retail's map iterator over
+// OBJSET_ANIMATE, 5): the case's `nearby`, recorded.
+std::vector<std::string> g_nearby;
+
+std::vector<TObjectInstance*> CaseNearby(TObjectInstance* center)
+{
+    std::vector<TObjectInstance*> around;
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "MapIterator").FieldString("who", g_spellWorld->NameOf(center));
+    j.Field("objset", OBJSET_ANIMATE).Key("result").Begin('[');
+    for (const std::string& n : g_nearby)
+    {
+        around.push_back(g_spellWorld->Get(n));
+        j.String(n);
+    }
+    j.End(']').End('}');
+    Seam(j.str());
+    return around;
+}
+
 // What a spell case adds to the world and its scope: the player as the main
-// player (retail's 0x00667fcc; `mainplayer: false` for none), the seams
-// above. Put back when the case ends.
+// player (retail's 0x00667fcc; `mainplayer: false` for none), the editor flag
+// and the magic cheat (`globals`), the seams above -- the casts' only when
+// `seamCasts` (kata S1; S2 runs them). Put back when the case ends.
 class SSpellScope
 {
   public:
-    SSpellScope(const JsonValue& cs, const TFixtureWorld& world)
+    SSpellScope(const JsonValue& cs, const TFixtureWorld& world, bool seamCasts)
     {
         static const bool installed = (log_add_callback(CaptureTextBar, nullptr, LOG_DEBUG), true);
         (void)installed;
@@ -250,13 +303,32 @@ class SSpellScope
         for (const JsonValue& v : cs["casts"].Items())
             g_casts.push_back((int32_t)v.Int());
         g_spellWorld = &world;
-        TCharacter::castSeam = CaseCastByName;
-        TCharacter::castByTalismansSeam = CaseCastByTalismans;
+        if (seamCasts)
+        {
+            TCharacter::castSeam = CaseCastByName;
+            TCharacter::castByTalismansSeam = CaseCastByTalismans;
+        }
+        g_nearby.clear();
+        for (const JsonValue& v : cs["nearby"].Items())
+            g_nearby.push_back(v.Str());
+        TPlayer::skillExpSeam = CaseSkillExp;
+        TPlayer::statEffectSeam = CaseStatEffect;
+        TPlayer::playerStateSeam = CasePlayerState;
+        TSpellManager::nearbySeam = CaseNearby;
+        savedEditor = Editor;
+        Editor = cs["globals"]["editor"].Bool(false);
+        MagicCheat = cs["globals"]["cheat"].Bool(false);
         g_recordTextBar = true;
     }
     ~SSpellScope()
     {
         g_recordTextBar = false;
+        MagicCheat = false;
+        Editor = savedEditor;
+        TSpellManager::nearbySeam = nullptr;
+        TPlayer::playerStateSeam = nullptr;
+        TPlayer::statEffectSeam = nullptr;
+        TPlayer::skillExpSeam = nullptr;
         TCharacter::castSeam = nullptr;
         TCharacter::castByTalismansSeam = nullptr;
         g_spellWorld = nullptr;
@@ -267,6 +339,7 @@ class SSpellScope
 
   private:
     TPlayer* savedPlayer = nullptr;
+    bool savedEditor = false;
 };
 
 // An inventory from the case: [{"name", "class" (0), "type" (the name),
@@ -279,8 +352,7 @@ void BuildInventory(TObjectInstance* owner, const JsonValue& items)
         const bool plain = spec.GetKind() == JsonValue::Kind::String;
         const std::string name = plain ? spec.Str() : spec["name"].Str();
         const std::string type = (!plain && spec.Has("type")) ? spec["type"].Str() : name;
-        SObjectDef def;
-        memset(&def, 0, sizeof(def));
+        SObjectDef def{};
         def.objclass = (short)(plain ? 0 : spec["class"].Int(0));
         TObjectClass* cl = TObjectClass::GetClass(def.objclass);
         if (!cl)
@@ -401,7 +473,7 @@ std::string SpellTalismans(const Case& c, std::string& error)
         TFixtureWorld world(cs);
         BuildSpellPieces(cs, world);
         SCaseScope scope(cs, world);
-        SSpellScope spells(cs, world);
+        SSpellScope spells(cs, world, true);
         TCharacter* me = world.Get(cs["self"].Str());
         if (call == "has-talismans")
         {
@@ -427,12 +499,151 @@ std::string SpellTalismans(const Case& c, std::string& error)
     }
 }
 
+// ---- S2: the cast (slots/combat/spell_cast.py) -------------------------------
+
+// A spell as the retail fixture dumps it (TSpell's layout by name).
+void WriteSpellState(JsonOut& j, const TFixtureWorld& world, TSpell* sp)
+{
+    auto name = [&](TObjectInstance* o) {
+        if (o)
+            j.String(world.NameOf(o));
+        else
+            j.Null();
+    };
+    j.Begin('{').FieldString("class", sp->ClassName()).Key("invoker");
+    name(sp->GetInvoker());
+    j.Key("targets").Begin('[');
+    for (int32_t i = 0; i < sp->GetTargetNum(); i++)
+        name(sp->GetTarget(i));
+    j.End(']');
+    j.Field("timer", sp->TimerValue()).Field("frame", sp->FrameValue()).Key("master");
+    if (sp->Master())
+        j.String("master");
+    else
+        j.Null();
+    j.Key("spell");
+    if (sp->SpellData())
+        j.String(ToUtf8(sp->SpellData()->name));
+    else
+        j.Null();
+    WriteVariantRef(j, "variant", sp->VariantData());
+    j.Field("wait", sp->WaitValue());
+    const S3DPoint& src = sp->Source();
+    j.Key("source").Begin('[').Value(src.x).Value(src.y).Value(src.z).End(']');
+    j.Field("defense", sp->GetDefense()).Field("offense", sp->GetOffense());
+    if (auto* strike = dynamic_cast<TStrikeSpell*>(sp))
+    {
+        j.Key("striketarget");
+        name(strike->StrikeTarget());
+    }
+    j.End('}');
+}
+
+// What a cast changes on a character besides its blocks: the buff flag
+// among the charflags, the invoke delay, the cooldown and the spells.
+void WriteCaster(JsonOut& j, const TFixtureWorld& world, TCharacter* c)
+{
+    TSpellManager* m = c->GetSpellManager();
+    j.Begin('{').Field("charflags", c->CharFlags()).Field("invokedelay", c->InvokeDelay());
+    j.Field("wait", m->Wait()).Key("spells").Begin('[');
+    for (int32_t i = 0; i < m->NumSpells(); i++)
+        if (TSpell* sp = m->GetSpell(i))
+            WriteSpellState(j, world, sp);
+    j.End(']').End('}');
+}
+
+// Case (field 0, JSON): {"call", "self", "text", "targets", "numtargs",
+// "sourcepos", "invoker", "chars", "globals", "nearby", ...}; see
+// spell_cast.py.
+std::string SpellCast(const Case& c, std::string& error)
+{
+    try
+    {
+        if (!LoadSpells(error))
+            return {};
+        const JsonValue cs = JsonValue::Parse(c.Field(0));
+        TFixtureWorld world(cs);
+        BuildSpellPieces(cs, world);
+        for (const JsonValue& spec : cs["chars"].Items())
+            world.Get(spec["name"].Str())->GetSpellManager()->SetWait((int32_t)spec["spellwait"].Int(0));
+        SCaseScope scope(cs, world);
+        SSpellScope spells(cs, world, false);
+        TCharacter* me = world.Get(cs["self"].Str());
+
+        // The targets: an array of the names (one null slot for an empty
+        // list, as the retail fixture allocates), or none.
+        std::vector<TObjectInstance*> targets;
+        const bool hasTargets = cs.Has("targets") && !cs["targets"].IsNull();
+        if (hasTargets)
+            for (const JsonValue& t : cs["targets"].Items())
+                targets.push_back(t.IsNull() ? nullptr : world.Get(t.Str()));
+        if (hasTargets && targets.empty())
+            targets.push_back(nullptr);
+        const int32_t numtargs =
+            (int32_t)cs["numtargs"].Int(hasTargets ? (int64_t)cs["targets"].Items().size() : 0);
+        TObjectInstance** array = hasTargets ? targets.data() : nullptr;
+        S3DPoint source;
+        S3DPoint* sourcepos = nullptr;
+        if (cs.Has("sourcepos") && !cs["sourcepos"].IsNull())
+        {
+            const JsonValue& p = cs["sourcepos"];
+            source = S3DPoint((int32_t)p[0].Int(), (int32_t)p[1].Int(), (int32_t)p[2].Int());
+            sourcepos = &source;
+        }
+        std::string text = cs["text"].Str();
+        const std::string call = cs["call"].Str();
+        int32_t returned = 0;
+        if (call == "cast-talismans")
+            returned = me->CastByTalismans(text.data(), array, numtargs, sourcepos) ? 1 : 0;
+        else if (call == "cast-name")
+            returned = me->CastByName(text.data(), array, numtargs, sourcepos) ? 1 : 0;
+        else if (call == "cast")
+            returned = me->Cast(text.data(), sourcepos) ? 1 : 0;
+        else if (call == "manager-cast-name" || call == "manager-cast-talismans")
+        {
+            TObjectInstance* invoker = cs["invoker"].IsNull() ? nullptr : world.Get(cs["invoker"].Str());
+            TSpellManager* m = me->GetSpellManager();
+            const bool ok = call == "manager-cast-name"
+                                ? m->CastByName(text.data(), invoker, array, numtargs, sourcepos)
+                                : m->CastByTalismans(text.data(), invoker, array, numtargs, sourcepos);
+            returned = ok ? 1 : 0;
+        }
+        else
+            throw std::runtime_error("unknown call '" + call + "'");
+
+        JsonOut j;
+        j.Begin('{').FieldString("schema", "combat.spell.v1").FieldString("side", "port");
+        j.Field("returned", returned);
+        j.Key("chars").Begin('{');
+        for (const JsonValue& spec : cs["chars"].Items())
+            world.WriteCharacter(j, spec["name"].Str().c_str(), world.Get(spec["name"].Str()));
+        j.End('}');
+        j.Key("casters").Begin('{');
+        for (const JsonValue& spec : cs["chars"].Items())
+        {
+            j.Key(spec["name"].Str().c_str());
+            WriteCaster(j, world, world.Get(spec["name"].Str()));
+        }
+        j.End('}');
+        WriteSeams(j);
+        WriteDraws(j);
+        j.End('}');
+        return j.str();
+    }
+    catch (const std::exception& e)
+    {
+        error = e.what();
+        return {};
+    }
+}
+
 }  // namespace
 
 // Registered with the A/B driver by name (retailab.h).
 static const bool registered = RegisterTarget("spell-data", SpellData) &&
                                RegisterTarget("spell-lookup", SpellTalismans) &&
                                RegisterTarget("spell-talismans", SpellTalismans) &&
-                               RegisterTarget("spell-quick", SpellTalismans);
+                               RegisterTarget("spell-quick", SpellTalismans) &&
+                               RegisterTarget("spell-cast", SpellCast);
 
 }  // namespace RetailAB
