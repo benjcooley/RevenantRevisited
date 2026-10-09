@@ -1126,26 +1126,11 @@ bool TObjectInstance::SetState(int32_t newstate)
         }
     }
 
-    if (newstate == state && imagery)
-    {
-        const int32_t stateflags = IsInInventory()
-            ? imagery->GetInvAniFlags(state)
-            : imagery->GetAniFlags(state);
-        if (stateflags & AF_LOOPING)
-        {
-            // A same-state request is not a transition. Looping animations
-            // must continue advancing through their authored keys; restarting
-            // here truncates the cycle and creates a visible pop.
-            ++anim_state_set_count;
-            ++anim_same_state_set_count;
-            anim_last_state_set_from = state;
-            anim_last_state_set_to = newstate;
-            anim_last_state_set_frame = frame;
-            anim_last_state_set_game_frame = PlayScreen.GameFrame();
-            SetCommandDone(false);
-            return true;
-        }
-    }
+    // REVSYNC: SetState @ 0x0046f250 -- re-setting the current state
+    // restarts it like any other (frame 0, prevstate = state): retail's
+    // action code re-forces a looping root when its cycle ends (frame is 0
+    // then). The pose bridge blends no transition between a looping state
+    // and itself (IsLoopingSameStateTransition), so the restart shows no pop.
 
     RedrawBackground();
     MapPane.ExtractWalkmap(this);
@@ -1177,10 +1162,11 @@ bool TObjectInstance::SetState(int32_t newstate)
         flags |= OF_ANIMATE;            // Cause Animate() function to be called
     else
     {
-        // Permanent-animator types keep their animator across state
-        // changes. For non-permanent types, freeing here matches the
-        // legacy lazy-attach behavior on imagery types whose anim is
-        // state-conditional (e.g. sprites).
+        // REVSYNC-DIVERGENCE: retail frees the animator whenever the
+        // imagery says it needs none (0x0046f344); permanent-animator types
+        // keep theirs here (3D characters always need one, so they never
+        // reach this). For the rest, freeing matches the legacy lazy-attach
+        // behavior on imagery whose anim is state-conditional (sprites).
         if (!IsAnimatorPermanent())
             FreeAnimator();
         flags &= ~(uint32_t)OF_ANIMATE;    // Prevents Animate() function from being called
