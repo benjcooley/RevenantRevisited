@@ -24,6 +24,7 @@
 #include "player.h"
 #include "spell.h"
 #include "script.h"
+#include "ctrlmap.h"
 #include "cursor.h"
 #include "multi.h"
 #include "savegame.h"
@@ -669,13 +670,23 @@ void TMapPane::KeyPress(int32_t key, bool down)
         exit(0);
 }
 
+// REVSYNC: FindClickPos @ 0x0044e930 (the 1998 body). From the bottom of the
+// view (plus the height of a 255-high walk cell) up to the pointer, the first
+// walk cell whose floor, raised to its height, lies under the pointer; else
+// the pointer's point at start's height. Map-screen coordinates come from the
+// map view (retail's x + posx, y + posy).
 void TMapPane::FindClickPos(int32_t x, int32_t y, S3DPoint& start, S3DPoint& target)
 {
-    int32_t bottomy = posy + GetHeight() + ((255 * 866) / 1000);
+    int32_t mapx = 0, mapy = 0, vw = 0, vh = 0, bottomx = 0, bottomy = 0;
+    if (mapview)
+        mapview->GetViewportSize(vw, vh);
+    PaneToMapScreen(x, y, mapx, mapy);
+    PaneToMapScreen(x, vh - 1, bottomx, bottomy);
+    bottomy += 1 + ((255 * 866) / 1000);
 
     S3DPoint top, bottom;
-    ScreenToWorld(x + posx, y + posy, top);
-    ScreenToWorld(x + posx, bottomy, bottom);
+    ScreenToWorld(mapx, mapy, top);
+    ScreenToWorld(mapx, bottomy, bottom);
     top &= (uint32_t)~(WALKMAPGRANULARITY - 1);
     bottom &= (uint32_t)~(WALKMAPGRANULARITY - 1);
 
@@ -693,7 +704,7 @@ void TMapPane::FindClickPos(int32_t x, int32_t y, S3DPoint& start, S3DPoint& tar
             int32_t height = GetWalkHeight(bottom);
 
             S3DPoint walkpos;
-            ScreenToWorld(x+posx, y+posy + ((height * 866) / 1000), walkpos);
+            ScreenToWorld(mapx, mapy + ((height * 866) / 1000), walkpos);
             walkpos.x += 8;
             walkpos.y += 8;
 
@@ -709,7 +720,7 @@ void TMapPane::FindClickPos(int32_t x, int32_t y, S3DPoint& start, S3DPoint& tar
         }
 
     if (!found)
-        ScreenToWorld(x+posx, y+posy, bottom, start.z);
+        ScreenToWorld(mapx, mapy, bottom, start.z);
 
     target = bottom;
 }
@@ -782,13 +793,13 @@ char *Directions[] = { "ne", "e", "se", "s", "sw", "w", "nw", "n", "ne" };
 // Gets the world position (given character's z pos) that mouse is hovering over
 void TMapPane::GetMouseMapPos(S3DPoint &p, int32_t zoffset)
 {
-    int32_t x = cursorx - GetPosX();
-    int32_t y = cursory - GetPosY();
-
     S3DPoint curpos;
     Player->GetPos(curpos);
 
-    ScreenToWorld(x + posx, y + posy, p, curpos.z + zoffset);
+    // The map view sits at the screen's top left: the pointer is in its pixels.
+    int32_t mapx = 0, mapy = 0;
+    PaneToMapScreen(cursorx, cursory, mapx, mapy);
+    ScreenToWorld(mapx, mapy, p, curpos.z + zoffset);
 }
 
 // Gets the angle of the mouse from the character's current position
@@ -802,6 +813,12 @@ int32_t TMapPane::GetMouseMapAngle()
     return ConvertToFacing(curpos, target);
 }
 
+// REVSYNC: UpdateMouseMovement @ 0x0044ee00. The point under the pointer at
+// Locke's height + 50; within 16 of him (x and y) only the arrow (the held
+// direction stays); otherwise the wedge for the angle's 45-degree sector, its
+// shadow at (0, 43), and that direction held. Retail pressed the numpad keys
+// through the screen; the port holds the joystick direction in the control
+// map, the same direction flags UpdateMove reads.
 void TMapPane::UpdateMouseMovement(int32_t x, int32_t y)
 {
     if (!Player)
@@ -818,42 +835,41 @@ void TMapPane::UpdateMouseMovement(int32_t x, int32_t y)
     if (absval(target.x) < 16 && absval(target.y) < 16)
     {
         SetMouseBitmap(GameData->Bitmap("cursor"));
-        Player->Stop();
-    }
-    else
-    {
-        angle += 0x10;
-        angle = angle & 0xe0;
-
-      // Get wedge cursor name
-        char buf[32];
-        sprintf(buf, "wedge-%s", Directions[angle >> 5]);
-        SetMouseBitmap(GameData->Bitmap(buf));
-        strcat(buf, "shadow");
-        SetMouseShadow(GameData->Bitmap(buf), 0, 43);
-        SetMouseCornerBitmap((PTBitmap)nullptr, true);
-
-      // Get movement command   
-        if (lastkey != -1)
-            CurrentScreen->KeyPress(lastkey, false);
-        lastkey = -1;
-        switch (angle)
-        { 
-          case 0:   { lastkey = VK_JOYUPRIGHT;   break; }
-          case 32:  { lastkey = VK_JOYRIGHT;     break; }
-          case 64:  { lastkey = VK_JOYDOWNRIGHT; break; }
-          case 96:  { lastkey = VK_JOYDOWN;      break; }
-          case 128: { lastkey = VK_JOYDOWNLEFT;  break; }
-          case 160: { lastkey = VK_JOYLEFT;      break; }
-          case 192: { lastkey = VK_JOYUPLEFT;    break; }
-          case 224: { lastkey = VK_JOYUP;        break; }
-        }
-
-        if (lastkey != -1)
-            CurrentScreen->KeyPress(lastkey, true);
+        walking = true;
+        return;
     }
 
-    clicked = true;
+    angle = (angle + 0x10) & 0xe0;
+
+  // Get wedge cursor name
+    char buf[32];
+    snprintf(buf, sizeof(buf), "wedge-%s", Directions[angle >> 5]);
+    SetMouseBitmap(GameData->Bitmap(buf));
+    strcat(buf, "shadow");
+    SetMouseShadow(GameData->Bitmap(buf), 0, 43);
+    SetMouseCornerBitmap((PTBitmap)nullptr, true);
+
+  // Get movement command
+    static constexpr int32_t kMoveKeys[8] =
+        { VK_JOYUPRIGHT, VK_JOYRIGHT, VK_JOYDOWNRIGHT, VK_JOYDOWN,
+          VK_JOYDOWNLEFT, VK_JOYLEFT, VK_JOYUPLEFT, VK_JOYUP };
+    HoldMoveKey(kMoveKeys[angle >> 5]);
+
+    walking = true;
+}
+
+// The right-button walk's direction: `key` held in the control map (-1:
+// none), the previous one let go.
+void TMapPane::HoldMoveKey(int32_t key)
+{
+    if (key == lastkey)
+        return;
+    const uint32_t modes = PlayScreen.ControlModeMask();
+    if (lastkey != -1)
+        ControlMap.GetCommand(lastkey, false, modes);
+    lastkey = key;
+    if (lastkey != -1)
+        ControlMap.GetCommand(lastkey, true, modes);
 }
 
 void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
@@ -1005,162 +1021,216 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
         }
     }
     else        // if not in the editor (normal gameplay)
+        PlayMouseClick(button, x, y);
+}
+
+// REVSYNC: MouseClick @ 0x0044f140, outside the editor
+// (docs/gameflow/forensics/MAP_INPUT.md §4). Retail first left a point over
+// the side tabs' controls to them; the play screen's HUD routing does that in
+// the port. Not ported: the stats pane's info (the right button in its info
+// mode, a left press on an item, 0x005496a0): the stats pane has no info mode.
+void TMapPane::PlayMouseClick(int32_t button, int32_t x, int32_t y)
+{
+    Notify(N_CANCELCONTROL, Player);
+
+    int32_t mapx = 0, mapy = 0;
+    const bool inview = PaneToMapScreen(x, y, mapx, mapy);
+    // Combat clicks attack unless the pointer shows something else to do.
+    const bool attackcursor = hovercursor == CURSOR_NONE || hovercursor == CURSOR_SWORDS;
+
+    switch (button)
     {
-        Notify(N_CANCELCONTROL, Player);
+      case MB_RIGHTDOWN:
+        if (Player)
+            UpdateMouseMovement(x, y);
+        return;
 
-        if (button == MB_RIGHTDOWN)
+      case MB_RIGHTUP:
+        if (Player && walking)
         {
-            if (Player)
+            SetMouseBitmap(GameData->Bitmap("cursor"));
+            HoldMoveKey(-1);
+            walking = false;
+        }
+        return;
+
+      case MB_LEFTDOWN:
+      {
+        if (!Player || !inview)
+            return;
+
+        if (Player->IsCombat() && attackcursor)
+        {
+            // Another character Locke may fight becomes his target;
+            // otherwise the press is a random swing.
+            TObjectInstance* on = OnObject(x, y);
+            if (on && on->ObjClass() == OBJCLASS_CHARACTER && on != Player->Fighting())
             {
-                UpdateMouseMovement(x, y);
+                if (Player->IsEnemy((TCharacter*)on))
+                    Player->SetFighting((TCharacter*)on);
+                return;
             }
+            Player->ButtonAttack(random(1, 3));
+            return;
         }
-        else if (button == MB_RIGHTUP)
+
+        if (Player->IsBowMode() && attackcursor)
         {
-            if (Player && clicked)
+            if (!Player->IsBowDrawn())
             {
-                SetMouseBitmap(GameData->Bitmap("cursor"));
-
-              // Stop character moving (release fake joystick key)
-                if (lastkey != -1)
-                {
-                    CurrentScreen->KeyPress(lastkey, false);
-                    lastkey = -1;
-                }
-
-                clicked = false;
+                Player->DrawBow();
+                Player->AimBow(GetMouseMapAngle());
             }
+            clicked = true;
+            return;
         }
-        else if (button == MB_LEFTDOWN)
-        {
-            if (Player && InPane(x, y))
-            {
-                if (Player->IsCombat())
-                {
-                    Player->ButtonAttack(random(1,3));
-                }
-                else if (Player->IsBowMode())
-                {
-                    if (!Player->IsBowDrawn())
-                    {
-                        Player->DrawBow();
-                        Player->AimBow(GetMouseMapAngle());
-                    }
-                }
-                else
-                {
-                    TObjectInstance* oi = OnObject(x, y);
-                    if (oi)
-                        onobject = oi->GetMapIndex();
-                    else
-                        onobject = -1;
-                    clicked = true;
-                }
-            }
-        }
-        else if (button == MB_LEFTUP)
-        {
-            if (Player && InPane(x, y))
-            {
-                if (Player->IsCombat())
-                {
-                }
-                else if (Player->IsBowMode())
-                {
-                    if (Player->IsBowDrawn())
-                        Player->ShootBow(GetMouseMapAngle());
-                }
-                else
-                {
-                    TObjectInstance* inst = Inventory.GetContainer()->GetInventorySlot(Inventory.GetHeldSlot());
-                    if (!inst && Player)
-                        inst = Player->GetInventorySlot(EquipPane.GetHeldSlot() + 256);
 
-                    int32_t objindex = -1;
-                    TObjectInstance* oninst = OnObject(x, y, inst);
-                    if (oninst)
-                        objindex = oninst->GetMapIndex();
+        // The press only remembers what it was over; the release acts.
+        TObjectInstance* on = OnObject(x, y);
+        onobject = on ? on->GetMapIndex() : -1;
+        clicked = true;
+        return;
+      }
 
-                    if (clicked)
-                    {
-                        TObjectInstance* inst = oninst;
-
-                        bool used = false;
-
-                        if (onobject == objindex && inst)
-                        {
-                            if (!inst->IsInventoryItem())
-                                used = inst->Use(Player);
-                            else
-                            {
-                                // Gold or food may merge into a pile and be deleted
-                                TObjectInstance* const item = GetInstance(objindex);
-                                const std::string name = inst->GetTypeName();
-                                const TSafeRef<TObjectInstance> taken(item);
-                                Player->Pickup(item);
-                                TakenObject = taken.Get();
-                                TextBar.Print("Picked up %s.", name.c_str());
-                                used = true;
-                            }
-                        }
-
-//                      if (!used)  // Goto the point the mouse clicked
-//                      {
-//                          S3DPoint target, curpos;
-//                          Player->GetPos(curpos);
-//                          FindClickPos(x, y, curpos, target);
-//                          Player->Goto(target.x, target.y);
-//                      }
-                    }
-                    else // Not clicked
-                    {
-                        // dragging from the inventory or equipment to map pane
-                        if (inst)
-                        {
-                            bool used = false;
-                            if (objindex >= 0)
-                            {
-                                // use the dragged object with the object clicked on
-                                TObjectInstance* oi = GetInstance(objindex);
-                                if (oi)
-                                {
-                                    used = oi->Use(Player, inst->GetMapIndex());
-                                    if (used)
-                                        Inventory.Update();
-                                }
-                            }
-
-                            if (!used)
-                            {
-                                // didn't click on anything special, so just drop it on the ground
-                                if (inst->InventNum() >= 256)
-                                    ((TPlayer*)Player)->Equip(nullptr, EquipPane.GetHeldSlot());   // clear from eq list
-
-                                S3DPoint curpos, target;
-                                Player->GetPos(curpos);
-                                ScreenToWorld(x+posx, y+posy, target, curpos.z + 30);
-
-                                inst->RemoveFromInventory();
-                                inst->SetPos(target, Player->GetLevel());
-                                inst->AddToMap();
-
-                                if (inst->Amount() > 1)
-                                    TextBar.Print("%d %ss dropped.", inst->Amount(), inst->GetName());
-                                else
-                                    TextBar.Print("%s dropped.", inst->GetName());
-
-                                DroppedObject = inst;
-                            }
-                        }
-                    }
-
-                } // clicked?
-
-            } // In pane and has char?
-
-            clicked = false;
-        }
+      case MB_LEFTUP:
+        if (Player && !Player->IsDead() && inview)
+            PlayMouseRelease(x, y, attackcursor);
+        clicked = false;
+        return;
     }
+}
+
+// The left button's release (MAP_INPUT.md §4.3): on the object pressed, Use
+// it, or pick it up if it is an item, when it is within 96 of Locke or is a
+// character; a farther one is walked to. A release that wasn't a press on the
+// map lets go of an item held from the inventory: used on the object under
+// it, else dropped there.
+void TMapPane::PlayMouseRelease(int32_t x, int32_t y, bool attackcursor)
+{
+    if (Player->IsCombat() && attackcursor && clicked)
+        return;
+    if (Player->IsBowMode() && Player->IsBowDrawn() && clicked)
+    {
+        Player->ShootBow(GetMouseMapAngle());
+        return;
+    }
+
+    TObjectInstance* inst = Inventory.GetContainer()->GetInventorySlot(Inventory.GetHeldSlot());
+    if (!inst)
+        inst = Player->GetInventorySlot(EquipPane.GetHeldSlot() + 256);
+
+    TObjectInstance* on = OnObject(x, y, inst);
+    const int32_t objindex = on ? on->GetMapIndex() : -1;
+    if (on)
+    {
+        S3DPoint op, pp;
+        on->GetPos(op);
+        Player->GetPos(pp);
+        log_info("[mapinput] release (%d, %d) on %s at (%d,%d,%d), Locke at (%d,%d,%d), distance %d, pressed on %d",
+                 x, y, on->GetName(), op.x, op.y, op.z, pp.x, pp.y, pp.z, on->Distance(Player), onobject);
+    }
+    else
+        log_info("[mapinput] release (%d, %d) on nothing, pressed on %d", x, y, onobject);
+
+    if (clicked)
+    {
+        constexpr int32_t kReach = 96;      // retail: Distance < 0x61
+        if (on && on->Distance(Player) > kReach && on->ObjClass() != OBJCLASS_CHARACTER)
+        {
+            WalkToward(x, y, on);
+            return;
+        }
+        if (on && onobject == objindex)
+        {
+            if (!on->IsInventoryItem())
+                on->Use(Player, -1);
+            else if (on->ObjClass() != OBJCLASS_PLAYER && on->ObjClass() != OBJCLASS_CHARACTER)
+            {
+                // Gold or food may merge into a pile and be deleted
+                const TSafeRef<TObjectInstance> taken(on);
+                Player->Pickup(on);
+                TakenObject = taken.Get();
+            }
+        }
+        return;
+    }
+
+    // Dragging from the inventory or equipment onto the map pane
+    if (!inst)
+        return;
+
+    bool used = false;
+    if (on)
+    {
+        // use the dragged object with the object clicked on
+        used = on->Use(Player, inst->GetMapIndex());
+        if (used)
+            Inventory.Update();
+    }
+
+    if (!used)
+    {
+        // didn't click on anything special, so just drop it on the ground
+        if (inst->InventNum() >= 256)
+            ((TPlayer*)Player)->Equip(nullptr, EquipPane.GetHeldSlot());   // clear from eq list
+
+        S3DPoint curpos, target;
+        Player->GetPos(curpos);
+        int32_t mapx = 0, mapy = 0;
+        PaneToMapScreen(x, y, mapx, mapy);
+        ScreenToWorld(mapx, mapy, target, curpos.z + 30);
+
+        inst->RemoveFromInventory();
+        inst->SetPos(target, Player->GetLevel());
+        inst->AddToMap();
+
+        if (inst->Amount() > 1)
+            TextBar.Print("%d %ss dropped.", inst->Amount(), inst->GetName());
+        else
+            TextBar.Print("%s dropped.", inst->GetName());
+
+        DroppedObject = inst;
+    }
+}
+
+// Retail 0x0044fd98..0x0044ff40: an object out of reach. Locke walks to the
+// floor point under the pointer less 64 toward him (two steps of 32 along the
+// line) when the line from him is walkable every 32 units for (distance - 32)
+// / 32 steps; else "too far". The walk carries the object, which its arrival
+// picks up when it is an item (TCharacter::Goto); a door takes a second click.
+// The walk test is GetWalkHeightRadius within 32 (0x0044fec1): a step of
+// more than 32 between neighbouring cells, or a cell with no walkmap, ends it.
+void TMapPane::WalkToward(int32_t x, int32_t y, TObjectInstance* on)
+{
+    S3DPoint start, target;
+    Player->GetPos(start);
+    FindClickPos(x, y, start, target);
+
+    const double angle = atan2(double(target.y - start.y), double(target.x - start.x));
+    const float stepx = float(cos(angle) * 32.0);
+    const float stepy = float(sin(angle) * 32.0);
+    target.x += int32_t(stepx * -2.0f);
+    target.y += int32_t(stepy * -2.0f);
+
+    const int32_t steps = (on->Distance(Player) - 32) / 32;
+    float px = float(start.x), py = float(start.y);
+    int32_t step = 0;
+    for (; step < steps; ++step)
+    {
+        S3DPoint p(int32_t(px), int32_t(py), start.z);
+        int32_t maxdelta = 0, height = 0;
+        bool hole = false;
+        GetWalkHeightRadius(p, 32, maxdelta, height, hole);
+        if (maxdelta > 32 || hole)
+            break;
+        px += stepx;
+        py += stepy;
+    }
+
+    if (step == steps)
+        Player->Goto(target.x, target.y, on);
+    else
+        TextBar.Print(TTextBar::ELineType::Notice, "%s", DialogList.GetLine("ITEMTOFAR"));
 }
 
 #define MOUSESCROLLSPEED    8
@@ -1264,9 +1334,9 @@ void TMapPane::MouseMove(int32_t button, int32_t x, int32_t y)
             }
         }
     }
-    else        // if not in the editor (normal gameplay)
+    else        // REVSYNC: MouseMove @ 0x004504d0, outside the editor
     {
-        if (button == MB_RIGHTDOWN && clicked)
+        if (button == MB_RIGHTDOWN && walking)
             UpdateMouseMovement(x, y);
 
       // Aim the bow if we have it drawn
@@ -1756,51 +1826,60 @@ TObjectInstance* TMapPane::ObjectInCube(PS3DRect cube, int32_t lvl, int32_t objs
     return nullptr;
 }
 
+// REVSYNC: OnObject @ 0x00452520 (docs/gameflow/forensics/MAP_INPUT.md §2).
+// First the 3D scene: a mesh shown at retail's probe pixels around the point
+// is the answer as it stands (Locke himself included). Else the map's
+// objects: the screen rect must hold the point; tiles (outside the editor)
+// and meshes are never answers here; the first object found stays unless a
+// later one is always on top, or, while nothing always-on-top is held, shows
+// its own pixel at the point (GetZ); outside the editor an object counts only
+// with a cursor for `with`, or as a pickup. Retail drew the probe into the
+// frame and z-found its software buffers; the port asks the map renderer what
+// the last frame showed (TMapRenderer::Pick), and the point's map-screen
+// position replaces retail's (x + posx, y + posy).
 TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with)
 {
-    bool IsPriorityItem = false;
-    TObjectInstance* on = nullptr;
+    if (!mapview)
+        return nullptr;
 
-    screenx += posx;
-    screeny += posy;
+    TMapRenderer::SPick pick;
+    if (mapview->Pick(screenx, screeny, pick) && pick.mesh)
+        return pick.mesh;
 
-    SRect r;
     SPoint p;
-    p.x = screenx;
-    p.y = screeny;
+    if (!PaneToMapScreen(screenx, screeny, p.x, p.y))
+        return nullptr;
 
-    updatemulti->SetClipRect(screenx, screeny, 1, 1);
-
+    TObjectInstance* on = nullptr;
+    bool priority = false;
     for (TMapIterator i(nullptr, CHECK_NOINVENT); i; i++)
     {
         TObjectInstance* inst = i;
         if (!inst->OnObject(p))
             continue;
-
-        if (inst->IsInInventory() || (!Editor && inst->ObjClass() == OBJCLASS_TILE))
+        if (!Editor && inst->ObjClass() == OBJCLASS_TILE)
+            continue;
+        if (const TObjectImagery* img = inst->GetImagery())
+            if (img->GetHeader() && img->GetHeader()->imageryid == OBJIMAGE_MESH3D)
+                continue;
+        if (on && !inst->AlwaysOnTop() && (priority || !inst->GetZ(pick.frontmost)))
+            continue;
+        if (!Editor && !(!GetDragObj() && inst->IsInventoryItem()) &&
+            inst->CursorType(with) == CURSOR_NONE)
             continue;
 
-        if (!on || inst->AlwaysOnTop() || (!IsPriorityItem && inst->GetZ(updatemulti)))
-        {
-            bool good = true;
-
-            if (!Editor)
-            {
-                if ((GetDragObj() || !inst->IsInventoryItem()) && inst->CursorType(with) == CURSOR_NONE)
-                    good = false;
-            }
-
-            if (good)
-            {
-                on = inst;
-                IsPriorityItem = inst->AlwaysOnTop();
-            }
-        }
+        on = inst;
+        priority = inst->AlwaysOnTop();
     }
 
-    updatemulti->ResetClipRect();
-
     return on;
+}
+
+// Retail's x + posx, y + posy: the scroll origin of the frame that was drawn,
+// which in the port is the map renderer's camera.
+bool TMapPane::PaneToMapScreen(int32_t x, int32_t y, int32_t& mapx, int32_t& mapy) const
+{
+    return mapview && mapview->ScreenToMapScreen(x, y, mapx, mapy);
 }
 
 // Resolve an instance by mapindex. O(1) via the registry; falls back to a
@@ -3862,73 +3941,56 @@ void TMapPane::ClearWindow()
 // * Main Animation Function *
 // ***************************
 
+// REVSYNC: Animate @ 0x00454450. Retail drew the map here (the objects'
+// animations, then T3DScene::DrawScene, which also picked under the
+// pointer); TMapRenderer::RenderFrame draws it in the port, so what is left
+// is the tail: the cursor for what is under the pointer. The type is worked
+// out on every 8th screen frame (retail's frame counter, one per drawn tick:
+// about three times a second) and kept (+0x12c); the cursor gets it every
+// drawn frame and clears it after drawing (TCursorHud::Draw, retail
+// 0x0043a480). Called by the game mode while the pointer is on the map.
+// Not ported: the mark retail sets on a hovered item's animator (+0x35,
+// purpose unconfirmed).
 void TMapPane::Animate(bool draw)
 {
-    // Draw dynamic light
-    if (!Editor && Player)
-    {
-        S3DPoint pos;
-        Player->GetPos(pos);
-        static int32_t brighttick;
-        brighttick++;
-        S3DPoint lpos = pos;
-        lpos.x += (int32_t)(10.0 * sin((double)brighttick / 7.0));
-        lpos.y += (int32_t)(10.0 * cos((double)brighttick / 7.0));
-        lpos.z += 100 + (int32_t)(20.0 * sin((double)brighttick / 12.0));
-        MapPane.SetDLightPos(lpos);
+    if (!draw || Editor || !mapview)
+        return;
 
-        if (draw)
+    // The map view sits at the screen's top left: the pointer is in its pixels.
+    const int32_t x = cursorx;
+    const int32_t y = cursory;
+    int32_t mapx = 0, mapy = 0;
+    if (!PaneToMapScreen(x, y, mapx, mapy))
+        return;
+
+    // The next frame copies back the ids around the pointer, so the pick
+    // below finds them without waiting on the GPU.
+    mapview->SetPickPoint(x, y);
+
+    const int32_t frame = CurrentScreen ? CurrentScreen->FrameCount() : 0;
+    if ((frame & 7) == 1 && frame != hoverpickframe)
+    {
+        hoverpickframe = frame;
+        hovercursor = CURSOR_NONE;
+        TObjectInstance* on = OnObject(x, y);
+        if (on)
         {
-            SetClipRect();
-            DrawDLight();
+            if (!GetDragObj() && on->IsInventoryItem() && !(on->GetFlags() & OF_INVISIBLE))
+                hovercursor = CURSOR_HAND;          // can pick up while in the map pane
+            else
+                hovercursor = on->CursorType(GetDragObj());
+        }
+        // The pick, in the log when it changes (test runs read it).
+        const int32_t onindex = on ? on->GetMapIndex() : -1;
+        if (onindex != hoverindex)
+        {
+            hoverindex = onindex;
+            log_info("[mapinput] over %s (%d, %d): cursor %d",
+                     on ? on->GetName() : "nothing", x, y, hovercursor);
         }
     }
 
-  // Update zbuffers before animation begins
-    if (draw)
-    {
-        SetClipRect();
-        Scene3D.RefreshZBuffer();
-    }
-
-  // Draw objects being dragged around
-    if (Editor && draw && !mx && !my)
-        AnimateSelectedObjects();
-
-  // Draw object animations
-    AnimateObjects(draw);
-
-    // Draw 3D scene stuff  
-    SetClipRect();
-    if (draw)
-        Scene3D.DrawScene();
-
-  // Update mouse cursor
-    if (draw)
-    {
-        int32_t x = cursorx - GetPosX();
-        int32_t y = cursory - GetPosY();
-
-        if (InPane(x, y))
-        {
-            int32_t type = CURSOR_NONE;
-
-            if (!Editor)
-            {
-                TObjectInstance* inst = OnObject(x, y);
-                if (inst)
-                    if (GetDragObj() == nullptr && inst->IsInventoryItem())
-                        type = CURSOR_HAND;         // can pick up while in the map pane
-                    else
-                        type = inst->CursorType(GetDragObj());
-            }
-
-            SetMouseCornerBitmap(type);
-        }
-    }
-
-  // Release time slice to update thread if necessary
-    UpdateTimeSlice(draw);  
+    SetMouseCornerBitmap(hovercursor);
 }
 
 // ***********************

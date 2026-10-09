@@ -1093,8 +1093,9 @@ class TObjectInstance : protected SObjectDef
         // Causes the object to draw itself to the unlit background
     void DrawLit(TSurface* surface) { if (imagery) imagery->DrawLit(this, surface); }
         // Causes the object to draw itself to the lit background
-    virtual bool GetZ(TSurface* surface) { return (imagery) ? imagery->GetZ(this, surface) : false; }
-        // Get first uncliped zbuffer point by simulating drawing to the surface
+    virtual bool GetZ(const TObjectInstance* frontmost) { return (imagery) ? imagery->GetZ(this, frontmost) : false; }
+        // True when the object's own pixel is the one the frame shows at the
+        // map pane's pick point (TObjectImagery::GetZ; retail 0x00477bc0)
     void DrawSelected(TSurface* surface)
         { if (imagery) imagery->DrawSelected(this, surface); }
         // Causes image to draw selection (hilighting) around itself

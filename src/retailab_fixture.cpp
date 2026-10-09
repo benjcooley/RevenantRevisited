@@ -74,7 +74,7 @@ void ClearSeams() { g_seams.clear(); }
 const std::pair<uint32_t, const char*> kPortFlags[] = {
     {0x001, "firsttime"}, {0x002, "transition"}, {0x004, "forced"}, {0x008, "priority"},
     {0x010, "interrupt"}, {0x020, "nowaitdone"}, {0x040, "dontforce"},   {0x080, "stop"},
-    {0x100, "waitpivot"}, {0x200, "noroot"},     {0x400, "loop?"}, {0x800, "pickup"},
+    {0x100, "waitpivot"}, {0x200, "noroot"},     {0x400, "loop?"}, {0x800, "walkto"},
 };
 
 uint32_t FlagBits(const JsonValue& names)

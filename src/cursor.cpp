@@ -34,6 +34,10 @@ bool priority;                      // Priority of mouse image
 // the original in-game draw runs.
 static bool g_os_cursor_owns_pixels = false;
 
+// The bitmap the OS cursor shows while it owns the pixels: the arrow (or
+// wedge), or the corner bitmap TCursorHud::Draw puts in its place.
+static PTBitmap g_os_cursor_shown = nullptr;
+
 // When false, the OS/hardware pointer is suppressed and TCursorHud draws the
 // game cursor bitmap in-frame at (cursorx, cursory). Toggled via
 // SetHardwareCursorEnabled (see cursor.h). Default: hardware cursor enabled.
@@ -88,6 +92,7 @@ void SetMouseBitmap(PTBitmap cursor)
     {
         g_os_cursor_owns_pixels = false;
     }
+    g_os_cursor_shown = g_os_cursor_owns_pixels ? cursor : nullptr;
 }
 
 void SetHardwareCursorEnabled(bool enabled)
@@ -107,6 +112,7 @@ void SetHardwareCursorEnabled(bool enabled)
         rev_platform::ResetOSCursor();
         sapp_show_mouse(false);
         g_os_cursor_owns_pixels = false;
+        g_os_cursor_shown = nullptr;
     }
 }
 
@@ -118,8 +124,11 @@ bool HardwareCursorEnabled()
 void RefreshOSCursor()
 {
     if (MouseCursor && Windowed && g_hw_cursor_enabled)
+    {
         g_os_cursor_owns_pixels = rev_platform::SetOSCursor(
             MouseCursor, MouseCursor->regx, MouseCursor->regy);
+        g_os_cursor_shown = g_os_cursor_owns_pixels ? MouseCursor : nullptr;
+    }
 }
 
 void SetMouseShadow(PTBitmap shadow, int32_t offsetx, int32_t offsety)
@@ -247,15 +256,20 @@ void TCursorHud::Draw()
     // and g_os_cursor_owns_pixels = true; on other platforms (and the
     // brief window before the first SetMouseBitmap call) we fall back
     // to the in-game draw.
-    if (MouseCursor && !MouseCursorAdd && !g_os_cursor_owns_pixels)
-        Renderer->DrawBitmap(MouseCursor, cursorx, cursory);
-
-    // Corner-bitmap overlay (the little add-on icon: hand, eye, sword,
-    // etc.) is always our render, even when OS owns the main cursor --
-    // it's a per-target hint laid over the cursor pixel that the OS
-    // pointer has no awareness of.
-    if (MouseCursorAdd)
-        Renderer->DrawBitmap(MouseCursorAdd, cursorx, cursory);
+    //
+    // The corner bitmap (hand, eye, mouth, door, ...: what the pointer is
+    // over) is drawn in place of the arrow, not beside it: retail's cursor
+    // draw (0x0043a480) puts the corner bitmap at the pointer when there is
+    // one, else the arrow. With the OS drawing the pointer, the OS cursor
+    // shows the corner bitmap for as long as it is set.
+    PTBitmap const shown = MouseCursorAdd ? MouseCursorAdd : MouseCursor;
+    if (shown && shown != g_os_cursor_shown && Windowed && g_hw_cursor_enabled)
+    {
+        g_os_cursor_owns_pixels = rev_platform::SetOSCursor(shown, shown->regx, shown->regy);
+        g_os_cursor_shown = g_os_cursor_owns_pixels ? shown : nullptr;
+    }
+    if (shown && !g_os_cursor_owns_pixels)
+        Renderer->DrawBitmap(shown, cursorx, cursory);
 
     if (cleardragbitmap)
     {

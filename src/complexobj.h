@@ -111,7 +111,7 @@ class TActionBlock
         uint32_t waitpivot : 1;     // For movenent actions, wait until pivot done before moving
         uint32_t noroot : 1;        // Don't use this as a root state (even if playing a root animation)
         uint32_t loop : 1;          // Loop this command
-        uint32_t pickup : 1;        // Walking to an item to pick up (retail 0x1000; Goto's item)
+        uint32_t walkto : 1;        // A Goto's walk: its arrival picks up the Goto's item (retail +0x60 bit 0x1000)
       };
     };
 };
