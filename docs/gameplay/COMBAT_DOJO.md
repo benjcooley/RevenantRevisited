@@ -99,7 +99,8 @@ only).
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
 | D0 | which rules files retail reads (loose `Resources/` against `resources.rvr`) | `0x4a13f0` -> `0x4a1240` | `rev_fopen` | [x] packs first (§5.6) |
-| D1 | rules.def / char.def / spell.def parse: every CHARACTER, ATTACK, IMPACT, SPELL | `0x48b990` `0x489850` `0x53ead0` | `TRules::Load`, `SCharData::Load`, `SSpellData::Load` | [ ] |
+| D1 | rules.def / stats.def / char.def / weapon.def / armor.def parse (`combat-data`): TRules::Initialize + Load, every CLASS, CHARACTER, ATTACK, IMPACT, WEAPON, ARMOR, STATLEVEL, then BindTypes | `0x48b690` `0x48b990` `0x4891c0` `0x489850` `0x48cab0` | `TRules::Initialize`, `Load`, `SClassData::Load`, `SCharData::Load`, `BindTypes` | [x] 4 cases (shipped, GameSpeed 5, GOG loose, every-tag edge), all fields (~39,700 per shipped case) |
+| D1s | spell.def parse: every SPELL | `0x53ead0` | `SSpellData::Load` | [ ] |
 
 ## 3. Determinism
 
@@ -210,11 +211,16 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
    a 14-values-different char.def) were never read, and the DOSBox
    captures used the 1999 data. feature/combat reads the packs first too
    (gameflow 36faa5f); main still read the loose 1998 rules.def. The parse
-   itself still differs (D1, forensics/COMBAT_DATA.md): ENEMIES/GROUPS
-   truncated at 47 characters in the port (Locke's enemies lose
-   "supernatural,undead"), TOHIT* and AMMODATA skipped, FATIGUEATTACK
-   read as ATTACK, MAGICATTACK conditions and swipe frames dropped,
-   several CHARACTER tags skipped, different defaults.
+   differed (forensics/COMBAT_DATA.md §11) and now matches (kata D1,
+   2026-10-08): ENEMIES/GROUPS 80 bytes (Locke's enemies keep
+   "supernatural,undead"), TOHIT*, TOHITDAMAGE and AMMODATA, FATIGUEATTACK
+   (maxfatigue, flag 0x10000), swipe frames, MAGICATTACK conditions, every
+   CHARACTER tag (MAGICFREQ, BLEEDER, NOPARALYZE, RETREAT*, RUNFATIGUE,
+   POISONCHANCE, LABELHEIGHT, SWIPEFULL, ATTACHEFFECT), CLASS WEAPONS,
+   retail's defaults, late name binding (BindTypes), and retail's fatal
+   errors (an unknown tag, a repeated CHARACTER / WEAPON / ARMOR, an unknown
+   CLASS). Nothing reads the new fields yet: to-hit (C4) and the AI (M9,
+   C3) do.
 7. **Distance callers (audit 2026-10-08).** Retail's script value
    `getdistance` (`0x41f991`) and SnapDist (`0x46f090`) call the virtual
    (slot 4), so a character's distance there is edge to edge in retail
@@ -293,17 +299,22 @@ after building the port (`cmake --build build --target Revenant`):
 python3 tools/retail_ab/retail_ab.py combat-kernels     # M2
 python3 tools/retail_ab/retail_ab.py combat-go          # M3, first difference per case
 python3 tools/retail_ab/retail_ab.py combat-resolve     # M5
+python3 tools/retail_ab/retail_ab.py combat-data        # D1, every record field by field
 python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2
 python3 tools/retail_ab/retail_ab.py combat-go --all --case go.player.cf1.f0.b64
 ```
 
-- Cases: `tools/retail_ab/combat_targets.py` (generators and the compare).
+- Cases: `tools/retail_ab/combat_targets.py` (generators and the compare);
+  `targets_data.py` for D1 (cases are install folders written under the
+  output directory; the edge case's files are in
+  `tools/retail_ab/cases/combat_data/`).
 - Retail: `tools/retail_runtime/slots/combat/` (versioned with the emulator;
   `fixturekit.py` holds the shared fixture helpers):
   `guest.py` (layouts, shared seams, fault reports with the callers on the
-  stack), `combat_call.py` (the method per case).
+  stack), `combat_call.py` (the method per case), `data_parse.py` (D1).
 - Port: `src/retailab_combat.cpp` (`--retail-ab=combat-*`), loading the
-  install's class.def once (`REVENANT_DATA_PATH`, set from `--data`).
+  install's class.def once (`REVENANT_DATA_PATH`, set from `--data`);
+  `src/retailab_data.cpp` (`combat-data`).
 - Output: `build/retail_ab/<target>/` — `report.json`, both dumps.
 
 Speed (2026-10-07, 4 retail processes): M3 762 cases in ~1.5 s retail,
