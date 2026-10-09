@@ -1031,6 +1031,11 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
 // mode, a left press on an item, 0x005496a0): the stats pane has no info mode.
 void TMapPane::PlayMouseClick(int32_t button, int32_t x, int32_t y)
 {
+    if (playMouseClickSeam)
+    {
+        playMouseClickSeam(button, x, y);
+        return;
+    }
     Notify(N_CANCELCONTROL, Player);
 
     int32_t mapx = 0, mapy = 0;

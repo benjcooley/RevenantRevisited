@@ -19,6 +19,7 @@ alternates.
 from __future__ import annotations
 
 import itertools
+import json
 from pathlib import Path
 
 from combat_targets import _toward, _walk, finish, port_fields
@@ -128,7 +129,34 @@ def sequence_cases(data: Path, workdir: Path) -> list[dict]:
         states = walk_states()
         states[0] = dict(name='walk', frames=7, aniflags=flags, motion=_cycle(7, 0x100))
         case(f'anim.{label}', [_char('Araknid', 12, AT, 64, states, walk_root)], 24)
+
+    # The game's own motion (tools/retail_ab/cases/motion/, i3ddump): Locke
+    # in combat round an Araknid, each direction held for three seconds,
+    # armed and bare-handed, CombatFace on and off; walking; the Araknid
+    # stepping in and backing off.
+    locke, araknid = (_real_states(n) for n in ('locke', 'araknid'))
+    foe = _char('Araknid', 12, _toward(AT, 64, 100), 192, araknid,
+                dict(name='combat', action=COMBAT, angle=192, moveangle=192))
+    for root, cf, hold in itertools.product(('combat', 'hand'), (1, 0), range(0, 256, 32)):
+        me = _char('Locke', 11, AT, 64, locke, dict(name=root, action=COMBAT, angle=64, moveangle=64, obj='Araknid'))
+        cases.append(dict(name=f'seq.real.{root}.cf{cf}.hold{hold}', call='sequence', ticks=72,
+                          inputs=[dict(go=hold)] * 72, globals=dict(combatface=cf, frame=0x40),
+                          self='Locke', chars=[me, foe], ground=dict(z=BASE)))
+    for hold in (64, 100, 220):
+        me = _char('Locke', 11, AT, 64, locke, dict(name='walk', action=ANIMATE, angle=64, moveangle=64))
+        case(f'real.walk.hold{hold}', [me], 60, [dict(go=hold)] * 60)
+    for hold, ticks in ((64, 60), (192, 40)):
+        me = _char('Araknid', 12, AT, 64, araknid, dict(name='combat', action=COMBAT, angle=64, moveangle=64,
+                                                        obj='Locke'))
+        loc = _char('Locke', 11, _toward(AT, 64, 120), 192, locke, dict(name='combat', action=COMBAT, angle=192,
+                                                                        moveangle=192), type='Locke')
+        case(f'real.araknid.hold{hold}', [me, loc], ticks, [dict(go=hold)] * ticks)
     return finish(cases)
+
+
+def _real_states(name):
+    path = Path(__file__).resolve().parent / 'cases' / 'motion' / f'{name}.json'
+    return json.loads(path.read_text())['states']
 
 
 TARGETS = {

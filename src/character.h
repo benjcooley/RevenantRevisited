@@ -418,6 +418,9 @@ class TCharacter : public TComplexObject
       // Returns true if character would be blocked when going to new position
     uint32_t MoveStep();
       // One tick's displacement (Move repeats it toward a MoveTo target)
+    enum class EBlockedBy : uint8_t { None, Hole, Height, Step, NoWalkmap, Character };
+    EBlockedBy blockedby = EBlockedBy::None;
+      // Which test the last Blocked() refused on (MoveStep's [move] log)
     
   // Miscellaneous functions
     virtual void MoveTo(S3DPoint& newpos) { movepos = newpos; movetopos = true; }
