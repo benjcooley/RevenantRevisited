@@ -92,7 +92,7 @@ inline bool IsUIBitmapAtlasDecodable(PTBitmap bm)
     if (bm->flags & BM_COMPRESSED) return false;
     if (bm->width > kUIAtlasMaxDim || bm->height > kUIAtlasMaxDim) return false;
 
-    const uint32_t knownFormatFlags = BM_8BIT | BM_15BIT | BM_16BIT | 0x10000;
+    const uint32_t knownFormatFlags = BM_8BIT | BM_15BIT | BM_16BIT | BM_ARGB4444;
     if (!(bm->flags & knownFormatFlags)) return false;
 
     const uint64_t pixels = uint64_t(bm->width) * uint64_t(bm->height);
@@ -101,7 +101,7 @@ inline bool IsUIBitmapAtlasDecodable(PTBitmap bm)
 
     if (bm->flags & BM_8BIT)
         return bm->datasize >= pixels && bm->palette.ptr() != nullptr;
-    if (bm->flags & (BM_15BIT | BM_16BIT | 0x10000))
+    if (bm->flags & (BM_15BIT | BM_16BIT | BM_ARGB4444))
         return bm->datasize >= pixels * 2;
     return false;
 }

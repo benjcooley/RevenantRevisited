@@ -80,7 +80,7 @@ bool DecodeBitmapHueChangedToRGBA(const TBitmap* bm, int32_t hue,
 {
     if (!bm || !dst || bm->width <= 0 || bm->height <= 0 || hue < 0)
         return false;
-    if (!(bm->flags & (BM_15BIT | BM_16BIT)) || (bm->flags & (BM_COMPRESSED | 0x10000)))
+    if (!(bm->flags & (BM_15BIT | BM_16BIT)) || (bm->flags & (BM_COMPRESSED | BM_ARGB4444)))
         return false;
 
     const bool rgb565 = (bm->flags & BM_16BIT) != 0;
@@ -199,25 +199,14 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
         }
         return true;
     }
-    // BM_UNKNOWN_0x10000 — a 16-bit-per-pixel ARGB4444 variant flag that
-    // appears on automap.dat (Marker, Amap, PlusSel, MinusSel) and statusbar.dat.
-    // No entry in revdefs.h's BM_* enum. On-disk pixel data is 2 bytes/pixel:
-    // header.datasize = w*h*2 exactly (verified on every entry in automap.dat),
-    // no palette, no separate alpha buffer. The pixel format is ARGB4444 stored
-    // little-endian — bits 15..12 = alpha, 11..8 = red, 7..4 = green, 3..0 = blue
-    // (each 4-bit channel bit-replicated 8 = (c4<<4)|c4 for clean white).
-    //
-    // Determined by inspecting Amap's pixel histogram + spatial layout: the dark
-    // interior (body-window area) reads as a perfect ARGB4444 alpha gradient
-    // (0xb000 → 0x8000 → ... → 0x0000 = decreasing alpha, RGB=0 transparent
-    // black), and the chrome edge reads as the expected warm-brown stone +
-    // gold trim ornate carvings (e.g. 0xfb73 = A=15 R=11 G=7 B=3 = opaque
-    // warm orange-brown; 0xfda5 = A=15 R=13 G=10 B=5 = opaque cream/gold).
-    // Decoding the same data as 555/565 gives all-red garbage (the 0x?000
-    // alpha-gradient pixels parse as solid red, the chrome reads as pink).
-    //
-    // No magenta chroma-key is used here (alpha is encoded directly per-pixel).
-    if (bm->flags & 0x10000)
+    // BM_ARGB4444: 2 bytes/pixel, bits 15..12 alpha, 11..8 red, 7..4 green,
+    // 3..0 blue, no palette and no separate alpha buffer (statusbar.dat,
+    // automap.dat, the texture-overlay HUD's art). Decoded the way retail's
+    // texture-overlay raster turns a 4444 texel into a pixel (measured in the
+    // emulator, docs/ui/HUD_REBUILD.md P1b): colour channels shift up
+    // (red 15 -> 0xF0, which a 565 target reads back as 30 of 31, as retail
+    // shows it), alpha bit-replicates so 15 stays fully opaque.
+    if (bm->flags & BM_ARGB4444)
     {
         const uint16_t* src = bm->data16;
         for (int32_t y = 0; y < h; y++)
@@ -227,13 +216,9 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
             {
                 const uint16_t px = src[y * w + x];
                 const uint8_t a4 = (uint8_t)((px >> 12) & 0x0F);
-                const uint8_t r4 = (uint8_t)((px >>  8) & 0x0F);
-                const uint8_t g4 = (uint8_t)((px >>  4) & 0x0F);
-                const uint8_t b4 = (uint8_t)( px        & 0x0F);
-                // Bit-replicate 4-bit channels to 8-bit (0xF -> 0xFF, not 0xF0).
-                row[0] = (uint8_t)((r4 << 4) | r4);
-                row[1] = (uint8_t)((g4 << 4) | g4);
-                row[2] = (uint8_t)((b4 << 4) | b4);
+                row[0] = (uint8_t)(((px >> 8) & 0x0F) << 4);
+                row[1] = (uint8_t)(((px >> 4) & 0x0F) << 4);
+                row[2] = (uint8_t)((px & 0x0F) << 4);
                 row[3] = (uint8_t)((a4 << 4) | a4);
                 row += 4;
             }

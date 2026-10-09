@@ -13,7 +13,8 @@ and the timing.
 
 Targets:
   draw-put   TSurface::Put 0x004bd680 (Draw 0x004ad0d0, routine selector
-             0x004ad1d0) vs the port's TBitmap::Put, on identical bytes:
+             0x004ad1d0) vs the port's GPU compose of the same draw, on
+             identical bytes:
              random ARGB4444 destinations, StatusBar.dat's bitmaps plus
              synthetic ARGB4444 bitmaps, default / plain / alpha modes,
              in-bounds positions, even destination widths (retail faults on
@@ -158,6 +159,9 @@ def target_draw_put(args, workdir):
     retail_seconds = time.perf_counter() - started
     retail.close()
     started = time.perf_counter()
+    # The port composes on the GPU (docs/ui/HUD_REBUILD.md §5): its side of
+    # this target is the GPU compose harness, which reads back the canvas.
+    raise SystemExit('draw-put: the port side is the GPU compose harness (HUD_REBUILD P1a), not wired yet')
     port_results = run_port('draw-put', args.port, [
         (c['name'], c['case']['dest']['format'], c['case']['dest']['width'], c['case']['dest']['height'],
          c['case']['dest']['pixels'], c['case']['bitmap'], c['case']['x'], c['case']['y'], c['case']['mode'])
