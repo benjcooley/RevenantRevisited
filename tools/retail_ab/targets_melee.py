@@ -89,13 +89,16 @@ def attack_states(cd: dict) -> list:
 
 
 def make_char(name, objclass, pos, facing, cd, *, typ=None, states=(), root=None, doing=None, stats=None,
-              classstats=None, attackstate=None, weapon=None, resists=None, charflags=0, frame=0, ident=0):
+              classstats=None, attackstate=None, weapon=None, resists=None, charflags=0, frame=0, ident=0,
+              desired=None, objflags=0):
     spec = {'name': name, 'type': typ or cd['name'], 'class': objclass, 'pos': list(pos), 'facing': facing,
-            'moveangle': facing, 'charflags': charflags, 'frame': frame, 'id': ident,
+            'moveangle': facing, 'charflags': charflags, 'objflags': objflags, 'frame': frame, 'id': ident,
             'stats': stats or {}, 'classstats': classstats or {'radius': 16, 'value': 1},
             'chardata': cd, 'states': list(states), 'root': root or dict(name='combat', action=3)}
     if doing is not None:
         spec['doing'] = doing
+    if desired is not None:
+        spec['desired'] = desired
     if attackstate is not None:
         spec['attackstate'] = attackstate
     if objclass == 11:
@@ -113,7 +116,8 @@ MONSTER_STATS = dict(health=30, fatigue=104, mana=0, damagemod=0)
 
 def duel(data, me, target, *, dist=20, bearing=64, me_stats=None, target_stats=None, me_states=None,
          target_states=None, me_root=None, me_doing=None, target_doing=None, me_state=None, target_state=None,
-         me_flags=0, target_flags=0, me_frame=0, weapon=None, target_root=None, me_value=1, target_value=1):
+         me_flags=0, target_flags=0, me_frame=0, weapon=None, target_root=None, me_value=1, target_value=1,
+         me_desired=None, me_objflags=0, target_objflags=0):
     """Two characters: `me` facing `target`, `dist` apart edge to edge
     (radius 16 each), its combat root on the target."""
     s = shipped(data, None)
@@ -126,12 +130,12 @@ def duel(data, me, target, *, dist=20, bearing=64, me_stats=None, target_stats=N
                         root=me_root or dict(name='combat', action=3, angle=bearing, moveangle=bearing, obj=tname),
                         doing=me_doing, stats=dict(PLAYER_STATS if mcls == 11 else MONSTER_STATS, **(me_stats or {})),
                         classstats={'radius': 16, 'value': me_value}, attackstate=me_state, weapon=weapon,
-                        charflags=me_flags, frame=me_frame, ident=0x10)
+                        charflags=me_flags, frame=me_frame, ident=0x10, desired=me_desired, objflags=me_objflags)
     tg_spec = make_char(tname, tcls, tpos, (bearing + 128) & 0xff, tcd, states=target_states or ['combat'],
                         root=target_root or dict(name='combat', action=3, angle=(bearing + 128) & 0xff, obj=mname),
                         doing=target_doing, stats=dict(PLAYER_STATS if tcls == 11 else MONSTER_STATS, **(target_stats or {})),
                         classstats={'radius': 16, 'value': target_value}, attackstate=target_state,
-                        charflags=target_flags, ident=0x20)
+                        charflags=target_flags, ident=0x20, objflags=target_objflags)
     return [me_spec, tg_spec], s['rules']
 
 
@@ -344,11 +348,12 @@ def synthetic_cases(data, add):
         # The player's prefix from his root (a target's impact name).
         if tg == 'Locke':
             for root, action in (('hand', 3), ('handrun', 3), ('combatrun', 3), ('bow', 0x19), ('bowrun', 0x19),
-                                 ('sneak', 1), ('walk', 1), ('run', 1), ('combat', 3)):
+                                 ('sneak', 1), ('walk', 1), ('run', 1), ('combat', 3), ('hand', 0x19)):
                 states = ['combat', root] + [p + a0['impacts'][0]['name'] for p in
                                              ('h', 'hr', 'c', 'cr', 'b', 'br', 's', 'w', 'r', 't', 'tr')]
-                run(f'prefix.{root}', [a0], target_states=states, target_root=block(root, action, obj='Me'))
-                run(f'prefix.{root}.bare', [a0], target_states=['combat'], target_root=block(root, action, obj='Me'))
+                run(f'prefix.{root}.{action}', [a0], target_states=states, target_root=block(root, action, obj='Me'))
+                run(f'prefix.{root}.{action}.bare', [a0], target_states=['combat'],
+                    target_root=block(root, action, obj='Me'))
         # To-hit out of the clamp; tier keys out of order.
         run('value.me20', [a0] * 3, me_value=20)
         run('value.targ20', [a0] * 3, target_value=20)
@@ -370,6 +375,285 @@ def synthetic_cases(data, add):
                                                                  impact_attack=0, impact_of='Me'))
                 run('heldimpact.self', recs, target_flags=0x80000,
                     target_doing=block('cheld', 0xc, impact=k, impact_attack=0, impact_of='Me'))
+
+
+def full_world(data, me, tg, **kw):
+    """A duel where each side has its own attacks and the impacts of the
+    other's (so either can attack, as the counter needs), timers run out."""
+    s = shipped(data, None)
+    mcd, tcd = s['chars'][me], s['chars'][tg]
+    state = dict(dict(nextattack=0, magictimer=0), **kw.pop('me_state', {}))
+    tstate = dict(dict(nextattack=0, magictimer=0), **kw.pop('target_state', {}))
+    mstates = ['combat', 'walk'] + attack_states(mcd) + impact_states(tcd, 'c')
+    tstates = ['combat', 'walk'] + attack_states(tcd) + impact_states(mcd, 'c')
+    return duel(data, me, tg, me_states=kw.pop('me_states', mstates), target_states=kw.pop('target_states', tstates),
+                me_state=state, target_state=tstate, **kw)
+
+
+def search_cases(data, add):
+    """The searches and the calls that make an attack, on real tables."""
+    s = shipped(data, None)
+    armed = dict(nextattack=0, magictimer=0)
+
+    def world(me, tg, **kw):
+        return full_world(data, me, tg, **kw)
+
+    # FindButtonAttack: every button, at the distances the tables turn on,
+    # with and without a target; isaction never finds anything.
+    for me, tg in (('Locke', 'Araknid'), ('Bayne', 'Pale Ogrok'), ('Navarro', 'Rahul'), ('Morganna', 'Skeleton')):
+        for dist in (0, 5, 18, 19, 20, 40, 75, 80, 150, 300):
+            chars, rules = world(me, tg, dist=dist)
+            for button in range(0, 13):
+                add(f'find-button.{me}.d{dist}.b{button}', 'find-button', chars, rules,
+                    args=dict(button=button, dmgpcnt=33, targ='Target'))
+        chars, rules = world(me, tg, dist=20)
+        for button in (1, 2, 3, 10, 12):
+            add(f'find-button.{me}.notarget.b{button}', 'find-button', chars, rules,
+                args=dict(button=button, dmgpcnt=33, targ=None))
+            add(f'find-button.{me}.action.b{button}', 'find-button', chars, rules,
+                args=dict(button=button, dmgpcnt=33, targ='Target', isaction=1))
+            add(f'find-button.{me}.preset.b{button}', 'find-button', chars, rules,
+                args=dict(button=button, dmgpcnt=33, targ='Target', damage=9, tohit=60, roll=100))
+            for label, kw in (('sneak', dict(me_root=block('sneak', 1, obj='Target'))),
+                              ('weak', dict(target_stats=dict(health=1))),
+                              ('tired', dict(me_stats=dict(fatigue=10)))):
+                chars2, rules2 = world(me, tg, dist=20, **kw)
+                add(f'find-button.{me}.{label}.b{button}', 'find-button', chars2, rules2,
+                    args=dict(button=button, dmgpcnt=33, targ='Target'))
+        cp = chain_parent(s['chars'][me])
+        if cp:
+            link, parent = cp
+            chars, rules = world(me, tg, dist=20, me_state=dict(lastattack=parent, lastattackticks=95))
+            add(f'find-button.{me}.chain', 'find-button', chars, rules,
+                args=dict(button=s['chars'][me]['attacks'][link]['button'], dmgpcnt=33, targ='Target'))
+
+    # FindPcntAttack: the monsters' random picks; the 2n tries running out.
+    monsters = ('Araknid', 'Jong', 'Pale Ogrok', 'Kantha', 'Yhagoro', 'Arakna', 'Rahul', 'Spider Queen', 'Zombie')
+    for me in monsters:
+        n = len(s['chars'][me]['attacks'])
+        for dist in (0, 5, 10, 30, 60):
+            chars, rules = world(me, 'Locke', dist=dist)
+            for pcnt in (1, 25, 50, 75, 100, 101):
+                add(f'find-pcnt.{me}.d{dist}.p{pcnt}', 'find-pcnt', chars, rules, args=dict(pcnt=pcnt, dmgpcnt=21))
+            # Steered picks: every index first.
+            for i in range(n):
+                add(f'find-pcnt.{me}.d{dist}.pick{i}', 'find-pcnt', chars, rules, args=dict(pcnt=1, dmgpcnt=21),
+                    tape=[i] + list(range(n)) * 2)
+        for label, kw in (('noroottarget', dict(me_root=block('combat', 3))),
+                          ('bowroot', dict(me_root=block('bow', 0x19, obj='Target'))),
+                          ('walkroot', dict(me_root=block('walk', 1, obj='Target'))),
+                          ('nextattack1', dict(me_state=dict(nextattack=1))),
+                          ('bare', dict(me_states=['combat'])),
+                          ('weak', dict(target_stats=dict(health=1)))):
+            chars, rules = world(me, 'Locke', dist=5, **kw)
+            add(f'find-pcnt.{me}.{label}', 'find-pcnt', chars, rules, args=dict(pcnt=1, dmgpcnt=21))
+        if n == 1:
+            continue
+    # One-attack table: no draw (random(0, 0)).
+    cd = copy.deepcopy(s['chars']['Araknid'])
+    cd['attacks'] = cd['attacks'][:1]
+    chars, rules = world('Araknid', 'Locke', dist=5)
+    chars[0]['chardata'] = cd
+    add('find-pcnt.single', 'find-pcnt', chars, rules, args=dict(pcnt=1, dmgpcnt=21))
+    # The tier compounding: the damage fixed once, re-tiered per candidate
+    # that gets past the damage block and is refused after it.
+    cd = copy.deepcopy(s['chars']['Araknid'])
+    a0 = cd['attacks'][0]
+    a0['flags'] |= CA_DEATH
+    cd['attacks'] = [copy.deepcopy(a0), copy.deepcopy(a0), cd['attacks'][1]]
+    for i, tape in enumerate(([0, 1, 2], [2, 0, 1], [1, 1, 2])):
+        chars, rules = world('Araknid', 'Locke', dist=5)
+        chars[0]['chardata'] = cd
+        add(f'find-pcnt.compound.{i}', 'find-pcnt', chars, rules, args=dict(pcnt=1, dmgpcnt=21),
+            tape=tape + [0, 30, 30] * 4)
+
+    # FindInteractiveAttack.
+    for me, tg in (('Pale Ogrok', 'Locke'), ('Kantha', 'Locke'), ('Locke', 'Araknid'), ('Navarro', 'Rahul'),
+                   ('Bayne', 'Pale Ogrok')):
+        for dist in (0, 10, 40):
+            for label, kw in (('base', {}), ('held', dict(target_flags=0x80000)), ('weak', dict(target_stats=dict(health=1))),
+                              ('noroottarget', dict(me_root=block('combat', 3)))):
+                chars, rules = world(me, tg, dist=dist, **kw)
+                for pcnt in (0, 50, 100):
+                    add(f'find-interactive.{me}.d{dist}.{label}.p{pcnt}', 'find-interactive', chars, rules,
+                        args=dict(pcnt=pcnt, dmgpcnt=21))
+
+
+def making_cases(data, add):
+    """DoAttack and the callers: ButtonAttack, ButtonAction, RandomAttack,
+    SpecificAttack."""
+    s = shipped(data, None)
+    armed = dict(nextattack=0, magictimer=0)
+
+    def world(me, tg, **kw):
+        return full_world(data, me, tg, **kw)
+
+    # DoAttack: each kind of record, an impact or none, refused, gated.
+    for me, tg in (('Locke', 'Araknid'), ('Araknid', 'Locke'), ('Jong', 'Locke'), ('Pale Ogrok', 'Locke'),
+                   ('Zombie', 'Locke'), ('Yhagoro', 'Locke')):
+        mcd = s['chars'][me]
+        picks = {}
+        for i, ad in enumerate(mcd['attacks']):
+            shape = (ad['flags'] & (CA_SPECIAL | CA_CHAIN | CA_AUTOCOMBO | CA_PLAYANIM | CA_MAGICATTACK | CA_INTERACTIVE),
+                     bool(ad.get('chainname')), len(ad.get('impacts', [])))
+            picks.setdefault(shape, i)
+        for shape, i in picks.items():
+            for label, kw, extra in (
+                    ('base', {}, {}),
+                    ('moving', dict(me_doing=block('combatf', 4, angle=40, moveangle=72, obj='Target')), {}),
+                    ('noturn', dict(me_flags=4), {}),
+                    ('priority', dict(me_doing=block('cswing', 7, obj='Target', flags=['priority'],
+                                                     attack=0), me_desired=None), {}),
+                    ('invoking', dict(me_doing=block('invoke', 0xb)), {}),
+                    ('dead', dict(me_stats=dict(health=0)), {}),
+                    ('iced', dict(me_objflags=0x2000000), {}),
+                    ('paralysed', dict(me_objflags=0x800000), {}),
+                    ('immobile', dict(me_objflags=1), {}),
+                    ('requests', dict(me_state=dict(requestbits=7)), {}),
+                    ('spell', {}, dict(spells=['heal3'])),
+                    ('spell.fails', {}, dict(spells=['heal3'], cast_result=0))):
+                chars, rules = world(me, tg, dist=10, **kw)
+                for imp in sorted({-1, 0, len(mcd['attacks'][i].get('impacts', [])) - 1}):
+                    add(f'do-attack.{me}.a{i}.{label}.i{imp}', 'do-attack', chars, rules,
+                        args=dict(attack=i, impact=imp, damage=17, tohit=60, roll=44, targ='Target'), **extra)
+            chars, rules = world(me, tg, dist=10)
+            add(f'do-attack.{me}.a{i}.notarget', 'do-attack', chars, rules,
+                args=dict(attack=i, impact=-1, damage=17, tohit=60, roll=44, targ=None))
+        chars, rules = world(me, tg, dist=10)
+        add(f'do-attack.{me}.outofrange', 'do-attack', chars, rules,
+            args=dict(attack=len(mcd['attacks']), impact=-1, damage=1, tohit=1, roll=1, targ='Target'))
+
+    # ButtonAttack: the target (the root's, else the one found), the chain
+    # bank, the same-button rule and the counter.
+    for me, tg in (('Locke', 'Araknid'), ('Bayne', 'Pale Ogrok'), ('Locke', 'Jong'), ('Navarro', 'Rahul')):
+        mcd = s['chars'][me]
+        cp = chain_parent(mcd)
+        for button in (1, 2, 3, 4, 5, 10, 11, 12):
+            for dist in (5, 20, 60):
+                chars, rules = world(me, tg, dist=dist)
+                add(f'button-attack.{me}.d{dist}.b{button}', 'button-attack', chars, rules, args=dict(button=button))
+            chars, rules = world(me, tg, dist=20, me_root=block('combat', 3))
+            add(f'button-attack.{me}.found.b{button}', 'button-attack', chars, rules, args=dict(button=button),
+                found='Target')
+            add(f'button-attack.{me}.nobody.b{button}', 'button-attack', chars, rules, args=dict(button=button))
+            chars, rules = world(me, tg, dist=20, me_root=block('walk', 1))
+            add(f'button-attack.{me}.walkroot.b{button}', 'button-attack', chars, rules, args=dict(button=button),
+                found='Target')
+            # The third press of a button: roll 100, and one in eleven the
+            # monster counters (tape 0 then its search).
+            for repeat, last in ((1, button), (2, button), (5, button), (2, button + 1)):
+                for label, tape in (('nocounter', [5]), ('counter', [0, 20] + list(range(40))),
+                                    ('counter11', [11, 3] + list(range(40)))):
+                    chars, rules = world(me, tg, dist=10, me_state=dict(lastbutton=last, buttonrepeat=repeat),
+                                         target_state=dict(nextattack=7))
+                    add(f'button-attack.{me}.b{button}.last{last}.rep{repeat}.{label}', 'button-attack', chars, rules,
+                        args=dict(button=button), tape=tape)
+        if cp:
+            link, parent = cp
+            exp = mcd['attacks'][parent]['chainexptime']
+            for hits in (0, 2, 3):
+                for ago in (0, exp, exp + 1):
+                    chars, rules = world(me, tg, dist=10, me_state=dict(lastattack=parent, lastattackticks=100 - ago,
+                                                                        chainhits=hits))
+                    add(f'button-attack.{me}.chainbank.h{hits}.ago{ago}', 'button-attack', chars, rules,
+                        args=dict(button=mcd['attacks'][link]['button']))
+        # Pressing on another player: no same-button rule.
+        chars, rules = world(me, 'Locke' if me != 'Locke' else 'Bayne', dist=10,
+                             me_state=dict(lastbutton=1, buttonrepeat=2))
+        add(f'button-attack.{me}.vsplayer', 'button-attack', chars, rules, args=dict(button=1), tape=[0])
+        for label, kw in (('dead', dict(me_stats=dict(health=0))), ('held', dict(
+                me_doing=block('cheld', 0xc, attack=first_with(mcd, CA_INTERACTIVE) or 0)))):
+            chars, rules = world(me, tg, dist=10, **kw)
+            add(f'button-attack.{me}.{label}', 'button-attack', chars, rules, args=dict(button=1))
+            chars, rules = world(me, tg, dist=10, me_flags=0x80000, **kw)
+            add(f'button-attack.{me}.{label}.self', 'button-attack', chars, rules, args=dict(button=1))
+        chars, rules = world(me, tg, dist=10)
+        add(f'button-action.{me}', 'button-action', chars, rules, args=dict(button=1), found='Target')
+        add(f'button-action.{me}.nobody', 'button-action', chars, rules, args=dict(button=1))
+
+    # RandomAttack and SpecificAttack (monsters, and the player's chains).
+    for me, tg in (('Araknid', 'Locke'), ('Jong', 'Locke'), ('Pale Ogrok', 'Locke'), ('Kantha', 'Locke'),
+                   ('Yhagoro', 'Locke'), ('Arakna', 'Locke'), ('Locke', 'Araknid')):
+        mcd = s['chars'][me]
+        for dist in (2, 10, 40):
+            for pcnt in (1, 50, 100):
+                for label, kw in (('base', {}), ('interactive', dict(me_state=dict(requestbits=4, lastbutton=1))),
+                                  ('interactive.nobutton', dict(me_state=dict(requestbits=4))),
+                                  ('timer', dict(me_state=dict(nextattack=3)))):
+                    chars, rules = world(me, tg, dist=dist, **kw)
+                    add(f'random-attack.{me}.d{dist}.p{pcnt}.{label}', 'random-attack', chars, rules,
+                        args=dict(pcnt=pcnt), spells=['heal3', 'fireball'])
+        for i in range(len(mcd['attacks'])):
+            chars, rules = world(me, tg, dist=10)
+            add(f'specific-attack.{me}.a{i}', 'specific-attack', chars, rules, args=dict(attack=i))
+        for label, kw, extra in (('found', dict(me_root=block('combat', 3)), dict(found='Target')),
+                                 ('nobody', dict(me_root=block('combat', 3)), {}),
+                                 ('dead', dict(me_stats=dict(health=0)), {})):
+            chars, rules = world(me, tg, dist=10, **kw)
+            add(f'specific-attack.{me}.{label}', 'specific-attack', chars, rules, args=dict(attack=0), **extra)
+
+    # Held in someone's interactive move: an interactive attack, or only a
+    # held impact; the character making the move isn't held.
+    lcd = s['chars']['Locke']
+    li = first_with(lcd, CA_INTERACTIVE)
+    lk = next(k for k, imp in enumerate(lcd['attacks'][li]['impacts']) if imp['flags'] & CAI_INTERACTIVE)
+    held = {'attack': dict(me_doing=block('cheld', 0xc, attack=li, attack_of='Target')),
+            'impact': dict(me_doing=block('cheld', 0xc, impact=lk, impact_attack=li, impact_of='Target')),
+            'impact.self': dict(me_doing=block('cheld', 0xc, impact=lk, impact_attack=li, impact_of='Target'),
+                                me_flags=0x80000)}
+    for label, kw in held.items():
+        for call, args in (('button-attack', dict(button=1)), ('button-action', dict(button=1)),
+                           ('random-attack', dict(pcnt=1)), ('specific-attack', dict(attack=0))):
+            me = 'Bayne' if call.startswith('button') else 'Araknid'
+            chars, rules = full_world(data, me, 'Locke', dist=10, **kw)
+            add(f'{call}.held.{label}', call, chars, rules, args=args, found='Target')
+        cd = copy.deepcopy(s['chars']['Araknid'])
+        cd['attacks'] = [magic_record(cd['attacks'][0], 1, 0)]
+        chars, rules = full_world(data, 'Araknid', 'Locke', dist=10, **kw)
+        chars[0]['chardata'] = cd
+        add(f'do-attack.magic.held.{label}', 'do-attack', chars, rules, spells=['heal3'],
+            args=dict(attack=0, impact=-1, damage=1, tohit=1, roll=1, targ='Target'))
+
+    # The counter's search: picks that are PLAYANIMs (passed over), a
+    # monster that can't attack (ten failed searches), one that can't act.
+    araknid = s['chars']['Araknid']['attacks']
+    plays = [i for i, ad in enumerate(araknid) if ad['flags'] & CA_PLAYANIM]
+    for label, tape, kw in (
+            ('playanims', [0, 20] + plays * 3 + [0, 1], {}),
+            ('allplayanims', [0, 20] + plays * 30, {}),
+            ('bare', [0, 20], dict(target_states=['combat'])),
+            ('dead', [0, 20, 0, 1], dict(target_stats=dict(health=0))),
+            ('invoking', [0, 20, 0, 1], dict(target_doing=block('invoke', 0xb)))):
+        chars, rules = full_world(data, 'Locke', 'Araknid', dist=10, me_state=dict(lastbutton=1, buttonrepeat=2),
+                                  **kw)
+        add(f'button-attack.counter.{label}', 'button-attack', chars, rules, args=dict(button=1), tape=tape)
+
+    # Bow roots: the searches, the callers and DoAttack's turn to face.
+    cd = copy.deepcopy(s['chars']['Araknid'])
+    bowed = [synthetic(ad, add_flags=CA_BOWMODE) for ad in cd['attacks']]
+    cd['attacks'] = bowed + cd['attacks']
+    for root in (('bow', 0x19), ('walk', 1)):
+        for call, args in (('random-attack', dict(pcnt=1)), ('specific-attack', dict(attack=0)),
+                           ('find-interactive', dict(pcnt=0)), ('find-pcnt', dict(pcnt=1)),
+                           ('do-attack', dict(attack=2, impact=-1, damage=3, tohit=50, roll=50, targ='Target'))):
+            for flags in (0, 4):
+                chars, rules = full_world(data, 'Araknid', 'Locke', dist=10,
+                                          me_root=block(root[0], root[1], obj='Target'), me_flags=flags)
+                chars[0]['chardata'] = cd
+                chars[0]['states'] += [ad['name'] for ad in bowed]
+                add(f'{call}.root{root[0]}.f{flags}', call, chars, rules, args=args)
+    chars, rules = full_world(data, 'Pale Ogrok', 'Locke', dist=10, me_root=block('bow', 0x19, obj='Target'))
+    add('find-interactive.rootbow.real', 'find-interactive', chars, rules, args=dict(pcnt=0))
+    chars, rules = full_world(data, 'Pale Ogrok', 'Locke', dist=10, me_root=block('walk', 1, obj='Target'))
+    add('find-interactive.rootwalk.real', 'find-interactive', chars, rules, args=dict(pcnt=0))
+    # An empty attack table.
+    for call, args in (('find-button', dict(button=1, targ='Target')), ('find-pcnt', dict(pcnt=1)),
+                       ('find-interactive', dict(pcnt=0)), ('button-attack', dict(button=1)),
+                       ('random-attack', dict(pcnt=1)), ('specific-attack', dict(attack=0))):
+        me = 'Locke' if call.startswith('button') or call == 'find-button' else 'Araknid'
+        chars, rules = full_world(data, me, 'Arakna', dist=10)
+        chars[0]['chardata']['attacks'] = []
+        add(f'{call}.emptytable', call, chars, rules, args=args)
 
 
 def attack_choice_cases(data: Path, workdir: Path) -> list[dict]:
@@ -526,6 +810,8 @@ def attack_choice_cases(data: Path, workdir: Path) -> list[dict]:
                     add(f'iva.{key}.magic{i}.{label}', 'iva', chars, rules,
                         calls=[dict(attack=i, tdist=50, targ='Target'), dict(attack=i, tdist=50, targ='Target')])
     synthetic_cases(data, add)
+    search_cases(data, add)
+    making_cases(data, add)
     return finish(cases)
 TARGETS = {
     'melee-attack-choice': dict(fixture='slots/combat/melee_attack.py', cases=attack_choice_cases, compare=compare,

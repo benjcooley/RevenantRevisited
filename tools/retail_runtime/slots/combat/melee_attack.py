@@ -122,8 +122,8 @@ class MeleeFixture:
         self.case = {}
 
     def _coverage(self):
-        """With MELEE_COVERAGE=<dir>: the basic blocks reached in the melee
-        functions, written to <dir>/<pid>.json when the process ends
+        """With MELEE_COVERAGE=<dir>: the code reached in the melee functions
+        (each block run, as [start, size]), written to <dir>/<pid>.json when the process ends
         (tools/retail_ab/melee_coverage.py reads them)."""
         import atexit
         import os
@@ -133,7 +133,8 @@ class MeleeFixture:
         from unicorn import UC_HOOK_BLOCK
         reached = set()
         lo, hi = min(r[0] for r in COVERED.values()), max(r[1] for r in COVERED.values())
-        self.vm.uc.hook_add(UC_HOOK_BLOCK, lambda uc, address, size, user: reached.add(address), begin=lo, end=hi)
+        self.vm.uc.hook_add(UC_HOOK_BLOCK, lambda uc, address, size, user: reached.add((address, size)),
+                            begin=lo, end=hi)
 
         def write():
             Path(out).mkdir(parents=True, exist_ok=True)
