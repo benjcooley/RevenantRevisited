@@ -4305,16 +4305,15 @@ void TRenderer::CompositeSwapchainTinted(TTextureHandle texture,
 // * and docs/FRAME_PIPELINE.md.                                            *
 // *************************************************************************
 
-TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm, bool prefer_alias)
+TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm, EBitmapDecode decode)
 {
     if (!bm || bm->width <= 0 || bm->height <= 0)
         return kInvalidTexture;
 
-    // Cache key folds in prefer_alias: the same bitmap decoded data-mode
-    // vs alias-mode is two distinct textures (cursor sprite vs its alias
-    // RLE shadow). Keying both lets cursor + soft shadow coexist without
-    // colliding in the cache.
-    const uint64_t key = UIBitmapAtlasKey(bm, prefer_alias);
+    // Cache key folds in the decode: the same bitmap decoded two ways is two
+    // distinct textures (the cursor sprite and its alias RLE shadow; a
+    // portrait with and without its own key).
+    const uint64_t key = UIBitmapAtlasKey(bm, decode);
     if (auto it = bitmap_texture_cache.find(key); it != bitmap_texture_cache.end())
         return it->second;
 
@@ -4322,7 +4321,7 @@ TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm, bool prefer_alias)
     const int32_t h = bm->height;
     const int32_t pitch = w * 4;
     std::vector<uint8_t> rgba(size_t(pitch) * size_t(h), 0);
-    if (!DecodeBitmapToRGBA(bm, rgba.data(), pitch, 0, 0, prefer_alias))
+    if (!DecodeBitmapToRGBA(bm, rgba.data(), pitch, 0, 0, decode))
     {
         log_warn("[renderer] DrawBitmap: DecodeBitmapToRGBA failed for bitmap %p (%dx%d, flags=0x%x)",
                  (void*)bm, w, h, bm->flags);
@@ -4339,20 +4338,20 @@ TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm, bool prefer_alias)
     return tex;
 }
 
-void TRenderer::DrawBitmap(PTBitmap bm, int32_t x, int32_t y, bool prefer_alias)
+void TRenderer::DrawBitmap(PTBitmap bm, int32_t x, int32_t y, EBitmapDecode decode)
 {
     if (!bm) return;
     const int32_t target_w = sapp_width();
     const int32_t target_h = sapp_height();
     SBitmapAtlasSlice slice;
-    if (LookupUIBitmapAtlasSlice(bm, prefer_alias, &slice))
+    if (LookupUIBitmapAtlasSlice(bm, decode, &slice))
     {
         CompositeSwapchain(slice.texture, x, y, bm->width, bm->height, target_w, target_h,
                            slice.src_x, slice.src_y, bm->width, bm->height,
                            slice.tex_width, slice.tex_height);
         return;
     }
-    const TTextureHandle tex = BitmapAsTexture(bm, prefer_alias);
+    const TTextureHandle tex = BitmapAsTexture(bm, decode);
     if (tex == kInvalidTexture) return;
     const sg_image img = TextureImage(tex);
     if (!img.id) return;
@@ -4370,7 +4369,7 @@ void TRenderer::DrawBitmapSubrect(PTBitmap bm,
     const int32_t target_w = sapp_width();
     const int32_t target_h = sapp_height();
     SBitmapAtlasSlice slice;
-    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
         CompositeSwapchain(slice.texture, dst_x, dst_y, src_w, src_h, target_w, target_h,
                            slice.src_x + src_x, slice.src_y + src_y, src_w, src_h,
@@ -4393,7 +4392,7 @@ void TRenderer::DrawBitmapTinted(PTBitmap bm, int32_t x, int32_t y,
     const int32_t target_w = sapp_width();
     const int32_t target_h = sapp_height();
     SBitmapAtlasSlice slice;
-    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
         CompositeSwapchainTinted(slice.texture, x, y, bm->width, bm->height, target_w, target_h,
                                  slice.src_x, slice.src_y, bm->width, bm->height,
@@ -4421,7 +4420,7 @@ void TRenderer::DrawBitmapSubrectTinted(PTBitmap bm,
     const int32_t target_w = sapp_width();
     const int32_t target_h = sapp_height();
     SBitmapAtlasSlice slice;
-    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
         CompositeSwapchainTinted(slice.texture, dst_x, dst_y, src_w, src_h, target_w, target_h,
                                  slice.src_x + src_x, slice.src_y + src_y, src_w, src_h,
@@ -4444,7 +4443,7 @@ void TRenderer::DrawBitmapToTarget(PTBitmap bm, int32_t x, int32_t y,
 {
     if (!bm) return;
     SBitmapAtlasSlice slice;
-    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
         Composite(slice.texture, x, y, bm->width, bm->height, target_w, target_h,
                   slice.src_x, slice.src_y, bm->width, bm->height,
@@ -4462,18 +4461,19 @@ void TRenderer::DrawBitmapSubrectToTarget(PTBitmap bm,
                                           int32_t dst_x, int32_t dst_y,
                                           int32_t src_x, int32_t src_y,
                                           int32_t src_w, int32_t src_h,
-                                          int32_t target_w, int32_t target_h)
+                                          int32_t target_w, int32_t target_h,
+                                          EBitmapDecode decode)
 {
     if (!bm || src_w <= 0 || src_h <= 0) return;
     SBitmapAtlasSlice slice;
-    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    if (LookupUIBitmapAtlasSlice(bm, decode, &slice))
     {
         Composite(slice.texture, dst_x, dst_y, src_w, src_h, target_w, target_h,
                   slice.src_x + src_x, slice.src_y + src_y, src_w, src_h,
                   slice.tex_width, slice.tex_height);
         return;
     }
-    const TTextureHandle tex = BitmapAsTexture(bm);
+    const TTextureHandle tex = BitmapAsTexture(bm, decode);
     if (tex == kInvalidTexture) return;
     Composite(tex, dst_x, dst_y, src_w, src_h, target_w, target_h,
               src_x, src_y, src_w, src_h,
@@ -4489,7 +4489,7 @@ void TRenderer::DrawBitmapSubrectStretchedToTarget(PTBitmap bm,
 {
     if (!bm || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return;
     SBitmapAtlasSlice slice;
-    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
         Composite(slice.texture, dst_x, dst_y, dst_w, dst_h, target_w, target_h,
                   slice.src_x + src_x, slice.src_y + src_y, src_w, src_h,
@@ -4512,7 +4512,7 @@ void TRenderer::DrawBitmapTintedToTarget(PTBitmap bm, int32_t x, int32_t y,
 {
     if (!bm) return;
     SBitmapAtlasSlice slice;
-    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
         CompositeTinted(slice.texture, x, y, bm->width, bm->height, target_w, target_h,
                         slice.src_x, slice.src_y, bm->width, bm->height,
@@ -4537,7 +4537,7 @@ void TRenderer::DrawBitmapSubrectTintedToTarget(PTBitmap bm,
 {
     if (!bm || src_w <= 0 || src_h <= 0) return;
     SBitmapAtlasSlice slice;
-    if (LookupUIBitmapAtlasSlice(bm, false, &slice))
+    if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
         CompositeTinted(slice.texture, dst_x, dst_y, src_w, src_h, target_w, target_h,
                         slice.src_x + src_x, slice.src_y + src_y, src_w, src_h,

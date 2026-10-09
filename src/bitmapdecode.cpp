@@ -108,24 +108,24 @@ bool DecodeBitmapHueChangedToRGBA(const TBitmap* bm, int32_t hue,
 }
 
 bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
-                        int32_t ox, int32_t oy, bool prefer_alias)
+                        int32_t ox, int32_t oy, EBitmapDecode decode)
 {
     if (!bm || bm->width <= 0 || bm->height <= 0) return false;
     if (bm->flags & BM_COMPRESSED) return false;  // TODO decompressor
     const int32_t w = bm->width, h = bm->height;
 
-    // Alias path: only when the caller explicitly asked for it (a shadow /
-    // glow draw). BM_ALIAS alone is NOT sufficient -- the cursor sprite
-    // carries both a real data array AND an alias buffer, and must decode
-    // from the data array. Retail keyed this off the DM_ALIAS draw mode,
-    // not the BM_ALIAS bitmap flag; prefer_alias is our equivalent.
+    // Alias path: only when the draw asked for it (a shadow / glow draw).
+    // BM_ALIAS alone is NOT sufficient -- the cursor sprite carries both a
+    // real data array AND an alias buffer, and must decode from the data
+    // array. Retail keyed this off the DM_ALIAS draw mode, not the BM_ALIAS
+    // bitmap flag; EBitmapDecode::Alias is our equivalent.
     //
     // The alias buffer stores anti-aliased pixels as an RLE coverage
     // stream: per scanline, alternating (skip-count, run-count,
     // [color16, alpha5]*) groups; AL_EOL ends a line, AL_EOD ends the
     // stream; alpha5 is 0..31 coverage (31 = opaque). C port of the
     // legacy MMX PutAlias* blit (graphics.cpp, now #if 0).
-    if (prefer_alias && (bm->flags & BM_ALIAS) && bm->alias.ptr())
+    if (decode == EBitmapDecode::Alias && (bm->flags & BM_ALIAS) && bm->alias.ptr())
     {
         const bool rgb565 = (bm->flags & BM_16BIT) != 0;
         const uint8_t* a   = (const uint8_t*)bm->alias.ptr();
@@ -228,6 +228,7 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
     if (bm->flags & (BM_15BIT | BM_16BIT))
     {
         const bool rgb565 = (bm->flags & BM_16BIT) != 0;
+        const bool overlay4444 = decode == EBitmapDecode::Overlay4444;
         const uint16_t key = (uint16_t)bm->keycolor;
         // Magenta (R=max,G=0,B=max) is the implicit transparency key in many
         // Revenant retail sprites. Match the packed value to the pixel format:
@@ -256,9 +257,20 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
                     const uint8_t a5 = alpha5[y * w + x] & 0x1f;
                     a = (uint8_t)((a5 << 3) | (a5 >> 2));   // 5-bit -> 8-bit
                 }
-                if (a == 0 || px == key || px == magentaKey)
+                if (a == 0 || (!overlay4444 && px == key) || px == magentaKey)
                 {
                     row[0]=row[1]=row[2]=row[3]=0;
+                }
+                else if (overlay4444)
+                {
+                    // REVSYNC: retail's 16-bit -> ARGB4444 blit truncates
+                    // (measured with the emulator's Put oracle).
+                    const uint16_t px565 = rgb565 ? px
+                                                  : uint16_t((px & 0x7c00) << 1 | (px & 0x03e0) << 1 | (px & 0x1f));
+                    row[0] = uint8_t((px565 >> 12) << 4);
+                    row[1] = uint8_t(((px565 >> 7) & 0xf) << 4);
+                    row[2] = uint8_t(((px565 >> 1) & 0xf) << 4);
+                    row[3] = a;
                 }
                 else
                 {
