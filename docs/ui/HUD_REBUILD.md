@@ -210,28 +210,28 @@ documented, never tuned around.
   spell bindings) through the same accessors retail uses. Gameplay's
   `HealthBar/StaminaBar/TextBar` writes are re-targeted to the real panes
   and the pre-release tube classes are removed.
-- **Classic rendering = retail's 2D raster plus quads.** Measured in the
-  emulator (2026-10-08):
-  - Retail composes each pane's textures in software: chrome and bars in
-    **ARGB4444**, text cells in **RGB565** keyed on magenta `0xf81f`.
-  - It uses its draw-routine selector (`FUN_004ad1d0`, under `Draw`
-    `FUN_004ad0d0`) over draw modes (default, transparent `0x100`, alpha
-    `0x2000`, translucent, fade, change-colour) and destination formats
-    (565/555/4444/1555/32).
-  - It then draws the textures as 1:1 quads.
-  - The port matches this the same way:
-    - Panes compose into 16-bit CPU surfaces with the **port's existing
-      `TSurface`/`graphics.cpp` software blitters** (the 1998 ancestors of
-      retail's), retail-synced and extended with the 4444/1555
-      destinations.
-    - Composition happens only when content changes, as retail does.
-    - The GPU draws the finished textures as nearest-sampled quads, with the
-      tint alpha. Opaque texels come out exact; alpha-blended edges are
-      exact to ±1 LSB (a recorded renderer limit).
-  - Each draw routine is A/B'd as a unit against retail's own `Draw` in the
-    emulator (crafted bitmaps, buffers and modes), before any pane uses
-    it.
-  - Revisited can later feed the same panes full-precision assets.
+- **Classic rendering: retail's visible result, by modern means.**
+  The engine is GPU-only and modern, and we don't write poor code to copy
+  retail's internals (user, 2026-10-08). Retail composes each pane's
+  textures in software (ARGB4444 chrome and bars, 565 keyed text cells),
+  then draws them as quads. The port does not emulate that pipeline:
+  - Panes draw the same layers directly as ordinary sprites through the
+    renderer (centralized rendering): backpanel, portrait, ring, icons,
+    bar slices, text cells. They use retail's assets, in retail's order, at
+    retail's exact positions, which the emulator records (e.g.
+    `plyrstatusbar.py`'s primitive recipe).
+  - Where retail fades a composite as one unit (a chip at fade < 6), the
+    pane draws that group into a standard offscreen layer and draws the
+    layer with opacity.
+  - Retail details that change what the player sees, and are cheap and
+    contained, are kept. Example: ARGB4444 decodes the way retail's raster
+    shows it (colour channels shifted, red 15 → 30/31).
+  - A/B acceptance:
+    - exact: geometry (every element's position, size and layering) and
+      opaque colours;
+    - stated tolerance: blend rounding at alpha edges, where retail's 4-bit
+      truncating compose and table blends differ from GPU float blending.
+- **Revisited** can later feed the same panes full-precision assets.
 - **Classic canvas.** The HUD renders into a 640×480 logical canvas,
   presented integer-scaled. The A/B renders that canvas offscreen 1:1.
 - **Test modes** host the production panes over a fixture world built
@@ -250,7 +250,7 @@ Each pane goes through the same loop:
 | Phase | Scope | Gate |
 |---|---|---|
 | **P0** | HUD slot (display env, loader, fixture objects, GDI boundary); port `--retail-ab=hud-*`; `hud_ab.py` | the retail status bar paints real pixels from `StatusBar.dat`; the port side round-trips one case; the triptych renders |
-| **P1a** | Retail 2D raster parity: `graphics.cpp` `Draw` selector + the routines the status bar uses (Box fill; Put default/transparent and alpha into 565 and 4444; surface-from-bitmap into 4444; 4444/565 copies; keyed 565 blit), retail-synced, unit A/B in the emulator | every routine bit-exact on randomized inputs |
+| **P1a** | Pane A/B harness: the port renders a pane over black at 640×480 from a case (headless test mode + readback); the compare checks geometry exactly and colour within the stated blend tolerance, and writes a retail / port / diff triptych | the status bar's current port output measured against retail |
 | **P1b** | `TPlyrStatusBar` production class (compose recipe recorded from retail: see `slots/hud/plyrstatusbar.py`), fades, bars kernel `0x54a5d0` (slices verified against traces), player + target sides | zero non-text diff across stat sweeps × target present/absent × fade ticks |
 | **P2** | Bottom bar: quickspell row, potion shelf + counts, end cap | same |
 | **P3** | `TSideTabsPane` + the sidebar mode cascade (`DAT_0065d1b8/bc`) | same, plus hover/pressed states |
@@ -272,21 +272,18 @@ each, merged back after their A/B report is clean.
     primitive recipe of the last frame (Put / ParamBlit / Box / Quad / Text
     with arguments) and the text calls.
   - Rendering architecture decided (§5, P1a/P1b).
-  - **P1a started.** The port's software blitters were empty shells: 71
-    routines whose 1998 x86 assembly was disabled under `#if 0`, with no
-    C++ body. New C++ bodies so far:
-    - the 2-byte `Put` copy and `Box` fill;
-    - the new `Alpha4444` (retail `0x004b3790`, formula recovered and
-      verified);
-    - the `BM_ARGB4444` / `BM_ARGB1555` formats.
-  - `tools/retail_ab/hud_ab.py draw-put`: **500/500 random cases
-    bit-exact** against retail's own `TSurface::Put` (real StatusBar.dat
-    bitmaps plus synthetic 4444; default, plain and alpha modes).
-  - Findings, both open P1a items (the HUD's own draws are in bounds and
-    its surfaces even-width):
-    - Retail surfaces *wrap* draws that cross an edge (clip mode).
-    - Retail's Put faults on odd-width surfaces with a DWORD-aligned
-      pitch.
+  - P1a, first pass:
+    - The port's software blitters were empty shells (71 routines, x86 under
+      `#if 0`). C++ bodies were written for the 4444 compose (500/500
+      bit-exact against retail via `hud_ab.py draw-put`), then reverted:
+      the port draws retail's layers directly with modern sprites (§5).
+    - Kept: the retail formulas (§5, verified), the oracle `draw_ab.py`,
+      the case generator, the `BM_ARGB4444` / `BM_ARGB1555` formats, and the
+      4444 decode as retail's raster does it.
+  - Findings, open P1a items (the HUD's own draws are in bounds and its
+    surfaces even-width):
+    - Retail surfaces *wrap* draws that cross an edge.
+    - Retail's Put faults on odd-width surfaces with a DWORD-aligned pitch.
   - First light: retail's status bar paints (chrome, icons, bars).
   - GDI text calls are recorded.
   - §2 corrected after merging GitHub main (gameflow's live binding).

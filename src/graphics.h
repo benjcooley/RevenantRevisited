@@ -243,9 +243,6 @@ bool AlphaDimZ(PSDrawBlock db, PSDrawParam dp);
   // Draws a bitmap using alpha channel info, dimming the alpha by dp->color.
 bool Alpha32(PSDrawBlock db, PSDrawParam dp);
   // Draws a bitmap using alpha channel info for 32 bit buffers.
-bool Alpha4444(PSDrawBlock db, PSDrawParam dp);
-  // Composites an ARGB4444 bitmap over an ARGB4444 buffer with the pixels'
-  // own alpha (retail 0x004b3790; the texture-overlay HUD compose).
 bool AlphaDimZNoBitmap(PSDrawBlock db, PSDrawParam dp);
   // Draws an alpha dimming z image with no bitmap data (single color)
 
@@ -433,15 +430,6 @@ inline void SetupDraw(int32_t *bmwidth, int32_t *bmheight, int32_t *srcoff, int3
 
     *srcoff = *srcoff * srcbytes;
     *srcadd = *srcadd * srcbytes;
-}
-
-// Bytes per pixel of a bitmap format (SetupDraw's rule: 2 unless 8/24/32).
-inline int32_t PixelBytes(uint32_t flags)
-{
-    if (flags & BM_8BIT) return 1;
-    if (flags & BM_24BIT) return 3;
-    if (flags & BM_32BIT) return 4;
-    return 2;
 }
 
 #define SETUP_DRAW\
