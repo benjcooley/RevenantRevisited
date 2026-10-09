@@ -3523,6 +3523,8 @@ bool Initialize(const char* mode)
         return InitializeUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         return InitializeUIPlyrStatusBarMode();
+    if (strcmp(mode, "ab-plyrstatusbar") == 0)
+        return InitializeABPlyrStatusBarMode();
     if (strcmp(mode, "ui-sidetabs") == 0)
         return InitializeUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)
@@ -3602,6 +3604,8 @@ void Close(const char* mode)
         CloseUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         CloseUIPlyrStatusBarMode();
+    if (strcmp(mode, "ab-plyrstatusbar") == 0)
+        CloseABPlyrStatusBarMode();
     if (strcmp(mode, "ui-sidetabs") == 0)
         CloseUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)
@@ -3683,6 +3687,8 @@ void Render(const char* mode)
         return RenderUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         return RenderUIPlyrStatusBarMode();
+    if (strcmp(mode, "ab-plyrstatusbar") == 0)
+        return RenderABPlyrStatusBarMode();
     if (strcmp(mode, "ui-sidetabs") == 0)
         return RenderUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)

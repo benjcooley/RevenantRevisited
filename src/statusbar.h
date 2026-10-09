@@ -45,7 +45,7 @@ struct SFontAtlas;
 class TPlyrStatusBar final : public TPane
 {
   public:
-    TPlyrStatusBar() = default;
+    TPlyrStatusBar();
     ~TPlyrStatusBar() override;
     TPlyrStatusBar(const TPlyrStatusBar&) = delete;
     TPlyrStatusBar& operator=(const TPlyrStatusBar&) = delete;

@@ -30,7 +30,6 @@
 #include "uiequiptest.h"
 #include "uiinventorytest.h"
 #include "uimaptest.h"
-#include "uiplyrstatusbartest.h"
 #include "uiquickspelltest.h"
 #include "uisidebartest.h"
 #include "uispellbooktest.h"
@@ -39,7 +38,6 @@
 
 namespace {
 
-bool g_initStatusBar = false;
 bool g_initBottomBar = false;
 bool g_initBarInv    = false;
 bool g_initQuickSp   = false;
@@ -81,9 +79,6 @@ bool InitializeUIHudMode()
     log_info("[ui-hud] === full HUD assembly ===");
     BeginUIBitmapAtlasBuild();
     RegisterUIBitmapAtlasArchive(GameData);
-
-    // Anchored to top of screen
-    SafeInit("PlyrStatusBar", g_initStatusBar, &InitializeUIPlyrStatusBarMode);
 
     // Anchored to bottom of screen — three layered pieces
     SafeInit("BottomBar",     g_initBottomBar, &InitializeUIBottomBarMode);
@@ -143,7 +138,6 @@ void RenderUIHudMode()
 
 void RenderUIHudModeEmbedded()
 {
-    if (g_initStatusBar) RenderUIPlyrStatusBarModeEmbedded();
     if (g_initBottomBar) RenderUIBottomBarModeEmbedded();
     if (g_initBarInv)    RenderUIBarInvModeEmbedded();
     if (g_initQuickSp)   RenderUIQuickSpellModeEmbedded();
@@ -201,6 +195,5 @@ void CloseUIHudMode()
     SafeClose("QuickSpell",    g_initQuickSp,   &CloseUIQuickSpellMode);
     SafeClose("BarInv",        g_initBarInv,    &CloseUIBarInvMode);
     SafeClose("BottomBar",     g_initBottomBar, &CloseUIBottomBarMode);
-    SafeClose("PlyrStatusBar", g_initStatusBar, &CloseUIPlyrStatusBarMode);
     ClearUIBitmapAtlas();
 }

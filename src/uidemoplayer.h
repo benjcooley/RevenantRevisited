@@ -16,6 +16,8 @@
 
 #pragma once
 
+class TPlayer;
+
 namespace UIDemoPlayer
 {
 
@@ -29,5 +31,8 @@ void Pulse();
 
 // Release the main player and delete everything Install built.
 void Remove();
+
+// The opponent Install built (fighting the player), or null.
+TPlayer* Opponent();
 
 } // namespace UIDemoPlayer

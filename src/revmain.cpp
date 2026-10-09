@@ -1799,6 +1799,15 @@ void GetParameters(int argc, char **argv)
             StartupInputScript = p;
     }
 
+  // AB-CASE="..." AB-OUT=<file> -- one HUD A/B case for a --test=ab-* host.
+    {
+        std::string p;
+        if (arg_param(cmd, "ab-case", p))
+            StartupAbCase = p;
+        if (arg_param(cmd, "ab-out", p))
+            StartupAbOut = p;
+    }
+
   // SECTOR=L_X_Y — pick which sector --test=sector keeps alive and renders.
   // Empty = the default hard-coded pick (0_2_25, Misthaven).
     {

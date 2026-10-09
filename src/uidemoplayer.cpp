@@ -274,6 +274,11 @@ void Pulse()
     g_opponent->SetFatigue(int32_t(g_opponent->MaxFatigue() * Lerp(kFatigueRange, tri)));
 }
 
+TPlayer* Opponent()
+{
+    return g_opponent;
+}
+
 void Remove()
 {
     if (g_player && g_player->IsFighting())
