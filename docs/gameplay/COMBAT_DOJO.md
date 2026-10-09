@@ -98,7 +98,7 @@ only).
 
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
-| D0 | which rules files retail reads (loose `Resources/` against `resources.rvr`) | file open path | `rev_fopen` | [ ] |
+| D0 | which rules files retail reads (loose `Resources/` against `resources.rvr`) | `0x4a13f0` -> `0x4a1240` | `rev_fopen` | [x] packs first (§5.6) |
 | D1 | rules.def / char.def / spell.def parse: every CHARACTER, ATTACK, IMPACT, SPELL | `0x48b990` `0x489850` `0x53ead0` | `TRules::Load`, `SCharData::Load`, `SSpellData::Load` | [ ] |
 
 ## 3. Determinism
@@ -202,12 +202,24 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
    characters, a stat for the player; Armor is `chardata->armor` or the
    player's equipped protection. The port adds `damagemods` (sign flipped)
    and ignores armor and the flags.
-6. **Data provenance.** The port reads the 1998 `data/Resources/rules.def`
-   (no TOHIT tables, FATIGUEDATA 25,1,100); retail's is the 8.6 KB
-   `rules.def` in `resources.rvr`. The retail lab install's loose
-   `Resources/rules.def` is the port's 1998 file (copied in 2026-05-05),
-   and `effects.def` / `render_metadata.def` there are port files too. D0
-   settles which one the shipped executable reads.
+6. **Data provenance (D0, settled).** Retail opens every combat data
+   file (rules.def, char.def, class.def, spell.def, weapon/armor/equip,
+   stats, master.s) from the packs first (`0x4a13f0` -> `0x4a1240`, arg 0)
+   and only then a loose file; only the .def screen loader `0x4377c0` is
+   loose-first. So the retail lab's stray loose files (the 1998 rules.def,
+   a 14-values-different char.def) were never read, and the DOSBox
+   captures used the 1999 data. feature/combat reads the packs first too
+   (gameflow 36faa5f); main still read the loose 1998 rules.def. The parse
+   itself still differs (D1, forensics/COMBAT_DATA.md): ENEMIES/GROUPS
+   truncated at 47 characters in the port (Locke's enemies lose
+   "supernatural,undead"), TOHIT* and AMMODATA skipped, FATIGUEATTACK
+   read as ATTACK, MAGICATTACK conditions and swipe frames dropped,
+   several CHARACTER tags skipped, different defaults.
+7. **Distance callers (audit 2026-10-08).** Retail's script value
+   `getdistance` (`0x41f991`) and SnapDist (`0x46f090`) call the virtual
+   (slot 4), so a character's distance there is edge to edge in retail
+   too; the trigger test doesn't use object Distance. The port's virtual
+   Distance matches all three.
 
 ## 6. Layouts used by the fixtures
 
