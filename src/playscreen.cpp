@@ -1818,7 +1818,8 @@ void TPlayScreen::UpdateMove()
     uint32_t state, changed;
     ControlMap.GetCommandFlags(state, changed);
 
-    // Synthesize diagonal flags from adjacent cardinals so keyboards
+    // REVSYNC-DIVERGENCE: retail takes the lowest held direction bit (two
+    // arrow keys walk along one of them). Synthesize diagonal flags from adjacent cardinals so keyboards
     // without a Home / PgUp / End / PgDn cluster can still walk
     // diagonally with two arrow keys. The retail bit-scan picks the
     // lowest set CMDFLAG bit, so without this UP+RIGHT would yield
@@ -1848,12 +1849,19 @@ void TPlayScreen::UpdateMove()
     for (c = 1; c < (1 << 8) && !(c & state); c <<= 1, angle += 32);
     if (angle > 255) angle = -1;  // no direction held
 
+    // REVSYNC: UpdateMove @ 0x0047de30 -- leap in a combat or bow root;
+    // else Go, unless a move already heads that way (the doing block's move
+    // angle: holding a direction calls Go once, not every tick). (The debug
+    // camera, 0x006671f0 set by the dev 'X' key, turns the direction and
+    // has a mode of its own; not ported.)
     if (angle >= 0)
     {
+        const TActionBlock* doing = Player->DoingBlock();
+        const bool moving = doing && (doing->action == ACTION_MOVE || doing->action == ACTION_COMBATMOVE ||
+                                      doing->action == ACTION_BOWMOVE);
         if (Player->IsFighting() && (state & CMDFLAG_LEAP))
             Player->Leap(angle);
-        else if (Player->GetMoveAngle() != angle ||
-                 !(Player->IsDoing(ACTION_MOVE) || Player->IsDoing(ACTION_COMBATMOVE)))
+        else if (!moving || doing->moveangle != angle)
             Player->Go(angle);
     }
     else if (changed && Player->IsMoving() && !Player->IsGoto())
