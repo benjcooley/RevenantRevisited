@@ -187,8 +187,8 @@ void CaptureTextBar(log_Event* ev)
 std::vector<int32_t> g_casts;
 const TFixtureWorld* g_spellWorld = nullptr;
 
-bool CaseCast(TCharacter* self, const char* kind, const char* text, TObjectInstance** targets, int32_t numtargs,
-              const S3DPoint* sourcepos)
+bool RecordCast(const char* kind, TCharacter* self, const char* text, TObjectInstance** targets, int32_t numtargs,
+                const S3DPoint* sourcepos)
 {
     int32_t result = 1;
     if (!g_casts.empty())
@@ -218,6 +218,18 @@ bool CaseCast(TCharacter* self, const char* kind, const char* text, TObjectInsta
     return result != 0;
 }
 
+bool CaseCastByName(TCharacter* self, const char* name, TObjectInstance** targets, int32_t numtargs,
+                    const S3DPoint* sourcepos)
+{
+    return RecordCast("CastByName", self, name, targets, numtargs, sourcepos);
+}
+
+bool CaseCastByTalismans(TCharacter* self, const char* talismans, TObjectInstance** targets, int32_t numtargs,
+                         const S3DPoint* sourcepos)
+{
+    return RecordCast("CastByTalismans", self, talismans, targets, numtargs, sourcepos);
+}
+
 // What a spell case adds to the world and its scope: the player as the main
 // player (retail's 0x00667fcc; `mainplayer: false` for none), the seams
 // above. Put back when the case ends.
@@ -238,13 +250,15 @@ class SSpellScope
         for (const JsonValue& v : cs["casts"].Items())
             g_casts.push_back((int32_t)v.Int());
         g_spellWorld = &world;
-        TCharacter::castSeam = CaseCast;
+        TCharacter::castSeam = CaseCastByName;
+        TCharacter::castByTalismansSeam = CaseCastByTalismans;
         g_recordTextBar = true;
     }
     ~SSpellScope()
     {
         g_recordTextBar = false;
         TCharacter::castSeam = nullptr;
+        TCharacter::castByTalismansSeam = nullptr;
         g_spellWorld = nullptr;
         Player = savedPlayer;
     }
