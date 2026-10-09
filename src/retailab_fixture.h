@@ -231,6 +231,11 @@ class TFixtureChar : public Base, public IFixtureChar
                 weapontype = (int32_t)spec["weapon"]["type"].Int();
                 weapondamage = (int32_t)spec["weapon"]["damage"].Int();
             }
+            if (spec.Has("maxmana"))
+            {
+                hasmaxmana = true;
+                maxmana = (int32_t)spec["maxmana"].Int();
+            }
         }
     }
     TFixtureChar(const TFixtureChar&) = delete;
@@ -417,6 +422,15 @@ class TFixtureChar : public Base, public IFixtureChar
         return ValueSeam("WeaponDamage", weapondamage);
     }
 
+    // A player's MaxMana, when the case gives `maxmana` (retail's seam at
+    // TPlayer::MaxMana 0x00520770); a character's is its chardata's.
+    int32_t MaxMana() override
+    {
+        if (!hasmaxmana)
+            return Base::MaxMana();
+        return ValueSeam("MaxMana", maxmana);
+    }
+
     void WriteAttackState(JsonOut& j) override
     {
         j.Key("attackstate").Begin('{');
@@ -490,6 +504,8 @@ class TFixtureChar : public Base, public IFixtureChar
 
     bool weapon = false;
     int32_t weapontype = 0, weapondamage = 0;
+    bool hasmaxmana = false;
+    int32_t maxmana = 0;
 
     std::string who;
     std::vector<SFixtureState> states;

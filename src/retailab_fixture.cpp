@@ -210,6 +210,7 @@ void ReadCharData(const JsonValue& c, SCharData& cd)
     cd.combatrangemin = two[0], cd.combatrangemax = two[1];
     ReadInt(c["maxattackrange"], cd.maxattackrange);
     ReadInt(c["bleeder"], cd.bleeder);
+    ReadInt(c["mana"], cd.mana);                       // a character's MaxMana (retail +0x1e0)
     ReadText(c["bodytype"], cd.bodytype, sizeof(cd.bodytype));
     int32_t block[3] = {cd.blockfreq, cd.blockmin, cd.blockmax};
     ReadInts(c["block"], block, 3);
@@ -282,6 +283,12 @@ const char* ObjStatName(int32_t statid)
         return "acbonus";
     if (statid == PLRVAL_FIRST + PLRVAL_EDGEBONUS)
         return "edgebonus";
+    if (statid == PLRVAL_FIRST + PLRVAL_MANACOSTPCT)
+        return "manacostpct";
+    if (statid == PLRVAL_FIRST + PLRVAL_SPELLDAMAGEINC)
+        return "spelldamageinc";
+    if (statid == SKE_FIRST + SK_INVOKE)
+        return "invokeexp";
     if (statid >= PLRSTAT_FIRST && statid < PLRSTAT_FIRST + NUM_PLRSTATS)
         return attributes[statid - PLRSTAT_FIRST];
     if (statid >= SK_FIRST && statid < SK_FIRST + NUM_SKILLS)
