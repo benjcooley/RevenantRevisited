@@ -71,7 +71,6 @@
 #include "retailab.h"
 #include "script.h"
 #include "textbar.h"
-#include "statusbar.h"
 #include "sound.h"
 #include "editorstub.h"
 #include "dls.h"
@@ -142,8 +141,6 @@ T3DScene        Scene3D;            // Display pointer
 TPlayScreen     PlayScreen;         // PlayScreen Object
 TMapPane        MapPane;            // Map pane for PlayScreen
 TInventory      Inventory;          // Inventory of objects
-THealthBar      HealthBar;          // Character's health
-TStaminaBar     StaminaBar;         // Character's fatigue
 TTextBar        TextBar;            // Info line for player
 TMultiCtrlPane  MultiCtrl;          // Multipane control panel (buttons)
 TEquipPane      EquipPane;          // Equipment pane

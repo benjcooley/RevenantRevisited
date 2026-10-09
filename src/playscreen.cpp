@@ -566,7 +566,7 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
     sec->AddObject(oi);
 
     // SetMainPlayer fires UI side effects (CenterOnObj / RefreshEquip /
-    // Inventory / HealthBar / StaminaBar) when CurrentScreen == &PlayScreen.
+    // Inventory) when CurrentScreen == &PlayScreen.
     // We are inside TPlayScreen::Initialize -- CurrentScreen is already
     // set, but the UI panes those calls touch are not yet initialized,
     // and one of them hangs. Clear CurrentScreen for the duration of

@@ -18,7 +18,6 @@
 #include "sound.h"
 #include "spell.h"
 #include "spellpane.h"
-#include "statusbar.h"
 #include "textbar.h"
 #include "weapon.h"
 
@@ -1430,10 +1429,6 @@ void TPlayerManager::SetMainPlayer(int32_t newplayernum)
 
           // Set inventory container
             Inventory.SetContainer(nullptr);
-
-          // Setup health bars
-            HealthBar.SetLevel(0);
-            StaminaBar.SetLevel(0);
         }
     }
     else
@@ -1450,10 +1445,6 @@ void TPlayerManager::SetMainPlayer(int32_t newplayernum)
 
           // Setup inventory pane
             Inventory.SetContainer(Player);
-
-          // Set status bars
-            HealthBar.SetLevel(Player->Health() * 1000 / Player->MaxHealth());
-            StaminaBar.SetLevel(Player->Mana() * 1000 / Player->MaxMana());
         }
     }
 }

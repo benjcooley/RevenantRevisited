@@ -30,7 +30,6 @@
 #include "money.h"
 #include "exit.h"
 #include "textbar.h"
-#include "statusbar.h"
 #include "spellpane.h"
 #include "sound.h"
 #include "logging.h"

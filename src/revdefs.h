@@ -189,17 +189,6 @@ constexpr int kInvSlotLast        = 0x115;
 #define TEXTBARWIDTH    198
 #define TEXTBARHEIGHT   14
 
-// Status bars
-#define HEALTHBARX          16
-#define HEALTHBARY          94
-#define HEALTHBARWIDTH      12
-#define HEALTHBARHEIGHT     164
-
-#define STAMINABARX         612
-#define STAMINABARY         94
-#define STAMINABARWIDTH     12
-#define STAMINABARHEIGHT    164
-
 // Status bar for editor
 #define STATUSBARX      4
 #define STATUSBARY      (FRAMEMAPPANEY+FRAMEMAPPANEHEIGHT+4)
