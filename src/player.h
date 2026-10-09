@@ -239,8 +239,9 @@ class TPlayer : public TCharacter
       // Invokes the given quickspell for the player
 
     // Info functions
-    virtual int32_t GetResistance(int32_t type);
-      // Get character's resistance to the given damage type
+    int32_t DamageModifier(int32_t damagetype) override;
+      // REVSYNC: TPlayer::Resist @ 0x005208d0 (slot 0x2c8) -- the modified copy's
+      // DmgRes stat for the type (0 past the copy's end)
     bool GetFieldText(const char *field, char *buf, int32_t buflen) override;
       // Player fields of the stat sheet (retail 0x0051dfb0)
 
@@ -366,8 +367,23 @@ class TPlayer : public TCharacter
         return ((PTWeapon)PrimeHand())->Type();
         else return WT_HAND; }
       // Returns the type of weapon being used
-//  virtual int32_t WeaponDamage() { if (PrimeHand()) return PrimeHand()->GetStat("Damage"); else return chardata->handdamage; }
-      // Returns the current weapon's damage value
+    int32_t WeaponDamage() override;
+      // REVSYNC: 0x00520830 -- the held item's Damage, else the character data's
+    int32_t AttackModifier() override;
+      // REVSYNC: 0x0051a480 -- ATTACKMOD, Agility's STATLEVEL, the spells' offense,
+      // the skill of the weapon held
+    int32_t DefenseModifier() override;
+      // REVSYNC: 0x0051a4e0 -- DEFENSEMOD, Reflexes' STATLEVEL, the spells' defense
+    int32_t Offense() override;
+      // REVSYNC: 0x0051a520 -- Level x TOHITRANGEPLYR + AttackModifier
+    int32_t Defense() override;
+      // REVSYNC: 0x0051a550 -- Level x TOHITRANGEPLYR + DefenseModifier
+    int32_t LuckMod() override { return Rules.StatLevel(PLRSTAT_LUCK, Luck()); }
+      // REVSYNC: 0x0051a580
+    int32_t StrengthMod() override { return Rules.StatLevel(PLRSTAT_STRN, Strn()); }
+      // REVSYNC: 0x00520900
+    bool HoldsLight() override;
+      // REVSYNC: 0x00519970 -- a light source in equipment slot 6 (retail +0x2b8): the torch
     int32_t StealthMod() override { 
         return SkillPcnt(SK_STEALTH, 10) + 
             (Body()?Body()->GetStat("Stealth"):0) + 

@@ -1061,8 +1061,9 @@ class TObjectInstance : protected SObjectDef
         // Resets class stat to default value
     void ResetObjStat(int32_t statid) { stats[statid] = cl->GetObjStat(objtype, statid); }
         // Resets object stat to default value
-    int32_t GetStat(const char *statname) const;
-        // Returns a statistic given the statistic name (stat can be object or class stat)
+    virtual int32_t GetStat(const char *statname) const;
+        // Returns a statistic given the statistic name (stat can be object or class stat).
+        // REVSYNC: 0x00473600, virtual (slot 0xd4) as in retail
     bool HasStat(const char *statname) const;
         // REVSYNC: 0x00473900 -- true if the name is one of this object's object or class statistics
     int32_t GetStat(const char *statname, char *str, int32_t id = -1) const;

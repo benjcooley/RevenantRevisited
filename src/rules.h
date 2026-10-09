@@ -338,6 +338,8 @@ class TRules
       // Experience a player needs to reach 'level' (retail 0x0048cc40)
     int32_t StatLevel(int32_t plyrstat, int32_t value) const { return statlevels.Get(plyrstat, value); }
       // The STATLEVEL percent of attribute 'plyrstat' (PLRSTAT_*) at 'value' (retail 0x0048cc20)
+    void SetStatLevel(int32_t plyrstat, int32_t level, int32_t value) { statlevels.Set(plyrstat, level, value); }
+      // One STATLEVEL entry (the retail A/B fixtures set the tables a case gives)
     const SItemData *GetItemData(int32_t objclass, const char *type) const;
       // The WEAPON.DEF / ARMOR.DEF entry of a weapon or armor type; null if none (retail 0x0048cb50)
     const std::vector<SItemData> &Weapons() const { return weapons; }
