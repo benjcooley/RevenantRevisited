@@ -381,6 +381,7 @@ python3 tools/retail_ab/retail_ab.py combat-resolve     # M5
 python3 tools/retail_ab/retail_ab.py combat-move        # M7
 python3 tools/retail_ab/retail_ab.py combat-update      # M1u
 python3 tools/retail_ab/retail_ab.py combat-sequence    # M8
+tools/walktest/walktest.py "<slot dir>" [--pattern sweep|walks|both|none] [--exec "player.goto X Y; ..."]
 python3 tools/retail_ab/retail_ab.py combat-data        # D1, every record field by field
 python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2
 python3 tools/retail_ab/retail_ab.py combat-go --all --case go.player.cf1.f0.b64
