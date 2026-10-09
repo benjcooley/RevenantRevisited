@@ -110,9 +110,11 @@ lives only in the fixture, so that move is mechanical.
 
 Also in the commit messages.
 
-- **Portrait fallback.** The status bar keeps the harness's `LockeFace`
-  portrait when the character carries no baked icon (state-0 inventory
-  image). Retail draws no face then. Unchanged by this work.
+- **Portrait fallback.** Resolved 2026-10-09 (HUD_REBUILD.md): the status
+  bar draws the character's InventoryImage as retail does. With
+  `T3DImagery::GetInvImage` answering the state-0 icon whatever the state
+  (retail `0x0040ce60`), characters have it, and the `LockeFace` fallback is
+  gone.
 - **Paperdoll pose.** Retail animates the paperdoll through its own
   counters (`mbr_0xbc/0xc4`) with an animation chosen through vtable
   `+0x131`, which is not identified. The pane holds frame 0 of the
@@ -183,8 +185,9 @@ Current behaviour is kept until these are answered.
 
 1. Paperdoll: does retail's paperdoll animate (an idle loop), or hold one
    pose? Which animation?
-2. Status bar: when the player has no portrait icon, does retail show an
-   empty frame? (The port shows `LockeFace`.)
+2. Answered by the emulator (2026-10-09): retail draws whatever the
+   character's +0x130 image is, which is its state-0 icon. With none, the
+   ring is empty. The port now does the same.
 3. New game: Locke starts with 0 of 105 mana (newgame.sav stores 0). Is
    that retail?
 4. Answered by the decompile (gameplay/forensics/PLAYER_STATS.md §7):

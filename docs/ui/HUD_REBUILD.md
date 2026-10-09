@@ -100,17 +100,23 @@ exact and builds on the same panes through anchors.
     forces `DAT_006680c8 = 1`, so the software mode always draws the NoTex
     2D HUD.
 - **The emulator's HUD setup is a declared hybrid.**
-  1. Retail boots for real in `BLUE` mode.
-  2. Before the HUD panes initialize, the fixture selects the
-     texture-overlay path (`DAT_006680c8 = 0`). Every pane's composition
-     (textures, text, tints, positions) is then the hardware path's own
-     code.
-  3. Only the final 1:1 quad raster runs on the internal rasterizer instead
-     of the D3D device.
-  - The hardware rasterizer's own behavior (bilinear filtering, texel
-    alignment via `TEXALIGN`, and probably the pink fringe) is a recorded
-    renderer limit, the same treatment the VFX A/B gives the software
-    raster.
+  1. Retail boots for real, on a fake 16 MB 3D card whose Direct3D offers
+     no texture-capable device (`slots/hud/README.md`).
+  2. Retail then takes the texture-overlay path (`DAT_006680c8 = 0`) by its
+     own rules. Every pane's composition (textures, text, tints, positions)
+     is the hardware path's own code.
+  3. Only the final quad draw is not retail's. Retail would fall back to
+     its internal software rasterizer, which sets no texture stages. It
+     draws overlay quads opaque whatever their tint, so chips never fade,
+     and its texture step drifts a texel along a wide quad (measured
+     2026-10-09).
+     - The fixture takes over T3DScene's quad submit (`0x00414550`) and
+       draws each quad as the device would (`slots/hud/overlayraster.py`):
+       texels 1:1, modulated by the tint (blend mode 4: COLOROP and ALPHAOP
+       MODULATE, `0x00417d60`), then alpha-blended.
+  - Card-specific behavior (bilinear filtering, texel alignment via
+    `TEXALIGN`, and probably the pink fringe) is a recorded renderer
+    limit.
 - **Text** is GDI. `FUN_004be2b0` (Surface.cpp) selects the font's HDC
   from `DAT_0065b020[font]`, draws with `TextOutA`/`DrawTextA`, then
   applies the 3-pass shadow / color handling. Imports present:
@@ -163,28 +169,37 @@ setup once, checkpoint, restore per case.
   ticks. The output is the 640×480 RGB565 capture, the per-pane rect and
   the text-call log.
 
-**Port side: `Revenant --retail-ab=hud-<pane> --ab-cases=F --ab-out=F`**
-(`src/retailab.*`, same CLI as gameflow).
-1. Build the production pane over real game objects configured from the
-   case (a `TPlayer` with those stats, …).
-2. Render the HUD canvas offscreen at 640×480 1:1.
-3. Read it back, quantize to RGB565, and write the capture plus its
-   text-call log.
+**Port side: `Revenant --headless --test=ab-<pane> --ab-case=… --ab-out=F
+--snap=F`.** A pane needs the GPU, so its A/B host is a test mode, not the
+pre-engine `--retail-ab` dump (`src/uiplyrstatusbartest.*` for the first).
+1. Build the production pane over real game objects (the demo player and
+   its opponent) set up from the case (fills, the fight).
+2. On a frame at a tick boundary (`--snapstep=0.03125`), stop the clock and
+   run the pane the case's ticks.
+3. Write the 640×480 frame (`--snap`). Write what the pane shows (names,
+   levels, stats, the portraits' TBitmap bytes) as JSON (`--ab-out`). The
+   retail side runs on exactly those inputs.
 
-**Compare: `tools/retail_ab/hud_ab.py <pane>`.**
-- Runs both sides over the case set.
-- Writes per case: a retail | port | diff triptych PNG, the differing
-  pixel count, the diff bbox, the max channel delta, and text-call
-  differences.
-- Writes a report with the retail build hash, port commit and case-set
-  hash.
+**Compare: `tools/retail_ab/hud_ab.py <pane>`** (run it under
+`caffeinate -du`: headless captures stall while the display sleeps).
+- Runs both sides over the case set, quantises both frames to RGB565.
+- Holds each pixel to a tolerance the fixture's masks give:
+  - exact by default;
+  - one RGB565 step (9) where a quad's blend mixed (`blend.screen`);
+  - two 4-bit steps plus that (43) where the pixel comes from a texel
+    retail blended into its ARGB4444 texture in 4-bit steps
+    (`blend.composed`, `slots/hud/blendmap.py`). The port blends in float.
+- Masks retail's text cells until the emulator draws GDI glyphs (P6), and
+  reports port text just outside a cell as text overflow.
+- Writes per case a retail | port | diff triptych PNG and the counts, max
+  deltas and defect bbox. Writes a report with the retail build hash, the
+  port binary hash and the case set.
 - The known-retail-bug class (pink fringe) is reported separately and
   never counted as a port defect.
 
-**Acceptance per pane:** zero differing pixels outside text across its
-case set, matching text calls; after P6, zero differing pixels overall.
-Renderer limits found along the way (e.g. ARGB4444 quantization) are
-documented, never tuned around.
+**Acceptance per pane:** zero defects across its case set; after P6, zero
+text overflow and text pixels compared too. Renderer limits found along the
+way are documented, never tuned around.
 
 ## 5. Code shape (target)
 
@@ -250,8 +265,8 @@ Each pane goes through the same loop:
 | Phase | Scope | Gate |
 |---|---|---|
 | **P0** | HUD slot (display env, loader, fixture objects, GDI boundary); port `--retail-ab=hud-*`; `hud_ab.py` | the retail status bar paints real pixels from `StatusBar.dat`; the port side round-trips one case; the triptych renders |
-| **P1a** | Pane A/B harness: the port renders a pane over black at 640×480 from a case (headless test mode + readback); the compare checks geometry exactly and colour within the stated blend tolerance, and writes a retail / port / diff triptych | the status bar's current port output measured against retail |
-| **P1b** | `TPlyrStatusBar` production class (compose recipe recorded from retail: see `slots/hud/plyrstatusbar.py`), fades, bars kernel `0x54a5d0` (slices verified against traces), player + target sides | zero non-text diff across stat sweeps × target present/absent × fade ticks |
+| **P1a** ✓ | Pane A/B harness: the port renders a pane over black at 640×480 from a case (headless test mode + readback); the compare checks geometry exactly and colour within the stated blend tolerance, and writes a retail / port / diff triptych | the status bar's current port output measured against retail |
+| **P1b** ✓ | `TPlyrStatusBar` production class (compose recipe recorded from retail: see `slots/hud/plyrstatusbar.py`), fades, bars kernel `0x54a5d0` (slices verified against traces), player + target sides | zero non-text diff across stat sweeps × target present/absent × fade ticks |
 | **P2** | Bottom bar: quickspell row, potion shelf + counts, end cap | same |
 | **P3** | `TSideTabsPane` + the sidebar mode cascade (`DAT_0065d1b8/bc`) | same, plus hover/pressed states |
 | **P4** | Sidebar panes: Stats, Equip, Spellbook, Inventory, Map, SpellCreate | same, per pane |
@@ -287,3 +302,39 @@ each, merged back after their A/B report is clean.
   - First light: retail's status bar paints (chrome, icons, bars).
   - GDI text calls are recorded.
   - §2 corrected after merging GitHub main (gameflow's live binding).
+- 2026-10-09: **P1a and P1b done.**
+  - `TPlyrStatusBar` (`src/statusbar.{h,cpp}`) replaces the 1998 tube bars
+    and the harness. `TPlayScreen` hosts it after the text bar.
+    `--test=ui-plyrstatusbar` and `--test=ab-plyrstatusbar` are thin hosts
+    over it.
+  - `hud_ab.py statusbar`: 20/20 cases with no defects. Every opaque pixel
+    is exact; blends are within 9 (screen) and 41 (composed).
+  - What the A/B found and fixed:
+    - `T3DImagery::GetInvImage` answers with the state-0 icon whatever the
+      state (`0x0040ce60`). Characters now have portraits; there is no
+      LockeFace.
+    - The portrait goes through a magenta-keyed 565 scratch into the
+      ARGB4444 chip: black stays opaque and colour is 4-bit
+      (`EBitmapDecode::Overlay4444`).
+    - The fade alpha is retail's integer `fade * 255 / 6`.
+  - Emulator findings:
+    - Retail's software rasterizer ignores a quad's tint alpha and drifts a
+      texel on wide quads. The fixture now draws quads as the D3D device
+      does (§3).
+    - Retail's 555 -> 565 widens green by a shift; 565 -> ARGB4444
+      truncates (Put oracle).
+  - Open, for P6:
+    - Retail's "Small" is `CreateFontA(+12, "Arial")`: a 12 px cell, about
+      9 px em. The port's "Small" atlas is 12 px by stb's
+      ScaleForPixelHeight, about 10.7 px em.
+    - `font.cpp`'s `kGdiTopLeading = 2` puts glyphs 2 px above the cell top,
+      where GDI's DT_TOP never draws (the A/B's text overflow).
+    - Both change every pane's text, so they get settled together against
+      Win98 GDI captures.
+  - Open, elsewhere:
+    - `TDialogPane` takes its Ring from `statusbarnotex.dat`. Retail uses
+      `DAT_0065a9d0`, which is `StatusBar.dat` on the Classic path.
+    - `invslot.cpp`'s probe of other states for an icon is redundant now
+      that GetInvImage follows retail.
+    - `--max-runtime` is armed on the first frame, so it never fires when no
+      frame comes (a sleeping display).

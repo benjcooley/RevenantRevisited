@@ -54,3 +54,24 @@ choices.
   Retail's `_beginthreadex(..., 1, ...)` passes 1.
 - `Runtime.call_sp`: host calls can start below a guest frame that stays
   live (WinMain stopped mid-way).
+
+## Fixtures
+
+Each fixture checkpoints the booted world and restores it per case; with
+`--serve` it speaks JSONL (`{"id", "case"}` -> `{"id", "ok", "result"}`).
+
+| Fixture | Runs |
+|---|---|
+| `plyrstatusbar.py` | TPlyrStatusBar (`0x0065a8c0`) over fixture characters: the frame, the last frame's primitives, the GDI text calls, and the blend masks |
+| `draw_ab.py` | retail's `TSurface::Put` on explicit bytes: the oracle for retail's 2D blits and conversions (`--bitmaps` dumps StatusBar.dat's) |
+
+Shared by the pane fixtures:
+
+| Module | Does |
+|---|---|
+| `hudscene.py` | archives through retail's loader, fixture characters (stats, class, portrait), one frame of a pane, the back buffer |
+| `overlayraster.py` | draws the overlay quads (T3DScene `0x00414550`) as the D3D device does: texels 1:1, modulated by the tint, alpha-blended. Retail's own fallback rasterizer ignores the tint's alpha and drifts a texel on wide quads |
+| `blendmap.py` | marks the screen pixels drawn from texels retail blended in 4-bit steps while composing its ARGB4444 textures |
+
+The port side and the compare are `tools/retail_ab/hud_ab.py` (run under
+`caffeinate -du`; see docs/DEBUG_TOOLING.md).

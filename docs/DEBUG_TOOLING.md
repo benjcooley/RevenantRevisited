@@ -110,6 +110,16 @@ what macOS App Nap throttles, which held back the frame timer for minutes
 `--headless` also takes an `NSProcessInfo` activity that opts out
 (`HeadlessWindow::KeepAwake`, from `sokol_main`).
 
+A sleeping display stops the frames too: macOS stops driving the frame
+callback, and a headless run sits after "logging initialized" until the
+display wakes. `--max-runtime` doesn't catch it, because it is armed on the
+first frame. Unattended runs (A/B sweeps, filmstrips) go under
+`caffeinate -du`, which wakes the display and keeps it on for the command:
+
+```sh
+caffeinate -du python3 tools/retail_ab/hud_ab.py statusbar
+```
+
 Each of these quit requests ends the process through the normal path
 (`AppCleanup` → `ShutdownGlobals`):
 
