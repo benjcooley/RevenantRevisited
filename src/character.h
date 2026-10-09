@@ -86,6 +86,19 @@ class TCharacter : public TComplexObject
     static inline CastSeam castSeam = nullptr;
       // Likewise for CastByName (retail SpellList::Find 0x0053f010 + Cast
       // 0x004d5c20), which DoAttack calls for a MAGICATTACK
+    using IsEnemySeam = bool (*)(TCharacter* self, TCharacter* other);
+    static inline IsEnemySeam isEnemySeam = nullptr;
+      // Likewise for IsEnemy (retail 0x004c89c0)
+    using BeginFightingSeam = bool (*)(TCharacter* self, TCharacter* target, ACTION action);
+    static inline BeginFightingSeam beginFightingSeam = nullptr;
+      // Likewise for BeginFighting (retail 0x004d3b90)
+    using DamageSeam = void (*)(TCharacter* self, int32_t damage, int32_t damagetype, int32_t modifier,
+        TActionBlock* action, TCharacter* attacker);
+    static inline DamageSeam damageSeam = nullptr;
+      // Likewise for Damage (retail 0x004c4950); the seam owns `action` as Damage does
+    using EffectBurstSeam = void (*)(TCharacter* self, const char* name, int32_t height);
+    static inline EffectBurstSeam effectBurstSeam = nullptr;
+      // Likewise for EffectBurst (retail 0x004c85d0)
       // Likewise for CanSeeCharacter (retail 0x004cd540)
     using NearbyCharactersSeam = std::vector<TCharacter*> (*)(const S3DPoint& pos, int32_t range);
     static inline NearbyCharactersSeam nearbyCharactersSeam = nullptr;

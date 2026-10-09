@@ -306,7 +306,7 @@ def _caster(name='Locke', player=True, root=('combat', 3), root_obj=None, states
     """A caster with plenty by default: mana, Invoke, every invoke state."""
     stats = dict(health=health, mana=mana)
     if player:
-        stats.update(manacostpct=manacostpct, invoke=invoke, invokeexp=7)
+        stats.update(manacostpct=manacostpct, invoke=invoke, invokeexp=7, spelldamageinc=0)
     spec = dict(name=name, type='Locke' if player else 'Araknid', **{'class': 11 if player else 12},
                 pos=[1000, 1000, 0], facing=0, moveangle=0, stats=stats, classstats=dict(radius=16),
                 chardata=dict(combatrangemax=300, mana=maxmana),
@@ -476,7 +476,96 @@ def cast_cases(data: Path, workdir: Path) -> list[dict]:
     return finish(cases)
 
 
+# ---- S3: a spell's construction and its damage -----------------------------------------
+
+def _damage_case(name, call, variant, chars, **extra):
+    case = dict(name=name, call=call, variant=list(variant), invoker='Locke', targets=['Araknid'], sourcepos=None,
+                globals=dict(frame=0), chars=chars)
+    case.update(extra)
+    return case
+
+
+def _victim(name='Araknid', player=False, magicresist=None, resists=None, x=1100):
+    if player:
+        spec = _caster(name, root=('combat', 3), states=[])
+        spec['stats'].update(poisoned=0)
+        spec['resists'] = resists or [0] * 10
+    else:
+        spec = _target(name, x=x)
+    if magicresist is not None:
+        spec['magicresist'] = magicresist
+    return spec
+
+
+def spell_new_cases(data: Path, workdir: Path) -> list[dict]:
+    """The TSpell constructor through each class's creator: every shipped
+    variant with a player, a monster and no invoker; targets none, one,
+    three, fewer than given; the source; the poison roll at its edges for
+    one to three targets; a STATLINE on each kind of invoker."""
+    cases = []
+    for i, (s, v) in enumerate((s, v) for s in shipped_spells(data) for v in s['variants']):
+        tag = f"{i:02d}." + re.sub(r'\W+', '_', v['name']).strip('_')
+        for cls in ('Spell', 'Strike'):
+            cases.append(_damage_case(f'new.{cls}.player.{tag}', 'spell-new', (s['name'], v['name']),
+                                      [_caster(), _victim()], tape=[10, 95], **{'class': cls}))
+        cases.append(_damage_case(f'new.monster.notargets.{tag}', 'spell-new', (s['name'], v['name']),
+                                  [_caster(player=False), _victim()], targets=None, sourcepos=[7, -8, 9], tape=[10]))
+        cases.append(_damage_case(f'new.noinvoker.{tag}', 'spell-new', (s['name'], v['name']),
+                                  [_caster(), _victim()], invoker=None, tape=[10]))
+    three = [_caster(), _victim(), _victim('Arakna', x=1200), _victim('Araknid3', x=1300)]
+    for rolls in ([89, 90, 0], [90, 100, 89], [0, 0, 0], [100, 100, 100]):
+        for vname in ('Poison', 'SpiderPoison'):
+            for n in (1, 2, 3):
+                cases.append(_damage_case(f'new.poison.{vname}.n{n}.r{"-".join(map(str, rolls))}', 'spell-new',
+                                          ('Poison', vname), three, targets=['Araknid', 'Arakna', 'Araknid3'][:n],
+                                          tape=rolls, **{'class': 'Strike'}))
+    for targets, numtargs in ((['Araknid', 'Arakna', 'Araknid3'], 2), (['Araknid'], 0), (['Araknid'], -5)):
+        cases.append(_damage_case(f'new.numtargs.{len(targets)}.n{numtargs}', 'spell-new', ('Poison', 'Poison'), three,
+                                  targets=targets, numtargs=numtargs, tape=[0, 0, 0], **{'class': 'Strike'}))
+    for invoker in ('Locke', 'Monster', None):
+        chars = [_caster(), _caster('Monster', player=False), _victim()]
+        cases.append(_damage_case(f'new.statline.{invoker}', 'spell-new', ('Might', 'Might'), chars, invoker=invoker,
+                                  **{'class': 'Strike'}))
+    return finish(cases)
+
+
+def spell_damage_cases(data: Path, workdir: Path) -> list[dict]:
+    """TSpell::Damage: every shipped variant from a player at a monster,
+    from a monster at the player, with no caster; then a grid over the
+    target's magic resistance (per mille, the float's cut), a player
+    caster's SpellDamageInc, a player target's DmgResMagical and the roll's
+    edges; no target."""
+    cases = []
+    for i, (s, v) in enumerate((s, v) for s in shipped_spells(data) for v in s['variants']):
+        tag = f"{i:02d}." + re.sub(r'\W+', '_', v['name']).strip('_')
+        variant = (s['name'], v['name'])
+        cases.append(_damage_case(f'dmg.player-at-monster.{tag}', 'spell-damage', variant,
+                                  [_caster(), _victim()], targets=None, target='Araknid', tape=[12345]))
+        cases.append(_damage_case(f'dmg.monster-at-player.{tag}', 'spell-damage', variant,
+                                  [_caster('Monster', player=False), _victim('Locke', player=True, resists=[0, 0, 0, 0, 0, 0, 20, 0, 0, 0])],
+                                  invoker='Monster', targets=None, target='Locke', tape=[777]))
+        cases.append(_damage_case(f'dmg.nocaster.{tag}', 'spell-damage', variant, [_caster(), _victim()],
+                                  invoker=None, targets=None, target='Araknid', tape=[4242]))
+    for (sname, vname), resist, sdi, magres, roll in itertools.product(
+            (('Fire Flash', 'Fire Flash'), ('Maelstrom', 'Maelstrom'), ('Lightning', 'Priest Bolt')),
+            (None, 0, 1, 100, 250, 333, 500, 999, 1000, 1500, -200), (0, 25, -50), (0, 30, 100, -50), (0, 32767)):
+        player = _caster()
+        player['stats']['spelldamageinc'] = sdi
+        victim = _victim('Locke2', player=True, magicresist=resist,
+                         resists=[0, 0, 0, 0, 0, 0, magres, 0, 0, 0]) if magres else _victim(magicresist=resist)
+        target = victim['name']
+        cases.append(_damage_case(f'grid.{vname.replace(" ", "_")}.mr{resist}.sdi{sdi}.res{magres}.r{roll}', 'spell-damage',
+                                  (sname, vname), [player, victim], targets=None, target=target, tape=[roll]))
+    cases.append(_damage_case('dmg.notarget', 'spell-damage', ('Fire Flash', 'Fire Flash'), [_caster(), _victim()],
+                              targets=None, target=None, tape=[5]))
+    return finish(cases)
+
+
 TARGETS = {
+    'spell-new': dict(fixture='slots/combat/spell_damage.py', cases=spell_new_cases, compare=generic_compare,
+                      port_fields=port_fields, unit=lambda r: 1),
+    'spell-damage': dict(fixture='slots/combat/spell_damage.py', cases=spell_damage_cases, compare=generic_compare,
+                         port_fields=port_fields, unit=lambda r: 1),
     'spell-cast': dict(fixture='slots/combat/spell_cast.py', cases=cast_cases, compare=generic_compare,
                        port_fields=port_fields, unit=lambda r: 1),
     'spell-data': dict(fixture='slots/combat/spell_data.py', cases=spell_data_cases, compare=compare_spell_data,

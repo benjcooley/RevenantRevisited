@@ -637,6 +637,139 @@ std::string SpellCast(const Case& c, std::string& error)
     }
 }
 
+// ---- S3: a spell's construction and damage (slots/combat/spell_damage.py) -----
+
+// TCharacter::Damage as a seam (retail 0x004c4950), recorded as the melee
+// kata records it; a spell or an arrow passes no action block.
+void CaseDamage(TCharacter* self, int32_t damage, int32_t damagetype, int32_t modifier, TActionBlock* action,
+                TCharacter* attacker)
+{
+    if (action)
+        throw std::runtime_error("Damage with an action block: not modelled here");
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "Damage").FieldString("who", g_spellWorld->NameOf(self));
+    j.Field("damage", damage).Field("type", damagetype).Field("mod", modifier).Key("attacker");
+    if (attacker)
+        j.String(g_spellWorld->NameOf(attacker));
+    else
+        j.Null();
+    j.Key("block").Null().End('}');
+    Seam(j.str());
+}
+
+void CaseKillExp(TPlayer* self, TCharacter* victim)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "AwardKillExp").FieldString("who", g_spellWorld->NameOf(self)).Key("victim");
+    if (victim)
+        j.String(g_spellWorld->NameOf(victim));
+    else
+        j.Null();
+    j.End('}');
+    Seam(j.str());
+}
+
+// The case's variant, [spell, variant] by name: the first of that pair.
+std::pair<SSpellData*, SSpellVariant*> FindVariant(const JsonValue& names)
+{
+    for (int32_t i = 0; i < SpellList.NumSpells(); i++)
+    {
+        SSpellData* sd = SpellList.GetSpellData(i);
+        if (names[0].Str() != sd->name)
+            continue;
+        for (int32_t k = 0; k < sd->variants.NumItems(); k++)
+            if (names[1].Str() == sd->variants[k].name)
+                return {sd, &sd->variants[k]};
+    }
+    throw std::runtime_error("no variant " + names[0].Str() + " / " + names[1].Str());
+}
+
+// Case (field 0, JSON): {"call": "spell-new" | "spell-damage", "class",
+// "variant", "invoker", "targets", "numtargs", "sourcepos", "target",
+// "chars", ...}; see spell_damage.py.
+std::string SpellDamage(const Case& c, std::string& error)
+{
+    try
+    {
+        if (!LoadSpells(error))
+            return {};
+        const JsonValue cs = JsonValue::Parse(c.Field(0));
+        TFixtureWorld world(cs);
+        BuildSpellPieces(cs, world);
+        for (const JsonValue& spec : cs["chars"].Items())
+            if (spec.Has("magicresist"))     // per mille
+                world.Get(spec["name"].Str())->SetMagicResistance((float)(spec["magicresist"].Int() / 1000.0));
+        SCaseScope scope(cs, world);
+        SSpellScope spells(cs, world, false);
+        TCharacter::damageSeam = CaseDamage;
+        TPlayer::killExpSeam = CaseKillExp;
+        struct SDamageSeamsOff
+        {
+            ~SDamageSeamsOff()
+            {
+                TCharacter::damageSeam = nullptr;
+                TPlayer::killExpSeam = nullptr;
+            }
+        } off;
+
+        std::vector<TObjectInstance*> targets;
+        const bool hasTargets = cs.Has("targets") && !cs["targets"].IsNull();
+        if (hasTargets)
+            for (const JsonValue& t : cs["targets"].Items())
+                targets.push_back(t.IsNull() ? nullptr : world.Get(t.Str()));
+        if (hasTargets && targets.empty())
+            targets.push_back(nullptr);
+        const int32_t numtargs =
+            (int32_t)cs["numtargs"].Int(hasTargets ? (int64_t)cs["targets"].Items().size() : 0);
+        S3DPoint source;
+        S3DPoint* sourcepos = nullptr;
+        if (cs.Has("sourcepos") && !cs["sourcepos"].IsNull())
+        {
+            const JsonValue& p = cs["sourcepos"];
+            source = S3DPoint((int32_t)p[0].Int(), (int32_t)p[1].Int(), (int32_t)p[2].Int());
+            sourcepos = &source;
+        }
+        auto [sd, variant] = FindVariant(cs["variant"]);
+        TObjectInstance* invoker = cs["invoker"].IsNull() ? nullptr : world.Get(cs["invoker"].Str());
+        const SSpellClass* cls = FindSpellClass(cs.Has("class") ? cs["class"].Str().c_str() : "Spell");
+        if (!cls)
+            throw std::runtime_error("no spell class " + cs["class"].Str());
+        std::unique_ptr<TSpell> spell(cls->create(invoker, hasTargets ? targets.data() : nullptr, numtargs, sourcepos,
+                                                  sd, variant, nullptr));
+
+        const std::string call = cs["call"].Str();
+        if (call == "spell-damage")
+        {
+            ClearSeams();
+            ClearDraws();
+            spell->Damage(cs["target"].IsNull() ? nullptr : world.Get(cs["target"].Str()));
+        }
+        else if (call != "spell-new")
+            throw std::runtime_error("unknown call '" + call + "'");
+
+        JsonOut j;
+        j.Begin('{').FieldString("schema", "combat.spell.v1").FieldString("side", "port");
+        j.Key("spell");
+        WriteSpellState(j, world, spell.get());
+        j.Key("casters").Begin('{');
+        for (const JsonValue& spec : cs["chars"].Items())
+        {
+            j.Key(spec["name"].Str().c_str());
+            WriteCaster(j, world, world.Get(spec["name"].Str()));
+        }
+        j.End('}');
+        WriteSeams(j);
+        WriteDraws(j);
+        j.End('}');
+        return j.str();
+    }
+    catch (const std::exception& e)
+    {
+        error = e.what();
+        return {};
+    }
+}
+
 }  // namespace
 
 // Registered with the A/B driver by name (retailab.h).
@@ -644,6 +777,8 @@ static const bool registered = RegisterTarget("spell-data", SpellData) &&
                                RegisterTarget("spell-lookup", SpellTalismans) &&
                                RegisterTarget("spell-talismans", SpellTalismans) &&
                                RegisterTarget("spell-quick", SpellTalismans) &&
-                               RegisterTarget("spell-cast", SpellCast);
+                               RegisterTarget("spell-cast", SpellCast) &&
+                               RegisterTarget("spell-new", SpellDamage) &&
+                               RegisterTarget("spell-damage", SpellDamage);
 
 }  // namespace RetailAB

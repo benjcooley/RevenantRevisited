@@ -49,6 +49,9 @@ void WriteSeams(JsonOut& j);
 // for a direct draw), from its `tape` and then retail's generator from its
 // `seed`, as the retail fixture answers them (SCaseScope installs it).
 void WriteDraws(JsonOut& j);
+// Forget the draws so far (the tape goes on where it was): a case that sets
+// something up with draws of its own before the call it compares.
+void ClearDraws();
 
 // Action block flags by meaning (the port's bits under retail's names).
 uint32_t FlagBits(const JsonValue& names);
