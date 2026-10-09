@@ -191,8 +191,11 @@ class TObjectImagery : public TAsset
         // Draws unlit imagery to background
     virtual void DrawLit(TObjectInstance* oi, TSurface* surface) {}
         // Draws lit imagery to background
-    virtual bool GetZ(TObjectInstance* oi, TSurface* surface) { return false; }
-        // Find first uncliped portion of zbuffer
+    virtual bool GetZ(TObjectInstance* oi, const TObjectInstance* frontmost) { return false; }
+        // True when the object's own pixel is what the frame shows at the pick
+        // point. `frontmost` is the object the map renderer drew there (its id
+        // buffer); retail z-found the still in the frame's z-buffer inside a
+        // 1x1 clip at the point (docs/gameflow/forensics/MAP_INPUT.md §2.3)
     virtual void DrawSelected(TObjectInstance* oi, TSurface* surface) { }
         // Causes image to draw selection (hilighting) around itself
     virtual void DrawLight(TObjectInstance* oi, TSurface* surface) {}

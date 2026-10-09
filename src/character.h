@@ -144,8 +144,8 @@ class TCharacter : public TComplexObject
       // Start a character moving in the given angle and speed (entry point)
     bool Go(S3DPoint vect);
       // Start a character moving in the given movement vector
-    bool Goto(int32_t x, int32_t y);
-      // Causes character to go to x,y.
+    bool Goto(int32_t x, int32_t y, TObjectInstance* pickup = nullptr);
+      // Causes character to go to x,y; an item given is picked up on arrival
     bool Stop(char *name = nullptr);
       // Stops specified action, or any action if name is nullptr
     bool Disable();
@@ -698,6 +698,11 @@ protected:
   // wander_target as a TSafeRef for safe-pointer semantics.
     TSafeRef<TObjectInstance> wander_target;
     int32_t  wander_commit = 0;
+
+  // retail +0x288: the item a Goto carries (the map pane's walk to an item
+  // out of reach, 0x004cedb0), picked up when that walk arrives (0x004c6155,
+  // 0x004c7fc3). Kept until then, or until a Goto carries another.
+    TSafeRef<TObjectInstance> gotoitem;
 
   // field_map.md: 0x254 = target_out_of_sight (retail mbr_0x95)
   // field_map.md: 0x258 = target_out_of_sight_prev (retail mbr_0x96)

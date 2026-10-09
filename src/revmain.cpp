@@ -2620,6 +2620,9 @@ static void AppInit()
             // desc.hidden already kept the window off screen; this and the
             // per-frame call in AppFrame keep it that way.
             HeadlessWindow::HideAllWindows();
+            // A hidden window has no pointer for the OS to draw: the game
+            // draws its cursor into the frame, where snapshots see it.
+            SetHardwareCursorEnabled(false);
         }
     }
 

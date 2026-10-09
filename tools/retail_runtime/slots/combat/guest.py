@@ -90,14 +90,14 @@ AB = dict(action=0x00, name=0x04, frame=0x24, wait=0x28, angle=0x2c, moveangle=0
 # Retail's flag bits by meaning. Confirmed from SetRoot/SetDoing/SetDesired/
 # UpdateAction, ForceCommand and Go/ResolveCombat (COMBAT_DOJO.md §5.4):
 # firsttime, transition, priority, interrupt, nowaitdone, dontforce, stop
-# (ResolveCombatMove 0x4c7f80), waitpivot, noroot, pickup (walking to an
+# (ResolveCombatMove 0x4c7f80), waitpivot, noroot, walkto (walking to an
 # item, Goto's third argument). The rest are
 # the 1998 names shifted up one bit past the inserted one -- unconfirmed,
 # so they keep a `?`, and a block that sets one shows up as a difference.
 AB_FLAGS = {0x1: 'firsttime', 0x2: 'transition', 0x4: 'forced', 0x8: 'retail-0x8',
             0x10: 'priority', 0x20: 'interrupt', 0x40: 'nowaitdone', 0x80: 'dontforce',
             0x100: 'stop', 0x200: 'waitpivot', 0x400: 'noroot', 0x800: 'loop?',
-            0x1000: 'pickup'}
+            0x1000: 'walkto'}
 
 # Globals
 G_COMBATFACE = 0x5d7a64                          # Revenant.ini CombatFace (default 1)
