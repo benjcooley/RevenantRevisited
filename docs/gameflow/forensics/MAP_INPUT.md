@@ -320,3 +320,42 @@ What the port had before this work (2026-10-07):
   one-pixel readback.
 
 The port's design and state: §7.
+
+### 7.1 Verified (2026-10-08, headless, input simulator)
+
+- **The pick decodes each probe with its own draw list.** A content
+  rebuild (`[mr-sync]`, about once a second while scripts move people)
+  replaces the draw list, and a probe read back a frame or two later, or
+  the last frame read at once, named records of the old list: the door
+  under a still pointer read as nothing every second or so, and a press
+  and its release could disagree. `TMapRenderer` now keeps the pick
+  tables (object, kind per draw id) of the last three drawn versions and
+  decodes a probe with the table of its tag.
+- **Door by mouse** (`ressexit`, after Tendrick's scene): the door cursor
+  (`CursorTypes[3]`) over it; a click within 96 runs DOOR1's USE block
+  (walk to the door, face, operate, `WOPENDOORIN`, fade, `ACTIVATE`) and
+  Locke arrives beside `ressenter`. From farther, a click walks toward the
+  floor point under the pointer less 64 (§4.3): with the pointer on the
+  door's face that point is ~40 units in front of the door, so from the
+  chamber's middle Locke stops ~105 away and the next click on the door
+  walks again; a click on the floor nearer the door, then the door, opens
+  it. Retail's math (`FindClickPos` `0x0044e930`, `Distance` `0x0046ea20`,
+  not overridden by TExit's vtable `0x5b27cc`) gives the same.
+- **Lift gate by mouse** (`soldoor`, `InportEW`, level 31): the door
+  cursor, and a click runs `INPORTEW` (`STATE "OPENING"`, `WOPENPORT`,
+  walk through, `CLOSING`, `CLOSED`). The gate sits in the giant
+  Solifuge's arena; the bars' lift isn't yet confirmed by eye.
+- The opening still plays to `SardokR: END` with no ERROR lines.
+- `[mapinput] over …` (hover changes) and `[mapinput] release …` (what a
+  click acted on, positions, distance) are in the log for test runs.
+
+Open:
+- A click on a character (talk) and on an item (get) by mouse: the code
+  path is retail's (§4.3) but no run has shown it yet.
+- Hover reads the last frame synchronously (`ReadIdProbe`) on the 8th
+  frame when the pointer has moved since the last probe: a small GPU
+  wait while the mouse moves. Hover can keep its last answer until the
+  asynchronous probe at the new point arrives.
+- The portcullis lift seen in a quiet place (level 45/46 `Inport*`).
+- Input-simulator note: `move X Y` glides for `kDefaultMoveMs`; sweeps
+  want `move X Y 0`.
