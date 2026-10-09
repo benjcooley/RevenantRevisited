@@ -24,7 +24,8 @@ The target, when given, is the player's current combat action target
 
 Case: {"name": "...", "player": {"name": "Locke", "health": 1833,
 "max_health": 1930, "fatigue": 191, "max_fatigue": 380, "mana": 2174,
-"max_mana": 2650, "level": 26}, "target": {...} | null, "frames": 8}
+"max_mana": 2650, "level": 26, "portrait": {"width": 40, "height": 40,
+"pixels": RGB565 hex} | absent}, "target": {...} | null, "frames": 8}
 """
 from __future__ import annotations
 
@@ -121,16 +122,21 @@ class StatusBarFixture:
 
     # ---- cases ---------------------------------------------------------
 
+    def _character(self, spec, default_name, player=False):
+        portrait = 0
+        if spec.get('portrait'):
+            p = spec['portrait']
+            portrait = self.scene.bitmap(p['width'], p['height'], bytes.fromhex(p['pixels']))
+        stats = Stats(**{k: v for k, v in spec.items() if k not in ('name', 'portrait')})
+        return self.scene.character(spec.get('name', default_name), player=player, stats=stats,
+                                    portrait=portrait)
+
     def run(self, case, out_dir=None):
         world, scene, vm = self.world, self.scene, self.vm
         world.restore()
-        player = scene.character(case['player'].get('name', 'Locke'), player=True,
-                                 stats=Stats(**{k: v for k, v in case['player'].items() if k != 'name'}))
+        player = self._character(case['player'], 'Locke', player=True)
         scene.set_player(player)
-        target = None
-        if case.get('target'):
-            target = scene.character(case['target'].get('name', 'Target'),
-                                     stats=Stats(**{k: v for k, v in case['target'].items() if k != 'name'}))
+        target = self._character(case['target'], 'Target') if case.get('target') else None
         scene.set_target(player, target)
         world.call(INITIALIZE, this=PANE, instruction_limit=200_000_000)
         frames = int(case.get('frames', 8))

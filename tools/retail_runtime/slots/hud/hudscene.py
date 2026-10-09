@@ -37,6 +37,7 @@ PLAYER_SIZE, CHARACTER_SIZE = 0x674, 0x2a0
 CLASS_PLAYER, CLASS_CHARACTER = 0x0b, 0x0c
 VTABLE_COPY = 0x400                          # bytes of the real vtable copied (256 slots)
 O_CLASS, O_NAME, O_ACTION = 0x04, 0x38, 0xe0
+BM_RGB565 = 0x4
 ACTION_SIZE, ACTION_COMBAT, ACTION_TARGET = 0x64, 3, 0x44
 
 # HUD input slots of a character: vtable offset -> field of `Stats`
@@ -110,7 +111,18 @@ class HudScene:
 
     # ---- characters ----------------------------------------------------
 
-    def character(self, name, player=False, stats=None):
+    def bitmap(self, width, height, pixels):
+        """A 16-bit RGB565 TBitmap in guest memory (the 0x48-byte header,
+        flags 0x4, then the pixels) -> its address."""
+        if len(pixels) != width * height * 2:
+            raise ValueError('bitmap pixels must be width*height RGB565 values')
+        header = struct.pack('<18I', width, height, 0, 0, BM_RGB565, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                             len(pixels))
+        address = self.vm.allocate(len(header) + len(pixels))
+        self.vm.write(address, header + pixels)
+        return address
+
+    def character(self, name, player=False, stats=None, portrait=0):
         size = PLAYER_SIZE if player else CHARACTER_SIZE
         address = self.vm.allocate(size)
         vtable = self.vm.allocate(VTABLE_COPY)
@@ -121,7 +133,7 @@ class HudScene:
         self.vm.put_u32(address, vtable)
         self.vm.write(address + O_CLASS, struct.pack('<H', CLASS_PLAYER if player else CLASS_CHARACTER))
         self.vm.put_u32(address + O_NAME, self.string(name))
-        self.characters[address] = Character(address, name, stats or Stats())
+        self.characters[address] = Character(address, name, stats or Stats(), portrait)
         return self.characters[address]
 
     def set_player(self, character):
