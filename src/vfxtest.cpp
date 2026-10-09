@@ -6233,11 +6233,12 @@ struct SVfxTestBootstrap {
             VfxTest::SEffect e = {};
             e.id            = "TWaterEffect_BESPOKE__SewerWater";
             e.family        = "water";
-            e.pipeline      = "FB";
+            e.pipeline      = "WORLD";
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
-            e.factory       = [](const S3DPoint& o) -> void* { return WaterBespokeVariantSpawn<kVariantSewerW_I3D>(o); };
-            e.submit        = [](void* c, EFxDebugMode d) { WaterBespokeSubmit(c, d); };
-            e.destroy       = [](void* c) { WaterBespokeDestroy(c); };
+            e.factory       = [](const S3DPoint& o) -> void* { return AuthoredStaticMeshVariantSpawn<kVariantSewerW_I3D>(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { GlobeBespokeSubmit(c, d); };
+            e.submit_world  = [](void* c, EFxDebugMode d) { GlobeBespokeSubmitWorld(c, d); };
+            e.destroy       = [](void* c) { GlobeBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
 

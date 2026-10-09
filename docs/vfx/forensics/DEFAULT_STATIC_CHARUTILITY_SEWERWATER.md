@@ -68,3 +68,32 @@ textured fixture must not substitute an invented white texture. No additional
 pixel pass is claimed. The remaining zero-triangle `StrikeEffect` dummy is a
 spell-controlled placeholder and is not a standalone visual replacement for
 its actual spell-specific imagery.
+
+## SewerWater browser dispatch correction (2026-10-08)
+
+The historical `TWaterEffect_BESPOKE__SewerWater` registration still calls
+`WaterBespokeVariantSpawn<kVariantSewerW_I3D>` in `src/vfxtest.cpp`. That path
+constructs the moving-water particle implementation. The exact asset/registry
+and eight-case native comparison above establish a constant quad with no
+controller instead. Route this browser ID through the same authored static
+mesh factory/world submission already used for StillWater. Keep the original
+SewerW asset, pose, indices, UV and material; introduce no particle substitute.
+Verify the real preview renders a nonempty constant image and exits cleanly.
+This corrects preview dispatch, independently of natural-map acceptance.
+
+The correction passes on a fresh game build: the before capture has 12 distinct
+images; the corrected preview has 12 identical nonempty images and logs the
+exact SewerW asset with one part/four vertices/two triangles. Normal map ADDAT,
+frame, MOVE, DELETE and identity-based absence pass ten observations. Creation
+changes the clean floor and deletion restores it exactly. Both captures exit
+normally; this provides preview/controlled runtime evidence, not a full retail
+versus Metal visual sign-off. Generated evidence is retained under the local
+lab's `research/vfx-next-20261008/sewer-*` paths.
+
+Related real-executable validation found the same nullable-identity assumption
+in Water/Waterfall diagnostic logging. Preview instances are created directly
+from imagery and legitimately have no class/type info. Runtime logs retain
+actual mapped identities; preview logs use declared labels/zero identity, and
+Waterfall caches the runtime identity for later tick logging. Both corrected
+previews animate and shut down cleanly. Failed native captures and the Water
+LLDB stack remain in the local lab; no broad object identity API was changed.

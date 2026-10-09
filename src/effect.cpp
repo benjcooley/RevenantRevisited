@@ -11703,6 +11703,7 @@ void TWaterFallEffect_Bespoke::Initialize(bool attach_runtime_component)
     for (int32_t i = 0; i < numdrops_; ++i) InitParticle(i);
     for (int32_t k = 0; k < numdrops_; ++k) UpdateStuff();
     initialized_ = true;
+    runtime_id_ = attach_runtime_component ? ObjId() : 0u;
     if (attach_runtime_component)
     {
         S3DTex texture = {};
@@ -11716,7 +11717,9 @@ void TWaterFallEffect_Bespoke::Initialize(bool attach_runtime_component)
     log_info("[waterfall-runtime] initialized type='%s' id=%08x map_index=%d "
              "origin=(%d,%d,%d) drops=%d warmup=%d texture=%u runtime=%d "
              "material=(%.3f,%.3f,%.3f,%.3f)",
-             GetTypeName(), ObjId(), GetMapIndex(), origin.x, origin.y, origin.z,
+             attach_runtime_component ? GetTypeName() : "preview",
+             attach_runtime_component ? ObjId() : 0u,
+             GetMapIndex(), origin.x, origin.y, origin.z,
              numdrops_, numdrops_, texture_, int(attach_runtime_component),
              material_diffuse_[0], material_diffuse_[1], material_diffuse_[2], material_diffuse_[3]);
 }
@@ -11750,7 +11753,7 @@ void TWaterFallEffect_Bespoke::Advance(double seconds)
     {
         logged_tick_ = true;
         log_info("[waterfall-runtime] first simulation tick id=%08x map_index=%d ticks=%d",
-                 ObjId(), GetMapIndex(), ticks_);
+                 runtime_id_, GetMapIndex(), ticks_);
     }
 }
 
@@ -11808,6 +11811,40 @@ void TWaterFallEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
 // * H01 — TWaterEffect_Bespoke                                             *
 // =========================================================================
 
+namespace {
+constexpr uint32_t kLiteralWaterId = 0x1903abcdu;
+class TLiteralWaterReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "water_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        if (auto* effect = dynamic_cast<const TWaterEffect_Bespoke*>(&owner))
+            effect->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* effect = dynamic_cast<TWaterEffect_Bespoke*>(Owner()))
+            effect->Advance(TTime::DeltaTime());
+    }
+};
+class TLiteralWaterAnimatorBuilder final : public T3DAnimatorBuilder
+{
+  public:
+    TLiteralWaterAnimatorBuilder() : T3DAnimatorBuilder("Water") {}
+    T3DAnimator* Build(TObjectInstance* owner) override { return new T3DAnimator(owner); }
+    void AttachComponents(TObjectInstance* owner) override
+    {
+        if (!owner || owner->GetMapIndex() <= 0 || owner->ObjClass() != OBJCLASS_EFFECT ||
+            owner->ObjId() != kLiteralWaterId || (owner->Flags() & OF_KILL)) return;
+        if (auto* effect = dynamic_cast<TWaterEffect_Bespoke*>(owner)) effect->Initialize();
+    }
+};
+TWaterReferenceBuilder<TWaterEffect_Bespoke> g_literal_water_builder("Water");
+TLiteralWaterAnimatorBuilder g_literal_water_animator_builder;
+} // namespace
+
 TWaterEffect_Bespoke::~TWaterEffect_Bespoke()
 {
     delete[] drops_;
@@ -11857,6 +11894,44 @@ void TWaterEffect_Bespoke::UpdateStuff()
     }
 }
 
+void TWaterEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if (initialized_) return;
+    if (attach_runtime_component && (ObjClass() != OBJCLASS_EFFECT ||
+        GetMapIndex() <= 0 || (Flags() & OF_KILL) || ObjId() != kLiteralWaterId)) return;
+    auto* imagery = dynamic_cast<T3DImagery*>(GetImagery());
+    // Do not allocate or consume RNG while the final imagery is unavailable.
+    if (!LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    S3DObj object = {};
+    imagery->GetObject(0, &object);
+    if (object.material >= 0 && object.material < imagery->NumMaterials())
+    {
+        S3DMat material = {};
+        imagery->GetMaterial(object.material, &material);
+        material_diffuse_[0] = material.matdesc.diffuse.r;
+        material_diffuse_[1] = material.matdesc.diffuse.g;
+        material_diffuse_[2] = material.matdesc.diffuse.b;
+        material_diffuse_[3] = material.matdesc.diffuse.a;
+    }
+    numdrops_ = kWaterMaxDrops;
+    drops_ = new SWaterParticle[numdrops_]();
+    for (int32_t i = 0; i < numdrops_; ++i) InitParticle(i);
+    for (int32_t k = 0; k < numdrops_; ++k) UpdateStuff();
+    literal_geometry_ = initialized_ = true;
+    if (attach_runtime_component)
+    {
+        S3DTex texture = {};
+        imagery->GetTexture(0, &texture);
+        auto component = std::make_unique<TLiteralWaterReferenceComponent>();
+        component->Configure(texture_, int32_t(texture.desc.width), int32_t(texture.desc.height),
+                             1, 1, 1, 1.0f, 1.0f, false, true);
+        AddComponent(std::move(component));
+    }
+    log_info("[water-runtime] initialized id=%08x map_index=%d drops=%d warmup=%d runtime=%d",
+             attach_runtime_component ? ObjId() : kLiteralWaterId,
+             GetMapIndex(), numdrops_, numdrops_, int(attach_runtime_component));
+}
+
 TWaterEffect_Bespoke*
 TWaterEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
                                           const char* asset_override)
@@ -11881,14 +11956,22 @@ TWaterEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
     w->uv_rect_[3] = uv_rect[3];
     w->size_wu_ = kWaterBaseSizeWu;
 
-    // VERBATIM port of TWaterAnimator::Initialize
-    // (src/effect_old.cpp:11950-11970). Same warmup pattern as H02.
-    w->numdrops_ = kWaterMaxDrops;
-    w->drops_ = new SWaterParticle[w->numdrops_]();
-    for (int32_t i = 0; i < w->numdrops_; i++)
-        w->InitParticle(i);
-    for (int32_t k = 0; k < w->numdrops_; k++)
-        w->UpdateStuff();
+    // Literal Water1903abcd: native Render4f3610 transforms the shipped
+    // XY quad by each drop's scale then translation, with no billboard fit.
+    // Alternate paths lack this retail mapping and keep their prior preview.
+    if (!asset_override || !stricmp(asset_override, kWaterImageryPath))
+    {
+        w->Initialize(false);
+        if (!w->initialized_) { delete w; return nullptr; }
+    }
+    else
+    {
+        // Existing unaudited alternate-asset delegates, without new mapping credit.
+        w->numdrops_ = kWaterMaxDrops;
+        w->drops_ = new SWaterParticle[w->numdrops_]();
+        for (int32_t i = 0; i < w->numdrops_; i++) w->InitParticle(i);
+        for (int32_t k = 0; k < w->numdrops_; k++) w->UpdateStuff();
+    }
 
     log_info("[water] SpawnForTest_BESPOKE: '%s' map_index=%d "
              "origin=(%d,%d,%d) drops=%d texture=%u uv=(%.3f,%.3f,%.3f,%.3f)",
@@ -11900,8 +11983,72 @@ TWaterEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
     return w;
 }
 
+void TWaterEffect_Bespoke::Advance(double seconds)
+{
+    if (!literal_geometry_ || !drops_ || (Flags() & OF_KILL) ||
+        !std::isfinite(seconds) || seconds <= 0.0) return;
+    sim_accum_seconds_ += seconds;
+    while (sim_accum_seconds_ + 1e-12 >= TTime::LegacyFrameSeconds)
+    {
+        sim_accum_seconds_ -= TTime::LegacyFrameSeconds;
+        SetCommandDone(false);
+        UpdateStuff();
+        ++ticks_;
+    }
+}
+
+void TWaterEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !literal_geometry_ || !drops_ ||
+        texture_ == kInvalidTexture || authored_vertices_.size() != 4 ||
+        (Flags() & OF_KILL)) return;
+    const hmm_mat4& world = Transform().Matrix();
+    const float fraction = float(std::clamp(sim_accum_seconds_ / TTime::LegacyFrameSeconds,
+                                          0.0, 1.0));
+    for (int32_t i = 0; i < numdrops_; ++i)
+    {
+        if (drops_[i].time != 0) continue;
+        hmm_mat4 local = {};
+        MtxClear(&local);
+        MtxScale(&local, &drops_[i].scale);
+        // Display motion between original24Hz updates; never mutate the pool.
+        const hmm_vec3 position = {drops_[i].pos.X + drops_[i].vel.X * fraction,
+                                   drops_[i].pos.Y + drops_[i].vel.Y * fraction,
+                                   drops_[i].pos.Z + drops_[i].vel.Z * fraction};
+        MtxTranslate(&local, &position);
+        SQuadDrawItem item = {};
+        for (int32_t corner = 0; corner < 4; ++corner)
+        {
+            hmm_vec3 point = {}, transformed = {};
+            MtxTransform(&local, &authored_vertices_[size_t(corner)].pos, &point);
+            MtxTransform(&world, &point, &transformed);
+            item.world_pos[corner][0] = transformed.X;
+            item.world_pos[corner][1] = transformed.Y;
+            item.world_pos[corner][2] = transformed.Z;
+            item.uv[corner][0] = authored_vertices_[size_t(corner)].tu;
+            item.uv[corner][1] = authored_vertices_[size_t(corner)].tv;
+        }
+        for (int32_t channel = 0; channel < 4; ++channel)
+            item.color_rgba[channel] = material_diffuse_[channel];
+        item.key.texture = texture_;
+        item.key.blend = uint8_t(EFxBlend::AdditiveStraight); // native mode16
+        item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
+        // Native OBJ3D_MATRIX clears copied-vertex colors. Authored normal /
+        // device lighting is an open gate, not a fitted flat-light proxy.
+        item.light_mode = EFxLightMode::Unlit;
+        item.debug_mode = debug_mode;
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
 void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
+    if (literal_geometry_)
+    {
+        Advance(TTime::DeltaTime());
+        Submit(debug_mode);
+        return;
+    }
     if (!Renderer || !drops_)
         return;
 
@@ -18052,9 +18199,16 @@ void TFaultFireEffect_Bespoke::Advance(double elapsed_seconds)
     constexpr double tick_ms=1000.0/24.0;
     while (sim_accum_ms_+1e-9>=tick_ms) {
         sim_accum_ms_-=tick_ms;
-        th_+=0.1f;
-        if (th_>float(M_PI*2.0)) th_-=float(M_PI*2.0);
-        u_offset_+=float(random(2,8))/100.0f;
+        // Native4f1626 keeps the sum in x87 across the comparison and
+        // wrap subtraction; round only the selected final theta to float.
+        const long double next=static_cast<long double>(th_)+0.10000000149011612f;
+        th_=float(next>static_cast<long double>(6.283185308)
+            ? next-static_cast<long double>(6.2831854820251465f) : next);
+        const float du=float(random(2,8))/100.0f;
+        u_offset_+=du; // diagnostic only; rendering reads mutable authored U.
+        // Native4f1690 adds separately to every stored vertex U. Adding an
+        // accumulated scalar at draw time changes rounding for initial U=1.
+        for(auto& vertex:vertices_)vertex.uv[0]+=du;
         SetCommandDone(false);
     }
 }
@@ -18090,7 +18244,7 @@ void TFaultFireEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
                 item.world_pos[corner][0]=p.X;
                 item.world_pos[corner][1]=p.Y;
                 item.world_pos[corner][2]=p.Z;
-                item.uv[corner][0]=v.uv[0]+u_offset_;
+                item.uv[corner][0]=v.uv[0];
                 item.uv[corner][1]=v.uv[1]*vscale;
             }
             Renderer->SubmitFxQuad(item);
