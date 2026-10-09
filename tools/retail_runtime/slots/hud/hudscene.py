@@ -111,16 +111,21 @@ class HudScene:
 
     # ---- characters ----------------------------------------------------
 
-    def bitmap(self, width, height, pixels):
-        """A 16-bit RGB565 TBitmap in guest memory (the 0x48-byte header,
-        flags 0x4, then the pixels) -> its address."""
+    def bitmap(self, data):
+        """A TBitmap's bytes as stored (the 0x48-byte header with its
+        relative offsets, then the data and blocks) in guest memory -> its
+        address."""
+        address = self.vm.allocate(len(data))
+        self.vm.write(address, data)
+        return address
+
+    @staticmethod
+    def rgb565_bitmap(width, height, pixels):
+        """The bytes of a 16-bit RGB565 TBitmap (flags 0x4) of `pixels`."""
         if len(pixels) != width * height * 2:
             raise ValueError('bitmap pixels must be width*height RGB565 values')
-        header = struct.pack('<18I', width, height, 0, 0, BM_RGB565, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                             len(pixels))
-        address = self.vm.allocate(len(header) + len(pixels))
-        self.vm.write(address, header + pixels)
-        return address
+        return struct.pack('<18I', width, height, 0, 0, BM_RGB565, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                           len(pixels)) + pixels
 
     def character(self, name, player=False, stats=None, portrait=0):
         size = PLAYER_SIZE if player else CHARACTER_SIZE
