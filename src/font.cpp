@@ -530,12 +530,16 @@ void DrawTextShadowedAtBaseline(const SFontAtlas* atlas, const char* text,
                                 ETextEncoding encoding)
 {
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
-    // Retail FUN_004be2b0 font-flag-0x400: 3 black passes (base, +1x, +1y) then
-    // the colored (doubled) pass at base. 1px shadow on the right + bottom.
-    DrawGlyphRun(atlas, text, encoding, penX,        baselineY,        0, 0, 0, target_w, target_h);
-    DrawGlyphRun(atlas, text, encoding, penX + 1.0f, baselineY,        0, 0, 0, target_w, target_h);
-    DrawGlyphRun(atlas, text, encoding, penX,        baselineY + 1.0f, 0, 0, 0, target_w, target_h);
-    DrawGlyphRunDoubled(atlas, text, encoding, penX,  baselineY,        r, g, b, target_w, target_h);
+    // Retail FUN_004be2b0 with font flag 0x400 draws the string black at
+    // (+1,+1), (+2,+1) and (+1,+2), then in its colour at the pen: a drop
+    // shadow down and to the right, two pixels wide. Measured from retail's
+    // own DrawTextA calls in the emulator (tools/retail_runtime/slots/hud,
+    // docs/ui/HUD_REBUILD.md P1b).
+    constexpr float kShadowPasses[3][2] = { { 1.0f, 1.0f }, { 2.0f, 1.0f }, { 1.0f, 2.0f } };
+    for (const auto& offset : kShadowPasses)
+        DrawGlyphRun(atlas, text, encoding, penX + offset[0], baselineY + offset[1],
+                     0, 0, 0, target_w, target_h);
+    DrawGlyphRunDoubled(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
 }
 
 int32_t WrapTextLines(const SFontAtlas* atlas, const char* text, float wrapWidth,
