@@ -9,17 +9,17 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 80,
+    "retail_rows_with_source_fixes_recorded": 82,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 69,
+    "actual_runtime_verified_rows": 71,
     "visual_fidelity_confirmed_rows": 16,
     "repeatable_ab_rows": 8,
-    "thin_bounded_render_frontend_rows": 55
+    "thin_bounded_render_frontend_rows": 57
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -397,6 +397,34 @@
       "check": "unmodified_animtex_failed_init_admission",
       "status": "expected_native_failure_reproduced",
       "scope": "Two exact fresh isolated repeats of native Init and RefreshControllers rejection. Separate cold-heap call reaches original null UV-array cleanup read. No animation, static-render acceptance or actual-world heap/crash claim."
+    },
+    "recon/retail_asm/runtime/effects/barrier-static-frontend-ab/manifest.json": {
+      "sha256": "af837f2f86e5588263197e87fa17b5c4fa91fc5161286c96f7bc6dc7dc00169d",
+      "retail_row": "LabGateBarrierS:0xad92bc37, LabGateBarrierE:0xad92bc38",
+      "check": "lab_barrier_untextured_frontend",
+      "status": "pass",
+      "scope": "Native matrices/keys/default lookup and original untextured raster versus compiled static preview geometry and material decode. Fixed authored red diffuse input; native full illumination excluded."
+    },
+    "recon/retail_asm/runtime/effects/lab-barrier-material-fixed-20261009/manifest.json": {
+      "sha256": "56a655d39943b3d30643d416085fd4d2be2b23084f805fb5e4840d99f5f03dcb",
+      "retail_row": "LabGateBarrierS:0xad92bc37, LabGateBarrierE:0xad92bc38",
+      "check": "lab_barrier_actual_map_material",
+      "status": "pass",
+      "scope": "Each exact owner independently passes10typed create/move/delete observations,16frames,1875red-dominant changed pixels and exact floor restoration. Synthetic floor; original full illumination/natural visibility/device remain open."
+    },
+    "recon/retail_asm/runtime/effects/lab-barrier-map-next-20261009/manifest.json": {
+      "sha256": "7f0883088b5f6ba674ff03f1867f8a5a80739767cb5a2f315d3772b802c40081",
+      "retail_row": "LabGateBarrierS:0xad92bc37, LabGateBarrierE:0xad92bc38",
+      "check": "lab_barrier_pre_fix_white_material",
+      "status": "diagnostic_wrong_material_color",
+      "scope": "Typed lifecycle passes but root visual inspection finds both authored red untextured quads white before material tint correction; no color parity credited."
+    },
+    "recon/retail_asm/runtime/effects/firewind-nullspell-preflight-20261009/manifest.json": {
+      "sha256": "0a9eb22a12e5328a1cccf7b9a11a7891c30ccb15e70232b52c8dde5e8bfa83bb",
+      "retail_row": "FireWind:0x98974eab",
+      "check": "native_nullspell_motion_feasibility",
+      "status": "native_nullspell_feasible_port_reconstruction_deferred",
+      "scope": "Native400record pool/100Animate ticks,9complete pool hashes,300birth/4404final RNG with genuine particle motion. No comparable production pool, rendering, target/damage or parity credit."
     }
   }
 }

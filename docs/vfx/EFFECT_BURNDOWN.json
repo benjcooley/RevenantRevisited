@@ -24,17 +24,17 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 80,
+    "retail_rows_with_source_fixes_recorded": 82,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 69,
+    "actual_runtime_verified_rows": 71,
     "visual_fidelity_confirmed_rows": 16,
     "repeatable_ab_rows": 8,
-    "thin_bounded_render_frontend_rows": 55
+    "thin_bounded_render_frontend_rows": 57
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -11847,7 +11847,7 @@
         "accepted": false
       },
       "runtime_dispatch": "placeholder_unverified_source_controller_pending",
-      "next_action": "FPS-enabled native capture still freezes pixels at the left viewport edge after owner expiry. Defer bounded dirty-rectangle/offscreen redraw investigation; no visual/reference credit. Advance FireFlash with its clean baseline.",
+      "next_action": "Defer full FireWind controller reconstruction behind easier effects. Native null-spell fixture runs400slots/100ticks with motion; port currently has a2second single-billboard placeholder. Implement literal pool, authored rendering and target/owner boundaries before granting any parity.",
       "notes": [
         "2026-10-05: one bounded30.583sec native probe has84 distinct viewport images; last change17.4sec, then left-edge frozen trails. FireWind.delete finds no context; nudge/return restores exact floor. No reference/visual/source-fix credit.",
         "FPS-enabled28.111seconds/76 distinct images; post-expiry/deletion mean error1.35331, camera-nudge return restores canonical floor exactly. Unlike FireSwarm/Streamer/Pixie/FireFlash/FireCone/MeteorStorm, FPS alone does not resolve this edge residue."
@@ -11878,7 +11878,7 @@
         },
         "accurate_reference": false
       },
-      "work_queue_status": "deferred_fps_enabled_offscreen_edge_residue",
+      "work_queue_status": "deferred_full_native_particle_controller_reconstruction",
       "source_preflight": {
         "forensics": "docs/vfx/forensics/FIREWIND_REFERENCE_PROBE.md",
         "standalone_safe": true,
@@ -11914,7 +11914,20 @@
             ]
           }
         }
-      ]
+      ],
+      "thin_native_motion_preflight": {
+        "manifest": "recon/retail_asm/runtime/effects/firewind-nullspell-preflight-20261009/manifest.json",
+        "sha256": "0a9eb22a12e5328a1cccf7b9a11a7891c30ccb15e70232b52c8dde5e8bfa83bb",
+        "doc": "docs/vfx/forensics/FIREWIND_THIN_PREFLIGHT.md",
+        "status": "native_nullspell_feasible_port_reconstruction_deferred",
+        "pool_slots": 400,
+        "ticks": 100,
+        "birth_rng_calls": 300,
+        "final_rng_calls": 4404,
+        "final_active_slots": 387,
+        "rendered_ab_cases": 0,
+        "scope": "Actual native Init/Animate and full-pool hashes with explicit base/audio/owner-completion boundaries. Moving particles verified; current billboard placeholder has no literal comparable pool, source and rendered parity remain open."
+      }
     },
     {
       "index": 49,
@@ -16813,15 +16826,17 @@
       "retail_type_id": "0xad92bc37",
       "asset": "Misc\\IBarrier1.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-09: propagate authored diffuse and alpha for zero-texture EFFECT opaque meshes; corrected real-map white fallback to red material, retaining existing textured/helper paths."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -16830,12 +16845,45 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "native_default_builder_verified_generic_untextured_mesh_and_actual_map_material_lifecycle_verified",
+      "next_action": "Verify original full illumination producer and actual authored map/caller visibility; retain untextured geometry/material-input references and controlled map lifecycle as distinct bounded proofs.",
       "notes": [
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
+        "2026-10-09: bounded default-animator authored mesh/material reference and controlled independent map lifecycle pass. First combined map capture was white; corrected captures are red and restore ground. No full illumination/device/natural-setting or acceptance credit."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "authored_untextured_default_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/barrier-static-frontend-ab/manifest.json",
+          "sha256": "af837f2f86e5588263197e87fa17b5c4fa91fc5161286c96f7bc6dc7dc00169d",
+          "scope": "Native default lookup/constant keys/matrix/projection and no-texture Gouraud raster versus compiled actual static preview submission and material decode; fixed authored red diffuse is an upstream input, full native lighting excluded. Four identity/translated cases replay twice.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "original full material/illumination-to-vertex producer",
+            "natural barrier caller/visibility/context",
+            "independent original device and Metal lighting parity"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/lab-barrier-material-fixed-20261009/LabGateBarrierS/manifest.json",
+        "sha256": "5e5a60549ff7240e9a8e5650857d87faa221f31f9f4c14bdecd9bbfb0711972e",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "owner_frame_wrap_verified": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false,
+        "observations": 10,
+        "frames": 16,
+        "red_dominant_changed_pixels": 1875,
+        "binary_sha256": "29215f3b36d8b33c0ac991ef667c4ff9348d6f53109a947594cac55445735222"
+      },
+      "work_queue_status": "thin_bounded_untextured_frontend_and_map_material_pass_natural_lighting_context_open"
     },
     {
       "index": 121,
@@ -16844,15 +16892,17 @@
       "retail_type_id": "0xad92bc38",
       "asset": "Misc\\IBarrier2.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-09: propagate authored diffuse and alpha for zero-texture EFFECT opaque meshes; corrected real-map white fallback to red material, retaining existing textured/helper paths."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -16861,12 +16911,45 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "native_default_builder_verified_generic_untextured_mesh_and_actual_map_material_lifecycle_verified",
+      "next_action": "Verify original full illumination producer and actual authored map/caller visibility; retain untextured geometry/material-input references and controlled map lifecycle as distinct bounded proofs.",
       "notes": [
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
+        "2026-10-09: bounded default-animator authored mesh/material reference and controlled independent map lifecycle pass. First combined map capture was white; corrected captures are red and restore ground. No full illumination/device/natural-setting or acceptance credit."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "authored_untextured_default_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/barrier-static-frontend-ab/manifest.json",
+          "sha256": "af837f2f86e5588263197e87fa17b5c4fa91fc5161286c96f7bc6dc7dc00169d",
+          "scope": "Native default lookup/constant keys/matrix/projection and no-texture Gouraud raster versus compiled actual static preview submission and material decode; fixed authored red diffuse is an upstream input, full native lighting excluded. Four identity/translated cases replay twice.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "original full material/illumination-to-vertex producer",
+            "natural barrier caller/visibility/context",
+            "independent original device and Metal lighting parity"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/lab-barrier-material-fixed-20261009/LabGateBarrierE/manifest.json",
+        "sha256": "fd93c05805407ae338af09c108e832443d4d830a89dfb464bb33aec1a18c02d2",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "owner_frame_wrap_verified": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false,
+        "observations": 10,
+        "frames": 16,
+        "red_dominant_changed_pixels": 1875,
+        "binary_sha256": "29215f3b36d8b33c0ac991ef667c4ff9348d6f53109a947594cac55445735222"
+      },
+      "work_queue_status": "thin_bounded_untextured_frontend_and_map_material_pass_natural_lighting_context_open"
     },
     {
       "index": 122,

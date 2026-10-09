@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Compile actual per-instance texture selection and opaque renderer batching.
+"""Compile actual map material tint, texture selection and renderer batching.
 
 GPU/map animation is checked separately by map_texture_probe.py. This test
-guards differently phased owners sharing immutable geometry in one gather.
+guards material color/alpha and differently phased owners sharing immutable
+geometry in one gather.
 """
 from pathlib import Path
 import subprocess
@@ -24,6 +25,9 @@ def function(text, signature):
 map_source = (ROOT/'src/maprenderer.cpp').read_text()
 renderer_source = (ROOT/'src/renderer.cpp').read_text()
 selection = function(map_source, 'static TTextureHandle MapMeshTexture(')
+material = function(map_source, 'void LoadObjectMaterial(')
+tint_start = map_source.index('            m.tint[0] = m.tint[1] = m.tint[2] = 1.0f;')
+tint = map_source[tint_start:map_source.index('            m.obj_id = obj_id;', tint_start)]
 drain = function(renderer_source, 'void TRenderer::DrainMeshQueue()')
 prelude = r'''
 #include <algorithm>
@@ -36,8 +40,18 @@ using TTextureHandle=uint32_t;constexpr uint32_t kInvalidTexture=0;
 constexpr int MAXTEXTURES=8,OBJ3D_TEX=0x200000,OBJ3D_TEXFRAME=0x100000;
 struct S3DAnimObj{int flags{};uint32_t htextures[8]{};int textureframe[9]{};};
 struct S3DTex{int numframes=1;bool copyframes=false;uint32_t*framehtexs=nullptr;uint32_t htexture=0;};
-struct T3DImagery{S3DTex texture;int NumTextures(){return 1;}void GetTexture(int,S3DTex*t){*t=texture;}};
-struct SMeshSubmit{uint32_t mesh=1,texture_override=0;int retail_lighting=0;bool retail_positive_face_cull=false;};
+struct Color{float r=0,g=0,b=0,a=1;};
+struct S3DMat{struct{Color diffuse,ambient,specular,emissive;float power=0;}matdesc;};
+struct S3DObj{int material=0;};
+struct T3DImagery{S3DTex texture;S3DMat material;int textures=1,material_index=0;
+ int NumTextures(){return textures;}void GetTexture(int,S3DTex*t){*t=texture;}
+ int NumMaterials(){return 1;}void GetObject(int,S3DObj*o){o->material=material_index;}
+ void GetMaterial(int,S3DMat*m){*m=material;}};
+struct SMeshSubmit{uint32_t mesh=1,texture_override=0;float tint[4]{};int retail_lighting=0;bool retail_positive_face_cull=false;};
+struct SHelperMeshSubmit{float diffuse[4]{},ambient[4]{},specular[4]{},emissive[4]{},power=0;};
+constexpr int OBJCLASS_EFFECT=7;
+struct Owner{int kind;int ObjClass()const{return kind;}};
+struct Asset{int objnum=0;};
 struct Resource{uint32_t id=1;};using sg_buffer=Resource;
 struct sg_range{const void*ptr;size_t size;};
 struct sg_bindings{Resource vertex_buffers[2];int vertex_buffer_offsets[2]{};Resource index_buffer;uint32_t fs_images[1]{};};
@@ -56,6 +70,14 @@ struct TRenderer{std::vector<SMeshSubmit>mesh_queue;std::vector<float>mesh_insta
 '''
 checks = r'''
 int main(){
+ T3DImagery barrier;barrier.textures=0;barrier.material.matdesc.diffuse={1,0,0,0.25f};
+ SMeshSubmit red;ApplyTint(&barrier,OBJCLASS_EFFECT,0.8f,red);
+ assert(red.tint[0]==1&&red.tint[1]==0&&red.tint[2]==0&&red.tint[3]==0.2f);
+ barrier.textures=1;ApplyTint(&barrier,OBJCLASS_EFFECT,0.8f,red);
+ assert(red.tint[0]==1&&red.tint[1]==1&&red.tint[2]==1&&red.tint[3]==0.8f);
+ barrier.textures=0;ApplyTint(&barrier,0,0.8f,red);assert(red.tint[1]==1&&red.tint[3]==0.8f);
+ barrier.material_index=2;ApplyTint(&barrier,OBJCLASS_EFFECT,0.8f,red);
+ assert(red.tint[0]==1&&red.tint[1]==1&&red.tint[2]==1&&red.tint[3]==0.8f);
  uint32_t frames[]{101,102,103,104,105,106};T3DImagery img;img.texture={6,false,frames,101};
  S3DAnimObj early,late;
  const auto a=MapMeshTexture(img,&early,0,1,1,88),b=MapMeshTexture(img,&late,0,1,3,88);
@@ -72,11 +94,12 @@ int main(){
  assert(draws[1].texture==102&&draws[1].instances==2);assert(draws[2].texture==104&&draws[2].instances==1);
  assert(r.meshes[0].albedo==77);draws.clear();l.retail_positive_face_cull=true;
  r.mesh_queue={e,l};r.DrainMeshQueue();assert(draws.size()==2);
- std::puts("PASS: actual per-owner frame/explicit overrides, immutable assets and texture-separated batches");
+ std::puts("PASS: actual material color/alpha/fallback, per-owner texture selection and immutable batches");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='revenant-map-texture-') as temp:
     source=Path(temp)/'test.cpp';binary=Path(temp)/'test'
-    source.write_text(prelude+selection+'\n'+drain+'\n'+checks)
+    tint_function = '\nvoid ApplyTint(T3DImagery*meshimg,int kind,float draw_alpha,SMeshSubmit&m){Owner owner{kind};Owner*oi=&owner;Asset asset;\n'+tint+'}\n'
+    source.write_text(prelude+selection+'\n'+material+tint_function+drain+'\n'+checks)
     subprocess.run(['clang++','-std=c++17',str(source),'-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True)
