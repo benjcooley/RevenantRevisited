@@ -49,3 +49,13 @@ fidelity and modern GPU parity remain separate.
 [Run instructions and exact scope](../../../recon/retail_asm/runtime/effects/scrolltex-water-ab/README.md)
 and [machine-readable proof](../../../recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json)
 retain the pre-fix compiled controller trace and original empty-selector counts.
+
+Final native/compiled proof covers84whole-frame RGB565/depth pairs with exact
+replays and4,872bit-exact UV fields. All six assets have14visible pairs each
+(minimum24,985nonzero pixels); fixed1280×720 RAM framing keeps original camera,
+z-distance1925, geometry and rate unchanged. Corner error is below4.73e-7.
+The actual authored-mesh Submit scroll branch is compiled in the candidate.
+Source/source-device lighting, sampler behavior, long-clock precision and Metal
+remain separate. Native three-object fallback and strict malformed/overlap
+regressions both pass. Generated report is retained under ignored
+`recon/retail_asm/runtime/effects/scrolltex-water-ab/`.

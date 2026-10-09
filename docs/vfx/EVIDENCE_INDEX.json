@@ -9,17 +9,17 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 76,
+    "retail_rows_with_source_fixes_recorded": 80,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 62,
+    "actual_runtime_verified_rows": 69,
     "visual_fidelity_confirmed_rows": 16,
     "repeatable_ab_rows": 8,
-    "thin_bounded_render_frontend_rows": 49
+    "thin_bounded_render_frontend_rows": 55
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -346,6 +346,43 @@
       "check": "literal_water_25_drop_frontend",
       "status": "pass",
       "scope": "Literal Water25drop original Init/warmup/Animate/RNG/Render matrices vs compiled actual production methods and packets. Exact authored XYZ/UV/RGB565/original indices; identity owner/face0/white common software raster. Copied lighting callback boundary omitted; source initialization/assets/renderer adapted. Actual additive device arithmetic, normal illumination, modern triangulation, map/component and Metal separate; no FlowWater mapping claim."
+    },
+    "recon/retail_asm/runtime/effects/ripple-map-next-20261009/manifest.json": {
+      "sha256": "633330575976231959fcdd473a7dc75f7b6a260498e13e63b3bf02dc1143c58f",
+      "retail_rows": [
+        "Ripple:0x12309867"
+      ],
+      "check": "ripple_actual_map_recursive_lifecycle",
+      "status": "pass",
+      "scope": "Actual typedmap Rippledefaultlength96/sharedcomponent/normalpulses/create/move/recursivechildren/naturalexpiry andrestoredfloor. Syntheticgroundmodule; originalworldsector scheduling andretail/Metaldevice parityremainopen."
+    },
+    "recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json": {
+      "sha256": "b3b3023714a7449c1c664210bff87b5b39a4f9e8aaa98f46f3fc3a50a3d5e8e2",
+      "retail_rows": [
+        "FlowWater:0xadbcef15",
+        "BendWater1:0xadbcef16",
+        "BendWater2:0xadbcef17",
+        "Wave:0x9d92bc1d",
+        "WaveS:0x9d92bc1e",
+        "WaveM:0x9d92bc1f"
+      ],
+      "check": "generic_scrolltex_and_map_lifecycle",
+      "status": "pass",
+      "scope": "Actual original scrolltex factory/full tag parser/Initialize/Render, original copied authored UVs and native constant keys/matrices versus compiled actual parser/GetObjectNum/InitializeScrollTexTracks/ScrollTexOffset inside actual generic mesh extraction/Submit scroll-imagery branch. Fixed1280x720 RAM viewport, unchanged z distance1925 and camera; common original software raster, white input lighting, two selected owner positions, legal ticks0..120. Copy-instance-vertices imagery adapter, map install/sampler/native device/Metal and long-clock precision separate."
+    },
+    "recon/retail_asm/runtime/effects/scrolltex-map-next-20261009/manifest.json": {
+      "sha256": "5f4bc483c17647a84c5a58b831e9b33b5806bd4fe535f0bf3669a065ef76662a",
+      "retail_rows": [
+        "FlowWater:0xadbcef15",
+        "BendWater1:0xadbcef16",
+        "BendWater2:0xadbcef17",
+        "Wave:0x9d92bc1d",
+        "WaveS:0x9d92bc1e",
+        "WaveM:0x9d92bc1f"
+      ],
+      "check": "generic_scrolltex_and_map_lifecycle",
+      "status": "pass",
+      "scope": "Six exact generic map owners ADDAT/MOVE/DELETE and rendered scrolls, each restores synthetic clean floor; natural placement, native original fullworld lighting and retail/Metaldevice equivalence remain open."
     }
   }
 }
