@@ -62,7 +62,7 @@ def production_spans():
         math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
 
 
-def build_port(output,metadata,frames=FRAMES,texture_frames=False):
+def build_port(output,metadata,frames=FRAMES,texture_frames=False,untextured=False):
     pieces=production_spans()
     prelude=r'''
 #include <cstdio>
@@ -127,6 +127,11 @@ struct TAuthoredStaticMeshEffect {World root;struct SStaticPart {int mesh=1,reta
  std::vector<SStaticPart> parts_;T3DImagery*scroll_imagery_=nullptr;int frame_{0};int GetFrame()const{return frame_;}const World&Transform()const{return root;}
  void SubmitWorldMeshForTest_BESPOKE(EFxDebugMode);};
 '''
+    if untextured:
+        # Execute the real zero-texture ExtractSubMeshTextureSlot fallback;
+        # no dummy surface or textured face bin is supplied.
+        prelude=prelude.replace('int NumTextures()const{return 1;}',
+                               'int NumTextures()const{return 0;}')
     trailer=r'''
 int main(int argc,char**argv){
  std::ifstream input(argv[1],std::ios::binary);if(!input)return 2;
@@ -175,6 +180,7 @@ int main(int argc,char**argv){
     return traces,dict(command=command,generated_source_sha256=sha(generated.read_bytes()),binary_sha256=sha(binary.read_bytes()),
         compiled_production_bodies=['GetUninterpolatedAniKey','GetAniKey','CalcObjectMatrix','BuildStaticObjectMatrix',
                                    'ExtractSubMeshTextureSlot','TAuthoredStaticMeshEffect::SubmitWorldMeshForTest_BESPOKE','src/math3d.cpp'],
+        untextured=untextured,
         boundaries=['decoded exact asset records supplied by verified relative-offset layout','identity/translated owner matrix',
                     'renderer captures actual generic SubmitMesh payload','cross-state interpolation disabled for one constant track'])
 

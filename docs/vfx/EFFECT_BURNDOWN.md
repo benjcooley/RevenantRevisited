@@ -9,7 +9,25 @@ Prioritize speed and repeatability, with known renderer limits recorded
 separately from VFX defects. The counts and earlier captures below are retained
 historical evidence; this migration alone grants no additional acceptance.
 
-**Latest thin-emulator coverage: 55 / 176 bounded rendered frontends.**
+**Latest thin-emulator coverage: 57 / 176 bounded rendered frontends.**
+
+**LabGateBarrierS/E:** both exact assets pass four nonempty original-software
+image/depth comparisons, each replayed twice, using their authored untextured
+geometry and red material. Original default-animator lookup, key/matrix code and
+the actual no-texture raster branch execute; compiled static preview submission
+and material decoding supply the independent port geometry. Authored diffuse
+is an explicit upstream vertex-color input, so full native illumination remains
+open. No texture or replacement geometry is introduced.
+
+Separate map captures found both quads rendered white. The opaque submission
+path now carries authored diffuse and alpha for zero-texture EFFECT meshes.
+Each corrected owner passes ten typed create/move/delete observations across
+16 frames, all 1,875 changed pixels are red-dominant, and deletion restores the
+floor exactly. The focused native test and compiled material/alpha/fallback
+regression pass alongside the 94-test runtime suite. Bounded frontends advance
+55→57, controlled runtime rows69→71 and source-fix rows80→82. Natural barrier
+visibility/caller, full illumination and device parity remain open; full
+acceptance is still0/176. [Scope and reproduction](forensics/LAB_GATE_BARRIERS_THIN.md).
 
 **2026-10-09 FireFlash precision checkpoint:** native initialization and fade
 arithmetic exposed two local rounding differences. The corrected production
@@ -36,7 +54,8 @@ that [case](forensics/RIFT1_FAILED_ANIMTEX.md) without repairing the authored ta
 or claiming animation. Standalone
 [Flare](forensics/FLARE_PREFLIGHT_20261009.md) also remains deferred because no
 exact asset binding exists in the shipped EFFECT registry/archive. Counts
-remain 55 bounded rendered rows, 69 controlled runtime rows and 0 fully accepted.
+at that checkpoint remained 55 bounded rendered rows, 69 controlled runtime rows
+and 0 fully accepted, before the subsequent barrier batch above.
 
 [Six generic scrolling-water effects](../../recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json)
 now pass84whole-image/depth pairs, all visiblynonempty, twice replayed. Original
@@ -841,7 +860,7 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 - [ ] **MeteorStorm** `0xf32bcfac` — `Magic\Comet.I3D`. Candidates: `TMeteorStormEffect_BESPOKE`. Progress: clean FPS-enabled native lifecycle with exact cleanup retained; existing placeholder is unverified. Next: recover actual Comet authored partsys/blendcont/default animator; snapshot storm candidate is the wrong retail association.
 - [ ] **Vortex** `0x452dade0` — `Magic\Vortex.I3D`. Candidates: `TVortexEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **FireFlash** `0x37780ae2` — `Magic\Fireflash.I3D`. Candidates: `TFireFlashAnimator_SHIM`, `TFireFlashEffect_BESPOKE`. Progress: literal150-slot controller, authored meshes/normals/materials and explicit software-helper lighting verified;11 real lifecycle checks pass. Own clean pair has backgrounds0. Next: native orange annulus versus softer filled port cloud remains software blend/raster/initial-phase deferral, with no fitting; natural spell damage/multiplicity/context remains open. See [audit](forensics/FIRE_FLASH_AUTHORED.md).
-- [ ] **FireWind** `0x98974eab` — `Magic\Firewind.I3D`. Candidates: `TFireWindEffect_BESPOKE`. Progress: bounded actual flame/ring recording retained; frozen trails remain after owner expiry, exact floor restored by camera nudge. Next: defer redraw/controller gap; acquire clean in-situ reference later. [Probe](forensics/FIREWIND_REFERENCE_PROBE.md).
+- [ ] **FireWind** `0x98974eab` — `Magic\Firewind.I3D`. Candidates: `TFireWindEffect_BESPOKE`. Progress: bounded actual flame/ring recording retained; frozen trails remain after owner expiry, exact floor restored by camera nudge. Next: defer redraw/controller gap; acquire clean in-situ reference later. [Probe](forensics/FIREWIND_REFERENCE_PROBE.md). Native400-slot null-spell motion now runs100ticks; current port remains a single-billboard placeholder. [Thin preflight](forensics/FIREWIND_THIN_PREFLIGHT.md).
 - [ ] **YFireWind** `0x98974ea7` — `Magic\YFirewind.I3D`. Candidates: `TFireWindEffect_Bespoke__YFireWind_BESPOKE`, `TFireWindEffect_BESPOKE__YFireWind`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **Pulp** `0x152dafdd` — `Misc\Pulp.I3D`. Candidates: `TPulpEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger. Registered preview is explicitly stubbed and returns null: implement live character/body-part mesh fixture.
 - [ ] **IceBolt** `0xb1c4c90f` — `Magic\Icebolt.I3D`. Candidates: `TIceBoltEffect_BESPOKE`, `TIceBoltAnimator_SHIM`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
@@ -914,8 +933,8 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 - [ ] **TeleportDoorInsideW** `0xad92bc32` — `Magic\WarpW.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **TeleportDoorInsideY** `0xad92bc33` — `Magic\WarpY.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **TeleportDoorInsideG** `0xad92bc34` — `Magic\WarpG.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **LabGateBarrierS** `0xad92bc37` — `Misc\IBarrier1.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **LabGateBarrierE** `0xad92bc38` — `Misc\IBarrier2.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
+- [ ] **LabGateBarrierS** `0xad92bc37` — `Misc\\IBarrier1.I3D`. Progress: default animator/untextured authored frontend passes exact image/depth pairs; actual map diffuse corrected from white to red, ten lifecycle observations and exact floor restoration pass. Next: original full illumination, natural barrier caller/visibility and device parity. [Scope](forensics/LAB_GATE_BARRIERS_THIN.md).
+- [ ] **LabGateBarrierE** `0xad92bc38` — `Misc\\IBarrier2.I3D`. Progress: default animator/untextured authored frontend passes exact image/depth pairs; actual map diffuse corrected from white to red, ten lifecycle observations and exact floor restoration pass. Next: original full illumination, natural barrier caller/visibility and device parity. [Scope](forensics/LAB_GATE_BARRIERS_THIN.md).
 - [ ] **LabyrinthEffect** `0xad92bd20` — `misc\Starfield.I3D`. Candidates: `TLabyrinthEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **Nakrnoth** `0xad92bd21` — `magic\Nakrnoth.I3D`. Candidates: `TNakrnothEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **KinSecretDoor** `0xad92bd23` — `misc\SecretDoor.I3D`. Candidates: `TKinSecretDoor_AUTHORED_STILL`. Progress: exact opaque still owner/source culling built;18 source contracts/1300 signs and6 MOVE/DELETE rows pass with100-groundtail. Final150-frame classic-source-lighting pair fixes grossbrightness; geometry/placement/culling agree but texture/contrast/raster remain mismatch. Next: shared source sampling/lighting review without fitting; opening177-frame/open states and natural door/map context remain mandatory open. See [audit](forensics/KINSECRETDOOR_STILL_RUNTIME.md).

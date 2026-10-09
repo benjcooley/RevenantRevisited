@@ -1495,6 +1495,15 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             std::memcpy(m.world, world_renderer, sizeof(m.world));
             m.tint[0] = m.tint[1] = m.tint[2] = 1.0f;
             m.tint[3] = draw_alpha;
+            // Untextured EFFECT faces use the authored material color.
+            // A white fallback surface supplies geometry, not white diffuse.
+            if (oi->ObjClass() == OBJCLASS_EFFECT && meshimg->NumTextures() == 0)
+            {
+                SHelperMeshSubmit material = {};
+                LoadObjectMaterial(meshimg, asset.objnum, material);
+                std::memcpy(m.tint, material.diffuse, sizeof(m.tint));
+                m.tint[3] *= draw_alpha;
+            }
             m.obj_id = obj_id;
             if (oi->ObjClass() == OBJCLASS_EFFECT) m.retail_lighting = (immortalmight_base || fmastery_base) ? 1 : asset.retail_lighting;
             m.retail_positive_face_cull = (IsRetailKinSecretDoorStill(oi, meshimg) && asset.objnum == 0) ||
