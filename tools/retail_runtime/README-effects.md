@@ -7,7 +7,7 @@ state, geometry, animation, motion and comparisons stay in this fast loop.
 Existing guest recordings remain evidence. Unsupported fixtures stay queued
 while the next easy effect moves forward.
 
-Latest bounded rendered coverage is 49/176. StillWater and all active watcher
+Latest bounded rendered coverage is 55/176. StillWater and all active watcher
 texture frames pass original-selector/matrix/raster comparisons; CharUtility
 and SewerWater pass all-part static comparisons and actual native animator
 lookup. Use `static_texture_probe.py` and `default_static_probe.py`.
@@ -670,3 +670,20 @@ retain raw removal journals: identity/tick matches, while flag-observation versu
 vector-destructor ordering within a tick is not claimed. Original sector/map
 installation, full world transformation, natural lighting and modern GPU pixels
 remain separate gates.
+
+
+### FlowWater, BendWater and Wave authored scrolling
+
+[`scrolltex_water_probe.py`](scrolltex_water_probe.py) runs actual native controller
+factory/tag parser/Initialize/Render and constant authored geometry for six exact
+FlowWater/BendWater1/BendWater2/Wave/WaveS/WaveM assets. Current production parser,
+initializer, query and actual scrolling generic SubmitMesh path agree over 84
+whole-image/depth pairs, with 4,872 bit-exact UV floats and two exact replays.
+
+Four shipped tags target renamed objects; original empty selection falls back to
+all animator objects. The corrected port now preserves this behavior without
+relaxing malformed/nonfinite/overlap rejection. Native three-object fallback and
+compiled regression tests pass. [Instructions/results](../../recon/retail_asm/runtime/effects/scrolltex-water-ab/README.md)
+and [report](../../recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json)
+retain pre-fix traces. Original lighting, map/sampler device fidelity and Metal
+pixel equivalence remain separate; Rift1 animtex is deferred.

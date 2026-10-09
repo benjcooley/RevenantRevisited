@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "audited_date": "2026-10-08",
+  "audited_date": "2026-10-09",
   "authority": "Retail CLASS EFFECT TYPES entries are the scope; completion requires all acceptance gates. Preview associations are candidates only.",
   "source": {
     "archive": "data/imagery.rvi",
@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "842ee4acf4a6c6a2fd80d75a0d64139a0a556b5a2415826beadd838ac8716935",
+    "harness_sha256": "a091e753d2c6d8f7059aaeece3d6df80f9ed716dfb701320526bf2fbadd1373d",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,17 +24,17 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 76,
+    "retail_rows_with_source_fixes_recorded": 80,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 62,
+    "actual_runtime_verified_rows": 69,
     "visual_fidelity_confirmed_rows": 16,
     "repeatable_ab_rows": 8,
-    "thin_bounded_render_frontend_rows": 49
+    "thin_bounded_render_frontend_rows": 55
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -10834,10 +10834,11 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Return later with actual shipped setting/controller and stable background; bounded standalone probe is diagnostic only. Advance easy retail A/B.",
+      "next_action": "Implement exact legacyasset/controllerfixturelater; currentFlare-basedTeleporter previewunsupportedforretailA/B. IrisFlareandTeleporter requireseparatecontrollers; Teleporter naturaltransition needscaster/source/destination.",
       "notes": [
         "2026-10-05: Visible residue after delete/redraw; background reference unstable. No accurate-reference or visual-acceptance credit.",
-        "Retail probe shows large blue cylinder plus flares; existing TFlare ten-spark preview association is unverified. Delete and Ctrl+R leave blue pixels outside floor. Retail recovered by verified shutdown and fixture reopen, no map saves."
+        "Retail probe shows large blue cylinder plus flares; existing TFlare ten-spark preview association is unverified. Delete and Ctrl+R leave blue pixels outside floor. Retail recovered by verified shutdown and fixture reopen, no map saves.",
+        "2026-10-09 exactregistry/legacyheader preflight: IrisFlare andTeleporter shareassetbutdistinctnativecontrollers. The Flare-basedTeleporter previewisnotretailcomparison;body2parser cannotreadflags4legacybody. No newstate/rendercredit."
       ],
       "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
       "diagnostic_reference_runs": [
@@ -10852,7 +10853,7 @@
         "restored_ground_mean_error": 1.1006907393292682,
         "reason": "Visible residue after delete/redraw; background reference unstable"
       },
-      "work_queue_status": "deferred_unstable_reference"
+      "work_queue_status": "deferred_exact_legacy_asset_controller_adapter"
     },
     {
       "index": 37,
@@ -10969,11 +10970,13 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Implement exact legacyasset/controllerfixturelater; currentFlare-basedTeleporter previewunsupportedforretailA/B. IrisFlareandTeleporter requireseparatecontrollers; Teleporter naturaltransition needscaster/source/destination.",
       "notes": [
-        "Retail Teleporter uses IrisFlare; M09 teleporter preview uses composite teleportation/gvortex. These names must not be conflated."
+        "Retail Teleporter uses IrisFlare; M09 teleporter preview uses composite teleportation/gvortex. These names must not be conflated.",
+        "2026-10-09 exactregistry/legacyheader preflight: IrisFlare andTeleporter shareassetbutdistinctnativecontrollers. The Flare-basedTeleporter previewisnotretailcomparison;body2parser cannotreadflags4legacybody. No newstate/rendercredit."
       ],
-      "batch": "3 \u2014 Environment, water, signs and simple reusable variants"
+      "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
+      "work_queue_status": "deferred_exact_legacy_asset_controller_adapter"
     },
     {
       "index": 40,
@@ -11555,13 +11558,14 @@
         "accepted": false
       },
       "runtime_dispatch": "exact_fireflash_builder_reference_component_verified_through_create_move_natural_expiry_and_delete",
-      "next_action": "Preserve literal150-slot controller and11 real lifecycle checks. Software helper corrected color; remaining native annulus versus softer filled cloud requires source blend/raster/initial-phase investigation, no fitting. Natural spell damage multiplicity/context remains open; advance simple references.",
+      "next_action": "Apply focused source-grounded FireFlash angle initialization/intermediate arithmetic and blend-request mapping, then repeat wholepool/packet proof and real original software pixels. Current state-only mismatch diagnostic is not acceptance.",
       "notes": [
         "2026-10-05: one bounded26.169sec native probe yields62 distinct viewport images; last change9.867sec, then frozen flame. FireFlash.delete reports no context. Nudge/return restores exact floor. No accurate-reference, port-fix or visual acceptance credit.",
         "FPS-enabled bounded recovery now has independently clean canonical floor, animated native reference and exact cleanup without camera nudge. Historical FPS-off residue is superseded as active reference; not a visual/controller acceptance claim.",
         "Builde0a92c7a3708 passes;16particle and108transform tests pass. Natural five-check fixture has16 exact-ground tail frames; explicit six-check fixture29. Preview240frames with last90 exact ground. Native/port backgrounds0; visual burst mismatch retained, not accepted. Initial particle test run from wrong cwd could not load effects.def; corrected repo-cwd run passes all16.",
         "Finale829e8db\u2026 compiled Metal helper and all8 serial capture jobs pass. Source RGB565 helper replaces fabricated specular/emissive injection only in explicit mode1; mode0 unchanged.11 real lifecycle checks per effect, exact natural and explicit-delete ground tails. Capture teardown still required SIGTERM; clean shutdown unproved.",
-        "Actual retail additive RGB565 selector/kernels confirmed; older snapshot overwrite/zero-key hypothesis rejected. Preserve additive blending; visual annulus/density differences remain open without fitted brightness."
+        "Actual retail additive RGB565 selector/kernels confirmed; older snapshot overwrite/zero-key hypothesis rejected. Preserve additive blending; visual annulus/density differences remain open without fitted brightness.",
+        "2026-10-09 native150record/101sample diagnostic retained: integer fields/RNG/drawcounts match;8120float32differences start at initial angle arithmetic, native request8 differs from current additive metadata. No softwarepixel/renderfrontend credit."
       ],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "native_diagnostic": {
@@ -11589,7 +11593,7 @@
           ]
         }
       },
-      "work_queue_status": "deferred_software_blend_raster_and_initial_visible_phase",
+      "work_queue_status": "deferred_source_precision_and_blend_contract",
       "source_preflight": {
         "forensics": "docs/vfx/forensics/FIREFLASH_REFERENCE_PROBE.md",
         "standalone_safe": true,
@@ -14347,15 +14351,18 @@
       "preview_candidates": [
         "TWaterEffect_BESPOKE__FlowWater"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "Recovered native scrolltex empty-selector fallback to all objects after successful strict parsing. Unmatched shipped object names no longer freeze UVs; native parser/controller/geometry/pixels and actual map lifecycle pass.",
+        "Historical particle preview replaced with opt-in supported scroll-controller authored mesh; mesh loads before tag inspection. Real preview26changingnonemptyframes exitsnormally."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -14364,10 +14371,39 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "runtime_dispatch": "native_default_builder_scrolltex_and_actual_generic_map_verified",
+      "next_action": "Retain exact original controller/UV/authored mesh plus actual generic map lifecycle. Verify authored environment/lighting/culling and original device/Metal separately.",
       "notes": [],
-      "batch": "3 \u2014 Environment, water, signs and simple reusable variants"
+      "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
+      "thin_emulator_checks": [
+        {
+          "name": "generic_scrolltex_authored_mesh_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json",
+          "sampled_pixel_pairs": 14,
+          "warm_replays": 2,
+          "native_uv_bit_exact": true,
+          "runtime_producer_compared": true,
+          "modern_gpu_backend_compared": false,
+          "scope": "Actual original scrolltex factory/full tag parser/Initialize/Render, original copied authored UVs and native constant keys/matrices versus compiled actual parser/GetObjectNum/InitializeScrollTexTracks/ScrollTexOffset inside actual generic mesh extraction/Submit scroll-imagery branch. Fixed1280x720 RAM viewport, unchanged z distance1925 and camera; common original software raster, white input lighting, two selected owner positions, legal ticks0..120. Copy-instance-vertices imagery adapter, map install/sampler/native device/Metal and long-clock precision separate.",
+          "open": [
+            "natural map scene/lighting/culling",
+            "material/sampler/nativegraphicsdevice and Metal equivalence",
+            "longclock precision"
+          ],
+          "full_acceptance_granted": false
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/scrolltex-map-next-20261009/manifest.json",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "created_visible": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false
+      }
     },
     {
       "index": 78,
@@ -14376,15 +14412,17 @@
       "retail_type_id": "0xadbcef16",
       "asset": "Misc\\BendWater1.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "Recovered native scrolltex empty-selector fallback to all objects after successful strict parsing. Unmatched shipped object names no longer freeze UVs; native parser/controller/geometry/pixels and actual map lifecycle pass."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -14393,12 +14431,41 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "native_default_builder_scrolltex_and_actual_generic_map_verified",
+      "next_action": "Retain exact original controller/UV/authored mesh plus actual generic map lifecycle. Verify authored environment/lighting/culling and original device/Metal separately.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "3 \u2014 Environment, water, signs and simple reusable variants"
+      "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
+      "thin_emulator_checks": [
+        {
+          "name": "generic_scrolltex_authored_mesh_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json",
+          "sampled_pixel_pairs": 14,
+          "warm_replays": 2,
+          "native_uv_bit_exact": true,
+          "runtime_producer_compared": true,
+          "modern_gpu_backend_compared": false,
+          "scope": "Actual original scrolltex factory/full tag parser/Initialize/Render, original copied authored UVs and native constant keys/matrices versus compiled actual parser/GetObjectNum/InitializeScrollTexTracks/ScrollTexOffset inside actual generic mesh extraction/Submit scroll-imagery branch. Fixed1280x720 RAM viewport, unchanged z distance1925 and camera; common original software raster, white input lighting, two selected owner positions, legal ticks0..120. Copy-instance-vertices imagery adapter, map install/sampler/native device/Metal and long-clock precision separate.",
+          "open": [
+            "natural map scene/lighting/culling",
+            "material/sampler/nativegraphicsdevice and Metal equivalence",
+            "longclock precision"
+          ],
+          "full_acceptance_granted": false
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/scrolltex-map-next-20261009/manifest.json",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "created_visible": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false
+      }
     },
     {
       "index": 79,
@@ -14407,15 +14474,17 @@
       "retail_type_id": "0xadbcef17",
       "asset": "Misc\\BendWater2.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "Recovered native scrolltex empty-selector fallback to all objects after successful strict parsing. Unmatched shipped object names no longer freeze UVs; native parser/controller/geometry/pixels and actual map lifecycle pass."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -14424,12 +14493,41 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "native_default_builder_scrolltex_and_actual_generic_map_verified",
+      "next_action": "Retain exact original controller/UV/authored mesh plus actual generic map lifecycle. Verify authored environment/lighting/culling and original device/Metal separately.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "3 \u2014 Environment, water, signs and simple reusable variants"
+      "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
+      "thin_emulator_checks": [
+        {
+          "name": "generic_scrolltex_authored_mesh_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json",
+          "sampled_pixel_pairs": 14,
+          "warm_replays": 2,
+          "native_uv_bit_exact": true,
+          "runtime_producer_compared": true,
+          "modern_gpu_backend_compared": false,
+          "scope": "Actual original scrolltex factory/full tag parser/Initialize/Render, original copied authored UVs and native constant keys/matrices versus compiled actual parser/GetObjectNum/InitializeScrollTexTracks/ScrollTexOffset inside actual generic mesh extraction/Submit scroll-imagery branch. Fixed1280x720 RAM viewport, unchanged z distance1925 and camera; common original software raster, white input lighting, two selected owner positions, legal ticks0..120. Copy-instance-vertices imagery adapter, map install/sampler/native device/Metal and long-clock precision separate.",
+          "open": [
+            "natural map scene/lighting/culling",
+            "material/sampler/nativegraphicsdevice and Metal equivalence",
+            "longclock precision"
+          ],
+          "full_acceptance_granted": false
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/scrolltex-map-next-20261009/manifest.json",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "created_visible": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false
+      }
     },
     {
       "index": 80,
@@ -14550,8 +14648,8 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -14560,12 +14658,41 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "native_default_builder_scrolltex_and_actual_generic_map_verified",
+      "next_action": "Retain exact original controller/UV/authored mesh plus actual generic map lifecycle. Verify authored environment/lighting/culling and original device/Metal separately.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "3 \u2014 Environment, water, signs and simple reusable variants"
+      "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
+      "thin_emulator_checks": [
+        {
+          "name": "generic_scrolltex_authored_mesh_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json",
+          "sampled_pixel_pairs": 14,
+          "warm_replays": 2,
+          "native_uv_bit_exact": true,
+          "runtime_producer_compared": true,
+          "modern_gpu_backend_compared": false,
+          "scope": "Actual original scrolltex factory/full tag parser/Initialize/Render, original copied authored UVs and native constant keys/matrices versus compiled actual parser/GetObjectNum/InitializeScrollTexTracks/ScrollTexOffset inside actual generic mesh extraction/Submit scroll-imagery branch. Fixed1280x720 RAM viewport, unchanged z distance1925 and camera; common original software raster, white input lighting, two selected owner positions, legal ticks0..120. Copy-instance-vertices imagery adapter, map install/sampler/native device/Metal and long-clock precision separate.",
+          "open": [
+            "natural map scene/lighting/culling",
+            "material/sampler/nativegraphicsdevice and Metal equivalence",
+            "longclock precision"
+          ],
+          "full_acceptance_granted": false
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/scrolltex-map-next-20261009/manifest.json",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "created_visible": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false
+      }
     },
     {
       "index": 83,
@@ -14574,15 +14701,17 @@
       "retail_type_id": "0x9d92bc1e",
       "asset": "Misc\\WaveS.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "Recovered native scrolltex empty-selector fallback to all objects after successful strict parsing. Unmatched shipped object names no longer freeze UVs; native parser/controller/geometry/pixels and actual map lifecycle pass."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -14591,12 +14720,41 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "native_default_builder_scrolltex_and_actual_generic_map_verified",
+      "next_action": "Retain exact original controller/UV/authored mesh plus actual generic map lifecycle. Verify authored environment/lighting/culling and original device/Metal separately.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "3 \u2014 Environment, water, signs and simple reusable variants"
+      "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
+      "thin_emulator_checks": [
+        {
+          "name": "generic_scrolltex_authored_mesh_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json",
+          "sampled_pixel_pairs": 14,
+          "warm_replays": 2,
+          "native_uv_bit_exact": true,
+          "runtime_producer_compared": true,
+          "modern_gpu_backend_compared": false,
+          "scope": "Actual original scrolltex factory/full tag parser/Initialize/Render, original copied authored UVs and native constant keys/matrices versus compiled actual parser/GetObjectNum/InitializeScrollTexTracks/ScrollTexOffset inside actual generic mesh extraction/Submit scroll-imagery branch. Fixed1280x720 RAM viewport, unchanged z distance1925 and camera; common original software raster, white input lighting, two selected owner positions, legal ticks0..120. Copy-instance-vertices imagery adapter, map install/sampler/native device/Metal and long-clock precision separate.",
+          "open": [
+            "natural map scene/lighting/culling",
+            "material/sampler/nativegraphicsdevice and Metal equivalence",
+            "longclock precision"
+          ],
+          "full_acceptance_granted": false
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/scrolltex-map-next-20261009/manifest.json",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "created_visible": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false
+      }
     },
     {
       "index": 84,
@@ -14612,8 +14770,8 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -14622,12 +14780,41 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "native_default_builder_scrolltex_and_actual_generic_map_verified",
+      "next_action": "Retain exact original controller/UV/authored mesh plus actual generic map lifecycle. Verify authored environment/lighting/culling and original device/Metal separately.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "3 \u2014 Environment, water, signs and simple reusable variants"
+      "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
+      "thin_emulator_checks": [
+        {
+          "name": "generic_scrolltex_authored_mesh_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json",
+          "sampled_pixel_pairs": 14,
+          "warm_replays": 2,
+          "native_uv_bit_exact": true,
+          "runtime_producer_compared": true,
+          "modern_gpu_backend_compared": false,
+          "scope": "Actual original scrolltex factory/full tag parser/Initialize/Render, original copied authored UVs and native constant keys/matrices versus compiled actual parser/GetObjectNum/InitializeScrollTexTracks/ScrollTexOffset inside actual generic mesh extraction/Submit scroll-imagery branch. Fixed1280x720 RAM viewport, unchanged z distance1925 and camera; common original software raster, white input lighting, two selected owner positions, legal ticks0..120. Copy-instance-vertices imagery adapter, map install/sampler/native device/Metal and long-clock precision separate.",
+          "open": [
+            "natural map scene/lighting/culling",
+            "material/sampler/nativegraphicsdevice and Metal equivalence",
+            "longclock precision"
+          ],
+          "full_acceptance_granted": false
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/scrolltex-map-next-20261009/manifest.json",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "created_visible": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false
+      }
     },
     {
       "index": 85,
@@ -18650,8 +18837,8 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "source_path_present_requires_in_game_acceptance",
-      "next_action": "Length64/96 recursive splash/child state, ordered RNG and rendered geometry now match, including translated owners. Verify real map/sector installation/scheduling, illumination/occlusion and Metal/backend separately.",
+      "runtime_dispatch": "actual_typed_map_ripple_component_recursive_lifecycle_verified",
+      "next_action": "Defaultlength96 realmap owner/recursivechildren/move/naturalexpiry nowpass. Verify authoredenvironmentalplacement, originalsector schedule/casterinteraction andfull lighting/device parity separately.",
       "notes": [
         "User reconfirms visual identity of the retail and port Ripple despite independent random seeds. Ring appearance is closed; no exact random placement or pixel matching required.",
         "2026-10-07: linked Drip length20 composite matches145states/fivecompletechildlifecycles/43image-depthpairs/twoexactreplays; no new effect-row or full acceptance credit."
@@ -18737,7 +18924,19 @@
           ],
           "full_acceptance_granted": false
         }
-      ]
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/ripple-map-next-20261009/manifest.json",
+        "exact_type_id_verified": true,
+        "one_component_attachment": true,
+        "move_verified": true,
+        "natural_expiry_verified": true,
+        "normal_object_removal_verified": true,
+        "recursive_child_factory_calls": 10,
+        "created_visible": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false
+      }
     },
     {
       "index": 147,
@@ -22334,9 +22533,9 @@
       "retail_type_candidates": [
         "0x369a5d2e"
       ],
-      "association_method": "name_candidate",
+      "association_method": "wrong_controller_placeholder_not_retail_comparison",
       "smoke": null,
-      "runtime_supported": null,
+      "runtime_supported": false,
       "retail_accepted": false
     },
     {

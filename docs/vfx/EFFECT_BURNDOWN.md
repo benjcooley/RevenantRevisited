@@ -9,7 +9,21 @@ Prioritize speed and repeatability, with known renderer limits recorded
 separately from VFX defects. The counts and earlier captures below are retained
 historical evidence; this migration alone grants no additional acceptance.
 
-**Latest thin-emulator coverage: 49 / 176 bounded rendered frontends.**
+**Latest thin-emulator coverage: 55 / 176 bounded rendered frontends.**
+
+[Six generic scrolling-water effects](../../recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json)
+now pass84whole-image/depth pairs, all visiblynonempty, twice replayed. Original
+factory/parser/controller execution confirms fallback to every object when a
+valid selector names none. FlowWater, BendWater1/2 andWaveS previously froze;
+Wave/WaveM exact targets are regression controls. Strict malformed/overlap
+rejection remains. Compiled actual authored-mesh submission now carries the
+original UV offset from the global24Hz clock; no particle proxy or geometry fit.
+[Map lifecycle](../../recon/retail_asm/runtime/effects/scrolltex-map-next-20261009/manifest.json)
+passes36exact-type create/move/delete observations over184frames. Each effect
+scrolls visibly and restores the floor after deletion; actual FlowWater preview
+has26changingnonemptyimages/cleanexit after fixing lazy mesh-before-tag loading.
+Controlled runtime rows advance63→69; natural setting/lighting/device gates stay
+open. [Controller audit](forensics/SCROLLTEX_EMPTY_SELECTION.md).
 
 [SewerWater preview/map dispatch](../../recon/retail_asm/runtime/effects/sewer-dispatch-next-20261008/sewer-dispatch-verification.json)
 now uses the verified static authored quad rather than the unrelated moving-water
@@ -39,6 +53,13 @@ owners, explicit texture/frame overrides and static fallback. This advances
 controlled runtime rows56→60 and source-fix rows71→74. Natural placement,
 lighting/culling and retail-versus-Metal device parity remain open; full
 acceptance is still0/176. [Map-texture audit](forensics/MAP_TEXTURE_ANIMATION.md).
+
+[Actual default Ripple map lifecycle](../../recon/retail_asm/runtime/effects/ripple-map-next-20261009/manifest.json)
+passes seven typed creation/component/movement/natural-expiry observations over
+108capturedframes. Ten child factory calls and95distinctactiveimages are
+retained; natural owner/tree expiry restores the initial floor
+exactly. Controlled runtime rows advance62→63; boundedfrontend49 andfull0
+remain unchanged. This is a synthetic grounded module, not authored-map parity.
 
 [Longer Ripple families](../../recon/retail_asm/runtime/effects/ripple-splash-family-ab/manifest.json)
 now verify length64/96 recursively through three profiles, including both signs
