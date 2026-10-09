@@ -12,6 +12,22 @@ ASSET_SHA='7c7471fced7e8175a56327ad2bfa370579d2cc08400ce735e4fe63104244d526'
 WIDTH=HEIGHT=1024
 
 
+def native_mode_mapping(vm):
+    """Observe original Scene mode code, not numeric-name assumptions."""
+    calls=[]
+    vm.put_u32(0x5d7a28,1);vm.put_u32(0x5e8790,0);vm.put_u32(0x66818c,0)
+    def setter(uc,address,size,user):
+        sp=uc.reg_read(UC_X86_REG_ESP);calls.append([vm.u32(sp+4),vm.u32(sp+8)])
+        uc.reg_write(UC_X86_REG_EIP,vm.u32(sp));uc.reg_write(UC_X86_REG_ESP,sp+12);uc.reg_write(UC_X86_REG_EAX,1)
+    hook=vm.uc.hook_add(UC_HOOK_CODE,setter,begin=0x417060,end=0x417060)
+    try:vm.call(0x417d60,(8,1),this=0x65a57c)
+    finally:vm.uc.hook_del(hook)
+    states=dict(calls)
+    if states.get(19)!=2 or states.get(20)!=2:raise AssertionError('Mode8 no longer maps to ONE/ONE')
+    return dict(original_function='0x417d60',observed_setter='0x417060',mode=8,states=calls,
+        source_blend='ONE',destination_blend='ONE',source_additive_metadata_correct=True)
+
+
 def parse_asset(data):
     if sha(data)!=ASSET_SHA:raise ValueError('Wrong literal FireFlash asset')
     u=lambda a:struct.unpack_from('<I',data,a)[0];r=lambda a:a+u(a)
@@ -32,6 +48,7 @@ class FireFlashFixture:
     observe_random=FountainFixture.observe_random
     def __init__(self,exe,asset):
         self.parts=parse_asset(asset);self.software=SoftwareFixture(exe,WIDTH,HEIGHT);self.vm=self.software.vm;v=self.vm
+        self.blend_mapping=native_mode_mapping(v)
         v.call(0x41e2de,stop_address=0x41e535,instruction_limit=20000000)
         self.lookup=bytes(v.uc.mem_read(0x634d44,1024))
         self.animator=v.allocate(0x3500);self.owner=v.allocate(0x400);self.imagery=v.allocate(0x200);vt=v.allocate(0x220)
@@ -184,7 +201,7 @@ def main():
         pixel_pair=None;diff=None
         if tick in draws:
             if len(draws[tick])!=len(modern['draws']):failures.append('submission count')
-            if any(d['additive']for d in modern['draws']):failures.append('native mode8 versus port additive')
+            if any(not d['additive']for d in modern['draws']):failures.append('native ONE/ONE versus nonadditive port metadata')
             if not args.state_only:
                 native_color,z=fixture.pixels(draws[tick]);revised,rz=fixture.pixels(modern['draws'],common=True)
                 diff=sum(a!=b for a,b in zip(struct.unpack('<'+str(WIDTH*HEIGHT)+'H',native_color),struct.unpack('<'+str(WIDTH*HEIGHT)+'H',revised)))
@@ -196,6 +213,7 @@ def main():
             original_draw_count=len(draws[tick])if tick in draws else None,differing_rgb565_pixels=diff,image_hashes=pixel_pair,errors=sorted(set(failures))))
     report=dict(status='differences_found'if errors else'pass',errors=errors,type_id='0x37780ae2',retail_sha256=RETAIL_SHA,asset_sha256=ASSET_SHA,
         native_particle_count=150,ticks=100,native_birth_rng=states[0]['random_count'],native_final_rng=states[-1]['random_count'],native_mode=8,
+        native_blend_mapping=fixture.blend_mapping,
         original_initialize='0x4e18c0',original_animate='0x4e1ad0',original_render='0x4e1fa0',compiled_port=compiled,probe_sha256=sha(Path(__file__).read_bytes()),
         scope='Nullspell stationary owner with actually moving native particle pool; literal150records and both authored meshes/textures. Native Init/Animate/Render and matrix packets; compiled current SimulateTick/Advance/Submit. '+
             ('Software pixels not executed in this state/packet diagnostic. 'if args.state_only else'Original software projection/raster pair executed. ')+

@@ -383,6 +383,20 @@
       "check": "generic_scrolltex_and_map_lifecycle",
       "status": "pass",
       "scope": "Six exact generic map owners ADDAT/MOVE/DELETE and rendered scrolls, each restores synthetic clean floor; natural placement, native original fullworld lighting and retail/Metaldevice equivalence remain open."
+    },
+    "recon/retail_asm/runtime/effects/fireflash-angle-scale-corrected-20261009/manifest.json": {
+      "sha256": "e1dc490eb41cc82b4cc5796a3f1a61e1bf56713c9b51c68f73004bd57737f952",
+      "retail_row": "FireFlash:0x37780ae2",
+      "check": "fireflash_angle_fade_full_pool_diagnostic",
+      "status": "differences_found",
+      "scope": "Actual native 150-record pool/101 samples; exact birth angles/fade scales and frame/integer/RNG/draw counts after causal production fixes. 1124 residual sphere-position fields from shared matrix precision. No pixels or full acceptance credited."
+    },
+    "recon/retail_asm/runtime/effects/rift-failed-animtex-preflight/manifest.json": {
+      "sha256": "6d42acc599699189a757763096d091c562b4be080ba59bc3b4c7d7a48031ae3c",
+      "retail_row": "Rift1:0xadbcef18",
+      "check": "unmodified_animtex_failed_init_admission",
+      "status": "expected_native_failure_reproduced",
+      "scope": "Two exact fresh isolated repeats of native Init and RefreshControllers rejection. Separate cold-heap call reaches original null UV-array cleanup read. No animation, static-render acceptance or actual-world heap/crash claim."
     }
   }
 }

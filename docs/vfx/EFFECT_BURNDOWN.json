@@ -11558,14 +11558,15 @@
         "accepted": false
       },
       "runtime_dispatch": "exact_fireflash_builder_reference_component_verified_through_create_move_natural_expiry_and_delete",
-      "next_action": "Apply focused source-grounded FireFlash angle initialization/intermediate arithmetic and blend-request mapping, then repeat wholepool/packet proof and real original software pixels. Current state-only mismatch diagnostic is not acceptance.",
+      "next_action": "Keep exact native angle/fade arithmetic; residual sphere-position differences are in shared matrix accumulation (max3.78994e-6). Defer shared math and unvalidated common-Z pixel route; next comparison must separately establish rendered projection/material and actual caster/target behavior. Additive ONE/ONE is already correct.",
       "notes": [
         "2026-10-05: one bounded26.169sec native probe yields62 distinct viewport images; last change9.867sec, then frozen flame. FireFlash.delete reports no context. Nudge/return restores exact floor. No accurate-reference, port-fix or visual acceptance credit.",
         "FPS-enabled bounded recovery now has independently clean canonical floor, animated native reference and exact cleanup without camera nudge. Historical FPS-off residue is superseded as active reference; not a visual/controller acceptance claim.",
         "Builde0a92c7a3708 passes;16particle and108transform tests pass. Natural five-check fixture has16 exact-ground tail frames; explicit six-check fixture29. Preview240frames with last90 exact ground. Native/port backgrounds0; visual burst mismatch retained, not accepted. Initial particle test run from wrong cwd could not load effects.def; corrected repo-cwd run passes all16.",
         "Finale829e8db\u2026 compiled Metal helper and all8 serial capture jobs pass. Source RGB565 helper replaces fabricated specular/emissive injection only in explicit mode1; mode0 unchanged.11 real lifecycle checks per effect, exact natural and explicit-delete ground tails. Capture teardown still required SIGTERM; clean shutdown unproved.",
         "Actual retail additive RGB565 selector/kernels confirmed; older snapshot overwrite/zero-key hypothesis rejected. Preserve additive blending; visual annulus/density differences remain open without fitted brightness.",
-        "2026-10-09 native150record/101sample diagnostic retained: integer fields/RNG/drawcounts match;8120float32differences start at initial angle arithmetic, native request8 differs from current additive metadata. No softwarepixel/renderfrontend credit."
+        "2026-10-09 native150record/101sample diagnostic retained: integer fields/RNG/drawcounts match;8120float32differences start at initial angle arithmetic, native request8 differs from current additive metadata. No softwarepixel/renderfrontend credit.",
+        "Correction 2026-10-09: actual Scene417d60(mode8,1) emits ONE/ONE withdepthtest/noZwrite; previouspreflight inferred a blendmismatchfromnumeric8 incorrectly. Sourceadditive metadata iscorrect. Older diagnosticblend failures arewithdrawn; nativeexecuted state mapping is retained."
       ],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "native_diagnostic": {
@@ -11593,7 +11594,7 @@
           ]
         }
       },
-      "work_queue_status": "deferred_source_precision_and_blend_contract",
+      "work_queue_status": "native_angle_and_fade_corrected_shared_matrix_and_render_gates_open",
       "source_preflight": {
         "forensics": "docs/vfx/forensics/FIREFLASH_REFERENCE_PROBE.md",
         "standalone_safe": true,
@@ -11787,6 +11788,33 @@
         "manifest": "research/rgb565-blend-audit/audit.json",
         "manifest_sha256": "a727c8c6ed5acc7e02a27f7fd62894897063379cd0f39832bf7730adfef13c11",
         "scope": "Actual retail destination-ONE selects additive RGB565 kernels, including depth-on/write-off paths. Older snapshot direct-store kernel cannot define retail behaviour. No blend change or visual credit."
+      },
+      "thin_precision_diagnostic": {
+        "manifest": "recon/retail_asm/runtime/effects/fireflash-angle-scale-corrected-20261009/manifest.json",
+        "sha256": "e1dc490eb41cc82b4cc5796a3f1a61e1bf56713c9b51c68f73004bd57737f952",
+        "status": "differences_found",
+        "samples": 101,
+        "pool_slots": 150,
+        "original_range_calls": 759,
+        "binary32_differences_before": 8120,
+        "binary32_differences_after": 1124,
+        "maximum_remaining_position_error": 3.78994e-06,
+        "birth_angles_and_fade_scales_exact": true,
+        "integer_rng_submission_counts_exact": true,
+        "software_pixels_executed": false,
+        "scope": "FireFlash-only native coefficient and single-store fade arithmetic corrected. Shared matrix precision, device/illumination and actual caster/target remain open; no new rendered or acceptance row."
+      },
+      "thin_precision_port_smoke": {
+        "manifest": "research/vfx-next-20261009/fireflash-final-visible/manifest.json",
+        "manifest_sha256": "9c3cd7de2ea0ec1a4214ddc61e94c393dc15bd589021730798f1d3c2a38d7487",
+        "status": "pass",
+        "binary_sha256": "4f4fbc5cc6a60d94e02857cb3a764b73c429853b72fb016cf8d94e3740d2b91b",
+        "frames": 96,
+        "nonblack_frames": 69,
+        "distinct_frames": 70,
+        "exit_code": 0,
+        "elapsed_seconds": 16.70452125000884,
+        "scope": "Actual final angle/fade-corrected preview under the decoded-pixel capture validator. Visibility/clean exit only, no retail pixel or natural-caller acceptance."
       }
     },
     {
@@ -14554,11 +14582,23 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Defer malformed shipped animtex tag: original parser rejects d and native failed-init cleanup faults before a successful runtime reference. Preserve unmodified tag; resume only for a bounded static asset check or an evidenced original caller/variant.",
       "notes": [
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
+        "2026-10-09 native parser recognizes u/v/g, while shipped Rift1 tag is animtex obj=rift,u=4,d=4. RefreshControllers takes failed-Init delete branch, with no admitted controller; cold-heap destructor accesses unallocated old-UV storage. No animation repair or rendered credit. This is isolated cold-heap evidence, not a claim about every actual gameplay heap state."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "work_queue_status": "deferred_native_failed_controller_destructor_fault",
+      "native_failed_init_diagnostic": {
+        "manifest": "recon/retail_asm/runtime/effects/rift-failed-animtex-preflight/manifest.json",
+        "sha256": "6d42acc599699189a757763096d091c562b4be080ba59bc3b4c7d7a48031ae3c",
+        "doc": "docs/vfx/forensics/RIFT1_FAILED_ANIMTEX.md",
+        "status": "expected_native_failure_reproduced",
+        "native_init_return": 0,
+        "admitted_controllers": 0,
+        "exact_repeats": 2,
+        "scope": "Isolated native controller rejection and cold-heap cleanup fault only; no full gameplay or animation acceptance."
+      }
     },
     {
       "index": 81,
