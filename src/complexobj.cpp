@@ -207,43 +207,48 @@ void TComplexObject::ClearComplexObj()
     state = FindState(root->name);
 }
 
+// REVSYNC: TComplexObject::Pulse @ 0x004db190 -- a state set without its
+// transition (forced) drops that mark and the transition mark once its
+// animation reaches frame 5; then UpdateAction with the last Move's bits.
 void TComplexObject::Pulse()
 {
     if (UpdatingBoundingRect)
         return;
 
+    if (doing->forced && frame >= 5)
+    {
+        doing->forced = false;
+        doing->transition = false;
+    }
     UpdateAction(GetMoveBits());        // Update current state given current movement flags
 }
 
+// REVSYNC: TComplexObject::UpdateAction @ 0x004db1d0 -- the doing block's
+// resolver, else done when the animation is; a done block loses priority.
+// Then the desired block is tried; done or impossible (or no desired block,
+// or the root), it is let go and the root tried. (Retail frees the desired
+// block here and again in SetDesired; SetDesired alone frees it here.)
 void TComplexObject::UpdateAction(int32_t bits)
 {
     int32_t comstate = ResolveAction(bits);
-
-    if (comstate == 0)
-        comstate = commanddone ? COM_COMPLETED : COM_EXECUTING;
+    if (comstate == COM_DONE)
+        comstate = commanddone ? COM_DONE : COM_EXECUTING;
 
     if (doing)
     {
-        // check firsttime (first frame) and priority (on completion)
-        if (doing->firsttime)
-            doing->firsttime = false;
-
-        if (comstate == COM_COMPLETED && doing->priority)
+        doing->firsttime = false;
+        if (comstate == COM_DONE)
             doing->priority = false;
     }
 
-    if (desired)
+    if (desired && desired != root)
+        comstate = TryCommand(desired, bits, 0);
+    else if (desired)
+        comstate = COM_DONE;
+    if (comstate == COM_DONE || comstate == COM_IMPOSSIBLE)
     {
-        if (desired == root)
-            comstate = COM_COMPLETED;
-        else
-            comstate = TryCommand(desired, bits);
-    }
-
-    if (comstate == COM_COMPLETED || comstate == COM_IMPOSSIBLE)
-    {
-        SetDesired(nullptr);
-        TryCommand(root);
+        SetDesired(nullptr, 0);
+        TryCommand(root, 0, 0);
     }
 }
 

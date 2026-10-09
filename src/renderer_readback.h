@@ -35,4 +35,16 @@ bool ReadPixel(sg_image img, int32_t x, int32_t y, uint8_t out_rgba[4]);
 bool ReadRect(sg_image img, int32_t x, int32_t y, int32_t w, int32_t h,
               uint8_t* out_rgba);
 
+// Asynchronous rect read, for a small read every frame without waiting on
+// the GPU. BeginReadRect commits a copy of the rect (RGBA8, tightly packed,
+// at most kMaxAsyncReadBytes) into `slot`'s staging buffer and returns at
+// once; PollReadRect returns true, once, when that copy has finished, with
+// the bytes in `out_rgba`. A slot holds one copy at a time: Begin on a busy
+// slot fails. Returns false where readback isn't supported.
+constexpr int32_t kAsyncReadSlots    = 2;
+constexpr int32_t kMaxAsyncReadBytes = 4096;
+bool BeginReadRect(int32_t slot, sg_image img, int32_t x, int32_t y,
+                   int32_t w, int32_t h);
+bool PollReadRect(int32_t slot, uint8_t* out_rgba, int32_t out_bytes);
+
 } // namespace RendererReadback
