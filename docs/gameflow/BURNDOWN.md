@@ -325,6 +325,14 @@ These items aren't part of any single track but block others:
       text bar each define the side tabs as 52 (`kSideTabsWidth`), and the
       dialog the status bar's bottom (0x70). Retail derives the text bar's
       rect from the panes (`TPlayScreen` layout `0x0047bc50`).
+- [ ] Headless runs need an awake display. `--headless` still takes its
+      frames from the display link, so while the Mac sleeps or its display is
+      off a run sits in the event loop after "logging initialized" and makes
+      no progress (2026-10-08: two builds hung 80+ min; agent watchdog stalls
+      line up with it). Headless should pace frames from its own timer, as the
+      App Nap opt-out (`HeadlessWindow::KeepAwake`) already keeps the process
+      awake — platform layer (sokol_app patch, DEBUG_TOOLING.md "Headless
+      runs").
 - [ ] Text baseline in the canonical glyph walk — track ui (`font.cpp`).
       The baseline is `cellY + ` the tallest printable-ASCII glyph's rise
       `- kGdiTopLeading (2)`, a constant calibrated on the HUD's Arial
