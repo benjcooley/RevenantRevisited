@@ -1988,41 +1988,17 @@ void TMapPane::RedrawWalkmapRect(TObjectInstance* oi, int32_t x, int32_t y, int3
         }
 }
 
-int32_t TMapPane::GetWalkHeight(S3DPoint& pos)
+// REVSYNC: GetWalkHeight @ 0x00452e10 -- the walk cell under pos: 0, 0 is
+// the centre of a walk cell, not its edge, so offset by half a cell.
+int32_t TMapPane::GetWalkHeight(const S3DPoint& pos)
 {
-    // because 0, 0 is actually the center of a walk grid, not the edge,
-    // everything has to be offset by half the walk grid size
-
-    int32_t x = pos.x + (GRIDSIZE / 2);
-    int32_t y = pos.y + (GRIDSIZE / 2);
-
-    const int32_t world_sx = x >> SECTORWSHIFT;
-    const int32_t world_sy = y >> SECTORHSHIFT;
-    const int32_t local_x  = (x & (SECTORWIDTH  - 1)) >> WALKMAPSHIFT;
-    const int32_t local_y  = (y & (SECTORHEIGHT - 1)) >> WALKMAPSHIFT;
-
-    const int32_t sx = world_sx - sectorx;
-    const int32_t sy = world_sy - sectory;
-
-    if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
-        return sectors[sx][sy]->ReturnWalkmap(local_x, local_y);
-
-    // Fall back to the canonical sector pool: MapManager owns the
-    // current TGameMap, which holds every loaded sector regardless of
-    // the (legacy) 3x3 streaming window. The window-first lookup
-    // above keeps any code that genuinely depends on sectors[][]
-    // unchanged; everything else routes through here.
-    if (TGameMap* m = MapManager.CurrentMap())
-        if (TSector* sec = m->FindSector(world_sx, world_sy))
-            return sec->ReturnWalkmap(local_x, local_y);
-
-    return 0;
+    return GetWalkGridHeight((pos.x + GRIDSIZE / 2) >> WALKMAPSHIFT, (pos.y + GRIDSIZE / 2) >> WALKMAPSHIFT);
 }
 
 int32_t TMapPane::GetWalkGridHeight(int32_t x, int32_t y)
 {
-    // because 0, 0 is actually the center of a walk grid, not the edge,
-    // everything has to be offset by half the walk grid size
+    if (walkGridSeam)
+        return walkGridSeam(x, y);
 
     const int32_t world_sx = x >> (SECTORWSHIFT - WALKMAPSHIFT);
     const int32_t world_sy = y >> (SECTORHSHIFT - WALKMAPSHIFT);
@@ -2078,125 +2054,57 @@ int32_t TMapPane::GetWalkHeightArea(S3DPoint& pos, int32_t width, int32_t height
 // Returns the minimum delta (fall), and maximum delta (rise) between any two walk grids 
 // within the radius, and also the height at the current position.
 
-#define MAXRADIUS 8
-
-void TMapPane::GetWalkHeightRadius(S3DPoint& pos, int32_t radius, 
-    int32_t &mindelta, int32_t &maxdelta, int32_t &curheight)
+// REVSYNC: GetWalkHeightRadius @ 0x004530a0 -- the height under pos; then,
+// for a radius in (0, 0xf0), every walk cell in the box pos +- radius whose
+// nearest point is within the radius (the distance table, or the squares
+// past it): maxdelta is the largest height step to the cell west or north of
+// it (when that one is in range too), hole is set by a cell of height 0 (no
+// walkmap). A radius whose cells would reach 0x80 is cut to 0x6f.
+void TMapPane::GetWalkHeightRadius(const S3DPoint& pos, int32_t radius, int32_t& maxdelta, int32_t& height,
+    bool& hole)
 {
-    static int32_t heights[MAXRADIUS][MAXRADIUS]; 
-    mindelta = 0;
     maxdelta = 0;
-
-    curheight = GetWalkHeight(pos);
-
-    if (radius <= 0)
+    hole = false;
+    height = GetWalkHeight(pos);
+    if (radius <= 0 || radius >= 0xf0)
         return;
+    if (((radius + GRIDSIZE - 1) & GRIDMASK) >= 0x80)
+        radius = 0x6f;
 
-    if (((radius + (GRIDSIZE - 1)) >> WALKMAPSHIFT) >= MAXRADIUS)
-        radius = ((MAXRADIUS - 1) << WALKMAPSHIFT) - 1;
+    const int32_t x0 = (pos.x - radius) & GRIDMASK;
+    const int32_t y0 = (pos.y - radius) & GRIDMASK;
+    const int32_t x1 = (pos.x + radius + GRIDSIZE) & GRIDMASK;
+    const int32_t y1 = (pos.y + radius + GRIDSIZE) & GRIDMASK;
 
-    S3DPoint p(0, 0, 0);
-
-    int32_t startx = (pos.x - radius) & (int32_t)GRIDMASK;
-    int32_t starty = (pos.y - radius) & (int32_t)GRIDMASK;
-    int32_t endx =   (pos.x + radius + GRIDSIZE) & (int32_t)GRIDMASK;
-    int32_t endy =   (pos.y + radius + GRIDSIZE) & (int32_t)GRIDMASK;
-
-    mindelta = 1000;
-    maxdelta = -1000;
-
-    for (p.y = starty; p.y <= endy; p.y += GRIDSIZE)
+    // Retail keeps the cells in one static array, eight to a column, which
+    // the larger radii run past; each read still finds the cell this call
+    // wrote, so a grid over the whole box gives the same answers.
+    constexpr int32_t kCells = (2 * 0x70 + 2 * GRIDSIZE) / GRIDSIZE + 1;
+    int32_t cells[kCells][kCells];     // [row][column]; -1 out of range
+    int32_t row = 0;
+    for (int32_t y = y0; y <= y1; y += GRIDSIZE, ++row)
     {
-        for (p.x = startx; p.x <= endx; p.x += GRIDSIZE)
+        int32_t col = 0;
+        for (int32_t x = x0; x <= x1; x += GRIDSIZE, ++col)
         {
-            int32_t x = (p.x - startx) >> WALKMAPSHIFT;
-            int32_t y = (p.y - starty) >> WALKMAPSHIFT;
-
-            int32_t xdelta, ydelta, height;
-            
-            xdelta = ydelta = 0;
-
-          // Test closest corners of walk grids
-            if (p.y <= pos.y)
+            // A cell spans its centre -8..+7: its point nearest pos.
+            const int32_t dx = abs(std::clamp(pos.x, x - GRIDSIZE / 2, x + GRIDSIZE / 2 - 1) - pos.x);
+            const int32_t dy = abs(std::clamp(pos.y, y - GRIDSIZE / 2, y + GRIDSIZE / 2 - 1) - pos.y);
+            const bool inrange = (dx < 256 && dy < 256) ? DistTable[dx][dy] <= radius
+                                                        : dx * dx + dy * dy <= radius * radius;
+            if (!inrange)
             {
-              if (p.x <= pos.x) 
-              {
-                if (dist(p.x + GRIDSIZE / 2 - 1, p.y + GRIDSIZE / 2 - 1, pos.x, pos.y) > radius)
-                {
-                    heights[x][y] = -1;
-                    continue;
-                }
-  
-              // Within radius, now get deltas between this grid and grid to left and above
-              // Deltas will be positive or negative depending on direction from center
-                height = heights[x][y] = GetWalkHeight(p);
-                if (x > 0 && heights[x - 1][y] >= 0)
-                    xdelta = heights[x - 1][y] - height;
-                if (y > 0 && heights[x][y - 1] >= 0)
-                    ydelta = heights[x][y - 1] - height;
-              }
-              else
-              {
-                if (dist(p.x - GRIDSIZE / 2, p.y + GRIDSIZE / 2 - 1, pos.x, pos.y) > radius)
-                {
-                    heights[x][y] = -1;
-                    continue;
-                }
-
-              // Within radius, now get deltas between this grid and grid to left and above
-              // Deltas will be positive or negative depending on direction from center
-                height = heights[x][y] = GetWalkHeight(p);
-                if (x > 0 && heights[x - 1][y] >= 0)
-                    xdelta = height - heights[x - 1][y];
-                if (y > 0 && heights[x][y - 1] >= 0)
-                    ydelta = heights[x][y - 1] - height;
-              }
+                cells[row][col] = -1;
+                continue;
             }
-            else
-            {
-              if (p.x <= pos.x) 
-              {
-                if (dist(p.x + GRIDSIZE / 2 - 1, p.y - GRIDSIZE / 2, pos.x, pos.y) > radius)
-                {
-                    heights[x][y] = -1;
-                    continue;
-                }
-
-              // Within radius, now get deltas between this grid and grid to left and above
-              // Deltas will be positive or negative depending on direction from center
-                height = heights[x][y] = GetWalkHeight(p);
-                if (x > 0 && heights[x - 1][y] >= 0)
-                    xdelta = heights[x - 1][y] - height;
-                if (y > 0 && heights[x][y - 1] >= 0)
-                    ydelta = height - heights[x][y - 1];
-              }
-              else
-              {
-                if (dist(p.x - GRIDSIZE / 2, p.y - GRIDSIZE / 2, pos.x, pos.y) > radius)
-                {
-                    heights[x][y] = -1;
-                    continue;
-                }
-
-              // Within radius, now get deltas between this grid and grid to left and above
-              // Deltas will be positive or negative depending on direction from center
-                height = heights[x][y] = GetWalkHeight(p);
-                if (x > 0 && heights[x - 1][y] >= 0)
-                    xdelta = height - heights[x - 1][y];
-                if (y > 0 && heights[x][y - 1] >= 0)
-                    ydelta = height - heights[x][y - 1];
-              }
-            }
-
-          // Get minimum/maximum deltas
-            if (xdelta > maxdelta)
-                maxdelta = xdelta;
-            else if (xdelta < mindelta)
-                mindelta = xdelta;
-            if (ydelta > maxdelta)
-                maxdelta = ydelta;
-            else if (ydelta < mindelta)
-                mindelta = ydelta;
+            const int32_t h = GetWalkHeight(S3DPoint(x, y, 0));
+            cells[row][col] = h;
+            if (h == 0)
+                hole = true;
+            if (col > 0 && cells[row][col - 1] >= 0)
+                maxdelta = (std::max)(maxdelta, abs(h - cells[row][col - 1]));
+            if (row > 0 && cells[row - 1][col] >= 0)
+                maxdelta = (std::max)(maxdelta, abs(h - cells[row - 1][col]));
         }
     }
 }

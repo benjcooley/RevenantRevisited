@@ -9,6 +9,7 @@
 
 #include "dls.h"                  // MakeColorTables (the trig tables too)
 #include "gameoptions.h"
+#include "mappane.h"                // walkGridSeam
 #include "playscreen.h"
 #include "revenant.h"
 #include "revutils.h"
@@ -171,6 +172,43 @@ bool CaseBlocked(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, 
     return g_blocked;
 }
 
+// The case's ground (both sides answer the walk cells from it; guest.py
+// ground_height) and the characters the map gives near a point.
+struct SGroundBox
+{
+    int32_t gx0 = 0, gy0 = 0, gx1 = 0, gy1 = 0, height = 0;
+};
+struct SGround
+{
+    int32_t z = 0;
+    std::vector<SGroundBox> cells;
+    std::vector<std::pair<int32_t, int32_t>> nosector;
+};
+SGround g_ground;
+std::vector<TCharacter*> g_nearby;
+
+int32_t CaseWalkCell(int32_t gx, int32_t gy)
+{
+    const std::pair<int32_t, int32_t> sector(gx >> 6, gy >> 6);
+    if (std::find(g_ground.nosector.begin(), g_ground.nosector.end(), sector) != g_ground.nosector.end())
+        return 0;
+    int32_t h = g_ground.z;
+    for (const SGroundBox& b : g_ground.cells)
+        if (b.gx0 <= gx && gx <= b.gx1 && b.gy0 <= gy && gy <= b.gy1)
+            h = b.height;
+    return h;
+}
+
+std::vector<TCharacter*> CaseNearby(const S3DPoint& pos, int32_t range)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "NearbyCharacters");
+    j.Key("pos").Begin('[').Value(pos.x).Value(pos.y).Value(pos.z).End(']');
+    j.Field("range", range).End('}');
+    Seam(j.str());
+    return g_nearby;
+}
+
 }  // namespace
 
 void WriteSeams(JsonOut& j)
@@ -242,8 +280,28 @@ SCaseScope::SCaseScope(const JsonValue& cs, const TFixtureWorld& world)
     g_blocked = cs["blocked"].Bool(false);
     g_sees = cs["sees"].Bool(true);
     TCharacter::findCharactersSeam = EmptyWorld;
-    TCharacter::blockedSeam = CaseBlocked;
     TCharacter::canSeeSeam = CaseSees;
+    if (cs.Has("ground"))
+    {
+        const JsonValue& gr = cs["ground"];
+        g_ground = SGround{};
+        g_ground.z = (int32_t)gr["z"].Int();
+        for (const JsonValue& b : gr["cells"].Items())
+            g_ground.cells.push_back(SGroundBox{(int32_t)b[0].Int(), (int32_t)b[1].Int(), (int32_t)b[2].Int(),
+                                                (int32_t)b[3].Int(), (int32_t)b[4].Int()});
+        for (const JsonValue& sc : gr["nosector"].Items())
+            g_ground.nosector.emplace_back((int32_t)sc[0].Int(), (int32_t)sc[1].Int());
+        g_nearby.clear();
+        if (cs.Has("nearby"))
+            for (const JsonValue& n : cs["nearby"].Items())
+                g_nearby.push_back(world.Get(n.Str()));
+        else
+            g_nearby = world.Order();
+        TMapPane::walkGridSeam = CaseWalkCell;
+        TCharacter::nearbyCharactersSeam = CaseNearby;
+    }
+    else
+        TCharacter::blockedSeam = CaseBlocked;
     ClearSeams();
 }
 
@@ -254,6 +312,8 @@ SCaseScope::~SCaseScope()
     TCharacter::findCharactersSeam = nullptr;
     TCharacter::blockedSeam = nullptr;
     TCharacter::canSeeSeam = nullptr;
+    TCharacter::nearbyCharactersSeam = nullptr;
+    TMapPane::walkGridSeam = nullptr;
     g_world = nullptr;
 }
 
