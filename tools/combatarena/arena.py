@@ -24,6 +24,8 @@ Scenario keys:
   ticks     game ticks to run after the play screen starts
   exec      console commands in order; `sleep N` waits N ticks
   ini       optional Revenant.ini overrides {"Section": {"Key": "Value"}}
+  playerai  true: Locke runs the character AI and fights on his own
+            (--playerai; retail's charflags 0x100000)
 
 Environment: REVENANT_DATA_PATH (the install; default the retail lab's).
 """
@@ -115,6 +117,8 @@ def run_once(scn: dict, port: Path, out: Path, watch: bool = False, extra: list[
             f'--max-runtime={scn.get("max_runtime", 600)}']
     if not watch:
         args.insert(1, '--headless')
+    if scn.get('playerai'):
+        args.append('--playerai')
     args += list(extra)
     env = dict(os.environ, REVENANT_SAVE_PATH=str(save), REVENANT_DATA_PATH=str(DATA))
     (out / 'cmd.txt').write_text(' '.join(repr(a) for a in args) + '\n')

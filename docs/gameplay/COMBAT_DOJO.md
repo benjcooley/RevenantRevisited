@@ -62,11 +62,11 @@ only).
 
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
-| M1 | action-state core: SetRoot / SetDoing / SetDesired / TryCommand / ForceCommand / UpdateAction | `0x4db2d0` `0x4db340` `0x4db3a0` `0x4db4d0` `0x4db450` `0x4db1d0` | `TComplexObject::*` | [ ] |
-| M2 | facing kernels: AdvanceAngles, GetAngleMoveAnim, AngleDiff, ConvertToFacing | `0x4c5ad0` `0x4d39f0` `0x46ded0` `0x46dc60` | `TCharacter::AdvanceAngles`, `GetAngleMoveAnim`, `AngleDiff`, `ConvertToFacing` | [ ] |
-| M3 | combat walking: Go(angle), empty world | `0x4ce350` | `TCharacter::Go(int)` | [~] 762 cases, 0 match (§5) |
+| M1 | action-state core: SetRoot / SetDoing / SetDesired / TryCommand / ForceCommand / UpdateAction | `0x4db2d0` `0x4db340` `0x4db3a0` `0x4db450` (Try) `0x4db4d0` (Force) `0x4db1d0` | `TComplexObject::*` | [~] SetDesired, ForceCommand ported (exercised by M3/M5); own kata open |
+| M2 | angle/distance kernels: AngleDiff, ConvertToFacing, Distance, ConvertToVector, object Distance/AngleTo | `0x46ded0` `0x46dc60` `0x46de60` `0x46db20` `0x46ea20` `0x46ea90` | `AngleDiff`, `ConvertToFacing`, `Distance`, `ConvertToVector`, `TObjectInstance::Distance/AngleTo` | [x] 30 batches, every angle pair, ~28k vectors |
+| M3 | combat walking: Go(angle), empty world | `0x4ce350` | `TCharacter::Go(int)` | [x] 762/762 |
 | M4 | combat walking with retargeting (world + sight/hearing seams) | `0x4ce350`, FindCharacters `0x4cd690` | same | [ ] |
-| M5 | combat resolve tick: ResolveCombat / ResolveCombatMove | `0x4c7980` `0x4c7f80` | `ResolveCombat`, `ResolveCombatMove` | [~] 654 cases, 0 match (§5) |
+| M5 | combat resolve tick: ResolveCombat / ResolveCombatMove (+ SetFighting `0x4d4790`) | `0x4c7980` `0x4c7f80` | `ResolveCombat`, `ResolveCombatMove` | [x] 654/654 |
 | M6 | player input per tick: UpdateMove → Go / Stop / Block / Leap | `0x47de30` | `TPlayScreen::UpdateMove` | [ ] |
 | M7 | displacement: Move / MoveStep (velocity, blocking, shove) | `0x4c46d0` `0x4c3bc0`, TPlayer `0x518df0` | `TCharacter::Move`, `MoveStep` | [ ] |
 | M8 | orbit sequence: N ticks of Pulse → UpdateAction → Resolve* → Move, player strafing around a stationary target, monster approaching and circling | the above, chained | the above | [ ] |
@@ -143,7 +143,15 @@ for that:
 Until then, every global a fixture sets is listed in its kata as an
 assumption, and both values are run where the right one is unknown.
 
-## 5. Findings so far (2026-10-07)
+## 5. Findings (2026-10-07/08)
+
+Status 2026-10-08: the orbit is ported (Go, ResolveCombat,
+ResolveCombatMove, SetFighting, SetDesired, ForceCommand, IsValidTarget,
+edge-to-edge Distance, CombatFace) and matches retail on every M3/M5
+case. Items 1-4c below describe the port *before* that; they are fixed
+unless noted. Open: the action core's own kata (M1), displacement (M7),
+sequences (M8), and everything melee (C, COMBAT_HIT.md), spells (S) and
+data (D).
 
 Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.md).
 
@@ -238,19 +246,48 @@ flag bits (§5.4): dumps name the flags, each side mapping its own bits.
 | sight | CanSeeCharacter `0x4cd540` | (none in the port's resolvers) | the case's `sees` |
 | world | FindCharacters `0x4cd690` (M3/M5: empty world) | `TCharacter::findCharactersSeam` | the case's characters |
 
-## 7. Running it
+## 7. The arena: deterministic auto-battles in the port
+
+`tools/combatarena/arena.py run <scenario> [--repeat N] [--watch]` runs
+the real game (headless, or a window with `--watch`) from a save slot,
+sets up a fight with console commands and lets the AI fight it out:
+
+- `--seed=N`: `random()` is retail's generator (MSVC rand, 15-bit), seeded.
+- `--fixedstep`: exactly one 24 Hz tick per frame (TTime::BeginFixedFrame).
+- `--combattrace=<file>`: every fighter every tick (position, facing,
+  state, blocks, health/fatigue/mana, target) and the events (attack,
+  cast, hit/miss with roll and to-hit, damage, death), the RNG draw count
+  per tick; `--combattrace-rng=FROM:TO` adds every draw with its caller.
+- `--playerai`: Locke runs the character AI (retail's charflags 0x100000
+  gate) and fights on his own.
+- `--repeat N` runs N copies and requires identical traces.
+
+Scenarios (`tools/combatarena/scenarios/`): Locke vs an Araknid (Demo 1),
+natural-faction fights (golem/skeleton, druid/araknid, araknid/arakna)
+from retail New Game1. Natural enemies come from char.def ENEMIES; no
+scripted targeting is needed. All repeat identically (2026-10-08) since
+SpellManager.Pulse moved to the tick (it ran in the draw).
+
+Known gaps the arena shows: the AI re-issues attacks almost every tick
+(attack choice is still 1998; COMBAT_ATTACK_CHOICE.md); hit, damage and
+fatigue are 1998 (COMBAT_HIT.md).
+
+## 8. Running it
 
 From the combat worktree (`worktrees/combat`, branch `feature/combat`),
 after building the port (`cmake --build build --target Revenant`):
 
 ```sh
+python3 tools/retail_ab/retail_ab.py combat-kernels     # M2
 python3 tools/retail_ab/retail_ab.py combat-go          # M3, first difference per case
 python3 tools/retail_ab/retail_ab.py combat-resolve     # M5
+python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2
 python3 tools/retail_ab/retail_ab.py combat-go --all --case go.player.cf1.f0.b64
 ```
 
 - Cases: `tools/retail_ab/combat_targets.py` (generators and the compare).
-- Retail: `tools/retail_runtime/slots/combat/` in the main checkout:
+- Retail: `tools/retail_runtime/slots/combat/` (versioned with the emulator;
+  `fixturekit.py` holds the shared fixture helpers):
   `guest.py` (layouts, shared seams, fault reports with the callers on the
   stack), `combat_call.py` (the method per case).
 - Port: `src/retailab_combat.cpp` (`--retail-ab=combat-*`), loading the
@@ -260,7 +297,7 @@ python3 tools/retail_ab/retail_ab.py combat-go --all --case go.player.cf1.f0.b64
 Speed (2026-10-07, 4 retail processes): M3 762 cases in ~1.5 s retail,
 ~2.9 s port; M5 654 cases in ~1 s / ~2 s.
 
-## 8. Coordination
+## 9. Coordination
 
 - **Gameflow** owns scripts, saves, the DOSBox lab and the driver this
   reuses; combat targets plug in through a registry hook, not a fork.

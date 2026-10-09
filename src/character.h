@@ -60,6 +60,8 @@ class TCharacter : public TComplexObject
       // centre distance less this character's Radius and, for a character
       // target, its Radius; never below 0
     bool IsValidTarget(TCharacter* target);
+    void SetRunsAI(bool on) { if (on) charflags |= kCharFlagPlayerAI; else charflags &= ~kCharFlagPlayerAI; }
+      // A player's AI switch (retail charflags 0x100000; AI() gates on it)
       // REVSYNC: 0x004cd990 -- may `target` be fought: there, alive, not
       // invisible, within combat range, and the player only while he has
       // control or demo mode is on

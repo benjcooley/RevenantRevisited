@@ -1572,6 +1572,8 @@ void GetParameters(int argc, char **argv)
             SeedRandom((uint32_t)std::stoul(p));
             log_info("[determinism] random seed %s", p.c_str());
         }
+        if (arg_flag(cmd, "playerai"))
+            StartupPlayerAI = true;
         if (arg_flag(cmd, "fixedstep"))
         {
             FixedStep = true;

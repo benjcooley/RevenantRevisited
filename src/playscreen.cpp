@@ -25,6 +25,7 @@
 // *************************************************************************
 
 #include "combattrace.h"
+#include "testconfig.h"
 #include "playscreen.h"
 
 #include "audio_backend.h"
@@ -794,6 +795,10 @@ void TPlayScreen::Update()
     // the level in and put the player back into the map (retail did both in
     // the map pane's sector update).
     const bool levelready = GameFlow.Session().EnterLevel();
+
+    // --playerai: the player fights on his own (testconfig.h).
+    if (StartupPlayerAI && Player)
+        Player->SetRunsAI(true);
 
     // --exec console queue (no-op unless the flag was given).
     PulseStartupExec();
