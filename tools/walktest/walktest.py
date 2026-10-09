@@ -14,8 +14,8 @@ traces the player every tick (--combattrace; the player is always traced).
   him and far (walk and run), a snapshot after each. (A left click on the
   bare floor does nothing, in retail too: MAP_INPUT.md §4.3.)
 
-A stretch of 2 s or more in which he is doing a move action (walk, run,
-combat step) without moving is reported with his position, and
+A stretch of 2 s or more in which he doesn't move while doing a move
+action (walk, run, combat step) or anything but a root stance is reported with his position, and
 the port's own reason for refusing the step from the log ([move] lines:
 which blocking test -- a hole in reach, the ground height, a step between
 cells, no walkmap, or a character). Filmstrip frames go to OUT/cap.
@@ -35,6 +35,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+ROOTS = ('walk', 'combat', 'hand', 'bow', 'sneak', 'run', 'torch', 'sleep')
 CENTRE = (216, 186)                 # Locke on screen at 640x480 (the camera follows him)
 INI = """[Paths]
 ClassDefPath = ".\\Resources"
@@ -116,14 +117,21 @@ def analyse(out: Path) -> dict:
                           d.get('doing', '')))
     stuck, start = [], None
     for i in range(1, len(ticks)):
-        moving_action = ticks[i][3].split(':', 1)[0] in ('2', '4', '26')   # MOVE, COMBATMOVE, BOWMOVE
-        if ticks[i][1] == ticks[i - 1][1] and moving_action:
+        # Held up: a move action (MOVE, COMBATMOVE, BOWMOVE) going nowhere, or
+        # any block but a root stance (the 1998 movement left Locke in a
+        # "fall" block on the Keep's stairs for good).
+        action, name = (ticks[i][3].split(':') + ['', ''])[:2]
+        held = action in ('2', '4', '26') or name not in ROOTS
+        if ticks[i][1] == ticks[i - 1][1] and held:
             start = start if start is not None else ticks[i - 1]
         else:
             if start is not None and ticks[i - 1][0] - start[0] >= 48:
                 stuck.append(dict(tick=start[0], ticks=ticks[i - 1][0] - start[0], pos=start[1],
                                   state=f'{start[2]}, doing {start[3]}'))
             start = None
+    if start is not None and ticks[-1][0] - start[0] >= 48:          # still held up at the end
+        stuck.append(dict(tick=start[0], ticks=ticks[-1][0] - start[0], pos=start[1],
+                          state=f'{start[2]}, doing {start[3]} (to the end)'))
     log = (out / 'revenant.log').read_text(errors='replace') if (out / 'revenant.log').exists() else ''
     blocks = [l.split('[move] ', 1)[1] for l in log.splitlines() if '[move] ' in l]
     travelled = sum(math.dist(ticks[i][1][:2], ticks[i - 1][1][:2]) for i in range(1, len(ticks)))
