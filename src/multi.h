@@ -25,16 +25,18 @@ class TMulti : public TMultiData
   public:
 
   // Functions
-    static TMulti* LoadMulti(char *name)
+    static TMulti* LoadMulti(const char *name)
       { return (TMulti*)LoadResource(name); }
-    static TMulti* LoadMulti(char *name, int32_t id)
+    static TMulti* LoadMulti(const char *name, int32_t id)
       { return (TMulti*)LoadResource(name, id); }
     void operator delete(void *p)
       { free(p); }
 
     void *Object(int32_t i)
       { return offsets[i]; }
-    void *Object(char *name);
+    void *Object(const char *name);
+      // The named entry; a missing name is fatal ("Unable to find ... in
+      // multiresource"), as in retail.
 
     PTAnimation Animation(int32_t i)
       { return (PTAnimation)(void *)offsets[i]; }
@@ -43,12 +45,12 @@ class TMulti : public TMultiData
     TFont* Font(int32_t i)
       { return (TFont*)(void *)offsets[i]; }
 
-    PTAnimation Animation(char *name)
+    PTAnimation Animation(const char *name)
       { return (PTAnimation)Object(name); }
-    PTBitmap Bitmap(char *name)
+    PTBitmap Bitmap(const char *name)
       { return (PTBitmap)Object(name); }
-    TFont* Font(char *name)
+    TFont* Font(const char *name)
       { return (TFont*)Object(name); }
-    PTWaveData Wave(char *name)
+    PTWaveData Wave(const char *name)
       { return (PTWaveData)Object(name); }
 };
