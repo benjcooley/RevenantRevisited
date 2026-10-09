@@ -275,6 +275,10 @@ SCaseScope::SCaseScope(const JsonValue& cs, const TFixtureWorld& world)
 
     const JsonValue& g = cs["globals"];
     CombatFace = g["combatface"].Bool(true);
+    // MapPane's ambient light as the case gives it (SetAmbientLight adds the
+    // gamma offset).
+    savedAmbient = MapPane.GetAmbientLight();
+    MapPane.SetAmbientLight((int32_t)g["ambient"].Int(128) - GammaAmbientOffset(GammaLevel), true);
     PlayScreen.SetFixtureState((int32_t)g["frame"].Int(0), g["control"].Bool(true), g["ps_5d8"].Bool(false));
     g_world = &world;
     g_blocked = cs["blocked"].Bool(false);
@@ -307,6 +311,7 @@ SCaseScope::SCaseScope(const JsonValue& cs, const TFixtureWorld& world)
 
 SCaseScope::~SCaseScope()
 {
+    MapPane.SetAmbientLight(savedAmbient - GammaAmbientOffset(GammaLevel), true);
     SetRandomSource(nullptr);
     SetRandomRangeObserver(nullptr);
     TCharacter::findCharactersSeam = nullptr;

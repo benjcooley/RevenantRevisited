@@ -110,7 +110,14 @@ G_PLAYSCREEN = 0x65caf0                          # GameFrame = [+0x688] - [+0x68
 # +0x5d8 (set by 0x47c550; meaning unknown), is set.
 G_PS_5D8, G_PS_CONTROL = 0x65d0c8, 0x65d0d0
 G_PLAYER = 0x667fcc
-OBJSTAT_IDS = {'health': (0x66ca4c, 0x101), 'fatigue': (0x66ca3c, 0x102), 'mana': (0x66ca38, 0x103)}
+OBJSTAT_IDS = {'health': (0x66ca4c, 0x101), 'fatigue': (0x66ca3c, 0x102), 'mana': (0x66ca38, 0x103),
+               'sleeping': (0x66ca58, 0x104)}
+# SetObjStat (slot 0xe8, thiscall (id, value) ret 8): recorded, the value stored.
+SET_OBJSTAT = {CLASS_CHARACTER: 0x4d74b0, CLASS_PLAYER: 0x51adb0}
+G_AMBIENT = 0x6671a4                             # MapPane ambient light (Visibility 0x4c5aa0)
+# The action state UpdateAction reads: commanddone, the animator (only
+# tested for null: a case's `animator` gives a stand-in), the stealth values.
+O_COMMANDDONE, O_ANIMATOR, O_GLIMPSE, O_NOISE = 0x80, 0x58, 0x130, 0x134
 # Type stats, read through slot 0xd8. Radius: TCharacter::Radius (slot
 # 0x258, 0x4d6e40), which Distance (0x4d61b0) subtracts.
 CLASSSTAT_IDS = {'radius': (0x66ca30, 0x201)}
@@ -205,6 +212,8 @@ class CombatWorld:
         for objclass, address in GET_OBJSTAT.items():
             b.add(address, 'GetObjStat', 4, self._get_objstat)
         b.add(GET_STAT, 'GetStat', 4, self._get_stat)
+        for objclass, address in SET_OBJSTAT.items():
+            b.add(address, 'SetObjStat', 8, self._set_objstat)
         b.add(SET_STATE, 'SetState', 4, self._set_state)
         b.add(RANDOM, 'random', 0, self._random)
         b.add(RAND, 'rand', 0, self._rand)
@@ -332,6 +341,13 @@ class CombatWorld:
     def _get_objstat(self, args, ecx):
         return self._stat('GetObjStat', self.stats, OBJSTAT_IDS, args, ecx)
 
+    def _set_objstat(self, args, ecx):
+        sid, value = s32(args[0]), s32(args[1])
+        names = {v[1]: k for k, v in OBJSTAT_IDS.items()}
+        self.stats.setdefault(ecx, {})[sid] = value
+        self.seams.append(dict(seam='SetObjStat', who=self._name(ecx), stat=names.get(sid, sid), value=value))
+        return 0
+
     def _get_stat(self, args, ecx):
         return self._stat('GetStat', self.classstats, CLASSSTAT_IDS, args, ecx)
 
@@ -410,6 +426,7 @@ class CombatWorld:
         vm.put_u32(G_PLAYSCREEN + 0x688, 0)
         vm.put_u32(G_PS_5D8, int(g.get('ps_5d8', 0)))
         vm.put_u32(G_PS_CONTROL, int(g.get('control', 1)))
+        vm.put_u32(G_AMBIENT, int(g.get('ambient', 128)))
 
     # -- objects ----------------------------------------------------------
     def new_block(self, spec, objmap):
@@ -457,6 +474,12 @@ class CombatWorld:
         vm.put_u32(obj + O_OUT_OF_SIGHT, int(spec.get('out_of_sight', 0)))
         vm.put_u32(obj + O_OUT_OF_SIGHT_PREV, int(spec.get('out_of_sight_prev', 0)))
         vm.put_u32(obj + O_SIGHT_LOST_TICKS, spec.get('sight_lost_ticks', 0))
+        vm.put_u32(obj + O_COMMANDDONE, int(spec.get('commanddone', 0)))
+        if spec.get('animator'):
+            vm.put_u32(obj + O_ANIMATOR, vm.allocate(0x40))   # never called: a null vtable would fault
+        vm.put_u32(obj + O_GLIMPSE, spec.get('glimpse', 0) & 0xffffffff)
+        vm.put_u32(obj + O_NOISE, spec.get('noise', 0) & 0xffffffff)
+        vm.write(obj + O_FRAME, struct.pack('<h', spec.get('frame', 0)))
         vm.put_u32(obj + O_MONSTER, spec.get('monsterkind', 0))
         if player:
             vm.put_u32(obj + O_PLAYERSTATE, spec.get('playerstate', 0))
@@ -530,7 +553,9 @@ class CombatWorld:
                     shovedir=s32(vm.u32(obj + O_SHOVEDIR)),
                     out_of_sight=vm.u32(obj + O_OUT_OF_SIGHT),
                     out_of_sight_prev=vm.u32(obj + O_OUT_OF_SIGHT_PREV),
-                    sight_lost_ticks=s32(vm.u32(obj + O_SIGHT_LOST_TICKS)))
+                    sight_lost_ticks=s32(vm.u32(obj + O_SIGHT_LOST_TICKS)),
+                    movedist=s32(vm.u32(obj + O_MOVEDIST)), commanddone=vm.u32(obj + O_COMMANDDONE),
+                    glimpse=s32(vm.u32(obj + O_GLIMPSE)), noise=s32(vm.u32(obj + O_NOISE)))
 
     def character_dump(self, obj, new_blocks):
         vm = self.vm

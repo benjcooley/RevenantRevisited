@@ -133,6 +133,7 @@ class IFixtureChar
     // The resolvers ResolveAction would call on the doing block.
     virtual int32_t ResolveCombat(int32_t bits) = 0;
     virtual int32_t ResolveCombatMove(int32_t bits) = 0;
+    virtual void RunUpdateAction(int32_t bits) = 0;
     // What a move changes beyond the character dump ("motion").
     virtual void WriteMotion(JsonOut& j) = 0;
 };
@@ -192,6 +193,14 @@ class TFixtureChar : public Base, public IFixtureChar
         this->sight_lost_ticks = (int32_t)spec["sight_lost_ticks"].Int();
         if constexpr (std::is_same_v<Base, TPlayer>)
             this->TPlayer::SetPlayerState((int32_t)spec["playerstate"].Int(0));   // as the retail fixture's zeroed +0x36c
+
+        // Action state (kata M1u): commanddone, an animator (only its
+        // presence is read), the frame, the stealth values.
+        this->commanddone = spec["commanddone"].Bool();
+        animated = spec["animator"].Bool();
+        this->frame = (short)spec["frame"].Int();
+        this->glimpse = (int32_t)spec["glimpse"].Int();
+        this->noise = (int32_t)spec["noise"].Int();
     }
     TFixtureChar(const TFixtureChar&) = delete;
     TFixtureChar& operator=(const TFixtureChar&) = delete;
@@ -228,6 +237,7 @@ class TFixtureChar : public Base, public IFixtureChar
     TActionBlock* Desired() override { return this->desired; }
     int32_t ResolveCombat(int32_t bits) override { return Base::ResolveCombat(this->doing, bits); }
     int32_t ResolveCombatMove(int32_t bits) override { return Base::ResolveCombatMove(this->doing, bits); }
+    void RunUpdateAction(int32_t bits) override { this->UpdateAction(bits); }
 
     void WriteMotion(JsonOut& j) override
     {
@@ -239,6 +249,8 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Field("out_of_sight", this->target_out_of_sight ? 1 : 0);
         j.Field("out_of_sight_prev", this->target_out_of_sight_prev ? 1 : 0);
         j.Field("sight_lost_ticks", this->sight_lost_ticks);
+        j.Field("movedist", this->GetMoveDist()).Field("commanddone", this->commanddone ? 1 : 0);
+        j.Field("glimpse", this->glimpse).Field("noise", this->noise);
         j.End('}');
     }
 
@@ -302,6 +314,18 @@ class TFixtureChar : public Base, public IFixtureChar
         return true;
     }
 
+    bool HasAnimator() const override { return animated; }
+
+    int32_t Sleeping() override { return ObjStat("sleeping"); }
+    void SetSleeping(int32_t v) override
+    {
+        stats["sleeping"] = v;
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "SetObjStat").FieldString("who", who).FieldString("stat", "sleeping");
+        j.Field("value", v).End('}');
+        Seam(j.str());
+    }
+
     int32_t Health() override { return ObjStat("health"); }
     int32_t Fatigue() override { return ObjStat("fatigue"); }
     int32_t Mana() override { return ObjStat("mana"); }
@@ -332,6 +356,7 @@ class TFixtureChar : public Base, public IFixtureChar
     std::vector<SFixtureState> states;
     std::map<std::string, int32_t> stats, classstats;
     std::unique_ptr<SCharData> cd;
+    bool animated = false;
 };
 
 // ---- The fixture world ------------------------------------------------------
@@ -507,6 +532,9 @@ class SCaseScope
     ~SCaseScope();
     SCaseScope(const SCaseScope&) = delete;
     SCaseScope& operator=(const SCaseScope&) = delete;
+
+  private:
+    int32_t savedAmbient = 0;
 };
 
 }  // namespace RetailAB::Fixture

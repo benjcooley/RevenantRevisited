@@ -20,6 +20,10 @@ fixture world (docs/gameplay/COMBAT_DOJO.md on feature/combat). The case's
   TPlayer::Move `0x518df0`) -- MoveStep `0x4c3bc0`, FindClearPath and
   CharBlocking `0x4d4db0` as original over the case's `ground` and
   `nearby` (guest.py). Adds `motion` to the result.
+- `update-action` (kata M1u): UpdateAction `0x4c3260` (slot 0x210) with
+  the case's `bits` (the last Move's): ResolveAction and the resolvers,
+  ResetStealthValues, TryCommand / ForceCommand as original; Sleeping /
+  SetSleeping through the object-stat seams. Adds `motion`.
 
 Schema `combat.call.v1`, shared with the port's `Revenant
 --retail-ab=combat-go` / `combat-resolve`.
@@ -65,6 +69,7 @@ CALCULATE_DAMAGE = 0x4c4860
 FIND_CLEAR_PATH = 0x4c39d0
 FIND_CHARACTERS = 0x4cd690
 SET_PLAYER_STATE = 0x51d680
+SLOT_UPDATE_ACTION = 0x210                       # TCharacter::UpdateAction 0x4c3260 (both classes)
 CAN_SEE = 0x4cd540
 
 
@@ -132,6 +137,9 @@ class CallFixture:
             result = s32(call(vm, entry, (doing, case.get('bits', 0) & 0xffffffff), this=me))
         elif kind == 'move':
             result = s32(call(vm, vm.u32(vm.u32(me) + SLOT_MOVE), (), this=me))
+        elif kind == 'update-action':
+            call(vm, vm.u32(vm.u32(me) + SLOT_UPDATE_ACTION), (case.get('bits', 0) & 0xffffffff,), this=me)
+            result = 0
         elif kind == 'calculate-damage':
             result = [s32(call(vm, CALCULATE_DAMAGE, tuple(v & 0xffffffff for v in inp), this=me))
                       for inp in case['inputs']]
@@ -141,7 +149,7 @@ class CallFixture:
         out = dict(schema=SCHEMA, side='retail', returned=result,
                    self=world.character_dump(me, new_blocks), seams=list(world.seams),
                    draws=list(world.draws))
-        if kind == 'move':
+        if kind in ('move', 'update-action'):
             out['motion'] = world.motion_dump(me)
         return out
 
