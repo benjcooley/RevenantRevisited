@@ -128,7 +128,10 @@ class Scheduler:
 
     def create_thread(self,args):
         security,size,entry,param,flags,out_tid=args
-        if security or flags&~4:raise ValueError('Unsupported CreateThread flags/security')
+        # Windows honours CREATE_SUSPENDED (4) and STACK_SIZE_PARAM_IS_A_RESERVATION
+        # (0x10000, a size hint) and ignores bits CreateThread does not define (retail's
+        # _beginthreadex(..., initflag=1, ...) passes 1).
+        if security:raise ValueError('Unsupported CreateThread security attributes')
         tid=self.next_tid
         if tid>self.MAX_THREADS:raise MemoryError('Guest thread capacity exhausted')
         self.next_tid+=1
@@ -200,10 +203,29 @@ class Scheduler:
     def set_event(self,args):self.event(args[0])['signaled']=True;return 1
     def reset_event(self,args):self.event(args[0])['signaled']=False;return 1
 
-    def signaled(self,handle):
+    def create_mutex(self,args):
+        # Unnamed, never abandoned (a thread exiting while it owns one is not
+        # modelled). Recursive ownership per thread, like Windows.
+        security,initial_owner,name=args
+        if security:raise ValueError('Mutex security attributes unsupported')
+        if name:raise ValueError('Named mutexes unsupported')
+        self.set_error((0,))
+        return self.handle(dict(type='mutex',owner=self.current if initial_owner else None,depth=int(bool(initial_owner))))
+
+    def release_mutex(self,args):
+        obj=self.objects.get(args[0])
+        if obj is None or obj['type']!='mutex':raise ValueError('Invalid mutex handle')
+        if obj['owner']!=self.current:self.set_error((288,));return 0 # ERROR_NOT_OWNER
+        obj['depth']-=1
+        if not obj['depth']:obj['owner']=None
+        return 1
+
+    def signaled(self,handle,tid=None):
+        # `tid`: the waiting thread (a mutex is signaled for its owner).
         obj=self.objects.get(handle)
         if obj is None:raise ValueError('Invalid wait handle')
         if obj['type']=='event':return obj['signaled']
+        if obj['type']=='mutex':return obj['owner'] in (None,self.current if tid is None else tid)
         return self.threads[obj['tid']].state=='exited'
 
     def consume(self,handles):
@@ -211,6 +233,7 @@ class Scheduler:
         for handle in handles:
             obj=self.objects[handle]
             if obj['type']=='event' and not obj['manual']:obj['signaled']=False
+            elif obj['type']=='mutex':obj['owner']=self.current;obj['depth']+=1
 
     def wait(self,handles,all_objects,timeout):
         if not handles or len(handles)>64 or (all_objects and len(set(handles))!=len(handles)):
@@ -263,7 +286,7 @@ class Scheduler:
                 wait=thread.wait
                 if wait['kind']=='critical':wake=self.critical[wait['address']]['owner'] is None
                 else:
-                    states=[self.signaled(h) for h in wait['handles']]
+                    states=[self.signaled(h,tid) for h in wait['handles']]
                     wake=all(states) if wait['all'] else any(states)
                 wake=wake or (wait['deadline'] is not None and wait['deadline']<=self.vm.elapsed_ms)
             if wake:thread.state='ready';self.ready.append(tid)

@@ -189,6 +189,16 @@ the original startup path when a subsystem needs its initialized state. Keep the
 game's calculations and software rasterization in original machine code; virtual
 APIs should supply the environment rather than replace behavior under test.
 
+## Full retail boot (HUD slot)
+
+`slots/hud/hudworld.py` boots the shipped game by its own code: CRT, all
+571 static constructors, then WinMain through game init (DirectDraw, the
+640x480x16 display, fonts, 3D scene, rules, classes, widgets). It stops
+before the intro movie. The slot's Win32/DirectDraw/GDI environment and
+the core changes it needed (`api_dlls`, mutexes, `ERROR_NEGATIVE_SEEK`,
+`CreateThread` flags, `call_sp`) are listed in
+[slots/hud/README.md](slots/hud/README.md).
+
 ## Checkpoint restore: native dirty pages
 
 `checkpoint()` records the CPU, heap, clock, files and virtual APIs; after

@@ -140,6 +140,13 @@ class Runtime:
             'DispatchMessageA':(1,self._dispatch),
         }
         self.user_apis={'PeekMessageA','PostQuitMessage','SetTimer','KillTimer','DispatchMessageA'}
+        # Import name -> DLLs whose import of it a slot-registered handler
+        # serves (e.g. a slot's ddraw.dll/gdi32.dll adapters). Empty: the
+        # kernel32/user32/winmm defaults above apply unchanged.
+        self.api_dlls={}
+        # Where host calls start their stack. A fixture that keeps a guest
+        # frame alive (a WinMain stopped mid-way) moves it below that frame.
+        self.call_sp=self.STACK+self.STACK_SIZE-0x100
         for i,(dll,name,iat) in enumerate(import_slots(self.image,self.layout)):
             address=self.STUBS+i*16
             if address>=self.RETURN:raise ValueError('Import stubs overlap return sentinel')
@@ -195,6 +202,8 @@ class Runtime:
             'SetThreadPriority':(2,self._thread_priority),
             'GetExitCodeThread':(2,self._thread_exit_code),
             'CreateEventA':(4,self.scheduler.create_event),
+            'CreateMutexA':(3,self.scheduler.create_mutex),
+            'ReleaseMutex':(1,self.scheduler.release_mutex),
             'SetEvent':(1,self.scheduler.set_event),
             'ResetEvent':(1,self.scheduler.reset_event),
             'WaitForSingleObject':(2,self.scheduler.wait_single),
@@ -386,7 +395,7 @@ class Runtime:
             self.scheduler.exit_thread((uc.reg_read(UC_X86_REG_EAX),));uc.emu_stop();return
         if address not in self.stubs:return
         dll,name=self.stubs[address]
-        supported_dlls={'winmm.dll','_inmm.dll'} if name=='timeGetTime' else ({'user32.dll'} if name in self.user_apis else {'kernel32.dll'})
+        supported_dlls=self.api_dlls.get(name) or ({'winmm.dll','_inmm.dll'} if name=='timeGetTime' else ({'user32.dll'} if name in self.user_apis else {'kernel32.dll'}))
         handler=self.handlers.get(name) if dll in supported_dlls else None
         if handler is None:
             self.error=MissingAPI(f'Unimplemented {dll}!{name} at 0x{address:08x}; caller 0x{self.u32(uc.reg_read(UC_X86_REG_ESP)):08x}')
@@ -421,7 +430,7 @@ class Runtime:
         # Previous successful calls finish with the main thread context active.
         # Rejected/faulted scenarios are rolled back by the session wrapper.
         self.scheduler.current=1
-        sp=self.STACK+self.STACK_SIZE-0x100
+        sp=self.call_sp
         self.write(sp,struct.pack('<'+'I'*(len(args)+1),self.RETURN,*args))
         self.uc.reg_write(UC_X86_REG_ESP,sp)
         if this is not None:self.uc.reg_write(UC_X86_REG_ECX,this)
@@ -526,7 +535,9 @@ class Runtime:
         delta=struct.unpack('<i',struct.pack('<I',args[1]))[0]
         origin=(0,pos,len(self.files[name]))[args[3]]
         new=origin+delta
-        if new<0:return 0xffffffff
+        # Before the start: fails with ERROR_NEGATIVE_SEEK, which the CRT's
+        # text-mode append open expects on an empty file.
+        if new<0:self.scheduler.set_error((131,));return 0xffffffff
         self.handles[args[0]][1]=new;return new
 
     def _read(self,args):
