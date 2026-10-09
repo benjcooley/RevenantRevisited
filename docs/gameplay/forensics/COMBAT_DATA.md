@@ -549,7 +549,7 @@ loose / by-name for each open.
 
 ## 11. Port divergences
 
-Port = `worktrees/combat` (feature/combat @ b02f095); `main` noted where
+Port = `worktrees/combat` (feature/combat @ fa8f555); `main` noted where
 it differs.
 
 **File resolution**
@@ -568,7 +568,7 @@ it differs.
 3. `MountModule` (`revutils.cpp:1771-1805`) mounts an unpacked
    `Modules/<name>/` folder **instead of** `<name>.rvm` when the folder
    exists (lab: Deathmatch6, Demo). Retail mounts the .rvm, and the pack
-   wins. The port treats a missing base pack as fatal (`revmain.cpp:2626-2629`);
+   wins. The port treats a missing base pack as fatal (`revmain.cpp:2628-2631`);
    retail carries on with loose files (§2.2).
 4. No XOR-0xCC decode for scrambled .def files (`parse.cpp` has none).
    The shipped data is plain, so there is no effect today.
@@ -577,7 +577,7 @@ it differs.
 5. **TOHITCENTER, TOHITRANGECHAR, TOHITRANGEPLYR, TOHITBLOCK, TOHITFACE,
    TOHITDAMAGE and AMMODATA are skipped** (`rules.cpp:839-856`, logged as
    warnings in the arena runs). TRules has no fields for them, so the
-   port's to-hit is still the 1998 formula (`character.cpp:1617-1633`) and
+   port's to-hit is still the 1998 formula (`character.cpp:1659-1675`) and
    ignores the retail table (C4).
 6. An unknown tag is skipped (port) but fatal in retail. A repeated
    CHARACTER replaces the earlier one (`:754-772`) but is fatal in retail;
@@ -586,7 +586,7 @@ it differs.
    AMMODATA. TRules members have no initializers (`rules.h:295-309`). The
    shipped file sets every value the port parses, so this has no data
    effect.
-8. `ConvertMinutesToFrames` (`playscreen.cpp:263-267`) is `m·60·24`;
+8. `ConvertMinutesToFrames` (`playscreen.cpp:264-268`) is `m·60·30` (kGameFrameRate 30, `playscreen.cpp:244`);
    retail is `m·daylength/1440`. TWILIGHT steps differ when GameSpeed is 5
    (default is 3).
 9. After a WEAPON block the port calls WhiteGet (`:820`); retail calls Get.
@@ -598,7 +598,7 @@ it differs.
     missing. An unknown class tag is fatal in retail.
 
 **CHARACTER (`SCharData::Load`, `rules.cpp:242-610`)**
-11. **GROUPS / ENEMIES are 48 bytes, `%48s`** (`rules.h:84`,
+11. **GROUPS / ENEMIES are 48 bytes, `%48s`** (`rules.h:85`,
     `rules.cpp:493-500`); retail uses 80 / `%80s`. 11 of 58 ENEMIES lists
     get cut off at 47 characters:
     - Locke, Bayne, Morganna and Navarro keep
@@ -609,7 +609,7 @@ it differs.
     - The three golems lose White, Blue and Red Dragon.
     - The four dragons lose Zombie and Skeleton.
 
-    IsEnemy (`character.cpp:2396-2404`) reads this list. Its effect on
+    IsEnemy (`character.cpp:2459-2467`) reads this list. Its effect on
     targeting is for M4.
 12. **ATTACK trailing fields are dropped** (`:299-318`): swipeframeon /
     swipeframeoff (`+0xec/+0xf0`).
