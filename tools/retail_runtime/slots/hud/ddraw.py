@@ -14,6 +14,7 @@ Interfaces (vtable slot order per ddraw.h):
 - `DirectDrawCreate` / `DirectDrawEnumerateA` (no devices enumerated: retail
   then creates the default device, its own fallback path).
 - IDirectDraw (v1): QueryInterface for IDirectDraw4 only.
+- Surface GetDC/ReleaseDC: a `gdi.py` device context bound to the surface.
 - IDirectDrawClipper: SetHWnd / SetClipList recorded (clipping is the
   original code's own; the fake blits do not clip).
 - IDirect3D3 (from IDirectDraw4::QueryInterface): EnumDevices enumerates
@@ -79,6 +80,9 @@ IID_IDIRECT3DRGBDEVICE = bytes.fromhex('605c66a47326cf11a31a00aa00b93356')
 # output, never the frame buffer a capture reads.
 IID_IDIRECTDRAWGAMMACONTROL = bytes.fromhex('3e1cc1696bb4d111ad7a00c04fc29b4e')
 E_NOINTERFACE = 0x80004002
+# IID_IDirect3DTexture2 {93281502-8cf8-11d0-89ab-00a0c9054129}: the texture
+# side of a surface (a separate object here, mapped back to its surface).
+IID_IDIRECT3DTEXTURE2 = bytes.fromhex('02152893f88cd01189ab00a0c9054129')
 D3DDEVICEDESC_SIZE = 0xfc
 D3DCOLOR_RGB = 2
 
@@ -133,6 +137,9 @@ MATERIAL3_METHODS = [
 LIGHT_METHODS = [
     ('QueryInterface', 3), ('AddRef', 1), ('Release', 1), ('Initialize', 2), ('SetLight', 2),
     ('GetLight', 2)]
+TEXTURE2_METHODS = [
+    ('QueryInterface', 3), ('AddRef', 1), ('Release', 1), ('GetHandle', 3), ('PaletteChanged', 3),
+    ('Load', 2)]
 VIEWPORT3_METHODS = [
     ('QueryInterface', 3), ('AddRef', 1), ('Release', 1), ('Initialize', 2), ('GetViewport', 2),
     ('SetViewport', 2), ('TransformVertices', 5), ('LightElements', 3), ('SetBackground', 2),
@@ -168,55 +175,77 @@ class DirectDraw:
     # 16 MB of video memory, the common 1999 card. Retail's 3D device init
     # (0x004a75b0) rounds video memory to MB and forces the NoTex HUD on
     # cards with 8 MB or less -- texture overlays need more.
-    def __init__(self, vm, width=640, height=480, video_memory=16 << 20):
+    def __init__(self, vm, state=None, width=640, height=480, video_memory=16 << 20):
+        """Fresh (`state` None): create the DirectDraw objects in guest
+        memory. From `state()`: re-attach to objects already there (a loaded
+        image or a checkpoint)."""
         self.vm = vm
+        self.gdi = None                       # gdi.Gdi, for surface DCs (set by the world)
         self.width, self.height = width, height
         self.video_memory = video_memory
-        self.surfaces: dict[int, Surface] = {}
-        self.clippers: dict[int, dict] = {}
-        self.primary = 0
-        self.cooperative = None
-        self.display_mode = None
-        self._vtables = {}
         for dll_name, argc, fn in [('DirectDrawCreate', 3, self._create),
                                    ('DirectDrawEnumerateA', 2, self._enumerate)]:
             self._export(dll_name, argc, fn)
-        self.dd1 = self._object('IDirectDraw', IDD1_METHODS, self._dd_method)
-        self.dd4 = self._object('IDirectDraw4', IDD4_METHODS, self._dd_method)
-        self.d3d3 = self._object('IDirect3D3', D3D3_METHODS, self._d3d_method)
-        self._install_enum_devices()
+        for interface, (methods, dispatch) in self.INTERFACES.items():
+            for method, argc in methods:
+                self._export(f'{interface}::{method}', argc,
+                             lambda args, m=method, i=interface, d=dispatch: getattr(self, d)(i, m, args))
+        if state is not None:
+            self.set_state(state)
+            return
+        self.surfaces: dict[int, Surface] = {}
+        self.clippers: dict[int, dict] = {}
+        self.textures: dict[int, int] = {}    # IDirect3DTexture2 -> its surface
+        self.primary = 0
+        self.cooperative = None
+        self.display_mode = None
         self.device_calls = []                # (method, args) on the D3D device / viewports
+        self._vtables = {}
+        self.dd1 = self._object('IDirectDraw')
+        self.dd4 = self._object('IDirectDraw4')
+        self.d3d3 = self._object('IDirect3D3')
+        self._install_enum_devices()
 
     # ---- plumbing ------------------------------------------------------
+
+    INTERFACES = {'IDirectDraw': (IDD1_METHODS, '_dd_method'),
+                  'IDirectDraw4': (IDD4_METHODS, '_dd_method'),
+                  'IDirectDrawSurface4': (SURF_METHODS, '_surface_method'),
+                  'IDirectDrawClipper': (CLIPPER_METHODS, '_clipper_method'),
+                  'IDirect3D3': (D3D3_METHODS, '_d3d_method'),
+                  'IDirect3DDevice3': (DEVICE3_METHODS, '_device_method'),
+                  'IDirect3DViewport3': (VIEWPORT3_METHODS, '_device_method'),
+                  'IDirect3DMaterial3': (MATERIAL3_METHODS, '_device_method'),
+                  'IDirect3DLight': (LIGHT_METHODS, '_device_method'),
+                  'IDirect3DTexture2': (TEXTURE2_METHODS, '_texture_method')}
 
     def _export(self, name, argc, fn):
         self.vm.handlers[name] = (argc, fn)
         self.vm.api_dlls[name] = {'ddraw.dll'}
 
-    def _vtable(self, interface, methods, dispatch):
-        if interface in self._vtables:
-            return self._vtables[interface]
-        table = self.vm.allocate(4 * len(methods))
-        for slot, (method, argc) in enumerate(methods):
-            label = f'{interface}::{method}'
-            self._export(label, argc, lambda args, m=method, i=interface: dispatch(i, m, args))
-            self.vm.put_u32(table + 4 * slot, self.vm.api_address('ddraw.dll', label))
-        self._vtables[interface] = table
-        return table
+    def _vtable(self, interface):
+        if interface not in self._vtables:
+            methods = self.INTERFACES[interface][0]
+            table = self.vm.allocate(4 * len(methods))
+            for slot, (method, _) in enumerate(methods):
+                self.vm.put_u32(table + 4 * slot, self.vm.api_address('ddraw.dll', f'{interface}::{method}'))
+            self._vtables[interface] = table
+        return self._vtables[interface]
 
-    def _object(self, interface, methods, dispatch, size=16):
+    def _object(self, interface, size=16):
         obj = self.vm.allocate(size)
-        self.vm.put_u32(obj, self._vtable(interface, methods, dispatch))
+        self.vm.put_u32(obj, self._vtable(interface))
         return obj
 
-    def snapshot(self):
-        return copy.deepcopy((self.surfaces, self.clippers, self.primary, self.cooperative,
-                              self.display_mode, len(self.device_calls)))
+    STATE = ('surfaces', 'clippers', 'textures', 'primary', 'cooperative', 'display_mode',
+             'device_calls', '_vtables', 'dd1', 'dd4', 'd3d3')
 
-    def restore(self, state):
-        (self.surfaces, self.clippers, self.primary, self.cooperative,
-         self.display_mode, calls) = copy.deepcopy(state)
-        del self.device_calls[calls:]
+    def state(self):
+        return copy.deepcopy({name: getattr(self, name) for name in self.STATE})
+
+    def set_state(self, state):
+        for name, value in copy.deepcopy(state).items():
+            setattr(self, name, value)
 
     def surface(self, pointer) -> Surface:
         if pointer not in self.surfaces:
@@ -288,7 +317,7 @@ class DirectDraw:
             flags, out, outer = args[1], args[2], args[3]
             if outer:
                 raise MissingAPI('CreateClipper: aggregation')
-            clipper = self._object('IDirectDrawClipper', CLIPPER_METHODS, self._clipper_method)
+            clipper = self._object('IDirectDrawClipper')
             self.clippers[clipper] = dict(hwnd=0, references=1)
             self.vm.put_u32(out, clipper)
             return DD_OK
@@ -324,6 +353,29 @@ class DirectDraw:
         struct.pack_into('<IIII', block, 0x408, 0xffff, 0xffff, 0, 0)  # vendor, device, subsys, rev
         self.vm.write(out, bytes(block))
         return DD_OK
+
+    def _texture_method(self, interface, method, args):
+        surface = self.surface(self.textures[args[0]])
+        if method == 'AddRef':
+            surface.references += 1
+            return surface.references
+        if method == 'Release':
+            surface.references -= 1
+            return max(surface.references, 0)
+        if method == 'GetHandle':                      # the handle names the surface
+            self.vm.put_u32(args[2], self.textures[args[0]])
+            return DD_OK
+        if method == 'Load':                           # copy a (system memory) texture in
+            source = self.surface(self.textures[args[1]])
+            if (source.width, source.height) != (surface.width, surface.height) or \
+                    source.pixel_format != surface.pixel_format:
+                raise MissingAPI('IDirect3DTexture2::Load between different textures')
+            for y in range(surface.height):
+                self.vm.write(surface.memory + y * surface.pitch,
+                              bytes(self.vm.uc.mem_read(source.memory + y * source.pitch,
+                                                        surface.width * surface.bytes_per_pixel)))
+            return DD_OK
+        raise MissingAPI(f'{interface}::{method}')
 
     def _clipper_method(self, interface, method, args):
         clipper = self.clippers[args[0]]
@@ -378,7 +430,7 @@ class DirectDraw:
             if outer:
                 raise MissingAPI('CreateDevice: aggregation')
             self.surface(surface)
-            device = self._object('IDirect3DDevice3', DEVICE3_METHODS, self._device_method)
+            device = self._object('IDirect3DDevice3')
             self.device_calls.append(('CreateDevice', bytes(self.vm.uc.mem_read(clsid, 16)).hex()))
             self.vm.put_u32(out, device)
             return DD_OK
@@ -386,16 +438,14 @@ class DirectDraw:
             out, outer = args[1:3]
             if outer:
                 raise MissingAPI(f'{method}: aggregation')
-            kind = ('IDirect3DMaterial3', MATERIAL3_METHODS) if method == 'CreateMaterial' \
-                else ('IDirect3DLight', LIGHT_METHODS)
-            self.vm.put_u32(out, self._object(*kind, self._device_method))
+            kind = 'IDirect3DMaterial3' if method == 'CreateMaterial' else 'IDirect3DLight'
+            self.vm.put_u32(out, self._object(kind))
             return DD_OK
         if method == 'CreateViewport':
             out, outer = args[1:3]
             if outer:
                 raise MissingAPI('CreateViewport: aggregation')
-            self.vm.put_u32(out, self._object('IDirect3DViewport3', VIEWPORT3_METHODS,
-                                              self._device_method))
+            self.vm.put_u32(out, self._object('IDirect3DViewport3'))
             return DD_OK
         raise MissingAPI(f'{interface}::{method}')
 
@@ -448,7 +498,7 @@ class DirectDraw:
             pitch = (width * bpp // 8 + 3) & ~3
         if not memory:
             memory = self.vm.allocate(pitch * height)
-        pointer = self._object('IDirectDrawSurface4', SURF_METHODS, self._surface_method)
+        pointer = self._object('IDirectDrawSurface4')
         self.surfaces[pointer] = Surface(width, height, pitch, memory, caps, pixel_format)
         return pointer
 
@@ -494,6 +544,14 @@ class DirectDraw:
             if iid == IID_IDIRECTDRAWGAMMACONTROL:
                 self.vm.put_u32(args[2], 0)
                 return E_NOINTERFACE
+            if iid == IID_IDIRECT3DTEXTURE2:
+                texture = next((t for t, owner in self.textures.items() if owner == this), None)
+                if texture is None:
+                    texture = self._object('IDirect3DTexture2')
+                    self.textures[texture] = this
+                s.references += 1
+                self.vm.put_u32(args[2], texture)
+                return DD_OK
             raise MissingAPI(f'{interface}::QueryInterface for {iid.hex()}')
         if method == 'AddRef':
             s.references += 1
@@ -554,6 +612,18 @@ class DirectDraw:
             return DD_OK
         if method == 'SetClipper':
             s.clipper = args[1]
+            return DD_OK
+        if method == 'GetDC':                          # GDI draws into this surface
+            if s.dc:
+                return 0x887601ae                      # DDERR_DCALREADYCREATED
+            s.dc = self.gdi.create_dc(this)
+            self.vm.put_u32(args[1], s.dc)
+            return DD_OK
+        if method == 'ReleaseDC':
+            if args[1] != s.dc:
+                raise MissingAPI('ReleaseDC of a DC this surface did not hand out')
+            self.gdi.release_dc(s.dc)
+            s.dc = 0
             return DD_OK
         if method == 'SetSurfaceDesc':
             raw = bytes(self.vm.uc.mem_read(args[1], SDESC_SIZE))

@@ -27,6 +27,7 @@ Values a capture could depend on are listed here, never invented elsewhere.
 """
 from __future__ import annotations
 
+import copy
 import datetime
 import struct
 import unicodedata
@@ -86,7 +87,7 @@ class MessageBoxReached(RuntimeError):
 
 
 class SystemApis:
-    def __init__(self, vm):
+    def __init__(self, vm, state=None):
         self.vm = vm
         self.error_mode = 0
         self.environment = {}                 # SetEnvironmentVariableA store (upper-case names)
@@ -135,6 +136,8 @@ class SystemApis:
         wide_to_bytes = vm.handlers['WideCharToMultiByte'][1]
         vm.handlers['WideCharToMultiByte'] = (8, lambda a: wide_to_bytes(
             (a[0], a[1] & ~(WC_COMPOSITECHECK | WC_SEPCHARS)) + tuple(a[2:])))
+        if state is not None:
+            self.set_state(state)
 
     # ---- lstr* (byte strings, cp1252) ----------------------------------
 
@@ -191,12 +194,6 @@ class SystemApis:
     def _kill_event(self, args):
         return 0 if self.timers.pop(args[0], None) is not None else 97   # MMSYSERR_INVALPARAM
 
-    def snapshot(self):
-        return dict(self.environment), self.error_mode, dict(self.timers), self.next_timer
-
-    def restore(self, state):
-        environment, self.error_mode, timers, self.next_timer = state
-        self.environment, self.timers = dict(environment), dict(timers)
 
     def now(self):
         return EPOCH + datetime.timedelta(milliseconds=float(self.vm.elapsed_ms))
@@ -311,3 +308,12 @@ class SystemApis:
         _, text, caption, _flags = args
         raise MessageBoxReached(f'MessageBoxA "{self.vm.string(caption) if caption else ""}": '
                                 f'{self.vm.string(text) if text else ""}')
+
+    STATE = ('error_mode', 'environment', 'timers', 'next_timer')
+
+    def state(self):
+        return copy.deepcopy({name: getattr(self, name) for name in self.STATE})
+
+    def set_state(self, state):
+        for name, value in copy.deepcopy(state).items():
+            setattr(self, name, value)

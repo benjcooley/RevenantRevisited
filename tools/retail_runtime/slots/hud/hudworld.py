@@ -51,12 +51,13 @@ sys.path.insert(0, str(HERE.parents[1]))
 from unicorn import UC_HOOK_CODE, UC_HOOK_MEM_FETCH_UNMAPPED, UC_HOOK_MEM_READ_UNMAPPED, UC_HOOK_MEM_WRITE_UNMAPPED  # noqa: E402
 from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_EIP, UC_X86_REG_ESP  # noqa: E402
 from runtime import Runtime  # noqa: E402
+import image  # noqa: E402
 from ddraw import DirectDraw  # noqa: E402
 from gdi import Gdi  # noqa: E402
 from profile import PrivateProfile  # noqa: E402
 from system import SystemApis  # noqa: E402
 from window import Windows  # noqa: E402
-from winfs import WinFileSystem  # noqa: E402
+from winfs import WinFileSystem, mount_tree  # noqa: E402
 
 RETAIL_SHA = '28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5'
 CRT_INIT, CRT_INIT_STOP = 0x0058ed0d, 0x0058ed8e     # entry: heap + TLS, before _ioinit
@@ -68,6 +69,13 @@ GAME_INITIALIZED = 0x00486e7f                # WinMain, just after `call 0x00485
 FRAME_RESERVE = 0x1000                       # below WinMain's live frame for later host calls
 COMMAND_LINE = b'NOSOUND'               # retail's own switch: no Miles / Red Book audio
 RETAIL_INSTALL = Path.home() / 'RevenantRetailLab' / 'retail-cd' / 'REVENANT'
+IMAGE_DIR = HERE / '__pycache__'
+# Sources whose behaviour shapes the booted state: a change to any of them
+# makes a new boot image (fixture modules built on the world are not here).
+BOOT_SOURCES = [HERE / name for name in ('hudworld.py', 'system.py', 'winfs.py', 'profile.py',
+                                          'window.py', 'ddraw.py', 'gdi.py', 'ttf.py')] + \
+               [HERE.parents[1] / name for name in ('runtime.py', 'threads.py', 'memory.py',
+                                                    'process.py', 'image.py', 'dirtypages.c')]
 BOOT_LOG = 0x004820b0                        # printf-style append to revboot.log, cdecl
 NETWORK_INIT = 0x00575890                    # DirectPlay provider enumeration, thiscall
 
@@ -76,20 +84,41 @@ G_INTERNAL_RASTER = 0x005d7a28
 
 
 class HudWorld:
-    def __init__(self, executable, install=RETAIL_INSTALL):
+    """Build with `HudWorld.open(executable)` (a cached boot image when one
+    matches, else a boot that saves one) or `HudWorld(executable)` (always
+    boot)."""
+
+    @classmethod
+    def open(cls, executable, install=RETAIL_INSTALL):
+        path = cls.image_path(executable)
+        if path.exists():
+            return cls(executable, install, image_path=path)
+        world = cls(executable, install)
+        world.save(path)
+        return world
+
+    @staticmethod
+    def image_path(executable):
+        digest = hashlib.sha256(Path(executable).read_bytes())
+        for source in BOOT_SOURCES:
+            digest.update(source.read_bytes())
+        return IMAGE_DIR / f'hud-boot-{digest.hexdigest()[:16]}.image'
+
+    def __init__(self, executable, install=RETAIL_INSTALL, image_path=None):
+        self.install = install
+        self.boundary_calls = []               # (name, detail) in call order
+        self._boundaries = {}
+        self.last_fault = None
+        if image_path is not None:
+            self._load(executable, image_path)
+            return
         self.vm = vm = Runtime(executable)
         self.sha = hashlib.sha256(vm.image).hexdigest()
         if self.sha != RETAIL_SHA:
             raise ValueError('HUD fixtures are verified for the unchanged retail image only')
-        self.last_fault = None
-        vm.uc.hook_add(UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED | UC_HOOK_MEM_FETCH_UNMAPPED,
-                       self._fault)
+        self._install_hooks()
         vm.call(CRT_INIT, stop_address=CRT_INIT_STOP)
         self.system = SystemApis(vm)
-        self.boundary_calls = []               # (name, detail) in call order
-        self._boundaries = {}
-        self.boundary(BOOT_LOG, 'boot log', 0, self._boot_log)
-        self.boundary(NETWORK_INIT, 'network init', 0, lambda args, ecx: (1, 'no DirectPlay'))
         self.fs = WinFileSystem(vm)
         self.mounted = self.fs.mount_tree(install)
         self.profile = PrivateProfile(vm, self.fs)
@@ -103,6 +132,7 @@ class HudWorld:
         self.ddraw = DirectDraw(vm)
         self.windows = Windows(vm)
         self.gdi = Gdi(vm)
+        self.ddraw.gdi = self.gdi
         command = vm.allocate(len(COMMAND_LINE) + 1)
         vm.write(command, COMMAND_LINE + b'\0')
         self.call(WINMAIN, (vm.base, 0, command, 1), stop_address=GAME_INITIALIZED,
@@ -114,6 +144,40 @@ class HudWorld:
         vm.call_sp = (vm.uc.reg_read(UC_X86_REG_ESP) - FRAME_RESERVE) & ~0xf
         if vm.u32(G_NOTEXOVERLAY) != 0 or vm.u32(G_INTERNAL_RASTER) != 1:
             raise RuntimeError('Boot did not reach the texture-overlay / internal-raster mode')
+
+    def _install_hooks(self):
+        self.vm.uc.hook_add(UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED
+                            | UC_HOOK_MEM_FETCH_UNMAPPED, self._fault)
+        self.boundary(BOOT_LOG, 'boot log', 0, self._boot_log)
+        self.boundary(NETWORK_INIT, 'network init', 0, lambda args, ecx: (1, 'no DirectPlay'))
+
+    # ---- boot image ----------------------------------------------------
+
+    MODULES = ('system', 'fs', 'profile', 'ddraw', 'windows', 'gdi')
+
+    def save(self, path):
+        """Write the booted world (`image.py` plus every module's state)."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        extra = dict(modules={name: getattr(self, name).state() for name in self.MODULES},
+                     boundary_calls=self.boundary_calls, mounted=self.mounted)
+        return image.save(self.vm, path, extra)
+
+    def _load(self, executable, path):
+        self.vm, extra = image.load(executable, path,
+                                    mount=lambda vm: mount_tree(vm, self.install))
+        vm = self.vm
+        self.sha = hashlib.sha256(vm.image).hexdigest()
+        states = extra['modules']
+        self.system = SystemApis(vm, states['system'])
+        self.fs = WinFileSystem(vm, states['fs'])
+        self.profile = PrivateProfile(vm, self.fs, states['profile'])
+        self.ddraw = DirectDraw(vm, states['ddraw'])
+        self.windows = Windows(vm, states['windows'])
+        self.gdi = Gdi(vm, states['gdi'])
+        self.ddraw.gdi = self.gdi
+        self.boundary_calls = list(extra['boundary_calls'])
+        self.mounted = extra['mounted']
+        self._install_hooks()
 
     # ---- boundaries: original entries answered by the host --------------
 
@@ -167,17 +231,15 @@ class HudWorld:
 
     def checkpoint(self):
         self.vm.checkpoint()
-        self._host_state = (self.ddraw.snapshot(), self.fs.snapshot(), self.system.snapshot(),
-                            self.windows.snapshot(), self.gdi.snapshot())
+        self._host_state = ({name: getattr(self, name).state() for name in self.MODULES},
+                            len(self.boundary_calls))
 
     def restore(self):
         self.vm.restore()
-        self.ddraw.restore(self._host_state[0])
-        self.fs.restore(self._host_state[1])
-        self.system.restore(self._host_state[2])
-        self.windows.restore(self._host_state[3])
-        self.gdi.restore(self._host_state[4])
-
+        modules, calls = self._host_state
+        for name, state in modules.items():
+            getattr(self, name).set_state(state)
+        del self.boundary_calls[calls:]
 
 def main():
     import argparse
@@ -187,10 +249,11 @@ def main():
     parser.add_argument('executable', type=Path)
     args = parser.parse_args()
     started = time.perf_counter()
-    world = HudWorld(args.executable)
+    world = HudWorld.open(args.executable)
     vm = world.vm
     summary = dict(
-        retail_sha256=world.sha, boot_seconds=round(time.perf_counter() - started, 1),
+        retail_sha256=world.sha, seconds=round(time.perf_counter() - started, 1),
+        image=str(HudWorld.image_path(args.executable).name),
         configuration={name: vm.u32(address) for name, address in
                        (('NoTexOverlay', G_NOTEXOVERLAY), ('InternalRaster', G_INTERNAL_RASTER),
                         ('TexturedDevice', 0x00669ad8))},

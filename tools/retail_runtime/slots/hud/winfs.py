@@ -21,6 +21,7 @@ names). This layer adds what WinMain and the CRT reach:
 """
 from __future__ import annotations
 
+import copy
 import fnmatch
 import posixpath
 import struct
@@ -31,16 +32,42 @@ INVALID = 0xffffffff
 ERROR_FILE_NOT_FOUND, ERROR_NO_MORE_FILES = 2, 18
 
 
+def canonical_key(path, root='C:\\REVENANT', cwd='C:\\REVENANT'):
+    """Canonical `vm.files` key for a Windows path: absolute, `.`/`..`
+    collapsed, '/'-separated, lower case."""
+    path = path.replace('/', '\\')
+    if not (len(path) > 1 and path[1] == ':'):
+        path = (root[:2] + path) if path.startswith('\\') else (cwd + '\\' + path)
+    drive, rest = path[:2], path[2:].replace('\\', '/')
+    return (drive + posixpath.normpath('/' + rest.lstrip('/'))).lower()
+
+
+def mount_tree(vm, host_dir, at='C:\\REVENANT'):
+    """Mount every file under `host_dir` read-only (immutable bytes) at the
+    Windows directory `at`. Returns the number of files."""
+    base = canonical_key(at)
+    count = 0
+    for path in sorted(Path(host_dir).rglob('*')):
+        if path.is_file():
+            relative = path.relative_to(host_dir).as_posix().lower()
+            vm.files[f'{base}/{relative}'] = path.read_bytes()
+            count += 1
+    return count
+
+
 class WinFileSystem:
-    def __init__(self, vm, root='C:\\REVENANT', module='Revenant.exe'):
+    def __init__(self, vm, state=None, root='C:\\REVENANT', module='Revenant.exe'):
         self.vm = vm
         self.root = root
-        self.cwd = root
         self.module_path = root + '\\' + module
-        self.finds = {}                       # handle -> remaining matches
-        self.directories = set()              # created directory keys
-        self.next_find = 0x6000
-        self._path_scratch = vm.allocate(1024)    # canonical name handed to the core
+        if state is not None:
+            self.set_state(state)
+        else:
+            self.cwd = root
+            self.finds = {}                   # handle -> remaining matches
+            self.directories = set()          # created directory keys
+            self.next_find = 0x6000
+            self._path_scratch = vm.allocate(1024)    # canonical name handed to the core
         core_create = vm.handlers['CreateFileA'][1]
         self._core_create = core_create
         for name, argc, fn in [
@@ -63,26 +90,13 @@ class WinFileSystem:
 
     def key(self, path):
         """Canonical `vm.files` key for a Windows path."""
-        path = path.replace('/', '\\')
-        if not (len(path) > 1 and path[1] == ':'):
-            path = (self.root[:2] + path) if path.startswith('\\') else (self.cwd + '\\' + path)
-        drive, rest = path[:2], path[2:].replace('\\', '/')
-        return (drive + posixpath.normpath('/' + rest.lstrip('/'))).lower()
+        return canonical_key(path, self.root, self.cwd)
 
     def windows(self, key):
         return key.replace('/', '\\')
 
     def mount_tree(self, host_dir, at=None):
-        """Mount every file under `host_dir` read-only at `at` (default the
-        install root). Returns the number of files."""
-        base = self.key(at or self.root)
-        count = 0
-        for path in sorted(Path(host_dir).rglob('*')):
-            if path.is_file():
-                relative = path.relative_to(host_dir).as_posix().lower()
-                self.vm.files[f'{base}/{relative}'] = path.read_bytes()
-                count += 1
-        return count
+        return mount_tree(self.vm, host_dir, at or self.root)
 
     def mount(self, windows_path, data):
         self.vm.files[self.key(windows_path)] = bytes(data)
@@ -212,11 +226,11 @@ class WinFileSystem:
     def _find_close(self, args):
         return int(self.finds.pop(args[0], None) is not None)
 
-    def snapshot(self):
-        return (self.cwd, {h: list(m) for h, m in self.finds.items()}, self.next_find,
-                set(self.directories))
+    STATE = ('cwd', 'finds', 'directories', 'next_find', '_path_scratch')
 
-    def restore(self, state):
-        self.cwd, finds, self.next_find, directories = state
-        self.finds = {h: list(m) for h, m in finds.items()}
-        self.directories = set(directories)
+    def state(self):
+        return copy.deepcopy({name: getattr(self, name) for name in self.STATE})
+
+    def set_state(self, state):
+        for name, value in copy.deepcopy(state).items():
+            setattr(self, name, value)

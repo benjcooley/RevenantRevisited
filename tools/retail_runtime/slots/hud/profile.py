@@ -16,6 +16,7 @@ Writes go to the virtual file only (never the host).
 """
 from __future__ import annotations
 
+import copy
 WINDOWS_DIRECTORY = 'C:\\WINDOWS'
 
 
@@ -40,7 +41,7 @@ def parse(text):
 
 
 class PrivateProfile:
-    def __init__(self, vm, fs):
+    def __init__(self, vm, fs, state=None):
         self.vm = vm
         self.fs = fs
         self.reads = []                       # (file, section, key, result) in call order
@@ -48,6 +49,8 @@ class PrivateProfile:
                                ('GetPrivateProfileIntA', 4, self._int),
                                ('WritePrivateProfileStringA', 4, self._write)]:
             vm.handlers[name] = (argc, fn)
+        if state is not None:
+            self.set_state(state)
 
     def _key(self, name):
         if '\\' not in name and '/' not in name:
@@ -136,3 +139,12 @@ class PrivateProfile:
                        for name, items in sections)
         self.vm.files[path] = bytearray(text.encode('cp1252'))
         return 1
+
+    STATE = ('reads',)
+
+    def state(self):
+        return copy.deepcopy({name: getattr(self, name) for name in self.STATE})
+
+    def set_state(self, state):
+        for name, value in copy.deepcopy(state).items():
+            setattr(self, name, value)
