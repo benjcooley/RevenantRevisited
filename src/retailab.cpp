@@ -14,6 +14,7 @@
 #include "character.h"
 #include "command.h"
 #include "dialog.h"
+#include "hudab.h"
 #include "logging.h"
 #include "mappane.h"
 #include "parse.h"
@@ -1134,6 +1135,8 @@ bool Run(int argc, char* argv[], int& exitcode)
         dump = ScriptStep;
     else if (target == "trigger-test")
         dump = TriggerTest;
+    else if (target == "draw-put")      // HUD track: docs/ui/HUD_REBUILD.md P1a
+        dump = [](const Case& c, std::string& error) { return HudAB::DrawPut(c.fields, error); };
     if (!dump)
     {
         fprintf(stderr, "retail-ab: unknown target '%s'\n", target.c_str());

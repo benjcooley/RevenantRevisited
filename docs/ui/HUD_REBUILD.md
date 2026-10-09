@@ -272,6 +272,21 @@ each, merged back after their A/B report is clean.
     primitive recipe of the last frame (Put / ParamBlit / Box / Quad / Text
     with arguments) and the text calls.
   - Rendering architecture decided (§5, P1a/P1b).
+  - **P1a started.** The port's software blitters were empty shells: 71
+    routines whose 1998 x86 assembly was disabled under `#if 0`, with no
+    C++ body. New C++ bodies so far:
+    - the 2-byte `Put` copy and `Box` fill;
+    - the new `Alpha4444` (retail `0x004b3790`, formula recovered and
+      verified);
+    - the `BM_ARGB4444` / `BM_ARGB1555` formats.
+  - `tools/retail_ab/hud_ab.py draw-put`: **500/500 random cases
+    bit-exact** against retail's own `TSurface::Put` (real StatusBar.dat
+    bitmaps plus synthetic 4444; default, plain and alpha modes).
+  - Findings, both open P1a items (the HUD's own draws are in bounds and
+    its surfaces even-width):
+    - Retail surfaces *wrap* draws that cross an edge (clip mode).
+    - Retail's Put faults on odd-width surfaces with a DWORD-aligned
+      pitch.
   - First light: retail's status bar paints (chrome, icons, bars).
   - GDI text calls are recorded.
   - §2 corrected after merging GitHub main (gameflow's live binding).

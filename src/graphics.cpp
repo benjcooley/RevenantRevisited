@@ -182,7 +182,9 @@ DRAWFUNCTION GetPutFunction(PSDrawBlock db, PSDrawParam dp)
 
         else if (dp->drawmode & DM_ALPHA)
         {
-            if (db->dstbitmapflags & BM_32BIT)
+            if ((db->srcbitmapflags & BM_ARGB4444) && (db->dstbitmapflags & BM_ARGB4444))
+                drawfunc = Alpha4444;     // retail selector 0x004ad1d0: 4444 over 4444
+            else if (db->dstbitmapflags & BM_32BIT)
                 drawfunc = Alpha32;
 
             else
@@ -816,118 +818,37 @@ bool StretchClip(PSDrawBlock db, PSDrawParam dp, PSDrawParam dparray,
 
 bool Put(PSDrawBlock db, PSDrawParam dp)
 {
+    // The plain copy between two buffers of one 2-byte format (565, 555,
+    // ARGB4444, ARGB1555): what retail's selector 0x004ad1d0 picks for an
+    // unflagged draw of a bitmap into a surface of its own format. Alpha-0
+    // and key-coloured pixels are copied like any other (no transparency).
     if (dp->swidth < 1 || dp->sheight < 1 || dp->dwidth < 1 || dp->dheight < 1) 
         return false;
 
     if (db->srcbitmapflags & BM_COMPRESSED)
-    {
         return false; // No longer supported
-//      if (dp->sx || dp->sy || db->sbufwidth != dp->swidth || db->sbufheight != dp->sheight)
-//          return ClipDecompress(db, dp, false);
-//      else
-//          return Decompress(db, dp, false);
-    }
-
-    SDrawBlock dbval = *db;
-    SDrawParam dpval = *dp;
 
     SETUP_DRAW
 
-    #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
-    __asm
+    const uint8_t* src = static_cast<const uint8_t*>(db->source) + srcoff;
+    uint8_t* dst = static_cast<uint8_t*>(db->dest) + dstoff;
+    const int32_t pixels = bmwidth / 2;
+    const bool reverse = (dp->drawmode & DM_REVERSEHORZ) != 0;
+
+    for (int32_t row = 0; row < bmheight; ++row)
     {
-        cld
-
-  // Load source
-        mov  esi, [dbval.source]
-        add  esi, srcoff
-
-  // Load destination
-        mov  edi, [dbval.dest]
-        add  edi, dstoff
-
-  // Load lines
-        mov  edx, [dpval.sheight]
-        mov  ebx, [dpval.drawmode]
-
-        and  ebx, DM_REVERSEHORZ
-        jne  reverse
-
-    forward:
-        mov  ecx, [dpval.swidth]     ; Do two pixels at a time
-
-        test ecx, 1
-        je   notodd
-
-        mov  ax, [esi]
-        add  esi, 2
-        mov  [edi], ax
-        add  edi, 2
-
-    notodd:
-        shr  ecx, 1
-        or   ecx, ecx
-        je   newline
-
-    floop:
-        mov  eax, [esi]
-        add  esi, 4
-
-        mov  [edi], eax
-        add  edi, 4
-
-        dec  ecx
-        jne  floop
-
-    newline:
-        add  esi, srcadd
-        add  edi, dstadd
-        dec  edx
-        jne  forward
-        jmp  done
-
-    reverse:
-        add  esi, [bmwidth]
-        mov  eax, [bmwidth]
-        shl  eax, 1
-        add  eax, srcadd
-        mov  srcadd, eax
-
-    revloop:
-        mov  ecx, [dpval.swidth]     ; Do two pixels at a time backwords
-
-        test ecx, 1
-        je   revnotodd
-
-        mov  ax, [esi]
-        sub  esi, 2
-        mov  [edi], ax
-        add  edi, 2
-        
-    revnotodd:
-        shr  ecx, 1
-        or   ecx, ecx
-        je   revnewline
-
-    revmoveloop:
-        mov  eax, [esi]
-        sub  esi, 4
-        rol  eax, 16
-        mov  [edi], eax
-        add  edi, 4
-        dec  ecx
-        jne  revmoveloop
-
-    revnewline:
-        add  esi, srcadd
-        add  edi, dstadd
-        dec  edx
-        jne  revloop
-
-    done:
+        const auto* s16 = reinterpret_cast<const uint16_t*>(src);
+        auto* d16 = reinterpret_cast<uint16_t*>(dst);
+        if (reverse)
+        {
+            for (int32_t i = 0; i < pixels; ++i)
+                d16[i] = s16[pixels - 1 - i];
+        }
+        else
+            memcpy(d16, s16, size_t(pixels) * 2);
+        src += bmwidth + srcadd;
+        dst += bmwidth + dstadd;
     }
-    #endif
-
     return true;
 }
 
@@ -6047,6 +5968,63 @@ bool Alpha32(PSDrawBlock db, PSDrawParam dp)
     return true;
 }
 
+// REVSYNC: 0x004b3790 -- ARGB4444 over ARGB4444, the pixels' own alpha.
+// Retail's texture-overlay HUD composes its chrome this way (StatusBar.dat
+// ring and icons into the chip surface). Per pixel, all in 4-bit channels,
+// every product truncated (retail's tables 0x00629240 / 0x0064da64 are
+// a * c / 15 for a, c in 0..15):
+//   source alpha 0                     -> destination unchanged
+//   source alpha 15 or dest alpha 0    -> the source pixel, alpha included
+//   otherwise  A = min(sa + da, 15)
+//              k = (15 - sa) * da / 15             (the destination's weight)
+//              C = sa * sc / 15 + k * dc / 15      (each of R, G, B)
+// Verified bit-exact against retail's own Put (tools/retail_runtime/slots/
+// hud/draw_ab.py; docs/ui/HUD_REBUILD.md P1a).
+namespace
+{
+constexpr int32_t Mul15(int32_t a, int32_t c) { return a * c / 15; }
+
+constexpr uint16_t Over4444(uint16_t src, uint16_t dst)
+{
+    const int32_t sa = src >> 12;
+    const int32_t da = dst >> 12;
+    if (sa == 0)
+        return dst;
+    if (sa == 15 || da == 0)
+        return src;
+    const int32_t k = Mul15(15 - sa, da);
+    const int32_t a = sa + da < 15 ? sa + da : 15;
+    uint16_t out = uint16_t(a << 12);
+    for (int32_t shift = 0; shift < 12; shift += 4)
+        out |= uint16_t((Mul15(sa, (src >> shift) & 15) + Mul15(k, (dst >> shift) & 15)) << shift);
+    return out;
+}
+} // namespace
+
+bool Alpha4444(PSDrawBlock db, PSDrawParam dp)
+{
+    if (dp->swidth < 1 || dp->sheight < 1 || dp->dwidth < 1 || dp->dheight < 1)
+        return false;
+
+    SETUP_DRAW
+
+    const uint8_t* src = static_cast<const uint8_t*>(db->source) + srcoff;
+    uint8_t* dst = static_cast<uint8_t*>(db->dest) + dstoff;
+    const int32_t pixels = bmwidth / 2;
+    const bool reverse = (dp->drawmode & DM_REVERSEHORZ) != 0;
+
+    for (int32_t row = 0; row < bmheight; ++row)
+    {
+        const auto* s16 = reinterpret_cast<const uint16_t*>(src);
+        auto* d16 = reinterpret_cast<uint16_t*>(dst);
+        for (int32_t i = 0; i < pixels; ++i)
+            d16[i] = Over4444(s16[reverse ? pixels - 1 - i : i], d16[i]);
+        src += bmwidth + srcadd;
+        dst += bmwidth + dstadd;
+    }
+    return true;
+}
+
 bool Alias(PSDrawBlock db, PSDrawParam dp)
 // put alias data, which is stored in RLE with end of line codes
 {
@@ -8786,144 +8764,44 @@ bool ZMaskStretch(PSDrawBlock db, PSDrawParam dp)
 
 bool Box(PSDrawBlock db, PSDrawParam dp)
 {
+    // Fills dwidth x dheight of the destination -- and of its z and normal
+    // buffers when DM_ZBUFFER / DM_NORMALS ask -- with dp->color / zpos /
+    // normal: the buffer format's raw pixel value (so a 565 buffer takes a
+    // 565 value, an ARGB4444 buffer a 4444 value; retail's Box 0x004bde60
+    // passes its colour the same way, e.g. the magenta key 0xf81f).
     if (dp->swidth < 1 || dp->sheight < 1 || dp->dwidth < 1 || dp->dheight < 1) 
         return false;
 
-    SDrawBlock dbval = *db;
-    SDrawParam dpval = *dp;
-
-    for (int32_t c = 0; c < 3; c++) // Graphics, Z, and Normal buffers
+    struct SFillTarget
     {
-        int32_t bmheight, bmwidth, srcoff, srcadd, dstoff, dstadd;
-        int32_t dstzoff, dstzadd;
-        int32_t oddwords = 0;
-        
-        uint32_t color, pixeldwordshift;
-        uint32_t dstincr;
+        void* buffer;
+        uint32_t flags;
+        uint32_t value;
+    };
+    const SFillTarget targets[] = {
+        { (dp->drawmode & DM_NODRAW) ? nullptr : db->dest, db->dstbitmapflags, dp->color },
+        { (dp->drawmode & DM_ZBUFFER) ? db->dzbuffer : nullptr, BM_16BIT, dp->zpos },
+        { (dp->drawmode & DM_NORMALS) ? db->dnormals : nullptr, BM_16BIT, dp->normal },
+    };
 
-        void *dest;
-        uint32_t dstbitmapflags;
-        uint32_t dcolor;
-        if (c == 0) // Dest buffer
+    for (const SFillTarget& target : targets)
+    {
+        if (!target.buffer)
+            continue;
+        SDrawBlock dbval = *db;
+        dbval.dstbitmapflags = target.flags;
+        int32_t bmwidth, bmheight, srcoff, srcadd, dstoff, dstadd;
+        SetupDraw(&bmwidth, &bmheight, &srcoff, &srcadd, &dstoff, &dstadd, &dbval, dp);
+
+        const int32_t bytes = PixelBytes(target.flags);
+        uint8_t* row = static_cast<uint8_t*>(target.buffer) + dstoff;
+        for (int32_t y = 0; y < dp->dheight; ++y)
         {
-            dest = db->dest;
-            if (!dest || (dp->drawmode & DM_NODRAW))
-                continue;
-            dstbitmapflags = db->dstbitmapflags;
-            dcolor = dp->color;
-        }
-        else if (c == 1) // Z buffer
-        {
-            dest = db->dzbuffer;
-            if (!dest || !(dp->drawmode & DM_ZBUFFER))
-                continue;
-            dstbitmapflags = BM_16BIT;
-            dcolor = dp->zpos;
-        }
-        else if (c == 2) // Normal buffer
-        {
-            dest = db->dnormals;
-            if (!dest || !(dp->drawmode & DM_NORMALS))
-                continue;
-            dstbitmapflags = BM_16BIT;
-            dcolor = dp->normal;
-        }
-
-        if (dstbitmapflags & BM_8BIT)
-        {
-            color = (((dcolor & 0xff) << 24) | ((dcolor & 0xff) << 16) 
-                  | ((dcolor & 0xff) << 8) | (dcolor & 0xff)); 
-                              
-            pixeldwordshift = 2;
-            dstincr = 1;
-        }
-
-        else if (dstbitmapflags & BM_15BIT || dstbitmapflags & BM_16BIT) 
-        {
-            color = ((dcolor & 0xffff) << 16) | ((dcolor & 0xffff));
-            pixeldwordshift = 1;
-            dbval.dstbitmapflags = dstbitmapflags;
-            SetupDraw(&bmwidth, &bmheight, &srcoff, &srcadd,
-                &dstoff, &dstadd, &dbval, &dpval);
-            
-            dstzoff = dstoff;
-            dstzadd = dstadd;
-            dstincr = 4;
-
-            oddwords = dpval.dwidth & 1;
-        }
-
-        else if (dstbitmapflags & BM_24BIT || dstbitmapflags & BM_32BIT) 
-        {
-            color = dcolor;
-            pixeldwordshift = 0;
-            
-            if (dstbitmapflags & BM_32BIT)
-            {
-                dbval.dstbitmapflags = dstbitmapflags;
-                SetupDraw(&bmwidth, &bmheight, &srcoff, &srcadd,
-                    &dstoff, &dstadd, &dbval, &dpval);
-                dstzoff = dstoff >> 1;
-                dstzadd = dstadd >> 1;
-                dstincr = 4;
-            }           
-
-            else
-            {
-                dbval.dstbitmapflags = dstbitmapflags;
-                SetupDraw(&bmwidth, &bmheight, &srcoff, &srcadd, 
-                    &dstoff, &dstadd, &dbval, &dpval); 
-                dstzoff = (dstoff >> 1) / 3;
-                dstzadd = (dstadd >> 1) / 3;
-                dstincr = 3;
-            }
-        }
-
-        uint32_t dstwidth = (dpval.dwidth >> pixeldwordshift);
-
-        if (dest)
-        {
-            #if 0 // TODO(port): MMX/x86 inline assembly — Phase 3 blit rewrite
-            __asm
-            {
-                cld 
-
-                mov  edi, [dest]
-                add  edi, [dstoff]
-
-                mov  eax, [color]
-                mov  edx, [bmheight]
-                mov  ebx, [oddwords]
-
-            OuterLoop:
-                mov  ecx, [dstwidth]    ;ECX contains number of rows to do.
-                cmp  ecx, 0
-                jz   SingleWord         ;Odd cases where only 16 bits per row
-
-            InnerLoop:
-                mov  [edi], eax
-                add  edi, [dstincr]
-
-                dec  ecx
-                jne  InnerLoop
-
-                or   ebx, ebx
-                je   NotOdd
-
-            SingleWord:
-                mov  [edi], ax
-                add  edi, 2
-                
-            NotOdd:
-                add  edi, [dstadd]
-
-                dec  edx
-                jne  OuterLoop
-            }
-            #endif
+            for (int32_t x = 0; x < dp->dwidth; ++x)
+                memcpy(row + x * bytes, &target.value, size_t(bytes));   // low bytes, little-endian
+            row += dp->dwidth * bytes + dstadd;
         }
     }
-
     return true;
 }
 
