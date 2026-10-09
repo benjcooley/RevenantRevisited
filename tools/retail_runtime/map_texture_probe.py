@@ -64,6 +64,7 @@ def run(binary, data, module, camera, output, profiles):
         '--snapstep=0.0416666666666667', '--snapseed=1', '--snapwarmup=1',
         '--snaprect=0,0,640,340', '--snapprefix='+str(output / 'frame-')]
     pinned_binary = digest(binary)
+    pinned_probe = digest(__file__)
     started = time.monotonic()
     with (output / 'run.log').open('wb') as log:
         process = subprocess.Popen(command, cwd=output, env=env, stdout=log, stderr=log)
@@ -89,8 +90,12 @@ def run(binary, data, module, camera, output, profiles):
     if len(frames) != 16:
         errors.append('Incomplete frame capture')
     distinct = len(set(hashes[3:7]))
-    if distinct != 4:
-        errors.append('Four owner frames did not produce four different rendered images')
+    expected_distinct = min(4,max(profile['owner_frames'] for profile in profiles))
+    if distinct != expected_distinct:
+        errors.append(f'Expected {expected_distinct} stationary rendered frames, observed {distinct}')
+    created_visible = len(hashes) == 16 and hashes[0] != hashes[3]
+    if not created_visible:
+        errors.append('Created effects produced no visible change from the clean floor')
     owner_regions = {}
     for profile in profiles:
         if not profile['name'].startswith('ogrokwatcher') or len(frames) != 16:
@@ -111,13 +116,15 @@ def run(binary, data, module, camera, output, profiles):
         errors.append('Deletion did not restore the original clean floor')
     if digest(binary) != pinned_binary:
         errors.append('Executable changed during capture')
+    if digest(__file__) != pinned_probe:
+        errors.append('Probe source changed during capture')
     report = dict(status='pass' if not errors else 'differences_found', errors=errors,
         command=command, binary_sha256=pinned_binary, commands_sha256=digest(commands),
         profiles=profiles, elapsed_seconds=time.monotonic()-started,
         exit_code=process.returncode, forced_shutdown=forced, command_rows=len(rows),
         completed_rows=len(re.findall(r'row line=.*status=PASS', log)),
         distinct_stationary_animation_frames=distinct, floor_restored=floor_restored,
-        owner_regions=owner_regions,probe_sha256=digest(__file__),
+        owner_regions=owner_regions,created_visible=created_visible,probe_sha256=pinned_probe,
         frames=[dict(path=str(p),pixel_sha256=h) for p,h in zip(frames,hashes)],
         log_sha256=digest(output/'run.log'),
         scope='Actual map NewObject/default animator/NextFrame/MOVE/DELETE and Metal output. '

@@ -3951,6 +3951,7 @@ class TWaterFallEffect_Bespoke : public TEffect
     int32_t ticks_ = 0;
     bool initialized_ = false;
     bool logged_tick_ = false;
+    uint32_t runtime_id_ = 0; // previews have no class/type identity
 };
 
 // *************************************************************************
@@ -3973,10 +3974,18 @@ class TWaterEffect_Bespoke : public TEffect
     TWaterEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TWaterEffect_Bespoke() override;
 
-    void OffScreen() override { KillThisEffect(); }
+    void OffScreen() override
+    {
+        if (literal_geometry_ || (ObjClass() == OBJCLASS_EFFECT && ObjId() == 0x1903abcdu))
+            TObjectInstance::OffScreen();
+        else KillThisEffect(); // unaudited alternate preview behavior is unchanged
+    }
 
     [[nodiscard]] static TWaterEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
                                                                     const char* asset_override = nullptr);
+    void Initialize(bool attach_runtime_component = true);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return true; }   // persistent
 
@@ -3990,6 +3999,14 @@ class TWaterEffect_Bespoke : public TEffect
     float           uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
     float           size_wu_   = 16.0f;
     double          sim_accum_ms_ = 0.0;
+    // Only the exact literal Water asset has the native quad contract. Keep
+    // unaudited alternate-asset delegates on their prior research path.
+    bool            literal_geometry_ = false;
+    bool            initialized_ = false;
+    std::vector<S3DVertex> authored_vertices_;
+    float           material_diffuse_[4] = {1,1,1,1};
+    double          sim_accum_seconds_ = 0.0;
+    int64_t         ticks_ = 0;
 };
 
 // *****************
