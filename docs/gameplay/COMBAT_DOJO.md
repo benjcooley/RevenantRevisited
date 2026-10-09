@@ -63,6 +63,7 @@ only).
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
 | M1 | action-state core: SetRoot / SetDoing / SetDesired / TryCommand / ForceCommand / UpdateAction | `0x4db2d0` `0x4db340` `0x4db3a0` `0x4db450` (Try) `0x4db4d0` (Force) `0x4db1d0` | `TComplexObject::*` | [~] SetDesired, ForceCommand ported (exercised by M3/M5); own kata open |
+| M1u | the action tick: UpdateAction (stealth reset, sleep, ResolveAction dispatch, the done rule, the fall, TryCommand), ResolveMove, ResolvePivot, ResolveSay, ResetStealthValues, Visibility | `0x4c3260` `0x4c3490` `0x4c5e90` `0x4c8470` `0x4c8400` `0x4cdbb0` `0x4c5aa0` | `TCharacter::UpdateAction` and the resolvers | [x] 255/255 (`combat-update`; six mutations caught) |
 | M2 | angle/distance kernels: AngleDiff, ConvertToFacing, Distance, ConvertToVector, object Distance/AngleTo | `0x46ded0` `0x46dc60` `0x46de60` `0x46db20` `0x46ea20` `0x46ea90` | `AngleDiff`, `ConvertToFacing`, `Distance`, `ConvertToVector`, `TObjectInstance::Distance/AngleTo` | [x] 30 batches, every angle pair, ~28k vectors |
 | M3 | combat walking: Go(angle), empty world | `0x4ce350` | `TCharacter::Go(int)` | [x] 762/762 |
 | M4 | combat walking with retargeting (world + sight/hearing seams) | `0x4ce350`, FindCharacters `0x4cd690` | same | [ ] |
@@ -258,6 +259,28 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
    unconfirmed), which matters only with a positive walk speed. Arena
    effect: fighters now reach each other, so the AI attack spam (C3,
    IsValidAttack's next-attack gate) shows in full (1866 attacks).
+9. **The action tick (kata M1u, 2026-10-09).** The port's command states
+   were the 1998 set (pending 0, executing 1, completed 2) while retail's
+   resolvers, TryCommand and ForceCommand use 0 done / no opinion, 2
+   executing, 3 impossible; the port now uses retail's (`COM_DONE`,
+   `COM_EXECUTING`, `COM_IMPOSSIBLE`). UpdateAction is retail's:
+   - a resolver's "done" still waits for the animation, but the root is
+     done unless mid-transition, and only "done" drops priority;
+   - the fall needs a "fall" animation and no priority, and no desired
+     block is tried that tick;
+   - ResetStealthValues runs off the 24-frame beat (and on it for a
+     finished non-root action or negative values): 100 for an attack,
+     else 70, halved sneaking, `random(1, 25)` -- a draw per character
+     nearly every tick, where the port drew `random(1, 100)` with the 1998
+     formula;
+   - Visibility is the ambient light alone (`min(ambient, 255) * 100 /
+     255`), not the 1998 sum of lights and ambient colour.
+   ResolveMove bounces off a block (the angle by octant, +0x10, facing and
+   move angle with it, back to the root) instead of facing the same way;
+   a Goto picks its item up on arrival (ResolveMove, and in combat
+   ResolveCombatMove, which also steps toward it). TComplexObject::Pulse
+   drops the forced and transition marks at frame 5. ResolvePull is still
+   dispatched (retail's is empty; where retail pulls levers is open).
 
 ## 6. Layouts used by the fixtures
 
@@ -342,6 +365,7 @@ python3 tools/retail_ab/retail_ab.py combat-kernels     # M2
 python3 tools/retail_ab/retail_ab.py combat-go          # M3, first difference per case
 python3 tools/retail_ab/retail_ab.py combat-resolve     # M5
 python3 tools/retail_ab/retail_ab.py combat-move        # M7
+python3 tools/retail_ab/retail_ab.py combat-update      # M1u
 python3 tools/retail_ab/retail_ab.py combat-data        # D1, every record field by field
 python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2
 python3 tools/retail_ab/retail_ab.py combat-go --all --case go.player.cf1.f0.b64

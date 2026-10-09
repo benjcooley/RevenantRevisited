@@ -15,11 +15,12 @@
 #include "object.h"
 #endif
 
-// States of completion for actions
-#define COM_PENDING         0           // Can't start command yet
-#define COM_EXECUTING       1           // Command is being executed
-#define COM_COMPLETED       2           // Command is complete
-#define COM_IMPOSSIBLE      3           // Can't get to this state from here
+// Command states, as retail's resolvers, TryCommand and ForceCommand return
+// them and UpdateAction reads them (0x004c3260, 0x004db1d0). The 1998 set
+// (pending 0, executing 1, completed 2) is gone: retail's 2 is executing.
+constexpr int32_t COM_DONE = 0;         // Done, or no opinion: UpdateAction decides
+constexpr int32_t COM_EXECUTING = 2;    // Being executed, or waiting its turn
+constexpr int32_t COM_IMPOSSIBLE = 3;   // Can't get to this state from here
 
 // Animate action (the default)
 typedef enum {

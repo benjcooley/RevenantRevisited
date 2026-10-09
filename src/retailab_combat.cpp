@@ -55,6 +55,8 @@ std::string CombatCall(const Case& c, std::string& error)
             returned = fx->ResolveCombatMove((int32_t)cs["bits"].Int());
         else if (call == "move")
             returned = (int32_t)me->Move();
+        else if (call == "update-action")
+            fx->RunUpdateAction((int32_t)cs["bits"].Int());
         else
             throw std::runtime_error("unknown call '" + call + "'");
 
@@ -72,7 +74,7 @@ std::string CombatCall(const Case& c, std::string& error)
         world.WriteCharacter(j, "self", me);
         WriteSeams(j);
         WriteDraws(j);
-        if (call == "move")
+        if (call == "move" || call == "update-action")
             fx->WriteMotion(j);
         j.End('}');
         return j.str();
@@ -144,6 +146,7 @@ static const bool registered = RegisterTarget("combat-go", CombatCall) &&
                                RegisterTarget("combat-resolve", CombatCall) &&
                                RegisterTarget("combat-damage", CombatCall) &&
                                RegisterTarget("combat-move", CombatCall) &&
+                               RegisterTarget("combat-update", CombatCall) &&
                                RegisterTarget("combat-kernels", CombatKernels);
 
 }  // namespace RetailAB
