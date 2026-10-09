@@ -11,7 +11,10 @@
 
 #include "retailab_fixture.h"
 
-#include "revenant.h"             // CheatNahkranoth
+#include "gameoptions.h"          // NoCombatResults
+#include "logging.h"
+#include "revenant.h"             // CheatNahkranoth, Player
+#include "sound.h"
 
 namespace RetailAB
 {
@@ -34,8 +37,13 @@ struct SMeleeAnswers
     bool blockResult = true;
     std::vector<std::string> spells;
     bool castResult = true;
+    const JsonValue* cs = nullptr;
+    bool active = false;                    // a case is running (the text bar capture)
 };
 SMeleeAnswers g_answers;
+
+std::string AttackName(const TFixtureWorld& world, const JsonValue& cs, const SCharAttackData* ad);
+std::string ImpactName(const TFixtureWorld& world, const JsonValue& cs, const SCharAttackImpact* imp);
 
 void WriteNameOrNull(JsonOut& j, const char* key, const TObjectInstance* o)
 {
@@ -107,6 +115,122 @@ bool CaseCast(TCharacter* self, const char* spell, TObjectInstance** targets, in
     return known && g_answers.castResult;
 }
 
+// IsEnemy: the case's `friends` are [who, other] pairs that aren't enemies.
+bool CaseIsEnemy(TCharacter* self, TCharacter* other)
+{
+    const std::string who = g_answers.world->NameOf(self), them = g_answers.world->NameOf(other);
+    bool enemy = true;
+    for (const JsonValue& pair : (*g_answers.cs)["friends"].Items())
+        if (pair[0].Str() == who && pair[1].Str() == them)
+            enemy = false;
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "IsEnemy").FieldString("who", who).FieldString("other", them);
+    j.Field("result", enemy ? 1 : 0).End('}');
+    Seam(j.str());
+    return enemy;
+}
+
+bool CaseBeginFighting(TCharacter* self, TCharacter* target, ACTION action)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "BeginFighting").FieldString("who", g_answers.world->NameOf(self));
+    WriteNameOrNull(j, "target", target);
+    j.Field("action", (int32_t)action).Field("result", 1).End('}');
+    Seam(j.str());
+    return true;
+}
+
+// Damage, recorded with the block it's given by meaning; the seam owns the
+// block, as Damage does: kept if it is now one of the victim's three, else
+// freed.
+void CaseDamage(TCharacter* self, int32_t damage, int32_t damagetype, int32_t modifier, TActionBlock* ab,
+                TCharacter* attacker)
+{
+    const TFixtureWorld& world = *g_answers.world;
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "Damage").FieldString("who", world.NameOf(self));
+    j.Field("damage", damage).Field("type", damagetype).Field("mod", modifier);
+    j.Key("block");
+    if (ab)
+    {
+        j.Begin('{').Field("action", (int32_t)ab->action).FieldString("name", ab->name).Field("wait", ab->wait);
+        j.Field("damage", ab->damage);
+        WriteNameOrNull(j, "obj", ab->obj);
+        j.Key("attack");
+        if (ab->attack)
+            j.String(AttackName(world, *g_answers.cs, ab->attack));
+        else
+            j.Null();
+        j.Key("impact");
+        if (ab->impact)
+            j.String(ImpactName(world, *g_answers.cs, ab->impact));
+        else
+            j.Null();
+        WriteFlags(j, ab->flags);
+        j.End('}');
+    }
+    else
+        j.Null();
+    WriteNameOrNull(j, "attacker", attacker);
+    j.End('}');
+    Seam(j.str());
+    IFixtureChar* fx = world.Fixture(self);
+    if (ab && ab != fx->Root() && ab != fx->Doing() && ab != fx->Desired())
+        delete ab;
+}
+
+void CaseEffectBurst(TCharacter* self, const char* name, int32_t height)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "EffectBurst").FieldString("who", g_answers.world->NameOf(self));
+    j.FieldString("name", name).Field("height", height).End('}');
+    Seam(j.str());
+}
+
+// No sound by any name: nothing plays (retail's lookup 0x0049c430).
+int32_t CaseSound(const char* name, int32_t nr)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "Sound").FieldString("name", name ? name : "").End('}');
+    Seam(j.str());
+    return -1;
+}
+
+void ExpRecord(TPlayer* self, const char* kind, int32_t skill, TCharacter* victim)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "Exp").FieldString("who", g_answers.world->NameOf(self));
+    j.FieldString("kind", kind).Field("skill", skill);
+    WriteNameOrNull(j, "victim", victim);
+    j.End('}');
+    Seam(j.str());
+}
+
+void CaseKillExp(TPlayer* self, TCharacter* victim) { ExpRecord(self, "kill", -1, victim); }
+void CaseSkillExp(TPlayer* self, int32_t skill, TCharacter* victim) { ExpRecord(self, "skill", skill, victim); }
+void CaseStealthExp(TPlayer* self, TCharacter* victim) { ExpRecord(self, "stealth", -1, victim); }
+
+void CasePlayerState(TPlayer* self, int32_t state)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "SetPlayerState").FieldString("who", g_answers.world->NameOf(self));
+    j.Field("value", state).End('}');
+    Seam(j.str());
+}
+
+// What the text bar is sent (TTextBar logs each message as "[textbar] ..."):
+// retail's 0x0054d170.
+void CaptureTextBar(log_Event* ev)
+{
+    if (!g_answers.active || ev->level != LOG_DEBUG || !ev->fmt || strncmp(ev->fmt, "[textbar] ", 10) != 0)
+        return;
+    char buf[1024];
+    vsnprintf(buf, sizeof(buf), ev->fmt, ev->ap);
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "TextBar").FieldString("text", buf + 10).End('}');
+    Seam(j.str());
+}
+
 // The case's rules (the combat-data dump's names), the cheat, the seams
 // above; the seams come off when the scope ends.
 class SMeleeScope
@@ -142,16 +266,44 @@ class SMeleeScope
         for (const JsonValue& s : cs["spells"].Items())
             g_answers.spells.push_back(s.Str());
         g_answers.castResult = cs["cast_result"].Bool(true);
+        g_answers.cs = &cs;
+        g_answers.active = true;
+        for (const JsonValue& spec : cs["chars"].Items())
+            if (spec["class"].Int(OBJCLASS_CHARACTER) == OBJCLASS_PLAYER)
+                Player = static_cast<TPlayer*>(world.Get(spec["name"].Str()));
+        NoCombatResults = cs["globals"]["nocombatresults"].Bool(false);
         TCharacter::findCharactersSeam = CaseFound;
         TCharacter::blockedSeam = CaseBlocked;
         TCharacter::blockSeam = CaseBlock;
         TCharacter::castSeam = CaseCast;
+        TCharacter::isEnemySeam = CaseIsEnemy;
+        TCharacter::beginFightingSeam = CaseBeginFighting;
+        TCharacter::damageSeam = cs["seam_damage"].Bool(true) ? CaseDamage : nullptr;
+        TCharacter::effectBurstSeam = CaseEffectBurst;
+        TSoundPlayer::findSeam = CaseSound;
+        TPlayer::killExpSeam = CaseKillExp;
+        TPlayer::awardSkillExpSeam = CaseSkillExp;
+        TPlayer::stealthExpSeam = CaseStealthExp;
+        TPlayer::playerStateSeam = CasePlayerState;
+        static const bool captured = log_add_callback(CaptureTextBar, nullptr, LOG_DEBUG) == 0;
+        (void)captured;
     }
     ~SMeleeScope()
     {
         TCharacter::blockSeam = nullptr;
         TCharacter::castSeam = nullptr;
+        TCharacter::isEnemySeam = nullptr;
+        TCharacter::beginFightingSeam = nullptr;
+        TCharacter::damageSeam = nullptr;
+        TCharacter::effectBurstSeam = nullptr;
+        TSoundPlayer::findSeam = nullptr;
+        TPlayer::killExpSeam = nullptr;
+        TPlayer::awardSkillExpSeam = nullptr;
+        TPlayer::stealthExpSeam = nullptr;
+        TPlayer::playerStateSeam = nullptr;
         CheatNahkranoth = false;
+        NoCombatResults = false;
+        Player = nullptr;
         g_answers = SMeleeAnswers{};
     }
     SMeleeScope(const SMeleeScope&) = delete;
@@ -332,6 +484,20 @@ std::string MeleeCall(const Case& c, std::string& error)
             j.Field("returned", me->DoAttack((int32_t)a["attack"].Int(), (int32_t)a["impact"].Int(-1),
                 (int32_t)a["damage"].Int(0), (int32_t)a["tohit"].Int(0), (int32_t)a["roll"].Int(0),
                 Named(world, a["targ"])) ? 1 : 0);
+        else if (call == "resolve-attack")
+            j.Field("returned", world.Fixture(me)->RunResolver("attack", (int32_t)a["bits"].Int(0)));
+        else if (call == "resolve-hit")
+        {
+            SCharAttackData* ad = &me->GetCharData()->attacks[(int32_t)a["attack"].Int()];
+            const int32_t k = (int32_t)a["impact"].Int(-1);
+            j.Field("returned", me->ResolveHit(Named(world, a["targ"]), ad, k >= 0 ? &ad->impacts[k] : nullptr,
+                (int32_t)a["damage"].Int(), (int32_t)a["tohit"].Int(), (int32_t)a["roll"].Int()) ? 1 : 0);
+        }
+        else if (call == "on-attacked")
+        {
+            me->SignalAttack(Named(world, a["attacker"]), Named(world, a["victim"]), (int32_t)a["flag"].Int(0));
+            j.Field("returned", 0);
+        }
         else if (call == "button-attack")
             j.Field("returned", me->ButtonAttack((int32_t)a["button"].Int()) ? 1 : 0);
         else if (call == "button-action")
@@ -362,6 +528,7 @@ std::string MeleeCall(const Case& c, std::string& error)
 }  // namespace
 
 // Registered with the A/B driver by name (retailab.h).
-static const bool registered = RegisterTarget("melee-attack-choice", MeleeCall);
+static const bool registered = RegisterTarget("melee-attack-choice", MeleeCall) &&
+                               RegisterTarget("melee-hit", MeleeCall);
 
 }  // namespace RetailAB
