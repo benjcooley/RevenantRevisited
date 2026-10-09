@@ -14,6 +14,7 @@
 #include "retailab.h"
 #include "retailab_json.h"
 
+#include "3dimage.h"
 #include "character.h"
 #include "imagery.h"
 #include "imageres.h"
@@ -21,6 +22,8 @@
 #include "rules.h"
 
 #include <algorithm>
+#include <array>
+#include <initializer_list>
 #include <cstdlib>
 #include <cstring>
 #include <map>
@@ -42,6 +45,8 @@ bool LoadGameData(std::string& error);
 void Seam(const std::string& record);
 void ClearSeams();
 void WriteSeams(JsonOut& j);
+size_t SeamCount();
+void WriteSeamsSince(JsonOut& j, size_t first);   // "seams": those from `first` on
 
 // The case's random draws ("draws": {lo, hi, result} for random(), {rand}
 // for a direct draw), from its `tape` and then retail's generator from its
@@ -55,22 +60,52 @@ void WriteFlags(JsonOut& j, uint32_t bits);
 // ---- Fixture imagery ------------------------------------------------------
 
 // A state table entry as the case gives it: a name, or
-// {"name", "frames" (10), "aniflags" (0)}.
+// {"name", "frames" (10), "aniflags" (0), "motion"}; motion, one
+// [dist, vert, ang, rotx, roty, rotz] a frame (SMotionData's fields).
 struct SFixtureState
 {
     std::string name;
     int32_t frames = 10;
     int32_t aniflags = 0;
+    std::vector<std::array<int32_t, 6>> motion;
 };
+
+// Kata M8: the animation layer runs as the game's own (SetState, the
+// imagery's SetObjectMotion) instead of being answered (set per case).
+inline bool g_realAnimation = false;
 
 std::vector<SFixtureState> ReadStates(const JsonValue& list);
 
-// Imagery whose header is the case's state table, registered under a name
-// of its own (the registry keeps every entry, so each one is new).
-class TFixtureImagery : public TObjectImagery
+// 3D imagery whose header is the case's state table, registered under a
+// name of its own (the registry keeps every entry, so each one is new), its
+// mesh marked built and its motion the case's: T3DImagery's SetObjectMotion
+// runs over it. The state queries are recorded.
+class TFixtureImagery : public T3DImagery
 {
   public:
-    TFixtureImagery(int32_t id, std::string owner) : TObjectImagery(id), who(std::move(owner)) {}
+    TFixtureImagery(int32_t id, std::string owner, const std::vector<SFixtureState>& states, bool needsanim)
+        : T3DImagery(id), who(std::move(owner)), needsanimator(needsanim)
+    {
+        meshinitialized = true;
+        motion = new SMotionData*[states.empty() ? 1 : states.size()]();
+        for (size_t i = 0; i < states.size(); ++i)
+        {
+            if (states[i].motion.empty())
+                continue;
+            motion[i] = new SMotionData[states[i].motion.size()]();
+            for (size_t f = 0; f < states[i].motion.size(); ++f)
+            {
+                const auto& m = states[i].motion[f];
+                SMotionData& md = motion[i][f];
+                md.dist = (uint32_t)m[0] & 0xffff;
+                md.vert = (int16_t)m[1];
+                md.ang = (uint32_t)m[2] & 0xff;
+                md.rotx = (uint32_t)m[3] & 0xff;
+                md.roty = (uint32_t)m[4] & 0xff;
+                md.rotz = (uint32_t)m[5] & 0xff;
+            }
+        }
+    }
 
     static int32_t Register(const std::vector<SFixtureState>& states)
     {
@@ -107,15 +142,81 @@ class TFixtureImagery : public TObjectImagery
 
     int32_t GetAniFlags(int32_t state) const override
     {
-        const int32_t flags = TObjectImagery::GetAniFlags(state);
+        return Query("GetAniFlags", state, TObjectImagery::GetAniFlags(state));
+    }
+    int32_t GetAniLength(int32_t state) const override
+    {
+        return Query("GetAniLength", state, TObjectImagery::GetAniLength(state));
+    }
+    int32_t GetInvAniFlags(int32_t state) const override
+    {
+        return Query("GetInvAniFlags", state, TObjectImagery::GetAniFlags(state));
+    }
+    int32_t GetInvAniLength(int32_t state) const override
+    {
+        return Query("GetInvAniLength", state, TObjectImagery::GetAniLength(state));
+    }
+    bool NeedsAnimator(const TObjectInstance* oi) const override
+    {
         JsonOut j;
-        j.Begin('{').FieldString("seam", "imagery.GetAniFlags").FieldString("who", who);
-        j.Key("args").Begin('[').Value(state).End(']').Field("result", flags).End('}');
+        j.Begin('{').FieldString("seam", "imagery.NeedsAnimator").FieldString("who", who);
+        j.Key("args").Begin('[').Value(0).End(']').Field("result", needsanimator ? 1 : 0).End('}');
         Seam(j.str());
-        return flags;
+        return needsanimator;
     }
 
   private:
+    int32_t Query(const char* name, int32_t state, int32_t result) const
+    {
+        JsonOut j;
+        j.Begin('{').FieldString("seam", std::string("imagery.") + name).FieldString("who", who);
+        j.Key("args").Begin('[').Value(state).End(']').Field("result", result).End('}');
+        Seam(j.str());
+        return result;
+    }
+
+    std::string who;
+    bool needsanimator = true;
+};
+
+// An animator that records what the object layer tells it (retail's
+// stand-in answers the same slots: Close, ResetState, SetComplete,
+// SetNewState, and the delete).
+class TFixtureAnimator : public TObjectAnimator
+{
+  public:
+    TFixtureAnimator(TObjectInstance* oi, std::string owner) : TObjectAnimator(oi), who(std::move(owner)) {}
+    ~TFixtureAnimator() override
+    {
+        // ~TObjectAnimator closes it: Close, then the delete, as retail's
+        // FreeAnimator calls them.
+        Record("Close", {});
+        Record("delete", {1});
+    }
+    void ResetState() override { Record("ResetState", {}); }
+    void SetComplete(bool comp) override
+    {
+        Record("SetComplete", {comp ? 1 : 0});
+        TObjectAnimator::SetComplete(comp);
+    }
+    void SetNewState(bool newst) override
+    {
+        Record("SetNewState", {newst ? 1 : 0});
+        TObjectAnimator::SetNewState(newst);
+    }
+
+  private:
+    void Record(const char* name, std::initializer_list<int32_t> args) const
+    {
+        JsonOut j;
+        j.Begin('{').FieldString("seam", std::string("animator.") + name).FieldString("who", who);
+        j.Key("args").Begin('[');
+        for (int32_t a : args)
+            j.Value(a);
+        j.End(']').Field("result", 0).End('}');
+        Seam(j.str());
+    }
+
     std::string who;
 };
 
@@ -134,6 +235,7 @@ class IFixtureChar
     virtual int32_t ResolveCombat(int32_t bits) = 0;
     virtual int32_t ResolveCombatMove(int32_t bits) = 0;
     virtual void RunUpdateAction(int32_t bits) = 0;
+    virtual void RunComplexPulse() = 0;         // TComplexObject::Pulse (UpdateAction with the move bits)
     // What a move changes beyond the character dump ("motion").
     virtual void WriteMotion(JsonOut& j) = 0;
 };
@@ -194,11 +296,15 @@ class TFixtureChar : public Base, public IFixtureChar
         if constexpr (std::is_same_v<Base, TPlayer>)
             this->TPlayer::SetPlayerState((int32_t)spec["playerstate"].Int(0));   // as the retail fixture's zeroed +0x36c
 
-        // Action state (kata M1u): commanddone, an animator (only its
-        // presence is read), the frame, the stealth values.
+        // Action state (kata M1u, M8): commanddone, an animator, the frame
+        // and its rate, the previous state, the stealth values.
         this->commanddone = spec["commanddone"].Bool();
-        animated = spec["animator"].Bool();
+        this->FreeAnimator();               // the one the constructor made
+        if (spec["animator"].Bool())
+            this->AddComponent(std::make_unique<TFixtureAnimator>(this, who));
         this->frame = (short)spec["frame"].Int();
+        this->framerate = (short)spec["framerate"].Int(1);
+        this->prevstate = (short)spec["prevstate"].Int(spec["state"].Int(0));
         this->glimpse = (int32_t)spec["glimpse"].Int();
         this->noise = (int32_t)spec["noise"].Int();
     }
@@ -238,6 +344,7 @@ class TFixtureChar : public Base, public IFixtureChar
     int32_t ResolveCombat(int32_t bits) override { return Base::ResolveCombat(this->doing, bits); }
     int32_t ResolveCombatMove(int32_t bits) override { return Base::ResolveCombatMove(this->doing, bits); }
     void RunUpdateAction(int32_t bits) override { this->UpdateAction(bits); }
+    void RunComplexPulse() override { this->TComplexObject::Pulse(); }
 
     void WriteMotion(JsonOut& j) override
     {
@@ -251,6 +358,9 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Field("sight_lost_ticks", this->sight_lost_ticks);
         j.Field("movedist", this->GetMoveDist()).Field("commanddone", this->commanddone ? 1 : 0);
         j.Field("glimpse", this->glimpse).Field("noise", this->noise);
+        j.Field("framerate", (int32_t)this->framerate).Field("prevstate", (int32_t)this->prevstate);
+        j.Field("prevframe", (int32_t)this->prevframe);
+        j.Field("animate", (this->flags & OF_ANIMATE) ? 1 : 0).Field("animator", this->HasAnimator() ? 1 : 0);
         j.End('}');
     }
 
@@ -301,6 +411,8 @@ class TFixtureChar : public Base, public IFixtureChar
 
     bool SetState(int32_t index) override
     {
+        if (g_realAnimation)
+            return Base::SetState(index);
         JsonOut j;
         j.Begin('{').FieldString("seam", "SetState").FieldString("who", who).Field("state", index);
         j.Key("name");
@@ -313,8 +425,6 @@ class TFixtureChar : public Base, public IFixtureChar
         this->state = (uint16_t)index;
         return true;
     }
-
-    bool HasAnimator() const override { return animated; }
 
     int32_t Sleeping() override { return ObjStat("sleeping"); }
     void SetSleeping(int32_t v) override
@@ -356,7 +466,6 @@ class TFixtureChar : public Base, public IFixtureChar
     std::vector<SFixtureState> states;
     std::map<std::string, int32_t> stats, classstats;
     std::unique_ptr<SCharData> cd;
-    bool animated = false;
 };
 
 // ---- The fixture world ------------------------------------------------------
@@ -371,7 +480,8 @@ class TFixtureWorld
         {
             std::vector<SFixtureState> table = ReadStates(spec["states"]);
             const std::string name = spec["name"].Str();
-            auto* imagery = new TFixtureImagery(TFixtureImagery::Register(table), name);
+            auto* imagery = new TFixtureImagery(TFixtureImagery::Register(table), name, table,
+                                                spec["needsanimator"].Bool(true));
             TCharacter* chr;
             IFixtureChar* fx;
             if (spec["class"].Int(OBJCLASS_CHARACTER) == OBJCLASS_PLAYER)

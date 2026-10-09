@@ -20,6 +20,13 @@ fixture world (docs/gameplay/COMBAT_DOJO.md on feature/combat). The case's
   TPlayer::Move `0x518df0`) -- MoveStep `0x4c3bc0`, FindClearPath and
   CharBlocking `0x4d4db0` as original over the case's `ground` and
   `nearby` (guest.py). Adds `motion` to the result.
+- `sequence` (kata M8): `ticks` game ticks of retail's order (TimerTick
+  0x490bd0): the case's `inputs[t]` (`{"go": angle}` -> Go), then for
+  every character TComplexObject::Pulse (UpdateAction with the last
+  Move's bits), Move (bits stored at +0xbc), SetObjectMotion, the game
+  frame, NextFrame. SetState, ResetState and the imagery's
+  SetObjectMotion run as original over the case's motion tables
+  (guest.py); a record per tick (`ticks`: self, motion, bits, seams).
 - `update-action` (kata M1u): UpdateAction `0x4c3260` (slot 0x210) with
   the case's `bits` (the last Move's): ResolveAction and the resolvers,
   ResetStealthValues, TryCommand / ForceCommand as original; Sleeping /
@@ -70,6 +77,8 @@ FIND_CLEAR_PATH = 0x4c39d0
 FIND_CHARACTERS = 0x4cd690
 SET_PLAYER_STATE = 0x51d680
 SLOT_UPDATE_ACTION = 0x210                       # TCharacter::UpdateAction 0x4c3260 (both classes)
+COMPLEX_PULSE = 0x4db190                         # TComplexObject::Pulse (UpdateAction with +0xbc)
+SET_OBJECT_MOTION, NEXT_FRAME = 0x470bb0, 0x470cc0
 CAN_SEE = 0x4cd540
 
 
@@ -137,6 +146,8 @@ class CallFixture:
             result = s32(call(vm, entry, (doing, case.get('bits', 0) & 0xffffffff), this=me))
         elif kind == 'move':
             result = s32(call(vm, vm.u32(vm.u32(me) + SLOT_MOVE), (), this=me))
+        elif kind == 'sequence':
+            return self._sequence(case, me)
         elif kind == 'update-action':
             call(vm, vm.u32(vm.u32(me) + SLOT_UPDATE_ACTION), (case.get('bits', 0) & 0xffffffff,), this=me)
             result = 0
@@ -152,6 +163,35 @@ class CallFixture:
         if kind in ('move', 'update-action'):
             out['motion'] = world.motion_dump(me)
         return out
+
+
+    def _sequence(self, case, me):
+        vm, world = self.vm, self.world
+        world.real_setstate = True
+        order = [world.by_name[spec['name']] for spec in case['chars']]
+        for obj in order:
+            vm.put_u32(obj + 0xbc, case.get('movebits', 0))
+        inputs = case.get('inputs', [])
+        ticks = []
+        for t in range(case['ticks']):
+            first = len(world.seams)
+            step = inputs[t] if t < len(inputs) else None
+            if step and 'go' in step:
+                call(vm, GO, (step['go'] & 0xffffffff,), this=me)
+            for obj in order:
+                call(vm, COMPLEX_PULSE, (), this=obj)
+            bits = {}
+            for obj in order:
+                bits[obj] = call(vm, vm.u32(vm.u32(obj) + SLOT_MOVE), (), this=obj) & 0xffffffff
+                vm.put_u32(obj + 0xbc, bits[obj])
+            for obj in order:
+                call(vm, SET_OBJECT_MOTION, (), this=obj)
+            vm.put_u32(0x65caf0 + 0x680, vm.u32(0x65caf0 + 0x680) + 1)
+            for obj in order:
+                call(vm, NEXT_FRAME, (), this=obj)
+            ticks.append(dict(tick=t, bits=bits[me], self=world.character_dump(me, []),
+                              motion=world.motion_dump(me), seams=world.seams[first:]))
+        return dict(schema=SCHEMA, side='retail', returned=0, ticks=ticks, draws=list(world.draws))
 
 
 def main():

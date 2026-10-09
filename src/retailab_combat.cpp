@@ -12,6 +12,7 @@
 #include "retailab_fixture.h"
 
 #include "dls.h"                  // MakeColorTables (the trig tables too)
+#include "playscreen.h"           // the game frame (kata M8)
 
 namespace RetailAB
 {
@@ -21,6 +22,60 @@ namespace
 using namespace Fixture;
 
 // ---- M3 / M5: one character method per case --------------------------------
+
+// Kata M8: `ticks` game ticks in retail's order (TimerTick 0x490bd0): the
+// case's inputs[t] ({"go": angle} -> Go), then for every character
+// TComplexObject::Pulse, Move (its bits kept for the next Pulse),
+// SetObjectMotion, the game frame, NextFrame; SetState and the imagery's
+// SetObjectMotion as the game's own (g_realAnimation). One record a tick.
+std::string Sequence(const JsonValue& cs, TFixtureWorld& world, TCharacter* me)
+{
+    g_realAnimation = true;
+    struct SReset
+    {
+        ~SReset() { g_realAnimation = false; }
+    } reset;
+    const JsonValue& g = cs["globals"];
+    int32_t frame = (int32_t)g["frame"].Int(0);
+    const bool control = g["control"].Bool(true), demo = g["ps_5d8"].Bool(false);
+    for (TCharacter* c : world.Order())
+        c->SetMoveBits((uint32_t)cs["movebits"].Int());
+    const auto& inputs = cs["inputs"].Items();
+
+    JsonOut j;
+    j.Begin('{').FieldString("schema", "combat.call.v1").FieldString("side", "port").Field("returned", 0);
+    j.Key("ticks").Begin('[');
+    for (int32_t t = 0; t < (int32_t)cs["ticks"].Int(); ++t)
+    {
+        const size_t first = SeamCount();
+        if ((size_t)t < inputs.size() && inputs[t].Has("go"))
+            me->Go((int32_t)inputs[t]["go"].Int());
+        for (TCharacter* c : world.Order())
+            world.Fixture(c)->RunComplexPulse();
+        uint32_t mine = 0;
+        for (TCharacter* c : world.Order())
+        {
+            const uint32_t bits = c->Move();
+            c->SetMoveBits(bits);
+            if (c == me)
+                mine = bits;
+        }
+        for (TCharacter* c : world.Order())
+            c->SetObjectMotion();
+        PlayScreen.SetFixtureState(++frame, control, demo);
+        for (TCharacter* c : world.Order())
+            c->NextFrame();
+        j.Begin('{').Field("tick", t).Field("bits", (int32_t)mine);
+        world.WriteCharacter(j, "self", me);
+        world.Fixture(me)->WriteMotion(j);
+        WriteSeamsSince(j, first);
+        j.End('}');
+    }
+    j.End(']');
+    WriteDraws(j);
+    j.End('}');
+    return j.str();
+}
 
 // Case (field 0, JSON): {"globals", "chars": [...], "self", "call", ...};
 // see slots/combat/combat_call.py. `call`: "go" (Go(angle), kata M3),
@@ -55,6 +110,8 @@ std::string CombatCall(const Case& c, std::string& error)
             returned = fx->ResolveCombatMove((int32_t)cs["bits"].Int());
         else if (call == "move")
             returned = (int32_t)me->Move();
+        else if (call == "sequence")
+            return Sequence(cs, world, me);
         else if (call == "update-action")
             fx->RunUpdateAction((int32_t)cs["bits"].Int());
         else
@@ -147,6 +204,7 @@ static const bool registered = RegisterTarget("combat-go", CombatCall) &&
                                RegisterTarget("combat-damage", CombatCall) &&
                                RegisterTarget("combat-move", CombatCall) &&
                                RegisterTarget("combat-update", CombatCall) &&
+                               RegisterTarget("combat-sequence", CombatCall) &&
                                RegisterTarget("combat-kernels", CombatKernels);
 
 }  // namespace RetailAB
