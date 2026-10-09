@@ -80,6 +80,7 @@ O_MOVEDIST, O_MOVEVERT = 0xb4, 0xb8
 O_MOVETOPOS, O_MOVEPOS, O_FORCENOMOVE, O_SHOVEDIR = 0xec, 0xf0, 0x10c, 0x11c
 O_OUT_OF_SIGHT_PREV, O_SIGHT_LOST_TICKS = 0x258, 0x25c
 CHAR_SIZE, PLAYER_SIZE = 0x2a0, 0x674
+CHAR_FLAGS = 0x8 | 0x20 | 0x4000 | 0x8000        # OF_MOVING | OF_AI | OF_ANIMATE | OF_PULSE
 CHAR_VTABLE, PLAYER_VTABLE = 0x5a7848, 0x5b4f30
 CLASS_PLAYER, CLASS_CHARACTER = 0x0b, 0x0c
 CHARDATA_SIZE = 0x600
@@ -132,6 +133,7 @@ G_AMBIENT = 0x6671a4                             # MapPane ambient light (Visibi
 # The action state UpdateAction reads: commanddone, the animator (only
 # tested for null: a case's `animator` gives a stand-in), the stealth values.
 O_COMMANDDONE, O_ANIMATOR, O_GLIMPSE, O_NOISE = 0x80, 0x58, 0x130, 0x134
+O_FRAMERATE, O_PREVSTATE, O_PREVFRAME, O_MOVEBITS = 0x5e, 0x60, 0x62, 0xbc
 # Type stats, read through slot 0xd8. Radius: TCharacter::Radius (slot
 # 0x258, 0x4d6e40), which Distance (0x4d61b0) subtracts.
 CLASSSTAT_IDS = {'radius': (0x66ca30, 0x201)}
@@ -143,6 +145,17 @@ O_STATE, O_IMAGERY, O_FRAME = 0x0c, 0x54, 0x5c   # state (short), imagery, frame
 # vtable slots answered by the host, header +0x04 -> states +0x54, each
 # 0x4c bytes with the frame count at +0x32.
 IMAGERY_SLOTS = 0x80
+IMAGERY_SIZE, IM_MESHINIT, IM_MOTION, HDR_NUMSTATES = 0x100, 0x0c, 0x98, 0x04
+IM_SLOT_SET_OBJECT_MOTION, SET_OBJECT_MOTION_3D = 0x4c, 0x40cd20   # T3DImagery::SetObjectMotion
+ANIMATOR_SLOTS = 0x40
+# Kata M8, the animation layer as original code: SetState 0x46f250 itself
+# (with ResetState 0x46f1e0), SetObjectMotion 0x470bb0 -> imagery slot 0x4c,
+# NextFrame 0x470cc0. What SetState does to the map is left out: the
+# background redraw (slot 0xf4 0x471020, ret 4; MapPane 0x4548a0, ret 8),
+# the walkmap (MapPane 0x452750, ret 0xc), the object lock (0x456790, ret 8;
+# 0x4567c0).
+MAP_NOOPS = ((0x471020, 'RedrawBackground', 4), (0x4548a0, 'MapPane.Redraw', 8),
+             (0x452750, 'MapPane.Walkmap', 0xc), (0x456790, 'MapPane.Lock', 8), (0x4567c0, 'MapPane.Unlock', 0))
 IM_HEADER, HDR_STATES, STATE_SIZE, ST_FRAMES = 0x04, 0x54, 0x4c, 0x32
 GET_STAT = 0x4d74d0                              # slot 0xd8, thiscall (id), ret 4
 GET_STAT_NAMED = 0x4d7510                        # slot 0xd4, thiscall (name), ret 4
@@ -239,7 +252,12 @@ class CombatWorld:
         b.add(ITER_INIT, 'MapIterator', 0x18, self._iter_init)
         b.add(ITER_NEXT, 'MapIterator.Next', 0, self._iter_next)
         b.add(SET_POS, 'SetPos', 0xc, self._set_pos)
+        self.animators = {}        # stand-in animator address -> character
+        self.imagery = {}
         self._imagery_stubs()
+        self._animator_stubs()
+        for address, name, pop in MAP_NOOPS:
+            b.add(address, name, pop, lambda args, ecx: 0)
         self.reset()
 
     def reset(self):
@@ -250,6 +268,9 @@ class CombatWorld:
         self.classstats = {}       # guest address -> {type stat id: value}
         self.classstats_named = {} # guest address -> {type stat name: value}
         self.imagery = {}          # stand-in imagery address -> character
+        self.animators.clear()
+        self.needs_animator = {}   # character -> imagery NeedsAnimator answer
+        self.real_setstate = False # kata M8: SetState runs as original
         self.blocks = {}           # guest address -> label of a block built by the fixture
         self.seams = []
         self.draws = []
@@ -380,6 +401,8 @@ class CombatWorld:
         return stats[name]
 
     def _set_state(self, args, ecx):
+        if self.real_setstate:
+            return Boundaries.ORIGINAL
         index = s32(args[0])
         table = self.states.get(ecx, [])
         name = table[index]['name'] if 0 <= index < len(table) else None
@@ -387,61 +410,107 @@ class CombatWorld:
         self.seams.append(dict(seam='SetState', who=self._name(ecx), state=index, name=name))
         return 1
 
-    def _imagery_stubs(self):
-        """One block of `ret` stubs for the stand-in imagery's vtable, one
-        hook over all of it; the slot is the entry's offset."""
+    def _stub_table(self, slots, answers, owner_of, kind):
+        """A vtable of `ret` stubs answered by the host, one hook over all of
+        it; `answers`: slot -> (name, argument bytes, fn(owner, args)). The
+        owner is `owner_of(ECX)`. A slot not answered fails the case. Each
+        call is recorded as `<kind>.<name>`."""
         from unicorn import UC_HOOK_CODE
         from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_EIP, UC_X86_REG_ESP
         vm = self.vm
-        stubs = vm.allocate(IMAGERY_SLOTS * 16)
-        vm.write(stubs, b'\xc3' * (IMAGERY_SLOTS * 16))
-        self.imagery_vtable = vm.allocate(IMAGERY_SLOTS * 4)
-        for i in range(IMAGERY_SLOTS):
-            vm.put_u32(self.imagery_vtable + 4 * i, stubs + 16 * i)
-        answers = {0x3c: ('NumStates', 0, self._im_numstates), 0x8c: ('GetAniFlags', 4, self._im_aniflags)}
+        stubs = vm.allocate(slots * 16)
+        vm.write(stubs, b'\xc3' * (slots * 16))
+        vtable = vm.allocate(slots * 4)
+        for i in range(slots):
+            vm.put_u32(vtable + 4 * i, stubs + 16 * i)
 
         def enter(uc, address, size, user):
             slot = (address - stubs) // 16 * 4
             sp = uc.reg_read(UC_X86_REG_ESP)
             args = struct.unpack('<4I', uc.mem_read(sp + 4, 16))
-            owner = self.imagery.get(uc.reg_read(UC_X86_REG_ECX))
+            owner = owner_of(uc.reg_read(UC_X86_REG_ECX))
             try:
                 if slot not in answers:
-                    raise RuntimeError(f'imagery slot {slot:#x} reached for {self._name(owner)} (not modelled)')
+                    raise RuntimeError(f'{kind} slot {slot:#x} reached for {self._name(owner)} (not modelled)')
                 name, pop, fn = answers[slot]
                 result = fn(owner, args)
             except Exception as error:
                 vm.error = error
                 uc.emu_stop()
                 return
-            self.seams.append(dict(seam=f'imagery.{name}', who=self._name(owner),
+            self.seams.append(dict(seam=f'{kind}.{name}', who=self._name(owner),
                                    args=[s32(a) for a in args[:pop // 4]], result=result))
-            uc.reg_write(UC_X86_REG_EAX, result & 0xffffffff)
+            uc.reg_write(UC_X86_REG_EAX, (result or 0) & 0xffffffff)
             uc.reg_write(UC_X86_REG_EIP, vm.u32(sp))
             uc.reg_write(UC_X86_REG_ESP, sp + 4 + pop)
 
-        vm.uc.hook_add(UC_HOOK_CODE, enter, begin=stubs, end=stubs + IMAGERY_SLOTS * 16 - 1)
+        vm.uc.hook_add(UC_HOOK_CODE, enter, begin=stubs, end=stubs + slots * 16 - 1)
+        return vtable
+
+    def _imagery_stubs(self):
+        """The stand-in imagery's vtable: the state table's queries answered
+        here; SetObjectMotion (slot 0x4c) is the original T3DImagery one,
+        over the motion tables `_new_imagery` lays out."""
+        frames = lambda owner, args: self._state(owner, args)['frames']
+        flags = lambda owner, args: self._state(owner, args)['aniflags']
+        self.imagery_vtable = self._stub_table(IMAGERY_SLOTS, {
+            0x3c: ('NumStates', 0, self._im_numstates), 0x8c: ('GetAniFlags', 4, flags),
+            0x90: ('GetAniLength', 4, frames), 0x94: ('GetInvAniFlags', 4, flags),
+            0x98: ('GetInvAniLength', 4, frames),
+            0x38: ('NeedsAnimator', 4, lambda owner, args: int(self.needs_animator.get(owner, 1)))},
+            lambda ecx: self.imagery.get(ecx), 'imagery')
+        self.vm.put_u32(self.imagery_vtable + IM_SLOT_SET_OBJECT_MOTION, SET_OBJECT_MOTION_3D)
+
+    def _animator_stubs(self):
+        """The stand-in animator's vtable: what the object layer tells an
+        animator, recorded."""
+        none = lambda owner, args: 0
+        self.animator_vtable = self._stub_table(ANIMATOR_SLOTS, {
+            0x00: ('delete', 4, none), 0x1c: ('Close', 0, none), 0x20: ('ResetState', 0, none),
+            0x24: ('SetComplete', 4, none), 0x28: ('SetNewState', 4, none)},
+            lambda ecx: self.animators.get(ecx), 'animator')
+
+    def _state(self, owner, args):
+        index = s32(args[0])
+        table = self.states[owner]
+        return table[index] if 0 <= index < len(table) else dict(frames=0, aniflags=0)
 
     def _im_numstates(self, owner, args):
         return len(self.states[owner])
 
-    def _im_aniflags(self, owner, args):
-        index = s32(args[0])
-        table = self.states[owner]
-        return table[index]['aniflags'] if 0 <= index < len(table) else 0
-
     def _new_imagery(self, obj, table):
+        """T3DImagery's layout as far as the code reads it: the header's
+        state table (count at +4, frames at state * 0x4c + 0x32), the mesh
+        marked initialized (+0x0c), and per state the case's motion, one
+        8-byte SMotionData a frame (+0x98; GetMotion 0x40cc40)."""
         vm = self.vm
-        imagery = vm.allocate(0x40)
+        imagery = vm.allocate(IMAGERY_SIZE)
         header = vm.allocate(0x60)
         states = vm.allocate(max(1, len(table)) * STATE_SIZE)
         vm.put_u32(imagery, self.imagery_vtable)
         vm.put_u32(imagery + IM_HEADER, header)
+        vm.put_u32(imagery + IM_MESHINIT, 1)
         vm.put_u32(header + HDR_STATES, states)
+        vm.put_u32(states + HDR_NUMSTATES, len(table))
+        motion = vm.allocate(max(1, len(table)) * 4)
+        vm.put_u32(imagery + IM_MOTION, motion)
         for i, st in enumerate(table):
             vm.write(states + i * STATE_SIZE + ST_FRAMES, struct.pack('<h', st['frames']))
+            if st.get('motion'):
+                data = vm.allocate(len(st['motion']) * 8)
+                for f, (dist, vert, ang, rx, ry, rz) in enumerate(st['motion']):
+                    vm.write(data + 8 * f, struct.pack('<IBBBB', (dist & 0xffff) | ((vert & 0xffff) << 16),
+                                                       ang & 0xff, rx & 0xff, ry & 0xff, rz & 0xff))
+                vm.put_u32(motion + 4 * i, data)
         self.imagery[imagery] = obj
         return imagery
+
+    def new_animator(self, obj):
+        """A stand-in animator at +0x58 (its calls recorded)."""
+        animator = self.vm.allocate(0x40)
+        self.vm.put_u32(animator, self.animator_vtable)
+        self.animators[animator] = obj
+        return animator
 
     # -- globals ----------------------------------------------------------
     def set_globals(self, g):
@@ -488,7 +557,9 @@ class CombatWorld:
         vm.write(obj + O_FACING, bytes([spec.get('facing', 0) & 0xff]))
         vm.put_u32(obj + O_MOVEANGLE, spec.get('moveangle', spec.get('facing', 0)) & 0xffffffff)
         vm.put_u32(obj + O_CHARFLAGS, spec.get('charflags', 0))
-        vm.put_u32(obj + O_FLAGS, spec.get('objflags', 0))
+        # A character's flags as its constructor leaves them (moving, AI,
+        # animate, pulse), plus the case's.
+        vm.put_u32(obj + O_FLAGS, CHAR_FLAGS | spec.get('objflags', 0))
         vm.write(obj + O_INVENTNUM, struct.pack('<h', spec.get('inventnum', -1)))
         vm.write(obj + O_VEL, struct.pack('<3i', *spec.get('vel', (0, 0, 0))))
         vm.write(obj + O_ACCUM, struct.pack('<3i', *spec.get('accum', (0, 0, 0))))
@@ -504,7 +575,10 @@ class CombatWorld:
         vm.put_u32(obj + O_SIGHT_LOST_TICKS, spec.get('sight_lost_ticks', 0))
         vm.put_u32(obj + O_COMMANDDONE, int(spec.get('commanddone', 0)))
         if spec.get('animator'):
-            vm.put_u32(obj + O_ANIMATOR, vm.allocate(0x40))   # never called: a null vtable would fault
+            vm.put_u32(obj + O_ANIMATOR, self.new_animator(obj))
+        self.needs_animator[obj] = spec.get('needsanimator', 1)
+        vm.write(obj + O_FRAMERATE, struct.pack('<h', spec.get('framerate', 1)))
+        vm.write(obj + O_PREVSTATE, struct.pack('<h', spec.get('prevstate', spec.get('state', 0))))
         vm.put_u32(obj + O_GLIMPSE, spec.get('glimpse', 0) & 0xffffffff)
         vm.put_u32(obj + O_NOISE, spec.get('noise', 0) & 0xffffffff)
         vm.write(obj + O_FRAME, struct.pack('<h', spec.get('frame', 0)))
@@ -588,7 +662,11 @@ class CombatWorld:
                     out_of_sight_prev=vm.u32(obj + O_OUT_OF_SIGHT_PREV),
                     sight_lost_ticks=s32(vm.u32(obj + O_SIGHT_LOST_TICKS)),
                     movedist=s32(vm.u32(obj + O_MOVEDIST)), commanddone=vm.u32(obj + O_COMMANDDONE),
-                    glimpse=s32(vm.u32(obj + O_GLIMPSE)), noise=s32(vm.u32(obj + O_NOISE)))
+                    glimpse=s32(vm.u32(obj + O_GLIMPSE)), noise=s32(vm.u32(obj + O_NOISE)),
+                    framerate=struct.unpack('<h', vm.uc.mem_read(obj + O_FRAMERATE, 2))[0],
+                    prevstate=struct.unpack('<h', vm.uc.mem_read(obj + O_PREVSTATE, 2))[0],
+                    prevframe=struct.unpack('<h', vm.uc.mem_read(obj + O_PREVFRAME, 2))[0],
+                    animate=int(bool(vm.u32(obj + O_FLAGS) & 0x4000)), animator=int(bool(vm.u32(obj + O_ANIMATOR))))
 
     def character_dump(self, obj, new_blocks):
         vm = self.vm

@@ -70,7 +70,7 @@ only).
 | M5 | combat resolve tick: ResolveCombat / ResolveCombatMove (+ SetFighting `0x4d4790`) | `0x4c7980` `0x4c7f80` | `ResolveCombat`, `ResolveCombatMove` | [x] 654/654 |
 | M6 | player input per tick: UpdateMove → Go / Stop / Block / Leap | `0x47de30` | `TPlayScreen::UpdateMove` | [ ] |
 | M7 | displacement: Move / MoveStep (velocity, blocking, shove), FindClearPath, CharBlocking, GetWalkHeight / GetWalkHeightRadius | `0x4c46d0` `0x4c3bc0`, TPlayer `0x518df0`, `0x4c39d0` `0x4d4db0` `0x452e10` `0x4530a0` | `TCharacter::Move`, `MoveStep`, `Blocked`, `CharBlocking`, `TMapPane::GetWalkHeight*` | [x] 786/786 (`combat-move`; six mutations caught) |
-| M8 | orbit sequence: N ticks of Pulse → UpdateAction → Resolve* → Move, player strafing around a stationary target, monster approaching and circling | the above, chained | the above | [ ] |
+| M8 | orbit sequence: N ticks of Go → Pulse (UpdateAction) → Move → SetObjectMotion → frame → NextFrame, with SetState / ResetState / T3DImagery::SetObjectMotion / NextFrame as original over motion tables; walking, strafing round a target, a monster curving, walls, loop / ping-pong / reverse roots | `0x490bd0` order; `0x46f250` `0x46f1e0` `0x40cd20` `0x40cc40` `0x470cc0` | the tick, `TObjectInstance::SetState` / `NextFrame`, `T3DImagery::SetObjectMotion` | [~] 32/32 sequences, ~1,500 ticks (`combat-sequence`); motion tables synthetic, real I3D motion next |
 | M9 | AI combat movement: approach, combat range, retreat, wander | `0x4c8b60`, `0x4c9790` | `TCharacter::AI` | [ ] |
 | M10 | leap, side step, knock back, pivot, stop | `0x4d2be0` `0x4d6220` `0x4d3750` `0x4c8470` `0x4cee70` | same | [ ] |
 
@@ -281,6 +281,20 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
    ResolveCombatMove, which also steps toward it). TComplexObject::Pulse
    drops the forced and transition marks at frame 5. ResolvePull is still
    dispatched (retail's is empty; where retail pulls levers is open).
+10. **The animation layer (kata M8, 2026-10-09).** SetState now restarts
+    the current state like retail (frame 0, prevstate = state, the
+    animator told) instead of returning early for a looping one. Retail's
+    action code re-forces a looping root when its cycle ends, so the
+    restart lands on frame 0 anyway; what the early return changed was
+    prevstate, and SetObjectMotion then cleared a ROOT animation's accum
+    every tick where retail never does. The pose bridge blends no
+    transition between a looping state and itself, so the restart shows
+    no pop. NextFrame, ResetState and T3DImagery::SetObjectMotion /
+    GetMotion match retail as they were. CommandDone in retail is plain
+    `commanddone` (slot 0x154); the port's says done whenever there is no
+    animator (every character has one in play). SetState's FreeAnimator
+    for permanent-animator types stays a divergence (3D characters always
+    need theirs).
 
 ## 6. Layouts used by the fixtures
 
@@ -366,6 +380,7 @@ python3 tools/retail_ab/retail_ab.py combat-go          # M3, first difference p
 python3 tools/retail_ab/retail_ab.py combat-resolve     # M5
 python3 tools/retail_ab/retail_ab.py combat-move        # M7
 python3 tools/retail_ab/retail_ab.py combat-update      # M1u
+python3 tools/retail_ab/retail_ab.py combat-sequence    # M8
 python3 tools/retail_ab/retail_ab.py combat-data        # D1, every record field by field
 python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2
 python3 tools/retail_ab/retail_ab.py combat-go --all --case go.player.cf1.f0.b64
