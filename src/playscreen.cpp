@@ -24,6 +24,8 @@
 //
 // *************************************************************************
 
+#include "combattrace.h"
+#include "testconfig.h"
 #include "playscreen.h"
 
 #include "audio_backend.h"
@@ -794,6 +796,10 @@ void TPlayScreen::Update()
     // the map pane's sector update).
     const bool levelready = GameFlow.Session().EnterLevel();
 
+    // --playerai: the player fights on his own (testconfig.h).
+    if (StartupPlayerAI && Player)
+        Player->SetRunsAI(true);
+
     // --exec console queue (no-op unless the flag was given).
     PulseStartupExec();
 
@@ -812,6 +818,9 @@ void TPlayScreen::Update()
     gametime = lastsessionframes
              + (gameframes - sessionstart) * 100 / kGameFrameRate;
     timeofday = TimeOfDayMinutes(gametime);
+
+    // --combattrace: the tick's fighters (no-op otherwise).
+    CombatTrace::Tick(gameframes);
 }
 
 namespace {

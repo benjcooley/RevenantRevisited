@@ -1,0 +1,8 @@
+{
+  "name": "golem_vs_skeleton",
+  "about": "Natural enemies (char.def: Earth Golem's ENEMIES include Skeleton; Skeleton's include supernatural), spawned beside Locke in the forest (retail New Game1) and left to the AI. No scripted targeting. Control off: retail's IsValidTarget then refuses the player as a target. Neither faction is an enemy of the forest's spiders or Druhgs.",
+  "slot": "Port Resave",
+  "seed": 1,
+  "ticks": 1440,
+  "exec": ["sleep 24", "control off", "addat 6050 24760 Earth Golem", "addat 6050 24900 Skeleton"]
+}

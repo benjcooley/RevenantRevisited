@@ -55,6 +55,30 @@ class TCharacter : public TComplexObject
     TCharacter(TObjectImagery* newim) : TComplexObject(newim) { ClearChar(); }
     TCharacter(SObjectDef* def, TObjectImagery* newim) : TComplexObject(def, newim) { ClearChar(); }
 
+    int32_t Distance(const TObjectInstance* inst) const override;
+      // REVSYNC: TCharacter::Distance @ 0x004d61b0 -- edge to edge: the
+      // centre distance less this character's Radius and, for a character
+      // target, its Radius; never below 0
+    bool IsValidTarget(TCharacter* target);
+    void SetRunsAI(bool on) { if (on) charflags |= kCharFlagPlayerAI; else charflags &= ~kCharFlagPlayerAI; }
+      // A player's AI switch (retail charflags 0x100000; AI() gates on it)
+      // REVSYNC: 0x004cd990 -- may `target` be fought: there, alive, not
+      // invisible, within combat range, and the player only while he has
+      // control or demo mode is on
+
+    using FindCharactersSeam = int32_t (*)(TCharacter* self, TCharacter* chars[], int32_t maxchars,
+        int32_t range, int32_t angle, int32_t anglerange, int32_t flags);
+    static inline FindCharactersSeam findCharactersSeam = nullptr;
+    using BlockedSeam = bool (*)(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, uint32_t bits);
+    static inline BlockedSeam blockedSeam = nullptr;
+      // Likewise for Blocked (retail FindClearPath 0x004c39d0)
+    using CanSeeSeam = bool (*)(TCharacter* self, TCharacter* chr, int32_t angle);
+    static inline CanSeeSeam canSeeSeam = nullptr;
+      // Likewise for CanSeeCharacter (retail 0x004cd540)
+      // Retail A/B fixtures only (retailab_combat.cpp): when set, it answers
+      // FindCharacters instead of the map, as the retail fixture's seam at
+      // FindCharacters 0x004cd690 does (docs/gameplay/COMBAT_DOJO.md §6.3).
+
     bool IsAnimatorPermanent() const override { return true; }
         // Characters always own a TObjectAnimator from construction. See
         // TObjectInstance::IsAnimatorPermanent for the contract.
@@ -290,6 +314,14 @@ class TCharacter : public TComplexObject
       // Forces the current command to be done
 
     static constexpr uint32_t kCharFlagNoIncidentals = 0x2;
+    // Retail charflags (+0x110) bits the combat code reads:
+    static constexpr uint32_t kCharFlagDamageSeventh = 0x10;      // CalculateDamage /7 (not freeze); setter unidentified
+    static constexpr uint32_t kCharFlagHalfPhysical  = 0x100;     // CalculateDamage halves physical; setter unidentified
+    static constexpr uint32_t kCharFlagHalfMagic     = 0x200;     // CalculateDamage halves magic (6-9); setter unidentified
+    static constexpr uint32_t kCharFlagNotTargetable = 0x8000;    // IsValidTarget refuses (setter unidentified)
+    static constexpr uint32_t kCharFlagInteractive   = 0x80000;   // in an interactive move: Go skips its gates
+    static constexpr uint32_t kCharFlagPlayerAI      = 0x100000;  // the player runs AI() (retail: set for
+                                                                  // net players at 0x0051efc4; the arena's --playerai)
       // charflags bit (retail +0x110 & 2): `incidentals off`
     void SetIncidentals(bool on)
         { if (on) charflags &= ~kCharFlagNoIncidentals; else charflags |= kCharFlagNoIncidentals; }
@@ -673,6 +705,18 @@ protected:
   // (target_out_of_sight is declared above at line ~606 with the existing
   // AI-fix sight tracking fields; the prev/lost_ticks pair lives here.)
     bool     target_out_of_sight_prev = false;
+  // Retail +0x234: an object the AI walks toward and ResolveCombat faces
+  // when no visible target overrides it (written by AI 0x004c8b60 and
+  // WanderToWaypoint 0x004c9790; no port writer yet).
+    TObjectInstance* ai_lookat = nullptr;
+  // Retail +0x28c / +0x290: the player's last attack button and how many
+  // times running it was pressed (ButtonAttack 0x004d2480's same-button
+  // rule); SetFighting resets them.
+  // Retail +0x280: the per-monster AI kind (AI_PerMonster 0x004c9b70 sets
+  // it; 1 is Baez, whom magic can't hurt). No port writer yet.
+    int32_t monsterkind  = 0;
+    int32_t lastbutton   = -1;
+    int32_t buttonrepeat = 0;
     int32_t  sight_lost_ticks = 0;
 };
 

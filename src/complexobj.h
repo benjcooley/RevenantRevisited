@@ -102,7 +102,7 @@ class TActionBlock
       {
         uint32_t firsttime : 1;     // If this is the first time through
         uint32_t transition : 1;    // If currently transitioning to this state
-        uint32_t terminating : 1;   // Action block is shutting down
+        uint32_t forced : 1;        // Set without its transition animation (retail 0x4, ForceCommand)
         uint32_t priority : 1;      // Action can't be changed by calling SetDesired() until played
         uint32_t interrupt : 1;     // Interrupts current doing animation unless doing has priority
         uint32_t nowaitdone : 1;    // Allows desired to interrupt this action
@@ -111,6 +111,7 @@ class TActionBlock
         uint32_t waitpivot : 1;     // For movenent actions, wait until pivot done before moving
         uint32_t noroot : 1;        // Don't use this as a root state (even if playing a root animation)
         uint32_t loop : 1;          // Loop this command
+        uint32_t pickup : 1;        // Walking to an item to pick up (retail 0x1000; Goto's item)
       };
     };
 };
@@ -172,6 +173,10 @@ class TComplexObject : public TObjectInstance
         // true, the action is garanteed to have an animation to play.
     const char* GetState() { return (const char*) doing->name; }
         // return the state name that the object is doing
+    const TActionBlock* RootBlock() const { return root; }
+    const TActionBlock* DoingBlock() const { return doing; }
+    const TActionBlock* DesiredBlock() const { return desired; }
+        // Read-only views of the three action blocks (traces, debug panes)
     virtual void Notify(int32_t notify, void *ptr);
         // Notify Action (check root,desired, and doing for deleted target obj)
 
@@ -204,7 +209,9 @@ class TComplexObject : public TObjectInstance
       // Set doing to ab and update pointers
     virtual PTActionBlock GetDesired() { return desired; }
       // Gets the current desired action block
-    virtual void SetDesired(PTActionBlock ab);
+    virtual bool SetDesired(PTActionBlock ab, uint32_t flags = 0);
+        // False when refused (a block still waits while doing has priority);
+        // the caller then still owns `ab`
       // Set desired pointer and update pointers
     virtual bool IsFinalState() { return false; }
       // Returns whether character is in their last days
