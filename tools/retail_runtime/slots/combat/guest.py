@@ -22,6 +22,12 @@ Seams (each call recorded in `world.seams`, in order):
 - GetStat `0x4d74d0`, slot 0xd8: the stats of the object's type (class.def
   STATS: Radius, ...), from the case's `classstats` (CLASSSTAT_IDS).
   Names as the port's: OBJSTATFUNC / STATFUNC.
+- The RNG tape: random(lo, hi) `0x483300` and rand `0x58c582` answer from
+  the case's `tape` (values 0..32767, in order), then retail's generator
+  from the case's `seed`; every draw is recorded in `world.draws` as
+  {lo, hi, result} (random) or {rand} (a direct rand). random itself is
+  answered here: lo when equal (no draw), the pair in order,
+  lo + v % (hi - lo + 1) -- 0x483300 exactly.
 - The animation layer below the action-state machine: SetState `0x46f250`
   (slot 0x18; recorded, the state index stored at +0x0c -- what it does
   past that, redraw, walkmap, animator, is its own kata), and a stand-in
@@ -96,6 +102,7 @@ O_STATE, O_IMAGERY, O_FRAME = 0x0c, 0x54, 0x5c   # state (short), imagery, frame
 IMAGERY_SLOTS = 0x80
 IM_HEADER, HDR_STATES, STATE_SIZE, ST_FRAMES = 0x04, 0x54, 0x4c, 0x32
 GET_STAT = 0x4d74d0                              # slot 0xd8, thiscall (id), ret 4
+RANDOM, RAND = 0x483300, 0x58c582                 # random(lo, hi) cdecl; MSVC rand()
 GET_OBJSTAT = {CLASS_CHARACTER: 0x4d7520, CLASS_PLAYER: 0x51ae30}
 
 
@@ -163,6 +170,8 @@ class CombatWorld:
             b.add(address, 'GetObjStat', 4, self._get_objstat)
         b.add(GET_STAT, 'GetStat', 4, self._get_stat)
         b.add(SET_STATE, 'SetState', 4, self._set_state)
+        b.add(RANDOM, 'random', 0, self._random)
+        b.add(RAND, 'rand', 0, self._rand)
         self._imagery_stubs()
         self.reset()
 
@@ -175,6 +184,35 @@ class CombatWorld:
         self.imagery = {}          # stand-in imagery address -> character
         self.blocks = {}           # guest address -> label of a block built by the fixture
         self.seams = []
+        self.draws = []
+        self.tape = []
+        self.vm.rng_seed = 1
+
+    def set_rng(self, case):
+        """The case's RNG: `tape` first, then retail's generator from `seed`."""
+        self.tape = list(case.get('tape', []))
+        self.vm.rng_seed = case.get('seed', 1) & 0xffffffff
+        self.draws = []
+
+    def _next(self):
+        if self.tape:
+            return self.tape.pop(0) & 0x7fff
+        return self.vm.random_msvc()
+
+    def _random(self, args, ecx):
+        lo, hi = s32(args[0]), s32(args[1])
+        if lo == hi:
+            return lo
+        if hi < lo:
+            lo, hi = hi, lo
+        result = lo + self._next() % (hi - lo + 1)
+        self.draws.append(dict(lo=lo, hi=hi, result=result))
+        return result
+
+    def _rand(self, args, ecx):
+        value = self._next()
+        self.draws.append(dict(rand=value))
+        return value
 
     # -- seams ------------------------------------------------------------
     def _name(self, address):

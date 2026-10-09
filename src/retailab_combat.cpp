@@ -68,6 +68,7 @@ std::string CombatCall(const Case& c, std::string& error)
             j.Field("returned", returned);
         world.WriteCharacter(j, "self", me);
         WriteSeams(j);
+        WriteDraws(j);
         j.End('}');
         return j.str();
     }

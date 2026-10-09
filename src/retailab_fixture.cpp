@@ -181,8 +181,60 @@ void WriteSeams(JsonOut& j)
     j.End(']');
 }
 
+namespace
+{
+// The RNG tape (retail fixture: guest.py set_rng / _random / _rand).
+std::vector<int32_t> g_tape;
+size_t g_tapeAt = 0;
+uint32_t g_tapeSeed = 1;
+std::vector<std::string> g_draws;
+
+int32_t TapeSource()
+{
+    int32_t value;
+    if (g_tapeAt < g_tape.size())
+        value = g_tape[g_tapeAt++] & 0x7fff;
+    else
+    {
+        g_tapeSeed = g_tapeSeed * 214013u + 2531011u;   // retail's generator
+        value = (int32_t)((g_tapeSeed >> 16) & 0x7fff);
+    }
+    JsonOut j;
+    j.Begin('{').Field("rand", value).End('}');
+    g_draws.push_back(j.str());
+    return value;
+}
+
+// random(lo, hi) draws through TapeSource and then reports here: its raw
+// record becomes the range record.
+void TapeRange(int32_t lo, int32_t hi, int32_t result)
+{
+    JsonOut j;
+    j.Begin('{').Field("lo", lo).Field("hi", hi).Field("result", result).End('}');
+    if (!g_draws.empty())
+        g_draws.back() = j.str();
+}
+}  // namespace
+
+void WriteDraws(JsonOut& j)
+{
+    j.Key("draws").Begin('[');
+    for (const std::string& d : g_draws)
+        j.Raw(d);
+    j.End(']');
+}
+
 SCaseScope::SCaseScope(const JsonValue& cs, const TFixtureWorld& world)
 {
+    g_tape.clear();
+    for (const JsonValue& v : cs["tape"].Items())
+        g_tape.push_back((int32_t)v.Int());
+    g_tapeAt = 0;
+    g_tapeSeed = (uint32_t)cs["seed"].Int(1);
+    g_draws.clear();
+    SetRandomSource(TapeSource);
+    SetRandomRangeObserver(TapeRange);
+
     const JsonValue& g = cs["globals"];
     CombatFace = g["combatface"].Bool(true);
     PlayScreen.SetFixtureState((int32_t)g["frame"].Int(0), g["control"].Bool(true), g["ps_5d8"].Bool(false));
@@ -197,6 +249,8 @@ SCaseScope::SCaseScope(const JsonValue& cs, const TFixtureWorld& world)
 
 SCaseScope::~SCaseScope()
 {
+    SetRandomSource(nullptr);
+    SetRandomRangeObserver(nullptr);
     TCharacter::findCharactersSeam = nullptr;
     TCharacter::blockedSeam = nullptr;
     TCharacter::canSeeSeam = nullptr;

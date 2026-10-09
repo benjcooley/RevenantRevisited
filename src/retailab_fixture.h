@@ -42,6 +42,11 @@ void Seam(const std::string& record);
 void ClearSeams();
 void WriteSeams(JsonOut& j);
 
+// The case's random draws ("draws": {lo, hi, result} for random(), {rand}
+// for a direct draw), from its `tape` and then retail's generator from its
+// `seed`, as the retail fixture answers them (SCaseScope installs it).
+void WriteDraws(JsonOut& j);
+
 // Action block flags by meaning (the port's bits under retail's names).
 uint32_t FlagBits(const JsonValue& names);
 void WriteFlags(JsonOut& j, uint32_t bits);
@@ -432,8 +437,8 @@ class TFixtureWorld
 
 // The case's globals and seams for one call: CombatFace, the PlayScreen frame
 // and control flags, an empty FindCharacters world, the case's `blocked`
-// (FindClearPath / Blocked) and `sees` (CanSeeCharacter). Removed when the
-// scope ends.
+// (FindClearPath / Blocked) and `sees` (CanSeeCharacter), the RNG tape.
+// Removed when the scope ends.
 class SCaseScope
 {
   public:
