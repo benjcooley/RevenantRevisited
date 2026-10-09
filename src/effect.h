@@ -5769,7 +5769,8 @@ class TAuthoredStaticMeshEffect : public TEffect
 
     [[nodiscard]] static TAuthoredStaticMeshEffect* SpawnForTest_BESPOKE(const S3DPoint& origin,
                                                                   const char* asset_override = nullptr,
-                                                                  bool animate_textures = false);
+                                                                  bool animate_textures = false,
+                                                                  bool scroll_textures = false);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     void SubmitWorldMeshForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return true; }
@@ -5777,12 +5778,14 @@ class TAuthoredStaticMeshEffect : public TEffect
   private:
     struct SStaticPart {
         MeshHandle mesh = 0;
+        int32_t object_index = 0;
         std::vector<MeshHandle> frame_meshes;
         int32_t retail_lighting = 0;
         float local_matrix[16] = {};
     };
     std::vector<SStaticPart> parts_;
     bool animate_textures_ = false;
+    T3DImagery* scroll_imagery_ = nullptr; // borrowed from this owner's imagery
     double texture_tick_seconds_ = 0.0;
 };
 

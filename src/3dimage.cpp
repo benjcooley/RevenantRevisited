@@ -604,29 +604,38 @@ void T3DImagery::InitializeScrollTexTracks(S3DImageryBody* mesh)
         SScrollTexTrack track;
         track.state = tag.state; track.tagframe = tag.frame;
         const char* params = static_cast<const char*>(tag.str.ptr());
-        if (!ParseScrollTexParams(params, object, track.du, track.dv) ||
-            (track.object = GetObjectNum(const_cast<char*>(object.c_str()))) < 0)
+        if (!ParseScrollTexParams(params, object, track.du, track.dv))
         {
             log_warn("[scrolltex] unsupported tag in %s: '%s' (requires single obj, du, dv)",
                      GetResFilename(), params ? params : "<null>");
             continue;
         }
-        // Multiple controllers on one object can capture a previous controller's
-        // modified UVs. Do not claim those semantics with a stateless offset.
-        bool overlaps = false;
-        for (const auto& prior : scrolltex_tracks)
-            if (prior.object == track.object &&
-                (prior.state == track.state || prior.state == -1 || track.state == -1))
-                overlaps = true;
-        if (overlaps)
+        const int32_t matched = GetObjectNum(const_cast<char*>(object.c_str()));
+        // Retail 0x401839..0x401866 selects every animator object if the
+        // successfully parsed selector found none. Several shipped water tags
+        // retain an old object name (water vs waterstr/waterbend, wave vs wave02).
+        const int32_t first = matched >= 0 ? matched : 0;
+        const int32_t last = matched >= 0 ? matched + 1 : NumObjects();
+        for (int32_t target = first; target < last; ++target)
         {
-            log_warn("[scrolltex] overlapping controllers unsupported in %s object=%s",
-                     GetResFilename(), object.c_str());
-            continue;
+            track.object = target;
+            // Multiple controllers on one object can capture a prior controller's
+            // modified UVs; keep those unsupported rather than approximate them.
+            bool overlaps = false;
+            for (const auto& prior : scrolltex_tracks)
+                if (prior.object == track.object &&
+                    (prior.state == track.state || prior.state == -1 || track.state == -1))
+                    overlaps = true;
+            if (overlaps)
+            {
+                log_warn("[scrolltex] overlapping controllers unsupported in %s object=%s",
+                         GetResFilename(), object.c_str());
+                continue;
+            }
+            scrolltex_tracks.push_back(track);
+            log_info("[scrolltex] authored %s object=%s index=%d state=%d tagframe=%d du=%g dv=%g",
+                     GetResFilename(), object.c_str(), target, track.state, track.tagframe, track.du, track.dv);
         }
-        scrolltex_tracks.push_back(track);
-        log_info("[scrolltex] authored %s object=%s state=%d tagframe=%d du=%g dv=%g",
-                 GetResFilename(), object.c_str(), track.state, track.tagframe, track.du, track.dv);
     }
 }
 

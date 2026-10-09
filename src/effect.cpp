@@ -15312,7 +15312,7 @@ TAuthoredStaticMeshEffect::~TAuthoredStaticMeshEffect()
 }
 
 TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const S3DPoint& origin,
-                                                                    const char* asset_override,bool animate_textures)
+                                                                    const char* asset_override,bool animate_textures,bool scroll_textures)
 {
     if (!Renderer) return nullptr;
     const char* path = asset_override ? asset_override : kGlobeImageryPath;
@@ -15321,14 +15321,33 @@ TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const
     auto eff = std::make_unique<TAuthoredStaticMeshEffect>(loaded.base);
     auto* img = loaded.img3d;
     eff->animate_textures_=animate_textures;
-    if (img->NumObjects() <= 0 || img->NumTags() != 0)
+    // Mesh queries load the imagery lazily; inspect tags only after loading.
+    const int32_t object_count = img->NumObjects();
+    int32_t scroll_tags = 0;
+    bool unknown_controller = false;
+    for (int32_t tag = 0; scroll_textures && tag < img->NumTags(); ++tag)
     {
-        log_error("[authored-static] missing objects or unsupported controller tags");
+        const char* name = img->GetTag(tag)->name;
+        if (name && !stricmp(name, "scrolltex")) ++scroll_tags;
+        else if (!name || (stricmp(name, "beg") && stricmp(name, "end") && stricmp(name, "play")))
+            unknown_controller = true;
+    }
+    // The loader also exposes passive state/audio metadata as tags.
+    const bool audited_scroll = scroll_textures && scroll_tags == 1 &&
+        !unknown_controller && img->HasScrollTex();
+    if (object_count <= 0 || (img->NumTags() != 0 && !audited_scroll) ||
+        (scroll_textures && !audited_scroll))
+    {
+        log_error("[authored-static] missing objects or unsupported controller tags: "
+                  "objects=%d tags=%d requested_scroll=%d scroll_tags=%d tracks=%d unknown=%d",
+                  img->NumObjects(), img->NumTags(), int(scroll_textures), scroll_tags,
+                  int(img->HasScrollTex()), int(unknown_controller));
         return nullptr;
     }
     // Only audited static profiles use this factory. Preserve every subobject
     // and texture slot instead of substituting the first face/texture.
     size_t total_vertices = 0, total_triangles = 0;
+    if (audited_scroll) eff->scroll_imagery_ = img;
     for (int32_t object = 0; object < img->NumObjects(); ++object)
     {
         if (img->IsHidden(object, 0)) continue;
@@ -15342,6 +15361,7 @@ TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const
                                               : Renderer->WhiteTextureHandle();
             if (texture == kInvalidTexture) return nullptr;
             SStaticPart part;
+            part.object_index = object;
             if (slot > 0) {
                 S3DTex desc = {};
                 img->GetTexture(slot - 1, &desc);
@@ -15406,6 +15426,9 @@ void TAuthoredStaticMeshEffect::SubmitWorldMeshForTest_BESPOKE(EFxDebugMode /*de
             item.mesh=part.frame_meshes[size_t(frame)%part.frame_meshes.size()];
         }
         item.retail_lighting = part.retail_lighting;
+        if (scroll_imagery_)
+            scroll_imagery_->ScrollTexOffset(part.object_index, 0, GetFrame(),
+                                            TTime::LegacyFrameCount(), item.uv_offset);
         // Root includes legacy Z scale; the static local pose includes parents.
         for (int32_t r = 0; r < 4; ++r)
             for (int32_t c = 0; c < 4; ++c)
