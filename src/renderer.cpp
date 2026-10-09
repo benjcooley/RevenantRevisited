@@ -1600,10 +1600,23 @@ void TRenderer::InitCompositePipeline()
     pip.depth.pixel_format     = _SG_PIXELFORMAT_DEFAULT;
     pip.label = "renderer.composite.pipeline.swap";
     composite_pip_swap = sg_make_pipeline(&pip);
+
+    // Premultiplied sources (TSurface layers, see ECompositeAlpha): colour
+    // and alpha both ONE / ONE_MINUS_SRC_ALPHA.
+    pip.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_ONE;
+    pip.label = "renderer.composite.pipeline.swap.premul";
+    composite_pip_premul_swap = sg_make_pipeline(&pip);
+
+    pip.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+    pip.depth.pixel_format     = SG_PIXELFORMAT_NONE;
+    pip.label = "renderer.composite.pipeline.rt.premul";
+    composite_pip_premul_rt = sg_make_pipeline(&pip);
 }
 
 void TRenderer::ShutdownCompositePipeline()
 {
+    if (composite_pip_premul_rt.id)   { sg_destroy_pipeline(composite_pip_premul_rt);   composite_pip_premul_rt   = {}; }
+    if (composite_pip_premul_swap.id) { sg_destroy_pipeline(composite_pip_premul_swap); composite_pip_premul_swap = {}; }
     if (composite_pip_add_rt.id) { sg_destroy_pipeline(composite_pip_add_rt); composite_pip_add_rt = {}; }
     if (composite_pip_rt.id)   { sg_destroy_pipeline(composite_pip_rt);   composite_pip_rt   = {}; }
     if (composite_pip_swap.id) { sg_destroy_pipeline(composite_pip_swap); composite_pip_swap = {}; }
@@ -4098,13 +4111,14 @@ void TRenderer::CompositeSwapchain(sg_image img,
                                    int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                    int32_t target_w, int32_t target_h,
                                    int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
-                                   int32_t src_tex_w, int32_t src_tex_h)
+                                   int32_t src_tex_w, int32_t src_tex_h,
+                                   ECompositeAlpha alpha)
 {
     // No tint (preserves all existing callers). For tinted blits use
     // CompositeSwapchainTinted below.
     CompositeSwapchainTinted(img, dst_x, dst_y, dst_w, dst_h, target_w, target_h,
                              src_x, src_y, src_w, src_h, src_tex_w, src_tex_h,
-                             1.0f, 1.0f, 1.0f, 1.0f);
+                             1.0f, 1.0f, 1.0f, 1.0f, alpha);
 }
 
 void TRenderer::CompositeSwapchainTinted(sg_image img,
@@ -4112,13 +4126,16 @@ void TRenderer::CompositeSwapchainTinted(sg_image img,
                                          int32_t target_w, int32_t target_h,
                                          int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
                                          int32_t src_tex_w, int32_t src_tex_h,
-                                         float tr, float tg, float tb, float ta)
+                                         float tr, float tg, float tb, float ta,
+                                         ECompositeAlpha alpha)
 {
-    if (!img.id || !composite_pip_swap.id) return;
+    const sg_pipeline pip = alpha == ECompositeAlpha::Premultiplied ? composite_pip_premul_swap
+                                                                    : composite_pip_swap;
+    if (!img.id || !pip.id) return;
     if (target_w <= 0 || target_h <= 0) return;
     if (src_tex_w <= 0 || src_tex_h <= 0) return;
 
-    sg_apply_pipeline(composite_pip_swap);
+    sg_apply_pipeline(pip);
     sg_bindings bind = {};
     bind.vertex_buffers[0] = composite_vbuf;
     bind.fs_images[0]      = img;
@@ -4154,9 +4171,12 @@ void TRenderer::Composite(sg_image img,
                           int32_t src_tex_w, int32_t src_tex_h,
                           bool additive_blend,
                           bool chroma_key,
-                          const float* chroma_key_rgb)
+                          const float* chroma_key_rgb,
+                          ECompositeAlpha alpha)
 {
-    const sg_pipeline pip = additive_blend ? composite_pip_add_rt : composite_pip_rt;
+    const sg_pipeline pip = additive_blend ? composite_pip_add_rt
+                          : alpha == ECompositeAlpha::Premultiplied ? composite_pip_premul_rt
+                                                                    : composite_pip_rt;
     if (!img.id || !pip.id) return;
     if (target_w <= 0 || target_h <= 0) return;
     if (src_tex_w <= 0 || src_tex_h <= 0) return;
@@ -4570,7 +4590,8 @@ void TRenderer::DrawSurfaceToTarget(TSurface* surf, int32_t x, int32_t y,
     const int32_t sw = surf->Width();
     const int32_t sh = surf->Height();
     Composite(img, x, y, sw, sh, target_w, target_h,
-              0, 0, sw, sh, sw, sh);
+              0, 0, sw, sh, sw, sh,
+              false, false, nullptr, ECompositeAlpha::Premultiplied);
 }
 
 void TRenderer::DrawSurfaceSubrectToTarget(TSurface* surf,
@@ -4584,7 +4605,8 @@ void TRenderer::DrawSurfaceSubrectToTarget(TSurface* surf,
     if (!img.id) return;
     Composite(img, dst_x, dst_y, src_w, src_h, target_w, target_h,
               src_x, src_y, src_w, src_h,
-              surf->Width(), surf->Height());
+              surf->Width(), surf->Height(),
+              false, false, nullptr, ECompositeAlpha::Premultiplied);
 }
 
 void TRenderer::DrawBitmapShadowed(PTBitmap bm, int32_t x, int32_t y,
@@ -4622,7 +4644,7 @@ void TRenderer::DrawSurface(TSurface* surf, int32_t x, int32_t y)
     const int32_t sw = surf->Width();
     const int32_t sh = surf->Height();
     CompositeSwapchain(img, x, y, sw, sh, target_w, target_h,
-                       0, 0, sw, sh, sw, sh);
+                       0, 0, sw, sh, sw, sh, ECompositeAlpha::Premultiplied);
 }
 
 void TRenderer::DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
@@ -4637,7 +4659,7 @@ void TRenderer::DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
     const int32_t sh = surf->Height();
     CompositeSwapchainTinted(img, x, y, sw, sh, target_w, target_h,
                              0, 0, sw, sh, sw, sh,
-                             tr, tg, tb, ta);
+                             tr * ta, tg * ta, tb * ta, ta, ECompositeAlpha::Premultiplied);
 }
 
 void TRenderer::DrawSurfaceSubrectTinted(TSurface* surf,
@@ -4653,7 +4675,7 @@ void TRenderer::DrawSurfaceSubrectTinted(TSurface* surf,
                              sapp_width(), sapp_height(),
                              src_x, src_y, src_w, src_h,
                              surf->Width(), surf->Height(),
-                             tr, tg, tb, ta);
+                             tr * ta, tg * ta, tb * ta, ta, ECompositeAlpha::Premultiplied);
 }
 
 void TRenderer::CompositeLitTargetSubrectToTarget(int32_t dst_x, int32_t dst_y,

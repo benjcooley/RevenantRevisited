@@ -1009,6 +1009,9 @@ public:
     // TSurface -> quad blit, sized to the surface. Used for cached HUD
     // panels (char stats, game log, ...) that own their own surface
     // and refresh outside the draw path.
+    // TSurface layers draw premultiplied (see ECompositeAlpha): the colour
+    // the ...ToTarget primitives left in them composites unchanged, and a
+    // tint's alpha fades the whole layer as one.
     void DrawSurface(TSurface* surf, int32_t x, int32_t y);
     void DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
                            float tr, float tg, float tb, float ta);
@@ -1167,6 +1170,13 @@ private:
     void Composite(sg_image img,
                    int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                    int32_t target_w, int32_t target_h);
+    // How a composite's source stores alpha. Bitmaps and atlas slices hold
+    // straight alpha. TSurface layers hold premultiplied colour: the
+    // ...ToTarget primitives blend straight-alpha draws into a cleared target,
+    // which leaves colour already multiplied by coverage. Drawing a layer back
+    // with the straight-alpha blend would apply its alpha twice.
+    enum class ECompositeAlpha : uint8_t { Straight, Premultiplied };
+
     void Composite(sg_image img,
                    int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                    int32_t target_w, int32_t target_h,
@@ -1174,7 +1184,8 @@ private:
                    int32_t src_tex_w, int32_t src_tex_h,
                    bool additive_blend = false,
                    bool chroma_key = false,
-                   const float* chroma_key_rgb = nullptr);
+                   const float* chroma_key_rgb = nullptr,
+                   ECompositeAlpha alpha = ECompositeAlpha::Straight);
     void CompositeTinted(sg_image img,
                          int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                          int32_t target_w, int32_t target_h,
@@ -1189,15 +1200,18 @@ private:
                             int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                             int32_t target_w, int32_t target_h,
                             int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
-                            int32_t src_tex_w, int32_t src_tex_h);
+                            int32_t src_tex_w, int32_t src_tex_h,
+                            ECompositeAlpha alpha = ECompositeAlpha::Straight);
     // Tinted variant — multiplies texture sample by (tr, tg, tb, ta)
-    // before output. Backs DrawBitmapTinted + the shadow draw helpers.
+    // before output. Backs DrawBitmapTinted + the shadow draw helpers. For a
+    // premultiplied source the tint must be premultiplied too (rgb * a).
     void CompositeSwapchainTinted(sg_image img,
                                   int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                   int32_t target_w, int32_t target_h,
                                   int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
                                   int32_t src_tex_w, int32_t src_tex_h,
-                                  float tr, float tg, float tb, float ta);
+                                  float tr, float tg, float tb, float ta,
+                                  ECompositeAlpha alpha = ECompositeAlpha::Straight);
 
     int32_t width  = 0;
     int32_t height = 0;
@@ -1208,6 +1222,8 @@ private:
     sg_pipeline composite_pip_rt   = {};   // RGBA8 RT variant
     sg_pipeline composite_pip_add_rt = {}; // RGBA8 additive/lighten RT variant
     sg_pipeline composite_pip_swap = {};   // Swapchain variant
+    sg_pipeline composite_pip_premul_rt   = {};   // RGBA8 RT, premultiplied source
+    sg_pipeline composite_pip_premul_swap = {};   // Swapchain, premultiplied source
 
     // ---- Passes ---------------------------------------------------------
     sg_pass default_pass = {};   // G-buffer MRT fill
