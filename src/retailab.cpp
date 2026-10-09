@@ -29,6 +29,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -1038,6 +1039,27 @@ bool Arg(int argc, char* argv[], const char* name, std::string& value)
 
 }  // namespace
 
+namespace
+{
+std::map<std::string, Target>& Registry()
+{
+    static std::map<std::string, Target> targets;   // built on first use (static init order)
+    return targets;
+}
+}  // namespace
+
+bool RegisterTarget(const char* name, Target fn)
+{
+    Registry()[name] = fn;
+    return true;
+}
+
+Target FindTarget(const std::string& name)
+{
+    auto it = Registry().find(name);
+    return it == Registry().end() ? nullptr : it->second;
+}
+
 bool Run(int argc, char* argv[], int& exitcode)
 {
     std::string target;
@@ -1065,7 +1087,7 @@ bool Run(int argc, char* argv[], int& exitcode)
     else if (target == "trigger-test")
         dump = TriggerTest;
     else
-        dump = CombatTarget(target);
+        dump = FindTarget(target);
     if (!dump)
     {
         fprintf(stderr, "retail-ab: unknown target '%s'\n", target.c_str());
