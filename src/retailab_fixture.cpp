@@ -40,7 +40,13 @@ bool LoadGameData(std::string& error)
         error = "can't mount resources.rvr / imagery.rvi";
         return false;
     }
-    TObjectImagery::SetImageryPath(NORMALPATH);
+    // As step 8 picks it: the IMAGERY\ folder unless normals are on. With the
+    // wrong one, the class.def types whose headers aren't in the quick-load
+    // cache (18, the Chaos talisman among them) don't register and vanish.
+    if (NoNormals)
+        TObjectImagery::SetImageryPath(NONORMALPATH);
+    else
+        TObjectImagery::SetImageryPath(NORMALPATH);
     MakeColorTables();
     if (!TObjectClass::LoadClasses())
     {

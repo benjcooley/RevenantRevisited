@@ -210,3 +210,188 @@ def variant_names(vm):
         for v in items(vm, sd + SD_VARIANTS):
             by_variant[v] = (by_spell[sd], cstr(vm, v + V_NAME, 32))
     return by_variant, by_spell
+
+
+# ---- class.def: the TALISMAN class ----------------------------------------------
+
+def shipped_class_def() -> bytes:
+    data = Path(os.environ.get('REVENANT_DATA_PATH',
+                               Path.home() / 'RevenantRetailLab' / 'retail-cd' / 'REVENANT'))
+    with zipfile.ZipFile(data / 'imagery.rvi') as z:
+        for n in z.namelist():
+            if n.lower() == 'class.def':
+                return z.read(n)
+    raise FileNotFoundError('imagery.rvi has no class.def')
+
+
+def class_section(text: bytes, name: str):
+    """One CLASS block of class.def: its STATS (name, default) in order and
+    its TYPES (name, [stat values]), the values `{a,b}` with the stats'
+    defaults after the ones given. Enough for the classes the spell katas
+    build in guest memory (TALISMAN), not a class.def parser."""
+    import re
+    lines = text.decode(TEXT).splitlines()
+    i = next(k for k, l in enumerate(lines) if re.match(rf'\s*CLASS\s+"{name}"', l, re.I))
+    stats, types, section, depth = [], [], None, 0
+    for raw in lines[i + 1:]:
+        line = raw.split('//', 1)[0].strip()
+        if not line:
+            continue
+        word = line.split()[0].upper()
+        if word == 'BEGIN':
+            depth += 1
+            continue
+        if word == 'END':
+            depth -= 1
+            if depth == 0:
+                break
+            section = None if depth == 1 else section
+            continue
+        if depth == 1 and word in ('STATS', 'TYPES', 'OBJSTATS'):
+            section = word
+            continue
+        if section == 'STATS' and depth == 2:
+            parts = line.split()
+            stats.append((parts[0], int(parts[2], 0)))
+        elif section == 'TYPES' and depth == 2:
+            m = re.match(r'"([^"]*)"[^{]*\{([^}]*)\}', line)
+            if m:
+                given = [int(v, 0) for v in m.group(2).split(',') if v.strip()]
+                values = given + [d for _, d in stats[len(given):]]
+                types.append((m.group(1), values))
+    return stats, types
+
+
+# TObjectClass, as the talisman code reads it: stat definitions (+0x00 count,
+# short; +0x04 records of 0x50 bytes, the name first) and the type array
+# (+0x10 count, +0x20 items, +0x24 default), each type {+0x00 name, +0x0c
+# stat count (short), +0x10 stat values}.
+TALISMAN_CLASS = 0x66dedc
+STATDEF_SIZE = 0x50
+
+
+def build_class(vm, address, stats, types):
+    defs = vm.allocate(STATDEF_SIZE * max(1, len(stats)))
+    for k, (name, _) in enumerate(stats):
+        vm.write(defs + STATDEF_SIZE * k, name.encode(TEXT) + b'\0')
+    vm.write(address, struct.pack('<h', len(stats)))
+    vm.put_u32(address + 0x04, defs)
+    array = vm.allocate(4 * max(1, len(types)))
+    for k, (name, values) in enumerate(types):
+        t = vm.allocate(0x20)
+        text = vm.allocate(len(name) + 1)
+        vm.write(text, name.encode(TEXT) + b'\0')
+        vals = vm.allocate(4 * max(1, len(values)))
+        for j, v in enumerate(values):
+            vm.put_u32(vals + 4 * j, v & 0xffffffff)
+        vm.put_u32(t, text)
+        vm.write(t + 0x0c, struct.pack('<h', len(values)))
+        vm.put_u32(t + 0x10, vals)
+        vm.put_u32(array + 4 * k, t)
+    default = vm.allocate(0x20)
+    vm.put_u32(address + 0x10, len(types))
+    vm.put_u32(address + 0x20, array)
+    vm.put_u32(address + 0x24, default)
+
+
+# ---- inventories, attack and impact records, the text bar ---------------------------
+
+# An object's inventory (TObjectInstance): count +0x68, items +0x78 (a pointer
+# array); an item's container +0x64 and index there +0x7e (short). The walk
+# (0x46dfb0) asks each container vtable slot 0x170 (the object its inventory
+# is redirected to; 0 for a plain object).
+O_INV_COUNT, O_INV_ITEMS, O_CONTAINER, O_INVINDEX = 0x68, 0x78, 0x64, 0x7e
+NO_REDIRECT = 0x477d50                           # TObjectInstance slot 0x170: xor eax, eax; ret
+ITEM_SIZE, ITEM_SLOTS = 0x100, 0x100
+TEXTBAR_PRINT = 0x54d170                         # cdecl (textbar, fmt, ...)
+
+
+class SpellWorld:
+    """What the spell katas add to a CombatWorld (guest.py): items in
+    inventories, attack / impact records on blocks, the TALISMAN class, the
+    text bar seam. Built on the world it's given; create after it and before
+    the checkpoint."""
+
+    def __init__(self, world):
+        self.world = world
+        self.vm = world.vm
+        self._item_vtable()
+        world.boundaries.add(TEXTBAR_PRINT, 'textbar', 0, self._textbar)
+
+    def _item_vtable(self):
+        """A vtable for items: slot 0x170 the base class's (no redirect),
+        every other slot a stub that fails the case naming the slot."""
+        from unicorn import UC_HOOK_CODE
+        vm = self.vm
+        stubs = vm.allocate(ITEM_SLOTS * 16)
+        vm.write(stubs, b'\xcc' * (ITEM_SLOTS * 16))
+        self.item_vtable = vm.allocate(ITEM_SLOTS * 4)
+        for i in range(ITEM_SLOTS):
+            vm.put_u32(self.item_vtable + 4 * i, stubs + 16 * i)
+        vm.put_u32(self.item_vtable + 0x170, NO_REDIRECT)
+
+        def enter(uc, address, size, user):
+            vm.error = RuntimeError(f'item vtable slot {(address - stubs) // 16 * 4:#x} reached (not modelled)')
+            uc.emu_stop()
+
+        vm.uc.hook_add(UC_HOOK_CODE, enter, begin=stubs, end=stubs + ITEM_SLOTS * 16 - 1)
+
+    def new_inventory(self, owner, items):
+        """`items`: [{"name", "class" (0), "items": [...]}, ...] or names, in
+        inventory order, each a plain object in `owner`'s inventory."""
+        vm = self.vm
+        array = vm.allocate(4 * max(1, len(items)))
+        for k, spec in enumerate(items):
+            spec = dict(name=spec) if isinstance(spec, str) else spec
+            item = vm.allocate(ITEM_SIZE)
+            vm.put_u32(item, self.item_vtable)
+            vm.write(item + 0x04, struct.pack('<h', spec.get('class', 0)))
+            text = vm.allocate(len(spec['name']) + 1)
+            vm.write(text, spec['name'].encode(TEXT) + b'\0')
+            vm.put_u32(item + 0x38, text)
+            vm.put_u32(item + O_CONTAINER, owner)
+            vm.write(item + O_INVINDEX, struct.pack('<h', k))
+            self.world.objects.setdefault(item, spec['name'])
+            vm.put_u32(array + 4 * k, item)
+            if spec.get('items'):
+                self.new_inventory(item, spec['items'])
+        vm.put_u32(owner + O_INV_COUNT, len(items))
+        vm.put_u32(owner + O_INV_ITEMS, array)
+
+    def set_records(self, obj, spec):
+        """The doing block's attack (+0x48) and impact (+0x4c) records from
+        the case's `doing_attack` / `doing_impact` ({"flags": n}, retail's CA_ /
+        CAI_ bits), at their flags field (+0x24)."""
+        vm = self.vm
+        doing = vm.u32(obj + 0xd8)
+        for key, off, size in (('doing_attack', 0x48, 0x320), ('doing_impact', 0x4c, 0x5c)):
+            if spec.get(key) is not None:
+                rec = vm.allocate(size)
+                vm.put_u32(rec + 0x24, spec[key].get('flags', 0) & 0xffffffff)
+                vm.put_u32(doing + off, rec)
+
+    def _textbar(self, args, ecx):
+        self.world.seams.append(dict(seam='TextBar', text=self.format(self.vm.string(args[1]), list(args[2:]))))
+        return 0
+
+    def format(self, fmt, args):
+        """printf for the %d/%i/%s the game's messages use."""
+        out, i = [], 0
+        while i < len(fmt):
+            c = fmt[i]
+            if c == '%' and i + 1 < len(fmt):
+                spec = fmt[i + 1]
+                if spec in 'di':
+                    out.append(str(s32(args.pop(0))))
+                elif spec == 's':
+                    pointer = args.pop(0)
+                    out.append(self.vm.string(pointer) if pointer else '(null)')
+                elif spec == '%':
+                    out.append('%')
+                else:
+                    out.append(fmt[i:i + 2])
+                i += 2
+                continue
+            out.append(c)
+            i += 1
+        return ''.join(out)

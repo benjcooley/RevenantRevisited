@@ -962,3 +962,38 @@ Corrections to this document, from the asm and the runs:
   registered imagery by file name (`0x446aa0`), not a load. STATLINE is the
   rest of the line with blanks collapsed and numbers re-printed
   (`STRN  -2 ... TIME 0480` → `STRN -2 ... TIME 480`), no leading space.
+
+### S1: talismans to spell
+
+Fixture `spell_talismans.py` (retail's TSpellList from the shipped
+spell.def, the TALISMAN class built from class.def's, inventories as
+plain objects the walk `0x46dfb0` reads: count `+0x68`, items `+0x78`,
+container `+0x64`, index `+0x7e`, vtable slot `0x170`).
+
+- `spell-lookup`, 75 cases (one per spell, ~12,000 queries): every shipped
+  talisman string and its near misses (case, order, each permutation, a
+  code dropped / added / changed / doubled, blanks), every variant and
+  spell name and its near misses, through GetSpellDataByTalismans
+  `0x53ed70`, GetVariantDataByTalismans `0x53ef90`, GetSpellDataByName
+  `0x53ede0`, GetVariantDataByName `0x53f010`. 75/75. The port's two
+  talisman lookups compared talisman counts (any order) and kept the last
+  match; they are retail's whole-string `_stricmp`, first match.
+- `spell-talismans`, 340 cases: TPlayer::HasTalismans `0x51b7c0` with
+  FindInventory `0x470280` and the walk as original code, over pouches
+  that cover, just miss and overshoot each shipped string, every type, no
+  pouch, a pouch in a pouch, a bag in the pouch, a pouch called
+  "spellpouch", other-case names, two pouches; ~500 queries each. 340/340
+  (the port's algorithm already matched; its shadowed "spellpouch" lookup
+  is now the explicit discarded call retail makes).
+- `spell-quick`, 49 cases: TPlayer::InvokeQuickSpell `0x51b5d0` over every
+  button and the edges, empty / held / missing / untyped slots, the cast's
+  answer, dead, the attack and impact interactive gates and charflags
+  `0x80000`, main player or not. Seams: the text bar, and TCharacter::
+  CastByTalismans / CastByName (`TCharacter::castSeam` on the port side).
+  49/49. The port's version had English texts, no Health or interactive
+  gates. Retail's multiplayer-client branches are not ported (no network).
+
+Fixture fix: `RetailAB::Fixture::LoadGameData` set the imagery path to
+`NORMAL\`; the game uses `IMAGERY\` (NoNormals, InitGlobals step 8). With
+the wrong one 18 class.def types whose headers aren't in the quick-load
+cache didn't register, the Chaos talisman among them.

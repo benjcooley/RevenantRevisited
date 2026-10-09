@@ -5576,12 +5576,16 @@ bool TCharacter::Cast(char* talismans, S3DPoint* sourcepos)
 // cast a spell by using its name
 bool TCharacter::CastByName(char* name, TObjectInstance* *target, int32_t numtargs, S3DPoint* sourcepos)
 {
+    if (castSeam)
+        return castSeam(this, "CastByName", name, target, numtargs, sourcepos);
     return SpellManager.CastByName(name, this, target, numtargs, sourcepos);
 }
 
 // cast a spell by using a list of talismans
 bool TCharacter::CastByTalismans(char* talismans, TObjectInstance* *target, int32_t numtargs, S3DPoint* sourcepos)
 {
+    if (castSeam)
+        return castSeam(this, "CastByTalismans", talismans, target, numtargs, sourcepos);
     return SpellManager.CastByTalismans(talismans, this, target, numtargs, sourcepos);
 }
 
