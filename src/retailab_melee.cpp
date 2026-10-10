@@ -13,6 +13,7 @@
 
 #include "gameoptions.h"          // NoCombatResults
 #include "logging.h"
+#include "mappane.h"                // TMapPane::lineOfSightSeam
 #include "revenant.h"             // CheatNahkranoth, CheatAlreadyDead
 #include "sound.h"
 
@@ -186,6 +187,106 @@ void CaseCombatFlash(TCharacter* self)
     Seam(j.str());
 }
 
+// CanSeeCharacter: the case's `sees`, yes or no, or the names seen.
+bool CaseSeesMelee(TCharacter* self, TCharacter* chr, int32_t angle)
+{
+    const JsonValue& sees = (*g_answers.cs)["sees"];
+    const std::string them = g_answers.world->NameOf(chr);
+    bool seen = sees.Bool(true);
+    if (sees.GetKind() == JsonValue::Kind::Array)
+        seen = std::any_of(sees.Items().begin(), sees.Items().end(),
+                           [&](const JsonValue& n) { return n.Str() == them; });
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "CanSeeCharacter").FieldString("who", g_answers.world->NameOf(self));
+    j.FieldString("target", them).Field("result", seen ? 1 : 0).End('}');
+    Seam(j.str());
+    return seen;
+}
+
+// The helpers near a point: the case's `waypoints` ({name, pos, type}, in
+// the order the map gives them), each a helper object of that type (with a
+// fixture imagery of no states, kept as the world's characters' are: nothing
+// here draws). Made before the case's seams are cleared.
+struct SCaseHelper
+{
+    std::string name;
+    std::unique_ptr<TObjectInstance> object;
+};
+std::vector<SCaseHelper> g_helpers;
+
+void MakeHelpers(const JsonValue& cs)
+{
+    g_helpers.clear();
+    const TObjectClass* helpers = TObjectClass::GetClass(OBJCLASS_HELPER);
+    for (const JsonValue& w : cs["waypoints"].Items())
+    {
+        SObjectDef def{};
+        def.objclass = OBJCLASS_HELPER;
+        const std::string type = w.Has("type") ? w["type"].Str() : "Waypoint";
+        def.objtype = (short)helpers->FindObjType(type.c_str());
+        if (def.objtype < 0)
+            throw std::runtime_error("no helper type " + type);
+        def.pos = S3DPoint((int32_t)w["pos"][0].Int(), (int32_t)w["pos"][1].Int(), (int32_t)w["pos"][2].Int());
+        auto* imagery = new TFixtureImagery(TFixtureImagery::Register({}), w["name"].Str(), {}, false);
+        g_helpers.push_back({w["name"].Str(), std::make_unique<TObjectInstance>(&def, imagery)});
+    }
+}
+
+TObjectInstance* HelperOrCharacter(const TFixtureWorld& world, const std::string& name)
+{
+    for (const SCaseHelper& h : g_helpers)
+        if (h.name == name)
+            return h.object.get();
+    return world.Get(name);
+}
+
+std::string HelperName(const TObjectInstance* o)
+{
+    for (const SCaseHelper& h : g_helpers)
+        if (h.object.get() == o)
+            return h.name;
+    return g_answers.world->NameOf(o);
+}
+
+int32_t CaseWaypoints(TCharacter* self, const S3DPoint& centre, TObjectInstance** found, int32_t max)
+{
+    const int32_t n = (int32_t)g_helpers.size();
+    for (int32_t i = 0; i < n && i < max; ++i)
+        found[i] = g_helpers[i].object.get();
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "FindObjectsInRange").FieldString("who", g_answers.world->NameOf(self));
+    j.Key("centre").Begin('[').Value(centre.x).Value(centre.y).Value(centre.z).End(']');
+    j.Field("max", max).Field("result", n).End('}');
+    Seam(j.str());
+    return n;
+}
+
+// The line of sight from a helper (WaypointReachable 0x00528850 looks from
+// it, at the character's height, to the character): clear unless the case's
+// `walls` name the pair.
+bool CaseHelperSight(const S3DPoint& from, const S3DPoint& to)
+{
+    std::string a = "?", b = "?";
+    for (const SCaseHelper& h : g_helpers)
+        if (h.object->Pos().x == from.x && h.object->Pos().y == from.y)
+            a = h.name;
+    for (const JsonValue& spec : (*g_answers.cs)["chars"].Items())
+    {
+        const S3DPoint p = g_answers.world->Get(spec["name"].Str())->Pos();
+        if (p.x == to.x && p.y == to.y && p.z == to.z)
+            b = spec["name"].Str();
+    }
+    bool clear = true;
+    for (const JsonValue& w : (*g_answers.cs)["walls"].Items())
+        if (w[0].Str() == a && w[1].Str() == b)
+            clear = false;
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "LineOfSight").FieldString("from", a).FieldString("to", b);
+    j.Field("result", clear ? 1 : 0).End('}');
+    Seam(j.str());
+    return clear;
+}
+
 void CaseEffectBurst(TCharacter* self, const char* name, int32_t height)
 {
     JsonOut j;
@@ -278,6 +379,12 @@ class SMeleeScope
         TCharacter::damageSeam = cs["seam_damage"].Bool(true) ? CaseDamage : nullptr;
         TCharacter::effectBurstSeam = CaseEffectBurst;
         TCharacter::effectCombatFlashSeam = CaseCombatFlash;
+        TCharacter::waypointsSeam = CaseWaypoints;
+        TCharacter::canSeeSeam = CaseSeesMelee;
+        if (!g_helpers.empty())
+            TMapPane::lineOfSightSeam = CaseHelperSight;
+        Editor = cs["globals"]["editor"].Bool(false);
+        NoAI = cs["globals"]["ai_off"].Bool(false);       // retail 0x00668110, the dummies cheat
         TSoundPlayer::findSeam = CaseSound;
         TPlayer::killExpSeam = CaseKillExp;
         TPlayer::awardSkillExpSeam = CaseSkillExp;
@@ -294,6 +401,12 @@ class SMeleeScope
         TCharacter::damageSeam = nullptr;
         TCharacter::effectBurstSeam = nullptr;
         TCharacter::effectCombatFlashSeam = nullptr;
+        TCharacter::waypointsSeam = nullptr;
+        if (!g_helpers.empty())
+            TMapPane::lineOfSightSeam = nullptr;
+        g_helpers.clear();
+        Editor = false;
+        NoAI = false;
         TSoundPlayer::findSeam = nullptr;
         TPlayer::killExpSeam = nullptr;
         TPlayer::awardSkillExpSeam = nullptr;
@@ -434,7 +547,7 @@ void SetBlockFields(const TFixtureWorld& world, const JsonValue& cs)
 // "find-button", "find-pcnt", "find-interactive", "do-attack",
 // "button-attack", "button-action", "random-attack", "specific-attack",
 // "resolve-attack", "resolve-hit", "on-attacked", "damage", "resolve-impact",
-// "resolve-block", "resolve-dead", "block", "stop-block", "dodge".
+// "resolve-block", "resolve-dead", "block", "stop-block", "dodge", "ai".
 std::string MeleeCall(const Case& c, std::string& error)
 {
     try
@@ -444,10 +557,18 @@ std::string MeleeCall(const Case& c, std::string& error)
         const JsonValue cs = JsonValue::Parse(c.Field(0));
         TFixtureWorld world(cs);
         SetBlockFields(world, cs);
+        MakeHelpers(cs);
         world.writeAttackState = true;
         world.blockExtra = [&](JsonOut& j, const TActionBlock& ab) { WriteBlockExtra(j, world, cs, ab); };
         SCaseScope scope(cs, world);
         SMeleeScope melee(cs, world);
+        for (const JsonValue& spec : cs["chars"].Items())
+            if (spec.Has("aistate"))
+            {
+                const JsonValue& look = spec["aistate"]["lookat"];
+                world.Fixture(world.Get(spec["name"].Str()))->ReadAIState(spec["aistate"], look.IsNull() ? nullptr
+                                                                         : HelperOrCharacter(world, look.Str()));
+            }
         TCharacter* me = world.Get(cs["self"].Str());
         const std::string call = cs["call"].Str();
         const JsonValue& a = cs["args"];
@@ -499,6 +620,11 @@ std::string MeleeCall(const Case& c, std::string& error)
             j.Field("returned", me->StopBlock() ? 1 : 0);
         else if (call == "dodge")
             j.Field("returned", me->Dodge((int32_t)a["dir"].Int(-1)) ? 1 : 0);
+        else if (call == "ai")
+        {
+            me->AI();
+            j.Field("returned", 0);
+        }
         else if (call == "resolve-hit")
         {
             SCharAttackData* ad = &me->GetCharData()->attacks[(int32_t)a["attack"].Int()];
@@ -539,6 +665,20 @@ std::string MeleeCall(const Case& c, std::string& error)
         for (const JsonValue& spec : cs["chars"].Items())
             world.WriteCharacter(j, spec["name"].Str().c_str(), world.Get(spec["name"].Str()));
         j.End('}');
+        j.Key("ai").Begin('{');
+        for (const JsonValue& spec : cs["chars"].Items())
+        {
+            const IFixtureChar* fx = world.Fixture(world.Get(spec["name"].Str()));
+            j.Key(spec["name"].Str().c_str()).Begin('{');
+            j.Key("lookat");
+            if (const TObjectInstance* look = fx->AILookAt())
+                j.String(HelperName(look));
+            else
+                j.Null();
+            fx->WriteAIState(j);
+            j.End('}');
+        }
+        j.End('}');
         WriteSeams(j);
         WriteDraws(j);
         j.End('}');
@@ -557,6 +697,7 @@ std::string MeleeCall(const Case& c, std::string& error)
 static const bool registered = RegisterTarget("melee-attack-choice", MeleeCall) &&
                                RegisterTarget("melee-hit", MeleeCall) &&
                                RegisterTarget("melee-damage", MeleeCall) &&
-                               RegisterTarget("melee-resolvers", MeleeCall);
+                               RegisterTarget("melee-resolvers", MeleeCall) &&
+                               RegisterTarget("melee-ai", MeleeCall);
 
 }  // namespace RetailAB

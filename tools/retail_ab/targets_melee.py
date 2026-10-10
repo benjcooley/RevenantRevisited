@@ -21,6 +21,10 @@ the doing block (blood and flash, the loops, the way back to the root),
 Block (the gates, the monster's timing, the duration), StopBlock, Dodge
 (the gates, the roll by facing and direction).
 
+`melee-ai` (kata C3b): one tick of AI() -- the gates, the target kept or
+found, the attack branch, the move branch (retreat, standing, stepping:
+stop, chase, search), the retreat state, the boss kind.
+
 Retail: tools/retail_runtime/slots/combat/melee_attack.py; port:
 src/retailab_melee.cpp (`Revenant --retail-ab=melee-*`). The compare is
 combat_targets.compare (every field; the seams aligned as sequences).
@@ -1645,6 +1649,247 @@ def resolver_cases(data: Path, workdir: Path) -> list[dict]:
     return finish(cases)
 
 
+# ---- C3b: AI ----------------------------------------------------------------------------
+
+def ai_cases(data: Path, workdir: Path) -> list[dict]:
+    s = shipped(data, workdir)
+    cases = []
+    seed = 31
+
+    def add(name, chars, rules, **kw):
+        nonlocal seed
+        seed += 1
+        cases.append(case(name, 'ai', chars, rules, args={}, seed=seed * 7907 + 1, tape=kw.pop('tape', [40, 7, 1, 2]),
+                          ground=dict(z=ME_AT[2]), **kw))
+
+    def world(me='Araknid', tg='Locke', *, aistate=None, me_stats=None, target_stats=None, **kw):
+        stats = dict(dict(aggressive=1, sleeping=0), **(me_stats or {}))
+        tstats = dict(dict(sleeping=0), **(target_stats or {}))
+        chars, rules = full_world(data, me, tg, me_stats=stats, target_stats=tstats, **kw)
+        if aistate is not None:
+            chars[0]['aistate'] = aistate
+        return chars, rules
+
+    def third(at, name='Third', cls='Araknid', **kw):
+        return make_char(name, 12, at, 0, chardata(s['chars'][cls]), states=['combat', 'sidestepl', 'sidestepr'],
+                         stats=dict(MONSTER_STATS, aggressive=1, sleeping=0), ident=0x30, **kw)
+
+    # The gates: a player without the AI switch, disabled (moving or not),
+    # dead, the dummies cheat, the editor.
+    for label, kw, extra in (
+            ('plain', {}, {}),
+            ('disabled', dict(me_objflags=0x40), {}),
+            ('disabled.moving', dict(me_objflags=0x40, me_doing=block('walk', 2, obj='Target')), {}),
+            ('disabled.combatstep', dict(me_objflags=0x40, me_doing=block('cwalkf', 4, obj='Target')), {}),
+            ('dead', dict(me_stats=dict(health=0)), {}),
+            ('dead.moving', dict(me_stats=dict(health=0), me_doing=block('walk', 2, obj='Target')), {}),
+            ('dummies', {}, dict(globals_extra=dict(ai_off=1))),
+            ('editor', {}, dict(globals_extra=dict(editor=1)))):
+        chars, rules = world(**kw)
+        add(f'ai.gate.{label}', chars, rules)
+        cases[-1]['globals'].update(extra.get('globals_extra', {}))
+    for flags in (0, 0x100000):
+        chars, rules = world('Locke', 'Araknid', me_flags=flags, target_root=block('combat', 3, obj='Me'))
+        add(f'ai.gate.player.f{flags:#x}', chars, rules)
+
+    # The target: the root's, kept while valid; else every 32 frames
+    # (phase by id), aggressive and not no-turn, the search; a retreating
+    # monster takes it without fighting.
+    for label, kw in (('valid', {}), ('dead', dict(target_stats=dict(health=0))), ('far', dict(dist=500)),
+                      ('untargetable', dict(target_flags=0x8000)),
+                      ('noroot', dict(me_root=block('walk', 1))), ('rootnotarget', dict(me_root=block('combat', 3)))):
+        for frame in (0x10, 0x20, 0x30):
+            for found in ('Target', None):
+                for aggressive in (1, 0):
+                    for flags in (0, 4):
+                        for retreat in (0, 1):
+                            chars, rules = world(me_stats=dict(aggressive=aggressive), me_flags=flags, **kw)
+                            chars[0]['id'] = 0x10
+                            if retreat:
+                                chars[0]['retreating'] = 1
+                                chars[0]['retreat_frames'] = 5
+                            add(f'ai.target.{label}.fr{frame:#x}.found{found}.ag{aggressive}.f{flags}.r{retreat}',
+                                chars, rules, frame=frame, found=found)
+
+    # The attack branch: in the stance, the walk of a walk-fighter, or asked
+    # by OnAttacked; the timers; still making the last attack; out of
+    # reach; in reach, the attack chosen or none, someone in the way.
+    acd = s['chars']['Araknid']
+    a0 = next(i for i, ad in enumerate(acd['attacks']) if not ad['flags'] & (CA_MAGICATTACK | CA_PLAYANIM))
+    play = first_with(acd, CA_PLAYANIM)
+    for doing_label, doing, flags, req in (
+            ('combat', None, 0, 0), ('walk', block('walk', 1, obj='Target'), 0, 0),
+            ('walk.fighter', block('walk', 1, obj='Target'), 0x4000, 0),
+            ('impact.asked', block('cimph', 0xc, obj='Target'), 0, 3), ('impact.asked1', block('cimph', 0xc, obj='Target'), 0, 1),
+            ('impact.asked6', block('cimph', 0xc, obj='Target'), 0, 6)):
+        for timers in ((0, 0), (1, 1), (2, 1), (1, 3), (3, 3), (0, 5), (5, 0)):
+            for dist in (10, 60):
+                for last in (None, a0, play):
+                    state = dict(nextattack=timers[0], magictimer=timers[1], requestbits=req)
+                    if last is not None:
+                        state['lastattack'] = last
+                    kw = dict(me_doing=doing) if doing else {}
+                    chars, rules = world(me_state=state, me_flags=flags, dist=dist, **kw)
+                    add(f'ai.attack.{doing_label}.t{timers[0]}{timers[1]}.d{dist}.l{last}', chars, rules,
+                        tape=[40, 7, 3, 9, 50, 2, 1, 33])
+    # Still making the last attack (the doing block plays it).
+    chars, rules = world(me_state=dict(nextattack=0, magictimer=0, lastattack=a0),
+                         me_doing=block(acd['attacks'][a0]['name'], 7, attack=a0, obj='Target'))
+    add('ai.attack.stillmaking', chars, rules)
+    # Someone in the way: a third character in line, at each side.
+    for side in (0, 0x30, 0x50, 0x70, -0x30, -0x50, -0x70):
+        for dist in (10, 25):
+            chars, rules = world(me_state=dict(nextattack=0, magictimer=0), dist=dist)
+            facing = chars[0]['facing']
+            chars.append(third(_toward(ME_AT, (facing + side) & 0xff, 20)))
+            add(f'ai.attack.blocker.s{side}.d{dist}', chars, rules, tape=[99, 99, 99, 99])
+
+    # The move branch: retreating (run; or no-turn), standing (step aside of
+    # a blocker, he the other way unless the target), stepping (stop near the
+    # target, wait out a PLAYANIM, chase seen or heard, else search).
+    for flags in (0, 4):
+        for lookat in (None, 'Target'):
+            chars, rules = world(me_doing=block('cwalkf', 4, obj='Target'), me_flags=flags,
+                                 aistate=dict(lookat=lookat) if lookat else None)
+            chars[0]['retreating'] = 1
+            chars[0]['retreat_latch'] = 1
+            chars[0]['retreat_frames'] = 9
+            add(f'ai.move.retreat.f{flags}.l{lookat}', chars, rules)
+    for accum in ([0, 0, 0], [2, 0, 0]):
+        for blocker in ('Target', 'Third', None):
+            for blocked in (True, False):
+                chars, rules = world(me_doing=block('cimph', 0xc, obj='Target'))
+                chars[0]['accum'] = accum
+                chars.append(third(_toward(ME_AT, 0x90, 40)))
+                add(f'ai.move.standing.a{accum[0]}.b{blocker}.{int(blocked)}', chars, rules,
+                    blocked=blocked, blocker=blocker)
+    for action in (2, 4, 0x1a):
+        for dist in (10, 40, 120):
+            for lookat in (None, 'Third'):
+                for sees in (True, False):
+                    for noise in (0, 50, 101):
+                        for invisible in (0, 0x80):
+                            chars, rules = world(me_doing=block('cwalkf', action, obj='Target'), dist=dist,
+                                                 target_objflags=invisible,
+                                                 aistate=dict(lookat=lookat, waypointticks=2, lastpos=[900, 950, 0])
+                                                 if lookat else dict(lastpos=[900, 950, 0]))
+                            chars[1]['noise'] = noise
+                            chars.append(third(_toward(ME_AT, 0x40, 3)))
+                            add(f'ai.move.step.a{action}.d{dist}.l{lookat}.s{int(sees)}.n{noise}.i{invisible}',
+                                chars, rules, sees=sees)
+    # A PLAYANIM under way; the waypoint's ticks in a chase; lost, with the
+    # target fighting someone else in sight.
+    if play is not None:
+        chars, rules = world(me_doing=block(acd['attacks'][play]['name'], 4, obj='Target'), dist=60,
+                             me_state=dict(lastattack=play))
+        add('ai.move.step.playanim', chars, rules)
+    for ticks in (0, 1, 3):
+        chars, rules = world(me_doing=block('cwalkf', 4, obj='Target'), dist=60,
+                             aistate=dict(lookat='Third', waypointticks=ticks))
+        chars.append(third(_toward(ME_AT, 0x20, 200)))
+        add(f'ai.move.chase.ticks{ticks}', chars, rules, sees=True)
+    for root in ('Third', 'Me', None):
+        for roll in (0, 1):
+            for lookat, near in ((None, False), ('Third', True), ('Third', False)):
+                chars, rules = world(me_doing=block('cwalkf', 4, obj='Target'), dist=60,
+                                     target_root=block('combat', 3, obj=root),
+                                     aistate=dict(lookat=lookat, lastpos=[800, 1200, 0]) if lookat
+                                     else dict(lastpos=[800, 1200, 0]))
+                chars[1]['noise'] = 0
+                chars.append(third(_toward(ME_AT, 0x60, 2 if near else 300)))
+                add(f'ai.move.lost.root{root}.r{roll}.l{lookat}.{"near" if near else "far"}', chars, rules,
+                    sees=False, tape=[roll, 5, 5])
+
+    # Bow roots: the target kept, standing beside a blocker, the lost
+    # target's own target.
+    for label, kw in (('bow', dict(me_root=block('bow', 0x19, obj='Target'))),
+                      ('bow.standing', dict(me_root=block('bow', 0x19, obj='Target'),
+                                            me_doing=block('cimph', 0xc, obj='Target'))),
+                      ('walk.standing', dict(me_root=block('walk', 1, obj='Target'),
+                                             me_doing=block('cimph', 0xc, obj='Target')))):
+        for blocker in ('Target', 'Third'):
+            chars, rules = world(**kw)
+            chars.append(third(_toward(ME_AT, 0x90, 40)))
+            add(f'ai.root.{label}.b{blocker}', chars, rules, blocked=True, blocker=blocker)
+    for root in (('bow', 0x19), ('walk', 1)):
+        chars, rules = world(me_doing=block('cwalkf', 4, obj='Target'), dist=150,
+                             target_root=block(root[0], root[1], obj='Third'))
+        chars[1]['noise'] = 0
+        chars.append(third(_toward(ME_AT, 0x60, 300)))
+        add(f'ai.move.lost.targetroot.{root[0]}', chars, rules, sees=['Third'], tape=[1, 5])
+    # The magic timer's own re-arm; both run out.
+    for timers in ((3, -1), (-1, -1), (-1, 4), (0, -1)):
+        chars, rules = world(me_state=dict(nextattack=timers[0], magictimer=timers[1]))
+        add(f'ai.attack.rearm.t{timers[0]}.{timers[1]}', chars, rules, tape=[5, 9, 2, 7])
+    # Stepping while the last attack plays (a PLAYANIM waits; another
+    # doesn't), far from the target.
+    for last, name in ((play, acd['attacks'][play]['name'] if play is not None else 'x'),
+                       (a0, acd['attacks'][a0]['name']), (a0, 'cwalkf')):
+        if last is None:
+            continue
+        chars, rules = world(me_doing=block(name, 4, obj='Target'), dist=150, me_state=dict(lastattack=last))
+        add(f'ai.move.step.last{last}.{name}', chars, rules)
+    # Lost, the target fighting someone in sight: both step aside.
+    for roll in (0, 1):
+        chars, rules = world(me_doing=block('cwalkf', 4, obj='Target'), dist=150,
+                             target_root=block('combat', 3, obj='Third'))
+        chars[1]['noise'] = 0
+        chars.append(third(_toward(ME_AT, 0x60, 300)))
+        add(f'ai.move.lost.otherseen.r{roll}', chars, rules, sees=['Third'], tape=[roll, 5])
+
+    # The waypoint search: none, one in sight or behind a wall, another
+    # helper type, the nearest under 1000 (else the first), the committed
+    # one found again (let go), more than ten.
+    lost = dict(me_doing=block('cwalkf', 4, obj='Target'), dist=150)
+    at = ME_AT
+    for label, wps, walls, look in (
+            ('none', [], [], None),
+            ('one', [dict(name='w1', pos=[at[0] + 100, at[1], 0])], [], None),
+            ('walled', [dict(name='w1', pos=[at[0] + 100, at[1], 0])], [['w1', 'Me']], None),
+            ('axis', [dict(name='a1', pos=[at[0] + 100, at[1], 0], type='Axis')], [], None),
+            ('nearest', [dict(name='w1', pos=[900, 950, 0]), dict(name='w2', pos=[700, 700, 0]),
+                         dict(name='w3', pos=[880, 940, 0])], [], None),
+            ('allfar', [dict(name='w1', pos=[4000, 4000, 0]), dict(name='w2', pos=[3000, 3000, 0])], [], None),
+            ('mixed', [dict(name='w1', pos=[4000, 4000, 0]), dict(name='w2', pos=[905, 951, 0]),
+                       dict(name='a1', pos=[900, 950, 0], type='Axis')], [['w2', 'Me']], None),
+            ('eleven', [dict(name=f'w{i}', pos=[900 + 40 * i, 950, 0]) for i in range(11)], [], None)):
+        for lastpos in ([900, 950, 0], [0, 0, 0]):
+            ai = dict(lastpos=lastpos)
+            chars, rules = world(**lost, aistate=ai)
+            chars[1]['noise'] = 0
+            c = dict(sees=False, waypoints=wps, walls=walls)
+            add(f'ai.move.waypoints.{label}.c{lastpos[0]}', chars, rules, **c)
+    # Committed to a waypoint: near it (search again from the target's
+    # place), or still away (keep facing it).
+    for near in (True, False):
+        for found_again in (True, False):
+            wp = dict(name='w1', pos=[ME_AT[0] + (2 if near else 200), ME_AT[1], 0])
+            wps = [wp] if found_again else [dict(name='w2', pos=[ME_AT[0] + 60, ME_AT[1] + 60, 0])]
+            chars, rules = world(**lost, aistate=dict(lastpos=[900, 950, 0], lookat='w1', waypointticks=3))
+            chars[1]['noise'] = 0
+            add(f'ai.move.waypoints.committed.n{int(near)}.f{int(found_again)}', chars, rules, sees=False,
+                waypoints=wps + ([wp] if not found_again else []))
+
+    # The retreat state: health against RETREATAT, the latch, the frames.
+    for victim in ('Kantha', 'Under Druhg', 'Araknid'):
+        at = s['chars'][victim]['retreatat']
+        for health in sorted({1, at, at + 1, 50}):
+            for latch in (0, 1):
+                for frames in (0, 1, 7):
+                    chars, rules = world(victim, me_stats=dict(health=health))
+                    chars[0]['retreat_latch'] = latch
+                    chars[0]['retreat_frames'] = frames
+                    add(f'ai.retreat.{victim}.h{health}.l{latch}.f{frames}', chars, rules)
+
+    # The boss kind: once, by type name (not for the bosses themselves,
+    # whose behaviours aren't ported).
+    for kind in (0, -1, 5):
+        chars, rules = world()
+        chars[0]['monsterkind'] = kind
+        add(f'ai.kind.{kind}', chars, rules)
+    return finish(cases)
+
+
 TARGETS = {
     'melee-attack-choice': dict(fixture='slots/combat/melee_attack.py', cases=attack_choice_cases, compare=compare,
                                 port_fields=port_fields, unit=lambda r: len(r.get('calls', [])) or 1),
@@ -1654,4 +1899,6 @@ TARGETS = {
                          port_fields=port_fields, unit=lambda r: 1),
     'melee-resolvers': dict(fixture='slots/combat/melee_attack.py', cases=resolver_cases, compare=compare,
                             port_fields=port_fields, unit=lambda r: 1),
+    'melee-ai': dict(fixture='slots/combat/melee_attack.py', cases=ai_cases, compare=compare,
+                     port_fields=port_fields, unit=lambda r: 1),
 }

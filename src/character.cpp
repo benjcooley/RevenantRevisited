@@ -2789,333 +2789,263 @@ bool TCharacter::IsEnemy(TCharacter* chr)
 // * General AI Routines *
 // ***********************
 
-// REVSYNC: retail TCharacter::AI @ 0x4c8b60
-//   recon/discovered/cls_0x5a7b98_TCharacter_AI_4c8b60.cpp (size 2291 / 326 lines).
-//   Per-tick monster brain. Retail flow:
-//     1. Health<1 -> return (dead).
-//     2. Player class with charflags-mask 0x100000 unset -> return.
-//     3. OF_DISABLED, NoAI globals, or AI-paused -> Stop(), return.
-//     4. AI_PerMonster() per-creature overlay. We currently only handle
-//        Araknid (the Demo 1 creature), which has no overlay (returns 0).
-//     5. Validate desired->obj as a current target via CanSeeCharacter
-//        check; if missing/invalid, every 32 frames sweep FindCharacters
-//        to acquire a fresh enemy.
-//     6. If we have a target and we're in combat, run the attack tree:
-//        out-of-range / blocked -> sidestep or Go(angle); in-range ->
-//        RandomAttack pick guarded by a CharBlocking line check; tick
-//        nextattack/waitticks counters and reset from chardata when they
-//        underflow.
-//     7. If no target (or non-combat root) and not moving, wander to the
-//        nearest "waypoint" object. The committed waypoint is held in
-//        wander_target with a wander_commit watchdog so we don't
-//        ping-pong on arrival.
-//     8. Tail: retreating is the *current* "lost target" flag,
-//        retreatlatch mirrors it for transition detection,
-//        retreatframes is a frame countdown.
-//
-// Field-offset cross-references (recon/discovered/field_map.md):
-//   doing       (mbr_0xd8  / param_1[0x36])
-//   desired     (mbr_0xe0  / param_1[0x38])
-//   chardata    (mbr_0xfc  / param_1[0x3f])
-//   charflags   (mbr_0x110 / param_1[0x44])
-//   nextattack  (mbr_0x120 / param_1[0x48])
-//   waitticks   (mbr_0x124 / param_1[0x49])
-//   chainhits   (mbr_0x12c / param_1[0x4b])
-//   oldab       (mbr_0x160 / param_1[0x58])  — retail uses for "in-progress action"
-//   wander_target            (mbr_0x238 / param_1[0x8d])
-//   target_last_position     (mbr_0x23c / param_1[0x8f..0x91])
-//   wander_commit            (mbr_0x248 / param_1[0x92])
-//   retreating      (mbr_0x254 / param_1[0x95])
-//   retreatlatch (mbr_0x258 / param_1[0x96])
-//   retreatframes         (mbr_0x25c / param_1[0x97])
+// REVSYNC: TCharacter::AI @ 0x004c8b60 (COMBAT_ATTACK_CHOICE.md §3.10) --
+// a character's brain, each tick Pulse runs it: the gates and the bosses'
+// overlay; keep the combat target or look for one (every 32 frames); then,
+// standing in the combat stance (or the walk of a walk-fighter, or asked by
+// OnAttacked), the attack branch, else the move branch (run from the target
+// while retreating, chase it seen or heard, search for it by waypoints, or
+// step aside of whoever stands in the way); last the retreat state.
+// (Retail first asks NetOwner, slot 0x178: 1 in single player.)
 void TCharacter::AI()
 {
     ai_ai_count++;
 
-  // (1) Dead -> skip entirely.
-    if (Health() < 1)
-        return;
-
-  // (2) REVSYNC: AI @ 0x004c8b60 -- the player runs AI only with charflags
-  //     0x100000 (retail sets it for a net player, 0x0051efc4; the combat
-  //     arena's --playerai sets it to let Locke fight on his own).
     if (ObjClass() == OBJCLASS_PLAYER && !(charflags & kCharFlagPlayerAI))
         return;
-
-  // (3) Global / object-flag gates. Retail also tests DAT_00668110 (a
-  //     "AI globally disabled" flag e.g. cinematic mode); we don't have
-  //     that global yet. NoAI is our stand-in.
-    if ((flags & OF_DISABLED) || NoAI || Editor)
+    if ((flags & OF_DISABLED) || Health() <= 0 || NoAI)
     {
-        if (doing && (doing->action == ACTION_MOVE ||
-                      doing->action == ACTION_COMBATMOVE ||
-                      doing->action == ACTION_BOWMOVE))
+        if (IsMoveAction(doing))
             Stop();
         return;
     }
+    if (Editor)
+        return;
+    if (Aggressive())
+        AIPerMonster();
 
-  // (4) Per-monster behavioural overlay. Retail dispatches on a one-time
-  //     name match against {"Baez","Solifuge","Jhaga","Yhagoro"}; every
-  //     other creature (including Araknid) takes the default branch and
-  //     returns 0, falling through to the generic AI body below.
-  //     Demo 1 only ships Araknid, so we leave the overlay as a no-op
-  //     stub and TODO the four boss cases. See
-  //     recon/discovered/araknid_ai_notes.md for confirmation that
-  //     Araknid has no special-case branch.
-  //     TODO retail: port AI_PerMonster cases 1..4 (Baez, Solifuge,
-  //     Jhaga, Yhagoro) when we actually have those creatures in a demo.
-
-  // (5) Validate / acquire combat target.
-  //
-  //     Retail reads desired->obj as the current target (the action
-  //     block's `obj` field), validates it via IsValidTarget (0x4cd990),
-  //     and if missing acquires a new one every 32 frames via
-  //     FindCharacters with a 32-unit angle range.
-    TCharacter* target = nullptr;
-    if (desired && desired->obj &&
-        (desired->action == ACTION_COMBAT || desired->action == ACTION_BOW))
+    TCharacter* target = Fighting();
+    if (!IsValidTarget(target) || !Fighting())
     {
-        // desired->obj is the combat target.
-        target = (TCharacter*)desired->obj;
-        if (!target || target->IsDead() ||
-            (target->ObjClass() != OBJCLASS_CHARACTER &&
-             target->ObjClass() != OBJCLASS_PLAYER))
-        {
-            target = nullptr;
-        }
-    }
-
-    if (!target)
-    {
-      // Periodic enemy sweep — retail only fires once every 32 frames
-      // (frame_tick xor charflags & 0x1f != 0) which keeps the cost
-      // amortised across the monster population.
-        if (Aggressive() && ((CurrentScreen->FrameCount() ^ (int32_t)charflags) & 0x1f) == 0)
+        target = nullptr;
+        if (!Editor && Aggressive() && !(charflags & kCharFlagNoTurn) &&
+            !((PlayScreen.GameFrame() ^ GetMapIndex()) & 0x1f))
         {
             TCharacter* found = nullptr;
-            int32_t n = FindCharacters(&found, 1, /*range=*/-1, /*angle=*/-1, /*anglerange=*/32,
-                                       FINDCHAR_ENEMY | FINDCHAR_SEE | FINDCHAR_HEAR);
-            if (n > 0 && found && !retreating)
-                BeginFighting(found, ACTION_COMBAT);
-            target = Fighting();
+            if (FindCharacters(&found, 1, -1, -1, 0x20, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) > 0)
+                target = found;
+            if (target && !retreating)
+                BeginFighting(target, ACTION_COMBAT);
         }
     }
 
-  // (6+7) Main per-tick decision tree.
-    if (!doing)
-        goto sight_tail;
-
-  // ===== Pre-step: cartwheel-pair on blocker =====
-  // Retail FUN_004c8b60:96-115. When we're NOT in a move root and
-  // another character is blocking our position (FindClearPath returns
-  // a char), throw a SideStep one direction; if the blocker isn't our
-  // combat target, throw the OPPOSITE side too — that's the "cartwheel
-  // both ways" liveliness. The retail action gate is "doing == null OR
-  // action ∉ {MOVE, COMBATMOVE, BOWMOVE}", i.e. don't double-step while
-  // already moving.
-  //
-  // We use CharBlocking() in place of retail's FindClearPath(pos, pos)
-  // — same semantics for this call (blocker char near current pos).
-  // The accum.x/y == 0 gate is retail FUN_004c8b60:98 ("character has
-  // no horizontal momentum"): only cartwheel when truly standing still
-  // in combat, never mid-step.
+    if (target && doing)
     {
-        ACTION da = doing->action;
-        if (da != ACTION_MOVE && da != ACTION_COMBATMOVE && da != ACTION_BOWMOVE
-            && accum.x == 0 && accum.y == 0)
-        {
-            TCharacter* blocker = CharBlocking(this, pos, Radius());
-            if (blocker)
-            {
-              // Retail line 101-102: cVar2 = diff>=0 ? 'r' : 'l'.
-              // (Sidestep moves 90° off facing; retail issues the pair
-              // and lets the engine decide which one actually plays.)
-                int32_t diff = AngleDiff(GetFace(), AngleTo(blocker));
-                char first = (diff >= 0) ? 'r' : 'l';
-                SideStep(first);
-
-              // Retail lines 104-114: if blocker is NOT our combat
-              // target, fire the opposite-side sidestep too.
-                TObjectInstance* combat_target = nullptr;
-                if (desired && (desired->action == ACTION_COMBAT ||
-                                desired->action == ACTION_BOW))
-                    combat_target = desired->obj;
-                if (combat_target != (TObjectInstance*)blocker)
-                {
-                    char second = (first == 'l') ? 'r' : 'l';
-                    SideStep(second);
-                }
-              // Retail then does `goto LAB_004c93ce` — straight to the
-              // sight-tail, skipping the attack tree this frame. We
-              // mirror that with `goto sight_tail` so the in-range
-              // tree below doesn't immediately try to attack.
-                goto sight_tail;
-            }
-        }
-    }
-
-  // REVSYNC: AI @ 0x004c8b60, the attack branch (0x004c8cd9-0x004c8f5b;
-  // COMBAT_ATTACK_CHOICE.md §3.10.2). Taken standing in the combat stance
-  // (or the walk root for a walk-fighter) unless retreating (+0x254), or
-  // when OnAttacked asked for an attack. The attack timer counts down here
-  // and gates IsValidAttack; an attempt costs a second tick and re-arms it
-  // from ATTACKFREQ the same tick, the magic timer from MAGICFREQ.
-    {
-        ACTION da = doing->action;
-        const bool fight = (doing->Is("walk") && !retreating && (charflags & kCharFlagWalkFighter)) ||
-                           (da == ACTION_COMBAT && !retreating) ||
-                           ((requestbits & kRequestAttackNow) && (requestbits & (kRequestNoPlayAnim | kRequestInteractive)));
-
-        if (fight && target)
-        {
-            ai_lookat = nullptr;
-            if (nextattack > 0)
-                nextattack--;
-            if (magictimer > 0)
-                magictimer--;
-            if (nextattack == 0 || magictimer == 0 || (requestbits & kRequestAttackNow))
-            {
-                requestbits &= ~kRequestAttackNow;
-                if (lastattack && doing->Is(lastattack->attackname))
-                {
-                    // still making it
-                }
-                else if (Distance(target) > chardata->maxattackrange)
-                {
-                    Go(AngleTo(target));
-                    lastattack = nullptr;
-                    lasthit = 0;
-                }
-                else
-                {
-                    const bool attacked = RandomAttack(random(1, 100));
-                  // Someone else in the way and no attack: step aside.
-                    TCharacter* blocker = CharBlocking(this, pos, Radius() * 2);
-                    if (blocker && blocker != target && !attacked)
-                    {
-                        const int32_t side = FaceAngleTo(blocker);
-                        if (side > 0x20 && side < 0x60)
-                            SideStep('l');
-                        else if (side < -0x20 && side > -0x60)
-                            SideStep('r');
-                    }
-                    if (attacked)
-                        attackcount--;
-                    else
-                    {
-                        lastattack = nullptr;
-                        lasthit = 0;
-                    }
-                }
-                if (!lastattack || !(lastattack->flags & CA_PLAYANIM))
-                    nextattack--;
-            }
-            if (nextattack < 0)
-                nextattack = random(chardata->minattackfreq * FRAMERATE / 100, chardata->maxattackfreq * FRAMERATE / 100);
-            if (magictimer < 0)
-                magictimer = random(chardata->minmagicfreq * FRAMERATE / 100, chardata->maxmagicfreq * FRAMERATE / 100);
-        }
-        else if ((da == ACTION_MOVE || da == ACTION_COMBATMOVE || da == ACTION_BOWMOVE)
-                 && target)
-        {
-          // ===== We're in a move root with a known target: drive the =====
-          // ===== move-angle and decide whether to switch to attack    =====
-            int32_t tdist = Distance(target);
-            if (tdist < chardata->maxattackrange && !retreating)
-            {
-                Stop();
-            }
-            // TODO retail: same `oldab->mbr_0x24 & 0x01000000` gate as
-            // above — see the matching comment block in the COMBAT branch.
-            else if (CanSeeCharacter(target))
-            {
-              // (retreating goes false next frame via tail)
-                target_last_position = target->Pos();
-                doing->moveangle      = AngleTo(target);
-                doing->angle          = AngleTo(target);
-            }
-            else
-            {
-              // ===== Lost sight: hop waypoints toward target =====
-              // Retail FUN_004c8b60 lines 128-244: when we have a target
-              // we can't see, we walk between "waypoint" objects to
-              // approach the last-known position. Initial search center
-              // is target's last known pos; on arrival at a waypoint
-              // (within ~5 units) we re-search with center at the
-              // target's CURRENT pos to find the next hop.
-                last_position_distance = ::Distance(pos, target_last_position);
-                last_position_start_point = pos;
-                retreating = true;
-                target_last_angle = ConvertToFacing(pos, target_last_position);
-
-              // If we have a committed waypoint and we've arrived at it,
-              // clear the commit so the search below re-picks. Use the
-              // target's current pos as the new search center (retail
-              // line 209-213: iStack_68 = piVar10[4..6] where piVar10 is
-              // the target character).
-                constexpr int32_t ARRIVAL_DIST = 5;
-                S3DPoint search_center = target_last_position;
-                if (TObjectInstance* cmt = wander_target.Get())
-                {
-                    if (::Distance(pos, cmt->Pos()) < ARRIVAL_DIST)
-                    {
-                        wander_target = TSafeRef<TObjectInstance>{};
-                        wander_commit = 0;
-                        search_center = target->Pos();
-                    }
-                }
-
-                TObjectInstance* wp = WanderToWaypoint(search_center);
-
-              // Walk toward the committed waypoint if we have one,
-              // otherwise straight toward the last-known target pos.
-                if (wp)
-                {
-                    doing->moveangle = AngleTo(wp);
-                  // Retail also caches the walk-to position in
-                  // mbr_0x8f/0x90/0x91; we mirror that into
-                  // target_last_position so subsequent frames have a
-                  // sensible fallback if the waypoint disappears.
-                }
-                else
-                {
-                    doing->moveangle = target_last_angle;
-                }
-            }
-        }
-      // No idle-wander branch: retail leaves untargeted monsters alone
-      // and lets per-character ALWAYS scripts (System 11) do whatever
-      // patrolling the level designer wants. Until System 11 is ported,
-      // monsters with no target just stand still.
-    }
-
-sight_tail:
-  // (8) Tail: tick the sight-lost watchdog. Retail:
-  //     out_of_sight = (frame > sight_max && !out_of_sight_prev) || retreatframes==0 ? 0 : 1;
-  //     out_of_sight_prev = out_of_sight;
-  //     if (retreatframes > 0) retreatframes--;
-  //
-  // chardata + 0x440 in retail is some "max sight-loss ticks" tunable
-  // we don't have; gate on FRAMERATE * a couple seconds for now.
-    {
-        const int32_t sight_max = FRAMERATE * 4;  // TODO retail: chardata field at +0x440 is unknown
-        const int32_t fc = CurrentScreen->FrameCount();
-        bool new_oos;
-        if ((fc > sight_max && !retreatlatch) || retreatframes == 0)
-            new_oos = false;
+        const bool attacking = (doing->Is("walk") && !retreating && (charflags & kCharFlagWalkFighter)) ||
+                               (doing->action == ACTION_COMBAT && !retreating) ||
+                               ((requestbits & kRequestAttackNow) &&
+                                (requestbits & (kRequestNoPlayAnim | kRequestInteractive)));
+        if (attacking)
+            AIAttack(target);
         else
-            new_oos = true;
-        retreatlatch = new_oos;
-        retreating      = new_oos;
-        if (retreatframes > 0)
-            retreatframes--;
+            AIMove(target);
     }
+
+  // The retreat: on while health is at RETREATAT or below (or it was on)
+  // and its frames last, which count down.
+    retreating = retreatlatch = (Health() <= chardata->retreatat || retreatlatch) && retreatframes != 0;
+    if (retreatframes > 0)
+        retreatframes--;
 }
 
-// REVSYNC: retail inlines this in FindCharacters (0x004cd7bd): heard if
-// visible, within HEARINGRANGE (edge to edge) and making more noise than
-// 100 less this hearing (Hearing) -- no line of sight, unlike the 1998
-// source's.
+// AI's attack branch (0x004c8cd9-0x004c8f5b; §3.10.2). The attack timer
+// counts down and gates IsValidAttack; an attempt costs a second tick and
+// re-arms it from ATTACKFREQ the same tick, the magic timer from MAGICFREQ.
+void TCharacter::AIAttack(TCharacter* target)
+{
+    ai_lookat = nullptr;
+    if (nextattack > 0)
+        nextattack--;
+    if (magictimer > 0)
+        magictimer--;
+    if (nextattack == 0 || magictimer == 0 || (requestbits & kRequestAttackNow))
+    {
+        requestbits &= ~kRequestAttackNow;
+        if (lastattack && doing->Is(lastattack->attackname))
+        {
+            // still making it
+        }
+        else if (Distance(target) > chardata->maxattackrange)
+        {
+            Go(AngleTo(target));
+            lastattack = nullptr;
+            lasthit = 0;
+        }
+        else
+        {
+            const bool attacked = RandomAttack(random(1, 100));
+          // Someone else in the way and no attack: step aside.
+            TCharacter* blocker = CharBlocking(this, pos, Radius() * 2);
+            if (blocker && blocker != target && !attacked)
+            {
+                const int32_t side = FaceAngleTo(blocker);
+                if (side > 0x20 && side < 0x60)
+                    SideStep('l');
+                else if (side < -0x20 && side > -0x60)
+                    SideStep('r');
+            }
+            if (attacked)
+                attackcount--;
+            else
+            {
+                lastattack = nullptr;
+                lasthit = 0;
+            }
+        }
+        if (!lastattack || !(lastattack->flags & CA_PLAYANIM))
+            nextattack--;
+    }
+    if (nextattack < 0)
+        nextattack = random(chardata->minattackfreq * FRAMERATE / 100, chardata->maxattackfreq * FRAMERATE / 100);
+    if (magictimer < 0)
+        magictimer = random(chardata->minmagicfreq * FRAMERATE / 100, chardata->maxmagicfreq * FRAMERATE / 100);
+}
+
+// AI's move branch (0x004c8f60-0x004c93c9; §3.10.3-3.10.5).
+void TCharacter::AIMove(TCharacter* target)
+{
+    if (retreating && !(charflags & kCharFlagNoTurn))
+    {
+        ai_lookat = nullptr;
+        Go((AngleTo(target) + 0x7f) & 0xff);       // straight away from it
+        return;
+    }
+    if (!IsMoveAction(doing))
+    {
+      // Standing out of the stance, someone in the way: step aside, and he
+      // the other way unless he is the target.
+        TCharacter* blocker = nullptr;
+        if (accum.x == 0 && accum.y == 0 && Blocked(pos, pos, 8, nullptr, &blocker) && blocker)
+        {
+            const char side = FaceAngleTo(blocker) >= 0 ? 'r' : 'l';
+            SideStep(side);
+            if (blocker != Fighting())
+                blocker->SideStep(side == 'l' ? 'r' : 'l');
+        }
+        return;
+    }
+
+    if (Distance(target) < chardata->maxattackrange && !ai_lookat)
+    {
+        Stop();
+        return;
+    }
+    if (lastattack && doing->Is(lastattack->attackname) && (lastattack->flags & CA_PLAYANIM))
+        return;
+
+    const auto heard = [&] {
+        if (target->flags & OF_INVISIBLE)
+            return false;
+        const int32_t dist = Distance(target);
+        return dist <= chardata->hearingrange && target->LastNoise() > 100 - Hearing(dist);
+    };
+    if (CanSeeCharacter(target, -1) || heard())
+    {
+      // Chase: a committed waypoint holds a few ticks; face it, or the target.
+        if (ai_lookat)
+        {
+            if (waypointticks == 0)
+                ai_lookat = nullptr;
+            else
+                waypointticks--;
+        }
+        target_last_position = target->Pos();
+        doing->angle = AngleTo(ai_lookat && waypointticks ? ai_lookat : target);
+        return;
+    }
+
+  // Lost: if the target is fighting someone else in sight, both step
+  // aside; then the waypoint nearest the target's last known place (or,
+  // the committed one reached, its place now), or that place itself.
+    S3DPoint centre = target_last_position;
+    TCharacter* other = target->Fighting();
+    if (other && other != this && CanSeeCharacter(other, -1))
+    {
+        const char side = random(0, 1) ? 'l' : 'r';
+        SideStep(side);
+        other->SideStep(side == 'l' ? 'r' : 'l');
+    }
+    if (!ai_lookat || Distance(ai_lookat) < 5)
+    {
+        if (ai_lookat)
+            centre = target->Pos();
+        TObjectInstance* waypoint = NearestWaypoint(centre);
+        if (ai_lookat == waypoint)
+            ai_lookat = nullptr;
+        else
+        {
+            waypointticks = 6;
+            ai_lookat = waypoint;
+        }
+    }
+    doing->angle = ai_lookat ? AngleTo(ai_lookat) : ConvertToFacing(pos, centre);
+}
+
+// AI's waypoint search (0x004c9158-0x004c9272): of the first ten helpers
+// within 250 of `centre`, the "waypoint"s in line of sight
+// (WaypointReachable 0x00528850), the nearest to it under 1000 -- else the
+// first. (Each new nearest also becomes the next move, SetNextMove
+// 0x00470bc0, with the waypoint's position as the vector, as retail
+// does.)
+TObjectInstance* TCharacter::NearestWaypoint(const S3DPoint& centre)
+{
+    constexpr int32_t kMaxFound = 10;
+    TObjectInstance* found[kMaxFound] = {};
+    int32_t n;
+    if (waypointsSeam)
+        n = waypointsSeam(this, centre, found, kMaxFound);
+    else
+    {
+        int32_t index[kMaxFound];
+        n = (std::min)(MapPane.FindObjectsInRange(centre, index, 250, 0, OBJCLASS_HELPER, kMaxFound), kMaxFound);
+        for (int32_t i = 0; i < n; ++i)
+            found[i] = MapPane.GetInstance(index[i]);
+    }
+    n = (std::min)(n, kMaxFound);
+    TObjectInstance* waypoints[kMaxFound];
+    int32_t count = 0;
+    for (int32_t i = 0; i < n; ++i)
+    {
+        TObjectInstance* o = found[i];
+        if (!o || stricmp(o->GetTypeName(), "waypoint") != 0)
+            continue;
+        S3DPoint from = o->Pos();
+        from.z = pos.z;
+        if (MapPane.LineOfSight(from, pos))
+            waypoints[count++] = o;
+    }
+    if (count == 0)
+        return nullptr;
+    int32_t best = 0, bestdist = 1000;
+    for (int32_t i = 0; i < count; ++i)
+    {
+        S3DPoint at = waypoints[i]->Pos();
+        const int32_t d = ::Distance(centre, at);
+        if (d < bestdist)
+        {
+            bestdist = d;
+            best = i;
+            SetNextMove(at);
+        }
+    }
+    return waypoints[best];
+}
+
+// REVSYNC: AI_PerMonster @ 0x004c9b70, its first part: the boss kind, by
+// type name, once (+0x280: Baez 1, Solifuge 2, Jhaga 3, Yhagoro 4, any other
+// -1). The bosses' behaviours (cases 1-4, 0x004c9ce8-0x004cd491, each with
+// its state at +0x284) aren't ported: docs/gameplay/BURNDOWN.md phase H.
+void TCharacter::AIPerMonster()
+{
+    if (monsterkind != 0)
+        return;
+    constexpr const char* kBosses[] = {"Baez", "Solifuge", "Jhaga", "Yhagoro"};
+    monsterkind = -1;
+    for (int32_t k = 0; k < 4; ++k)
+        if (!stricmp(GetTypeName(), kBosses[k]))
+            monsterkind = k + 1;
+}
+
 bool TCharacter::CanHearCharacter(TCharacter* chr)
 {
     if (chr->flags & OF_INVISIBLE)
@@ -3281,80 +3211,6 @@ TCharacter* TCharacter::FindCharacterAhead(int32_t angle, int32_t anglerange)
 TCharacter* TCharacter::FindClosestEnemy(int32_t angle, int32_t anglerange)
 {
     return FindCharacter(-1, angle, anglerange, FINDCHAR_ENEMY | FINDCHAR_SEE | FINDCHAR_HEAR);
-}
-
-// REVSYNC: retail TCharacter::AI waypoint-search branch @ 0x4c8b60 lines 149-244
-//
-// Decompile: recon/discovered/cls_0x5a7b98_TCharacter_AI_4c8b60.cpp
-//
-// Algorithm (retail):
-//   * If we DON'T have a committed waypoint:
-//       - FindObjectsInRange around `search_center` (retail mbr_0x8f/0x90/0x91,
-//         the cached "walk-to" point). Filter to type-name "waypoint" + reachable.
-//         Pick the closest by 2D distance.
-//       - If the new closest equals the last committed (rare here since we just
-//         nulled it), clear and bail. Else commit + reset timer to 6 frames.
-//   * If we DO have a committed waypoint:
-//       - Decrement the commit timer. When it hits 0, clear committed (will
-//         re-search next call).
-//   * Caller is responsible for calling this with the right search_center:
-//       - Initial search: target_last_position
-//       - On arrival (within ~5 units of committed): target's *current* pos
-//   * Walking is the caller's job — this function only manages the committed
-//     waypoint state.
-TObjectInstance* TCharacter::WanderToWaypoint(const S3DPoint& search_center, int32_t range)
-{
-    constexpr int32_t COMMIT_FRAMES = 6;  // retail mbr_0x92 reset value (param_1[0x92] = 6)
-
-    TObjectInstance* committed = wander_target.Get();
-
-  // If we have a committed waypoint, just tick the timer. Caller decides
-  // whether to call us again with a target-centered search after arrival.
-    if (committed)
-    {
-        if (wander_commit == 0)
-        {
-            wander_target = TSafeRef<TObjectInstance>{};
-            committed = nullptr;
-        }
-        else
-        {
-            --wander_commit;
-        }
-    }
-
-    if (committed)
-        return committed;
-
-  // No commit: search for the closest "waypoint"-typed object near
-  // search_center. Retail uses TMapPane::FindObjectsInRange (0xfa range,
-  // max 10 candidates) and applies a WaypointReachable() filter; our
-  // TMapIterator is cheap so we don't cap, but we do match the 250-unit
-  // range. WaypointReachable is a TODO — without it, monsters may pick
-  // waypoints across walls.
-    TObjectInstance* closest = nullptr;
-    int32_t          best    = 1000;  // retail's initial "best" sentinel
-    for (TMapIterator i(search_center, range, CHECK_NOINVENT | CHECK_MAPRECT, OBJSET_ALL); i; i++)
-    {
-        TObjectInstance* oi = i.Item();
-        if (!oi || oi == (TObjectInstance*)this) continue;
-        const char *tn = oi->GetTypeName();
-        if (!tn || stricmp(tn, "waypoint") != 0) continue;
-        int32_t d = ::Distance(search_center, oi->Pos());
-        if (d < best) { best = d; closest = oi; }
-    }
-
-    if (!closest)
-    {
-        wander_target = TSafeRef<TObjectInstance>{};
-        wander_commit = 0;
-        return nullptr;
-    }
-
-  // Fresh pick — commit.
-    wander_target = TSafeRef<TObjectInstance>(closest);
-    wander_commit = COMMIT_FRAMES;
-    return closest;
 }
 
 // REVSYNC: Hearing @ 0x004cda80 (slot 0x2e0) -- 0 beyond HEARINGRANGE (the
