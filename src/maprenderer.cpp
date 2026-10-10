@@ -1519,9 +1519,15 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             std::memcpy(m.world, world_renderer, sizeof(m.world));
             m.tint[0] = m.tint[1] = m.tint[2] = 1.0f;
             m.tint[3] = draw_alpha;
-            // Untextured EFFECT faces use the authored material color.
-            // A white fallback surface supplies geometry, not white diffuse.
-            if (oi->ObjClass() == OBJCLASS_EFFECT && meshimg->NumTextures() == 0)
+            // Actual software D3DVERTEX56eb30/Illuminate56ed9d supplies normal
+            // light without material diffuse. Admit only these audited roots;
+            // the earlier diffuse-fed fixture was not that native producer.
+            const bool retail_untextured_normal = oi->ObjClass() == OBJCLASS_EFFECT &&
+                Renderer->UsesRetailSoftwareMeshLighting() && meshimg->NumTextures() == 0 && (oi->ObjId() == 0xad92bc10u ||
+                oi->ObjId() == 0xad92bc37u || oi->ObjId() == 0xad92bc38u);
+            if (retail_untextured_normal)
+                m.retail_lighting = 1;
+            else if (oi->ObjClass() == OBJCLASS_EFFECT && meshimg->NumTextures() == 0)
             {
                 SHelperMeshSubmit material = {};
                 LoadObjectMaterial(meshimg, asset.objnum, material);
@@ -1529,7 +1535,8 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 m.tint[3] *= draw_alpha;
             }
             m.obj_id = obj_id;
-            if (oi->ObjClass() == OBJCLASS_EFFECT) m.retail_lighting = (immortalmight_base || fmastery_base) ? 1 : asset.retail_lighting;
+            if (oi->ObjClass() == OBJCLASS_EFFECT && !retail_untextured_normal)
+                m.retail_lighting = (immortalmight_base || fmastery_base) ? 1 : asset.retail_lighting;
             m.retail_positive_face_cull = (IsRetailKinSecretDoorStill(oi, meshimg) && asset.objnum == 0) ||
                                           IsRetailPunchAndJudy(oi, meshimg) || immortalmight_base || fmastery_base;
             // Query immutable authored tags with this live instance's state/frame.

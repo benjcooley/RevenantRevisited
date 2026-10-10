@@ -1,5 +1,12 @@
 # Speaker: bounded generic-mesh comparison
 
+2026-10-10 correction: the diffuse-fed material fixture below remains a bounded
+frontend proof. The actual original untextured software vertex producer ignores
+material diffuse and supplies normal-lit grayscale; the current map route now
+uses that policy only in source-software mode. See the
+[current visual batch](SMALL_FAMILY_VISUAL_BATCH_20261010.md) for the causal
+correction and actual Metal/native pair. No audio or full-scene credit follows.
+
 The shipped `speaker` EFFECT (`0xad92bc10`) now has a passing thin-emulator comparison for its complete constant root mesh, material decoding, and software pixels. This is one bounded frontend result, not full gameplay, lighting, audio, or device acceptance. No game source correction was needed.
 
 ## Exact admission

@@ -1,0 +1,497 @@
+{
+  "status": "scoped_visual_batch_pass",
+  "date": "2026-10-10",
+  "types": 9,
+  "typed_observations": 90,
+  "actual_gpu_frames": 144,
+  "paired_inspection_samples": 36,
+  "cases": [
+    {
+      "name": "TeleportDoorInsideO",
+      "id": "0xad92bc29",
+      "asset": "Magic/WarpO.I3D",
+      "asset_sha256": "8f04e17b51636cad5195592fdac1c3ed70c0092edab2e351d589f10a1cf0f34e",
+      "status": "scoped_visual_pass",
+      "inspection": "Orange cloudy portal/perimeter and alpha floor integration.",
+      "manual_reviewer": "lane1 individually inspected own final original/native vs actual Metal sheet",
+      "pair_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideO/pair-manifest.json",
+        "sha256": "c10e483819fc54c1ad5cd5f0e01e84069bc4f48731f25c9365c73d53f241c346"
+      },
+      "capture_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideO/modern/manifest.json",
+        "sha256": "52edeb8c8f6dfcf10331b08e13ad13ad1b74ebdb5290f2ab57277e963242bfc7"
+      },
+      "sheet": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideO/same-floor-native-modern-sheet.png",
+        "sha256": "87c378fbbb6d99cd6656af70846e3b03fee7cae56646e94077dfde1bca5e7516"
+      },
+      "map_observations": 10,
+      "map_frames": 16,
+      "stationary_distinct": 4,
+      "floor_restored": true,
+      "bounds": {
+        "native_in_modern_viewport": [
+          268,
+          64,
+          369,
+          195
+        ],
+        "modern": [
+          269,
+          57,
+          369,
+          195
+        ]
+      },
+      "source_policy": "original custom UV/alpha texture raster with explicit white31 input",
+      "full_acceptance": false,
+      "exact_device_parity": false,
+      "independent_root_review": "passed overall appearance for recorded source-software configuration"
+    },
+    {
+      "name": "TeleportDoorInsideP",
+      "id": "0xad92bc30",
+      "asset": "Magic/WarpP.I3D",
+      "asset_sha256": "680379069432189e9a05c5cb92cf417c7a194feed37b1951cb90264bf631f391",
+      "status": "scoped_visual_pass",
+      "inspection": "Purple cloudy portal/perimeter and alpha floor integration.",
+      "manual_reviewer": "lane1 individually inspected own final original/native vs actual Metal sheet",
+      "pair_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideP/pair-manifest.json",
+        "sha256": "cd1b998658568dc5386491e368f66e30e72e3ebf1666dac3b80028778352db67"
+      },
+      "capture_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideP/modern/manifest.json",
+        "sha256": "8fae49ed2de1f4245c0fdbc80e12bcd6d70803c007bb93b5b6c3966a6604d528"
+      },
+      "sheet": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideP/same-floor-native-modern-sheet.png",
+        "sha256": "6b7a3c76a3adbff2cad9913ab25edc57c23e646b83890df5ced17cb72ec9e3a6"
+      },
+      "map_observations": 10,
+      "map_frames": 16,
+      "stationary_distinct": 4,
+      "floor_restored": true,
+      "bounds": {
+        "native_in_modern_viewport": [
+          268,
+          64,
+          369,
+          195
+        ],
+        "modern": [
+          269,
+          57,
+          369,
+          195
+        ]
+      },
+      "source_policy": "original custom UV/alpha texture raster with explicit white31 input",
+      "full_acceptance": false,
+      "exact_device_parity": false,
+      "independent_root_review": "passed overall appearance for recorded source-software configuration"
+    },
+    {
+      "name": "TeleportDoorInsideR",
+      "id": "0xad92bc31",
+      "asset": "Magic/WarpR.I3D",
+      "asset_sha256": "f8ca877ffeffb67fd571ec9044c4b6636dcd3c638356d0d8e4747e83c4c94d66",
+      "status": "scoped_visual_pass",
+      "inspection": "Red cloudy portal/perimeter and alpha floor integration.",
+      "manual_reviewer": "lane1 individually inspected own final original/native vs actual Metal sheet",
+      "pair_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideR/pair-manifest.json",
+        "sha256": "c0c96a6d1387c992947fe996de084063e126c7815aaa091d41dd4fdeae504669"
+      },
+      "capture_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideR/modern/manifest.json",
+        "sha256": "6f3531f69a127b1ec17d67b3d98ecad81f2ef40f36a1f6add7a8174465230870"
+      },
+      "sheet": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideR/same-floor-native-modern-sheet.png",
+        "sha256": "519b4d171259884dc962ee7e1c1b44414e84a75578349890c097b6fcdeb98995"
+      },
+      "map_observations": 10,
+      "map_frames": 16,
+      "stationary_distinct": 4,
+      "floor_restored": true,
+      "bounds": {
+        "native_in_modern_viewport": [
+          268,
+          64,
+          369,
+          195
+        ],
+        "modern": [
+          269,
+          57,
+          369,
+          195
+        ]
+      },
+      "source_policy": "original custom UV/alpha texture raster with explicit white31 input",
+      "full_acceptance": false,
+      "exact_device_parity": false,
+      "independent_root_review": "passed overall appearance for recorded source-software configuration"
+    },
+    {
+      "name": "TeleportDoorInsideW",
+      "id": "0xad92bc32",
+      "asset": "Magic/WarpW.I3D",
+      "asset_sha256": "e4efcf96b48ffed4c601d271bda6926bd1c7f67389de5459f51035c463022d96",
+      "status": "scoped_visual_pass",
+      "inspection": "White cloudy portal/perimeter and alpha floor integration.",
+      "manual_reviewer": "lane1 individually inspected own final original/native vs actual Metal sheet",
+      "pair_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideW/pair-manifest.json",
+        "sha256": "1478f18188f056b203bc5559d872928c31541bfce0b1f9334b635e5ed369cc6b"
+      },
+      "capture_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideW/modern/manifest.json",
+        "sha256": "bb31aa72e060e4de5bc59e74b73f32fbe3346c7339cc9af8c2e7daa3060b093a"
+      },
+      "sheet": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideW/same-floor-native-modern-sheet.png",
+        "sha256": "bd2def86c6002bbe75ff0ca66063821f800b716dcd0be72424d84af9fbb72c92"
+      },
+      "map_observations": 10,
+      "map_frames": 16,
+      "stationary_distinct": 4,
+      "floor_restored": true,
+      "bounds": {
+        "native_in_modern_viewport": [
+          268,
+          64,
+          369,
+          195
+        ],
+        "modern": [
+          269,
+          57,
+          369,
+          195
+        ]
+      },
+      "source_policy": "original custom UV/alpha texture raster with explicit white31 input",
+      "full_acceptance": false,
+      "exact_device_parity": false,
+      "independent_root_review": "passed overall appearance for recorded source-software configuration"
+    },
+    {
+      "name": "TeleportDoorInsideY",
+      "id": "0xad92bc33",
+      "asset": "Magic/WarpY.I3D",
+      "asset_sha256": "63e48d799e3daa058e57bab26d1d71e70dc9a5b0ac58cb3766fa98e608bd7e4d",
+      "status": "scoped_visual_pass",
+      "inspection": "Yellow cloudy portal/perimeter and alpha floor integration.",
+      "manual_reviewer": "lane1 individually inspected own final original/native vs actual Metal sheet",
+      "pair_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideY/pair-manifest.json",
+        "sha256": "4fcfd7ee0aa01c80754cd50cd9df6814a952c949fe60139a0f1f99b532659b0b"
+      },
+      "capture_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideY/modern/manifest.json",
+        "sha256": "5e29bb00479afef037aadde16c942b359dbf1d1643720c6c2d62e04ad876e980"
+      },
+      "sheet": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideY/same-floor-native-modern-sheet.png",
+        "sha256": "323f05d00d2d073af35bf5c09867dbe62d0ef7420c0d6b0f7364d2bfa58a3d8f"
+      },
+      "map_observations": 10,
+      "map_frames": 16,
+      "stationary_distinct": 4,
+      "floor_restored": true,
+      "bounds": {
+        "native_in_modern_viewport": [
+          268,
+          64,
+          369,
+          195
+        ],
+        "modern": [
+          269,
+          57,
+          369,
+          195
+        ]
+      },
+      "source_policy": "original custom UV/alpha texture raster with explicit white31 input",
+      "full_acceptance": false,
+      "exact_device_parity": false,
+      "independent_root_review": "passed overall appearance for recorded source-software configuration"
+    },
+    {
+      "name": "TeleportDoorInsideG",
+      "id": "0xad92bc34",
+      "asset": "Magic/WarpG.I3D",
+      "asset_sha256": "916432dceb4f4fe5571530601c818338442145357f8fcfc15551444bc27446b2",
+      "status": "scoped_visual_pass",
+      "inspection": "Green cloudy portal/perimeter and alpha floor integration.",
+      "manual_reviewer": "lane1 individually inspected own final original/native vs actual Metal sheet",
+      "pair_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideG/pair-manifest.json",
+        "sha256": "d9ce23d0d75c4631de956fa95d40a670cb3deb50e05f2bd65b1d893a885eb1a0"
+      },
+      "capture_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideG/modern/manifest.json",
+        "sha256": "e9b5bc2cec2d482a53751d67f67336668594f9e1f2c262b922df8f4f60d7c8a2"
+      },
+      "sheet": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/TeleportDoorInsideG/same-floor-native-modern-sheet.png",
+        "sha256": "0fc5643ab9a5cb733b30203d45c8e10ef5ed1f43c1dfa01b97c75873abc90a69"
+      },
+      "map_observations": 10,
+      "map_frames": 16,
+      "stationary_distinct": 4,
+      "floor_restored": true,
+      "bounds": {
+        "native_in_modern_viewport": [
+          268,
+          64,
+          369,
+          195
+        ],
+        "modern": [
+          269,
+          57,
+          369,
+          195
+        ]
+      },
+      "source_policy": "original custom UV/alpha texture raster with explicit white31 input",
+      "full_acceptance": false,
+      "exact_device_parity": false,
+      "independent_root_review": "passed overall appearance for recorded source-software configuration"
+    },
+    {
+      "name": "speaker",
+      "id": "0xad92bc10",
+      "asset": "Misc/speaker.i3d",
+      "asset_sha256": "a0255572172177816cdaf3f81185ef7d398df7063faf0c5d5db33547e8f42949",
+      "status": "scoped_visual_pass",
+      "inspection": "Grayscale faceted cylinder matches actual normal-lit native producer; old solid white/green fixture divergence corrected.",
+      "manual_reviewer": "lane1 individually inspected own final original/native vs actual Metal sheet",
+      "pair_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/speaker/pair-manifest.json",
+        "sha256": "b924887a45ff6f96de5ea1c0c56b5d062d13c87950f1f50a6460ee72c9458ae4"
+      },
+      "capture_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/speaker/modern/manifest.json",
+        "sha256": "ff4af2c095f3e369737c4d5a8791e7d9766cd6d013230a0f24e07b7cffd6642e"
+      },
+      "sheet": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/speaker/same-floor-native-modern-sheet.png",
+        "sha256": "908957c7cf4e2e4126713625ce04f7d3ce9f9648c96ac8f19f98070893268722"
+      },
+      "map_observations": 10,
+      "map_frames": 16,
+      "stationary_distinct": 1,
+      "floor_restored": true,
+      "bounds": {
+        "native_in_modern_viewport": [
+          303,
+          146,
+          336,
+          169
+        ],
+        "modern": [
+          304,
+          144,
+          336,
+          168
+        ]
+      },
+      "source_policy": "original normal-lit56eb30 no diffuse inputs",
+      "full_acceptance": false,
+      "exact_device_parity": false,
+      "independent_root_review": "passed overall appearance for recorded source-software configuration"
+    },
+    {
+      "name": "LabGateBarrierS",
+      "id": "0xad92bc37",
+      "asset": "Misc/IBarrier1.I3D",
+      "asset_sha256": "aee3ba4debae7894ae093a8047e03491b7e2b2eb22275a85ad0048fca354fb91",
+      "status": "scoped_visual_pass",
+      "inspection": "Gray S card matches actual native normal-lit plane; old diffuse-red software route corrected.",
+      "manual_reviewer": "lane1 individually inspected own final original/native vs actual Metal sheet",
+      "pair_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/LabGateBarrierS/pair-manifest.json",
+        "sha256": "aa951c3c1dd9752b691cd1b582b89116c828074fcee83129d5b7325c36411c8f"
+      },
+      "capture_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/LabGateBarrierS/modern/manifest.json",
+        "sha256": "d957fc3c0fa51a7ee5aee38194eefd8ace95207361c183ec8f2591c30d28b6a8"
+      },
+      "sheet": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/LabGateBarrierS/same-floor-native-modern-sheet.png",
+        "sha256": "cd8064e69b5f2267df240b7fcb64fa61ecd6c772e051717ab0c29ca0948ac8be"
+      },
+      "map_observations": 10,
+      "map_frames": 16,
+      "stationary_distinct": 1,
+      "floor_restored": true,
+      "bounds": {
+        "native_in_modern_viewport": [
+          275,
+          148,
+          364,
+          192
+        ],
+        "modern": [
+          277,
+          147,
+          363,
+          191
+        ]
+      },
+      "source_policy": "original normal-lit56eb30 no diffuse inputs",
+      "full_acceptance": false,
+      "exact_device_parity": false,
+      "independent_root_review": "passed overall appearance for recorded source-software configuration"
+    },
+    {
+      "name": "LabGateBarrierE",
+      "id": "0xad92bc38",
+      "asset": "Misc/IBarrier2.I3D",
+      "asset_sha256": "782a2fc0a2f0ffe3fe0811df78dcd39752603ced7df6213ec5bdceb1b8439718",
+      "status": "scoped_visual_pass",
+      "inspection": "Gray E card matches actual native normal-lit plane; old diffuse-red software route corrected.",
+      "manual_reviewer": "lane1 individually inspected own final original/native vs actual Metal sheet",
+      "pair_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/LabGateBarrierE/pair-manifest.json",
+        "sha256": "c8b9b58558509b0dee3ee31db8a14be2050b38c7d4c324a6f364217e97d12ac4"
+      },
+      "capture_manifest": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/LabGateBarrierE/modern/manifest.json",
+        "sha256": "0f957a10b3d227645e66ff88a87fee1e355e647061f6b906031ed7af2803342e"
+      },
+      "sheet": {
+        "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/LabGateBarrierE/same-floor-native-modern-sheet.png",
+        "sha256": "2b0e5c6c87dda47385f92435a3af9051ec41993d1aedaf95da17ed1a16299f13"
+      },
+      "map_observations": 10,
+      "map_frames": 16,
+      "stationary_distinct": 1,
+      "floor_restored": true,
+      "bounds": {
+        "native_in_modern_viewport": [
+          275,
+          148,
+          364,
+          192
+        ],
+        "modern": [
+          277,
+          147,
+          363,
+          191
+        ]
+      },
+      "source_policy": "original normal-lit56eb30 no diffuse inputs",
+      "full_acceptance": false,
+      "exact_device_parity": false,
+      "independent_root_review": "passed overall appearance for recorded source-software configuration"
+    }
+  ],
+  "binary": {
+    "path": "/Users/benjamincooley/projects/RevenantRevisited/worktrees/vfx-visual-batch-20261010/build-merge/Revenant",
+    "sha256": "9c3fe0ab1f014ce5ea22485bc32a89a478535021f275e6eb17344a02cb763a7d"
+  },
+  "batch_manifest": {
+    "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/family-visual-batch-final/manifest.json",
+    "sha256": "eac60cabde17a854460057ddb612e0caa703c3cfb3a0c4ec6d82ea1b36c25ee3"
+  },
+  "fixture_module": {
+    "path": "/Users/benjamincooley/RevenantRetailLab/captures/runtime-fixtures/fountain-command-20261004/data/Modules/FontRuntimeLab.rvm",
+    "sha256": "69329e35e021051d9e45dbeeb8df15daa723444a4d3c30a55e5c62d838f644d7"
+  },
+  "original_executable": {
+    "path": "/Users/benjamincooley/projects/RevenantRevisited/RevenantRevisited/recon/retail_asm/baseline/Revenant.rebuilt.exe",
+    "sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5"
+  },
+  "source_files": {
+    "src/maprenderer.cpp": "3b81ea99bd0c50277e00ef4b5660a18b9b236e9d384113d1763959aeeb7bf041",
+    "src/renderer.h": "3e6abd013038168f776af403a8dfd10540fcfa61ee766217e372224919c5393b",
+    "tools/test_map_texture_submission.py": "b1dde8168998b256f434c6dad9365a69591fc54b54a066006b557790b6637192",
+    "tools/retail_runtime/family_visual_review.py": "f5701277b57f080d4010faa664883f50360ed383b6df70018331f407e11269a6",
+    "tools/retail_runtime/lit_software_probe.py": "bbe52d0baf81fc02bf8843dca941d6d6d2e7a40aabb294be46a4f81b9c939a52"
+  },
+  "shared_native_fixture_commit": "4500135",
+  "tested_configuration": {
+    "module": "FontRuntimeLab",
+    "camera": [
+      110,
+      10000,
+      10000,
+      16
+    ],
+    "ambient": [
+      32,
+      255,
+      255,
+      255
+    ],
+    "cadence_hz": 24,
+    "seed": 1,
+    "warmup_frames": 1,
+    "modern_viewport": [
+      640,
+      340
+    ],
+    "native_viewport": [
+      512,
+      512
+    ],
+    "source_lighting_mode": 0,
+    "source_rgb_enabled": true,
+    "point_lights": 0,
+    "native_ambient_rgb": [
+      38,
+      38,
+      38
+    ],
+    "native_directional_rgb": [
+      1,
+      1,
+      1
+    ],
+    "ambient3d_ini_percent": 130,
+    "directional_ini_percent": 85
+  },
+  "source_correction": {
+    "exact_ids": [
+      "0xad92bc10",
+      "0xad92bc37",
+      "0xad92bc38"
+    ],
+    "effect_class_only": true,
+    "untextured_only": true,
+    "policy": "Classicmode0 AND source RGB enabled: white tint+existing normal-prelit1. Modern/point-light fallback keeps prior material/alpha behavior.",
+    "causal_native": "Original56eb30 authored normal transform/Illuminate56ed9d/raster ignores material diffuse."
+  },
+  "validation": {
+    "build": "Own Release/Metal build-merge max-j4 passed",
+    "compiled_actual_map_test": "passed: exact3 IDs, modern mode, positional fallback, unknownID/class/textured negatives, alpha, immutable texture batches",
+    "whitespace": "git diff --check passed"
+  },
+  "known_losses": [
+    "All six Warp current apex7px higher,138vs131 height~5.3%, no fitting.",
+    "Speaker/barrier edge bounds differ by\u22642px; normal/backend/raster exactness remains open.",
+    "Native barriers RGB(189,186,189) vs modern(189,189,189): retained3green quantization difference, no brightness fit."
+  ],
+  "prior_partial_inputs": "Initial family-visual-batch-current diffuse-fed Speaker/barrier references are diagnostic material fixtures, not actual native software appearance.",
+  "not_claimed": [
+    "Original retail map floor/background",
+    "Saved barrier natural visibility or teleport trigger/story",
+    "Ambient speaker sound/caller",
+    "Positional-light selection",
+    "Exact geometry/device pixels",
+    "Full effect acceptance"
+  ],
+  "root_review_complete": true,
+  "reviewers": [
+    "lane1 individually inspected all nine final sheets",
+    "root independently inspected all nine final Warp/untextured contacts"
+  ]
+}
