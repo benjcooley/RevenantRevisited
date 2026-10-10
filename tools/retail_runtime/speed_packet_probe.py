@@ -111,7 +111,12 @@ def run(executable,archive,output):
     q=subprocess.run(command,capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr)
     if q.returncode:raise RuntimeError('Actual SubmitPartSys compile failed; see compile.log')
     inputs=struct.pack('<i',90)+bytes.fromhex(asset['objects'][2]['vertex_hex'])
-    for p in native['poses']:inputs+=struct.pack('<i22f',p['frame'],*p['position'],*p['scale'],*p['matrix'])
+    from buff_base_lighting_probe import compile_matrices
+    emitter_output=output/'independent-emitter';emitter_output.mkdir()
+    emitter_matrices,emitter_compiled=compile_matrices(emitter_output,asset,'speed')
+    for tick in range(90):
+        frame=tick%asset['state0_frames'];pose=emitter_matrices[frame]
+        inputs+=struct.pack('<i22f',frame,*pose['position'],*pose['scale'],*pose['emitter'])
     (output/'inputs.bin').write_bytes(inputs)
     tag=next(t['parameters']for t in asset['tags']if t['name']=='partsys')
     q=subprocess.run([str(binary),tag,str(output/'inputs.bin')],capture_output=True,text=True)
@@ -224,10 +229,11 @@ def run(executable,archive,output):
         centre_oracle='Compiled rawZ vsactualnative particle rawZ; original4027e8..40281f x87FIX/store '
             'executes withcompiledrawZ input and is comparedtoseparatelyretained nativeRenderSample MODELZ. No PythonFIX formula.',
         pairs=pairs,compiled_SubmitPartSys_sha256=sha(body.encode()),asset_sha256=asset['sha256'],
+        independent_production_emitter=emitter_compiled,
         generated_source_sha256=sha(cpp.encode()),binary_sha256=sha(binary.read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),
         accepted=False,full_game_integration=False,metal_backend_compared=False,
         scope='Actual compiled parser/State/SubmitPartSys against native whole parser/Initialize/Pulse/liveSample/#CalcObjectMatrix/x87transform; '
-            'exact native-authored emitter poses common inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; '
+            'independent production integer decoder/SpeedEmitterLocalMatrix from shipped keys, without native pose inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; '
             'raw-world portZ compared via declared MODELZ bridge using actual native sample centre. Shared original software '
             'projector/raster used at fixed512white/color fixture; no actual map/Metal projector, base material lighting/caster/full acceptance.')
     (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n')

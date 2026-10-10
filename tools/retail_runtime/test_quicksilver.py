@@ -32,7 +32,10 @@ class QuicksilverTests(unittest.TestCase):
             self.assertEqual(pair['differing_rgb565_pixels'],0)
             self.assertTrue(pair['depth_equal'])
             self.assertEqual(pair['image_sha256'][0],pair['image_sha256'][1])
-        self.assertEqual(result['max_native_FIX_centre_error'],0)
+        # Independent production emitter matrix arithmetic can differ from x87
+        # by an ULP; keep the existing native geometry contract's 3e-6 bound.
+        self.assertIn('keys_sha256',result['independent_production_emitter'])
+        self.assertLess(result['max_native_FIX_centre_error'],3e-6)
         self.assertFalse(result['metal_backend_compared'])
         self.assertFalse(result['accepted'])
 
