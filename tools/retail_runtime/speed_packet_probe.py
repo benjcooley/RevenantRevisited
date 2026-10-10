@@ -47,7 +47,8 @@ struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};SFxBatch
  uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
 struct S3DVertex{hmm_vec3 pos,normal;float tu,tv;};
 struct Owner{uint32_t ObjId()const{return 0xad92bd36u;}int GetState()const{return 0;}};
-struct Imagery{bool HasRetailMightPartSysProfile()const{return false;}
+struct Imagery{bool HasRetailStaticParticleProfile(uint32_t)const{return false;}
+ bool HasRetailMightPartSysProfile()const{return false;}
  bool HasRetailImmortalmightPartSysProfile()const{return false;}
  bool HasRetailFmasteryPartSysProfile()const{return false;}
  bool speed_partsys_profile=true,quicksilver_partsys_profile=false;

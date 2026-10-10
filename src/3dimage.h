@@ -239,6 +239,8 @@ class T3DImagery : public TObjectImagery
     bool fmastery_partsys_profile = false;
     bool speed_partsys_profile = false;
     bool quicksilver_partsys_profile = false;
+    uint32_t static_particles_profile = 0;
+    uint32_t ValidateRetailStaticParticleProfile();
     bool ValidateRetailSpeedPartSysProfile();
     bool ValidateRetailQuicksilverPartSysProfile();
     bool ValidateRetailFmasteryPartSysProfile();
@@ -334,6 +336,8 @@ class T3DImagery : public TObjectImagery
     bool HasRetailFmasteryPartSysProfile() const { return fmastery_partsys_profile; }
     bool HasRetailSpeedPartSysProfile() const { return speed_partsys_profile; }
     bool HasRetailQuicksilverPartSysProfile() const { return quicksilver_partsys_profile; }
+    bool HasRetailStaticParticleProfile(uint32_t type_id) const
+    { return static_particles_profile!=0 && static_particles_profile==type_id; }
     bool HasRetailSpeedFamilyPartSysProfile(uint32_t type_id) const
     { return (type_id==0xad92bd36u && speed_partsys_profile) ||
              (type_id==0xad92bd35u && quicksilver_partsys_profile); }

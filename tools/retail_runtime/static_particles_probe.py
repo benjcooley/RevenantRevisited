@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exact Quicksilver compiled SubmitPartSys versus native sample/# geometry.
+"""Three exact static-emitter particle profiles versus native software geometry.
 
 The modern raw-world Z packet is compared in its declared original MODELZ
 domain. Shared original projection/raster can isolate frontend differences;
@@ -15,7 +15,9 @@ import subprocess
 import zipfile
 
 from speed_controller_preflight import NativeSpeed, ROOT, read_asset
-from speed_render_contract import punctuation
+from static_particles_profile_contract import PROFILES
+from unicorn.x86_const import UC_X86_REG_ECX
+
 from speed_state_compare import compare as compare_state
 from software_probe import save_rgb565_png
 from unicorn.x86_const import (UC_X86_REG_ESI,UC_X86_REG_EBX,UC_X86_REG_ESP,
@@ -47,21 +49,23 @@ struct SFxBatchKey{TTextureHandle texture=0;uint16_t pipeline_id=1;uint8_t blend
 struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};SFxBatchKey key;
  uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
 struct S3DVertex{hmm_vec3 pos,normal;float tu,tv;};
-struct Owner{uint32_t ObjId()const{return 0xad92bd35u;}int GetState()const{return 0;}};
-struct Imagery{bool HasRetailStaticParticleProfile(uint32_t)const{return false;}
+uint32_t type_id=0;
+struct Owner{uint32_t ObjId()const{return type_id;}int GetState()const{return 0;}};
+struct Imagery{uint32_t static_particles_profile=type_id;
+ STATIC_PROFILE_METHOD
  bool HasRetailMightPartSysProfile()const{return false;}
  bool HasRetailImmortalmightPartSysProfile()const{return false;}
  bool HasRetailFmasteryPartSysProfile()const{return false;}
- bool speed_partsys_profile=false,quicksilver_partsys_profile=true;
+ bool speed_partsys_profile=false,quicksilver_partsys_profile=false;
  bool HasRetailSpeedPartSysProfile()const{return false;}
  SPEED_FAMILY_METHOD
  bool HasCombatFlashStart1PartSysProfile()const{return false;}
- TTextureHandle GetTextureHandle(int index){if(index!=1)std::abort();return 1;}};
+ TTextureHandle GetTextureHandle(int index){if(index!=0)std::abort();return 1;}};
 struct TRenderer{std::vector<SQuadDrawItem>quads;void SubmitFxQuad(const SQuadDrawItem&q){quads.push_back(q);}};
 struct TTime{static int frame;static int FrameCount(){return frame;}};int TTime::frame=0;
 unsigned random_state=1;int random(int a,int b){random_state=random_state*214013u+2531011u;return a+((random_state>>16)&32767u)%(b-a+1);}
 struct T3DAnimator{struct SPartSysControllers{
- struct Track{int state=0,prototype=2,texture_slot=2;std::array<S3DVertex,4>vertices;};
+ struct Track{int state=0,prototype=0,texture_slot=1;std::array<S3DVertex,4>vertices;};
  struct Controller{Track track;authored_partsys::State simulation;int64_t last_render_frame=-1;};
  std::vector<Controller>controllers;bool unsupported=false;uint64_t renders=0,quads=0;};
  std::unique_ptr<SPartSysControllers>partsys_controllers;Owner*inst;Imagery im;
@@ -70,44 +74,72 @@ struct T3DAnimator{struct SPartSysControllers{
 constexpr float WORLD3D_Z_SCALE=1.5f;
 '''
 MAIN = r'''
-int main(int argc,char**argv){if(argc!=3)return 2;
- authored_partsys::Definition d;std::string diag;if(!authored_partsys::ParseDefinition(argv[1],d,diag))return 3;
- std::ifstream f(argv[2],std::ios::binary);int ticks;f.read((char*)&ticks,4);
+int main(int argc,char**argv){if(argc!=4)return 2;type_id=std::strtoul(argv[1],nullptr,0);
+ authored_partsys::Definition d;std::string diag;if(!authored_partsys::ParseDefinition(argv[2],d,diag))return 3;
+ std::ifstream f(argv[3],std::ios::binary);int ticks,emitters;f.read((char*)&ticks,4);f.read((char*)&emitters,4);
+ if(ticks!=90||emitters!=int(d.objects.size()))return 8;
  Owner owner;T3DAnimator a;a.inst=&owner;a.partsys_controllers=std::make_unique<T3DAnimator::SPartSysControllers>();
  a.partsys_controllers->controllers.emplace_back();auto&c=a.partsys_controllers->controllers[0];
- f.read((char*)c.track.vertices.data(),128);
- authored_partsys::TickInputs in;in.owner_position={0,0,0};in.has_object_zero_origin=true;in.object_zero_origin={0,0,-10};
- in.emitters.resize(1);in.ground_height=[](int,int,int){return 0;};TRenderer renderer;
- for(int tick=0;tick<ticks;++tick){f.read((char*)&in.animation_frame,4);auto&e=in.emitters[0];
- f.read((char*)e.position.data(),12);f.read((char*)e.scale.data(),12);f.read((char*)e.matrix.data(),64);
- for(int i=0;i<3;++i)e.origin[i]=e.matrix[12+i];if(tick==0&&!c.simulation.Initialize(d,in,0,diag))return 4;
+ authored_partsys::TickInputs in;in.owner_position={0,0,0};in.has_object_zero_origin=true;
+ f.read((char*)in.object_zero_origin.data(),12);f.read((char*)c.track.vertices.data(),128);
+ in.emitters.resize(emitters);in.ground_height=[](int,int,int){return 0;};TRenderer renderer;
+ for(int tick=0;tick<ticks;++tick){f.read((char*)&in.animation_frame,4);
+ for(auto&e:in.emitters){f.read((char*)e.position.data(),12);f.read((char*)e.scale.data(),12);f.read((char*)e.matrix.data(),64);for(int i=0;i<3;++i)e.origin[i]=e.matrix[12+i];}
+ if(tick==0&&!c.simulation.Initialize(d,in,0,diag))return 4;
  if(tick==60)in.owner_position={16,-8,4};TTime::frame=tick;renderer.quads.clear();
  c.simulation.Advance(in,[](int a,int b){return random(a,b);});
- int n=a.SubmitPartSys(renderer,2,2,{1,1,1});if(n!=int(renderer.quads.size()))return 5;
+ int n=a.SubmitPartSys(renderer,0,1,{1,1,1});if(n!=int(renderer.quads.size()))return 5;
  size_t q=0;for(size_t slot=0;slot<c.simulation.Capacity();++slot){const auto&p=c.simulation.Particles()[slot];if(!p.alive||p.scale<=9.999999747378752e-6f)continue;
  const auto&item=renderer.quads[q++];printf("%d %zu %.9g %d %d %d",tick,slot,p.position[2],int(item.key.blend),int(item.key.depth_mode),item.retail_texture);
  for(float v:item.color_rgba)printf(" %.9g",v);
  for(int corner=0;corner<4;++corner){for(float v:item.world_pos[corner])printf(" %.9g",v);for(float v:item.uv[corner])printf(" %.9g",v);}puts("");}
- if(a.SubmitPartSys(renderer,2,2,{1,1,1})!=0)return 6;
+ if(a.SubmitPartSys(renderer,0,1,{1,1,1})!=0)return 6;
  }
  return f?0:7;
 }
 '''
 
 
+
 def sha(data):return hashlib.sha256(data).hexdigest()
 
 
-def run(executable,archive,output,retain_draws=False):
+def registry(f):
+    v=f.vm;v.put_u32(0x5e872c,0);v.call(0x406160)
+    for row in f.dispatch['registrations']:v.call(int(row['call'],16)-10)
+    name=f.put_string(f.asset['name']);builder=v.call(0x40dca0,(name,))
+    if v.u32(0x5e872c)!=93 or builder!=0x5e8508 or v.u32(v.u32(builder))!=0x40dc00:
+        raise AssertionError('Complete native registry selects a different factory')
+    return dict(default_constructor='0x406160',complete_named_constructors=92,registry_count=93,
+        actual_builder=hex(builder),actual_factory=hex(v.u32(v.u32(builder))),actual_animator_vtable=hex(v.u32(f.animator)))
+
+
+def punctuation(f):
+    v=f.vm;sp=v.STACK+v.STACK_SIZE-0x1000
+    for index,o in enumerate(f.asset['objects']):
+        name=f.put_string(o['name']);obj=f.animobjs[index];v.put_u32(sp+0x1c,name)
+        v.uc.reg_write(UC_X86_REG_ESP,sp);v.uc.reg_write(UC_X86_REG_ECX,name);v.uc.reg_write(UC_X86_REG_EBX,obj)
+        v.uc.emu_start(0x409f61,0x409fe0,count=10000)
+        if v.uc.reg_read(UC_X86_REG_EIP)!=0x409fe0:raise AssertionError('Original punctuation did not finish')
+        if bool(v.u32(obj)&0x20000000)!=bool(index==0):raise AssertionError('Exact native camera-facing flags differ')
+
+
+def run(executable,archive,output,profile):
     output.mkdir(parents=True,exist_ok=True)
-    source_paths=('src/3dimage.cpp','src/3dimage.h','src/authoredpartsys.cpp','src/authoredpartsys.h','src/partsysdefinition.cpp','src/partsysdefinition.h','src/speedauthoredmatrix.h','src/goldauthoredmatrix.h','src/math3d.cpp','src/math3d.h')
+    source_paths=('src/3dimage.cpp','src/3dimage.h','src/staticpartsysprofiles.h','src/authoredpartsys.cpp','src/authoredpartsys.h','src/partsysdefinition.cpp','src/partsysdefinition.h','src/speedauthoredmatrix.h','src/goldauthoredmatrix.h','src/math3d.cpp','src/math3d.h')
     pinned={p:sha((ROOT/p).read_bytes())for p in source_paths}
     with zipfile.ZipFile(archive)as z:
-        member=next(n for n in z.namelist()if n.lower()=='imagery/magic/quicksilver.i3d');data=z.read(member)
-    asset=read_asset(data);asset['name']='quicksilver';
-    if asset['sha256']!='07c6a0a48c32d891ccd29367b12a882a4244a3eea004e4b06a7c2dee7aa609b4':raise ValueError('Exact shipped Quicksilver asset changed')
-    f=NativeSpeed(executable,asset);punctuation(f);initialization=json.loads(json.dumps(f.initialize(0)))
+        member=next(n for n in z.namelist()if n.lower()==('imagery/'+profile['asset']).lower());data=z.read(member)
+    asset=read_asset(data);asset['name']=profile['name']
+    if asset['sha256']!=profile['sha256']:raise ValueError('Exact shipped asset changed')
+    f=NativeSpeed(executable,asset);dispatch=registry(f);punctuation(f);initialization=json.loads(json.dumps(f.initialize(0)))
     native=f.state_trace(90)
+    first=sha(json.dumps(dict(rows=native['rows'],poses=native['poses']),separators=(',',':')).encode())
+    fresh=NativeSpeed(executable,asset);registry(fresh);punctuation(fresh);fresh.initialize(0)
+    replay=fresh.state_trace(90)
+    second=sha(json.dumps(dict(rows=replay['rows'],poses=replay['poses']),separators=(',',':')).encode())
+    if first!=second:raise AssertionError('Fresh native full-pool/pose replay changed')
+    del fresh,replay
     (output/'asset-triage.json').write_text(json.dumps([asset],indent=2)+'\n')
     (output/'native-init.json').write_text(json.dumps(initialization,indent=2)+'\n')
     (output/'retail-state-trace.json').write_text(json.dumps(native,indent=2)+'\n')
@@ -115,27 +147,25 @@ def run(executable,archive,output,retain_draws=False):
     if state_compare['status']!='pass':raise AssertionError('Full independent production state/RNG differs')
     production=(ROOT/'src/3dimage.cpp').read_text();body=fn(production,'int32_t T3DAnimator::SubmitPartSys(')
     family=fn((ROOT/'src/3dimage.h').read_text(),'bool HasRetailSpeedFamilyPartSysProfile(')
-    cpp=PRELUDE.replace('SPEED_FAMILY_METHOD',family)+'\n'+body+'\n'+MAIN
+    static_profile=fn((ROOT/'src/3dimage.h').read_text(),'bool HasRetailStaticParticleProfile(')
+    cpp=PRELUDE.replace('SPEED_FAMILY_METHOD',family).replace('STATIC_PROFILE_METHOD',static_profile)+'\n'+body+'\n'+MAIN
     source=output/'packet_driver.cpp';source.write_text(cpp);binary=output/'packet_driver'
     command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer',
         '-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(source),
         str(ROOT/'src/authoredpartsys.cpp'),str(ROOT/'src/partsysdefinition.cpp'),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
     q=subprocess.run(command,capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr)
     if q.returncode:raise RuntimeError('Actual SubmitPartSys compile failed; see compile.log')
-    inputs=struct.pack('<i',90)+bytes.fromhex(asset['objects'][2]['vertex_hex'])
-    from buff_base_lighting_probe import compile_matrices
-    emitter_output=output/'independent-emitter';emitter_output.mkdir()
-    emitter_matrices,emitter_compiled=compile_matrices(emitter_output,asset,'quicksilver')
-    for tick in range(90):
-        frame=tick%asset['state0_frames'];pose=emitter_matrices[frame]
-        inputs+=struct.pack('<i22f',frame,*pose['position'],*pose['scale'],*pose['emitter'])
+    inputs=struct.pack('<2i3f',90,len(native['poses'][0]['emitters']),*native['object_zero_initial_origin'])+bytes.fromhex(asset['objects'][0]['vertex_hex'])
+    for p in native['poses']:
+        inputs+=struct.pack('<i',p['frame'])
+        for e in p['emitters']:inputs+=struct.pack('<22f',*e['position'],*e['scale'],*e['matrix'])
     (output/'inputs.bin').write_bytes(inputs)
     tag=next(t['parameters']for t in asset['tags']if t['name']=='partsys')
-    q=subprocess.run([str(binary),tag,str(output/'inputs.bin')],capture_output=True,text=True)
+    q=subprocess.run([str(binary),profile['id'],tag,str(output/'inputs.bin')],capture_output=True,text=True)
     (output/'run.log').write_text(q.stderr);(output/'production-packets.csv').write_text(q.stdout)
     if q.returncode or q.stderr:raise RuntimeError('Actual SubmitPartSys execution failed')
     packets={(int(p[0]),int(p[1])):p for line in q.stdout.splitlines()if(p:=[float(x)for x in line.split()])}
-    v=f.vm;obj=f.animobjs[2];rawvertices=list(struct.iter_unpack('<8f',bytes.fromhex(asset['objects'][2]['vertex_hex'])))
+    v=f.vm;obj=f.animobjs[0];rawvertices=list(struct.iter_unpack('<8f',bytes.fromhex(asset['objects'][0]['vertex_hex'])))
     point=v.allocate(12);result=v.allocate(12);geometry_errors=[];max_corner=0;max_uv=0;draws={i:[]for i in range(90)}
     zero_scale_rejections=[];all_packets=0
     centre_errors=[];max_raw_centre_error=0;max_model_centre_error=0;centre_checks=0
@@ -207,7 +237,7 @@ def run(executable,archive,output,retain_draws=False):
         max_native_FIX_centre_error=max_model_centre_error,centre_errors=centre_errors,
         geometry_errors=geometry_errors,accepted=False),indent=2)+'\n')
     # No billboard or scaled stand-in. Decode the actual prototype texture.
-    u=lambda p:struct.unpack_from('<I',data,p)[0];r=lambda p:p+u(p);bo=20+u(16);tex=r(bo+40)+120
+    u=lambda p:struct.unpack_from('<I',data,p)[0];r=lambda p:p+u(p);bo=20+u(16);tex=r(bo+40)
     height,width=struct.unpack_from('<2I',data,tex+8);pixel=r(r(tex+108));texture=data[pixel:pixel+width*height*2]
     f.software.set_texture(width,height,texture,format='RGB565')
     # Canonical ONE/ONE RGB565 uses original carry/add tables. This bounded
@@ -241,7 +271,7 @@ def run(executable,archive,output,retain_draws=False):
         if differences or depths[0]!=depths[1] or not visible:pixel_errors.append(dict(tick=tick,differing_pixels=differences,visible=visible))
         pairs.append(dict(tick=tick,differing_rgb565_pixels=differences,visible_native_pixels=visible,depth_equal=depths[0]==depths[1],image_sha256=[sha(p)for p in images],depth_sha256=[sha(p)for p in depths],warm_replays=2))
     if pinned!={p:sha((ROOT/p).read_bytes())for p in source_paths}:raise AssertionError('Production source changed during comparison')
-    report=dict(source_sha256=pinned,full_state_comparisons=state_compare['comparisons'],full_state_errors=state_compare['error_count'],raster_replays_per_case=2,type_id='0xad92bd35',status='pass'if not geometry_errors and not pixel_errors and not centre_errors else'fail',geometry_errors=geometry_errors,
+    report=dict(native_dispatch=dispatch,fresh_native_state_replays=2,native_row_pose_sha256=[first,second],source_sha256=pinned,full_state_comparisons=state_compare['comparisons'],full_state_errors=state_compare['error_count'],raster_replays_per_case=2,name=profile['name'],type_id=profile['id'],status='pass'if not geometry_errors and not pixel_errors and not centre_errors else'fail',geometry_errors=geometry_errors,
         pixel_errors=pixel_errors,sampled_live_packets=all_packets,actual_native_draw_packets=sum(len(x)for x in draws.values()),
         native_zero_scale_rejections=zero_scale_rejections,max_corner_error=max_corner,max_uv_error=max_uv,
         independent_centre_checks=centre_checks,max_raw_centre_error=max_raw_centre_error,
@@ -249,23 +279,24 @@ def run(executable,archive,output,retain_draws=False):
         centre_oracle='Compiled rawZ vsactualnative particle rawZ; original4027e8..40281f x87FIX/store '
             'executes withcompiledrawZ input and is comparedtoseparatelyretained nativeRenderSample MODELZ. No PythonFIX formula.',
         pairs=pairs,compiled_SubmitPartSys_sha256=sha(body.encode()),asset_sha256=asset['sha256'],
-        independent_production_emitter=emitter_compiled,
         generated_source_sha256=sha(cpp.encode()),binary_sha256=sha(binary.read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),
         accepted=False,full_game_integration=False,metal_backend_compared=False,
         scope='Actual compiled parser/State/SubmitPartSys against native whole parser/Initialize/Pulse/liveSample/#CalcObjectMatrix/x87transform; '
-            'independent production integer decoder/SpeedEmitterLocalMatrix from shipped keys, without native pose inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; '
+            'exact native-authored emitter poses common inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; '
             'raw-world portZ compared via declared MODELZ bridge using actual native sample centre. Shared original software '
             'projector/raster used at fixed512white/color fixture; no actual map/Metal projector, base material lighting/caster/full acceptance.')
     (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n')
-    if retain_draws:
-        report['selected_frontend_draws']={tick:draws[tick] for tick in (5,15,29)}
-        report['independent_base_matrices']={frame:pose['base'] for frame,pose in emitter_matrices.items()}
     return report
 
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path)
     p.add_argument('--archive',type=Path,default=ROOT/'data/imagery.rvi');p.add_argument('--output',type=Path,required=True)
-    a=p.parse_args();result=run(a.executable,a.archive,a.output)
-    print(json.dumps({k:v for k,v in result.items()if k not in('geometry_errors','pairs','native_zero_scale_rejections')},indent=2))
-    if result['status']!='pass':raise SystemExit(1)
+    p.add_argument('--profiles',nargs='+',choices=[p['name']for p in PROFILES],default=[p['name']for p in PROFILES]);a=p.parse_args()
+    cases=[]
+    for profile in PROFILES:
+        if profile['name']not in a.profiles:continue
+        result=run(a.executable,a.archive,a.output/profile['name'],profile);cases.append(result)
+        print(json.dumps({k:result[k]for k in('name','status','full_state_comparisons','sampled_live_packets','actual_native_draw_packets','max_corner_error','max_uv_error','pixel_errors')},indent=2),flush=True)
+    (a.output/'manifest.json').write_text(json.dumps(dict(status='pass'if all(c['status']=='pass'for c in cases)else'fail',cases=[dict(name=c['name'],status=c['status'],manifest=str(a.output/c['name']/'manifest.json'))for c in cases],rendered_types=len(cases),accepted=False),indent=2)+'\n')
+    if any(c['status']!='pass'for c in cases):raise SystemExit(1)
