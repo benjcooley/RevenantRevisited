@@ -89,3 +89,19 @@ The static software mode3 pipeline now tests existing scene depth without writin
 it and renders both face directions. Warp's explicit helper depth policy is
 unchanged. This evidence establishes caller state and raster behavior, not a
 whole-scene lighting or pixel-identical GPU claim.
+
+Integrated source build (root5af4a39 plus the mode4 correction) passed. Fresh
+`hard-alpha/scene-mode4/` recordings cover all seven Ribbon types:16frames,
+10typed observations per type, clean exit and exact floor restoration. The
+retained three-column comparison shows the previously missing lower coil and
+colored halo restored by the native state correction. Retail AVI-derived frames,
+previous negative-control images and current Metal frames retain their own
+unmodified floors; all use the same fixed110x110 crop, no registration or fitting.
+Independent root review remains responsible for the central acceptance ledger.
+
+All28 Warp color/atlas comparisons were re-inspected against the unchanged
+original software references in `hard-alpha/warp-mode3-review/`. All seven
+colors preserve the cloudy perimeter, four atlas states and floor transparency
+under strict4444 decoding. The previously declared7px apex/projection difference
+remains; this is scoped appearance evidence, not exact device or original-scene
+acceptance. The native references use a declared RGB565-quantized modern floor.

@@ -48,7 +48,9 @@ class NativeAlphaSceneState(unittest.TestCase):
                         # outcomes of 409e5e..409eaf join mode4 at409eb1.
                         v.put_u32(materials+i*4,v.allocate(0x58))
                         texture=v.allocate(0x98)
-                        v.put_u32(texture+0x64,int(alpha))
+                        # DDSURFACEDESC.ddpfPixelFormat.dwRGBAlphaBitMask;
+                        # parse_parts pins all fourteen descriptors to0xf000.
+                        v.put_u32(texture+0x64,0xf000 if alpha else 0)
                         v.put_u32(textures+i*4,texture)
                         obj=v.call(0x409ca0,(i,0),this=imagery)
                         self.assertEqual(v.u32(obj+0x348),4 if alpha else 0)
