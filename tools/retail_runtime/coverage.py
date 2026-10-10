@@ -44,7 +44,7 @@ def generate(ledger_path=LEDGER,executable=BASELINE):
                 data=path.read_bytes();value=json.loads(data)
                 diffs=[]
                 def measured_pixels(case):
-                    for key in ('differing_rgb565_pixels','pixel_differences','different_pixels','color_different_bytes'):
+                    for key in ('differing_rgb565_pixels','pixel_differences','different_pixels','differing_pixels','color_different_bytes'):
                         if type(case.get(key)) is int:diffs.append(case[key])
                     for key in ('cases','poses','pairs'):
                         for child in case.get(key,[]):measured_pixels(child)
