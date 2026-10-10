@@ -62,54 +62,55 @@ class TCharacter : public TComplexObject
       // centre distance less this character's Radius and, for a character
       // target, its Radius; never below 0
     bool IsValidTarget(TCharacter* target);
-    void SetRunsAI(bool on) { if (on) charflags |= kCharFlagPlayerAI; else charflags &= ~kCharFlagPlayerAI; }
-      // A player's AI switch (retail charflags 0x100000; AI() gates on it)
       // REVSYNC: 0x004cd990 -- may `target` be fought: there, alive, not
       // invisible, within combat range, and the player only while he has
       // control or demo mode is on
+    void SetRunsAI(bool on) { if (on) charflags |= kCharFlagPlayerAI; else charflags &= ~kCharFlagPlayerAI; }
+      // A player's AI switch (retail charflags 0x100000; AI() gates on it)
 
+  // Retail A/B fixtures only (retailab_*.cpp; docs/gameplay/COMBAT_DOJO.md
+  // §6.3): when set, each answers its function in place of the world, as the
+  // retail fixture's seam at the same function does.
     using FindCharactersSeam = int32_t (*)(TCharacter* self, TCharacter* chars[], int32_t maxchars,
         int32_t range, int32_t angle, int32_t anglerange, int32_t flags);
     static inline FindCharactersSeam findCharactersSeam = nullptr;
+      // FindCharacters (retail 0x004cd690)
     using BlockedSeam = bool (*)(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, uint32_t bits,
         TCharacter** bychar);
     static inline BlockedSeam blockedSeam = nullptr;
-      // Likewise for Blocked (retail FindClearPath 0x004c39d0)
+      // Blocked (retail FindClearPath 0x004c39d0)
     using CanSeeSeam = bool (*)(TCharacter* self, TCharacter* chr, int32_t angle);
     static inline CanSeeSeam canSeeSeam = nullptr;
+      // CanSeeCharacter (retail 0x004cd540)
     using BlockSeam = bool (*)(TCharacter* self, int32_t frames);
     static inline BlockSeam blockSeam = nullptr;
-      // Likewise for Block (retail 0x004d2e30), which IsValidAttack calls on
-      // a target about to be hit glancingly
+      // Block (retail 0x004d2e30), which IsValidAttack calls on a target
+      // about to be hit glancingly
     using CastSeam = bool (*)(TCharacter* self, const char* spell, TObjectInstance** targets, int32_t numtargs,
         const S3DPoint* source);
     static inline CastSeam castSeam = nullptr;
+      // CastByName (retail SpellList::Find 0x0053f010 + Cast 0x004d5c20),
+      // which DoAttack calls for a MAGICATTACK
     using IsEnemySeam = bool (*)(TCharacter* self, TCharacter* other);
     static inline IsEnemySeam isEnemySeam = nullptr;
-      // Likewise for IsEnemy (retail 0x004c89c0)
+      // IsEnemy (retail 0x004c89c0)
     using BeginFightingSeam = bool (*)(TCharacter* self, TCharacter* target, ACTION action);
     static inline BeginFightingSeam beginFightingSeam = nullptr;
-      // Likewise for BeginFighting (retail 0x004d3b90)
+      // BeginFighting (retail 0x004d3b90)
     using DamageSeam = void (*)(TCharacter* self, int32_t damage, int32_t damagetype, int32_t modifier,
         TActionBlock* action, TCharacter* attacker);
     static inline DamageSeam damageSeam = nullptr;
-      // Likewise for Damage (retail 0x004c4950); the seam owns `action` as Damage does
+      // Damage (retail 0x004c4950); the seam owns `action` as Damage does
     using EffectBurstSeam = void (*)(TCharacter* self, const char* name, int32_t height);
     static inline EffectBurstSeam effectBurstSeam = nullptr;
-      // Likewise for EffectBurst (retail 0x004c85d0)
-      // Likewise for CastByName (retail SpellList::Find 0x0053f010 + Cast
-      // 0x004d5c20), which DoAttack calls for a MAGICATTACK
-      // Likewise for CanSeeCharacter (retail 0x004cd540)
+      // EffectBurst (retail 0x004c85d0)
     using KnockBackSeam = void (*)(TCharacter* self, const S3DPoint& from, int32_t variant);
     static inline KnockBackSeam knockBackSeam = nullptr;
-      // Likewise for KnockBack (retail 0x004d3750)
+      // KnockBack (retail 0x004d3750)
     using NearbyCharactersSeam = std::vector<TCharacter*> (*)(const S3DPoint& pos, int32_t range);
     static inline NearbyCharactersSeam nearbyCharactersSeam = nullptr;
-      // Likewise for the characters CharBlocking walks (retail's map iterator
-      // 0x0044ceb0 / 0x0044d080), in map order
-      // Retail A/B fixtures only (retailab_combat.cpp): when set, it answers
-      // FindCharacters instead of the map, as the retail fixture's seam at
-      // FindCharacters 0x004cd690 does (docs/gameplay/COMBAT_DOJO.md §6.3).
+      // The characters near a point that CharBlocking and FindCharacters
+      // walk (retail's map iterator 0x0044ceb0 / 0x0044d080), in map order
 
     bool IsAnimatorPermanent() const override { return true; }
         // Characters always own a TObjectAnimator from construction. See
@@ -564,12 +565,11 @@ class TCharacter : public TComplexObject
     virtual int32_t Visibility();
       // Returns the total visibility 1-100 for character (based on lights, ambient, and fog, etc.)
     virtual int32_t Hearing(int32_t dist);
-      // Returns a 1-100 hearing value which indicates how the average noise will be heard
-      // by a monster.  If the monster is sleeping, the listening value is 20% of normal.
+      // How well a noise `dist` away is heard: retail's is 100 within the
+      // hearing range, 0 beyond it (character.cpp)
     virtual int32_t Sight(int32_t dist);
-      // Returns a 1-100 sight value which indicates how the average char will be seen
-      // by a monster in the darkness.  If the monster is sleeping, the sight value
-      // is always 0.
+      // How well a character `dist` away is seen in the dark: retail's is 0
+      // or 1 within the sight range, 0 beyond it or asleep (character.cpp)
     virtual int32_t StealthMod() { return 0; }
       // Ordinary characters dont have stealth
     virtual int32_t LastGlimpse() { return glimpse; }
@@ -632,10 +632,9 @@ class TCharacter : public TComplexObject
       // Returns true if this character can hear the last noise made by 'chr'
     int32_t FindCharacters(TCharacter* chars[], int32_t maxchars, 
         int32_t range = 128, int32_t angle = -1, int32_t anglerange = 32, int32_t flags = 0);
-      // Finds characters given the above parameters.  Will find all chars in range from
-      // direction 'angle' if not -1 with angle range of 32.  Puts the closest character
-      // at the beginning of the list, all other characters are in random order.  Returns
-      // the number of characters found.
+      // The characters in range (FINDCHAR_* filters), from direction 'angle'
+      // within 'anglerange' when 'angle' isn't -1; the best placed at the
+      // head of the list, the rest in map order. Returns how many.
     TCharacter* FindCharacter(int32_t range = 128, int32_t angle = -1, int32_t anglerange = 32, int32_t flags = 0);
       // Calls the FindCharacters function above with only 1 character
       // Finds characters given the above parameters.  Will find all chars in range from

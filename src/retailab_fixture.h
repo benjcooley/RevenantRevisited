@@ -253,8 +253,12 @@ class IFixtureChar
     virtual int32_t RunResolver(const std::string& which, int32_t bits) = 0;
     virtual void RunUpdateAction(int32_t bits) = 0;
     virtual void RunComplexPulse() = 0;         // TComplexObject::Pulse (UpdateAction with the move bits)
+    virtual int32_t RunFindCharacters(TCharacter* chars[], int32_t maxchars, int32_t range, int32_t angle,
+                                      int32_t anglerange, int32_t flags) = 0;
     // What a move changes beyond the character dump ("motion").
     virtual void WriteMotion(JsonOut& j) = 0;
+    // The characters it remembers seeing (retail +0x1c0, MAXHASSEEN entries).
+    virtual SHasSeen* Memory() = 0;
 };
 
 // A TCharacter or TPlayer built from the case, without a class record or
@@ -325,6 +329,15 @@ class TFixtureChar : public Base, public IFixtureChar
         this->prevstate = (short)spec["prevstate"].Int(spec["state"].Int(0));
         this->glimpse = (int32_t)spec["glimpse"].Int();
         this->noise = (int32_t)spec["noise"].Int();
+        // Perception (kata M9b): the invisibility spell, a player's team
+        // (the memory, naming others, is the world's: SetMemory).
+        this->invisible_spell = spec["invisiblespell"].Bool();
+        if constexpr (std::is_base_of_v<TPlayer, Base>)
+        {
+            SPlayerTeamRecord team;
+            team.name = spec["team"].Str();
+            this->SetTeam(team);
+        }
         ReadAttackState(spec["attackstate"]);
         if constexpr (std::is_base_of_v<TPlayer, Base>)
         {
@@ -376,6 +389,12 @@ class TFixtureChar : public Base, public IFixtureChar
     int32_t ResolveCombatMove(int32_t bits) override { return Base::ResolveCombatMove(this->doing, bits); }
     void RunUpdateAction(int32_t bits) override { this->UpdateAction(bits); }
     void RunComplexPulse() override { this->TComplexObject::Pulse(); }
+    int32_t RunFindCharacters(TCharacter* chars[], int32_t maxchars, int32_t range, int32_t angle,
+                              int32_t anglerange, int32_t flags) override
+    {
+        return this->FindCharacters(chars, maxchars, range, angle, anglerange, flags);
+    }
+    SHasSeen* Memory() override { return this->hasseen; }
 
     void WriteMotion(JsonOut& j) override
     {
@@ -659,10 +678,18 @@ class TFixtureWorld
             names[chr] = name;
             order.push_back(chr);
         }
-        // Blocks after every character exists: a block's obj names one.
+        // Blocks and memories after every character exists: a block's obj
+        // names one, and so does each remembered entry ([name, frame,
+        // noautocombat]).
         const auto& specs = cs["chars"].Items();
         for (size_t i = 0; i < specs.size(); ++i)
+        {
             SetBlocks(order[i], specs[i]);
+            SHasSeen* memory = fixtures[order[i]]->Memory();
+            const auto& seen = specs[i]["hasseen"].Items();
+            for (size_t e = 0; e < seen.size() && e < MAXHASSEEN; ++e)
+                memory[e] = SHasSeen{Get(seen[e][0].Str()), (int32_t)seen[e][1].Int(), seen[e][2].Bool()};
+        }
     }
 
     IFixtureChar* Fixture(const TCharacter* c) const { return fixtures.at(c); }
@@ -674,6 +701,24 @@ class TFixtureWorld
         if (it == byname.end())
             throw std::runtime_error("no character '" + name + "' in the case");
         return it->second;
+    }
+
+    // A character's memory as compared ("memory"): each entry's character
+    // (null when empty), frame and no-autocombat flag.
+    void WriteMemory(JsonOut& j, TCharacter* c) const
+    {
+        j.Key("memory").Begin('[');
+        const SHasSeen* memory = Fixture(c)->Memory();
+        for (int32_t e = 0; e < MAXHASSEEN; ++e)
+        {
+            j.Begin('[');
+            if (memory[e].chr)
+                j.String(NameOf(memory[e].chr));
+            else
+                j.Null();
+            j.Value(memory[e].time).Value(memory[e].noautocombat ? 1 : 0).End(']');
+        }
+        j.End(']');
     }
 
     std::string NameOf(const TObjectInstance* o) const

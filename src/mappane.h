@@ -487,6 +487,11 @@ class TMapPane : public TPane
         // any of them has no walkmap (hole)
     bool LineOfSight(S3DPoint& pos, S3DPoint& to, S3DPoint* obst = nullptr);
         // Returns line of sight flags for line between positions
+    using LineOfSightSeam = bool (*)(const S3DPoint& from, const S3DPoint& to);
+    static inline LineOfSightSeam lineOfSightSeam = nullptr;
+        // Retail A/B fixtures only: when set, it answers LineOfSight, as the
+        // retail fixture's seam at 0x004533d0 does (CanSeeCharacter's, from
+        // eye to eye; docs/gameplay/COMBAT_DOJO.md §6.3)
     void CalculateWalkmap();
         // Call to recalculate the walkmap for the current sector
     void AdjustWalkmap(int32_t deltaz, bool absolute = false, bool nonzero = false);

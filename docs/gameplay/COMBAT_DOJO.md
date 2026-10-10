@@ -72,6 +72,7 @@ only).
 | M7 | displacement: Move / MoveStep (velocity, blocking, shove), FindClearPath, CharBlocking, GetWalkHeight / GetWalkHeightRadius | `0x4c46d0` `0x4c3bc0`, TPlayer `0x518df0`, `0x4c39d0` `0x4d4db0` `0x452e10` `0x4530a0` | `TCharacter::Move`, `MoveStep`, `Blocked`, `CharBlocking`, `TMapPane::GetWalkHeight*` | [x] 786/786 (`combat-move`; six mutations caught) |
 | M8 | orbit sequence: N ticks of Go → Pulse (UpdateAction) → Move → SetObjectMotion → frame → NextFrame, with SetState / ResetState / T3DImagery::SetObjectMotion / NextFrame as original over motion tables; walking, strafing round a target, a monster curving, walls, loop / ping-pong / reverse roots | `0x490bd0` order; `0x46f250` `0x46f1e0` `0x40cd20` `0x40cc40` `0x470cc0` | the tick, `TObjectInstance::SetState` / `NextFrame`, `T3DImagery::SetObjectMotion` | [~] 32/32 sequences, ~1,500 ticks (`combat-sequence`); motion tables synthetic, real I3D motion next |
 | M9 | AI combat movement: approach, combat range, retreat, wander | `0x4c8b60`, `0x4c9790` | `TCharacter::AI` | [ ] |
+| M9b | perception: IsEnemy, CanSeeCharacter, FindCharacters (hearing inlined), Hearing, Sight, HasSeenMe / SetHasSeen, the map iterator's characters | `0x4c89c0` `0x4cd540` `0x4cd690` `0x4cda80` `0x4cdb30` `0x4c58f0` `0x4c5940` | same | [x] 1007/1007 (`combat-perceive`; nine mutations caught); the line of sight `0x4533d0` is the case's on both sides (its own kata open) |
 | M10 | leap, side step, knock back, pivot, stop | `0x4d2be0` `0x4d6220` `0x4d3750` `0x4c8470` `0x4cee70` | same | [~] SideStep, Leap, StartRetreat `0x4d5fc0`, KnockBack: 482/482 (`combat-steps`; five mutations caught); Stop in M6; Pivot `0x4c8470` open |
 
 ### C — melee
@@ -319,6 +320,39 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
     flash (+0x224) to 5, and force an IMPACT with priority. The port played
     `cimpk` every time and faced the blow by atan2.
 
+13. **Perception (kata M9b, 2026-10-09).** Retail's senses are close to
+    binary, and not what the 1998 source's comments describe:
+    - Hearing returns 100 anywhere within HEARINGRANGE (the distance less
+      the radius and 32), 0 beyond: its scaled value is held to at most 0
+      and then floored at 100, a 0..100 clamp turned inside out. HEARINGMIN
+      and HEARINGMAX are parsed and never read. Hearing has no line of
+      sight. So any noise above 0 within range (edge to edge) is heard.
+      ResetStealthValues gives 0 only when sneaking with a draw of 1 (one
+      tick in 25).
+    - Sight is 0 or 1 within SIGHTRANGE (centre to centre, eye to eye;
+      no radius taken off), 0 beyond or asleep; SIGHTMIN / SIGHTMAX are
+      never read. Seeing wants a glimpse of 99 or more. A walking
+      character's glimpse tops out at 70 (100 only while attacking), so
+      without infravision a monster sees him only mid-attack; it finds him
+      by ear.
+    - The memory (HasSeenMe) holds a character 45 seconds (0x438 frames),
+      not ten. FindCharacters keeps one neither heard nor seen only while
+      remembered.
+    - FindCharacters, looking for enemies, marks a non-enemy as seen and
+      passes over an invalid target (dead, invisible, out of combat range)
+      without marking it. The first found is never scored (the best starts
+      at 10000), and the head of the list takes the lowest score: with an
+      angle, the edge distance times how close to the angle it is (plus 1),
+      so it favours the near and the off-angle.
+    - IsEnemy never counts an idle player (state bit 2). Between players it
+      takes the teams (case-insensitive) and the player-killer bit (state
+      bit 24, under the session's rule `0x676804`, multiplayer and not
+      ported). Then: the one fighting me (a combat or bow root on me), or
+      one named, typed or grouped among my ENEMIES who is aggressive or a
+      player.
+    The port had the 1998 versions throughout (ten-second memory, scaled
+    senses, line of sight for hearing, the dead marked as seen).
+
 ## 6. Layouts used by the fixtures
 
 Retail, verified against the disassembly where a fixture relies on them.
@@ -405,6 +439,8 @@ python3 tools/retail_ab/retail_ab.py combat-move        # M7
 python3 tools/retail_ab/retail_ab.py combat-update      # M1u
 python3 tools/retail_ab/retail_ab.py combat-sequence    # M8
 python3 tools/retail_ab/retail_ab.py combat-input       # M6
+python3 tools/retail_ab/retail_ab.py combat-steps       # M10
+python3 tools/retail_ab/retail_ab.py combat-perceive    # M9b
 tools/walktest/walktest.py "<slot dir>" [--pattern sweep|walks|both|none] [--exec "player.goto X Y; ..."]
 python3 tools/retail_ab/retail_ab.py combat-data        # D1, every record field by field
 python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2
