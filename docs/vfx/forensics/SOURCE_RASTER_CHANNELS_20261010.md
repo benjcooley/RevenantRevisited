@@ -69,3 +69,23 @@ Private inspection evidence is under
 Mist and SymGlow use the separate FX-quad shader and are not corrected by this
 mesh/helper change. Full-pixel RGB565/ARGB4444 equivalence, source projector,
 software destination quantization, and spell/caller context remain open.
+
+### Follow-up: original alpha scene state
+
+The initial post-light mode3 pipeline incorrectly retained depth writes and
+back-face culling. Executed `NewObject409ca0` assigns both Ribbon subobjects
+`flags=0x01000000, blend=4` when their used texture carries alpha. The decoded
+resource boundary supplies literal names, material indices and texture-face
+counts; material values do not affect this branch (both branches join409eb1).
+Removing the alpha metadata is a negative control: no blend override is assigned.
+Executing the actual `RenderObject40adfc..40aeba` dispatch on those constructed
+objects, including unmodified `Scene.SetBlendMode417d60`, yields ZWRITE0,
+ZENABLE1, CULL_NONE, SRCALPHA/INVSRCALPHA. This holds for all14 subobjects of the
+seven pinned Ribbon assets. Original4444 raster controls render both windings
+and blend a rear layer after a front layer; forcing depth writes suppresses the
+rear layer. `test_alpha_scene_state.py` preserves these controls.
+
+The static software mode3 pipeline now tests existing scene depth without writing
+it and renders both face directions. Warp's explicit helper depth policy is
+unchanged. This evidence establishes caller state and raster behavior, not a
+whole-scene lighting or pixel-identical GPU claim.
