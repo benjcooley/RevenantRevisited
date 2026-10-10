@@ -258,7 +258,7 @@ class TFixtureChar : public Base, public IFixtureChar
         this->SetMoveAngle((int32_t)spec["moveangle"].Int(spec["facing"].Int()));
         this->state = (uint16_t)spec["state"].Int(0);
         this->charflags = (uint32_t)spec["charflags"].Int();
-        this->target_out_of_sight = spec["out_of_sight"].Bool();
+        this->retreating = spec["retreating"].Bool();
         this->monsterkind = (int32_t)spec["monsterkind"].Int(0);
         for (const auto& [k, v] : spec["stats"].Members())
             stats[k] = (int32_t)v.Int();
@@ -291,8 +291,8 @@ class TFixtureChar : public Base, public IFixtureChar
         }
         this->forcenomove = spec["forcenomove"].Bool();
         this->shovedir = (int32_t)spec["shovedir"].Int(-1);
-        this->target_out_of_sight_prev = spec["out_of_sight_prev"].Bool();
-        this->sight_lost_ticks = (int32_t)spec["sight_lost_ticks"].Int();
+        this->retreatlatch = spec["retreat_latch"].Bool();
+        this->retreatframes = (int32_t)spec["retreat_frames"].Int();
         if constexpr (std::is_same_v<Base, TPlayer>)
             this->TPlayer::SetPlayerState((int32_t)spec["playerstate"].Int(0));   // as the retail fixture's zeroed +0x36c
 
@@ -353,9 +353,9 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Key("accum").Begin('[').Value(this->accum.x).Value(this->accum.y).Value(this->accum.z).End(']');
         j.Field("movetopos", this->movetopos ? 1 : 0).Field("forcenomove", this->forcenomove ? 1 : 0);
         j.Field("shovedir", this->shovedir);
-        j.Field("out_of_sight", this->target_out_of_sight ? 1 : 0);
-        j.Field("out_of_sight_prev", this->target_out_of_sight_prev ? 1 : 0);
-        j.Field("sight_lost_ticks", this->sight_lost_ticks);
+        j.Field("retreating", this->retreating ? 1 : 0);
+        j.Field("retreat_latch", this->retreatlatch ? 1 : 0);
+        j.Field("retreat_frames", this->retreatframes);
         j.Field("movedist", this->GetMoveDist()).Field("commanddone", this->commanddone ? 1 : 0);
         j.Field("glimpse", this->glimpse).Field("noise", this->noise);
         j.Field("framerate", (int32_t)this->framerate).Field("prevstate", (int32_t)this->prevstate);

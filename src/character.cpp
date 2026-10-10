@@ -910,11 +910,11 @@ uint32_t TCharacter::MoveStep()
                     lastpos = pos;
                     lastwhy = why;
                 }
-                if (target_out_of_sight)
+                if (retreating)
                 {
-                    sight_lost_ticks = 0;
-                    target_out_of_sight = false;
-                    target_out_of_sight_prev = false;
+                    retreatframes = 0;
+                    retreating = false;
+                    retreatlatch = false;
                 }
             }
         }
@@ -2078,7 +2078,7 @@ int32_t TCharacter::ResolveCombat(TActionBlock* ab, int32_t bits)
     {
         if (!CanSeeCharacter(static_cast<TCharacter*>(obj), -1) && ai_lookat)
             face = false;
-        if (face && !target_out_of_sight)
+        if (face && !retreating)
             look = obj;
     }
     if (!look)
@@ -2460,9 +2460,9 @@ bool TCharacter::IsEnemy(TCharacter* chr)
 //        nearest "waypoint" object. The committed waypoint is held in
 //        wander_target with a wander_commit watchdog so we don't
 //        ping-pong on arrival.
-//     8. Tail: target_out_of_sight is the *current* "lost target" flag,
-//        target_out_of_sight_prev mirrors it for transition detection,
-//        sight_lost_ticks is a frame countdown.
+//     8. Tail: retreating is the *current* "lost target" flag,
+//        retreatlatch mirrors it for transition detection,
+//        retreatframes is a frame countdown.
 //
 // Field-offset cross-references (recon/discovered/field_map.md):
 //   doing       (mbr_0xd8  / param_1[0x36])
@@ -2476,9 +2476,9 @@ bool TCharacter::IsEnemy(TCharacter* chr)
 //   wander_target            (mbr_0x238 / param_1[0x8d])
 //   target_last_position     (mbr_0x23c / param_1[0x8f..0x91])
 //   wander_commit            (mbr_0x248 / param_1[0x92])
-//   target_out_of_sight      (mbr_0x254 / param_1[0x95])
-//   target_out_of_sight_prev (mbr_0x258 / param_1[0x96])
-//   sight_lost_ticks         (mbr_0x25c / param_1[0x97])
+//   retreating      (mbr_0x254 / param_1[0x95])
+//   retreatlatch (mbr_0x258 / param_1[0x96])
+//   retreatframes         (mbr_0x25c / param_1[0x97])
 void TCharacter::AI()
 {
     ai_ai_count++;
@@ -2546,7 +2546,7 @@ void TCharacter::AI()
             TCharacter* found = nullptr;
             int32_t n = FindCharacters(&found, 1, /*range=*/-1, /*angle=*/-1, /*anglerange=*/32,
                                        FINDCHAR_ENEMY | FINDCHAR_SEE | FINDCHAR_HEAR);
-            if (n > 0 && found && !target_out_of_sight)
+            if (n > 0 && found && !retreating)
                 BeginFighting(found, ACTION_COMBAT);
             target = Fighting();
         }
@@ -2606,13 +2606,13 @@ void TCharacter::AI()
     }
 
   // Special branch: we have an in-flight action that's interactive (e.g.
-  // a cast / use). Retail tests `TActionBlock_Is("combat") && !target_out_of_sight && (charflags & 0x4000)`
+  // a cast / use). Retail tests `TActionBlock_Is("combat") && !retreating && (charflags & 0x4000)`
   // — we approximate by skipping the attack tree when nextattack hasn't
   // armed.
     {
         ACTION da = doing->action;
 
-        if (da == ACTION_COMBAT && target && !target_out_of_sight)
+        if (da == ACTION_COMBAT && target && !retreating)
         {
           // ===== In combat, target visible: tick attack/wait, fire =====
             if (nextattack > 0) nextattack--;
@@ -2632,7 +2632,7 @@ void TCharacter::AI()
                   // pre-snapshot hardcoded "> 80" was wrong for
                   // short-reach creatures (e.g. Araknid attkrng=32);
                   // chardata-driven is right.
-                    target_out_of_sight = false;
+                    retreating = false;
                     Go(AngleTo(target));
                     oldab = nullptr;
                 }
@@ -2709,7 +2709,7 @@ void TCharacter::AI()
           // ===== We're in a move root with a known target: drive the =====
           // ===== move-angle and decide whether to switch to attack    =====
             int32_t tdist = Distance(target);
-            if (tdist < chardata->maxattackrange && !target_out_of_sight)
+            if (tdist < chardata->maxattackrange && !retreating)
             {
                 Stop();
             }
@@ -2717,7 +2717,7 @@ void TCharacter::AI()
             // above — see the matching comment block in the COMBAT branch.
             else if (CanSeeCharacter(target))
             {
-              // (target_out_of_sight goes false next frame via tail)
+              // (retreating goes false next frame via tail)
                 target_last_position = target->Pos();
                 doing->moveangle      = AngleTo(target);
                 doing->angle          = AngleTo(target);
@@ -2733,7 +2733,7 @@ void TCharacter::AI()
               // target's CURRENT pos to find the next hop.
                 last_position_distance = ::Distance(pos, target_last_position);
                 last_position_start_point = pos;
-                target_out_of_sight = true;
+                retreating = true;
                 target_last_angle = ConvertToFacing(pos, target_last_position);
 
               // If we have a committed waypoint and we've arrived at it,
@@ -2779,9 +2779,9 @@ void TCharacter::AI()
 
 sight_tail:
   // (8) Tail: tick the sight-lost watchdog. Retail:
-  //     out_of_sight = (frame > sight_max && !out_of_sight_prev) || sight_lost_ticks==0 ? 0 : 1;
+  //     out_of_sight = (frame > sight_max && !out_of_sight_prev) || retreatframes==0 ? 0 : 1;
   //     out_of_sight_prev = out_of_sight;
-  //     if (sight_lost_ticks > 0) sight_lost_ticks--;
+  //     if (retreatframes > 0) retreatframes--;
   //
   // chardata + 0x440 in retail is some "max sight-loss ticks" tunable
   // we don't have; gate on FRAMERATE * a couple seconds for now.
@@ -2789,14 +2789,14 @@ sight_tail:
         const int32_t sight_max = FRAMERATE * 4;  // TODO retail: chardata field at +0x440 is unknown
         const int32_t fc = CurrentScreen->FrameCount();
         bool new_oos;
-        if ((fc > sight_max && !target_out_of_sight_prev) || sight_lost_ticks == 0)
+        if ((fc > sight_max && !retreatlatch) || retreatframes == 0)
             new_oos = false;
         else
             new_oos = true;
-        target_out_of_sight_prev = new_oos;
-        target_out_of_sight      = new_oos;
-        if (sight_lost_ticks > 0)
-            sight_lost_ticks--;
+        retreatlatch = new_oos;
+        retreating      = new_oos;
+        if (retreatframes > 0)
+            retreatframes--;
     }
 }
 
@@ -3228,10 +3228,10 @@ bool TCharacter::Go(int32_t angle)
 
     TActionBlock* ab = nullptr;
 
-    if (target_out_of_sight)
+    if (retreating)
     {
-      // Hunting a target out of sight: turn toward the direction held at a
-      // speed scaled to the turn (retail's float, 0x004ceb13).
+      // Retreating: turn toward the direction held at a speed scaled to
+      // the turn (retail's float, 0x004ceb13).
         const int32_t diff = std::abs(AngleDiff(GetFace(), angle));
         auto scaled = [diff](int32_t rate) {
             return (int32_t)((double)rate / ((double)diff * (double)(1.0f / 127.0f)) * (double)2.2f);
@@ -3277,7 +3277,7 @@ bool TCharacter::Go(int32_t angle)
 
         int32_t face = angle;
         if (targ && IsValidTarget(targ) && (CombatFace || ObjClass() == OBJCLASS_CHARACTER) &&
-            !target_out_of_sight)
+            !retreating)
             face = AngleTo(doing->obj);
         const int32_t face8 = (face + 15) & 0xe0;
 
@@ -3346,7 +3346,7 @@ bool TCharacter::Go(int32_t angle)
         ab->moveangle = ab->angle = angle;
     }
 
-    if (ab && !(target_out_of_sight))
+    if (ab && !(retreating))
     {
         ab->interrupt = true;
         ab->noroot = true;
@@ -4924,7 +4924,7 @@ bool TCharacter::EndFighting()
 // Refused while dead or in an interactive move, for itself or a dead
 // target; outside a combat/bow root a target starts the fight
 // (BeginFighting); else every block takes the target and faces it (not
-// while it's out of sight). The network message (0x21) isn't ported.
+// while retreating). The network message (0x21) isn't ported.
 bool TCharacter::SetFighting(TCharacter* newtarget)
 {
     if (Health() <= 0)
@@ -4951,7 +4951,7 @@ bool TCharacter::SetFighting(TCharacter* newtarget)
     if (newtarget)
     {
         const int32_t angle = AngleTo(newtarget);
-        if (!target_out_of_sight)
+        if (!retreating)
             doing->angle = desired->angle = root->angle = angle;
     }
     if (ObjClass() == OBJCLASS_PLAYER)
