@@ -126,16 +126,6 @@ system slept (2026-10-09). If a run stalls with the display off and the
 Mac awake, look next at `CAMetalLayer nextDrawable` blocking on a layer
 that is never composited.
 
-A sleeping display stops the frames too: macOS stops driving the frame
-callback, and a headless run sits after "logging initialized" until the
-display wakes. `--max-runtime` doesn't catch it, because it is armed on the
-first frame. Unattended runs (A/B sweeps, filmstrips) go under
-`caffeinate -du`, which wakes the display and keeps it on for the command:
-
-```sh
-caffeinate -du python3 tools/retail_ab/hud_ab.py statusbar
-```
-
 Each of these quit requests ends the process through the normal path
 (`AppCleanup` → `ShutdownGlobals`):
 
