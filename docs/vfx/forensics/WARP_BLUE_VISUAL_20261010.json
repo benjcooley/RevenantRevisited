@@ -1,0 +1,384 @@
+{
+  "status": "scoped_visual_pass",
+  "date": "2026-10-10",
+  "reviewers": [
+    "lane3 direct image inspection",
+    "root independent first-sheet and same-floor inspection"
+  ],
+  "type_name": "TeleportDoorInsideB",
+  "type_id": "0xad92bc28",
+  "asset": "Magic/WarpB.I3D",
+  "asset_sha256": "0ffad51668c2c39c45df92d7174e053475a25c62ca70d1e4d9cf0ecda943a836",
+  "scope": "Overall isolated blue Warp appearance for the recorded synthetic map and pinned Metal build, against original executable software raster reference. Triangular form, blue/white cloudy perimeter, four changing atlas states and alpha floor integration reviewed. This is actual modern-port review, not shared-original-raster frontend parity.",
+  "positive_visual_observations": [
+    "Same triangular portal form and recognizable blue/white perimeter.",
+    "Cloud detail changes across four successive U-quarter states.",
+    "Interior alpha retains floor detail without an opaque blue rectangle.",
+    "Modern owner moves and deletes; exact clean-floor restoration."
+  ],
+  "open_findings": [
+    {
+      "category": "renderer_projection",
+      "status": "open",
+      "native_effect_bounds_in_modern_viewport": [
+        268,
+        64,
+        369,
+        195
+      ],
+      "modern_effect_bounds": [
+        269,
+        57,
+        369,
+        195
+      ],
+      "apex_difference_pixels": -7,
+      "native_height_pixels": 131,
+      "modern_height_pixels": 138,
+      "height_difference_percent": 5.343511450381677,
+      "note": "No fitted shift, scale or geometry correction applied. This residual blocks exact geometry/device parity, not the recorded overall appearance verdict."
+    }
+  ],
+  "no_credit": [
+    "Exact geometry or device pixel parity",
+    "Other six Warp color visual passes",
+    "Native original-scene floor or illumination producer",
+    "Natural teleport caller/story/visibility",
+    "Full effect or gameplay acceptance"
+  ],
+  "modern_capture": {
+    "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/modern/manifest.json",
+    "sha256": "2332f9140687cdbc5e230a64c78cd7fc504375e65196bbd0ae8565eb4f8e552f"
+  },
+  "modern_summary": {
+    "binary_sha256": "7a377760d05d3a006f3578e825e30208a20d324862e6c4f554d3a90730124fc6",
+    "frames": 16,
+    "typed_observations": 10,
+    "distinct_stationary_states": 4,
+    "floor_restored": true,
+    "exit_code": 0,
+    "forced_shutdown": false,
+    "viewport": [
+      640,
+      340
+    ],
+    "camera": [
+      110,
+      10000,
+      10000,
+      16
+    ],
+    "ambient": [
+      32,
+      255,
+      255,
+      255
+    ],
+    "cadence_hz": 24
+  },
+  "modern_binary": {
+    "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/Revenant-7a377760",
+    "sha256": "7a377760d05d3a006f3578e825e30208a20d324862e6c4f554d3a90730124fc6"
+  },
+  "fixture_module": {
+    "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/data/Modules/FontRuntimeLab.rvm",
+    "sha256": "c82da5deef9ffb3cd53ac7ed315fbe5e24904e06e2aba00885793b94ed55c8f4"
+  },
+  "native_executable": {
+    "path": "/Users/benjamincooley/projects/RevenantRevisited/RevenantRevisited/recon/retail_asm/baseline/Revenant.rebuilt.exe",
+    "sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5"
+  },
+  "native_reference": {
+    "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/native/manifest.json",
+    "sha256": "870a0da8e1e0c76d2354e41e33d87a564ba0e13b72342e7712fde77f8fe5121e"
+  },
+  "same_floor_reference": {
+    "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/native-floor/manifest.json",
+    "sha256": "a679c50b497155b1b06ed1b80f37f9b5f44dfb2c18865d36d23c4e96277de92c"
+  },
+  "comparison_sheets": [
+    {
+      "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/first-native-modern-sheet.png",
+      "sha256": "b22ff7afc168ef3b56f6a1282834bcf493eabbf5ef855ff596ab34a3af51e408"
+    },
+    {
+      "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/same-floor-native-modern-sheet.png",
+      "sha256": "248f5bcd1db13a571fd646cd6183e93f8d98b4b83114b57b1f217e0bee9baf62"
+    }
+  ],
+  "native_config": {
+    "viewport": [
+      512,
+      512
+    ],
+    "camera": [
+      0,
+      0,
+      0
+    ],
+    "owner": [
+      0,
+      0,
+      0
+    ],
+    "zdist": 1925,
+    "vertex_rgba_5bit": [
+      31,
+      31,
+      31,
+      31
+    ],
+    "texture": "Authored256x256ARGB4444",
+    "faces": 3,
+    "initial_U_ticks": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "UV_offsets": [
+      [
+        0,
+        0
+      ],
+      [
+        0.25,
+        0
+      ],
+      [
+        0.5,
+        0
+      ],
+      [
+        0.75,
+        0
+      ]
+    ],
+    "functions": [
+      "4ff9d0 Init",
+      "4ffa60 Animate",
+      "4ffae0 Render",
+      "40a420 matrix",
+      "43ad80 point transform",
+      "original software projection and alpha raster"
+    ],
+    "depth": "test without writes, empty reference depth"
+  },
+  "lighting_policy": {
+    "native": "Explicit white31 vertex input and authored white material; native texture/alpha raster execute. Full original illumination producer is outside fixture.",
+    "modern": "Scene ambient32 white; Warp ConfigureDraw sets retail_lighting2. Metal mode2 preserves authored ARGB texels and bypasses normal/deferred-light modulation. Ambient differences are therefore not used to dismiss brightness mismatches.",
+    "remaining": "Small RGB565 quantization/raster sampling differences remain visible; no fitted tint or brightness correction."
+  },
+  "background_policy": "Native same-floor references use the clean modern frame1 as a destination quantized toRGB565, then execute original software alpha raster. This is a shared visual backdrop, not a claim of original retail map rendering.",
+  "presentation": {
+    "native_crop": [
+      156,
+      96,
+      356,
+      306
+    ],
+    "modern_crop": [
+      220,
+      10,
+      420,
+      220
+    ],
+    "native_background_translation": [
+      -64,
+      86
+    ],
+    "description": "Fixed200x210 crop windows about declared viewport origins. Viewport-center recentering only; no effect-pixel registration, scaling, phase fitting or geometry edits."
+  },
+  "cases": [
+    {
+      "tick": 0,
+      "modern_frame": 3,
+      "offset": [
+        0.0,
+        0.0
+      ],
+      "projected_native_corners": [
+        [
+          255.26714998483658,
+          220.67851638793945,
+          2728.312255859375
+        ],
+        [
+          255.29547715187073,
+          149.03153228759766,
+          2686.9140625
+        ],
+        [
+          305.8760223388672,
+          231.14143180847168,
+          2792.93701171875
+        ],
+        [
+          204.62994766235352,
+          281.862585067749,
+          2705.08544921875
+        ]
+      ],
+      "native_path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/native-floor/retail-floor-00.png",
+      "native_sha256": "ea7831a8658b9b57f532ca8a7ffa403e4a5c0946eab1d049a8d1225b0dfd85ac",
+      "modern_path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/modern/frame-003-2026-10-10-09-18-39.png",
+      "modern_sha256": "b672f0086cd1d7f061d5093e7be2a5d4530c7d4754213bc131a87bd0941cb316",
+      "native_bbox": [
+        204,
+        150,
+        305,
+        281
+      ],
+      "modern_bbox": [
+        269,
+        37,
+        369,
+        175
+      ]
+    },
+    {
+      "tick": 1,
+      "modern_frame": 4,
+      "offset": [
+        0.25,
+        0.0
+      ],
+      "projected_native_corners": [
+        [
+          255.26714998483658,
+          220.67851638793945,
+          2728.312255859375
+        ],
+        [
+          255.29547715187073,
+          149.03153228759766,
+          2686.9140625
+        ],
+        [
+          305.8760223388672,
+          231.14143180847168,
+          2792.93701171875
+        ],
+        [
+          204.62994766235352,
+          281.862585067749,
+          2705.08544921875
+        ]
+      ],
+      "native_path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/native-floor/retail-floor-01.png",
+      "native_sha256": "1bf1b44b3b77658e5dbfdb9957bef2e4dccd3796b2fbd117a68450d5a2c79ca9",
+      "modern_path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/modern/frame-004-2026-10-10-09-18-39.png",
+      "modern_sha256": "c4102f574425baa7475e996d61eecc961509afdc0f30a26164be261d6a06874d",
+      "native_bbox": [
+        204,
+        150,
+        305,
+        281
+      ],
+      "modern_bbox": [
+        269,
+        37,
+        369,
+        175
+      ]
+    },
+    {
+      "tick": 2,
+      "modern_frame": 5,
+      "offset": [
+        0.5,
+        0.0
+      ],
+      "projected_native_corners": [
+        [
+          255.26714998483658,
+          220.67851638793945,
+          2728.312255859375
+        ],
+        [
+          255.29547715187073,
+          149.03153228759766,
+          2686.9140625
+        ],
+        [
+          305.8760223388672,
+          231.14143180847168,
+          2792.93701171875
+        ],
+        [
+          204.62994766235352,
+          281.862585067749,
+          2705.08544921875
+        ]
+      ],
+      "native_path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/native-floor/retail-floor-02.png",
+      "native_sha256": "49d99becd99c066ae4308bfa8bf69b9cb2103f0cc66e23ef2de6d9ea27368b47",
+      "modern_path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/modern/frame-005-2026-10-10-09-18-39.png",
+      "modern_sha256": "81029cd143c6245a09becf403a45cef20f6e43513f5ae4402de61f87bebaf64b",
+      "native_bbox": [
+        204,
+        150,
+        305,
+        281
+      ],
+      "modern_bbox": [
+        269,
+        37,
+        369,
+        175
+      ]
+    },
+    {
+      "tick": 3,
+      "modern_frame": 6,
+      "offset": [
+        0.75,
+        0.0
+      ],
+      "projected_native_corners": [
+        [
+          255.26714998483658,
+          220.67851638793945,
+          2728.312255859375
+        ],
+        [
+          255.29547715187073,
+          149.03153228759766,
+          2686.9140625
+        ],
+        [
+          305.8760223388672,
+          231.14143180847168,
+          2792.93701171875
+        ],
+        [
+          204.62994766235352,
+          281.862585067749,
+          2705.08544921875
+        ]
+      ],
+      "native_path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/native-floor/retail-floor-03.png",
+      "native_sha256": "7a850937daf86d3be1acab4b150f38a6632f35e57406d3bb8a5851f80d07cdb9",
+      "modern_path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261010/warp-blue-modern-visual/modern/frame-006-2026-10-10-09-18-39.png",
+      "modern_sha256": "3cdbbc831d6710e31ccb8ddc83353c5ca23fed15921d21cd1912407d566266c1",
+      "native_bbox": [
+        204,
+        150,
+        305,
+        281
+      ],
+      "modern_bbox": [
+        269,
+        37,
+        369,
+        175
+      ]
+    }
+  ],
+  "prior_native_frontend_proof": {
+    "path": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261009/warp-final-ab/manifest.json",
+    "sha256": "6e8f55e48b6e85ac36acf1d0bb695b931df2b9b089afdea09681ed47269c4b96"
+  },
+  "production_edits": false,
+  "additional_captures_required": false
+}

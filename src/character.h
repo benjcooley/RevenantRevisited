@@ -62,28 +62,67 @@ class TCharacter : public TComplexObject
       // centre distance less this character's Radius and, for a character
       // target, its Radius; never below 0
     bool IsValidTarget(TCharacter* target);
-    void SetRunsAI(bool on) { if (on) charflags |= kCharFlagPlayerAI; else charflags &= ~kCharFlagPlayerAI; }
-      // A player's AI switch (retail charflags 0x100000; AI() gates on it)
       // REVSYNC: 0x004cd990 -- may `target` be fought: there, alive, not
       // invisible, within combat range, and the player only while he has
       // control or demo mode is on
+    void SetRunsAI(bool on) { if (on) charflags |= kCharFlagPlayerAI; else charflags &= ~kCharFlagPlayerAI; }
+      // A player's AI switch (retail charflags 0x100000; AI() gates on it)
 
+  // Retail A/B fixtures only (retailab_*.cpp; docs/gameplay/COMBAT_DOJO.md
+  // §6.3): when set, each answers its function in place of the world, as the
+  // retail fixture's seam at the same function does.
     using FindCharactersSeam = int32_t (*)(TCharacter* self, TCharacter* chars[], int32_t maxchars,
         int32_t range, int32_t angle, int32_t anglerange, int32_t flags);
     static inline FindCharactersSeam findCharactersSeam = nullptr;
-    using BlockedSeam = bool (*)(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, uint32_t bits);
+      // FindCharacters (retail 0x004cd690)
+    using BlockedSeam = bool (*)(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, uint32_t bits,
+        TCharacter** bychar);
     static inline BlockedSeam blockedSeam = nullptr;
-      // Likewise for Blocked (retail FindClearPath 0x004c39d0)
+      // Blocked (retail FindClearPath 0x004c39d0)
     using CanSeeSeam = bool (*)(TCharacter* self, TCharacter* chr, int32_t angle);
     static inline CanSeeSeam canSeeSeam = nullptr;
-      // Likewise for CanSeeCharacter (retail 0x004cd540)
+      // CanSeeCharacter (retail 0x004cd540)
+    using BlockSeam = bool (*)(TCharacter* self, int32_t frames);
+    static inline BlockSeam blockSeam = nullptr;
+      // Block (retail 0x004d2e30), which IsValidAttack calls on a target
+      // about to be hit glancingly
+    using CastSeam = bool (*)(TCharacter* self, const char* spell, TObjectInstance** targets, int32_t numtargs,
+        const S3DPoint* source);
+    static inline CastSeam castSeam = nullptr;
+      // CastByName (retail SpellList::Find 0x0053f010 + Cast 0x004d5c20),
+      // which DoAttack calls for a MAGICATTACK
+    static inline CastSeam castByTalismansSeam = nullptr;
+      // CastByTalismans (retail 0x004d5c20), as castSeam for CastByName
+    using IsEnemySeam = bool (*)(TCharacter* self, TCharacter* other);
+    static inline IsEnemySeam isEnemySeam = nullptr;
+      // IsEnemy (retail 0x004c89c0)
+    using BeginFightingSeam = bool (*)(TCharacter* self, TCharacter* target, ACTION action);
+    static inline BeginFightingSeam beginFightingSeam = nullptr;
+      // BeginFighting (retail 0x004d3b90)
+    using DamageSeam = void (*)(TCharacter* self, int32_t damage, int32_t damagetype, int32_t modifier,
+        TActionBlock* action, TCharacter* attacker);
+    static inline DamageSeam damageSeam = nullptr;
+      // Damage (retail 0x004c4950); the seam owns `action` as Damage does
+    using EffectBurstSeam = void (*)(TCharacter* self, const char* name, int32_t height);
+    static inline EffectBurstSeam effectBurstSeam = nullptr;
+      // EffectBurst (retail 0x004c85d0)
+    using EffectCombatFlashSeam = void (*)(TCharacter* self);
+    static inline EffectCombatFlashSeam effectCombatFlashSeam = nullptr;
+      // EffectCombatFlash (retail 0x004c8500)
+    using WaypointsSeam = int32_t (*)(TCharacter* self, const S3DPoint& centre, TObjectInstance** found, int32_t max);
+    static inline WaypointsSeam waypointsSeam = nullptr;
+      // The helpers AI's waypoint search finds near a point (retail
+      // TMapPane::FindObjectsInRange 0x00452060 and GetInstance 0x00452690)
+    using KnockBackSeam = void (*)(TCharacter* self, const S3DPoint& from, int32_t variant);
+    static inline KnockBackSeam knockBackSeam = nullptr;
+      // KnockBack (retail 0x004d3750)
+    using SignalAttackSeam = void (*)(TCharacter* self, TObjectInstance* actor, TObjectInstance* target, int32_t flag);
+    static inline SignalAttackSeam signalAttackSeam = nullptr;
+      // SignalAttack (retail OnAttacked 0x004cdce0, vtable +0x240)
     using NearbyCharactersSeam = std::vector<TCharacter*> (*)(const S3DPoint& pos, int32_t range);
     static inline NearbyCharactersSeam nearbyCharactersSeam = nullptr;
-      // Likewise for the characters CharBlocking walks (retail's map iterator
-      // 0x0044ceb0 / 0x0044d080), in map order
-      // Retail A/B fixtures only (retailab_combat.cpp): when set, it answers
-      // FindCharacters instead of the map, as the retail fixture's seam at
-      // FindCharacters 0x004cd690 does (docs/gameplay/COMBAT_DOJO.md §6.3).
+      // The characters near a point that CharBlocking and FindCharacters
+      // walk (retail's map iterator 0x0044ceb0 / 0x0044d080), in map order
 
     bool IsAnimatorPermanent() const override { return true; }
         // Characters always own a TObjectAnimator from construction. See
@@ -110,12 +149,17 @@ class TCharacter : public TComplexObject
         // is calculated as damage * (100% + modifier) * (100% + chardmgmodifier).
     virtual void Damage(int32_t damage, int32_t damagetype = DT_NONE, int32_t modifier = 0,
         PTActionBlock action = nullptr, TCharacter* attacker = nullptr);
-        // Apply damage to the character.  If character hit, use 'action' action block
-        // instead of default "impact" state, or use 'action' block if he dies instead
-        // of default "dead" state.  If impact and death are nullptr, uses default "impact"
-        // and "dead".  Note that damage is modified based on monsters resistance to 
-        // 'damagetype' damage unless damagetype is DT_NONE, in which case the exact
-        // damage value in 'damage' is used without ANY modification.
+        // This character takes 'damage' from 'attacker' (retail 0x004c4950, vtable
+        // +0x228): exactly as given for DT_NONE, else through CalculateDamage. It
+        // shows it with the impact or death block 'action' when that suits, else
+        // one of its CHARIMPACTs or the stock "impact" / "dead" names. Damage owns
+        // 'action': it becomes one of this character's blocks or is freed.
+    virtual void Killed(TCharacter* /*victim*/) {}
+        // This character landed a killing blow (retail vtable +0x244; the
+        // player counts it)
+    virtual void Died(TCharacter* /*killer*/) {}
+        // This character's health reached 0 (retail +0x248): from Damage with the
+        // killer, from Pulse with none
     void RestoreHealth();
         // Cure them of all ailments and set health to max
 
@@ -130,8 +174,8 @@ class TCharacter : public TComplexObject
         // Actor is moving
     virtual void SignalHostility(TObjectInstance* actor, TObjectInstance* target);
         // Actor is hostile to target
-    virtual void SignalAttack(TObjectInstance* actor, TObjectInstance* target);
-        // Actor is attacking target
+    virtual void SignalAttack(TObjectInstance* actor, TObjectInstance* target, int32_t flag = 0);
+        // Actor is attacking target (retail OnAttacked 0x004cdce0, slot 0x240; flag 2 for a spell)
 
   // ActionBlock generic function callers
     bool SetWalkMode();
@@ -158,8 +202,10 @@ class TCharacter : public TComplexObject
       // Sets burning pointer to nullptr
     bool Flail();
       // Causes a character to act a fool
-    bool KnockBack(S3DPoint frompos);
-      // Causes a character to react with a heavy imapct animation, facing towards frompos
+    bool KnockBack(S3DPoint frompos, int32_t variant = -1);
+      // Thrown back by a blow from frompos: one of five impacts (`variant`
+      // 0..4, else random) facing it, or the back impact from behind (retail
+      // 0x004d3750)
     bool Jump();
       // Causes character to jump (in normal mode, use Leap in Combat mode)
     bool Pivot(int32_t angle);
@@ -187,14 +233,21 @@ class TCharacter : public TComplexObject
       // Says something given a dialog tag id number
     bool SayTag(const char *tag, int32_t wait = -1, const char *anim = nullptr);
       // Says something given a dialog tag
+    bool MayCast();
+      // The gates every cast opens with (retail inline in 0x004d5c20, 0x004d5b90,
+      // 0x004d5ae0): alive, not locked in an interactive move, not immobile,
+      // iced or paralyzed
     bool CastByName(char* name, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
-      // Cast a spell by usings its name
+      // REVSYNC: TCharacter::CastByName @ 0x004d5b90 -- the variant of that
+      // name, cast by its talismans
     bool CastByTalismans(char* talismans, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
-      // Cast a spell by using a talisman list
+      // REVSYNC: TCharacter::CastByTalismans @ 0x004d5c20 -- the manager's
+      // cast; a player's failed cast of a spell with a cost fizzles
     bool SetCast(char* ani, TObjectInstance* target, int32_t invoke_delay = INVOKE_DELAY);
-      // Set the character to the cast animation
+      // REVSYNC: TCharacter::SetCast @ 0x004d5900 -- the invoke animation
     bool Cast(char* talismans, S3DPoint* sourcepos = nullptr);
-      // quick cast a spell
+      // REVSYNC: TCharacter::Cast @ 0x004d5ae0 -- cast at the combat or bow
+      // root's opponent
     bool BeginFighting(TCharacter* target = nullptr, ACTION action = ACTION_COMBAT);
       // Engage character in combat
     bool EndFighting();
@@ -229,6 +282,42 @@ class TCharacter : public TComplexObject
       // Find a random attack (for a monster) based on a value from 1-100
     bool SpecificAttack(int32_t attacknum);
       // Do a specific attack given the attacknum
+
+  // The attack search (retail's signatures). Every search shares one set of
+  // out-values -- impact, damage, to-hit, roll -- that its caller starts at
+  // -1 (the roll at 100 for a repeated button); the first candidate that
+  // gets as far as the damage fixes them for the rest of the search.
+    bool IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &damage, int32_t &tohit, int32_t &roll,
+        int32_t tdist, int32_t button, int32_t pcnt, int32_t dmgpcnt, int32_t flagmask, int32_t flags,
+        TCharacter* targ);
+      // REVSYNC: 0x004d1120 -- whether attack `attacknum` can be made now at `targ` (null: none,
+      // `tdist` then 10000), fixing the out-values on the way
+    bool FindButtonAttack(int32_t button, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum,
+        int32_t &damage, int32_t &tohit, int32_t &roll, bool isaction, TCharacter* targ);
+      // REVSYNC: 0x004d1dd0 -- the first valid attack on `button`: responses, then
+      // specials, then the rest, each in table order
+    bool FindPcntAttack(int32_t pcnt, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum,
+        int32_t &damage, int32_t &tohit, int32_t &roll);
+      // REVSYNC: 0x004d1eb0 -- up to 2n random picks of a valid attack whose
+      // percentage is at least `pcnt`, against the fighting target
+    bool FindInteractiveAttack(int32_t pcnt, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum,
+        int32_t &damage, int32_t &tohit, int32_t &roll);
+      // REVSYNC: 0x004d1ff0 -- the first valid CA_INTERACTIVE attack, in table order
+    bool DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage, int32_t tohit, int32_t roll,
+        TCharacter* targ);
+      // REVSYNC: 0x004d2120 -- start the chosen attack: an ATTACK block carrying
+      // its numbers (or the spell of a MAGICATTACK)
+    void CombatAnimName(char *buf, const char *name);
+      // REVSYNC: 0x004ce1b0 -- `name` with this character's animation prefix
+      // ("c", or the player's weapon/mode prefix); buf holds RESNAMELEN
+    const char *AnimPrefix();
+      // REVSYNC: slot 0x310, 0x004cdf60 -- the player's animation prefix for his root:
+      // h/hr (hand), b/br (bow), c/cr (combat), s (sneak), w/r, t/tr (with a torch)
+    bool InteractiveLocked() const;
+      // Held in someone's interactive attack (retail's five-line gate opening
+      // ButtonAttack, RandomAttack, SpecificAttack, SetFighting, Go, ...): the doing
+      // attack is CA_INTERACTIVE or its impact CAI_INTERACTIVE, unless this character
+      // is the one making the move (charflags 0x80000)
     bool Swing() { return ButtonAttack(1); }
       // Character swings their weapon at their current target
     bool Thrust() { return ButtonAttack(2); }
@@ -238,19 +327,27 @@ class TCharacter : public TComplexObject
     bool Combo(int32_t num) { return ButtonAttack(3 + num); }
       // Character does combo number num
     bool Block(int32_t frames = -1);
-      // Character blocks an attack
+      // A guard for 'frames' ticks (below 0: BLOCK's random range; -2 forces a
+      // monster's, as IsValidAttack does), retail 0x004d2e30
     bool StopBlock();
-      // Character stops blocking
-    bool Dodge();
-      // Character dodges an attack
+      // Ends a guard (retail 0x004d30f0)
+    bool Dodge(int32_t dir);
+      // A roll out of the combat stance toward 'dir' (0-7, retail's eight
+      // Combat Dodge controls, commands 0x30-0x37), else back (retail 0x004d3150)
     bool SideStep(char dir = 0);
       // Cartwheel/sidestep: step \xc2\xb190\xc2\xb0 of facing using the "sidestepl"/"sidestepr"
       // animation if the root has it. Retail FUN_004d6220 @ 0x4d6220.
       // dir is 'l' or 'r'; pass 0 for random L/R.
     bool Leap(int32_t angle);
+    void StartRetreat();
+      // Give up the fight and run (retail 0x004d5fc0)
       // Character leaps in the given direction (combat mode only)
     bool PlayAnim(char *string);
       // Causes character to play animation name.
+    bool ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAttackImpact* impact, int32_t damage,
+        int32_t tohit, int32_t roll);
+      // REVSYNC: 0x004c62b0 -- one character struck by an attack at its impact frame
+      // (ResolveAttack calls it for the target and each character in reach)
 
   // Info functions specific to characters
     bool IsFighting() { return IsCombat() || IsBowMode(); }
@@ -321,19 +418,37 @@ class TCharacter : public TComplexObject
 
     static constexpr uint32_t kCharFlagNoIncidentals = 0x2;
     // Retail charflags (+0x110) bits the combat code reads:
+    static constexpr uint32_t kCharFlagNoTurn        = 0x4;       // DoAttack / Block / EndFighting leave the move
+                                                                  // angle alone; the AI doesn't acquire (name unknown)
+    static constexpr uint32_t kCharFlagUnkillable    = 0x8;       // Damage leaves at least 1 health (setter unidentified)
+    static constexpr uint32_t kCharFlagNoKill        = 0x80;      // IsValidAttack refuses a killing blow but an
+                                                                  // interactive death (setter unidentified)
+    static constexpr uint32_t kCharFlagBuffed        = 0x20;      // a spell's stat effect was put on (TSpell ctor
+                                                                  // 0x0053f190); a buff cast ends his others
     static constexpr uint32_t kCharFlagDamageSeventh = 0x10;      // CalculateDamage /7 (not freeze); setter unidentified
     static constexpr uint32_t kCharFlagHalfPhysical  = 0x100;     // CalculateDamage halves physical; setter unidentified
     static constexpr uint32_t kCharFlagHalfMagic     = 0x200;     // CalculateDamage halves magic (6-9); setter unidentified
+    static constexpr uint32_t kCharFlagWalkPrefix    = 0x2000;    // CombatAnimName tries a "w" name in the walk root
+    static constexpr uint32_t kCharFlagWalkFighter   = 0x4000;    // fights in its walk root (BeginFighting, AI)
     static constexpr uint32_t kCharFlagNotTargetable = 0x8000;    // IsValidTarget refuses (setter unidentified)
+    static constexpr uint32_t kCharFlagPlayAnimRoots = 0x10000;   // a PLAYANIM "c..." / "w..." needs that root
+    static constexpr uint32_t kCharFlagDead          = 0x40000;   // Died has been told (Damage; retail's Pulse
+                                                                  // too, which clears it when health returns)
     static constexpr uint32_t kCharFlagInteractive   = 0x80000;   // in an interactive move: Go skips its gates
     static constexpr uint32_t kCharFlagPlayerAI      = 0x100000;  // the player runs AI() (retail: set for
                                                                   // net players at 0x0051efc4; the arena's --playerai)
+    // AI request bits (retail +0x128), set by OnAttacked 0x004cdce0
+    static constexpr uint32_t kRequestAttackNow   = 0x1;          // the AI tries an attack this tick
+    static constexpr uint32_t kRequestNoPlayAnim  = 0x2;          // IsValidAttack refuses PLAYANIM attacks
+    static constexpr uint32_t kRequestInteractive = 0x4;          // RandomAttack tries an interactive attack first
       // charflags bit (retail +0x110 & 2): `incidentals off`
     void SetIncidentals(bool on)
         { if (on) charflags &= ~kCharFlagNoIncidentals; else charflags |= kCharFlagNoIncidentals; }
       // Incidentals are the random "NN:" variants of a character's root and idle
       // states (fidgets); off, the character always plays the 100% variant
     bool Incidentals() const { return !(charflags & kCharFlagNoIncidentals); }
+    void SetBuffed() { charflags |= kCharFlagBuffed; }
+    [[nodiscard]] bool IsBuffed() const { return (charflags & kCharFlagBuffed) != 0; }
 
     // Static access functions
     static TCharacter* CharBlocking(TObjectInstance* inst, const S3DPoint& pos, int32_t radius = 0);
@@ -355,8 +470,10 @@ class TCharacter : public TComplexObject
         // barriers.
     void SetOnExit();
       // Flags that character is on an exit
-    void EffectBurst(char *name, int32_t height = 50);
+    void EffectBurst(const char *name, int32_t height = 50);
       // Create a burst effect of the given name
+    void EffectCombatFlash();
+      // The flash of a blow (retail 0x004c8500)
     int32_t GetCombatFlashTicks() { return combatflashticks; }
       // Returns 0 if no flash, or positive number of ticks left if flash being drawn
     void MakeInvisible();
@@ -364,6 +481,9 @@ class TCharacter : public TComplexObject
     void MakeVisible();
       // Makes character visible
     PTSpellManager GetSpellManager() { return &SpellManager; }
+    [[nodiscard]] uint32_t CharFlags() const { return charflags; }
+    [[nodiscard]] int32_t InvokeDelay() const { return invokedelay; }
+      // Pulses the invoke animation holds the spell's effect back (retail +0x188, SetCast)
       // Get spell manager object
 
   // Streaming functions
@@ -433,7 +553,8 @@ class TCharacter : public TComplexObject
     OBJSTAT(DmgResBurn)
     OBJSTAT(DmgResFreeze)
     OBJSTAT(DmgResPoison)
-    OBJSTAT(DamageMod)
+    OBJSTATFUNC(DamageMod)
+      // REVSYNC: slot 0x2b0, 0x004d7220 -- percent added to the damage this character deals
 
    // Calculated stats
     virtual int32_t MaxHealth() { return chardata->health; }
@@ -460,6 +581,20 @@ class TCharacter : public TComplexObject
       // Returns the type of weapon being used
     virtual int32_t WeaponDamage() { return chardata->weapondamage; }
       // Returns current weapon damage
+    virtual int32_t Offense();
+      // REVSYNC: slot 0x2c4, 0x004d72e0 -- what this character adds to its to-hit:
+      // ATTACKMOD, the type's Value x TOHITRANGECHAR, its spells' offense
+    virtual int32_t Defense();
+      // REVSYNC: slot 0x2c0, 0x004d72a0 -- what it takes off an attacker's to-hit:
+      // DEFENSEMOD, Value x TOHITRANGECHAR, its spells' defense
+    virtual int32_t LuckMod() { return 0; }
+      // REVSYNC: slot 0x2ec, 0x004d7370 -- added to both sides of a to-hit; 0 but
+      // for the player (his Luck STATLEVEL)
+    virtual int32_t StrengthMod() { return 0; }
+      // REVSYNC: slot 0x2f4, 0x004d7390 -- percent added to the damage; 0 but for the
+      // player (his Strength STATLEVEL)
+    virtual bool HoldsLight() { return false; }
+      // REVSYNC: slot 0x250, 0x004d6de0 -- holding a light source (the player's torch)
     int32_t GetDamageType(int32_t weapontype, int32_t attackflags);
       // Returns the DT_XXX damage type flags for the given weapon type and attack flags
     virtual int32_t Transparency();
@@ -468,12 +603,11 @@ class TCharacter : public TComplexObject
     virtual int32_t Visibility();
       // Returns the total visibility 1-100 for character (based on lights, ambient, and fog, etc.)
     virtual int32_t Hearing(int32_t dist);
-      // Returns a 1-100 hearing value which indicates how the average noise will be heard
-      // by a monster.  If the monster is sleeping, the listening value is 20% of normal.
+      // How well a noise `dist` away is heard: retail's is 100 within the
+      // hearing range, 0 beyond it (character.cpp)
     virtual int32_t Sight(int32_t dist);
-      // Returns a 1-100 sight value which indicates how the average char will be seen
-      // by a monster in the darkness.  If the monster is sleeping, the sight value
-      // is always 0.
+      // How well a character `dist` away is seen in the dark: retail's is 0
+      // or 1 within the sight range, 0 beyond it or asleep (character.cpp)
     virtual int32_t StealthMod() { return 0; }
       // Ordinary characters dont have stealth
     virtual int32_t LastGlimpse() { return glimpse; }
@@ -506,11 +640,6 @@ class TCharacter : public TComplexObject
     virtual void UpdateAction(int32_t bits = 0);
       // Called by Pulse() to update the action blocks
 
-    bool ResolveHit(TCharacter* targ, 
-        PSCharAttackData attack, PSCharAttackImpact attackimpact, int32_t attackdamage);
-    // This function is called by the ResolveAttack() function to resolve hits for
-    // multiple characters.  The characters are usually found by calling the FindCharacters()
-    // function, then calling this function for each character found.
 
     // Resolve functions - redefine these in derived classes for different functionality
     virtual int32_t ResolveAction(int32_t bits = 0);
@@ -529,6 +658,29 @@ class TCharacter : public TComplexObject
     virtual int32_t ResolveLeap(PTActionBlock ab, int32_t bits);
     virtual int32_t ResolvePull(PTActionBlock ab, int32_t bits);
 
+    // Damage's steps (retail 0x004c4950, COMBAT_HIT.md §3.4)
+    SCharAttackImpact* DamageDeath(TActionBlock* given, TActionBlock*& made, int32_t damage, int32_t dir,
+        TCharacter* attacker);
+      // The death block (the given one, a CHARIMPACT's, or a stock name) forced;
+      // the impact whose snap follows. A block it makes is left in 'made'.
+    SCharAttackImpact* DamageImpact(TActionBlock* given, TActionBlock*& made, int32_t damage, int32_t dir,
+        TCharacter* attacker);
+      // Likewise the impact block ("blockimpact" while blocking)
+    void ForceDamageBlock(TActionBlock* ab, const SCharAttackImpact* imp);
+      // Turns 'ab' as its impact says, then forces the root and 'ab'
+    int32_t DamageShare(int32_t damage);
+      // damage as a percentage of what's left (at most 100): CHARIMPACT's range
+
+    // AI's steps (retail 0x004c8b60, COMBAT_ATTACK_CHOICE.md §3.10)
+    void AIAttack(TCharacter* target);
+      // In the combat stance: the attack timers, the attack or the walk to reach it
+    void AIMove(TCharacter* target);
+      // Otherwise: run while retreating, chase, search, or step aside
+    TObjectInstance* NearestWaypoint(const S3DPoint& centre);
+      // The waypoint in sight nearest `centre`, or none
+    void AIPerMonster();
+      // The boss kind (retail AI_PerMonster's first part)
+
     char *GetAngleMoveAnim(int32_t movedir, int32_t facedir, char *root, char *animname, int32_t buflen);
       // Returns the correct angle movce animation given the current movedir, facedir, and root name
     void AdvanceAngles(int32_t faceang, int32_t moveang, int32_t maxturn);
@@ -541,10 +693,9 @@ class TCharacter : public TComplexObject
       // Returns true if this character can hear the last noise made by 'chr'
     int32_t FindCharacters(TCharacter* chars[], int32_t maxchars, 
         int32_t range = 128, int32_t angle = -1, int32_t anglerange = 32, int32_t flags = 0);
-      // Finds characters given the above parameters.  Will find all chars in range from
-      // direction 'angle' if not -1 with angle range of 32.  Puts the closest character
-      // at the beginning of the list, all other characters are in random order.  Returns
-      // the number of characters found.
+      // The characters in range (FINDCHAR_* filters), from direction 'angle'
+      // within 'anglerange' when 'angle' isn't -1; the best placed at the
+      // head of the list, the rest in map order. Returns how many.
     TCharacter* FindCharacter(int32_t range = 128, int32_t angle = -1, int32_t anglerange = 32, int32_t flags = 0);
       // Calls the FindCharacters function above with only 1 character
       // Finds characters given the above parameters.  Will find all chars in range from
@@ -553,35 +704,8 @@ class TCharacter : public TComplexObject
       // Find closest character in this direction
     TCharacter* FindClosestEnemy(int32_t angle = -1, int32_t anglerange = 32);
       // Finds the closest character attacking this character
-    TObjectInstance* WanderToWaypoint(const S3DPoint& search_center, int32_t range = 250);
-      // Retail TCharacter::AI (FUN_004c8b60) waypoint-search branch. Used by the
-      // out-of-sight target chase: when a monster has lost sight of its target, it
-      // hops between "waypoint" objects to thread its way toward the target's last
-      // known position. Each call: if there's a committed waypoint, tick the commit
-      // timer (decrement/clear); otherwise scan reachable waypoints near
-      // search_center, pick the closest, commit for ~6 frames. Returns the
-      // currently committed waypoint instance (or nullptr if none).
     void ResetStealthValues();
       // Based on character position, lights, and stealth, sets noise and glimpse
-
-  // Attack functions   
-    bool IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &damage,
-        int32_t tdist, int32_t id, int32_t pcnt, int32_t dmgpcnt, int32_t flagmask, int32_t flags);
-      // Checks attack to see if attack is valid or not, returns true if valid, and the correct impact and
-      // damage value for the attack in 'impactnum' and 'damage'.  Must give function target distance in 'tdist',
-      // button id in 'id' or -1 if no button, random attack pcnt in 'pcnt' or -1 if no random attack pcnt, 
-      // the random damage percentage 1-100 in 'dmgpcnt', and the attack flagmask and flags to specify what
-      // kinds of attacks we're looking for.
-    bool FindButtonAttack(int32_t id, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum, int32_t &damage, bool isaction = false);
-      // Finds a valid attack given an attack id (i.e. controller button), and the given random damage
-      // percentage 1-100.
-      // Returns the correct attacknum, impactnum, and damage value for the found attack.
-      // If 'isaction' is set, will find an attack entry with a CA_ACTION flag set instead (called by ButtonAction())
-    bool FindPcntAttack(int32_t id, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum, int32_t &damage);
-      // Finds a valid attack given a randomly generated percentage (0-100) number and a given damage percentage.
-      // Returns the correct attacknum, impactnum, and damage value for the found attack.
-    bool DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage);
-      // Executes a particular attack (using index into SCharData's attack array)
 
     // -- Data members --
     bool autocombat;            // this mimics the global, but works as a way to allow locke to flee in
@@ -592,7 +716,8 @@ class TCharacter : public TComplexObject
 
     PSCharData chardata;        // Pointer to global character settings for this type of char
 
-    int32_t waitticks;              // Number of ticks to wait for no action block wait
+    int32_t magictimer = 1;         // retail +0x124: frames until a MAGICATTACK may be tried
+                                    // (AI re-arms it from MAGICFREQ; IsValidAttack spends it)
 
     bool forcecommanddone;      // For skipping past animations
     bool forcenomove;           // For forcing end movement
@@ -606,7 +731,8 @@ class TCharacter : public TComplexObject
     int32_t shovedir;               // Last choice (left/right) for going around an obstacle
     
   // Stealth Stuff
-    int32_t nextattack;             // Ticks till next attack
+    int32_t nextattack = 1;         // retail +0x120: frames until the AI may attack again
+                                    // (IsValidAttack refuses a monster's attack while non-zero)
     int32_t glimpse;                // Value from 1-100 indicating how visible last move was
     int32_t noise;                  // Value from 1-100 indicating how quiet last move was
 
@@ -619,9 +745,12 @@ class TCharacter : public TComplexObject
     int32_t lastpoisondamage;
 
   // Attack stuff
-    PSCharAttackData lastattack; // Last attack
-    int32_t lastattackticks;         // Game ticks when last attack occured
-    int32_t chainhits;               // Number of hits in a chain attack
+    PSCharAttackData lastattack = nullptr; // retail +0x160: the attack last started (ResolveAttack)
+    int32_t lastattackticks = 0;     // retail +0x164: GameFrame it started on
+    int32_t lasthit = 0;             // retail +0x168: whether it hit its main target (ResolveAttack)
+    int32_t chainhits = 0;           // retail +0x16c: chain presses banked (ButtonAttack, at most 3)
+    uint32_t requestbits = 0;        // retail +0x128: AI requests (kRequest*), set by OnAttacked
+    int32_t attackcount = 0;         // retail +0x12c: decremented by the AI per attack made (no reader found)
 
   // spells stuff
     TSpellManager SpellManager;  // handles the spells the character casts
@@ -651,10 +780,10 @@ class TCharacter : public TComplexObject
     SHasSeen hasseen[MAXHASSEEN]; // List of characters seen recently
 
   // Snap stuff
-    int32_t snapticks;                // Total number of frames left in snap move
+    int32_t snapticks = -1;           // retail +0x220: Damage stores an impact's snaptime (nothing reads it)
 
   // combatflash delay
-    int32_t combatflashticks;
+    int32_t combatflashticks = 0;     // retail +0x224 (a blow sets 5; Pulse counts it down)
 
   // Diagnostic counters. ai_pulse_count increments at every Pulse()
   // entry, ai_ai_count at every AI() entry. The overlay reads these
@@ -674,66 +803,52 @@ public:
     int32_t  DoingTargetX() const { return doing ? doing->target.x : 0; }
     int32_t  DoingTargetY() const { return doing ? doing->target.y : 0; }
     int32_t  NextAttack()   const { return nextattack; }
+    int32_t  LastBowShot()  const { return lastbowshot; }
+    int32_t  BowShots()     const { return bowshots; }
 protected:
 
   // Last bow shot ticks (so we don't shoot bow too fast)
-    int32_t lastbowshot = 0;
+    int32_t lastbowshot = 0;    // +0x22c
+  // Shots ShootBow has queued for ResolveBowShoot
+    int32_t bowshots = 0;       // +0x230
 
-  // AI fix, this variable keeps track of the last position we saw the enemy at
+  // Retail +0x23c: where the AI last saw or heard its target (the centre of
+  // its waypoint search when it loses it).
     S3DPoint target_last_position{};
-  // AI fix, this variable keeps track of when to save the last position of the enemy
-    int32_t last_position_count = 0;
-    bool target_out_of_sight = false;
-    int32_t last_position_distance = 0;
-    S3DPoint last_position_start_point{};
-    int32_t target_last_angle = 0;
 
-  // Retail wander state (from FUN_004c8b60 lines 199-205).
-  // field_map.md: 0x238 = wander_target  (retail mbr_0x8d / param_1[0x8d])
-  // field_map.md: 0x248 = wander_commit  (retail mbr_0x92 / param_1[0x92])
-  // The AI body caches the currently-targeted waypoint instance here and
-  // ticks `wander_commit` down each frame while we walk toward it. While
-  // commit > 0 we keep the same waypoint; when the search re-finds the
-  // same waypoint as already-committed we treat that as arrival and clear,
-  // letting the next tick pick a different one. Replaces the pre-release
-  // version's missing waypoint state (it had only a closest-waypoint
-  // search per tick which pingponged at arrival). Source-side we keep
-  // wander_target as a TSafeRef for safe-pointer semantics.
-    TSafeRef<TObjectInstance> wander_target;
-    int32_t  wander_commit = 0;
+  // Retail +0x248: how many more ticks the AI keeps facing its waypoint
+  // (ai_lookat) while chasing; a new waypoint gives it 6.
+    int32_t  waypointticks = 0;
 
   // retail +0x288: the item a Goto carries (the map pane's walk to an item
   // out of reach, 0x004cedb0), picked up when that walk arrives (0x004c6155,
   // 0x004c7fc3). Kept until then, or until a Goto carries another.
     TSafeRef<TObjectInstance> gotoitem;
 
-  // field_map.md: 0x254 = target_out_of_sight (retail mbr_0x95)
-  // field_map.md: 0x258 = target_out_of_sight_prev (retail mbr_0x96)
-  // field_map.md: 0x25c = sight_lost_ticks (retail mbr_0x97)
-  // The pair (out_of_sight, out_of_sight_prev) tracks both the current
-  // and previous-frame value of the "I can't see my target" flag, so the
-  // AI body can detect first-frame transitions. sight_lost_ticks
-  // decrements each frame after sight is lost; when it hits zero AI
-  // forces out_of_sight back to false (gives up on the search).
-  // MoveStep zeroes all three when the character commits to "stuck and
-  // can't sidestep" — sight tracking is invalidated when the path to the
-  // target is provably broken.
-  // (target_out_of_sight is declared above at line ~606 with the existing
-  // AI-fix sight tracking fields; the prev/lost_ticks pair lives here.)
-    bool     target_out_of_sight_prev = false;
+  // Retail +0x254 / +0x258 / +0x25c: the retreat (COMBAT_ATTACK_CHOICE.md
+  // §3.10.6). The AI's tail, every tick it runs: retreating = latch =
+  // (Health <= RETREATAT || latch) && frames != 0, then frames counts down.
+  // Damage arms the frames with RETREATFOR when a hit leaves 1 <= Health <=
+  // RETREATAT; StartRetreat (0x004d5fc0) with 96 and sets both flags. A
+  // retreating character runs straight away from its target (and takes
+  // no new one); ResolveCombat doesn't face it; a blocked step (MoveStep)
+  // clears all three. (The 1998 AI body below reads them as "target out
+  // of sight" until its retail port, C3b.)
+    bool     retreating = false;
+    bool     retreatlatch = false;
+    int32_t  retreatframes = 0;
   // Retail +0x234: an object the AI walks toward and ResolveCombat faces
-  // when no visible target overrides it (written by AI 0x004c8b60 and
-  // WanderToWaypoint 0x004c9790; no port writer yet).
+  // when no visible target overrides it: the waypoint AI 0x004c8b60 heads
+  // for (Wander 0x004c9790 writes it too, not ported).
     TObjectInstance* ai_lookat = nullptr;
   // Retail +0x28c / +0x290: the player's last attack button and how many
   // times running it was pressed (ButtonAttack 0x004d2480's same-button
   // rule); SetFighting resets them.
-  // Retail +0x280: the per-monster AI kind (AI_PerMonster 0x004c9b70 sets
-  // it; 1 is Baez, whom magic can't hurt). No port writer yet.
+  // Retail +0x280: the boss kind AI_PerMonster 0x004c9b70 gives, once (1
+  // Baez, whom magic can't hurt, 2 Solifuge, 3 Jhaga, 4 Yhagoro, -1 any other).
     int32_t monsterkind  = 0;
     int32_t lastbutton   = -1;
     int32_t buttonrepeat = 0;
-    int32_t  sight_lost_ticks = 0;
 };
 
 DEFINE_BUILDER("Character", TCharacter)

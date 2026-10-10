@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "character.h"
+#include "ctrlmap.h"
 
 #include "rules.h"
 #include "mappane.h"
@@ -82,10 +83,33 @@ extern TDialogPane DialogPane;
 // Returns a turn rate value based on how far character is turning
 #define MAKETURNRATE(diff) (MAXTURNRATE + max(0, (diff) - 32) / 32 * (MAXTURNRATE / 2))
 
-#define MAXSEENTIME (FRAMERATE * 10)
+// How long a character remembers one it saw or heard (HasSeenMe): retail
+// 0x438, 45 seconds (the 1998 source had ten).
+constexpr int32_t kMaxSeenTime = FRAMERATE * 45;
 
 namespace
 {
+// The characters within `range` of pos (a square) on `level`, in map order,
+// until `visit` returns false: retail's map iterator 0x0044ceb0 / 0x0044d080
+// as CharBlocking and FindCharacters make it (characters, flags 0xe0: no
+// inventories, the map rectangle, the loaded sectors -- what the level
+// constructor sets), or the A/B fixture's.
+template <class Visit>
+void ForCharactersNear(int32_t level, const S3DPoint& pos, int32_t range, Visit&& visit)
+{
+    if (TCharacter::nearbyCharactersSeam)
+    {
+        for (TCharacter* c : TCharacter::nearbyCharactersSeam(pos, range))
+            if (!visit(c))
+                return;
+        return;
+    }
+    SRect r{pos.x - range, pos.y - range, pos.x + range, pos.y + range};
+    for (TMapIterator i(level, &r, CHECK_NOINVENT, OBJSET_CHARACTER); i; i++)
+        if (!visit(static_cast<TCharacter*>(i.Item())))
+            return;
+}
+
 // Retail's three moving actions (walk, combat, bow steps).
 bool IsMoveAction(const TActionBlock* ab)
 {
@@ -97,6 +121,83 @@ bool IsMoveAction(const TActionBlock* ab)
 int32_t StepTurnRate(int32_t diff)
 {
     return (std::max)(0, diff - 32) / 32 * 4 + 8;
+}
+
+// The TOHITDAMAGE row a to-hit margin (to-hit less the roll) falls in, as
+// IsValidAttack (0x004d18d2) and ResolveHit (0x004c64e0) look it up: the
+// margin held to the first and last rows' keys, then the first row it
+// reaches. Its damage factor is (100 + DamagePercent); false when no row is
+// reached, which only keys out of order allow.
+bool ToHitDamageFactor(int32_t margin, int32_t& factor)
+{
+    const auto& table = Rules.tohitdamage;
+    if (margin >= table.front().minvalue)
+        margin = table.front().minvalue;
+    if (margin <= table.back().minvalue)
+        margin = table.back().minvalue;
+    for (const TRules::SToHitDamage& row : table)
+        if (margin >= row.minvalue)
+        {
+            factor = row.damagepercent + 100;
+            return true;
+        }
+    return false;
+}
+
+// REVSYNC: 0x0046e7d0 / 0x0046e7f0 -- a name as the text bar shows it: its
+// letters and digits read as a dialog tag, the name itself on a miss; at
+// most 99 characters.
+std::string ShownName(const char* name)
+{
+    constexpr size_t kLength = 100;
+    if (!name)
+        return {};
+    std::string tag;
+    for (const char* c = name; *c && tag.size() < kLength - 2; ++c)
+        if (isalnum((unsigned char)*c))
+            tag.push_back(*c);
+    const char* line = DialogList.GetLine(tag.c_str());
+    std::string shown = (line && line[0] != '[') ? line : name;
+    if (shown.size() > kLength - 1)
+        shown.resize(kLength - 1);
+    return shown;
+}
+
+// Where a character's combat target stands, as Damage filters its
+// CHARIMPACTs (0x004c4c78): the absolute bearing to it, not turned by the
+// character's facing, in three quarters about 0x80; none for 0xe0-0x1f.
+int32_t BearingFilter(int32_t bearing)
+{
+    if (bearing >= 0x20 && bearing < 0x60)
+        return CAI_TURNPLUS90;
+    if (bearing >= 0x60 && bearing < 0xa0)
+        return CAI_TURN180;
+    if (bearing >= 0xa0 && bearing < 0xe0)
+        return CAI_TURNMINUS90;
+    return 0;
+}
+
+// The angle a death or impact block takes: the bearing to whoever it
+// answers, turned as its impact's flags say (0x004c4eaf, 0x004c53c0).
+int32_t ImpactTurn(int32_t bearing, int32_t impflags)
+{
+    if (impflags & CAI_TURN180)
+        return (bearing - 0x80) & 0xff;
+    if (impflags & CAI_TURNPLUS90)
+        return (bearing + 0x40) & 0xff;
+    if (impflags & CAI_TURNMINUS90)
+        return (bearing - 0x40) & 0xff;
+    return bearing;
+}
+
+// The slot after an impact list's first `used`, where retail's searches end
+// when nothing matches: a zeroed record while the list has room.
+SCharAttackImpact* SlotAfter(SCharAttackImpact* list, int32_t used, int32_t capacity)
+{
+  // REVSYNC-DIVERGENCE: after a full list retail reads past it; an empty
+  // impact stands in.
+    static SCharAttackImpact none{};
+    return used < capacity ? &list[used] : &none;
 }
 }
 
@@ -110,7 +211,6 @@ void TCharacter::ClearChar()
 
     autocombat = AutoBeginCombat;
     
-    waitticks = 0;
     forcecommanddone = false;
     forcenomove = false;
     is_invisible = false;
@@ -172,8 +272,10 @@ void TCharacter::ClearChar()
         SetMana(MaxMana());
     }
 
-  // Reset AI data
-    nextattack = -1;
+  // Reset AI data. REVSYNC: ClearChar 0x004c18a0 starts both attack timers
+  // at 1 (the AI's first attack tick counts them down to 0).
+    nextattack = 1;
+    magictimer = 1;
     chainhits = 0;
     shovedir = -1;                // Block go around direction choice
     glimpse = noise = -1;         // Reset glimpse and noise values
@@ -632,7 +734,7 @@ int32_t FixedTimes(int32_t x, int32_t y)
 bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t *height, TCharacter* *bychar)
 {
     if (blockedSeam)
-        return blockedSeam(this, pos, newpos, bits);
+        return blockedSeam(this, pos, newpos, bits, bychar);
 
     int32_t h;
     if (!height)
@@ -908,11 +1010,11 @@ uint32_t TCharacter::MoveStep()
                     lastpos = pos;
                     lastwhy = why;
                 }
-                if (target_out_of_sight)
+                if (retreating)
                 {
-                    sight_lost_ticks = 0;
-                    target_out_of_sight = false;
-                    target_out_of_sight_prev = false;
+                    retreatframes = 0;
+                    retreating = false;
+                    retreatlatch = false;
                 }
             }
         }
@@ -1001,156 +1103,313 @@ int32_t TCharacter::CalculateDamage(int32_t damage, int32_t damagetype, int32_t 
     return taken;
 }
 
+// REVSYNC: TCharacter::Damage @ 0x004c4950 (vtable +0x228; COMBAT_HIT.md
+// §3.4) -- this character takes `damage` from `attacker`: as it is with
+// DT_NONE, else through CalculateDamage with the attacker's `modifier`.
+// Then the block that shows it: a death or an impact, the given `action`
+// (ResolveHit's hit block) when it suits, else one of this character's
+// CHARIMPACTs or the stock names; then the impact's snap, and the retreat
+// a low-health hit starts. Damage owns `action`: it ends as one of this
+// character's blocks or is freed.
 void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
     TActionBlock* action, TCharacter* attacker)
 {
-  // Calculate total damage
-    if (damagetype >= 0)
-        damage = CalculateDamage(damage, damagetype, modifier);
-
-  // Apply damage to low level object
-    TObjectInstance::Damage(damage);
-    CombatTrace::Event(this, "damage", "amount=%d\ttype=%d\thp=%d\tby=%s", damage, damagetype, Health(),
-                       attacker && attacker->GetName() ? attacker->GetName() : "-");
-
-  // Get impact pointer
-    SCharAttackImpact* impactdata = nullptr;
-
-  // Do death...
-    if (Health() < 1)
+    if (damageSeam)
     {
-        CombatTrace::Event(this, "death", "by=%s", attacker && attacker->GetName() ? attacker->GetName() : "-");
-/*      if (!random(0, 2))
-        {
-            S3DPoint vel;
-            vel.x = random(-8, 8);
-            vel.y = random(-8, 8);
-            vel.z = random(7, 12); 
-            int32_t count = random(6, 16);
-            Pulp(vel, count, count * 30);
-        }
-*/
-        TActionBlock* death = action;
-
-      // Caller didn't give us a special death to use so...
-        if (!death)
-        {
-          // Find a 'death' impact in impact list (if there is one)
-            const char *deathname = "dead";
-            impactdata = chardata->impacts;
-            int32_t i;
-            for (i = 0; i < chardata->numimpacts; i++, impactdata++)
-            {
-                if (damage >= impactdata->damagemin &&
-                    damage <= impactdata->damagemax &&
-                    (impactdata->flags & CAI_DEATH) &&
-                    (!(impactdata->flags & CAI_WHENSTUNNED) || doing->action == ACTION_STUN) &&
-                    (!(impactdata->flags & CAI_WHENDOWN) || doing->action == ACTION_KNOCKDOWN) &&
-                    HasActionAni(impactdata->impactname) &&
-                    (impactdata->loopname[0] == '\0' || HasActionAni(impactdata->loopname)))
-                {
-                    deathname = impactdata->impactname;
-                    break;
-                }
-            }
-
-            if (i >= chardata->numimpacts)      // Not found, use default "dead" animation!
-                impactdata = nullptr;
-
-            if (!impactdata && !HasActionAni(deathname)) // Check to see if default "death" is there
-                return;
-
-            death = new TActionBlock(deathname, ACTION_DEAD);
-            death->impact = impactdata;
-        }
-        else
-            impactdata = death->impact;
-
-        death->obj = doing->obj;
-        death->damage = damage;
-        death->interrupt = true;
-        death->priority = true;
-        death->loop = true;
-        ForceCommand(root);     // Make sure we play "combat to" transitions
-        ForceCommand(death);
+        damageSeam(this, damage, damagetype, modifier, action, attacker);
+        return;
     }
 
-  // Or do impact...
+  // The given block and the one Damage makes: each ends as root, doing or
+  // desired, or is freed here. (Retail frees a given block it replaces at
+  // once and leaves the rest to its caller, ResolveHit, which frees the
+  // block unless installed.)
+    struct SOwnedBlocks
+    {
+        TCharacter* self;
+        TActionBlock* given;
+        TActionBlock* made = nullptr;
+        ~SOwnedBlocks()
+        {
+            self->DropUnheld(given);
+            if (made != given)
+                self->DropUnheld(made);
+        }
+    } owned{this, action};
+
+    (void)Health();     // retail reads it first, for the network's damage message
+
+    if (attacker && (attacker->flags & (OF_ICED | OF_PARALIZE)))
+        return;
+    if (CheatAlreadyDead && ObjClass() == OBJCLASS_PLAYER)
+        return;
+    if (flags & OF_INVULNERABLE)
+        return;
+    if (CheatNahkranoth && attacker && attacker->ObjClass() == OBJCLASS_PLAYER)
+        damage = 100000;
+    if (attacker && !IsEnemy(attacker))
+        return;
+    if (ObjClass() == OBJCLASS_PLAYER && (static_cast<TPlayer*>(this)->PlayerState() & 2))
+        return;
+
+    if (damagetype >= 0)
+    {
+        damage = CalculateDamage(damage, damagetype, modifier);
+      // The victim's edge bonus for a player with an edged weapon (knife,
+      // sword, axe): IsValidAttack's line for the attacker, here for the
+      // one struck.
+        if (ObjClass() == OBJCLASS_PLAYER)
+        {
+            const int32_t wt = WeaponType();
+            if (wt > 0 && (wt <= 2 || wt == 4))
+                damage = damage * (static_cast<TPlayer*>(this)->EdgeBonus() + 100) / 100;
+        }
+    }
+    if ((charflags & kCharFlagUnkillable) && damage >= Health() - 1)
+        damage = Health() - 1;
+
+  // Retail floats the amount over the character here (its animator's number
+  // list, TCharAnimator 0x004da3b0): not ported yet, see COMBAT_HIT.md §9.2.
+
+  // Held in an interactive move (another's), a character loses no health
+  // and shows no block.
+    if (!InteractiveLocked() && damage)
+        TObjectInstance::Damage(damage, 0);
+    if (CombatTrace::Enabled())
+        CombatTrace::Event(this, "damage", "amount=%d\ttype=%d\thp=%d\tby=%s", damage, damagetype, Health(),
+                           attacker && attacker->GetName() ? attacker->GetName() : "-");
+
+    const int32_t dir = root && (root->action == ACTION_COMBAT || root->action == ACTION_BOW) && root->obj
+                      ? BearingFilter(AngleTo(root->obj)) : 0;
+
+    if (Health() <= 0 && !(charflags & kCharFlagDead))
+    {
+        charflags |= kCharFlagDead;
+        if (CombatTrace::Enabled())
+            CombatTrace::Event(this, "death", "by=%s", attacker && attacker->GetName() ? attacker->GetName() : "-");
+        Died(attacker);
+        if (attacker)
+            attacker->Killed(this);
+    }
+
+    if (!InteractiveLocked())
+    {
+        SCharAttackImpact* imp = Health() <= 0 ? DamageDeath(action, owned.made, damage, dir, attacker)
+                                               : DamageImpact(action, owned.made, damage, dir, attacker);
+        if (imp && imp->snapdist > 0 && attacker)
+        {
+            snapticks = imp->snaptime;
+            const int32_t away = (attacker->GetFace() - 0x80) & 0xff;
+            SetRotateZ(away);
+            SetMoveAngle(away);
+            S3DPoint p;
+            GetSnapPos(attacker, imp->snapdist, p);
+            MoveTo(p);
+        }
+    }
+
+    if (Health() <= chardata->retreatat && Health() >= 1)
+        retreatframes = chardata->retreatfor;
+}
+
+// Damage's death (0x004c4d45): the given block when it is a death, or
+// carries an interactive attack, else this character's first CHARIMPACT
+// death that fits, else the stock names; faced at the attacker. `made`:
+// the block made here. The impact whose snap follows.
+SCharAttackImpact* TCharacter::DamageDeath(TActionBlock* given, TActionBlock*& made, int32_t damage, int32_t dir,
+    TCharacter* attacker)
+{
+    TActionBlock* ab = given;
+    SCharAttackImpact* imp = nullptr;
+  // (Retail reads the given attack's flags unguarded.)
+    const bool usable = given && !(given->impact && !(given->impact->flags & CAI_DEATH) &&
+                                   !(given->attack && (given->attack->flags & CA_INTERACTIVE)));
+    if (usable)
+    {
+        imp = given->impact;
+        if (!imp && given->attack)
+        {
+          // The attack's impact of the block's name, or the slot after the last.
+            SCharAttackData* ad = given->attack;
+            int32_t k = 0;
+            while (k < ad->numimpacts && strcmp(ad->impacts[k].impactname, given->name) != 0)
+                ++k;
+            imp = SlotAfter(ad->impacts, k, MAXATTACKIMPACTS);
+        }
+    }
     else
     {
-        TActionBlock* impact = action;
-
-      // Caller didn't give us a special impact to use so...    
-        if (!impact)
+        char name[0x44] = "";
+        int32_t k = 0;
+        for (; k < chardata->numimpacts; ++k)
         {
-          // Find default impact from char's default impact list
-            const char *impactname = "impact";
-            ACTION impactaction = ACTION_IMPACT;
-            impactdata = chardata->impacts;
-            int32_t i;
-            for (i = 0; i < chardata->numimpacts; i++, impactdata++)
+            SCharAttackImpact& ci = chardata->impacts[k];
+            strncpyz(name, ci.impactname, sizeof(name));
+            if (!HasActionAni(name))
+                CombatAnimName(name, ci.impactname);
+            if ((ci.flags & dir) != dir || !(ci.flags & CAI_DEATH))
+                continue;
+            if (((ci.flags & CAI_WHENSTUNNED) && doing->action != ACTION_STUN) ||
+                ((ci.flags & CAI_WHENDOWN) && doing->action != ACTION_KNOCKDOWN))
+                continue;
+            if (!HasActionAni(name) || (ci.loopname[0] && !HasActionAni(ci.loopname)))
+                continue;
+            const int32_t share = DamageShare(damage);
+            if (share >= ci.damagemin && share <= ci.damagemax)
+                break;
+        }
+        imp = SlotAfter(chardata->impacts, k, MAXCHARIMPACTS);
+        if (k >= chardata->numimpacts || !name[0])
+        {
+            char dead[0x44];
+            CombatAnimName(name, "dead");
+            if (!HasActionAni(name))
             {
-                if (damage >= impactdata->damagemin &&
-                    damage <= impactdata->damagemax &&
-                    !(impactdata->flags & CAI_DEATH) &&
-                    (!(impactdata->flags & CAI_WHENSTUNNED) || doing->action == ACTION_STUN) &&
-                    (!(impactdata->flags & CAI_WHENDOWN) || doing->action == ACTION_KNOCKDOWN) &&
-                    HasActionAni(impactdata->impactname) &&
-                    (impactdata->loopname[0] == '\0' || HasActionAni(impactdata->loopname)))
+                CombatAnimName(dead, "dead");
+                snprintf(name, sizeof(name), "%s to %s", root->name, dead);
+                if (!HasActionAni(name))
                 {
-                    impactname = impactdata->impactname;
-                    if (impactdata->flags & CAI_STUN)
-                        impactaction = ACTION_STUN;
-                    else if (impactdata->flags & CAI_KNOCKDOWN)
-                        impactaction = ACTION_KNOCKDOWN;
-                    break;
+                    snprintf(name, sizeof(name), "%s to dead", root->name);
+                    if (!HasActionAni(name))
+                    {
+                        strncpyz(name, "dead", sizeof(name));
+                        if (!HasActionAni(name))
+                            name[0] = '\0';
+                    }
                 }
             }
-
-            if (i >= chardata->numimpacts)      // Not found, use default "impact" animation!
-                impactdata = nullptr;
-
-            if (!impactdata && !HasActionAni(impactname)) // Check to see if default "impact" is there
-                return;
-
-            impact = new TActionBlock(impactname, impactaction);
-            impact->impact = impactdata;
-
-            if (impactdata)
-                impact->wait = impactdata->looptime;
         }
-        else
-            impactdata = impact->impact;
-
-        impact->obj = doing->obj;
-        impact->damage = damage;
-        impact->interrupt = true;
-        ForceCommand(root);     // Make sure we play "combat to" transitions
-        ForceCommand(impact);
-
-        if (impact && impact->attack)
-            int32_t q = impact->attack->fatigue;
+      // No name: the given block (if any) stands, as retail leaves it.
+        if (name[0])
+        {
+            ab = made = new TActionBlock(name, ACTION_DEAD);
+            ab->impact = imp;
+        }
     }
 
-  // Do snap/push if needed
-    if (impactdata && impactdata->snapdist > 0 && attacker)
+    if (attacker)
     {
-        S3DPoint snap;
-        GetSnapPos(attacker, impactdata->snapdist, snap);
-//      if (impactdata->snaptime == 0)      // Immediate snap
-//      {
-            MoveTo(snap);
-//      }
-//      else                                // Time based snap
-//      {
-//          int32_t rollsnap = impactdata->snapdist * ROLLOVER / max(impactdata->snaptime, 1);
-//          S3DPoint snapvect;
-//          ConvertToVector(attacker->AngleTo(this), rollsnap, snapvect);
-//          SetVel(snapvect);
-//          snapticks = impactdata->snaptime;
-//      }
+        const int32_t a = AngleTo(attacker);
+        SetRotateZ(a);
+        SetMoveAngle(a);
+    }
+    if (!ab)
+        return imp;
+    ab->damage = damage;
+    ab->obj = doing->obj;
+    ab->priority = ab->interrupt = true;
+    if (!strstr(ab->name, " to "))
+        ab->loop = true;
+    ab->angle = ab->moveangle = doing->angle;
+    if (attacker && attacker->doing)
+        ab->attack = attacker->doing->attack;
+    ForceDamageBlock(ab, imp);
+    return imp;
+}
+
+// Damage's impact (0x004c52ab): blocking, a "blockimpact" unless the hit is
+// interactive; else the given block unless its impact is a death; else
+// this character's first CHARIMPACT that fits, or "impact". `made`: the
+// block made here. The impact whose snap follows.
+SCharAttackImpact* TCharacter::DamageImpact(TActionBlock* given, TActionBlock*& made, int32_t damage, int32_t dir,
+    TCharacter* attacker)
+{
+    TActionBlock* ab = given;
+    SCharAttackImpact* imp = nullptr;
+    if (doing->action == ACTION_BLOCK)
+    {
+      // (Retail reads the given attack's flags unguarded.)
+        const bool interactive = given && given->impact &&
+            ((given->attack && (given->attack->flags & CA_INTERACTIVE)) || (given->impact->flags & CAI_INTERACTIVE));
+        if (!interactive)
+        {
+            char name[0x44];
+            CombatAnimName(name, "blockimpact");
+            if (!HasActionAni(name))
+            {
+                strncpyz(name, "blockimpact", sizeof(name));
+                if (!HasActionAni(name))
+                    name[0] = '\0';
+            }
+            if (name[0])
+            {
+              // Retail's action 15 (the 1998 FLYBACK): played once, back to the root.
+                ab = made = new TActionBlock(name, ACTION_FLYBACK);
+                ab->priority = true;
+                ab->impact = nullptr;
+                ab->angle = GetFace();
+            }
+        }
+    }
+    else if (given && !(given->impact && (given->impact->flags & CAI_DEATH)))
+        imp = given->impact;
+    else
+    {
+        const char* name = "impact";
+        ACTION act = ACTION_IMPACT;
+        int32_t k = 0;
+        for (; k < chardata->numimpacts; ++k)
+        {
+            SCharAttackImpact& ci = chardata->impacts[k];
+            const int32_t share = DamageShare(damage);
+            if (share < ci.damagemin || share > ci.damagemax)
+                continue;
+            if ((ci.flags & dir) != dir || (ci.flags & CAI_DEATH))
+                continue;
+            if (((ci.flags & CAI_WHENSTUNNED) && doing->action != ACTION_STUN) ||
+                ((ci.flags & CAI_WHENDOWN) && doing->action != ACTION_KNOCKDOWN))
+                continue;
+            if (!HasActionAni(ci.impactname) || (ci.loopname[0] && !HasActionAni(ci.loopname)))
+                continue;
+            imp = &ci;
+            name = ci.impactname;
+            act = (ci.flags & CAI_STUN) ? ACTION_STUN : (ci.flags & CAI_KNOCKDOWN) ? ACTION_KNOCKDOWN : ACTION_IMPACT;
+            break;
+        }
+        if (imp || HasActionAni(name))
+        {
+            ab = made = new TActionBlock(name, act);
+            ab->impact = imp;
+            if (imp)
+                ab->wait = imp->looptime;
+        }
     }
 
+    if (!ab)
+        return imp;
+    ab->damage = damage;
+    ab->obj = doing->obj;
+    ab->interrupt = true;
+    if (attacker && attacker->doing)
+        ab->attack = attacker->doing->attack;
+    ForceDamageBlock(ab, imp);
+    SetRotateZ(ab->angle);
+    SetMoveAngle(ab->angle);
+    return imp;
+}
+
+// Damage's last steps for its block: an impact that doesn't snap or keep
+// the angle turns it from whoever it answers; then the root (for the
+// "combat to" transition) and the block, forced past any priority.
+void TCharacter::ForceDamageBlock(TActionBlock* ab, const SCharAttackImpact* imp)
+{
+    if (doing->obj && imp && imp->snapdist == 0 && !(imp->flags & CAI_KEEPANGLE))
+        ab->angle = ab->moveangle = ImpactTurn(AngleTo(doing->obj), imp->flags);
+    doing->priority = false;
+    if (desired)        // (retail's is never empty)
+        desired->priority = false;
+    ForceCommand(root);
+    ForceCommand(ab);
+}
+
+// The share of what's left that `damage` is, capped at 100: damage·100 /
+// max(1, max(Health(), damage)), Health() after the damage, read as
+// retail's code reads it. CHARIMPACT's damage range is in these terms.
+int32_t TCharacter::DamageShare(int32_t damage)
+{
+    const int32_t most = Health() > damage ? Health() : damage;
+    const int32_t denom = most < 1 ? 1 : (Health() > damage ? Health() : damage);
+    return damage * 100 / denom;
 }
 
 void TCharacter::RestoreHealth()
@@ -1194,13 +1453,14 @@ bool TCharacter::GetFieldText(const char *field, char *buf, int32_t buflen)
     return true;
 }
 
-// Returns true if character has seen 'me'
+// REVSYNC: HasSeenMe @ 0x004c58f0 -- 'me' is in my memory, seen or heard
+// within kMaxSeenTime (FindCharacters inlines it).
 bool TCharacter::HasSeenMe(TCharacter* me)
 {
     for (int32_t c = 0; c < MAXHASSEEN; c++)
     {
         if (hasseen[c].chr == me &&
-            PlayScreen.GameFrame() - hasseen[c].time < MAXSEENTIME)
+            PlayScreen.GameFrame() - hasseen[c].time < kMaxSeenTime)
                 return true;
     }
 
@@ -1574,404 +1834,451 @@ int32_t TCharacter::ResolveMove(TActionBlock* ab, int32_t bits)
 // This function is called by the ResolveAttack() function to resolve hits for
 // multiple characters.  The characters are usually found by calling the FindCharacters()
 // function, then calling this function for each character.  Returns true if hit.
-bool TCharacter::ResolveHit(TCharacter* targ, 
-    SCharAttackData* attack, SCharAttackImpact* attackimpact, int32_t attackdamage)
+// REVSYNC: TCharacter::ResolveHit @ 0x004c62b0 -- one character struck by an
+// attack at its impact frame (COMBAT_HIT.md §3.3). No dice: the to-hit and
+// the roll were fixed when the attack was chosen. A target blocking or
+// dodging and facing the blow takes 50 off the to-hit (the damage re-tiered
+// at the new margin). A failed roll is a glance, not a miss: the target
+// still takes the damage and plays the impact for it -- all but a blocking
+// player -- and the attacker plays its miss. The player and his foes get
+// the result on the text bar; the player earns experience.
+bool TCharacter::ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAttackImpact* impact,
+    int32_t damage, int32_t tohit, int32_t roll)
 {
-    int32_t damage = 0;
-    SCharAttackImpact* impact = nullptr;
+    if (!targ || !IsEnemy(targ))
+        return false;
+    const int32_t dist = Distance(targ);
+    const int32_t angle = FaceAngleTo(targ);
+    if (dist < attack->hitminrange || dist > attack->hitmaxrange)
+        return false;
+    if (abs(targ->pos.z - pos.z) > MAXZHITRANGE)
+        return false;
+    if (abs(angle) > attack->hitangle)
+        return false;
+    if (!IsValidTarget(targ))
+        return false;
+  // Someone held in an interactive move can only be struck by its maker.
+    if (targ->InteractiveLocked() && targ->Fighting() != this)
+        return false;
 
-    if (targ)
+    targ->SetHasSeen(this);
+    S3DPoint push;
+    ConvertToVector(GetFace(), 4 * ROLLOVER, push);
+    targ->vel += push;
+
+    bool hit = tohit >= roll;
+    int32_t dmg = damage;
+    bool blocked = false;
+    const int32_t facing = targ->FaceAngleTo(this);
+    if (!(impact && (impact->flags & CAI_DEATH)) && abs(facing) < 0x30 && targ->doing &&
+        (targ->doing->action == ACTION_BLOCK || targ->doing->action == ACTION_DODGE))
     {
-        int32_t dist = Distance(targ);
-        int32_t angle = FaceAngleTo(targ);
+      // Undo the tier the damage carries, take the guard's 50 off the
+      // to-hit, and tier it again.
+        int32_t factor;
+        if (damage > 0 && ToHitDamageFactor(tohit - roll, factor))
+            dmg = damage * 100 / factor;
+        tohit = std::clamp(tohit - 50, 10, 100);
+        if (ToHitDamageFactor(tohit - roll, factor))
+            dmg = (std::max)(1, factor * dmg / 100);
+        hit = tohit >= roll;
+        blocked = !hit;
+    }
+  // An interactive move lands on a target that is moving and not blocking.
+    if ((attack->flags & CA_INTERACTIVE) && (targ->accum.x || targ->accum.y) &&
+        !(targ->doing && targ->doing->action == ACTION_BLOCK))
+        hit = true;
 
-        // Check to see if impact is even possible? 
-        if (dist >= attack->hitminrange &&
-            dist <= attack->hitmaxrange && 
-            abs(targ->pos.z - pos.z) <= MAXZHITRANGE && 
-            abs(angle) <= attack->hitangle &&
-            !targ->IsDead() &&
-            !targ->IsInvisibleSpell())
+    int32_t def = targ->LuckMod();
+    def += targ->Defense();
+    int32_t off = LuckMod();
+    off += Offense();
+    if (dmg < 1)
+        dmg = 1;
+
+  // An interactive move can't kill without a death impact.
+    if (hit && (attack->flags & CA_INTERACTIVE) && targ->Health() - dmg < 1 &&
+        !(impact && (impact->flags & CAI_DEATH)))
+        hit = false;
+    if (!hit && (attack->flags & CA_INTERACTIVE))
+        return false;
+    CombatTrace::Event(this, hit ? "hit" : "miss", "target=%s\troll=%d\ttohit=%d\tdamage=%d",
+                       targ->GetName() ? targ->GetName() : "-", roll, tohit, dmg);
+
+  // The block the target plays: a death named by the impact when the blow
+  // kills, else the impact itself; a real hit (not a glance) also draws
+  // the target into the fight.
+    TActionBlock* hitab = nullptr;
+    const char* tag = "BASEGLANCE";
+    if (targ->Health() - dmg < 1)
+    {
+        if (impact && (impact->flags & CAI_DEATH) && targ->HasActionAni(impact->impactname))
         {
-            // If within hit range, set has seen to true!
-            targ->SetHasSeen(this);
-
-            S3DPoint vect;
-            ConvertToVector(facing, 4 * ROLLOVER, vect);
-            targ->vel += vect;
-
-          // Chance to hit is concatenation of all the below
-          // Note: To hit value is based on the following formula
-          // 
-          //    Armor + DefenseModifier + FatigueModifier(always negative) - AttackModifier
-          // 
-          //    This TOHIT value should 'almost' always be less than 25.  If it is greater,
-          //    the random value will be 1-(tohit + 1) to always give the char a chance to hit.  
-          // 
-            int32_t targangle = targ->FaceAngleTo(this);
-            int32_t tohit = targ->ArmorValue() + targ->DefenseModifier() + 
-                targ->FatigueModifier() - AttackModifier();
-            int32_t maxroll = max(25, tohit + 1);           
-            if (abs(targangle) < 48  &&                 // HALVE hit chances if blocking/dodging
-                (targ->IsDoing(ACTION_BLOCK) || targ->IsDoing(ACTION_DODGE)))
-                tohit += (maxroll - tohit + 1) * 3 / 4;
-            if (abs(targ->FaceAngleTo(this)) >= 48 ||   // If not facing us or...
-                targ->IsDoing(ACTION_ATTACK))           // is currently trying to do an attack
-                tohit -= (maxroll - tohit + 1) / 2;     // Then DOUBLE hit chances
-
-            // We hit, so set damage value to precalculated attack damage!
-            const int32_t roll = random(1, maxroll);
-            if (roll > tohit)
-            {
-                damage = attackdamage; 
-                impact = attackimpact; // This can be nullptr;
-            }
-            CombatTrace::Event(this, roll > tohit ? "hit" : "miss", "target=%s\troll=%d\ttohit=%d\tmaxroll=%d\tdamage=%d",
-                               targ->GetName() ? targ->GetName() : "-", roll, tohit, maxroll, damage);
-
-            // We hit the character (though we may not have done much damage)!
-            if (!targ->IsDoing(ACTION_BLOCK) || damage > 0) // ****** CODE FOR IMPACT *******
-            {
-                // Get interactive DEATH
-                TActionBlock* deathab = nullptr;
-                TActionBlock* impactab = nullptr;
-                TActionBlock* hitab = nullptr;
-                if (targ->Health() - damage < 1)
-                {
-                    if (impact)
-                        if ((impact->flags & CAI_DEATH) &&
-                            targ->HasActionAni(impact->impactname))
-                        {
-                            deathab = new TActionBlock(impact->impactname, ACTION_DEAD);
-                            deathab->obj = this;
-                            deathab->priority = true;   // Don't interrupt period!
-                            deathab->attack = attack;
-                            deathab->impact = impact;
-                            deathab->damage = damage;
-                            targ->SetFighting(this);
-                        }
-                    hitab = deathab;
-                }
-                else    // Get interactive IMPACT
-                {
-                    // If we're not fighting anyone, fight the guy who just hit us
-                    if ((!targ->Fighting()) && (!GetAutoCombat()))
-                    {
-                        // not fighting - shall we engage this target?
-                        if (dist <= targ->chardata->combatrangemin)
-                            targ->BeginCombat(this);
-                    }
-
-                    // Get impact animations
-                    if (impact && targ->HasActionAni(impact->impactname))
-                    {
-                        ACTION a;
-                        if (!impact)
-                            a = ACTION_IMPACT;
-                        else if (impact->flags & CAI_STUN)
-                            a = ACTION_STUN;
-                        else if (impact->flags & CAI_KNOCKDOWN)
-                            a = ACTION_KNOCKDOWN;
-                        else
-                            a = ACTION_IMPACT;
-                        impactab = new TActionBlock(impact->impactname, a);
-                        impactab->obj = this;
-                        impactab->interrupt = true; // Interrupt current char 'doing'
-                        impactab->priority = true;  // Don't imterrupt until done!
-                        impactab->attack = attack;
-                        impactab->impact = impact;
-                        impactab->damage = damage;
-                        if (impact)
-                            impactab->wait = impact->looptime;
-                        targ->SetFighting(this); // If special impact, face char to impact
-                    }
-                    hitab = impactab;
-                }
-
-        //        Don't use this anymore... see below...
-        //          targ->Damage(damage, 
-        //                  GetDamageType(WeaponType(), attack->flags),  
-        //                  attack->damagemod,
-        //                  impactab, deathab);
-
-          // Note: DamageType and damagemod's are already reflected in 'damage' total so we can get
-          // the right impact/death for this attack.  This means we have to use DT_NONE to avoid
-          // recalculating damage with damagetype modifiers, etc.
-                targ->Damage(damage, DT_NONE, 0, hitab, this);
-
-            }
-
-          // REVSYNC: the end of retail's hit resolution (0x004c62b0): a
-          // player earns experience from the target -- for the kill, in the
-          // weapon's skill, and in stealth if the target never saw it
-          // coming (TPlayer vtable +0x414, +0x41c, +0x420; each checks the
-          // target is dead). docs/gameplay/forensics/PLAYER_STATS.md §7.
-            if (ObjClass() == OBJCLASS_PLAYER)
-            {
-                TPlayer* player = static_cast<TPlayer*>(this);
-                player->AwardKillExp(targ);
-                player->AwardSkillExp(SK_WEAPONSKILLS + player->WeaponType(), targ);
-                player->AwardStealthExp(targ);
-            }
+            hitab = new TActionBlock(impact->impactname, ACTION_DEAD);
+            hitab->priority = true;
+            hitab->attack = attack;
+            hitab->obj = this;
+            hitab->impact = nullptr;
+            hitab->damage = dmg;
+            targ->SetFighting(this);
         }
-    }
-
-    return damage > 0;              // Did we miss?
-}
-
-// Maximum number of characters we can hit at a time
-#define MAXHITCHARS 32  // This should do it
-
-int32_t TCharacter::ResolveAttack(TActionBlock* ab, int32_t bits)
-{
-    TCharacter* targ = (TCharacter*)ab->obj;
-    SCharAttackData* attack = ab->attack;
-    SCharAttackImpact* impact = ab->impact;
-
-  // Set last attack stuff
-    if (ab->firsttime)
-    {
-        lastattack = attack;
-        lastattackticks = PlayScreen.GameFrame();
-    }
-
-  // Make sure moving angle equals face (it doesn't during a combat move)
-    SetMoveAngle(GetFace());
-
-    int32_t dist, angle;
-    if (targ)
-    {
-        dist = Distance(targ);
-        angle = FaceAngleTo(targ);
+        targ->combatflashticks = 5;
     }
     else
     {
-        dist = 0;
-        angle = 0;
-    }
-
-  // Do this
-    if (ab->firsttime)
-    {
-      // Signal our opponent that he's getting wailed on
-        if (targ)
-            targ->SignalAttack(this, ab->obj);
-    }
-
-  // Cause attack to push character... ONLY IF THERE IS SOMETHING *TO* KNOCK BACK!!!!
-    if (targ)
-        if (attack && 
-            !(attack->flags & CA_NOPUSH) && 
-            !(attack->flags & CA_INTERACTIVE) && 
-            !(GetAniFlags() & AF_FLY) && 
-            !(targ->GetAniFlags() & AF_FLY) && 
-            (!impact || impact->snapdist <= 0) &&
-            !targ->IsDead() &&
-            !targ->IsInvisibleSpell() &&
-            targ && dist <= (Radius() + targ->Radius() + 10))
+        if (hit && !targ->Fighting() && !autocombat && dist <= targ->chardata->combatrangemin)
+            targ->BeginFighting(this, ACTION_COMBAT);
+        if (impact)
         {
-            S3DPoint nm;
-            if (frame < attack->impacttime) // Before impact.. don't move
-            {
-                GetNextMove(nm);
-                nm.x = nm.y = 0;
-                SetNextMove(nm);
-            }
+            char name[RESNAMELEN];
+            if (impact->flags & (CAI_DEATH | CAI_INTERACTIVE))
+                strncpyz(name, impact->impactname, RESNAMELEN);
             else
-            {                                           // After impact, move monster (if not already moving)
-                targ->Face((GetFace() + 128) & 255);
-                targ->SetMoveAngle(GetFace());
-                targ->SetMoveDist(targ->GetMoveDist() + GetMoveDist());
+                targ->CombatAnimName(name, impact->impactname);
+            if (targ->HasActionAni(name))
+            {
+                targ->doing->priority = targ->doing->interrupt = false;
+                const ACTION action = (impact->flags & CAI_STUN) ? ACTION_STUN
+                                    : (impact->flags & CAI_KNOCKDOWN) ? ACTION_KNOCKDOWN : ACTION_IMPACT;
+                hitab = new TActionBlock(name, action);
+                hitab->priority = hitab->interrupt = true;
+                hitab->attack = attack;
+                hitab->impact = impact;
+                hitab->wait = impact->looptime;
+                hitab->obj = this;
+                hitab->damage = dmg;
+                targ->SetFighting(this);
             }
         }
-
-  // If we have target, and frame has reached trigger time for impact, then do the impact.
-    if (attack && frame == attack->impacttime)
+    }
+    if (hit)
     {
-        bool hit;
-
-      // Do main target character
-        if (targ)
-            hit = ResolveHit(targ, ab->attack, ab->impact, ab->damage);
-
-      // If this attack allows hits for other characters, do them too...
-        if (!(attack->flags & CA_ONETARGET))
-        {
-            int32_t numchars;
-            TCharacter* chars[MAXHITCHARS];
-
-            numchars = FindCharacters(chars, MAXHITCHARS, 
-                attack->hitmaxrange, GetFace(), attack->hitangle, FINDCHAR_ENEMY);
-
-            for (int32_t c = 0; c < numchars; c++)
-            {
-                if (chars[c] != targ)
-                    hit = (hit | ResolveHit(chars[c], ab->attack, ab->impact, ab->damage));
-            }
-        }
-
-      // Do miss if we failed to hit anything   
-        if (!hit)
-        {
-            TActionBlock* missab;
-
-          // Do we play miss animation, or return straightway to combat state? 
-            if (!(attack->flags & CA_NOMISS))
-            {
-                if (HasActionAni(attack->missname))
-                {
-                    missab = new TActionBlock(attack->missname, ACTION_MISS);
-                    missab->attack = attack;
-                }
-                else
-                {
-                    missab = new TActionBlock(root->name, ACTION_COMBAT);
-                    PlayWave(listrnd(chardata->misssounds));  // Play default sounds
-                }
-                missab->interrupt = true;
-                missab->obj = ab->obj;
-                SetDesired(missab);
-            }
-            
-          // Play block sound do sparks
-            if (targ && targ->doing->action == ACTION_BLOCK)
-            {
-                if (attack->flags & CA_SPARKS)
-                    EffectBurst("sparks");
-                PlayWave(listrnd(chardata->blocksounds));
-            }
-        }
-
-       // Subtract from fatigue value
-//      SetFatigue(max(Fatigue() - attack->fatigue, 0));    
-
+        const int32_t margin = tohit - roll;
+        const auto& tiers = Rules.tohitdamage;
+        tag = (attack->flags & CA_FATIGUEATTACK) ? "BASEFATIGUE"
+            : margin > tiers[0].minvalue ? "BASEDOUBLE"
+            : margin > tiers[1].minvalue ? "BASEHIT"
+            : margin > tiers[2].minvalue ? "BASEMINOR"
+            : margin > tiers[3].minvalue ? "BASESMALL" : "BASEGLANCE";
     }
 
-    return 0;
+  // The result line, for fights the player is in.
+    if ((!blocked || ((attack->flags & CA_INTERACTIVE) && hit)) &&
+        (this == Player || targ == Player) && !NoCombatResults)
+    {
+        char line[100];
+        if (DialogList.FindLine("FULLCOMBATRES") >= 0)
+        {
+            const char* what = DialogList.GetLine(tag);
+            const char* format = DialogList.GetLine("FULLCOMBATRES");
+            snprintf(line, sizeof(line), format, what, targ->GetName(), dmg, def, off);
+        }
+        else
+        {
+            const char* offense = DialogList.GetLine("BASEOFF");
+            const char* defense = DialogList.GetLine("BASEDEF");
+            const char* damaged = DialogList.GetLine("BASEDMG");
+            const char* what = DialogList.GetLine(tag);
+            snprintf(line, sizeof(line), "%s %s %s:%d %s:%d %s:%d", what, ShownName(targ->GetName()).c_str(), damaged, dmg,
+                     defense, def, offense, off);
+        }
+        TextBar.Print("%s", line);
+    }
+
+  // The damage: a blocking player takes none from a glance. Damage keeps
+  // or frees the block it is given (retail frees it here when Damage
+  // didn't install it, after a Damage that may have freed it already).
+    if (hit || !(targ->ObjClass() == OBJCLASS_PLAYER && targ->doing && targ->doing->action == ACTION_BLOCK))
+        targ->Damage(dmg, DT_NONE, 0, hitab, this);
+    else
+        delete hitab;   // REVSYNC-DIVERGENCE: ownership passes to Damage (no double free; see TCharacter::Damage)
+
+    if (targ->ObjClass() == OBJCLASS_PLAYER && targ->root && targ->root->action == ACTION_BOW)
+        targ->BeginFighting(nullptr, ACTION_COMBAT);
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        TPlayer* player = static_cast<TPlayer*>(this);
+        player->AwardKillExp(targ);
+        player->AwardSkillExp(SK_WEAPONSKILLS + WeaponType(), targ);
+        player->AwardStealthExp(targ);
+    }
+    return hit;
 }
 
+// Maximum number of characters an attack strikes at once (retail's 0x20).
+constexpr int32_t kMaxHitChars = 32;
+
+// REVSYNC: TCharacter::ResolveAttack @ 0x004c6dd0 -- every tick of an ATTACK
+// block (COMBAT_HIT.md §3.2): the first tick tells the target, until the
+// impact frame a close target holds still, at the impact frame each
+// character in reach is struck (ResolveHit), a miss plays the miss
+// animation (and against a guard sparks and a block sound), and the attack's
+// fatigue is paid -- a quarter for a missed interactive move.
+int32_t TCharacter::ResolveAttack(TActionBlock* ab, int32_t bits)
+{
+    if (flags & (OF_ICED | OF_PARALIZE))
+        return COM_DONE;
+    if (charflags & kCharFlagNoTurn)
+        return COM_DONE;
+    SCharAttackImpact* impact = ab->impact;
+    SCharAttackData* attack = ab->attack;
+    TCharacter* targ = (TCharacter*)ab->obj;
+    if (ab->firsttime)
+    {
+        lastattack = attack;
+        lasthit = 0;
+        lastattackticks = PlayScreen.GameFrame();
+    }
+    int32_t dist = 0;
+    if (targ)
+    {
+        dist = Distance(targ);
+        FaceAngleTo(targ);      // retail computes it and drops it
+    }
+    if (ab->firsttime && targ && ab->attack && !(ab->attack->flags & CA_PLAYANIM))
+        targ->SignalAttack(this, ab->obj, (ab->attack->flags & CA_MAGICATTACK) ? 2 : 0);
+    if (!attack)
+        return COM_DONE;        // REVSYNC-DIVERGENCE: retail reads through the null record
+    if (targ && !(attack->flags & (CA_INTERACTIVE | CA_NOPUSH)) && !(GetAniFlags() & AF_FLY) &&
+        !(targ->GetAniFlags() & AF_FLY) && !(impact && impact->snapdist > 0) && targ->Health() > 0 &&
+        !targ->invisible_spell && dist <= 10 && GetFrame() < attack->impacttime)
+    {
+      // Close in: hold still until the blow lands.
+        S3DPoint next;
+        GetNextMove(next);
+        next.x = next.y = 0;
+        SetNextMove(next);
+    }
+
+    if (GetFrame() == attack->impacttime && !(attack->flags & (CA_PLAYANIM | CA_MAGICATTACK)))
+    {
+        bool hit = false;
+        if (targ)
+            hit = ResolveHit(targ, ab->attack, ab->impact, ab->damage, ab->tohit, ab->roll);
+        lasthit = hit;
+        if (!(attack->flags & CA_ONETARGET))
+        {
+            TCharacter* chars[kMaxHitChars];
+            const int32_t n = FindCharacters(chars, kMaxHitChars, attack->hitmaxrange, GetFace(), attack->hitangle,
+                                             FINDCHAR_ENEMY);
+            for (int32_t c = 0; c < n; c++)
+                if (chars[c] != targ)
+                    hit |= ResolveHit(chars[c], ab->attack, ab->impact, ab->damage, ab->tohit, ab->roll);
+        }
+
+        int32_t cost = attack->fatigue;
+        if (!hit)
+        {
+            if (!(attack->flags & CA_NOMISS))
+            {
+                TActionBlock* miss;
+                if (HasActionAni(attack->missname))
+                {
+                    miss = new TActionBlock(attack->missname, ACTION_MISS);
+                    miss->attack = attack;
+                }
+                else
+                    miss = new TActionBlock(root->name, ACTION_COMBAT);
+                miss->obj = ab->obj;
+                doing->priority = false;
+                miss->priority = true;
+                SetMoveDist(0);
+                ForceCommand(miss);
+                PlayWave(listrnd(chardata->misssounds));
+            }
+          // Struck a guard: sparks between two weapons, and the clash.
+            if (targ && targ->doing->action == ACTION_BLOCK && Distance(targ) <= attack->hitmaxrange)
+            {
+                if (WeaponType() && targ->WeaponType())
+                    EffectBurst("sparks", 0x32);
+                if (TCharacter* opponent = Fighting())
+                {
+                    const int32_t mine = WeaponType();
+                    const int32_t theirs = opponent->WeaponType();
+                    const int32_t which = random(1, 2);
+                    const bool edged = theirs == WT_KNIFE || theirs == WT_SWORD || theirs == WT_AXE;
+                    const char* clash = "dull";
+                    if (mine == WT_KNIFE || mine == WT_SWORD || mine == WT_AXE)
+                        clash = theirs ? "sword" : "dull";
+                    else if (mine >= WT_BLUDGEON && mine <= 7)
+                        clash = edged ? "sword" : "dull";
+                    char sound[32];
+                    snprintf(sound, sizeof(sound), "block%d%s", which, clash);
+                    PlayWave(sound);
+                }
+            }
+            if (attack->flags & CA_INTERACTIVE)
+                cost = attack->fatigue / 4;
+        }
+        if (Fatigue() - cost > 0)
+            SetFatigue(Fatigue() - cost);
+        else
+            SetFatigue(0);
+    }
+
+    if ((attack->flags & CA_PLAYANIM) && Fighting())
+        SetRotateZ(AngleTo(Fighting()));
+    return COM_DONE;
+}
+
+// REVSYNC: TCharacter::OnAttacked @ 0x004cdce0 (slot 0x240) -- a monster told
+// an attack on it has begun (COMBAT_ATTACK_CHOICE.md §3.13): it turns on the
+// attacker unless its own target is much closer, counts the attacker's
+// repeats of one button, answers a fatigue attack with an attack of its own
+// and a third repeat with its guard, and else blocks by its BLOCK
+// frequency. The player isn't told.
+void TCharacter::SignalAttack(TObjectInstance* actor, TObjectInstance* target, int32_t flag)
+{
+    if (signalAttackSeam)
+    {
+        signalAttackSeam(this, actor, target, flag);
+        return;
+    }
+    if (target != this || InteractiveLocked() || objclass == OBJCLASS_PLAYER || !actor)
+        return;
+    TCharacter* attacker = static_cast<TCharacter*>(actor);
+    if (TCharacter* current = Fighting())
+    {
+        const int32_t nearer = Distance(current) * 75 / 100;
+        if (Distance(attacker) < nearer)
+            SetFighting(attacker);
+    }
+    else
+        SetFighting(attacker);
+
+    bool repeat = false;
+    const SCharAttackData* a = attacker->GetDoing()->attack;
+    if (a)
+    {
+        if (a->button == lastbutton)
+        {
+            if (++buttonrepeat >= 3)
+                repeat = true;
+        }
+        else
+            buttonrepeat = 1;
+        lastbutton = a->button;
+    }
+    else
+    {
+        lastbutton = -1;
+        buttonrepeat = 0;
+    }
+    if (a && (a->flags & CA_FATIGUEATTACK))
+    {
+        requestbits |= kRequestAttackNow | kRequestNoPlayAnim | kRequestInteractive;
+        return;
+    }
+    if (!repeat)
+    {
+        if (flag || Fighting() != attacker)
+            return;
+        const int32_t chance = BlockPcnt();
+        if (random(1, 100) > chance || attacker->InteractiveLocked())
+            return;
+    }
+    Block(-1);
+}
+
+// REVSYNC: TCharacter::ResolveImpact @ 0x004c74b0 (vtable +0x338; COMBAT_HIT.md
+// §3.7) -- each tick of an impact, stun or knockdown block: blood (one
+// tick in six of an "impale"; the first tick of a blow that took over 1% of
+// the character's health, unless its attack draws none), the combat flash;
+// when the animation ends, back to the root once the wait is out, else on
+// into the impact's loop.
 int32_t TCharacter::ResolveImpact(TActionBlock* ab, int32_t bits)
 {
-#if 0
-    static int32_t frame;
-    if (ab->firsttime)
-        frame = 0;
-
-    if (frame < 4)
-    {
-        int32_t x, y;
-        S3DPoint fpos = pos;
-        fpos.z += 75;
-        S3DPoint vect;
-        ConvertToVector(facing, 14, vect);
-        fpos += vect;
-        WorldToScreen(fpos, x, y);
-        PlayScreen.AddPostCharAnim(x, y, 0, GameData->Animation("flashred")->GetFrame(frame++), DM_ALPHA);
-    }
-#endif
-
-  // Do blood for impale    
-    if ((ab->Is("impale") && random(0, 5) == 1))
+    const float share = (float)ab->damage / (float)chardata->health;
+    const auto bleeds = [this] { return !(chardata->flags & CF_BADBLEEDER) && chardata->bleeder; };
+    if (ab->Is("impale") && random(0, 5) == 1 && bleeds())
         EffectBurst("blood", ab->Is("impale") ? 40 : 50);
-    
-  // Do blood for attack
-    if (ab->firsttime && 
-        ab->damage > 0 && (!ab->attack || (ab->attack->flags & CA_BLOOD)))
-            EffectBurst("blood", ab->Is("impale") ? 40 : 50);
-
-  // Do combat flash for impact firsttime!
+    if (ab->firsttime && bleeds() && share > 0.01f && (!ab->attack || (ab->attack->flags & CA_BLOOD)))
+        EffectBurst("blood", ab->Is("impale") ? 40 : 50);
     if (ab->firsttime)
-        combatflashticks = 3;
+    {
+        EffectCombatFlash();
+        combatflashticks = 5;
+    }
 
-    // Return from looping or root impact states.
-  // This allows some impacts to be used as death states.  For example, the impact state is
-  // a looping root state of the guy on the ground, and the impact has a "impact to combat"
-  // state where the guy gets up again and goes back to fight pose.  The impact state will
-  // use the get up transition, where the death state will just loop forever in the 'on the ground'
-  // animation.
-  // It also allows some impacts to have looping "stun" states where the attack sets the
-  // wait value of the action block to 'stunwait', and the impact loop plays until 'wait'
-  // is exauhsted.
     if (commanddone)
     {
-      // If we're done waiting, go back to combat mode
         if (ab->wait <= 0)
         {
             doing->priority = false;
             root->interrupt = true;
             SetDesired(root);
         }
-      // If we're done with impact animation, see if we should do the loop animation
-      // NOTE: impacts can have a "combat to impact" transition state and "impact_l" looping state without
-      // specifying anything for 'loopname'.  'loopname' is provided so that different impacts can end in
-      // the same looping stun, knockdown, or death state.
-        else if (ab->impact && 
-            ab->Is(ab->impact->impactname) &&
-            ab->impact->loopname[0] != '\0' &&
-            FindState(ab->impact->loopname) >= 0)
+        else if (ab->impact && ab->Is(ab->impact->impactname) && ab->impact->loopname[0] &&
+                 FindState(ab->impact->loopname) >= 0)
         {
-            TActionBlock* newab = new TActionBlock(*ab, ab->impact->loopname, ab->action);
-            newab->priority = true;
-            newab->interrupt = true;
+            auto* loop = new TActionBlock(*ab, ab->impact->loopname, ab->action);
+            loop->priority = loop->interrupt = true;
             desired->priority = false;
             doing->priority = false;
-            SetDesired(newab);
+          // Forced while the character plays its last attack's animation (or
+          // that attack is a PLAYANIM); else it waits its turn.
+          // REVSYNC-DIVERGENCE: retail reads the last attack unguarded; with
+          // none the loop waits.
+            if (lastattack && ((lastattack->flags & CA_PLAYANIM) || !stricmp(lastattack->attackname, doing->name)))
+                ForceCommand(loop);
+            else
+                SetDesired(loop);
+            DropUnheld(loop);
         }
     }
-
-  // Return from looping or root impact states.
-  // This allows some impacts to be used as death states.  For example, the impact state is
-  // a looping root state of the guy on the ground, and the impact has a "impact to combat"
-  // state where the guy gets up again and goes back to fight pose.  The impact state will
-  // use the get up transition, where the death state will just loop forever in the 'on the ground'
-  // animation.
-  // It also allows some impacts to have looping "stun" states where the attack sets the
-  // wait value of the action block to 'stunwait', and the impact loop plays until 'wait'
-  // is exauhsted.
     if (commanddone && ab->wait <= 0)
     {
-        TActionBlock* newab = new TActionBlock(root->name, ACTION_COMBAT);
-        newab->interrupt = true;
-        SetDesired(newab);
+        auto* back = new TActionBlock(root->name, ACTION_COMBAT);
+        back->interrupt = true;
+        SetDesired(back);
+        DropUnheld(back);
     }
-                        
-    return 0;
+    return COM_DONE;
 }
 
+// REVSYNC: TCharacter::ResolveBlock @ 0x004c77a0 (vtable +0x334) -- a block
+// faces whoever it answers, and holds until its wait is out or it is
+// stopped.
 int32_t TCharacter::ResolveBlock(TActionBlock* ab, int32_t bits)
 {
-    if (ab->wait <= 0 || (doing && doing->stop))
+    if (doing && doing->obj)
     {
-        ab->wait = 0;
-        SetDesired(nullptr);
-        return COM_DONE;
+        const int32_t a = AngleTo(doing->obj);
+        SetRotateZ(a);
+        SetMoveAngle(a);
     }
-
-    return COM_EXECUTING;
+    if (ab->wait > 0 && !(doing && doing->stop))
+        return COM_EXECUTING;
+    ab->wait = 0;
+    SetDesired(nullptr);
+    return COM_DONE;
 }
 
+// REVSYNC: TCharacter::ResolveDead @ 0x004c7810 (vtable +0x33c) -- the first
+// tick's blood (as retail tests it: only for a character whose BLEEDER
+// value failed to parse) and combat flash; when the dying animation ends,
+// the death impact's loop becomes the root.
 int32_t TCharacter::ResolveDead(TActionBlock* ab, int32_t bits)
 {
-  // Do blood for attack
-    if (ab->firsttime && (!ab->attack || (ab->attack->flags & CA_BLOOD)))
+    if (ab->firsttime && (!ab->attack || (ab->attack->flags & CA_BLOOD)) && chardata->bleeder &&
+        (chardata->flags & CF_BADBLEEDER))
         EffectBurst("blood", ab->Is("impale") ? 40 : 50);
-
-  // If we're done with dying animation (transition), do the death animation.
-    if (commanddone &&
-        ab->impact &&
-        ab->impact->loopname[0] != '\0' &&
-        !ab->Is(ab->impact->loopname) &&
+    if (ab->firsttime)
+    {
+        EffectCombatFlash();
+        combatflashticks = 5;
+    }
+    if (commanddone && ab->impact && ab->impact->loopname[0] && !ab->Is(ab->impact->loopname) &&
         FindState(ab->impact->loopname) >= 0)
     {
-        TActionBlock* newab = new TActionBlock(*ab, ab->impact->loopname, ab->action);
-        newab->priority = true;
-        newab->interrupt = true;
+        auto* loop = new TActionBlock(*ab, ab->impact->loopname, ab->action);
+        loop->priority = loop->interrupt = true;
         desired->priority = false;
         doing->priority = false;
-        SetDesired(newab);
-        SetRoot(newab);
+        SetDesired(loop);
+        SetRoot(loop);
+        DropUnheld(loop);
     }
-
     return COM_EXECUTING;
 }
 
@@ -2076,7 +2383,7 @@ int32_t TCharacter::ResolveCombat(TActionBlock* ab, int32_t bits)
     {
         if (!CanSeeCharacter(static_cast<TCharacter*>(obj), -1) && ai_lookat)
             face = false;
-        if (face && !target_out_of_sight)
+        if (face && !retreating)
             look = obj;
     }
     if (!look)
@@ -2155,6 +2462,9 @@ int32_t TCharacter::ResolveCombatMove(TActionBlock* ab, int32_t bits)
     return ResolveCombat(ab, bits);
 }
 
+// REVSYNC: TCharacter::ResolveBowAim @ 0x004c80c0 -- hold still and turn to
+// the aim; done once a shot is called for and the facing is there. The
+// root's and the doing block's angles follow the aim.
 int32_t TCharacter::ResolveBowAim(TActionBlock* ab, int32_t bits)
 {
     Halt(); // Make sure there's no movement
@@ -2164,43 +2474,68 @@ int32_t TCharacter::ResolveBowAim(TActionBlock* ab, int32_t bits)
 
   // Do turning
     AdvanceAngles(ab->angle, ab->angle, ab->turnrate);
+    root->moveangle = doing->moveangle = ab->angle;
+    root->angle = doing->angle = ab->angle;
 
     return COM_EXECUTING; // Allow to loop indefinitely until cancelled
 }
 
+// REVSYNC: TCharacter::ResolveBowShoot @ 0x004c8130 -- a player's queued
+// shots, one when the last is more than BOWWAIT ticks old: facing the aim,
+// an arrow of the equipped ammo's type flies from ARROWPOS (turned with the
+// facing) at ARROWSPEED, his; when it is made, one ammo leaves the
+// inventory (the slot is emptied with the last) and "bowshoot1".."6"
+// plays. Executing while shots are queued, done after; others shoot nothing.
 int32_t TCharacter::ResolveBowShoot(TActionBlock* ab, int32_t bits)
 {
-    // generate a new arrow and fire it
-    if (ab->firsttime)
+    if (ObjClass() != OBJCLASS_PLAYER)
+        return COM_DONE;
+    auto* player = static_cast<TPlayer*>(this);
+    const bool due = PlayScreen.GameFrame() - lastbowshot > chardata->bowwait;
+    if (bowshots > 0 && due)
     {
-        Face(ab->angle);
+        // Retail leaves a multiplayer client's arrow to the server; the
+        // network game isn't ported, so this is always the one shooting.
+        if (TObjectInstance* ammo = player->GetEquip(EQ_AMMO))
+        {
+            SetRotateZ(ab->angle & 255);
+            SetMoveAngle(ab->angle);
 
-        SObjectDef def;
-        memset(&def, 0, sizeof(SObjectDef));
-        def.objclass = OBJCLASS_AMMO;
-        def.objtype = AmmoClass.FindObjType("Arrow3D");
-        def.flags = OF_WEIGHTLESS;
-        GetPos(def.pos);
+            SObjectDef def{};
+            def.objclass = OBJCLASS_AMMO;
+            def.objtype = AmmoClass.FindObjType(ammo->GetName());
+            def.flags = OF_WEIGHTLESS;
+            def.pos = pos;
+            S3DPoint offset;
+            ConvertToVector((GetFace() + ConvertToFacing(chardata->arrowpos)) & 255, ::Distance(chardata->arrowpos),
+                            offset);
+            def.pos.x += offset.x;
+            def.pos.y += offset.y;
+            def.pos.z += chardata->arrowpos.z;
+            def.level = MapPane.GetMapLevel();
+            ConvertToVector(GetFace(), chardata->arrowspeed << 16, def.vel);
+            def.facing = GetFace();
+            // No arrow made (or not an AMMO one): no ammo spent, no sound.
+            TObjectInstance* arrow = MapPane.GetInstance(MapPane.NewObject(&def));
+            if (arrow && arrow->ObjClass() == OBJCLASS_AMMO)
+            {
+                static_cast<TAmmo*>(arrow)->SetShooter(this);
+                // (Retail then adds it to the map, 0x00451090: NewObject has.)
 
-        S3DPoint shootpos;
-        ConvertToVector(GetFace(), ::Distance(chardata->arrowpos), shootpos);
-        shootpos.z = chardata->arrowpos.z;
-        def.pos += shootpos;
+                const int32_t left = ammo->Amount();
+                DeleteFromInventory(ammo->GetName(), 1);
+                if (left == 1)
+                    player->Equip(nullptr, EQ_AMMO);
 
-        def.level = MapPane.GetMapLevel();
-        ConvertToVector(GetFace(), chardata->arrowspeed * ROLLOVER, def.vel);
-        def.facing = GetFace();
-
-        MapPane.NewObject(&def);
-
-        TObjectInstance* arrow = FindObjInventory(OBJCLASS_AMMO, AT_ARROW);
-        if (arrow)
-            DeleteFromInventory(arrow->GetName(), 1);
-
-        PlayWave("arrow");
+                char sound[] = "bowshoot*";
+                sound[8] = char('1' + random(0, 5));
+                PlayAt(sound, pos);
+            }
+        }
+        lastbowshot = PlayScreen.GameFrame();
+        bowshots--;
     }
-
-    return 0;
+    return bowshots <= 0 ? COM_DONE : COM_EXECUTING;
 }
 
 int32_t TCharacter::ResolveLeap(TActionBlock* ab, int32_t bits)
@@ -2289,8 +2624,36 @@ int32_t TCharacter::ResolvePivot(TActionBlock* ab, int32_t bits)
     return COM_EXECUTING;
 }
 
-void TCharacter::EffectBurst(char *name, int32_t height)
+// REVSYNC: TCharacter::EffectCombatFlash @ 0x004c8500 -- the flash of a
+// blow: a "combatflash" effect at (30, 30, 80) from the character, in an
+// even state of its imagery short of the last (2·random(0, states / 2)).
+void TCharacter::EffectCombatFlash()
 {
+    if (effectCombatFlashSeam)
+    {
+        effectCombatFlashSeam(this);
+        return;
+    }
+    extern TObjectClass EffectClass;
+    SObjectDef def{};
+    def.objclass = OBJCLASS_EFFECT;
+    def.objtype = EffectClass.FindObjType("combatflash");
+    def.level = MapPane.GetMapLevel();
+    def.pos = pos + S3DPoint(30, 30, 80);
+    TObjectInstance* flash = MapPane.GetInstance(MapPane.NewObject(&def));
+    if (!flash)
+        return;
+    const int32_t states = flash->GetImagery() ? flash->GetImagery()->NumStates() : 1;
+    flash->SetState(states > 0 ? (std::min)(2 * random(0, states / 2), states - 2) : 0);
+}
+
+void TCharacter::EffectBurst(const char *name, int32_t height)
+{
+    if (effectBurstSeam)
+    {
+        effectBurstSeam(this, name, height);
+        return;
+    }
 //  return;
     // hack? maybe not... just no blood if i'm burning
     if (burning && !stricmp(name, "blood"))
@@ -2412,10 +2775,30 @@ bool TCharacter::IsFinalState()
     return false;
 }
 
+// REVSYNC: IsEnemy @ 0x004c89c0 -- never an idle player (state bit 2), nor,
+// between players, one of my team or either of us not a player killer;
+// always the one fighting me; else one named, typed or grouped among my
+// ENEMIES, if he's aggressive or a player.
 bool TCharacter::IsEnemy(TCharacter* chr)
 {
+    if (isEnemySeam)
+        return isEnemySeam(this, chr);
+    if (chr->ObjClass() == OBJCLASS_PLAYER)
+    {
+        const auto* other = static_cast<const TPlayer*>(chr);
+        if (other->PlayerState() & 2)
+            return false;
+        if (ObjClass() == OBJCLASS_PLAYER)
+        {
+            const auto* me = static_cast<const TPlayer*>(this);
+            if (!me->Team().name.empty() && stricmp(me->Team().name.c_str(), other->Team().name.c_str()) == 0)
+                return false;
+            if (!other->IsPlayerKiller() || !me->IsPlayerKiller())
+                return false;
+        }
+    }
   // Is this character attacking me
-    if (chr->IsFighting() && chr->Fighting() == this)
+    if (chr->Fighting() == this)
         return true;    // That makes me hostile no matter what
 
   // Is this character a PARTICULAR enemy of mine (i.e. enemy by name)
@@ -2438,395 +2821,291 @@ bool TCharacter::IsEnemy(TCharacter* chr)
 // * General AI Routines *
 // ***********************
 
-// REVSYNC: retail TCharacter::AI @ 0x4c8b60
-//   recon/discovered/cls_0x5a7b98_TCharacter_AI_4c8b60.cpp (size 2291 / 326 lines).
-//   Per-tick monster brain. Retail flow:
-//     1. Health<1 -> return (dead).
-//     2. Player class with charflags-mask 0x100000 unset -> return.
-//     3. OF_DISABLED, NoAI globals, or AI-paused -> Stop(), return.
-//     4. AI_PerMonster() per-creature overlay. We currently only handle
-//        Araknid (the Demo 1 creature), which has no overlay (returns 0).
-//     5. Validate desired->obj as a current target via CanSeeCharacter
-//        check; if missing/invalid, every 32 frames sweep FindCharacters
-//        to acquire a fresh enemy.
-//     6. If we have a target and we're in combat, run the attack tree:
-//        out-of-range / blocked -> sidestep or Go(angle); in-range ->
-//        RandomAttack pick guarded by a CharBlocking line check; tick
-//        nextattack/waitticks counters and reset from chardata when they
-//        underflow.
-//     7. If no target (or non-combat root) and not moving, wander to the
-//        nearest "waypoint" object. The committed waypoint is held in
-//        wander_target with a wander_commit watchdog so we don't
-//        ping-pong on arrival.
-//     8. Tail: target_out_of_sight is the *current* "lost target" flag,
-//        target_out_of_sight_prev mirrors it for transition detection,
-//        sight_lost_ticks is a frame countdown.
-//
-// Field-offset cross-references (recon/discovered/field_map.md):
-//   doing       (mbr_0xd8  / param_1[0x36])
-//   desired     (mbr_0xe0  / param_1[0x38])
-//   chardata    (mbr_0xfc  / param_1[0x3f])
-//   charflags   (mbr_0x110 / param_1[0x44])
-//   nextattack  (mbr_0x120 / param_1[0x48])
-//   waitticks   (mbr_0x124 / param_1[0x49])
-//   chainhits   (mbr_0x12c / param_1[0x4b])
-//   oldab       (mbr_0x160 / param_1[0x58])  — retail uses for "in-progress action"
-//   wander_target            (mbr_0x238 / param_1[0x8d])
-//   target_last_position     (mbr_0x23c / param_1[0x8f..0x91])
-//   wander_commit            (mbr_0x248 / param_1[0x92])
-//   target_out_of_sight      (mbr_0x254 / param_1[0x95])
-//   target_out_of_sight_prev (mbr_0x258 / param_1[0x96])
-//   sight_lost_ticks         (mbr_0x25c / param_1[0x97])
+// REVSYNC: TCharacter::AI @ 0x004c8b60 (COMBAT_ATTACK_CHOICE.md §3.10) --
+// a character's brain, each tick Pulse runs it: the gates and the bosses'
+// overlay; keep the combat target or look for one (every 32 frames); then,
+// standing in the combat stance (or the walk of a walk-fighter, or asked by
+// OnAttacked), the attack branch, else the move branch (run from the target
+// while retreating, chase it seen or heard, search for it by waypoints, or
+// step aside of whoever stands in the way); last the retreat state.
+// (Retail first asks NetOwner, slot 0x178: 1 in single player.)
 void TCharacter::AI()
 {
     ai_ai_count++;
 
-  // (1) Dead -> skip entirely.
-    if (Health() < 1)
-        return;
-
-  // (2) REVSYNC: AI @ 0x004c8b60 -- the player runs AI only with charflags
-  //     0x100000 (retail sets it for a net player, 0x0051efc4; the combat
-  //     arena's --playerai sets it to let Locke fight on his own).
     if (ObjClass() == OBJCLASS_PLAYER && !(charflags & kCharFlagPlayerAI))
         return;
-
-  // (3) Global / object-flag gates. Retail also tests DAT_00668110 (a
-  //     "AI globally disabled" flag e.g. cinematic mode); we don't have
-  //     that global yet. NoAI is our stand-in.
-    if ((flags & OF_DISABLED) || NoAI || Editor)
+    if ((flags & OF_DISABLED) || Health() <= 0 || NoAI)
     {
-        if (doing && (doing->action == ACTION_MOVE ||
-                      doing->action == ACTION_COMBATMOVE ||
-                      doing->action == ACTION_BOWMOVE))
+        if (IsMoveAction(doing))
             Stop();
         return;
     }
+    if (Editor)
+        return;
+    if (Aggressive())
+        AIPerMonster();
 
-  // (4) Per-monster behavioural overlay. Retail dispatches on a one-time
-  //     name match against {"Baez","Solifuge","Jhaga","Yhagoro"}; every
-  //     other creature (including Araknid) takes the default branch and
-  //     returns 0, falling through to the generic AI body below.
-  //     Demo 1 only ships Araknid, so we leave the overlay as a no-op
-  //     stub and TODO the four boss cases. See
-  //     recon/discovered/araknid_ai_notes.md for confirmation that
-  //     Araknid has no special-case branch.
-  //     TODO retail: port AI_PerMonster cases 1..4 (Baez, Solifuge,
-  //     Jhaga, Yhagoro) when we actually have those creatures in a demo.
-
-  // (5) Validate / acquire combat target.
-  //
-  //     Retail reads desired->obj as the current target (the action
-  //     block's `obj` field), validates it via IsValidTarget (0x4cd990),
-  //     and if missing acquires a new one every 32 frames via
-  //     FindCharacters with a 32-unit angle range.
-    TCharacter* target = nullptr;
-    if (desired && desired->obj &&
-        (desired->action == ACTION_COMBAT || desired->action == ACTION_BOW))
+    TCharacter* target = Fighting();
+    if (!IsValidTarget(target) || !Fighting())
     {
-        // desired->obj is the combat target.
-        target = (TCharacter*)desired->obj;
-        if (!target || target->IsDead() ||
-            (target->ObjClass() != OBJCLASS_CHARACTER &&
-             target->ObjClass() != OBJCLASS_PLAYER))
-        {
-            target = nullptr;
-        }
-    }
-
-    if (!target)
-    {
-      // Periodic enemy sweep — retail only fires once every 32 frames
-      // (frame_tick xor charflags & 0x1f != 0) which keeps the cost
-      // amortised across the monster population.
-        if (Aggressive() && ((CurrentScreen->FrameCount() ^ (int32_t)charflags) & 0x1f) == 0)
+        target = nullptr;
+        if (!Editor && Aggressive() && !(charflags & kCharFlagNoTurn) &&
+            !((PlayScreen.GameFrame() ^ GetMapIndex()) & 0x1f))
         {
             TCharacter* found = nullptr;
-            int32_t n = FindCharacters(&found, 1, /*range=*/-1, /*angle=*/-1, /*anglerange=*/32,
-                                       FINDCHAR_ENEMY | FINDCHAR_SEE | FINDCHAR_HEAR);
-            if (n > 0 && found && !target_out_of_sight)
-                BeginFighting(found, ACTION_COMBAT);
-            target = Fighting();
+            if (FindCharacters(&found, 1, -1, -1, 0x20, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) > 0)
+                target = found;
+            if (target && !retreating)
+                BeginFighting(target, ACTION_COMBAT);
         }
     }
 
-  // (6+7) Main per-tick decision tree.
-    if (!doing)
-        goto sight_tail;
-
-  // ===== Pre-step: cartwheel-pair on blocker =====
-  // Retail FUN_004c8b60:96-115. When we're NOT in a move root and
-  // another character is blocking our position (FindClearPath returns
-  // a char), throw a SideStep one direction; if the blocker isn't our
-  // combat target, throw the OPPOSITE side too — that's the "cartwheel
-  // both ways" liveliness. The retail action gate is "doing == null OR
-  // action ∉ {MOVE, COMBATMOVE, BOWMOVE}", i.e. don't double-step while
-  // already moving.
-  //
-  // We use CharBlocking() in place of retail's FindClearPath(pos, pos)
-  // — same semantics for this call (blocker char near current pos).
-  // The accum.x/y == 0 gate is retail FUN_004c8b60:98 ("character has
-  // no horizontal momentum"): only cartwheel when truly standing still
-  // in combat, never mid-step.
+    if (target && doing)
     {
-        ACTION da = doing->action;
-        if (da != ACTION_MOVE && da != ACTION_COMBATMOVE && da != ACTION_BOWMOVE
-            && accum.x == 0 && accum.y == 0)
-        {
-            TCharacter* blocker = CharBlocking(this, pos, Radius());
-            if (blocker)
-            {
-              // Retail line 101-102: cVar2 = diff>=0 ? 'r' : 'l'.
-              // (Sidestep moves 90° off facing; retail issues the pair
-              // and lets the engine decide which one actually plays.)
-                int32_t diff = AngleDiff(GetFace(), AngleTo(blocker));
-                char first = (diff >= 0) ? 'r' : 'l';
-                SideStep(first);
-
-              // Retail lines 104-114: if blocker is NOT our combat
-              // target, fire the opposite-side sidestep too.
-                TObjectInstance* combat_target = nullptr;
-                if (desired && (desired->action == ACTION_COMBAT ||
-                                desired->action == ACTION_BOW))
-                    combat_target = desired->obj;
-                if (combat_target != (TObjectInstance*)blocker)
-                {
-                    char second = (first == 'l') ? 'r' : 'l';
-                    SideStep(second);
-                }
-              // Retail then does `goto LAB_004c93ce` — straight to the
-              // sight-tail, skipping the attack tree this frame. We
-              // mirror that with `goto sight_tail` so the in-range
-              // tree below doesn't immediately try to attack.
-                goto sight_tail;
-            }
-        }
+        const bool attacking = (doing->Is("walk") && !retreating && (charflags & kCharFlagWalkFighter)) ||
+                               (doing->action == ACTION_COMBAT && !retreating) ||
+                               ((requestbits & kRequestAttackNow) &&
+                                (requestbits & (kRequestNoPlayAnim | kRequestInteractive)));
+        if (attacking)
+            AIAttack(target);
+        else
+            AIMove(target);
     }
 
-  // Special branch: we have an in-flight action that's interactive (e.g.
-  // a cast / use). Retail tests `TActionBlock_Is("combat") && !target_out_of_sight && (charflags & 0x4000)`
-  // — we approximate by skipping the attack tree when nextattack hasn't
-  // armed.
+  // The retreat: on while health is at RETREATAT or below (or it was on)
+  // and its frames last, which count down.
+    retreating = retreatlatch = (Health() <= chardata->retreatat || retreatlatch) && retreatframes != 0;
+    if (retreatframes > 0)
+        retreatframes--;
+}
+
+// AI's attack branch (0x004c8cd9-0x004c8f5b; §3.10.2). The attack timer
+// counts down and gates IsValidAttack; an attempt costs a second tick and
+// re-arms it from ATTACKFREQ the same tick, the magic timer from MAGICFREQ.
+void TCharacter::AIAttack(TCharacter* target)
+{
+    ai_lookat = nullptr;
+    if (nextattack > 0)
+        nextattack--;
+    if (magictimer > 0)
+        magictimer--;
+    if (nextattack == 0 || magictimer == 0 || (requestbits & kRequestAttackNow))
     {
-        ACTION da = doing->action;
-
-        if (da == ACTION_COMBAT && target && !target_out_of_sight)
+        requestbits &= ~kRequestAttackNow;
+        if (lastattack && doing->Is(lastattack->attackname))
         {
-          // ===== In combat, target visible: tick attack/wait, fire =====
-            if (nextattack > 0) nextattack--;
-            if (waitticks  > 0) waitticks--;
-
-            if (nextattack == 0 || waitticks == 0)
-            {
-              // Reset interrupt flag (retail clears charflags & 1).
-
-              // Retail gating: skip attack if oldab is set with the
-              // "interactive" bit. Approximation: just always allow.
-                int32_t tdist = Distance(target);
-                if (tdist > chardata->maxattackrange)
-                {
-                  // Out of range: walk toward target. Retail Walk(angle)
-                  // (FUN_004ce350) is essentially Go(angle). The
-                  // pre-snapshot hardcoded "> 80" was wrong for
-                  // short-reach creatures (e.g. Araknid attkrng=32);
-                  // chardata-driven is right.
-                    target_out_of_sight = false;
-                    Go(AngleTo(target));
-                    oldab = nullptr;
-                }
-                else
-                {
-                  // In range: try a percentage-driven attack. Retail
-                  // first does a CharBlocking line check from us through
-                  // 2*radius — if some other character is between us
-                  // and the target, sidestep instead of attacking
-                  // through them.
-                    int32_t pcnt    = random(1, 100);
-                    bool    attacked = RandomAttack(pcnt);
-
-                    int32_t reach = Radius() * 2;
-                    TCharacter* lineblocker = CharBlocking(this, pos, reach);
-                    if (lineblocker && lineblocker != target)
-                    {
-                        if (!attacked)
-                        {
-                          // Sidestep around the blocker, retail
-                          // FUN_004c8b60:282-291. AngleDiff sign picks
-                          // the side: blocker on our right (diff in
-                          // +33..+95) → step left; blocker on our left
-                          // (-95..-33) → step right; else skip.
-                            int32_t angtoblock = AngleTo(lineblocker);
-                            int32_t diff       = AngleDiff(GetFace(), angtoblock);
-                            if (diff >= 33 && diff <= 95)
-                                SideStep('l');
-                            else if (diff <= -33 && diff >= -95)
-                                SideStep('r');
-                          // else: blocker is in front-cone or behind —
-                          // sidestep wouldn't help; just skip the dodge.
-                        }
-                    }
-
-                    if (attacked)
-                    {
-                      // Attack landed: bump chainhits (retail decrements
-                      // mbr_0x4b which is our chainhits — but retail's
-                      // semantics are "chain-attack budget remaining",
-                      // counting down from MAXCHAINHITS).
-                        if (chainhits > 0) chainhits--;
-                    }
-                }
-
-                // TODO retail: gate `if oldab && (oldab->mbr_0x24 & 0x01000000)`
-                // — the retail decompile masks bit 24 of TActionBlock
-                // offset 0x24, but in our 92-byte source TActionBlock that
-                // offset is `frame` (an int frame number). Either the
-                // retail layout differs (TActionBlock is 100 bytes there
-                // with 8 bytes of extra fields per field_map.md) or the
-                // mask targets a flag that lives somewhere else in our
-                // layout. Until we resolve, just always refresh.
-                if (nextattack <= 0)
-                    nextattack--;
-            }
-
-            if (nextattack < 0)
-                nextattack = random(chardata->minattackfreq * FRAMERATE / 100,
-                                    chardata->maxattackfreq * FRAMERATE / 100);
-            // TODO retail: waitticks reset uses chardata + 0x1d8 / 0x1dc
-            // (the field directly after attackfreq); field_map.md tags
-            // these as mana/fatigue but that doesn't match SCharData
-            // semantics. For now just reuse the attackfreq bounds — this
-            // gives correct behaviour for "tick down both counters in
-            // lockstep, refire when either runs out".
-            if (waitticks < 0)
-                waitticks = random(chardata->minattackfreq * FRAMERATE / 100,
-                                   chardata->maxattackfreq * FRAMERATE / 100);
+            // still making it
         }
-        else if ((da == ACTION_MOVE || da == ACTION_COMBATMOVE || da == ACTION_BOWMOVE)
-                 && target)
+        else if (Distance(target) > chardata->maxattackrange)
         {
-          // ===== We're in a move root with a known target: drive the =====
-          // ===== move-angle and decide whether to switch to attack    =====
-            int32_t tdist = Distance(target);
-            if (tdist < chardata->maxattackrange && !target_out_of_sight)
+            Go(AngleTo(target));
+            lastattack = nullptr;
+            lasthit = 0;
+        }
+        else
+        {
+            const bool attacked = RandomAttack(random(1, 100));
+          // Someone else in the way and no attack: step aside.
+            TCharacter* blocker = CharBlocking(this, pos, Radius() * 2);
+            if (blocker && blocker != target && !attacked)
             {
-                Stop();
+                const int32_t side = FaceAngleTo(blocker);
+                if (side > 0x20 && side < 0x60)
+                    SideStep('l');
+                else if (side < -0x20 && side > -0x60)
+                    SideStep('r');
             }
-            // TODO retail: same `oldab->mbr_0x24 & 0x01000000` gate as
-            // above — see the matching comment block in the COMBAT branch.
-            else if (CanSeeCharacter(target))
-            {
-              // (target_out_of_sight goes false next frame via tail)
-                target_last_position = target->Pos();
-                doing->moveangle      = AngleTo(target);
-                doing->angle          = AngleTo(target);
-            }
+            if (attacked)
+                attackcount--;
             else
             {
-              // ===== Lost sight: hop waypoints toward target =====
-              // Retail FUN_004c8b60 lines 128-244: when we have a target
-              // we can't see, we walk between "waypoint" objects to
-              // approach the last-known position. Initial search center
-              // is target's last known pos; on arrival at a waypoint
-              // (within ~5 units) we re-search with center at the
-              // target's CURRENT pos to find the next hop.
-                last_position_distance = ::Distance(pos, target_last_position);
-                last_position_start_point = pos;
-                target_out_of_sight = true;
-                target_last_angle = ConvertToFacing(pos, target_last_position);
-
-              // If we have a committed waypoint and we've arrived at it,
-              // clear the commit so the search below re-picks. Use the
-              // target's current pos as the new search center (retail
-              // line 209-213: iStack_68 = piVar10[4..6] where piVar10 is
-              // the target character).
-                constexpr int32_t ARRIVAL_DIST = 5;
-                S3DPoint search_center = target_last_position;
-                if (TObjectInstance* cmt = wander_target.Get())
-                {
-                    if (::Distance(pos, cmt->Pos()) < ARRIVAL_DIST)
-                    {
-                        wander_target = TSafeRef<TObjectInstance>{};
-                        wander_commit = 0;
-                        search_center = target->Pos();
-                    }
-                }
-
-                TObjectInstance* wp = WanderToWaypoint(search_center);
-
-              // Walk toward the committed waypoint if we have one,
-              // otherwise straight toward the last-known target pos.
-                if (wp)
-                {
-                    doing->moveangle = AngleTo(wp);
-                  // Retail also caches the walk-to position in
-                  // mbr_0x8f/0x90/0x91; we mirror that into
-                  // target_last_position so subsequent frames have a
-                  // sensible fallback if the waypoint disappears.
-                }
-                else
-                {
-                    doing->moveangle = target_last_angle;
-                }
+                lastattack = nullptr;
+                lasthit = 0;
             }
         }
-      // No idle-wander branch: retail leaves untargeted monsters alone
-      // and lets per-character ALWAYS scripts (System 11) do whatever
-      // patrolling the level designer wants. Until System 11 is ported,
-      // monsters with no target just stand still.
+        if (!lastattack || !(lastattack->flags & CA_PLAYANIM))
+            nextattack--;
+    }
+    if (nextattack < 0)
+        nextattack = random(chardata->minattackfreq * FRAMERATE / 100, chardata->maxattackfreq * FRAMERATE / 100);
+    if (magictimer < 0)
+        magictimer = random(chardata->minmagicfreq * FRAMERATE / 100, chardata->maxmagicfreq * FRAMERATE / 100);
+}
+
+// AI's move branch (0x004c8f60-0x004c93c9; §3.10.3-3.10.5).
+void TCharacter::AIMove(TCharacter* target)
+{
+    if (retreating && !(charflags & kCharFlagNoTurn))
+    {
+        ai_lookat = nullptr;
+        Go((AngleTo(target) + 0x7f) & 0xff);       // straight away from it
+        return;
+    }
+    if (!IsMoveAction(doing))
+    {
+      // Standing out of the stance, someone in the way: step aside, and he
+      // the other way unless he is the target.
+        TCharacter* blocker = nullptr;
+        if (accum.x == 0 && accum.y == 0 && Blocked(pos, pos, 8, nullptr, &blocker) && blocker)
+        {
+            const char side = FaceAngleTo(blocker) >= 0 ? 'r' : 'l';
+            SideStep(side);
+            if (blocker != Fighting())
+                blocker->SideStep(side == 'l' ? 'r' : 'l');
+        }
+        return;
     }
 
-sight_tail:
-  // (8) Tail: tick the sight-lost watchdog. Retail:
-  //     out_of_sight = (frame > sight_max && !out_of_sight_prev) || sight_lost_ticks==0 ? 0 : 1;
-  //     out_of_sight_prev = out_of_sight;
-  //     if (sight_lost_ticks > 0) sight_lost_ticks--;
-  //
-  // chardata + 0x440 in retail is some "max sight-loss ticks" tunable
-  // we don't have; gate on FRAMERATE * a couple seconds for now.
+    if (Distance(target) < chardata->maxattackrange && !ai_lookat)
     {
-        const int32_t sight_max = FRAMERATE * 4;  // TODO retail: chardata field at +0x440 is unknown
-        const int32_t fc = CurrentScreen->FrameCount();
-        bool new_oos;
-        if ((fc > sight_max && !target_out_of_sight_prev) || sight_lost_ticks == 0)
-            new_oos = false;
-        else
-            new_oos = true;
-        target_out_of_sight_prev = new_oos;
-        target_out_of_sight      = new_oos;
-        if (sight_lost_ticks > 0)
-            sight_lost_ticks--;
+        Stop();
+        return;
     }
+    if (lastattack && doing->Is(lastattack->attackname) && (lastattack->flags & CA_PLAYANIM))
+        return;
+
+    const auto heard = [&] {
+        if (target->flags & OF_INVISIBLE)
+            return false;
+        const int32_t dist = Distance(target);
+        return dist <= chardata->hearingrange && target->LastNoise() > 100 - Hearing(dist);
+    };
+    if (CanSeeCharacter(target, -1) || heard())
+    {
+      // Chase: a committed waypoint holds a few ticks; face it, or the target.
+        if (ai_lookat)
+        {
+            if (waypointticks == 0)
+                ai_lookat = nullptr;
+            else
+                waypointticks--;
+        }
+        target_last_position = target->Pos();
+        doing->angle = AngleTo(ai_lookat && waypointticks ? ai_lookat : target);
+        return;
+    }
+
+  // Lost: if the target is fighting someone else in sight, both step
+  // aside; then the waypoint nearest the target's last known place (or,
+  // the committed one reached, its place now), or that place itself.
+    S3DPoint centre = target_last_position;
+    TCharacter* other = target->Fighting();
+    if (other && other != this && CanSeeCharacter(other, -1))
+    {
+        const char side = random(0, 1) ? 'l' : 'r';
+        SideStep(side);
+        other->SideStep(side == 'l' ? 'r' : 'l');
+    }
+    if (!ai_lookat || Distance(ai_lookat) < 5)
+    {
+        if (ai_lookat)
+            centre = target->Pos();
+        TObjectInstance* waypoint = NearestWaypoint(centre);
+        if (ai_lookat == waypoint)
+            ai_lookat = nullptr;
+        else
+        {
+            waypointticks = 6;
+            ai_lookat = waypoint;
+        }
+    }
+    doing->angle = ai_lookat ? AngleTo(ai_lookat) : ConvertToFacing(pos, centre);
+}
+
+// AI's waypoint search (0x004c9158-0x004c9272): of the first ten helpers
+// within 250 of `centre`, the "waypoint"s in line of sight
+// (WaypointReachable 0x00528850), the nearest to it under 1000 -- else the
+// first. (Each new nearest also becomes the next move, SetNextMove
+// 0x00470bc0, with the waypoint's position as the vector, as retail
+// does.)
+TObjectInstance* TCharacter::NearestWaypoint(const S3DPoint& centre)
+{
+    constexpr int32_t kMaxFound = 10;
+    TObjectInstance* found[kMaxFound] = {};
+    int32_t n;
+    if (waypointsSeam)
+        n = waypointsSeam(this, centre, found, kMaxFound);
+    else
+    {
+        int32_t index[kMaxFound];
+        n = (std::min)(MapPane.FindObjectsInRange(centre, index, 250, 0, OBJCLASS_HELPER, kMaxFound), kMaxFound);
+        for (int32_t i = 0; i < n; ++i)
+            found[i] = MapPane.GetInstance(index[i]);
+    }
+    n = (std::min)(n, kMaxFound);
+    TObjectInstance* waypoints[kMaxFound];
+    int32_t count = 0;
+    for (int32_t i = 0; i < n; ++i)
+    {
+        TObjectInstance* o = found[i];
+        if (!o || stricmp(o->GetTypeName(), "waypoint") != 0)
+            continue;
+        S3DPoint from = o->Pos();
+        from.z = pos.z;
+        if (MapPane.LineOfSight(from, pos))
+            waypoints[count++] = o;
+    }
+    if (count == 0)
+        return nullptr;
+    int32_t best = 0, bestdist = 1000;
+    for (int32_t i = 0; i < count; ++i)
+    {
+        S3DPoint at = waypoints[i]->Pos();
+        const int32_t d = ::Distance(centre, at);
+        if (d < bestdist)
+        {
+            bestdist = d;
+            best = i;
+            SetNextMove(at);
+        }
+    }
+    return waypoints[best];
+}
+
+// REVSYNC: AI_PerMonster @ 0x004c9b70, its first part: the boss kind, by
+// type name, once (+0x280: Baez 1, Solifuge 2, Jhaga 3, Yhagoro 4, any other
+// -1). The bosses' behaviours (cases 1-4, 0x004c9ce8-0x004cd491, each with
+// its state at +0x284) aren't ported: docs/gameplay/BURNDOWN.md phase H.
+void TCharacter::AIPerMonster()
+{
+    if (monsterkind != 0)
+        return;
+    constexpr const char* kBosses[] = {"Baez", "Solifuge", "Jhaga", "Yhagoro"};
+    monsterkind = -1;
+    for (int32_t k = 0; k < 4; ++k)
+        if (!stricmp(GetTypeName(), kBosses[k]))
+            monsterkind = k + 1;
 }
 
 bool TCharacter::CanHearCharacter(TCharacter* chr)
 {
-    bool hear = true;
-    int32_t dist = Distance(chr);
-    int32_t noise = chr->LastNoise();
-    S3DPoint from, to;
-    GetPos(from);
-    from.z += LIGHTINGCHARHEIGHT; // Nominal character height
-    chr->GetPos(to);
-    to.z += LIGHTINGCHARHEIGHT; // Nominal character height
-    if (dist > chardata->hearingrange ||    // Within hearing range
-         noise < (100 - Hearing(dist)) ||   // Last noise made was too quiet
-        !MapPane.LineOfSight(from, to))     // Has line of sight
-        hear = false;
-
-    return hear;
+    if (chr->flags & OF_INVISIBLE)
+        return false;
+    const int32_t dist = Distance(chr);
+    const int32_t noise = chr->LastNoise();
+    return dist <= chardata->hearingrange && noise > 100 - Hearing(dist);
 }
 
+// REVSYNC: CanSeeCharacter @ 0x004cd540 -- eye to eye (LIGHTINGCHARHEIGHT
+// above each position), centre to centre: within SIGHTRANGE, within
+// SIGHTANGLE of `angle` (the facing below 1), in line of sight, and lit
+// enough -- the glimpse he gave off (always seen with infravision, reversed
+// when light-blind) at least 100 less this sight (Sight). Never an
+// invisible object.
 bool TCharacter::CanSeeCharacter(TCharacter* chr, int32_t angle)
 {
     if (canSeeSeam)
         return canSeeSeam(this, chr, angle);
-    bool see = true;
-
+    if (chr->flags & OF_INVISIBLE)
+        return false;
+    S3DPoint from = pos, to = chr->Pos();
+    from.z += LIGHTINGCHARHEIGHT;
+    to.z += LIGHTINGCHARHEIGHT;
     if (angle < 1)
         angle = GetFace();
-    int32_t dist = Distance(chr);
-    int32_t angleto = AngleTo(chr);
-    int32_t anglediff = abs(AngleDiff(angle, angleto));
+    const int32_t dist = ::Distance(from, to);
+    const int32_t anglediff = abs(AngleDiff(angle, AngleTo(chr)));
 
     int32_t glimpse = chr->LastGlimpse();
     if (chardata->flags & CF_INFRAVISION)
@@ -2834,19 +3113,8 @@ bool TCharacter::CanSeeCharacter(TCharacter* chr, int32_t angle)
     else if (chardata->flags & CF_LIGHTBLIND)
         glimpse = 100 - glimpse; // Reverse glimpse value so more light is less visible!
 
-    S3DPoint from, to;
-    GetPos(from);
-    from.z += LIGHTINGCHARHEIGHT; // Nominal character height
-    chr->GetPos(to);
-    to.z += LIGHTINGCHARHEIGHT; // Nominal character height
-
-    if (dist > chardata->sightrange ||
-        anglediff > chardata->sightangle ||
-        !MapPane.LineOfSight(from, to) ||
-        glimpse < (100 - Sight(dist)))
-        see = false;
-
-    return see;
+    return dist <= chardata->sightrange && anglediff <= chardata->sightangle && MapPane.LineOfSight(from, to) &&
+           glimpse >= 100 - Sight(dist);
 }
 
 // Finds characters in range, with closest guy at head of list
@@ -2881,8 +3149,19 @@ bool TCharacter::IsValidTarget(TCharacter* target)
     return target->ObjClass() != OBJCLASS_PLAYER;      // a script holds control: not the player
 }
 
-int32_t TCharacter::FindCharacters(TCharacter* chars[], int32_t maxchars, 
-    int32_t range, int32_t angle, int32_t anglerange, int32_t flags)
+// REVSYNC: FindCharacters @ 0x004cd690 -- the characters near me, in map
+// order, the best at the head. The range is at least the hearing range when
+// listening and the sight range when looking (and when below 0). Not me,
+// nor one under the invisibility spell. Looking for enemies, one who isn't
+// is marked as seen and passed over, and an invalid target passed over.
+// Listening or looking, one neither heard nor seen is kept only if I
+// remember him (HasSeenMe); one heard or seen is remembered. With an angle,
+// only those within `anglerange` of it, the score the edge distance times
+// how far off it they are (plus 1); without, the edge distance alone. A
+// better (or equal) score goes to the head, the one it displaces to the
+// end -- but the first found is never scored: the best starts at 10000.
+int32_t TCharacter::FindCharacters(TCharacter* chars[], int32_t maxchars, int32_t range, int32_t angle,
+                                   int32_t anglerange, int32_t flags)
 {
     if (findCharactersSeam)
         return findCharactersSeam(this, chars, maxchars, range, angle, anglerange, flags);
@@ -2891,84 +3170,58 @@ int32_t TCharacter::FindCharacters(TCharacter* chars[], int32_t maxchars,
         return 0;
 
     chars[0] = nullptr;
-    int32_t bestdist = 10000;
-    
     if (range < 0 || (flags & FINDCHAR_HEAR))
         range = max(range, chardata->hearingrange);
     if (range < 0 || (flags & FINDCHAR_SEE))
         range = max(range, chardata->sightrange);
 
     int32_t numchars = 0;
-
-    for (TMapIterator i(Pos(), range, CHECK_NOINVENT | CHECK_MAPRECT, OBJSET_CHARACTER); i; i++)
-    {
-        TCharacter* chr = (TCharacter*)i.Item();
-
-        if (chr == this)
-            continue;
-
-    // if the invisible spell is cast
-        if (chr->IsInvisibleSpell())
-            continue;
-
-        if ((flags & FINDCHAR_ENEMY) && (!IsEnemy(chr) || chr->IsDead()))
+    int32_t best = 10000;
+    ForCharactersNear(GetLevel(), pos, range, [&](TCharacter* chr) {
+        if (chr == this || chr->IsInvisibleSpell())
+            return true;
+        if (flags & FINDCHAR_ENEMY)
         {
-            SetHasSeen(chr);
-            continue;
+            if (!IsEnemy(chr))
+            {
+                SetHasSeen(chr);
+                return true;
+            }
+            if (!IsValidTarget(chr))
+                return true;
         }
+        int32_t score = Distance(chr);
+        if (score > range)
+            return true;
+        const int32_t angleto = AngleTo(chr);
 
-        int32_t dist = Distance(chr);
-        if (dist > range)
-            continue;
-
-        int32_t angleto = AngleTo(chr);
-
-     // Do we hear this guy?
-        bool hear = true;
-        if (flags & FINDCHAR_HEAR)
-            hear = CanHearCharacter(chr);
-
-      // Do we see this guy
-        bool see = true;
-        if (flags & FINDCHAR_SEE)
-            see = CanSeeCharacter(chr, angle); // Uses 'angle' if >= 0, otherwise uses facing
-
-      // Set has seen if we see or hear char
+        const bool hear = !(flags & FINDCHAR_HEAR) || CanHearCharacter(chr);
+        const bool see = !(flags & FINDCHAR_SEE) || CanSeeCharacter(chr, angle);
         if (flags & (FINDCHAR_HEAR | FINDCHAR_SEE))
         {
             if (hear || see)
                 SetHasSeen(chr);
-            else
-                if (!HasSeenMe(chr))  // Didn't see me, and hasn't seen me in a while...
-                    continue;
+            else if (!HasSeenMe(chr))
+                return true;
         }
 
-      // Is this guy in the direction we're checking?   
         if (angle >= 0)
         {
-            int32_t diff = abs(AngleDiff(angle, angleto));
+            const int32_t diff = abs(AngleDiff(angle, angleto));
             if (diff > anglerange)
-                continue;
-            dist = dist * ((anglerange + 1) - diff); // Dist gets bigger when diff between angles small
-        }
-    
-      // Put closest guy at head of list
-        if (chars[0] != nullptr && dist <= bestdist)
-        {
-            TCharacter* temp = chars[0];
-            chars[0] = chr;
-            chr = temp;
-            bestdist = dist;
+                return true;
+            score *= anglerange - diff + 1;
         }
 
-      // Add to end of list
+        if (chars[0] && score <= best)
+        {
+            std::swap(chars[0], chr);
+            best = score;
+        }
         if (numchars < maxchars)
-        {
-            chars[numchars] = chr;
-            numchars++;
-        }
-    }
-
+            chars[numchars++] = chr;
+        return true;
+    });
     return numchars;
 }
 
@@ -2992,120 +3245,38 @@ TCharacter* TCharacter::FindClosestEnemy(int32_t angle, int32_t anglerange)
     return FindCharacter(-1, angle, anglerange, FINDCHAR_ENEMY | FINDCHAR_SEE | FINDCHAR_HEAR);
 }
 
-// REVSYNC: retail TCharacter::AI waypoint-search branch @ 0x4c8b60 lines 149-244
-//
-// Decompile: recon/discovered/cls_0x5a7b98_TCharacter_AI_4c8b60.cpp
-//
-// Algorithm (retail):
-//   * If we DON'T have a committed waypoint:
-//       - FindObjectsInRange around `search_center` (retail mbr_0x8f/0x90/0x91,
-//         the cached "walk-to" point). Filter to type-name "waypoint" + reachable.
-//         Pick the closest by 2D distance.
-//       - If the new closest equals the last committed (rare here since we just
-//         nulled it), clear and bail. Else commit + reset timer to 6 frames.
-//   * If we DO have a committed waypoint:
-//       - Decrement the commit timer. When it hits 0, clear committed (will
-//         re-search next call).
-//   * Caller is responsible for calling this with the right search_center:
-//       - Initial search: target_last_position
-//       - On arrival (within ~5 units of committed): target's *current* pos
-//   * Walking is the caller's job — this function only manages the committed
-//     waypoint state.
-TObjectInstance* TCharacter::WanderToWaypoint(const S3DPoint& search_center, int32_t range)
-{
-    constexpr int32_t COMMIT_FRAMES = 6;  // retail mbr_0x92 reset value (param_1[0x92] = 6)
-
-    TObjectInstance* committed = wander_target.Get();
-
-  // If we have a committed waypoint, just tick the timer. Caller decides
-  // whether to call us again with a target-centered search after arrival.
-    if (committed)
-    {
-        if (wander_commit == 0)
-        {
-            wander_target = TSafeRef<TObjectInstance>{};
-            committed = nullptr;
-        }
-        else
-        {
-            --wander_commit;
-        }
-    }
-
-    if (committed)
-        return committed;
-
-  // No commit: search for the closest "waypoint"-typed object near
-  // search_center. Retail uses TMapPane::FindObjectsInRange (0xfa range,
-  // max 10 candidates) and applies a WaypointReachable() filter; our
-  // TMapIterator is cheap so we don't cap, but we do match the 250-unit
-  // range. WaypointReachable is a TODO — without it, monsters may pick
-  // waypoints across walls.
-    TObjectInstance* closest = nullptr;
-    int32_t          best    = 1000;  // retail's initial "best" sentinel
-    for (TMapIterator i(search_center, range, CHECK_NOINVENT | CHECK_MAPRECT, OBJSET_ALL); i; i++)
-    {
-        TObjectInstance* oi = i.Item();
-        if (!oi || oi == (TObjectInstance*)this) continue;
-        const char *tn = oi->GetTypeName();
-        if (!tn || stricmp(tn, "waypoint") != 0) continue;
-        int32_t d = ::Distance(search_center, oi->Pos());
-        if (d < best) { best = d; closest = oi; }
-    }
-
-    if (!closest)
-    {
-        wander_target = TSafeRef<TObjectInstance>{};
-        wander_commit = 0;
-        return nullptr;
-    }
-
-  // Fresh pick — commit.
-    wander_target = TSafeRef<TObjectInstance>(closest);
-    wander_commit = COMMIT_FRAMES;
-    return closest;
-}
-
-// Returns a 1-100 hearing value which indicates how the average noise will be heard
-// by a monster.  If the monster is sleeping, the listening value is 20% of normal. 
-// The hearing value is based on the minhearing/maxhearing values in the chardata structure,
-// where minhearing is the hearing value at the characters maximum hearing range, and 
-// maxhearing is the hearing value right in front of the character.
+// REVSYNC: Hearing @ 0x004cda80 (slot 0x2e0) -- 0 beyond HEARINGRANGE (the
+// distance less my radius and 32), else 100: the scaling (a draw of -2..2
+// on 100, times the distance over the range, over 100; halved asleep) is
+// then held to at most 0 and floored at 100 -- a clamp to 0..100 turned
+// inside out. So anything in range making any noise is heard. (The 1998
+// source scaled from HEARINGMAX close to HEARINGMIN at the range; retail
+// reads neither.)
 int32_t TCharacter::Hearing(int32_t dist)
 {
-    dist = max(0, dist - (Radius() + 32));
-
+    dist = max(0, dist - Radius() - 32);
     if (dist > chardata->hearingrange)
         return 0;
 
-    int32_t hearing = chardata->hearingmin +
-        (chardata->hearingrange - dist) *
-        (chardata->hearingmax - chardata->hearingmin) / 
-        chardata->hearingrange;
-
+    int32_t hearing = (random(-2, 2) + 100) * dist / chardata->hearingrange / 100;
     if (Sleeping())
-        hearing = hearing * 20 / 100;
-
-    return hearing;
+        hearing /= 2;
+    hearing = min(hearing, 0);
+    return hearing > 100 ? hearing : 100;
 }
 
-// Returns a 1-100 sight value which indicates how the average char will be seen
-// by a monster in the darkness.  The sight value is based on the minsight/maxsight
-// values in the chardata structure, where minsight is the sight value at the characters
-// maximum sight range, and maxsight is the sight value right in front of the character.
-// If the monster is sleeping, the sight value is always 0.
+// REVSYNC: Sight @ 0x004cdb30 (slot 0x2e4) -- 0 asleep or beyond SIGHTRANGE
+// (centre to centre), else a draw of -2..2 on 100, times the distance over
+// the range, over 100, held to 0..100: 0 or 1. So CanSeeCharacter wants a
+// glimpse of 99 or more. (The 1998 source scaled from SIGHTMAX close to
+// SIGHTMIN at the range, less the radius and 32; retail reads neither.)
 int32_t TCharacter::Sight(int32_t dist)
 {
-    dist = max(0, dist - (Radius() + 32));
-
+    dist = max(dist, 0);
     if (Sleeping() || dist > chardata->sightrange)
         return 0;
-    
-  // Basically return min + (max - min) * dist/range
-    return chardata->sightmin +
-        (chardata->sightrange - dist) *
-        (chardata->sightmax - chardata->sightmin) / 
-        chardata->sightrange;
+
+    return std::clamp((random(-2, 2) + 100) * dist / chardata->sightrange / 100, 0, 100);
 }
 
 // Resets the noise and glimpse values to control whether monsters see you or not
@@ -3134,33 +3305,6 @@ void TCharacter::SignalHostility(TObjectInstance* actor, TObjectInstance* target
         return;
 }
 
-void TCharacter::SignalAttack(TObjectInstance* actor, TObjectInstance* target)
-{
-    if (target != this)
-        return;
-
-    if (actor == doing->obj &&
-        random(1, 100) <= BlockPcnt())
-          Block();
-
-    if (ObjClass() != OBJCLASS_PLAYER)
-    {
-        // Monsters auto-target whoever swung at them.
-        SetFighting((TCharacter*)actor);
-    }
-    else
-    {
-        // Players auto-flip into combat mode when attacked. This is
-        // the retail behavior -- the moment a hostile lands a swing
-        // (or even attempts one) the player drops out of walk root
-        // into combat root, ready to swing back. BeginCombat is
-        // idempotent: if we're already in combat targeted at the
-        // actor it's a no-op, otherwise it sets fighting + flips
-        // root to "combat".
-        if (actor && actor != (TObjectInstance*)this)
-            BeginCombat((TCharacter*)actor);
-    }
-}
 
 void TCharacter::SetOnExit()
 {
@@ -3226,10 +3370,10 @@ bool TCharacter::Go(int32_t angle)
 
     TActionBlock* ab = nullptr;
 
-    if (target_out_of_sight)
+    if (retreating)
     {
-      // Hunting a target out of sight: turn toward the direction held at a
-      // speed scaled to the turn (retail's float, 0x004ceb13).
+      // Retreating: turn toward the direction held at a speed scaled to
+      // the turn (retail's float, 0x004ceb13).
         const int32_t diff = std::abs(AngleDiff(GetFace(), angle));
         auto scaled = [diff](int32_t rate) {
             return (int32_t)((double)rate / ((double)diff * (double)(1.0f / 127.0f)) * (double)2.2f);
@@ -3275,7 +3419,7 @@ bool TCharacter::Go(int32_t angle)
 
         int32_t face = angle;
         if (targ && IsValidTarget(targ) && (CombatFace || ObjClass() == OBJCLASS_CHARACTER) &&
-            !target_out_of_sight)
+            !retreating)
             face = AngleTo(doing->obj);
         const int32_t face8 = (face + 15) & 0xe0;
 
@@ -3344,7 +3488,7 @@ bool TCharacter::Go(int32_t angle)
         ab->moveangle = ab->angle = angle;
     }
 
-    if (ab && !(target_out_of_sight))
+    if (ab && !(retreating))
     {
         ab->interrupt = true;
         ab->noroot = true;
@@ -3393,21 +3537,28 @@ bool TCharacter::Goto(int32_t x, int32_t y, TObjectInstance* pickup)
     return true;
 }
 
+// REVSYNC: Stop @ 0x004cee70 -- end a walk, a step or a pivot (or the
+// named action): the root, interrupting, takes the doing block's angles and
+// becomes desired (with incidentals off, its 100% variant). The player also
+// lets go of every held control and of the right-button walk (the map
+// pane's right button up). The network notify is inert offline.
 bool TCharacter::Stop(char *name)
 {
     if (!IsMoving() && !IsDoing(ACTION_PIVOT) &&
         (!name || !doing->Is(name)))                                   // Is a use specified command
         return false;
 
-//  if (doing)
-//      doing->stop = true;
-
     root->interrupt = true;
     root->angle = doing->angle;
     root->moveangle = doing->moveangle;
 
-    SetDesired(root);
+    SetDesired(root, Incidentals() ? 0 : kCommandNoIncidentals);
 
+    if (this == static_cast<TCharacter*>(Player))
+    {
+        ControlMap.ReleaseAll();
+        MapPane.PlayMouseClick(MB_RIGHTUP, 0, 0);
+    }
     return true;
 }
 
@@ -3814,27 +3965,43 @@ void TCharacter::StopTalking()
     ForceCommandDone();
 }
 
-// Begins drawing bow or crossbow
+// REVSYNC: TCharacter::DrawBow @ 0x004d0aa0 -- start aiming, in the bow
+// root and not aiming yet, alive and not held in an interactive move. A
+// player needs ammunition: an arrow in the inventory, which is equipped when
+// the ammo slot is empty. A walk or step stops first; then "bowaim"
+// (interrupting, from frame 20) at the facing is desired. Retail's network
+// notice (0x0057d9d0) is for a multiplayer game.
 bool TCharacter::DrawBow()
 {
-    if (!IsBowMode() || IsBowDrawn() || !FindObjInventory(OBJCLASS_AMMO, AT_ARROW))
+    if (!IsBowMode() || IsBowDrawn() || Health() <= 0 || InteractiveLocked())
         return false;
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        auto* player = static_cast<TPlayer*>(this);
+        const bool hasammo = FindObjInventory(OBJCLASS_AMMO, AT_ARROW) != nullptr;
+        if (!player->GetEquip(EQ_AMMO))
+            player->Equip(FindObjInventory(OBJCLASS_AMMO, AT_ARROW), EQ_AMMO);
+        if (!hasammo)
+            return false;
+    }
 
-    if (IsMoving())
+    if (doing && (doing->action == ACTION_MOVE || doing->action == ACTION_COMBATMOVE ||
+                  doing->action == ACTION_BOWMOVE))
         Stop();
 
-    TActionBlock* ab = new TActionBlock(StName(root->name, "aim"), ACTION_BOWAIM);
+    auto* ab = new TActionBlock("bowaim", ACTION_BOWAIM);
     ab->interrupt = true;
     ab->angle = ab->moveangle = GetFace();
+    ab->frame = 20;
     SetDesired(ab);
-
     return true;
 }
 
-// Causes character to aim at given angle before shooting bow
+// REVSYNC: TCharacter::AimBow @ 0x004d0c70 -- turn the drawn bow toward
+// `angle` (nothing once the shot is on its way), the turn rate from how far.
 bool TCharacter::AimBow(int32_t angle)
 {
-    if (!IsBowMode() || !IsBowDrawn())
+    if (!IsBowMode() || !IsBowDrawn() || Health() <= 0 || InteractiveLocked())
         return false;
 
     if (doing->stop)    // No more aiming if arrow was shot
@@ -3847,24 +4014,32 @@ bool TCharacter::AimBow(int32_t angle)
     return true;
 }
 
+// REVSYNC: 0x004d0dc0
 bool TCharacter::AimBowLeft()
 {
     return AimBow((GetFace() - chardata->bowaimspeed) & 255);
 }
 
+// REVSYNC: 0x004d0de0
 bool TCharacter::AimBowRight()
 {
     return AimBow((GetFace() + chardata->bowaimspeed) & 255);
 }
 
-// Shoots bow or crossbow
+// REVSYNC: TCharacter::ShootBow @ 0x004d0e00 -- loose an arrow at `angle`:
+// the aim stops (after its pivot), "bowshoot" is desired and one more shot
+// is queued for ResolveBowShoot, which keeps the pace (BOWWAIT). An idle
+// player (state bit 2) is idle no more.
 bool TCharacter::ShootBow(int32_t angle)
 {
-    if (!IsBowMode() || !IsBowDrawn())
+    if (!IsBowMode() || !IsBowDrawn() || Health() <= 0 || InteractiveLocked())
         return false;
-
-    if (PlayScreen.GameFrame() - lastbowshot <= chardata->bowwait)
-        return false;
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        auto* player = static_cast<TPlayer*>(this);
+        if (player->PlayerState() & 2)
+            player->SetPlayerState(player->PlayerState() & ~2);
+    }
 
   // Inform aim animation that it should stop (will wait for pivot though)
     doing->stop = true;
@@ -3873,17 +4048,14 @@ bool TCharacter::ShootBow(int32_t angle)
     doing->turnrate = MAKETURNRATE(absdiff);
 
   // Queue the shoot action (after pivot)
-    TActionBlock* ab = new TActionBlock(StName(root->name, "shoot"), ACTION_BOWSHOOT);
+    auto* ab = new TActionBlock("bowshoot", ACTION_BOWSHOOT);
     ab->angle = ab->moveangle = angle;
     SetDesired(ab);
-
-  // Save the bow shot timestamp so we don't shoot too fast
-    lastbowshot = PlayScreen.GameFrame();   
-
+    bowshots++;
     return true;
 }
 
-// Is character aiming bow
+// REVSYNC: TCharacter::IsBowDrawn @ 0x004d1050 -- doing the bow root's "aim"
 bool TCharacter::IsBowDrawn()
 {
     if (!IsBowMode())
@@ -3892,796 +4064,823 @@ bool TCharacter::IsBowDrawn()
     return !stricmp(StName(root->name, "aim"), doing->name);
 }
 
-// Per-call diagnostic state captured by IsValidAttack so FindButtonAttack
-// can log *which* check rejected the first button-matching attack.
-thread_local int32_t      g_dbg_attack_rej_button  = -1;
-thread_local const char  *g_dbg_attack_rej_reason  = nullptr;
-thread_local int32_t      g_dbg_attack_rej_tdist   = 0;
-thread_local int32_t      g_dbg_attack_rej_mindist = 0;
-thread_local int32_t      g_dbg_attack_rej_maxdist = 0;
+// *****************************
+// * Choosing and making attacks *
+// *****************************
+//
+// docs/gameplay/forensics/COMBAT_ATTACK_CHOICE.md §3.1-§3.6 (the searches)
+// and COMBAT_HIT.md §3.1 (the numbers an attack carries).
 
-// REVSYNC: retail TCharacter::IsValidAttack @ 0x4d1120
-// Source-port of the retail decompile in
-// recon/classes/cls_0x5a7b98.cpp lines 9532-10278. Replaces the
-// pre-release Cinematix version. Retail differs from the pre-release in
-// a few important ways:
-//   * impact-loop has fancier fallback when target lacks the named
-//     impact ani (tries a "<bodytype>_to_dead" / generic alternate)
-//   * separate handling for daytime/bow attacks (a retail-only
-//     CA_BOWATTACK-ish flag we don't yet have; TODO below)
-//   * uses GetCharData()->attacks_default when chardata->attacks[i] is
-//     null (covered by TVirtualArray semantics in our codebase)
-bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &damage,
-    int32_t tdist, int32_t id, int32_t pcnt, int32_t dmgpcnt, int32_t flagmask, int32_t flags)
+// REVSYNC: the five-line gate retail opens ButtonAttack 0x004d2480,
+// RandomAttack 0x004d2900, SpecificAttack 0x004d2a60 (and SetFighting, Go,
+// EndFighting, Block, Dodge; Damage spares a held victim) with: held in
+// another's interactive move (its attack or an interactive impact).
+bool TCharacter::InteractiveLocked() const
+{
+    if (charflags & kCharFlagInteractive)
+        return false;
+    return (doing->attack && (doing->attack->flags & CA_INTERACTIVE)) ||
+           (doing->impact && (doing->impact->flags & CAI_INTERACTIVE));
+}
+
+// REVSYNC: TCharacter::Offense @ 0x004d72e0
+int32_t TCharacter::Offense()
+{
+    const int32_t spells = SpellManager.GetOffense();
+    return chardata->attackmod + spells + GetStat("Value") * Rules.tohitrangechar;
+}
+
+// REVSYNC: TCharacter::Defense @ 0x004d72a0
+int32_t TCharacter::Defense()
+{
+    const int32_t spells = SpellManager.GetDefense();
+    return chardata->defensemod + spells + GetStat("Value") * Rules.tohitrangechar;
+}
+
+// REVSYNC: TCharacter::AnimPrefix @ 0x004cdf60 (slot 0x310; the player's too)
+const char *TCharacter::AnimPrefix()
+{
+    const bool running = IsRunMode();
+    if (root && root->Is("hand"))
+        return running ? "hr" : "h";
+    if (root && root->action == ACTION_BOW)
+        return running ? "br" : "b";
+    if (root && root->action == ACTION_COMBAT)
+        return running ? "cr" : "c";
+    if (root && root->Is("sneak"))
+        return "s";
+    if (running)
+        return HoldsLight() ? "tr" : "r";
+    return HoldsLight() ? "t" : "w";
+}
+
+// REVSYNC: TCharacter::CombatAnimName @ 0x004ce1b0
+void TCharacter::CombatAnimName(char *buf, const char *name)
+{
+    snprintf(buf, RESNAMELEN, "%s%s", objclass == OBJCLASS_PLAYER ? AnimPrefix() : "c", name);
+    if ((charflags & kCharFlagWalkPrefix) && root && root->Is("walk"))
+    {
+        const char first = buf[0];
+        buf[0] = 'w';
+        if (!HasActionAni(buf))
+            buf[0] = first;
+    }
+}
+
+// REVSYNC: TCharacter::IsValidAttack @ 0x004d1120. The shape gates
+// (COMBAT_ATTACK_CHOICE.md §3.1), then with a target the numbers the attack
+// will carry (COMBAT_HIT.md §3.1): the damage once per search -- the
+// target's CalculateDamage of this character's weapon, scaled by DamageMod
+// plus `dmgpcnt` (a player's StrengthMod takes its place) and by a player's
+// EdgeBonus for an edged weapon -- the to-hit and the roll once each, and
+// the TOHITDAMAGE tier every time a candidate gets that far, so a search
+// that goes on past a later refusal compounds it. Then the impact the
+// target will play, and the glancing-blow guard.
+bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &damage, int32_t &tohit,
+    int32_t &roll, int32_t tdist, int32_t button, int32_t pcnt, int32_t dmgpcnt, int32_t flagmask,
+    int32_t flags, TCharacter* targ)
 {
     impactnum = -1;
-    damage = 0;
-
-    auto note_reject = [&](const char *reason) {
-        if (g_dbg_attack_rej_button >= 0 &&
-            objclass == OBJCLASS_PLAYER &&
-            id == g_dbg_attack_rej_button &&
-            !g_dbg_attack_rej_reason)
-        {
-            g_dbg_attack_rej_reason = reason;
-        }
-    };
-
     if ((uint32_t)attacknum >= (uint32_t)chardata->attacks.NumItems())
-        { note_reject("attacknum out of range"); return false; }
+        return false;
+    SCharAttackData* ad = &chardata->attacks[attacknum];
 
-    SCharAttackData* ad = &(chardata->attacks[attacknum]);
-    TCharacter* targ = Fighting();
+    if ((requestbits & kRequestNoPlayAnim) && (ad->flags & CA_PLAYANIM))
+        return false;
+    if (!HasActionAni(ad->attackname))
+        return false;
 
-    // TODO retail: at 0x4d1147 retail rejects when (this->mbr_0x128 & 2)
-    // is set and the attack is CA_PLAYANIM. mbr_0x128 is an unidentified
-    // status/flags slot (see recon/discovered/field_map.md). Skipping
-    // until we identify it — likely an "in cinematic / non-interactive"
-    // gate that doesn't apply to the source port yet.
-
-    if (!IsFighting())
-        { note_reject("!IsFighting"); return false; }
-
-    // Daytime/bow special-case at 0x4d1190:
-    //   if (!daytime || !player) {
-    //       if (!(ad->flags & 0x10000)) {
-    //           if (Fatigue() < ad->fatigue) return false;
-    //       } else {
-    //           // bow attack threshold check on a different field
-    //           if (piVar18[0x3d] < Fatigue()) return false;
-    //       }
-    //   } else if (ad->flags & 0x10000) {
-    //       return false;  // players in daytime can't use bow attacks
-    //   }
-    //
-    // TODO retail: 0x10000 is a CA_* flag we don't yet have in our
-    // CA_* defines, and piVar18[0x3d] is a field of SCharAttackData
-    // beyond our struct. For now we apply only the standard fatigue
-    // check; the retail-specific bow-fatigue path is left as a TODO.
-    if (Fatigue() < ad->fatigue)
-        { note_reject("fatigue too low"); return false; }
-
-    // Matches flags
-    if ((ad->flags & flagmask) != flags)
-        { note_reject("flagmask mismatch"); return false; }
-
-    // Button id matches attack button id (for controller/keyboard buttons)
-    if (id >= 0 && ad->button != id)
-        return false;  // expected for most rows; not interesting to log
-
-    // Percentage value is less than percent parameter (for random attack finding)
-    if (ad->attackpcnt < pcnt)
-        { note_reject("attackpcnt < pcnt"); return false; }
-
-    // In range
-    if (ad->maxdist > 0 && targ)
+  // Fatigue: a FATIGUEATTACK only while tired enough, anything else only
+  // with the fatigue it costs. With the cheat the player skips this, and
+  // can't make fatigue attacks.
+    if (CheatNahkranoth && objclass == OBJCLASS_PLAYER)
     {
-        if (tdist < ad->mindist || tdist > ad->maxdist)
-        {
-            if (g_dbg_attack_rej_button == id && objclass == OBJCLASS_PLAYER && !g_dbg_attack_rej_reason)
-            {
-                g_dbg_attack_rej_tdist   = tdist;
-                g_dbg_attack_rej_mindist = ad->mindist;
-                g_dbg_attack_rej_maxdist = ad->maxdist;
-            }
-            note_reject("range");
+        if (ad->flags & CA_FATIGUEATTACK)
             return false;
-        }
     }
+    else if (ad->flags & CA_FATIGUEATTACK)
+    {
+        if (Fatigue() > ad->maxfatigue)
+            return false;
+    }
+    else if (Fatigue() < ad->fatigue)
+        return false;
 
-    // Mode gating (retail 0x4d12bf-0x4d12ee)
+    if ((ad->flags & flagmask) != flags)
+        return false;
+    if (button >= 0 && ad->button != button)
+        return false;
+    if (ad->attackpcnt < pcnt)
+        return false;
+    if (ad->maxdist > 0 && targ && (tdist < ad->mindist || tdist > ad->maxdist))
+        return false;
+
+  // The mode it's made in: sneaking, walking, the bow, or the combat stance.
     if (ad->flags & CA_SNEAKMODE)
     {
-        if (!root) { note_reject("CA_SNEAKMODE no root"); return false; }
-        if (!root->Is("sneak")) { note_reject("CA_SNEAKMODE !sneak"); return false; }
+        if (!root || !root->Is("sneak"))
+            return false;
     }
     else if (ad->flags & CA_WALKMODE)
     {
-        if (!root) { note_reject("CA_WALKMODE no root"); return false; }
-        if (!root->Is("walk")) { note_reject("CA_WALKMODE !walk"); return false; }
+        if (!root || !root->Is("walk"))
+            return false;
     }
     else if (ad->flags & CA_BOWMODE)
     {
-        if (!root) { note_reject("CA_BOWMODE no root"); return false; }
-        if (root->action != ACTION_BOW) { note_reject("CA_BOWMODE !ACTION_BOW"); return false; }
+        if (!root || root->action != ACTION_BOW)
+            return false;
     }
-    else
-    {
-        // Default: the root must be a combat root, and not one still
-        // named "walk" (retail 0x4d12bf: root action 3, then Is(DAT_005e0318
-        // = "walk") rejects).
-        if (!root) { note_reject("default-mode no root"); return false; }
-        if (root->action != ACTION_COMBAT)
-            { note_reject("default-mode !ACTION_COMBAT"); return false; }
-        if (root->Is("walk"))
-            { note_reject("default-mode walk root"); return false; }
-    }
-
-    // CA_PLAYANIM gating (retail 0x4d12ef-0x4d1349)
-    if (ad->flags & CA_PLAYANIM)
-    {
-        if (ad->attackname[0] == 'c' || ad->attackname[0] == 'C')
-        {
-            if (!root) { note_reject("CA_PLAYANIM 'c'-prefix no root"); return false; }
-            if (!root->Is("combat")) { note_reject("CA_PLAYANIM 'c'-prefix !combat"); return false; }
-        }
-        if (ad->attackname[0] != 'w' && ad->attackname[0] != 'W')
-            return true;
-        if (!root) { note_reject("CA_PLAYANIM 'w'-prefix no root"); return false; }
-        if (!root->Is("walk")) { note_reject("CA_PLAYANIM 'w'-prefix !walk"); return false; }
-        return true;
-    }
-
-    // Magical attack: switch on a stat-gate field (retail 0x4d1356)
-    if (ad->flags & CA_MAGICATTACK)
-    {
-        if (waitticks != 0)
-            { note_reject("CA_MAGICATTACK waitticks!=0"); return false; }
-        waitticks = waitticks - 1;
-        return true;
-    }
-
-    // Monsters don't attack while their script waits. (This gate read the
-    // 1998 character wait state, which now lives on the script.)
-    if (IsScriptWaiting() && objclass != OBJCLASS_PLAYER)
+    else if (!root || root->action != ACTION_COMBAT || root->Is("walk"))
         return false;
 
-    // Not still doing another attack (retail 0x4d139c)
-    if (doing && doing->action == ACTION_ATTACK && doing->attack &&
-        frame < doing->attack->nextwait)
-        { note_reject("still in prior attack"); return false; }
+    if (ad->flags & CA_PLAYANIM)
+    {
+        if (!(charflags & kCharFlagPlayAnimRoots))
+            return true;
+        const char first = ad->attackname[0];
+        if ((first == 'c' || first == 'C') && (!root || !root->Is("combat")))
+            return false;
+        if (first == 'w' || first == 'W')
+            return root && root->Is("walk");
+        return true;
+    }
 
-    // Has the named attack animation
+  // A spell: its own timer and condition, nothing else.
+    if (ad->flags & CA_MAGICATTACK)
+    {
+        if (magictimer != 0)
+            return false;
+        switch (ad->condition)
+        {
+          case MASTAT_HEALTHLT: if (Health() > ad->conditionvalue) return false; break;
+          case MASTAT_HEALTHGT: if (Health() <= ad->conditionvalue) return false; break;
+          case MASTAT_MANALT:   if (Mana() > ad->conditionvalue) return false; break;
+          case MASTAT_MANAGT:   if (Mana() <= ad->conditionvalue) return false; break;
+          default: break;
+        }
+        magictimer--;
+        return true;
+    }
+
+  // A monster attacks only when the AI's timer has run out; the player's
+  // presses aren't timed. Nobody starts one while the last is still early.
+    if (nextattack != 0 && objclass != OBJCLASS_PLAYER)
+        return false;
+    if (doing->action == ACTION_ATTACK && doing->attack && GetFrame() < doing->attack->nextwait)
+        return false;   // REVSYNC-DIVERGENCE: retail doesn't test doing->attack (an ATTACK block always has one)
     if (!HasActionAni(ad->attackname))
-        { note_reject("no attack animation"); return false; }
+        return false;
+    if ((ad->flags & CA_MOVING) && !IsMoveAction(doing))
+        return false;
+    if ((ad->flags & CA_RUNNING) && !IsRunMode())
+        return false;
 
-    // CA_MOVING gate (retail 0x4d13c2): doing must be MOVE/COMBATMOVE/BOWMOVE
-    if (ad->flags & CA_MOVING)
-    {
-        if (!doing) { note_reject("CA_MOVING no doing"); return false; }
-        if (doing->action != ACTION_MOVE &&
-            doing->action != ACTION_COMBATMOVE &&
-            doing->action != ACTION_BOWMOVE)
-            { note_reject("CA_MOVING !moving"); return false; }
-    }
-
-    // CA_RUNNING gate (retail 0x4d13e8)
-    if (ad->flags & CA_RUNNING)
-    {
-        if (!root) { note_reject("CA_RUNNING no root"); return false; }
-        bool isrun = false;
-        if (root->action == ACTION_COMBAT &&
-            (root->Is("combatrun") || root->Is("handrun")))
-            isrun = true;
-        else if (root->action == ACTION_BOW && root->Is("bowrun"))
-            isrun = true;
-        else if (IsRunMode())
-            isrun = true;
-        if (!isrun) { note_reject("CA_RUNNING !running"); return false; }
-    }
-
-    // Target-state gates
+  // What the target is doing: a stun / knockdown follow-up, a response.
     if (targ)
     {
-        if (ad->flags & CA_ATTACKSTUN)
-        {
-            if (!targ->doing || targ->doing->action != ACTION_STUN)
-                { note_reject("CA_ATTACKSTUN !stunned"); return false; }
-        }
-        if (ad->flags & CA_ATTACKDOWN)
-        {
-            if (!targ->doing || targ->doing->action != ACTION_KNOCKDOWN)
-                { note_reject("CA_ATTACKDOWN !down"); return false; }
-        }
-        if (ad->responsename[0] != '\0' &&
-            !targ->doing->Is(ad->responsename))
-            { note_reject("response wrong state"); return false; }
+        if ((ad->flags & CA_ATTACKSTUN) && (!targ->doing || targ->doing->action != ACTION_STUN))
+            return false;
+        if ((ad->flags & CA_ATTACKDOWN) && (!targ->doing || targ->doing->action != ACTION_KNOCKDOWN))
+            return false;
+        if (ad->responsename[0] && !targ->doing->Is(ad->responsename))
+            return false;
     }
 
-    if ((ad->flags & (CA_CHAIN | CA_AUTOCOMBO)) && ad->chainname[0] != '\0')
+  // A chain link follows its attack in time.
+    if ((ad->flags & (CA_CHAIN | CA_AUTOCOMBO)) && ad->chainname[0])
     {
-        if (!lastattack) { note_reject("chain no lastattack"); return false; }
-        if (stricmp(lastattack->attackname, ad->chainname) != 0)
-            { note_reject("chain mismatch"); return false; }
-        if (lastattack->chainexptime < (PlayScreen.GameFrame() - lastattackticks))
-            { note_reject("chain expired"); return false; }
+        if (!lastattack || stricmp(lastattack->attackname, ad->chainname) != 0)
+            return false;
+        if (PlayScreen.GameFrame() - lastattackticks > lastattack->chainexptime)
+            return false;
     }
 
+  // An interactive attack needs a target that isn't held in one already;
+  // nobody attacks a target held in one.
     if (ad->flags & CA_INTERACTIVE)
     {
-        if (!targ) { note_reject("CA_INTERACTIVE no targ"); return false; }
-        if (targ->doing && targ->doing->attack &&
-            (targ->doing->attack->flags & CA_INTERACTIVE))
-            { note_reject("CA_INTERACTIVE targ already interactive"); return false; }
-        if (targ->doing && targ->doing->impact &&
-            (targ->doing->impact->flags & 0x80))
-            { note_reject("CA_INTERACTIVE targ impact 0x80"); return false; }
+        if (!targ)
+            return false;
+        if (!(targ->charflags & kCharFlagInteractive))
+        {
+            const TActionBlock* td = targ->doing;
+            if ((td->attack && (td->attack->flags & CA_INTERACTIVE)) ||
+                (td->impact && (td->impact->flags & CAI_INTERACTIVE)))
+                return false;
+        }
     }
+    if (targ && targ->doing->impact && (targ->doing->impact->flags & CAI_INTERACTIVE))
+        return false;
 
-    if (targ && targ->doing && targ->doing->impact &&
-        (targ->doing->impact->flags & 0x80))
-        { note_reject("targ impact 0x80"); return false; }
-
+  // The player's weapon and skills; his StrengthMod takes the damage
+  // percentage's place.
     if (objclass == OBJCLASS_PLAYER)
     {
-        TPlayer* player = (TPlayer*)this;
-
         if (!(ad->weaponmask & (1 << WeaponType())))
-            { note_reject("weaponmask mismatch"); return false; }
-        if (player->Skill(SK_ATTACK) < ad->attackskill)
-            { note_reject("attack skill too low"); return false; }
-        if (player->WeaponSkill(WeaponType()) < ad->weaponskill)
-            { note_reject("weapon skill too low"); return false; }
-
-        // TODO retail: 0x4d162d adds a "sunsetflipper" attack-name
-        // special-case requiring the target's bodytype to be a
-        // specific value (DAT_005e0330). Skipping — only affects one
-        // hardcoded named attack we don't ship.
+            return false;
+        if (GetObjStat(PLRVAL_FIRST + PLRVAL_ATTACKLEVEL) < ad->attackskill)
+            return false;
+        if (GetObjStat(SK_FIRST + SK_WEAPONSKILLS + WeaponType()) < ad->weaponskill)
+            return false;
+        dmgpcnt = StrengthMod();
+        if (!strcmp(ad->attackname, "sunsetflipper") &&
+            (!targ || !targ->GetName() || stricmp(targ->GetName(), "Baez") != 0))
+            return false;   // (retail would crash on a nameless target)
     }
 
-    // Damage calculation (retail 0x4d171c). Only run when the caller
-    // didn't already set damage (passes -1 sentinel). Retail tracks two
-    // sentinels (damage and a randomness field, both -1 by default).
-    if (targ && damage == 0 /* sentinel: caller wants us to compute */)
+    if (targ)
     {
-        // Base attack value: damageMod-scaled weapon damage
-        // adjusted by attack-modifier and dmgpcnt.
-        damage = targ->CalculateDamage(WeaponDamage(),
-            GetDamageType(WeaponType(), ad->flags), ad->damagemod) * dmgpcnt / 100;
-    }
-
-    if (ad->flags & CA_DEATH)
-    {
-        if (!targ) { note_reject("CA_DEATH no targ"); return false; }
-        if (damage < targ->Health()) { note_reject("CA_DEATH dmg<hp"); return false; }
-    }
-
-    // Impact-loop with fallback (retail 0x4d19c0-0x4d1d3a). For each
-    // declared impact in the attack we accept it when EITHER:
-    //   * damage >= target's current health AND impact has CAI_DEATH
-    //   * (no impact selected yet) damage is in the impact's range
-    // and the target either:
-    //   * has the named impact animation directly, OR
-    //   * (for CAI_DEATH impacts) has a fallback "to_dead" transition
-    //     animation built from the target's body root (see retail
-    //     string-manipulation around 0x4d1bc0).
-    //
-    // This is the most intricate part of retail combat — getting it
-    // right is what unblocks attacking monsters whose imagery doesn't
-    // include every named impact. The retail decompile builds an
-    // alternate name "<root>_to_dead" / "<root>_to_impact" by string
-    // concatenation. We mirror that semantically using StName().
-    if (targ && ad->numimpacts > 0)
-    {
-        SCharAttackImpact* ai = ad->impacts;
-        for (int32_t i = 0; i < ad->numimpacts; i++, ai++)
+        if (damage == -1)
         {
-            const bool deathimp = (ai->flags & CAI_DEATH) != 0;
-            const bool deathmatch = deathimp && (damage >= targ->Health());
-            const bool rangematch = (impactnum < 0) &&
-                (damage >= ai->damagemin && damage <= ai->damagemax);
-            if (!(deathmatch || rangematch))
+            const int32_t type = GetDamageType(WeaponType(), ad->flags);
+            const int32_t weapon = WeaponDamage();
+            const int32_t d = targ->CalculateDamage(weapon, type, ad->damagemod);
+            damage = d * (DamageMod() + dmgpcnt + 100) / 100;
+            if (objclass == OBJCLASS_PLAYER)
+            {
+                const int32_t wt = WeaponType();
+                if (wt == WT_KNIFE || wt == WT_SWORD || wt == WT_AXE)
+                    damage = damage * (static_cast<TPlayer*>(this)->EdgeBonus() + 100) / 100;
+            }
+        }
+        int32_t def = targ->LuckMod();
+        def += targ->Defense();
+        int32_t off = LuckMod();
+        off += Offense();
+        if (tohit == -1)
+        {
+          // Easier against a target facing away, or one swinging itself.
+            int32_t t = Rules.tohitcenter - def + off;
+            if (abs(targ->FaceAngleTo(this)) >= 0x30 || (targ->doing && targ->doing->action == ACTION_ATTACK))
+                t += Rules.tohitface;
+            if (objclass == OBJCLASS_PLAYER && CheatNahkranoth)
+                t += 100;
+            t = std::clamp(t, 10, 100);
+            tohit = t + (random(0, 9) == 0 ? 5 : 0);
+        }
+        if (roll == -1)
+        {
+            const int32_t high = random(1, 50);
+            roll = high + random(0, 50);
+        }
+        int32_t factor;
+        if (ToHitDamageFactor(tohit - roll, factor))
+            damage = (std::max)(1, factor * damage / 100);
+    }
+
+    if ((ad->flags & CA_DEATH) && (!targ || damage < targ->Health()))
+        return false;
+
+  // Retail clamps the target's health against the damage here and drops
+  // the result (two min/max expressions); their Health() calls remain.
+    if (targ)
+    {
+        const int32_t h = targ->Health() > damage ? targ->Health() : damage;
+        if (h >= 1 && targ->Health() > damage)
+            targ->Health();
+    }
+
+  // The impact the target will play: the first that fits, or a later death
+  // impact when the blow kills. A target that can't play one refuses the
+  // attack. Their damage ranges aren't read.
+    if (ad->numimpacts > 0)
+    {
+        if (!targ)
+            return true;
+        const int32_t h = targ->Health() > damage ? targ->Health() : damage;
+        if (h >= 1 && targ->Health() > damage)
+            targ->Health();
+
+        for (int32_t k = 0; k < ad->numimpacts; k++)
+        {
+            const SCharAttackImpact* imp = &ad->impacts[k];
+            const bool kills = damage >= targ->Health();
+            if (!(kills && (imp->flags & CAI_DEATH)) && impactnum >= 0)
                 continue;
 
-            // Bit 0x80 / piVar13[0x15]: retail flag we don't model — see
-            // TODO above. The retail path runs FindClearPath here for
-            // some impacts; we skip for now since we can't identify the
-            // bit (CAI_? — possibly "needs line-of-sight").
-            // TODO retail: ai->flags bit 0x80 + piVar13[0x15] LoS test.
-
-            bool ok = false;
-            if (!deathimp)
+          // A held impact snaps the target in front of us: there must be room.
+            if ((imp->flags & CAI_INTERACTIVE) && imp->snapdist > 0)
             {
-                // Plain impact: target must have the named impact ani.
-                ok = targ->HasActionAni(ai->impactname);
-                if (ok && ai->loopname[0] != '\0')
-                    ok = targ->HasActionAni(ai->loopname);
+                S3DPoint from = targ->Pos(), to;
+                GetSnapPos(this, imp->snapdist, to);
+                TCharacter* blocker = nullptr;
+                if (targ->Blocked(from, to, 0, nullptr, &blocker) && blocker != this)
+                    return false;
             }
-            else
-            {
-                // Death impact: try the named ani first; if absent
-                // build a "<root>_to_dead" or "<root>_to_impact"
-                // transition name. Retail's string-builder path uses
-                // BuildActionName(target, buf, "") to get the root,
-                // then suffixes "_to_d","ead" or "..." (DAT_005e00c4-
-                // 005e00d4). We approximate with StName(root,"to_dead")
-                // and "to_impact".
-                if (targ->HasActionAni(ai->impactname))
-                {
-                    ok = true;
-                }
-                else if (stricmp(ai->impactname, "combat_to_dead") == 0)
-                {
-                    // Build alternate from target root: "<root>_to_dead"
-                    const char *targroot = (targ->root && targ->root->name[0])
-                        ? targ->root->name : "combat";
-                    const char *alt = StName(targroot, "to_dead");
-                    ok = targ->HasActionAni(alt);
-                }
-                else
-                {
-                    // TODO retail: DAT_005e0350 — second specific
-                    // impact name retail special-cases (likely
-                    // "bow_to_dead" or "<root>_to_dead"). Falling back
-                    // to the named ani here.
-                    ok = targ->HasActionAni(ai->impactname);
-                }
 
-                if (ok && ai->loopname[0] != '\0')
+            if (imp->flags & CAI_DEATH)
+            {
+                if (!targ->HasActionAni(imp->impactname))
                 {
-                    if (!targ->HasActionAni(ai->loopname))
+                  // The death the name stands for: "<root> to <prefix>dead" or
+                  // "<prefix>dead".
+                    char dead[RESNAMELEN];
+                    targ->CombatAnimName(dead, "dead");
+                    if (!stricmp(imp->impactname, "combat to dead"))
                     {
-                        // Retail tries a "_to_<loop>" alternate.
-                        const char *targroot = (targ->root && targ->root->name[0])
-                            ? targ->root->name : "combat";
-                        const char *alt = StName(targroot, ai->loopname);
-                        ok = targ->HasActionAni(alt);
+                        char name[RESNAMELEN * 2];
+                        snprintf(name, sizeof(name), "%s to %sdead", targ->root->name,
+                                 targ->ObjClass() == OBJCLASS_PLAYER ? targ->AnimPrefix() : "c");
+                        if (!targ->HasActionAni(name))
+                            return false;
+                    }
+                    else if (stricmp(imp->impactname, "dead") != 0 || !targ->HasActionAni(dead))
+                        return false;
+                  // Retail takes FindState's index for a yes/no here: a loop
+                  // state found at index 0 counts as missing, -1 as present.
+                    if (imp->loopname[0] && targ->FindState(imp->loopname) == 0)
+                    {
+                        if (stricmp(imp->loopname, "dead") != 0 || targ->FindState(dead) == 0)
+                            return false;
                     }
                 }
             }
-
-            if (ok)
-                impactnum = i;
+            else
+            {
+                char name[RESNAMELEN];
+                if (imp->flags & CAI_INTERACTIVE)
+                    strncpyz(name, imp->impactname, RESNAMELEN);
+                else
+                    targ->CombatAnimName(name, imp->impactname);
+                if (!targ->HasActionAni(name))
+                    return false;
+                if (imp->loopname[0] && targ->FindState(imp->loopname) == 0)   // (index 0: as above)
+                    return false;
+            }
+            impactnum = k;
         }
 
-        // Retail 0x4d1d18: if we ran out of declared impacts and the
-        // *last* impact (piVar13 here) had bit 0x80 set with health
-        // already exceeded, reject. We don't model bit 0x80 — skip.
-
-        // If no impact was selected, the attack still validates (retail
-        // returns 1 — the impact-loop is purely advisory unless CA_DEATH
-        // forces it). The caller's damage path will use the default
-        // chardata->impacts list in DoAttack via ResolveHit.
+      // Retail tests the record one past the last impact here: zero, unless
+      // the attack has all six, when it reads past the record.
+        const bool kills = damage >= targ->Health();
+        if (kills && ad->numimpacts < MAXATTACKIMPACTS &&
+            (ad->impacts[ad->numimpacts].flags & CAI_INTERACTIVE))
+            return false;   // REVSYNC-DIVERGENCE: with six impacts retail reads heap memory; the port reads nothing
     }
 
-    // Final health-vs-damage cinematic gate (retail 0x4d1d3a): when
-    // this character has charflags bit 0x80 set ("ChainHits enabled"
-    // or similar) and the attack would NOT kill the target, reject
-    // unless the attack is a CA_INTERACTIVE death.
-    // TODO retail: charflags bit 0x80 unidentified (CF_ values stop at
-    // 0x0008). Skipping that gate.
+    if (!targ)
+        return true;
+    if ((charflags & kCharFlagNoKill) && targ->Health() <= damage &&
+        !((ad->flags & CA_INTERACTIVE) && (ad->flags & CA_DEATH)))
+        return false;
 
-    // Schedule a TPlayScreen "fight begin" hook for non-player target
-    // (retail 0x4d1da9): meth_0x4d2e30(target). We don't have that
-    // hook plumbed yet — skipping is benign.
+  // A blow that will only glance makes a monster raise its guard as the
+  // swing begins.
+    if (tohit - roll <= Rules.tohitdamage[3].minvalue && targ->ObjClass() == OBJCLASS_CHARACTER)
+        targ->Block(-2);
     return true;
 }
 
-// REVSYNC: retail TPlayer::meth_0x4d1dd0 (player-specific button dispatch,
-// 3-mode loop) — recon/classes/cls_0x5b4f30.cpp lines 1161-1191.
-// (Retail TCharacter::meth_0x4d1ff0_FindButtonAttack is a different
-// chain-retry helper used only from ButtonAttack's combo path; it gates
-// on CA_INTERACTIVE so all CA_HAND attacks would be skipped — wrong for
-// the main "press SWING" path.) The 3-mode pass walks the attack list
-// three times trying CA_RESPONSE then CA_SPECIAL then plain attacks, so
-// chain/special attacks beat normals when both are eligible.
-bool TCharacter::FindButtonAttack(int32_t id, int32_t dmgpcnt, int32_t &attacknum,
-    int32_t &impactnum, int32_t &damage, bool isaction)
+// REVSYNC: TCharacter::FindButtonAttack @ 0x004d1dd0 (recon labels it
+// TPlayer::meth_0x4d1dd0; 0x004d1ff0 is FindInteractiveAttack). `isaction`
+// asks for a CA_ACTION flag the mask can't see, so ButtonAction never finds
+// anything -- as in retail.
+bool TCharacter::FindButtonAttack(int32_t button, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum,
+    int32_t &damage, int32_t &tohit, int32_t &roll, bool isaction, TCharacter* targ)
 {
-    if (!IsFighting())
-    {
-        if (objclass == OBJCLASS_PLAYER)
-            log_warn("[combat-dbg] FindButtonAttack(btn=%d): !IsFighting", id);
-        return false;
-    }
-
-    int32_t tdist = Fighting() ? Distance(Fighting()) : 10000;
-    bool dbg = (objclass == OBJCLASS_PLAYER);
-
+    const int32_t tdist = targ ? Distance(targ) : 10000;
     for (int32_t mode = 0; mode < 3; mode++)
     {
-        int32_t flags;
-        if      (mode == 0) flags = CA_RESPONSE;
-        else if (mode == 1) flags = CA_SPECIAL;
-        else                flags = 0;
-        if (isaction) flags |= CA_ACTION;
-
-        if (dbg && mode == 2)
-        {
-            extern thread_local int32_t g_dbg_attack_rej_button;
-            extern thread_local const char *g_dbg_attack_rej_reason;
-            extern thread_local int32_t g_dbg_attack_rej_tdist, g_dbg_attack_rej_mindist, g_dbg_attack_rej_maxdist;
-            g_dbg_attack_rej_button = id;
-            g_dbg_attack_rej_reason = nullptr;
-            g_dbg_attack_rej_tdist = g_dbg_attack_rej_mindist = g_dbg_attack_rej_maxdist = 0;
-        }
-
-        const int32_t n = chardata->attacks.NumItems();
-        for (int32_t a = 0; a < n; a++)
-        {
-            if (IsValidAttack(a, impactnum, damage, tdist, id, 0, dmgpcnt,
-                              CA_RESPONSE | CA_SPECIAL, flags))
+        int32_t want = mode == 0 ? CA_RESPONSE : mode == 1 ? CA_SPECIAL : 0;
+        if (isaction)
+            want |= CA_ACTION;
+        for (int32_t i = 0; i < chardata->attacks.NumItems(); i++)
+            if (IsValidAttack(i, impactnum, damage, tohit, roll, tdist, button, 0, dmgpcnt,
+                              CA_RESPONSE | CA_SPECIAL, want, targ))
             {
-                attacknum = a;
-                if (dbg)
-                {
-                    extern thread_local int32_t g_dbg_attack_rej_button;
-                    g_dbg_attack_rej_button = -1;
-                }
+                attacknum = i;
                 return true;
             }
-        }
-    }
-
-    if (dbg)
-    {
-        extern thread_local const char *g_dbg_attack_rej_reason;
-        extern thread_local int32_t g_dbg_attack_rej_tdist, g_dbg_attack_rej_mindist, g_dbg_attack_rej_maxdist;
-        extern thread_local int32_t g_dbg_attack_rej_button;
-        TPlayer *p = (TPlayer *)this;
-        const char *reason = g_dbg_attack_rej_reason ? g_dbg_attack_rej_reason : "(none — no button match)";
-        if (g_dbg_attack_rej_reason && strcmp(g_dbg_attack_rej_reason, "range") == 0)
-        {
-            log_warn("[combat-dbg] FindButtonAttack(btn=%d) no match. "
-                     "first_reject='range' tdist=%d need=[%d..%d] (Locke is %s) "
-                     "attacks=%d wpn=%d fatigue=%d/%d",
-                     id, g_dbg_attack_rej_tdist,
-                     g_dbg_attack_rej_mindist, g_dbg_attack_rej_maxdist,
-                     (g_dbg_attack_rej_tdist < g_dbg_attack_rej_mindist ? "too close" : "too far"),
-                     chardata ? chardata->attacks.NumItems() : -1,
-                     (int)WeaponType(),
-                     (int)Fatigue(), (int)p->MaxFatigue());
-        }
-        else
-        {
-            log_warn("[combat-dbg] FindButtonAttack(btn=%d) no match. "
-                     "first_reject='%s' attacks=%d wpn=%d combat=%d sneak=%d bow=%d "
-                     "fighting=%d fatigue=%d/%d skill_atk=%d wpnskill=%d",
-                     id, reason,
-                     chardata ? chardata->attacks.NumItems() : -1,
-                     (int)WeaponType(),
-                     (int)IsCombat(), (int)IsSneakMode(), (int)IsBowMode(),
-                     (int)IsFighting(),
-                     (int)Fatigue(), (int)p->MaxFatigue(),
-                     (int)p->Skill(SK_ATTACK),
-                     (int)p->WeaponSkill(WeaponType()));
-        }
-        g_dbg_attack_rej_button = -1;
     }
     return false;
 }
 
-// REVSYNC: retail TCharacter::FindPcntAttack @ 0x4d1eb0
-// Source-port of the retail decompile in
-// recon/classes/cls_0x5a7b98.cpp lines 10284-10320. Loops random
-// indices into chardata->attacks up to 2*N times.
-bool TCharacter::FindPcntAttack(int32_t pcnt, int32_t dmgpcnt, int32_t &attacknum,
-    int32_t &impactnum, int32_t &damage)
+// REVSYNC: TCharacter::FindPcntAttack @ 0x004d1eb0
+bool TCharacter::FindPcntAttack(int32_t pcnt, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum,
+    int32_t &damage, int32_t &tohit, int32_t &roll)
 {
-    // Retail requires root to be COMBAT or BOW
-    if (!root) return false;
-    if (root->action != ACTION_COMBAT && root->action != ACTION_BOW)
+    if (!Fighting())
         return false;
-
-    // TODO retail: meth_0x46ea20 / chardata->attacks_default side-call.
-
-    int32_t tdist = Fighting() ? Distance(Fighting()) : 10000;
-
+    const int32_t tdist = Distance(Fighting());
     const int32_t n = chardata->attacks.NumItems();
-    const int32_t limit = n * 2;
-    for (int32_t i = 0; i < limit; i++)
+    for (int32_t k = 0; k < n * 2; k++)
     {
-        int32_t a = random(0, n - 1);
-        if (IsValidAttack(a, impactnum, damage, tdist, -1, pcnt, dmgpcnt, 0, 0))
+        const int32_t i = random(0, n - 1);
+        if (IsValidAttack(i, impactnum, damage, tohit, roll, tdist, -1, pcnt, dmgpcnt, 0, 0, Fighting()))
         {
-            attacknum = a;
+            attacknum = i;
             return true;
         }
     }
     return false;
 }
 
-// Executes a particular attack (using index into SCharData's attack array)
-bool TCharacter::DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage)
+// REVSYNC: TCharacter::FindInteractiveAttack @ 0x004d1ff0
+bool TCharacter::FindInteractiveAttack(int32_t pcnt, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum,
+    int32_t &damage, int32_t &tohit, int32_t &roll)
 {
+    if (!Fighting())
+        return false;
+    const int32_t tdist = Distance(Fighting());
+    for (int32_t i = 0; i < chardata->attacks.NumItems(); i++)
+        if ((chardata->attacks[i].flags & CA_INTERACTIVE) &&
+            IsValidAttack(i, impactnum, damage, tohit, roll, tdist, -1, pcnt, dmgpcnt, 0, 0, Fighting()))
+        {
+            attacknum = i;
+            return true;
+        }
+    return false;
+}
+
+// REVSYNC: TCharacter::DoAttack @ 0x004d2120. Not ported: the multiplayer
+// gate and the network notify (0x00584150).
+bool TCharacter::DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage, int32_t tohit, int32_t roll,
+    TCharacter* targ)
+{
+    if (doing && doing->action == ACTION_INVOKE)
+        return false;
+    if (Health() <= 0)
+        return false;
+    if (flags & (OF_ICED | OF_PARALIZE))
+        return false;
     if ((uint32_t)attacknum >= (uint32_t)chardata->attacks.NumItems())
         return false;
+    if (objclass == OBJCLASS_PLAYER)
+    {
+        TPlayer* player = static_cast<TPlayer*>(this);
+        if (player->PlayerState() & 2)
+            player->SetPlayerState(player->PlayerState() & ~2);
+    }
+    SCharAttackData* ad = &chardata->attacks[attacknum];
 
-  // Get attack info from char data
-    SCharAttackData* ad = &(chardata->attacks[attacknum]);
-
-  // Get target
-    TCharacter* targ = (TCharacter*)doing->obj;
-
-  // Do magic attack
     if (ad->flags & CA_MAGICATTACK)
     {
+        if (Health() <= 0 || InteractiveLocked() || (flags & OF_IMMOBILE) || (flags & (OF_ICED | OF_PARALIZE)))
+            return false;
         CombatTrace::Event(this, "cast", "spell=%s\ttarget=%s", ad->spellname,
                            targ && targ->GetName() ? targ->GetName() : "-");
-        return CastByName(ad->spellname, (TObjectInstance* *)&targ, (targ)?1:0, &(ad->spellsource));
+        TObjectInstance* target = targ;
+        return CastByName(ad->spellname, &target, targ ? 1 : 0, &ad->spellsource);
     }
     CombatTrace::Event(this, "attack", "attack=%s\ttarget=%s\tdamage=%d", ad->attackname,
                        targ && targ->GetName() ? targ->GetName() : "-", damage);
 
-  // Get action type
-    ACTION a;
-    if (ad->flags & CA_PLAYANIM)
-        a = ACTION_COMBAT;
-    else
-        a = ACTION_ATTACK;  
-
-  // Setup action block
-    TActionBlock* ab = new TActionBlock(ad->attackname, a);
+  // A PLAYANIM plays as an attack too. A special can't be cut short; a
+  // chain link waits for the attack before it.
+    auto* ab = new TActionBlock(ad->attackname, ACTION_ATTACK);
     ab->obj = targ;
     ab->attack = ad;
-    if (impactnum >= 0)
-        ab->impact = &(ad->impacts[impactnum]);
-    else
-        ab->impact = nullptr; // Use default impact
+    ab->impact = impactnum >= 0 ? &ad->impacts[impactnum] : nullptr;
+    ab->tohit = tohit;
     ab->damage = damage;
-    ab->interrupt = true;   // Play animation now
-    ab->noroot = true;      // don't go back to the root anim before playing the new one
+    ab->roll = roll;
+    ab->priority = (ad->flags & CA_SPECIAL) != 0;
+    ab->interrupt = !((ad->flags & CA_CHAIN) && ad->chainname[0]);
+    if (ad->flags & CA_INTERACTIVE)
+        requestbits &= ~kRequestInteractive;
+    if (!(ad->flags & CA_PLAYANIM))
+        requestbits &= ~kRequestNoPlayAnim;
 
-    SetDesired(ab);
-
-  // Make sure moving angle equals face (it doesn't during a combat move)
-    SetMoveAngle(GetFace());
-
+  // The swing keeps the heading the character had; the root remembers it.
+    root->angle = root->moveangle = doing->angle;
+    ab->moveangle = doing->angle;
+    if (ab->interrupt)
+        ab->angle = doing->angle;
+    ab->noroot = true;
+    if (!SetDesired(ab))
+    {
+        delete ab;
+        return true;
+    }
+    if (!(ad->flags & CA_PLAYANIM) && !(charflags & kCharFlagNoTurn))
+        SetMoveAngle(GetFace());
+    else if (TCharacter* t = Fighting())
+        SetRotateZ(AngleTo(t));
     return true;
 }
 
-// Find attack based on the button the player pressed
-bool TCharacter::ButtonAttack(int32_t buttonid)
+// REVSYNC: TCharacter::ButtonAttack @ 0x004d2480 -- the player's attack
+// buttons. A press while a chain attack's window is open only banks a
+// chain hit (Pulse spends them). The third and later presses of the same
+// button against the same monster swing with the worst roll (100), and one
+// time in eleven the monster counters at once instead: its timer cleared,
+// its fatigue refilled. The target is looked up before the chain test.
+bool TCharacter::ButtonAttack(int32_t button)
 {
- // Check if chain attack is valid...
-    if (lastattack && 
-        (lastattack->flags & CA_CHAIN) &&
-        (PlayScreen.GameFrame() - lastattackticks <= lastattack->chainexptime) &&
-        (chainhits < MAXCHAINHITS))
+    if (Health() <= 0 || InteractiveLocked())
+        return false;
+    bool repeat = false;
+    TCharacter* targ = Fighting();
+    if (!targ)
+    {
+        TCharacter* found = nullptr;
+        if (FindCharacters(&found, 1, -1, GetFace(), 0x20, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) > 0)
+            targ = found;
+    }
+
+    if (lastattack && (lastattack->flags & CA_CHAIN) &&
+        PlayScreen.GameFrame() - lastattackticks <= lastattack->chainexptime && chainhits < MAXCHAINHITS)
     {
         chainhits++;
         return true;
     }
 
-    int32_t dmgpcnt = random(1, 50) + random(1, 50);
-    int32_t attacknum, impactnum, damage;
-    bool found = FindButtonAttack(buttonid, dmgpcnt, attacknum, impactnum, damage);
-    if (found)
-        return DoAttack(attacknum, impactnum, damage);
-    else
-        return false;
+    if (objclass == OBJCLASS_PLAYER && targ && targ->ObjClass() != OBJCLASS_PLAYER)
+    {
+        if (button == lastbutton)
+        {
+            if (++buttonrepeat >= 3)
+                repeat = true;
+        }
+        else
+            buttonrepeat = 1;
+        lastbutton = button;
+
+        if (repeat && random(0, 10) == 0)
+        {
+            const int32_t counter = random(1, 50) + 50;
+            int32_t a = -1, imp = -1, dmg = -1, th = -1, rl = 100;
+            targ->nextattack = 0;
+            targ->SetFatigue(targ->MaxFatigue());
+            bool found = false;
+            for (int32_t k = 0; k < 10; k++)
+            {
+                found = targ->FindInteractiveAttack(0, counter, a, imp, dmg, th, rl) ||
+                        targ->FindPcntAttack(0, counter, a, imp, dmg, th, rl);
+                if (found && !(targ->chardata->attacks[a].flags & (CA_PLAYANIM | CA_MAGICATTACK)))
+                    break;
+                found = false;
+            }
+            if (found && targ->DoAttack(a, imp, dmg, th, 0, this))
+                return false;
+        }
+    }
+
+    const int32_t first = random(1, 50);
+    const int32_t dmgpcnt = first + random(1, 50);
+    int32_t a = -1, imp = -1, dmg = -1, th = -1, rl = repeat ? 100 : -1;
+    if (FindButtonAttack(button, dmgpcnt, a, imp, dmg, th, rl, false, targ))
+        return DoAttack(a, imp, dmg, th, rl, targ);
+    return false;
 }
 
-// Find an action in RULES.DEF based on given button number
-bool TCharacter::ButtonAction(int32_t buttonid)
+// REVSYNC: TCharacter::ButtonAction @ 0x004d27f0 (finds nothing: see
+// FindButtonAttack).
+bool TCharacter::ButtonAction(int32_t button)
 {
-    int32_t dmgpcnt = random(1, 50) + random(1, 50);
-    int32_t attacknum, impactnum, damage;
-    bool found = FindButtonAttack(buttonid, dmgpcnt, attacknum, impactnum, damage, true);
-    if (found)
-        return DoAttack(attacknum, impactnum, damage);
-    else
+    if (Health() <= 0 || InteractiveLocked())
         return false;
+    TCharacter* found = nullptr;
+    TCharacter* targ = FindCharacters(&found, 1, 0x200, GetFace(), 0x20, 0) > 0 ? found : nullptr;
+    const int32_t first = random(1, 50);
+    const int32_t dmgpcnt = first + random(1, 50);
+    int32_t a = -1, imp = -1, dmg = -1, th = -1, rl = -1;
+    if (FindButtonAttack(button, dmgpcnt, a, imp, dmg, th, rl, true, targ))
+        return DoAttack(a, imp, dmg, th, rl, targ);
+    return false;
 }
 
-// Find a random attack (for a monster)
+// REVSYNC: TCharacter::RandomAttack @ 0x004d2900 -- the AI's attack: an
+// interactive one first when OnAttacked asked for it, else a random pick.
 bool TCharacter::RandomAttack(int32_t pcnt)
 {
-    int32_t dmgpcnt = random(1, 50) + random(1, 50);
-    int32_t attacknum, impactnum, damage;
-    bool found = FindPcntAttack(pcnt, dmgpcnt, attacknum, impactnum, damage);
-    if (found)
-    {
-        return DoAttack(attacknum, impactnum, damage);
-    }
-    else 
+    if (Health() <= 0 || InteractiveLocked())
         return false;
+    const int32_t first = random(1, 50);
+    const int32_t dmgpcnt = first + random(1, 50);
+    int32_t a = -1, imp = -1, dmg = -1, th = -1, rl = -1;
+    bool found = false;
+    if (lastbutton >= 0 && (requestbits & kRequestInteractive))
+    {
+        found = FindInteractiveAttack(pcnt, dmgpcnt, a, imp, dmg, th, rl);
+        requestbits &= ~kRequestInteractive;
+    }
+    if (!found && !FindPcntAttack(pcnt, dmgpcnt, a, imp, dmg, th, rl))
+        return false;
+    return DoAttack(a, imp, dmg, th, rl, Fighting());
 }
 
-// Do a specific attack
+// REVSYNC: TCharacter::SpecificAttack @ 0x004d2a60 -- one attack by number
+// (Pulse's chains, the `specificattack` script command), its timer cleared.
 bool TCharacter::SpecificAttack(int32_t attacknum)
 {
-    TCharacter* targ = Fighting();
-    int32_t tdist = 0;
-    if (targ)
-        tdist = Distance(targ);
-
-    int32_t dmgpcnt = random(1, 50) + random(1, 50);
-    int32_t impactnum, damage;
-    bool valid = IsValidAttack(attacknum, impactnum, damage, tdist, -1, -1, dmgpcnt, 0, 0);
-
-    if (valid)
-        return DoAttack(attacknum, impactnum, damage);
-    else
+    if (Health() <= 0 || InteractiveLocked())
         return false;
+    TCharacter* targ = Fighting();
+    if (!targ)
+    {
+        TCharacter* found = nullptr;
+        if (FindCharacters(&found, 1, -1, GetFace(), 0x20, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) > 0)
+            targ = found;
+    }
+    const int32_t tdist = targ ? Distance(targ) : 10000;
+    const int32_t first = random(1, 50);
+    const int32_t dmgpcnt = first + random(1, 50);
+    int32_t imp = -1, dmg = -1, th = -1, rl = -1;
+    nextattack = 0;
+    if (!IsValidAttack(attacknum, imp, dmg, th, rl, tdist, -1, -1, dmgpcnt, 0, 0, targ))
+        return false;
+    return DoAttack(attacknum, imp, dmg, th, rl, targ);
 }
 
+// REVSYNC: Leap @ 0x004d2be0 -- in a combat or bow root, alive, and (unless
+// the move is interactive, charflags 0x80000) not in an interactive attack
+// or impact: the root's leap toward `angle`, one of eight by the angle off
+// the facing's octant ("<root>leapf", "...fr", ... "...fl"). A player's
+// idle mark (state bit 2) goes. The block interrupts and keeps the doing
+// block's target; true once it's desired (SetDesired's answer isn't read).
 bool TCharacter::Leap(int32_t angle)
 {
-    if (!IsFighting())
+    if (!IsFighting() || Health() <= 0)
         return false;
-
-    int32_t roundangle = ((GetFace() + 15) & 0xE0); // round to 8 dirs
-    int32_t diff = (angle - roundangle) & 255;
-    int32_t anim = diff / 32;
-
-    TActionBlock* ab = nullptr;
-
-    char *sfx;
-
-    switch (anim)
+    if (!(charflags & kCharFlagInteractive))
     {
-        case 0: sfx = "leapf"; break;
-        case 1: sfx = "leapfr"; break;
-        case 2: sfx = "leapr"; break;
-        case 3: sfx = "leapbr"; break;
-        case 4: sfx = "leapb"; break;
-        case 5: sfx = "leapbl"; break;
-        case 6: sfx = "leapl"; break;
-        case 7: sfx = "leapfl"; break;
+        if (doing->attack && (doing->attack->flags & CA_INTERACTIVE))
+            return false;
+        if (doing->impact && (doing->impact->flags & CAI_INTERACTIVE))
+            return false;
+    }
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        auto* player = static_cast<TPlayer*>(this);
+        if (player->PlayerState() & 2)
+            player->SetPlayerState(player->PlayerState() & ~2);
     }
 
-    char animname[RESNAMELEN];
-    strcpy(animname, StName(root->name, sfx));
-
-    if (!HasActionAni(animname))
+    static constexpr const char* kSuffix[8] = {"leapf", "leapfr", "leapr", "leapbr",
+                                               "leapb", "leapbl", "leapl", "leapfl"};
+    const int32_t octant = ((angle - ((GetFace() + 15) & 0xe0)) & 0xff) / 32;
+    char name[RESNAMELEN];
+    snprintf(name, sizeof(name), "%s%s", root->name, kSuffix[octant]);
+    if (!HasActionAni(name))
         return false;
 
-    ab = new TActionBlock(animname, ACTION_COMBATLEAP);
+    auto* ab = new TActionBlock(name, ACTION_COMBATLEAP);
     ab->interrupt = true;
-
-    if (ab && doing)    // Copy current target
+    if (doing)
         ab->obj = doing->obj;
-
-    SetDesired(ab);
-
+    SetDesired(ab, 0);
     return true;
 }
 
+// REVSYNC: StartRetreat @ 0x004d5fc0 -- give up the fight and run: no target,
+// the walk stopped (unless already retreating), and 96 frames of retreat.
+void TCharacter::StartRetreat()
+{
+    SetFighting(nullptr);
+    if (!retreating)
+        Stop();
+    retreatframes = 0x60;
+    retreating = true;
+    retreatlatch = true;
+}
+
+// REVSYNC: TCharacter::Block @ 0x004d2e30 (COMBAT_HIT.md §3.9) -- raise a
+// guard for `frames` (below 0: BLOCK's random range) in a combat or bow root:
+// not while flinching, dead or held, nor with the root's target over 120
+// away. A monster blocks only an attack it can still catch (the attacker
+// short of its block time), unless `frames` is -2 (IsValidAttack's forced
+// block); the player needs no timing. The block keeps its target, loops,
+// and interrupts.
 bool TCharacter::Block(int32_t frames)
 {
-    if (!IsFighting() || !(IsDoing(ACTION_COMBAT) || IsDoing(ACTION_IMPACT)))
+    if (blockSeam)
+        return blockSeam(this, frames);
+    if (!root || (root->action != ACTION_COMBAT && root->action != ACTION_BOW))
         return false;
-
-    TCharacter* targ = (TCharacter*)doing->obj;
-
-    char *blockanim = "block";
-    bool synchronize = false;
-
-    if (targ)
+    if (doing && doing->action == ACTION_IMPACT)
+        return false;
+    if (Health() <= 0 || InteractiveLocked())
+        return false;
+    if (root->obj && Distance(root->obj) > 120)
+        return false;
+    if (ObjClass() != OBJCLASS_PLAYER)
     {
-        if (targ->IsDoing(ACTION_ATTACK) &&                         // Char is attacking
-            targ->GetFrame() < targ->GetDoing()->attack->blocktime) // And we're in time to block
-        {
-            blockanim = targ->GetDoing()->attack->blockname;        // Get desired block name
-            if (!HasActionAni(blockanim))
-                blockanim = "block";                                // Use default block
-            else
-            {
-    //          if (targ->GetDoing()->attack->flags & CA_SNAPBLOCK) // If special block, and needs snap, do snap
-    //              SnapDist(targ, targ->doing->impact->snapdist);
-            }
-        }
-        else
-        {
+        auto* attacker = dynamic_cast<TCharacter*>(doing->obj);
+        if (!attacker)
             return false;
-        }
+        const TActionBlock* blow = attacker->doing;
+        const bool catchable = blow && blow->action == ACTION_ATTACK && blow->attack &&
+                               attacker->GetFrame() < blow->attack->blocktime;
+        if (!catchable && frames != -2)
+            return false;
     }
-
-    if (!HasActionAni(blockanim)) // Do we have this particular block?
+    char name[RESNAMELEN];
+    CombatAnimName(name, "block");
+    if (!HasActionAni(name))
         return false;
 
-  // Ok, now start the block (note that AF_SYNCHRONIZE will cause frames to sync with attack
-    TActionBlock* ab = new TActionBlock(blockanim, ACTION_BLOCK);
+    auto* ab = new TActionBlock(name, ACTION_BLOCK);
     ab->obj = doing->obj;
-    if (frames < 0)
-        ab->wait = random(chardata->blockmin, chardata->blockmax);
-    else
-        ab->wait = frames;
+    ab->wait = frames < 0 ? random(chardata->blockmin, chardata->blockmax) : frames;
+    ab->priority = false;
     ab->interrupt = true;
     ab->loop = true;
     SetDesired(ab);
-
-  // Make sure moving angle equals face (it doesn't during a combat move)
-    SetMoveAngle(GetFace());
-
+    DropUnheld(ab);
+    if (!(charflags & kCharFlagNoTurn))
+        SetMoveAngle(GetFace());
     return true;
 }
 
+// REVSYNC: TCharacter::StopBlock @ 0x004d30f0 -- ends a guard: its wait to 0
+// (ResolveBlock lets it go).
 bool TCharacter::StopBlock()
 {
-    if (!IsFighting() || !IsDoing(ACTION_BLOCK))
+    if (!root || (root->action != ACTION_COMBAT && root->action != ACTION_BOW) || !doing ||
+        doing->action != ACTION_BLOCK)
         return false;
-
     doing->wait = 0;
-
     return true;
 }
 
-bool TCharacter::Dodge()
+namespace
 {
-    if (!IsFighting() || !IsDoing(ACTION_COMBAT))
+// Dodge's roll by the character's facing (eight sectors, the last the
+// rest) and the direction held (0-7): the last letter of "crollb".
+constexpr char kDodgeRolls[8][9] = {"bflrbfbf", "bfbfblrf", "rlbfbbff", "fbbfrbfl",
+                                    "fbrlfbfb", "fbfbfrlb", "lrfbffbb", "bffblfbr"};
+
+int32_t DodgeSector(int32_t facing)
+{
+    constexpr int32_t kFirst[7] = {0x10, 0x31, 0x51, 0x71, 0x92, 0xb3, 0xd3};
+    constexpr int32_t kLast[7] = {0x30, 0x50, 0x70, 0x91, 0xb2, 0xd2, 0xf2};
+    for (int32_t s = 0; s < 7; ++s)
+        if (facing >= kFirst[s] && facing <= kLast[s])
+            return s;
+    return 7;
+}
+}
+
+// REVSYNC: TCharacter::Dodge @ 0x004d3150 (COMBAT_HIT.md §3.10) -- a roll
+// out of the combat stance, toward `dir` (0-7, the direction held; any
+// other keeps the back roll): "crollb" ("hrollb" from the "hand" root), its
+// last letter by the facing and `dir`. Not dead or held; a stopped player
+// is let go. (The debug camera's turn of the facing, 0x006671f0, isn't
+// ported, as in UpdateMove.)
+bool TCharacter::Dodge(int32_t dir)
+{
+    if (!root || (root->action != ACTION_COMBAT && root->action != ACTION_BOW))
         return false;
+    if (!doing || doing->action != ACTION_COMBAT || Health() <= 0 || InteractiveLocked())
+        return false;
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        TPlayer* player = static_cast<TPlayer*>(this);
+        if (player->PlayerState() & 2)
+            player->SetPlayerState(player->PlayerState() & ~2);
+    }
 
-    TActionBlock* ab = new TActionBlock("dodge", ACTION_DODGE);
+    char name[] = "crollb";
+    if (root->Is("hand"))
+        name[0] = 'h';
+    if (dir >= 0 && dir <= 7)
+        name[5] = kDodgeRolls[DodgeSector(GetFace())][dir];
+    if (!HasActionAni(name))
+        return false;
+    auto* ab = new TActionBlock(name, ACTION_DODGE);
     ab->obj = doing->obj;
+    ab->interrupt = false;
+    ab->priority = true;
     SetDesired(ab);
-
+    DropUnheld(ab);
     return true;
 }
 
-// REVSYNC: retail TCharacter::SideStep @ 0x4d6220
-//   recon/discovered/cls_0x5a7b98_TCharacter_GoCmd_4d6220.cpp (size 398).
-// Cartwheel sidestep: queues a "sidestepl" / "sidestepr" animation that
-// steps the character ~90 degrees off facing. Used by the AI body to
-// dodge blockers and by the in-range attack tree when a character is in
-// the line of attack. When called with dir=0 (or any non-l/r byte),
-// retail picks L/R at random — fed twice in a row, that's the
-// "cartwheel both ways" pattern.
-//
-// Retail uses bare anim names ("sidestepl", not "comhand_sidestepl");
-// HasActionAni resolves transitions from the current root via
-// FindTransitionState.
+// REVSYNC: SideStep @ 0x004d6220 -- a step to the side, "sidestepl" or
+// "sidestepr" (either at random when `dir` names neither), unless one is
+// already under way. The block keeps the doing block's target and angle,
+// and the character faces that angle at once; it moves off the move angle
+// by a quarter turn (left +0x40), with priority and a pivot first
+// (waitpivot), turn rate 8. A block SetDesired refuses is dropped. (The
+// return value is retail's leftover register; here, whether it was taken.)
 bool TCharacter::SideStep(char dir)
 {
-    if (!doing)
+    if (!doing || strncasecmp(doing->name, "sidestep", 8) == 0)
         return false;
-
-  // Retail FUN_004d6220:26 — gate: only proceed if doing->name is NOT
-  // already prefixed with "sidestep" (i.e. we're not already in a
-  // sidestep). Prevents re-queuing a fresh sidestep on top of an
-  // in-progress one.
-    if (doing->name && strncmp(doing->name, "sidestep", 8) == 0)
-        return false;
-
-  // Retail randomises L/R when caller didn't specify (lines 28-31).
     if (dir != 'l' && dir != 'r')
         dir = random(0, 1) ? 'l' : 'r';
 
-    char animname[10];
-    animname[0] = 's'; animname[1] = 'i'; animname[2] = 'd'; animname[3] = 'e';
-    animname[4] = 's'; animname[5] = 't'; animname[6] = 'e'; animname[7] = 'p';
-    animname[8] = dir; animname[9] = '\0';
-
-  // Retail FUN_004d6220:33 calls vftbl[0x1f0/4] which is HasActionAni
-  // (or its variant) on the bare anim name — so transitions from the
-  // current root are searched automatically.
-    if (!HasActionAni(animname))
+    char name[16] = "sidestep";
+    name[8] = dir;
+    if (!HasActionAni(name))
         return false;
 
-  // Retail uses action=3 (ACTION_COMBAT) — the sidestep stays inside the
-  // combat root rather than swapping to ACTION_DODGE; keeps the character
-  // ready to attack again on the next tick.
-    TActionBlock* ab = new TActionBlock(animname, ACTION_COMBAT);
-    ab->obj       = doing->obj;
-    ab->moveangle = doing->moveangle;
-
-  // Step direction: 90° left or right of facing. Retail FUN_004d6220:49
-  //   ab->angle = (dir == 'l' ? face + 0x40 : face + 0xc0) & 0xff
-    int32_t face = GetFace();
-    if (dir == 'l') ab->angle = (face + 0x40) & 0xff;
-    else            ab->angle = (face + 0xc0) & 0xff;
-
-  // Retail FUN_004d6220:51 — turnrate=8 (limits in-step turn speed).
+    auto* ab = new TActionBlock(name, ACTION_COMBAT);
+    ab->obj = doing->obj;
+    ab->angle = doing->angle;
+    FaceOnly(doing->angle);
+    ab->moveangle = (moveangle + (dir == 'l' ? 0x40 : 0xc0)) & 0xff;
+    ab->interrupt = false;
+    ab->priority = true;
+    ab->waitpivot = true;
     ab->turnrate = 8;
-
-  // Retail FUN_004d6220:52 — flags = (flags & ~nowaitdone) | interrupt | noroot
-  //   bit 0x10 = interrupt, bit 0x20 = nowaitdone, bit 0x200 = noroot.
-    ab->interrupt  = 1;
-    ab->noroot     = 1;
-    ab->nowaitdone = 0;
-
-    SetDesired(ab);
+    if (!SetDesired(ab, 0))
+    {
+        delete ab;
+        return false;
+    }
     return true;
 }
 
@@ -4757,21 +4956,48 @@ bool TCharacter::Burn()
 }
 
 
-bool TCharacter::KnockBack(S3DPoint frompos)
+// REVSYNC: KnockBack @ 0x004d3750 -- thrown back by a blow from `frompos`:
+// an IMPACT with priority, forced at once. From behind (the facing more than
+// 0x48 off the blow's bearing, which retail measures without wrapping) the
+// back impact "impb" when the character has one, keeping its facing; else
+// one of five (`variant` 0..4, else random) turning to face the blow. An
+// idle player isn't knocked back; a paralysed character is left as it is
+// (true). The network notify is inert offline.
+bool TCharacter::KnockBack(S3DPoint frompos, int32_t variant)
 {
-    S3DPoint pos;
-
-    if (IsParalized())
+    if (knockBackSeam)
+    {
+        knockBackSeam(this, frompos, variant);
         return true;
+    }
+    if (ObjClass() == OBJCLASS_PLAYER && (static_cast<TPlayer*>(this)->PlayerState() & 2))
+        return false;
+    if (flags & OF_PARALIZE)
+        return true;
+    combatflashticks = 5;
 
-    GetPos(pos);
-    float dx = (float)(frompos.x - pos.x), dy = (float)(frompos.y - pos.y);
-    float ang = (float)atan2(dy, dx);
-    TActionBlock* ab = new TActionBlock("cimpk", ACTION_IMPACT);
+    static constexpr const char* kImpacts[5] = {"impk", "imphh", "imph", "implh", "impl"};
+    char name[RESNAMELEN];
+    const int32_t bearing = ConvertToFacing(pos, frompos);
+    bool back = false;
+    if (std::abs(GetFace() - bearing) > 0x48)
+    {
+        CombatAnimName(name, "impb");
+        back = HasActionAni(name);
+    }
+    if (!back)
+    {
+        if (variant < 0 || variant > 4)
+            variant = random(0, 4);
+        CombatAnimName(name, kImpacts[variant]);
+        Face(bearing);
+    }
+    if (!HasActionAni(name))
+        return false;
+
+    auto* ab = new TActionBlock(name, ACTION_IMPACT);
     ab->priority = true;
-    ForceCommand(ab);
-    Face((int32_t)((ang * 256) / M_2PI));
-    
+    ForceCommand(ab, 0, 0);
     return true;
 }
 
@@ -4837,6 +5063,8 @@ ACTION TCharacter::GetLeapAction(ACTION action)
 
 bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
 {
+    if (beginFightingSeam)
+        return beginFightingSeam(this, target, action);
   // Prevent auto combat from being called again for 
   // all currently visible characters.
     SetHasSeenAutoCombat(false);
@@ -4944,7 +5172,7 @@ bool TCharacter::EndFighting()
 // Refused while dead or in an interactive move, for itself or a dead
 // target; outside a combat/bow root a target starts the fight
 // (BeginFighting); else every block takes the target and faces it (not
-// while it's out of sight). The network message (0x21) isn't ported.
+// while retreating). The network message (0x21) isn't ported.
 bool TCharacter::SetFighting(TCharacter* newtarget)
 {
     if (Health() <= 0)
@@ -4971,7 +5199,7 @@ bool TCharacter::SetFighting(TCharacter* newtarget)
     if (newtarget)
     {
         const int32_t angle = AngleTo(newtarget);
-        if (!target_out_of_sight)
+        if (!retreating)
             doing->angle = desired->angle = root->angle = angle;
     }
     if (ObjClass() == OBJCLASS_PLAYER)
@@ -5108,20 +5336,14 @@ TCharacter* TCharacter::CharBlocking(TObjectInstance* inst, const S3DPoint& pos,
         return !(c->ObjClass() == OBJCLASS_PLAYER && (static_cast<TPlayer*>(c)->PlayerState() & 2));
     };
 
-    if (nearbyCharactersSeam)
-    {
-        for (TCharacter* c : nearbyCharactersSeam(pos, kRange))
-            if (blocks(c))
-                return c;
-        return nullptr;
-    }
-    // Retail's iterator flags 0xe0: no inventories, the map rectangle, the
-    // loaded sectors -- what the level constructor sets.
-    SRect r{pos.x - kRange, pos.y - kRange, pos.x + kRange, pos.y + kRange};
-    for (TMapIterator i(inst->GetLevel(), &r, CHECK_NOINVENT, OBJSET_CHARACTER); i; i++)
-        if (TCharacter* c = static_cast<TCharacter*>(i.Item()); blocks(c))
-            return c;
-    return nullptr;
+    TCharacter* found = nullptr;
+    ForCharactersNear(inst->GetLevel(), pos, kRange, [&](TCharacter* c) {
+        if (!blocks(c))
+            return true;
+        found = c;
+        return false;
+    });
+    return found;
 }
 
 // ------------- Streaming functions ------------------
@@ -5360,184 +5582,95 @@ void TCharacter::SetInvisibleSpell(bool on)
     }
 }
 
-// set to cast mode
+// The invoke animation named by the spell's ANIMATION: one with "inv" in
+// it becomes the character's own "<prefix>inv<last char>" (invoke2 ->
+// "cinv2", "hinv2", ...); without it, "invoke"; without that, none. A
+// priority-free ACTION_INVOKE block waits the invoke delay, which the
+// character keeps too, and is forced; one ForceCommand didn't take (doing
+// has priority) is dropped.
 bool TCharacter::SetCast(char* ani, TObjectInstance* target, int32_t invoke_delay)
 {
-//  int32_t incombat = IsFighting();
-    char puthere[50];
-    strcpy(puthere, ani);
-    if (!stricmp(ani, "invoke1"))
+    char name[RESNAMELEN];
+    if (strstr(ani, "inv"))
     {
-        strcpy(puthere,"cinv1");
-        puthere[4] = '1';
-        puthere[5] = '\0';
-        if (IsCombat())
-        {
-            if (IsRunMode())
-                strcpy(puthere,"crinv1");
-        }
-        else if (IsHandCombat())
-        {
-            puthere[0] = 'h';
-            if (IsRunMode())
-                puthere[0] = 'r';
-        }
-        else if (IsBowMode())
-        {
-            puthere[0] = 'b';
-            if (IsRunMode())
-                strcpy(puthere,"brinv1");
-        }
-        else if (IsWalkMode())
-            puthere[0] = 'w';
-        else if (IsSneakMode())
-            puthere[0] = 's';
+        char base[RESNAMELEN];
+        snprintf(base, sizeof(base), "inv%s", ani + strlen(ani) - 1);
+        CombatAnimName(name, base);
     }
-    if (!stricmp(ani, "invoke2"))
+    else
+        strncpyz(name, ani, RESNAMELEN);
+    if (!HasActionAni(name))
     {
-        strcpy(puthere,"cinv2");
-        puthere[4] = '2';
-        puthere[5] = '\0';
-        if (IsCombat())
-        {
-            if (IsRunMode())
-                strcpy(puthere,"crinv2");
-        }
-        else if (IsHandCombat())
-        {
-            puthere[0] = 'h';
-            if (IsRunMode())
-                puthere[0] = 'r';
-        }
-        else if (IsBowMode())
-        {
-            puthere[0] = 'b';
-            if (IsRunMode())
-                strcpy(puthere,"brinv2");
-        }
-        else if (IsWalkMode())
-            puthere[0] = 'w';
-        else if (IsSneakMode())
-            puthere[0] = 's';
-    }
-    if (!stricmp(ani, "invoke3"))
-    {
-        strcpy(puthere,"cinv3");
-        puthere[4] = '3';
-        puthere[5] = '\0';
-        if (IsCombat())
-        {
-            if (IsRunMode())
-                strcpy(puthere,"crinv3");
-        }
-        else if (IsHandCombat())
-        {
-            puthere[0] = 'h';
-            if (IsRunMode())
-                puthere[0] = 'r';
-        }
-        else if (IsBowMode())
-        {
-            puthere[0] = 'b';
-            if (IsRunMode())
-                strcpy(puthere,"brinv3");
-        }
-        else if (IsWalkMode())
-            puthere[0] = 'w';
-        else if (IsSneakMode())
-            puthere[0] = 's';
-    }
-    if (!stricmp(ani, "invoke4"))
-    {
-        strcpy(puthere,"cinv4");
-        puthere[4] = '4';
-        puthere[5] = '\0';
-        if (IsCombat())
-        {
-            if (IsRunMode())
-                strcpy(puthere,"crinv4");
-        }
-        else if (IsHandCombat())
-        {
-            puthere[0] = 'h';
-            if (IsRunMode())
-                puthere[0] = 'r';
-        }
-        else if (IsBowMode())
-        {
-            puthere[0] = 'b';
-            if (IsRunMode())
-                strcpy(puthere,"brinv4");
-        }
-        else if (IsWalkMode())
-            puthere[0] = 'w';
-        else if (IsSneakMode())
-            puthere[0] = 's';
-    }
-    if (!stricmp(ani, "invoke5"))
-    {
-        strcpy(puthere,"cinv5");
-        puthere[4] = '1';
-        puthere[5] = '\0';
-        if (IsCombat())
-        {
-            if (IsRunMode())
-                strcpy(puthere,"crinv5");
-        }
-        else if (IsHandCombat())
-        {
-            puthere[0] = 'h';
-            if (IsRunMode())
-                puthere[0] = 'r';
-        }
-        else if (IsBowMode())
-        {
-            puthere[0] = 'b';
-            if (IsRunMode())
-                strcpy(puthere,"brinv5");
-        }
-        else if (IsWalkMode())
-            puthere[0] = 'w';
-        else if (IsSneakMode())
-            puthere[0] = 's';
-    }
-
-        
-    if (!HasActionAni(puthere))
-    {
-        strcpy(puthere, "invoke");
-        if (!HasActionAni(puthere))
+        strncpyz(name, "invoke", RESNAMELEN);
+        if (!HasActionAni(name))
             return false;
     }
 
-    // create the action block
-    TActionBlock* ab = new TActionBlock(puthere, ACTION_INVOKE);
-    ab->obj = target;
-    ab->priority = true;
-    ForceCommand(ab);
+    auto* ab = new TActionBlock(name, ACTION_INVOKE);
+    ab->priority = false;
     invokedelay = invoke_delay;
-
+    ab->wait = invoke_delay;
+    ab->obj = target;
+    ForceCommand(ab, 0, 0);
+    if (doing && doing->priority && desired != doing)
+        delete ab;
     return true;
 }
 
-// cast a spell using talismans, automating the targeting
+bool TCharacter::MayCast()
+{
+    return Health() > 0 && !InteractiveLocked() && !(flags & OF_IMMOBILE) && !(flags & (OF_ICED | OF_PARALIZE));
+}
+
 bool TCharacter::Cast(char* talismans, S3DPoint* sourcepos)
 {
-    TObjectInstance* targ = Fighting();
-
-    return CastByTalismans(talismans, &targ, (targ)?1:0, sourcepos);
+    if (!MayCast())
+        return false;
+    TObjectInstance* targ = nullptr;
+    if (root && (root->action == ACTION_COMBAT || root->action == ACTION_BOW))
+        targ = root->obj;
+    return CastByTalismans(talismans, &targ, targ ? 1 : 0, sourcepos);
 }
 
-// cast a spell by using its name
 bool TCharacter::CastByName(char* name, TObjectInstance* *target, int32_t numtargs, S3DPoint* sourcepos)
 {
-    return SpellManager.CastByName(name, this, target, numtargs, sourcepos);
+    if (castSeam)
+        return castSeam(this, name, target, numtargs, sourcepos);
+    if (!MayCast())
+        return false;
+    SSpellVariant* variant = SpellList.GetVariantDataByName(name);
+    if (!variant)
+        return false;
+    return CastByTalismans(variant->talismans, target, numtargs, sourcepos);
 }
 
-// cast a spell by using a list of talismans
+// A player's state bit 2 goes off before the cast. Network play -- the
+// cast's authority test, the echo to the other players, their SPLCASTOK /
+// SPLCASTFAIL notes -- isn't ported: the port is single player, where retail
+// casts locally.
 bool TCharacter::CastByTalismans(char* talismans, TObjectInstance* *target, int32_t numtargs, S3DPoint* sourcepos)
 {
-    return SpellManager.CastByTalismans(talismans, this, target, numtargs, sourcepos);
+    if (castByTalismansSeam)
+        return castByTalismansSeam(this, talismans, target, numtargs, sourcepos);
+    if (!MayCast())
+        return false;
+    if (objclass == OBJCLASS_PLAYER)
+    {
+        auto* player = static_cast<TPlayer*>(this);
+        if (player->PlayerState() & 2)
+            player->SetPlayerState(player->PlayerState() & ~2);
+    }
+    if (SpellManager.CastByTalismans(talismans, this, target, numtargs, sourcepos))
+        return true;
+
+    if (objclass != OBJCLASS_PLAYER)
+        return false;
+    const SSpellVariant* variant = SpellList.GetVariantDataByTalismans(talismans);
+    if (!variant || variant->mana <= 0 || !MayCast())
+        return false;
+    if (SSpellVariant* fizzle = SpellList.GetVariantDataByName("fizzle"))
+        CastByTalismans(fizzle->talismans, nullptr, 0, nullptr);
+    return false;
 }
 
 // Flail - Make the character act a fool

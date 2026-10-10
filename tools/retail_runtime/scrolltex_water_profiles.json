@@ -1,0 +1,41 @@
+{
+  "scope": "Six single-object constant-TRS authored scrolltex water assets; Rift animtex deferred.",
+  "profiles": [
+    {
+      "name": "FlowWater",
+      "id": "0xadbcef15",
+      "asset": "Misc/flowwater.i3d",
+      "asset_sha256": "46bc09659b6a36ae41c624828b1ca09688615a00365209b141820cfd546edddf"
+    },
+    {
+      "name": "BendWater1",
+      "id": "0xadbcef16",
+      "asset": "Misc/bendwater1.i3d",
+      "asset_sha256": "26ed721cb6e0ddde0afac0604e05b13d0162ed64e91bfa211e87c7db9cce5452"
+    },
+    {
+      "name": "BendWater2",
+      "id": "0xadbcef17",
+      "asset": "Misc/bendwater2.i3d",
+      "asset_sha256": "fa59507ced8bf4d52da47be1aeb763b558e95553b9eb355f82dd672b481916a1"
+    },
+    {
+      "name": "Wave",
+      "id": "0x9d92bc1d",
+      "asset": "Misc/wave.I3D",
+      "asset_sha256": "1236cadd77ac9db37f5f73e55b9ae9b28816527a381894f8b74cbfe70da9ee85"
+    },
+    {
+      "name": "WaveS",
+      "id": "0x9d92bc1e",
+      "asset": "Misc/waves.I3D",
+      "asset_sha256": "fcbc9e1aaeb84e6e4f86912f5594f97ab08cb22a8c7b4400dddfb7c093778642"
+    },
+    {
+      "name": "WaveM",
+      "id": "0x9d92bc1f",
+      "asset": "Misc/wavem.I3D",
+      "asset_sha256": "f62d1aa60610af3a320a467fd78e717aa57165ee7c7b93d67e7d96a1c61c8016"
+    }
+  ]
+}

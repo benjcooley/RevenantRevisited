@@ -294,6 +294,11 @@ void TPlayer::LogStats(const char *why)
 // experience read are the modified stats', as retail's.
 void TPlayer::AddSkillExp(int32_t skillnum, int32_t exp)
 {
+    if (skillExpSeam)
+    {
+        skillExpSeam(this, skillnum, exp);
+        return;
+    }
     const int32_t have = GetObjStat(SKE_FIRST + skillnum);
     const int32_t level = GetObjStat(SK_FIRST + skillnum);
     if (level >= TRules::kMaxSkillLevel)
@@ -464,6 +469,11 @@ void TPlayer::ApplyStatLine(const char *statline, int32_t effect)
 // has lost its INITIALIZE, so in practice all of them: one effect at a time.
 void TPlayer::AddStatEffect(const char *statline)
 {
+    if (statEffectSeam)
+    {
+        statEffectSeam(this, statline);
+        return;
+    }
     if (!statline)
         return;
 
@@ -529,6 +539,50 @@ int32_t TPlayer::ArmorValue()
     return armor;
 }
 
+// REVSYNC: TPlayer::WeaponDamage @ 0x00520830 (the item's class isn't checked)
+int32_t TPlayer::WeaponDamage()
+{
+    return PrimeHand() ? PrimeHand()->GetStat("Damage") : chardata->weapondamage;
+}
+
+// REVSYNC: TPlayer::AttackModifier @ 0x0051a480
+int32_t TPlayer::AttackModifier()
+{
+    int32_t mod = chardata->attackmod;
+    mod += Rules.StatLevel(PLRSTAT_AGIL, Agil());
+    mod += SpellManager.GetOffense();
+    return mod + GetObjStat(SK_FIRST + SK_WEAPONSKILLS + WeaponType());
+}
+
+// REVSYNC: TPlayer::DefenseModifier @ 0x0051a4e0
+int32_t TPlayer::DefenseModifier()
+{
+    int32_t mod = chardata->defensemod;
+    mod += Rules.StatLevel(PLRSTAT_RFLX, Rflx());
+    return mod + SpellManager.GetDefense();
+}
+
+// REVSYNC: TPlayer::Offense @ 0x0051a520
+int32_t TPlayer::Offense()
+{
+    const int32_t level = Level() * Rules.tohitrangeplyr;
+    return level + AttackModifier();
+}
+
+// REVSYNC: TPlayer::Defense @ 0x0051a550
+int32_t TPlayer::Defense()
+{
+    const int32_t level = Level() * Rules.tohitrangeplyr;
+    return level + DefenseModifier();
+}
+
+// REVSYNC: TPlayer::HoldsLight @ 0x00519970
+bool TPlayer::HoldsLight()
+{
+    TObjectInstance* item = equipment[EQ_L_ACCESSORY];
+    return item && item->ObjClass() == OBJCLASS_LIGHTSOURCE;
+}
+
 // **************
 // * Experience *
 // **************
@@ -549,6 +603,11 @@ int32_t TPlayer::KillExp(int32_t value)
 // animation (0x004d5900) and the network forwarding.
 void TPlayer::AwardKillExp(TCharacter *victim)
 {
+    if (killExpSeam)
+    {
+        killExpSeam(this, victim);
+        return;
+    }
     if (!victim || victim->Health() > 0)
         return;
 
@@ -635,6 +694,11 @@ void TPlayer::AwardKillExp(TCharacter *victim)
 // dead victim, by its Value.
 void TPlayer::AwardSkillExp(int32_t skillnum, TCharacter *victim)
 {
+    if (awardSkillExpSeam)
+    {
+        awardSkillExpSeam(this, skillnum, victim);
+        return;
+    }
     if (!victim || victim->Health() > 0)
         return;
     AddSkillExp(skillnum, KillExp(victim->GetStat("Value")));
@@ -644,6 +708,11 @@ void TPlayer::AwardSkillExp(int32_t skillnum, TCharacter *victim)
 // victim that never saw the player (0x004c58f0).
 void TPlayer::AwardStealthExp(TCharacter *victim)
 {
+    if (stealthExpSeam)
+    {
+        stealthExpSeam(this, victim);
+        return;
+    }
     if (victim && !victim->HasSeenMe(this))
         AwardSkillExp(SK_STEALTH, victim);
 }
@@ -722,14 +791,36 @@ uint32_t TPlayer::Move()
     return retval;
 }
 
+// REVSYNC: TPlayer::Damage @ 0x005191e0 (vtable +0x48).
 void TPlayer::Damage(int32_t damage, int32_t type)
 {
     TCharacter::Damage(damage, type);
 }
 
-int32_t TPlayer::GetResistance(int32_t type)
+// REVSYNC: TPlayer::Killed @ 0x00518ed0 (vtable +0x244) -- a kill counts in
+// the frag record: +0x650 for a player, +0x658 for anything else. (The
+// network score message and the HUD refresh are multiplayer's.)
+void TPlayer::Killed(TCharacter* victim)
 {
-    return 0; // Huhh?
+    if (victim)
+        ++frags[victim->ObjClass() == OBJCLASS_PLAYER ? 0 : 2];
+}
+
+// REVSYNC: TPlayer::Died @ 0x00518f90 (vtable +0x248; SetFrags 0x00519050) --
+// a death counts: +0x654 by a player, +0x65c by anything else; none when
+// nothing killed it (Pulse's call).
+void TPlayer::Died(TCharacter* killer)
+{
+    if (killer)
+        ++frags[killer->ObjClass() == OBJCLASS_PLAYER ? 1 : 3];
+}
+
+// REVSYNC: TPlayer::Resist @ 0x005208d0 -- CalculateDamage's percent off:
+// read straight from the modified copy (+0x34c), not through GetObjStat.
+int32_t TPlayer::DamageModifier(int32_t damagetype)
+{
+    const int32_t id = CHRRESIST_FIRST + damagetype;
+    return (uint32_t)id < (uint32_t)modstats.size() ? modstats[id] : 0;
 }
 
 // REVSYNC: TPlayer::GetFieldText = retail 0x0051dfb0 (vtable +0xc8).
@@ -826,6 +917,8 @@ void TPlayer::OnInventoryRemove(TObjectInstance* item)
 // the body-part rebuild (0x00584e00).
 bool TPlayer::Equip(TObjectInstance* oi, int32_t slot)
 {
+    if (equipSeam)
+        return equipSeam(this, oi, slot);
     if (slot < 0)
     {
         if (!oi || oi->FindStat("EqSlot") < 0)
@@ -1074,37 +1167,55 @@ void TPlayer::SetQuickSpell(int32_t button, char *talismans)
         QuickSpells.SetDirty(true);
 }
 
-// Invokes one of players quickspells
+// REVSYNC: TPlayer::InvokeQuickSpell @ 0x0051b5d0 -- cast quick spell
+// `button` with no target: alive and not in an interactive attack or impact;
+// an empty slot or a missing talisman fizzles; a cast that fails fizzles
+// (TCharacter::CastByTalismans has usually fizzled already). The main player
+// is told how it went. Retail's multiplayer-client branches (no fizzle and
+// no message when a talisman is missing or the cast fails) have no port: the
+// port has no network play.
 bool TPlayer::InvokeQuickSpell(int32_t button)
 {
-    if ((uint32_t)button >= QSPELL_NUM)
+    if ((uint32_t)button >= QSPELL_NUM || Health() <= 0)
         return false;
-
-    if (quickspells[button][0] != '\0')
+    if (!(charflags & kCharFlagInteractive))
     {
-        if (HasTalismans(quickspells[button]))
-        {
-            if (!CastByTalismans(quickspells[button]))
-            {
-                CastByName("Fizzle");
-                TextBar.Print("Spell failed");
-            }
-            else
-                TextBar.Print("Spell cast successfully");
-        }
-        else
-        {
-            TextBar.Print("Some of the talismans you need are missing");
-            CastByName("Fizzle");
-        }
+        if (doing->attack && (doing->attack->flags & CA_INTERACTIVE))
+            return false;
+        if (doing->impact && (doing->impact->flags & CAI_INTERACTIVE))
+            return false;
     }
-    else
-        CastByName("Fizzle");
 
+    char *talismans = quickspells[button];
+    const bool mainplayer = (this == Player);
+    if (!talismans[0])
+    {
+        if (mainplayer)
+            TextBar.Print("%s", DialogList.GetLine("SPLNOTAL"));
+        CastByName("Fizzle");
+        return true;
+    }
+    if (!HasTalismans(talismans))
+    {
+        if (mainplayer)
+            TextBar.Print("%s", DialogList.GetLine("SPLMISTAL"));
+        CastByName("Fizzle");
+        return true;
+    }
+    if (!CastByTalismans(talismans))
+    {
+        CastByName("Fizzle");
+        if (mainplayer)
+            TextBar.Print("%s", DialogList.GetLine("SPLCASTFAIL"));
+    }
+    else if (mainplayer)
+        TextBar.Print("%s", DialogList.GetLine("SPLCASTOK"));
     return true;
 }
 
-// Player has talismans for spell
+// REVSYNC: TPlayer::HasTalismans @ 0x0051b7c0 -- the Spell Pouch's talismans,
+// counted by TALISMAN type name, cover the string: each code (the type's Code
+// stat, case-sensitive) takes one. Codes of no type (M-P) cost nothing.
 bool TPlayer::HasTalismans(char *talismans)
 {
     bool has = true;
@@ -1117,10 +1228,11 @@ bool TPlayer::HasTalismans(char *talismans)
         quanttal[x] = 0;
 
     // now parse the inventory and count how many of each talisman there are
-    // find their spell pouch (retail 0x0051b7c0 tries both names)
+    // find their spell pouch. Retail looks for a "spellpouch" when there is
+    // none and drops the answer, so only a Spell Pouch counts.
     TObjectInstance* pouch = FindObjInventory("Spell Pouch");
     if (!pouch)
-        pouch = FindObjInventory("spellpouch");
+        (void)FindObjInventory("spellpouch");
     if (pouch)
     {
         for(x = 0; x < TalismanClass.NumTypes(); ++x)
@@ -1366,6 +1478,8 @@ bool TPlayer::LearnSpell(const char* talismans)
 // multiplayer control and message handling.
 void TPlayer::SetPlayerState(int32_t newstate)
 {
+    if (playerStateSeam)
+        playerStateSeam(this, newstate);
     playerstate = newstate;
 }
 

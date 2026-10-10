@@ -71,7 +71,11 @@ class TActionBlock
     TActionBlock(const char *n, const char *str, ACTION a = ACTION_ANIMATE);    // Animation+string/action
     TActionBlock(TActionBlock &ab, const char *str = nullptr, ACTION = ACTION_NONE); // Copies another action block
     
-    ~TActionBlock() { if (data) free(data); }
+    ~TActionBlock() { if (destroyedSeam) destroyedSeam(this); if (data) free(data); }
+    using DestroyedSeam = void (*)(const TActionBlock* ab);
+    static inline DestroyedSeam destroyedSeam = nullptr;
+      // Retail A/B fixtures only: told as a block goes (a case's dumps name
+      // the blocks it began with by address, which a new block may reuse)
 
     bool Is(const char *s) const;           // Multipurpose match (?=any one char, *=0 or more chars, #=any num, [xx]=any one char in braces)
     bool Is(ACTION a) const { return action == a; } // Is an action
@@ -95,6 +99,8 @@ class TActionBlock
     PSCharAttackData attack;              // Attack info (if is attack/impact/death/stun/knockdown action)
     PSCharAttackImpact impact;            // Impact info (if is attack/impact/death/stun/knockdown action)
     int32_t damage;                       // Damage attack will do (if hits)
+    int32_t tohit = 0;                    // Attack's to-hit, fixed when chosen (retail +0x54, DoAttack 0x004d2120)
+    int32_t roll = 0;                     // Attack's 1..100 roll, fixed when chosen (retail +0x58)
     void *data;                           // Data field (such as text for say)
     union
     {
@@ -214,6 +220,10 @@ class TComplexObject : public TObjectInstance
         // False when refused (a block still waits while doing has priority);
         // the caller then still owns `ab`
       // Set desired pointer and update pointers
+    void DropUnheld(PTActionBlock ab)
+        { if (ab && ab != root && ab != doing && ab != desired) delete ab; }
+      // Frees a block that isn't the root, doing or desired one: what a
+      // refused SetDesired or ForceCommand leaves with its caller
     virtual bool IsFinalState() { return false; }
       // Returns whether character is in their last days
 

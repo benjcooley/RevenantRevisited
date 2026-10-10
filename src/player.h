@@ -145,7 +145,10 @@ class TPlayer : public TCharacter
 
 
     void Damage(int32_t damage, int32_t type = DAMAGE_UNDEFINED) override;
-        // Apply damage to the player
+        // Damage(damage, type, 0, nullptr, nullptr): the whole of TCharacter's (retail 0x005191e0)
+    void Killed(TCharacter* victim) override;
+    void Died(TCharacter* killer) override;
+        // Kills and deaths count in the frag record (retail 0x00518ed0 / 0x00518f90)
 
 //  virtual int32_t SwingRange();
 //  virtual int32_t ThrustRange();
@@ -167,6 +170,9 @@ class TPlayer : public TCharacter
     bool CanEquip(TObjectInstance* oi, int32_t slot);
         // Returns true if player can be equiped by the given object
     bool Equip(TObjectInstance* oi, int32_t slot);
+    using EquipSeam = bool (*)(TPlayer* self, TObjectInstance* oi, int32_t slot);
+    static inline EquipSeam equipSeam = nullptr;
+      // Retail A/B fixtures only: when set, it answers Equip (retail 0x005199b0)
         // Set up equipment pointers from objects in player's inventory
     void OnInventoryRemove(TObjectInstance* item) override;
         // An equipped item leaving the inventory is unequipped first
@@ -190,6 +196,23 @@ class TPlayer : public TCharacter
     // Experience
     [[nodiscard]] int32_t KillExp(int32_t value);
       // What overcoming something worth 'value' earns at this level (retail 0x0051a5b0)
+    // Retail A/B fixtures only: when set, each answers its call as the
+    // retail fixture's seam does -- recorded, not run: AwardKillExp (vtable
+    // +0x414), AddSkillExp (+0x418), AwardSkillExp (+0x41c), AwardStealthExp
+    // (+0x420), AddStatEffect (0x0051c2c0); and SetPlayerState (0x0051d680),
+    // recorded with the state still set.
+    using KillExpSeam = void (*)(TPlayer* self, TCharacter* victim);
+    static inline KillExpSeam killExpSeam = nullptr;
+    using SkillExpSeam = void (*)(TPlayer* self, int32_t skillnum, int32_t exp);
+    static inline SkillExpSeam skillExpSeam = nullptr;
+    using AwardSkillExpSeam = void (*)(TPlayer* self, int32_t skillnum, TCharacter* victim);
+    static inline AwardSkillExpSeam awardSkillExpSeam = nullptr;
+    using StatEffectSeam = void (*)(TPlayer* self, const char* statline);
+    static inline StatEffectSeam statEffectSeam = nullptr;
+    using StealthExpSeam = void (*)(TPlayer* self, TCharacter* victim);
+    static inline StealthExpSeam stealthExpSeam = nullptr;
+    using PlayerStateSeam = void (*)(TPlayer* self, int32_t newstate);
+    static inline PlayerStateSeam playerStateSeam = nullptr;
     void AwardKillExp(TCharacter *victim);
       // Experience for a dead victim; may raise the level (retail vtable +0x414, 0x0051a630)
     void AwardSkillExp(int32_t skillnum, TCharacter *victim);
@@ -239,8 +262,9 @@ class TPlayer : public TCharacter
       // Invokes the given quickspell for the player
 
     // Info functions
-    virtual int32_t GetResistance(int32_t type);
-      // Get character's resistance to the given damage type
+    int32_t DamageModifier(int32_t damagetype) override;
+      // REVSYNC: TPlayer::Resist @ 0x005208d0 (slot 0x2c8) -- the modified copy's
+      // DmgRes stat for the type (0 past the copy's end)
     bool GetFieldText(const char *field, char *buf, int32_t buflen) override;
       // Player fields of the stat sheet (retail 0x0051dfb0)
 
@@ -261,6 +285,16 @@ class TPlayer : public TCharacter
     [[nodiscard]] int32_t PlayerState() const { return playerstate; }
     void SetPlayerState(int32_t newstate);
         // Player state bits (retail +0x36c)
+    [[nodiscard]] const std::array<int32_t, 4>& Frags() const { return frags; }
+        // Players killed, deaths by a player, others killed, other deaths (+0x650..+0x65c)
+    [[nodiscard]] bool IsPlayerKiller() const { return (playerstate >> 24) & 1; }
+        // REVSYNC: 0x0051e480 -- may this player fight other players: state
+        // bit 24, under the session's player-killer rule (DAT_00676804: 1
+        // everyone, 2 no one, 0 -- single player -- each his own bit), which
+        // lives with multiplayer and isn't ported
+    [[nodiscard]] const SPlayerTeamRecord& Team() const { return team; }
+    void SetTeam(const SPlayerTeamRecord& record) { team = record; }
+        // The multiplayer team record, set as a whole (0x0051e4d0 compares it)
     [[nodiscard]] const SPlayerHudWords& HudWords() const { return hudwords; }
     void SetHudWords(const SPlayerHudWords& words) { hudwords = words; }
         // The HUD state written into a save
@@ -366,8 +400,23 @@ class TPlayer : public TCharacter
         return ((PTWeapon)PrimeHand())->Type();
         else return WT_HAND; }
       // Returns the type of weapon being used
-//  virtual int32_t WeaponDamage() { if (PrimeHand()) return PrimeHand()->GetStat("Damage"); else return chardata->handdamage; }
-      // Returns the current weapon's damage value
+    int32_t WeaponDamage() override;
+      // REVSYNC: 0x00520830 -- the held item's Damage, else the character data's
+    int32_t AttackModifier() override;
+      // REVSYNC: 0x0051a480 -- ATTACKMOD, Agility's STATLEVEL, the spells' offense,
+      // the skill of the weapon held
+    int32_t DefenseModifier() override;
+      // REVSYNC: 0x0051a4e0 -- DEFENSEMOD, Reflexes' STATLEVEL, the spells' defense
+    int32_t Offense() override;
+      // REVSYNC: 0x0051a520 -- Level x TOHITRANGEPLYR + AttackModifier
+    int32_t Defense() override;
+      // REVSYNC: 0x0051a550 -- Level x TOHITRANGEPLYR + DefenseModifier
+    int32_t LuckMod() override { return Rules.StatLevel(PLRSTAT_LUCK, Luck()); }
+      // REVSYNC: 0x0051a580
+    int32_t StrengthMod() override { return Rules.StatLevel(PLRSTAT_STRN, Strn()); }
+      // REVSYNC: 0x00520900
+    bool HoldsLight() override;
+      // REVSYNC: 0x00519970 -- a light source in equipment slot 6 (retail +0x2b8): the torch
     int32_t StealthMod() override { 
         return SkillPcnt(SK_STEALTH, 10) + 
             (Body()?Body()->GetStat("Stealth"):0) + 

@@ -6424,6 +6424,7 @@ void TFireBallEffect::Initialize()
     aim_angle_  = 0;
     range_      = 32768;
     status_     = true; // Actual retail Fireball Initialize 0x510bd0 stores status=1.
+    damage_armed_ = true;   // and +0x194 = 1, the blast armed
     vel_        = {0.0f, 0.0f, 0.0f};
     old_state_  = 0;
     firsttime_  = 0;
@@ -6456,7 +6457,7 @@ void TFireBallEffect::Pulse()
     // preview. Render submission does not drive the actual map's simulation.
     if(alive_)
     {
-        StepMissilePulse();
+        PulseMissile();
         // Original Animate510e5b calls SetCommandDone(false). The collapsed
         // simulator must retain this handshake before generic effect cleanup.
         SetCommandDone(false);
@@ -6464,6 +6465,29 @@ void TFireBallEffect::Pulse()
     }
     if(!alive_)KillThisEffect();
     TEffect::Pulse();
+}
+
+void TFireBallEffect::PulseMissile()
+{
+    StepMissilePulse();
+    if (state_ != 2 /*MISSILE_EXPLODE*/ || !damage_armed_ || !spell)
+        return;
+    // The ball's offset from the object (the animator's +0x4ac..+0x4b4,
+    // truncated as retail's ftol does).
+    S3DPoint at = Pos();
+    if (alive_)
+    {
+        at.x += int32_t(fireball_.pos.X);
+        at.y += int32_t(fireball_.pos.Y);
+        at.z += int32_t(fireball_.pos.Z);
+    }
+    // REVSYNC-DIVERGENCE: retail hands AreaDamage the invoker pointer the
+    // spell keeps, which dangles once the caster is gone; the port's safe
+    // reference gives none then, and nobody is hurt.
+    const SSpellVariant* variant = spell->VariantData();
+    AreaDamage(spell->GetInvokerRef().Get(), at, 150, variant->mindamage, variant->maxdamage,
+               spell->SpellData()->damagetype, 0);
+    damage_armed_ = false;
 }
 
 bool TFireBallEffect::SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination)
@@ -6550,16 +6574,27 @@ void TFireBallEffect::StepMissilePulse()
         S3DPoint velocity{};ConvertToVector(facing,speed,velocity);
         return missile_state::Point{velocity.x,velocity.y,velocity.z};
     };
+    // REVSYNC: TMissileEffect::Pulse @ 0x00510220, the fly state's hit test:
+    // the map's characters within 256 (retail's iterator: this level, the
+    // loaded sectors, flags 0xe0) -- the first one not the caster, alive,
+    // within 32 and the caster's enemy (anyone, with no caster) explodes it.
     input.character_hit=[this](const missile_state::Point& point)
     {
         if(preview_mode_)return false;
         TObjectInstance* invoker_object=spell?spell->GetInvokerRef().Get():nullptr;
         TCharacter* invoker=dynamic_cast<TCharacter*>(invoker_object);
         const S3DPoint query{point.x,point.y,point.z};
-        for(TMapIterator iterator(query,256,CHECK_NOINVENT,OBJSET_CHARACTER);iterator;iterator++)
+        std::vector<TCharacter*> around;
+        if(TCharacter::nearbyCharactersSeam)around=TCharacter::nearbyCharactersSeam(query,256);
+        else
         {
-            auto* character=dynamic_cast<TCharacter*>(iterator.Item());
-            if(!character||character==invoker_object||character->Health()<=0)continue;
+            SRect r{query.x-256,query.y-256,query.x+256,query.y+256};
+            for(TMapIterator iterator(GetLevel(),&r,CHECK_NOINVENT,OBJSET_CHARACTER);iterator;iterator++)
+                if(auto* character=dynamic_cast<TCharacter*>(iterator.Item()))around.push_back(character);
+        }
+        for(TCharacter* character:around)
+        {
+            if(character==invoker_object||character->Health()<=0)continue;
             if(::Distance(query,character->Pos())>32)continue;
             if(invoker&&!invoker->IsEnemy(character))continue;
             return true;
@@ -6658,26 +6693,8 @@ void TFireBallEffect::StepAnimate()
 
             if (firsttime_)
             {
-                // Impact world position = fireball.pos + effect_pos
-                // (:676-679). In our port fireball_.pos.X/Y/Z are 0 (the
-                // ball head sits at the effect origin), so the impact
-                // simplifies to effect_pos.
-                S3DPoint impact_pos = effect_pos;
-                impact_pos.x += int32_t(fireball_.pos.X);
-                impact_pos.y += int32_t(fireball_.pos.Y);
-                impact_pos.z += int32_t(fireball_.pos.Z);
-
-                // Blast damage (:681-684). The retail call:
-                //   BlastCharactersInRange(spell->GetInvoker(), impact_pos,
-                //                          150, vd->mindamage, vd->maxdamage,
-                //                          spell->SpellData()->damagetype);
-                // is gated by HasSpell() — and BlastCharactersInRange itself
-                // currently lives under `#if 0` in effect_old.cpp:278 (the
-                // body comes back online in the combat-port phase). The
-                // gameflow caller wires this; harness has no live spell.
-                // See §13.8 (damage source = spell variant data, not the
-                // dead FIREBALL_DAMAGE_MIN/MAX macro).
-                (void)impact_pos;
+                // The blast's damage is the object's, not the animator's: retail
+                // moved it into TFireBallEffect::Pulse (0x00510c10, PulseMissile).
 
                 // Burst quads (:687-699). Pre-release sets
                 // `burst[i].rotation = 0` (missileeffect.cpp:694); the
@@ -11703,6 +11720,7 @@ void TWaterFallEffect_Bespoke::Initialize(bool attach_runtime_component)
     for (int32_t i = 0; i < numdrops_; ++i) InitParticle(i);
     for (int32_t k = 0; k < numdrops_; ++k) UpdateStuff();
     initialized_ = true;
+    runtime_id_ = attach_runtime_component ? ObjId() : 0u;
     if (attach_runtime_component)
     {
         S3DTex texture = {};
@@ -11716,7 +11734,9 @@ void TWaterFallEffect_Bespoke::Initialize(bool attach_runtime_component)
     log_info("[waterfall-runtime] initialized type='%s' id=%08x map_index=%d "
              "origin=(%d,%d,%d) drops=%d warmup=%d texture=%u runtime=%d "
              "material=(%.3f,%.3f,%.3f,%.3f)",
-             GetTypeName(), ObjId(), GetMapIndex(), origin.x, origin.y, origin.z,
+             attach_runtime_component ? GetTypeName() : "preview",
+             attach_runtime_component ? ObjId() : 0u,
+             GetMapIndex(), origin.x, origin.y, origin.z,
              numdrops_, numdrops_, texture_, int(attach_runtime_component),
              material_diffuse_[0], material_diffuse_[1], material_diffuse_[2], material_diffuse_[3]);
 }
@@ -11750,7 +11770,7 @@ void TWaterFallEffect_Bespoke::Advance(double seconds)
     {
         logged_tick_ = true;
         log_info("[waterfall-runtime] first simulation tick id=%08x map_index=%d ticks=%d",
-                 ObjId(), GetMapIndex(), ticks_);
+                 runtime_id_, GetMapIndex(), ticks_);
     }
 }
 
@@ -11808,6 +11828,40 @@ void TWaterFallEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
 // * H01 — TWaterEffect_Bespoke                                             *
 // =========================================================================
 
+namespace {
+constexpr uint32_t kLiteralWaterId = 0x1903abcdu;
+class TLiteralWaterReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "water_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        if (auto* effect = dynamic_cast<const TWaterEffect_Bespoke*>(&owner))
+            effect->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* effect = dynamic_cast<TWaterEffect_Bespoke*>(Owner()))
+            effect->Advance(TTime::DeltaTime());
+    }
+};
+class TLiteralWaterAnimatorBuilder final : public T3DAnimatorBuilder
+{
+  public:
+    TLiteralWaterAnimatorBuilder() : T3DAnimatorBuilder("Water") {}
+    T3DAnimator* Build(TObjectInstance* owner) override { return new T3DAnimator(owner); }
+    void AttachComponents(TObjectInstance* owner) override
+    {
+        if (!owner || owner->GetMapIndex() <= 0 || owner->ObjClass() != OBJCLASS_EFFECT ||
+            owner->ObjId() != kLiteralWaterId || (owner->Flags() & OF_KILL)) return;
+        if (auto* effect = dynamic_cast<TWaterEffect_Bespoke*>(owner)) effect->Initialize();
+    }
+};
+TWaterReferenceBuilder<TWaterEffect_Bespoke> g_literal_water_builder("Water");
+TLiteralWaterAnimatorBuilder g_literal_water_animator_builder;
+} // namespace
+
 TWaterEffect_Bespoke::~TWaterEffect_Bespoke()
 {
     delete[] drops_;
@@ -11857,6 +11911,44 @@ void TWaterEffect_Bespoke::UpdateStuff()
     }
 }
 
+void TWaterEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if (initialized_) return;
+    if (attach_runtime_component && (ObjClass() != OBJCLASS_EFFECT ||
+        GetMapIndex() <= 0 || (Flags() & OF_KILL) || ObjId() != kLiteralWaterId)) return;
+    auto* imagery = dynamic_cast<T3DImagery*>(GetImagery());
+    // Do not allocate or consume RNG while the final imagery is unavailable.
+    if (!LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    S3DObj object = {};
+    imagery->GetObject(0, &object);
+    if (object.material >= 0 && object.material < imagery->NumMaterials())
+    {
+        S3DMat material = {};
+        imagery->GetMaterial(object.material, &material);
+        material_diffuse_[0] = material.matdesc.diffuse.r;
+        material_diffuse_[1] = material.matdesc.diffuse.g;
+        material_diffuse_[2] = material.matdesc.diffuse.b;
+        material_diffuse_[3] = material.matdesc.diffuse.a;
+    }
+    numdrops_ = kWaterMaxDrops;
+    drops_ = new SWaterParticle[numdrops_]();
+    for (int32_t i = 0; i < numdrops_; ++i) InitParticle(i);
+    for (int32_t k = 0; k < numdrops_; ++k) UpdateStuff();
+    literal_geometry_ = initialized_ = true;
+    if (attach_runtime_component)
+    {
+        S3DTex texture = {};
+        imagery->GetTexture(0, &texture);
+        auto component = std::make_unique<TLiteralWaterReferenceComponent>();
+        component->Configure(texture_, int32_t(texture.desc.width), int32_t(texture.desc.height),
+                             1, 1, 1, 1.0f, 1.0f, false, true);
+        AddComponent(std::move(component));
+    }
+    log_info("[water-runtime] initialized id=%08x map_index=%d drops=%d warmup=%d runtime=%d",
+             attach_runtime_component ? ObjId() : kLiteralWaterId,
+             GetMapIndex(), numdrops_, numdrops_, int(attach_runtime_component));
+}
+
 TWaterEffect_Bespoke*
 TWaterEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
                                           const char* asset_override)
@@ -11881,14 +11973,22 @@ TWaterEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
     w->uv_rect_[3] = uv_rect[3];
     w->size_wu_ = kWaterBaseSizeWu;
 
-    // VERBATIM port of TWaterAnimator::Initialize
-    // (src/effect_old.cpp:11950-11970). Same warmup pattern as H02.
-    w->numdrops_ = kWaterMaxDrops;
-    w->drops_ = new SWaterParticle[w->numdrops_]();
-    for (int32_t i = 0; i < w->numdrops_; i++)
-        w->InitParticle(i);
-    for (int32_t k = 0; k < w->numdrops_; k++)
-        w->UpdateStuff();
+    // Literal Water1903abcd: native Render4f3610 transforms the shipped
+    // XY quad by each drop's scale then translation, with no billboard fit.
+    // Alternate paths lack this retail mapping and keep their prior preview.
+    if (!asset_override || !stricmp(asset_override, kWaterImageryPath))
+    {
+        w->Initialize(false);
+        if (!w->initialized_) { delete w; return nullptr; }
+    }
+    else
+    {
+        // Existing unaudited alternate-asset delegates, without new mapping credit.
+        w->numdrops_ = kWaterMaxDrops;
+        w->drops_ = new SWaterParticle[w->numdrops_]();
+        for (int32_t i = 0; i < w->numdrops_; i++) w->InitParticle(i);
+        for (int32_t k = 0; k < w->numdrops_; k++) w->UpdateStuff();
+    }
 
     log_info("[water] SpawnForTest_BESPOKE: '%s' map_index=%d "
              "origin=(%d,%d,%d) drops=%d texture=%u uv=(%.3f,%.3f,%.3f,%.3f)",
@@ -11900,8 +12000,72 @@ TWaterEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
     return w;
 }
 
+void TWaterEffect_Bespoke::Advance(double seconds)
+{
+    if (!literal_geometry_ || !drops_ || (Flags() & OF_KILL) ||
+        !std::isfinite(seconds) || seconds <= 0.0) return;
+    sim_accum_seconds_ += seconds;
+    while (sim_accum_seconds_ + 1e-12 >= TTime::LegacyFrameSeconds)
+    {
+        sim_accum_seconds_ -= TTime::LegacyFrameSeconds;
+        SetCommandDone(false);
+        UpdateStuff();
+        ++ticks_;
+    }
+}
+
+void TWaterEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !literal_geometry_ || !drops_ ||
+        texture_ == kInvalidTexture || authored_vertices_.size() != 4 ||
+        (Flags() & OF_KILL)) return;
+    const hmm_mat4& world = Transform().Matrix();
+    const float fraction = float(std::clamp(sim_accum_seconds_ / TTime::LegacyFrameSeconds,
+                                          0.0, 1.0));
+    for (int32_t i = 0; i < numdrops_; ++i)
+    {
+        if (drops_[i].time != 0) continue;
+        hmm_mat4 local = {};
+        MtxClear(&local);
+        MtxScale(&local, &drops_[i].scale);
+        // Display motion between original24Hz updates; never mutate the pool.
+        const hmm_vec3 position = {drops_[i].pos.X + drops_[i].vel.X * fraction,
+                                   drops_[i].pos.Y + drops_[i].vel.Y * fraction,
+                                   drops_[i].pos.Z + drops_[i].vel.Z * fraction};
+        MtxTranslate(&local, &position);
+        SQuadDrawItem item = {};
+        for (int32_t corner = 0; corner < 4; ++corner)
+        {
+            hmm_vec3 point = {}, transformed = {};
+            MtxTransform(&local, &authored_vertices_[size_t(corner)].pos, &point);
+            MtxTransform(&world, &point, &transformed);
+            item.world_pos[corner][0] = transformed.X;
+            item.world_pos[corner][1] = transformed.Y;
+            item.world_pos[corner][2] = transformed.Z;
+            item.uv[corner][0] = authored_vertices_[size_t(corner)].tu;
+            item.uv[corner][1] = authored_vertices_[size_t(corner)].tv;
+        }
+        for (int32_t channel = 0; channel < 4; ++channel)
+            item.color_rgba[channel] = material_diffuse_[channel];
+        item.key.texture = texture_;
+        item.key.blend = uint8_t(EFxBlend::AdditiveStraight); // native mode16
+        item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
+        // Native OBJ3D_MATRIX clears copied-vertex colors. Authored normal /
+        // device lighting is an open gate, not a fitted flat-light proxy.
+        item.light_mode = EFxLightMode::Unlit;
+        item.debug_mode = debug_mode;
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
 void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
+    if (literal_geometry_)
+    {
+        Advance(TTime::DeltaTime());
+        Submit(debug_mode);
+        return;
+    }
     if (!Renderer || !drops_)
         return;
 
@@ -15165,7 +15329,7 @@ TAuthoredStaticMeshEffect::~TAuthoredStaticMeshEffect()
 }
 
 TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const S3DPoint& origin,
-                                                                    const char* asset_override,bool animate_textures)
+                                                                    const char* asset_override,bool animate_textures,bool scroll_textures)
 {
     if (!Renderer) return nullptr;
     const char* path = asset_override ? asset_override : kGlobeImageryPath;
@@ -15174,14 +15338,33 @@ TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const
     auto eff = std::make_unique<TAuthoredStaticMeshEffect>(loaded.base);
     auto* img = loaded.img3d;
     eff->animate_textures_=animate_textures;
-    if (img->NumObjects() <= 0 || img->NumTags() != 0)
+    // Mesh queries load the imagery lazily; inspect tags only after loading.
+    const int32_t object_count = img->NumObjects();
+    int32_t scroll_tags = 0;
+    bool unknown_controller = false;
+    for (int32_t tag = 0; scroll_textures && tag < img->NumTags(); ++tag)
     {
-        log_error("[authored-static] missing objects or unsupported controller tags");
+        const char* name = img->GetTag(tag)->name;
+        if (name && !stricmp(name, "scrolltex")) ++scroll_tags;
+        else if (!name || (stricmp(name, "beg") && stricmp(name, "end") && stricmp(name, "play")))
+            unknown_controller = true;
+    }
+    // The loader also exposes passive state/audio metadata as tags.
+    const bool audited_scroll = scroll_textures && scroll_tags == 1 &&
+        !unknown_controller && img->HasScrollTex();
+    if (object_count <= 0 || (img->NumTags() != 0 && !audited_scroll) ||
+        (scroll_textures && !audited_scroll))
+    {
+        log_error("[authored-static] missing objects or unsupported controller tags: "
+                  "objects=%d tags=%d requested_scroll=%d scroll_tags=%d tracks=%d unknown=%d",
+                  img->NumObjects(), img->NumTags(), int(scroll_textures), scroll_tags,
+                  int(img->HasScrollTex()), int(unknown_controller));
         return nullptr;
     }
     // Only audited static profiles use this factory. Preserve every subobject
     // and texture slot instead of substituting the first face/texture.
     size_t total_vertices = 0, total_triangles = 0;
+    if (audited_scroll) eff->scroll_imagery_ = img;
     for (int32_t object = 0; object < img->NumObjects(); ++object)
     {
         if (img->IsHidden(object, 0)) continue;
@@ -15195,6 +15378,7 @@ TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const
                                               : Renderer->WhiteTextureHandle();
             if (texture == kInvalidTexture) return nullptr;
             SStaticPart part;
+            part.object_index = object;
             if (slot > 0) {
                 S3DTex desc = {};
                 img->GetTexture(slot - 1, &desc);
@@ -15259,6 +15443,9 @@ void TAuthoredStaticMeshEffect::SubmitWorldMeshForTest_BESPOKE(EFxDebugMode /*de
             item.mesh=part.frame_meshes[size_t(frame)%part.frame_meshes.size()];
         }
         item.retail_lighting = part.retail_lighting;
+        if (scroll_imagery_)
+            scroll_imagery_->ScrollTexOffset(part.object_index, 0, GetFrame(),
+                                            TTime::LegacyFrameCount(), item.uv_offset);
         // Root includes legacy Z scale; the static local pose includes parents.
         for (int32_t r = 0; r < 4; ++r)
             for (int32_t c = 0; c < 4; ++c)
@@ -16932,9 +17119,11 @@ void TFireFlashEffect_Bespoke::Initialize(bool attach_runtime_component)
     for (auto& p : particles_) p = {};
     for (int i = 0; i < 75; ++i) {
         auto& p = particles_[i];
-        p.angle.X = float(random(0, 359)) / 360.0f * float(M_2PI);
-        p.angle.Y = float(random(0, 359)) / 360.0f * float(M_2PI);
-        p.angle.Z = float(random(0, 359)) / 360.0f * float(M_2PI);
+        // Native4e1a6a/87/a3: FILD × float5a39f0, one float store.
+        constexpr float native_angle_step = 0.01745329238474369f;
+        p.angle.X = float(static_cast<long double>(random(0, 359)) * native_angle_step);
+        p.angle.Y = float(static_cast<long double>(random(0, 359)) * native_angle_step);
+        p.angle.Z = float(static_cast<long double>(random(0, 359)) * native_angle_step);
         p.angvel.X = p.angvel.Y = p.angvel.Z = 0.12f;
         p.state = 2;
     }
@@ -17061,7 +17250,10 @@ void TFireFlashEffect_Bespoke::Submit(EFxDebugMode debug_mode)
             j = p.stopfade - p.life >= (p.stopfade - p.startfade) * 70 / 100 ? 0 : 1;
             if (p.life > 0) {
                 if (p.stopfade - p.life >= p.startfade)
-                    p.scale = mainscale_ * p.life / (p.stopfade - p.startfade) + 0.05f;
+                    // Native4e203b..55 keeps the product/division/addition
+                    // extended until its single float store.
+                    p.scale = float(static_cast<long double>(mainscale_) * p.life /
+                                    (p.stopfade - p.startfade) + 0.05000000074505806f);
                 else p.scale = mainscale_;
             }
         } else if (p.state == 2) {
@@ -17569,27 +17761,30 @@ void TFireConeEffect_Bespoke::SimulateTick()
             flame->vel.X = 0.0f;
             flame->vel.Y = 0.0f;
             flame->vel.Z = 0.0f;
-            float diff;
+            // Retail keeps each approach expression in x87 until the position store.
+            long double diff;
             if(flame->pos.X != 0.0f)
             {
-                diff = (0.0f - flame->pos.X) * .25f;
+                diff = (0.0L - static_cast<long double>(flame->pos.X)) * .25L;
                 flame->pos.X += diff;
             }
             if(flame->pos.Y != -30.0f)
             {
-                diff = (-30.0f - flame->pos.Y) * .25f;
+                diff = (-30.0L - static_cast<long double>(flame->pos.Y)) * .25L;
                 flame->pos.Y += diff;
             }
             if(flame->pos.Z != -30.0f)
             {
-                diff = (-30.0f - flame->pos.Z) * .25f;
+                diff = (-30.0L - static_cast<long double>(flame->pos.Z)) * .25L;
                 flame->pos.Z += diff;
             }
         }
         else if((float)flame->life / (float)flame->life_span > .5f)
             flame->vel.Z += 1.5f;
 
-        float equ = (125.0f - flame->pos.Z) * .01f;
+        // Native duplicates its x87 scale expression before each final float store.
+        const long double equ = (125.0L - static_cast<long double>(flame->pos.Z)) *
+                                static_cast<long double>(.01f);
         flame->scl.X = flame->temp.X * equ;
         flame->scl.Y = flame->temp.Y * equ;
         flame->scl.Z = flame->temp.Z * equ;
@@ -17605,7 +17800,8 @@ void TFireConeEffect_Bespoke::SimulateTick()
 
         flame->vel.Z += 3.0f;
 
-        float equ = (125.0f - flame->pos.Z) * .01f;
+        long double equ = (125.0L - static_cast<long double>(flame->pos.Z)) *
+                          static_cast<long double>(.01f);
         if(equ < 0.0f)
             equ = 0.0f;
 
@@ -18052,9 +18248,16 @@ void TFaultFireEffect_Bespoke::Advance(double elapsed_seconds)
     constexpr double tick_ms=1000.0/24.0;
     while (sim_accum_ms_+1e-9>=tick_ms) {
         sim_accum_ms_-=tick_ms;
-        th_+=0.1f;
-        if (th_>float(M_PI*2.0)) th_-=float(M_PI*2.0);
-        u_offset_+=float(random(2,8))/100.0f;
+        // Native4f1626 keeps the sum in x87 across the comparison and
+        // wrap subtraction; round only the selected final theta to float.
+        const long double next=static_cast<long double>(th_)+0.10000000149011612f;
+        th_=float(next>static_cast<long double>(6.283185308)
+            ? next-static_cast<long double>(6.2831854820251465f) : next);
+        const float du=float(random(2,8))/100.0f;
+        u_offset_+=du; // diagnostic only; rendering reads mutable authored U.
+        // Native4f1690 adds separately to every stored vertex U. Adding an
+        // accumulated scalar at draw time changes rounding for initial U=1.
+        for(auto& vertex:vertices_)vertex.uv[0]+=du;
         SetCommandDone(false);
     }
 }
@@ -18090,7 +18293,7 @@ void TFaultFireEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
                 item.world_pos[corner][0]=p.X;
                 item.world_pos[corner][1]=p.Y;
                 item.world_pos[corner][2]=p.Z;
-                item.uv[corner][0]=v.uv[0]+u_offset_;
+                item.uv[corner][0]=v.uv[0];
                 item.uv[corner][1]=v.uv[1]*vscale;
             }
             Renderer->SubmitFxQuad(item);

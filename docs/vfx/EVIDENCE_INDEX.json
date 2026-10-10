@@ -5,21 +5,23 @@
     "retail_type_rows": 176,
     "distinct_retail_names_casefold": 174,
     "distinct_asset_paths_casefold": 166,
-    "preview_ids": 159,
-    "retail_rows_with_preview_candidates": 120,
-    "retail_rows_without_preview_candidates": 56,
+    "preview_ids": 162,
+    "retail_rows_with_preview_candidates": 123,
+    "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 71,
-    "port_smoke_preview_ids": 34,
-    "retail_rows_with_port_smoke": 36,
+    "retail_rows_with_source_fixes_recorded": 91,
+    "port_smoke_preview_ids": 36,
+    "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 56,
-    "visual_fidelity_confirmed_rows": 16,
-    "repeatable_ab_rows": 8,
-    "thin_bounded_render_frontend_rows": 40
+    "actual_runtime_verified_rows": 81,
+    "visual_fidelity_confirmed_rows": 17,
+    "repeatable_ab_rows": 7,
+    "thin_bounded_render_frontend_rows": 67,
+    "reviewed_visual_pass_rows": 17,
+    "remaining_visual_review_rows": 159
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -196,6 +198,501 @@
       "check": "ripple_no_splash_frontend_render",
       "status": "pass",
       "scope": "No-splash ring birth through kill/postdeath; shared original software raster."
+    },
+    "recon/retail_asm/runtime/effects/static-texture-next-20261007/manifest.json": {
+      "sha256": "c52f96704b160a19f254ba7167cb2c6c0d153e69c86ee215658310754002d914",
+      "check": "authored_texture_frame_frontend",
+      "status": "pass",
+      "scope": "Exact STILL header/constant pose and every active authored texture frame: StillWater1,watchers4each. Native original texture selector uses explicit copyframes=false opaque surface/texture handles; candidate actual generic SubmitMesh picks registered per-frame mesh. Original matrix/raster and selected owner translation, white lighting/cullNONE/depthtest-write. Natural owner cadence, default-builder/caller/map placement and modernGPU parity are separate; no texture fitting.",
+      "retail_rows": [
+        "StillWater:0xadbcef14",
+        "ogrokwatcher1:0xaeaeeb23",
+        "ogrokwatcher2:0xaeaeeb24",
+        "ogrokwatcher3:0xaeaeeb25"
+      ]
+    },
+    "recon/retail_asm/runtime/effects/default-static-frontend-ab/manifest.json": {
+      "sha256": "1fa5468d7d7c047a004b6a730a15e11fc3dfb21022a4840d50c5c68a68ffed27",
+      "check": "constant_default_mesh_frontend",
+      "status": "pass",
+      "scope": "Complete selected default/no-tag constant asset root parts vs compiled production keys/matrix/extraction/static submission. Original software projection/raster shared, identity/translated owner, fixed512viewport/white/cullNONE/depthtestwrite. Part0 remapping/decodedasset/provider interfaces explicit; character utility selection, natural owner/map/illumination/device/Metal separate.",
+      "retail_rows": [
+        "CharUtility:0xadbcef13",
+        "SewerWater:0xadbcef19"
+      ]
+    },
+    "recon/retail_asm/runtime/effects/map-texture-next-20261007/manifest.json": {
+      "sha256": "0f9522e7844c27e7ecc86dcf49a171057b7c1cc3ca6fe3fb7108691bab38de37",
+      "check": "map_texture_lifecycle",
+      "status": "pass",
+      "scope": "Actual map NewObject/default animator/NextFrame/MOVE/DELETE and Metal output. Synthetic ground-only module; natural context and retail device fidelity remain open.",
+      "retail_rows": [
+        "StillWater:0xadbcef14",
+        "ogrokwatcher1:0xaeaeeb23",
+        "ogrokwatcher2:0xaeaeeb24",
+        "ogrokwatcher3:0xaeaeeb25"
+      ]
+    },
+    "recon/retail_asm/runtime/effects/drip-ripple-composite-ab/manifest.json": {
+      "sha256": "b11655ab9ce5312845e1ad3491136cfd82bf42877f2756693a2d06c478ecf648",
+      "check": "drip_linked_no_splash_child_composite",
+      "status": "pass",
+      "scope": "Actual native Drip emitter events instantiate actual original no-splash Ripple Init/Animate/Render; production independently spawns/advances/removes/renders real TRippleEffect via compiled actual Drip/Ripple methods/factory and asset providers. Compare linked birth/live ages/death and ordered mixed-texture software pixels, not port rings positioned from native traces. Identity owner/fixed camera/white vertices, explicit component-style scheduling; original sector iteration/map allocation/loader/component installation and audio/global RNG coupling remain separate. Length20 excludes splash recursion.",
+      "retail_rows": [
+        "Drip:0x5975abde",
+        "Ripple:0x12309867"
+      ]
+    },
+    "recon/retail_asm/runtime/effects/fireswarm-render-next-20261008/manifest.json": {
+      "sha256": "52895e29063ccccecf25a25a5a3138cc08e00ac3b5b568311aeaa55504d7ebcc",
+      "retail_rows": [
+        "FireSwarm:0x582c1e78"
+      ],
+      "check": "fireswarm_stationary_tube_lifecycle_frontend",
+      "status": "pass",
+      "scope": "Original one-shot scale/yaw/lifecycle and tube01 object1 authored mesh/texture versus compiled shared preview/map producer. No RNG/audio; owner spell null, identity world. Current frontend triangle-culling formula provided at imagery boundary; independent device culling not asserted. Original matrix/vertex/projection/raster executes unmodified with selected 1024x2048 viewport, camera zero/zdist1925/white input vertices, no shape or camera fitting. Original software skips triangle edges above640px X/480px Y: early tall-cylinder samples are empty, so early visible appearance is not verified. Later nonempty samples, lifecycle/pose/mesh and size-rejection diagnostic are retained separately. Real loader/component/map context, normals/lighting/blend/modern GPU remain separate.",
+      "visible_pixel_pair_ticks": [
+        30,
+        36,
+        48,
+        60,
+        72
+      ]
+    },
+    "recon/retail_asm/runtime/effects/sewer-dispatch-next-20261008/sewer-dispatch-verification.json": {
+      "sha256": "d3886c8478f25baf0d1ca50f0cf00c2779e5299e53558fe8164eefbb6af86d47",
+      "retail_rows": [
+        "SewerWater:0xadbcef19"
+      ],
+      "check": "sewer_actual_preview_and_map_dispatch",
+      "status": "pass",
+      "scope": "Correct real preview dispatch/static mesh and actual map create/frame/move/delete. Existing native-raster geometry proof retained; natural map setting and full retail/Metal fidelity remain open."
+    },
+    "recon/retail_asm/runtime/effects/sewer-dispatch-next-20261008/sewer-map-reviewed/manifest.json": {
+      "sha256": "c26656e11f2fbea9e0c3fd7f6c763bf0b82c09961153d5761d5a85f90393945b",
+      "retail_rows": [
+        "SewerWater:0xadbcef19"
+      ],
+      "check": "sewer_actual_preview_and_map_dispatch",
+      "status": "pass",
+      "scope": "Actual map NewObject/default animator/NextFrame/MOVE/DELETE and Metal output. Synthetic ground-only module; natural context and retail device fidelity remain open."
+    },
+    "recon/retail_asm/runtime/effects/sewer-dispatch-next-20261008/sewer-preview-after/manifest.json": {
+      "sha256": "ec6a5e716321207f8754b93d609aa0bd16acbd4bb627486c0b7e695bd42e6be1",
+      "retail_rows": [
+        "SewerWater:0xadbcef19"
+      ],
+      "check": "sewer_actual_preview_and_map_dispatch",
+      "status": "pass",
+      "scope": "Actual Revisited GPU output for the explicit scenario; comparison/acceptance is separate."
+    },
+    "recon/retail_asm/runtime/effects/ripple-splash-family-ab/manifest.json": {
+      "sha256": "7b26d2c3c0d893acc8c8eacbeb9436ec71bdb77017a78e6e78e1db20fbe228c1",
+      "retail_rows": [
+        "Ripple:0x12309867"
+      ],
+      "check": "ripple_recursive_splash_family",
+      "status": "pass",
+      "scope": "Actual native splash allocation/range+raw RNG/Animate/Render and recursive child Init in one shared Runtime; independent compiled actual production Ripple factory/Advance/Submit and strict observed raw draws. Explicit children-before-parent component order; original sector/map allocation/install, natural lighting, modern GPU separate. Compare removal identities/ticks; preserve raw flag/destructor journals without claiming within-tick destructor order. Identity facing, origin selected without fitting; native 43ad80 local transforms plus declared integer owner translation adapter, not the full retail map world-render path."
+    },
+    "recon/retail_asm/runtime/effects/faultfire-render-next-20261008/manifest.json": {
+      "sha256": "fa92387916f74afa4e794a3423f85e3ee1600edd690b56f5fbcefd5be54127c5",
+      "retail_rows": [
+        "Faultfire:0x51753bce"
+      ],
+      "check": "faultfire_two_pass_uv_phase_frontend",
+      "status": "pass",
+      "scope": "Nullspell stationaryTEffect, identityowner, actualauthoredfourvertices/twofaces/ARGB4444texture; sharedcompiledAdvance/Submit, originalSetup/FCOS/UV accumulation/matrix/projection/raster. OriginalsoftwareblendSave/Set/Restore execute; whitevertex fixture. Assetloader/completeconstructor/caller/device/normal-light/modernGPU remain separate."
+    },
+    "recon/retail_asm/runtime/effects/water-final-interpolated-20261008-ab/manifest.json": {
+      "sha256": "0c3b364a622a8ebb4f96fd9d8c4d72d4cee76366692aa263e3d7811514b85391",
+      "retail_rows": [
+        "Water:0x1903abcd"
+      ],
+      "check": "literal_water_25_drop_frontend",
+      "status": "pass",
+      "scope": "Literal Water25drop original Init/warmup/Animate/RNG/Render matrices vs compiled actual production methods and packets. Exact authored XYZ/UV/RGB565/original indices; identity owner/face0/white common software raster. Copied lighting callback boundary omitted; source initialization/assets/renderer adapted. Actual additive device arithmetic, normal illumination, modern triangulation, map/component and Metal separate; no FlowWater mapping claim."
+    },
+    "recon/retail_asm/runtime/effects/water-runtime-next-20261008/water-map-runtime/manifest.json": {
+      "sha256": "f0ebadae0889e008cf664c9ebbc2a971fec2578c4ca02aa8aa67004b27a4a40f",
+      "retail_rows": [
+        "Water:0x1903abcd"
+      ],
+      "check": "water_actual_preview_map_lifecycle",
+      "status": "pass",
+      "scope": "Actual ADDAT/typed Water component/normal map pulse/render/MOVE/DELETE,64frames,restored clean floor. Synthetic grounded module; natural environment/lighting and retail versus Metal parity remain open."
+    },
+    "recon/retail_asm/runtime/effects/water-runtime-next-20261008/water-preview-final/manifest.json": {
+      "sha256": "1deeb5f12064f3e18c40fcdfd1f1f6fbd0b91d4bc3448e8e1752943a64a994d6",
+      "retail_rows": [
+        "Water:0x1903abcd"
+      ],
+      "check": "water_actual_preview_map_lifecycle",
+      "status": "pass",
+      "scope": "Actual Revisited GPU output for the explicit scenario; comparison/acceptance is separate."
+    },
+    "recon/retail_asm/runtime/effects/water-runtime-next-20261008/waterfall-preview-final/manifest.json": {
+      "sha256": "fce386b945c321311822b3dc94031d663fd2f14fff9ef73bb5308d68eb860c0d",
+      "retail_rows": [
+        "Waterfall:0xa907dabf"
+      ],
+      "check": "water_actual_preview_map_lifecycle",
+      "status": "pass",
+      "scope": "Actual Revisited GPU output for the explicit scenario; comparison/acceptance is separate."
+    },
+    "recon/retail_asm/runtime/effects/water-final-identity-safe-20261008-ab/manifest.json": {
+      "sha256": "b0e309da620e4f1102e0b4f5c71679bbf3329d1326b1828318bd14c80a913b95",
+      "retail_rows": [
+        "Water:0x1903abcd"
+      ],
+      "check": "literal_water_25_drop_frontend",
+      "status": "pass",
+      "scope": "Literal Water25drop original Init/warmup/Animate/RNG/Render matrices vs compiled actual production methods and packets. Exact authored XYZ/UV/RGB565/original indices; identity owner/face0/white common software raster. Copied lighting callback boundary omitted; source initialization/assets/renderer adapted. Actual additive device arithmetic, normal illumination, modern triangulation, map/component and Metal separate; no FlowWater mapping claim."
+    },
+    "recon/retail_asm/runtime/effects/ripple-map-next-20261009/manifest.json": {
+      "sha256": "633330575976231959fcdd473a7dc75f7b6a260498e13e63b3bf02dc1143c58f",
+      "retail_rows": [
+        "Ripple:0x12309867"
+      ],
+      "check": "ripple_actual_map_recursive_lifecycle",
+      "status": "pass",
+      "scope": "Actual typedmap Rippledefaultlength96/sharedcomponent/normalpulses/create/move/recursivechildren/naturalexpiry andrestoredfloor. Syntheticgroundmodule; originalworldsector scheduling andretail/Metaldevice parityremainopen."
+    },
+    "recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json": {
+      "sha256": "b3b3023714a7449c1c664210bff87b5b39a4f9e8aaa98f46f3fc3a50a3d5e8e2",
+      "retail_rows": [
+        "FlowWater:0xadbcef15",
+        "BendWater1:0xadbcef16",
+        "BendWater2:0xadbcef17",
+        "Wave:0x9d92bc1d",
+        "WaveS:0x9d92bc1e",
+        "WaveM:0x9d92bc1f"
+      ],
+      "check": "generic_scrolltex_and_map_lifecycle",
+      "status": "pass",
+      "scope": "Actual original scrolltex factory/full tag parser/Initialize/Render, original copied authored UVs and native constant keys/matrices versus compiled actual parser/GetObjectNum/InitializeScrollTexTracks/ScrollTexOffset inside actual generic mesh extraction/Submit scroll-imagery branch. Fixed1280x720 RAM viewport, unchanged z distance1925 and camera; common original software raster, white input lighting, two selected owner positions, legal ticks0..120. Copy-instance-vertices imagery adapter, map install/sampler/native device/Metal and long-clock precision separate."
+    },
+    "recon/retail_asm/runtime/effects/scrolltex-map-next-20261009/manifest.json": {
+      "sha256": "5f4bc483c17647a84c5a58b831e9b33b5806bd4fe535f0bf3669a065ef76662a",
+      "retail_rows": [
+        "FlowWater:0xadbcef15",
+        "BendWater1:0xadbcef16",
+        "BendWater2:0xadbcef17",
+        "Wave:0x9d92bc1d",
+        "WaveS:0x9d92bc1e",
+        "WaveM:0x9d92bc1f"
+      ],
+      "check": "generic_scrolltex_and_map_lifecycle",
+      "status": "pass",
+      "scope": "Six exact generic map owners ADDAT/MOVE/DELETE and rendered scrolls, each restores synthetic clean floor; natural placement, native original fullworld lighting and retail/Metaldevice equivalence remain open."
+    },
+    "recon/retail_asm/runtime/effects/fireflash-angle-scale-corrected-20261009/manifest.json": {
+      "sha256": "e1dc490eb41cc82b4cc5796a3f1a61e1bf56713c9b51c68f73004bd57737f952",
+      "retail_row": "FireFlash:0x37780ae2",
+      "check": "fireflash_angle_fade_full_pool_diagnostic",
+      "status": "differences_found",
+      "scope": "Actual native 150-record pool/101 samples; exact birth angles/fade scales and frame/integer/RNG/draw counts after causal production fixes. 1124 residual sphere-position fields from shared matrix precision. No pixels or full acceptance credited."
+    },
+    "recon/retail_asm/runtime/effects/rift-failed-animtex-preflight/manifest.json": {
+      "sha256": "6d42acc599699189a757763096d091c562b4be080ba59bc3b4c7d7a48031ae3c",
+      "retail_row": "Rift1:0xadbcef18",
+      "check": "unmodified_animtex_failed_init_admission",
+      "status": "expected_native_failure_reproduced",
+      "scope": "Two exact fresh isolated repeats of native Init and RefreshControllers rejection. Separate cold-heap call reaches original null UV-array cleanup read. No animation, static-render acceptance or actual-world heap/crash claim."
+    },
+    "recon/retail_asm/runtime/effects/barrier-static-frontend-ab/manifest.json": {
+      "sha256": "af837f2f86e5588263197e87fa17b5c4fa91fc5161286c96f7bc6dc7dc00169d",
+      "retail_row": "LabGateBarrierS:0xad92bc37, LabGateBarrierE:0xad92bc38",
+      "check": "lab_barrier_untextured_frontend",
+      "status": "pass",
+      "scope": "Native matrices/keys/default lookup and original untextured raster versus compiled static preview geometry and material decode. Fixed authored red diffuse input; native full illumination excluded."
+    },
+    "recon/retail_asm/runtime/effects/lab-barrier-material-fixed-20261009/manifest.json": {
+      "sha256": "56a655d39943b3d30643d416085fd4d2be2b23084f805fb5e4840d99f5f03dcb",
+      "retail_row": "LabGateBarrierS:0xad92bc37, LabGateBarrierE:0xad92bc38",
+      "check": "lab_barrier_actual_map_material",
+      "status": "pass",
+      "scope": "Each exact owner independently passes10typed create/move/delete observations,16frames,1875red-dominant changed pixels and exact floor restoration. Synthetic floor; original full illumination/natural visibility/device remain open."
+    },
+    "recon/retail_asm/runtime/effects/lab-barrier-map-next-20261009/manifest.json": {
+      "sha256": "7f0883088b5f6ba674ff03f1867f8a5a80739767cb5a2f315d3772b802c40081",
+      "retail_row": "LabGateBarrierS:0xad92bc37, LabGateBarrierE:0xad92bc38",
+      "check": "lab_barrier_pre_fix_white_material",
+      "status": "diagnostic_wrong_material_color",
+      "scope": "Typed lifecycle passes but root visual inspection finds both authored red untextured quads white before material tint correction; no color parity credited."
+    },
+    "recon/retail_asm/runtime/effects/firewind-nullspell-preflight-20261009/manifest.json": {
+      "sha256": "0a9eb22a12e5328a1cccf7b9a11a7891c30ccb15e70232b52c8dde5e8bfa83bb",
+      "retail_row": "FireWind:0x98974eab",
+      "check": "native_nullspell_motion_feasibility",
+      "status": "native_nullspell_feasible_port_reconstruction_deferred",
+      "scope": "Native400record pool/100Animate ticks,9complete pool hashes,300birth/4404final RNG with genuine particle motion. No comparable production pool, rendering, target/damage or parity credit."
+    },
+    "recon/retail_asm/runtime/effects/warp-authored-atlas-ab/manifest.json": {
+      "sha256": "6e8f55e48b6e85ac36acf1d0bb695b931df2b9b089afdea09681ed47269c4b96",
+      "retail_row": "TeleportDoorInsideB/O/P/R/W/Y/G",
+      "check": "warp_authored_atlas_frontend",
+      "status": "pass",
+      "scope": "154native/compiled state, geometry, UV, alpha-payload and shared original-software pairs, replay twice;574state/2296UV bits exact. Natural context/illumination/backend remain open."
+    },
+    "recon/retail_asm/runtime/effects/speaker-static-ab-20261009/manifest.json": {
+      "sha256": "23709f25db614c631f8b74256d5a50bd01dc1d3eca7da43f03183435247771b9",
+      "retail_row": "speaker:0xad92bc10",
+      "check": "speaker_generic_untextured_frontend",
+      "status": "pass",
+      "scope": "Six exact authored key/matrix/material-input untextured software pairs, replay twice; explicit generic builder, no audio/full illumination."
+    },
+    "recon/retail_asm/runtime/effects/firecone-native-state-ab/manifest.json": {
+      "sha256": "76124520063ea50d68aeb060de48dc3dd3190d449abcb56761d522896da7055d",
+      "retail_row": "FireCone:0xab92cd01",
+      "check": "firecone_defined_native_pool_state",
+      "status": "pass",
+      "scope": "260pool occupancies/73,806defined active float fields/1243RNG calls/native pool entry ordering exact through100ticks and drain93; no render/live-caster/completeInitialize claim."
+    },
+    "recon/retail_asm/runtime/effects/firecone-native-state-before/manifest.json": {
+      "sha256": "ba668714a74227d8345feac5aa71aff6f0675ea028a7f11002063935d2af626c",
+      "retail_row": "FireCone:0xab92cd01",
+      "check": "firecone_before_precision_fix",
+      "status": "differences_found",
+      "scope": "Retained small state-rounding differences before native extended arithmetic corrections."
+    },
+    "recon/retail_asm/runtime/effects/warp-map-final-20261009/manifest.json": {
+      "sha256": "68300df79d2979cd04243e09394a6d502815961624f00ce581d19b76e5b34446",
+      "retail_row": "TeleportDoorInsideB/O/P/R/W/Y/G",
+      "check": "warp_independent_actual_map_lifecycle",
+      "status": "pass",
+      "scope": "Seven independent final-binary map cases,70typed observations/112frames; every owner remainsSTILLframe0 but renders4changingimages, moves/deletes/restoresfloor. Synthetic floor, no natural/device acceptance."
+    },
+    "recon/retail_asm/runtime/effects/warp-blue-map-first-20261009/manifest.json": {
+      "sha256": "23a47a765bfe68f5de2d264578e5ef102ce1c9c47529b2f404ed21b96f9dae93",
+      "retail_row": "TeleportDoorInsideB:0xad92bc28",
+      "check": "warp_alpha_sampler_before_fix",
+      "status": "differences_found",
+      "scope": "First alpha-helper route clamped negative V, giving solid-color samples; four expected changing samples reduced to2. Preserved before wrapped-nearest mode2 correction."
+    },
+    "recon/retail_asm/runtime/effects/speaker-map-next-20261009/manifest.json": {
+      "sha256": "572d620fa05b71516dd992036c45861e4fb81c9e5fd93aa2070487e2f4979e51",
+      "retail_row": "speaker:0xad92bc10",
+      "check": "speaker_actual_map_lifecycle",
+      "status": "pass",
+      "scope": "Ten typed create/frame/move/delete observations/16frames and exact floor restore; static authored marker. No sound/natural context or backend fidelity."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261009/helper-zero-uv-fireflash/manifest.json": {
+      "sha256": "71a6b7e1457702ac7be7a424199dab32f7024485dc1dddf18840a739dd0232f0",
+      "retail_row": "FireFlash:0x37780ae2",
+      "check": "helper_zero_uv_gpu_regression",
+      "status": "pass",
+      "scope": "After UV uniform/ARGB sampler support, all96decoded FireFlash pixel hashes exactly match previous validated capture; unchanged RGB565 helper behavior. Cleanexit/no retail device parity claim."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination/manifest.json": {
+      "sha256": "3b20d0d4a772c52aab42dc4f98138e5470d5d2c29a1cba26d1df28efb0953873",
+      "retail_row": "shared authored particles",
+      "check": "native_curve_destination_defaults",
+      "status": "pass",
+      "scope": "Actual literal parser/Initialize versus compiled Reader; clears only first curve destination, absent/literal/otherdimensions preserved."
+    },
+    "recon/retail_asm/runtime/effects/speed-map-final-20261009/manifest.json": {
+      "sha256": "23246cda60d42f9b2f34963a5864d0da3278310ef92cb8cddbc1ca60265ece53",
+      "retail_row": "speed:0xad92bd36",
+      "check": "speed_actual_map_controller_lifecycle",
+      "status": "pass",
+      "scope": "Eight typed controller/live/quality0/capacity31/movement/deletion checks;48frames31distinctactive/floorrestored. Nearzero suppression preserves prior48pixels; no base illumination/caster acceptance."
+    },
+    "recon/retail_asm/runtime/effects/speed-profile-contract/manifest.json": {
+      "sha256": "2328e4e88720dc7c184aef2cde9aaa4a28d78f4303af2bb728ffcefa062880ca",
+      "retail_row": "speed:0xad92bd36",
+      "check": "speed_profile_integer_decoder",
+      "status": "pass",
+      "scope": "4accepts258mutationrejects/2boundary controls/810TRSexact underASan/UBSan."
+    },
+    "recon/retail_asm/runtime/effects/speed-native-render-contract/manifest.json": {
+      "sha256": "8af59977e4fb6c0d45c73d3c0981167679eb9b504a89c438ad4cccf40ffb6d1f",
+      "retail_row": "speed:0xad92bd36",
+      "check": "speed_native_punctuation_and_explicit_modes",
+      "status": "pass",
+      "scope": "Actual native #punctuation/matrices and full per-object base80/prototype16 additive/no-write carrier; no fullbase lighting/device claim."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261009/warp-blue-authored-sector/manifest.json": {
+      "sha256": "be47bec3d9155c374cfbd0cac35feb704c03fe1472988aeece66ab579f073205",
+      "retail_row": "TeleportDoorInsideB:0xad92bc28",
+      "check": "original_saved_warp_context_smoke",
+      "status": "authored_saved_map_smoke_pass",
+      "scope": "Original saved actor/mapindex/position and terrain/lights/areaambient;24frames16distinct. Not native full-scene A/B/background/script/teleport acceptance."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261009/shipped-blue-barriers-map-inventory.json": {
+      "sha256": "020962a07b823f08aecfb3850abaa428971f909f5ba79983e37b6def4d9054b5",
+      "retail_row": "WarpBlue and LabGate barriers",
+      "check": "serialized_original_placements",
+      "status": "placement_inventory_complete",
+      "scope": "4896sectors/11selectedtop-level records; savedpositions/flags/mapindices, barriersInvisible. No visibility/caller claim."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261009/firecone-raw-render-stage-verified/manifest.json": {
+      "sha256": "45ac39f6954e022e19649cbb9d9dde29ea27e6acb5fccb2cb1ca48ea61e908d2",
+      "retail_row": "FireCone:0xab92cd01",
+      "check": "firecone_raw_stage_render_diagnostic",
+      "status": "deferred",
+      "scope": "44rawrendercases/404state ticks; relative native versus alreadyworld-adapted source Z/culling unresolved, no source/pixel correction."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261009/simple-effect-preflight/manifest.json": {
+      "sha256": "91bfd733ae6336e75d6c330fdd0b0f2c8b02f90acb39046395629a12a96e560e",
+      "retail_row": "Labback/Quick/Createfood/Energyspray",
+      "check": "complete_constructor_factory_triage",
+      "status": "preflight_only",
+      "scope": "Full default+92named constructors/actualfactories establish mapping, not static/visual/runtime acceptance."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination-buff-final/Might-quality0/comparison/manifest.json": {
+      "sha256": "5d12469e8f8418c337d7e3a152ceb2fed71ead3e9a6781715654e2edc4c28d98",
+      "retail_row": "Might:0x5be39ae0",
+      "check": "cold_literal_parser_state_revalidation",
+      "status": "pass",
+      "scope": "Fresh full literal native parser/Initialize/Pulse/live sample versus corrected compiled parser/State; resource/emitter inputs explicit, no renewed GPU/visual/caller claim."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination-buff-final/Might-quality1/comparison/manifest.json": {
+      "sha256": "522819d56495ddeca489ce6c0cec8e7288f89d1e7cfe84647bb1e7776aa36593",
+      "retail_row": "Might:0x5be39ae0",
+      "check": "cold_literal_parser_state_revalidation",
+      "status": "pass",
+      "scope": "Fresh full literal native parser/Initialize/Pulse/live sample versus corrected compiled parser/State; resource/emitter inputs explicit, no renewed GPU/visual/caller claim."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination-buff-final/Fmastery-quality0/comparison/manifest.json": {
+      "sha256": "4388e7c93039346d354afb0c0febd71cec91479891f73e21f31e3379e7798392",
+      "retail_row": "Fmastery:0xb0e024df",
+      "check": "cold_literal_parser_state_revalidation",
+      "status": "pass",
+      "scope": "Fresh full literal native parser/Initialize/Pulse/live sample versus corrected compiled parser/State; resource/emitter inputs explicit, no renewed GPU/visual/caller claim."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination-buff-final/Fmastery-quality1/comparison/manifest.json": {
+      "sha256": "da2660568bf4c5e9c285825ce5f971b2794b62842a8fe9290c4d1a396076e8b6",
+      "retail_row": "Fmastery:0xb0e024df",
+      "check": "cold_literal_parser_state_revalidation",
+      "status": "pass",
+      "scope": "Fresh full literal native parser/Initialize/Pulse/live sample versus corrected compiled parser/State; resource/emitter inputs explicit, no renewed GPU/visual/caller claim."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination-buff-final/Immortalmight-quality0/comparison/manifest.json": {
+      "sha256": "2bf2a4970fbd149f70e68bdb1d18b76a5de2dd0656993b2cac7cca18fcab21c8",
+      "retail_row": "Immortalmight:0x82aeb30f",
+      "check": "cold_literal_parser_state_revalidation",
+      "status": "pass",
+      "scope": "Fresh full literal native parser/Initialize/Pulse/live sample versus corrected compiled parser/State; resource/emitter inputs explicit, no renewed GPU/visual/caller claim."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination-buff-final/Immortalmight-quality1/comparison/manifest.json": {
+      "sha256": "7ea79c24214338658c826f9efda393f1af2ea24d6ecf416389634b3e1fe184e1",
+      "retail_row": "Immortalmight:0x82aeb30f",
+      "check": "cold_literal_parser_state_revalidation",
+      "status": "pass",
+      "scope": "Fresh full literal native parser/Initialize/Pulse/live sample versus corrected compiled parser/State; resource/emitter inputs explicit, no renewed GPU/visual/caller claim."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination-combat-final/comparison/manifest.json": {
+      "sha256": "d642b699a4194c7b7834c1b494dc5023fe4cd3f7eff8b1a4474e29f84ca68fe8",
+      "retail_row": "combatflash:0xad92bd29",
+      "check": "cold_literal_parser_state_revalidation",
+      "status": "pass",
+      "scope": "Fresh full literal native parser/Initialize/Pulse/live sample versus corrected compiled parser/State; resource/emitter inputs explicit, no renewed GPU/visual/caller claim."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination-buff-final/speed-quality0/comparison/manifest.json": {
+      "sha256": "a82a3544d190d85c7c50b9e574c60ecfd962077c25aa96b6ba335c2bc51c7880",
+      "retail_row": "speed:0xad92bd36",
+      "check": "cold_literal_parser_state_revalidation",
+      "status": "pass",
+      "scope": "Fresh full literal native parser/Initialize/Pulse/live sample versus corrected compiled parser/State; resource/emitter inputs explicit, no renewed GPU/visual/caller claim."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination-buff-final/goldeffect-quality0/comparison/manifest.json": {
+      "sha256": "9e0c20a427933f872fa5dd3ac58f517393d7bf2c070278e498a7c585211ef152",
+      "retail_row": "goldeffect:0xd0c0f035",
+      "check": "cold_literal_parser_state_revalidation",
+      "status": "pass",
+      "scope": "Fresh full literal native parser/Initialize/Pulse/live sample versus corrected compiled parser/State; resource/emitter inputs explicit, no renewed GPU/visual/caller claim."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination-water-final/WaterFlft/comparison/manifest.json": {
+      "sha256": "14dd097d020466e7d983a8192ecb6b675e77bf74d1df29af8b07f262c3ed0c8f",
+      "retail_row": "WaterFlft:0xd0c0f036",
+      "check": "cold_literal_parser_state_revalidation",
+      "status": "pass",
+      "scope": "Fresh full literal native parser/Initialize/Pulse/live sample versus corrected compiled parser/State; resource/emitter inputs explicit, no renewed GPU/visual/caller claim."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination-water-final/WaterFrt/comparison/manifest.json": {
+      "sha256": "6ab303042889777dd06db1cb446e3c788e4b60b5b386940eb176b9d05047766e",
+      "retail_row": "WaterFrt:0xd0c0f037",
+      "check": "cold_literal_parser_state_revalidation",
+      "status": "pass",
+      "scope": "Fresh full literal native parser/Initialize/Pulse/live sample versus corrected compiled parser/State; resource/emitter inputs explicit, no renewed GPU/visual/caller claim."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination-water-final/WaterClft/comparison/manifest.json": {
+      "sha256": "5f68c0d98a144896d392c8fe151edf97346fdaa1bf36f1edd8a5d0d993f1d4b8",
+      "retail_row": "WaterClft:0xd0c0f038",
+      "check": "cold_literal_parser_state_revalidation",
+      "status": "pass",
+      "scope": "Fresh full literal native parser/Initialize/Pulse/live sample versus corrected compiled parser/State; resource/emitter inputs explicit, no renewed GPU/visual/caller claim."
+    },
+    "recon/retail_asm/runtime/effects/curve-destination-water-final/WaterCrt/comparison/manifest.json": {
+      "sha256": "57c3819a0809bb346bb575863db1ab1ebdeb5d6a00b0fc81bc3721b9223e2d14",
+      "retail_row": "WaterCrt:0xd0c0f039",
+      "check": "cold_literal_parser_state_revalidation",
+      "status": "pass",
+      "scope": "Fresh full literal native parser/Initialize/Pulse/live sample versus corrected compiled parser/State; resource/emitter inputs explicit, no renewed GPU/visual/caller claim."
+    },
+    "recon/retail_asm/runtime/effects/speed-particle-centre-verified/manifest.json": {
+      "sha256": "69e98839559ee1639adad8ef00fccabd2d4ae2c13896d229482446b373b1cc38",
+      "retail_row": "speed:0xad92bd36",
+      "check": "speed_particle_frontend_independent_center_bridge",
+      "status": "pass",
+      "scope": "Actual parser/State/SubmitPartSys/native sample/#matrix and2109draws/112actualscale rejects.4218independentraw-centre/native x87FIX checks prevent translation masking; five exact shared-softwarecolor/depth pairs in MODELZ bridge. Particle-only; baseillumination/Metal/caster open."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261009/speed-packet-centre-hook-final/repeat-validation.json": {
+      "sha256": "9c4550e68609bc686881bfdbe8668043af116f15ae9b68ff381153f961796f7b",
+      "retail_row": "speed:0xad92bd36",
+      "check": "speed_particle_centres_fresh_repeat",
+      "status": "pass",
+      "scope": "Two fresh native/source runs preserve independentcentrechecks/draw admissions and allfive shared-software pixel/depth hashes; no base/device/context claim."
+    },
+    "recon/retail_asm/runtime/effects/might-current-visual/visual-review.json": {
+      "sha256": "1df2085c9c5709d00dc1163a36fb3c094357fd8044df77231d0bb687c19dd8f2",
+      "retail_row": "Might:0x5be39ae0",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Current corrected-parser actual Revisited map renderer versus retained native software reference: tested isolated state0 steady appearance at measured quality1. Independent RNG and fixed elapsed-time comparison. Normal floor illumination, exact device/raster/projection, natural caster/story/audio and full acceptance remain separate."
+    },
+    "recon/retail_asm/runtime/effects/immortalmight-current-visual/visual-review.json": {
+      "sha256": "1d4a50c8fa59c9f999b5284a6b0bc7b7aedf0289a6ef2daa91e645bbbb993e35",
+      "retail_row": "Immortalmight:0x82aeb30f",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Current corrected-parser actual Revisited map renderer versus retained native software reference: tested isolated state0 steady appearance at measured quality1. Independent RNG and fixed elapsed-time comparison. Normal floor illumination, exact device/raster/projection, natural caster/story/audio and full acceptance remain separate."
+    },
+    "recon/retail_asm/runtime/effects/warp-blue-current-visual/visual-review.json": {
+      "sha256": "ed7a2303c811e98272934e4c875fcb6649e1fb98a21b2ca78b2eb21689a32df3",
+      "retail_row": "TeleportDoorInsideB:0xad92bc28",
+      "check": "current_actual_port_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Overall isolated blue Warp appearance for the recorded synthetic map and pinned Metal build, against original executable software raster reference. Triangular form, blue/white cloudy perimeter, four changing atlas states and alpha floor integration reviewed. This is actual modern-port review, not shared-original-raster frontend parity."
+    },
+    "recon/retail_asm/runtime/effects/quicksilver-particle-merge-final/manifest.json": {
+      "sha256": "a074542fc38e0525f54511a8c09eaab262177c974cd6fad3bee36166ea21600c",
+      "retail_row": "quicksilver:0xad92bd35",
+      "check": "quicksilver_particle",
+      "status": "pass",
+      "scope": "Actual compiled parser/State/SubmitPartSys against native whole parser/Initialize/Pulse/liveSample/#CalcObjectMatrix/x87transform; exact native-authored emitter poses common inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; raw-world portZ compared via declared MODELZ bridge using actual native sample centre. Shared original software projector/raster used at fixed512white/color fixture; no actual map/Metal projector, base material lighting/caster/full acceptance."
+    },
+    "recon/retail_asm/runtime/effects/quicksilver-profile-contract/manifest.json": {
+      "sha256": "330095bb55dcb366542cfb158ae08b28c113061ed5b2e62ad65e5c84d2ac9eec",
+      "retail_row": "quicksilver:0xad92bd35",
+      "check": "quicksilver_profile",
+      "status": "pass",
+      "scope": "Actual strict Quicksilver profile and integer decoder source bodies/constants/packed records compile and execute. Literal shipped keys/tags/materials/vertices/faces/descriptors supplied by decoded readonly resource interface; independent mutable copies reject changes. Original decoder/conversion vs all3x30x9TRS channels. Full InitializeMesh/GetAniKey interpolation/owner matrices/controller geometry/lighting/raster/Metal/caller acceptance separate."
+    },
+    "recon/retail_asm/runtime/effects/quicksilver-map-final/manifest.json": {
+      "sha256": "ae8ee36b6071c089175578909648e46a24e46620687928549df1d0e3456a6574",
+      "retail_row": "quicksilver:0xad92bd35",
+      "check": "quicksilver_map",
+      "status": "pass",
+      "scope": "Fresh private Metal game build; exact type0xad92bd35 ADDAT/profile/controller/cap31/live draws/MOVE/DELETE and exact floor restoration on synthetic module. Separate from natural caster/caller/map context, native full base material lighting and software/Metal parity."
+    },
+    "recon/retail_asm/runtime/effects/quicksilver-main-merged-20261010/manifest.json": {
+      "sha256": "243ae32f5d8ddf7ec4a8c03a59720fd99a4dfac0b6e0b5742746a07cd1bb1318",
+      "retail_row": "quicksilver:0xad92bd35",
+      "check": "merged_main_actual_map_regression",
+      "status": "pass",
+      "scope": "Optimized merged main:48frames/8typedlifecyclechecks/31distinctactive/floorrestored/cleanexit. No additional visual/full acceptance."
     }
   }
 }

@@ -23,9 +23,11 @@
 
 #include <algorithm>
 #include <array>
-#include <initializer_list>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
+#include <initializer_list>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -52,10 +54,22 @@ void WriteSeamsSince(JsonOut& j, size_t first);   // "seams": those from `first`
 // for a direct draw), from its `tape` and then retail's generator from its
 // `seed`, as the retail fixture answers them (SCaseScope installs it).
 void WriteDraws(JsonOut& j);
+// Forget the draws so far (the tape goes on where it was): a case that sets
+// something up with draws of its own before the call it compares.
+void ClearDraws();
 
 // Action block flags by meaning (the port's bits under retail's names).
 uint32_t FlagBits(const JsonValue& names);
 void WriteFlags(JsonOut& j, uint32_t bits);
+
+// A case's character data, by the field names of the combat-data dump
+// (retailab_data.cpp): only the fields given are set, over SCharData's
+// defaults. `attacks` and `impacts` replace the tables.
+void ReadCharData(const JsonValue& c, SCharData& cd);
+
+// The name a case gives an object stat (retail's stat ids: charstats.h),
+// as the retail fixture names them; null for one it doesn't name.
+const char* ObjStatName(int32_t statid);
 
 // ---- Fixture imagery ------------------------------------------------------
 
@@ -234,11 +248,34 @@ class IFixtureChar
     // The resolvers ResolveAction would call on the doing block.
     virtual int32_t ResolveCombat(int32_t bits) = 0;
     virtual int32_t ResolveCombatMove(int32_t bits) = 0;
+    // The attack bookkeeping (timers, request bits, the player's button
+    // repeats, the chain, the last attack by index), by retail's names.
+    virtual void WriteAttackState(JsonOut& j) = 0;
+    // The AI's own state: its waypoint or look-at (retail +0x234), the
+    // target's last place (+0x23c), the waypoint's ticks (+0x248), the boss
+    // kind (+0x280). The look-at is the caller's to name.
+    virtual void ReadAIState(const JsonValue& a, TObjectInstance* lookat) = 0;
+    [[nodiscard]] virtual TObjectInstance* AILookAt() const = 0;
+    virtual void WriteAIState(JsonOut& j) const = 0;
+    // Another resolver on the doing block: "attack", "impact", "block",
+    // "dead", "bow-aim", "bow-shoot" (ResolveAction's dispatch, retail
+    // 0x004c3490).
+    virtual int32_t RunResolver(const std::string& which, int32_t bits) = 0;
     virtual void RunUpdateAction(int32_t bits) = 0;
     virtual void RunComplexPulse() = 0;         // TComplexObject::Pulse (UpdateAction with the move bits)
+    virtual int32_t RunFindCharacters(TCharacter* chars[], int32_t maxchars, int32_t range, int32_t angle,
+                                      int32_t anglerange, int32_t flags) = 0;
     // What a move changes beyond the character dump ("motion").
     virtual void WriteMotion(JsonOut& j) = 0;
+    // The characters it remembers seeing (retail +0x1c0, MAXHASSEEN entries).
+    virtual SHasSeen* Memory() = 0;
+    // The case's object stats again, over what setting the case up wrote
+    // (an Equip's RefreshStats, say).
+    virtual void ResetStats(const JsonValue& spec) = 0;
 };
+
+// When set, the fixture characters answer DeleteFromInventory as a seam.
+inline bool inventorySeams = false;
 
 // A TCharacter or TPlayer built from the case, without a class record or
 // loaded imagery: it answers the seams itself.
@@ -258,7 +295,7 @@ class TFixtureChar : public Base, public IFixtureChar
         this->SetMoveAngle((int32_t)spec["moveangle"].Int(spec["facing"].Int()));
         this->state = (uint16_t)spec["state"].Int(0);
         this->charflags = (uint32_t)spec["charflags"].Int();
-        this->target_out_of_sight = spec["out_of_sight"].Bool();
+        this->retreating = spec["retreating"].Bool();
         this->monsterkind = (int32_t)spec["monsterkind"].Int(0);
         for (const auto& [k, v] : spec["stats"].Members())
             stats[k] = (int32_t)v.Int();
@@ -274,6 +311,7 @@ class TFixtureChar : public Base, public IFixtureChar
         cd->runspeed = (int32_t)c["runspeed"].Int(-1);
         cd->sneakspeed = (int32_t)c["sneakspeed"].Int(-1);
         cd->combatwalkspeed = (int32_t)c["combatwalkspeed"].Int(-1);
+        ReadCharData(c, *cd);
         this->chardata = cd.get();
 
         // Motion (kata M7): object flags, inventory slot, vel and accum,
@@ -291,8 +329,10 @@ class TFixtureChar : public Base, public IFixtureChar
         }
         this->forcenomove = spec["forcenomove"].Bool();
         this->shovedir = (int32_t)spec["shovedir"].Int(-1);
-        this->target_out_of_sight_prev = spec["out_of_sight_prev"].Bool();
-        this->sight_lost_ticks = (int32_t)spec["sight_lost_ticks"].Int();
+        this->retreatlatch = spec["retreat_latch"].Bool();
+        this->retreatframes = (int32_t)spec["retreat_frames"].Int();
+        this->lastbowshot = (int32_t)spec["lastbowshot"].Int();
+        this->bowshots = (int32_t)spec["bowshots"].Int();
         if constexpr (std::is_same_v<Base, TPlayer>)
             this->TPlayer::SetPlayerState((int32_t)spec["playerstate"].Int(0));   // as the retail fixture's zeroed +0x36c
 
@@ -307,6 +347,33 @@ class TFixtureChar : public Base, public IFixtureChar
         this->prevstate = (short)spec["prevstate"].Int(spec["state"].Int(0));
         this->glimpse = (int32_t)spec["glimpse"].Int();
         this->noise = (int32_t)spec["noise"].Int();
+        // Perception (kata M9b): the invisibility spell, a player's team
+        // (the memory, naming others, is the world's: SetMemory).
+        this->invisible_spell = spec["invisiblespell"].Bool();
+        if constexpr (std::is_base_of_v<TPlayer, Base>)
+        {
+            SPlayerTeamRecord team;
+            team.name = spec["team"].Str();
+            this->SetTeam(team);
+        }
+        ReadAttackState(spec["attackstate"]);
+        if constexpr (std::is_base_of_v<TPlayer, Base>)
+        {
+            const JsonValue& r = spec["resists"];
+            for (int32_t i = 0; i < NUMDAMAGETYPES; ++i)
+                Base::SetObjStat(CHRRESIST_FIRST + i, (int32_t)r[i].Int(0));
+            if (spec.Has("weapon"))
+            {
+                weapon = true;
+                weapontype = (int32_t)spec["weapon"]["type"].Int();
+                weapondamage = (int32_t)spec["weapon"]["damage"].Int();
+            }
+            if (spec.Has("maxmana"))
+            {
+                hasmaxmana = true;
+                maxmana = (int32_t)spec["maxmana"].Int();
+            }
+        }
     }
     TFixtureChar(const TFixtureChar&) = delete;
     TFixtureChar& operator=(const TFixtureChar&) = delete;
@@ -345,6 +412,12 @@ class TFixtureChar : public Base, public IFixtureChar
     int32_t ResolveCombatMove(int32_t bits) override { return Base::ResolveCombatMove(this->doing, bits); }
     void RunUpdateAction(int32_t bits) override { this->UpdateAction(bits); }
     void RunComplexPulse() override { this->TComplexObject::Pulse(); }
+    int32_t RunFindCharacters(TCharacter* chars[], int32_t maxchars, int32_t range, int32_t angle,
+                              int32_t anglerange, int32_t flags) override
+    {
+        return this->FindCharacters(chars, maxchars, range, angle, anglerange, flags);
+    }
+    SHasSeen* Memory() override { return this->hasseen; }
 
     void WriteMotion(JsonOut& j) override
     {
@@ -353,14 +426,15 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Key("accum").Begin('[').Value(this->accum.x).Value(this->accum.y).Value(this->accum.z).End(']');
         j.Field("movetopos", this->movetopos ? 1 : 0).Field("forcenomove", this->forcenomove ? 1 : 0);
         j.Field("shovedir", this->shovedir);
-        j.Field("out_of_sight", this->target_out_of_sight ? 1 : 0);
-        j.Field("out_of_sight_prev", this->target_out_of_sight_prev ? 1 : 0);
-        j.Field("sight_lost_ticks", this->sight_lost_ticks);
+        j.Field("retreating", this->retreating ? 1 : 0);
+        j.Field("retreat_latch", this->retreatlatch ? 1 : 0);
+        j.Field("retreat_frames", this->retreatframes);
         j.Field("movedist", this->GetMoveDist()).Field("commanddone", this->commanddone ? 1 : 0);
         j.Field("glimpse", this->glimpse).Field("noise", this->noise);
         j.Field("framerate", (int32_t)this->framerate).Field("prevstate", (int32_t)this->prevstate);
         j.Field("prevframe", (int32_t)this->prevframe);
         j.Field("animate", (this->flags & OF_ANIMATE) ? 1 : 0).Field("animator", this->HasAnimator() ? 1 : 0);
+        j.Field("combatflash", this->GetCombatFlashTicks());
         j.End('}');
     }
 
@@ -441,6 +515,161 @@ class TFixtureChar : public Base, public IFixtureChar
     int32_t Mana() override { return ObjStat("mana"); }
     int32_t Radius() override { return ClassStat("radius"); }
 
+    // Any other object stat the case names (retail's GetObjStat seam, slot
+    // 0xdc); the rest as the port has them, unrecorded.
+    int32_t GetObjStat(int32_t statid) const override
+    {
+        const char* stat = ObjStatName(statid);
+        if (!stat || !stats.count(stat))
+            return Base::GetObjStat(statid);
+        return StatSeam("GetObjStat", stats, stat);
+    }
+
+    // Setting one (retail's SetObjStat seam, slot 0xe8): recorded, and the
+    // case's value follows (a stat the case didn't give is added).
+    void SetObjStat(int32_t statid, int32_t value) override
+    {
+        const char* stat = ObjStatName(statid);
+        if (!stat)
+        {
+            Base::SetObjStat(statid, value);
+            return;
+        }
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "SetObjStat").FieldString("who", who).FieldString("stat", stat);
+        j.Field("value", value).End('}');
+        Seam(j.str());
+        stats[stat] = value;
+    }
+
+    // A type stat by name (retail's GetStat seam at slot 0xd4), when the
+    // case gives it.
+    using Base::GetStat;
+    int32_t GetStat(const char* statname) const override
+    {
+        std::string stat = statname;
+        for (char& ch : stat)
+            ch = (char)tolower((unsigned char)ch);
+        if (!classstats.count(stat))
+            return Base::GetStat(statname);
+        return StatSeam("GetStat", classstats, stat.c_str());
+    }
+
+    // The player's weapon, when the case gives one (retail's seams at
+    // TPlayer::WeaponType 0x00520810 / WeaponDamage 0x00520830).
+    int32_t WeaponType() override
+    {
+        if (!weapon)
+            return Base::WeaponType();
+        return ValueSeam("WeaponType", weapontype);
+    }
+    int32_t WeaponDamage() override
+    {
+        if (!weapon)
+            return Base::WeaponDamage();
+        return ValueSeam("WeaponDamage", weapondamage);
+    }
+
+    // Taking items out by name (retail's seam at TObjectInstance slot 0x78,
+    // 0x00477950), when a target sets inventorySeams: recorded, not done.
+    int32_t DeleteFromInventory(const char* name, int32_t number) override
+    {
+        if (!inventorySeams)
+            return Base::DeleteFromInventory(name, number);
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "DeleteFromInventory").FieldString("who", who);
+        j.FieldString("name", name ? name : "").Field("count", number).End('}');
+        Seam(j.str());
+        return 1;
+    }
+
+    void ResetStats(const JsonValue& spec) override
+    {
+        stats.clear();
+        for (const auto& [k, v] : spec["stats"].Members())
+            stats[k] = (int32_t)v.Int();
+    }
+
+    int32_t RunResolver(const std::string& which, int32_t bits) override
+    {
+        if (which == "attack")
+            return Base::ResolveAttack(this->doing, bits);
+        if (which == "impact")
+            return Base::ResolveImpact(this->doing, bits);
+        if (which == "block")
+            return Base::ResolveBlock(this->doing, bits);
+        if (which == "dead")
+            return Base::ResolveDead(this->doing, bits);
+        if (which == "bow-aim")
+            return Base::ResolveBowAim(this->doing, bits);
+        if (which == "bow-shoot")
+            return Base::ResolveBowShoot(this->doing, bits);
+        throw std::runtime_error("no resolver '" + which + "'");
+    }
+
+    void ReadAIState(const JsonValue& a, TObjectInstance* lookat) override
+    {
+        this->ai_lookat = lookat;
+        if (a.Has("lastpos"))
+            this->target_last_position = Point(a["lastpos"]);
+        this->waypointticks = (int32_t)a["waypointticks"].Int(0);
+    }
+
+    TObjectInstance* AILookAt() const override { return this->ai_lookat; }
+
+    void WriteAIState(JsonOut& j) const override
+    {
+        const S3DPoint& p = this->target_last_position;
+        j.Key("lastpos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']');
+        j.Field("waypointticks", this->waypointticks).Field("monsterkind", this->monsterkind);
+    }
+
+    // A player's MaxMana, when the case gives `maxmana` (retail's seam at
+    // TPlayer::MaxMana 0x00520770); a character's is its chardata's.
+    int32_t MaxMana() override
+    {
+        if (!hasmaxmana)
+            return Base::MaxMana();
+        return ValueSeam("MaxMana", maxmana);
+    }
+
+    void WriteAttackState(JsonOut& j) override
+    {
+        j.Key("attackstate").Begin('{');
+        j.Field("nextattack", this->nextattack).Field("magictimer", this->magictimer);
+        j.Field("requestbits", this->requestbits).Field("attackcount", this->attackcount);
+        j.Field("lastbutton", this->lastbutton).Field("buttonrepeat", this->buttonrepeat);
+        j.Field("chainhits", this->chainhits).Field("lastattackticks", this->lastattackticks);
+        j.Field("lasthit", this->lasthit).Field("flashticks", this->combatflashticks);
+        j.Field("autocombat", this->autocombat ? 1 : 0).Field("movevert", this->GetMoveVert());
+        j.Field("snapticks", this->snapticks).Field("charflags", (int32_t)this->charflags);
+        j.Field("objflags", (int32_t)(this->flags & (OF_ICED | OF_PARALIZE)));
+        j.Key("lastattack");
+        const int32_t last = AttackIndex(this->lastattack);
+        if (last >= 0)
+            j.Value(last);
+        else
+            j.Null();
+        if constexpr (std::is_base_of_v<TPlayer, Base>)
+        {
+            j.Key("frags").Begin('[');
+            for (int32_t n : this->Frags())
+                j.Value(n);
+            j.End(']');
+        }
+        j.End('}');
+        WriteMotion(j);
+    }
+
+    // The index of an attack record in this character's table, -1 if none.
+    int32_t AttackIndex(const SCharAttackData* ad) const
+    {
+        for (int32_t i = 0; ad && i < cd->attacks.NumItems(); ++i)
+            if (&cd->attacks[i] == ad)
+                return i;
+        return -1;
+    }
+
   private:
     static S3DPoint Point(const JsonValue& v)
     {
@@ -450,7 +679,7 @@ class TFixtureChar : public Base, public IFixtureChar
     int32_t ObjStat(const char* stat) { return StatSeam("GetObjStat", stats, stat); }
     int32_t ClassStat(const char* stat) { return StatSeam("GetStat", classstats, stat); }
 
-    int32_t StatSeam(const char* seam, const std::map<std::string, int32_t>& from, const char* stat)
+    int32_t StatSeam(const char* seam, const std::map<std::string, int32_t>& from, const char* stat) const
     {
         auto it = from.find(stat);
         if (it == from.end())
@@ -462,9 +691,42 @@ class TFixtureChar : public Base, public IFixtureChar
         return it->second;
     }
 
+    int32_t ValueSeam(const char* seam, int32_t value) const
+    {
+        JsonOut j;
+        j.Begin('{').FieldString("seam", seam).FieldString("who", who).Field("result", value).End('}');
+        Seam(j.str());
+        return value;
+    }
+
+    // The case's attack bookkeeping, where given (retail +0x120 ... +0x290).
+    void ReadAttackState(const JsonValue& a)
+    {
+        this->nextattack = (int32_t)a["nextattack"].Int(this->nextattack);
+        this->magictimer = (int32_t)a["magictimer"].Int(this->magictimer);
+        this->requestbits = (uint32_t)a["requestbits"].Int(this->requestbits);
+        this->attackcount = (int32_t)a["attackcount"].Int(this->attackcount);
+        this->lastbutton = (int32_t)a["lastbutton"].Int(this->lastbutton);
+        this->buttonrepeat = (int32_t)a["buttonrepeat"].Int(this->buttonrepeat);
+        this->chainhits = (int32_t)a["chainhits"].Int(this->chainhits);
+        this->lastattackticks = (int32_t)a["lastattackticks"].Int(this->lastattackticks);
+        this->lasthit = (int32_t)a["lasthit"].Int(this->lasthit);
+        this->combatflashticks = (int32_t)a["flashticks"].Int(0);
+        this->autocombat = a["autocombat"].Bool(true);
+        this->snapticks = (int32_t)a["snapticks"].Int(-1);
+        if (a.Has("lastattack") && !a["lastattack"].IsNull())
+            this->lastattack = &cd->attacks[(int32_t)a["lastattack"].Int()];
+    }
+
+    bool weapon = false;
+    int32_t weapontype = 0, weapondamage = 0;
+    bool hasmaxmana = false;
+    int32_t maxmana = 0;
+
     std::string who;
     std::vector<SFixtureState> states;
-    std::map<std::string, int32_t> stats, classstats;
+    mutable std::map<std::string, int32_t> stats;
+    std::map<std::string, int32_t> classstats;
     std::unique_ptr<SCharData> cd;
 };
 
@@ -501,10 +763,18 @@ class TFixtureWorld
             names[chr] = name;
             order.push_back(chr);
         }
-        // Blocks after every character exists: a block's obj names one.
+        // Blocks and memories after every character exists: a block's obj
+        // names one, and so does each remembered entry ([name, frame,
+        // noautocombat]).
         const auto& specs = cs["chars"].Items();
         for (size_t i = 0; i < specs.size(); ++i)
+        {
             SetBlocks(order[i], specs[i]);
+            SHasSeen* memory = fixtures[order[i]]->Memory();
+            const auto& seen = specs[i]["hasseen"].Items();
+            for (size_t e = 0; e < seen.size() && e < MAXHASSEEN; ++e)
+                memory[e] = SHasSeen{Get(seen[e][0].Str()), (int32_t)seen[e][1].Int(), seen[e][2].Bool()};
+        }
     }
 
     IFixtureChar* Fixture(const TCharacter* c) const { return fixtures.at(c); }
@@ -516,6 +786,24 @@ class TFixtureWorld
         if (it == byname.end())
             throw std::runtime_error("no character '" + name + "' in the case");
         return it->second;
+    }
+
+    // A character's memory as compared ("memory"): each entry's character
+    // (null when empty), frame and no-autocombat flag.
+    void WriteMemory(JsonOut& j, TCharacter* c) const
+    {
+        j.Key("memory").Begin('[');
+        const SHasSeen* memory = Fixture(c)->Memory();
+        for (int32_t e = 0; e < MAXHASSEEN; ++e)
+        {
+            j.Begin('[');
+            if (memory[e].chr)
+                j.String(NameOf(memory[e].chr));
+            else
+                j.Null();
+            j.Value(memory[e].time).Value(memory[e].noautocombat ? 1 : 0).End(']');
+        }
+        j.End(']');
     }
 
     std::string NameOf(const TObjectInstance* o) const
@@ -561,8 +849,18 @@ class TFixtureWorld
         else
             j.Null();
         WriteFlags(j, ab->flags);
+        if (blockExtra)
+            blockExtra(j, *ab);
         j.End('}');
     }
+
+    // A block the case began with is gone: a new one at its address is new.
+    void ForgetBlock(const TActionBlock* ab) const { roles.erase(ab); }
+
+    // Optional extras a target adds to its dumps: fields of each block, and
+    // each character's attack bookkeeping (IFixtureChar::WriteAttackState).
+    std::function<void(JsonOut&, const TActionBlock&)> blockExtra;
+    bool writeAttackState = false;
 
     void WriteCharacter(JsonOut& j, const char* key, TCharacter* c) const
     {
@@ -576,11 +874,14 @@ class TFixtureWorld
         WriteBlock(j, "root", fx->Root(), made);
         WriteBlock(j, "doing", fx->Doing(), made);
         WriteBlock(j, "desired", fx->Desired(), made);
+        if (writeAttackState)
+            fx->WriteAttackState(j);
         j.End('}');
     }
 
-  private:
-    TActionBlock* NewBlock(const JsonValue& b)
+    // A block as a case gives one: name, action, the angles, turn rate,
+    // frame, wait, obj, flags (guest.py's new_block).
+    TActionBlock* NewBlock(const JsonValue& b) const
     {
         auto* ab = new TActionBlock(b["name"].Str().c_str(), (ACTION)b["action"].Int());
         if (b.Has("angle"))
@@ -600,6 +901,7 @@ class TFixtureWorld
         return ab;
     }
 
+  private:
     void SetBlocks(TCharacter* chr, const JsonValue& spec)
     {
         std::map<std::string, TActionBlock*> made;
@@ -624,7 +926,7 @@ class TFixtureWorld
     std::map<const TCharacter*, IFixtureChar*> fixtures;
     std::map<std::string, TCharacter*> byname;
     std::map<const TObjectInstance*, std::string> names;
-    std::map<const TActionBlock*, std::string> roles;
+    mutable std::map<const TActionBlock*, std::string> roles;
     std::vector<TCharacter*> order;
 };
 
@@ -645,6 +947,7 @@ class SCaseScope
 
   private:
     int32_t savedAmbient = 0;
+    TPlayer* savedPlayer = nullptr;
 };
 
 }  // namespace RetailAB::Fixture
