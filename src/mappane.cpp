@@ -1959,14 +1959,14 @@ void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
 
     // EXTRACT mode also wants to redraw the walkmap rect as part of the
     // clear. Wrap the resolver to capture the sector for the redraw
-    // call, since TGameMap::StampTileWalkmap doesn't know about the
+    // call, since TGameMap::StampWalkmap doesn't know about the
     // pane redraw chrome.
     if (mode == WALK_EXTRACT)
     {
         // Stamp the clear, then walk the affected sectors a second time
         // to redraw the rect. The redraw needs imagery bbox / pos in
         // walkmap-local coords; recompute here once after the stamp.
-        TGameMap::StampTileWalkmap(oi, mode, find_sector);
+        TGameMap::StampWalkmap(oi, mode, find_sector);
 
         // RedrawWalkmapRect re-stamps the neighbours from the sector window,
         // which holds the current map's sectors only; redrawing them into
@@ -1999,7 +1999,7 @@ void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
         return;
     }
 
-    TGameMap::StampTileWalkmap(oi, mode, find_sector);
+    TGameMap::StampWalkmap(oi, mode, find_sector);
 }
 
 void TMapPane::RedrawWalkmapRect(TObjectInstance* oi, int32_t x, int32_t y, int32_t w, int32_t l, TSector* dsect)
