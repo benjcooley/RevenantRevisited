@@ -22,6 +22,9 @@ class LitSoftwareFixture(SoftwareFixture):
         v.write(0x676055, b'\1')  # Explicit active software scene.
         v.write(0x67604a, b'\0')
         v.call(0x56c730, (65536, 16), this=0x675e90, instruction_limit=5000000)
+        # Original startup 56cc32..56cc45 also binds both blend tables to
+        # the camera. Scene-selected RGB565 additive kernels read these.
+        v.call(0x54df70, (v.u32(0x675e90), v.u32(0x675e94)), this=self.camera)
         v.put_u32(0x670674, v.u32(0x675e90))
         v.put_u32(0x67067c, v.u32(0x675e94))
         self.directional = None
