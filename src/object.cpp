@@ -1891,6 +1891,24 @@ void TObjectInstance::OffScreen()
 // (potions are the prime example; see 3dimagebody.h's invanim slot) were
 // invisible in the port until this fallback landed because the previous
 // pass-through only consulted GetInvImage.
+bool SInvIcon::operator==(const SInvIcon& other) const
+{
+    if (count != other.count)
+        return false;
+    for (int32_t i = 0; i < count; ++i)
+        if (parts[i].image != other.parts[i].image || parts[i].x != other.parts[i].x
+            || parts[i].y != other.parts[i].y)
+            return false;
+    return true;
+}
+
+SInvIcon TObjectInstance::InventoryIcon()
+{
+    SInvIcon icon;
+    icon.Add(InventoryImage(), 0, 0);
+    return icon;
+}
+
 PTBitmap TObjectInstance::InventoryImage()
 {
     if (!imagery)

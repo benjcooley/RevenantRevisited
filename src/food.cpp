@@ -6,7 +6,6 @@
 
 #include "revenant.h"
 #include "character.h"
-#include "statusbar.h"
 #include <typeinfo>
 #include "food.h"
 #include "logging.h"
@@ -63,17 +62,11 @@ bool TFood::Use(TObjectInstance* user, int32_t with)
             if (((PTCharacter)user)->Health() > ((PTCharacter)user)->MaxHealth())
                 ((PTCharacter)user)->SetHealth(((PTCharacter)user)->MaxHealth());
 
-            if (((PTCharacter)user) == ((PTCharacter)Player))
-                HealthBar.ChangeLevel(((PTCharacter)user)->Health() * 1000 / ((PTCharacter)user)->MaxHealth());
-
         // give the user more mana
             ((PTCharacter)user)->SetMana(user->Mana() + Mana());
 
             if (((PTCharacter)user)->Mana() > ((PTCharacter)user)->MaxMana())
                 ((PTCharacter)user)->SetMana(((PTCharacter)user)->MaxMana());
-
-            if (((PTCharacter)user) == ((PTCharacter)Player))
-                StaminaBar.ChangeLevel(((PTCharacter)user)->Mana() * 1000 / ((PTCharacter)user)->MaxMana());
         }
         SetState(1);
         return true;

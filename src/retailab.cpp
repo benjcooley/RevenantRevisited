@@ -15,6 +15,7 @@
 #include "character.h"
 #include "command.h"
 #include "dialog.h"
+#include "jsonout.h"
 #include "logging.h"
 #include "mappane.h"
 #include "parse.h"

@@ -7,6 +7,7 @@
 #pragma once
 
 #include "revenant.h"
+#include "bitmapdecode.h"
 #include "render3d_types.h"
 
 #include <string>
@@ -64,15 +65,15 @@ bool BuildImageryBitmapAtlas(SBitmapAtlas* atlas);
 void DestroyBitmapAtlas(SBitmapAtlas* atlas);
   // Releases the atlas image and clears all packed metadata.
 
-uint64_t UIBitmapAtlasKey(PTBitmap bm, bool prefer_alias = false);
+uint64_t UIBitmapAtlasKey(PTBitmap bm, EBitmapDecode decode = EBitmapDecode::Pixels);
   // Stable key for one decoded bitmap form. Includes bitmap identity,
-  // structure, backing buffers, and alias/data decode mode.
+  // structure, backing buffers, and the decode.
 
 void BeginUIBitmapAtlasBuild();
   // Starts a fresh shared UI bitmap atlas collection pass. Call before
   // initializing the HUD panes that will register their loaded art.
 
-void RegisterUIBitmapAtlasBitmap(PTBitmap bm, bool prefer_alias = false);
+void RegisterUIBitmapAtlasBitmap(PTBitmap bm, EBitmapDecode decode = EBitmapDecode::Pixels);
 void RegisterUIBitmapAtlasArchive(TMulti* multi);
 int32_t RegisterUIBitmapAtlasInventoryImagery();
   // Registers every inventory icon/animated-icon frame exposed by the
@@ -85,4 +86,4 @@ bool BuildUIBitmapAtlas();
   // atlas pages. Small sprites are grouped before larger pane art.
 
 void ClearUIBitmapAtlas();
-bool LookupUIBitmapAtlasSlice(PTBitmap bm, bool prefer_alias, SBitmapAtlasSlice* out);
+bool LookupUIBitmapAtlasSlice(PTBitmap bm, EBitmapDecode decode, SBitmapAtlasSlice* out);

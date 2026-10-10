@@ -44,7 +44,7 @@ constexpr uint64_t kFnvPrime64 = 1099511628211ull;
 struct SUIBitmapAtlasCandidate
 {
     PTBitmap bm = nullptr;
-    bool prefer_alias = false;
+    EBitmapDecode decode = EBitmapDecode::Pixels;
     uint64_t key = 0;
 };
 
@@ -92,7 +92,7 @@ inline bool IsUIBitmapAtlasDecodable(PTBitmap bm)
     if (bm->flags & BM_COMPRESSED) return false;
     if (bm->width > kUIAtlasMaxDim || bm->height > kUIAtlasMaxDim) return false;
 
-    const uint32_t knownFormatFlags = BM_8BIT | BM_15BIT | BM_16BIT | 0x10000;
+    const uint32_t knownFormatFlags = BM_8BIT | BM_15BIT | BM_16BIT | BM_ARGB4444;
     if (!(bm->flags & knownFormatFlags)) return false;
 
     const uint64_t pixels = uint64_t(bm->width) * uint64_t(bm->height);
@@ -101,7 +101,7 @@ inline bool IsUIBitmapAtlasDecodable(PTBitmap bm)
 
     if (bm->flags & BM_8BIT)
         return bm->datasize >= pixels && bm->palette.ptr() != nullptr;
-    if (bm->flags & (BM_15BIT | BM_16BIT | 0x10000))
+    if (bm->flags & (BM_15BIT | BM_16BIT | BM_ARGB4444))
         return bm->datasize >= pixels * 2;
     return false;
 }
@@ -169,7 +169,7 @@ bool BuildStandaloneUIBitmapAtlasSlice(const SUIBitmapAtlasCandidate& c)
     if (!IsUIBitmapAtlasDecodable(bm)) return false;
 
     std::vector<uint8_t> rgba(size_t(bm->width) * size_t(bm->height) * 4, 0);
-    if (!DecodeBitmapToRGBA(bm, rgba.data(), bm->width * 4, 0, 0, c.prefer_alias))
+    if (!DecodeBitmapToRGBA(bm, rgba.data(), bm->width * 4, 0, 0, c.decode))
         return false;
 
     const TTextureHandle tex = Renderer->RegisterTextureAsset(
@@ -230,11 +230,11 @@ inline void ClearBitmapAtlasMetadata(SBitmapAtlas* atlas)
 
 }  // namespace
 
-uint64_t UIBitmapAtlasKey(PTBitmap bm, bool prefer_alias)
+uint64_t UIBitmapAtlasKey(PTBitmap bm, EBitmapDecode decode)
 {
     uint64_t h = kFnvOffset64;
     HashU64(h, uintptr_t(bm));
-    HashU64(h, prefer_alias ? 1u : 0u);
+    HashU64(h, uint64_t(decode));
     if (!bm) return h;
 
     HashU64(h, uint32_t(bm->width));
@@ -277,18 +277,18 @@ void BeginUIBitmapAtlasBuild()
     g_uiCollecting = true;
 }
 
-void RegisterUIBitmapAtlasBitmap(PTBitmap bm, bool prefer_alias)
+void RegisterUIBitmapAtlasBitmap(PTBitmap bm, EBitmapDecode decode)
 {
     if (!g_uiCollecting || !IsUIBitmapAtlasDecodable(bm))
         return;
 
-    const uint64_t key = UIBitmapAtlasKey(bm, prefer_alias);
+    const uint64_t key = UIBitmapAtlasKey(bm, decode);
     if (!g_uiCandidateKeys.insert(key).second)
         return;
 
     SUIBitmapAtlasCandidate c;
     c.bm = bm;
-    c.prefer_alias = prefer_alias;
+    c.decode = decode;
     c.key = key;
     g_uiCandidates.push_back(c);
 }
@@ -399,7 +399,7 @@ bool BuildUIBitmapAtlas()
 
         SUIBitmapAtlasPage& page = g_uiPages[pageIdx];
         const int32_t pitch = page.width * 4;
-        if (!DecodeBitmapToRGBA(bm, page.rgba.data(), pitch, px, py, c.prefer_alias))
+        if (!DecodeBitmapToRGBA(bm, page.rgba.data(), pitch, px, py, c.decode))
         {
             ++skipped;
             continue;
@@ -464,10 +464,10 @@ bool BuildUIBitmapAtlas()
     return g_uiReady;
 }
 
-bool LookupUIBitmapAtlasSlice(PTBitmap bm, bool prefer_alias, SBitmapAtlasSlice* out)
+bool LookupUIBitmapAtlasSlice(PTBitmap bm, EBitmapDecode decode, SBitmapAtlasSlice* out)
 {
     if (!out || !g_uiReady || !bm) return false;
-    auto it = g_uiSlices.find(UIBitmapAtlasKey(bm, prefer_alias));
+    auto it = g_uiSlices.find(UIBitmapAtlasKey(bm, decode));
     if (it == g_uiSlices.end()) return false;
     if (it->second.texture == kInvalidTexture) return false;
     *out = it->second;

@@ -341,9 +341,14 @@ These items aren't part of any single track but block others:
 - [ ] DEF screens' "tex" backgrounds (in-game menu, Save, Load, Options;
       flags 0x10000/0x10400, a texture format with its own alpha) show the game
       through their middles — track ui (tex-overlay path). Check the decoded
-      alpha against retail's D3D overlay draw before changing anything; the
-      "alpha" variants (popups, widgets) were fixed 2026-10-09 (key colour no
-      longer applied with an alpha track, retail 0x004b349d).
+      alpha against retail's D3D overlay draw before changing anything.
+      Fixed 2026-10-09: DEF sprites stored DM_ALPHA (the popup's background,
+      the alpha/tex widget packs) decode unkeyed, as retail's DM_USEDEFAULT
+      draw sends them through the alpha blit (0x004b349d), which never keys
+      (`DecodeFor`, defpane.cpp). Open: sprites stored without DM_TRANSPARENT
+      (`loadgamealpha` / `optionsalpha` Background, mode 0; buysell.dat's
+      art) would draw their key colour (black) opaque under DM_USEDEFAULT;
+      they still decode keyed — confirm against retail first.
 - [ ] Text baseline in the canonical glyph walk — track ui (`font.cpp`).
       The baseline is `cellY + ` the tallest printable-ASCII glyph's rise
       `- kGdiTopLeading (2)`, a constant calibrated on the HUD's Arial

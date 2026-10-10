@@ -54,6 +54,19 @@ constexpr uint32_t kListHList      = 0x00020000;
 constexpr uint32_t kListNoScroll   = 0x00040000;
 constexpr uint32_t kEditSpin       = 0x00040000;
 
+// REVSYNC: the DEF engine draws its sprites with DM_USEDEFAULT (0x80000000,
+// cls_0x5b93c4.cpp:237), which takes the bitmap's own draw mode (1998
+// TSurface::ParamDrawSetup). A DM_ALPHA sprite -- the "alpha" and "tex"
+// widget packs, popupalpha's Background -- goes through the alpha blit
+// (0x004b349d), which reads only its alpha track, never the key colour: its
+// dark glass and edges are black pixels (the key, 0) with alpha. Other
+// stored modes keep the keyed decode (a mode without DM_TRANSPARENT would
+// draw the key colour too; BURNDOWN cross-track).
+EBitmapDecode DecodeFor(const TBitmap* bm)
+{
+    return (bm && (bm->drawmode & DM_ALPHA)) ? EBitmapDecode::Unkeyed : EBitmapDecode::Pixels;
+}
+
 // Retail bitmap fonts ("Med"/"Large"/"small" from font.def) are mapped to the
 // Arial-metric Arimo TTF per the UI text-rendering convention
 // (project-ui-text-rendering; InGameMenuDef_SPEC §2 maps "Med" -> Arimo-14).
@@ -915,11 +928,13 @@ void TDefPane::DrawNineSlice(PTBitmap bm, const SDefInsets& frame,
     if (!bm || !surface) return;
     if (frame.set && (frame.l || frame.t || frame.r || frame.b))
         Renderer->DrawNineSliceToTarget(bm, frame.l, frame.t, frame.r, frame.b,
-                                        x, y, w, h, surface->Width(), surface->Height());
+                                        x, y, w, h, surface->Width(), surface->Height(),
+                                        DecodeFor(bm));
     else
         Renderer->DrawBitmapSubrectStretchedToTarget(bm, x, y, w, h, 0, 0,
                                                      bm->width, bm->height,
-                                                     surface->Width(), surface->Height());
+                                                     surface->Width(), surface->Height(),
+                                                     DecodeFor(bm));
 }
 
 void TDefPane::DrawText(const std::string& text, int32_t x, int32_t y,
@@ -1009,7 +1024,7 @@ void TDefPane::DrawWidget(const SDefWidget& wid)
                 PTBitmap face = wid.faceUp;
                 if (wid.pressed && wid.faceDown)       face = wid.faceDown;
                 else if (wid.hovered && wid.faceHover) face = wid.faceHover;
-                Renderer->DrawBitmapToTarget(face, wid.x, wid.y, tw, th);
+                Renderer->DrawBitmapToTarget(face, wid.x, wid.y, tw, th, DecodeFor(face));
                 break;
             }
             if (wid.flags & kBtnToggle)
@@ -1019,7 +1034,7 @@ void TDefPane::DrawWidget(const SDefWidget& wid)
                 // UPLABELRECT offset (e.g. 18,-1) — NOT a stretched 9-slice.
                 const std::string& box = wid.selected ? st.down : st.up;
                 if (PTBitmap bm = LookupBitmap(box.c_str()))
-                    Renderer->DrawBitmapToTarget(bm, wid.x, wid.y, tw, th);
+                    Renderer->DrawBitmapToTarget(bm, wid.x, wid.y, tw, th, DecodeFor(bm));
                 if (!wid.text.empty())
                 {
                     const int32_t* lr = st.uplabelrect;
@@ -1172,9 +1187,9 @@ void TDefPane::DrawListScrollbar(const SDefWidget& w)
     const SListBar bar = ListBarLayout(w, up ? up->height : 0);
 
     if (up)
-        Renderer->DrawBitmapToTarget(up, bar.x + kListBarArrowX, bar.upY, tw, th);
+        Renderer->DrawBitmapToTarget(up, bar.x + kListBarArrowX, bar.upY, tw, th, DecodeFor(up));
     if (down)
-        Renderer->DrawBitmapToTarget(down, bar.x + kListBarArrowX, bar.downY, tw, th);
+        Renderer->DrawBitmapToTarget(down, bar.x + kListBarArrowX, bar.downY, tw, th, DecodeFor(down));
     if (thumb && bar.thumbH > 0)
     {
         // The thumb art is a vertical 3-slice: its end rows stay, the middle
@@ -1182,7 +1197,8 @@ void TDefPane::DrawListScrollbar(const SDefWidget& w)
         const int32_t cap = thumb->height / 2;
         Renderer->DrawNineSliceToTarget(thumb, 0, cap, 0, thumb->height - cap - 1,
                                         bar.x + kListBarArrowX + (kListBarWidth - thumb->width) / 2,
-                                        bar.thumbY, thumb->width, bar.thumbH, tw, th);
+                                        bar.thumbY, thumb->width, bar.thumbH, tw, th,
+                                        DecodeFor(thumb));
     }
 }
 
@@ -1209,7 +1225,7 @@ void TDefPane::DrawField(const SDefWidget& wid)
 {
     if (wid.fieldBitmap && surface)
         Renderer->DrawBitmapToTarget(wid.fieldBitmap, wid.x, wid.y,
-                                     surface->Width(), surface->Height());
+                                     surface->Width(), surface->Height(), DecodeFor(wid.fieldBitmap));
 }
 
 void TDefPane::DrawScrollbar(const SDefWidget& w)
@@ -1237,28 +1253,28 @@ void TDefPane::DrawScrollbar(const SDefWidget& w)
 
     if (vertical)
     {
-        if (up)    Renderer->DrawBitmapToTarget(up,   hmid(up->width),   w.y + 1, tw, th);
-        if (down)  Renderer->DrawBitmapToTarget(down, hmid(down->width), w.y + w.h - down->height - 1, tw, th);
+        if (up)    Renderer->DrawBitmapToTarget(up,   hmid(up->width),   w.y + 1, tw, th, DecodeFor(up));
+        if (down)  Renderer->DrawBitmapToTarget(down, hmid(down->width), w.y + w.h - down->height - 1, tw, th, DecodeFor(down));
         if (thumb)
         {
             const int32_t top = w.y + 1 + (up ? up->height : 0) + 1;
             const int32_t bot = w.y + w.h - 1 - (down ? down->height : 0) - 1;
             const int32_t span = bot - top - thumb->height;
             const int32_t ty = top + (span > 0 ? int32_t(frac * span) : 0);
-            Renderer->DrawBitmapToTarget(thumb, hmid(thumb->width), ty, tw, th);
+            Renderer->DrawBitmapToTarget(thumb, hmid(thumb->width), ty, tw, th, DecodeFor(thumb));
         }
     }
     else
     {
-        if (up)    Renderer->DrawBitmapToTarget(up,   w.x + 1, vmid(up->height),   tw, th);
-        if (down)  Renderer->DrawBitmapToTarget(down, w.x + w.w - down->width - 1, vmid(down->height), tw, th);
+        if (up)    Renderer->DrawBitmapToTarget(up,   w.x + 1, vmid(up->height),   tw, th, DecodeFor(up));
+        if (down)  Renderer->DrawBitmapToTarget(down, w.x + w.w - down->width - 1, vmid(down->height), tw, th, DecodeFor(down));
         if (thumb)
         {
             const int32_t left  = w.x + 1 + (up ? up->width : 0) + 1;
             const int32_t right = w.x + w.w - 1 - (down ? down->width : 0) - 1;
             const int32_t span  = right - left - thumb->width;
             const int32_t tx    = left + (span > 0 ? int32_t(frac * span) : 0);
-            Renderer->DrawBitmapToTarget(thumb, tx, vmid(thumb->height), tw, th);
+            Renderer->DrawBitmapToTarget(thumb, tx, vmid(thumb->height), tw, th, DecodeFor(thumb));
         }
     }
 }
@@ -1281,7 +1297,8 @@ void TDefPane::Paint()
 void TDefPane::PaintBackground()
 {
     if (background)
-        Renderer->DrawBitmapToTarget(background, 0, 0, surface->Width(), surface->Height());
+        Renderer->DrawBitmapToTarget(background, 0, 0, surface->Width(), surface->Height(),
+                                     DecodeFor(background));
 }
 
 // REVSYNC: the button pane's draw, 0x00435de0 -- every widget in order.

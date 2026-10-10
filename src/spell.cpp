@@ -15,7 +15,6 @@
 #include "effect.h"
 #include "mappane.h"
 #include "parse.h"
-#include "statusbar.h"
 
 #include <set>
 #include <string>
@@ -73,6 +72,11 @@ bool SSpellData::Load(char *aname, TToken &t)
             if (!Parse(t, "NAME %30s\n", objname))
                 t.Error("Error parsing NAME tag");
         }
+        else if (t.Is("ICONNAME"))
+        {
+            if (!Parse(t, "ICONNAME %30s\n", iconname))
+                t.Error("Error parsing ICONNAME tag");
+        }
         else if (t.Is("DESCRIPTION"))
         {
             char buf[1024];
@@ -129,7 +133,7 @@ bool SSpellData::Load(char *aname, TToken &t)
         {
             // Retail added spell tags not in the pre-release source. Skip
             // them rather than aborting. Tags come in two flavors: single-
-            // line (ICONNAME, LIGHT) and ones followed by a BEGIN/END block
+            // line (LIGHT) and ones followed by a BEGIN/END block
             // (CONTROLDATA). Detect the block form by peeking for BEGIN.
             // One warning per tag name, not per spell.
             static std::set<std::string> reported;
@@ -242,30 +246,16 @@ bool TSpellList::Load()
     return true;
 }
 
-// return spell by talismans list
-PSSpellData TSpellList::GetSpellDataByTalismans(char* talismans)
+// REVSYNC: 0x0053ed70 -- the first spell with a variant cast by exactly these
+// talismans, in this order (case aside): "Advanced healing" is DEB, "Restore
+// Life" BED.
+PSSpellData TSpellList::GetSpellDataByTalismans(const char* talismans)
 {
-    PSSpellData return_spell = nullptr;
-    int32_t *tal = (int32_t *)malloc(TalismanClass.NumTypes() * sizeof(int32_t));
-    int32_t *cmp = (int32_t *)malloc(TalismanClass.NumTypes() * sizeof(int32_t));
-    
-    TSpellList::GetTalList(talismans, tal);
-
-    for(int32_t i = 0; i < spelldata.NumItems(); i++)
-    {
-        for(int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
-        {
-            TSpellList::GetTalList(spelldata[i]->variants[j].talismans, cmp);
-
-            if (TSpellList::CompareTalList(tal, cmp))
-                return_spell = spelldata[i];
-        }
-    }
-
-    free(tal);
-    free(cmp);
-    
-    return return_spell;
+    for (int32_t i = 0; i < spelldata.NumItems(); i++)
+        for (int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
+            if (stricmp(spelldata[i]->variants[j].talismans, talismans) == 0)
+                return spelldata[i];
+    return nullptr;
 }
 
 // return spell data based on name
@@ -321,30 +311,15 @@ bool TSpellList::CompareTalList(int32_t* tal1, int32_t* tal2)
     return true;
 }
 
-// return variant data based on talismans
-PSSpellVariant TSpellList::GetVariantDataByTalismans(char* talismans)
+// REVSYNC: 0x0053ef90 -- the first variant cast by exactly these talismans,
+// as GetSpellDataByTalismans matches them.
+PSSpellVariant TSpellList::GetVariantDataByTalismans(const char* talismans)
 {
-    PSSpellVariant return_variant = nullptr;
-    int32_t *tal = (int32_t *)malloc(TalismanClass.NumTypes() * sizeof(int32_t));
-    int32_t *cmp = (int32_t *)malloc(TalismanClass.NumTypes() * sizeof(int32_t));
-
-    TSpellList::GetTalList(talismans, tal);
-
-    for(int32_t i = 0; i < spelldata.NumItems(); i++)
-    {
-        for(int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
-        {
-            TSpellList::GetTalList(spelldata[i]->variants[j].talismans, cmp);
-
-            if (TSpellList::CompareTalList(tal, cmp))
-                return_variant = &spelldata[i]->variants[j];
-        }
-    }
-
-    free(tal);
-    free(cmp);
-
-    return return_variant;
+    for (int32_t i = 0; i < spelldata.NumItems(); i++)
+        for (int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
+            if (stricmp(spelldata[i]->variants[j].talismans, talismans) == 0)
+                return &spelldata[i]->variants[j];
+    return nullptr;
 }
 
 // return variant data based on name
@@ -519,8 +494,6 @@ void TSpell::ManaDrain()
     ((PTCharacter)invoker)->SetMana(((PTCharacter)invoker)->Mana() - variant->mana);
     if (((PTCharacter)invoker)->Mana() > ((PTCharacter)invoker)->MaxMana())
         ((PTCharacter)invoker)->SetMana(((PTCharacter)invoker)->MaxMana());
-    if (((PTCharacter)invoker) == ((PTCharacter)Player))
-        StaminaBar.ChangeLevel(((PTCharacter)invoker)->Mana() * 1000 / ((PTCharacter)invoker)->MaxMana());
 }
 
 // *********************

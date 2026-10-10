@@ -143,42 +143,6 @@ void ApplySample(TPlayer* player, const SSampleStats& sample)
     player->SetFatigue(int32_t(player->MaxFatigue() * sample.fatigueFill));
 }
 
-// Build the item type of that name (whatever its class) into `owner`'s
-// inventory at `slot` (a free slot when negative). Placed, not added: the
-// kit's gold piles and potions stay apart as laid out, where AddToInventory
-// would merge them.
-TObjectInstance* AddItem(TObjectInstance* owner, const char* name, int32_t slot,
-                         int32_t amount = 1)
-{
-    for (int32_t c = 0; c < MAXOBJECTCLASSES; ++c)
-    {
-        TObjectClass* cl = TObjectClass::GetClass(c);
-        const int32_t type = cl ? cl->FindObjType(name) : -1;
-        if (type < 0)
-            continue;
-
-        SObjectDef def = {};
-        def.objclass = static_cast<short>(cl->ClassId());
-        def.objtype  = static_cast<short>(type);
-        TObjectInstance* item = cl->NewObject(&def);
-        if (!item)
-            break;
-        if (amount != 1)
-            item->SetAmount(amount);
-        if (slot < 0)
-            slot = owner->FindFreeInventorySlot();
-        if (slot <= kInvSlotLast && !owner->GetInventorySlot(slot))
-        {
-            owner->PlaceInInventory(item, slot);
-            return item;
-        }
-        delete item;
-        break;
-    }
-    log_warn("[ui-demo] could not add '%s' at slot %d", name, slot);
-    return nullptr;
-}
-
 void AddSampleKit(TPlayer* player)
 {
     for (const SSampleItem& entry : kEquipment)
@@ -227,6 +191,49 @@ double Lerp(const double range[2], double t)
 
 } // namespace
 
+// Placed, not added: the kit's gold piles and potions stay apart as laid
+// out, where AddToInventory would merge them.
+TObjectInstance* AddItem(TObjectInstance* owner, const char* name, int32_t slot, int32_t amount)
+{
+    for (int32_t c = 0; c < MAXOBJECTCLASSES; ++c)
+    {
+        TObjectClass* cl = TObjectClass::GetClass(c);
+        const int32_t type = cl ? cl->FindObjType(name) : -1;
+        if (type < 0)
+            continue;
+
+        SObjectDef def = {};
+        def.objclass = static_cast<short>(cl->ClassId());
+        def.objtype  = static_cast<short>(type);
+        TObjectInstance* item = cl->NewObject(&def);
+        if (!item)
+            break;
+        if (amount != 1)
+            item->SetAmount(amount);
+        if (slot < 0)
+            slot = owner->FindFreeInventorySlot();
+        if (slot <= kInvSlotLast && !owner->GetInventorySlot(slot))
+        {
+            owner->PlaceInInventory(item, slot);
+            return item;
+        }
+        delete item;
+        break;
+    }
+    log_warn("[ui-demo] could not add '%s' at slot %d", name, slot);
+    return nullptr;
+}
+
+void RemoveItems(TObjectInstance* owner, int32_t first, int32_t last)
+{
+    for (int32_t slot = first; slot <= last; ++slot)
+        if (TObjectInstance* item = owner->GetInventorySlot(slot))
+        {
+            item->RemoveFromInventory();
+            delete item;
+        }
+}
+
 bool Install()
 {
     if (g_player)
@@ -272,6 +279,11 @@ void Pulse()
     g_opponent->SetHealth(int32_t(g_opponent->MaxHealth() * Lerp(kHealthRange, tri)));
     g_opponent->SetMana(int32_t(g_opponent->MaxMana() * Lerp(kManaRange, tri)));
     g_opponent->SetFatigue(int32_t(g_opponent->MaxFatigue() * Lerp(kFatigueRange, tri)));
+}
+
+TPlayer* Opponent()
+{
+    return g_opponent;
 }
 
 void Remove()

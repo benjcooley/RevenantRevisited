@@ -35,7 +35,7 @@ void SetMouseCornerBitmap(PTBitmap corner, bool toppriority = false);
 void SetMouseCornerBitmap(int32_t type, bool toppriority = false);
 void CursorOverObject(TObjectInstance* inst, bool toppriority = false);
 
-constexpr int32_t kMaxDragBitmapLayers = 4;
+constexpr int32_t kMaxDragBitmapLayers = 64;  // a stacked inventory icon: a pile of 64 coins
 struct SDragBitmapLayer
 {
     PTBitmap bitmap = nullptr;

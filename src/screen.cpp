@@ -526,16 +526,6 @@ void TScreenFade::FadeOut()
     log_debug("[screenfade] fade out from %.2f/%d", level - 1.0f, steps);
 }
 
-namespace {
-
-float StepToward(float from, float to, double seconds)
-{
-    const float delta = float(seconds * TTime::LegacyFramerate);
-    return from < to ? (std::min)(from + delta, to) : (std::max)(from - delta, to);
-}
-
-}  // namespace
-
 // Retail's draw clears the busy flags once the level reaches its target
 // (0x00491cb0's tail); here the advance does. The first advance counts as
 // one tick, as retail's first step.
@@ -545,7 +535,7 @@ void TScreenFade::AdvanceTo(double time)
     clock = (std::max)(time, clock);
     if (!IsBusy())
         return;
-    level = StepToward(level, target, elapsed);
+    level = StepTowardPerTick(level, target, elapsed);
     if (level == target)
     {
         flags &= ~(kFadingIn | kFadingOut);
@@ -571,7 +561,7 @@ float TScreenFade::Opacity(double now) const
 {
     float shown = level;
     if (IsBusy() && clock >= 0.0)
-        shown = StepToward(level, target, (std::max)(now - clock, 0.0));
+        shown = StepTowardPerTick(level, target, (std::max)(now - clock, 0.0));
     if (flags & kFadingIn)
         shown -= 1.0f;
     if (steps < 2)

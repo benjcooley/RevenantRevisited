@@ -80,7 +80,7 @@ bool DecodeBitmapHueChangedToRGBA(const TBitmap* bm, int32_t hue,
 {
     if (!bm || !dst || bm->width <= 0 || bm->height <= 0 || hue < 0)
         return false;
-    if (!(bm->flags & (BM_15BIT | BM_16BIT)) || (bm->flags & (BM_COMPRESSED | 0x10000)))
+    if (!(bm->flags & (BM_15BIT | BM_16BIT)) || (bm->flags & (BM_COMPRESSED | BM_ARGB4444)))
         return false;
 
     const bool rgb565 = (bm->flags & BM_16BIT) != 0;
@@ -108,24 +108,24 @@ bool DecodeBitmapHueChangedToRGBA(const TBitmap* bm, int32_t hue,
 }
 
 bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
-                        int32_t ox, int32_t oy, bool prefer_alias)
+                        int32_t ox, int32_t oy, EBitmapDecode decode)
 {
     if (!bm || bm->width <= 0 || bm->height <= 0) return false;
     if (bm->flags & BM_COMPRESSED) return false;  // TODO decompressor
     const int32_t w = bm->width, h = bm->height;
 
-    // Alias path: only when the caller explicitly asked for it (a shadow /
-    // glow draw). BM_ALIAS alone is NOT sufficient -- the cursor sprite
-    // carries both a real data array AND an alias buffer, and must decode
-    // from the data array. Retail keyed this off the DM_ALIAS draw mode,
-    // not the BM_ALIAS bitmap flag; prefer_alias is our equivalent.
+    // Alias path: only when the draw asked for it (a shadow / glow draw).
+    // BM_ALIAS alone is NOT sufficient -- the cursor sprite carries both a
+    // real data array AND an alias buffer, and must decode from the data
+    // array. Retail keyed this off the DM_ALIAS draw mode, not the BM_ALIAS
+    // bitmap flag; EBitmapDecode::Alias is our equivalent.
     //
     // The alias buffer stores anti-aliased pixels as an RLE coverage
     // stream: per scanline, alternating (skip-count, run-count,
     // [color16, alpha5]*) groups; AL_EOL ends a line, AL_EOD ends the
     // stream; alpha5 is 0..31 coverage (31 = opaque). C port of the
     // legacy MMX PutAlias* blit (graphics.cpp, now #if 0).
-    if (prefer_alias && (bm->flags & BM_ALIAS) && bm->alias.ptr())
+    if (decode == EBitmapDecode::Alias && (bm->flags & BM_ALIAS) && bm->alias.ptr())
     {
         const bool rgb565 = (bm->flags & BM_16BIT) != 0;
         const uint8_t* a   = (const uint8_t*)bm->alias.ptr();
@@ -176,6 +176,7 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
     {
         SPalette* pal = (SPalette*)bm->palette.ptr();
         if (!pal) return false;
+        const bool keyed = decode != EBitmapDecode::Unkeyed && decode != EBitmapDecode::MagentaKeyed;
         const uint8_t key = (uint8_t)bm->keycolor;
         const uint8_t* src = bm->data8;
         for (int32_t y = 0; y < h; y++)
@@ -184,40 +185,26 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
             for (int32_t x = 0; x < w; x++)
             {
                 const uint8_t idx = src[y * w + x];
-                if (idx == key) { row[0]=row[1]=row[2]=row[3]=0; }
+                if (keyed && idx == key) { row[0]=row[1]=row[2]=row[3]=0; }
                 else
-                {
-                    // rgbcolors is Windows COLORREF: 0x00BBGGRR.
-                    const uint32_t c = pal->rgbcolors[idx];
-                    row[0] = (uint8_t)( c        & 0xFF);
-                    row[1] = (uint8_t)((c >> 8)  & 0xFF);
-                    row[2] = (uint8_t)((c >> 16) & 0xFF);
-                    row[3] = 255;
-                }
+                    // The 15-bit palette, as retail draws an 8-bit bitmap (it
+                    // converts that palette to the display's format). The data
+                    // also carries 24-bit colours, not always in the same byte
+                    // order (the "Arrow" icon's are RGB, most are COLORREF).
+                    Decode555(pal->colors[idx], row);
                 row += 4;
             }
         }
         return true;
     }
-    // BM_UNKNOWN_0x10000 — a 16-bit-per-pixel ARGB4444 variant flag that
-    // appears on automap.dat (Marker, Amap, PlusSel, MinusSel) and statusbar.dat.
-    // No entry in revdefs.h's BM_* enum. On-disk pixel data is 2 bytes/pixel:
-    // header.datasize = w*h*2 exactly (verified on every entry in automap.dat),
-    // no palette, no separate alpha buffer. The pixel format is ARGB4444 stored
-    // little-endian — bits 15..12 = alpha, 11..8 = red, 7..4 = green, 3..0 = blue
-    // (each 4-bit channel bit-replicated 8 = (c4<<4)|c4 for clean white).
-    //
-    // Determined by inspecting Amap's pixel histogram + spatial layout: the dark
-    // interior (body-window area) reads as a perfect ARGB4444 alpha gradient
-    // (0xb000 → 0x8000 → ... → 0x0000 = decreasing alpha, RGB=0 transparent
-    // black), and the chrome edge reads as the expected warm-brown stone +
-    // gold trim ornate carvings (e.g. 0xfb73 = A=15 R=11 G=7 B=3 = opaque
-    // warm orange-brown; 0xfda5 = A=15 R=13 G=10 B=5 = opaque cream/gold).
-    // Decoding the same data as 555/565 gives all-red garbage (the 0x?000
-    // alpha-gradient pixels parse as solid red, the chrome reads as pink).
-    //
-    // No magenta chroma-key is used here (alpha is encoded directly per-pixel).
-    if (bm->flags & 0x10000)
+    // BM_ARGB4444: 2 bytes/pixel, bits 15..12 alpha, 11..8 red, 7..4 green,
+    // 3..0 blue, no palette and no separate alpha buffer (statusbar.dat,
+    // automap.dat, the texture-overlay HUD's art). Decoded the way retail's
+    // texture-overlay raster turns a 4444 texel into a pixel (measured in the
+    // emulator, docs/ui/HUD_REBUILD.md P1b): colour channels shift up
+    // (red 15 -> 0xF0, which a 565 target reads back as 30 of 31, as retail
+    // shows it), alpha bit-replicates so 15 stays fully opaque.
+    if (bm->flags & BM_ARGB4444)
     {
         const uint16_t* src = bm->data16;
         for (int32_t y = 0; y < h; y++)
@@ -227,13 +214,9 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
             {
                 const uint16_t px = src[y * w + x];
                 const uint8_t a4 = (uint8_t)((px >> 12) & 0x0F);
-                const uint8_t r4 = (uint8_t)((px >>  8) & 0x0F);
-                const uint8_t g4 = (uint8_t)((px >>  4) & 0x0F);
-                const uint8_t b4 = (uint8_t)( px        & 0x0F);
-                // Bit-replicate 4-bit channels to 8-bit (0xF -> 0xFF, not 0xF0).
-                row[0] = (uint8_t)((r4 << 4) | r4);
-                row[1] = (uint8_t)((g4 << 4) | g4);
-                row[2] = (uint8_t)((b4 << 4) | b4);
+                row[0] = (uint8_t)(((px >> 8) & 0x0F) << 4);
+                row[1] = (uint8_t)(((px >> 4) & 0x0F) << 4);
+                row[2] = (uint8_t)((px & 0x0F) << 4);
                 row[3] = (uint8_t)((a4 << 4) | a4);
                 row += 4;
             }
@@ -243,6 +226,9 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
     if (bm->flags & (BM_15BIT | BM_16BIT))
     {
         const bool rgb565 = (bm->flags & BM_16BIT) != 0;
+        const bool overlay4444 = decode == EBitmapDecode::Overlay4444;
+        const bool keyBitmap = decode == EBitmapDecode::Pixels || decode == EBitmapDecode::Alias;
+        const bool keyMagenta = decode != EBitmapDecode::Unkeyed;
         const uint16_t key = (uint16_t)bm->keycolor;
         // Magenta (R=max,G=0,B=max) is the implicit transparency key in many
         // Revenant retail sprites. Match the packed value to the pixel format:
@@ -257,12 +243,6 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
         // 0..31; matches the 15-bit colour depth). Expand 5->8 bit so the brass
         // ring reads opaque and the glass disc its true coverage. Without this
         // the ring rendered at ~12% alpha (effectively invisible).
-        // REVSYNC: retail's alpha blit (0x004b349d: dst = dst*(31-a) + src*a
-        // through the colour tables) reads only the alpha byte, never the key
-        // colour, so with an alpha track the alpha alone decides coverage.
-        // These bitmaps' key is 0 (black), and their dark glass and shadows are
-        // black pixels with alpha: keying them out made the popup background a
-        // hole (35,917 of its pixels) and dropped every UI frame's dark edge.
         const uint8_t* alpha5 = (bm->flags & BM_ALPHA)
                                     ? (const uint8_t*)bm->alpha.ptr() : nullptr;
         for (int32_t y = 0; y < h; y++)
@@ -277,10 +257,20 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
                     const uint8_t a5 = alpha5[y * w + x] & 0x1f;
                     a = (uint8_t)((a5 << 3) | (a5 >> 2));   // 5-bit -> 8-bit
                 }
-                const bool keyed = alpha5 ? false : (px == key || px == magentaKey);
-                if (a == 0 || keyed)
+                if (a == 0 || (keyBitmap && px == key) || (keyMagenta && px == magentaKey))
                 {
                     row[0]=row[1]=row[2]=row[3]=0;
+                }
+                else if (overlay4444)
+                {
+                    // REVSYNC: retail's 16-bit -> ARGB4444 blit truncates
+                    // (measured with the emulator's Put oracle).
+                    const uint16_t px565 = rgb565 ? px
+                                                  : uint16_t((px & 0x7c00) << 1 | (px & 0x03e0) << 1 | (px & 0x1f));
+                    row[0] = uint8_t((px565 >> 12) << 4);
+                    row[1] = uint8_t(((px565 >> 7) & 0xf) << 4);
+                    row[2] = uint8_t(((px565 >> 1) & 0xf) << 4);
+                    row[3] = a;
                 }
                 else
                 {

@@ -49,7 +49,6 @@ static inline char *strlwr(char *s)
 #include "scroll.h"
 #include "exit.h"
 #include "textbar.h"
-#include "statusbar.h"
 #include "spell.h"
 #include "file.h"
 #include "3dimage.h"

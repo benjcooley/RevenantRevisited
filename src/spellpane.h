@@ -12,6 +12,12 @@
 #include "button.h"
 #include "spell.h"
 
+#include <memory>
+#include <string>
+
+class TMulti;
+struct SFontAtlas;
+
 extern char *Talismans[];
 extern char *Old[];
 
@@ -30,8 +36,8 @@ class TTalismanButton : public TButton
         TButton(bname, bx, by, bw, bh, keypr, bfunc, dbm, ubm, rad, tog, notsquare, -1, 0)
             { quickspellid = qspellid; xoffset = xoff; Clear(); }
 
-    virtual void Draw();
-        // Draw the button to the screen
+    void Compose(int32_t target_w, int32_t target_h) override;
+        // The button, then the talismans of its spell
 
     void AddTalisman(char t);
         // Add a talisman to the button
@@ -101,30 +107,72 @@ class TSpellPane : public TButtonPane
     bool onclickedtal;                  // whether mouse arrow is still on the clicked talisman
 };
 
+// *********************
+// * TQuickSpellButton *
+// *********************
+
+// REVSYNC: retail's quick-spell ring (vtable 0x005b9c54; draw 0x00542900).
+// The spell bound to the ring shows as its circle from SpellIcons.dat inside
+// the ring, with its name above and below; the ring is grey while the
+// player can't cast it, and the ring and circle sink a pixel while pressed.
+class TQuickSpellButton final : public TButton
+{
+  public:
+    TQuickSpellButton(const char *bname, int32_t bx, int32_t by, int32_t bw, int32_t bh, void (*bfunc)(),
+                      TBitmap *ringdown, TBitmap *ringup, TBitmap *ringgrey,
+                      const SFontAtlas *labelfont, int32_t labelline);
+
+    // What the ring shows: the spell's circle (null: none), the two parts of
+    // its label, and whether the player can cast it (else the grey ring).
+    // Marks the ring dirty when any of it changes.
+    void SetSpell(TBitmap *circle, std::string top, std::string bottom, bool castable);
+    void Compose(int32_t target_w, int32_t target_h) override;
+
+  private:
+    TBitmap *greybitmap = nullptr;
+    const SFontAtlas *font = nullptr;
+    int32_t lineheight = 0;
+    TBitmap *icon = nullptr;
+    std::string toplabel;
+    std::string bottomlabel;
+    bool castable = false;
+};
+
 // *******************
 // * TQuickSpellPane *
 // *******************
 
-#define NUMBUTTONS      4
-
-// A bunch of buttons above the inventory giving the player quicker access to
-// their spells.
-
+// REVSYNC: TQuickSpellPane @ 0x0065c6f8 (vtable 0x005a5a30; docs/ui/
+// HUD_REBUILD.md §6a). The four quick-spell rings at the left of the bottom
+// bar: rings 1..4 show the player's quick spells (TPlayer::GetQuickSpell),
+// and a click casts one. It shares the bottom bar's rect and draws over it
+// (TBottomBarPane, its parent).
+//
+// Not yet ported: dropping a spell dragged from the spellbook onto a ring
+// (MouseClick 0x00544890 sets that quick spell). It arrives with the
+// spellbook pane, which owns the drag (HUD_REBUILD P4).
 _CLASSDEF(TQuickSpellPane)
-class TQuickSpellPane : public TButtonPane
+class TQuickSpellPane final : public TButtonPane
 {
   public:
-    TQuickSpellPane() : TButtonPane(QUICKSPELLX, QUICKSPELLY, QUICKSPELLWIDTH, QUICKSPELLHEIGHT) {}
-    ~TQuickSpellPane() {}
+    static constexpr int32_t kNumRings = 4;         // quick spells QSPELL_1..QSPELL_4
 
-    virtual bool Initialize();
-    virtual void DrawBackground();
-    virtual void MouseClick(int32_t button, int32_t x, int32_t y);
+    TQuickSpellPane();
+    ~TQuickSpellPane() override;
+    TQuickSpellPane(const TQuickSpellPane&) = delete;
+    TQuickSpellPane& operator=(const TQuickSpellPane&) = delete;
 
-    void Invoke(int32_t button);
-        // Invoke the spell on the given button
-    void Clear(int32_t button);
-    void Backspace(int32_t button);
-    void AddTalisman(int32_t button, char tal);
-    void Set(int32_t button);
+    bool Initialize() override;     // 0x00544160
+    void Close() override;
+    void Pulse() override;          // each ring's spell and state, as 0x005444c0 sets them
+    void MouseClick(int32_t button, int32_t x, int32_t y) override;    // 0x00544890: a spell dropped on a ring
+
+    void Invoke(int32_t ring);
+        // Cast the spell on ring 1..4 (the rings' functions, 0x005440a0 ...)
+
+  private:
+    [[nodiscard]] TQuickSpellButton *Ring(int32_t ring);
+    [[nodiscard]] int32_t RingAt(int32_t x, int32_t y);    // 1..4, or 0 off the rings
+
+    std::unique_ptr<TMulti> icons;                  // SpellIcons.dat (retail DAT_0065bc3c)
 };

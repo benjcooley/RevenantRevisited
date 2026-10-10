@@ -7,15 +7,23 @@
 #include "revenant.h"
 #include "bitmap.h"
 #include "character.h"
+#include "dialog.h"
 #include "display.h"
+#include "fonttable.h"
+#include "logging.h"
 #include "mappane.h"
 #include "multi.h"
 #include "player.h"
 #include "playscreen.h"
+#include "renderer.h"
 #include "spell.h"
 #include "font.h"
 #include "spellpane.h"
 #include "textbar.h"
+#include "uidragstate.h"
+
+#include <iterator>
+#include <string>
 
 extern TObjectClass TalismanClass;
 
@@ -26,33 +34,22 @@ char *Old[] =
 // * TTalismanButton *
 // *******************
 
-// do this!
-void TTalismanButton::Draw()
+void TTalismanButton::Compose(int32_t target_w, int32_t target_h)
 {
-    TButton::Draw();
-
-    if (!Player)
+    TButton::Compose(target_w, target_h);
+    if (hidden || !Player || !Renderer)
         return;
 
     char spell[SPELLSIZE + 1];
     strncpyz(spell, Player->GetQuickSpell(quickspellid), MAXTALISMANLEN);
-    int32_t len = strlen(spell);
-
-    if (hidden)
-        return;
-
-    int32_t start = x + xoffset + ((SPELLSIZE - len) * 11) - 4;
+    const int32_t len = int32_t(strlen(spell));
+    const int32_t start = x + xoffset + ((SPELLSIZE - len) * 11) - 4;
 
     for (int32_t i = 0; i < len; i++)
-    {
-        for(int32_t t = 0; t < TalismanClass.NumTypes(); t++)
-        {
-            char code = TalismanClass.GetStat(t, "Code");
-            if (toupper(spell[i]) == toupper(code))
-                Display.Put(start + (i*23), y + 3 + (down ? 1 : 0),
-                GameData->Bitmap(*(Old + t)), DM_BACKGROUND | DM_TRANSPARENT); // t used to be x - Pepper
-        }
-    }
+        for (int32_t t = 0; t < TalismanClass.NumTypes(); t++)
+            if (toupper(spell[i]) == toupper(TalismanClass.GetStat(t, "Code")))
+                Renderer->DrawBitmapToTarget(GameData->Bitmap(Old[t]), start + i * 23, y + 3 + (down ? 1 : 0),
+                                             target_w, target_h);
 }
 
 void TTalismanButton::AddTalisman(char t)
@@ -439,127 +436,206 @@ char *TSpellPane::GetSpell()
     return ((PTTalismanButton)Button(0))->GetSpell();
 }
 
-// ******************
-// * QuickSpellPane *
-// ******************
+// *********************
+// * TQuickSpellButton *
+// *********************
 
-void BtnSpellOne()
+namespace {
+
+// REVSYNC: 0x00542900 -- the label is the spell's name as the game shows names
+// (0x0046e7f0), split at its first space; a part over 9 characters shows its
+// first 7 and "..". In white "Small", centred, no shadow: the first part in
+// (x - 6, y - 10, 52 x two lines), the rest in (x - 6, y + 36, 52 x a line
+// + 4).
+constexpr int32_t kLabelLeft = -6;
+constexpr int32_t kLabelWidth = 0x34;
+constexpr int32_t kTopLabelTop = -10;
+constexpr int32_t kBottomLabelTop = 0x24;
+constexpr size_t kLabelChars = 9;
+constexpr size_t kLabelCut = 7;
+
+std::string LabelPart(std::string part)
 {
-    QuickSpells.Invoke(1);
+    if (part.size() > kLabelChars)
+        part = part.substr(0, kLabelCut) + "..";
+    return part;
 }
 
-void BtnSpellTwo()
+}  // namespace
+
+TQuickSpellButton::TQuickSpellButton(const char *bname, int32_t bx, int32_t by, int32_t bw, int32_t bh,
+                                     void (*bfunc)(), TBitmap *ringdown, TBitmap *ringup, TBitmap *ringgrey,
+                                     const SFontAtlas *labelfont, int32_t labelline)
+    : TButton(bname, bx, by, bw, bh, 0, bfunc, ringdown, ringup)
+    , greybitmap(ringgrey)
+    , font(labelfont)
+    , lineheight(labelline)
 {
-    QuickSpells.Invoke(2);
 }
 
-void BtnSpellThree()
+void TQuickSpellButton::SetSpell(TBitmap *circle, std::string top, std::string bottom, bool cancast)
 {
-    QuickSpells.Invoke(3);
+    if (circle == icon && top == toplabel && bottom == bottomlabel && cancast == castable)
+        return;
+    icon = circle;
+    toplabel = std::move(top);
+    bottomlabel = std::move(bottom);
+    castable = cancast;
+    SetDirty();
 }
 
-void BtnSpellFour()
+// REVSYNC: 0x00542900 -- the circle, keyed on magenta alone (retail sets its
+// key to the display's, 0x00542ab3), then the ring with alpha: grey while the
+// spell can't be cast, else down or up; pressed, both sink a pixel. Then the
+// label. (Retail first restores the bar under the ring; the port's ring layer
+// lies over the bar's.)
+void TQuickSpellButton::Compose(int32_t target_w, int32_t target_h)
 {
-    QuickSpells.Invoke(4);
+    dirty = false;
+    if (hidden || !Renderer)
+        return;
+    const int32_t sink = down ? 1 : 0;
+    if (icon)
+        Renderer->DrawBitmapToTarget(icon, x + sink, y + sink, target_w, target_h, EBitmapDecode::MagentaKeyed);
+    if (TBitmap *ring = !castable ? greybitmap : down ? downbitmap : upbitmap)
+        Renderer->DrawBitmapToTarget(ring, x + sink, y + sink, target_w, target_h, EBitmapDecode::Unkeyed);
+    if (!font)
+        return;
+    if (!toplabel.empty())
+        DrawTextToTarget(font, toplabel.c_str(), x + kLabelLeft, y + kTopLabelTop, kLabelWidth, 2 * lineheight,
+                         ETextAlign::Center, 1.0f, 1.0f, 1.0f, target_w, target_h);
+    if (!bottomlabel.empty())
+        DrawTextToTarget(font, bottomlabel.c_str(), x + kLabelLeft, y + kBottomLabelTop, kLabelWidth, lineheight + 4,
+                         ETextAlign::Center, 1.0f, 1.0f, 1.0f, target_w, target_h);
 }
 
+// *******************
+// * TQuickSpellPane *
+// *******************
+
+namespace {
+
+// REVSYNC: TQuickSpellPane::Initialize (0x00544160) -- buttons "1".."4" at
+// (10 + 50k, 10) (the tables at 0x005e4fe8 / 0x005e4ff8), 32 x 32, from
+// SpellIcons.dat's RingD / RingU / RingG; each casts its quick spell.
+constexpr int32_t kRingLeft = 10;
+constexpr int32_t kRingStep = 50;
+constexpr int32_t kRingTop = 10;
+constexpr int32_t kRingHit = 0x20;
+constexpr const char *kRingNames[] = { "1", "2", "3", "4" };
+void (*const kRingFunctions[])() = {
+    [] { QuickSpells.Invoke(1); }, [] { QuickSpells.Invoke(2); },
+    [] { QuickSpells.Invoke(3); }, [] { QuickSpells.Invoke(4); },
+};
+static_assert(std::size(kRingNames) == TQuickSpellPane::kNumRings
+              && std::size(kRingFunctions) == TQuickSpellPane::kNumRings);
+
+// REVSYNC: the circle of a spell that names none in SpellIcons.dat (0x005e50bc).
+constexpr const char *kDefaultCircle = "Aura";
+
+}  // namespace
+
+TQuickSpellPane::TQuickSpellPane() : TButtonPane(0, 0, 0, 0) {}
+TQuickSpellPane::~TQuickSpellPane() = default;
+
+// The pane takes its rect from the bottom bar (TBottomBarPane::LayOut).
 bool TQuickSpellPane::Initialize()
 {
-    TButtonPane::Initialize();
-
-    NewButton(new TTalismanButton("1", 0, 0, 120, 28, 0, BtnSpellOne, GameData->Bitmap("spell1down"), GameData->Bitmap("spell1up"), false, false, true, QSPELL_1, -4));
-    NewButton(new TTalismanButton("2", 99, 7, 120, 28, 0, BtnSpellTwo, GameData->Bitmap("spell2down"), GameData->Bitmap("spell2up"), false, false, true, QSPELL_2, 4));
-    NewButton(new TTalismanButton("3", 218, 7, 120, 28, 0, BtnSpellThree, GameData->Bitmap("spell3down"), GameData->Bitmap("spell3up"), false, false, true, QSPELL_3, -4));
-    NewButton(new TTalismanButton("4", 317, 0, 120, 28, 0, BtnSpellFour, GameData->Bitmap("spell4down"), GameData->Bitmap("spell4up"), false, false, true, QSPELL_4, 4));
-
+    if (IsOpen())
+        return true;
+    icons.reset(TMulti::LoadMulti("SpellIcons.dat"));
+    const SFontAtlas *font = FontTable ? FontTable->Atlas("Small") : nullptr;
+    const TGenericFont *small = FontTable ? FontTable->FindFont("Small") : nullptr;
+    if (!icons || !font || !small)
+    {
+        log_error("[quickspell] SpellIcons.dat or the \"Small\" font is missing");
+        icons.reset();
+        return false;
+    }
+    if (!TButtonPane::Initialize())
+        return false;
+    TBitmap *ringdown = icons->Bitmap("RingD");
+    TBitmap *ringup = icons->Bitmap("RingU");
+    TBitmap *ringgrey = icons->Bitmap("RingG");
+    for (int32_t k = 0; k < kNumRings; ++k)
+        NewButton(new TQuickSpellButton(kRingNames[k], kRingLeft + k * kRingStep, kRingTop, kRingHit, kRingHit,
+                                        kRingFunctions[k], ringdown, ringup, ringgrey, font, small->height));
     return true;
 }
 
-void TQuickSpellPane::DrawBackground()
+void TQuickSpellPane::Close()
 {
-    TButtonPane::DrawBackground();
+    if (!IsOpen())
+        return;
+    TButtonPane::Close();
+    icons.reset();
 }
 
-void TQuickSpellPane::Invoke(int32_t button)
+// REVSYNC: 0x005444c0's loop. A ring shows the player's quick spell: the
+// spell's circle (its ICONNAME, else "Aura") and its variant's name. It can
+// be cast when the spell exists and the player holds its talismans
+// (0x0051b7c0); otherwise, or with no quick spell there, it is grey.
+void TQuickSpellPane::Pulse()
 {
-    // James - Was <, but button is one based and NUMBUTTONS is 4
-    if (button > 0 && button <= NUMBUTTONS)
-        ((PTTalismanButton)Button(button - 1))->Invoke();
-}
-
-void TQuickSpellPane::AddTalisman(int32_t button, char tal)
-{
-    if (button > 0 && button <= NUMBUTTONS)
-        ((PTTalismanButton)Button(button - 1))->AddTalisman(tal);
-}
-
-void TQuickSpellPane::Backspace(int32_t button)
-{
-    if (button > 0 && button <= NUMBUTTONS)
-        ((PTTalismanButton)Button(button - 1))->Backspace();
-}
-
-void TQuickSpellPane::Clear(int32_t button)
-{
-    if (button > 0 && button <= NUMBUTTONS)
-        ((PTTalismanButton)Button(button - 1))->Clear();
-}
-
-void TQuickSpellPane::Set(int32_t button)
-{
-    if (button > 0 && button <= NUMBUTTONS)
+    for (int32_t ring = 1; ring <= kNumRings; ++ring)
     {
-        ((PTTalismanButton)Button(button - 1))->Clear();
-
-        char buf[MAXTALISMANLEN];
-
-        strncpyz(buf, SpellPane.GetSpell(), MAXTALISMANLEN);
-
-        for(int32_t i = 0; buf[i]; ++i)
-            ((PTTalismanButton)Button(button - 1))->AddTalisman(buf[i]);
-
-        SetDirty(true);
+        TQuickSpellButton *button = Ring(ring);
+        char *talismans = Player ? Player->GetQuickSpell(ring) : nullptr;
+        SSpellData *spell = talismans && *talismans ? SpellList.GetSpellDataByTalismans(talismans) : nullptr;
+        SSpellVariant *variant = spell ? SpellList.GetVariantDataByTalismans(talismans) : nullptr;
+        if (!variant)
+        {
+            button->SetSpell(nullptr, {}, {}, false);
+            continue;
+        }
+        TBitmap *circle = spell->iconname[0] ? icons->FindBitmap(spell->iconname) : nullptr;
+        if (!circle)
+            circle = icons->Bitmap(kDefaultCircle);
+        const std::string name = DialogList.DisplayName(variant->name);
+        const size_t space = name.find(' ');
+        button->SetSpell(circle, LabelPart(name.substr(0, space)),
+                         space == std::string::npos ? std::string() : LabelPart(name.substr(space + 1)),
+                         Player->HasTalismans(talismans));
     }
 }
 
+// REVSYNC: 0x00544890. A spell dragged from the spell book and let go over a
+// ring goes on that ring, if spell.def has it (TPlayer::SetQuickSpell
+// 0x0051b580); a spell let go anywhere on the pane ends its drag there. Any
+// other click is the rings' own.
 void TQuickSpellPane::MouseClick(int32_t button, int32_t x, int32_t y)
 {
+    if (button == MB_LEFTUP && UIDragState::IsDragging() && UIDragState::Get().source == EDragSource::SpellPane
+        && InPane(x, y))
+    {
+        const int32_t ring = RingAt(x, y);
+        const int32_t row = UIDragState::Get().source_idx;     // the spell book's row: a known spell
+        std::string talismans = Player && row >= 0 && row < Player->NumKnownSpells() ? Player->KnownSpell(row) : "";
+        const bool dropped = ring > 0 && !talismans.empty() && SpellList.GetSpellDataByTalismans(talismans.data());
+        if (dropped)
+            Player->SetQuickSpell(ring, talismans.data());
+        UIDragState::CompleteDrag(EDragSource::QuickSpell, ring, dropped);
+        if (dropped)
+            return;
+    }
     TButtonPane::MouseClick(button, x, y);
+}
 
-    if (button == MB_RIGHTDOWN)
-    {
-        for (TPointerIterator<TButton> i(&Buttons); i; i++)
-            if (i.Item() && i.Item()->OnButton(x, y) &&
-                (i.Item()->GetState() == false || i.Item()->IsToggle()) &&
-                (i.Item()->RadioGroup() < 0 || i.Item()->GetState() == false))
-            {
-                if (i.Item()->IsToggle())
-                {
-                    ClearGroup(i.Item()->RadioGroup());
-                    i.Item()->Invert();
-                    i.Item()->ButtonFunc();
-                }
-                else
-                {
-                    i.Item()->SetState(true);
-                    clicked = i.ItemNum();
-                }
+void TQuickSpellPane::Invoke(int32_t ring)
+{
+    if (ring >= 1 && ring <= kNumRings && Player)
+        Player->InvokeQuickSpell(ring);
+}
 
-                if (i.Item()->Repeats())
-                    Set(clicked + 1);
-                break;
-            }
-    }
-    else if (button == MB_RIGHTUP)
-    {
-        if (clicked >= 0 && Buttons[clicked]->OnButton(x, y) &&
-            !Buttons[clicked]->IsToggle())
-        {
-            if (!Buttons[clicked]->IsToggle())
-                Buttons[clicked]->SetState(false);
-            if (!Buttons[clicked]->Repeats())
-                Set(clicked + 1);
-        }
-        clicked = -1;
-    }
+TQuickSpellButton *TQuickSpellPane::Ring(int32_t ring)
+{
+    return static_cast<TQuickSpellButton *>(Button(ring - 1));
+}
+
+int32_t TQuickSpellPane::RingAt(int32_t x, int32_t y)
+{
+    for (int32_t ring = 1; ring <= kNumRings; ++ring)
+        if (Ring(ring)->OnButton(x, y))
+            return ring;
+    return 0;
 }
