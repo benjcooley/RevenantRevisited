@@ -6424,6 +6424,7 @@ void TFireBallEffect::Initialize()
     aim_angle_  = 0;
     range_      = 32768;
     status_     = true; // Actual retail Fireball Initialize 0x510bd0 stores status=1.
+    damage_armed_ = true;   // and +0x194 = 1, the blast armed
     vel_        = {0.0f, 0.0f, 0.0f};
     old_state_  = 0;
     firsttime_  = 0;
@@ -6456,7 +6457,7 @@ void TFireBallEffect::Pulse()
     // preview. Render submission does not drive the actual map's simulation.
     if(alive_)
     {
-        StepMissilePulse();
+        PulseMissile();
         // Original Animate510e5b calls SetCommandDone(false). The collapsed
         // simulator must retain this handshake before generic effect cleanup.
         SetCommandDone(false);
@@ -6464,6 +6465,29 @@ void TFireBallEffect::Pulse()
     }
     if(!alive_)KillThisEffect();
     TEffect::Pulse();
+}
+
+void TFireBallEffect::PulseMissile()
+{
+    StepMissilePulse();
+    if (state_ != 2 /*MISSILE_EXPLODE*/ || !damage_armed_ || !spell)
+        return;
+    // The ball's offset from the object (the animator's +0x4ac..+0x4b4,
+    // truncated as retail's ftol does).
+    S3DPoint at = Pos();
+    if (alive_)
+    {
+        at.x += int32_t(fireball_.pos.X);
+        at.y += int32_t(fireball_.pos.Y);
+        at.z += int32_t(fireball_.pos.Z);
+    }
+    // REVSYNC-DIVERGENCE: retail hands AreaDamage the invoker pointer the
+    // spell keeps, which dangles once the caster is gone; the port's safe
+    // reference gives none then, and nobody is hurt.
+    const SSpellVariant* variant = spell->VariantData();
+    AreaDamage(spell->GetInvokerRef().Get(), at, 150, variant->mindamage, variant->maxdamage,
+               spell->SpellData()->damagetype, 0);
+    damage_armed_ = false;
 }
 
 bool TFireBallEffect::SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination)
@@ -6550,16 +6574,27 @@ void TFireBallEffect::StepMissilePulse()
         S3DPoint velocity{};ConvertToVector(facing,speed,velocity);
         return missile_state::Point{velocity.x,velocity.y,velocity.z};
     };
+    // REVSYNC: TMissileEffect::Pulse @ 0x00510220, the fly state's hit test:
+    // the map's characters within 256 (retail's iterator: this level, the
+    // loaded sectors, flags 0xe0) -- the first one not the caster, alive,
+    // within 32 and the caster's enemy (anyone, with no caster) explodes it.
     input.character_hit=[this](const missile_state::Point& point)
     {
         if(preview_mode_)return false;
         TObjectInstance* invoker_object=spell?spell->GetInvokerRef().Get():nullptr;
         TCharacter* invoker=dynamic_cast<TCharacter*>(invoker_object);
         const S3DPoint query{point.x,point.y,point.z};
-        for(TMapIterator iterator(query,256,CHECK_NOINVENT,OBJSET_CHARACTER);iterator;iterator++)
+        std::vector<TCharacter*> around;
+        if(TCharacter::nearbyCharactersSeam)around=TCharacter::nearbyCharactersSeam(query,256);
+        else
         {
-            auto* character=dynamic_cast<TCharacter*>(iterator.Item());
-            if(!character||character==invoker_object||character->Health()<=0)continue;
+            SRect r{query.x-256,query.y-256,query.x+256,query.y+256};
+            for(TMapIterator iterator(GetLevel(),&r,CHECK_NOINVENT,OBJSET_CHARACTER);iterator;iterator++)
+                if(auto* character=dynamic_cast<TCharacter*>(iterator.Item()))around.push_back(character);
+        }
+        for(TCharacter* character:around)
+        {
+            if(character==invoker_object||character->Health()<=0)continue;
             if(::Distance(query,character->Pos())>32)continue;
             if(invoker&&!invoker->IsEnemy(character))continue;
             return true;
@@ -6658,26 +6693,8 @@ void TFireBallEffect::StepAnimate()
 
             if (firsttime_)
             {
-                // Impact world position = fireball.pos + effect_pos
-                // (:676-679). In our port fireball_.pos.X/Y/Z are 0 (the
-                // ball head sits at the effect origin), so the impact
-                // simplifies to effect_pos.
-                S3DPoint impact_pos = effect_pos;
-                impact_pos.x += int32_t(fireball_.pos.X);
-                impact_pos.y += int32_t(fireball_.pos.Y);
-                impact_pos.z += int32_t(fireball_.pos.Z);
-
-                // Blast damage (:681-684). The retail call:
-                //   BlastCharactersInRange(spell->GetInvoker(), impact_pos,
-                //                          150, vd->mindamage, vd->maxdamage,
-                //                          spell->SpellData()->damagetype);
-                // is gated by HasSpell() — and BlastCharactersInRange itself
-                // currently lives under `#if 0` in effect_old.cpp:278 (the
-                // body comes back online in the combat-port phase). The
-                // gameflow caller wires this; harness has no live spell.
-                // See §13.8 (damage source = spell variant data, not the
-                // dead FIREBALL_DAMAGE_MIN/MAX macro).
-                (void)impact_pos;
+                // The blast's damage is the object's, not the animator's: retail
+                // moved it into TFireBallEffect::Pulse (0x00510c10, PulseMissile).
 
                 // Burst quads (:687-699). Pre-release sets
                 // `burst[i].rotation = 0` (missileeffect.cpp:694); the

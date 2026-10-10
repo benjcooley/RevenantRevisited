@@ -4,10 +4,10 @@
     MELEE_COVERAGE=<dir> python3 tools/retail_ab/retail_ab.py melee-attack-choice
     <retail-asm venv python> tools/retail_ab/melee_coverage.py <dir> [--show]
 
-The retail fixture (slots/combat/melee_attack.py) writes the block starts
+The retail fixture (slots/combat/melee_attack.py) writes the code blocks
 it executed to <dir>/<pid>.json; this lists, per function in its COVERED
 table, the block starts the asm has (the entry, every branch target, the
-instruction after every branch or call) that no case reached. `--show`
+instruction after every branch or call) whose first byte no case ran. `--show`
 prints each unreached block's first instructions.
 """
 from __future__ import annotations
@@ -81,7 +81,8 @@ def main():
     show = '--show' in sys.argv
     reached = set()
     for f in folder.glob('*.json'):
-        reached |= set(json.loads(f.read_text()))
+        for start, size in json.loads(f.read_text()):
+            reached.update(range(start, start + size))
     read = image()
     total_all = hit_all = 0
     for name, (lo, hi) in COVERED.items():

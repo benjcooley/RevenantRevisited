@@ -3629,11 +3629,18 @@ class TFireBallEffect : public TEffect
     // plain virtual). Pulse IS virtual on TEffect, so override there.
     virtual void Initialize();
     void Pulse() override;
+    // REVSYNC: TFireBallEffect::Pulse @ 0x00510c10 (YFireBall's 0x00513140 the
+    // same) -- the missile's step (TMissileEffect::Pulse 0x00510220), then the
+    // blast: the first tick it is exploding, a spell's fireball hurts its
+    // caster's enemies within 150 of the ball (AreaDamage, the variant's
+    // damage, the spell's type). Pulse runs it, then the animator's step.
+    void PulseMissile();
     // Pulse owns original missile integration. The generic map movement walk
     // reads its last result instead of moving the same projectile twice.
     uint32_t Move() override { return GetMoveBits(); }
     bool SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination);
     const missile_state::State& ProjectileState() const { return missile_motion_; }
+    [[nodiscard]] bool DamageArmed() const { return damage_armed_; }
 
     // Spawn a standalone TFireBallEffect for the --test=vfx harness.
     // Loads `Magic\NewFireBall.I3D`, resolves the 3 sub-object textures +
@@ -3672,6 +3679,7 @@ class TFireBallEffect : public TEffect
     int32_t range_      = 32768;        // ticks left until self-explode
     bool    status_     = false;        // animator → base "launch now" handshake
     int32_t aim_angle_  = 0;            // 0..255 byte-angle (horizontal facing)
+    bool    damage_armed_ = true;       // +0x194: the blast is still to come (Initialize 0x00510bd0 sets it)
     missile_state::State missile_motion_{};
     S3DPoint projectile_destination_{};
     bool has_projectile_destination_=false;

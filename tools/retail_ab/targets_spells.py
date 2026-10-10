@@ -615,7 +615,357 @@ def area_cases(data: Path, workdir: Path) -> list[dict]:
     return finish(cases)
 
 
+# ---- S4b: an arrow's hit -----------------------------------------------------------
+
+# class.def's AMMO types: [MagicType, DamageMod].
+ARROW_TYPES = {'Arrow': (2, 0), 'Poison Arrow': (2, 5), 'Fire Arrow': (7, 10), 'Ice Arrow': (8, 10),
+               'Magic Arrow': (0, 15)}
+MOVE_BLOCKED = 2
+CA_INTERACTIVE, CAI_INTERACTIVE, CHAR_INTERACTIVE = 0x2000000, 0x80, 0x80000
+
+
+def _archer(player=True, level=5, bows=3, bow=20, x=600, **extra):
+    """The shooter, well away from the arrow: a player (Level, the bows skill,
+    a bow's DamageMod or none) or a monster."""
+    if player:
+        spec = _caster('Locke', root=('bow', 0x19), states=[], id=1, pos=[x, 1000, 0])
+        spec['stats'].update(level=level, fatigue=100)
+        spec['classstats'].update(bows=bows)
+        if bow is not None:
+            spec['bow'] = dict(name='Light Bow', damagemod=bow)
+    else:
+        spec = _caster('Archer', player=False, root=('combat', 3), states=[], id=2, pos=[x, 1000, 0])
+    spec.update(extra)
+    return spec
+
+
+def _mark(name='Mon', kind='Araknid', at=(1000, 1000, 0), oid=3, health=30, player=False, level=4, **extra):
+    """A character at the arrow (or `at`)."""
+    if player:
+        spec = _caster(name, root=('combat', 3), states=[], id=oid, pos=list(at), health=health)
+        spec['stats'].update(level=level, fatigue=100)
+    else:
+        spec = _target(name, kind, id=oid)
+        spec['pos'] = list(at)
+        spec['stats']['health'] = health
+    spec.update(extra)
+    return spec
+
+
+def _arrow(kind='Arrow', shooter='Locke', at=(1000, 1000, 0), vel=(0x140000, 0, 0), killwait=-1, flags=0x10000,
+           **extra):
+    magic, mod = ARROW_TYPES.get(kind, (2, 0))
+    spec = dict(name='arrow', type=kind, magictype=magic, damagemod=mod, pos=list(at), vel=list(vel),
+                flags=flags, killwait=killwait, shooter=shooter, id=900)
+    spec.update(extra)
+    return spec
+
+
+def arrow_cases(data: Path, workdir: Path) -> list[dict]:
+    """TAmmo::Move on an arrow in flight: no hit (flying on, not flying, done
+    already, a wall with nobody there), a hit from a player (Level, bows, the
+    bow's DamageMod, none), a monster and a trap on a monster and on the
+    player; a friend; the height window; every arrow type of class.def; the
+    poison and fire procs either side of their rolls, the cast answered
+    either way; a zero damage roll; the message with no main player; the
+    ice burst's filters and its cap; then TAmmo::Pulse."""
+    cases = []
+
+    def case(name, chars, arrow, bits=0, tape=None, **extra):
+        c = dict(name=f'arrow.{name}', call='arrow-move', chars=chars, arrow=arrow, bits=bits,
+                 globals=dict(frame=0), ground=dict(z=0), tape=tape or [16000, 3000, 30000, 9000, 22000, 7, 0])
+        c.update(extra)
+        cases.append(c)
+
+    # No hit.
+    case('fly', [_archer(), _mark(at=(1300, 1000, 0))], _arrow())
+    case('notflying', [_archer(), _mark()], _arrow(flags=0))
+    case('handled', [_archer(), _mark()], _arrow(killwait=0))
+    case('wall.nobody', [_archer(), _mark(at=(1300, 1000, 0))], _arrow(), bits=MOVE_BLOCKED)
+    case('wall.monster', [_archer(player=False), _mark(at=(1300, 1000, 0))], _arrow(shooter='Archer'),
+         bits=MOVE_BLOCKED)
+    case('wall.trap', [_mark(at=(1300, 1000, 0))], _arrow(shooter=None), bits=MOVE_BLOCKED)
+    # The height window (a wide victim so it is the one there).
+    for dz in (80, 81, -80, -81):
+        big = dict(classstats=dict(radius=120))
+        case(f'height.{dz}', [_archer(), _mark(at=(1000, 1000, dz), **big)], _arrow())
+        case(f'height.{dz}.wall', [_archer(), _mark(at=(1000, 1000, dz), **big)], _arrow(), bits=MOVE_BLOCKED)
+    # Who shot it.
+    for level, bows, bow in ((5, 3, 20), (1, 0, None), (12, 9, 0), (20, 15, 100), (3, 2, -50)):
+        case(f'player.l{level}.b{bows}.bow{bow}', [_archer(level=level, bows=bows, bow=bow), _mark()], _arrow())
+    case('player.blocked', [_archer(), _mark()], _arrow(), bits=MOVE_BLOCKED)
+    case('player.friend', [_archer(), _mark()], _arrow(), friends=[('Locke', 'Mon')])
+    case('player.nomain', [_archer(), _mark()], _arrow(), mainplayer=False)
+    case('monster', [_archer(player=False), _mark()], _arrow(shooter='Archer'))
+    case('monster.friend', [_archer(player=False), _mark()], _arrow(shooter='Archer'), friends=[('Archer', 'Mon')])
+    case('monster.atplayer', [_archer(player=False), _mark('Locke', player=True, oid=1)], _arrow(shooter='Archer'))
+    case('trap.monster', [_mark()], _arrow(shooter=None))
+    for level in (1, 4, 20):
+        case(f'trap.player.l{level}', [_mark('Locke', player=True, oid=1, level=level)], _arrow(shooter=None))
+    # Every arrow type, from the player and from a trap.
+    for kind in ARROW_TYPES:
+        tag = kind.replace(' ', '')
+        case(f'type.{tag}', [_archer(), _mark()], _arrow(kind))
+        case(f'type.{tag}.trap', [_mark()], _arrow(kind, shooter=None))
+    # The procs: poison (MagicType 9) under 33, fire (7) under 66, the cast
+    # answered either way; by a monster's arrow too.
+    for magic, rolls in ((9, (32, 33)), (7, (65, 66))):
+        for roll in rolls:
+            for cast in (1, 0):
+                for who, chars, shooter in (('player', [_archer(), _mark()], 'Locke'),
+                                            ('monster', [_archer(player=False), _mark()], 'Archer'),
+                                            ('trap', [_mark()], None)):
+                    case(f'proc.{magic}.r{roll}.c{cast}.{who}', chars, _arrow(magictype=magic, shooter=shooter),
+                         tape=[16000, 3000, roll], casts=[cast])
+    # The damage roll's ends, and nothing to roll (a bow taking it all off).
+    for draw in (0, 32767):
+        case(f'roll.{draw}', [_archer(), _mark()], _arrow(), tape=[0, draw])
+    # AMMODATA other than the defaults (rules.def's commented line).
+    for ammo in ((20, 6, 3, 2, 25), (0, 0, 0, 0, 25), (50, 10, 10, 5, 100), (20, 6, 4, 1, 0)):
+        tag = '.'.join(map(str, ammo))
+        case(f'ammodata.{tag}', [_archer(), _mark()], _arrow(), globals=dict(frame=0, ammodata=list(ammo)))
+        case(f'ammodata.{tag}.monster', [_archer(player=False), _mark()], _arrow(shooter='Archer'),
+             globals=dict(frame=0, ammodata=list(ammo)))
+        case(f'ammodata.{tag}.trap', [_mark('Locke', player=True, oid=1)], _arrow(shooter=None),
+             globals=dict(frame=0, ammodata=list(ammo)))
+    case('roll.zero', [_archer(level=0, bows=0, bow=-100), _mark()], _arrow(damagemod=0), tape=[0])
+    case('roll.zero.poison', [_archer(level=0, bows=0, bow=-100), _mark()], _arrow(magictype=9), tape=[0, 0])
+    # The ice burst: only Solifuges, and of them not the main player, the
+    # dead, one held in an interactive attack or impact (unless it is the
+    # mover), one skywalking; the first ten characters the map gives.
+    def sol(name, at, oid, **extra):
+        return _mark(name, 'Solifuge', at=at, oid=oid, **extra)
+
+    skip = [sol('Sol', (1100, 1000, 0), 10),
+            sol('DeadSol', (1100, 1100, 0), 11, health=0),
+            sol('HeldSol', (1100, 900, 0), 12, doing_attack=dict(flags=CA_INTERACTIVE)),
+            sol('HitSol', (900, 1100, 0), 13, doing_impact=dict(flags=CAI_INTERACTIVE)),
+            sol('MoverSol', (900, 900, 0), 14, doing_attack=dict(flags=CA_INTERACTIVE), charflags=CHAR_INTERACTIVE),
+            sol('SkySol', (1200, 1000, 0), 15, doing=dict(name='skywalk2', action=3)),
+            _mark('Plain', at=(1000, 1200, 0), oid=16)]
+    names = [s['name'] for s in skip]
+    case('ice.burst', [_archer()] + [_mark()] + skip, _arrow('Ice Arrow'), iced=names + ['Locke', 'Mon'])
+    case('ice.burst.trap', [_mark()] + skip, _arrow('Ice Arrow', shooter=None), iced=['Mon'] + names)
+    case('ice.burst.nomain', [_archer()] + [_mark()] + skip, _arrow('Ice Arrow'), iced=['Locke'] + names,
+         mainplayer=False)
+    crowd = [sol(f'S{i}', (1000 + 30 * i, 1300, 0), 20 + i) for i in range(12)]
+    case('ice.cap', [_archer(), _mark()] + crowd, _arrow('Ice Arrow'), iced=[s['name'] for s in crowd])
+    case('ice.wall', [_archer(), _mark(at=(1300, 1000, 0))] + skip, _arrow('Ice Arrow'), bits=MOVE_BLOCKED,
+         iced=names)
+    case('ice.friend', [_archer(), _mark()] + skip, _arrow('Ice Arrow'), iced=names, friends=[('Locke', 'Mon')])
+    case('ice.onvictim', [_archer(), _mark('Target', 'Solifuge')], _arrow('Ice Arrow'), iced=['Target'])
+
+    # TAmmo::Pulse.
+    for killwait in (-1, 0, 1, 2, 5):
+        for vel in ((0, 0, 0), (0x140000, 0, 0), (0, 0, -1)):
+            for editor in (0, 1):
+                tag = f'k{killwait}.v{"".join("1" if c else "0" for c in vel)}.e{editor}'
+                cases.append(dict(name=f'pulse.{tag}', call='arrow-pulse', chars=[_archer()],
+                                  arrow=_arrow(killwait=killwait, vel=vel), globals=dict(frame=0, editor=editor),
+                                  ground=dict(z=0)))
+    for killwait in (-1, 0, 3):
+        cases.append(dict(name=f'pulse.owned.k{killwait}', call='arrow-pulse', chars=[_archer()],
+                          arrow=_arrow(killwait=killwait, vel=(0, 0, 0), owner='Locke'), globals=dict(frame=0),
+                          ground=dict(z=0)))
+    return finish(cases)
+
+
+# ---- S4c: the bow ------------------------------------------------------------------
+
+BOW_CHARDATA = dict(arrowpos=[-10, -15, 50], arrowspeed=20, bowwait=12, bowaimspeed=8)
+BOW_ROOT = dict(name='bow', action=0x19)
+BOW_AIM = dict(name='bowaim', action=0x1b, angle=0, moveangle=0, turnrate=8)
+
+
+def _bowman(player=True, facing=0, doing=None, root=None, ammo=None, chardata=None, **extra):
+    """The bow root's shooter, aiming by default (doing "bowaim")."""
+    name = 'Locke' if player else 'Archer'
+    spec = _caster(name, player=player, root=('bow', 0x19), states=['bowaim', 'bowshoot'], id=1 if player else 2,
+                   pos=[1000, 1000, 0], facing=facing, moveangle=facing)
+    spec['root'] = dict(root or BOW_ROOT)
+    spec['doing'] = dict(doing) if doing is not None else dict(BOW_AIM, angle=facing, moveangle=facing)
+    spec['chardata'].update(BOW_CHARDATA, **(chardata or {}))
+    if player:
+        spec['stats'].update(fatigue=100)
+        spec['ammo'] = [dict(name='Arrow', amount=12, equipped=True)] if ammo is None else ammo
+    spec.update(extra)
+    return spec
+
+
+def bow_cases(data: Path, workdir: Path) -> list[dict]:
+    """The bow's commands and resolvers: DrawBow from the roots and doings
+    that let it and don't, with ammo equipped, carried or none; AimBow and
+    its left / right steps over the turn-rate's steps and the stop; ShootBow
+    queueing a shot (an idle player woken); IsBowDrawn by root name;
+    ResolveBowAim's stop and turn; ResolveBowShoot's pace, the arrow's def
+    from each ARROWPOS and facing, the ammo counted down, the slot emptied
+    with the last, no ammo, a monster, the arrow given its shooter."""
+    cases = []
+
+    def case(name, call, chars, self='Locke', **extra):
+        c = dict(name=f'bow.{name}', call=call, self=self, chars=chars, globals=dict(frame=100), tape=[7, 3, 11, 0])
+        c.update(extra)
+        cases.append(c)
+
+    idle = dict(name='bow', action=0x19)
+    walking = dict(name='bowwalk', action=0x1a)
+    # DrawBow.
+    case('draw.idle', 'draw-bow', [_bowman(doing=idle)])
+    case('draw.walking', 'draw-bow', [_bowman(doing=walking)])
+    case('draw.moving', 'draw-bow', [_bowman(doing=dict(name='walk', action=2))])
+    case('draw.drawn', 'draw-bow', [_bowman()])
+    case('draw.combatroot', 'draw-bow', [_bowman(root=dict(name='combat', action=3), doing=dict(name='combat', action=3))])
+    case('draw.dead', 'draw-bow', [_bowman(doing=idle, health=0)])
+    case('draw.locked', 'draw-bow', [_bowman(doing=idle, doing_attack=dict(flags=CA_INTERACTIVE))])
+    case('draw.mover', 'draw-bow', [_bowman(doing=idle, doing_attack=dict(flags=CA_INTERACTIVE),
+                                            charflags=CHAR_INTERACTIVE)])
+    case('draw.carried', 'draw-bow', [_bowman(doing=idle, ammo=[dict(name='Fire Arrow', amount=3)])])
+    case('draw.none', 'draw-bow', [_bowman(doing=idle, ammo=[])])
+    case('draw.monster', 'draw-bow', [_bowman(player=False, doing=idle)], self='Archer')
+    for facing in (0, 77, 200):
+        case(f'draw.facing{facing}', 'draw-bow', [_bowman(doing=idle, facing=facing)])
+    # AimBow and its steps.
+    for facing, angle in ((0, 0), (0, 32), (0, 33), (0, 64), (0, 100), (0, 128), (0, 160), (10, 200), (200, 10),
+                          (128, 0), (250, 5)):
+        case(f'aim.{facing}.{angle}', 'aim-bow', [_bowman(facing=facing)], angle=angle)
+    case('aim.stopped', 'aim-bow', [_bowman(doing=dict(BOW_AIM, flags=['stop']))], angle=90)
+    case('aim.notdrawn', 'aim-bow', [_bowman(doing=idle)], angle=90)
+    case('aim.dead', 'aim-bow', [_bowman(health=0)], angle=90)
+    case('aim.locked', 'aim-bow', [_bowman(doing_attack=dict(flags=CA_INTERACTIVE))], angle=90)
+    for facing in (0, 4, 250, 128):
+        for speed in (8, 3):
+            for call in ('aim-left', 'aim-right'):
+                case(f'{call}.{facing}.s{speed}', call, [_bowman(facing=facing, chardata=dict(bowaimspeed=speed))])
+    # ShootBow.
+    for facing, angle in ((0, 0), (0, 40), (0, 200), (100, 30)):
+        case(f'shoot.{facing}.{angle}', 'shoot-bow', [_bowman(facing=facing)], angle=angle)
+    case('shoot.queued', 'shoot-bow', [_bowman(bowshots=2)], angle=10)
+    case('shoot.idleplayer', 'shoot-bow', [_bowman(playerstate=2)], angle=10)
+    case('shoot.idleplayer6', 'shoot-bow', [_bowman(playerstate=6)], angle=10)
+    case('shoot.notdrawn', 'shoot-bow', [_bowman(doing=idle)], angle=10)
+    case('shoot.dead', 'shoot-bow', [_bowman(health=0)], angle=10)
+    case('shoot.monster', 'shoot-bow', [_bowman(player=False)], self='Archer', angle=10)
+    # IsBowDrawn.
+    case('drawn.yes', 'is-bow-drawn', [_bowman()])
+    case('drawn.idle', 'is-bow-drawn', [_bowman(doing=idle)])
+    case('drawn.longbow', 'is-bow-drawn', [_bowman(root=dict(name='longbow', action=0x19),
+                                                   doing=dict(name='LONGBOWAIM', action=0x1b))])
+    case('drawn.combat', 'is-bow-drawn', [_bowman(root=dict(name='combat', action=3),
+                                                  doing=dict(name='combataim', action=0x1b))])
+    # ResolveBowAim.
+    for facing, angle, stop in ((0, 0, True), (0, 0, False), (0, 40, True), (0, 40, False), (250, 10, False),
+                                (100, 100, True)):
+        aim = dict(BOW_AIM, angle=angle, moveangle=angle, turnrate=12, flags=['stop'] if stop else [])
+        case(f'resolve-aim.{facing}.{angle}.{"stop" if stop else "go"}', 'resolve-bow-aim',
+             [_bowman(facing=facing, doing=aim, movedist=7)])
+    # ResolveBowShoot.
+    shot = dict(name='bowshoot', action=0x1c, angle=40, moveangle=40)
+
+    def shooting(**extra):
+        extra.setdefault('doing', shot)
+        extra.setdefault('bowshots', 1)
+        extra.setdefault('lastbowshot', 0)
+        return _bowman(**extra)
+
+    # NewObject gives the case's arrow unless a case says otherwise.
+    def fire(name, chars, **extra):
+        extra.setdefault('newobject', 900)
+        extra.setdefault('arrow', _arrow(shooter=None))
+        case(name, 'resolve-bow-shoot', chars, **extra)
+
+    fire('fire.nothingmade', [shooting()], newobject=-1)
+    fire('fire.notammo', [shooting()], newobject=1)
+    fire('fire.one', [shooting()])
+    fire('fire.three', [shooting(bowshots=3)])
+    fire('fire.none', [shooting(bowshots=0)])
+    fire('fire.negative', [shooting(bowshots=-1)])
+    for last in (88, 87, 100, 101):
+        fire(f'fire.pace.{last}', [shooting(lastbowshot=last)])
+    fire('fire.lastarrow', [shooting(ammo=[dict(name='Arrow', amount=1, equipped=True)])])
+    fire('fire.twoleft', [shooting(ammo=[dict(name='Arrow', amount=2, equipped=True)])])
+    fire('fire.noammo', [shooting(ammo=[])])
+    fire('fire.carriedonly', [shooting(ammo=[dict(name='Arrow', amount=5)])])
+    for kind in ARROW_TYPES:
+        fire(f'fire.type.{kind.replace(" ", "")}',
+             [shooting(ammo=[dict(name=kind, amount=4, equipped=True)])])
+    for facing, angle in ((0, 0), (0, 64), (90, 200), (200, 7), (255, 128)):
+        for pos in ((-10, -15, 50), (-5, -15, 80), (0, 0, 0), (20, 3, 40), (-300, 400, 10)):
+            tag = f'{facing}.{angle}.{"_".join(map(str, pos))}'
+            fire(f'fire.aim.{tag}',
+                 [shooting(facing=facing, doing=dict(shot, angle=angle, moveangle=angle),
+                           chardata=dict(arrowpos=list(pos)))])
+    for speed in (0, 1, 20, 37):
+        fire(f'fire.speed{speed}', [shooting(chardata=dict(arrowspeed=speed))])
+    fire('fire.monster', [shooting(player=False)], self='Archer')
+    return finish(cases)
+
+
+# ---- S4d: a spell's fireball, tick by tick -------------------------------------------
+
+def fireball_cases(data: Path, workdir: Path) -> list[dict]:
+    """A FireBall from launch to blast: at a target ahead, beside and behind
+    (the aim from the spell's target, or the caster's facing), into a wall,
+    past a friend and the dead, out of life; from a monster at the player; no
+    caster; no spell (no blast); the two variants; the blast's radius over
+    the ones near where it bursts."""
+    cases = []
+
+    def case(name, chars, ticks=40, variant=('Fireball', 'Fireball'), invoker='Locke', targets=('Mon',), **extra):
+        c = dict(name=f'fireball.{name}', ticks=ticks, variant=list(variant), invoker=invoker,
+                 targets=list(targets) if targets is not None else None, fireball=dict(pos=[1000, 1000, 60]),
+                 globals=dict(frame=0), ground=dict(z=10), chars=chars, tape=[100, 2000, 30000, 7, 0, 32767])
+        c.update(extra)
+        cases.append(c)
+
+    def caster(player=True, facing=0, **extra):
+        spec = _caster('Locke' if player else 'Archer', player=player, root=('combat', 3), states=[], id=1,
+                       pos=[1000, 1000, 0], facing=facing, moveangle=facing)
+        spec['stats'].update(spelldamageinc=0) if player else None
+        spec.update(extra)
+        return spec
+
+    def mon(name='Mon', at=(1200, 1000, 0), oid=3, **extra):
+        spec = _target(name, 'Araknid', id=oid)
+        spec['pos'] = list(at)
+        spec.update(extra)
+        return spec
+
+    for at in ((1200, 1000, 0), (1000, 1200, 0), (800, 1000, 0), (1150, 1150, 0), (1003, 1300, 0)):
+        tag = '_'.join(map(str, at))
+        case(f'at.{tag}', [caster(), mon(at=at)])
+    case('notarget.facing0', [caster(facing=0), mon(at=(1000, 800, 0))], targets=None)
+    case('notarget.facing64', [caster(facing=64), mon(at=(1200, 1000, 0))], targets=None)
+    case('target.self', [caster(facing=128), mon(at=(800, 1000, 0))], targets=('Locke',))
+    case('miss.life', [caster(), mon(at=(1000, 1400, 0))], ticks=70)
+    case('wall', [caster(), mon(at=(1300, 1000, 0))],
+         ground=dict(z=10, cells=[[70, 0, 80, 200, 400]]))
+    case('friend.inpath', [caster(), mon('Pal', at=(1100, 1000, 0), oid=4), mon(at=(1200, 1000, 0))],
+         friends=[('Locke', 'Pal')])
+    case('dead.inpath', [caster(), mon('Corpse', at=(1100, 1000, 0), oid=4, stats=dict(health=0, mana=0, poisoned=0)),
+                         mon(at=(1200, 1000, 0))])
+    case('crowd', [caster(), mon(at=(1200, 1000, 0)), mon('M2', at=(1260, 1060, 0), oid=4),
+                   mon('M3', at=(1330, 1000, 0), oid=5), mon('M4', at=(1400, 1000, 0), oid=6),
+                   mon('Pal', at=(1220, 940, 0), oid=7)], friends=[('Locke', 'Pal')])
+    case('monster.atplayer', [caster(player=False), _caster('Hero', root=('combat', 3), states=[], id=8,
+                                                           pos=[1200, 1000, 0])],
+         invoker='Archer', targets=('Hero',))
+    case('nocaster', [caster(), mon(at=(1200, 1000, 0))], invoker=None)
+    case('nospell', [caster(), mon(at=(1200, 1000, 0))], spell=False, ticks=30)
+    case('priest', [caster(), mon(at=(1200, 1000, 0))], variant=('Fireball', 'Priest Fireball'))
+    case('high', [caster(), mon(at=(1200, 1000, 0))], fireball=dict(pos=[1000, 1000, 120]))
+    case('low', [caster(), mon(at=(1200, 1000, 0))], fireball=dict(pos=[1000, 1000, 12]))
+    case('underground', [caster(), mon(at=(1200, 1000, 0))], fireball=dict(pos=[1000, 1000, 5]))
+    case('nowalkmap', [caster(), mon(at=(1200, 1000, 0))], ground=dict(z=0))
+    return finish(cases)
+
+
 TARGETS = {
+    'missile-fireball': dict(fixture='slots/combat/spell_missile.py', cases=fireball_cases, compare=generic_compare,
+                             port_fields=port_fields, unit=lambda r: len(r.get('ticks', []))),
+    'missile-bow': dict(fixture='slots/combat/spell_bow.py', cases=bow_cases, compare=generic_compare,
+                        port_fields=port_fields, unit=lambda r: 1),
+    'missile-arrow': dict(fixture='slots/combat/spell_arrow.py', cases=arrow_cases, compare=generic_compare,
+                          port_fields=port_fields, unit=lambda r: 1),
     'missile-area': dict(fixture='slots/combat/spell_damage.py', cases=area_cases, compare=generic_compare,
                          port_fields=port_fields, unit=lambda r: 1),
     'spell-new': dict(fixture='slots/combat/spell_damage.py', cases=spell_new_cases, compare=generic_compare,

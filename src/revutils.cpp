@@ -2057,9 +2057,16 @@ int32_t listnum(const char *src)
 }
 
 // Get random string from comma list
+// REVSYNC: listrnd @ 0x004833c0 -- one entry of a comma list at random:
+// rand() % entries, drawn straight from the generator; a list of one entry
+// draws nothing.
 char *listrnd(const char *src, char *dst, int32_t len)
 {
-    return listget(src, random(0, listnum(src) - 1), dst, len);
+    int32_t commas = 0;
+    for (const char *p = src; *p; ++p)
+        if (*p == ',')
+            commas++;
+    return listget(src, commas ? GameRand() % (commas + 1) : 0, dst, len);
 }
 
 // Returns true if string is in comma list (case insensitive)

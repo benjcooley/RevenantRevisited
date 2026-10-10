@@ -24,10 +24,10 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <initializer_list>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <initializer_list>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -251,11 +251,21 @@ class IFixtureChar
     // The attack bookkeeping (timers, request bits, the player's button
     // repeats, the chain, the last attack by index), by retail's names.
     virtual void WriteAttackState(JsonOut& j) = 0;
+    // Another resolver on the doing block: "attack", "impact", "block",
+    // "dead", "bow-aim", "bow-shoot" (ResolveAction's dispatch, retail
+    // 0x004c3490).
+    virtual int32_t RunResolver(const std::string& which, int32_t bits) = 0;
     virtual void RunUpdateAction(int32_t bits) = 0;
     virtual void RunComplexPulse() = 0;         // TComplexObject::Pulse (UpdateAction with the move bits)
     // What a move changes beyond the character dump ("motion").
     virtual void WriteMotion(JsonOut& j) = 0;
+    // The case's object stats again, over what setting the case up wrote
+    // (an Equip's RefreshStats, say).
+    virtual void ResetStats(const JsonValue& spec) = 0;
 };
+
+// When set, the fixture characters answer DeleteFromInventory as a seam.
+inline bool inventorySeams = false;
 
 // A TCharacter or TPlayer built from the case, without a class record or
 // loaded imagery: it answers the seams itself.
@@ -314,6 +324,8 @@ class TFixtureChar : public Base, public IFixtureChar
         this->shovedir = (int32_t)spec["shovedir"].Int(-1);
         this->retreatlatch = spec["retreat_latch"].Bool();
         this->retreatframes = (int32_t)spec["retreat_frames"].Int();
+        this->lastbowshot = (int32_t)spec["lastbowshot"].Int();
+        this->bowshots = (int32_t)spec["bowshots"].Int();
         if constexpr (std::is_same_v<Base, TPlayer>)
             this->TPlayer::SetPlayerState((int32_t)spec["playerstate"].Int(0));   // as the retail fixture's zeroed +0x36c
 
@@ -544,6 +556,43 @@ class TFixtureChar : public Base, public IFixtureChar
         return ValueSeam("MaxMana", maxmana);
     }
 
+    // Taking items out by name (retail's seam at TObjectInstance slot 0x78,
+    // 0x00477950), when a target sets inventorySeams: recorded, not done.
+    int32_t DeleteFromInventory(const char* name, int32_t number) override
+    {
+        if (!inventorySeams)
+            return Base::DeleteFromInventory(name, number);
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "DeleteFromInventory").FieldString("who", who);
+        j.FieldString("name", name ? name : "").Field("count", number).End('}');
+        Seam(j.str());
+        return 1;
+    }
+
+    void ResetStats(const JsonValue& spec) override
+    {
+        stats.clear();
+        for (const auto& [k, v] : spec["stats"].Members())
+            stats[k] = (int32_t)v.Int();
+    }
+
+    int32_t RunResolver(const std::string& which, int32_t bits) override
+    {
+        if (which == "attack")
+            return Base::ResolveAttack(this->doing, bits);
+        if (which == "impact")
+            return Base::ResolveImpact(this->doing, bits);
+        if (which == "block")
+            return Base::ResolveBlock(this->doing, bits);
+        if (which == "dead")
+            return Base::ResolveDead(this->doing, bits);
+        if (which == "bow-aim")
+            return Base::ResolveBowAim(this->doing, bits);
+        if (which == "bow-shoot")
+            return Base::ResolveBowShoot(this->doing, bits);
+        throw std::runtime_error("no resolver '" + which + "'");
+    }
+
     void WriteAttackState(JsonOut& j) override
     {
         j.Key("attackstate").Begin('{');
@@ -551,7 +600,8 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Field("requestbits", this->requestbits).Field("attackcount", this->attackcount);
         j.Field("lastbutton", this->lastbutton).Field("buttonrepeat", this->buttonrepeat);
         j.Field("chainhits", this->chainhits).Field("lastattackticks", this->lastattackticks);
-        j.Field("lasthit", this->lasthit);
+        j.Field("lasthit", this->lasthit).Field("flashticks", this->combatflashticks);
+        j.Field("autocombat", this->autocombat ? 1 : 0).Field("movevert", this->GetMoveVert());
         j.Key("lastattack");
         const int32_t last = AttackIndex(this->lastattack);
         if (last >= 0)
@@ -559,6 +609,7 @@ class TFixtureChar : public Base, public IFixtureChar
         else
             j.Null();
         j.End('}');
+        WriteMotion(j);
     }
 
     // The index of an attack record in this character's table, -1 if none.
@@ -611,6 +662,8 @@ class TFixtureChar : public Base, public IFixtureChar
         this->chainhits = (int32_t)a["chainhits"].Int(this->chainhits);
         this->lastattackticks = (int32_t)a["lastattackticks"].Int(this->lastattackticks);
         this->lasthit = (int32_t)a["lasthit"].Int(this->lasthit);
+        this->combatflashticks = (int32_t)a["flashticks"].Int(0);
+        this->autocombat = a["autocombat"].Bool(true);
         if (a.Has("lastattack") && !a["lastattack"].IsNull())
             this->lastattack = &cd->attacks[(int32_t)a["lastattack"].Int()];
     }
