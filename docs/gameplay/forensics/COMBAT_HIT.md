@@ -900,3 +900,54 @@ Divergences (none noticeable): the slot after a full impact list (six)
 is an empty impact (retail reads past the list); the given block's attack
 is read guarded (retail reads it unguarded); a block Damage doesn't keep
 is freed (retail leaks one ForceCommand refuses).
+
+### 9.3 C5 `melee-resolvers` (2100 cases)
+
+ResolveImpact `0x4c74b0`, ResolveBlock `0x4c77a0`, ResolveDead
+`0x4c7810`, Block `0x4d2e30`, StopBlock `0x4d30f0`, Dodge `0x4d3150`, and
+EffectCombatFlash `0x4c8500` (seamed in the kata: it spawns an effect).
+Identities as §1 (the vtable slots and ResolveAction's dispatch, the
+strings "impale", "block", "crollb", the BLOCK range). Coverage:
+ResolveImpact 49/62 blocks, ResolveBlock 10/10, ResolveDead 24/25, Block
+56/63, StopBlock 9/9, Dodge 63/72. Not reached: frees after a SetDesired
+that can't refuse (ResolveImpact clears the priority first), `malloc`
+failing, a block carrying `data`, the network, Dodge's debug-camera turn
+(`0x6671f0`, not ported, as in UpdateMove), one dead branch in Block.
+
+Answers to §8:
+
+- (2) Dodge's last letter of "crollb", by the facing's sector (rows) and
+  `dir` (columns 0–7): `0x10–0x30` bflrbfbf, `0x31–0x50` bfbfblrf,
+  `0x51–0x70` rlbfbbff, `0x71–0x91` fbbfrbfl, `0x92–0xb2` fbrlfbfb,
+  `0xb3–0xd2` fbfbfrlb, `0xd3–0xf2` lrfbffbb, else bffblfbr. `dir` is the
+  Command (`0x47d90c`) of retail's eight controls "Combat Dodge Left /
+  Right / Up / Down / UpLeft / UpRight / DownLeft / DownRight" (commands
+  `0x30`–`0x37`); any other keeps the back roll. The port has one dodge
+  control (GAMECMD_DODGE) and passes −1: the back roll. `0x5a497c` is
+  −40.58 (−255/2π), the camera's radians to facing units.
+- (3) ResolveImpact returns 0; ResolveBlock 2 while the guard holds, 0
+  when it ends; ResolveDead 2.
+- (4) Action 15 has no case in ResolveAction: the block impact plays once.
+- (6) Retail **crashes** there (a read at `[0 + 0x24]`) when the
+  character never attacked (`+0x160` is 0 until ResolveAttack sets it).
+  The branch is reached only when the impact block plays under the
+  impact's own name (ResolveHit names a stun or knockdown with the combat
+  prefix, so mostly death and interactive impacts), with wait left and
+  the loop's state present. The port: with no last attack the loop waits
+  its turn (SetDesired). REVSYNC-DIVERGENCE (a crash).
+- (5, part) `chardata+0xc8 & 0x10` is the bit a failing BLEEDER parse
+  sets (CF_BADBLEEDER): ResolveImpact bleeds only without it, ResolveDead
+  only with it, so in the shipped data a death never bleeds.
+- EffectCombatFlash's frame is a state: 2·random(0, n/2), at most n − 2,
+  of the effect's n imagery states (imagery slot `0x3c` is NumStates).
+
+Divergences (none noticeable): the null last attack above; Block checks
+that the guard's target is a character with an attack (retail reads
+through whatever it is); a block SetDesired or ForceCommand refuses is
+freed (DropUnheld; retail leaks Dodge's, ResolveDead's).
+
+Fixture note (both sides, for every kata): the dumps name a block the
+case began with by its address; a block made after one was freed may get
+the same address. The retail side now drops a freed address (the engine
+free `0x4830f0`, observed), the port side a deleted block
+(TActionBlock::destroyedSeam), so such a block is "new N" on both.

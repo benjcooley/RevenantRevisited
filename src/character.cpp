@@ -2152,128 +2152,105 @@ void TCharacter::SignalAttack(TObjectInstance* actor, TObjectInstance* target, i
     Block(-1);
 }
 
+// REVSYNC: TCharacter::ResolveImpact @ 0x004c74b0 (vtable +0x338; COMBAT_HIT.md
+// §3.7) -- each tick of an impact, stun or knockdown block: blood (one
+// tick in six of an "impale"; the first tick of a blow that took over 1% of
+// the character's health, unless its attack draws none), the combat flash;
+// when the animation ends, back to the root once the wait is out, else on
+// into the impact's loop.
 int32_t TCharacter::ResolveImpact(TActionBlock* ab, int32_t bits)
 {
-#if 0
-    static int32_t frame;
-    if (ab->firsttime)
-        frame = 0;
-
-    if (frame < 4)
-    {
-        int32_t x, y;
-        S3DPoint fpos = pos;
-        fpos.z += 75;
-        S3DPoint vect;
-        ConvertToVector(facing, 14, vect);
-        fpos += vect;
-        WorldToScreen(fpos, x, y);
-        PlayScreen.AddPostCharAnim(x, y, 0, GameData->Animation("flashred")->GetFrame(frame++), DM_ALPHA);
-    }
-#endif
-
-  // Do blood for impale    
-    if ((ab->Is("impale") && random(0, 5) == 1))
+    const float share = (float)ab->damage / (float)chardata->health;
+    const auto bleeds = [this] { return !(chardata->flags & CF_BADBLEEDER) && chardata->bleeder; };
+    if (ab->Is("impale") && random(0, 5) == 1 && bleeds())
         EffectBurst("blood", ab->Is("impale") ? 40 : 50);
-    
-  // Do blood for attack
-    if (ab->firsttime && 
-        ab->damage > 0 && (!ab->attack || (ab->attack->flags & CA_BLOOD)))
-            EffectBurst("blood", ab->Is("impale") ? 40 : 50);
-
-  // Do combat flash for impact firsttime!
+    if (ab->firsttime && bleeds() && share > 0.01f && (!ab->attack || (ab->attack->flags & CA_BLOOD)))
+        EffectBurst("blood", ab->Is("impale") ? 40 : 50);
     if (ab->firsttime)
-        combatflashticks = 3;
+    {
+        EffectCombatFlash();
+        combatflashticks = 5;
+    }
 
-    // Return from looping or root impact states.
-  // This allows some impacts to be used as death states.  For example, the impact state is
-  // a looping root state of the guy on the ground, and the impact has a "impact to combat"
-  // state where the guy gets up again and goes back to fight pose.  The impact state will
-  // use the get up transition, where the death state will just loop forever in the 'on the ground'
-  // animation.
-  // It also allows some impacts to have looping "stun" states where the attack sets the
-  // wait value of the action block to 'stunwait', and the impact loop plays until 'wait'
-  // is exauhsted.
     if (commanddone)
     {
-      // If we're done waiting, go back to combat mode
         if (ab->wait <= 0)
         {
             doing->priority = false;
             root->interrupt = true;
             SetDesired(root);
         }
-      // If we're done with impact animation, see if we should do the loop animation
-      // NOTE: impacts can have a "combat to impact" transition state and "impact_l" looping state without
-      // specifying anything for 'loopname'.  'loopname' is provided so that different impacts can end in
-      // the same looping stun, knockdown, or death state.
-        else if (ab->impact && 
-            ab->Is(ab->impact->impactname) &&
-            ab->impact->loopname[0] != '\0' &&
-            FindState(ab->impact->loopname) >= 0)
+        else if (ab->impact && ab->Is(ab->impact->impactname) && ab->impact->loopname[0] &&
+                 FindState(ab->impact->loopname) >= 0)
         {
-            TActionBlock* newab = new TActionBlock(*ab, ab->impact->loopname, ab->action);
-            newab->priority = true;
-            newab->interrupt = true;
+            auto* loop = new TActionBlock(*ab, ab->impact->loopname, ab->action);
+            loop->priority = loop->interrupt = true;
             desired->priority = false;
             doing->priority = false;
-            SetDesired(newab);
+          // Forced while the character plays its last attack's animation (or
+          // that attack is a PLAYANIM); else it waits its turn.
+          // REVSYNC-DIVERGENCE: retail reads the last attack unguarded; with
+          // none the loop waits.
+            if (lastattack && ((lastattack->flags & CA_PLAYANIM) || !stricmp(lastattack->attackname, doing->name)))
+                ForceCommand(loop);
+            else
+                SetDesired(loop);
+            DropUnheld(loop);
         }
     }
-
-  // Return from looping or root impact states.
-  // This allows some impacts to be used as death states.  For example, the impact state is
-  // a looping root state of the guy on the ground, and the impact has a "impact to combat"
-  // state where the guy gets up again and goes back to fight pose.  The impact state will
-  // use the get up transition, where the death state will just loop forever in the 'on the ground'
-  // animation.
-  // It also allows some impacts to have looping "stun" states where the attack sets the
-  // wait value of the action block to 'stunwait', and the impact loop plays until 'wait'
-  // is exauhsted.
     if (commanddone && ab->wait <= 0)
     {
-        TActionBlock* newab = new TActionBlock(root->name, ACTION_COMBAT);
-        newab->interrupt = true;
-        SetDesired(newab);
+        auto* back = new TActionBlock(root->name, ACTION_COMBAT);
+        back->interrupt = true;
+        SetDesired(back);
+        DropUnheld(back);
     }
-                        
-    return 0;
+    return COM_DONE;
 }
 
+// REVSYNC: TCharacter::ResolveBlock @ 0x004c77a0 (vtable +0x334) -- a block
+// faces whoever it answers, and holds until its wait is out or it is
+// stopped.
 int32_t TCharacter::ResolveBlock(TActionBlock* ab, int32_t bits)
 {
-    if (ab->wait <= 0 || (doing && doing->stop))
+    if (doing && doing->obj)
     {
-        ab->wait = 0;
-        SetDesired(nullptr);
-        return COM_DONE;
+        const int32_t a = AngleTo(doing->obj);
+        SetRotateZ(a);
+        SetMoveAngle(a);
     }
-
-    return COM_EXECUTING;
+    if (ab->wait > 0 && !(doing && doing->stop))
+        return COM_EXECUTING;
+    ab->wait = 0;
+    SetDesired(nullptr);
+    return COM_DONE;
 }
 
+// REVSYNC: TCharacter::ResolveDead @ 0x004c7810 (vtable +0x33c) -- the first
+// tick's blood (as retail tests it: only for a character whose BLEEDER
+// value failed to parse) and combat flash; when the dying animation ends,
+// the death impact's loop becomes the root.
 int32_t TCharacter::ResolveDead(TActionBlock* ab, int32_t bits)
 {
-  // Do blood for attack
-    if (ab->firsttime && (!ab->attack || (ab->attack->flags & CA_BLOOD)))
+    if (ab->firsttime && (!ab->attack || (ab->attack->flags & CA_BLOOD)) && chardata->bleeder &&
+        (chardata->flags & CF_BADBLEEDER))
         EffectBurst("blood", ab->Is("impale") ? 40 : 50);
-
-  // If we're done with dying animation (transition), do the death animation.
-    if (commanddone &&
-        ab->impact &&
-        ab->impact->loopname[0] != '\0' &&
-        !ab->Is(ab->impact->loopname) &&
+    if (ab->firsttime)
+    {
+        EffectCombatFlash();
+        combatflashticks = 5;
+    }
+    if (commanddone && ab->impact && ab->impact->loopname[0] && !ab->Is(ab->impact->loopname) &&
         FindState(ab->impact->loopname) >= 0)
     {
-        TActionBlock* newab = new TActionBlock(*ab, ab->impact->loopname, ab->action);
-        newab->priority = true;
-        newab->interrupt = true;
+        auto* loop = new TActionBlock(*ab, ab->impact->loopname, ab->action);
+        loop->priority = loop->interrupt = true;
         desired->priority = false;
         doing->priority = false;
-        SetDesired(newab);
-        SetRoot(newab);
+        SetDesired(loop);
+        SetRoot(loop);
+        DropUnheld(loop);
     }
-
     return COM_EXECUTING;
 }
 
@@ -2591,7 +2568,30 @@ int32_t TCharacter::ResolvePivot(TActionBlock* ab, int32_t bits)
     return COM_EXECUTING;
 }
 
-void TCharacter::EffectBurst(char *name, int32_t height)
+// REVSYNC: TCharacter::EffectCombatFlash @ 0x004c8500 -- the flash of a
+// blow: a "combatflash" effect at (30, 30, 80) from the character, in an
+// even state of its imagery short of the last (2·random(0, states / 2)).
+void TCharacter::EffectCombatFlash()
+{
+    if (effectCombatFlashSeam)
+    {
+        effectCombatFlashSeam(this);
+        return;
+    }
+    extern TObjectClass EffectClass;
+    SObjectDef def{};
+    def.objclass = OBJCLASS_EFFECT;
+    def.objtype = EffectClass.FindObjType("combatflash");
+    def.level = MapPane.GetMapLevel();
+    def.pos = pos + S3DPoint(30, 30, 80);
+    TObjectInstance* flash = MapPane.GetInstance(MapPane.NewObject(&def));
+    if (!flash)
+        return;
+    const int32_t states = flash->GetImagery() ? flash->GetImagery()->NumStates() : 1;
+    flash->SetState(states > 0 ? (std::min)(2 * random(0, states / 2), states - 2) : 0);
+}
+
+void TCharacter::EffectBurst(const char *name, int32_t height)
 {
     if (effectBurstSeam)
     {
@@ -4816,77 +4816,115 @@ void TCharacter::StartRetreat()
     retreatlatch = true;
 }
 
+// REVSYNC: TCharacter::Block @ 0x004d2e30 (COMBAT_HIT.md §3.9) -- raise a
+// guard for `frames` (below 0: BLOCK's random range) in a combat or bow root:
+// not while flinching, dead or held, nor with the root's target over 120
+// away. A monster blocks only an attack it can still catch (the attacker
+// short of its block time), unless `frames` is -2 (IsValidAttack's forced
+// block); the player needs no timing. The block keeps its target, loops,
+// and interrupts.
 bool TCharacter::Block(int32_t frames)
 {
     if (blockSeam)
         return blockSeam(this, frames);
-    if (!IsFighting() || !(IsDoing(ACTION_COMBAT) || IsDoing(ACTION_IMPACT)))
+    if (!root || (root->action != ACTION_COMBAT && root->action != ACTION_BOW))
         return false;
-
-    TCharacter* targ = (TCharacter*)doing->obj;
-
-    char *blockanim = "block";
-    bool synchronize = false;
-
-    if (targ)
+    if (doing && doing->action == ACTION_IMPACT)
+        return false;
+    if (Health() <= 0 || InteractiveLocked())
+        return false;
+    if (root->obj && Distance(root->obj) > 120)
+        return false;
+    if (ObjClass() != OBJCLASS_PLAYER)
     {
-        if (targ->IsDoing(ACTION_ATTACK) &&                         // Char is attacking
-            targ->GetFrame() < targ->GetDoing()->attack->blocktime) // And we're in time to block
-        {
-            blockanim = targ->GetDoing()->attack->blockname;        // Get desired block name
-            if (!HasActionAni(blockanim))
-                blockanim = "block";                                // Use default block
-            else
-            {
-    //          if (targ->GetDoing()->attack->flags & CA_SNAPBLOCK) // If special block, and needs snap, do snap
-    //              SnapDist(targ, targ->doing->impact->snapdist);
-            }
-        }
-        else
-        {
+        auto* attacker = dynamic_cast<TCharacter*>(doing->obj);
+        if (!attacker)
             return false;
-        }
+        const TActionBlock* blow = attacker->doing;
+        const bool catchable = blow && blow->action == ACTION_ATTACK && blow->attack &&
+                               attacker->GetFrame() < blow->attack->blocktime;
+        if (!catchable && frames != -2)
+            return false;
     }
-
-    if (!HasActionAni(blockanim)) // Do we have this particular block?
+    char name[RESNAMELEN];
+    CombatAnimName(name, "block");
+    if (!HasActionAni(name))
         return false;
 
-  // Ok, now start the block (note that AF_SYNCHRONIZE will cause frames to sync with attack
-    TActionBlock* ab = new TActionBlock(blockanim, ACTION_BLOCK);
+    auto* ab = new TActionBlock(name, ACTION_BLOCK);
     ab->obj = doing->obj;
-    if (frames < 0)
-        ab->wait = random(chardata->blockmin, chardata->blockmax);
-    else
-        ab->wait = frames;
+    ab->wait = frames < 0 ? random(chardata->blockmin, chardata->blockmax) : frames;
+    ab->priority = false;
     ab->interrupt = true;
     ab->loop = true;
     SetDesired(ab);
-
-  // Make sure moving angle equals face (it doesn't during a combat move)
-    SetMoveAngle(GetFace());
-
+    DropUnheld(ab);
+    if (!(charflags & kCharFlagNoTurn))
+        SetMoveAngle(GetFace());
     return true;
 }
 
+// REVSYNC: TCharacter::StopBlock @ 0x004d30f0 -- ends a guard: its wait to 0
+// (ResolveBlock lets it go).
 bool TCharacter::StopBlock()
 {
-    if (!IsFighting() || !IsDoing(ACTION_BLOCK))
+    if (!root || (root->action != ACTION_COMBAT && root->action != ACTION_BOW) || !doing ||
+        doing->action != ACTION_BLOCK)
         return false;
-
     doing->wait = 0;
-
     return true;
 }
 
-bool TCharacter::Dodge()
+namespace
 {
-    if (!IsFighting() || !IsDoing(ACTION_COMBAT))
+// Dodge's roll by the character's facing (eight sectors, the last the
+// rest) and the direction held (0-7): the last letter of "crollb".
+constexpr char kDodgeRolls[8][9] = {"bflrbfbf", "bfbfblrf", "rlbfbbff", "fbbfrbfl",
+                                    "fbrlfbfb", "fbfbfrlb", "lrfbffbb", "bffblfbr"};
+
+int32_t DodgeSector(int32_t facing)
+{
+    constexpr int32_t kFirst[7] = {0x10, 0x31, 0x51, 0x71, 0x92, 0xb3, 0xd3};
+    constexpr int32_t kLast[7] = {0x30, 0x50, 0x70, 0x91, 0xb2, 0xd2, 0xf2};
+    for (int32_t s = 0; s < 7; ++s)
+        if (facing >= kFirst[s] && facing <= kLast[s])
+            return s;
+    return 7;
+}
+}
+
+// REVSYNC: TCharacter::Dodge @ 0x004d3150 (COMBAT_HIT.md §3.10) -- a roll
+// out of the combat stance, toward `dir` (0-7, the direction held; any
+// other keeps the back roll): "crollb" ("hrollb" from the "hand" root), its
+// last letter by the facing and `dir`. Not dead or held; a stopped player
+// is let go. (The debug camera's turn of the facing, 0x006671f0, isn't
+// ported, as in UpdateMove.)
+bool TCharacter::Dodge(int32_t dir)
+{
+    if (!root || (root->action != ACTION_COMBAT && root->action != ACTION_BOW))
         return false;
+    if (!doing || doing->action != ACTION_COMBAT || Health() <= 0 || InteractiveLocked())
+        return false;
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        TPlayer* player = static_cast<TPlayer*>(this);
+        if (player->PlayerState() & 2)
+            player->SetPlayerState(player->PlayerState() & ~2);
+    }
 
-    TActionBlock* ab = new TActionBlock("dodge", ACTION_DODGE);
+    char name[] = "crollb";
+    if (root->Is("hand"))
+        name[0] = 'h';
+    if (dir >= 0 && dir <= 7)
+        name[5] = kDodgeRolls[DodgeSector(GetFace())][dir];
+    if (!HasActionAni(name))
+        return false;
+    auto* ab = new TActionBlock(name, ACTION_DODGE);
     ab->obj = doing->obj;
+    ab->interrupt = false;
+    ab->priority = true;
     SetDesired(ab);
-
+    DropUnheld(ab);
     return true;
 }
 

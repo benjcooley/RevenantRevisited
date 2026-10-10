@@ -27,6 +27,10 @@ field names (data_parse.py's layouts) -- and their attack bookkeeping
 - `damage` Damage `0x4c4950` (damage, type, mod, block, attacker): `block`
   a block spec as the case's roles take them, its attack / impact the
   attacker's by default; run with the case's `seam_damage` false.
+- `resolve-impact` ResolveImpact `0x4c74b0`, `resolve-block` ResolveBlock
+  `0x4c77a0`, `resolve-dead` ResolveDead `0x4c7810` (bits) on the doing
+  block; `block` Block `0x4d2e30` (frames; with `seam_block` false),
+  `stop-block` StopBlock `0x4d30f0`, `dodge` Dodge `0x4d3150` (dir).
 
 Runs as original code: the method and what it calls -- the searches,
 IsValidAttack, DoAttack, HasActionAni, CombatAnimName `0x4ce1b0` and the
@@ -42,7 +46,8 @@ Seams (guest.py's, and these), recorded in order:
 - FindClearPath `0x4c39d0`: the case's `blocked`; when blocked, the
   blocker is the case's `blocker` (a name, or none).
 - Block `0x4d2e30` (frames): recorded on the character, the case's
-  `block_result` (1).
+  `block_result` (1); the original runs with the case's `seam_block` false.
+- EffectCombatFlash `0x4c8500`: recorded (it spawns an effect).
 - The spell list's Find `0x53f010` and Cast `0x4d5c20`, as one record
   `CastByName` (spell, targets, source, result): a spell in the case's
   `spells` is cast with `cast_result` (1); any other isn't found (result 0).
@@ -80,6 +85,9 @@ FIND_BUTTON, FIND_PCNT, FIND_INTERACTIVE = 0x4d1dd0, 0x4d1eb0, 0x4d1ff0
 DO_ATTACK = 0x4d2120
 BUTTON_ATTACK, BUTTON_ACTION, RANDOM_ATTACK, SPECIFIC_ATTACK = 0x4d2480, 0x4d27f0, 0x4d2900, 0x4d2a60
 FIND_CHARACTERS, FIND_CLEAR_PATH, BLOCK = 0x4cd690, 0x4c39d0, 0x4d2e30
+STOP_BLOCK, DODGE = 0x4d30f0, 0x4d3150
+RESOLVE_IMPACT, RESOLVE_BLOCK, RESOLVE_DEAD = 0x4c74b0, 0x4c77a0, 0x4c7810
+EFFECT_COMBAT_FLASH = 0x4c8500
 SPELL_FIND, CAST = 0x53f010, 0x4d5c20
 PLAYER_WEAPONTYPE, PLAYER_WEAPONDAMAGE, SET_PLAYER_STATE = 0x520810, 0x520830, 0x51d680
 # Hit resolution (COMBAT_HIT.md): original ResolveAttack / ResolveHit /
@@ -100,7 +108,10 @@ COVERED = {'AnimPrefix': (0x4cdf60, 0x4ce1b0), 'CombatAnimName': (0x4ce1b0, 0x4c
            'SpecificAttack': (0x4d2a60, 0x4d2bd9), 'ResolveHit': (0x4c62b0, 0x4c6dca),
            'ResolveAttack': (0x4c6dd0, 0x4c748c), 'OnAttacked': (0x4cdce0, 0x4cdef1),
            'Damage': (0x4c4950, 0x4c5810), 'ObjectDamage': (0x46e970, 0x46ea0d),
-           'PlayerKilled': (0x518ed0, 0x518f8b), 'PlayerDied': (0x518f90, 0x518fda)}
+           'PlayerKilled': (0x518ed0, 0x518f8b), 'PlayerDied': (0x518f90, 0x518fda),
+           'ResolveImpact': (0x4c74b0, 0x4c7798), 'ResolveBlock': (0x4c77a0, 0x4c7804),
+           'ResolveDead': (0x4c7810, 0x4c7973), 'Block': (0x4d2e30, 0x4d30ec), 'StopBlock': (0x4d30f0, 0x4d3147),
+           'Dodge': (0x4d3150, 0x4d3471)}
 
 ATTACK_SIZE = 0x320
 RULES = 0x65d7a8
@@ -132,7 +143,7 @@ class MeleeFixture:
         b = self.world.boundaries
         b.add(FIND_CHARACTERS, 'FindCharacters', 0x18, self._find_characters)
         b.add(FIND_CLEAR_PATH, 'FindClearPath', 0x14, self._find_clear_path)
-        b.add(BLOCK, 'Block', 4, self._block)
+        b.add(EFFECT_COMBAT_FLASH, 'EffectCombatFlash', 0, self._combat_flash)
         b.add(SPELL_FIND, 'SpellFind', 4, self._spell_find)
         b.add(CAST, 'Cast', 0x10, self._cast)
         b.add(PLAYER_WEAPONTYPE, 'WeaponType', 0, lambda a, c: self._weapon(c, 'type', 'WeaponType'))
@@ -148,6 +159,7 @@ class MeleeFixture:
         for kind, (address, pop) in EXP.items():
             b.add(address, f'Exp{kind}', pop, lambda a, c, kind=kind: self._exp(kind, a, c))
         self._conditional(DAMAGE, 0x14, self._damage, lambda: self.case.get('seam_damage', True))
+        self._conditional(BLOCK, 4, self._block, lambda: self.case.get('seam_block', True))
         self._emulator_fixes()
         self._coverage()
         self.vm.checkpoint()
@@ -202,6 +214,10 @@ class MeleeFixture:
         result = int(self.case.get('block_result', 1))
         self.world.seams.append(dict(seam='Block', who=self.world._name(ecx), frames=s32(args[0]), result=result))
         return result
+
+    def _combat_flash(self, args, ecx):
+        self.world.seams.append(dict(seam='EffectCombatFlash', who=self.world._name(ecx)))
+        return 0
 
     def _spell_find(self, args, ecx):
         name = self.vm.string(args[0])
@@ -566,9 +582,16 @@ class MeleeFixture:
             result['returned'] = s32(call(vm, DO_ATTACK, (
                 a['attack'] & 0xffffffff, a.get('impact', -1) & 0xffffffff, a.get('damage', 0) & 0xffffffff,
                 a.get('tohit', 0) & 0xffffffff, a.get('roll', 0) & 0xffffffff, self._obj(a.get('targ'))), this=me))
-        elif kind == 'resolve-attack':
-            result['returned'] = s32(call(vm, RESOLVE_ATTACK, (vm.u32(me + 0xd8), a.get('bits', 0) & 0xffffffff),
-                                          this=me))
+        elif kind in ('resolve-attack', 'resolve-impact', 'resolve-block', 'resolve-dead'):
+            entry = {'resolve-attack': RESOLVE_ATTACK, 'resolve-impact': RESOLVE_IMPACT,
+                     'resolve-block': RESOLVE_BLOCK, 'resolve-dead': RESOLVE_DEAD}[kind]
+            result['returned'] = s32(call(vm, entry, (vm.u32(me + 0xd8), a.get('bits', 0) & 0xffffffff), this=me))
+        elif kind == 'block':
+            result['returned'] = s32(call(vm, BLOCK, (a.get('frames', -1) & 0xffffffff,), this=me))
+        elif kind == 'stop-block':
+            result['returned'] = s32(call(vm, STOP_BLOCK, (), this=me))
+        elif kind == 'dodge':
+            result['returned'] = s32(call(vm, DODGE, (a.get('dir', -1) & 0xffffffff,), this=me))
         elif kind == 'resolve-hit':
             cd = vm.u32(me + 0xfc)
             rec = vm.u32(vm.u32(cd + C_ATTACKS + 0x10) + 4 * a['attack'])

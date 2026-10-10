@@ -71,7 +71,11 @@ class TActionBlock
     TActionBlock(const char *n, const char *str, ACTION a = ACTION_ANIMATE);    // Animation+string/action
     TActionBlock(TActionBlock &ab, const char *str = nullptr, ACTION = ACTION_NONE); // Copies another action block
     
-    ~TActionBlock() { if (data) free(data); }
+    ~TActionBlock() { if (destroyedSeam) destroyedSeam(this); if (data) free(data); }
+    using DestroyedSeam = void (*)(const TActionBlock* ab);
+    static inline DestroyedSeam destroyedSeam = nullptr;
+      // Retail A/B fixtures only: told as a block goes (a case's dumps name
+      // the blocks it began with by address, which a new block may reuse)
 
     bool Is(const char *s) const;           // Multipurpose match (?=any one char, *=0 or more chars, #=any num, [xx]=any one char in braces)
     bool Is(ACTION a) const { return action == a; } // Is an action
