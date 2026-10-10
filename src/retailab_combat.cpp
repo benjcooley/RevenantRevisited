@@ -126,6 +126,12 @@ std::string CombatCall(const Case& c, std::string& error)
             returned = me->Leap((int32_t)cs["angle"].Int()) ? 1 : 0;
         else if (call == "start-retreat")
             me->StartRetreat();
+        else if (call == "knockback")
+        {
+            const JsonValue& f = cs["from"];
+            returned = me->KnockBack(S3DPoint((int32_t)f[0].Int(), (int32_t)f[1].Int(), (int32_t)f[2].Int()),
+                                     (int32_t)cs["variant"].Int(-1)) ? 1 : 0;
+        }
         else if (call == "update-move")
         {
             const JsonValue& ctl = cs["controls"];
@@ -149,7 +155,7 @@ std::string CombatCall(const Case& c, std::string& error)
         world.WriteCharacter(j, "self", me);
         WriteSeams(j);
         WriteDraws(j);
-        if (call == "move" || call == "update-action" || call == "start-retreat")
+        if (call == "move" || call == "update-action" || call == "start-retreat" || call == "knockback")
             fx->WriteMotion(j);
         if (call == "update-move")
         {

@@ -392,6 +392,7 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Field("framerate", (int32_t)this->framerate).Field("prevstate", (int32_t)this->prevstate);
         j.Field("prevframe", (int32_t)this->prevframe);
         j.Field("animate", (this->flags & OF_ANIMATE) ? 1 : 0).Field("animator", this->HasAnimator() ? 1 : 0);
+        j.Field("combatflash", this->GetCombatFlashTicks());
         j.End('}');
     }
 

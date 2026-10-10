@@ -92,6 +92,29 @@ def steps_cases(data: Path, workdir: Path) -> list[dict]:
             me['doing']['obj'] = 'Foe'
         cases.append(dict(name=f'steps.retreat.{who}.{doing}.already{already}', call='start-retreat',
                           globals=dict(combatface=1, frame=0x40), self=who, chars=[me, foe]))
+
+    # KnockBack: the blow's bearing all round two facings (the back impact
+    # past 0x48 off the facing, measured unwrapped: a facing of 250 sees a
+    # blow at 10 as from behind), each variant and the random pick (out of
+    # range too), with and without the back impact, a player (the prefix),
+    # an idle player, a paralysed character.
+    impacts = ['impk', 'imphh', 'imph', 'implh', 'impl']
+    for who, objclass, facing, bearing, variant, has_back in itertools.product(
+            ('Araknid', 'Locke'), (12, 11), (0, 250), range(0, 256, 32), (-1, 0, 3, 7), (1, 0)):
+        if (who == 'Locke') != (objclass == 11):
+            continue
+        prefix = 'c'
+        states = FULL_STATES + [prefix + n for n in impacts] + ([prefix + 'impb'] if has_back else [])
+        me = _char(who, objclass, me_at, facing, root_obj='Target', states=states)
+        frm = _toward(me_at, bearing, 80)
+        tape = [[1], [4], [32767], [8]][(facing // 2 + bearing // 32) % 4] if variant in (-1, 7) else []
+        case(f'knock.{who}.f{facing}.b{bearing}.v{variant}.back{has_back}', me, call='knockback', **{'from': frm},
+             variant=variant, tape=tape)
+    for label, extra in (('player-idle', dict(playerstate=2)), ('paralysed', dict(objflags=0x800000)),
+                         ('no-anim', dict(states=FULL_STATES))):
+        states = extra.pop('states', FULL_STATES + ['c' + n for n in impacts])
+        me = _char('Locke', 11, me_at, 0, root_obj='Target', states=states, **extra)
+        case(f'knock.refuse.{label}', me, call='knockback', **{'from': _toward(me_at, 20, 80)}, variant=1)
     return finish(cases)
 
 
