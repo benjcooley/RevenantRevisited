@@ -39,7 +39,9 @@ struct TEffect:TObjectInstance{void*spell{};bool animator=true,done=true;Image*i
  bool CommandDone()const{return done;}void SetCommandDone(bool x){done=x;}void SetFrame(int x){frame=x;}
  int GetState()const{return 0;}const char*GetName()const{return "fixture";}
  unsigned GetFlags()const{return flags;}void SetFlags(unsigned x){flags|=x;}void Pulse();};
-struct TFireBallEffect:TEffect{bool alive_=true;int steps{};void StepMissilePulse(){++steps;}void StepAnimate(){++steps;}void KillThisEffect(){flags|=OF_KILL;}void Pulse();};
+// PulseMissile is the combat wrapper introduced on main. This lifecycle
+// boundary counts dispatch only; missile physics/damage have their own katas.
+struct TFireBallEffect:TEffect{bool alive_=true;int steps{};void PulseMissile(){++steps;}void StepAnimate(){++steps;}void KillThisEffect(){flags|=OF_KILL;}void Pulse();};
 '''
         tests=r'''
 void check(bool condition,const char*name){if(!condition){std::fprintf(stderr,"FAIL %s\n",name);std::exit(1);}}
