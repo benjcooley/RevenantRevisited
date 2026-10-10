@@ -19,7 +19,9 @@
     "actual_runtime_verified_rows": 80,
     "visual_fidelity_confirmed_rows": 14,
     "repeatable_ab_rows": 7,
-    "thin_bounded_render_frontend_rows": 66
+    "thin_bounded_render_frontend_rows": 66,
+    "reviewed_visual_pass_rows": 14,
+    "remaining_visual_review_rows": 162
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {

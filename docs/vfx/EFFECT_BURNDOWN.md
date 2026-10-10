@@ -1,5 +1,19 @@
 # Effects burn-down: retail parity and working runtime
 
+## Current VFX progress (2026-10-10)
+
+**14 / 176 effects have reviewed visual passes for their recorded test configuration; 162 still need a current visual pass.** This is the primary VFX progress measure. The separate 66 bounded rendered frontend comparisons help diagnose correctness; they are not 66 completed effects. These counts overlap and must not be added.
+
+Passed appearance cases: CyanFont, RedFont, GreenFont, BlueFont, base Flame, Ripple emitted by Drip, Globe, Sparks editor defaults, isolated Cure, isolated Pixie, Shadowfist, Warriorborn, teleportation and goldeffect. Their per-row visual reviews record the configuration and remaining limitations. Might and Immortalmight remain pending after the shared parser correction.
+
+A useful pass compares actual port output with actual retail output and reviews form, scale, color/blending, animation, motion and lifetime within the recorded configuration. Independent random seeds are acceptable. Moving projectiles and two-endpoint effects must exercise those behaviors. State-only or partial shared-raster proofs are supporting evidence and do not establish a complete visual pass.
+
+Natural gameplay triggers, attachment, audio, other configurations and targeted graphics-device checks remain follow-up tasks. The earlier all-gates count is an end-to-end integration measure, not the headline completion measure. Keep concrete visible differences open; do not silently accept them because another test passed.
+
+Work proceeds in parallel: close current visual reviews, convert and compare new easy effects, and fix shared testing/rendering defects. Each effect lane should return a reviewed pass or a specific mismatch to fix. Infrastructure work does not block independent effect work.
+
+The dated sections below retain historical checkpoint counts. Use this summary and the JSON ledger for current status.
+
 **Workflow change (2026-10-07):** most new VFX validation uses the thin retail
 emulator and its original software renderer. DOSBox-X with the emulated 3D device
 is reserved for targeted software-rendering diagnostics, not the routine loop.
@@ -382,11 +396,11 @@ Bounded rendered-frontend coverage is **29 / 176**; full acceptance remains open
 
 Audited 2026-10-05. This file and [EFFECT_BURNDOWN.json](EFFECT_BURNDOWN.json) are the current completion ledger. Older [INVENTORY.md](INVENTORY.md), [BESPOKE_WAVE_ROADMAP.md](BESPOKE_WAVE_ROADMAP.md) and [EFFECT_USAGE_MAP.md](EFFECT_USAGE_MAP.md) retain useful class research, but their counts, statuses and historical scope do not certify acceptance.
 
-## Scope and honest progress
+## Historical scope and checkpoint (superseded by current summary)
 
 The current `data/imagery.rvi` → `class.def` contains **176 retail EFFECT type rows**, **174 distinct case-insensitive names**, and **166 distinct case-insensitive asset paths**. Preserve all 176 type IDs. Three rows are literally named `Flame`, with assets `Flame.I3D`, `FlameB.I3D` and `FlameG.I3D` and IDs `0x50ba373b`, `0x50ba373c`, `0x50ba373d`. The colored harness aliases do not prove that `add FlameB`/`add FlameG` dispatches in retail. This corrects the older inventory's claim of 174 entries/164 assets.
 
-**Retail visual checks passed: 16 / 176 (four Fountain colors, Ripple emitted by Drip, Globe on an actual map floor, base Flame, isolated Pixie, isolated Cure, Sparks editor defaults and teleportation/Shadowfist/Warriorborn on a neutral real-depth floor and Gold default appearance against two independent references measured-quality Might and corrected incoming-state Immortalmight). Full retail/runtime acceptance: 0 / 176; 176 remain.** Fifty retail rows now have software references (base Flame, Mist, all four Fountain colors, Fizzle, Drip, static Globe, all twelve town signs and all seven colored Ribbons and SymGlow, Faultfire, FireSwarm, Streamer, setvortex, Pixie, FireFlash, FireCone, MeteorStorm, Cure, goldeffect, combatflash state0/start1, Sparks editor defaults and KinSecretDoor still/state0, PunchAndJudy loop excerpt and MPAppear defaultstart, Shadowfist, Warriorborn, teleportation, Might, Immortalmight and Fmastery steady start excerpts), with saved paired previews for49 rows. These prove the capture/comparison workflow, not final visual or runtime acceptance. A successful build, plausible preview or `status: complete` capture alone does not establish visual fidelity; a retained retail pair and visual review can establish it with independent random seeds. Completion includes the effect's real map, spell, combat or character trigger, beyond `SpawnForTest`.
+**Historical retail visual checks passed: 16 / 176 (four Fountain colors, Ripple emitted by Drip, Globe on an actual map floor, base Flame, isolated Pixie, isolated Cure, Sparks editor defaults and teleportation/Shadowfist/Warriorborn on a neutral real-depth floor and Gold default appearance against two independent references measured-quality Might and corrected incoming-state Immortalmight). Full retail/runtime acceptance: 0 / 176; 176 remain.** Fifty retail rows now have software references (base Flame, Mist, all four Fountain colors, Fizzle, Drip, static Globe, all twelve town signs and all seven colored Ribbons and SymGlow, Faultfire, FireSwarm, Streamer, setvortex, Pixie, FireFlash, FireCone, MeteorStorm, Cure, goldeffect, combatflash state0/start1, Sparks editor defaults and KinSecretDoor still/state0, PunchAndJudy loop excerpt and MPAppear defaultstart, Shadowfist, Warriorborn, teleportation, Might, Immortalmight and Fmastery steady start excerpts), with saved paired previews for49 rows. These prove the capture/comparison workflow, not final visual or runtime acceptance. A successful build, plausible preview or `status: complete` capture alone does not establish visual fidelity; a retained retail pair and visual review can establish it with independent random seeds. The historical all-gates completion rule included the effect's real map, spell, combat or character trigger, beyond `SpawnForTest`; these are now separate follow-up gates for the primary scoped visual measure.
 
 The current harness declares **159 unique preview IDs**, associated by name or explicit factory profile with **120 retail rows**; **56 rows need candidate mapping/fixture research**. These associations are work leads, not coverage proofs. **8 preview IDs** remain outside this association scan (see the JSON catalogue); multiple previews can represent one type, and a registered stub can draw nothing.
 

@@ -16,7 +16,10 @@ class CoverageTests(unittest.TestCase):
         counts=self.coverage['counts']
         self.assertEqual(counts['ledger_rows'],176)
         self.assertEqual(counts['exposed_real_type_ids'],37)
-        self.assertEqual(counts['fully_accepted_rows'],0)
+        rows=list(self.coverage['types'].values())
+        self.assertEqual(counts['fully_accepted_rows'],sum(bool(r['ledger_acceptance']['accepted']) for r in rows))
+        self.assertEqual(counts['reviewed_visual_pass_rows'],sum(bool(r['ledger_acceptance']['visual_fidelity']) for r in rows))
+        self.assertEqual(counts['reviewed_visual_pass_rows']+counts['remaining_visual_review_rows'],counts['ledger_rows'])
         self.assertEqual(self.coverage['exposed_without_ledger'],[])
         for type_id in self.coverage['rendered_without_direct_adapter']:
             self.assertIsNone(self.coverage['types'][type_id]['control'])
@@ -33,9 +36,19 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(row['gates']['gpu']['status'],'differences_found')
         self.assertEqual(row['gates']['full_acceptance']['status'],'open')
         self.assertFalse(row['gates']['runtime']['natural_context_verified'])
+        self.assertEqual(row['gates']['visual_review']['status'],'pass_for_tested_configuration')
         fog=self.coverage['types']['0x180674ba']
         self.assertEqual(fog['gates']['gpu']['status'],'not_checked')
         self.assertEqual(fog['gates']['full_acceptance']['status'],'open')
+        self.assertEqual(fog['gates']['visual_review']['status'],'pending')
+
+    def test_current_report_formats_count_pixels_without_promoting_visual_reviews(self):
+        self.assertEqual(self.coverage['counts']['evidence_rows_with_shared_raster_pixel_pass'],
+                         self.coverage['counts']['ledger_reported_render_frontend_rows'])
+        for type_id in ('0xad92bc28','0xad92bc37','0xad92bd36'):
+            row=self.coverage['types'][type_id]
+            self.assertEqual(row['gates']['pixel_frontend']['status'],'shared_original_raster_pass')
+            self.assertEqual(row['gates']['visual_review']['status'],'pending')
 
     def test_fireball_route_requires_actual_moving_distinct_endpoint_scenario(self):
         control=self.coverage['types']['0x63fd382a']['control']
