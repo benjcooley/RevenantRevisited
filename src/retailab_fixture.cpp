@@ -342,6 +342,30 @@ bool CaseSees(TCharacter* self, TCharacter* chr, int32_t angle)
     return g_sees;
 }
 
+// The case's `walls` (pairs of names) block the line of sight from the
+// first's eyes to the second's (CanSeeCharacter's, LIGHTINGCHARHEIGHT above
+// each); every other line is clear (both sides).
+std::vector<std::pair<std::string, std::string>> g_walls;
+
+std::string EyesOf(const S3DPoint& p)
+{
+    for (TCharacter* c : g_world->Order())
+        if (c->Pos().x == p.x && c->Pos().y == p.y && c->Pos().z + LIGHTINGCHARHEIGHT == p.z)
+            return g_world->NameOf(c);
+    return "?";
+}
+
+bool CaseLineOfSight(const S3DPoint& from, const S3DPoint& to)
+{
+    const std::pair<std::string, std::string> line{EyesOf(from), EyesOf(to)};
+    const bool clear = std::find(g_walls.begin(), g_walls.end(), line) == g_walls.end();
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "LineOfSight").FieldString("from", line.first);
+    j.FieldString("to", line.second).Field("result", clear ? 1 : 0).End('}');
+    Seam(j.str());
+    return clear;
+}
+
 bool CaseBlocked(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, uint32_t bits, TCharacter** bychar)
 {
     if (bychar)
@@ -482,8 +506,31 @@ SCaseScope::SCaseScope(const JsonValue& cs, const TFixtureWorld& world)
             Player = static_cast<TPlayer*>(c);
     g_blocked = cs["blocked"].Bool(false);
     g_sees = cs["sees"].Bool(true);
-    TCharacter::findCharactersSeam = EmptyWorld;
-    TCharacter::canSeeSeam = CaseSees;
+    // With `perception`, the characters find and see each other as the
+    // game's own code (kata M9b), only the line of sight the case's;
+    // otherwise FindCharacters finds no one and CanSeeCharacter answers
+    // `sees`.
+    if (cs["perception"].Bool())
+    {
+        g_walls.clear();
+        for (const JsonValue& w : cs["walls"].Items())
+            g_walls.emplace_back(w[0].Str(), w[1].Str());
+        TMapPane::lineOfSightSeam = CaseLineOfSight;
+    }
+    else
+    {
+        TCharacter::findCharactersSeam = EmptyWorld;
+        TCharacter::canSeeSeam = CaseSees;
+    }
+    // The characters near a point: the case's `nearby`, else all of them,
+    // in case order (as the retail fixture's map iterator gives them).
+    g_nearby.clear();
+    if (cs.Has("nearby"))
+        for (const JsonValue& n : cs["nearby"].Items())
+            g_nearby.push_back(world.Get(n.Str()));
+    else
+        g_nearby = world.Order();
+    TCharacter::nearbyCharactersSeam = CaseNearby;
     TActionBlock::destroyedSeam = [](const TActionBlock* ab) { g_world->ForgetBlock(ab); };
     TMapPane::playMouseClickSeam = [](int32_t button, int32_t x, int32_t y) {
         JsonOut j;
@@ -507,14 +554,7 @@ SCaseScope::SCaseScope(const JsonValue& cs, const TFixtureWorld& world)
                                                 (int32_t)b[3].Int(), (int32_t)b[4].Int()});
         for (const JsonValue& sc : gr["nosector"].Items())
             g_ground.nosector.emplace_back((int32_t)sc[0].Int(), (int32_t)sc[1].Int());
-        g_nearby.clear();
-        if (cs.Has("nearby"))
-            for (const JsonValue& n : cs["nearby"].Items())
-                g_nearby.push_back(world.Get(n.Str()));
-        else
-            g_nearby = world.Order();
         TMapPane::walkGridSeam = CaseWalkCell;
-        TCharacter::nearbyCharactersSeam = CaseNearby;
     }
     else
         TCharacter::blockedSeam = CaseBlocked;
@@ -534,6 +574,7 @@ SCaseScope::~SCaseScope()
     TMapPane::playMouseClickSeam = nullptr;
     TCharacter::nearbyCharactersSeam = nullptr;
     TMapPane::walkGridSeam = nullptr;
+    TMapPane::lineOfSightSeam = nullptr;
     Player = savedPlayer;
     g_world = nullptr;
 }
