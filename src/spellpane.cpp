@@ -20,8 +20,10 @@
 #include "font.h"
 #include "spellpane.h"
 #include "textbar.h"
+#include "uidragstate.h"
 
 #include <iterator>
+#include <string>
 
 extern TObjectClass TalismanClass;
 
@@ -482,10 +484,11 @@ void TQuickSpellButton::SetSpell(TBitmap *circle, std::string top, std::string b
     SetDirty();
 }
 
-// REVSYNC: 0x00542900 -- the circle (magenta-keyed), then the ring with alpha:
-// grey while the spell can't be cast, else down or up; pressed, both sink a
-// pixel. Then the label. (Retail first restores the bar under the ring; the
-// port's ring layer lies over the bar's.)
+// REVSYNC: 0x00542900 -- the circle, keyed on magenta alone (retail sets its
+// key to the display's, 0x00542ab3), then the ring with alpha: grey while the
+// spell can't be cast, else down or up; pressed, both sink a pixel. Then the
+// label. (Retail first restores the bar under the ring; the port's ring layer
+// lies over the bar's.)
 void TQuickSpellButton::Compose(int32_t target_w, int32_t target_h)
 {
     dirty = false;
@@ -493,9 +496,9 @@ void TQuickSpellButton::Compose(int32_t target_w, int32_t target_h)
         return;
     const int32_t sink = down ? 1 : 0;
     if (icon)
-        Renderer->DrawBitmapToTarget(icon, x + sink, y + sink, target_w, target_h);
+        Renderer->DrawBitmapToTarget(icon, x + sink, y + sink, target_w, target_h, EBitmapDecode::MagentaKeyed);
     if (TBitmap *ring = !castable ? greybitmap : down ? downbitmap : upbitmap)
-        Renderer->DrawBitmapToTarget(ring, x + sink, y + sink, target_w, target_h);
+        Renderer->DrawBitmapToTarget(ring, x + sink, y + sink, target_w, target_h, EBitmapDecode::Unkeyed);
     if (!font)
         return;
     if (!toplabel.empty())
@@ -596,6 +599,28 @@ void TQuickSpellPane::Pulse()
     }
 }
 
+// REVSYNC: 0x00544890. A spell dragged from the spell book and let go over a
+// ring goes on that ring, if spell.def has it (TPlayer::SetQuickSpell
+// 0x0051b580); a spell let go anywhere on the pane ends its drag there. Any
+// other click is the rings' own.
+void TQuickSpellPane::MouseClick(int32_t button, int32_t x, int32_t y)
+{
+    if (button == MB_LEFTUP && UIDragState::IsDragging() && UIDragState::Get().source == EDragSource::SpellPane
+        && InPane(x, y))
+    {
+        const int32_t ring = RingAt(x, y);
+        const int32_t row = UIDragState::Get().source_idx;     // the spell book's row: a known spell
+        std::string talismans = Player && row >= 0 && row < Player->NumKnownSpells() ? Player->KnownSpell(row) : "";
+        const bool dropped = ring > 0 && !talismans.empty() && SpellList.GetSpellDataByTalismans(talismans.data());
+        if (dropped)
+            Player->SetQuickSpell(ring, talismans.data());
+        UIDragState::CompleteDrag(EDragSource::QuickSpell, ring, dropped);
+        if (dropped)
+            return;
+    }
+    TButtonPane::MouseClick(button, x, y);
+}
+
 void TQuickSpellPane::Invoke(int32_t ring)
 {
     if (ring >= 1 && ring <= kNumRings && Player)
@@ -605,4 +630,12 @@ void TQuickSpellPane::Invoke(int32_t ring)
 TQuickSpellButton *TQuickSpellPane::Ring(int32_t ring)
 {
     return static_cast<TQuickSpellButton *>(Button(ring - 1));
+}
+
+int32_t TQuickSpellPane::RingAt(int32_t x, int32_t y)
+{
+    for (int32_t ring = 1; ring <= kNumRings; ++ring)
+        if (Ring(ring)->OnButton(x, y))
+            return ring;
+    return 0;
 }

@@ -36,7 +36,7 @@ of game data:
 | Stat sheet | `FIELD x` → pane resolver `FUN_00547240` (`train*`, `objdesc`, weapon type, `stmod*`) → object virtual `+0xc8` chain: TPlayer `0x0051dfb0` (`class`) → TCharacter `0x004d5260` (`armor`, `maxhealth/fatigue/mana`, `attackpct`, `defensepct`, `damage`, `stealth`) → TObjectInstance `0x00472f80` (`name`, `objtype`, `objclass`, `statmod`, `experience`, else the object stat of that name) | decompiled 2026-10-05, §6 |
 | Inventory | `player->GetInventorySlot(page + col*3 + row)`; gold = `(*player+0x84)("Gold")`, the port's `GetInventoryAmount` (the player has no Gold stat); count = `Amount()` when > 1 | InventoryPane_SPEC §5, §8 |
 | Equip | `player->GetEquip(i)` icons; the paperdoll draws the player's model with the pane's own animation counters (`mbr_0xbc/0xc4`, anim `"walk"` from `DAT_005e4060`) | EquipPane_SPEC §5, §9 |
-| Belt | items in the player's inventory with `inventnum = 0x10b + N`; a `"Pouch"` shows its first item's icon and its item count | BarInvPane_SPEC §5 step 7 |
+| Belt | items in the player's inventory with `inventnum = 0x10b + N`; a `"Pouch"` shows the item in its slot 0 at half size and its item count | `0x0052ca70`, measured (HUD_REBUILD.md §7, P2b) |
 | Quick spells | `player + 0x2cc + slot*6`: talisman code per button (port `TPlayer::GetQuickSpell`) | QuickSpellPane_SPEC §1 |
 | Spell book | `player + 0x2ec` known-spell list (talisman codes) | SpellbookPane_SPEC §1; SAVE_GAME §11.4 |
 
@@ -69,8 +69,8 @@ belt and equip slots resolve their item from the player's inventory, and a
 committed drag moves the item there: `SetInventNum` to the destination slot
 (swapping with an occupant), and `TPlayer::Equip` for equipment slots,
 following the 1998 `TEquipPane::MouseClick` algorithm the retail panes
-share (`invslot.h` banner). Icons come from the item (`InventoryImage`,
-plus the item's `invanim` stepped on the legacy 24 Hz tick).
+share (the pane specs). Icons come from the item: its `invanim` on the
+game frame when its state has one, else `InventoryImage` (`invslot.h`).
 
 **Objects answer the stat sheet.** The retail field resolver is an object
 virtual; the port gains `TObjectInstance::GetFieldText` with the

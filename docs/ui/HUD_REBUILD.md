@@ -266,7 +266,7 @@ Each pane goes through the same loop:
 | **P0** | HUD slot (display env, loader, fixture objects, GDI boundary); port `--retail-ab=hud-*`; `hud_ab.py` | the retail status bar paints real pixels from `StatusBar.dat`; the port side round-trips one case; the triptych renders |
 | **P1a** ✓ | Pane A/B harness: the port renders a pane over black at 640×480 from a case (headless test mode + readback); the compare checks geometry exactly and colour within the stated blend tolerance, and writes a retail / port / diff triptych | the status bar's current port output measured against retail |
 | **P1b** ✓ | `TPlyrStatusBar` production class (compose recipe recorded from retail: see `slots/hud/plyrstatusbar.py`), fades, bars kernel `0x54a5d0` (slices verified against traces), player + target sides | zero non-text diff across stat sweeps × target present/absent × fade ticks |
-| **P2** | Bottom bar: quickspell row, potion shelf + counts, end cap | same |
+| **P2** ✓ | Bottom bar: quickspell row, potion shelf + counts, end cap | same |
 | **P3** | `TSideTabsPane` + the sidebar mode cascade (`DAT_0065d1b8/bc`) | same, plus hover/pressed states |
 | **P4** | Sidebar panes: Stats, Equip, Spellbook, Inventory, Map, SpellCreate | same, per pane |
 | **P5** | `TTextBar` game log | text calls match; colors settled (pink fringe) |
@@ -290,13 +290,18 @@ retail's own blitters: no overlay quads.
 
 - **Bar** (`0x0052c880`): `UtilityBar` (640×60) *cropped* to the bar's width
   at (0, 0), not stretched. Then `BarEndCap` (10×60) at (w − 10, 0).
-- **Shelf**: `BarInvBox` (42×42, mode 0x10) at (220 + 45k, 10) for
+- **Shelf**: `BarInvBox` (42×42, mode 0x10: opaque) at (220 + 45k, 10) for
   k < (w − 220) / 45 (5 at 452 wide).
-  - Items: the player's belt slots (`0x10b + n`), after a scroll offset.
-    Each item draws its own inventory image at the box (item vtable
-    +0x108), and its count when Amount (+0x198) > 1.
-  - A "Pouch" also shows its first item's icon at 20×20 and that item's
-    count. (Measured in P2b.)
+  - Items: the player's belt slots (`0x10b + n`). (The pane has a scroll
+    offset, +0x88, that only Initialize writes, with 0.) Each item draws
+    its inventory icon at the box's top-left (item vtable +0x108, mode
+    0x110); one with an inventory animation draws the frame
+    `GameFrame % n` in Animate (`0x0052cd80`) instead.
+  - Its amount, when over 1: "%d" in "Numbers" (FONT.DEF Arial 12, red),
+    shadowed, right-aligned in (x, 10, 40, 2 lines).
+  - A "Pouch" also shows the item in its slot 0 halved by the 2:1 reduction
+    (`0x004a31a0`) at (x, 30), and its item count in white "Small",
+    shadowed, in (x + 20, 36, 20, line + 2).
 - **Rings**: buttons "1".."4" (class `0x005b9c54`) at (10 + 50k, 10), 32×32
   hit rects, built from SpellIcons.dat RingU / RingD / RingG. Each frame the
   pane disables a ring (flag 4) unless the player has a quick spell there,
@@ -322,22 +327,26 @@ engine's pane contract (§5):
     All of the port's buttons are bitmap buttons; the 1998 generic frame
     path is dead and goes.
   - `TDialogPane` keeps its own Compose/Draw.
-- **`TBottomBarPane`** (new, `src/bottombar.*`). It lays out against the
-  map view and composes the bar. The shelf and the rings are its children
-  (TPane hierarchy): retail's slot 20 paints them after it, and its
-  SetRect sizes them. `TPlayScreen` adds it as one pane.
+- **`TBottomBarPane`** (new, `src/bottombar.*`). Its host places it
+  (`Place`, retail's SetRect) and it composes the bar. The shelf and the
+  rings are its children (TPane hierarchy): retail's slot 20 paints them
+  after it, and its SetRect sizes them. `TPlayScreen` adds it as one pane
+  and places it along the bottom of the map view while the HUD's lower
+  panel is open (`UpdateBottomBar`).
 - **`TQuickSpellPane`** (evolves `src/spellpane.*`). Retail's four ring
   buttons replace the 1998 `TTalismanButton` strip; the quick spells are
   the player's (`TPlayer::GetQuickSpell`). Pulse sets each ring's
   disabled state. `TQuickSpellButton` composes icon, ring and label as
   above.
-- **`TBarInvPane`** (new, `src/barinv.*`). It composes the boxes, and the
-  items through the shared item cell (`TInvSlot`) once P2b has measured
-  them.
+- **`TBarInvPane`** (new, `src/barinv.*`). It composes the boxes and the
+  items through the shared item cell (`TInvSlot`), recomposing when what a
+  box shows changes.
 
 The A/B is `hud_ab.py bottombar` over `--test=ab-bottombar`. Its cases vary
 the bar's width (452, 640), the quick spells (empty, castable, not
-castable, one word, long names) and, from P2b, the belt.
+castable, one word, long names), and the belt: still and animated items at
+several game frames, pouches, amounts (ammo, money), a pouch holding a
+stack.
 
 ## 7. Status
 
@@ -395,5 +404,55 @@ castable, one word, long names) and, from P2b, the belt.
   - Open, elsewhere:
     - `TDialogPane` takes its Ring from `statusbarnotex.dat`. Retail uses
       `DAT_0065a9d0`, which is `StatusBar.dat` on the Classic path.
-    - `invslot.cpp`'s probe of other states for an icon is redundant now
-      that GetInvImage follows retail.
+- 2026-10-09: **P2 done.**
+  - `TBottomBarPane`, `TQuickSpellPane` and `TBarInvPane` are production
+    panes; `TPlayScreen` hosts the bar. The harness bar, shelf and rings
+    are gone; `--test=ui-bottombar` and `--test=ab-bottombar` are thin
+    hosts, and `--test=ui-hud` hosts the bar beside the harness's side.
+  - `hud_ab.py bottombar`: 19/19 cases with no defects. Every opaque pixel
+    is exact; the rings' alpha edges are within 17.
+  - What the A/B found and fixed:
+    - Keying follows the draw mode, as in retail: a draw without
+      DM_TRANSPARENT keys nothing (`EBitmapDecode::Unkeyed`: the bar, the
+      boxes, the DM_ALPHA rings). The quick-spell circle is keyed on
+      magenta alone: retail sets its key to the display's before the Put
+      (`0x00542ab3`; `EBitmapDecode::MagentaKeyed`).
+    - Retail's 2D DM_ALPHA mixes through 5-bit scale tables (`0x004b3694`):
+      `d * (31 - a) // 31 + s * a // 31` a field, green in two 3-bit halves.
+      Over every input that is at most 17 (two RGB565 steps) from the
+      port's float blend: the A/B's `alpha` tolerance, on the pixels the
+      fixture marks.
+    - The 2:1 reduction is a GPU pass (`DrawBitmapHalvedToTarget`) that
+      takes the mean as retail does: green and blue the floor of the mean;
+      red sums each pixel's top byte, green's top bits with it, so green
+      can carry red up a step.
+    - Ammo and money icons are stacks (`SInvIcon`, drawn as parts on the
+      GPU), to retail's recipes: an "Arrow" stack shows IMGAMOUNT(amount)
+      copies at AmmoPos − 4, other ammo one (`0x004bf990`, `0x004bfda0`); a
+      gold pile 1..64 coins at MoneyPos, its key 0 (`0x00515fb0`). The
+      snapshot's CPU composites (crashing for 3D imagery) are gone.
+    - 8-bit bitmaps decode through their 15-bit palette, as retail draws
+      them: the "Arrow" icon's 24-bit colours are stored RGB, not COLORREF.
+    - `TSpellList::GetSpellDataByTalismans` / `GetVariantDataByTalismans`
+      match the talismans exactly, first match (`0x0053ed70`,
+      `0x0053ef90`): "Advanced healing" is DEB, "Restore Life" BED. Casting
+      uses them too.
+    - A spell dropped from the spell book onto a ring goes on it
+      (`0x00544890`).
+    - A pouch's count is of the items in it; retail counts its inventory
+      array (`0x00470040`), holes left by items taken out included.
+  - Retail bug, reported, not reproduced: a pouch's thumbnail of a stacked
+    item sits on a black square. The stack's icon is composed on 0, its
+    key; the reduction keys 16-bit sources on the one value it is given,
+    the display's key, which also fills its empty pixels. The port's
+    thumbnail has no square; the fixture fixes the bug so the A/B checks it
+    (`bottombar.py`, `"retail_bugs": true` keeps it).
+  - Emulator: DirectDraw surfaces it allocates pick their own pitch; retail's
+    texture upload set DDSD_PITCH with a texel width and overran them.
+    Items with amounts now build.
+  - Open:
+    - Dragging an item off the shelf (`0x0052d6e0`) and dropping one on it
+      are still the side panel harness's hit tests; the hovered item's name
+      (`0x0043a820`). P4, with the other item panes.
+    - Revisited at 16:9: the shelf shows (w − 220) / 45 boxes, more than the
+      belt's 11 slots at wide widths. A layout question for P7.
