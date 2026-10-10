@@ -260,6 +260,9 @@ class TPlayer : public TCharacter
   // Shipped-game player record (SAVE_GAME.md §11.4)
     [[nodiscard]] int32_t PlayerState() const { return playerstate; }
     void SetPlayerState(int32_t newstate);
+    using SetPlayerStateSeam = void (*)(TPlayer* player, int32_t newstate);
+    static inline SetPlayerStateSeam setPlayerStateSeam = nullptr;
+      // Retail A/B fixtures only: told every SetPlayerState (retail's seam at 0x0051d680)
         // Player state bits (retail +0x36c)
     [[nodiscard]] const SPlayerHudWords& HudWords() const { return hudwords; }
     void SetHudWords(const SPlayerHudWords& words) { hudwords = words; }

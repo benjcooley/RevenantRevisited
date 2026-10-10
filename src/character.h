@@ -248,6 +248,8 @@ class TCharacter : public TComplexObject
       // animation if the root has it. Retail FUN_004d6220 @ 0x4d6220.
       // dir is 'l' or 'r'; pass 0 for random L/R.
     bool Leap(int32_t angle);
+    void StartRetreat();
+      // Give up the fight and run (retail 0x004d5fc0)
       // Character leaps in the given direction (combat mode only)
     bool PlayAnim(char *string);
       // Causes character to play animation name.

@@ -10,6 +10,7 @@
 #include "dls.h"                  // MakeColorTables (the trig tables too)
 #include "gameoptions.h"
 #include "mappane.h"                // walkGridSeam
+#include "player.h"
 #include "playscreen.h"
 #include "revenant.h"
 #include "revutils.h"
@@ -294,10 +295,29 @@ SCaseScope::SCaseScope(const JsonValue& cs, const TFixtureWorld& world)
     MapPane.SetAmbientLight((int32_t)g["ambient"].Int(128) - GammaAmbientOffset(GammaLevel), true);
     PlayScreen.SetFixtureState((int32_t)g["frame"].Int(0), g["control"].Bool(true), g["ps_5d8"].Bool(false));
     g_world = &world;
+    // The player: the last one the case builds, as the retail fixture's
+    // G_PLAYER (0x00667fcc) is.
+    savedPlayer = Player;
+    Player = nullptr;
+    for (TCharacter* c : world.Order())
+        if (c->ObjClass() == OBJCLASS_PLAYER)
+            Player = static_cast<TPlayer*>(c);
     g_blocked = cs["blocked"].Bool(false);
     g_sees = cs["sees"].Bool(true);
     TCharacter::findCharactersSeam = EmptyWorld;
     TCharacter::canSeeSeam = CaseSees;
+    TMapPane::playMouseClickSeam = [](int32_t button, int32_t x, int32_t y) {
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "PlayMouseClick").Field("button", button).Field("x", x);
+        j.Field("y", y).End('}');
+        Seam(j.str());
+    };
+    TPlayer::setPlayerStateSeam = [](TPlayer* player, int32_t newstate) {
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "SetPlayerState").FieldString("who", g_world->NameOf(player));
+        j.Field("value", newstate).End('}');
+        Seam(j.str());
+    };
     if (cs.Has("ground"))
     {
         const JsonValue& gr = cs["ground"];
@@ -330,8 +350,11 @@ SCaseScope::~SCaseScope()
     TCharacter::findCharactersSeam = nullptr;
     TCharacter::blockedSeam = nullptr;
     TCharacter::canSeeSeam = nullptr;
+    TPlayer::setPlayerStateSeam = nullptr;
+    TMapPane::playMouseClickSeam = nullptr;
     TCharacter::nearbyCharactersSeam = nullptr;
     TMapPane::walkGridSeam = nullptr;
+    Player = savedPlayer;
     g_world = nullptr;
 }
 
