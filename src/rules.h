@@ -95,6 +95,16 @@
 
 #define CAI_CHARIMPACT  0x1000  // Set on a CHARIMPACT, cleared on an IMPACT (retail 0x0048a926 / 0x0048a95e)
 
+// Impact flags the shipped char.def uses beyond the 1998 list (COMBAT_HIT.md
+// §3.4). A death or impact block turns to face whoever it answers, then by
+// these; TCharacter::Damage also takes the three turns as a filter on the
+// CHARIMPACTs: where the character's combat target stands, by absolute
+// bearing.
+constexpr int32_t CAI_KEEPANGLE   = 0x0100;  // no turn
+constexpr int32_t CAI_TURN180     = 0x0200;  // turned away; target at bearing 0x60-0x9f
+constexpr int32_t CAI_TURNPLUS90  = 0x0400;  // +64; target at 0x20-0x5f
+constexpr int32_t CAI_TURNMINUS90 = 0x0800;  // -64; target at 0xa0-0xdf
+
 #define CA_FATIGUEATTACK 0x10000 // A FATIGUEATTACK (retail 0x00489ca2); not among char.def's CA_ defines
 
 // MAGICATTACK conditions (char.def MASTAT_*): when the AI may cast it

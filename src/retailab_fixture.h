@@ -550,12 +550,21 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Field("chainhits", this->chainhits).Field("lastattackticks", this->lastattackticks);
         j.Field("lasthit", this->lasthit).Field("flashticks", this->combatflashticks);
         j.Field("autocombat", this->autocombat ? 1 : 0).Field("movevert", this->GetMoveVert());
+        j.Field("snapticks", this->snapticks).Field("charflags", (int32_t)this->charflags);
+        j.Field("objflags", (int32_t)(this->flags & (OF_ICED | OF_PARALIZE)));
         j.Key("lastattack");
         const int32_t last = AttackIndex(this->lastattack);
         if (last >= 0)
             j.Value(last);
         else
             j.Null();
+        if constexpr (std::is_base_of_v<TPlayer, Base>)
+        {
+            j.Key("frags").Begin('[');
+            for (int32_t n : this->Frags())
+                j.Value(n);
+            j.End(']');
+        }
         j.End('}');
         WriteMotion(j);
     }
@@ -612,6 +621,7 @@ class TFixtureChar : public Base, public IFixtureChar
         this->lasthit = (int32_t)a["lasthit"].Int(this->lasthit);
         this->combatflashticks = (int32_t)a["flashticks"].Int(0);
         this->autocombat = a["autocombat"].Bool(true);
+        this->snapticks = (int32_t)a["snapticks"].Int(-1);
         if (a.Has("lastattack") && !a["lastattack"].IsNull())
             this->lastattack = &cd->attacks[(int32_t)a["lastattack"].Int()];
     }
@@ -746,8 +756,9 @@ class TFixtureWorld
         j.End('}');
     }
 
-  private:
-    TActionBlock* NewBlock(const JsonValue& b)
+    // A block as a case gives one: name, action, the angles, turn rate,
+    // frame, wait, obj, flags (guest.py's new_block).
+    TActionBlock* NewBlock(const JsonValue& b) const
     {
         auto* ab = new TActionBlock(b["name"].Str().c_str(), (ACTION)b["action"].Int());
         if (b.Has("angle"))
@@ -767,6 +778,7 @@ class TFixtureWorld
         return ab;
     }
 
+  private:
     void SetBlocks(TCharacter* chr, const JsonValue& spec)
     {
         std::map<std::string, TActionBlock*> made;

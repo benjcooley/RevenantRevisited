@@ -13,7 +13,7 @@
 
 #include "gameoptions.h"          // NoCombatResults
 #include "logging.h"
-#include "revenant.h"             // CheatNahkranoth
+#include "revenant.h"             // CheatNahkranoth, CheatAlreadyDead
 #include "sound.h"
 
 namespace RetailAB
@@ -246,6 +246,7 @@ class SMeleeScope
             for (int32_t level = 0; level < PlayerStats::TStatLevels::kLevels; ++level)
                 Rules.SetStatLevel(t, level, (int32_t)tables[t][level].Int(PlayerStats::TStatLevels::kUnset));
         CheatNahkranoth = cs["globals"]["nahkranoth"].Bool(false);
+        CheatAlreadyDead = cs["globals"]["alreadydead"].Bool(false);
 
         g_answers = SMeleeAnswers{};
         g_answers.world = &world;
@@ -289,6 +290,7 @@ class SMeleeScope
         TPlayer::awardSkillExpSeam = nullptr;
         TPlayer::stealthExpSeam = nullptr;
         CheatNahkranoth = false;
+        CheatAlreadyDead = false;
         NoCombatResults = false;
         g_answers = SMeleeAnswers{};
     }
@@ -313,7 +315,9 @@ std::string AttackName(const TFixtureWorld& world, const JsonValue& cs, const SC
     return buf;
 }
 
-// An attack's impact as "<owner>#<attack>/<impact>".
+// An attack's impact as "<owner>#<attack>/<impact>", a CHARIMPACT as
+// "<owner>/<impact>"; the empty one Damage gives for the slot after a full
+// list "past-end" (as the retail fixture names that slot).
 std::string ImpactName(const TFixtureWorld& world, const JsonValue& cs, const SCharAttackImpact* imp)
 {
     for (const JsonValue& spec : cs["chars"].Items())
@@ -325,7 +329,11 @@ std::string ImpactName(const TFixtureWorld& world, const JsonValue& cs, const SC
             if (imp >= first && imp < first + MAXATTACKIMPACTS)
                 return spec["name"].Str() + "#" + std::to_string(i) + "/" + std::to_string(imp - first);
         }
+        if (imp >= cd->impacts && imp < cd->impacts + MAXCHARIMPACTS)
+            return spec["name"].Str() + "/" + std::to_string(imp - cd->impacts);
     }
+    if (!imp->impactname[0] && !imp->flags && !imp->loopname[0] && !imp->snapdist)
+        return "past-end";
     char buf[32];
     snprintf(buf, sizeof(buf), "%p", (const void*)imp);
     return buf;
@@ -372,8 +380,31 @@ TCharacter* Named(const TFixtureWorld& world, const JsonValue& v)
 }
 
 // What a block of the case carries beyond the shared spec (melee_attack.py
-// _block_fields): its attack (an index into the owner's table, `attack_of`
-// naming another owner), impact, damage, to-hit and roll.
+// _block_fields): its attack (an index into the table of `chr`, or of the
+// character `attack_of` names), impact (of that attack, or of attack
+// `impact_attack` of `impact_of`), damage, to-hit and roll.
+void ApplyBlockFields(const TFixtureWorld& world, TCharacter* chr, const JsonValue& b, TActionBlock* ab)
+{
+    auto record = [&](const JsonValue& owner, int64_t index) {
+        TCharacter* c = owner.IsNull() ? chr : world.Get(owner.Str());
+        return &c->GetCharData()->attacks[(int32_t)index];
+    };
+    if (b.Has("attack"))
+        ab->attack = record(b["attack_of"], b["attack"].Int());
+    if (b.Has("impact"))
+    {
+        const JsonValue& owner = b.Has("impact_of") ? b["impact_of"] : b["attack_of"];
+        const int64_t index = b.Has("impact_attack") ? b["impact_attack"].Int() : b["attack"].Int();
+        ab->impact = &record(owner, index)->impacts[(int32_t)b["impact"].Int()];
+    }
+    if (b.Has("damage"))
+        ab->damage = (int32_t)b["damage"].Int();
+    if (b.Has("tohit"))
+        ab->tohit = (int32_t)b["tohit"].Int();
+    if (b.Has("roll"))
+        ab->roll = (int32_t)b["roll"].Int();
+}
+
 void SetBlockFields(const TFixtureWorld& world, const JsonValue& cs)
 {
     for (const JsonValue& spec : cs["chars"].Items())
@@ -383,30 +414,8 @@ void SetBlockFields(const TFixtureWorld& world, const JsonValue& cs)
         TActionBlock* blocks[] = {fx->Root(), fx->Doing(), fx->Desired()};
         const char* roles[] = {"root", "doing", "desired"};
         for (int32_t r = 0; r < 3; ++r)
-        {
-            const JsonValue& b = spec[roles[r]];
-            if (b.GetKind() != JsonValue::Kind::Object)
-                continue;
-            TActionBlock* ab = blocks[r];
-            auto record = [&](const JsonValue& owner, int64_t index) {
-                TCharacter* c = owner.IsNull() ? chr : world.Get(owner.Str());
-                return &c->GetCharData()->attacks[(int32_t)index];
-            };
-            if (b.Has("attack"))
-                ab->attack = record(b["attack_of"], b["attack"].Int());
-            if (b.Has("impact"))
-            {
-                const JsonValue& owner = b.Has("impact_of") ? b["impact_of"] : b["attack_of"];
-                const int64_t index = b.Has("impact_attack") ? b["impact_attack"].Int() : b["attack"].Int();
-                ab->impact = &record(owner, index)->impacts[(int32_t)b["impact"].Int()];
-            }
-            if (b.Has("damage"))
-                ab->damage = (int32_t)b["damage"].Int();
-            if (b.Has("tohit"))
-                ab->tohit = (int32_t)b["tohit"].Int();
-            if (b.Has("roll"))
-                ab->roll = (int32_t)b["roll"].Int();
-        }
+            if (spec[roles[r]].GetKind() == JsonValue::Kind::Object)
+                ApplyBlockFields(world, chr, spec[roles[r]], blocks[r]);
     }
 }
 
@@ -414,7 +423,8 @@ void SetBlockFields(const TFixtureWorld& world, const JsonValue& cs)
 
 // Case (field 0, JSON): see slots/combat/melee_attack.py. `call`: "iva",
 // "find-button", "find-pcnt", "find-interactive", "do-attack",
-// "button-attack", "button-action", "random-attack", "specific-attack".
+// "button-attack", "button-action", "random-attack", "specific-attack",
+// "resolve-attack", "resolve-hit", "on-attacked", "damage".
 std::string MeleeCall(const Case& c, std::string& error)
 {
     try
@@ -492,6 +502,19 @@ std::string MeleeCall(const Case& c, std::string& error)
             j.Field("returned", me->RandomAttack((int32_t)a["pcnt"].Int()) ? 1 : 0);
         else if (call == "specific-attack")
             j.Field("returned", me->SpecificAttack((int32_t)a["attack"].Int()) ? 1 : 0);
+        else if (call == "damage")
+        {
+          // The given block's attack and impact are the attacker's by default.
+            TActionBlock* ab = nullptr;
+            if (a["block"].GetKind() == JsonValue::Kind::Object)
+            {
+                ab = world.NewBlock(a["block"]);
+                ApplyBlockFields(world, Named(world, a["attacker"]), a["block"], ab);
+            }
+            me->Damage((int32_t)a["damage"].Int(), (int32_t)a["type"].Int(DT_NONE), (int32_t)a["mod"].Int(0), ab,
+                       Named(world, a["attacker"]));
+            j.Field("returned", 0);
+        }
         else
             throw std::runtime_error("unknown call '" + call + "'");
 
@@ -515,6 +538,7 @@ std::string MeleeCall(const Case& c, std::string& error)
 
 // Registered with the A/B driver by name (retailab.h).
 static const bool registered = RegisterTarget("melee-attack-choice", MeleeCall) &&
-                               RegisterTarget("melee-hit", MeleeCall);
+                               RegisterTarget("melee-hit", MeleeCall) &&
+                               RegisterTarget("melee-damage", MeleeCall);
 
 }  // namespace RetailAB

@@ -1089,3 +1089,52 @@ FATIGUEATTACK `+0x128 |= 7` response and the interactive gate.
 - `0x4c9790` (slot `0x234`) is TCharacter's Wander, not TPlayer::Pulse.
 - The TCharacter vtable is 0x350 bytes (`0x5a7848`–`0x5a7b94`); slots
   `0x2a0`–`0x34c` hold the stat/sense accessors and the resolvers.
+
+## 9. Port status / kata
+
+### 9.1 C3 `melee-attack-choice` (5143 cases)
+
+Ported from the asm (`src/character.cpp`) and held to the original by the
+A/B kata (retail `tools/retail_runtime/slots/combat/melee_attack.py`, port
+`src/retailab_melee.cpp`, cases `tools/retail_ab/targets_melee.py`):
+IsValidAttack `0x4d1120` whole, FindButtonAttack `0x4d1dd0`, FindPcntAttack
+`0x4d1eb0`, FindInteractiveAttack `0x4d1ff0`, DoAttack `0x4d2120`,
+ButtonAttack `0x4d2480`, ButtonAction `0x4d27f0`, RandomAttack `0x4d2900`,
+SpecificAttack `0x4d2a60`, the prefix `0x4cdf60` and CombatAnimName
+`0x4ce1b0`, Offense / Defense (`0x4d72e0` / `0x4d72a0`, TPlayer's
+`0x51a520` / `0x51a550`), TPlayer's AttackModifier, DefenseModifier,
+LuckMod, StrengthMod, WeaponDamage, Resist, HoldsLight; and the AI's
+attack branch (`0x4c8cd9`–`0x4c8f5b`: the next-attack and magic timers,
+re-armed from ATTACKFREQ / MAGICFREQ). The cases run every attack of the
+real char.def tables of 14 pairs (plain, chain / autocombo, interactive
+with held and death impacts, fatigue, sneak / walk mode, PLAYANIM,
+MAGICATTACK with each condition, death attacks) at every range edge and
+fatigue threshold, synthetic records for the shapes the data lacks, and
+every random branch by tape. Coverage: 606 of 646 basic blocks; not
+reached: multiplayer, a null item, `malloc` failing, the torch prefix (a
+light in hand).
+
+Corrections to this document:
+
+- IsValidAttack's 9th argument (`dmgpcnt`) **is** read: damage =
+  d·(DamageMod + dmgpcnt + 100)/100 for every attacker; only a player
+  replaces it (by StrengthMod) first. (COMBAT_HIT.md §3.1 said "unused".)
+- The impact checks in IsValidAttack treat FindState returning **0**
+  (state index 0) as "no such animation", as they test the result for
+  zero.
+- A death impact is taken at once when its raw name exists; the loop
+  name is checked only on the prefixed fallback.
+- OnAttacked `0x4cdce0` is (attacker, victim, flag).
+- ClearChar `0x4c18a0` sets `+0x120` and `+0x124` to 1.
+
+Divergences (none noticeable): IsValidAttack guards a doing block with
+no attack; the impact one past a full list (six) reads as empty; a
+nameless target is guarded in the Baez (sunsetflipper) rule.
+
+Arena (Locke vs an Araknid, 1440 ticks): 74 attacks after C3 against
+1812 before; with C4 and C2, 27 attacks, 3 hits, 2 deaths; deterministic
+(two runs, identical traces).
+
+Left: the rest of AI() (C3b), on the movement callees as they land
+(StartRetreat, Leap, KnockBack are in; Wander, which only the player AI
+reaches, is not).

@@ -145,7 +145,10 @@ class TPlayer : public TCharacter
 
 
     void Damage(int32_t damage, int32_t type = DAMAGE_UNDEFINED) override;
-        // Apply damage to the player
+        // Damage(damage, type, 0, nullptr, nullptr): the whole of TCharacter's (retail 0x005191e0)
+    void Killed(TCharacter* victim) override;
+    void Died(TCharacter* killer) override;
+        // Kills and deaths count in the frag record (retail 0x00518ed0 / 0x00518f90)
 
 //  virtual int32_t SwingRange();
 //  virtual int32_t ThrustRange();
@@ -274,6 +277,8 @@ class TPlayer : public TCharacter
     [[nodiscard]] int32_t PlayerState() const { return playerstate; }
     void SetPlayerState(int32_t newstate);
         // Player state bits (retail +0x36c)
+    [[nodiscard]] const std::array<int32_t, 4>& Frags() const { return frags; }
+        // Players killed, deaths by a player, others killed, other deaths (+0x650..+0x65c)
     [[nodiscard]] const SPlayerHudWords& HudWords() const { return hudwords; }
     void SetHudWords(const SPlayerHudWords& words) { hudwords = words; }
         // The HUD state written into a save

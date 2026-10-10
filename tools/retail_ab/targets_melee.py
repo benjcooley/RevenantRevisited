@@ -8,6 +8,14 @@ interactive), DoAttack, and the callers (ButtonAttack with its chain,
 same-button and counter rules, ButtonAction, RandomAttack,
 SpecificAttack), every random branch steered with RNG tapes.
 
+`melee-hit` (kata C4): ResolveAttack, ResolveHit and OnAttacked, with
+Damage a seam (recorded with the hit block by meaning).
+
+`melee-damage` (kata C2): Damage itself -- the gates and cheats, the
+amount by type, the held victim, the death and impact blocks (the given
+block, the CHARIMPACT search by side, state and share, the stock names),
+the snaps and turns, the retreat, the kills and deaths the player counts.
+
 Retail: tools/retail_runtime/slots/combat/melee_attack.py; port:
 src/retailab_melee.cpp (`Revenant --retail-ab=melee-*`). The compare is
 combat_targets.compare (every field; the seams aligned as sequences).
@@ -140,7 +148,8 @@ def duel(data, me, target, *, dist=20, bearing=64, me_stats=None, target_stats=N
 
 
 def case(name, call, chars, rules, *, self_='Me', args=None, calls=None, tape=None, seed=1, frame=100, **extra):
-    c = dict(name=name, call=call, globals=dict(combatface=1, frame=frame, nahkranoth=extra.pop('nahkranoth', 0)),
+    c = dict(name=name, call=call, globals=dict(combatface=1, frame=frame, nahkranoth=extra.pop('nahkranoth', 0),
+                                               alreadydead=extra.pop('alreadydead', 0)),
              rules=rules, chars=chars, self=self_)
     if args is not None:
         c['args'] = args
@@ -1145,9 +1154,312 @@ def hit_cases(data: Path, workdir: Path) -> list[dict]:
     return finish(cases)
 
 
+# ---- C2: Damage ------------------------------------------------------------------------
+
+# Every name Damage may look for on a victim: its CHARIMPACTs and their
+# loops (raw and with the combat prefix), the block impact, "impact", the
+# death fallbacks.
+def victim_states(cd: dict, extra=()) -> list:
+    names = ['combat', 'walk', 'block', 'cblock']
+    for imp in cd.get('impacts', []):
+        names += [imp['name'], 'c' + imp['name']]
+        if imp['loopname']:
+            names.append(imp['loopname'])
+    names += ['blockimpact', 'cblockimpact', 'impact', 'cdead', 'combat to cdead', 'combat to dead', 'dead']
+    names += list(extra)
+    out = []
+    for n in names:
+        if n.lower() not in [o.lower() for o in out]:
+            out.append(n)
+    return out
+
+
+def damage_world(data, victim, attacker, *, health=30, states=None, impacts=None, attacks=None, bearing=0, **kw):
+    """The victim ('Me', the call's self) struck by `attacker` ('Target'),
+    who stands at `bearing` (0: ahead, where Damage filters no CHARIMPACT
+    by side): the victim's character data with `impacts` (CHARIMPACTs) and
+    the attacker's with `attacks` in place of the shipped ones when given."""
+    kw['bearing'] = bearing
+    s = shipped(data, None)
+    vcd = copy.deepcopy(s['chars'][victim])
+    if impacts is not None:
+        vcd['impacts'] = impacts
+    acd = copy.deepcopy(s['chars'][attacker])
+    if attacks is not None:
+        acd['attacks'] = attacks
+    stats = dict(kw.pop('me_stats', {}))
+    stats.setdefault('health', health)
+    chars, rules = duel(data, victim, attacker, me_states=states if states is not None else victim_states(vcd),
+                        me_stats=stats, **kw)
+    chars[0]['chardata'] = vcd
+    chars[1]['chardata'] = acd
+    return chars, rules
+
+
+def hit_block(name, action, *, attack=None, impact=None, damage=0, wait=0, flags=('priority', 'interrupt')):
+    """A block as ResolveHit hands Damage one: the attacker's attack and
+    impact (indices into the attacker's table)."""
+    b = dict(name=name, action=action, obj='Target', wait=wait, damage=damage, flags=list(flags))
+    if attack is not None:
+        b['attack'] = attack
+    if impact is not None:
+        b['impact'] = impact
+        b.setdefault('attack', 0)
+    return b
+
+
+def damage_cases(data: Path, workdir: Path) -> list[dict]:
+    s = shipped(data, workdir)
+    cases = []
+    seed = 11
+
+    def add(name, chars, rules, *, damage, block=None, attacker='Target', type=-1, mod=0, **kw):
+        nonlocal seed
+        seed += 1
+        args = dict(damage=damage, type=type, mod=mod, attacker=attacker)
+        if block is not None:
+            args['block'] = block
+        cases.append(case(name, 'damage', chars, rules, args=args, seed=seed * 7919 + 5, seam_damage=False,
+                          tape=kw.pop('tape', [1, 2, 3]), **kw))
+
+    arak = s['chars']['Araknid']
+    a_plain = next(i for i, ad in enumerate(arak['attacks']) if not ad['flags'] & (CA_MAGICATTACK | CA_PLAYANIM))
+    pale = s['chars']['Pale Ogrok']
+    p_int = first_with(pale, CA_INTERACTIVE)
+    p_hold = next(k for k, imp in enumerate(pale['attacks'][p_int]['impacts']) if imp['flags'] & CAI_INTERACTIVE)
+    locke = s['chars']['Locke']
+    l_plain = next(i for i, ad in enumerate(locke['attacks']) if not ad['flags'] & (CA_MAGICATTACK | CA_PLAYANIM))
+
+    # The gates: a frozen attacker, the cheats, an invulnerable or friendly
+    # victim, a stopped player; no attacker at all.
+    for victim, attacker in (('Araknid', 'Locke'), ('Locke', 'Araknid')):
+        for label, kw, extra, pstate in (
+                ('plain', {}, {}, None),
+                ('attacker.iced', dict(target_objflags=0x2000000), {}, None),
+                ('attacker.paralysed', dict(target_objflags=0x800000), {}, None),
+                ('invulnerable', dict(me_objflags=0x10000000), {}, None),
+                ('alreadydead', {}, dict(alreadydead=1), None),
+                ('nahkranoth', {}, dict(nahkranoth=1), None),
+                ('friend', {}, dict(friends=[['Me', 'Target']]), None),
+                ('stopped', {}, {}, 2),
+                ('stopped.other', {}, {}, 5)):
+            for health, dmg in ((30, 7), (5, 7)):
+                chars, rules = damage_world(data, victim, attacker, health=health, **kw)
+                if pstate is not None:
+                    chars[0]['playerstate'] = pstate
+                add(f'damage.gate.{victim}.{label}.h{health}', chars, rules, damage=dmg, **extra)
+        chars, rules = damage_world(data, victim, attacker, health=30)
+        add(f'damage.gate.{victim}.noattacker', chars, rules, damage=7, attacker=None)
+        chars, rules = damage_world(data, victim, attacker, health=5)
+        add(f'damage.gate.{victim}.noattacker.lethal', chars, rules, damage=7, attacker=None)
+        chars, rules = damage_world(data, victim, attacker, health=30)
+        add(f'damage.gate.{victim}.noattacker.nahkranoth', chars, rules, damage=7, attacker=None, nahkranoth=1)
+
+    # The amount: by type through CalculateDamage, the player's edge bonus by
+    # weapon, the unkillable flag at every edge, nothing.
+    for victim, attacker in (('Araknid', 'Locke'), ('Locke', 'Araknid'), ('Pale Ogrok', 'Locke')):
+        for typ in (-1, 0, 1, 2, 3, 6, 8, 9):
+            for mod in (0, 40, -60):
+                for wt in ((0, 1, 2, 3, 4, 5) if victim == 'Locke' else (None,)):
+                    kw = dict(weapon=dict(type=wt, damage=6)) if wt is not None else {}
+                    chars, rules = damage_world(data, victim, attacker, health=60, **kw)
+                    add(f'damage.amount.{victim}.t{typ}.m{mod}.w{wt}', chars, rules, damage=17, type=typ, mod=mod)
+        for health in (0, 1, 2, 10):
+            for dmg in (health - 2, health - 1, health, health + 4, 0):
+                chars, rules = damage_world(data, victim, attacker, health=health, me_flags=8)
+                add(f'damage.unkillable.{victim}.h{health}.d{dmg}', chars, rules, damage=dmg)
+
+    # Held: in another's interactive attack or an interactive impact (no
+    # health lost, no block), unless the move is the victim's own.
+    for own in (0, 0x80000):
+        for label, doing in (('attack', block('cheld', 7, attack=p_int, attack_of='Third')),
+                             ('impact', block('cheld', 0xc, impact=p_hold, impact_attack=p_int, impact_of='Third')),
+                             ('plain', block('cheld', 0xc, attack=0, attack_of='Third'))):
+            for health in (40, 3):
+                for victim in ('Araknid', 'Kantha'):
+                    chars, rules = damage_world(data, victim, 'Locke', health=health, me_doing=doing, me_flags=own)
+                    chars.append(make_char('Third', 12, [3000, 3000, 0], 0, chardata(pale), states=['combat'],
+                                           stats=dict(MONSTER_STATS), ident=0x30))
+                    add(f'damage.held.{label}.own{own:#x}.{victim}.h{health}', chars, rules, damage=6,
+                        block=hit_block('cimph', 0xc, attack=l_plain))
+
+    # A paralysed victim breaks free one hit in four; an iced one thaws.
+    for flags, label in ((0x800000, 'paralysed'), (0x2000000, 'iced'), (0x2800000, 'both')):
+        for roll in (0, 1, 3):
+            chars, rules = damage_world(data, 'Araknid', 'Locke', health=40, me_objflags=flags)
+            add(f'damage.{label}.r{roll}', chars, rules, damage=5, tape=[roll, 2])
+        chars, rules = damage_world(data, 'Araknid', 'Locke', health=40, me_objflags=flags)
+        add(f'damage.{label}.none', chars, rules, damage=0, tape=[0])
+
+    # The death: the CHARIMPACT search by the side the target stands on,
+    # stunned or down, raw or prefixed names, a loop or none, the share of
+    # what was left; the stock names one by one; the given blocks.
+    deaths = [impact('dfront', 0x1004, 'dloop', damagemin=0, damagemax=999),
+              impact('dside', 0x1404, '', damagemin=0, damagemax=999),
+              impact('dback', 0x1204, 'dloop', damagemin=0, damagemax=999),
+              impact('dother', 0x1804, '', damagemin=0, damagemax=999)]
+    for bearing in (0, 0x1f, 0x20, 0x5f, 0x60, 0x9f, 0xa0, 0xdf, 0xe0):
+        for root in (('combat', 3), ('bow', 0x19), ('walk', 1)):
+            chars, rules = damage_world(data, 'Araknid', 'Locke', health=4, bearing=bearing, impacts=deaths,
+                                        me_root=block(root[0], root[1], obj='Target'),
+                                        states=['combat', 'bow', 'walk', 'cdfront', 'dside', 'cdback', 'dloop',
+                                                'dother', 'cdead'])
+            add(f'damage.death.bearing{bearing:#x}.{root[0]}', chars, rules, damage=9)
+        chars, rules = damage_world(data, 'Araknid', 'Locke', health=4, bearing=bearing, impacts=deaths,
+                                    me_root=block('combat', 3), states=['combat', 'dfront', 'dside', 'dback', 'dloop'])
+        add(f'damage.death.bearing{bearing:#x}.notarget', chars, rules, damage=9)
+    when = [impact('dstun', 0x100c, '', damagemin=0, damagemax=999),
+            impact('ddown', 0x1014, '', damagemin=0, damagemax=999),
+            impact('dany', 0x1004, '', damagemin=0, damagemax=999)]
+    for action in (3, 0xd, 0xe):
+        chars, rules = damage_world(data, 'Araknid', 'Locke', health=4, impacts=when,
+                                    me_doing=block('cimph', action, obj='Target'),
+                                    states=['combat', 'cimph', 'dstun', 'ddown', 'dany'])
+        add(f'damage.death.when.a{action}', chars, rules, damage=9)
+    shares = [impact('dlow', 0x1004, '', damagemin=0, damagemax=40), impact('dmid', 0x1004, '', damagemin=41, damagemax=99),
+              impact('dhigh', 0x1004, '', damagemin=100, damagemax=100), impact('dzero', 0x1004, '', damagemin=0,
+                                                                                    damagemax=0)]
+    for health, dmg in ((4, 9), (0, 0), (0, 5), (-3, 2), (-5, -3)):
+        chars, rules = damage_world(data, 'Araknid', 'Locke', health=health, impacts=shares,
+                                    states=['combat', 'dlow', 'dmid', 'dhigh', 'dzero'])
+        add(f'damage.death.share.h{health}.d{dmg}', chars, rules, damage=dmg)
+    for victim in ('Araknid', 'Hopper', 'Locke', 'Pale Ogrok'):
+        vcd = s['chars'][victim]
+        full = victim_states(vcd)
+        variants = [('all', full), ('raw', [n for n in full if not n.startswith('c') or n == 'combat']),
+                    ('noloops', [n for n in full if n not in [i['loopname'] for i in vcd.get('impacts', [])]]),
+                    ('cdead', ['combat', 'cdead']), ('combattocdead', ['combat', 'combat to cdead']),
+                    ('combattodead', ['combat', 'combat to dead']), ('dead', ['combat', 'dead']),
+                    ('none', ['combat'])]
+        for label, states in variants:
+            for attacker in ('Locke', 'Araknid'):
+                if attacker == victim:
+                    continue
+                for adoing in (None, block('swing', 7, attack=0, obj='Me')):
+                    chars, rules = damage_world(data, victim, attacker, health=3, states=states, target_doing=adoing)
+                    add(f'damage.death.{victim}.{label}.by{attacker}.{"swinging" if adoing else "idle"}', chars,
+                        rules, damage=8)
+            chars, rules = damage_world(data, victim, 'Locke', health=3, states=states)
+            add(f'damage.death.{victim}.{label}.unsuitable', chars, rules, damage=8,
+                block=hit_block('cimph', 0xc, attack=l_plain, impact=0 if locke['attacks'][l_plain].get('impacts')
+                                else None))
+            chars, rules = damage_world(data, victim, 'Locke', health=3, states=states)
+            add(f'damage.death.{victim}.{label}.noattacker', chars, rules, damage=8, attacker=None)
+    # Given death blocks: the attack's impact by the block's name, one past
+    # the last, none; a death impact; an interactive attack's other impact;
+    # the snaps and turns those impacts carry.
+    turns = [impact('ia', 0x4, 'iloop'), impact('ib', 0x104), impact('ic', 0x204), impact('id', 0x404),
+             impact('ie', 0x804)]
+    snaps = [impact('if', 0x4, '', snapdist=24, snaptime=5), impact('ig', 0x0, '', snapdist=16, snaptime=3),
+             impact('ih', 0x204, '', snapdist=8, snaptime=2), impact('ii', 0x0), impact('ij', 0x404),
+             impact('ik', 0x80)]
+    for attack_flags in (0, CA_INTERACTIVE):
+        base = arak['attacks'][a_plain]
+        flags = (base['flags'] & ~CA_INTERACTIVE) | attack_flags
+        attacks = [synthetic(base, flags=flags, impacts=turns), synthetic(base, flags=flags, impacts=snaps),
+                   synthetic(base, impacts=[])]
+        for victim in ('Locke', 'Rahul'):
+            for label, b in (
+                    [(f'a0.imp{k}', hit_block(imp['name'], 0x13, attack=0, impact=k)) for k, imp in enumerate(turns)] +
+                    [(f'a1.imp{k}', hit_block(imp['name'], 0x13, attack=1, impact=k)) for k, imp in enumerate(snaps)] +
+                    [('byname', hit_block('id', 0x13, attack=0)), ('nomatch', hit_block('zz', 0x13, attack=0)),
+                     ('nomatch.full', hit_block('zz', 0x13, attack=1)),
+                     ('emptyattack', hit_block('zz', 0x13, attack=2)), ('noattack', hit_block('zz', 0x13)),
+                     ('to', hit_block('combat to cdead', 0x13, attack=0, impact=0))]):
+                for health, target_facing in ((3, None), (3, 0x30), (40, None)):
+                    chars, rules = damage_world(data, victim, 'Araknid', health=health, attacks=attacks,
+                                                states=['combat', 'ia', 'iloop', 'ib', 'ic', 'id', 'ie', 'if', 'ig',
+                                                        'ih', 'ii', 'ij', 'ik', 'zz', 'combat to cdead', 'cdead',
+                                                        'cimpact', 'impact'])
+                    if target_facing is not None:
+                        chars[1]['facing'] = chars[1]['moveangle'] = target_facing
+                    add(f'damage.given.int{attack_flags:#x}.{victim}.{label}.h{health}.f{target_facing}', chars,
+                        rules, damage=6, block=b)
+
+    # The impact: blocking (the block impact, prefixed or not, none; an
+    # interactive hit kept), the given block, the CHARIMPACT search, "impact".
+    for victim, attacker in (('Locke', 'Araknid'), ('Araknid', 'Locke'), ('Hopper', 'Locke')):
+        vcd = s['chars'][victim]
+        acd = s['chars'][attacker]
+        aplain = next(i for i, ad in enumerate(acd['attacks']) if not ad['flags'] & (CA_MAGICATTACK | CA_PLAYANIM))
+        nimp = len(acd['attacks'][aplain].get('impacts', []))
+        for label, states in (('both', ['combat', 'cblock', 'cblockimpact', 'blockimpact']),
+                              ('raw', ['combat', 'cblock', 'blockimpact']), ('none', ['combat', 'cblock'])):
+            for given in (None, hit_block('cimph', 0xc, attack=aplain, impact=0 if nimp else None)):
+                chars, rules = damage_world(data, victim, attacker, health=50, states=states,
+                                            me_doing=block('cblock', 8, obj='Target'))
+                add(f'damage.blocking.{victim}.{label}.{"given" if given else "none"}', chars, rules, damage=4,
+                    block=given)
+        for dmg in (1, 3, 5, 7, 9, 12, 30, 99):
+            for states_label, states in (('all', victim_states(vcd)), ('stock', ['combat', 'impact']),
+                                         ('bare', ['combat'])):
+                for given in (None, hit_block('cimph', 0xc, attack=aplain, impact=0 if nimp else None, wait=5)):
+                    chars, rules = damage_world(data, victim, attacker, health=100, states=states)
+                    add(f'damage.impact.{victim}.d{dmg}.{states_label}.{"given" if given else "none"}', chars, rules,
+                        damage=dmg, block=given)
+    held = synthetic(pale['attacks'][p_int])
+    for k, imp in enumerate(held.get('impacts', [])):
+        for victim in ('Locke', 'Araknid'):
+            chars, rules = damage_world(data, victim, 'Pale Ogrok', health=60,
+                                        me_doing=block('cblock', 8, obj='Target'),
+                                        states=['combat', 'cblock', 'cblockimpact', imp['name']])
+            add(f'damage.blocking.interactive.{victim}.i{k}', chars, rules, damage=4,
+                block=hit_block(imp['name'], 0xc, attack=p_int, impact=k))
+    # (`dmg` of `dmg + 100`: shares 5, 30, 50, 70, 90.)
+    impacts = [impact('istun', 0x1001, 'sl', damagemin=0, damagemax=20, looptime=9),
+               impact('idown', 0x1002, 'dl', damagemin=21, damagemax=40, looptime=7),
+               impact('iplain', 0x1000, '', damagemin=41, damagemax=60),
+               impact('ideath', 0x1004, '', damagemin=0, damagemax=100),
+               impact('iright', 0x1400, '', damagemin=61, damagemax=80, snapdist=12, snaptime=4),
+               impact('iback', 0x1200, '', damagemin=61, damagemax=100)]
+    whens = [impact('wstun', 0x1008, '', damagemin=0, damagemax=100),
+             impact('wdown', 0x1010, '', damagemin=0, damagemax=100),
+             impact('wany', 0x1001, 'sl', damagemin=81, damagemax=100)]
+    for dmg in (5, 30, 50, 70, 90):
+        for bearing in (0x40, 0x80, 0x10, 0xc0):
+            for action in (3, 0xd, 0xe):
+                for imps, states in ((impacts, ['combat', 'istun', 'sl', 'idown', 'dl', 'iplain', 'iright', 'iback',
+                                                'impact']),
+                                     (impacts, ['combat', 'istun', 'idown', 'iplain']),
+                                     (whens, ['combat', 'wstun', 'wdown', 'wany', 'sl'])):
+                    chars, rules = damage_world(data, 'Araknid', 'Locke', health=dmg + 100, bearing=bearing,
+                                                impacts=imps, states=states,
+                                                me_doing=block('cimph', action, obj='Target'))
+                    add(f'damage.impact.search.{imps[0]["name"]}.d{dmg}.b{bearing:#x}.a{action}.s{len(states)}',
+                        chars, rules, damage=dmg)
+    # Given impact blocks: the impact's snap and turns; a death impact on a
+    # blow that doesn't kill.
+    plain_turns = [impact('pa', 0x100), impact('pb', 0x200), impact('pc', 0x400), impact('pd', 0x800),
+                   impact('pe', 0x0), impact('pf', 0x600)]
+    for which, imps in enumerate((turns, snaps, plain_turns)):
+        for k, imp in enumerate(imps):
+            for victim in ('Locke', 'Rahul'):
+                atk = synthetic(arak['attacks'][a_plain], impacts=imps)
+                chars, rules = damage_world(data, victim, 'Araknid', health=40, attacks=[atk],
+                                            states=['combat', imp['name'], 'impact', 'cimpact'])
+                add(f'damage.given.impact.{victim}.s{which}.imp{k}', chars, rules, damage=6,
+                    block=hit_block(imp['name'], 0xc, attack=0, impact=k))
+
+    # The retreat a low-health hit starts.
+    for victim in ('Under Druhg', 'Kantha', 'Araknid'):
+        at = s['chars'][victim]['retreatat']
+        for left in sorted({0, 1, at - 1, at, at + 1}):
+            chars, rules = damage_world(data, victim, 'Locke', health=left + 6)
+            add(f'damage.retreat.{victim}.left{left}', chars, rules, damage=6)
+
+    # Kills and deaths in the player's frag record.
+    for victim, attacker in (('Locke', 'Araknid'), ('Araknid', 'Locke'), ('Locke', 'Bayne'), ('Bayne', 'Locke')):
+        for flags in (0, 0x40000):
+            chars, rules = damage_world(data, victim, attacker, health=3, me_flags=flags)
+            add(f'damage.frags.{victim}.by{attacker}.f{flags:#x}', chars, rules, damage=9)
+    return finish(cases)
+
+
 TARGETS = {
     'melee-attack-choice': dict(fixture='slots/combat/melee_attack.py', cases=attack_choice_cases, compare=compare,
                                 port_fields=port_fields, unit=lambda r: len(r.get('calls', [])) or 1),
     'melee-hit': dict(fixture='slots/combat/melee_attack.py', cases=hit_cases, compare=compare,
                       port_fields=port_fields, unit=lambda r: 1),
+    'melee-damage': dict(fixture='slots/combat/melee_attack.py', cases=damage_cases, compare=compare,
+                         port_fields=port_fields, unit=lambda r: 1),
 }
