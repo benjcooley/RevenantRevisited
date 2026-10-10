@@ -9,17 +9,17 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 82,
+    "retail_rows_with_source_fixes_recorded": 89,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 71,
+    "actual_runtime_verified_rows": 79,
     "visual_fidelity_confirmed_rows": 16,
     "repeatable_ab_rows": 8,
-    "thin_bounded_render_frontend_rows": 57
+    "thin_bounded_render_frontend_rows": 65
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -425,6 +425,62 @@
       "check": "native_nullspell_motion_feasibility",
       "status": "native_nullspell_feasible_port_reconstruction_deferred",
       "scope": "Native400record pool/100Animate ticks,9complete pool hashes,300birth/4404final RNG with genuine particle motion. No comparable production pool, rendering, target/damage or parity credit."
+    },
+    "recon/retail_asm/runtime/effects/warp-authored-atlas-ab/manifest.json": {
+      "sha256": "6e8f55e48b6e85ac36acf1d0bb695b931df2b9b089afdea09681ed47269c4b96",
+      "retail_row": "TeleportDoorInsideB/O/P/R/W/Y/G",
+      "check": "warp_authored_atlas_frontend",
+      "status": "pass",
+      "scope": "154native/compiled state, geometry, UV, alpha-payload and shared original-software pairs, replay twice;574state/2296UV bits exact. Natural context/illumination/backend remain open."
+    },
+    "recon/retail_asm/runtime/effects/speaker-static-ab-20261009/manifest.json": {
+      "sha256": "23709f25db614c631f8b74256d5a50bd01dc1d3eca7da43f03183435247771b9",
+      "retail_row": "speaker:0xad92bc10",
+      "check": "speaker_generic_untextured_frontend",
+      "status": "pass",
+      "scope": "Six exact authored key/matrix/material-input untextured software pairs, replay twice; explicit generic builder, no audio/full illumination."
+    },
+    "recon/retail_asm/runtime/effects/firecone-native-state-ab/manifest.json": {
+      "sha256": "76124520063ea50d68aeb060de48dc3dd3190d449abcb56761d522896da7055d",
+      "retail_row": "FireCone:0xab92cd01",
+      "check": "firecone_defined_native_pool_state",
+      "status": "pass",
+      "scope": "260pool occupancies/73,806defined active float fields/1243RNG calls/native pool entry ordering exact through100ticks and drain93; no render/live-caster/completeInitialize claim."
+    },
+    "recon/retail_asm/runtime/effects/firecone-native-state-before/manifest.json": {
+      "sha256": "ba668714a74227d8345feac5aa71aff6f0675ea028a7f11002063935d2af626c",
+      "retail_row": "FireCone:0xab92cd01",
+      "check": "firecone_before_precision_fix",
+      "status": "differences_found",
+      "scope": "Retained small state-rounding differences before native extended arithmetic corrections."
+    },
+    "recon/retail_asm/runtime/effects/warp-map-final-20261009/manifest.json": {
+      "sha256": "68300df79d2979cd04243e09394a6d502815961624f00ce581d19b76e5b34446",
+      "retail_row": "TeleportDoorInsideB/O/P/R/W/Y/G",
+      "check": "warp_independent_actual_map_lifecycle",
+      "status": "pass",
+      "scope": "Seven independent final-binary map cases,70typed observations/112frames; every owner remainsSTILLframe0 but renders4changingimages, moves/deletes/restoresfloor. Synthetic floor, no natural/device acceptance."
+    },
+    "recon/retail_asm/runtime/effects/warp-blue-map-first-20261009/manifest.json": {
+      "sha256": "23a47a765bfe68f5de2d264578e5ef102ce1c9c47529b2f404ed21b96f9dae93",
+      "retail_row": "TeleportDoorInsideB:0xad92bc28",
+      "check": "warp_alpha_sampler_before_fix",
+      "status": "differences_found",
+      "scope": "First alpha-helper route clamped negative V, giving solid-color samples; four expected changing samples reduced to2. Preserved before wrapped-nearest mode2 correction."
+    },
+    "recon/retail_asm/runtime/effects/speaker-map-next-20261009/manifest.json": {
+      "sha256": "572d620fa05b71516dd992036c45861e4fb81c9e5fd93aa2070487e2f4979e51",
+      "retail_row": "speaker:0xad92bc10",
+      "check": "speaker_actual_map_lifecycle",
+      "status": "pass",
+      "scope": "Ten typed create/frame/move/delete observations/16frames and exact floor restore; static authored marker. No sound/natural context or backend fidelity."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261009/helper-zero-uv-fireflash/manifest.json": {
+      "sha256": "71a6b7e1457702ac7be7a424199dab32f7024485dc1dddf18840a739dd0232f0",
+      "retail_row": "FireFlash:0x37780ae2",
+      "check": "helper_zero_uv_gpu_regression",
+      "status": "pass",
+      "scope": "After UV uniform/ARGB sampler support, all96decoded FireFlash pixel hashes exactly match previous validated capture; unchanged RGB565 helper behavior. Cleanexit/no retail device parity claim."
     }
   }
 }

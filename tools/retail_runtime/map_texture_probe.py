@@ -90,7 +90,8 @@ def run(binary, data, module, camera, output, profiles):
     if len(frames) != 16:
         errors.append('Incomplete frame capture')
     distinct = len(set(hashes[3:7]))
-    expected_distinct = min(4,max(profile['owner_frames'] for profile in profiles))
+    # Custom atlas animators can change UVs while their STILL owner frame stays0.
+    expected_distinct = min(4,max(profile.get('render_frames',profile['owner_frames']) for profile in profiles))
     if distinct != expected_distinct:
         errors.append(f'Expected {expected_distinct} stationary rendered frames, observed {distinct}')
     created_visible = len(hashes) == 16 and hashes[0] != hashes[3]

@@ -17744,27 +17744,30 @@ void TFireConeEffect_Bespoke::SimulateTick()
             flame->vel.X = 0.0f;
             flame->vel.Y = 0.0f;
             flame->vel.Z = 0.0f;
-            float diff;
+            // Retail keeps each approach expression in x87 until the position store.
+            long double diff;
             if(flame->pos.X != 0.0f)
             {
-                diff = (0.0f - flame->pos.X) * .25f;
+                diff = (0.0L - static_cast<long double>(flame->pos.X)) * .25L;
                 flame->pos.X += diff;
             }
             if(flame->pos.Y != -30.0f)
             {
-                diff = (-30.0f - flame->pos.Y) * .25f;
+                diff = (-30.0L - static_cast<long double>(flame->pos.Y)) * .25L;
                 flame->pos.Y += diff;
             }
             if(flame->pos.Z != -30.0f)
             {
-                diff = (-30.0f - flame->pos.Z) * .25f;
+                diff = (-30.0L - static_cast<long double>(flame->pos.Z)) * .25L;
                 flame->pos.Z += diff;
             }
         }
         else if((float)flame->life / (float)flame->life_span > .5f)
             flame->vel.Z += 1.5f;
 
-        float equ = (125.0f - flame->pos.Z) * .01f;
+        // Native duplicates its x87 scale expression before each final float store.
+        const long double equ = (125.0L - static_cast<long double>(flame->pos.Z)) *
+                                static_cast<long double>(.01f);
         flame->scl.X = flame->temp.X * equ;
         flame->scl.Y = flame->temp.Y * equ;
         flame->scl.Z = flame->temp.Z * equ;
@@ -17780,7 +17783,8 @@ void TFireConeEffect_Bespoke::SimulateTick()
 
         flame->vel.Z += 3.0f;
 
-        float equ = (125.0f - flame->pos.Z) * .01f;
+        long double equ = (125.0L - static_cast<long double>(flame->pos.Z)) *
+                          static_cast<long double>(.01f);
         if(equ < 0.0f)
             equ = 0.0f;
 

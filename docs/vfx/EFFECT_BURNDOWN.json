@@ -24,17 +24,17 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 82,
+    "retail_rows_with_source_fixes_recorded": 89,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 71,
+    "actual_runtime_verified_rows": 79,
     "visual_fidelity_confirmed_rows": 16,
     "repeatable_ab_rows": 8,
-    "thin_bounded_render_frontend_rows": 57
+    "thin_bounded_render_frontend_rows": 65
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -13916,7 +13916,8 @@
         "TFireConeEffect_BESPOKE"
       ],
       "source_fixes": [
-        "Removed invented tinted billboard/growth/fixed1.8second lifetime; restored exact FireCone type and authored two meshes/normals/materials with source fire80/smoke80/burst100 helper pools, full state/RNG operation order,6/15/33 phases, first-free allocation, negative fire scale, no fictitious flicker, live owner movement and idempotent Z+100 initialization. Uses source RGB565 software-helper draw with24Hz Advance/Submit separation."
+        "Removed invented tinted billboard/growth/fixed1.8second lifetime; restored exact FireCone type and authored two meshes/normals/materials with source fire80/smoke80/burst100 helper pools, full state/RNG operation order,6/15/33 phases, first-free allocation, negative fire scale, no fictitious flicker, live owner movement and idempotent Z+100 initialization. Uses source RGB565 software-helper draw with24Hz Advance/Submit separation.",
+        "2026-10-09: preserve native x87 extended intermediates for fire/smoke scale and MID approach; all260occupancies and73,806defined active float fields match through100ticks/naturaldrain93, with exact1,243RNG calls and native pool operation order."
       ],
       "port_smoke_ids": [
         "TFireConeEffect_BESPOKE"
@@ -13932,8 +13933,8 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
@@ -13943,7 +13944,7 @@
         "accepted": false
       },
       "runtime_dispatch": "exact_firecone_builder_reference_component_verified_through_create_move_natural_expiry_and_delete",
-      "next_action": "Preserve literal controller and11 real lifecycle checks; defer remaining software blend/raster, initial-visible phase and stochastic coverage mismatch without fitting. Real caster/target/aiming/damage and original context remain open. Advance next simple ready source candidates.",
+      "next_action": "Retain exact native null-spell pool/RNG/order proof; next establish authored render matrices/projection/blend and actual caster/target/damage without tuning controller constants. Existing map lifecycle remains a separate scoped proof.",
       "notes": [
         "Frozen natural-expiry residue observed, but FPS redraw prerequisite was absent. Historical diagnostic only; repeat one bounded FPS-enabled attempt before diagnosing device or controller failure.",
         "FPS-enabled bounded recovery now has independently clean canonical floor, animated native reference and exact cleanup without camera nudge. Historical FPS-off residue is superseded as active reference; not a visual/controller acceptance claim.",
@@ -14116,7 +14117,18 @@
         "manifest": "research/rgb565-blend-audit/audit.json",
         "manifest_sha256": "a727c8c6ed5acc7e02a27f7fd62894897063379cd0f39832bf7730adfef13c11",
         "scope": "Actual retail destination-ONE selects additive RGB565 kernels, including depth-on/write-off paths. Older snapshot direct-store kernel cannot define retail behaviour. No blend change or visual credit."
-      }
+      },
+      "thin_emulator_checks": [
+        {
+          "name": "native_defined_particle_pool_state",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/firecone-native-state-ab/manifest.json",
+          "sha256": "76124520063ea50d68aeb060de48dc3dd3190d449abcb56761d522896da7055d",
+          "scope": "Native Init/100Animate calls and original shared-pool helpers versus actual compiled port Pool::Add/Animate/SimulateTick. Null-spell defined fields/order/RNG exact through drain93; port Initialize/component/rendering/live actors/audio excluded.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false
+        }
+      ]
     },
     {
       "index": 73,
@@ -14883,8 +14895,8 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -14893,13 +14905,46 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "explicit_registered_generic_animator_authored_untextured_map_lifecycle",
+      "next_action": "Verify original full illumination and actual authored map/visibility/caller, including natural teleporter activation or sound; retain bounded original-raster frontend and independent controlled map lifecycle.",
       "notes": [
         "Audio-only candidate: verify no visual output and actual runtime audio/data behavior before documenting visual exemption.",
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
+        "2026-10-09: Speaker is explicitly registered to generic T3DAnimator, not an absent-name fallback. All authored geometry/material retained; no speaker-specific production correction needed. Sound/full illumination/natural visibility unverified."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "speaker_generic_untextured_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/speaker-static-ab-20261009/manifest.json",
+          "sha256": "23709f25db614c631f8b74256d5a50bd01dc1d3eca7da43f03183435247771b9",
+          "scope": "Actual explicit Speaker generic builder registration,55vertices/30faces, native constant keys/matrix versus compiled generic geometry and authored material decoding; six untextured original-software pairs replay twice. Material diffuse is upstream input; full illumination/audio excluded.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "original full illumination/device/backend equivalence",
+            "natural caller/visibility/context",
+            "sound or teleporter gameplay where applicable"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/speaker-map-next-20261009/manifest.json",
+        "sha256": "572d620fa05b71516dd992036c45861e4fb81c9e5fd93aa2070487e2f4979e51",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "owner_frame_wrap_verified": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false,
+        "observations": 10,
+        "frames": 16,
+        "changing_gpu_samples": 1,
+        "binary_sha256": "fae05f421d0bfff1dfbaa466c35341d49eab78ab6b487923717b4879faf776e9"
+      },
+      "work_queue_status": "thin_bounded_frontend_and_controlled_map_pass_context_open"
     },
     {
       "index": 86,
@@ -16609,15 +16654,17 @@
       "retail_type_id": "0xad92bc28",
       "asset": "Magic\\WarpB.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-09: replaced frozen opaque generic atlas drawing with exact per-owner quarter-step Warp UV clock (including V<=0 wrap to1), native mode2 alpha/depth-test/no-write helper and wrapped nearest ARGB4444 sampling; retained all authored faces/material/texture and rejected unsupported profiles."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -16626,12 +16673,45 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "verified_exact_custom_warp_owner_state_alpha_helper_map_lifecycle",
+      "next_action": "Verify original full illumination and actual authored map/visibility/caller, including natural teleporter activation or sound; retain bounded original-raster frontend and independent controlled map lifecycle.",
       "notes": [
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
+        "2026-10-09: bounded native/current authored comparison and independent controlled map lifecycle pass; full original context/device remains open. Warp objects have one STILL frame but a separate local UV clock."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "custom_warp_atlas_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/warp-authored-atlas-ab/manifest.json",
+          "sha256": "6e8f55e48b6e85ac36acf1d0bb695b931df2b9b089afdea09681ed47269c4b96",
+          "scope": "Actual seven custom factories/Init/Animate/Render and native mode2; compiled shared owner-state/alpha-payload plus full authored generic geometry;154original software color/depth pairs replay twice, exact UVs. Source white vertex illumination input and generic/base APIs are explicit boundaries.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "original full illumination/device/backend equivalence",
+            "natural caller/visibility/context",
+            "sound or teleporter gameplay where applicable"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/warp-map-final-20261009/TeleportDoorInsideB/manifest.json",
+        "sha256": "91490f99c9d1b356feeb893e9a11a62b00f9772aeba11ff9b46c73a12ae8bdd1",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "owner_frame_wrap_verified": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false,
+        "observations": 10,
+        "frames": 16,
+        "changing_gpu_samples": 4,
+        "binary_sha256": "c2ad8c9545f4aa6345ef3496e6f6347b09b737c75cb90205b8656a1f5db15bdf"
+      },
+      "work_queue_status": "thin_bounded_frontend_and_controlled_map_pass_context_open"
     },
     {
       "index": 114,
@@ -16640,15 +16720,17 @@
       "retail_type_id": "0xad92bc29",
       "asset": "Magic\\WarpO.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-09: replaced frozen opaque generic atlas drawing with exact per-owner quarter-step Warp UV clock (including V<=0 wrap to1), native mode2 alpha/depth-test/no-write helper and wrapped nearest ARGB4444 sampling; retained all authored faces/material/texture and rejected unsupported profiles."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -16657,12 +16739,45 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "verified_exact_custom_warp_owner_state_alpha_helper_map_lifecycle",
+      "next_action": "Verify original full illumination and actual authored map/visibility/caller, including natural teleporter activation or sound; retain bounded original-raster frontend and independent controlled map lifecycle.",
       "notes": [
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
+        "2026-10-09: bounded native/current authored comparison and independent controlled map lifecycle pass; full original context/device remains open. Warp objects have one STILL frame but a separate local UV clock."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "custom_warp_atlas_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/warp-authored-atlas-ab/manifest.json",
+          "sha256": "6e8f55e48b6e85ac36acf1d0bb695b931df2b9b089afdea09681ed47269c4b96",
+          "scope": "Actual seven custom factories/Init/Animate/Render and native mode2; compiled shared owner-state/alpha-payload plus full authored generic geometry;154original software color/depth pairs replay twice, exact UVs. Source white vertex illumination input and generic/base APIs are explicit boundaries.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "original full illumination/device/backend equivalence",
+            "natural caller/visibility/context",
+            "sound or teleporter gameplay where applicable"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/warp-map-final-20261009/TeleportDoorInsideO/manifest.json",
+        "sha256": "ec257efca86a6e9d929ade0620f3a0e29dc4beb8f57ac210699d80f53c2f972f",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "owner_frame_wrap_verified": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false,
+        "observations": 10,
+        "frames": 16,
+        "changing_gpu_samples": 4,
+        "binary_sha256": "c2ad8c9545f4aa6345ef3496e6f6347b09b737c75cb90205b8656a1f5db15bdf"
+      },
+      "work_queue_status": "thin_bounded_frontend_and_controlled_map_pass_context_open"
     },
     {
       "index": 115,
@@ -16671,15 +16786,17 @@
       "retail_type_id": "0xad92bc30",
       "asset": "Magic\\WarpP.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-09: replaced frozen opaque generic atlas drawing with exact per-owner quarter-step Warp UV clock (including V<=0 wrap to1), native mode2 alpha/depth-test/no-write helper and wrapped nearest ARGB4444 sampling; retained all authored faces/material/texture and rejected unsupported profiles."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -16688,12 +16805,45 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "verified_exact_custom_warp_owner_state_alpha_helper_map_lifecycle",
+      "next_action": "Verify original full illumination and actual authored map/visibility/caller, including natural teleporter activation or sound; retain bounded original-raster frontend and independent controlled map lifecycle.",
       "notes": [
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
+        "2026-10-09: bounded native/current authored comparison and independent controlled map lifecycle pass; full original context/device remains open. Warp objects have one STILL frame but a separate local UV clock."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "custom_warp_atlas_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/warp-authored-atlas-ab/manifest.json",
+          "sha256": "6e8f55e48b6e85ac36acf1d0bb695b931df2b9b089afdea09681ed47269c4b96",
+          "scope": "Actual seven custom factories/Init/Animate/Render and native mode2; compiled shared owner-state/alpha-payload plus full authored generic geometry;154original software color/depth pairs replay twice, exact UVs. Source white vertex illumination input and generic/base APIs are explicit boundaries.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "original full illumination/device/backend equivalence",
+            "natural caller/visibility/context",
+            "sound or teleporter gameplay where applicable"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/warp-map-final-20261009/TeleportDoorInsideP/manifest.json",
+        "sha256": "ef5a67e6baa191e82b17cda068c26c601f30efc835683074794ff258a64d3621",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "owner_frame_wrap_verified": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false,
+        "observations": 10,
+        "frames": 16,
+        "changing_gpu_samples": 4,
+        "binary_sha256": "c2ad8c9545f4aa6345ef3496e6f6347b09b737c75cb90205b8656a1f5db15bdf"
+      },
+      "work_queue_status": "thin_bounded_frontend_and_controlled_map_pass_context_open"
     },
     {
       "index": 116,
@@ -16702,15 +16852,17 @@
       "retail_type_id": "0xad92bc31",
       "asset": "Magic\\WarpR.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-09: replaced frozen opaque generic atlas drawing with exact per-owner quarter-step Warp UV clock (including V<=0 wrap to1), native mode2 alpha/depth-test/no-write helper and wrapped nearest ARGB4444 sampling; retained all authored faces/material/texture and rejected unsupported profiles."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -16719,12 +16871,45 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "verified_exact_custom_warp_owner_state_alpha_helper_map_lifecycle",
+      "next_action": "Verify original full illumination and actual authored map/visibility/caller, including natural teleporter activation or sound; retain bounded original-raster frontend and independent controlled map lifecycle.",
       "notes": [
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
+        "2026-10-09: bounded native/current authored comparison and independent controlled map lifecycle pass; full original context/device remains open. Warp objects have one STILL frame but a separate local UV clock."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "custom_warp_atlas_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/warp-authored-atlas-ab/manifest.json",
+          "sha256": "6e8f55e48b6e85ac36acf1d0bb695b931df2b9b089afdea09681ed47269c4b96",
+          "scope": "Actual seven custom factories/Init/Animate/Render and native mode2; compiled shared owner-state/alpha-payload plus full authored generic geometry;154original software color/depth pairs replay twice, exact UVs. Source white vertex illumination input and generic/base APIs are explicit boundaries.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "original full illumination/device/backend equivalence",
+            "natural caller/visibility/context",
+            "sound or teleporter gameplay where applicable"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/warp-map-final-20261009/TeleportDoorInsideR/manifest.json",
+        "sha256": "fbf4e06a7da5a2322f22131fcacf8a15af0bed4bd44865974b7ac50519c28416",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "owner_frame_wrap_verified": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false,
+        "observations": 10,
+        "frames": 16,
+        "changing_gpu_samples": 4,
+        "binary_sha256": "c2ad8c9545f4aa6345ef3496e6f6347b09b737c75cb90205b8656a1f5db15bdf"
+      },
+      "work_queue_status": "thin_bounded_frontend_and_controlled_map_pass_context_open"
     },
     {
       "index": 117,
@@ -16733,15 +16918,17 @@
       "retail_type_id": "0xad92bc32",
       "asset": "Magic\\WarpW.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-09: replaced frozen opaque generic atlas drawing with exact per-owner quarter-step Warp UV clock (including V<=0 wrap to1), native mode2 alpha/depth-test/no-write helper and wrapped nearest ARGB4444 sampling; retained all authored faces/material/texture and rejected unsupported profiles."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -16750,12 +16937,45 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "verified_exact_custom_warp_owner_state_alpha_helper_map_lifecycle",
+      "next_action": "Verify original full illumination and actual authored map/visibility/caller, including natural teleporter activation or sound; retain bounded original-raster frontend and independent controlled map lifecycle.",
       "notes": [
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
+        "2026-10-09: bounded native/current authored comparison and independent controlled map lifecycle pass; full original context/device remains open. Warp objects have one STILL frame but a separate local UV clock."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "custom_warp_atlas_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/warp-authored-atlas-ab/manifest.json",
+          "sha256": "6e8f55e48b6e85ac36acf1d0bb695b931df2b9b089afdea09681ed47269c4b96",
+          "scope": "Actual seven custom factories/Init/Animate/Render and native mode2; compiled shared owner-state/alpha-payload plus full authored generic geometry;154original software color/depth pairs replay twice, exact UVs. Source white vertex illumination input and generic/base APIs are explicit boundaries.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "original full illumination/device/backend equivalence",
+            "natural caller/visibility/context",
+            "sound or teleporter gameplay where applicable"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/warp-map-final-20261009/TeleportDoorInsideW/manifest.json",
+        "sha256": "da4b53413bb3e57ab9c49e7886657c3ccdf93360928b0829dfb5b41830d15cdd",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "owner_frame_wrap_verified": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false,
+        "observations": 10,
+        "frames": 16,
+        "changing_gpu_samples": 4,
+        "binary_sha256": "c2ad8c9545f4aa6345ef3496e6f6347b09b737c75cb90205b8656a1f5db15bdf"
+      },
+      "work_queue_status": "thin_bounded_frontend_and_controlled_map_pass_context_open"
     },
     {
       "index": 118,
@@ -16764,15 +16984,17 @@
       "retail_type_id": "0xad92bc33",
       "asset": "Magic\\WarpY.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-09: replaced frozen opaque generic atlas drawing with exact per-owner quarter-step Warp UV clock (including V<=0 wrap to1), native mode2 alpha/depth-test/no-write helper and wrapped nearest ARGB4444 sampling; retained all authored faces/material/texture and rejected unsupported profiles."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -16781,12 +17003,45 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "verified_exact_custom_warp_owner_state_alpha_helper_map_lifecycle",
+      "next_action": "Verify original full illumination and actual authored map/visibility/caller, including natural teleporter activation or sound; retain bounded original-raster frontend and independent controlled map lifecycle.",
       "notes": [
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
+        "2026-10-09: bounded native/current authored comparison and independent controlled map lifecycle pass; full original context/device remains open. Warp objects have one STILL frame but a separate local UV clock."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "custom_warp_atlas_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/warp-authored-atlas-ab/manifest.json",
+          "sha256": "6e8f55e48b6e85ac36acf1d0bb695b931df2b9b089afdea09681ed47269c4b96",
+          "scope": "Actual seven custom factories/Init/Animate/Render and native mode2; compiled shared owner-state/alpha-payload plus full authored generic geometry;154original software color/depth pairs replay twice, exact UVs. Source white vertex illumination input and generic/base APIs are explicit boundaries.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "original full illumination/device/backend equivalence",
+            "natural caller/visibility/context",
+            "sound or teleporter gameplay where applicable"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/warp-map-final-20261009/TeleportDoorInsideY/manifest.json",
+        "sha256": "344d061eabc84dddb7be72a2738321b2dafa9dd570b2b052385aa6dd7d6ca872",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "owner_frame_wrap_verified": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false,
+        "observations": 10,
+        "frames": 16,
+        "changing_gpu_samples": 4,
+        "binary_sha256": "c2ad8c9545f4aa6345ef3496e6f6347b09b737c75cb90205b8656a1f5db15bdf"
+      },
+      "work_queue_status": "thin_bounded_frontend_and_controlled_map_pass_context_open"
     },
     {
       "index": 119,
@@ -16795,15 +17050,17 @@
       "retail_type_id": "0xad92bc34",
       "asset": "Magic\\WarpG.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-09: replaced frozen opaque generic atlas drawing with exact per-owner quarter-step Warp UV clock (including V<=0 wrap to1), native mode2 alpha/depth-test/no-write helper and wrapped nearest ARGB4444 sampling; retained all authored faces/material/texture and rejected unsupported profiles."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -16812,12 +17069,45 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "verified_exact_custom_warp_owner_state_alpha_helper_map_lifecycle",
+      "next_action": "Verify original full illumination and actual authored map/visibility/caller, including natural teleporter activation or sound; retain bounded original-raster frontend and independent controlled map lifecycle.",
       "notes": [
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
+        "2026-10-09: bounded native/current authored comparison and independent controlled map lifecycle pass; full original context/device remains open. Warp objects have one STILL frame but a separate local UV clock."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "custom_warp_atlas_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/warp-authored-atlas-ab/manifest.json",
+          "sha256": "6e8f55e48b6e85ac36acf1d0bb695b931df2b9b089afdea09681ed47269c4b96",
+          "scope": "Actual seven custom factories/Init/Animate/Render and native mode2; compiled shared owner-state/alpha-payload plus full authored generic geometry;154original software color/depth pairs replay twice, exact UVs. Source white vertex illumination input and generic/base APIs are explicit boundaries.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "original full illumination/device/backend equivalence",
+            "natural caller/visibility/context",
+            "sound or teleporter gameplay where applicable"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/warp-map-final-20261009/TeleportDoorInsideG/manifest.json",
+        "sha256": "8b26eca8887061ee17e6f7e9a0914fa8e3f0aed29df9459c0eb49c0956364137",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "owner_frame_wrap_verified": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false,
+        "observations": 10,
+        "frames": 16,
+        "changing_gpu_samples": 4,
+        "binary_sha256": "c2ad8c9545f4aa6345ef3496e6f6347b09b737c75cb90205b8656a1f5db15bdf"
+      },
+      "work_queue_status": "thin_bounded_frontend_and_controlled_map_pass_context_open"
     },
     {
       "index": 120,

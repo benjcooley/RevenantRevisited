@@ -1282,6 +1282,10 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         // character that is OF_INVISIBLE, or faded below retail's threshold,
         // isn't drawn (TCharAnimator::DrawAlpha).
         T3DAnimator* d3 = dynamic_cast<T3DAnimator*>(oi->GetAnimator());
+        float warp_uv[2] = {};
+        const bool warp_atlas = d3 && d3->WarpAtlasOffset((*ctx.mesh_assets)[asset_idx].objnum,warp_uv);
+        if (retail_warp::AssetPath(oi->ObjId()) && !warp_atlas)
+        { ++stats.mesh_skipped; return; } // Unsupported Warp profile must not draw a static substitute.
         const float draw_alpha = d3 ? d3->DrawAlpha() : 1.0f;
         if (draw_alpha <= 0.0f)
             return;
@@ -1442,7 +1446,20 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             (oi->ObjId()==0xb0e024dfu && meshimg->HasRetailFmasteryPartSysProfile()) ||
             (oi->ObjId()==0x5be39ae0u && meshimg->HasRetailMightPartSysProfile());
         SHelperMeshSubmit blended = {};
-        if (!audited_profile && HelperDrawForBlend(meshimg->StateBlend(state), blended))
+        if (warp_atlas)
+        {
+            blended.mesh = asset.handle;
+            blended.texture_override = live_texture;
+            std::memcpy(blended.world, world_renderer, sizeof(blended.world));
+            retail_warp::State warp_state;
+            warp_state.u=warp_uv[0]; warp_state.v=warp_uv[1];
+            retail_warp::ConfigureDraw(blended,warp_state);
+            const S3DPoint mesh_world = MapRendererMeshWorld(world_pos,ctx.mesh_scale_x,ctx.mesh_scale_y,ctx.mesh_scale_z);
+            const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld,ctx.mesh_scale_x,ctx.mesh_scale_y,ctx.mesh_scale_z);
+            blended.sort_depth=CameraDepth({mesh_world.x-mesh_camera.x,mesh_world.y-mesh_camera.y,mesh_world.z},ctx.cam_forward);
+            Renderer->SubmitHelperMesh(blended);
+        }
+        else if (!audited_profile && HelperDrawForBlend(meshimg->StateBlend(state), blended))
         {
             // A blend-mode object (an effect's glow, swirl or column) draws
             // in the transparent pass over the lit scene, not into the
