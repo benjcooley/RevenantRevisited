@@ -1,5 +1,19 @@
 # Effects burn-down: retail parity and working runtime
 
+## Current VFX progress (2026-10-10)
+
+**17 / 176 effects have reviewed visual passes for their recorded test configuration; 159 still need a current visual pass.** This is the primary VFX progress measure. The separate 67 bounded rendered frontend comparisons help diagnose correctness; they are not 67 completed effects. These counts overlap and must not be added.
+
+Passed appearance cases: CyanFont, RedFont, GreenFont, BlueFont, base Flame, Ripple emitted by Drip, Globe, Sparks editor defaults, isolated Cure, isolated Pixie, Shadowfist, Warriorborn, teleportation, goldeffect, Might, Immortalmight and blue TeleportDoorInsideB. Their per-row visual reviews record the configuration and remaining limitations. Fresh Might/Immortalmight footage passes after the parser correction. Blue Warp retains an open seven-pixel apex/projection discrepancy despite its scoped overall appearance pass.
+
+A useful pass compares actual port output with actual retail output and reviews form, scale, color/blending, animation, motion and lifetime within the recorded configuration. Independent random seeds are acceptable. Moving projectiles and two-endpoint effects must exercise those behaviors. State-only or partial shared-raster proofs are supporting evidence and do not establish a complete visual pass.
+
+Natural gameplay triggers, attachment, audio, other configurations and targeted graphics-device checks remain follow-up tasks. The earlier all-gates count is an end-to-end integration measure, not the headline completion measure. Keep concrete visible differences open; do not silently accept them because another test passed.
+
+Work proceeds in parallel: close current visual reviews, convert and compare new easy effects, and fix shared testing/rendering defects. Each effect lane should return a reviewed pass or a specific mismatch to fix. Infrastructure work does not block independent effect work.
+
+The dated sections below retain historical checkpoint counts. Use this summary and the JSON ledger for current status.
+
 **Workflow change (2026-10-07):** most new VFX validation uses the thin retail
 emulator and its original software renderer. DOSBox-X with the emulated 3D device
 is reserved for targeted software-rendering diagnostics, not the routine loop.
@@ -9,7 +23,210 @@ Prioritize speed and repeatability, with known renderer limits recorded
 separately from VFX defects. The counts and earlier captures below are retained
 historical evidence; this migration alone grants no additional acceptance.
 
-**Latest thin-emulator coverage: 40 / 176 bounded rendered frontends.**
+**Latest thin-emulator coverage: 67 / 176 bounded rendered frontends.**
+
+**Quicksilver checkpoint (2026-10-10):** strict authored admission, source-backed controller/submission and a controlled map lifecycle pass. Five nonempty particle-only original-software pairs replay twice with zero pixel differences; the actual map passes eight typed observations, movement/deletion and exact floor restoration. Source-fix coverage is 91 rows; controlled runtime coverage is 81. Full base rendering and actual-port/native visual review remain open. [Scope and reproduction](forensics/QUICKSILVER_FRONTEND_20261010.md).
+
+**Speed and actual curve parsing (2026-10-09):** native literal parsing exposed
+a shared cached-default error: entering a curve clears only its first destination
+to zero. The port retained its absent-field default1, making newborn particles
+start at the wrong scale/alpha. The corrected parser preserves absent/literal
+defaults and other dimensions. Fresh whole-parser/Initialize/Pulse comparisons
+now pass for Might/Immortalmight/Fmastery, all four authored water assets,
+CombatFlash start1 and unchanged literal-scale Gold, including fresh repeats.
+Previously injected template1 records remain conditional historical evidence.
+
+Speed now runs through strict profile admission, actual native `#` emitter/base
+matrix contracts and explicit base80/particle16 blend/depth policies. Its
+**particle frontend only** adds five repeated original-software color/depth
+pairs, 2,109 admitted draws and112 actual near-zero rejections, with the declared
+raw-world/MODELZ bridge. Baseflare lighting/raster and full device/caster remain
+open. The normal map passes eight typed controller/live-particle/movement/delete
+observations,48frames/31distinctactiveimages and exact floor restoration.
+[Scope and reproduction](forensics/SPEED_CONTROLLER_PREFLIGHT_20261009.md).
+
+Source fixes are90 rows and controlled runtime coverage80 rows. Two prior
+Might/Immortalmight visual passes and Immortalmight's repeat credit are suspended
+pending fresh current-code footage: current visual14/repeat7, full0. Numerical
+rechecks do not renew appearance claims. Build,106runtime tests and focused
+source regressions pass. Original recorded retail references remain available.
+
+The [saved Warp map check](forensics/WARP_AUTHORED_MAP_CONTEXT.md) now shows
+the animated blue door in its original Labyrinth room with saved identity,
+terrain/lights and area ambient. It adds contextual port footage, not a full
+native-scene comparison. The locator also records that all eight original
+LabGate barrier objects are invisible during normal play; preserve those flags.
+
+**Speaker and seven Warp colors (2026-10-09):** Speaker's complete 55-vertex,
+30-face untextured mesh passes six original-software pairs with repeat, explicit
+generic builder registration and authored material inputs. Its separate map
+case passes ten typed observations, static frame progression and clean-floor
+restoration; sound/full illumination remain open. [Scope](forensics/SPEAKER_THIN_STATIC.md).
+
+TeleportDoorInside B/O/P/R/W/Y/G use custom native factories and a local UV
+clock, despite their one-frame STILL assets. The exact quarter-step controller,
+inclusive V wrap and mode2 alpha/depth-test/no-write path now run in the port.
+All authored faces are retained; 154 original/compiled software pairs replay
+twice, with 574 state and 2,296 UV values matching float bits. Actual map testing
+found a clamped-alpha-sampler defect, then verifies wrapped-nearest sampling:
+each final owner passes ten typed observations, four changing GPU samples,
+movement, deletion and exact floor restoration. [Scope](forensics/TELEPORT_DOOR_INSIDE_THIN.md).
+
+FireCone additionally gains exact native/compiled defined particle state:
+260 slots, 73,806 float fields, 1,243 RNG calls and pool call ordering match
+through 100 ticks and natural drain93 after local extended-arithmetic fixes.
+This adds state evidence, not another rendered row. [Proof](forensics/FIRECONE_THIN_STATE_20261009.md).
+Build, all 99 runtime tests and the compiled helper/material regressions pass.
+The zero-UV FireFlash control also retains all 96 prior decoded pixel hashes.
+Counts advance to 65 bounded rendered rows, 79 controlled runtime rows and
+89 source-fix rows; full acceptance remains0/176.
+
+**LabGateBarrierS/E:** both exact assets pass four nonempty original-software
+image/depth comparisons, each replayed twice, using their authored untextured
+geometry and red material. Original default-animator lookup, key/matrix code and
+the actual no-texture raster branch execute; compiled static preview submission
+and material decoding supply the independent port geometry. Authored diffuse
+is an explicit upstream vertex-color input, so full native illumination remains
+open. No texture or replacement geometry is introduced.
+
+Separate map captures found both quads rendered white. The opaque submission
+path now carries authored diffuse and alpha for zero-texture EFFECT meshes.
+Each corrected owner passes ten typed create/move/delete observations across
+16 frames, all 1,875 changed pixels are red-dominant, and deletion restores the
+floor exactly. The focused native test and compiled material/alpha/fallback
+regression pass alongside the 94-test runtime suite. Bounded frontends advance
+55→57, controlled runtime rows69→71 and source-fix rows80→82. Natural barrier
+visibility/caller, full illumination and device parity remain open; full
+acceptance is still0/176. [Scope and reproduction](forensics/LAB_GATE_BARRIERS_THIN.md).
+
+**2026-10-09 FireFlash precision checkpoint:** native initialization and fade
+arithmetic exposed two local rounding differences. The corrected production
+code now matches all birth angles and fade scales across 101 samples of the
+150-slot pool; frame, integer state, 759 range calls and sampled draw counts
+also match. Binary32 discrepancies fall from 8,120 to 1,124, confined to sphere
+positions from shared matrix accumulation (maximum error 3.78994e-6). Original
+Scene mode8 explicitly maps to ONE/ONE; the earlier numeric-mode mismatch claim
+is withdrawn. [Evidence and remaining gates](forensics/FIREFLASH_THIN_PREFLIGHT.md).
+No shared matrix/rendering change, pixel parity or new effect-row credit follows.
+
+Live capture validation now rejects empty black-background previews, invalid
+images and explicit asset/controller rejection even when files were written
+and the process exited normally. An intentional empty control must declare
+`expect_visible: false`. The runtime regression suite passes 94 tests; the final
+FireFlash preview has 69 nonblack frames out of 96, 70 distinct images and a
+clean shutdown in 16.7 seconds. This smoke result does not establish retail
+pixel parity.
+
+Rift1's shipped `animtex obj=rift,u=4,d=4` is rejected by the original parser;
+its failed-initialization cleanup faults on unallocated UV storage in the
+isolated cold-heap fixture. Actual gameplay heap behavior is not established. Defer
+that [case](forensics/RIFT1_FAILED_ANIMTEX.md) without repairing the authored tag
+or claiming animation. Standalone
+[Flare](forensics/FLARE_PREFLIGHT_20261009.md) also remains deferred because no
+exact asset binding exists in the shipped EFFECT registry/archive. Counts
+at that checkpoint remained 55 bounded rendered rows, 69 controlled runtime rows
+and 0 fully accepted, before the subsequent barrier batch above.
+
+[Six generic scrolling-water effects](../../recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json)
+now pass84whole-image/depth pairs, all visiblynonempty, twice replayed. Original
+factory/parser/controller execution confirms fallback to every object when a
+valid selector names none. FlowWater, BendWater1/2 andWaveS previously froze;
+Wave/WaveM exact targets are regression controls. Strict malformed/overlap
+rejection remains. Compiled actual authored-mesh submission now carries the
+original UV offset from the global24Hz clock; no particle proxy or geometry fit.
+[Map lifecycle](../../recon/retail_asm/runtime/effects/scrolltex-map-next-20261009/manifest.json)
+passes36exact-type create/move/delete observations over184frames. Each effect
+scrolls visibly and restores the floor after deletion; actual FlowWater preview
+has26changingnonemptyimages/cleanexit after fixing lazy mesh-before-tag loading.
+Controlled runtime rows advance63→69; natural setting/lighting/device gates stay
+open. [Controller audit](forensics/SCROLLTEX_EMPTY_SELECTION.md).
+
+[SewerWater preview/map dispatch](../../recon/retail_asm/runtime/effects/sewer-dispatch-next-20261008/sewer-dispatch-verification.json)
+now uses the verified static authored quad rather than the unrelated moving-water
+particle code. The actual browser changes from 12 moving images to 12 identical
+nonempty images; the normal map passes ten create/frame/move/delete observations
+and restores its original clean floor. Source-fix rows rise74→75 and controlled
+runtime rows60→61. This extends an existing retail row; bounded coverage remains
+47/176 and natural setting/device acceptance remains open.
+
+[StillWater and all three watcher textures](../../recon/retail_asm/runtime/effects/static-texture-next-20261007/manifest.json)
+add 52 original texture-selector checks, 1,040 corner/UV comparisons and 26
+exact image/depth pairs with warm replay. Watcher3 stores six textures but
+its STILL state uses only frames0..3; the two inactive textures receive no
+animation credit. [CharUtility and SewerWater](../../recon/retail_asm/runtime/effects/default-static-frontend-ab/manifest.json)
+add eight exact image/depth pairs and actual native default-animator lookup;
+all five CharUtility parts/materials are retained.
+
+The [normal-map regression](../../recon/retail_asm/runtime/effects/map-texture-next-20261007/manifest.json)
+found and fixed frozen watcher graphics: owner counters advanced while cached
+map meshes kept texture0. Live texture selection now travels with each draw;
+opaque batches split by texture, and helper/translucent depth and colour use
+the same selection without mutating shared geometry/albedo. Four exact-type
+owners pass 40 create/frame-wrap/move/delete observations, every watcher has
+four changing GPU samples, and deleting them restores the initial floor.
+Compiled production selection/batching also verifies independently phased
+owners, explicit texture/frame overrides and static fallback. This advances
+controlled runtime rows56→60 and source-fix rows71→74. Natural placement,
+lighting/culling and retail-versus-Metal device parity remain open; full
+acceptance is still0/176. [Map-texture audit](forensics/MAP_TEXTURE_ANIMATION.md).
+
+[Actual default Ripple map lifecycle](../../recon/retail_asm/runtime/effects/ripple-map-next-20261009/manifest.json)
+passes seven typed creation/component/movement/natural-expiry observations over
+108capturedframes. Ten child factory calls and95distinctactiveimages are
+retained; natural owner/tree expiry restores the initial floor
+exactly. Controlled runtime rows advance62→63; boundedfrontend49 andfull0
+remain unchanged. This is a synthetic grounded module, not authored-map parity.
+
+[Longer Ripple families](../../recon/retail_asm/runtime/effects/ripple-splash-family-ab/manifest.json)
+now verify length64/96 recursively through three profiles, including both signs
+of owner translation: 363 states, 12,528 splash float fields, 36 births/removals,
+120 observed RNG calls and 105 exact image/depth pairs, twice replayed. A wrong
+truncate-before-owner-add mutation fails at the first translated birth. No
+production change was needed. Original sector/component scheduling, natural
+illumination/occlusion and Metal remain open; no duplicate row credit.
+[Scope](forensics/RIPPLE_SPLASH_FAMILY_THIN.md).
+
+[Linked Drip → Ripple](../../recon/retail_asm/runtime/effects/drip-ripple-composite-ab/manifest.json)
+now verifies the actual production child factory/Advance/Submit against original
+retail children: 145 state frames, five complete child lifecycles and 43 exact
+image/depth pairs, twice replayed. A deliberate missing-child-Advance mutation
+fails the new regression. This closes the no-splash length20 rendered-child
+gap without increasing the effect-row count. Sector scheduling, audio/RNG,
+length64 splashes, natural context and full Metal parity remain separate.
+[Scope](forensics/DRIP_RIPPLE_LINKED_THIN.md).
+
+Actual Water map ownership now passes eight identity/component/movement/delete
+observations over64frames, with59changingactiveimages and exact clean-floor
+restoration. Water and Waterfall previews both complete12nonemptychangingframes
+and clean shutdown after fixing identity-less diagnostic logging. Waterfall
+physics/material are unchanged. Controlled runtime rows are now62; full device
+and natural-setting acceptance remain separate.
+
+[Literal Water](../../recon/retail_asm/runtime/effects/water-final-identity-safe-20261008-ab/manifest.json)
+now uses its authored XY quad, native scale/translation/mode16 and true24Hz
+state clock. The previous41ms clock first drifted at tick62; its billboards
+also used invented16wu geometry. Corrected native/production97states compare
+all25drops/24,250fields and420RNGcalls, with eight exact repeated image/depth
+pairs. Preview/map share one initializer/producer, and rendering-only motion
+is smooth between original ticks. Natural lighting/material/device and setting
+remain open. [Audit](forensics/LITERAL_WATER_THIN.md).
+
+[FaultFire](../../recon/retail_asm/runtime/effects/faultfire-render-next-20261008/manifest.json)
+now passes129ticks/645exactphase-and-UVfields,128orderedRNGcalls and12nonempty
+repeated two-pass image/depth pairs. Per-vertex U accumulation and extended
+phase-wrap intermediates remove325source/packet mismatches. Selected images
+already matched before the fix, so field equality supplies the causal evidence;
+this is no brightness/size/material fit. Natural context and upper-mesh/device
+transparency remain open.
+
+[FireSwarm](../../recon/retail_asm/runtime/effects/fireswarm-render-next-20261008/manifest.json)
+adds a stationary-cylinder frontend: 79 exact lifecycle ticks, 237 float32
+scale/yaw fields, kill76 and 12 repeated image/depth pairs. Only the five
+nonempty matching samples at ticks30/36/48/60/72 earn rendered-sample credit.
+Early empty images retain the original software triangle-span limitation;
+actual device/culling/lighting, natural setting and early visible phases remain
+open. Native class/caller analysis finds no missile or two-endpoint contract.
+
 [Streamer](../../recon/retail_asm/runtime/effects/streamer-frontend-ab/manifest.json)
 adds 104 exact lifecycle ticks in both production ownership modes and 11 sampled
 image/depth pairs repeated twice. Preserving native intermediate precision and
@@ -181,11 +398,11 @@ Bounded rendered-frontend coverage is **29 / 176**; full acceptance remains open
 
 Audited 2026-10-05. This file and [EFFECT_BURNDOWN.json](EFFECT_BURNDOWN.json) are the current completion ledger. Older [INVENTORY.md](INVENTORY.md), [BESPOKE_WAVE_ROADMAP.md](BESPOKE_WAVE_ROADMAP.md) and [EFFECT_USAGE_MAP.md](EFFECT_USAGE_MAP.md) retain useful class research, but their counts, statuses and historical scope do not certify acceptance.
 
-## Scope and honest progress
+## Historical scope and checkpoint (superseded by current summary)
 
 The current `data/imagery.rvi` → `class.def` contains **176 retail EFFECT type rows**, **174 distinct case-insensitive names**, and **166 distinct case-insensitive asset paths**. Preserve all 176 type IDs. Three rows are literally named `Flame`, with assets `Flame.I3D`, `FlameB.I3D` and `FlameG.I3D` and IDs `0x50ba373b`, `0x50ba373c`, `0x50ba373d`. The colored harness aliases do not prove that `add FlameB`/`add FlameG` dispatches in retail. This corrects the older inventory's claim of 174 entries/164 assets.
 
-**Retail visual checks passed: 16 / 176 (four Fountain colors, Ripple emitted by Drip, Globe on an actual map floor, base Flame, isolated Pixie, isolated Cure, Sparks editor defaults and teleportation/Shadowfist/Warriorborn on a neutral real-depth floor and Gold default appearance against two independent references measured-quality Might and corrected incoming-state Immortalmight). Full retail/runtime acceptance: 0 / 176; 176 remain.** Fifty retail rows now have software references (base Flame, Mist, all four Fountain colors, Fizzle, Drip, static Globe, all twelve town signs and all seven colored Ribbons and SymGlow, Faultfire, FireSwarm, Streamer, setvortex, Pixie, FireFlash, FireCone, MeteorStorm, Cure, goldeffect, combatflash state0/start1, Sparks editor defaults and KinSecretDoor still/state0, PunchAndJudy loop excerpt and MPAppear defaultstart, Shadowfist, Warriorborn, teleportation, Might, Immortalmight and Fmastery steady start excerpts), with saved paired previews for49 rows. These prove the capture/comparison workflow, not final visual or runtime acceptance. A successful build, plausible preview or `status: complete` capture alone does not establish visual fidelity; a retained retail pair and visual review can establish it with independent random seeds. Completion includes the effect's real map, spell, combat or character trigger, beyond `SpawnForTest`.
+**Historical retail visual checks passed: 16 / 176 (four Fountain colors, Ripple emitted by Drip, Globe on an actual map floor, base Flame, isolated Pixie, isolated Cure, Sparks editor defaults and teleportation/Shadowfist/Warriorborn on a neutral real-depth floor and Gold default appearance against two independent references measured-quality Might and corrected incoming-state Immortalmight). Full retail/runtime acceptance: 0 / 176; 176 remain.** Fifty retail rows now have software references (base Flame, Mist, all four Fountain colors, Fizzle, Drip, static Globe, all twelve town signs and all seven colored Ribbons and SymGlow, Faultfire, FireSwarm, Streamer, setvortex, Pixie, FireFlash, FireCone, MeteorStorm, Cure, goldeffect, combatflash state0/start1, Sparks editor defaults and KinSecretDoor still/state0, PunchAndJudy loop excerpt and MPAppear defaultstart, Shadowfist, Warriorborn, teleportation, Might, Immortalmight and Fmastery steady start excerpts), with saved paired previews for49 rows. These prove the capture/comparison workflow, not final visual or runtime acceptance. A successful build, plausible preview or `status: complete` capture alone does not establish visual fidelity; a retained retail pair and visual review can establish it with independent random seeds. The historical all-gates completion rule included the effect's real map, spell, combat or character trigger, beyond `SpawnForTest`; these are now separate follow-up gates for the primary scoped visual measure.
 
 The current harness declares **159 unique preview IDs**, associated by name or explicit factory profile with **120 retail rows**; **56 rows need candidate mapping/fixture research**. These associations are work leads, not coverage proofs. **8 preview IDs** remain outside this association scan (see the JSON catalogue); multiple previews can represent one type, and a registered stub can draw nothing.
 
@@ -614,40 +831,40 @@ Current11419/a181 correctedsource/runtime andown240unchanged-frame reference pai
 - [ ] Audit Burn's retained divergence and synthetic anchor/size assumptions; obtain an accurate fresh native reference. Older Burn, Blood reconstruction or engine-versus-bespoke images are not retail acceptance.
 - [ ] Migrate accepted bespoke effects into the general effects system after parity is verified; retain the accepted reference and run A/B regressions during migration.
 
-## Per-effect definition of done
+## Per-effect visual completion and follow-ups
 
-For each row, record evidence in the JSON ledger and link it here before checking its final box:
+The checkbox for each retail row means its recorded **visual test configuration has passed review**, matching the primary progress count. It does not imply every gameplay or device configuration has been tested.
 
-1. Identify its exact retail type ID, shipped asset/subobjects/materials, actual animator and caller; distinguish snapshot behavior from retail changes.
-2. Audit/implement source geometry, UVs, blend/depth, lighting, emitter/state machine, 24Hz timing, randomness and lifecycle. Avoid placeholder assets or invented display calibration.
-3. Exercise the intended implementation in a deterministic port fixture, with build/tests and animated smoke evidence; null/stub factories fail this gate.
-4. Acquire a healthy, accurate software retail reference with matched camera, ambient/color, placement, parameters and an effect-free backdrop; capture complete one-shot lifecycle or enough continuous motion.
-5. Compare spawn, peak, sustain, decay/end and occlusion using paired elapsed-time evidence. Retain phase-estimate views separately; particle RNG differences do not justify geometry/color/timing differences.
-6. Repeat the reference protocol, check clean background/health and cache reuse; retain manifests, asset/config/binary hashes and commands.
-7. Verify the effect in its actual map/character setting and through its natural runtime trigger, including runtime type dispatch, parameter variations, cleanup and scene changes. A harness-only class is insufficient.
-8. Record the reviewer, acceptance criteria and remaining exceptions. Only then check `visual_fidelity`, `runtime_trigger_integration`, `map_or_character_context`, `repeatable_ab` and `accepted` in JSON and the final checkbox here. Verified audio/data-only rows require a documented visual exemption plus runtime behavior, not a silent skip.
+Before checking a box:
 
-Each checkbox below means all gates are accepted. Every box is currently open. Preview associations are intentionally labelled candidates. Batch groups partition the full retail registry; priority does not delete lower-priority types.
+1. Identify the exact retail type and authored asset used by the port and reference; state the fixture parameters and any partial-component scope.
+2. Retain an actual port/retail pair with useful animation or a legitimate static case. Projectiles must move; point-to-point effects must have both endpoints. State-only and shared-raster subset tests alone cannot check this box.
+3. Review form, scale, color/blending, animation, motion and lifetime for that configuration. Independent random seeds are allowed; unexplained effect-specific mismatches remain open. Record known shared renderer differences explicitly.
+4. Record the reviewer, result, artifact/build hashes and remaining limitations in the JSON ledger. Reopen an affected pass after a behavior-changing fix until current-code footage is reviewed.
+
+Natural map/character triggers, additional parameters, repeatability, audio and targeted graphics-device checks remain separately tracked follow-ups. The legacy all-gates accepted flag is the end-to-end integration measure and is not required to check a scoped visual pass here. Audio/data-only rows need an explicit visual exemption and a verified runtime result; they cannot silently pass.
+
+Preview associations remain candidates. Batch groups partition all 176 retail types; prioritizing an easy batch does not remove deferred work.
 
 ## Batch 1 — Finish the current authored-geometry batch (6 retail rows)
 
-- [ ] **CyanFont** `0x22491405` — `Misc\Sparkle.I3D`. Candidates: `TFountainAnimator_BESPOKE`, `TFountainAnimator_SHIM`, `TCyanFountainAnimator_BESPOKE`. Progress: isolated steady-state retail visual A/B passed; real saved/command lifecycle regression passes. Next: authored story/context checks separately; extend reference coverage to the remaining effects.
-- [ ] **RedFont** `0x335a2516` — `Misc\Sparkle.I3D`. Candidates: `TRedFountainAnimator_BESPOKE`. Progress: isolated steady-state retail visual A/B passed; real saved/command lifecycle regression passes. Next: authored story/context checks separately; extend reference coverage to the remaining effects.
-- [ ] **GreenFont** `0x446b3627` — `Misc\Sparkle.I3D`. Candidates: `TGreenFountainAnimator_BESPOKE`. Progress: isolated steady-state retail visual A/B passed; real saved/command lifecycle regression passes. Next: authored story/context checks separately; extend reference coverage to the remaining effects.
-- [ ] **BlueFont** `0x557c4738` — `Misc\Sparkle.I3D`. Candidates: `TBlueFountainAnimator_BESPOKE`. Progress: isolated steady-state retail visual A/B passed; real saved/command lifecycle regression passes. Next: authored story/context checks separately; extend reference coverage to the remaining effects.
+- [x] **CyanFont** `0x22491405` — `Misc\Sparkle.I3D`. Candidates: `TFountainAnimator_BESPOKE`, `TFountainAnimator_SHIM`, `TCyanFountainAnimator_BESPOKE`. Progress: isolated steady-state retail visual A/B passed; real saved/command lifecycle regression passes. Next: authored story/context checks separately; extend reference coverage to the remaining effects.
+- [x] **RedFont** `0x335a2516` — `Misc\Sparkle.I3D`. Candidates: `TRedFountainAnimator_BESPOKE`. Progress: isolated steady-state retail visual A/B passed; real saved/command lifecycle regression passes. Next: authored story/context checks separately; extend reference coverage to the remaining effects.
+- [x] **GreenFont** `0x446b3627` — `Misc\Sparkle.I3D`. Candidates: `TGreenFountainAnimator_BESPOKE`. Progress: isolated steady-state retail visual A/B passed; real saved/command lifecycle regression passes. Next: authored story/context checks separately; extend reference coverage to the remaining effects.
+- [x] **BlueFont** `0x557c4738` — `Misc\Sparkle.I3D`. Candidates: `TBlueFountainAnimator_BESPOKE`. Progress: isolated steady-state retail visual A/B passed; real saved/command lifecycle regression passes. Next: authored story/context checks separately; extend reference coverage to the remaining effects.
 - [ ] **Mist** `0x2093487a` — `Magic\Mist.i3d`. Candidates: `TMistEffect_BESPOKE`, `TMistEffect`, `TMistEffect_SOFTWARE_ALPHA_DIAGNOSTIC`. Progress: owner-bound runtime hook passes create/move/persist/delete; 1,600 snapshot state/RNG cases pass and 150 prior preview frames match exactly. Fresh SW and explicit blend comparisons retained. Next: verify RGB565/sampling semantics and natural caller/context. See [M05 evidence](forensics/M05_SOFTWARE_REFERENCE.md).
 - [ ] **Fizzle** `0xab8800dd` — `Magic\Fizzle.I3D`. Candidates: `TFizzleEffect`, `TFizzleAnimator_SHIM`, `TFizzleEffect_SINGLE_BURST`. Progress: retail animator/state audited; 24Hz/x87 correction verified; two full native bursts paired; actual component finishes and is reaped normally. Spell definitions and safe spell lifetime initialized/repaired. Next: prove failed quickspell through the player, including associated LIGHT, FAIL audio and residual sampling/coverage. See [X21 evidence](forensics/X21_TFizzleEffect.md).
 
 ## Batch 2 — Close early parity and map/combat regressions (8 retail rows)
 
 - [ ] **Blood** `0xddc4042e` — `Misc\Blood.I3D`. Candidates: `TBloodEffect`, `TBloodEffect_BESPOKE`, `TBloodAnimator_SHIM`. Progress: archive-path collision corrected; no usable native/caller acceptance yet. Next: plain ADDAT is deferred because six snapshot parameters are uninitialized and actual retail defaults are unproven. Require a real parameterized caller or source-proven initialization; do not guess a safe editor recipe.
-- [ ] **Flame** `0x50ba373b` — `Magic\Flame.I3D`. Candidates: `TFlameEffect`, `TFlameEffect_BESPOKE`, `TFlameAnimator_SHIM`. Progress: Current authored-quad preview isolated appearance passes own retail reference; exact-type create/move/delete and animation pass. Next: natural shipped setting and precise cadence; colored same-name IDs remain separate.
+- [x] **Flame** `0x50ba373b` — `Magic\Flame.I3D`. Candidates: `TFlameEffect`, `TFlameEffect_BESPOKE`, `TFlameAnimator_SHIM`. Progress: Current authored-quad preview isolated appearance passes own retail reference; exact-type create/move/delete and animation pass. Next: natural shipped setting and precise cadence; colored same-name IDs remain separate.
 - [ ] **Flame** `0x50ba373c` — `Magic\FlameB.I3D`. Candidates: `TFlameEffect_BESPOKE__FlameB`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger. Retail class.def literally repeats the name Flame; harness labels FlameB/FlameG are asset aliases. Verify type-ID dispatch, not name lookup.
 - [ ] **Flame** `0x50ba373d` — `Magic\FlameG.I3D`. Candidates: `TFlameEffect_BESPOKE__FlameG`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger. Retail class.def literally repeats the name Flame; harness labels FlameB/FlameG are asset aliases. Verify type-ID dispatch, not name lookup.
-- [ ] **Sparks** `0x14db0f2e` — `Misc\Sparks.I3D`. Candidates: `TSparkEffect_EDITOR_DEFAULT`, `TSparkEffect`, `TSparkAnimator_SHIM`, `TSparksEffect_BESPOKE`. Progress: clean FPS-enabled editor-default reference has34 changing images and exact ground; own240-frame authored FX-quad pair passes root isolated visual review across six active samples with independent RNG/no fitting. Old trail diagnostic retained. Next: real ResolveAttack blocked miss→CA_SPARKS→EffectBurst in loaded combat, including15–25/single variant/trails2/bounce and actor/audio/lifetime. Editor appearance grants no blocked-combat acceptance. See [audit](forensics/SPARKS_TSparkAnimator.md).
+- [x] **Sparks** `0x14db0f2e` — `Misc\Sparks.I3D`. Candidates: `TSparkEffect_EDITOR_DEFAULT`, `TSparkEffect`, `TSparkAnimator_SHIM`, `TSparksEffect_BESPOKE`. Progress: clean FPS-enabled editor-default reference has34 changing images and exact ground; own240-frame authored FX-quad pair passes root isolated visual review across six active samples with independent RNG/no fitting. Old trail diagnostic retained. Next: real ResolveAttack blocked miss→CA_SPARKS→EffectBurst in loaded combat, including15–25/single variant/trails2/bounce and actor/audio/lifetime. Editor appearance grants no blocked-combat acceptance. See [audit](forensics/SPARKS_TSparkAnimator.md).
 - [ ] **Burn** `0x55471bff` — `Magic\Burnbabyburn.I3D`. Candidates: `TBurnEffect_BESPOKE`, `TBurnAnimator_SHIM`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **Drip** `0x5975abde` — `Magic\Drip.i3d`. Candidates: `TDripEffect`, `TDripEffect_AB`, `TDripEffect.OnHand`. Progress: accurate SW reference and steady-state emitted Ripple appearance pass; exact0x5975abde real ADDAT/setdrip/MOVE/DELETE passes7 checks, animation at both positions and17 exact-ground cleanup frames. Next: falling Drip visual fidelity and natural map context separately; advance the easy reference queue.
-- [ ] **Ripple** `0x12309867` — `Magic\Ripples.I3D`. Candidates: `TRippleEffect`. Progress: source fix recorded; user confirms the Drip-emitted Ripple matches retail visually despite different random seeds. Next: standalone type dispatch and natural runtime/context checks; no further ring appearance or random placement tuning needed. Latest user reconfirms identical appearance despite independent randomseeds; same scopedpass, no duplicatecount/cadence/full claim.
+- [x] **Ripple** `0x12309867` — `Magic\Ripples.I3D`. Candidates: `TRippleEffect`. Progress: user-confirmed independent-seed appearance plus native length64/96 recursive splash/child/RNG proofs and105exact image/depthpairs. Next: actual sector/component installation/scheduling, natural illumination/occlusion and Metal; no additional ring geometry fitting.
 
 ## Batch 3 — Environment, water, signs and simple reusable variants (51 retail rows)
 
@@ -665,15 +882,15 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 - [ ] **Smoke** `0x224a5ccc` — `Misc\smoke.I3D`. Candidates: none identified. Progress: Additional Z35 placement/camera probe remains invisible; owner context was not retained after add. Four exact saved Smoke IDs occur at Z35 in Ahkuilon; placement-probe.json retains coordinates. S08 MistFog is not Smoke. Next: Return later with actual shipped setting/controller and stable background; bounded standalone probe is diagnostic only. Advance easy retail A/B.
 - [ ] **Flies** `0xa21d9d00` — `Misc\Flies.I3D`. Candidates: `TFlyEffect_BESPOKE`. Progress: 2026-10-05: No useful animated visible reference in bounded standalone recipe. No accurate-reference or visual-acceptance credit. Next: Return later with actual shipped setting/controller and stable background; bounded standalone probe is diagnostic only. Advance easy retail A/B.
 - [ ] **Fog** `0xc24b2a85` — `Misc\Fog.I3D`. Candidates: `TFogEffect_BESPOKE`. Progress: native standalone probe invisible; shipped asset/source require an untextured36-vertex grid, unlike current billboard. Next: defer difficult reference and restore source mesh path later. See [audit](forensics/DUST_FOG.md).
-- [ ] **Water** `0x1903abcd` — `misc\Water.i3d`. Candidates: `TWaterEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
+- [ ] **Water** `0x1903abcd` — `misc\Water.i3d`. Candidates: `TWaterEffect_BESPOKE`. Progress: exact native25drop/warmup/RNG/authored quad frontend passes; actual sharedpreview/map producer and eight map lifecycle checks pass. Next: natural environment, material illumination/culling and original/Metal device parity separately.
 - [ ] **Waterfall** `0xa907dabf` — `misc\Water.i3d`. Candidates: `TWaterFallEffect_BESPOKE`, `TWaterFallEffect_BESPOKE__Waterfall`. Progress: source/state/runtime fixes pass; retail flags0x100 select authored FVF0x112 vertices/material, so ignored CPU grayscale has now been removed from the port. Corrected render/opcode tests and fresh saved/command recaptures pass: 121/49 distinct images, seven lifecycle rows and one reference component. Prior captures retain pre-color-fix lifecycle proof. Next: visible native reference and authored-normal/material/device parity in original setting. Ambient 128 native attempt also failed. See [H02 evidence](forensics/H02_WATERFALL_RUNTIME.md).
 - [ ] **MistFog** `0x180674ba` — `misc\Mistfog.i3d`. Candidates: `TFogEffect_Bespoke__MistFog_BESPOKE`. Progress: wrong Magic asset replaced by exact Misc RGB565; authored geometry, gravity -.01, RNG order and 24Hz state restored; 1,600 state cases pass. Original saved identity and actual ADDAT/move/persist/delete regressions pass with one reference component; 121/49 distinct saved/command images and clean post-delete tail. Next: visible native reference, authored-normal SW illumination/device parity and original map setting. Unlit is not SW illumination parity; failed native attempts are diagnostics. See [M06 evidence](forensics/M06_MISTFOG_RUNTIME.md).
-- [ ] **Pixie** `0x89abcde1` — `misc\Pixies.i3d`. Candidates: `TPixieEffect_BESPOKE`. Progress: two authored meshes/textures, source timing/object switching, no invented light, exact typed owner;6 lifecycle checks, animation at both poses, source XY restoration and17 ground-only deletion frames pass. Next: isolated appearance now passes; nearby-character interaction, repeat protocol and original context remain open. See [audit](forensics/PIXIE_AUTHORED.md).
-- [ ] **StillWater** `0xadbcef14` — `Misc\StillWater.I3D`. Candidates: `TWaterEffect_BESPOKE__StillWater`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
+- [x] **Pixie** `0x89abcde1` — `misc\Pixies.i3d`. Candidates: `TPixieEffect_BESPOKE`. Progress: two authored meshes/textures, source timing/object switching, no invented light, exact typed owner;6 lifecycle checks, animation at both poses, source XY restoration and17 ground-only deletion frames pass. Next: isolated appearance now passes; nearby-character interaction, repeat protocol and original context remain open. See [audit](forensics/PIXIE_AUTHORED.md).
+- [ ] **StillWater** `0xadbcef14` — `Misc\StillWater.I3D`. Candidates: `TWaterEffect_BESPOKE__StillWater`. Progress: exact default-animator/asset and bounded original-raster A/B pass (2026-10-07). Normal map create/frame-wrap/move/delete and texture animation pass after shared cache fix. Next: natural caller/map or character context, illumination/culling and full device/backend parity. Full acceptance remains open.
 - [ ] **FlowWater** `0xadbcef15` — `Misc\FlowWater.I3D`. Candidates: `TWaterEffect_BESPOKE__FlowWater`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **BendWater1** `0xadbcef16` — `Misc\BendWater1.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **BendWater2** `0xadbcef17` — `Misc\BendWater2.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **SewerWater** `0xadbcef19` — `Misc\SewerW.I3D`. Candidates: `TWaterEffect_BESPOKE__SewerWater`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
+- [ ] **SewerWater** `0xadbcef19` — `Misc\SewerW.I3D`. Candidates: `TWaterEffect_BESPOKE__SewerWater`. Progress: exact default-animator/asset and bounded original-raster A/B pass. SewerWater browser now uses its static authored quad;12nonemptyidenticalGPUframes and10real map create/frame/move/delete checks pass. Next: natural setting, illumination/culling and full device/backend parity. Full acceptance remains open.
 - [ ] **Wave** `0x9d92bc1d` — `Misc\Wave.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **WaveS** `0x9d92bc1e` — `Misc\WaveS.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **WaveM** `0x9d92bc1f` — `Misc\WaveM.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
@@ -689,13 +906,13 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 - [ ] **VillageSign** `0xad92bc27` — `Misc\Village.I3D`. Candidates: `TFountainAnimator_BESPOKE__VillageSign`. Progress: Source-derived software mesh lighting and direct texel sampling rechecked; exact-type visible create/move/delete passes. Own native pair retained; shared raster/shading differences remain. Next: defer remaining shared renderer mismatch and advance simple references; authored map context remains separate.
 - [ ] **MistSign** `0xad92bc35` — `Misc\Mist.I3D`. Candidates: `TFountainAnimator_BESPOKE__MistSign`. Progress: Source-derived software mesh lighting and direct texel sampling rechecked; exact-type visible create/move/delete passes. Own native pair retained; shared raster/shading differences remain. Next: defer remaining shared renderer mismatch and advance simple references; authored map context remains separate.
 - [ ] **HavenSign** `0xad92bc36` — `Misc\Haven.I3D`. Candidates: `TFountainAnimator_BESPOKE__HavenSign`. Progress: Source-derived software mesh lighting and direct texel sampling rechecked; exact-type visible create/move/delete passes. Own native pair retained; shared raster/shading differences remain. Next: defer remaining shared renderer mismatch and advance simple references; authored map context remains separate.
-- [ ] **Globe** `0xad92bd24` — `misc\\Globe.I3D`. Candidates: `TGlobeEffect_BESPOKE`. Progress: invented blue pulse replaced with authored static28vertex mesh; fresh actual-map retail visual A/B passes and all6 ADDAT/MOVE/DELETE observations pass. Next: locate shipped context separately; ground depth is required. See [Globe audit](forensics/GLOBE_STATIC_MESH.md).
+- [x] **Globe** `0xad92bd24` — `misc\\Globe.I3D`. Candidates: `TGlobeEffect_BESPOKE`. Progress: invented blue pulse replaced with authored static28vertex mesh; fresh actual-map retail visual A/B passes and all6 ADDAT/MOVE/DELETE observations pass. Next: locate shipped context separately; ground depth is required. See [Globe audit](forensics/GLOBE_STATIC_MESH.md).
 - [ ] **Fairy** `0xad92bd25` — `misc\Fairy.I3D`. Candidates: `TFairyEffect_BESPOKE`. Progress: authored animated emitter, partsys and blend-controller audit retained. Deferred from the easy queue. Next: port the actual controller and capture retail later; guessed hover billboard is unverified.
 - [ ] **Fairy2** `0xad92bd26` — `misc\Fairy2.I3D`. Candidates: none identified. Progress: authored animated emitter, partsys and blend-controller audit retained. Deferred from the easy queue. Next: port the actual controller and capture retail later; guessed hover billboard is unverified.
 - [ ] **cfire** `0xad92bd27` — `misc\Cfire.i3d`. Candidates: `TFlameAnimator_Bespoke__cfire_BESPOKE`. Progress: 2026-10-05: exact Misc/Cfire asset exists with four subobjects,two textures,cfire/csparks tags. Corrected false no-asset stub diagnostic; factory remains explicitly unsupported, not accepted or silently replaced by Flame. Next: Bind authored cfire/csparks particle controllers before a reference comparison; defer controller research and advance easy effects.
 - [ ] **sgeyser** `0xad92bd30` — `cave\Cavsgeyser.i3d`. Invalid candidate: `TGeyserEffect_Bespoke__sgeyser_BESPOKE`. Progress: guessed 100-particle PoisonCloud profile removed; factory fails closed with no RNG/draw/resource creation. Actual TRAP spawn and authored partsys/frame tags identified, but complete source behavior and rendered effect remain unsupported. Next: recover frame10 emission and frame30 filename vapor, template/emitter pose and controller semantics, then natural map fixture. See [W03 evidence](forensics/W03_GEYSER_RUNTIME.md).
 - [ ] **fgeyser** `0xad92bd31` — `cave\Cavfgeyser.i3d`. Invalid candidate: `TGeyserEffect_Bespoke__fgeyser_BESPOKE`. Progress: guessed 100-particle PoisonCloud profile removed; factory fails closed with no RNG/draw/resource creation. Actual TRAP spawn and authored partsys/blendcont tags identified, but complete source behavior and rendered effect remain unsupported. Next: recover litadd plus separate frame1 fire/frame50 spark emitters and controller semantics, then natural map fixture. See [W03 evidence](forensics/W03_GEYSER_RUNTIME.md).
-- [ ] **goldeffect** `0xd0c0f035` — `misc\Goldp.i3d`. Progress: currentbb0a two own240-frame retail-reference pairs root isolated default appearance PASS, independentRNG/no fit; top39/native40(old75); natural4/MOVEDELETE8checks/40+88groundtails pass; exactnativecadence/realmapcollision/caster/audio/context/full remain open.
+- [x] **goldeffect** `0xd0c0f035` — `misc\Goldp.i3d`. Progress: currentbb0a two own240-frame retail-reference pairs root isolated default appearance PASS, independentRNG/no fit; top39/native40(old75); natural4/MOVEDELETE8checks/40+88groundtails pass; exactnativecadence/realmapcollision/caster/audio/context/full remain open.
 - [ ] **WaterFlft** `0xd0c0f036` — `misc\WFall.i3d`. Invalid candidate: `TWaterFallEffect_BESPOKE__WaterFlft` (100-drop profile does not match retail). Progress: source-backed six-emitter partsys, exact saved identity and original-map runtime checks pass; 118 changing images/150. Next: acquire visible native reference and compare original map/device/projection fidelity. See [partsys audit](forensics/PARTSYS_RUNTIME.md).
 - [ ] **WaterFrt** `0xd0c0f037` — `misc\WFall2.i3d`. Invalid candidate: `TWaterFallEffect_BESPOKE__WaterFrt` (100-drop profile does not match retail). Progress: source-backed six-emitter partsys, exact saved identity and original-map runtime checks pass; 117 changing images/150. Next: acquire visible native reference and compare original map/device/projection fidelity. See [partsys audit](forensics/PARTSYS_RUNTIME.md).
 - [ ] **WaterClft** `0xd0c0f038` — `misc\WCap.i3d`. Invalid candidate: `TWaterFallEffect_BESPOKE__WaterClft` (100-drop profile does not match retail). Progress: source-backed six-emitter partsys, exact saved identity and original-map runtime checks pass; 118 changing images/150. Next: acquire visible native reference and compare original map/device/projection fidelity. See [partsys audit](forensics/PARTSYS_RUNTIME.md).
@@ -713,7 +930,7 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 - [ ] **MeteorStorm** `0xf32bcfac` — `Magic\Comet.I3D`. Candidates: `TMeteorStormEffect_BESPOKE`. Progress: clean FPS-enabled native lifecycle with exact cleanup retained; existing placeholder is unverified. Next: recover actual Comet authored partsys/blendcont/default animator; snapshot storm candidate is the wrong retail association.
 - [ ] **Vortex** `0x452dade0` — `Magic\Vortex.I3D`. Candidates: `TVortexEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **FireFlash** `0x37780ae2` — `Magic\Fireflash.I3D`. Candidates: `TFireFlashAnimator_SHIM`, `TFireFlashEffect_BESPOKE`. Progress: literal150-slot controller, authored meshes/normals/materials and explicit software-helper lighting verified;11 real lifecycle checks pass. Own clean pair has backgrounds0. Next: native orange annulus versus softer filled port cloud remains software blend/raster/initial-phase deferral, with no fitting; natural spell damage/multiplicity/context remains open. See [audit](forensics/FIRE_FLASH_AUTHORED.md).
-- [ ] **FireWind** `0x98974eab` — `Magic\Firewind.I3D`. Candidates: `TFireWindEffect_BESPOKE`. Progress: bounded actual flame/ring recording retained; frozen trails remain after owner expiry, exact floor restored by camera nudge. Next: defer redraw/controller gap; acquire clean in-situ reference later. [Probe](forensics/FIREWIND_REFERENCE_PROBE.md).
+- [ ] **FireWind** `0x98974eab` — `Magic\Firewind.I3D`. Candidates: `TFireWindEffect_BESPOKE`. Progress: bounded actual flame/ring recording retained; frozen trails remain after owner expiry, exact floor restored by camera nudge. Next: defer redraw/controller gap; acquire clean in-situ reference later. [Probe](forensics/FIREWIND_REFERENCE_PROBE.md). Native400-slot null-spell motion now runs100ticks; current port remains a single-billboard placeholder. [Thin preflight](forensics/FIREWIND_THIN_PREFLIGHT.md).
 - [ ] **YFireWind** `0x98974ea7` — `Magic\YFirewind.I3D`. Candidates: `TFireWindEffect_Bespoke__YFireWind_BESPOKE`, `TFireWindEffect_BESPOKE__YFireWind`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **Pulp** `0x152dafdd` — `Misc\Pulp.I3D`. Candidates: `TPulpEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger. Registered preview is explicitly stubbed and returns null: implement live character/body-part mesh fixture.
 - [ ] **IceBolt** `0xb1c4c90f` — `Magic\Icebolt.I3D`. Candidates: `TIceBoltEffect_BESPOKE`, `TIceBoltAnimator_SHIM`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
@@ -729,17 +946,17 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 - [ ] **Sandswirl** `0xbecefeda` — `Magic\Sandswirl.i3d`. Candidates: `TSandswirlEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **WindStrip** `0xded3dbed` — `Magic\Wind.I3D`. Candidates: `TWindStripAnimator_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **Halo** `0xdedbdbed` — `Magic\Halo.I3D`. Candidates: `THaloEffect`. Progress: Bounded software standalone probe invisible; exact cleanup and authored asset dump retained. Next: defer caller/device investigation; no accurate-reference credit.
-- [ ] **Faultfire** `0x51753bce` — `Magic\Faultfire.i3d`. Candidates: `TFaultFireAnimator_SHIM`, `TFaultFireEffect_BESPOKE`. Progress: own native122-image reference and current authored vertical two-pass mesh retained;6 exact-type runtime checks, animation/movement and17-frame exact cleanup pass. Next: defer remaining native-solid/port-translucent alpha/raster difference and natural context; advance easy effects. See [audit](forensics/F06_TFaultFireEffect.md).
-- [ ] **FireCone** `0xab92cd01` — `Magic\FireCone.I3D`. Candidates: `TFireConeEffect_BESPOKE`. Progress: source fire80/smoke80/burst100 pools, authored meshes/materials,24Hz and idempotent ownerZ+100 restored;39 controller checks and11 real lifecycle rows pass. Clean native/current software-helper pair retained with backgrounds0. Next: port brighter/denser white core versus native orange flame/smoke scatter remains bounded software blend/raster/initial-phase deferral; actual caster/target/context and full acceptance remain open. See [audit](forensics/FIRE_CONE_AUTHORED.md).
+- [ ] **Faultfire** `0x51753bce` — `Magic\Faultfire.i3d`. Candidates: `TFaultFireAnimator_SHIM`, `TFaultFireEffect_BESPOKE`. Progress: native theta-wrap/per-vertexU arithmetic corrected;129ticks/645exactfields and12nonemptytwo-pass image/depthpairs pass. Next: natural context and original upper-mesh/device material-opacity issue, full Metal parity.
+- [ ] **FireCone** `0xab92cd01` — `Magic\FireCone.I3D`. Candidates: `TFireConeEffect_BESPOKE`. Progress: source fire80/smoke80/burst100 pools, authored meshes/materials,24Hz and idempotent ownerZ+100 restored;39 controller checks and11 real lifecycle rows pass. Clean native/current software-helper pair retained with backgrounds0. Next: port brighter/denser white core versus native orange flame/smoke scatter remains bounded software blend/raster/initial-phase deferral; actual caster/target/context and full acceptance remain open. See [audit](forensics/FIRE_CONE_AUTHORED.md). Complete defined native null-spell pool state/RNG/order now matches after extended-arithmetic correction; render/live-caster gates stay open. [State proof](forensics/FIRECONE_THIN_STATE_20261009.md).
 - [ ] **Aura** `0x00ab1d1d` — `Magic\Aura.I3D`. Candidates: `TAuraEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
-- [ ] **CharUtility** `0xadbcef13` — `Misc\CharUtility.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
+- [ ] **CharUtility** `0xadbcef13` — `Misc\CharUtility.I3D`. Candidates: none identified. Progress: exact default-animator/asset and bounded original-raster A/B pass (2026-10-07). All authored parts/materials retained in compiled-production fixture. Next: natural caller/map or character context, illumination/culling and full device/backend parity. Full acceptance remains open.
 - [ ] **dragonfire** `0xad92bc1a` — `Magic\FireCone.I3D`. Candidates: `TFireSwarmEffect_BESPOKE__dragonfire`, `TFireConeEffect_BESPOKE__dragonfire`. Progress: fabricated FireSwarm proxy removed;12 exact-ground frames verify explicit unsupported path. Next: implement actual animator/caller, not generic cylinder reuse; other candidates remain unaccepted.
 - [ ] **queenarrow** `0xad92bd1e` — `misc\Arroweffects.I3D`. Candidates: `TArrowEffect_BESPOKE__queenarrow`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **arroweffect** `0xad92bd1f` — `misc\Arroweffects.I3D`. Candidates: `TArrowEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **RockStorm** `0xad92bd22` — `magic\Rocks.I3D`. Candidates: `TRockStormEffect_Bespoke_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **combatflash** `0xad92bd29` — `misc\Impact.i3d`. Progress: currentbb0a state0/start1 natural4/MOVEDELETE8checks/40+100groundtails andown240framepair complete; rootINCONCLUSIVE nativeahead/portbright at.4-.6sec, PNGpreviewdepth/nativefloor unisolated; other17states/naturalcombat and full remain open.
 - [ ] **StrikeEffect** `0xad92bd32` — `Misc\Dummy.i3d`. Candidates: `TStrikeEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
-- [ ] **teleportation** `0xad92bd40` — `magic\Teleportation.i3d`. Candidate: `TTeleportation_AUTHORED_OWNER`. Progress: exact authored source/build and realmap lifecycle pass; currentab3e400frames10rows50tail/own240unchanged-frame pair root **isolated overall appearance/occlusion PASS** after sharedMetaldepthStore. Nativephase/cadence/fullcycle, fractional/source-raster requirements and naturalspell/character/story/audio/context/full acceptance remain open; no fittedeffect changes.
+- [x] **teleportation** `0xad92bd40` — `magic\Teleportation.i3d`. Candidate: `TTeleportation_AUTHORED_OWNER`. Progress: exact authored source/build and realmap lifecycle pass; currentab3e400frames10rows50tail/own240unchanged-frame pair root **isolated overall appearance/occlusion PASS** after sharedMetaldepthStore. Nativephase/cadence/fullcycle, fractional/source-raster requirements and naturalspell/character/story/audio/context/full acceptance remain open; no fittedeffect changes.
 - [ ] **gvortex** `0xad99bd33` — `Misc\Gvortex.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. Retail Teleporter uses IrisFlare; M09 teleporter preview uses composite teleportation/gvortex. These names must not be conflated. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **headfireball** `0xd000f005` — `magic\Hfire.i3d`. Candidates: `TFireSwarmEffect_BESPOKE__headfireball`. Progress: fabricated FireSwarm proxy removed;12 exact-ground frames verify explicit unsupported path. Next: implement actual animator/caller, not generic cylinder reuse; other candidates remain unaccepted.
 - [ ] **dragonattack** `0xba09fead` — `magic\Hfire.i3d`. Candidates: `TFireSwarmEffect_BESPOKE__dragonattack`. Progress: fabricated FireSwarm proxy removed;12 exact-ground frames verify explicit unsupported path. Next: implement actual animator/caller, not generic cylinder reuse; other candidates remain unaccepted.
@@ -748,23 +965,23 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 ## Batch 5 — Buffs, debuffs, late boss effects and unresolved retail types (72 retail rows)
 
 - [ ] **Labback** `0xdcc4011d` — `Misc\Labback.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **Might** `0x5be39ae0` — `magic\might.i3d`. Candidate: `TMight_AUTHORED_TAGS`. Progress: exactsource/build, matched measurednativequality1 actual450frames13checks/oneinitcap7/50tail andown240unchanged-frame pair root isolatedappearancePASS; authoredPPS30→source7.5, no fit. Preserve oldquality0 mismatch/incorrectfirstbirth assertions. Naturalbuff/caster/collision/audio/context/nativecadence/exactraster/full acceptance remain open.
+- [x] **Might** `0x5be39ae0` — `magic\might.i3d`. Progress: fresh corrected-parser actual-map/retail pair passes isolated quality1 steady appearance; 450 frames, 13 typed lifecycle checks and exact clean deletion tail. Next: natural caster/context, other parameters, device and repeat checks. [Review](forensics/MIGHT_IMMORTALMIGHT_CURRENT_VISUAL_20261010.md).
 - [ ] **Dexterity** `0x8cd3ea0f` — `magic\Dexterity.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **Antimagic** `0xd3ae043a` — `magic\Antimagic.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **Fmastery** `0xb0e024df` — `magic\Fmaster.i3d`. Candidate: `TFmastery_AUTHORED_TAGS`. Source/runtime/450frames13rowscap4Q1incoming16/50tail andown240paircomplete. RootvisualMISMATCH palerwhiterbasecore; correctnonuniform#matrix/alpha1/whiteatlas/freshlighting doesnotjustifytint/fade/blendfit. DefercommonRGB565raster/normal-lighting ormatchedsceneinput proof; guestloan respected. Naturalcontext/cadence/raster/full open.
-- [ ] **Immortalmight** `0x82aeb30f` — `magic\Imight.i3d`. Candidate: `TImmortalmight_AUTHORED_TAGS`. Progress: correctedNOOBJBLEND/baseinherits16, measuredincoming16/Q1 actual450frames13rows/oneinitcap7/50tail andtwo240-frame independentnative-reference steadyappearancePASS. Oldalpha4/badABI claims superseded. Unmeasuredcoldcallerauto/naturalbuff/audio/context/exactcadence/raster/full gates open.
+- [x] **Immortalmight** `0x82aeb30f` — `magic\Imight.i3d`. Progress: fresh corrected-parser actual-map/retail pair passes isolated quality1/incoming16 steady appearance; 450 frames, 13 typed lifecycle checks and exact clean deletion tail. Next: natural caster/context, other parameters, device and independent repeat. [Review](forensics/MIGHT_IMMORTALMIGHT_CURRENT_VISUAL_20261010.md).
 - [ ] **Ogrestrength** `0x42e0fcd0` — `magic\Ogre.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **Regeneration** `0x10ac03de` — `magic\Regen.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **Shadowfist** `0x550decaf` — `magic\Sfist.i3d`. Candidate: `TShadowfist_AUTHORED_OWNER`. Progress: exact authored source/build and realmap lifecycle pass; currentab3e400frames10rows50tail/own240unchanged-frame pair root **isolated overall appearance/occlusion PASS** after sharedMetaldepthStore. Nativephase/cadence/fullcycle, fractional/source-raster requirements and naturalspell/character/story/audio/context/full acceptance remain open; no fittedeffect changes.
-- [ ] **Warriorborn** `0x9de2a0fe` — `magic\Wborn.i3d`. Candidate: `TWarriorborn_AUTHORED_OWNER`. Progress: exact authored source/build and realmap lifecycle pass; currentab3e400frames10rows50tail/own240unchanged-frame pair root **isolated overall appearance/occlusion PASS** after sharedMetaldepthStore. Nativephase/cadence/fullcycle, fractional/source-raster requirements and naturalspell/character/story/audio/context/full acceptance remain open; no fittedeffect changes.
+- [x] **Shadowfist** `0x550decaf` — `magic\Sfist.i3d`. Candidate: `TShadowfist_AUTHORED_OWNER`. Progress: exact authored source/build and realmap lifecycle pass; currentab3e400frames10rows50tail/own240unchanged-frame pair root **isolated overall appearance/occlusion PASS** after sharedMetaldepthStore. Nativephase/cadence/fullcycle, fractional/source-raster requirements and naturalspell/character/story/audio/context/full acceptance remain open; no fittedeffect changes.
+- [x] **Warriorborn** `0x9de2a0fe` — `magic\Wborn.i3d`. Candidate: `TWarriorborn_AUTHORED_OWNER`. Progress: exact authored source/build and realmap lifecycle pass; currentab3e400frames10rows50tail/own240unchanged-frame pair root **isolated overall appearance/occlusion PASS** after sharedMetaldepthStore. Nativephase/cadence/fullcycle, fractional/source-raster requirements and naturalspell/character/story/audio/context/full acceptance remain open; no fittedeffect changes.
 - [ ] **Essencedrain** `0xdefeca7e` — `magic\Worm.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **Restorelife** `0xb3ae0fed` — `magic\Restorelife.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **BarrierEW** `0x224a5adf` — `Misc\BarrierEW.I3D`. Candidates: none identified. Progress: Bounded software standalone probe invisible; exact cleanup and authored asset dump retained. Next: defer caller/device investigation; no accurate-reference credit.
 - [ ] **BarrierNS** `0x224b5adc` — `Misc\BarrierNS.I3D`. Candidates: none identified. Progress: Bounded software standalone probe invisible; exact cleanup and authored asset dump retained. Next: defer caller/device investigation; no accurate-reference credit.
-- [ ] **Cure** `0x152dafef` — `Magic\Cure.I3D`. Candidates: `TCureEffect_BESPOKE`. Progress: exact retail mapping, original80-swirl/five-ball state and8358 source/RNG ticks verified;11 actual null-spell create/move/natural-expiry/delete checks pass. Source software-helper lighting fixes white rectangles; isolated appearance passes and240 final preview files exactly match prior reviewed output. Next: linked-character SpellData POISONCHANCE/target execution, original lighting/audio/context and full acceptance; advance easy editor references. See [runtime](forensics/CURE_RUNTIME.md) and [software-helper audit](forensics/CURE_HELPER_SOFTWARE.md).
+- [x] **Cure** `0x152dafef` — `Magic\Cure.I3D`. Candidates: `TCureEffect_BESPOKE`. Progress: exact retail mapping, original80-swirl/five-ball state and8358 source/RNG ticks verified;11 actual null-spell create/move/natural-expiry/delete checks pass. Source software-helper lighting fixes white rectangles; isolated appearance passes and240 final preview files exactly match prior reviewed output. Next: linked-character SpellData POISONCHANCE/target execution, original lighting/audio/context and full acceptance; advance easy editor references. See [runtime](forensics/CURE_RUNTIME.md) and [software-helper audit](forensics/CURE_HELPER_SOFTWARE.md).
 - [ ] **Createfood** `0x838cffba` — `Magic\Createfood.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **Rift1** `0xadbcef18` — `Misc\Rift1.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **speaker** `0xad92bc10` — `Misc\Speaker.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. Audio-only candidate: verify no visual output and actual runtime audio/data behavior before documenting visual exemption. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
+- [ ] **speaker** `0xad92bc10` — `Misc\\Speaker.I3D`. Progress: explicit generic animator, complete untextured mesh/material-input software pairs and ten actual map lifecycle checks pass. Next: sound, original full illumination, authored visibility/caller and device parity. [Scope](forensics/SPEAKER_THIN_STATIC.md).
 - [ ] **manadrain** `0xad92bc13` — `Magic\Manadrain.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **Ymanadrain** `0xae92bc14` — `Magic\YManadrain.I3D`. Candidates: `TManadrainEffect_Bespoke__YManadrain_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **puke** `0xad92bc11` — `Magic\puke.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
@@ -779,22 +996,22 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 - [ ] **energyspray** `0xad92bc1c` — `Magic\Energyspray.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **Blast** `0x0ea34fa3` — `Magic\Blast.I3D`. Candidates: `TBlastEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **heal** `0xad92bc1d` — `Magic\Heal.I3D`. Candidates: `THealEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
-- [ ] **TeleportDoorInsideB** `0xad92bc28` — `Magic\WarpB.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **TeleportDoorInsideO** `0xad92bc29` — `Magic\WarpO.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **TeleportDoorInsideP** `0xad92bc30` — `Magic\WarpP.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **TeleportDoorInsideR** `0xad92bc31` — `Magic\WarpR.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **TeleportDoorInsideW** `0xad92bc32` — `Magic\WarpW.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **TeleportDoorInsideY** `0xad92bc33` — `Magic\WarpY.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **TeleportDoorInsideG** `0xad92bc34` — `Magic\WarpG.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **LabGateBarrierS** `0xad92bc37` — `Misc\IBarrier1.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **LabGateBarrierE** `0xad92bc38` — `Misc\IBarrier2.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
+- [x] **TeleportDoorInsideB** `0xad92bc28` — `Magic\WarpB.I3D`. Progress: actual Metal versus original software pair passes scoped blue portal appearance and four changing atlas states; own ten-check lifecycle restores floor. Next: recorded seven-pixel apex/projection residual, natural teleport/context and exact device behavior. [Review](forensics/WARP_BLUE_VISUAL_20261010.md).
+- [ ] **TeleportDoorInsideO** `0xad92bc29` — `Magic\WarpO.I3D`. Progress: exact custom quarter-step UV controller/alpha helper and repeated original-software pairs pass; own final map ten-observation lifecycle and four changing GPU samples restore the floor. Next: natural visibility/teleport caller, full illumination and device parity. [Scope](forensics/TELEPORT_DOOR_INSIDE_THIN.md).
+- [ ] **TeleportDoorInsideP** `0xad92bc30` — `Magic\WarpP.I3D`. Progress: exact custom quarter-step UV controller/alpha helper and repeated original-software pairs pass; own final map ten-observation lifecycle and four changing GPU samples restore the floor. Next: natural visibility/teleport caller, full illumination and device parity. [Scope](forensics/TELEPORT_DOOR_INSIDE_THIN.md).
+- [ ] **TeleportDoorInsideR** `0xad92bc31` — `Magic\WarpR.I3D`. Progress: exact custom quarter-step UV controller/alpha helper and repeated original-software pairs pass; own final map ten-observation lifecycle and four changing GPU samples restore the floor. Next: natural visibility/teleport caller, full illumination and device parity. [Scope](forensics/TELEPORT_DOOR_INSIDE_THIN.md).
+- [ ] **TeleportDoorInsideW** `0xad92bc32` — `Magic\WarpW.I3D`. Progress: exact custom quarter-step UV controller/alpha helper and repeated original-software pairs pass; own final map ten-observation lifecycle and four changing GPU samples restore the floor. Next: natural visibility/teleport caller, full illumination and device parity. [Scope](forensics/TELEPORT_DOOR_INSIDE_THIN.md).
+- [ ] **TeleportDoorInsideY** `0xad92bc33` — `Magic\WarpY.I3D`. Progress: exact custom quarter-step UV controller/alpha helper and repeated original-software pairs pass; own final map ten-observation lifecycle and four changing GPU samples restore the floor. Next: natural visibility/teleport caller, full illumination and device parity. [Scope](forensics/TELEPORT_DOOR_INSIDE_THIN.md).
+- [ ] **TeleportDoorInsideG** `0xad92bc34` — `Magic\WarpG.I3D`. Progress: exact custom quarter-step UV controller/alpha helper and repeated original-software pairs pass; own final map ten-observation lifecycle and four changing GPU samples restore the floor. Next: natural visibility/teleport caller, full illumination and device parity. [Scope](forensics/TELEPORT_DOOR_INSIDE_THIN.md).
+- [ ] **LabGateBarrierS** `0xad92bc37` — `Misc\\IBarrier1.I3D`. Progress: default animator/untextured authored frontend passes exact image/depth pairs; actual map diffuse corrected from white to red, ten lifecycle observations and exact floor restoration pass. Next: original full illumination, natural barrier caller/visibility and device parity. [Scope](forensics/LAB_GATE_BARRIERS_THIN.md).
+- [ ] **LabGateBarrierE** `0xad92bc38` — `Misc\\IBarrier2.I3D`. Progress: default animator/untextured authored frontend passes exact image/depth pairs; actual map diffuse corrected from white to red, ten lifecycle observations and exact floor restoration pass. Next: original full illumination, natural barrier caller/visibility and device parity. [Scope](forensics/LAB_GATE_BARRIERS_THIN.md).
 - [ ] **LabyrinthEffect** `0xad92bd20` — `misc\Starfield.I3D`. Candidates: `TLabyrinthEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **Nakrnoth** `0xad92bd21` — `magic\Nakrnoth.I3D`. Candidates: `TNakrnothEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **KinSecretDoor** `0xad92bd23` — `misc\SecretDoor.I3D`. Candidates: `TKinSecretDoor_AUTHORED_STILL`. Progress: exact opaque still owner/source culling built;18 source contracts/1300 signs and6 MOVE/DELETE rows pass with100-groundtail. Final150-frame classic-source-lighting pair fixes grossbrightness; geometry/placement/culling agree but texture/contrast/raster remain mismatch. Next: shared source sampling/lighting review without fitting; opening177-frame/open states and natural door/map context remain mandatory open. See [audit](forensics/KINSECRETDOOR_STILL_RUNTIME.md).
 - [ ] **stoneskin** `0xad92bd33` — `magic\Stone.i3d`. Candidates: `TBuffEffect_Bespoke__Stoneskin_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **ironskin** `0xad92bd34` — `magic\Iskin.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **quicksilver** `0xad92bd35` — `magic\Quicksilver.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **speed** `0xad92bd36` — `magic\Speed.i3d`. Candidates: `TBuffEffect_Bespoke__speed_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
+- [ ] **quicksilver** `0xad92bd35` — `magic\Quicksilver.i3d`. Progress: strict authored profile, 85614 state checks, five twice-replayed particle-only software pairs and eight actual-map lifecycle checks pass. Next: independent production emitter/base matrices, full base lighting/raster and actual-port/native visual comparison. [Scope](forensics/QUICKSILVER_FRONTEND_20261010.md).
+- [ ] **speed** `0xad92bd36` — `magic\Speed.i3d`. Progress: strict native profile/#matrices/mode80 base+16 particles, repeated bridge-relative particle software pairs and eight actual map lifecycle checks pass. Next: baseflare lighting/raster, independent device/projection and natural caster/attachment. [Scope](forensics/SPEED_CONTROLLER_PREFLIGHT_20261009.md).
 - [ ] **charm** `0xad92bd37` — `magic\Charm.i3d`. Candidates: `TBuffEffect_Bespoke__charm_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **nullifier** `0xad92bd38` — `magic\Nullifier.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **trollblood** `0xad92bd39` — `magic\Trollblood.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
@@ -805,9 +1022,9 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 - [ ] **jteled** `0x0c05263c` — `magic\jteled.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **poison** `0xe0a3bc42` — `magic\PoisonCloud.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **SwiftStrike** `0xe0a3bc43` — `magic\SwiftStrike.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **ogrokwatcher1** `0xaeaeeb23` — `misc\ogrokwatcher1.i3d`. Candidates: none identified. Progress: deferred native software-format diagnostic; watcher1 shows17 changing neon humanoid images with exact cleanup, inconsistent with authored ARGB1555 darkpurple art. Same-word4444 interpretation resembles that fingerprint; no accurate reference or code/visual credit. Next: defer all3 watcher types without more device debugging; retain canonical asset decoding and return later with proven format/caller. Remains mandatory unfinished.
-- [ ] **ogrokwatcher2** `0xaeaeeb24` — `misc\ogrokwatcher2.i3d`. Candidates: none identified. Progress: deferred native software-format diagnostic; watcher1 shows17 changing neon humanoid images with exact cleanup, inconsistent with authored ARGB1555 darkpurple art. Same-word4444 interpretation resembles that fingerprint; no accurate reference or code/visual credit. Next: defer all3 watcher types without more device debugging; retain canonical asset decoding and return later with proven format/caller. Remains mandatory unfinished.
-- [ ] **ogrokwatcher3** `0xaeaeeb25` — `misc\ogrokwatcher3.i3d`. Candidates: none identified. Progress: deferred native software-format diagnostic; watcher1 shows17 changing neon humanoid images with exact cleanup, inconsistent with authored ARGB1555 darkpurple art. Same-word4444 interpretation resembles that fingerprint; no accurate reference or code/visual credit. Next: defer all3 watcher types without more device debugging; retain canonical asset decoding and return later with proven format/caller. Remains mandatory unfinished.
+- [ ] **ogrokwatcher1** `0xaeaeeb23` — `misc\ogrokwatcher1.i3d`. Candidates: `TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1`. Progress: exact default-animator/asset and bounded original-raster A/B pass (2026-10-07). Normal map create/frame-wrap/move/delete and texture animation pass after shared cache fix. Next: natural caller/map or character context, illumination/culling and full device/backend parity. Full acceptance remains open.
+- [ ] **ogrokwatcher2** `0xaeaeeb24` — `misc\ogrokwatcher2.i3d`. Candidates: `TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher2`. Progress: exact default-animator/asset and bounded original-raster A/B pass (2026-10-07). Normal map create/frame-wrap/move/delete and texture animation pass after shared cache fix. Next: natural caller/map or character context, illumination/culling and full device/backend parity. Full acceptance remains open.
+- [ ] **ogrokwatcher3** `0xaeaeeb25` — `misc\ogrokwatcher3.i3d`. Candidates: `TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher3`. Progress: exact default-animator/asset and bounded original-raster A/B pass (2026-10-07). Normal map create/frame-wrap/move/delete and texture animation pass after shared cache fix. Next: natural caller/map or character context, illumination/culling and full device/backend parity. Full acceptance remains open.
 - [ ] **maelstrom** `0xaeaeeb26` — `magic\maelstrom.i3d`. Candidates: `TMaelstromEffect_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **ymaelstrom** `0xae5eeb26` — `magic\ymaelstrom.i3d`. Candidates: `TMaelstromEffect_Bespoke__ymaelstrom_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **PowerUp** `0xaeaefb27` — `misc\Powerup.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
