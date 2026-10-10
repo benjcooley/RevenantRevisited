@@ -13,17 +13,17 @@ def pixel_hash(path):
     with Image.open(path) as image:return sha(image.convert('RGB').tobytes())
 
 
-def review(reference, metal, maps, output):
+def review(reference, metal, maps, output, metal_suffix=""):
     output.mkdir(parents=True,exist_ok=False)
     original=json.loads((reference/'manifest.json').read_text())
     panel=Image.new('RGB',(1100,720),(28,28,28));labels=ImageDraw.Draw(panel)
     cases=[];map_reports=[]
     for row,name in enumerate(('Speed','Quicksilver','Fmastery')):
         folder='Fmastery' if name=='Fmastery' else name.lower()
-        capture=json.loads((metal/name/'manifest.json').read_text())
+        capture=json.loads((metal/(name+metal_suffix)/'manifest.json').read_text())
         if capture['status']!='pass' or capture['scenario']['frames']!=60:raise AssertionError('Metal capture failed')
-        frames=sorted((metal/name).glob('frame-[0-9][0-9][0-9]-*.png'))
-        capture_log=(metal/name/'run.log').read_text()
+        frames=sorted((metal/(name+metal_suffix)).glob('frame-[0-9][0-9][0-9]-*.png'))
+        capture_log=(metal/(name+metal_suffix)/'run.log').read_text()
         lights=[line for line in capture_log.splitlines() if '[vfx-source-light]' in line]
         if len(lights)!=1 or 'ambient=(0.149019614,0.149019614,0.149019614) directional=(1,1,1) point_lights=0' not in lights[0]:raise AssertionError('Actual source lighting differs')
         rng={int(frame):int(count) for frame,count in re.findall(r'\[vfx-rng-scope\] before_render=(\d+) global_random_draws=(\d+)',capture_log)}
@@ -48,7 +48,7 @@ def review(reference, metal, maps, output):
         after=ImageChops.difference(Image.open(files[37]).convert('RGB'),Image.open(files[0]).convert('RGB')).getbbox()
         map_reports.append(dict(name=name,status='pass',binary_sha256=manifest['binary_sha256'],command=manifest['command'],frames=58,commands=commands,distinct_active_frames=len(set(hashes[2:44])),floor_tail_equal=True,movement_bbox_before=before,movement_bbox_after=after,frame_sha256=[sha(p.read_bytes())for p in files],log_sha256=sha((directory/'run.log').read_bytes()),commands_sha256=sha((directory/'commands.txt').read_bytes())))
     panel.save(output/'native-metal.png')
-    report=dict(status='review_ready',accepted=False,strict_pixel_parity=False,native_manifest_sha256=sha((reference/'manifest.json').read_bytes()),metal_binary_sha256=capture['binary_sha256'],cases=cases,map_lifecycle=map_reports,panel_sha256=sha((output/'native-metal.png').read_bytes()),scope='Three complete native isolated effects versus fresh actual Metal, declared identical source lighting/quality/owner origin and documented animation cadence. Raw frames remain unchanged. Panel uses the same fixed crop and nearest resize for both branches, with no image registration or fitting. Map ADDAT/MOVE/DELETE and exact floor restoration are separate real-world-owner evidence. Native common projection, RGB565 raster/modulation and GPU sampling differ visibly; overall appearance requires human review, not an automatic pixel pass. Natural caller, caster, audio, scene point lights and device edge cases remain outside this configuration.')
+    report=dict(native_domain=capture['scenario'].get('native_domain',False),status='review_ready',accepted=False,strict_pixel_parity=False,native_manifest_sha256=sha((reference/'manifest.json').read_bytes()),metal_binary_sha256=capture['binary_sha256'],cases=cases,map_lifecycle=map_reports,panel_sha256=sha((output/'native-metal.png').read_bytes()),scope='Three complete native isolated effects versus fresh actual Metal, declared identical source lighting/quality/owner origin and documented animation cadence. Raw frames remain unchanged. Panel uses the same fixed crop and nearest resize for both branches, with no image registration or fitting. Map ADDAT/MOVE/DELETE and exact floor restoration are separate real-world-owner evidence. Native common projection, RGB565 raster/modulation and GPU sampling differ visibly; overall appearance requires human review, not an automatic pixel pass. Natural caller, caster, audio, scene point lights and device edge cases remain outside this configuration.')
     (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');return report
 
 if __name__=='__main__':

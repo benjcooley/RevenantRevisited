@@ -52,6 +52,8 @@ struct TRenderer{
  struct{float dir[3]{0,0,1},intensity=1,color[3]{1,1,1},ambient=1;}light;
  int width=640,height=340;static constexpr int kGBufPad=16;
  float retail_mesh_ambient[3]{1,1,1},retail_mesh_directional[3]{};
+ bool software_lighting=true;
+ bool UsesRetailSoftwareMeshLighting()const{return software_lighting;}
  uint32_t TextureImage(uint32_t handle){return handle;}
  void EmitTransparentHelper(const SHelperMeshSubmit&);
 };
@@ -64,7 +66,14 @@ int main(){
  assert(texture==88&&pipeline==2&&renderer.meshes[0].albedo==77);
  for(int i=1;i<4;++i)warp.Step();retail_warp::ConfigureDraw(draw,warp);
  renderer.EmitTransparentHelper(draw);assert(vertex_uniforms[36]==0&&vertex_uniforms[37]==1);
- assert(vertex_uniforms[35]==2); // mode2 selects wrapped-nearest unlit alpha
+ assert(vertex_uniforms[35]==3); // source software route preserves ARGB4444 nibble arithmetic
+ renderer.software_lighting=false;renderer.EmitTransparentHelper(draw);
+ assert(vertex_uniforms[35]==2); // modern route keeps wrapped-nearest texture alpha
+ renderer.software_lighting=true;
+ assert(vertex_uniforms[38]==0&&vertex_uniforms[39]==0);
+ draw.retail_software_projection=true;draw.retail_camera_z=13;
+ renderer.EmitTransparentHelper(draw);assert(vertex_uniforms[38]==1&&vertex_uniforms[39]==13);
+ assert(vertex_uniforms[36]==0&&vertex_uniforms[37]==1); // projection metadata never aliases atlas UV
  std::puts("PASS: actual helper UV uniform ABI, alpha path, all9 indices and immutable albedo");
 }
 '''

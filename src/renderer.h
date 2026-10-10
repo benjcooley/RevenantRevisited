@@ -348,6 +348,8 @@ struct SQuadDrawItem
     SFxBatchKey key = {};
     uint8_t corner_count = 4; // 3 preserves one authored triangle; 4 uses the quad diagonal.
     uint8_t retail_texture = 0; // 1: Blue software nearest texels with wrapped UVs.
+    bool retail_software_projection = false; // XYZ are original software MODELZ/world.
+    float retail_camera_z = 0.0f; // Explicit original camera input; XY use reconstruction camera.
     EFxDebugMode debug_mode = EFxDebugMode::Normal;
     EFxLightMode light_mode = EFxLightMode::Unlit;
 };
@@ -506,6 +508,8 @@ struct SHelperMeshSubmit
     float      retail_normal_z_scale = 1.0f;
     bool       retail_gold_no_depth = false; // audited authored mode80, no depth test/write
     bool       retail_positive_face_cull = false; // source positive screen-down; opt-in only
+    bool       retail_software_projection = false;
+    float      retail_camera_z = 0.0f;
 };
 
 enum class ETransparentWorldKind : uint8_t

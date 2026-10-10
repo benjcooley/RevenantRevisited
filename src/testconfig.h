@@ -63,6 +63,8 @@ extern bool StartupVfxWireframe;
 // --vfx-lighting-mode=auto|classic|modern — VFX-only render diagnostic.
 // Auto (-1) preserves explicit source ambient -> classic, otherwise modern.
 extern int32_t StartupVfxLightingMode;
+// --vfx-native-domain: exact buff previews only; native owner/MODELZ/projector.
+extern bool StartupVfxNativeDomain;
 // --partsys-quality=0|1|2 — match retail controller quality during captures.
 // 0 preserves full emission; retail 1 uses one quarter, 2 uses one half.
 extern int32_t StartupPartSysQuality;

@@ -6,6 +6,8 @@
 #include "../meshextract.h"
 #include "../object.h"
 #include "../renderer.h"
+#include "../retailsoftwaretransform.h"
+#include "../testconfig.h"
 #include "../time.h"
 
 #include <cmath>
@@ -72,6 +74,7 @@ State* Spawn(const S3DPoint& origin, bool quicksilver)
     imagery->GetMaterial(object.material, &material);
     context->flare_material = material.matdesc;
     owner->Animate(false);
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT particle=MODELZ", int(StartupVfxNativeDomain));
     log_info("[speed-family-preview] actual owner id=%08x map_index=%d generation=%u default-animator=1 state=0 controllers=1 origin=(%d,%d,%d)",
              owner->ObjId(), owner->GetMapIndex(), owner->SafeRefGen(), origin.x, origin.y, origin.z);
     return context.release();
@@ -111,14 +114,19 @@ void SubmitWorld(State* context, EFxDebugMode)
     auto* animator = dynamic_cast<T3DAnimator*>(owner->GetAnimator());
     if (!animator || animator->PartSysUnsupported()) return;
     const hmm_vec3 render_scale = {1, 1, 1};
-    animator->SubmitPartSys(*Renderer, 2, 2, render_scale);
+    animator->SubmitPartSys(*Renderer, 2, 2, render_scale, StartupVfxNativeDomain);
     uint32_t blend = 0;
     S3DAnimObj* bone = animator->GetObject(1);
     if (!bone || !animator->SpeedBaseMeshBlend(1, blend)) return;
     SHelperMeshSubmit mesh = {};
     mesh.mesh = context->flare_mesh;
-    hmm_mat4 world;
-    if (!animator->SpeedBaseMeshWorldMatrix(world)) return;
+    hmm_mat4 world, native_owner;
+    if (StartupVfxNativeDomain)
+    {
+        const S3DPoint& position = owner->Pos();
+        BuildRetailSoftwareOwner(native_owner, position.x, position.y, position.z, uint8_t(owner->GetFace()));
+    }
+    if (!animator->SpeedBaseMeshWorldMatrix(world, StartupVfxNativeDomain ? &native_owner : nullptr)) return;
     for (int row = 0; row < 4; ++row)
         for (int column = 0; column < 4; ++column)
             mesh.world[row * 4 + column] = world.Elements[column][row];
@@ -133,6 +141,7 @@ void SubmitWorld(State* context, EFxDebugMode)
     mesh.additive_blend = true;
     mesh.retail_positive_face_cull = true;
     mesh.retail_lighting = 1;
+    mesh.retail_software_projection = StartupVfxNativeDomain;
     mesh.retail_gold_no_depth = true; // Actual Speed/Quicksilver blend controller selects mode80.
     Renderer->SubmitGoldFlareAfterFx(mesh); // Original controller-before-base order.
 }

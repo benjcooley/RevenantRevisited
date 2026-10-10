@@ -45,7 +45,7 @@ enum class EFxDebugMode:uint8_t{Normal=0};enum class EFxLightMode:uint8_t{Unlit=
 enum class EFxPipeline:uint16_t{Billboard=1,Particle=2,Strip=3};
 struct SFxBatchKey{TTextureHandle texture=0;uint16_t pipeline_id=1;uint8_t blend=0,depth_mode=0;};
 struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};SFxBatchKey key;
- uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
+ bool retail_software_projection=false;uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
 struct S3DVertex{hmm_vec3 pos,normal;float tu,tv;};
 struct Owner{uint32_t ObjId()const{return 0xad92bd35u;}int GetState()const{return 0;}};
 struct Imagery{bool HasRetailStaticParticleProfile(uint32_t)const{return false;}
@@ -66,7 +66,7 @@ struct T3DAnimator{struct SPartSysControllers{
  std::vector<Controller>controllers;bool unsupported=false;uint64_t renders=0,quads=0;};
  std::unique_ptr<SPartSysControllers>partsys_controllers;Owner*inst;Imagery im;
  Imagery*Get3DImagery(){return &im;}
- int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&);};
+ int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&,bool=false);};
 constexpr float WORLD3D_Z_SCALE=1.5f;
 '''
 MAIN = r'''
@@ -98,7 +98,7 @@ int main(int argc,char**argv){if(argc!=3)return 2;
 def sha(data):return hashlib.sha256(data).hexdigest()
 
 
-def run(executable,archive,output,retain_draws=False):
+def run(executable,archive,output,retain_draws=False,native_mode=False):
     output.mkdir(parents=True,exist_ok=True)
     source_paths=('src/3dimage.cpp','src/3dimage.h','src/authoredpartsys.cpp','src/authoredpartsys.h','src/partsysdefinition.cpp','src/partsysdefinition.h','src/speedauthoredmatrix.h','src/goldauthoredmatrix.h','src/math3d.cpp','src/math3d.h')
     pinned={p:sha((ROOT/p).read_bytes())for p in source_paths}
@@ -116,6 +116,7 @@ def run(executable,archive,output,retain_draws=False):
     production=(ROOT/'src/3dimage.cpp').read_text();body=fn(production,'int32_t T3DAnimator::SubmitPartSys(')
     family=fn((ROOT/'src/3dimage.h').read_text(),'bool HasRetailSpeedFamilyPartSysProfile(')
     cpp=PRELUDE.replace('SPEED_FAMILY_METHOD',family)+'\n'+body+'\n'+MAIN
+    if native_mode:cpp=cpp.replace('a.SubmitPartSys(renderer,2,2,{1,1,1})','a.SubmitPartSys(renderer,2,2,{1,1,1},true)')
     source=output/'packet_driver.cpp';source.write_text(cpp);binary=output/'packet_driver'
     command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer',
         '-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(source),
@@ -188,7 +189,8 @@ def run(executable,archive,output,retain_draws=False):
         uvs=[packet[13+i*5:15+i*5]for i in range(4)]
         # Source packet centre is raw-world Z. Its mesh-local Z is stretched
         # 1.5 exactly once. Compare in the original sampled MODELZ domain.
-        modern=[[p[0],p[1],sample[2]+(p[2]-packet[2])/1.5]for p in modern]
+        if not native_mode:
+            modern=[[p[0],p[1],sample[2]+(p[2]-packet[2])/1.5]for p in modern]
         order=(0,1,3,2)
         error=max(abs(a-b)for index,i in enumerate(order)for a,b in zip(original[i],modern[index]))
         uv_error=max(abs(a-b)for index,i in enumerate(order)for a,b in zip(rawvertices[i][6:],uvs[index]))
@@ -256,6 +258,8 @@ def run(executable,archive,output,retain_draws=False):
             'independent production integer decoder/SpeedEmitterLocalMatrix from shipped keys, without native pose inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; '
             'raw-world portZ compared via declared MODELZ bridge using actual native sample centre. Shared original software '
             'projector/raster used at fixed512white/color fixture; no actual map/Metal projector, base material lighting/caster/full acceptance.')
+    if native_mode:
+        report['scope']=report['scope'].replace('raw-world portZ compared via declared MODELZ bridge using actual native sample centre.', 'Native MODELZ vertices submitted directly; no geometry or centre comparison adapter.')
     (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n')
     if retain_draws:
         report['selected_frontend_draws']={tick:draws[tick] for tick in (5,15,29)}

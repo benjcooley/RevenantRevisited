@@ -54,8 +54,8 @@ struct T3DAnimator{Owner*inst;T3DImagery*im;Bones animobjs;
  bool SpeedBaseMeshBlend(int,uint32_t&v){v=80;return true;}
  bool FmasteryBaseMeshBlend(int,uint32_t&v){v=16;return true;}
  bool SpeedEmitterLocalMatrix(hmm_mat4&,hmm_vec3*,hmm_vec3*);
- bool SpeedBaseMeshWorldMatrix(hmm_mat4&);
- bool FmasteryBaseMeshWorldMatrix(hmm_mat4&);};
+ bool SpeedBaseMeshWorldMatrix(hmm_mat4&,const hmm_mat4* = nullptr);
+ bool FmasteryBaseMeshWorldMatrix(hmm_mat4&,const hmm_mat4* = nullptr);};
 '''
     signatures = ('static inline int32_t SkipAniKey32(', 'static inline void GetAniKey32(',
         'bool T3DImagery::GetUninterpolatedAniKey(', 'bool T3DAnimator::SpeedEmitterLocalMatrix(',

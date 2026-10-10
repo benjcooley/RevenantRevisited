@@ -1751,6 +1751,8 @@ void GetParameters(int argc, char **argv)
 
   // VFX-NO-UI — suppress the ImGui VFX Browser panel (for clean
   // effect-only screencaps). Flag-style: --vfx-no-ui (no value).
+    if (arg_flag(cmd, "vfx-native-domain"))
+        StartupVfxNativeDomain = true;
     if (arg_flag(cmd, "vfx-no-ui"))
         StartupVfxHideUi = true;
 
