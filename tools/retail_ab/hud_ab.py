@@ -26,6 +26,15 @@ Targets:
              Retail composes the chips into its textures by its own code;
              the fixture draws the overlay quads as the D3D device does
              (overlayraster.py), fades included.
+  bottombar  TBottomBarPane (0x0065b638) with the quick-spell rings and the
+             potion shelf: rings empty, grey and castable, long spell names,
+             still and animated items at several game frames, pouches,
+             amounts (ammo, money), the bar at 640 and at 452 wide. A ring
+             is castable on both sides when the port's player holds its
+             talismans (the port reports which). Retail draws it in 2D
+             straight onto the screen; every pixel outside its text cells
+             (the GDI glyphs again, P6) must match exactly, but for the ones
+             the fixture marks `alpha` (below).
 
 Both frames are quantised to the 16-bit screen retail draws (RGB565). A
 pixel must match exactly, unless the fixture marks it (the masks of
@@ -39,6 +48,12 @@ tools/retail_runtime/slots/hud/plyrstatusbar.py):
   float (HUD_REBUILD.md section 5). They match within COMPOSED_TOLERANCE:
   two nested 4-bit truncations (17 each: the Ring over the portrait over
   the BackPanel) and the RGB565 step.
+- `alpha` (bottombar.py): a 2D DM_ALPHA Put mixed it, coverage strictly
+  between 0 and 31. Retail mixes through 5-bit scale tables (0x004b3694):
+  d * (31 - a) // 31 + s * a // 31 per field, green in two 3-bit halves --
+  two truncations a field, four on green. The port blends in float. Over
+  every source, destination and coverage the two are at most ALPHA_TOLERANCE
+  apart, two RGB565 steps.
 A channel off by more is a defect.
 
 Environment / defaults:
@@ -68,6 +83,7 @@ PORT = REPO / 'build' / 'Revenant'
 
 SCREEN_TOLERANCE = 9
 COMPOSED_TOLERANCE = 2 * 17 + SCREEN_TOLERANCE
+ALPHA_TOLERANCE = 17              # two RGB565 steps: the worst case of retail's 2D DM_ALPHA tables
 SCREEN = (640, 480)
 TRIPTYCH_ROWS = 128               # the strip of the screen a triptych shows
 TEXT_SHADOW = 2                   # the black shadow reaches 2 px right of and below a cell's text
@@ -137,7 +153,8 @@ def compare(retail, port, mask, band, tolerance):
                   within_tolerance=int(((delta > 0) & ~over).sum()), defects=int(bad.sum()),
                   text_overflow=int((over & band).sum()),
                   max_delta=dict(exact=worst(tolerance == 0), screen=worst(tolerance == SCREEN_TOLERANCE),
-                                 composed=worst(tolerance == COMPOSED_TOLERANCE)))
+                                 composed=worst(tolerance == COMPOSED_TOLERANCE),
+                                 alpha=worst(tolerance == ALPHA_TOLERANCE)))
     if bad.any():
         ys, xs = np.nonzero(bad)
         result['defect_bbox'] = [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1]
@@ -146,11 +163,10 @@ def compare(retail, port, mask, band, tolerance):
     return result, delta
 
 
-def triptych(path, retail, port, delta, mask, band, tolerance):
-    """retail | port | diff, stacked, the top TRIPTYCH_ROWS rows, 2x. The diff
-    shows deltas within tolerance in grey, defects in red, text overflow in
-    yellow and the masked text cells in blue."""
-    rows = slice(0, TRIPTYCH_ROWS)
+def triptych(path, retail, port, delta, mask, band, tolerance, rows=slice(0, TRIPTYCH_ROWS)):
+    """retail | port | diff, stacked, the screen `rows`, 2x. The diff shows
+    deltas within tolerance in grey, defects in red, text overflow in yellow
+    and the masked text cells in blue."""
     diff = np.zeros_like(retail[rows])
     d, m, b = delta[rows], mask[rows], band[rows]
     over = d > tolerance[rows]
@@ -273,7 +289,139 @@ def target_statusbar(args, workdir):
                 timing={k: round(v, 2) for k, v in timing.items()}, results=results)
 
 
-TARGETS = {'statusbar': target_statusbar}
+# =====================================================================
+# bottombar
+# =====================================================================
+
+# Belt slots: None empty, else (type, amount or None, contents or None). No
+# two items of a type on one belt, a pouch's included: retail's AddToInventory
+# stacks them.
+LONG_NAMES = ['BJ', 'MAL', 'BLE', 'MH']           # Regeneration, HighPriest Bolt, ...
+RINGS = ['LI', 'KJL', 'DEB', 'FL']                # Fire Flash, IronSkin, Advanced healing, Shadow Fist
+STILL = [('Golden Sun Key', None, None), ('Ale Mug', None, None)]
+POUCH = ('Pouch', None, [('Lesser Healing', None, None), ('Ale Mug', None, None)])
+FULL = [('Lesser Healing', None, None), ('Golden Sun Key', None, None), POUCH, ('Arrow', 7, None),
+        ('Gold', 42, None), None, ('Brown Leather Helmet', None, None), None, None]
+BOTTOMBAR_CASES = [
+    dict(name='empty-640', width=640),
+    dict(name='empty-452', width=452),
+    dict(name='rings-grey', width=452, spells=RINGS),
+    dict(name='rings-castable', width=452, spells=RINGS, castable=['LI', 'DEB']),
+    dict(name='rings-long-names', width=452, spells=LONG_NAMES, castable=['BJ']),
+    dict(name='belt-still', width=640, belt=STILL),
+    *[dict(name=f'belt-animated-{frame:02d}', width=640, belt=[('Lesser Healing', None, None)], frame=frame)
+      for frame in (0, 1, 2, 3, 7, 13)],
+    dict(name='pouch', width=640, belt=[None, POUCH]),
+    dict(name='pouch-one', width=640, belt=[('Pouch', None, [('Golden Sun Key', None, None)])]),
+    dict(name='amounts', width=640, belt=[('Arrow', 3, None), ('Gold', 42, None), None, ('Arrow', 12, None)]),
+    dict(name='amounts-large', width=640, belt=[('Arrow', 45, None), ('Gold', 700, None)]),
+    dict(name='pouch-gold', width=640, belt=[('Pouch', None, [('Gold', 42, None)]), None,
+                                             ('Pouch', None, [('Arrow', 9, None)])]),
+    dict(name='full-640', width=640, spells=RINGS, castable=['LI'], belt=FULL, frame=5),
+    dict(name='full-452', width=452, spells=RINGS, castable=['LI'], belt=FULL, frame=5),
+]
+
+
+def port_item(item):
+    if item is None:
+        return '-'
+    kind, amount, contents = item
+    text = kind + (f'*{amount}' if amount else '')
+    return text + (f'({",".join(port_item(c) for c in contents)})' if contents else '')
+
+
+def retail_item(item):
+    if item is None:
+        return None
+    kind, amount, contents = item
+    entry = dict(type=kind)
+    if amount:
+        entry['amount'] = amount
+    if contents:
+        entry['contents'] = [retail_item(c) for c in contents]
+    return entry
+
+
+def run_port_bottombar(port, case, workdir):
+    """The production bar in --test=ab-bottombar -> (shown, frame path)."""
+    name = case['name']
+    shown, frame, log = (workdir / f'{name}.port.json', workdir / f'{name}.port.png',
+                         workdir / f'{name}.port.log')
+    for stale in (shown, frame):
+        stale.unlink(missing_ok=True)
+    spells = (case.get('spells', []) + [''] * 4)[:4]
+    spec = (f'width={case["width"]};spells={",".join(spells)};castable={",".join(case.get("castable", []))};'
+            f'belt={"|".join(port_item(i) for i in case.get("belt", []))};frame={case.get("frame", 0)}')
+    with log.open('wb') as handle:
+        subprocess.run([str(port), '--headless', '--test=ab-bottombar', f'--ab-case={spec}', f'--ab-out={shown}',
+                        f'--snap={frame}', '--snapstep=0.03125', '--snapwarmup=12', '--max-runtime=60'],
+                       cwd=REPO, stdout=handle, stderr=handle, timeout=120, check=False)
+    if not shown.is_file() or not frame.is_file():
+        raise RuntimeError(f'port wrote no {shown.name if not shown.is_file() else frame.name} (see {log})')
+    return json.loads(shown.read_text()), frame
+
+
+def drawn_text_cells(primitives, origin):
+    """The rects retail's 2D text calls lay text in (pane-local, the pane at
+    `origin`) -> (mask: the cells widened by the shadow, band: the TEXT_BAND
+    around the mask, cells on the screen)."""
+    mask = np.zeros((SCREEN[1], SCREEN[0]), dtype=bool)
+    band = np.zeros_like(mask)
+    cells = []
+    for p in primitives:
+        if p['primitive'] != 'Text' or p['dst'] != 'display':
+            continue
+        x, y, w, h = p['rect']
+        x, y = x + origin[0], y + origin[1]
+        cells.append([x, y, w, h])
+        mask[max(0, y):y + h + TEXT_SHADOW, max(0, x):x + w + TEXT_SHADOW] = True
+        band[max(0, y - TEXT_BAND):y + h + TEXT_SHADOW + TEXT_BAND,
+             max(0, x - TEXT_BAND):x + w + TEXT_SHADOW + TEXT_BAND] = True
+    return mask, band & ~mask, cells
+
+
+def target_bottombar(args, workdir):
+    cases = [c for c in BOTTOMBAR_CASES if not args.only or c['name'] in args.only]
+    retail = Fixture(SLOT / 'bottombar.py', '--serve')
+    results, timing = [], dict(port_seconds=0.0, retail_seconds=0.0)
+    for case in cases:
+        name = case['name']
+        entry = dict(case=name)
+        try:
+            started = time.perf_counter()
+            shown, port_png = run_port_bottombar(args.port, case, workdir)
+            timing['port_seconds'] += time.perf_counter() - started
+            rings = shown['rings']
+            retail_case = dict(name=name, pane_width=shown['pane'][2], tick=shown['frame'],
+                               player=dict(quickspells=[r['talismans'] for r in rings],
+                                           castable=[r['talismans'] for r in rings if r['castable']]),
+                               belt=[retail_item(i) for i in case.get('belt', [])])
+            started = time.perf_counter()
+            r = retail.run(name, retail_case, out=str(workdir / 'retail'))
+            timing['retail_seconds'] += time.perf_counter() - started
+            if not r.get('ok'):
+                raise RuntimeError(f'retail: {r.get("error")}')
+            result = r['result']
+            pane = result['pane']
+            if pane != shown['pane']:
+                raise RuntimeError(f'pane {shown["pane"]} in the port, {pane} in retail')
+            mask, band, cells = drawn_text_cells(result['primitives'], pane[:2])
+            retail_rgb = retail_frame(workdir / 'retail' / f'{name}.rgb565')
+            port_rgb = port_frame(port_png)
+            tolerance = np.where(screen_mask(result['blend']['alpha']), ALPHA_TOLERANCE, 0)
+            diff, delta = compare(retail_rgb, port_rgb, mask, band, tolerance)
+            rows = slice(max(0, pane[1] - 16), SCREEN[1])
+            triptych(workdir / f'{name}.triptych.png', retail_rgb, port_rgb, delta, mask, band, tolerance, rows)
+            entry.update(diff, text_cells=cells, rings=rings, boxes=shown['boxes'])
+        except Exception as error:      # one case's failure is reported, not fatal
+            entry['error'] = f'{type(error).__name__}: {error}'
+        results.append(entry)
+    retail.close()
+    return dict(retail_sha256=retail.hello.get('retail_sha256'), tolerance=dict(alpha=ALPHA_TOLERANCE),
+                case_set=cases, timing={k: round(v, 2) for k, v in timing.items()}, results=results)
+
+
+TARGETS = {'statusbar': target_statusbar, 'bottombar': target_bottombar}
 
 
 def main():
@@ -300,7 +448,8 @@ def main():
             worst = r['max_delta']
             print(f'  {r["case"]}: {r["defects"]} defects, {r["exact"]}/{r["compared"]} exact, '
                   f'{r["within_tolerance"]} within tolerance (max delta: exact {worst["exact"]}, '
-                  f'screen {worst["screen"]}, composed {worst["composed"]}), {r["text_overflow"]} text overflow'
+                  f'screen {worst["screen"]}, composed {worst["composed"]}, alpha {worst["alpha"]}), '
+                  f'{r["text_overflow"]} text overflow'
                   + (f', defects in {r["defect_bbox"]}' if r.get('defect_bbox') else ''))
     sys.exit(1 if failing else 0)
 

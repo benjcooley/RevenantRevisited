@@ -36,7 +36,7 @@ filtering and alignment are a recorded renderer limit.
 | `winfs.py` | the install read-only at `C:\REVENANT` (immutable `bytes`, shared by checkpoints), canonical paths, find/attributes/directories |
 | `profile.py` | `GetPrivateProfile*` over the CD's Revenant.ini |
 | `window.py` | the game window: class, HWND bound to its WndProc in the core queue, metrics |
-| `ddraw.py` | DirectDraw 4 + clipper + Direct3D 3 device/viewport/material on RAM surfaces; `EnumDevices` offers the RGB emulation device through a guest thunk |
+| `ddraw.py` | DirectDraw 4 + clipper + Direct3D 3 device/viewport/material on RAM surfaces; `EnumDevices` offers the RGB emulation device through a guest thunk; a surface it allocates gets its own pitch, as DirectDraw ignores a caller's `DDSD_PITCH` without `DDSD_LPSURFACE` (`test_ddraw.py`) |
 | `gdi.py`, `ttf.py` | fonts (LOGFONT kept), surface DCs, text metrics from the TrueType tables GDI uses (hdmx/VDMX); TextOutA/DrawTextA recorded, no glyphs yet |
 
 Anything not implemented fails by name. Each module's docstring lists its
@@ -66,7 +66,7 @@ Each fixture checkpoints the booted world and restores it per case; with
 | Fixture | Runs |
 |---|---|
 | `plyrstatusbar.py` | TPlyrStatusBar (`0x0065a8c0`) over fixture characters: the frame, the last frame's primitives, the GDI text calls, and the blend masks |
-| `bottombar.py` | TBottomBarPane (`0x0065b638`) with the quick-spell rings and the potion shelf: a fixture player's quick spells, a belt of real items (retail's NewObject + AddToInventory), the game frame, the scroll |
+| `bottombar.py` | TBottomBarPane (`0x0065b638`) with the quick-spell rings and the potion shelf: a fixture player's quick spells, a belt of real items (retail's NewObject + AddToInventory, amounts through their SetAmount), the game frame; the frame, the primitives, the GDI text calls and the DM_ALPHA mask. Fixes one retail bug (the stacked thumbnail's black square; see its docstring) |
 | `draw_ab.py` | retail's `TSurface::Put` on explicit bytes: the oracle for retail's 2D blits and conversions (`--bitmaps` dumps StatusBar.dat's) |
 
 Shared by the pane fixtures:
