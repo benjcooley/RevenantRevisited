@@ -81,8 +81,8 @@ only).
 |---|---|---|---|---|
 | C1 | CalculateDamage | `0x4c4860` | `TCharacter::CalculateDamage` | [x] 40 cases x 594 inputs (characters; the player's resist/armour slots open) |
 | C2 | Damage (impact / death choice) | `0x4c4950` | `TCharacter::Damage` | [ ] |
-| C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [ ] |
-| C4 | hit resolution: ResolveAttack → ResolveHit (to-hit, tiers) | `0x4c6dd0` `0x4c62b0` | same | [ ] |
+| C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [x] 5143/5143 (`melee-attack-choice`); AI() as a whole is C3b |
+| C4 | hit resolution: ResolveAttack → ResolveHit (to-hit, tiers), OnAttacked | `0x4c6dd0` `0x4c62b0` | same | [x] 7855/7855 (`melee-hit`) |
 | C5 | block / dodge / impact / dead resolvers | `0x4d2e30` `0x4d3150` `0x4c74b0` `0x4c7810` `0x4c77a0` | same | [ ] |
 | C6 | Pulse: regen, fatigue, poison, chains, death | `0x4c1bb0`, TPlayer `0x518aa0` | `TCharacter::Pulse`, `TPlayer::Pulse` | [ ] |
 | C7 | experience and level-up | `0x51a630` | `AwardKillExp` / `AwardSkillExp` | [ ] |
@@ -91,10 +91,10 @@ only).
 
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
-| S1 | talismans → spell, quick spell, fizzle | `0x51b5d0` `0x51b7c0` | `TSpellList::GetSpellDataByTalismans`, `TPlayer::HasTalismans` | [ ] |
-| S2 | cast gates: mana, wait, fail roll | `0x53fe80`, `0x4d5c20` | `TSpellManager::Cast*` | [ ] |
-| S3 | spell damage, poison roll | `0x53f560` `0x53f090` | `TSpell::Damage`, `TSpell` ctor | [ ] |
-| S4 | missiles: flight, hit, damage | `0x510220` | missile effects | [ ] |
+| S1 | talismans → spell, quick spell, fizzle | `0x51b5d0` `0x51b7c0` | `TSpellList::GetSpellDataByTalismans`, `TPlayer::HasTalismans` | [x] `spell-lookup` 75, `spell-talismans` 340, `spell-quick` 49 |
+| S2 | cast gates: mana, wait, fail roll | `0x53fe80` (CastByTalismans), `0x4d5c20` | `TSpellManager::Cast*` | [x] 2071/2071 (`spell-cast`) |
+| S3 | spell damage, poison roll | `0x53f560` `0x53f090` | `TSpell::Damage`, `TSpell` ctor | [x] `spell-new` 426, `spell-damage` 1090 |
+| S4 | missiles: flight, hit, damage | `0x510220`, AreaDamage `0x4de3c0` | missile effects | [~] AreaDamage 64/64 (`missile-area`); arrows, the bow and the fireball (S4b–d) are green in the spells worktree, not yet committed |
 
 ### D — data
 
@@ -102,7 +102,7 @@ only).
 |---|---|---|---|---|
 | D0 | which rules files retail reads (loose `Resources/` against `resources.rvr`) | `0x4a13f0` -> `0x4a1240` | `rev_fopen` | [x] packs first (§5.6) |
 | D1 | rules.def / stats.def / char.def / weapon.def / armor.def parse (`combat-data`): TRules::Initialize + Load, every CLASS, CHARACTER, ATTACK, IMPACT, WEAPON, ARMOR, STATLEVEL, then BindTypes | `0x48b690` `0x48b990` `0x4891c0` `0x489850` `0x48cab0` | `TRules::Initialize`, `Load`, `SClassData::Load`, `SCharData::Load`, `BindTypes` | [x] 4 cases (shipped, GameSpeed 5, GOG loose, every-tag edge), all fields (~39,700 per shipped case) |
-| D1s | spell.def parse: every SPELL | `0x53ead0` | `SSpellData::Load` | [ ] |
+| D1s | spell.def parse: every SPELL | `0x53ead0` | `SSpellData::Load` | [x] 3/3 (`spell-data`) |
 
 ## 3. Determinism
 
