@@ -29,6 +29,8 @@ fixture world (docs/gameplay/COMBAT_DOJO.md on feature/combat). The case's
   (guest.py); a record per tick (`ticks`: self, motion, bits, seams).
 - `sidestep` (kata M10): SideStep `0x4d6220` with the case's `dir`
   ('l', 'r', or none: retail's random pick), as original.
+- `leap` / `start-retreat` (kata M10): Leap `0x4d2be0` (the case's
+  `angle`), StartRetreat `0x4d5fc0`, as original.
 - `update-move` (kata M6): TPlayScreen::UpdateMove `0x47de30` with the
   case's held controls (`controls`: state, changed; the debug camera off):
   Go / Leap / Stop as original, the map pane's MouseClick (the player's
@@ -91,6 +93,7 @@ PLAY_MOUSE_CLICK = 0x44f140                      # TMapPane::MouseClick (thiscal
 INPUT_SEAMS = ((0x4d2e30, 'Block', 4), (0x4d30f0, 'StopBlock', 0), (0x4d1050, 'IsBowDrawn', 0),
                (0x4d0dc0, 'AimBowLeft', 0), (0x4d0de0, 'AimBowRight', 0))
 SIDE_STEP = 0x4d6220                             # TCharacter::SideStep (thiscall (char dir), ret 4)
+LEAP, START_RETREAT = 0x4d2be0, 0x4d5fc0         # thiscall (angle) ret 4; thiscall () ret 0
 COMPLEX_PULSE = 0x4db190                         # TComplexObject::Pulse (UpdateAction with +0xbc)
 SET_OBJECT_MOTION, NEXT_FRAME = 0x470bb0, 0x470cc0
 CAN_SEE = 0x4cd540
@@ -176,6 +179,11 @@ class CallFixture:
         elif kind == 'sidestep':
             call(vm, SIDE_STEP, (ord(case['dir']) if case.get('dir') else 0,), this=me)
             result = 0                            # retail's return is a leftover register
+        elif kind == 'leap':
+            result = s32(call(vm, LEAP, (case['angle'] & 0xffffffff,), this=me))
+        elif kind == 'start-retreat':
+            call(vm, START_RETREAT, (), this=me)
+            result = 0
         elif kind == 'update-move':
             controls = case.get('controls', {})
             vm.put_u32(G_CMDSTATE, controls.get('state', 0))
@@ -195,7 +203,7 @@ class CallFixture:
         out = dict(schema=SCHEMA, side='retail', returned=result,
                    self=world.character_dump(me, new_blocks), seams=list(world.seams),
                    draws=list(world.draws))
-        if kind in ('move', 'update-action'):
+        if kind in ('move', 'update-action', 'start-retreat'):
             out['motion'] = world.motion_dump(me)
         if kind == 'update-move':
             out['controls'] = dict(state=vm.u32(G_CMDSTATE), changed=vm.u32(G_CMDCHANGED))

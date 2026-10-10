@@ -645,6 +645,7 @@ class SCaseScope
 
   private:
     int32_t savedAmbient = 0;
+    TPlayer* savedPlayer = nullptr;
 };
 
 }  // namespace RetailAB::Fixture

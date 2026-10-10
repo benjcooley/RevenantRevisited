@@ -122,21 +122,15 @@ std::string CombatCall(const Case& c, std::string& error)
             const std::string dir = cs["dir"].Str();
             me->SideStep(dir.empty() ? 0 : dir[0]);    // the result isn't compared: retail's is a leftover
         }
+        else if (call == "leap")
+            returned = me->Leap((int32_t)cs["angle"].Int()) ? 1 : 0;
+        else if (call == "start-retreat")
+            me->StartRetreat();
         else if (call == "update-move")
         {
             const JsonValue& ctl = cs["controls"];
             ControlMap.SetCommandFlags((uint32_t)ctl["state"].Int(), (uint32_t)ctl["changed"].Int());
-            TPlayer* const was = Player;
-            Player = me->ObjClass() == OBJCLASS_PLAYER ? static_cast<TPlayer*>(me) : nullptr;
-            TMapPane::playMouseClickSeam = [](int32_t button, int32_t x, int32_t y) {
-                JsonOut r;
-                r.Begin('{').FieldString("seam", "PlayMouseClick").Field("button", button).Field("x", x);
-                r.Field("y", y).End('}');
-                Seam(r.str());
-            };
             PlayScreen.UpdateMove();
-            TMapPane::playMouseClickSeam = nullptr;
-            Player = was;
         }
         else
             throw std::runtime_error("unknown call '" + call + "'");
@@ -155,7 +149,7 @@ std::string CombatCall(const Case& c, std::string& error)
         world.WriteCharacter(j, "self", me);
         WriteSeams(j);
         WriteDraws(j);
-        if (call == "move" || call == "update-action")
+        if (call == "move" || call == "update-action" || call == "start-retreat")
             fx->WriteMotion(j);
         if (call == "update-move")
         {

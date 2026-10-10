@@ -1367,6 +1367,8 @@ bool TPlayer::LearnSpell(const char* talismans)
 // multiplayer control and message handling.
 void TPlayer::SetPlayerState(int32_t newstate)
 {
+    if (setPlayerStateSeam)
+        setPlayerStateSeam(this, newstate);
     playerstate = newstate;
 }
 
