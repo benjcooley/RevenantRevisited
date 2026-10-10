@@ -62,7 +62,7 @@ def production_spans():
         math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
 
 
-def build_port(output,metadata,frames=FRAMES,texture_frames=False):
+def build_port(output,metadata,frames=FRAMES,texture_frames=False,untextured=False):
     pieces=production_spans()
     prelude=r'''
 #include <cstdio>
@@ -90,7 +90,7 @@ struct T3DImagery {
  std::vector<S3DVertex> vertices;std::vector<S3DFace> faces;std::vector<SAniKey32> keys;
  S3DObj objects[1];int key_count=0,frame_count=100;void* key_pointer=nullptr;int flags=0xdc;bool meshinitialized=true;
  bool retail_punch_keys=false,retail_mpappear_start_profile=false,retail_shadowfist_profile=false,retail_warriorborn_profile=false,
- retail_teleportation_profile=false,might_partsys_profile=false,immortalmight_partsys_profile=false,fmastery_partsys_profile=false;
+ retail_teleportation_profile=false,might_partsys_profile=false,immortalmight_partsys_profile=false,fmastery_partsys_profile=false,speed_partsys_profile=false,quicksilver_partsys_profile=false;
  int prevstate=-1,prevframe=0;StubHeader header;
  int NumObjects()const{return 1;}int NumStates()const{return 1;}int GetAniLength(int)const{return frame_count;}
  int NumTextures()const{return 1;}int NumObjVerts(int)const{return int(vertices.size());}int NumObjFaces(int)const{return int(faces.size());}
@@ -102,6 +102,7 @@ struct T3DImagery {
  bool GetUninterpolatedAniKey(int,int,int,hmm_vec3&,hmm_vec3&,hmm_vec3&);
  bool GetAniKey(int,int,int,hmm_vec3&,hmm_vec3&,hmm_vec3&);
  bool CalcObjectMatrix(S3DAnimObj*,int,int,hmm_mat4*,bool);
+ bool ScrollTexOffset(int,int,int,int64_t,float*)const{throw std::runtime_error("Unexpected scroll in static fixture");}
 };
 #define OBJ3D_ROTMASK 0x30
 #define OBJ3D_POSMASK 0x0c
@@ -117,14 +118,20 @@ struct T3DImagery {
 #define OBJ3D_SCL1 0x40
 #define OBJ3D_SCL2 0x80
 #define OBJ3D_SCL3 0xc0
-struct SMeshSubmit {int mesh=1,retail_lighting=0;float world[16]{},tint[4]{};};
+struct SMeshSubmit {int mesh=1,retail_lighting=0;float world[16]{},tint[4]{},uv_offset[2]{};};
 struct TRenderer {SMeshSubmit last;void SubmitMesh(const SMeshSubmit& s){last=s;}};
 TRenderer renderer;TRenderer*Renderer=&renderer;
+struct TTime{static int64_t LegacyFrameCount(){return 0;}};
 struct World {hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4& Matrix()const{return m;}};
-struct TAuthoredStaticMeshEffect {World root;struct SStaticPart {int mesh=1,retail_lighting=0;float local_matrix[16]{};std::vector<int> frame_meshes;};
- std::vector<SStaticPart> parts_;int frame_{0};int GetFrame()const{return frame_;}const World&Transform()const{return root;}
+struct TAuthoredStaticMeshEffect {World root;struct SStaticPart {int mesh=1,retail_lighting=0,object_index=0;float local_matrix[16]{};std::vector<int> frame_meshes;};
+ std::vector<SStaticPart> parts_;T3DImagery*scroll_imagery_=nullptr;int frame_{0};int GetFrame()const{return frame_;}const World&Transform()const{return root;}
  void SubmitWorldMeshForTest_BESPOKE(EFxDebugMode);};
 '''
+    if untextured:
+        # Execute the real zero-texture ExtractSubMeshTextureSlot fallback;
+        # no dummy surface or textured face bin is supplied.
+        prelude=prelude.replace('int NumTextures()const{return 1;}',
+                               'int NumTextures()const{return 0;}')
     trailer=r'''
 int main(int argc,char**argv){
  std::ifstream input(argv[1],std::ios::binary);if(!input)return 2;
@@ -173,6 +180,7 @@ int main(int argc,char**argv){
     return traces,dict(command=command,generated_source_sha256=sha(generated.read_bytes()),binary_sha256=sha(binary.read_bytes()),
         compiled_production_bodies=['GetUninterpolatedAniKey','GetAniKey','CalcObjectMatrix','BuildStaticObjectMatrix',
                                    'ExtractSubMeshTextureSlot','TAuthoredStaticMeshEffect::SubmitWorldMeshForTest_BESPOKE','src/math3d.cpp'],
+        untextured=untextured,
         boundaries=['decoded exact asset records supplied by verified relative-offset layout','identity/translated owner matrix',
                     'renderer captures actual generic SubmitMesh payload','cross-state interpolation disabled for one constant track'])
 

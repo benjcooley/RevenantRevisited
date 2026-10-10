@@ -19,6 +19,10 @@
 #include "bitmap.h"
 #endif
 
+#include <memory>
+
+class TSurface;
+
 _CLASSDEF(TButton)
 class TButton
 {
@@ -38,7 +42,7 @@ class TButton
         // Check update status
     bool IsToggle() { return toggle; }
         // Returns whether button is a toggle-type
-    bool RadioGroup() { return radiogroup; }
+    int32_t RadioGroup() const { return radiogroup; }
         // Returns the radio group or -1 if none
     bool Repeats() { return (repeatrate > 0); }
         // Returns if the button is a repeater
@@ -73,8 +77,11 @@ class TButton
     [[nodiscard]] bool IsHover() const { return hover; }
     void SetHover(bool on) { hover = on && hoverable && !hidden; SetDirty(); }
 
-    virtual void Draw();
-        // Draw the button to the screen
+    virtual void Compose(int32_t target_w, int32_t target_h);
+        // Compose the button into its pane's layer: the active render-target
+        // pass, target_w x target_h, the button at its pane-local rect.
+        // Clears the dirty flag. (Retail draws a button onto its pane's
+        // surface, vtable +0x40.)
     void Animate(bool draw = true);
         // Animation pulse
 
@@ -113,13 +120,19 @@ class TButtonPane : public TPane
     TButtonPane(int32_t px, int32_t py, int32_t pw, int32_t ph) : TPane(px, py, pw, ph) {}
       // Create pane
 
+    ~TButtonPane() override;
+
     bool Initialize() override;
     void Close() override;
     void KeyPress(int32_t key, bool down) override;
     void MouseClick(int32_t button, int32_t x, int32_t y) override;
     void MouseMove(int32_t button, int32_t x, int32_t y) override;
-    void DrawBackground() override;
     void Animate(bool draw = true) override;
+    void Compose() override;
+        // Recomposes the pane's layer when the pane or a button is dirty:
+        // ComposeBackground, then every visible button
+    void Draw() override;
+        // The layer, at the pane's position
 
     virtual void OnControl(TButton *button, int32_t msg) { (void)button; (void)msg; }
       // A button reports to its pane (retail vtable 0x94); CONTROL_CLICKED
@@ -155,11 +168,17 @@ class TButtonPane : public TPane
   protected:
     void Activate(TButton *b);
         // The button was pressed: click sound, its function, OnControl
+    virtual void ComposeBackground(int32_t target_w, int32_t target_h) { (void)target_w; (void)target_h; }
+        // The pane's own art under its buttons, into its layer
 
     TPointerArray<TButton, MAXBUTTONS> Buttons;
     int32_t clicked = -1;                   // Index to last clicked button
     TButton *hover = nullptr;               // Hovered button (retail +0x9c)
     uint32_t paneflags = 0;                 // BPF_*
+
+  private:
+    [[nodiscard]] bool NeedsCompose();
+    std::unique_ptr<TSurface> layer;        // the pane's art and buttons, as last composed
 };
 
 #endif

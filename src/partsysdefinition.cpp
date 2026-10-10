@@ -72,6 +72,10 @@ struct Reader {
     }
     bool Expr(Expression& expression) {
         if (!Take('[')) return Tuple(expression.constant, expression.dimensions, false);
+        // Original 4010f3 clears only the first destination before selecting
+        // literal/curve parsing. A curve preserves the remaining defaults;
+        // e.g. bounce becomes (0,100), while absent fields remain unchanged.
+        expression.constant[0] = 0;
         do {
             Key key;
             if (!Number(key.percent) || !Take(':')) return Fail("expected key time ':'");

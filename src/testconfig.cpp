@@ -42,3 +42,5 @@ float StartupVfxCamera[2] = {-1.0f, -1.0f};
 int32_t StartupVfxOrigin[3] = {0, 0, 0};
 bool StartupVfxOriginSet = false;
 std::string StartupInputScript;
+std::string StartupAbCase;
+std::string StartupAbOut;

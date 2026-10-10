@@ -1,5 +1,7 @@
 # RiverFall — authored scrolltex restoration
 
+2026-10-09 update: the native empty-object-selection contract is now recovered in [SCROLLTEX_EMPTY_SELECTION.md](SCROLLTEX_EMPTY_SELECTION.md). A valid unmatched object name falls back to every object, as original Initialize does; it is no longer treated as an unsupported tag. Earlier unknown-object negative source-oracle expectations below are superseded by actual native initialization and current compiled regression tests. Strict malformed/nonfinite/overlap checks remain.
+
 2026-10-04: the literal RiverFall UV controller is restored through the ordinary mesh path. Source-expression checks, integrated build, active Metal rendering and actual create/move/persist/delete captures pass. Retail visual review remains open. This does not restore the retail general `partsys` system or establish overall water/lighting fidelity.
 
 ## Evidence and source behavior

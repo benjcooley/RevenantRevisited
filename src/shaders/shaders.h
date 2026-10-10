@@ -46,6 +46,7 @@
 
     inline constexpr const char* kCompositeVs = kCompositeVsMetal;
     inline constexpr const char* kCompositeFs = kCompositeFsMetal;
+    inline constexpr const char* kCompositeReduceFs = kCompositeReduceFsMetal;
     inline constexpr const char* kTileVs      = kTileVsMetal;
     inline constexpr const char* kTileFs      = kTileFsMetal;
     inline constexpr const char* kMeshVs      = kMeshVsMetal;
@@ -80,6 +81,7 @@
 
     inline constexpr const char* kCompositeVs = kCompositeVsGlsl;
     inline constexpr const char* kCompositeFs = kCompositeFsGlsl;
+    inline constexpr const char* kCompositeReduceFs = kCompositeReduceFsGlsl;
     inline constexpr const char* kTileVs      = kTileVsGlsl;
     inline constexpr const char* kTileFs      = kTileFsGlsl;
     inline constexpr const char* kMeshVs      = kMeshVsGlsl;
@@ -114,6 +116,7 @@
 
     inline constexpr const char* kCompositeVs = kCompositeVsHlsl;
     inline constexpr const char* kCompositeFs = kCompositeFsHlsl;
+    inline constexpr const char* kCompositeReduceFs = kCompositeReduceFsHlsl;
     inline constexpr const char* kTileVs      = kTileVsHlsl;
     inline constexpr const char* kTileFs      = kTileFsHlsl;
     inline constexpr const char* kMeshVs      = kMeshVsHlsl;

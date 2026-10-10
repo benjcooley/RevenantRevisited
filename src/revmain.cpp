@@ -72,7 +72,6 @@
 #include "retailab.h"
 #include "script.h"
 #include "textbar.h"
-#include "statusbar.h"
 #include "sound.h"
 #include "editorstub.h"
 #include "dls.h"
@@ -143,8 +142,6 @@ T3DScene        Scene3D;            // Display pointer
 TPlayScreen     PlayScreen;         // PlayScreen Object
 TMapPane        MapPane;            // Map pane for PlayScreen
 TInventory      Inventory;          // Inventory of objects
-THealthBar      HealthBar;          // Character's health
-TStaminaBar     StaminaBar;         // Character's fatigue
 TTextBar        TextBar;            // Info line for player
 TMultiCtrlPane  MultiCtrl;          // Multipane control panel (buttons)
 TEquipPane      EquipPane;          // Equipment pane
@@ -1833,6 +1830,15 @@ void GetParameters(int argc, char **argv)
         std::string p;
         if (arg_param(cmd, "input-script", p) || arg_param(cmd, "mouse-script", p))
             StartupInputScript = p;
+    }
+
+  // AB-CASE="..." AB-OUT=<file> -- one HUD A/B case for a --test=ab-* host.
+    {
+        std::string p;
+        if (arg_param(cmd, "ab-case", p))
+            StartupAbCase = p;
+        if (arg_param(cmd, "ab-out", p))
+            StartupAbOut = p;
     }
 
   // SECTOR=L_X_Y — pick which sector --test=sector keeps alive and renders.

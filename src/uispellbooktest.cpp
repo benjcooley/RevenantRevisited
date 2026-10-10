@@ -30,8 +30,7 @@
 // Architecture (spec §3 direct-renderer contract): compose the WHOLE pane
 // (Scroll frame + content surface + arrow buttons) into ONE offscreen
 // TSurface RT via the *ToTarget primitive family, then DrawSurface it once
-// in the HUD pass — same direct-renderer contract as uiplyrstatusbartest /
-// uibarinvtest / uiquickspelltest.
+// in the HUD pass — the compose-to-target contract the HUD's panes share.
 //
 // Primitives (UI_METHOD_MAP §12 — canonical shared toolbox only):
 //   Renderer->DrawBitmapToTarget                 - opaque chrome stamp
@@ -686,7 +685,7 @@ bool InitializeUISpellbookMode()
                  g_scrollFrame->width, g_scrollFrame->height);
 
     // Spec §2: SpellIcons.dat owns the 40x40 spell-circle icons keyed by
-    // spell name. Same archive uiquickspelltest already uses.
+    // spell name. Same archive the quick-spell rings use (spellpane.cpp).
     g_spellIconsDat = TMulti::LoadMulti((char*)kSpellIconsDat);
     RegisterUIBitmapAtlasArchive(g_spellIconsDat);
     if (g_spellIconsDat)

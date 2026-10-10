@@ -8,44 +8,14 @@
 #include <cstdio>
 
 #include "revenant.h"
-#include "display.h"
 #include "button.h"
-#include "font.h"
+#include "renderer.h"
 #include "sound.h"
+#include "surface.h"
 
 // ***********
 // * TButton *
 // ***********
-
-void DrawFrame(TSurface* surface, int32_t x, int32_t y, int32_t w, int32_t h, bool down)
-{
-    int32_t topcolor = 216, bottomcolor = 40, leftcolor = 196, rightcolor = 70;
-    int32_t centercolor = 128;
-    SColor color;
-
-    if (down)
-    {
-        int32_t tmp;
-        tmp = topcolor; topcolor = bottomcolor; bottomcolor = tmp;
-        tmp = leftcolor; leftcolor = rightcolor; rightcolor = tmp;
-    }
-
-    // center
-    color.red = color.green = color.blue = centercolor;
-    surface->Box(x + 1, y + 1, w - 2, h - 2, TranslateColor(color), 0, 0, DM_BACKGROUND);
-    // top
-    color.red = color.green = color.blue = topcolor;
-    surface->Box(x, y, w, 1, TranslateColor(color), 0, 0, DM_BACKGROUND);
-    // left
-    color.red = color.green = color.blue = leftcolor;
-    surface->Box(x, y + 1, 1, h - 1, TranslateColor(color), 0, 0, DM_BACKGROUND);
-    // right
-    color.red = color.green = color.blue = rightcolor;
-    surface->Box(x + w - 1, y + 1, 1, h - 2, TranslateColor(color), 0, 0, DM_BACKGROUND);
-    // bottom
-    color.red = color.green = color.blue = bottomcolor;
-    surface->Box(x + 1, y + h - 1, w - 1, 1, TranslateColor(color), 0, 0, DM_BACKGROUND);
-}
 
 TButton::TButton(const char *bname, int32_t bx, int32_t by, int32_t bw, int32_t bh, uint16_t keypr,
                  void (*bfunc)(), PTBitmap dbm, PTBitmap ubm, bool rad,
@@ -87,33 +57,17 @@ TButton::TButton(const char *bname, int32_t bx, int32_t by, int32_t bw, int32_t 
     }
 }
 
-void TButton::Draw()
+// The up or down bitmap at the button's place, less the bitmap's
+// registration point (DM_USEREG: the radial buttons centre theirs).
+void TButton::Compose(int32_t target_w, int32_t target_h)
 {
-    if (hidden)
-        return;
-
-    if (downbitmap)
-    {
-        if (pixelcheck)
-            //Display.PutSV(x, y, down ? downbitmap : upbitmap, DM_USEREG | DM_BACKGROUND | DM_TRANSPARENT, level * 2, level);
-            Display.Put(x, y, down ? downbitmap : upbitmap, DM_USEREG | DM_BACKGROUND | DM_TRANSPARENT);
-        else
-            Display.Put(x, y, down ? downbitmap : upbitmap, DM_USEREG | DM_BACKGROUND);
-    }
-    else
-    {
-        // generate a generic button
-        int32_t add = down ? 1 : 0;
-        int32_t nx = x + (w / 2) - ((strlen(name) * SystemFont->GetChar(SystemFont->FirstChar())->width) / 2);
-        int32_t ny = y + (h / 2) - (SystemFont->height / 2) - 3;
-        DrawFrame(&Display, x, y, w, h, down);
-        SColor color;
-        color.red = color.blue = color.green = 40;
-        Display.WriteText(name, nx + add, ny + add, 1, SystemFont, &color, DM_TRANSPARENT | DM_ALIAS | DM_BACKGROUND);
-        Display.AddUpdateRect(x, y, w, h, UPDATE_RESTORE);
-    }
-
     dirty = false;
+    TBitmap* bitmap = down && downbitmap ? downbitmap : upbitmap;
+    if (hidden || !bitmap || !Renderer)
+        return;
+    const bool registered = (bitmap->flags & BM_REGPOINT) != 0;
+    Renderer->DrawBitmapToTarget(bitmap, x - (registered ? bitmap->regx : 0), y - (registered ? bitmap->regy : 0),
+                                 target_w, target_h);
 }
 
 #define REPEATWAIT      7
@@ -161,6 +115,8 @@ inline bool TButton::IsKey(int32_t keypr, bool keydown)
 // * TButtonPane *
 // ***************
 
+TButtonPane::~TButtonPane() = default;
+
 bool TButtonPane::Initialize()
 {
     TPane::Initialize();
@@ -188,6 +144,7 @@ void TButtonPane::Close()
     }
     clicked = -1;
     hover = nullptr;
+    layer.reset();
     TPane::Close();
 }
 
@@ -239,11 +196,39 @@ bool TButtonPane::DeleteButton(TButton *b)
     return false;
 }
 
-void TButtonPane::DrawBackground()
+bool TButtonPane::NeedsCompose()
 {
+    if (IsDirty() || !layer)
+        return true;
     for (TPointerIterator<TButton> i(&Buttons); i; i++)
         if (i.Item() && i.Item()->IsDirty())
-            i.Item()->Draw();
+            return true;
+    return false;
+}
+
+// REVSYNC: retail's draw loop (0x00435de0) draws each dirty button onto the
+// pane's surface, the button restoring the background under it first. The
+// port recomposes the pane's whole layer -- its art, then every button --
+// when anything in it changed.
+void TButtonPane::Compose()
+{
+    if (!NeedsCompose() || GetWidth() <= 0 || GetHeight() <= 0 || !Renderer)
+        return;
+    SetDirty(false);
+    if (!layer || layer->Width() != GetWidth() || layer->Height() != GetHeight())
+        layer = std::make_unique<TSurface>(GetWidth(), GetHeight(), SG_PIXELFORMAT_RGBA8);
+    layer->StartPass(0.0f, 0.0f, 0.0f, 0.0f);
+    ComposeBackground(GetWidth(), GetHeight());
+    for (TPointerIterator<TButton> i(&Buttons); i; i++)
+        if (i.Item())
+            i.Item()->Compose(GetWidth(), GetHeight());
+    layer->EndPass();
+}
+
+void TButtonPane::Draw()
+{
+    if (layer && Renderer)
+        Renderer->DrawSurface(layer.get(), GetPosX(), GetPosY());
 }
 
 void TButtonPane::Animate(bool draw)
@@ -405,14 +390,14 @@ void TButtonPane::MouseMove(int32_t button, int32_t x, int32_t y)
         SetHover(nullptr);
 }
 
+// A radio group's first button starts down.
 bool TButtonPane::NewButton(PTButton b)
 {
-    if (b)
-        return (Buttons.Add(b) >= 0);
-
+    if (!b || Buttons.Add(b) < 0)
+        return false;
     CheckGroup(b->RadioGroup());
-
-    return false;
+    SetDirty(true);
+    return true;
 }
 
 void TButtonPane::ClearGroup(int32_t group)

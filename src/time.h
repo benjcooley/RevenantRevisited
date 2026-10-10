@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 
 class TTime
@@ -69,3 +70,12 @@ class TTime
     static int64_t m_frameCount;
     static int64_t m_legacyFrameCount;
 };
+
+// Moves `from` toward `to` by one unit per legacy tick of `seconds`, stopping
+// at `to`: retail's per-tick counters (fade steps, ramps) as time-based levels
+// that read the same at tick boundaries and stay smooth between them.
+[[nodiscard]] inline float StepTowardPerTick(float from, float to, double seconds)
+{
+    const float delta = float(seconds * TTime::LegacyFramerate);
+    return from < to ? (std::min)(from + delta, to) : (std::max)(from - delta, to);
+}
