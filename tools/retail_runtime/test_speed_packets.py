@@ -28,6 +28,7 @@ class SpeedPacketTests(unittest.TestCase):
             self.assertEqual(manifest['geometry_errors'],[])
             self.assertEqual(manifest['centre_errors'],[])
             self.assertEqual(manifest['independent_centre_checks'],4218)
+            self.assertIn('keys_sha256',manifest['independent_production_emitter'])
             self.assertLess(manifest['max_raw_centre_error'],2e-5)
             self.assertLess(manifest['max_native_FIX_centre_error'],3e-6)
             self.assertEqual(manifest['pixel_errors'],[])

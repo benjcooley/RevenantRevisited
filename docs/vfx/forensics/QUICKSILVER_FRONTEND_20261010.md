@@ -1,5 +1,9 @@
 # Quicksilver: exact profile, particle frontend and map lifecycle
 
+Follow-up: [independent production emitter matrices and original normal-lit
+base pixels](BUFF_BASE_LIGHTING_20261010.md) now replace the shared emitter-pose
+boundary in the particle probe. The earlier report below remains historical.
+
 EFFECT `quicksilver:0xad92bd35` binds shipped `magic\Quicksilver.i3d`, SHA256
 `07c6a0a48c32d891ccd29367b12a882a4244a3eea004e4b06a7c2dee7aa609b4`.
 It shares Speed's three-object controller architecture, but has its own
