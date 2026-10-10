@@ -54,6 +54,9 @@ choices.
   Retail's `_beginthreadex(..., 1, ...)` passes 1.
 - `Runtime.call_sp`: host calls can start below a guest frame that stays
   live (WinMain stopped mid-way).
+- `PulseEvent`: releases the threads waiting at that moment (all of them on
+  a manual-reset event, the first on an auto-reset one), then resets the
+  event (`test_threads.py`). Item construction reaches it.
 
 ## Fixtures
 
@@ -63,13 +66,14 @@ Each fixture checkpoints the booted world and restores it per case; with
 | Fixture | Runs |
 |---|---|
 | `plyrstatusbar.py` | TPlyrStatusBar (`0x0065a8c0`) over fixture characters: the frame, the last frame's primitives, the GDI text calls, and the blend masks |
+| `bottombar.py` | TBottomBarPane (`0x0065b638`) with the quick-spell rings and the potion shelf: a fixture player's quick spells, a belt of real items (retail's NewObject + AddToInventory), the game frame, the scroll |
 | `draw_ab.py` | retail's `TSurface::Put` on explicit bytes: the oracle for retail's 2D blits and conversions (`--bitmaps` dumps StatusBar.dat's) |
 
 Shared by the pane fixtures:
 
 | Module | Does |
 |---|---|
-| `hudscene.py` | archives through retail's loader, fixture characters (stats, class, portrait), one frame of a pane, the back buffer |
+| `hudscene.py` | archives through retail's loader, fixture characters (stats, class, portrait), real objects by type name, one frame of a pane, the back buffer |
 | `overlayraster.py` | draws the overlay quads (T3DScene `0x00414550`) as the D3D device does: texels 1:1, modulated by the tint, alpha-blended. Retail's own fallback rasterizer ignores the tint's alpha and drifts a texel on wide quads |
 | `blendmap.py` | marks the screen pixels drawn from texels retail blended in 4-bit steps while composing its ARGB4444 textures |
 

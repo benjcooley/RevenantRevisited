@@ -203,6 +203,18 @@ class Scheduler:
     def set_event(self,args):self.event(args[0])['signaled']=True;return 1
     def reset_event(self,args):self.event(args[0])['signaled']=False;return 1
 
+    def pulse_event(self,args):
+        # Releases the threads waiting on the event at this moment -- every one
+        # for a manual-reset event, the first for an auto-reset one -- and
+        # leaves it non-signaled; with none waiting it only resets it. A
+        # released thread holds its release until its wait consumes it.
+        handle=args[0];obj=self.event(handle)
+        waiters=[tid for tid,thread in self.threads.items() if thread.state=='waiting'
+                 and thread.wait['kind']=='objects' and handle in thread.wait['handles']]
+        obj['pulsed']=set(waiters if obj['manual'] else waiters[:1])
+        obj['signaled']=False
+        return 1
+
     def create_mutex(self,args):
         # Unnamed, never abandoned (a thread exiting while it owns one is not
         # modelled). Recursive ownership per thread, like Windows.
@@ -224,7 +236,8 @@ class Scheduler:
         # `tid`: the waiting thread (a mutex is signaled for its owner).
         obj=self.objects.get(handle)
         if obj is None:raise ValueError('Invalid wait handle')
-        if obj['type']=='event':return obj['signaled']
+        if obj['type']=='event':
+            return obj['signaled'] or (self.current if tid is None else tid) in obj.get('pulsed',())
         if obj['type']=='mutex':return obj['owner'] in (None,self.current if tid is None else tid)
         return self.threads[obj['tid']].state=='exited'
 
@@ -232,7 +245,9 @@ class Scheduler:
         # Duplicate handles in wait-all are rejected before reaching this path.
         for handle in handles:
             obj=self.objects[handle]
-            if obj['type']=='event' and not obj['manual']:obj['signaled']=False
+            if obj['type']=='event':
+                obj.get('pulsed',set()).discard(self.current)
+                if not obj['manual']:obj['signaled']=False
             elif obj['type']=='mutex':obj['owner']=self.current;obj['depth']+=1
 
     def wait(self,handles,all_objects,timeout):

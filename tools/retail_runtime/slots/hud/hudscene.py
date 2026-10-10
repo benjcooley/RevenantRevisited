@@ -39,6 +39,8 @@ VTABLE_COPY = 0x400                          # bytes of the real vtable copied (
 O_CLASS, O_NAME, O_ACTION = 0x04, 0x38, 0xe0
 BM_RGB565 = 0x4
 ARCHIVE_DATA = 0x404                         # an archive blob's dataOff table
+G_TYPE_COUNT, G_TYPE_TABLE, G_CLASS_TABLE = 0x00659d30, 0x00659d40, 0x0065a148
+NEW_OBJECT, OBJECT_DEF_SIZE = 0x00474bb0, 0x34
 ACTION_SIZE, ACTION_COMBAT, ACTION_TARGET = 0x64, 3, 0x44
 
 # HUD input slots of a character: vtable offset -> field of `Stats`
@@ -140,6 +142,30 @@ class HudScene:
             raise ValueError('bitmap pixels must be width*height RGB565 values')
         return struct.pack('<18I', width, height, 0, 0, BM_RGB565, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                            len(pixels)) + pixels
+
+    def new_object(self, type_name):
+        """A real object of the named type, built as retail builds one by name
+        (TObjectInstance::AddToInventory 0x0046f940): the type's record in the
+        name-sorted table of every class's types (count `0x00659d30`, table
+        `0x00659d40`; record: name pointer, type at +0x20, class at +0x22), an
+        SObjectDef of that class and type, and the class's NewObject
+        `0x00474bb0`(def, -1, 1)."""
+        for index in range(self.vm.u32(G_TYPE_COUNT)):
+            record = self.vm.u32(self.vm.u32(G_TYPE_TABLE) + 4 * index)
+            if self.vm.string(self.vm.u32(record)).lower() != type_name.lower():
+                continue
+            objtype = struct.unpack('<H', self.vm.uc.mem_read(record + 0x20, 2))[0]
+            objclass = self.vm.uc.mem_read(record + 0x22, 1)[0]
+            cls = self.vm.u32(G_CLASS_TABLE + 4 * objclass)
+            definition = self.vm.allocate(OBJECT_DEF_SIZE)
+            self.vm.write(definition, struct.pack('<HH', struct.unpack('<H', self.vm.uc.mem_read(cls + 8, 2))[0],
+                                                  objtype))
+            instance = self.world.call(NEW_OBJECT, (definition, 0xffffffff, 1), this=cls,
+                                       instruction_limit=2_000_000_000)
+            if not instance:
+                raise RuntimeError(f'NewObject built no {type_name!r}')
+            return instance
+        raise KeyError(f'no object type {type_name!r}')
 
     def character(self, name, player=False, stats=None, portrait=0):
         size = PLAYER_SIZE if player else CHARACTER_SIZE
