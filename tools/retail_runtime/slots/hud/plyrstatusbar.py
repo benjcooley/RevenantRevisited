@@ -41,7 +41,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import struct
 import sys
 import time
 from pathlib import Path
@@ -49,12 +48,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[1]))
-from unicorn import UC_HOOK_CODE  # noqa: E402
-from unicorn.x86_const import UC_X86_REG_ECX, UC_X86_REG_ESP  # noqa: E402
 from blendmap import BlendMap  # noqa: E402
-from overlayraster import OverlayRaster  # noqa: E402
-from hudscene import DISPLAY_BACK, DISPLAY_POINTER, HudScene, Stats, png  # noqa: E402
+from hudscene import HudScene, Stats, png  # noqa: E402
 from hudworld import HudWorld  # noqa: E402
+from overlayraster import OverlayRaster  # noqa: E402
+from primitives import PrimitiveTap, s32  # noqa: E402
 
 PANE = 0x0065a8c0
 INITIALIZE = 0x00549740
@@ -65,10 +63,6 @@ SCREEN = (640, 480)
 SCHEMA = 'hud.plyrstatusbar.v1'
 SURFACE_FIELDS = {0x60: 'portrait', 0x64: 'text', 0x68: 'bars', 0x6c: 'chrome_compose',
                   0x70: 'chrome', 0x74: 'target_chrome'}
-PRIMITIVES = {0x004bd680: ('Put', 5), 0x004bd5e0: ('PutSubrect', 7), 0x004bd490: ('ParamBlit', 4),
-              0x004bbed0: ('ParamBlit', 4), 0x004aa280: ('ParamBlit', 4), 0x004bde60: ('Box', 8),
-              0x004a6930: ('Box', 8), 0x00414d70: ('Quad', 14), 0x004be2b0: ('Text', 10),
-              0x004a5ca0: ('SurfaceFromBitmap', 2)}
 
 
 class StatusBarFixture:
@@ -79,82 +73,33 @@ class StatusBarFixture:
         self.scene = HudScene(world)
         self.scene.load_archive('StatusBar.dat', G_STATUSBAR_DAT)
         self.scene.load_archive('Portraits.dat', G_PORTRAITS_DAT)
-        self.recording = None
         self.blend = None
-        for address in PRIMITIVES:
-            self.vm.uc.hook_add(UC_HOOK_CODE, self._primitive, begin=address, end=address)
+        self.tap = PrimitiveTap(self.vm, self._surface_name)
+        self.tap.listeners.append(self._track_blend)
         self.raster = OverlayRaster(self.vm, world.ddraw, self.scene.back_buffer)
         world.checkpoint()
         self.setup_ms = (time.perf_counter() - started) * 1000
-
-    # ---- primitive recording -------------------------------------------
 
     def _surface_name(self, pointer):
         for offset, name in SURFACE_FIELDS.items():
             if pointer and self.vm.u32(PANE + offset) == pointer:
                 return name
-        display = self.vm.u32(DISPLAY_POINTER)
-        if pointer == display:
-            return 'display'
-        if pointer == self.vm.u32(display + DISPLAY_BACK):
-            return 'back_buffer'
-        return f'0x{pointer:08x}' if pointer else None
+        return self.scene.screen_surface(pointer) or (f'0x{pointer:08x}' if pointer else None)
 
-    def _is_screen(self, pointer):
-        """The display or its back buffer: the 2D pass's blits land there."""
-        display = self.vm.u32(DISPLAY_POINTER)
-        return pointer in (display, self.vm.u32(display + DISPLAY_BACK))
-
-    def _bitmap(self, pointer):
-        if not pointer:
-            return None
-        width, height, regx, regy, flags, drawmode, key = struct.unpack(
-            '<7I', self.vm.uc.mem_read(pointer, 28))
-        return dict(size=[width, height], flags=flags, drawmode=drawmode, key=key)
-
-    def _primitive(self, uc, address, size, user):
-        if self.blend is None:
-            return
-        name, count = PRIMITIVES[address]
-        sp = uc.reg_read(UC_X86_REG_ESP)
-        a = struct.unpack(f'<{count}I', uc.mem_read(sp + 4, 4 * count))
-        s32 = lambda v: struct.unpack('<i', struct.pack('<I', v))[0]  # noqa: E731
-        self._track_blend(name, uc.reg_read(UC_X86_REG_ECX), a, s32)
-        if self.recording is None:
-            return
-        this = self._surface_name(uc.reg_read(UC_X86_REG_ECX))
-        if name == 'Put':
-            entry = dict(dst=this, x=s32(a[0]), y=s32(a[1]), bitmap=self._bitmap(a[2]), mode=a[3])
-        elif name == 'ParamBlit':
-            dp = struct.unpack('<21I', uc.mem_read(a[0], 84))
-            entry = dict(dst=this, src=self._surface_name(a[1]), drawparam=list(dp))
-        elif name == 'Box':
-            entry = dict(dst=this, rect=[s32(v) for v in a[:4]], color=a[4], mode=a[7])
-        elif name == 'Quad':
-            entry = dict(x=s32(a[0]), y=s32(a[1]), texture=self._surface_name(a[3]),
-                         size=[s32(a[5]), s32(a[6])], tint=a[7],
-                         src=[s32(v) for v in a[8:12]], mode=a[13])
-        elif name == 'Text':
-            entry = dict(dst=this, rect=[s32(v) for v in a[:4]], text=self.vm.string(a[4]),
-                         font=a[6], format=a[8])
-        elif name == 'SurfaceFromBitmap':
-            entry = dict(bitmap=self._bitmap(a[0]), flags=a[1])
-        else:
-            entry = dict(args=list(a))
-        self.recording.append(dict(primitive=name, **entry))
-
-    def _track_blend(self, name, this, a, s32):
+    def _track_blend(self, name, this, a):
         """Every frame's primitives feed the blend map (the chips compose on
         the first frame); the screen's marks are the last frame's quads."""
+        if self.blend is None:
+            return
         if name == 'Put':
             self.blend.put(this, s32(a[0]), s32(a[1]), a[2], a[3])
         elif name == 'Box':
             self.blend.box(this, *(s32(v) for v in a[:4]))
         elif name == 'ParamBlit':
-            dp = [s32(v) for v in struct.unpack('<21I', self.vm.uc.mem_read(a[0], 84))]
-            if a[1] and not self._is_screen(this):
+            if a[1] and not self.scene.screen_surface(this):
+                dp = self.tap.drawparam(a[0])
                 self.blend.blit(this, a[1], dp[10], dp[11], dp[14], dp[15], dp[16], dp[17])
-        elif name == 'Quad' and self.recording is not None:
+        elif name == 'Quad' and self.tap.recording is not None:
             self.blend.quad(s32(a[0]), s32(a[1]), s32(a[5]), s32(a[6]), a[3], s32(a[8]), s32(a[9]))
 
     # ---- cases ---------------------------------------------------------
@@ -187,12 +132,12 @@ class StatusBarFixture:
             last = frame == frames - 1
             if last:
                 scene.clear()
-                self.recording = []
+                self.tap.start()
                 self.blend.new_frame()
                 self.raster.new_frame(*SCREEN)
                 text_start = len(world.gdi.text_calls)
             scene.frame(PANE)
-        primitives, self.recording = self.recording, None
+        primitives = self.tap.stop()
         blend = dict(composed=self.blend.screen_mask(), screen=self.raster.screen_mask())
         self.blend = None
         width, height, rows = scene.capture()
