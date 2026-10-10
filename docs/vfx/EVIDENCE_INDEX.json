@@ -9,19 +9,19 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 90,
+    "retail_rows_with_source_fixes_recorded": 91,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 80,
-    "visual_fidelity_confirmed_rows": 14,
+    "actual_runtime_verified_rows": 81,
+    "visual_fidelity_confirmed_rows": 17,
     "repeatable_ab_rows": 7,
-    "thin_bounded_render_frontend_rows": 66,
-    "reviewed_visual_pass_rows": 14,
-    "remaining_visual_review_rows": 162
+    "thin_bounded_render_frontend_rows": 67,
+    "reviewed_visual_pass_rows": 17,
+    "remaining_visual_review_rows": 159
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -644,6 +644,48 @@
       "check": "speed_particle_centres_fresh_repeat",
       "status": "pass",
       "scope": "Two fresh native/source runs preserve independentcentrechecks/draw admissions and allfive shared-software pixel/depth hashes; no base/device/context claim."
+    },
+    "recon/retail_asm/runtime/effects/might-current-visual/visual-review.json": {
+      "sha256": "1df2085c9c5709d00dc1163a36fb3c094357fd8044df77231d0bb687c19dd8f2",
+      "retail_row": "Might:0x5be39ae0",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Current corrected-parser actual Revisited map renderer versus retained native software reference: tested isolated state0 steady appearance at measured quality1. Independent RNG and fixed elapsed-time comparison. Normal floor illumination, exact device/raster/projection, natural caster/story/audio and full acceptance remain separate."
+    },
+    "recon/retail_asm/runtime/effects/immortalmight-current-visual/visual-review.json": {
+      "sha256": "1d4a50c8fa59c9f999b5284a6b0bc7b7aedf0289a6ef2daa91e645bbbb993e35",
+      "retail_row": "Immortalmight:0x82aeb30f",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Current corrected-parser actual Revisited map renderer versus retained native software reference: tested isolated state0 steady appearance at measured quality1. Independent RNG and fixed elapsed-time comparison. Normal floor illumination, exact device/raster/projection, natural caster/story/audio and full acceptance remain separate."
+    },
+    "recon/retail_asm/runtime/effects/warp-blue-current-visual/visual-review.json": {
+      "sha256": "ed7a2303c811e98272934e4c875fcb6649e1fb98a21b2ca78b2eb21689a32df3",
+      "retail_row": "TeleportDoorInsideB:0xad92bc28",
+      "check": "current_actual_port_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Overall isolated blue Warp appearance for the recorded synthetic map and pinned Metal build, against original executable software raster reference. Triangular form, blue/white cloudy perimeter, four changing atlas states and alpha floor integration reviewed. This is actual modern-port review, not shared-original-raster frontend parity."
+    },
+    "recon/retail_asm/runtime/effects/quicksilver-particle-merge-final/manifest.json": {
+      "sha256": "a074542fc38e0525f54511a8c09eaab262177c974cd6fad3bee36166ea21600c",
+      "retail_row": "quicksilver:0xad92bd35",
+      "check": "quicksilver_particle",
+      "status": "pass",
+      "scope": "Actual compiled parser/State/SubmitPartSys against native whole parser/Initialize/Pulse/liveSample/#CalcObjectMatrix/x87transform; exact native-authored emitter poses common inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; raw-world portZ compared via declared MODELZ bridge using actual native sample centre. Shared original software projector/raster used at fixed512white/color fixture; no actual map/Metal projector, base material lighting/caster/full acceptance."
+    },
+    "recon/retail_asm/runtime/effects/quicksilver-profile-contract/manifest.json": {
+      "sha256": "330095bb55dcb366542cfb158ae08b28c113061ed5b2e62ad65e5c84d2ac9eec",
+      "retail_row": "quicksilver:0xad92bd35",
+      "check": "quicksilver_profile",
+      "status": "pass",
+      "scope": "Actual strict Quicksilver profile and integer decoder source bodies/constants/packed records compile and execute. Literal shipped keys/tags/materials/vertices/faces/descriptors supplied by decoded readonly resource interface; independent mutable copies reject changes. Original decoder/conversion vs all3x30x9TRS channels. Full InitializeMesh/GetAniKey interpolation/owner matrices/controller geometry/lighting/raster/Metal/caller acceptance separate."
+    },
+    "recon/retail_asm/runtime/effects/quicksilver-map-final/manifest.json": {
+      "sha256": "ae8ee36b6071c089175578909648e46a24e46620687928549df1d0e3456a6574",
+      "retail_row": "quicksilver:0xad92bd35",
+      "check": "quicksilver_map",
+      "status": "pass",
+      "scope": "Fresh private Metal game build; exact type0xad92bd35 ADDAT/profile/controller/cap31/live draws/MOVE/DELETE and exact floor restoration on synthetic module. Separate from natural caster/caller/map context, native full base material lighting and software/Metal parity."
     }
   }
 }

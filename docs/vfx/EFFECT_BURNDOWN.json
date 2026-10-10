@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "audited_date": "2026-10-09",
+  "audited_date": "2026-10-10",
   "authority": "Retail CLASS EFFECT TYPES entries are the scope. Primary VFX progress is reviewed visual passes for the recorded test configuration; bounded frontend comparisons are supporting coverage. End-to-end gameplay/device acceptance is tracked separately. Preview associations are candidates only.",
   "source": {
     "archive": "data/imagery.rvi",
@@ -24,19 +24,19 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 90,
+    "retail_rows_with_source_fixes_recorded": 91,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 80,
-    "visual_fidelity_confirmed_rows": 14,
+    "actual_runtime_verified_rows": 81,
+    "visual_fidelity_confirmed_rows": 17,
     "repeatable_ab_rows": 7,
-    "thin_bounded_render_frontend_rows": 66,
-    "reviewed_visual_pass_rows": 14,
-    "remaining_visual_review_rows": 162
+    "thin_bounded_render_frontend_rows": 67,
+    "reviewed_visual_pass_rows": 17,
+    "remaining_visual_review_rows": 159
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -6886,7 +6886,8 @@
       ],
       "comparison_runs": [
         "captures/ab/sw-fps-might-authored-actual-map-completed-20261005",
-        "captures/ab/sw-fps-might-quality1-actual-map-20261005"
+        "captures/ab/sw-fps-might-quality1-actual-map-20261005",
+        "research/vfx-next-20261010/buff-current-visual/might-pair/manifest.json"
       ],
       "owner": null,
       "acceptance": {
@@ -6896,13 +6897,13 @@
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_generic_guarded_might30loop_onepartsys_create_wrap_move_delete",
-      "next_action": "Retain actual cold-parser/native numeric state proof; record fresh actual port output and re-review against retained native reference before restoring visual/repeat credit. Natural caller/context/device remain open.",
+      "next_action": "Preserve current isolated quality1 visual pass after actual corrected-parser capture; verify natural caster/attachment, additional parameters, audio and device behavior separately. Repeat credit remains unchanged.",
       "notes": [
         "Clean FPS-on/ambient32 native8second persistentexcerpt afterfixed2secondwarmup has193distinct referenceimages, background/delete/restore0, rootyellow-orange rising sparks. Nativeos09525.697377seconds1799frames/jobs264\u2013266terminal0.30-loop singlepartsys14literalfields recognised read-only, no compiledpacket/renderproof or enginepatchstaged. OldTBuffcandidate is non-authoritative invented proxy only, not exactcontroller/port support.",
         "Prior relvel0/alpha1 packet tests do not cover Might nonzero.25/partial-alpha/friction.1/randomrotationY0\u219215. RGB565 ownpackedcolor5-bit/triangle min-alpha5 and raster partial/full31 branches need actual source execution; nearesttexels alone not sufficient. NativeSoftware1 is verified for currentread-onlyPID/session, not all historicaldriver states.",
@@ -7040,7 +7041,7 @@
           "production_changes_not_yet_safe": "Do not alias nearest-only flag to claim source own-colour fidelity; explicit scoped RGB565 prelit policy needed if adopting original SW semantics"
         }
       },
-      "work_queue_status": "cold_parser_state_corrected_current_appearance_repeat_revalidation_pending",
+      "work_queue_status": "visual_pass_followups",
       "source_pool_validation": {
         "status": "PASS meaningful live/previously-spawned fields",
         "ticks": 90,
@@ -7349,13 +7350,26 @@
           "contact_sha256": "1905fb5337024cb6273707d5123e97e0a99322e03b72a1366b076ee72e76e39f",
           "activity_summary_sha256": "0fd9a73ff61049c3c146617e69f37974697a86fba4355efc0e04db6043f9f3d6",
           "software_raster_exactness_proved": false
+        },
+        {
+          "date": "2026-10-09",
+          "result": "revalidation_pending_after_native_curve_template_fix",
+          "finding": "Full original parser clears curve destination scalar at birth; prior production retained1. New numerical cold-parser/birth/update proof is positive, but historical port/native appearance and repeat evidence does not establish current-code output.",
+          "scope": "Original native recordings remain valid references; fresh current-map/paired appearance review required."
         }
       ],
       "visual_review": {
-        "date": "2026-10-09",
-        "result": "revalidation_pending_after_native_curve_template_fix",
-        "finding": "Full original parser clears curve destination scalar at birth; prior production retained1. New numerical cold-parser/birth/update proof is positive, but historical port/native appearance and repeat evidence does not establish current-code output.",
-        "scope": "Original native recordings remain valid references; fresh current-map/paired appearance review required."
+        "date": "2026-10-10",
+        "reviewer": "root and lane independent image inspections",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Current corrected-parser actual Revisited map renderer versus retained native software reference: tested isolated state0 steady appearance at measured quality1. Independent RNG and fixed elapsed-time comparison. Normal floor illumination, exact device/raster/projection, natural caster/story/audio and full acceptance remain separate.",
+        "finding": "Sparse rising yellow/orange glints with bright yellow/white cores, authored size/shape and overall spread agree across the six fixed elapsed samples; no persistent dense white base cluster or obvious geometry/halo mismatch.",
+        "report": "recon/retail_asm/runtime/effects/might-current-visual/visual-review.json",
+        "sha256": "1df2085c9c5709d00dc1163a36fb3c094357fd8044df77231d0bb687c19dd8f2",
+        "note": "docs/vfx/forensics/MIGHT_IMMORTALMIGHT_CURRENT_VISUAL_20261010.md",
+        "position_or_scale_fitted": false,
+        "phase_search": false
       },
       "cold_parser_revalidation": {
         "date": "2026-10-09",
@@ -7371,7 +7385,8 @@
           }
         ],
         "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
-      }
+      },
+      "visual_fidelity_scope": "Current corrected-parser actual Revisited map renderer versus retained native software reference: tested isolated state0 steady appearance at measured quality1. Independent RNG and fixed elapsed-time comparison. Normal floor illumination, exact device/raster/projection, natural caster/story/audio and full acceptance remain separate."
     },
     {
       "index": 6,
@@ -7690,7 +7705,8 @@
       "comparison_runs": [
         "captures/ab/sw-fps-immortalmight-quality1-actual-map-20261005",
         "captures/ab/sw-fps-immortalmight-base-inheritance-incoming16-20261005",
-        "captures/ab/sw-fps-immortalmight-base-inheritance-original-reference-20261005"
+        "captures/ab/sw-fps-immortalmight-base-inheritance-original-reference-20261005",
+        "research/vfx-next-20261010/buff-current-visual/immortalmight-pair/manifest.json"
       ],
       "owner": null,
       "acceptance": {
@@ -7700,13 +7716,13 @@
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_NOOBJBLEND_inherited_base_controller16_quality1_incoming16_lifecycle_verified",
-      "next_action": "Retain actual cold-parser/native numeric state proof; record fresh actual port output and re-review against retained native reference before restoring visual/repeat credit. Natural caller/context/device remain open.",
+      "next_action": "Preserve current isolated quality1 visual pass after actual corrected-parser capture; verify natural caster/attachment, additional parameters, audio and device behavior separately. Repeat credit remains unchanged.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "FinalnativeSHA2b48b552\u2026195distinct8secondsteadyexcerpt afterfixed2secondwarmup, markerfreeSW/background-cleanup0; os09632.896643seconds2303nativeframes/jobs269\u2013271terminal0. Quality1/software1 measuredreadonlyjob268; actual#flare mode4 alpha/test-no-write/material preflight pending. Native only, no source/runtime/pair/visual credit.",
@@ -7775,7 +7791,7 @@
         "full_cycle_frame_coverage_proven": false,
         "simulation_clock_equivalence_proven": false
       },
-      "work_queue_status": "cold_parser_state_corrected_current_appearance_repeat_revalidation_pending",
+      "work_queue_status": "visual_pass_followups",
       "runtime_regression": {
         "manifest": "captures/runtime-fixtures/immortalmight-incoming16-loop-20261005/command-capture/manifest.json",
         "manifest_sha256": "74087154216b8cad0f39e2b93d3b7822ce85adb189fce964d679143ef45d440b",
@@ -8012,13 +8028,26 @@
           "activity_summary_sha256": "a8412506b0addc623f6494cc05e5339720c3c87c155b53418e2a2f55c54cd60e",
           "quality": 1,
           "incoming_blend": 16
+        },
+        {
+          "date": "2026-10-09",
+          "result": "revalidation_pending_after_native_curve_template_fix",
+          "finding": "Full original parser clears curve destination scalar at birth; prior production retained1. New numerical cold-parser/birth/update proof is positive, but historical port/native appearance and repeat evidence does not establish current-code output.",
+          "scope": "Original native recordings remain valid references; fresh current-map/paired appearance review required."
         }
       ],
       "visual_review": {
-        "date": "2026-10-09",
-        "result": "revalidation_pending_after_native_curve_template_fix",
-        "finding": "Full original parser clears curve destination scalar at birth; prior production retained1. New numerical cold-parser/birth/update proof is positive, but historical port/native appearance and repeat evidence does not establish current-code output.",
-        "scope": "Original native recordings remain valid references; fresh current-map/paired appearance review required."
+        "date": "2026-10-10",
+        "reviewer": "root and lane independent image inspections",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Current corrected-parser actual Revisited map renderer versus retained native software reference: tested isolated state0 steady appearance at measured quality1. Independent RNG and fixed elapsed-time comparison. Normal floor illumination, exact device/raster/projection, natural caster/story/audio and full acceptance remain separate.",
+        "finding": "Bright yellow/gold authored star base, its overall size and breathing appearance, and sparse rising sparks/core agree across the six fixed elapsed samples; no opaque dark halo or obvious shape mismatch.",
+        "report": "recon/retail_asm/runtime/effects/immortalmight-current-visual/visual-review.json",
+        "sha256": "1d4a50c8fa59c9f999b5284a6b0bc7b7aedf0289a6ef2daa91e645bbbb993e35",
+        "note": "docs/vfx/forensics/MIGHT_IMMORTALMIGHT_CURRENT_VISUAL_20261010.md",
+        "position_or_scale_fitted": false,
+        "phase_search": false
       },
       "cold_parser_revalidation": {
         "date": "2026-10-09",
@@ -8034,7 +8063,8 @@
           }
         ],
         "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
-      }
+      },
+      "visual_fidelity_scope": "Current corrected-parser actual Revisited map renderer versus retained native software reference: tested isolated state0 steady appearance at measured quality1. Independent RNG and fixed elapsed-time comparison. Normal floor illumination, exact device/raster/projection, natural caster/story/audio and full acceptance remain separate."
     },
     {
       "index": 10,
@@ -16736,13 +16766,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "verified_exact_custom_warp_owner_state_alpha_helper_map_lifecycle",
-      "next_action": "Verify original full illumination and actual authored map/visibility/caller, including natural teleporter activation or sound; retain bounded original-raster frontend and independent controlled map lifecycle.",
+      "next_action": "Preserve tested blue Warp overall appearance pass; resolve recorded seven-pixel apex/projection residual for exact geometry, then natural teleport/context and device behavior. Other six colors need independent visual reviews.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "2026-10-09: bounded native/current authored comparison and independent controlled map lifecycle pass; full original context/device remains open. Warp objects have one STILL frame but a separate local UV clock."
@@ -16779,7 +16809,7 @@
         "changing_gpu_samples": 4,
         "binary_sha256": "c2ad8c9545f4aa6345ef3496e6f6347b09b737c75cb90205b8656a1f5db15bdf"
       },
-      "work_queue_status": "thin_bounded_frontend_and_controlled_map_pass_context_open",
+      "work_queue_status": "visual_pass_followups",
       "authored_saved_map_smoke": {
         "manifest": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261009/warp-blue-authored-sector/manifest.json",
         "sha256": "be47bec3d9155c374cfbd0cac35feb704c03fe1472988aeece66ab579f073205",
@@ -16795,7 +16825,49 @@
         "frames": 24,
         "distinct_scene_frames": 16,
         "scope": "Original saved actor/terrain/lights and areaambient; full native scene A/B/story/background/teleport remain unverified."
-      }
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root and lane independent image inspections",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Overall isolated blue Warp appearance for the recorded synthetic map and pinned Metal build, against original executable software raster reference. Triangular form, blue/white cloudy perimeter, four changing atlas states and alpha floor integration reviewed. This is actual modern-port review, not shared-original-raster frontend parity.",
+        "finding": [
+          "Same triangular portal form and recognizable blue/white perimeter.",
+          "Cloud detail changes across four successive U-quarter states.",
+          "Interior alpha retains floor detail without an opaque blue rectangle.",
+          "Modern owner moves and deletes; exact clean-floor restoration."
+        ],
+        "report": "recon/retail_asm/runtime/effects/warp-blue-current-visual/visual-review.json",
+        "sha256": "ed7a2303c811e98272934e4c875fcb6649e1fb98a21b2ca78b2eb21689a32df3",
+        "note": "docs/vfx/forensics/WARP_BLUE_VISUAL_20261010.md",
+        "position_or_scale_fitted": false,
+        "phase_search": false,
+        "open_findings": [
+          {
+            "category": "renderer_projection",
+            "status": "open",
+            "native_effect_bounds_in_modern_viewport": [
+              268,
+              64,
+              369,
+              195
+            ],
+            "modern_effect_bounds": [
+              269,
+              57,
+              369,
+              195
+            ],
+            "apex_difference_pixels": -7,
+            "native_height_pixels": 131,
+            "modern_height_pixels": 138,
+            "height_difference_percent": 5.343511450381677,
+            "note": "No fitted shift, scale or geometry correction applied. This residual blocks exact geometry/device parity, not the recorded overall appearance verdict."
+          }
+        ]
+      },
+      "visual_fidelity_scope": "Overall isolated blue Warp appearance for the recorded synthetic map and pinned Metal build, against original executable software raster reference. Triangular form, blue/white cloudy perimeter, four changing atlas states and alpha floor integration reviewed. This is actual modern-port review, not shared-original-raster frontend parity."
     },
     {
       "index": 114,
@@ -18450,15 +18522,17 @@
       "retail_type_id": "0xad92bd35",
       "asset": "magic\\Quicksilver.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: strict Quicksilver authored profile admission and typed Speed-family matrix/frame/blend policy; authored nonuniform emitter keys and blue color curve preserved. Near-zero draw rejection follows render RNG sampling."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -18467,12 +18541,47 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "runtime_dispatch": "exact_quicksilver_partsysemittance_and_animated_base_profile_verified_map_lifecycle",
+      "next_action": "Retain particle-only and controlled map passes; verify independent production emitter/base matrix submission, full base lighting/raster and actual-port/native visual pair. Natural caster/context/device remain separate.",
       "notes": [
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "2026-10-10: particle-only shared original software raster comparison with native-decoded authored emitter matrices as common inputs; no full-effect appearance acceptance."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "quicksilver_particle_frontend_bridge_relative",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/quicksilver-particle-merge-final/manifest.json",
+          "sha256": "a074542fc38e0525f54511a8c09eaab262177c974cd6fad3bee36166ea21600c",
+          "scope": "Particle-only native whole parser/Pulse/sample/#geometry versus compiled production parser/State/SubmitPartSys: 85614 fields,2109 draws,112 zero-scale rejections and5 nonempty repeated exact original-software color/depth pairs. Native-decoded emitter poses are common inputs.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "independent production emitter/base matrix submission",
+            "full base illumination/raster and actual Metal/native visual comparison",
+            "natural caster/context/device"
+          ],
+          "independent_raw_and_native_FIX_center_checks": 4218
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/quicksilver-map-final/manifest.json",
+        "sha256": "ae8ee36b6071c089175578909648e46a24e46620687928549df1d0e3456a6574",
+        "status": "pass",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false,
+        "observations": 8,
+        "frames": 48,
+        "distinct_active_frames": 31,
+        "capacity": 31,
+        "quality": 0,
+        "binary_sha256": "52748e34f6bc58b6454b17a0996bb8ae35354df3c79d0ef1125cce3b1136d8ff"
+      },
+      "work_queue_status": "bounded_particle_frontend_and_controller_map_pass_base_visual_open"
     },
     {
       "index": 138,

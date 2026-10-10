@@ -50,7 +50,9 @@ struct Owner{uint32_t ObjId()const{return 0xad92bd36u;}int GetState()const{retur
 struct Imagery{bool HasRetailMightPartSysProfile()const{return false;}
  bool HasRetailImmortalmightPartSysProfile()const{return false;}
  bool HasRetailFmasteryPartSysProfile()const{return false;}
+ bool speed_partsys_profile=true,quicksilver_partsys_profile=false;
  bool HasRetailSpeedPartSysProfile()const{return true;}
+ SPEED_FAMILY_METHOD
  bool HasCombatFlashStart1PartSysProfile()const{return false;}
  TTextureHandle GetTextureHandle(int index){if(index!=1)std::abort();return 1;}};
 struct TRenderer{std::vector<SQuadDrawItem>quads;void SubmitFxQuad(const SQuadDrawItem&q){quads.push_back(q);}};
@@ -100,7 +102,8 @@ def run(executable,archive,output):
     asset=read_asset(data);asset['name']='speed';f=NativeSpeed(executable,asset);punctuation(f);f.initialize(0)
     native=f.state_trace(90)
     production=(ROOT/'src/3dimage.cpp').read_text();body=fn(production,'int32_t T3DAnimator::SubmitPartSys(')
-    cpp=PRELUDE+'\n'+body+'\n'+MAIN
+    family=fn((ROOT/'src/3dimage.h').read_text(),'bool HasRetailSpeedFamilyPartSysProfile(')
+    cpp=PRELUDE.replace('SPEED_FAMILY_METHOD',family)+'\n'+body+'\n'+MAIN
     source=output/'packet_driver.cpp';source.write_text(cpp);binary=output/'packet_driver'
     command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer',
         '-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(source),

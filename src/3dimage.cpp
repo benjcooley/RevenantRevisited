@@ -544,6 +544,48 @@ bool T3DImagery::ValidateRetailSpeedPartSysProfile()
     return materials[0].texture==-1 && materials[1].texture==0 && materials[2].texture==1;
 }
 
+bool T3DImagery::ValidateRetailQuicksilverPartSysProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+       GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=3 ||
+       NumMaterials()!=3 || NumTextures()!=2 || NumTags()!=2 || numverts!=8 || numfaces!=4) return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    constexpr const char* suffix="magic/quicksilver.i3d";const size_t length=std::strlen(suffix);
+    if(path.size()<length || path.compare(path.size()-length,length,suffix) ||
+       (path.size()!=length && path[path.size()-length-1]!='/'))return false;
+    const auto fingerprint=[](const void* data,size_t length){
+        uint64_t h=1469598103934665603ull;const auto* bytes=static_cast<const uint8_t*>(data);
+        for(size_t i=0;i<length;++i){h^=bytes[i];h*=1099511628211ull;}return h;
+    };
+    constexpr const char* names[3]={"speed","#speedflare","#speedo"};
+    constexpr int keycounts[3]={9,38,6};
+    constexpr uint64_t keys[3]={0x5eee8f50e1e1f5e6ull,0x9d24a4c7a3977790ull,0xf3ca8b067ae3b3ecull};
+    for(int i=0;i<3;++i){const auto& o=objects[i];
+        if(std::strcmp(o.name,names[i]) || o.parent[0]!=-1 || o.material!=i ||
+           o.numverts!=(i?4:0) || o.numfaces!=(i?2:0) || !o.anikeys[0] ||
+           o.numanikeys[0]!=keycounts[i] || fingerprint(o.anikeys[0],keycounts[i]*sizeof(SAniKey32))!=keys[i])return false;
+        for(int slot=0;slot<3;++slot)if(o.numtexfaces[slot]!=(slot==i && i?2:0))return false;
+    }
+    const auto& blend=*GetTag(0);const auto& particles=*GetTag(1);
+    constexpr const char* parameters="obj=(#speedflare),particle=#speedo,pps=30,lifespan=20:25,scale=[0:1.5,100:0],localrotation=[0:(0,0,0),100:(0,-360,0)],color=[0:(5,80,230),25:(10,75,190),100:(1,25,70)],emittersize=2,relvel=0.1";
+    if(blend.state!=0 || blend.frame!=1 || !blend.name || !blend.str || std::strcmp(blend.name,"blendcont") || std::strcmp(blend.str,"litaddz") ||
+       particles.state!=0 || particles.frame!=5 || !particles.name || !particles.str || std::strcmp(particles.name,"partsys") || std::strcmp(particles.str,parameters))return false;
+    for(int i=0;i<2;++i){const auto& t=textures[i];const auto& p=t.desc.pixelFormat;
+        if(t.desc.width!=(i?32:64) || t.desc.height!=(i?32:64) || t.numframes!=1 ||
+           p.dwRGBBitCount!=16 || p.dwRBitMask!=0xf800 || p.dwGBitMask!=0x07e0 || p.dwBBitMask!=0x001f || p.dwRGBAlphaBitMask)return false;
+    }
+    constexpr uint64_t material_hashes[3]={0x8237bf10191e1de0ull,0xe82f1a8b1ab2978dull,0x2d6e7c4f0d54f390ull};
+    for(int i=0;i<3;++i)if(fingerprint(&materials[i].matdesc.diffuse,17*sizeof(float))!=material_hashes[i])return false;
+    constexpr uint64_t vertex_hashes[2]={0xbfaaf45209499646ull,0x7795981c8f84ffe0ull};
+    constexpr uint16_t face_indices[6]={2,3,0,1,2,0};
+    for(int i=1;i<3;++i){S3DVertex vertices[4]{};S3DFace faces[2]{};
+        GetObjVerts(i,vertices,0,0);GetObjFaces(i,faces);
+        if(fingerprint(vertices,sizeof(vertices))!=vertex_hashes[i-1] || std::memcmp(faces,face_indices,sizeof(faces)))return false;
+    }
+    return materials[0].texture==-1 && materials[1].texture==0 && materials[2].texture==1;
+}
+
 void T3DImagery::InitializePartSysTracks()
 {
     partsys_tracks.clear();
@@ -552,6 +594,7 @@ void T3DImagery::InitializePartSysTracks()
     immortalmight_partsys_profile = ValidateRetailImmortalmightPartSysProfile();
     fmastery_partsys_profile = ValidateRetailFmasteryPartSysProfile();
     speed_partsys_profile = ValidateRetailSpeedPartSysProfile();
+    quicksilver_partsys_profile = ValidateRetailQuicksilverPartSysProfile();
     combatflash_start1_partsys_profile = ValidateCombatFlashStart1PartSysProfile();
     for (int32_t i = 0; i < NumTags(); ++i)
     {
@@ -618,7 +661,7 @@ void T3DImagery::InitializePartSysTracks()
         for (int32_t j = 0; j < NumTags() && track.supported; ++j)
         {
             const char* name = GetTag(j)->name;
-            if ((gold_partsys_profile || combatflash_start1_partsys_profile || speed_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
+            if ((gold_partsys_profile || combatflash_start1_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
             if (name && stricmp(name, "partsys") && stricmp(name, "scrolltex") &&
                 stricmp(name, "play") && stricmp(name, "beg") && stricmp(name, "end"))
             {
@@ -1492,6 +1535,7 @@ void T3DImagery::ClearMesh()
     immortalmight_partsys_profile = false;
     fmastery_partsys_profile = false;
     speed_partsys_profile = false;
+    quicksilver_partsys_profile = false;
     retail_punch_keys = false;
     retail_mpappear_start_profile = false;
     retail_shadowfist_profile = false;
@@ -1938,7 +1982,7 @@ bool T3DImagery::GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t 
                 // visibly goes second-last -> first -> held first.
                 // Actual retail4096bc JGE is inclusive. Opt in only the
                 // exact audited Punch, Appear, Sfist and Wborn keys; others keep their policy.
-                const bool reached = (retail_punch_keys || retail_mpappear_start_profile || retail_shadowfist_profile || retail_warriorborn_profile || retail_teleportation_profile || might_partsys_profile || immortalmight_partsys_profile || fmastery_partsys_profile || speed_partsys_profile) ? frame <= curframe + frames : frame < curframe + frames;
+                const bool reached = (retail_punch_keys || retail_mpappear_start_profile || retail_shadowfist_profile || retail_warriorborn_profile || retail_teleportation_profile || might_partsys_profile || immortalmight_partsys_profile || fmastery_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile) ? frame <= curframe + frames : frame < curframe + frames;
                 if ((num <= 0) || reached)
                 {
                     GetAniKey32(curkey, keys, numkeys,
@@ -3067,7 +3111,7 @@ struct T3DAnimator::SPartSysControllers
             (owner.ObjId()==0x5be39ae0u && owner.GetState()==0 && animator.Get3DImagery()->HasRetailMightPartSysProfile()) ||
             (owner.ObjId()==0x82aeb30fu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailImmortalmightPartSysProfile()) ||
             (owner.ObjId()==0xb0e024dfu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailFmasteryPartSysProfile()) ||
-            (owner.ObjId()==0xad92bd36u && owner.GetState()==0 && animator.Get3DImagery()->HasRetailSpeedPartSysProfile()) ||
+            (owner.GetState()==0 && animator.Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(owner.ObjId())) ||
             (owner.ObjId() == 0xad92bd29u && owner.GetState() == 0)) ? animator.GetFrame() : owner.GetFrame();
         // Retail Initialize obtains object zero's origin before resolving the
         // authored emitter list. Keep that distinct from its first emitter.
@@ -3085,8 +3129,8 @@ struct T3DAnimator::SPartSysControllers
             // stretched world matrix. The simulation adds live owner XYZ itself.
             if (!bone || !animator.GetObjectMatrix(object, &matrix)) continue;
             hmm_vec3 speed_position{},speed_scale{};
-            const bool speed_pose=owner.ObjId()==0xad92bd36u && owner.GetState()==0 &&
-                animator.Get3DImagery()->HasRetailSpeedPartSysProfile() && object==1;
+            const bool speed_pose=owner.GetState()==0 &&
+                animator.Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(owner.ObjId()) && object==1;
             if(speed_pose && !animator.SpeedEmitterLocalMatrix(matrix,&speed_position,&speed_scale))continue;
             auto& pose = inputs.emitters[i];
             std::memcpy(pose.matrix.data(), matrix.Elements, sizeof(matrix));
@@ -3119,11 +3163,11 @@ void T3DAnimator::RefreshPartSysControllers()
     const bool might = id==0x5be39ae0u && imagery->might_partsys_profile && current_state==0;
     const bool immortalmight = id==0x82aeb30fu && imagery->immortalmight_partsys_profile && current_state==0;
     const bool fmastery=id==0xb0e024dfu && imagery->fmastery_partsys_profile && current_state==0;
-    const bool speed=id==0xad92bd36u && imagery->speed_partsys_profile && current_state==0;
+    const bool speed=imagery->HasRetailSpeedFamilyPartSysProfile(id) && current_state==0;
     if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && !speed && (id < 0xd0c0f036u || id > 0xd0c0f039u))
     {
         if (!state.initialized)
-            log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only audited water, Goldp, CombatFlash start1 and exact Might/Immortalmight/Fmastery/Speed profiles are enabled",
+            log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only audited water, Goldp, CombatFlash start1 and exact Might/Immortalmight/Fmastery/Speed/Quicksilver profiles are enabled",
                      inst->GetTypeName(), id, inst->GetMapIndex());
         state.unsupported = true;
         state.controllers.clear();
@@ -3164,7 +3208,7 @@ void T3DAnimator::RefreshPartSysControllers()
             }
         log_info("[blendcont] init type=%s id=%08x map_index=%d state=0 tagframe=%d mode=%d objects=%d profile=%s",
                  inst->GetTypeName(), id, inst->GetMapIndex(), gold ? 5 : speed ? 1 : 0,
-                 speed ? 80 : 16,NumObjects(),gold ? "gold" : speed ? "speed" : "combatflash-start1");
+                 speed ? 80 : 16,NumObjects(),gold ? "gold" : speed ? (id==0xad92bd35u ? "quicksilver" : "speed") : "combatflash-start1");
     }
     for (const auto& track : imagery->partsys_tracks)
     {
@@ -3486,8 +3530,8 @@ bool T3DAnimator::FmasteryBaseMeshWorldMatrix( hmm_mat4& world)
 
 bool T3DAnimator::SpeedEmitterLocalMatrix(hmm_mat4& matrix,hmm_vec3* output_position,hmm_vec3* output_scale)
 {
-    if(!inst || inst->ObjId()!=0xad92bd36u || inst->GetState()!=0 ||
-       !Get3DImagery()->HasRetailSpeedPartSysProfile() || !animobjs.Used(1))return false;
+    if(!inst || inst->GetState()!=0 ||
+       !Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) || !animobjs.Used(1))return false;
     hmm_vec3 position{},rotation{},scale{};
     auto* imagery=Get3DImagery();imagery->SetPrevState(-1,0);
     // Original controller Pulse reads the animator's cached integer frame.
@@ -3500,8 +3544,8 @@ bool T3DAnimator::SpeedEmitterLocalMatrix(hmm_mat4& matrix,hmm_vec3* output_posi
 
 bool T3DAnimator::SpeedBaseMeshBlend(int32_t object,uint32_t& blend) const
 {
-    if(!inst || inst->ObjId()!=0xad92bd36u || inst->GetState()!=0 ||
-       !Get3DImagery()->HasRetailSpeedPartSysProfile() || !partsys_controllers ||
+    if(!inst || inst->GetState()!=0 ||
+       !Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) || !partsys_controllers ||
        partsys_controllers->unsupported || object!=1 || !animobjs.Used(1) ||
        !(animobjs[1]->flags&OBJ3D_BLEND))return false;
     blend=animobjs[1]->blend;return blend==80u;
@@ -3587,8 +3631,8 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // Native Speed RenderObject40a9e7..9f3 skips geometry when its
             // CalcObjectMatrix scale gate40a591..5c1 returns0. Sampling still
             // happens first, preserving its three render-time RNG calls.
-            if(inst->ObjId()==0xad92bd36u && inst->GetState()==0 &&
-               Get3DImagery()->HasRetailSpeedPartSysProfile() && track.prototype==2 &&
+            if(inst->GetState()==0 &&
+               Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2 &&
                sample.scale<=9.999999747378752e-6f)continue;
             hmm_mat4 matrix;
             MtxClear(&matrix);
@@ -3603,8 +3647,8 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                 Get3DImagery()->HasRetailImmortalmightPartSysProfile() && track.prototype==0;
             const bool fmastery=inst->ObjId()==0xb0e024dfu && inst->GetState()==0 &&
                 Get3DImagery()->HasRetailFmasteryPartSysProfile() && track.prototype==0;
-            const bool speed=inst->ObjId()==0xad92bd36u && inst->GetState()==0 &&
-                Get3DImagery()->HasRetailSpeedPartSysProfile() && track.prototype==2;
+            const bool speed=inst->GetState()==0 &&
+                Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2;
             if (might || immortalmight || fmastery || speed || inst->ObjId() == 0xd0c0f035u ||
                 (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0 &&
                  Get3DImagery()->HasCombatFlashStart1PartSysProfile() && track.prototype == 0))

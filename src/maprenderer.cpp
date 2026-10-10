@@ -1278,7 +1278,8 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         {++stats.mesh_skipped;return;} // modified profiles do not draw a substitute flare
         if(oi->ObjId()==0x5be39ae0u && (state!=0 || !meshimg->HasRetailMightPartSysProfile()))
         {++stats.mesh_skipped;return;} // exactprofile only, no staticprototype substitute
-        if(oi->ObjId()==0xad92bd36u && (state!=0 || !meshimg->HasRetailSpeedPartSysProfile()))
+        if((oi->ObjId()==0xad92bd36u || oi->ObjId()==0xad92bd35u) &&
+           (state!=0 || !meshimg->HasRetailSpeedFamilyPartSysProfile(oi->ObjId())))
         {++stats.mesh_skipped;return;}
         // The animator says how opaque the object draws this frame. A
         // character that is OF_INVISIBLE, or faded below retail's threshold,
@@ -1449,7 +1450,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             (oi->ObjId()==0xad92bd40u && meshimg->HasRetailTeleportationProfile()) ||
             (oi->ObjId()==0x82aeb30fu && meshimg->HasRetailImmortalmightPartSysProfile()) ||
             (oi->ObjId()==0xb0e024dfu && meshimg->HasRetailFmasteryPartSysProfile()) ||
-            (oi->ObjId()==0xad92bd36u && meshimg->HasRetailSpeedPartSysProfile()) ||
+            meshimg->HasRetailSpeedFamilyPartSysProfile(oi->ObjId()) ||
             (oi->ObjId()==0x5be39ae0u && meshimg->HasRetailMightPartSysProfile());
         SHelperMeshSubmit blended = {};
         if (warp_atlas)
