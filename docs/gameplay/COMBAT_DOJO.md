@@ -80,10 +80,11 @@ only).
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
 | C1 | CalculateDamage | `0x4c4860` | `TCharacter::CalculateDamage` | [x] 40 cases x 594 inputs (characters; the player's resist/armour slots open) |
-| C2 | Damage (impact / death choice) | `0x4c4950` | `TCharacter::Damage` | [ ] |
-| C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [x] 5143/5143 (`melee-attack-choice`); AI() as a whole is C3b |
+| C2 | Damage (impact / death choice), TObjectInstance::Damage, TPlayer Killed / Died | `0x4c4950` `0x46e970` `0x518ed0` `0x518f90` | `TCharacter::Damage` and its parts | [x] 1137/1137 (`melee-damage`); the floating damage number waits for a post-character overlay (COMBAT_HIT.md §9.2) |
+| C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [x] 5143/5143 (`melee-attack-choice`) |
 | C4 | hit resolution: ResolveAttack → ResolveHit (to-hit, tiers), OnAttacked | `0x4c6dd0` `0x4c62b0` | same | [x] 7855/7855 (`melee-hit`) |
-| C5 | block / dodge / impact / dead resolvers | `0x4d2e30` `0x4d3150` `0x4c74b0` `0x4c7810` `0x4c77a0` | same | [ ] |
+| C5 | block / dodge / impact / dead resolvers, EffectCombatFlash | `0x4d2e30` `0x4d30f0` `0x4d3150` `0x4c74b0` `0x4c7810` `0x4c77a0` `0x4c8500` | same | [x] 2100/2100 (`melee-resolvers`); the eight dodge controls (commands 0x30-0x37) are input work |
+| C3b | the AI as a whole: acquisition, the attack branch, the move branch, the waypoint, AI_PerMonster (non-boss) | `0x4c8b60` `0x4c9b70` | `TCharacter::AI`, `AIAttack`, `AIMove`, `NearestWaypoint`, `AIPerMonster` | [x] 925/925 (`melee-ai`); bosses (Baez, Solifuge, Jhaga, Yhagoro) are BURNDOWN phase H; Wander `0x4c9790` open (M9) |
 | C6 | Pulse: regen, fatigue, poison, chains, death | `0x4c1bb0`, TPlayer `0x518aa0` | `TCharacter::Pulse`, `TPlayer::Pulse` | [ ] |
 | C7 | experience and level-up | `0x51a630` | `AwardKillExp` / `AwardSkillExp` | [ ] |
 
