@@ -1117,10 +1117,10 @@ bool TPlayer::HasTalismans(char *talismans)
         quanttal[x] = 0;
 
     // now parse the inventory and count how many of each talisman there are
-    // find their spell pouch
+    // find their spell pouch (retail 0x0051b7c0 tries both names)
     TObjectInstance* pouch = FindObjInventory("Spell Pouch");
     if (!pouch)
-        TObjectInstance* pouch = FindObjInventory("spellpouch");
+        pouch = FindObjInventory("spellpouch");
     if (pouch)
     {
         for(x = 0; x < TalismanClass.NumTypes(); ++x)
