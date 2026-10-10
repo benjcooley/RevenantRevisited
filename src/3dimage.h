@@ -238,7 +238,9 @@ class T3DImagery : public TObjectImagery
     bool immortalmight_partsys_profile = false;
     bool fmastery_partsys_profile = false;
     bool speed_partsys_profile = false;
+    bool quicksilver_partsys_profile = false;
     bool ValidateRetailSpeedPartSysProfile();
+    bool ValidateRetailQuicksilverPartSysProfile();
     bool ValidateRetailFmasteryPartSysProfile();
     bool ValidateRetailImmortalmightPartSysProfile();
     bool ValidateRetailMightPartSysProfile();
@@ -331,6 +333,10 @@ class T3DImagery : public TObjectImagery
     bool HasRetailImmortalmightPartSysProfile() const { return immortalmight_partsys_profile; }
     bool HasRetailFmasteryPartSysProfile() const { return fmastery_partsys_profile; }
     bool HasRetailSpeedPartSysProfile() const { return speed_partsys_profile; }
+    bool HasRetailQuicksilverPartSysProfile() const { return quicksilver_partsys_profile; }
+    bool HasRetailSpeedFamilyPartSysProfile(uint32_t type_id) const
+    { return (type_id==0xad92bd36u && speed_partsys_profile) ||
+             (type_id==0xad92bd35u && quicksilver_partsys_profile); }
     bool HasRetailPunchProfile() const { return retail_punch_keys; }
     bool HasRetailMPAppearStartProfile() const { return retail_mpappear_start_profile; }
     bool HasRetailShadowfistProfile() const { return retail_shadowfist_profile; }

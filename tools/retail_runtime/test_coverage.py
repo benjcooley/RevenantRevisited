@@ -48,7 +48,8 @@ class CoverageTests(unittest.TestCase):
         for type_id in ('0xad92bc28','0xad92bc37','0xad92bd36'):
             row=self.coverage['types'][type_id]
             self.assertEqual(row['gates']['pixel_frontend']['status'],'shared_original_raster_pass')
-            self.assertEqual(row['gates']['visual_review']['status'],'pending')
+            if not row['ledger_acceptance']['visual_fidelity']:
+                self.assertEqual(row['gates']['visual_review']['status'],'pending')
 
     def test_fireball_route_requires_actual_moving_distinct_endpoint_scenario(self):
         control=self.coverage['types']['0x63fd382a']['control']

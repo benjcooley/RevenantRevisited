@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Strict shipped Speed admission and integer keys vs original retail decoder.
+"""Strict shipped Quicksilver admission and integer keys vs original retail decoder.
 
 Actual production profile/decoder bodies execute against immutable decoded
 asset records. Mutation cases use independent copies; no engine file is edited.
@@ -13,7 +13,8 @@ import struct
 import subprocess
 import zipfile
 
-from speed_controller_preflight import NativeSpeed, read_asset, ROOT, SPEED_SHA
+from speed_controller_preflight import NativeSpeed, read_asset, ROOT
+QUICKSILVER_SHA = "07c6a0a48c32d891ccd29367b12a882a4244a3eea004e4b06a7c2dee7aa609b4"
 from software_probe import RETAIL_SHA
 
 
@@ -67,9 +68,9 @@ class T3DImagery{public:
  bool meshinitialized=true,null_filename=false;
  bool retail_punch_keys=false,retail_mpappear_start_profile=false,retail_shadowfist_profile=false,
  retail_warriorborn_profile=false,retail_teleportation_profile=false,might_partsys_profile=false,
- immortalmight_partsys_profile=false,fmastery_partsys_profile=false,speed_partsys_profile=false,quicksilver_partsys_profile=false;
+ immortalmight_partsys_profile=false,fmastery_partsys_profile=false,quicksilver_partsys_profile=false,speed_partsys_profile=false;
  int version=0,flags=0,numverts=0,numfaces=0,nstates=0,frames=0,aflags=0,nobj=0,nmat=0,ntex=0,ntags=0;
- std::string path="Imagery/Magic/Speed.I3D";
+ std::string path="Imagery/Magic/Quicksilver.I3D";
  std::array<S3DObj,3>objects;std::array<S3DTex,2>textures;std::array<S3DMat,3>materials;
  std::array<S3DTag,2>tags;std::array<std::string,2>tag_names,tag_values;
  std::array<int,3>parent{},keycount{};std::array<void*,3>keyptr{};
@@ -82,9 +83,9 @@ class T3DImagery{public:
  int NumTags(){return ntags;}S3DTag*GetTag(int i){return &tags.at(i);}
  void GetObjVerts(int i,S3DVertex*out,int=0,int=0){memcpy(out,verts.at(i).data(),verts.at(i).size()*sizeof(S3DVertex));}
  void GetObjFaces(int i,S3DFace*out){memcpy(out,faces.at(i).data(),faces.at(i).size()*sizeof(S3DFace));}
- void Select(){speed_partsys_profile=ValidateRetailSpeedPartSysProfile();}
+ void Select(){quicksilver_partsys_profile=ValidateRetailQuicksilverPartSysProfile();}
  void*GetBody(){assert(false);return nullptr;}bool InitializeMesh(S3DImageryBody*){assert(false);return false;}
- bool ValidateRetailSpeedPartSysProfile();
+ bool ValidateRetailQuicksilverPartSysProfile();
  bool GetUninterpolatedAniKey(int32_t,int32_t,int32_t,hmm_vec3&,hmm_vec3&,hmm_vec3&);
 };
 uint32_t U(const std::vector<unsigned char>&b,size_t p){assert(p+4<=b.size());uint32_t v;memcpy(&v,b.data()+p,4);return v;}
@@ -120,14 +121,14 @@ MAIN = r'''
 int main(int argc,char**argv){assert(argc==2);static_assert(sizeof(SAniKey32)==4);static_assert(sizeof(S3DVertex)==32);
  static_assert(sizeof(S3DFace)==6);static_assert(sizeof(S3DMaterial)==80);
  std::ifstream f(argv[1],std::ios::binary);const std::vector<unsigned char>b((std::istreambuf_iterator<char>(f)),{});
- T3DImagery im;Load(im,b);im.Select();assert(im.speed_partsys_profile);puts("C accept literal");
+ T3DImagery im;Load(im,b);im.Select();assert(im.quicksilver_partsys_profile);puts("C accept literal");
  auto reject=[&](const char*category,int index,auto mutate){T3DImagery bad;Load(bad,b);mutate(bad);
-  bad.Select();assert(!bad.speed_partsys_profile);printf("C reject %s %d\n",category,index);};
+  bad.Select();assert(!bad.quicksilver_partsys_profile);printf("C reject %s %d\n",category,index);};
  int n=0;
  reject("path",n++,[](auto&v){v.null_filename=true;});reject("path",n++,[](auto&v){v.path="";});
- for(const char*p:{"notmagic/speed.i3d","magic/speed.i3d.bak","magic/quicksilver.i3d","magic/unverified.i3d"})reject("path",n++,[&](auto&v){v.path=p;});
- for(const char*p:{"magic\\Speed.i3d","MAGIC/SPEED.I3D","/assets/Imagery/Magic/Speed.i3d"}){
-  T3DImagery good;Load(good,b);good.path=p;good.Select();assert(good.speed_partsys_profile);puts("C accept path");}
+ for(const char*p:{"notmagic/quicksilver.i3d","magic/quicksilver.i3d.bak","magic/speed.i3d","magic/unverified.i3d"})reject("path",n++,[&](auto&v){v.path=p;});
+ for(const char*p:{"magic\\Quicksilver.i3d","MAGIC/QUICKSILVER.I3D","/assets/Imagery/Magic/Quicksilver.i3d"}){
+  T3DImagery good;Load(good,b);good.path=p;good.Select();assert(good.quicksilver_partsys_profile);puts("C accept path");}
  reject("header",0,[](auto&v){v.version=2;});reject("header",1,[](auto&v){v.flags^=1;});
  reject("header",2,[](auto&v){v.nstates=2;});reject("header",3,[](auto&v){v.frames=29;});
  reject("header",4,[](auto&v){v.aflags^=1;});reject("header",5,[](auto&v){v.nobj=2;});
@@ -160,8 +161,8 @@ int main(int argc,char**argv){assert(argc==2);static_assert(sizeof(SAniKey32)==4
  SAniKey32 test[6]={};for(int i=0;i<3;++i){test[i].code=8+i;test[i].value=64;test[3+i].code=8+i;test[3+i].value=128;}
  T3DImagery synthetic;synthetic.flags=I3D_ANIKEY32;synthetic.nstates=1;synthetic.frames=3;int count=6;void*ptr=test;
  synthetic.objects[0].numanikeys=&count;synthetic.objects[0].anikeys=&ptr;hmm_vec3 p,r,s;
- synthetic.speed_partsys_profile=false;assert(synthetic.GetUninterpolatedAniKey(0,0,1,p,r,s)&&s.X==.5f);puts("B default_half_open");
- synthetic.speed_partsys_profile=true;assert(synthetic.GetUninterpolatedAniKey(0,0,1,p,r,s)&&s.X==.25f);puts("B admitted_inclusive");
+ synthetic.quicksilver_partsys_profile=false;assert(synthetic.GetUninterpolatedAniKey(0,0,1,p,r,s)&&s.X==.5f);puts("B default_half_open");
+ synthetic.quicksilver_partsys_profile=true;assert(synthetic.GetUninterpolatedAniKey(0,0,1,p,r,s)&&s.X==.25f);puts("B admitted_inclusive");
  for(int i=0;i<3;++i)for(int frame=0;frame<30;++frame){assert(im.GetUninterpolatedAniKey(i,0,frame,p,r,s));
   printf("P %d %d %.9g %.9g %.9g %.9g %.9g %.9g %.9g %.9g %.9g\n",i,frame,p.X,p.Y,p.Z,r.X,r.Y,r.Z,s.X,s.Y,s.Z);}
 }
@@ -176,7 +177,7 @@ def run(executable, archive, output):
     body = (ROOT/'src/3dimagebody.h').read_text()
     render = (ROOT/'src/render3d_types.h').read_text()
     signatures = ('static inline int32_t SkipAniKey32(', 'static inline void GetAniKey32(',
-                  'bool T3DImagery::ValidateRetailSpeedPartSysProfile()',
+                  'bool T3DImagery::ValidateRetailQuicksilverPartSysProfile()',
                   'bool T3DImagery::GetUninterpolatedAniKey(')
     methods = {s:function(source,s) for s in signatures}
     prefixes = ('SMALLKEY','ANIKEY32_','ANIFLAG32_','ANICODE32_','ANIKEY_POSSCALE','ANIKEY_ANGSCALE','I3D_ANIKEY32')
@@ -189,17 +190,17 @@ def run(executable, archive, output):
         members = {n.lower():n for n in z.namelist()}
         class_bytes = z.read(members['class.def'])
         section = re.search(r'CLASS\s+"EFFECT"(.*?)(?=\bCLASS\s+"|\Z)',class_bytes.decode('latin1'),re.S)[1]
-        binding = re.findall(r'^\s*"speed"\s+"([^\"]+)"\s+(0x[0-9a-fA-F]+)',section,re.M)
-        if binding != [('magic\\Speed.i3d','0xad92bd36')]:
-            raise AssertionError('Exact CLASS EFFECT Speed binding changed')
-        member = members['imagery/magic/speed.i3d']
+        binding = re.findall(r'^\s*"quicksilver"\s+"([^\"]+)"\s+(0x[0-9a-fA-F]+)',section,re.M)
+        if binding != [('magic\\Quicksilver.i3d','0xad92bd35')]:
+            raise AssertionError('Exact CLASS EFFECT Quicksilver binding changed')
+        member = members['imagery/magic/quicksilver.i3d']
         asset_bytes = z.read(member)
-    if sha(asset_bytes) != SPEED_SHA or sha(executable.read_bytes()) != RETAIL_SHA:
-        raise ValueError('Exact Speed asset or original executable changed')
+    if sha(asset_bytes) != QUICKSILVER_SHA or sha(executable.read_bytes()) != RETAIL_SHA:
+        raise ValueError('Exact Quicksilver asset or original executable changed')
     asset = read_asset(asset_bytes)
-    asset.update(name='speed',class_definition=binding,archive_member=member)
+    asset.update(name='quicksilver',class_definition=binding,archive_member=member)
     (output/'asset-triage.json').write_text(json.dumps([asset],indent=2)+'\n')
-    asset_input = output/'speed.asset-input'
+    asset_input = output/'quicksilver.asset-input'
     asset_input.write_bytes(asset_bytes)
     generated = output/'production-profile-decoder.cpp'
     generated.write_text(PRELUDE+'\n'+constants+'\n'+records+'\n'+CLASS+'\n'+'\n'.join(methods.values())+'\n'+MAIN)
@@ -248,7 +249,7 @@ def run(executable, archive, output):
         key=c['outcome']+':'+c['category']
         categories[key]=categories.get(key,0)+1
     report = dict(status='fail' if errors else 'pass',error_count=len(errors),errors=errors,
-        type_id='0xad92bd36',asset=member,asset_sha256=SPEED_SHA,retail_sha256=RETAIL_SHA,
+        type_id='0xad92bd35',asset=member,asset_sha256=QUICKSILVER_SHA,retail_sha256=RETAIL_SHA,
         class_def_sha256=sha(class_bytes),source_sha256=pinned,
         source_span_sha256={k:sha(v.encode()) for k,v in methods.items()},
         constants_sha256=sha(constants.encode()),record_definitions_sha256=sha(records.encode()),
@@ -261,7 +262,7 @@ def run(executable, archive, output):
         maximum_absolute_error=maximum,poses=poses,original_decoder='0x409430',
         original_key_conversion='0x4105d0',native_resource_boundaries=native.constructor,
         no_source_changes=True,new_rendered_ab_cases=0,accepted=False,full_accepted_rows=0,
-        scope='Actual strict Speed profile and integer decoder source bodies/constants/packed records compile and execute. Literal shipped keys/tags/materials/vertices/faces/descriptors supplied by decoded readonly resource interface; independent mutable copies reject changes. Original decoder/conversion vs all3x30x9TRS channels. Full InitializeMesh/GetAniKey interpolation/owner matrices/controller geometry/lighting/raster/Metal/caller acceptance separate.')
+        scope='Actual strict Quicksilver profile and integer decoder source bodies/constants/packed records compile and execute. Literal shipped keys/tags/materials/vertices/faces/descriptors supplied by decoded readonly resource interface; independent mutable copies reject changes. Original decoder/conversion vs all3x30x9TRS channels. Full InitializeMesh/GetAniKey interpolation/owner matrices/controller geometry/lighting/raster/Metal/caller acceptance separate.')
     (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n')
     return report
 

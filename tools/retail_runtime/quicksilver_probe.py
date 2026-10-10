@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Actual compiled SubmitPartSys versus native Speed sample/# geometry.
+"""Exact Quicksilver compiled SubmitPartSys versus native sample/# geometry.
 
 The modern raw-world Z packet is compared in its declared original MODELZ
 domain. Shared original projection/raster can isolate frontend differences;
@@ -16,6 +16,7 @@ import zipfile
 
 from speed_controller_preflight import NativeSpeed, ROOT, read_asset
 from speed_render_contract import punctuation
+from speed_state_compare import compare as compare_state
 from software_probe import save_rgb565_png
 from unicorn.x86_const import (UC_X86_REG_ESI,UC_X86_REG_EBX,UC_X86_REG_ESP,
                                UC_X86_REG_FPCW,UC_X86_REG_EIP)
@@ -46,12 +47,12 @@ struct SFxBatchKey{TTextureHandle texture=0;uint16_t pipeline_id=1;uint8_t blend
 struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};SFxBatchKey key;
  uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
 struct S3DVertex{hmm_vec3 pos,normal;float tu,tv;};
-struct Owner{uint32_t ObjId()const{return 0xad92bd36u;}int GetState()const{return 0;}};
+struct Owner{uint32_t ObjId()const{return 0xad92bd35u;}int GetState()const{return 0;}};
 struct Imagery{bool HasRetailMightPartSysProfile()const{return false;}
  bool HasRetailImmortalmightPartSysProfile()const{return false;}
  bool HasRetailFmasteryPartSysProfile()const{return false;}
- bool speed_partsys_profile=true,quicksilver_partsys_profile=false;
- bool HasRetailSpeedPartSysProfile()const{return true;}
+ bool speed_partsys_profile=false,quicksilver_partsys_profile=true;
+ bool HasRetailSpeedPartSysProfile()const{return false;}
  SPEED_FAMILY_METHOD
  bool HasCombatFlashStart1PartSysProfile()const{return false;}
  TTextureHandle GetTextureHandle(int index){if(index!=1)std::abort();return 1;}};
@@ -98,9 +99,19 @@ def sha(data):return hashlib.sha256(data).hexdigest()
 
 def run(executable,archive,output):
     output.mkdir(parents=True,exist_ok=True)
-    with zipfile.ZipFile(archive)as z:data=z.read('Imagery/Magic/speed.I3D')
-    asset=read_asset(data);asset['name']='speed';f=NativeSpeed(executable,asset);punctuation(f);f.initialize(0)
+    source_paths=('src/3dimage.cpp','src/3dimage.h','src/authoredpartsys.cpp','src/authoredpartsys.h','src/partsysdefinition.cpp','src/partsysdefinition.h','src/speedauthoredmatrix.h','src/goldauthoredmatrix.h','src/math3d.cpp','src/math3d.h')
+    pinned={p:sha((ROOT/p).read_bytes())for p in source_paths}
+    with zipfile.ZipFile(archive)as z:
+        member=next(n for n in z.namelist()if n.lower()=='imagery/magic/quicksilver.i3d');data=z.read(member)
+    asset=read_asset(data);asset['name']='quicksilver';
+    if asset['sha256']!='07c6a0a48c32d891ccd29367b12a882a4244a3eea004e4b06a7c2dee7aa609b4':raise ValueError('Exact shipped Quicksilver asset changed')
+    f=NativeSpeed(executable,asset);punctuation(f);initialization=json.loads(json.dumps(f.initialize(0)))
     native=f.state_trace(90)
+    (output/'asset-triage.json').write_text(json.dumps([asset],indent=2)+'\n')
+    (output/'native-init.json').write_text(json.dumps(initialization,indent=2)+'\n')
+    (output/'retail-state-trace.json').write_text(json.dumps(native,indent=2)+'\n')
+    state_compare=compare_state(output,output/'state-comparison')
+    if state_compare['status']!='pass':raise AssertionError('Full independent production state/RNG differs')
     production=(ROOT/'src/3dimage.cpp').read_text();body=fn(production,'int32_t T3DAnimator::SubmitPartSys(')
     family=fn((ROOT/'src/3dimage.h').read_text(),'bool HasRetailSpeedFamilyPartSysProfile(')
     cpp=PRELUDE.replace('SPEED_FAMILY_METHOD',family)+'\n'+body+'\n'+MAIN
@@ -201,22 +212,30 @@ def run(executable,archive,output):
     if not carry or not add:raise AssertionError('Original additive lookup table initialization failed')
     v.put_u32(0x670674,carry);v.put_u32(0x67067c,add)
     pairs=[];pixel_errors=[]
+    def raster(tick,label):
+        f.software.clear();v.call(0x417d60,(16,1),this=0x65a57c)
+        for draw in draws[tick]:
+            positions=draw[label];uv=draw[label+'_uv'];projected=f.software.project(positions,camera=(0,0,0),zdist=1925)
+            if any(not(0<=p[0]<512 and 0<=p[1]<512)for p in projected):raise AssertionError('Literal geometry exceeds fixed viewport; defer rather than fit')
+            f.software.draw([(*p,*draw['color'],draw['alpha'],*t)for p,t in zip(projected,uv)],
+                [2,3,0,1,2,0]if label=='native'else[2,0,3,1,3,0],z_enabled=True,z_write=False,instruction_limit=5000000)
+        return v.surface_bytes('screen'),v.surface_bytes('depth')
     for tick in (5,15,29,60,89):
-        images=[];depths=[]
-        for label in('native','port'):
-            f.software.clear();v.call(0x417d60,(16,1),this=0x65a57c)
-            for draw in draws[tick]:
-                positions=draw[label];uv=draw[label+'_uv'];projected=f.software.project(positions,camera=(0,0,0),zdist=1925)
-                if any(not(0<=p[0]<512 and 0<=p[1]<512)for p in projected):raise AssertionError('Literal geometry exceeds fixed viewport; defer rather than fit')
-                f.software.draw([(*p,*draw['color'],draw['alpha'],*t)for p,t in zip(projected,uv)],
-                    [2,3,0,1,2,0]if label=='native'else[2,0,3,1,3,0],z_enabled=True,z_write=False,instruction_limit=5000000)
-            image=v.surface_bytes('screen');depth=v.surface_bytes('depth');images.append(image);depths.append(depth)
-            save_rgb565_png(output/f'{label}-tick{tick:03d}.png',image,512,512)
+        prior=None
+        for repeat in range(2):
+            images=[];depths=[]
+            for label in('native','port'):
+                image,depth=raster(tick,label);images.append(image);depths.append(depth)
+                save_rgb565_png(output/f'{label}-tick{tick:03d}.png',image,512,512)
+            hashes=[sha(p)for p in images+depths]
+            if prior is not None and hashes!=prior:raise AssertionError('Full RGB565/depth warm replay differs')
+            prior=hashes
         differences=sum(a!=b for a,b in zip(struct.unpack('<262144H',images[0]),struct.unpack('<262144H',images[1])))
         visible=sum(p!=0 for p in struct.unpack('<262144H',images[0]))
         if differences or depths[0]!=depths[1] or not visible:pixel_errors.append(dict(tick=tick,differing_pixels=differences,visible=visible))
-        pairs.append(dict(tick=tick,differing_rgb565_pixels=differences,visible_native_pixels=visible,depth_equal=depths[0]==depths[1],image_sha256=[sha(p)for p in images]))
-    report=dict(status='pass'if not geometry_errors and not pixel_errors and not centre_errors else'fail',geometry_errors=geometry_errors,
+        pairs.append(dict(tick=tick,differing_rgb565_pixels=differences,visible_native_pixels=visible,depth_equal=depths[0]==depths[1],image_sha256=[sha(p)for p in images],depth_sha256=[sha(p)for p in depths],warm_replays=2))
+    if pinned!={p:sha((ROOT/p).read_bytes())for p in source_paths}:raise AssertionError('Production source changed during comparison')
+    report=dict(source_sha256=pinned,full_state_comparisons=state_compare['comparisons'],full_state_errors=state_compare['error_count'],raster_replays_per_case=2,type_id='0xad92bd35',status='pass'if not geometry_errors and not pixel_errors and not centre_errors else'fail',geometry_errors=geometry_errors,
         pixel_errors=pixel_errors,sampled_live_packets=all_packets,actual_native_draw_packets=sum(len(x)for x in draws.values()),
         native_zero_scale_rejections=zero_scale_rejections,max_corner_error=max_corner,max_uv_error=max_uv,
         independent_centre_checks=centre_checks,max_raw_centre_error=max_raw_centre_error,
@@ -238,5 +257,5 @@ if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path)
     p.add_argument('--archive',type=Path,default=ROOT/'data/imagery.rvi');p.add_argument('--output',type=Path,required=True)
     a=p.parse_args();result=run(a.executable,a.archive,a.output)
-    print(json.dumps({k:v for k,v in result.items()if k not in('geometry_errors','pairs')},indent=2))
+    print(json.dumps({k:v for k,v in result.items()if k not in('geometry_errors','pairs','native_zero_scale_rejections')},indent=2))
     if result['status']!='pass':raise SystemExit(1)
