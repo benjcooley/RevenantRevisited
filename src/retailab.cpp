@@ -9,6 +9,7 @@
 // same JSON schema, so the compare is a plain diff of the two dumps.
 
 #include "retailab.h"
+#include "retailab_json.h"
 
 #include "audio_backend.h"
 #include "character.h"
@@ -29,6 +30,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -80,19 +82,6 @@ void WriteErrors(JsonOut& j, size_t from, size_t to = size_t(-1))
 }
 
 // ---- Cases ---------------------------------------------------------------
-
-// One case per line, tab-separated: the name, then the target's fields.
-struct Case
-{
-    std::string name;
-    std::vector<std::string> fields;
-
-    [[nodiscard]] const std::string& Field(size_t i) const
-    {
-        static const std::string none;
-        return i < fields.size() ? fields[i] : none;
-    }
-};
 
 bool ReadCases(const std::string& file, std::vector<Case>& cases)
 {
@@ -1051,6 +1040,27 @@ bool Arg(int argc, char* argv[], const char* name, std::string& value)
 
 }  // namespace
 
+namespace
+{
+std::map<std::string, Target>& Registry()
+{
+    static std::map<std::string, Target> targets;   // built on first use (static init order)
+    return targets;
+}
+}  // namespace
+
+bool RegisterTarget(const char* name, Target fn)
+{
+    Registry()[name] = fn;
+    return true;
+}
+
+Target FindTarget(const std::string& name)
+{
+    auto it = Registry().find(name);
+    return it == Registry().end() ? nullptr : it->second;
+}
+
 bool Run(int argc, char* argv[], int& exitcode)
 {
     std::string target;
@@ -1077,6 +1087,8 @@ bool Run(int argc, char* argv[], int& exitcode)
         dump = ScriptStep;
     else if (target == "trigger-test")
         dump = TriggerTest;
+    else
+        dump = FindTarget(target);
     if (!dump)
     {
         fprintf(stderr, "retail-ab: unknown target '%s'\n", target.c_str());

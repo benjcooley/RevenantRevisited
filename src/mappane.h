@@ -14,6 +14,8 @@
 #include "screen.h"
 #include "sector.h"
 
+class TMapRenderer;
+
 // Grid snap
 #define GRIDSHIFT   4
 #define GRIDSIZE    (1 << GRIDSHIFT)
@@ -181,7 +183,16 @@ class TMapPane : public TPane
     int32_t GetMouseMapAngle();
       // Gets the angle of the mouse from the character's current position
     void UpdateMouseMovement(int32_t x, int32_t y);
-      // Update moving Player around
+      // The right-button walk toward the pointer (retail 0x0044ee00)
+
+  // The map view (docs/gameflow/forensics/MAP_INPUT.md)
+    void SetMapView(TMapRenderer* view) { mapview = view; }
+        // The renderer that draws this pane's map (TPlayScreen's): where the
+        // last frame put things, for the pick and the pointer's map point
+    bool PaneToMapScreen(int32_t x, int32_t y, int32_t& mapx, int32_t& mapy) const;
+        // The map-screen point (WorldToScreen's space) under pane pixel
+        // (x, y) as the last frame drew it: retail's (x + posx, y + posy).
+        // False off the map view
 
   // Map management (retail Load/Save/ClearCurMap) lives on TMapManager,
   // which owns the loaded sectors in the port.
@@ -299,7 +310,9 @@ class TMapPane : public TPane
     void PulseObjects();
       // Sends animation pulse to all objects with OF_PULSE set
     virtual void Animate(bool draw);
-      // Does animations for all objects with OF_ANIMATE set
+      // Once a drawn frame, after the map is drawn: the cursor for what is
+      // under the pointer (retail 0x00454450's tail; its object and 3D scene
+      // drawing is TMapRenderer's)
     void AnimateObjects(bool draw);
       // Does foreground/2D animations (calls Animate() function for objects on screen)
     void NextFrameObjects();
@@ -414,7 +427,10 @@ class TMapPane : public TPane
         // The first object on level inside the cube, faces included, from
         // the level's loaded sectors (a CUBE trigger's search)
     TObjectInstance* OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with = nullptr);
-        // Returns the index of the object the mouse is on
+        // The object under pane pixel (x, y) by retail's rules (0x00452520):
+        // a 3D mesh shown there, else the map's objects whose screen rect
+        // holds the point (a visible pixel or always-on-top preferred) that
+        // offer a cursor for `with` (or a pickup)
     TObjectInstance* GetInstance(int32_t index, int32_t objset = OBJSET_ALL);
         // Returns the instance given an object index. Backed by an
         // unordered_map keyed on mapindex (O(1) hit, falls back to a linear
@@ -444,24 +460,26 @@ class TMapPane : public TPane
         // Clear out area of walkmap that object resides in
     void ExtractWalkmap(TObjectInstance* inst) { WalkmapHandler(inst, WALK_EXTRACT); }
         // Remove object's walkmap from the sector walkmap (by redrawing its rect)
-    int32_t GetWalkHeight(S3DPoint& pos);
+    int32_t GetWalkHeight(const S3DPoint& pos);
         // Gets walk height for a given walk map
     int32_t GetWalkGridHeight(int32_t x, int32_t y);
         // Gets walk height given walk grid x and y
+    using WalkGridSeam = int32_t (*)(int32_t x, int32_t y);
+    static inline WalkGridSeam walkGridSeam = nullptr;
+        // Retail A/B fixtures only: when set, it answers every walk cell's
+        // height (GetWalkGridHeight, so GetWalkHeight and
+        // GetWalkHeightRadius too), as the retail fixture's seam at the
+        // sector walkmap read does (docs/gameplay/COMBAT_DOJO.md §6.3)
     int32_t GetWalkHeightArea(S3DPoint& pos, int32_t width = 0, int32_t height = 0);
         // Gets walk height for a given walk map CENTERED on pos with given with and height
         // If width == 0, pos is treated as a point
         // Otherwise pos, width, and height define the box of walk area CENTERED on pos
-    void GetWalkHeightRadius(S3DPoint& pos, int32_t radius, 
-        int32_t &mindelta, int32_t &maxdelta, int32_t &curheight);
-        // Returns the minimum delta (fall), and maximum delta (rise) between any two walk grids 
-        // within the radius, and also the height at the current position.
-        // The mindelta value detects drops in the heightmap within the radius. (holes, downstairs)
-        // The maxdelta value detects rises in the heightmap (walls, columns, obstructions)
-        // The 'curheight' value gives the height under 'pos'
-        // Note that the 'deltas' only indicate differences in hieght between adjacent walk
-        // grids, so 'radius' may be scaled arbirarily large and still work correctly.
-        // This routine is somewhat processor intensive, so only use for moving chars and objs.
+    void GetWalkHeightRadius(const S3DPoint& pos, int32_t radius, int32_t& maxdelta, int32_t& height,
+        bool& hole);
+        // The walk height under pos, and over the walk cells whose nearest
+        // point lies within radius of pos: the largest height step between
+        // two such cells side by side (maxdelta: walls, ledges) and whether
+        // any of them has no walkmap (hole)
     bool LineOfSight(S3DPoint& pos, S3DPoint& to, S3DPoint* obst = nullptr);
         // Returns line of sight flags for line between positions
     void CalculateWalkmap();
@@ -538,6 +556,16 @@ class TMapPane : public TPane
     void BindWindow(TGameMap* map);
         // Borrow the window's sectors from `map` and follow its Unloaded event
 
+  // Play input (docs/gameflow/forensics/MAP_INPUT.md §4)
+    void PlayMouseClick(int32_t button, int32_t x, int32_t y);
+        // MouseClick outside the editor (retail 0x0044f140)
+    void PlayMouseRelease(int32_t x, int32_t y, bool attackcursor);
+        // The left button's release: use, pick up, walk to, or let go of a held item
+    void WalkToward(int32_t x, int32_t y, TObjectInstance* on);
+        // An object out of reach: walk toward it, or "too far"
+    void HoldMoveKey(int32_t key);
+        // The right-button walk's held direction (-1: none)
+
   // Data Members
     bool command_window_borrowed = false;
     TSector* sectors[SECTORWINDOWX][SECTORWINDOWY] = {}; // Window borrowed from windowmap (see above)
@@ -556,14 +584,19 @@ class TMapPane : public TPane
     S3DPoint scrollvel{};                           // Smooth-scroll velocity (retail 0x00658468..70)
     int32_t  lastcamz = 0;                          // The target z last update (retail 0x00658320)
     SCenterOnState centeron;                        // Pane will attempt to scroll to this object or point
-    int32_t onobject;                               // Object clicked on
+    int32_t onobject = -1;                          // Object pressed on (retail +0xf8)
     int32_t grabx, graby;                           // Click pos
     int32_t objx, objy;                             // Offset on the object
     int32_t oldz;                                   // For z-dragging
     int32_t mx, my;                                 // Mouse scrolling
-    bool clicked;                                   // To allow movement outside of pane
+    bool clicked = false;                           // Left press on the map, awaiting its release (retail +0x120)
+    bool walking = false;                           // Right-button walk on (retail +0x11c)
+    int32_t hovercursor = CURSOR_NONE;              // Cursor type for what's under the pointer (retail +0x12c)
+    int32_t hoverpickframe = -1;                    // Screen frame of the last pick for it
+    int32_t hoverindex = -1;                        // Map index of that pick (-1: nothing), for the log
+    TMapRenderer* mapview = nullptr;                // The renderer drawing this map (not owned)
     uint32_t notifyflags;                           // Notify Objects of changes
-    int32_t lastkey;                                // Last virtual keycode generated by mouseclicks
+    int32_t lastkey = -1;                           // Direction the right-button walk holds (retail +0x128)
 
   // Update system members...
     int32_t numbgrects;                             // Number of background update rectangles

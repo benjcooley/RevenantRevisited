@@ -1,0 +1,149 @@
+// Combat dojo kata D1 edge case: every CHARACTER tag, the per-name defaults
+// and the attack and impact rules the shipped char.def doesn't reach
+// (tools/retail_ab/targets_data.py).
+
+#define CA_SPECIAL	     0x0001
+#define CA_HAND			 0x0010
+#define CA_BLOOD		 0x0200
+#define CA_NOMISS        0x1000
+#define CA_MAGICATTACK   0x800000
+#define CA_PLAYANIM		 0x1000000
+#define CA_NOINTERRUPT	 0x80000000
+#define CAI_STUN		0x0001
+#define CAI_KNOCKDOWN	0x0002
+#define CAI_DEATH		0x0004
+#define CAI_BLOOD		0x0040
+#define CAI_CHARIMPACT	0x1000
+#define WM_HAND		0x0001
+#define WT_SWORD	2
+#define MASTAT_NONE		1
+#define MASTAT_HEALTHLT		2
+#define MASTAT_MANAGT		5
+
+CHARACTER "Default"
+BEGIN
+END
+
+// The four players: the label height and arrow start by name
+CHARACTER "Locke"
+BEGIN
+  CLASS "Hunter"
+  ENEMIES "an enemies list longer than the seventy nine characters the field keeps, cut there"
+  GROUPS "a groups list that is exactly seventy nine characters long, no more, no less!!"
+END
+
+CHARACTER "BAYNE"
+BEGIN
+  CLASS "Wanderer"
+END
+
+CHARACTER "Morganna"
+BEGIN
+  LABELHEIGHT 77
+END
+
+CHARACTER "Navarro"
+BEGIN
+  ARROWPOS 1, 2, 3
+END
+
+// Every tag once
+CHARACTER "Araknid"
+BEGIN
+  DAMAGEMODS 1, -2, 3, -4, 5, -6, 7, -8, 9, -100
+  GROUPS "spider,beast"
+  ENEMIES "player,human"
+  CLASS "Hunter"
+  BLOCK 11, 6, 16
+  PLAYERBLOCK 12, 7, 13
+  ARMOR 4
+  DEFENSEMOD 3
+  ATTACKMOD -2
+  ATTACKFREQ 20, 60
+  MAGICFREQ 30, 90
+  WEAPONTYPE WT_SWORD
+  WEAPONDAMAGE 9
+  BLOCKSOUNDS "clank1,clank2"
+  MISSSOUNDS "whoosh1,whoosh2"
+  SIGHT 40, 90, 500, 48
+  HEARING 20, 70, 400
+  MANA 30
+  FATIGUE 40
+  HEALTH 50
+  COMBATRANGE 100
+  MAXATTACKRANGE 64
+  BLEEDER 0
+  WALKSPEED 5
+  SNEAKSPEED 2
+  RUNSPEED 11
+  COMBATWALKSPEED 4
+  BODYTYPE "big"
+  SWIPECOLOR 10, 20, 30
+  SWIPEFULL 1
+  ATTACHEFFECT "glow", 1, 2, 3, "none", "NONE"
+  ATTACHEFFECT "fire", 4, 5, 6, "spark", "smoke"
+  ATTACHEFFECT "ice", 7, 8, 9, "shard", "none"
+  ATTACHEFFECT "bolt", 10, 11, 12, "none", "arc"
+  ARROWSPEED 25
+  BOWWAIT 14
+  BOWAIMSPEED 6
+  RETREATAT 20
+  RETREATATMANA 10
+  RETREATFOR 48
+  RUNFATIGUE 5, 50
+  POISONCHANCE 15
+  NOPARALYZE
+  LABELHEIGHT 90
+
+  CHARIMPACT "cimpact1", 0, "", 0, 0, 999, 0, 0
+  CHARIMPACT "cimpact2", CAI_STUN, "stunloop", 24, 10, 50, 8, 4
+  CHARIMPACT "cimpact3", CAI_BLOOD, "", 0, 50, 100, 0, 0
+  CHARIMPACT "cimpact4", CAI_CHARIMPACT, "", 0, 1, 2, 3, 4
+  CHARIMPACT "cimpact5", 0, "", 0, 0, 0, 0, 0
+  CHARIMPACT "cimpact6", CAI_DEATH, "dieloop", 10, 0, 999, 0, 0
+
+// An attack with a response (CA_SPECIAL cleared, CA_RESPONSE set) and six impacts
+	ATTACK "bite", CA_SPECIAL | CA_HAND | CA_BLOOD, 1, "stunned", "block", "miss", "chain",\
+		   2, 3, 8, 12, 19, 75,\
+		   0, 45, 32, 12, 12, 0,\
+		   WM_HAND, 0, 100, 4, 9
+	IMPACT "imph1", 0, "", 0, 0, 10000, 0, 0
+	IMPACT "imph2", CAI_KNOCKDOWN, "down", 30, 5, 60, 10, 6
+	IMPACT "imph3", CAI_CHARIMPACT, "", 0, 1, 2, 3, 4
+	IMPACT "imph4", 0, "", 0, 0, 0, 0, 0
+	IMPACT "imph5", CAI_BLOOD, "", 0, 0, 0, 0, 0
+	IMPACT "imph6", CAI_DEATH, "dead", 1, 2, 3, 4, 5
+
+// A fatigue attack with a response (no response rule)
+	FATIGUEATTACK "tired", CA_SPECIAL | CA_HAND, 2, "stunned", "", "", "",\
+		   15, 16, 29, 0, 1, 10000,\
+		   0, 60, 24, -80, 5, 0,\
+		   WM_HAND, 0, 100, 25, 3, 7
+	IMPACT "imph", 0, "", 0, 0, 10000, 0, 0
+
+// Spells with conditions
+	MAGICATTACK "invoke3", CA_MAGICATTACK, 0, 50, 1, 640,\
+                "heal3", -1, -2, -3, MASTAT_HEALTHLT, 100
+	MAGICATTACK "invoke2", 0, 0, 10, 1, 640,\
+                "a spell name that is thirty three", 4, 5, 6, MASTAT_MANAGT, 20
+
+// An animation
+	PLAYANIM "rollleft", CA_NOMISS | CA_NOINTERRUPT, 3, 10, 20, 30
+	ATTACK "rollright", CA_PLAYANIM | CA_NOMISS | CA_NOINTERRUPT, 0, "", "", "", "",\
+		   0, 0, 0, 0, 0, 100,\
+		   0, 0, 0, 0, 0, 0,\
+		   0, 0, 100, 0, 0
+END
+
+// Two combat ranges
+CHARACTER "Skeleton"
+BEGIN
+  COMBATRANGE 100, 300
+  BLEADER 0
+END
+
+// A name that is no object type: it stays unbound
+CHARACTER "Nobody"
+BEGIN
+  HEALTH 5
+END

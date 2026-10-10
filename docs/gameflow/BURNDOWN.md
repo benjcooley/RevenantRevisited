@@ -222,6 +222,9 @@ REVSYNC-QUESTIONs surfaced for the user.
 |--------|------|--------------|
 | [x] | Retail TExit, the exit list, teleports, level changes as a session step ([forensics/EXITS.md](forensics/EXITS.md) §7) | 2026-10-05 |
 | [x] | Locks and keys (`CheckKeyUse`), the door prototypes' USE scripts end to end | 2026-10-05 |
+| [x] | Doors and lift gates by mouse: the map pane's retail pick on the GPU id buffer, the door cursor, click-to-use; `ressexit` opens and teleports, `soldoor`'s INPORTEW runs ([forensics/MAP_INPUT.md](forensics/MAP_INPUT.md) §7.1) | 2026-10-08 |
+| [x] | Portcullis (InportNS) by mouse, seen lifting and closing behind Locke at the level-46 gatehouse; locked gates say "It seems to be locked" (MAP_INPUT §7.1) | 2026-10-09 |
+| [ ] | By mouse, not yet shown: click-to-talk, click-to-get, a PortNS/PortEW exit gate; hover's synchronous read while the pointer moves (MAP_INPUT §7.1 Open) | 2026-10-09 |
 | [-] | curmap written on every transition: the port keeps visited levels loaded and writes them when saving (ARCHITECTURE §7) | 2026-10-05 |
 | [x] | Walk-on of an unscripted AutoActivate exit: a level-41 teleport pad sends Locke to `Lv41Tel5`'s target | 2026-10-05 |
 | [x] | The loading bar fills per sector during the world load (staged `TGameMap` load) | 2026-10-05 |
@@ -325,6 +328,16 @@ These items aren't part of any single track but block others:
       text bar each define the side tabs as 52 (`kSideTabsWidth`), and the
       dialog the status bar's bottom (0x70). Retail derives the text bar's
       rect from the panes (`TPlayScreen` layout `0x0047bc50`).
+- [x] Headless runs stalled while the Mac slept (2026-10-08: two builds hung
+      80+ min; agent watchdog stalls line up with it). Two causes, both
+      fixed (feature/combat, on main 2026-10-09):
+      `--headless` took its frames from the display link (now an NSTimer at
+      the display's rate while the window is hidden, 4c76a33), and
+      `HeadlessWindow::KeepAwake` used
+      `NSActivityUserInitiatedAllowingIdleSystemSleep`, which let the Mac
+      idle-sleep under a run (now `NSActivityUserInitiated |
+      NSActivityLatencyCritical`, 08e59c8; the display may still sleep).
+      DEBUG_TOOLING.md "Headless runs".
 - [ ] Text baseline in the canonical glyph walk — track ui (`font.cpp`).
       The baseline is `cellY + ` the tallest printable-ASCII glyph's rise
       `- kGdiTopLeading (2)`, a constant calibrated on the HUD's Arial

@@ -1134,6 +1134,29 @@ public:
     [[nodiscard]] uintptr_t LitTargetTextureId() const;
     [[nodiscard]] bool ReadIdTargetPixel(int32_t x, int32_t y, uint8_t out_rgba[4]) const;
 
+    // ---- Id probe ---------------------------------------------------------
+    // The id target's ids in a small square around a viewport pixel, for a
+    // pick under the pointer every frame. A request is copied back once the
+    // frame that drew it is committed (ResolveIdProbe, from FlipPage) and
+    // arrives a frame or two later (LatestIdProbe); ReadIdProbe reads the
+    // last drawn frame at once, waiting for the GPU. Ids are obj_id values
+    // (kObjIdMask applies); 0 is nothing, or outside the target. The tag is
+    // the caller's, returned with the probe (e.g. its draw-list version).
+    static constexpr int32_t kIdProbeRadius = 2;
+    static constexpr int32_t kIdProbeSize   = 2 * kIdProbeRadius + 1;
+    struct SIdProbe
+    {
+        int32_t  x = 0, y = 0;    // centre, viewport pixels
+        uint64_t tag = 0;
+        uint32_t ids[kIdProbeSize * kIdProbeSize] = {};   // row-major from (x - r, y - r)
+        [[nodiscard]] uint32_t At(int32_t dx, int32_t dy) const
+          { return ids[(dy + kIdProbeRadius) * kIdProbeSize + (dx + kIdProbeRadius)]; }
+    };
+    void RequestIdProbe(int32_t x, int32_t y, uint64_t tag);
+    void ResolveIdProbe();
+    [[nodiscard]] bool LatestIdProbe(SIdProbe& out) const;
+    [[nodiscard]] bool ReadIdProbe(int32_t x, int32_t y, uint64_t tag, SIdProbe& out) const;
+
     // Editor selection-outline plumbing. Setting this >0 turns on the
     // post-process outline glow in the lit shader for pixels whose
     // id_target value matches `id`.
@@ -1353,6 +1376,19 @@ private:
     sg_image normal_target  = {};   // G-buffer: normal   (RGBA16F)
     sg_image scene_z_target = {};   // G-buffer: scene-z  (R32F)
     sg_image id_target      = {};   // G-buffer: obj id   (RGBA8 packed)
+
+    // Id probe state (RequestIdProbe / ResolveIdProbe): this frame's request,
+    // the copies in flight (one per readback slot) and the newest result.
+    struct SIdProbeRead { bool active = false; SIdProbe probe; };
+    bool         idProbeRequested = false;
+    SIdProbe     idProbeRequest;
+    SIdProbeRead idProbeReads[2];
+    bool         idProbeLatestValid = false;
+    SIdProbe     idProbeLatest;
+    [[nodiscard]] bool IdProbeRect(int32_t x, int32_t y, int32_t& rx, int32_t& ry,
+                                   int32_t& rw, int32_t& rh) const;
+    void DecodeIdProbe(const uint8_t* rgba, int32_t rx, int32_t ry, int32_t rw,
+                       int32_t rh, SIdProbe& probe) const;
     uint32_t selected_obj_id = 0;   // editor selection (0 = no outline)
     sg_image ao_target      = {};   // AO pass output     (R32F)
     sg_image shadow_target  = {};   // sun visibility mask (R32F, low-res)

@@ -23,7 +23,7 @@ extern int32_t MusicVolume;       // MusicVolume: music level; 0..0x60 is heard 
 extern int32_t EffectsVolume;     // EffectsVolume: sound effects level, 0..0x7f
 extern int32_t GammaLevel;        // GammaLevel, 0..4: the map ambient offset (GammaAmbientOffset); no display ramp (OPTIONS.md §9)
 extern bool    RealTimeLight;     // RealTimeLight: kept and saved; Classic renders the RealTimeLight=No image
-extern bool    CombatFace;        // CombatFace: kept and saved; the combat code doesn't read it yet
+extern bool    CombatFace;        // CombatFace: face the target while moving in combat (TCharacter::Go, ResolveCombat)
 extern bool    NoCombatResults;   // NoCombatResults: kept and saved; combat results aren't printed yet
 extern bool    NoGameSpeedLimit;  // "Limit Game Speed" unchecked; this session only, never saved;
                                   // the port's simulation always runs on the 24 Hz tick

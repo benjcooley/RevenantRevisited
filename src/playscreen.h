@@ -210,6 +210,11 @@ class TPlayScreen : public TScreen
 
     // ---- Game time -----------------------------------------------------
     [[nodiscard]] int32_t GameFrame()    const;
+    void SetFixtureState(int32_t frame, bool control, bool demo)
+        { gameframes = frame; controlon = control; demomode = demo; }
+      // Retail A/B fixtures only (retailab_combat.cpp): the frame count and
+      // the control / demo flags as a case sets them, without
+      // SetControlOn(false)'s input release
     [[nodiscard]] int32_t GameTime()     const { return gametime; }
     void                   SetGameTime(int32_t t);
     [[nodiscard]] int32_t TimeOfDay()    const;
@@ -234,6 +239,15 @@ class TPlayScreen : public TScreen
     // Borrowed pointer to the owned map renderer. Null before Initialize()
     // and after Close().
     [[nodiscard]] TMapRenderer* MapRenderer() const { return mapRenderer.get(); }
+
+    // ---- Map input ------------------------------------------------------
+    // Whether the map has the pointer at (x, y): no modal holding the mouse,
+    // no load, not over the shop or a HUD panel, no HUD drag. The play
+    // field's clicks, moves and cursor go to the map pane only then.
+    [[nodiscard]] bool MapHasPointer(int32_t x, int32_t y) const;
+    // The control map's mode for the player's state (walk, combat, bow,
+    // sneak): which binding a key's command comes from.
+    [[nodiscard]] uint32_t ControlModeMask() const;
 
     // ---- TScreen pulse-driver hook -------------------------------------
     static TScreen* ShowScreen(TScreen* screen, int32_t ticks);
@@ -319,7 +333,7 @@ class TPlayScreen : public TScreen
     TObjectImagery* sparksimagery = nullptr;
 };
 
-// Helpers used by save-game + scripting code. Conversion uses the engine's
-// fixed game-frame rate (see playscreen.cpp).
+// The day clock: game minutes against rules.def DAYLENGTH units, a day being
+// 1440 minutes (retail 0x0047eb30 / 0x0047eb50; see playscreen.cpp).
 int32_t ConvertFramesToMinutes(int32_t frames);
 int32_t ConvertMinutesToFrames(int32_t minutes);

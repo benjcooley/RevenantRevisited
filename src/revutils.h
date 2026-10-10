@@ -154,8 +154,30 @@ void UnmountAll();
 // Returns the number of names appended.
 size_t rev_find_files(const char *dir, const char *ext, std::vector<std::string> &names);
 
-// Random number generation
+// Random number generation. The shipped game drew every random number from
+// the MSVC C runtime's rand() (a linear congruential generator, 0..32767);
+// random() keeps that generator, so a seed gives retail's sequence and a
+// seeded run (--seed) repeats exactly.
 int32_t random(int32_t min, int32_t max);
+    // min..max inclusive (either order); min == max returns min without a draw
+int32_t GameRand();
+    // The next value of the generator, 0..32767 (MSVC rand())
+void SeedRandom(uint32_t seed);
+    // Seeds the generator (and the C library's rand(), which some effects
+    // still call directly)
+uint64_t RandomDraws();
+    // Values drawn since start: a run's draw count is part of its trace
+using RandomObserver = void (*)(int32_t value, const void* caller);
+void SetRandomObserver(RandomObserver observer);
+using RandomSource = int32_t (*)();
+void SetRandomSource(RandomSource source);
+    // Retail A/B fixtures (the dojo's RNG tape): when set, every value
+    // comes from `source` (0..32767) instead of the generator
+using RandomRangeObserver = void (*)(int32_t lo, int32_t hi, int32_t result);
+void SetRandomRangeObserver(RandomRangeObserver observer);
+    // Retail A/B fixtures: told every random(lo, hi) and its result
+    // Determinism debugging (--combattrace-rng): told every draw and the
+    // code address that asked for it (random()'s caller, or GameRand's)
 
 // Comma delimited list functions (useful for strings in "abcd,defg,hijk" format)
 // If dst is nullptr, retuns result pointer from static internal buffer

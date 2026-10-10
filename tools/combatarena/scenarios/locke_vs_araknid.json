@@ -1,0 +1,9 @@
+{
+  "name": "locke_vs_araknid",
+  "about": "Demo 1's fight: Locke (player AI, his own char.def attacks) against an Araknid spawned beside him in the forest (retail New Game1). Both sides are the retail AI; no input.",
+  "slot": "Port Resave",
+  "seed": 1,
+  "ticks": 1440,
+  "playerai": true,
+  "exec": ["sleep 24", "addat 5900 24815 Araknid"]
+}
