@@ -43,3 +43,10 @@ PY=/Users/benjamincooley/RevenantRetailLab/research/retail-asm/venv/bin/python
 ```
 
 Measured (2026-10-07): ~0.7 ms per case, setup ~10 ms.
+
+Emulator caveat (melee agent, 2026-10-09): Unicorn can lose a `cmp`'s flags
+across an interleaved `rep movsb` before the conditional jump that reads
+them (ResolveAttack's block-sound switch, `0x4c727c`, faulted on it). A
+case that faults on a jump table or takes an impossible branch right after a
+string copy is worth checking for this before suspecting the code; the melee
+fixture answers that site with a hook.
