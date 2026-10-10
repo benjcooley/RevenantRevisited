@@ -690,6 +690,7 @@ bool TDefPane::Open(const char* defName, const char* panelName, uint32_t defFlag
     fadeStartTime = TTime::Time();
     fadeFromLevel = 0.0f;
     finishing     = false;
+    endRequested  = false;
     log_info("[defpane] opened '%s' panel '%s' flags 0x%x %dx%d @(%d,%d): %zu widgets, bg=%s",
              defName, targetPanel.c_str(), defflags, paneW, paneH, x, y,
              widgets.size(), background ? "OK" : "MISS");
@@ -794,6 +795,7 @@ void TDefPane::ReleaseAssets()
     open = false;
     defflags  = 0;
     finishing = false;
+    endRequested = false;
     draggingSlider = -1;
 }
 
@@ -1544,16 +1546,25 @@ void TDefPane::Finish(int32_t result)
         if (fadeFromLevel > 0.0f)
             return;
     }
-    EndModal(result);
+    RequestEnd();
+}
+
+// The screen removes an ended modal at the start of its next tick, so the
+// pane is drawn once more after this: it stays finishing (faded out, level
+// 0) until Close, rather than reading as a fade-in from where the fade-out
+// began, which drew it opaque for that frame.
+void TDefPane::RequestEnd()
+{
+    if (endRequested)
+        return;
+    endRequested = true;
+    EndModal(finishResult);
 }
 
 void TDefPane::Pulse()
 {
     if (finishing && FadeLevel() <= 0.0f)
-    {
-        finishing = false;
-        EndModal(finishResult);
-    }
+        RequestEnd();
 }
 
 void TDefPane::Compose()
