@@ -7,7 +7,7 @@ state, geometry, animation, motion and comparisons stay in this fast loop.
 Existing guest recordings remain evidence. Unsupported fixtures stay queued
 while the next easy effect moves forward.
 
-Latest bounded rendered coverage is 65/176. StillWater and all active watcher
+Latest bounded rendered coverage is 66/176. StillWater and all active watcher
 texture frames pass original-selector/matrix/raster comparisons; CharUtility
 and SewerWater pass all-part static comparisons and actual native animator
 lookup. Use `static_texture_probe.py` and `default_static_probe.py`.
@@ -43,9 +43,23 @@ remaining original illumination/render/combat/audio checks.
 
 The complete scope remains the 176 retail type rows in
 [`EFFECT_BURNDOWN.json`](../../docs/vfx/EFFECT_BURNDOWN.json). As audited for this
-work, 16 rows have a bounded visual appearance check and zero have every runtime
+work, 14 rows retain a current bounded visual appearance check and zero have every runtime
 and context acceptance gate. These probes add retained evidence; they do not
 silently mark any effect fully accepted or replace the ledger.
+
+The [Speed/native curve destination audit](../../docs/vfx/forensics/SPEED_CONTROLLER_PREFLIGHT_20261009.md)
+replaces synthetic template1 newborn assumptions with actual full-parser
+comparisons. `curve_destination_probe.py` and `admitted_full_parser_probe.py`
+exercise those paths; `speed_packet_probe.py` checks the particle-only frontend
+with five nonempty shared-software pairs. Current Might/Immortalmight appearance
+and Immortalmight repeat credit are suspended until fresh port footage is reviewed.
+The recorded native references remain valid inputs. Speed's baseflare lighting,
+independent projection/device and natural caster remain separate gates.
+
+For actual saved contexts, use `map_effect_placements.py --type-id <exact-id>
+--output <new-json>` against the original module archive. The
+[Warp map note](../../docs/vfx/forensics/WARP_AUTHORED_MAP_CONTEXT.md) gives a
+tested original saved actor, camera, area lighting and hidden-barrier flags.
 
 [`scenarios/effect_candidates.json`](scenarios/effect_candidates.json) records
 the first easy fixtures and moving missile contract, addresses, shipped assets, original map
