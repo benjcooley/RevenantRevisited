@@ -887,12 +887,15 @@ bool TObjectInstance::NeedsAnimator() const
     return false;
 }
 
+// REVSYNC: TObjectInstance::Damage @ 0x0046e970 (vtable +0x48) -- health
+// only: a hit that isn't ice thaws the object, one in four breaks a
+// paralysis (random(0, 3) == 0, drawn while paralysed).
 void TObjectInstance::Damage(int32_t damage, int32_t type)
 {
-// this is probably a serious hack
     if (IsIced() && type != DAMAGE_ICE)
         SetIced(false);
-// end of serious hack
+    if (IsParalized() && random(0, 3) == 0)
+        SetParalize(false);
     if (damage < Health())
         SetHealth(Health() - damage);
     else

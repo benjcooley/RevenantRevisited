@@ -68,21 +68,23 @@ only).
 | M3 | combat walking: Go(angle), empty world | `0x4ce350` | `TCharacter::Go(int)` | [x] 762/762 |
 | M4 | combat walking with retargeting (world + sight/hearing seams) | `0x4ce350`, FindCharacters `0x4cd690` | same | [ ] |
 | M5 | combat resolve tick: ResolveCombat / ResolveCombatMove (+ SetFighting `0x4d4790`) | `0x4c7980` `0x4c7f80` | `ResolveCombat`, `ResolveCombatMove` | [x] 654/654 |
-| M6 | player input per tick: UpdateMove → Go / Stop / Block / Leap | `0x47de30` | `TPlayScreen::UpdateMove` | [ ] |
+| M6 | player input per tick: UpdateMove → Go / Stop / Leap (Block and the bow aim seamed: their tracks), and Stop | `0x47de30`, `0x4cee70` | `TPlayScreen::UpdateMove`, `TCharacter::Stop` | [x] 280/280 (`combat-input`; two mutations caught) |
 | M7 | displacement: Move / MoveStep (velocity, blocking, shove), FindClearPath, CharBlocking, GetWalkHeight / GetWalkHeightRadius | `0x4c46d0` `0x4c3bc0`, TPlayer `0x518df0`, `0x4c39d0` `0x4d4db0` `0x452e10` `0x4530a0` | `TCharacter::Move`, `MoveStep`, `Blocked`, `CharBlocking`, `TMapPane::GetWalkHeight*` | [x] 786/786 (`combat-move`; six mutations caught) |
 | M8 | orbit sequence: N ticks of Go → Pulse (UpdateAction) → Move → SetObjectMotion → frame → NextFrame, with SetState / ResetState / T3DImagery::SetObjectMotion / NextFrame as original over motion tables; walking, strafing round a target, a monster curving, walls, loop / ping-pong / reverse roots | `0x490bd0` order; `0x46f250` `0x46f1e0` `0x40cd20` `0x40cc40` `0x470cc0` | the tick, `TObjectInstance::SetState` / `NextFrame`, `T3DImagery::SetObjectMotion` | [~] 32/32 sequences, ~1,500 ticks (`combat-sequence`); motion tables synthetic, real I3D motion next |
 | M9 | AI combat movement: approach, combat range, retreat, wander | `0x4c8b60`, `0x4c9790` | `TCharacter::AI` | [ ] |
-| M10 | leap, side step, knock back, pivot, stop | `0x4d2be0` `0x4d6220` `0x4d3750` `0x4c8470` `0x4cee70` | same | [ ] |
+| M9b | perception: IsEnemy, CanSeeCharacter, FindCharacters (hearing inlined), Hearing, Sight, HasSeenMe / SetHasSeen, the map iterator's characters | `0x4c89c0` `0x4cd540` `0x4cd690` `0x4cda80` `0x4cdb30` `0x4c58f0` `0x4c5940` | same | [x] 1007/1007 (`combat-perceive`; nine mutations caught); the line of sight `0x4533d0` is the case's on both sides (its own kata open) |
+| M10 | leap, side step, knock back, pivot, stop | `0x4d2be0` `0x4d6220` `0x4d3750` `0x4c8470` `0x4cee70` | same | [~] SideStep, Leap, StartRetreat `0x4d5fc0`, KnockBack: 482/482 (`combat-steps`; five mutations caught); Stop in M6; Pivot `0x4c8470` open |
 
 ### C — melee
 
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
 | C1 | CalculateDamage | `0x4c4860` | `TCharacter::CalculateDamage` | [x] 40 cases x 594 inputs (characters; the player's resist/armour slots open) |
-| C2 | Damage (impact / death choice) | `0x4c4950` | `TCharacter::Damage` | [ ] |
-| C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [ ] |
-| C4 | hit resolution: ResolveAttack → ResolveHit (to-hit, tiers) | `0x4c6dd0` `0x4c62b0` | same | [ ] |
-| C5 | block / dodge / impact / dead resolvers | `0x4d2e30` `0x4d3150` `0x4c74b0` `0x4c7810` `0x4c77a0` | same | [ ] |
+| C2 | Damage (impact / death choice), TObjectInstance::Damage, TPlayer Killed / Died | `0x4c4950` `0x46e970` `0x518ed0` `0x518f90` | `TCharacter::Damage` and its parts | [x] 1137/1137 (`melee-damage`); the floating damage number waits for a post-character overlay (COMBAT_HIT.md §9.2) |
+| C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [x] 5143/5143 (`melee-attack-choice`) |
+| C4 | hit resolution: ResolveAttack → ResolveHit (to-hit, tiers), OnAttacked | `0x4c6dd0` `0x4c62b0` | same | [x] 7855/7855 (`melee-hit`) |
+| C5 | block / dodge / impact / dead resolvers, EffectCombatFlash | `0x4d2e30` `0x4d30f0` `0x4d3150` `0x4c74b0` `0x4c7810` `0x4c77a0` `0x4c8500` | same | [x] 2100/2100 (`melee-resolvers`); the eight dodge controls (commands 0x30-0x37) are input work |
+| C3b | the AI as a whole: acquisition, the attack branch, the move branch, the waypoint, AI_PerMonster (non-boss) | `0x4c8b60` `0x4c9b70` | `TCharacter::AI`, `AIAttack`, `AIMove`, `NearestWaypoint`, `AIPerMonster` | [x] 925/925 (`melee-ai`); bosses (Baez, Solifuge, Jhaga, Yhagoro) are BURNDOWN phase H; Wander `0x4c9790` open (M9) |
 | C6 | Pulse: regen, fatigue, poison, chains, death | `0x4c1bb0`, TPlayer `0x518aa0` | `TCharacter::Pulse`, `TPlayer::Pulse` | [ ] |
 | C7 | experience and level-up | `0x51a630` | `AwardKillExp` / `AwardSkillExp` | [ ] |
 
@@ -90,10 +92,10 @@ only).
 
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
-| S1 | talismans → spell, quick spell, fizzle | `0x51b5d0` `0x51b7c0` | `TSpellList::GetSpellDataByTalismans`, `TPlayer::HasTalismans` | [ ] |
-| S2 | cast gates: mana, wait, fail roll | `0x53fe80`, `0x4d5c20` | `TSpellManager::Cast*` | [ ] |
-| S3 | spell damage, poison roll | `0x53f560` `0x53f090` | `TSpell::Damage`, `TSpell` ctor | [ ] |
-| S4 | missiles: flight, hit, damage | `0x510220` | missile effects | [ ] |
+| S1 | talismans → spell, quick spell, fizzle | `0x51b5d0` `0x51b7c0` | `TSpellList::GetSpellDataByTalismans`, `TPlayer::HasTalismans` | [x] `spell-lookup` 75, `spell-talismans` 340, `spell-quick` 49 |
+| S2 | cast gates: mana, wait, fail roll | `0x53fe80` (CastByTalismans), `0x4d5c20` | `TSpellManager::Cast*` | [x] 2071/2071 (`spell-cast`) |
+| S3 | spell damage, poison roll | `0x53f560` `0x53f090` | `TSpell::Damage`, `TSpell` ctor | [x] `spell-new` 426, `spell-damage` 1090 |
+| S4 | missiles: flight, hit, damage | `0x510220`, AreaDamage `0x4de3c0` | missile effects | [x] `missile-area` 64 (AreaDamage `0x4de3c0`), `missile-arrow` 119 (TAmmo), `missile-bow` 114 (DrawBow ... ResolveBowShoot), `missile-fireball` 21 cases / 840 ticks; spell lifetimes, RANGEDAMAGE effects and the Iced effect open |
 
 ### D — data
 
@@ -101,7 +103,7 @@ only).
 |---|---|---|---|---|
 | D0 | which rules files retail reads (loose `Resources/` against `resources.rvr`) | `0x4a13f0` -> `0x4a1240` | `rev_fopen` | [x] packs first (§5.6) |
 | D1 | rules.def / stats.def / char.def / weapon.def / armor.def parse (`combat-data`): TRules::Initialize + Load, every CLASS, CHARACTER, ATTACK, IMPACT, WEAPON, ARMOR, STATLEVEL, then BindTypes | `0x48b690` `0x48b990` `0x4891c0` `0x489850` `0x48cab0` | `TRules::Initialize`, `Load`, `SClassData::Load`, `SCharData::Load`, `BindTypes` | [x] 4 cases (shipped, GameSpeed 5, GOG loose, every-tag edge), all fields (~39,700 per shipped case) |
-| D1s | spell.def parse: every SPELL | `0x53ead0` | `SSpellData::Load` | [ ] |
+| D1s | spell.def parse: every SPELL | `0x53ead0` | `SSpellData::Load` | [x] 3/3 (`spell-data`) |
 
 ## 3. Determinism
 
@@ -295,6 +297,62 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
     animator (every character has one in play). SetState's FreeAnimator
     for permanent-animator types stays a divergence (3D characters always
     need theirs).
+11. **The held direction (kata M6, 2026-10-09).** Holding a direction calls
+    Go once: UpdateMove skips it while the doing block is a move (walk,
+    combat step, bow step) whose move angle is the held one. The port
+    compared the object's move angle, which a step's motion data keeps
+    nudging (Locke's `combatr` moves at 63), so it called Go almost every
+    tick of a strafe. Stop is retail's: the root takes the doing block's
+    angles with incidentals off, and the player lets go of every held
+    control and of the right-button walk (the map pane's right button up,
+    0x0044f140). The right-button walk is the numpad direction of the
+    pointer's 45° sector (MAP_INPUT.md §5), so mouse walking and the keys
+    meet here. Kept as a divergence: two adjacent arrows walk their
+    diagonal (retail: the lowest bit), for keyboards with no numpad. Not
+    ported: the debug camera's turn of the direction (0x006671f0, the dev
+    'X' key).
+12. **Knock-back (kata M10, 2026-10-09).** A blow from behind (the facing
+    more than 0x48 off the blow's bearing, which retail measures without
+    wrapping: a facing of 250 takes a blow at 10 as from behind) plays the
+    back impact `impb` if the character has one and keeps its facing;
+    otherwise one of five (`impk`, `imphh`, `imph`, `implh`, `impl`; the
+    caller's variant, else `random(0, 4)`) turns it to face the blow. Both
+    are named through CombatAnimName (the player's prefix), set the combat
+    flash (+0x224) to 5, and force an IMPACT with priority. The port played
+    `cimpk` every time and faced the blow by atan2.
+
+13. **Perception (kata M9b, 2026-10-09).** Retail's senses are close to
+    binary, and not what the 1998 source's comments describe:
+    - Hearing returns 100 anywhere within HEARINGRANGE (the distance less
+      the radius and 32), 0 beyond: its scaled value is held to at most 0
+      and then floored at 100, a 0..100 clamp turned inside out. HEARINGMIN
+      and HEARINGMAX are parsed and never read. Hearing has no line of
+      sight. So any noise above 0 within range (edge to edge) is heard.
+      ResetStealthValues gives 0 only when sneaking with a draw of 1 (one
+      tick in 25).
+    - Sight is 0 or 1 within SIGHTRANGE (centre to centre, eye to eye;
+      no radius taken off), 0 beyond or asleep; SIGHTMIN / SIGHTMAX are
+      never read. Seeing wants a glimpse of 99 or more. A walking
+      character's glimpse tops out at 70 (100 only while attacking), so
+      without infravision a monster sees him only mid-attack; it finds him
+      by ear.
+    - The memory (HasSeenMe) holds a character 45 seconds (0x438 frames),
+      not ten. FindCharacters keeps one neither heard nor seen only while
+      remembered.
+    - FindCharacters, looking for enemies, marks a non-enemy as seen and
+      passes over an invalid target (dead, invisible, out of combat range)
+      without marking it. The first found is never scored (the best starts
+      at 10000), and the head of the list takes the lowest score: with an
+      angle, the edge distance times how close to the angle it is (plus 1),
+      so it favours the near and the off-angle.
+    - IsEnemy never counts an idle player (state bit 2). Between players it
+      takes the teams (case-insensitive) and the player-killer bit (state
+      bit 24, under the session's rule `0x676804`, multiplayer and not
+      ported). Then: the one fighting me (a combat or bow root on me), or
+      one named, typed or grouped among my ENEMIES who is aggressive or a
+      player.
+    The port had the 1998 versions throughout (ten-second memory, scaled
+    senses, line of sight for hearing, the dead marked as seen).
 
 ## 6. Layouts used by the fixtures
 
@@ -308,7 +366,7 @@ Retail, verified against the disassembly where a fixture relies on them.
   (short), moveangle `+0xb0`.
 - TComplexObject: doing `+0xd8`, desired `+0xdc`, root `+0xe0`.
 - TCharacter (0x2a0 bytes, vtable `0x5a7848`): chardata `+0xfc`,
-  charflags `+0x110`, combat-engage `+0x254`, per-monster id `+0x280`.
+  charflags `+0x110`, retreating `+0x254`, per-monster id `+0x280`.
   Motion: vel `+0x1c`, accum `+0x28` (1/0x10000 units), inventnum
   `+0x7c` (short), movedist `+0xb4`, movevert `+0xb8`, movetopos `+0xec`,
   movepos `+0xf0`, forcenomove `+0x10c`, shovedir `+0x11c`, the sight
@@ -381,6 +439,14 @@ python3 tools/retail_ab/retail_ab.py combat-resolve     # M5
 python3 tools/retail_ab/retail_ab.py combat-move        # M7
 python3 tools/retail_ab/retail_ab.py combat-update      # M1u
 python3 tools/retail_ab/retail_ab.py combat-sequence    # M8
+python3 tools/retail_ab/retail_ab.py combat-input       # M6
+python3 tools/retail_ab/retail_ab.py combat-steps       # M10
+python3 tools/retail_ab/retail_ab.py combat-perceive    # M9b
+python3 tools/retail_ab/retail_ab.py melee-attack-choice   # C3 (melee-hit C4, melee-damage C2,
+                                                           # melee-resolvers C5, melee-ai C3b)
+python3 tools/retail_ab/retail_ab.py spell-cast         # S2 (spell-data D1s; spell-lookup, -talismans,
+                                                        # -quick S1; spell-new, -damage S3)
+python3 tools/retail_ab/retail_ab.py missile-bow        # S4 (missile-area, -arrow, -fireball)
 tools/walktest/walktest.py "<slot dir>" [--pattern sweep|walks|both|none] [--exec "player.goto X Y; ..."]
 python3 tools/retail_ab/retail_ab.py combat-data        # D1, every record field by field
 python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2

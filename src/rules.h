@@ -29,6 +29,8 @@
 #define CF_MAGICAL      0x0002  // This character can only be damaged by magical weapons
 #define CF_INFRAVISION  0x0004  // This character can see in the dark
 #define CF_LIGHTBLIND   0x0008  // This character is blinded by light (reverse dark/light sight)
+constexpr int32_t CF_BADBLEEDER = 0x0010; // FLAGS bit a BLEEDER value that fails to parse sets (the parse is
+                                          // then fatal): ResolveImpact bleeds without it, ResolveDead with it
 
 // Note, searches for attack by searching for 'combo' attacks first, then 'special'
 // attacks, then ordinary attacks.  This allows the same controller key to be used for
@@ -94,6 +96,16 @@
 #define CAI_INTERACTIVE 0x0080  // Interactive impact (retail char.def; Go refuses to step out of one)
 
 #define CAI_CHARIMPACT  0x1000  // Set on a CHARIMPACT, cleared on an IMPACT (retail 0x0048a926 / 0x0048a95e)
+
+// Impact flags the shipped char.def uses beyond the 1998 list (COMBAT_HIT.md
+// §3.4). A death or impact block turns to face whoever it answers, then by
+// these; TCharacter::Damage also takes the three turns as a filter on the
+// CHARIMPACTs: where the character's combat target stands, by absolute
+// bearing.
+constexpr int32_t CAI_KEEPANGLE   = 0x0100;  // no turn
+constexpr int32_t CAI_TURN180     = 0x0200;  // turned away; target at bearing 0x60-0x9f
+constexpr int32_t CAI_TURNPLUS90  = 0x0400;  // +64; target at 0x20-0x5f
+constexpr int32_t CAI_TURNMINUS90 = 0x0800;  // -64; target at 0xa0-0xdf
 
 #define CA_FATIGUEATTACK 0x10000 // A FATIGUEATTACK (retail 0x00489ca2); not among char.def's CA_ defines
 
@@ -338,6 +350,8 @@ class TRules
       // Experience a player needs to reach 'level' (retail 0x0048cc40)
     int32_t StatLevel(int32_t plyrstat, int32_t value) const { return statlevels.Get(plyrstat, value); }
       // The STATLEVEL percent of attribute 'plyrstat' (PLRSTAT_*) at 'value' (retail 0x0048cc20)
+    void SetStatLevel(int32_t plyrstat, int32_t level, int32_t value) { statlevels.Set(plyrstat, level, value); }
+      // One STATLEVEL entry (the retail A/B fixtures set the tables a case gives)
     const SItemData *GetItemData(int32_t objclass, const char *type) const;
       // The WEAPON.DEF / ARMOR.DEF entry of a weapon or armor type; null if none (retail 0x0048cb50)
     const std::vector<SItemData> &Weapons() const { return weapons; }

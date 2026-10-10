@@ -823,3 +823,131 @@ Port: `src/character.cpp` (as of `a604a52`; line numbers drift).
 8. The SCharAttackData / SCharAttackImpact layouts used above have one
    extra dword at `+0x20` against the port's (flags at `+0x24`, impact
    stride 0x5c); what it holds is unread here (kata D1).
+
+## 9. Port status / kata
+
+Ported from the asm above and held to the original by A/B katas (retail
+run in the emulator, `tools/retail_runtime/slots/combat/melee_attack.py`;
+port `src/retailab_melee.cpp`; cases `tools/retail_ab/targets_melee.py`).
+Coverage is the share of the function's basic blocks some case ran
+(`tools/retail_ab/melee_coverage.py`).
+
+### 9.1 C4 `melee-hit` (7855 cases)
+
+ResolveAttack `0x4c6dd0`, ResolveHit `0x4c62b0`, OnAttacked `0x4cdce0`
+(port `SignalAttack`), with Damage a seam recording the hit block by
+meaning. Coverage: ResolveHit 216/229 blocks, ResolveAttack 125/133,
+OnAttacked 50/52. Not reached: a hit tier no row of TOHITDAMAGE gives,
+`malloc` failing, the FULLCOMBATRES line (the case dialog list is empty),
+a sound that exists, a character with no imagery, the network.
+
+Divergences (none noticeable): ResolveAttack returns at once when the
+doing block has no attack (retail would read through null); the hit block
+belongs to Damage (no free after it, below); the text bar line is printed
+as `"%s"` (retail passes it as the format); PlayWave by name and volume
+only; the network messages aren't sent.
+
+Emulator note: the block-sound switch in ResolveAttack (`0x4c727c`,
+`cmp eax, 6; rep movsb; ja`) loses the cmp's flags across the `rep movsb`
+under Unicorn; the fixture takes the `ja` as the hardware does (a hook at
+`0x4c7281`). Only that site is patched; no general fix.
+
+### 9.2 C2 `melee-damage` (1137 cases)
+
+TCharacter::Damage `0x4c4950` whole (port `TCharacter::Damage`,
+`DamageDeath`, `DamageImpact`, `ForceDamageBlock`, `DamageShare`),
+TObjectInstance::Damage `0x46e970` (the paralysis break), TPlayer::Killed
+`0x518ed0` / Died `0x518f90` (frag counts). Coverage: Damage 272/307,
+TObjectInstance::Damage 15/16, Killed 9/18, Died 6/7. Not reached: the
+network (all of the rest of Killed / Died), the floating number (below),
+`malloc` failing, a given block carrying `data`, two share branches no
+death can take (Health() > damage ≥ 1 with Health() ≤ 0).
+
+Corrections to §3.4:
+
+- When no death name exists at all, the **given block stays the death
+  block** (retail jumps back with `ab` still the caller's), even one
+  carrying a non-death impact; "no death block" only when none was given.
+- Slots `0x244` / `0x248` are Killed(victim) / Died(killer): empty for
+  characters, TPlayer's count frags (`+0x650` players killed, `+0x654`
+  deaths by a player, `+0x658` others killed, `+0x65c` other deaths),
+  saved with the player. Pulse `0x4c2114` also sets charflags `0x40000`
+  and calls Died(NULL); when health returns it clears the flag and calls
+  slot `0x24c`.
+- Object flag `0x10000000` is OF_INVULNERABLE; `0x668104` is the
+  "alreadydead" console cheat (also read at `0x4c2a20`, `0x4d3590`).
+- `+0x220` (snaptime) is set to −1 by ClearChar and written only here;
+  nothing reads it.
+- The block impact is made with action 15 (the 1998 FLYBACK), which
+  ResolveAction has no case for: it plays once and goes back to the root.
+- Blocking with an interactive hit keeps the given block **without its
+  impact for the snap and turn** (`[esp+0x14]` stays 0 on that path).
+- The floating number is TCharAnimator's (`0x4da3b0`, class
+  `0x5a7e38`), given −min(Health(), damage), the screen position 135 px
+  above the character, and a colour by the health left
+  ((Health() − damage)·100 / MaxHealth(): under 25 red, under 50 yellow,
+  else white). It renders the number (`itoa`) into a 64×32 bitmap
+  (64×64 when `0x669324` is set) and keeps it in slots 1–7 of eight
+  (`+0x104`, 0x14 each: bitmap, ticks 36, x, y, rise).
+  TCharAnimator::Animate `0x4d7a00` counts them down (`0x4da6f0`: rise
+  += 400 a tick, in 1/256 px); the map pass (`0x4141f2`) draws them
+  (`0x4da750`) at (x − 32, y − rise/256) less the scroll, alpha 255 until
+  the last 24 ticks, then ticks·255/24. **Not ported**: the port has no
+  post-character overlay yet (TPlayScreen::AddPostCharText is empty);
+  Damage marks the spot.
+
+Divergences (none noticeable): the slot after a full impact list (six)
+is an empty impact (retail reads past the list); the given block's attack
+is read guarded (retail reads it unguarded); a block Damage doesn't keep
+is freed (retail leaks one ForceCommand refuses).
+
+### 9.3 C5 `melee-resolvers` (2100 cases)
+
+ResolveImpact `0x4c74b0`, ResolveBlock `0x4c77a0`, ResolveDead
+`0x4c7810`, Block `0x4d2e30`, StopBlock `0x4d30f0`, Dodge `0x4d3150`, and
+EffectCombatFlash `0x4c8500` (seamed in the kata: it spawns an effect).
+Identities as §1 (the vtable slots and ResolveAction's dispatch, the
+strings "impale", "block", "crollb", the BLOCK range). Coverage:
+ResolveImpact 49/62 blocks, ResolveBlock 10/10, ResolveDead 24/25, Block
+56/63, StopBlock 9/9, Dodge 63/72. Not reached: frees after a SetDesired
+that can't refuse (ResolveImpact clears the priority first), `malloc`
+failing, a block carrying `data`, the network, Dodge's debug-camera turn
+(`0x6671f0`, not ported, as in UpdateMove), one dead branch in Block.
+
+Answers to §8:
+
+- (2) Dodge's last letter of "crollb", by the facing's sector (rows) and
+  `dir` (columns 0–7): `0x10–0x30` bflrbfbf, `0x31–0x50` bfbfblrf,
+  `0x51–0x70` rlbfbbff, `0x71–0x91` fbbfrbfl, `0x92–0xb2` fbrlfbfb,
+  `0xb3–0xd2` fbfbfrlb, `0xd3–0xf2` lrfbffbb, else bffblfbr. `dir` is the
+  Command (`0x47d90c`) of retail's eight controls "Combat Dodge Left /
+  Right / Up / Down / UpLeft / UpRight / DownLeft / DownRight" (commands
+  `0x30`–`0x37`); any other keeps the back roll. The port has one dodge
+  control (GAMECMD_DODGE) and passes −1: the back roll. `0x5a497c` is
+  −40.58 (−255/2π), the camera's radians to facing units.
+- (3) ResolveImpact returns 0; ResolveBlock 2 while the guard holds, 0
+  when it ends; ResolveDead 2.
+- (4) Action 15 has no case in ResolveAction: the block impact plays once.
+- (6) Retail **crashes** there (a read at `[0 + 0x24]`) when the
+  character never attacked (`+0x160` is 0 until ResolveAttack sets it).
+  The branch is reached only when the impact block plays under the
+  impact's own name (ResolveHit names a stun or knockdown with the combat
+  prefix, so mostly death and interactive impacts), with wait left and
+  the loop's state present. The port: with no last attack the loop waits
+  its turn (SetDesired). REVSYNC-DIVERGENCE (a crash).
+- (5, part) `chardata+0xc8 & 0x10` is the bit a failing BLEEDER parse
+  sets (CF_BADBLEEDER): ResolveImpact bleeds only without it, ResolveDead
+  only with it, so in the shipped data a death never bleeds.
+- EffectCombatFlash's frame is a state: 2·random(0, n/2), at most n − 2,
+  of the effect's n imagery states (imagery slot `0x3c` is NumStates).
+
+Divergences (none noticeable): the null last attack above; Block checks
+that the guard's target is a character with an attack (retail reads
+through whatever it is); a block SetDesired or ForceCommand refuses is
+freed (DropUnheld; retail leaks Dodge's, ResolveDead's).
+
+Fixture note (both sides, for every kata): the dumps name a block the
+case began with by its address; a block made after one was freed may get
+the same address. The retail side now drops a freed address (the engine
+free `0x4830f0`, observed), the port side a deleted block
+(TActionBlock::destroyedSeam), so such a block is "new N" on both.

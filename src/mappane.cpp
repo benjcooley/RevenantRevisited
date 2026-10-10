@@ -1030,6 +1030,11 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
 // mode, a left press on an item, 0x005496a0): the stats pane has no info mode.
 void TMapPane::PlayMouseClick(int32_t button, int32_t x, int32_t y)
 {
+    if (playMouseClickSeam)
+    {
+        playMouseClickSeam(button, x, y);
+        return;
+    }
     Notify(N_CANCELCONTROL, Player);
 
     int32_t mapx = 0, mapy = 0;
@@ -1410,6 +1415,8 @@ void TMapPane::SetMapPos(S3DPoint& newpos)
 // Create object
 int32_t TMapPane::NewObject(SObjectDef* def)
 {
+    if (newObjectSeam)
+        return newObjectSeam(def);
     TObjectClass* oc = TObjectClass::GetClass(def->objclass);
     if (!oc)
     {
@@ -1719,6 +1726,8 @@ TObjectInstance* TMapPane::FindClosestObject(const char *name, TObjectInstance* 
 
 int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height, int32_t objclass, int32_t maxnum, int32_t objset)
 {
+    if (findObjectsSeam)
+        return findObjectsSeam(pos, array, width, height, objclass, maxnum, objset);
     if (maxnum < 1)
         return 0;
 
@@ -2210,6 +2219,8 @@ void TMapPane::ClearWalkmaps()
 
 bool TMapPane::LineOfSight(S3DPoint& pos, S3DPoint& to, S3DPoint* obst)
 {
+    if (lineOfSightSeam)
+        return lineOfSightSeam(pos, to);
     int32_t sx, sy, sz, ex, ey, ez, dx, dy, dz;
 
   // Get starting values in grid coordinates

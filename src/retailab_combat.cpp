@@ -12,7 +12,10 @@
 #include "retailab_fixture.h"
 
 #include "dls.h"                  // MakeColorTables (the trig tables too)
-#include "playscreen.h"           // the game frame (kata M8)
+#include "ctrlmap.h"              // the held controls (kata M6)
+#include "mappane.h"
+#include "player.h"
+#include "playscreen.h"           // the game frame (kata M8), UpdateMove (M6)
 
 namespace RetailAB
 {
@@ -77,14 +80,10 @@ std::string Sequence(const JsonValue& cs, TFixtureWorld& world, TCharacter* me)
     return j.str();
 }
 
-// Case (field 0, JSON): {"globals", "chars": [...], "self", "call", ...};
-// see slots/combat/combat_call.py. `call`: "go" (Go(angle), kata M3),
-// "resolve-combat" / "resolve-combat-move" (the resolvers on the doing
-// block with `bits`, kata M5), "move" (Move, kata M7: the case's ground and
-// nearby characters, retailab_fixture.h; adds "motion"). Not modelled on the port side, because the
-// port has no such thing yet: CombatFace (the case's value is ignored),
-// FindClearPath (the port's Go doesn't probe ahead), CanSeeCharacter in the
-// resolvers, the frame cadence of retargeting.
+// Case (field 0, JSON): {"globals", "chars": [...], "self", "call", ...}.
+// slots/combat/combat_call.py documents each `call` (the katas M1u-M10,
+// M9b, C1) and what it adds to the dump; the seams answered from the case
+// are SCaseScope's (retailab_fixture.cpp).
 std::string CombatCall(const Case& c, std::string& error)
 {
     try
@@ -99,6 +98,7 @@ std::string CombatCall(const Case& c, std::string& error)
         const std::string call = cs.Has("call") ? cs["call"].Str() : "go";
         int32_t returned = 0;
         std::vector<int32_t> outputs;
+        std::vector<TCharacter*> found;
         if (call == "calculate-damage")
             for (const JsonValue& in : cs["inputs"].Items())
                 outputs.push_back(me->CalculateDamage((int32_t)in[0].Int(), (int32_t)in[1].Int(), (int32_t)in[2].Int()));
@@ -114,6 +114,43 @@ std::string CombatCall(const Case& c, std::string& error)
             return Sequence(cs, world, me);
         else if (call == "update-action")
             fx->RunUpdateAction((int32_t)cs["bits"].Int());
+        else if (call == "sidestep")
+        {
+            const std::string dir = cs["dir"].Str();
+            me->SideStep(dir.empty() ? 0 : dir[0]);    // the result isn't compared: retail's is a leftover
+        }
+        else if (call == "leap")
+            returned = me->Leap((int32_t)cs["angle"].Int()) ? 1 : 0;
+        else if (call == "start-retreat")
+            me->StartRetreat();
+        else if (call == "knockback")
+        {
+            const JsonValue& f = cs["from"];
+            returned = me->KnockBack(S3DPoint((int32_t)f[0].Int(), (int32_t)f[1].Int(), (int32_t)f[2].Int()),
+                                     (int32_t)cs["variant"].Int(-1)) ? 1 : 0;
+        }
+        else if (call == "find-characters")
+        {
+            const int32_t max = (int32_t)cs["max"].Int(1);
+            found.assign((size_t)(std::max)(max, 1), nullptr);
+            returned = fx->RunFindCharacters(found.data(), max, (int32_t)cs["range"].Int(), (int32_t)cs["angle"].Int(),
+                                             (int32_t)cs["anglerange"].Int(), (int32_t)cs["flags"].Int());
+            found.resize((size_t)(std::max)(returned, 0));
+        }
+        else if (call == "can-see")
+            returned = me->CanSeeCharacter(world.Get(cs["target"].Str()), (int32_t)cs["angle"].Int(-1)) ? 1 : 0;
+        else if (call == "is-enemy")
+            returned = me->IsEnemy(world.Get(cs["target"].Str())) ? 1 : 0;
+        else if (call == "hearing")
+            returned = me->Hearing((int32_t)cs["dist"].Int());
+        else if (call == "sight")
+            returned = me->Sight((int32_t)cs["dist"].Int());
+        else if (call == "update-move")
+        {
+            const JsonValue& ctl = cs["controls"];
+            ControlMap.SetCommandFlags((uint32_t)ctl["state"].Int(), (uint32_t)ctl["changed"].Int());
+            PlayScreen.UpdateMove();
+        }
         else
             throw std::runtime_error("unknown call '" + call + "'");
 
@@ -131,8 +168,23 @@ std::string CombatCall(const Case& c, std::string& error)
         world.WriteCharacter(j, "self", me);
         WriteSeams(j);
         WriteDraws(j);
-        if (call == "move" || call == "update-action")
+        if (call == "move" || call == "update-action" || call == "start-retreat" || call == "knockback")
             fx->WriteMotion(j);
+        if (call == "find-characters" || call == "can-see" || call == "is-enemy" || call == "hearing" ||
+            call == "sight")
+        {
+            j.Key("found").Begin('[');
+            for (TCharacter* f : found)
+                j.String(world.NameOf(f));
+            j.End(']');
+            world.WriteMemory(j, me);
+        }
+        if (call == "update-move")
+        {
+            uint32_t state, changed;
+            ControlMap.GetCommandFlags(state, changed);
+            j.Key("controls").Begin('{').Field("state", (int32_t)state).Field("changed", (int32_t)changed).End('}');
+        }
         j.End('}');
         return j.str();
     }
@@ -205,6 +257,9 @@ static const bool registered = RegisterTarget("combat-go", CombatCall) &&
                                RegisterTarget("combat-move", CombatCall) &&
                                RegisterTarget("combat-update", CombatCall) &&
                                RegisterTarget("combat-sequence", CombatCall) &&
+                               RegisterTarget("combat-input", CombatCall) &&
+                               RegisterTarget("combat-steps", CombatCall) &&
+                               RegisterTarget("combat-perceive", CombatCall) &&
                                RegisterTarget("combat-kernels", CombatKernels);
 
 }  // namespace RetailAB

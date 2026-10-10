@@ -165,6 +165,11 @@ class TMapPane : public TPane
   // Virtual handler functions  
     virtual void KeyPress(int32_t key, bool down);
     virtual void MouseClick(int32_t button, int32_t x, int32_t y);
+    void PlayMouseClick(int32_t button, int32_t x, int32_t y);
+        // MouseClick outside the editor (retail 0x0044f140; also the player's Stop, its right button up)
+    using PlayMouseClickSeam = void (*)(int32_t button, int32_t x, int32_t y);
+    static inline PlayMouseClickSeam playMouseClickSeam = nullptr;
+        // Retail A/B fixtures only: answers PlayMouseClick (the player's Stop calls it)
     virtual void MouseMove(int32_t button, int32_t x, int32_t y);
     virtual void Update() { TPane::Update(); RedrawAll(); }
 
@@ -389,6 +394,10 @@ class TMapPane : public TPane
       // Makes a unique id map index for an object
     int32_t NewObject(SObjectDef* def);
       // Create a new object with the given objdef
+    using NewObjectSeam = int32_t (*)(SObjectDef* def);
+    static inline NewObjectSeam newObjectSeam = nullptr;
+      // Retail A/B fixtures only: when set, it answers NewObject (retail
+      // 0x00450e40): the def recorded, the id it gives returned
     int32_t AddObject(TObjectInstance* oi);
       // Adds the given object to the map and returns unique id
     void ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32_t newflags);
@@ -423,6 +432,10 @@ class TMapPane : public TPane
         // As above, from an object's position and level (else the camera's)
     int32_t FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height = 0, int32_t objclass = -1, int32_t maxnum = MAXFOUNDOBJS, int32_t objset = OBJSET_ALL);
       // Finds objects within given range. If height not given uses width as radius
+    using FindObjectsSeam = int32_t (*)(const S3DPoint& pos, int32_t* array, int32_t width, int32_t height,
+        int32_t objclass, int32_t maxnum, int32_t objset);
+    static inline FindObjectsSeam findObjectsSeam = nullptr;
+      // Likewise for FindObjectsInRange (retail 0x00452060)
     TObjectInstance* ObjectInCube(PS3DRect cube, int32_t level, int32_t objset = OBJSET_ALL);
         // The first object on level inside the cube, faces included, from
         // the level's loaded sectors (a CUBE trigger's search)
@@ -482,6 +495,11 @@ class TMapPane : public TPane
         // any of them has no walkmap (hole)
     bool LineOfSight(S3DPoint& pos, S3DPoint& to, S3DPoint* obst = nullptr);
         // Returns line of sight flags for line between positions
+    using LineOfSightSeam = bool (*)(const S3DPoint& from, const S3DPoint& to);
+    static inline LineOfSightSeam lineOfSightSeam = nullptr;
+        // Retail A/B fixtures only: when set, it answers LineOfSight, as the
+        // retail fixture's seam at 0x004533d0 does (CanSeeCharacter's, from
+        // eye to eye; docs/gameplay/COMBAT_DOJO.md §6.3)
     void CalculateWalkmap();
         // Call to recalculate the walkmap for the current sector
     void AdjustWalkmap(int32_t deltaz, bool absolute = false, bool nonzero = false);
@@ -557,8 +575,6 @@ class TMapPane : public TPane
         // Borrow the window's sectors from `map` and follow its Unloaded event
 
   // Play input (docs/gameflow/forensics/MAP_INPUT.md §4)
-    void PlayMouseClick(int32_t button, int32_t x, int32_t y);
-        // MouseClick outside the editor (retail 0x0044f140)
     void PlayMouseRelease(int32_t x, int32_t y, bool attackcursor);
         // The left button's release: use, pick up, walk to, or let go of a held item
     void WalkToward(int32_t x, int32_t y, TObjectInstance* on);

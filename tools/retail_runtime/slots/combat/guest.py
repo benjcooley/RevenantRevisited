@@ -22,6 +22,12 @@ Seams (each call recorded in `world.seams`, in order):
 - GetStat `0x4d74d0`, slot 0xd8: the stats of the object's type (class.def
   STATS: Radius, ...), from the case's `classstats` (CLASSSTAT_IDS).
   Names as the port's: OBJSTATFUNC / STATFUNC.
+- GetStat by name `0x4d7510`, slot 0xd4 (TCharacter's and TPlayer's): a
+  type stat the case's `classstats` names ("Value" -> value).
+- SetObjStat `0x4d74b0` (TCharacter) / `0x51adb0` (TPlayer), slot 0xe8:
+  recorded, the case's stat takes the value. Object stats the code names by
+  a literal id (the player's attributes and skills, charstats.h) are named
+  by LITERAL_OBJSTATS.
 - The RNG tape: random(lo, hi) `0x483300` and rand `0x58c582` answer from
   the case's `tape` (values 0..32767, in order), then retail's generator
   from the case's `seed`; every draw is recorded in `world.draws` as
@@ -57,6 +63,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1]))
 from fixturekit import Boundaries, MALLOC, s32, serve, start as crt_start  # noqa: E402,F401
+FREE = 0x4830f0                                   # engine free, cdecl (MALLOC's partner)
 
 ANGLE_TABLES = (0x41e2de, 0x41e535)
 
@@ -64,7 +71,7 @@ ANGLE_TABLES = (0x41e2de, 0x41e535)
 O_VTABLE, O_CLASS, O_FLAGS, O_POS, O_FACING, O_NAME, O_ID = 0x00, 0x04, 0x08, 0x10, 0x36, 0x38, 0x40
 O_MOVEANGLE = 0xb0
 O_DOING, O_DESIRED, O_ROOT = 0xd8, 0xdc, 0xe0
-O_CHARDATA, O_CHARFLAGS, O_OUT_OF_SIGHT, O_MONSTER = 0xfc, 0x110, 0x254, 0x280
+O_CHARDATA, O_CHARFLAGS, O_RETREATING, O_MONSTER = 0xfc, 0x110, 0x254, 0x280
 O_PLAYERSTATE = 0x36c
 # Motion (forensics/COMBAT_MOTION.md §3.8): vel and the carried fraction in
 # 1/0x10000 units, the animation's move (GetNextMove 0x470c30), a MoveTo, the
@@ -72,7 +79,7 @@ O_PLAYERSTATE = 0x36c
 O_VEL, O_ACCUM, O_INVENTNUM = 0x1c, 0x28, 0x7c
 O_MOVEDIST, O_MOVEVERT = 0xb4, 0xb8
 O_MOVETOPOS, O_MOVEPOS, O_FORCENOMOVE, O_SHOVEDIR = 0xec, 0xf0, 0x10c, 0x11c
-O_OUT_OF_SIGHT_PREV, O_SIGHT_LOST_TICKS = 0x258, 0x25c
+O_RETREAT_LATCH, O_RETREAT_FRAMES = 0x258, 0x25c
 CHAR_SIZE, PLAYER_SIZE = 0x2a0, 0x674
 CHAR_FLAGS = 0x8 | 0x20 | 0x4000 | 0x8000        # OF_MOVING | OF_AI | OF_ANIMATE | OF_PULSE
 CHAR_VTABLE, PLAYER_VTABLE = 0x5a7848, 0x5b4f30
@@ -112,7 +119,19 @@ G_PLAYSCREEN = 0x65caf0                          # GameFrame = [+0x688] - [+0x68
 G_PS_5D8, G_PS_CONTROL = 0x65d0c8, 0x65d0d0
 G_PLAYER = 0x667fcc
 OBJSTAT_IDS = {'health': (0x66ca4c, 0x101), 'fatigue': (0x66ca3c, 0x102), 'mana': (0x66ca38, 0x103),
-               'sleeping': (0x66ca58, 0x104)}
+               # Retail's own ids for the rest (charstats.h), the globals static init fills.
+               'aggressive': (0x66caa4, 0), 'sleeping': (0x66ca58, 0x104), 'damagemod': (0x66ca28, 16),
+               'level': (0x66da34, 17), 'acbonus': (0x66da38, 30), 'edgebonus': (0x66d950, 33),
+               # The spells' (SPELLS_MISSILES.md: SetPoisoned 0x4d6eb0, the cast and
+               # ManaDrain's ManaCostPct, TSpell::Damage's SpellDamageInc).
+               'poisoned': (0x66ca5c, 1), 'manacostpct': (0x66d9d0, 31), 'spelldamageinc': (0x66da30, 32)}
+# Object stats the code asks for by a literal id: the player's attack level,
+# attributes and skills (charstats.h; IsValidAttack 0x4d1652, TPlayer
+# 0x51a480 / 0x51a580 / 0x520900).
+LITERAL_OBJSTATS = {20: 'attacklevel', 34: 'strn', 35: 'cons', 36: 'agil', 37: 'rflx', 38: 'mind', 39: 'luck',
+                    **{40 + i: n for i, n in enumerate(('attack', 'defense', 'invoke', 'hands', 'knife', 'sword',
+                                                        'bludgeons', 'axes', 'bows', 'stealth', 'lockpick'))},
+                    53: 'invokeexp'}                # the cast's skill experience reads it (0x54012f)
 # SetObjStat (slot 0xe8, thiscall (id, value) ret 8): recorded, the value stored.
 SET_OBJSTAT = {CLASS_CHARACTER: 0x4d74b0, CLASS_PLAYER: 0x51adb0}
 G_AMBIENT = 0x6671a4                             # MapPane ambient light (Visibility 0x4c5aa0)
@@ -120,6 +139,14 @@ G_AMBIENT = 0x6671a4                             # MapPane ambient light (Visibi
 # tested for null: a case's `animator` gives a stand-in), the stealth values.
 O_COMMANDDONE, O_ANIMATOR, O_GLIMPSE, O_NOISE = 0x80, 0x58, 0x130, 0x134
 O_FRAMERATE, O_PREVSTATE, O_PREVFRAME, O_MOVEBITS = 0x5e, 0x60, 0x62, 0xbc
+O_COMBATFLASH = 0x224                            # combat flash ticks (a blow sets 5)
+# Perception (kata M9b): the object info (its first field the type name,
+# GetTypeName), the invisibility spell, the memory of characters seen
+# (MAXHASSEEN entries of 12 bytes: character, game frame, no-autocombat),
+# a player's team record name (char[50]).
+O_INFO, O_INVISIBLE_SPELL, O_HASSEEN, O_TEAM = 0x4c, 0x1a4, 0x1c0, 0x494
+MAXHASSEEN, HASSEEN_SIZE = 8, 12
+TEXT = 'cp1252'
 # Type stats, read through slot 0xd8. Radius: TCharacter::Radius (slot
 # 0x258, 0x4d6e40), which Distance (0x4d61b0) subtracts.
 CLASSSTAT_IDS = {'radius': (0x66ca30, 0x201)}
@@ -144,11 +171,16 @@ MAP_NOOPS = ((0x471020, 'RedrawBackground', 4), (0x4548a0, 'MapPane.Redraw', 8),
              (0x452750, 'MapPane.Walkmap', 0xc), (0x456790, 'MapPane.Lock', 8), (0x4567c0, 'MapPane.Unlock', 0))
 IM_HEADER, HDR_STATES, STATE_SIZE, ST_FRAMES = 0x04, 0x54, 0x4c, 0x32
 GET_STAT = 0x4d74d0                              # slot 0xd8, thiscall (id), ret 4
+GET_STAT_NAMED = 0x4d7510                        # slot 0xd4, thiscall (name), ret 4
+O_FRAME_SHORT = 0x5c
 RANDOM, RAND = 0x483300, 0x58c582                 # random(lo, hi) cdecl; MSVC rand()
 GET_OBJSTAT = {CLASS_CHARACTER: 0x4d7520, CLASS_PLAYER: 0x51ae30}
 FIND_SECTOR, RETURN_WALKMAP = 0x499e10, 0x499720  # cdecl (level, sx, sy); thiscall (x, y) ret 8
 ITER_INIT, ITER_NEXT, ITER_ITEM = 0x44ceb0, 0x44d080, 0x0c   # init thiscall, 6 args, ret 0x18
 SET_POS = 0x46ed70                               # slot 8, thiscall (pos*, level, override), ret 0xc
+# TMapPane::MouseClick (thiscall (button, x, y), ret 0xc): what the player's
+# Stop calls to let go of the right-button walk (button 5), recorded.
+PLAY_MOUSE_CLICK = 0x44f140
 SLOT_MOVE = 0x114                                # TCharacter::Move 0x4c46d0, TPlayer::Move 0x518df0
 
 
@@ -211,6 +243,31 @@ def flag_names(flags):
     return sorted(names)
 
 
+def write_text(vm, address, size, text):
+    """A fixed char[size], NUL-padded."""
+    raw = text.encode(TEXT)[:size - 1]
+    vm.write(address, raw + bytes(size - len(raw)))
+
+
+def write_fields(vm, base, fields, values):
+    """The `fields` that `values` names, at `base`, by kind: an offset (an
+    int32), ('s', offset, size) text, ('b', offset) a byte, ('i', offset,
+    n) int32s (data_parse's tables)."""
+    for name, kind in fields:
+        if name not in values:
+            continue
+        v = values[name]
+        if isinstance(kind, int):
+            vm.put_u32(base + kind, int(v) & 0xffffffff)
+        elif kind[0] == 's':
+            write_text(vm, base + kind[1], kind[2], v)
+        elif kind[0] == 'b':
+            vm.write(base + kind[1], bytes([int(v) & 0xff]))
+        else:
+            for i, x in enumerate(v[:kind[2]]):
+                vm.put_u32(base + kind[1] + 4 * i, int(x) & 0xffffffff)
+
+
 class CombatWorld:
     """Per-case guest objects plus the shared seams. Create once before the
     checkpoint (it installs the hooks); call `reset()` at the start of each
@@ -220,11 +277,13 @@ class CombatWorld:
         self.vm = vm
         self.boundaries = Boundaries(vm)
         b = self.boundaries
+        b.add(FREE, 'free', 0, self._free)
         b.add(FIND_STATE, 'FindState', 8, self._find_state)
         b.add(FIND_TRANSITION, 'FindTransitionState', 0xc, self._find_transition)
         for objclass, address in GET_OBJSTAT.items():
             b.add(address, 'GetObjStat', 4, self._get_objstat)
         b.add(GET_STAT, 'GetStat', 4, self._get_stat)
+        b.add(GET_STAT_NAMED, 'GetStat', 4, self._get_stat_named)
         for objclass, address in SET_OBJSTAT.items():
             b.add(address, 'SetObjStat', 8, self._set_objstat)
         b.add(SET_STATE, 'SetState', 4, self._set_state)
@@ -235,6 +294,7 @@ class CombatWorld:
         b.add(ITER_INIT, 'MapIterator', 0x18, self._iter_init)
         b.add(ITER_NEXT, 'MapIterator.Next', 0, self._iter_next)
         b.add(SET_POS, 'SetPos', 0xc, self._set_pos)
+        b.add(PLAY_MOUSE_CLICK, 'PlayMouseClick', 0xc, self._play_mouse_click)
         self.animators = {}        # stand-in animator address -> character
         self.imagery = {}
         self._imagery_stubs()
@@ -249,6 +309,7 @@ class CombatWorld:
         self.states = {}           # guest address -> [state names]
         self.stats = {}            # guest address -> {object stat id: value}
         self.classstats = {}       # guest address -> {type stat id: value}
+        self.classstats_named = {} # guest address -> {type stat name: value}
         self.imagery = {}          # stand-in imagery address -> character
         self.animators.clear()
         self.needs_animator = {}   # character -> imagery NeedsAnimator answer
@@ -332,6 +393,10 @@ class CombatWorld:
         self.seams.append(dict(seam='SetPos', who=self._name(ecx), pos=pos))
         return 1
 
+    def _play_mouse_click(self, args, ecx):
+        self.seams.append(dict(seam='PlayMouseClick', button=s32(args[0]), x=s32(args[1]), y=s32(args[2])))
+        return 0
+
     def _name(self, address):
         return self.objects.get(address, f'{address:#x}')
 
@@ -354,6 +419,8 @@ class CombatWorld:
         sid = s32(args[0])
         stats = table.get(ecx, {})
         names = {v[1]: k for k, v in ids.items()}
+        if ids is OBJSTAT_IDS:
+            names = {**LITERAL_OBJSTATS, **names}
         if sid not in stats:
             raise KeyError(f'{self._name(ecx)} has no {names.get(sid, sid)} in the case')
         self.seams.append(dict(seam=seam, who=self._name(ecx), stat=names.get(sid, sid), result=stats[sid]))
@@ -364,13 +431,21 @@ class CombatWorld:
 
     def _set_objstat(self, args, ecx):
         sid, value = s32(args[0]), s32(args[1])
-        names = {v[1]: k for k, v in OBJSTAT_IDS.items()}
+        names = {**LITERAL_OBJSTATS, **{v[1]: k for k, v in OBJSTAT_IDS.items()}}
         self.stats.setdefault(ecx, {})[sid] = value
         self.seams.append(dict(seam='SetObjStat', who=self._name(ecx), stat=names.get(sid, sid), value=value))
         return 0
 
     def _get_stat(self, args, ecx):
         return self._stat('GetStat', self.classstats, CLASSSTAT_IDS, args, ecx)
+
+    def _get_stat_named(self, args, ecx):
+        name = self.vm.string(args[0]).lower()
+        stats = self.classstats_named.get(ecx, {})
+        if name not in stats:
+            raise KeyError(f'{self._name(ecx)} has no {name} in the case')
+        self.seams.append(dict(seam='GetStat', who=self._name(ecx), stat=name, result=stats[name]))
+        return stats[name]
 
     def _set_state(self, args, ecx):
         if self.real_setstate:
@@ -497,6 +572,12 @@ class CombatWorld:
         vm.put_u32(G_PS_CONTROL, int(g.get('control', 1)))
         vm.put_u32(G_AMBIENT, int(g.get('ambient', 128)))
 
+    def _free(self, args, ecx):
+        """The engine's free (observed, then run): a block the case began
+        with is gone, so a new one at its address is new (block_dump)."""
+        self.blocks.pop(args[0], None)
+        return Boundaries.ORIGINAL
+
     # -- objects ----------------------------------------------------------
     def new_block(self, spec, objmap):
         """An action block from the case: built by the original ctor, then
@@ -542,9 +623,9 @@ class CombatWorld:
             vm.write(obj + O_MOVEPOS, struct.pack('<3i', *spec['moveto']))
         vm.put_u32(obj + O_FORCENOMOVE, int(spec.get('forcenomove', 0)))
         vm.put_u32(obj + O_SHOVEDIR, spec.get('shovedir', -1) & 0xffffffff)
-        vm.put_u32(obj + O_OUT_OF_SIGHT, int(spec.get('out_of_sight', 0)))
-        vm.put_u32(obj + O_OUT_OF_SIGHT_PREV, int(spec.get('out_of_sight_prev', 0)))
-        vm.put_u32(obj + O_SIGHT_LOST_TICKS, spec.get('sight_lost_ticks', 0))
+        vm.put_u32(obj + O_RETREATING, int(spec.get('retreating', 0)))
+        vm.put_u32(obj + O_RETREAT_LATCH, int(spec.get('retreat_latch', 0)))
+        vm.put_u32(obj + O_RETREAT_FRAMES, spec.get('retreat_frames', 0))
         vm.put_u32(obj + O_COMMANDDONE, int(spec.get('commanddone', 0)))
         if spec.get('animator'):
             vm.put_u32(obj + O_ANIMATOR, self.new_animator(obj))
@@ -562,6 +643,14 @@ class CombatWorld:
         vm.write(name, spec['name'].encode('cp1252') + b'\0')
         vm.put_u32(obj + O_NAME, name)
         vm.put_u32(obj + O_ID, spec.get('id', 0))
+        typename = spec.get('type', spec['name'])
+        info, text = vm.allocate(4), vm.allocate(len(typename) + 1)
+        vm.write(text, typename.encode(TEXT) + b'\0')
+        vm.put_u32(info, text)
+        vm.put_u32(obj + O_INFO, info)
+        vm.put_u32(obj + O_INVISIBLE_SPELL, int(spec.get('invisiblespell', 0)))
+        if player:
+            write_text(vm, obj + O_TEAM, 50, spec.get('team', ''))
         cd = vm.allocate(CHARDATA_SIZE)
         chardata = spec.get('chardata', {})
         vm.put_u32(cd + CD_COMBATRANGEMAX, chardata.get('combatrangemax', 0))
@@ -578,8 +667,13 @@ class CombatWorld:
         self.states[obj] = table
         vm.put_u32(obj + O_IMAGERY, self._new_imagery(obj, table))
         vm.write(obj + O_STATE, struct.pack('<h', spec.get('state', 0)))
-        self.stats[obj] = {OBJSTAT_IDS[k][1]: v for k, v in spec.get('stats', {}).items()}
-        self.classstats[obj] = {CLASSSTAT_IDS[k][1]: v for k, v in spec.get('classstats', {}).items()}
+        vm.write(obj + O_FRAME_SHORT, struct.pack('<h', spec.get('frame', 0)))
+        literal = {n: i for i, n in LITERAL_OBJSTATS.items()}
+        self.stats[obj] = {OBJSTAT_IDS[k][1] if k in OBJSTAT_IDS else literal[k]: v
+                           for k, v in spec.get('stats', {}).items()}
+        self.classstats[obj] = {CLASSSTAT_IDS[k][1]: v for k, v in spec.get('classstats', {}).items()
+                                if k in CLASSSTAT_IDS}
+        self.classstats_named[obj] = dict(spec.get('classstats', {}))
         return obj
 
     def set_blocks(self, obj, spec):
@@ -596,7 +690,23 @@ class CombatWorld:
         self.vm.put_u32(obj + O_DOING, made['doing'])
         self.vm.put_u32(obj + O_DESIRED, made['desired'])
 
+    def set_memory(self, obj, spec):
+        """The characters it remembers seeing (`hasseen`: [name, frame,
+        noautocombat] each), once every character exists."""
+        for i, (name, frame, noauto) in enumerate(spec.get('hasseen', [])[:MAXHASSEEN]):
+            self.vm.write(obj + O_HASSEEN + HASSEEN_SIZE * i,
+                          struct.pack('<IiI', self.by_name[name], frame, int(bool(noauto))))
+
     # -- results ----------------------------------------------------------
+    def memory_dump(self, obj):
+        """The memory as compared: each entry's character (None when empty),
+        frame and no-autocombat flag."""
+        out = []
+        for i in range(MAXHASSEEN):
+            chr_, frame, noauto = struct.unpack('<IiI', self.vm.uc.mem_read(obj + O_HASSEEN + HASSEEN_SIZE * i, 12))
+            out.append([self._name(chr_) if chr_ else None, frame, int(noauto != 0)])
+        return out
+
     def block_dump(self, ab, new_blocks):
         """A block as the compared record. Identity: the role it had when the
         case began, or `new N` in the order the function made them."""
@@ -625,15 +735,16 @@ class CombatWorld:
                     accum=list(struct.unpack('<3i', vm.uc.mem_read(obj + O_ACCUM, 12))),
                     movetopos=vm.u32(obj + O_MOVETOPOS), forcenomove=vm.u32(obj + O_FORCENOMOVE),
                     shovedir=s32(vm.u32(obj + O_SHOVEDIR)),
-                    out_of_sight=vm.u32(obj + O_OUT_OF_SIGHT),
-                    out_of_sight_prev=vm.u32(obj + O_OUT_OF_SIGHT_PREV),
-                    sight_lost_ticks=s32(vm.u32(obj + O_SIGHT_LOST_TICKS)),
+                    retreating=vm.u32(obj + O_RETREATING),
+                    retreat_latch=vm.u32(obj + O_RETREAT_LATCH),
+                    retreat_frames=s32(vm.u32(obj + O_RETREAT_FRAMES)),
                     movedist=s32(vm.u32(obj + O_MOVEDIST)), commanddone=vm.u32(obj + O_COMMANDDONE),
                     glimpse=s32(vm.u32(obj + O_GLIMPSE)), noise=s32(vm.u32(obj + O_NOISE)),
                     framerate=struct.unpack('<h', vm.uc.mem_read(obj + O_FRAMERATE, 2))[0],
                     prevstate=struct.unpack('<h', vm.uc.mem_read(obj + O_PREVSTATE, 2))[0],
                     prevframe=struct.unpack('<h', vm.uc.mem_read(obj + O_PREVFRAME, 2))[0],
-                    animate=int(bool(vm.u32(obj + O_FLAGS) & 0x4000)), animator=int(bool(vm.u32(obj + O_ANIMATOR))))
+                    animate=int(bool(vm.u32(obj + O_FLAGS) & 0x4000)), animator=int(bool(vm.u32(obj + O_ANIMATOR))),
+                    combatflash=s32(vm.u32(obj + O_COMBATFLASH)))
 
     def character_dump(self, obj, new_blocks):
         vm = self.vm

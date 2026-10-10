@@ -186,6 +186,10 @@ class TSoundPlayer
   // Finds sound id's by name
     int32_t FindSound(const char *soundname, int32_t nr = -1) const;
         // Find a given sound: name (plus nr, if given) without case, -1 if none
+    using FindSeam = int32_t (*)(const char* soundname, int32_t nr);
+    static inline FindSeam findSeam = nullptr;
+        // Retail A/B fixtures only: answers FindSound (retail's sound lookup
+        // 0x0049c430, which the combat fixtures answer with "no such sound")
 
   // Simple sound garbage-collector functions to make playing sounds a bit handier
   // These functions work with the sound id returned from FindSound()
@@ -291,6 +295,15 @@ inline bool PLAY(const char *x)
     if (!SoundPlayer.Unmount(id))
         return false;
     return true;
+}
+
+// Retail's one-shot at a point: the sound found (0x0049c430), loaded
+// (0x0049b650) and played at full volume there (0x0049b990; its 0x50 /
+// 0x2bc falloff distances are the port's sound model's).
+inline bool PlayAt(const char *name, S3DPoint at)
+{
+    const int32_t id = SoundPlayer.FindSound(name);
+    return id >= 0 && SoundPlayer.Mount(id) && SoundPlayer.Play(id, 0, 0, &at);
 }
 
 inline bool PLAYN(const char *x, int32_t n)

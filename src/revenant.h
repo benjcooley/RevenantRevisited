@@ -98,6 +98,8 @@ extern bool IsVooDoo;           // True if using a voodoo card
 extern bool IsMMX;              // Has MMX extensions
 extern bool CaptureVideo;       // True when system is capturing video
 extern bool NoAI;               // Turns off monster AI
+extern bool CheatNahkranoth;    // retail 0x00668108: the player's blows land and kill (console "nahkranoth")
+extern bool CheatAlreadyDead;   // retail 0x00668104: nothing hurts the player (console "alreadydead")
 extern bool AutoBeginCombat;    // Automatically begins combat if enemy in range and facing him
 extern bool PlaySpeech;         // Play speech wave files
 extern bool ShowDialog;         // Show dialog text if speech wave is played

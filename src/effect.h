@@ -3629,11 +3629,18 @@ class TFireBallEffect : public TEffect
     // plain virtual). Pulse IS virtual on TEffect, so override there.
     virtual void Initialize();
     void Pulse() override;
+    // REVSYNC: TFireBallEffect::Pulse @ 0x00510c10 (YFireBall's 0x00513140 the
+    // same) -- the missile's step (TMissileEffect::Pulse 0x00510220), then the
+    // blast: the first tick it is exploding, a spell's fireball hurts its
+    // caster's enemies within 150 of the ball (AreaDamage, the variant's
+    // damage, the spell's type). Pulse runs it, then the animator's step.
+    void PulseMissile();
     // Pulse owns original missile integration. The generic map movement walk
     // reads its last result instead of moving the same projectile twice.
     uint32_t Move() override { return GetMoveBits(); }
     bool SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination);
     const missile_state::State& ProjectileState() const { return missile_motion_; }
+    [[nodiscard]] bool DamageArmed() const { return damage_armed_; }
 
     // Spawn a standalone TFireBallEffect for the --test=vfx harness.
     // Loads `Magic\NewFireBall.I3D`, resolves the 3 sub-object textures +
@@ -3672,6 +3679,7 @@ class TFireBallEffect : public TEffect
     int32_t range_      = 32768;        // ticks left until self-explode
     bool    status_     = false;        // animator → base "launch now" handshake
     int32_t aim_angle_  = 0;            // 0..255 byte-angle (horizontal facing)
+    bool    damage_armed_ = true;       // +0x194: the blast is still to come (Initialize 0x00510bd0 sets it)
     missile_state::State missile_motion_{};
     S3DPoint projectile_destination_{};
     bool has_projectile_destination_=false;
@@ -3951,6 +3959,7 @@ class TWaterFallEffect_Bespoke : public TEffect
     int32_t ticks_ = 0;
     bool initialized_ = false;
     bool logged_tick_ = false;
+    uint32_t runtime_id_ = 0; // previews have no class/type identity
 };
 
 // *************************************************************************
@@ -3973,10 +3982,18 @@ class TWaterEffect_Bespoke : public TEffect
     TWaterEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TWaterEffect_Bespoke() override;
 
-    void OffScreen() override { KillThisEffect(); }
+    void OffScreen() override
+    {
+        if (literal_geometry_ || (ObjClass() == OBJCLASS_EFFECT && ObjId() == 0x1903abcdu))
+            TObjectInstance::OffScreen();
+        else KillThisEffect(); // unaudited alternate preview behavior is unchanged
+    }
 
     [[nodiscard]] static TWaterEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
                                                                     const char* asset_override = nullptr);
+    void Initialize(bool attach_runtime_component = true);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return true; }   // persistent
 
@@ -3990,6 +4007,14 @@ class TWaterEffect_Bespoke : public TEffect
     float           uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
     float           size_wu_   = 16.0f;
     double          sim_accum_ms_ = 0.0;
+    // Only the exact literal Water asset has the native quad contract. Keep
+    // unaudited alternate-asset delegates on their prior research path.
+    bool            literal_geometry_ = false;
+    bool            initialized_ = false;
+    std::vector<S3DVertex> authored_vertices_;
+    float           material_diffuse_[4] = {1,1,1,1};
+    double          sim_accum_seconds_ = 0.0;
+    int64_t         ticks_ = 0;
 };
 
 // *****************
@@ -5752,7 +5777,8 @@ class TAuthoredStaticMeshEffect : public TEffect
 
     [[nodiscard]] static TAuthoredStaticMeshEffect* SpawnForTest_BESPOKE(const S3DPoint& origin,
                                                                   const char* asset_override = nullptr,
-                                                                  bool animate_textures = false);
+                                                                  bool animate_textures = false,
+                                                                  bool scroll_textures = false);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     void SubmitWorldMeshForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return true; }
@@ -5760,12 +5786,14 @@ class TAuthoredStaticMeshEffect : public TEffect
   private:
     struct SStaticPart {
         MeshHandle mesh = 0;
+        int32_t object_index = 0;
         std::vector<MeshHandle> frame_meshes;
         int32_t retail_lighting = 0;
         float local_matrix[16] = {};
     };
     std::vector<SStaticPart> parts_;
     bool animate_textures_ = false;
+    T3DImagery* scroll_imagery_ = nullptr; // borrowed from this owner's imagery
     double texture_tick_seconds_ = 0.0;
 };
 

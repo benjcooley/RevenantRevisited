@@ -8,17 +8,34 @@
 
 #include "bitmap.h"
 #include "character.h"
+#include "dialog.h"
+#include "editorstub.h"
 #include "imagery.h"
 #include "mappane.h"
+#include "player.h"
+#include "rules.h"
 #include "sound.h"
+#include "spell.h"
+#include "textbar.h"
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+extern TObjectClass EffectClass;
 
 REGISTER_BUILDER(TAmmo)
 TObjectClass AmmoClass("AMMO", OBJCLASS_AMMO, 0);
 
-// Hard coded class stats
+// Hard coded class stats (retail's, 0x004bf120..0x004bf2a0)
 DEFSTAT(Ammo, EqSlot,       EQSL, 0, 8, 0, 10)
 DEFSTAT(Ammo, Value,        VAL,  1, 0, 0, 1000000)
 DEFSTAT(Ammo, Type,         TYPE, 2, 1, 0, 4)
+DEFSTAT(Ammo, SaleType,     STYP, 3, 0, 0, 3)
+DEFSTAT(Ammo, MagicType,    MTYP, 4, 0, 0, 10)
+DEFSTAT(Ammo, DamageMod,    DMOD, 5, 0, -100, 100)
+DEFSTAT(Ammo, Duration,     DURA, 6, 3, -1, 500)
+DEFSTAT(Ammo, Stack,        STCK, 7, 0, 0, 1)
 
 // Hard coded object stats
 DEFOBJSTAT(Ammo, Amount,    AMT,  0, 0, 0, 1000)
@@ -208,55 +225,166 @@ PTBitmap TAmmo::GetStillImage(int32_t ostate)
 }
 
 
-// ************
-// * TArrow3D *
-// ************
+// ********************
+// * Arrows in flight *
+// ********************
 
-_CLASSDEF(TArrow3D)
-class TArrow3D : public TObjectInstance
+namespace
 {
-  public:
-    TArrow3D(TObjectImagery* newim) : TObjectInstance(newim) { killwait = -1; }
-    TArrow3D(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { killwait = -1; }
 
-    virtual uint32_t Move();
-    virtual void Pulse();
-
-    int32_t killwait;
-};
-
-DEFINE_BUILDER("Arrow3D", TArrow3D)
-REGISTER_BUILDER(TArrow3D)
-
-uint32_t TArrow3D::Move()
+// An arrow's spell on its victim: the victim's own spells cast it by name,
+// with the shooter as invoker (retail then echoes the cast to the network,
+// 0x00584870, which does nothing in a single-player game).
+void Proc(TCharacter* victim, const char* spell, TCharacter* shooter)
 {
-    uint32_t bits = TObjectInstance::Move();
+    char name[RESNAMELEN];
+    strncpy(name, spell, sizeof(name) - 1);
+    name[sizeof(name) - 1] = 0;
+    TObjectInstance* target = victim;
+    victim->GetSpellManager()->CastByName(name, shooter, &target, 1, nullptr, nullptr);
+}
 
-    TObjectInstance* inst = (TObjectInstance*)TCharacter::CharBlocking(this, pos);
+}  // namespace
 
-    if (killwait < 0 && ((bits & MOVE_BLOCKED) || inst))
+// REVSYNC: 0x004c00b0
+void TAmmo::SetShooter(TObjectInstance* who)
+{
+    if (who)
+        shooter = who;
+}
+
+// REVSYNC: TAmmo::Move @ 0x004c01f0
+uint32_t TAmmo::Move()
+{
+    const uint32_t bits = flightSeam ? flightSeam(this) : TObjectInstance::Move();
+    if (!(flags & OF_WEIGHTLESS))
+        return bits;
+
+    // The character where the arrow is; one far above or below it stops
+    // everything this step, a wall included.
+    TCharacter* victim = TCharacter::CharBlocking(this, pos, 0);
+    if (victim && abs(victim->Pos().z - pos.z) > 80)
+        return bits;
+    if (killwait >= 0 || (!(bits & MOVE_BLOCKED) && !victim))
+        return bits;
+
+    const bool icearrow = !stricmp(GetTypeName(), "ice arrow");
+    if (icearrow)
+        IceAround();
+
+    char sound[] = "impact*bow";
+    sound[6] = char('1' + random(0, 2));
+    PlayAt(sound, pos);
+
+    // REVSYNC-DIVERGENCE: retail reads the class of whatever its shooter's
+    // id gives, so a shooter removed while the arrow flew crashes it; here
+    // that arrow has no shooter.
+    TObjectInstance* by = shooter.Get();
+    TCharacter* archer = (by && (by->ObjClass() == OBJCLASS_CHARACTER || by->ObjClass() == OBJCLASS_PLAYER))
+                             ? static_cast<TCharacter*>(by)
+                             : nullptr;
+    if (!victim || (archer && !archer->IsEnemy(victim)))
     {
-        // collision!
-
-        PLAY("arrow impact");       // play sound
-
-        if (inst)
-        {
-            // hit character
-            inst->Damage(random(20, 50), DAMAGE_PIERCING);
-        }
-
-        killwait = FRAMERATE * 3;
+        killwait = 0;
+        return bits;
     }
 
+    // The knockback comes from two steps behind the arrow.
+    const S3DPoint from(pos.x - 2 * vel.x, pos.y - 2 * vel.y, pos.z - 2 * vel.z);
+
+    // AMMODATA: base, per level of a monster (or of a player a trap hits),
+    // per level of a player shooting, per point of bow skill, the least
+    // percent of it a hit does.
+    const auto& ammo = Rules.ammodata;
+    TPlayer* playerarcher = nullptr;
+    int32_t base;
+    if (archer && archer->ObjClass() == OBJCLASS_PLAYER)
+    {
+        playerarcher = static_cast<TPlayer*>(archer);
+        const int32_t level = playerarcher->Level();
+        const int32_t bows = playerarcher->GetStat("bows");
+        base = ammo[0] + bows * ammo[3] + level * ammo[2];
+        int32_t mod = DamageMod();
+        if (TObjectInstance* bow = playerarcher->GetEquip(EQ_RANGEDWEAPON))
+            mod += bow->GetStat("damagemod");
+        base += mod * base / 100;
+        playerarcher->AwardSkillExp(SK_BOWS, victim);
+    }
+    // A monster's level is retail's Value() (vtable +0x190), which no
+    // character class answers: 0.
+    else if (archer)
+        base = archer->Value() * ammo[1] + ammo[0];
+    else if (victim->ObjClass() == OBJCLASS_PLAYER)
+        base = static_cast<TPlayer*>(victim)->Level() * ammo[1] + ammo[0];
+    else
+        base = victim->Value() * ammo[1] + ammo[0];
+
+    const int32_t damage = random(base * ammo[4] / 100, base);
+    if (damage != 0 && !icearrow)
+    {
+        if (MagicType() == DT_POISON && random(0, 100) < 33)
+            Proc(victim, "Poison", archer);
+        else if (MagicType() == DT_BURN && random(0, 100) < 66)
+            Proc(victim, "Fire Flash", archer);
+        victim->Damage(damage, MagicType(), 0, nullptr, nullptr);
+        victim->KnockBack(from, -1);
+    }
+
+    // REVSYNC-DIVERGENCE: retail hands the text bar the message as its
+    // format; here it is printed as text.
+    if (playerarcher && playerarcher == Player)
+    {
+        char text[256];
+        if (DialogList.FindLine("FULLARROWDMG") >= 0)
+            snprintf(text, sizeof(text), DialogList.GetLine("FULLARROWDMG"), victim->GetName(), damage);
+        else
+            snprintf(text, sizeof(text), "%s %s %s:%d", DialogList.GetLine("BASEARROW"), victim->GetName(),
+                     DialogList.GetLine("BASEDMG"), damage);
+        TextBar.Print("%s", text);
+    }
+
+    if (archer)
+        victim->SignalAttack(archer, victim, 1);
+    SetFlags(flags | OF_KILL);
     return bits;
 }
 
-void TArrow3D::Pulse()
+// The ice arrow's burst (in TAmmo::Move @ 0x004c01f0): an Iced effect at
+// every Solifuge among the first ten characters the map finds within 200
+// of the arrow, but the main player, the dead, one held in an interactive
+// attack or impact, and one skywalking.
+void TAmmo::IceAround()
+{
+    int32_t found[10];
+    const int32_t n = MapPane.FindObjectsInRange(pos, found, 200, 0, -1, 10, OBJSET_CHARACTER);
+    for (int32_t i = 0; i < n; i++)
+    {
+        auto* c = static_cast<TCharacter*>(MapPane.GetInstance(found[i]));
+        if (!c || stricmp(c->GetTypeName(), "Solifuge") != 0 || c == Player || c->Health() <= 0 ||
+            c->InteractiveLocked() || strstr(c->DoingName(), "skywalk"))
+            continue;
+        SObjectDef def{};
+        def.objclass = OBJCLASS_EFFECT;
+        def.objtype = EffectClass.FindObjType("Iced");
+        def.level = MapPane.GetMapLevel();
+        def.pos = c->Pos();
+        TObjectInstance* iced = MapPane.GetInstance(MapPane.NewObject(&def));
+        if (!iced)
+            continue;
+        if (!iced->HasAnimator())
+            iced->CreateAnimator();
+        // Retail then gives the Iced effect its target (0x004ec930: the
+        // target paralysed and iced, "FREEZECUBE" played at it). The port
+        // has no Iced effect yet (effects), so nobody is frozen.
+    }
+}
+
+// REVSYNC: TAmmo::Pulse @ 0x004c0880
+void TAmmo::Pulse()
 {
     if (killwait > 0)
         killwait--;
-    
-    if (killwait == 0)
-        SetFlags(OF_KILL);
+    if (killwait == 0 || (!Editor && !GetOwner() && vel.x == 0 && vel.y == 0 && vel.z == 0))
+        SetFlags(flags | OF_KILL);
+    TObjectInstance::Pulse();
 }

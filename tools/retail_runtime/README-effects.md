@@ -7,11 +7,59 @@ state, geometry, animation, motion and comparisons stay in this fast loop.
 Existing guest recordings remain evidence. Unsupported fixtures stay queued
 while the next easy effect moves forward.
 
+Latest bounded rendered coverage is 66/176. StillWater and all active watcher
+texture frames pass original-selector/matrix/raster comparisons; CharUtility
+and SewerWater pass all-part static comparisons and actual native animator
+lookup. Use `static_texture_probe.py` and `default_static_probe.py`.
+`map_texture_probe.py` exercises real map create/frame-wrap/move/delete and
+detects frozen textures even when owner frame counters advance. It requires a
+prepared floor-only module and an installed data root; use `--help` for inputs.
+These remain bounded tests, with natural context and full device parity open.
+
+The seven TeleportDoorInside colors now use the shared production
+[`warp_atlas.h`](../../src/effects/warp_atlas.h) state and alpha-helper payload.
+Use `warp_probe.py <retail-exe> --compare --no-images --output <new-directory>`
+for the 154-case repeated software comparison, or `test_warp.py` for the fast
+native/header regression. Original custom factories and mode2 execute; a
+one-frame STILL header does not mean a static texture. The map animator steps
+each owner's UVs at24Hz and the helper shader performs wrapped-nearest unlit
+ARGB sampling, retaining all three authored faces and depth-test/no-write.
+
+For independent normal-map cases, import `map_texture_probe.run` and pass one
+profile at a time, for example
+`[{"name":"TeleportDoorInsideB","id":"0xad92bc28","owner_frames":1,"render_frames":4}]`.
+Use a separate output directory for each owner. `owner_frames` drives typed
+frame assertions; `render_frames` checks changing imagery independently of
+that owner counter. Final seven-case evidence is
+`recon/retail_asm/runtime/effects/warp-map-final-20261009/manifest.json`.
+The [Warp note](../../docs/vfx/forensics/TELEPORT_DOOR_INSIDE_THIN.md) declares
+the upstream illumination, natural caller and device limits.
+
+Speaker adds six repeated complete untextured geometry/material-input pairs;
+use `speaker_static_probe.py`. FireCone's actual defined native particle pool
+state/order/RNG now matches after local arithmetic fixes; use
+`firecone_state_probe.py` or `test_firecone_state.py`. Neither replaces the
+remaining original illumination/render/combat/audio checks.
+
 The complete scope remains the 176 retail type rows in
 [`EFFECT_BURNDOWN.json`](../../docs/vfx/EFFECT_BURNDOWN.json). As audited for this
-work, 16 rows have a bounded visual appearance check and zero have every runtime
+work, 14 rows retain a current bounded visual appearance check and zero have every runtime
 and context acceptance gate. These probes add retained evidence; they do not
 silently mark any effect fully accepted or replace the ledger.
+
+The [Speed/native curve destination audit](../../docs/vfx/forensics/SPEED_CONTROLLER_PREFLIGHT_20261009.md)
+replaces synthetic template1 newborn assumptions with actual full-parser
+comparisons. `curve_destination_probe.py` and `admitted_full_parser_probe.py`
+exercise those paths; `speed_packet_probe.py` checks the particle-only frontend
+with five nonempty shared-software pairs. Current Might/Immortalmight appearance
+and Immortalmight repeat credit are suspended until fresh port footage is reviewed.
+The recorded native references remain valid inputs. Speed's baseflare lighting,
+independent projection/device and natural caster remain separate gates.
+
+For actual saved contexts, use `map_effect_placements.py --type-id <exact-id>
+--output <new-json>` against the original module archive. The
+[Warp map note](../../docs/vfx/forensics/WARP_AUTHORED_MAP_CONTEXT.md) gives a
+tested original saved actor, camera, area lighting and hidden-barrier flags.
 
 [`scenarios/effect_candidates.json`](scenarios/effect_candidates.json) records
 the first easy fixtures and moving missile contract, addresses, shipped assets, original map
@@ -625,3 +673,81 @@ retain the early-appearance limit: original software skips triangle edges over
 shows Z testing is not the cause. Do not fit VFX geometry/camera to hide this.
 Early real-device appearance, device culling, lighting/blending, map binding and
 modern GPU remain separate gates.
+
+
+### Linked Drip → short no-splash Ripple
+
+[`drip_ripple_probe.py`](drip_ripple_probe.py) extends the emitter-only evidence
+for `(length20,height128,period1)`: original native child Initialize/Animate/Render
+and independently compiled actual production Drip/Ripple factory/Advance/Submit
+agree through five complete child lifecycles, 145 states and 43 composite software
+image/depth pairs. Seventeen samples submit both head and ring. Existing children
+advance before the parent; newborns first advance next tick. Period is changed
+before tick121 to drain the last child. Native sector scheduling, map installation,
+audio/global RNG coupling, splashes and modern GPU appearance remain separate.
+
+[Instructions and scope](../../recon/retail_asm/runtime/effects/drip-ripple-composite-ab/README.md)
+and [report](../../recon/retail_asm/runtime/effects/drip-ripple-composite-ab/manifest.json)
+include two exact warm replays. `test_drip_ripple_composite.py` also compiles a
+broken child-link driver and confirms its slipped age and missing removal are
+rejected. This narrowly extends the earlier request-boundary result; it does not
+expand the length64 or map-context claims.
+
+
+### Ripple splashes and recursive children
+
+[`ripple_splash_probe.py`](ripple_splash_probe.py) checks the length 64/96 path,
+including splash allocation, actual native RNG and independently generated
+children/grandchildren. Three profiles (origin and both opposing-sign XY poses)
+match over 363 state frames and 105 original-software image/depth pairs, replayed
+twice. Four tests include an isolated truncate-before-owner-add mutation rejected
+by actual native child coordinates. Production source passes unchanged.
+
+[Instructions and scope](../../recon/retail_asm/runtime/effects/ripple-splash-family-ab/README.md)
+and [report](../../recon/retail_asm/runtime/effects/ripple-splash-family-ab/manifest.json)
+retain raw removal journals: identity/tick matches, while flag-observation versus
+vector-destructor ordering within a tick is not claimed. Original sector/map
+installation, full world transformation, natural lighting and modern GPU pixels
+remain separate gates.
+
+
+### FlowWater, BendWater and Wave authored scrolling
+
+[`scrolltex_water_probe.py`](scrolltex_water_probe.py) runs actual native controller
+factory/tag parser/Initialize/Render and constant authored geometry for six exact
+FlowWater/BendWater1/BendWater2/Wave/WaveS/WaveM assets. Current production parser,
+initializer, query and actual scrolling generic SubmitMesh path agree over 84
+whole-image/depth pairs, with 4,872 bit-exact UV floats and two exact replays.
+
+Four shipped tags target renamed objects; original empty selection falls back to
+all animator objects. The corrected port now preserves this behavior without
+relaxing malformed/nonfinite/overlap rejection. Native three-object fallback and
+compiled regression tests pass. [Instructions/results](../../recon/retail_asm/runtime/effects/scrolltex-water-ab/README.md)
+and [report](../../recon/retail_asm/runtime/effects/scrolltex-water-ab/manifest.json)
+retain pre-fix traces. Original lighting, map/sampler device fidelity and Metal
+pixel equivalence remain separate; Rift1 animtex is deferred.
+
+### Live capture validity
+
+`port_capture.py` now decodes and hashes the actual PNG pixels. Black-background
+visual captures must contain at least one nonblack frame, and a rejected
+asset/controller cannot pass just by writing image files. Empty/control recordings
+set `expect_visible: false` explicitly. Nonblack scene backgrounds still require
+an effect-free backdrop/ROI comparison to prove visibility. Clean exit and
+fixed-step timing checks remain required. Pillow is already part of the local
+runtime requirements; install them using `SETUP.md` before running capture tests.
+
+
+### Deferred Rift1: native animtex initialization failure
+
+[`rift_failed_animtex_probe.py`](rift_failed_animtex_probe.py) reproduces the
+unchanged shipped `obj=rift,u=4,d=4` tag failure. Actual native parser accepts
+u/v/g, so Initialize returns zero; actual RefreshControllers chooses deletion
+and admits zero controllers. A separate cold-heap execution faults in native
+cleanup at 0x405c14 because its saved-UV array was never allocated. Two fresh
+isolated runs reproduce both the stop-before-delete and unmodified fault traces.
+
+[Forensics and reproducible command](../../docs/vfx/forensics/RIFT1_FAILED_ANIMTEX.md)
+and [report](../../recon/retail_asm/runtime/effects/rift-failed-animtex-preflight/manifest.json)
+grant no animation/static-render acceptance and make no whole-game crash claim.
+Do not repair d→v or execute Render on the failed controller to invent fidelity.
