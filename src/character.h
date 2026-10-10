@@ -97,6 +97,9 @@ class TCharacter : public TComplexObject
     using EffectBurstSeam = void (*)(TCharacter* self, const char* name, int32_t height);
     static inline EffectBurstSeam effectBurstSeam = nullptr;
       // Likewise for EffectBurst (retail 0x004c85d0)
+    using EffectCombatFlashSeam = void (*)(TCharacter* self);
+    static inline EffectCombatFlashSeam effectCombatFlashSeam = nullptr;
+      // Likewise for EffectCombatFlash (retail 0x004c8500)
       // Likewise for CastByName (retail SpellList::Find 0x0053f010 + Cast
       // 0x004d5c20), which DoAttack calls for a MAGICATTACK
       // Likewise for CanSeeCharacter (retail 0x004cd540)
@@ -307,11 +310,13 @@ class TCharacter : public TComplexObject
     bool Combo(int32_t num) { return ButtonAttack(3 + num); }
       // Character does combo number num
     bool Block(int32_t frames = -1);
-      // Character blocks an attack
+      // A guard for 'frames' ticks (below 0: BLOCK's random range; -2 forces a
+      // monster's, as IsValidAttack does), retail 0x004d2e30
     bool StopBlock();
-      // Character stops blocking
-    bool Dodge();
-      // Character dodges an attack
+      // Ends a guard (retail 0x004d30f0)
+    bool Dodge(int32_t dir);
+      // A roll out of the combat stance toward 'dir' (0-7, retail's eight
+      // Combat Dodge controls, commands 0x30-0x37), else back (retail 0x004d3150)
     bool SideStep(char dir = 0);
       // Cartwheel/sidestep: step \xc2\xb190\xc2\xb0 of facing using the "sidestepl"/"sidestepr"
       // animation if the root has it. Retail FUN_004d6220 @ 0x4d6220.
@@ -444,8 +449,10 @@ class TCharacter : public TComplexObject
         // barriers.
     void SetOnExit();
       // Flags that character is on an exit
-    void EffectBurst(char *name, int32_t height = 50);
+    void EffectBurst(const char *name, int32_t height = 50);
       // Create a burst effect of the given name
+    void EffectCombatFlash();
+      // The flash of a blow (retail 0x004c8500)
     int32_t GetCombatFlashTicks() { return combatflashticks; }
       // Returns 0 if no flash, or positive number of ticks left if flash being drawn
     void MakeInvisible();

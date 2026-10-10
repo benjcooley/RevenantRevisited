@@ -16,6 +16,11 @@ amount by type, the held victim, the death and impact blocks (the given
 block, the CHARIMPACT search by side, state and share, the stock names),
 the snaps and turns, the retreat, the kills and deaths the player counts.
 
+`melee-resolvers` (kata C5): ResolveImpact, ResolveBlock, ResolveDead on
+the doing block (blood and flash, the loops, the way back to the root),
+Block (the gates, the monster's timing, the duration), StopBlock, Dodge
+(the gates, the roll by facing and direction).
+
 Retail: tools/retail_runtime/slots/combat/melee_attack.py; port:
 src/retailab_melee.cpp (`Revenant --retail-ab=melee-*`). The compare is
 combat_targets.compare (every field; the seams aligned as sequences).
@@ -1455,6 +1460,191 @@ def damage_cases(data: Path, workdir: Path) -> list[dict]:
     return finish(cases)
 
 
+# ---- C5: the resolvers, Block, StopBlock, Dodge ----------------------------------------
+
+def resolver_cases(data: Path, workdir: Path) -> list[dict]:
+    s = shipped(data, workdir)
+    cases = []
+    seed = 23
+
+    def add(name, call, chars, rules, *, args=None, **kw):
+        nonlocal seed
+        seed += 1
+        cases.append(case(name, call, chars, rules, args=args or {}, seed=seed * 6271 + 9, seam_damage=False,
+                          tape=kw.pop('tape', [1, 2, 3]), **kw))
+
+    arak = s['chars']['Araknid']
+    a_plain = next(i for i, ad in enumerate(arak['attacks']) if not ad['flags'] & (CA_MAGICATTACK | CA_PLAYANIM))
+    a_play = first_with(arak, CA_PLAYANIM)
+    CA_BLOOD = 0x200
+
+    def world(victim='Araknid', *, cd_changes=None, attacks=None, foe_attacks=None, states=None, commanddone=0, **kw):
+        foe = 'Araknid' if victim == 'Locke' else 'Locke'
+        chars, rules = damage_world(data, victim, foe, states=states, attacks=foe_attacks, **kw)
+        if cd_changes:
+            chars[0]['chardata'].update(cd_changes)
+        if attacks is not None:
+            chars[0]['chardata']['attacks'] = attacks
+        chars[0]['commanddone'] = commanddone
+        return chars, rules
+
+    # ResolveImpact: the impale's blood (one tick in six), the first tick's
+    # blood by the share of health and the attack, the flash; when the
+    # animation ends, the root once the wait is out, else the impact's loop
+    # (forced while playing the last attack, or a PLAYANIM one). The victim
+    # has always attacked: retail reads its last attack unguarded there.
+    loops = [impact('ihit', 0x2, 'iloop', looptime=8), impact('impale', 0x1, 'ploop', looptime=5),
+             impact('inoloop', 0x2, '')]
+    base = arak['attacks'][a_plain]
+    own = [synthetic(base, flags=base['flags'] | CA_BLOOD, impacts=loops),
+           synthetic(base, name='ihit', flags=base['flags'] & ~CA_BLOOD, impacts=loops)]
+    if a_play is not None:
+        own.append(copy.deepcopy(arak['attacks'][a_play]))
+    states = ['combat', 'ihit', 'iloop', 'impale', 'ploop', 'inoloop', own[0]['name']] + \
+             ([own[2]['name']] if a_play is not None else [])
+    for name, k in (('ihit', 0), ('impale', 1), ('inoloop', 2), ('other', 0)):
+        for attack in (0, 1, None):
+            for first in (True, False):
+                for done in (0, 1):
+                    for wait in (0, 6):
+                        for bleed in ((0, 1), (0, 0), (0x10, 1)):
+                            for dmg in (0, 1, 2, 40):
+                                b = block(name, 0xc, impact=k, impact_attack=0, damage=dmg, wait=wait, obj='Target',
+                                          flags=['firsttime'] if first else [])
+                                if attack is not None:
+                                    b['attack'] = attack
+                                chars, rules = world(attacks=own, states=states, commanddone=done, me_doing=b,
+                                                     cd_changes=dict(flags=bleed[0], bleeder=bleed[1], health=100),
+                                                     me_state=dict(lastattack=0))
+                                add(f'resolve-impact.{name}.a{attack}.f{int(first)}.d{done}.w{wait}.b{bleed[0]:#x}'
+                                    f'{bleed[1]}.dmg{dmg}', 'resolve-impact', chars, rules, tape=[1, 0, 1])
+    # The loop's turn: the last attack (the one the doing block plays,
+    # another, a PLAYANIM); the impact's loop missing.
+    for label, state in (('own', dict(lastattack=1)), ('other', dict(lastattack=0)),
+                         ('playanim', dict(lastattack=2 if a_play is not None else 0))):
+        for doing_name in ('ihit', 'cimpx'):
+            for st in (states, [n for n in states if n != 'iloop']):
+                b = block(doing_name, 0xd, impact=0, impact_attack=0, wait=6, obj='Target')
+                chars, rules = world(attacks=own, states=st, commanddone=1, me_doing=b, me_state=state)
+                add(f'resolve-impact.loop.{label}.{doing_name}.s{len(st)}', 'resolve-impact', chars, rules)
+
+    # ResolveBlock: facing the guard's target, the wait, a stop.
+    for obj in ('Target', None):
+        for wait in (0, 1, 9):
+            for stop in (False, True):
+                for done in (0, 1):
+                    b = block('cblock', 8, wait=wait, obj=obj, flags=['stop'] if stop else [])
+                    chars, rules = world(me_doing=b, commanddone=done, bearing=0x50)
+                    chars[0]['facing'] = chars[0]['moveangle'] = 0x10
+                    add(f'resolve-block.o{obj}.w{wait}.s{int(stop)}.d{done}', 'resolve-block', chars, rules)
+
+    # ResolveDead: the first tick's blood and flash; the death's loop.
+    deaths = [impact('heavydeath', 0x1004, 'death'), impact('quiet', 0x1004, '')]
+    datk = [synthetic(base, flags=base['flags'] | CA_BLOOD, impacts=deaths),
+            synthetic(base, flags=base['flags'] & ~CA_BLOOD, impacts=deaths)]
+    for name, k in (('heavydeath', 0), ('death', 0), ('quiet', 1), ('nimp', None)):
+        for attack in (0, 1, None):
+            for first in (True, False):
+                for done in (0, 1):
+                    for bleed in ((0, 1), (0x10, 1), (0x10, 0)):
+                        for st in (['combat', 'heavydeath', 'death', 'quiet'], ['combat', 'heavydeath', 'quiet']):
+                            b = block(name, 0x13, damage=30, obj='Target', flags=['firsttime'] if first else [])
+                            if k is not None:
+                                b.update(impact=k, impact_attack=0)
+                            if attack is not None:
+                                b['attack'] = attack
+                            chars, rules = world(attacks=datk, states=st, commanddone=done, me_doing=b,
+                                                 cd_changes=dict(flags=bleed[0], bleeder=bleed[1]))
+                            add(f'resolve-dead.{name}.a{attack}.f{int(first)}.d{done}.b{bleed[0]:#x}{bleed[1]}'
+                                f'.s{len(st)}', 'resolve-dead', chars, rules)
+
+    # Block: the root, flinching, dead, held, the target's reach; a
+    # monster's timing against the attacker's block time (or forced, -2);
+    # the player needs none; the duration drawn or given; no-turn.
+    for victim in ('Araknid', 'Locke'):
+        tcd = s['chars']['Locke' if victim == 'Araknid' else 'Araknid']
+        tplain = next(ad for ad in tcd['attacks'] if not ad['flags'] & (CA_MAGICATTACK | CA_PLAYANIM))
+        # The attacker's table: an interactive attack (to hold the victim), the
+        # blow the guard times.
+        foe = [synthetic(tplain, add_flags=CA_INTERACTIVE, impacts=[impact('hold', CAI_INTERACTIVE)]),
+               copy.deepcopy(tplain)]
+        ti, bt = 1, tplain['blocktime']
+        for label, kw, extra in (
+                ('plain', {}, {}),
+                ('bowroot', dict(me_root=block('bow', 0x19, obj='Target')), {}),
+                ('walkroot', dict(me_root=block('walk', 1, obj='Target')), {}),
+                ('notarget', dict(me_root=block('combat', 3)), {}),
+                ('flinching', dict(me_doing=block('cimph', 0xc, obj='Target')), {}),
+                ('blocking', dict(me_doing=block('cblock', 8, obj='Target')), {}),
+                ('nodoingobj', dict(me_doing=block('combat', 3)), {}),
+                ('dead', dict(health=0), {}),
+                ('held', dict(me_doing=block('cheld', 7, attack=0, attack_of='Target', obj='Target')), {}),
+                ('heldimpact', dict(me_doing=block('cheld', 3, impact=0, impact_attack=0, impact_of='Target',
+                                                   obj='Target')), {}),
+                ('refused', dict(me_doing=block('combat', 3, obj='Target', flags=['priority']),
+                                 me_desired=block('cnext', 3)), {}),
+                ('held.own', dict(me_doing=block('cheld', 7, attack=0, attack_of='Target', obj='Target'),
+                                  me_flags=0x80000), {}),
+                ('far', dict(dist=121), {}), ('reach', dict(dist=120), {}),
+                ('noturn', dict(me_flags=4), {}),
+                ('noanim', dict(states=['combat']), {}),
+                ('rawanim', dict(states=['combat', 'block']), {})):
+            for tframe, tdoing in ((0, block('swing', 7, attack=ti, obj='Me')), (bt - 1, block('swing', 7, attack=ti,
+                                                                                               obj='Me')),
+                                   (bt, block('swing', 7, attack=ti, obj='Me')), (0, None)):
+                for frames in (-2, -1, 7):
+                    kw2 = dict(kw)
+                    kw2.setdefault('me_doing', block('combat', 3, obj='Target'))
+                    kw2.setdefault('states', ['combat', 'cblock', 'block', 'wblock', 'hblock'])
+                    chars, rules = world(victim, target_doing=tdoing, foe_attacks=foe, **kw2)
+                    chars[1]['frame'] = tframe
+                    chars[0]['facing'] = 0x30
+                    add(f'block.{victim}.{label}.t{tframe if tdoing else "idle"}.fr{frames}', 'block', chars, rules,
+                        args=dict(frames=frames), seam_block=False, tape=[4, 9], **extra)
+    # StopBlock.
+    for root in (('combat', 3), ('bow', 0x19), ('walk', 1)):
+        for doing in (block('cblock', 8, wait=9), block('combat', 3)):
+            chars, rules = world(me_root=block(root[0], root[1], obj='Target'), me_doing=doing)
+            add(f'stop-block.{root[0]}.{doing["name"]}', 'stop-block', chars, rules)
+
+    # Dodge: the gates, the "hand" root, the roll by facing sector and
+    # direction.
+    rolls = ['croll' + c for c in 'bflr'] + ['hroll' + c for c in 'bflr']
+    for facing in (0x00, 0x0f, 0x10, 0x30, 0x31, 0x50, 0x51, 0x70, 0x71, 0x91, 0x92, 0xb2, 0xb3, 0xd2, 0xd3, 0xf2, 0xf3):
+        for d in (-1, 0, 1, 2, 3, 4, 5, 6, 7, 8):
+            chars, rules = world('Locke', states=['combat'] + rolls)
+            chars[0]['facing'] = chars[0]['moveangle'] = facing
+            add(f'dodge.f{facing:#x}.d{d}', 'dodge', chars, rules, args=dict(dir=d))
+    for label, kw in (('handroot', dict(me_root=block('hand', 3, obj='Target'))),
+                      ('bowroot', dict(me_root=block('bow', 0x19, obj='Target'))),
+                      ('walkroot', dict(me_root=block('walk', 1, obj='Target'))),
+                      ('moving', dict(me_doing=block('cwalkf', 4, obj='Target'))),
+                      ('dead', dict(health=0)),
+                      ('held', dict(me_doing=block('cheld', 3, attack=0, attack_of='Target', obj='Target'))),
+                      ('heldimpact', dict(me_doing=block('cheld', 3, impact=0, impact_attack=0, impact_of='Target',
+                                                         obj='Target'))),
+                      ('refused', dict(me_doing=block('combat', 3, obj='Target', flags=['priority']),
+                                       me_desired=block('cnext', 3))),
+                      ('held.own', dict(me_doing=block('cheld', 3, attack=0, attack_of='Target', obj='Target'),
+                                        me_flags=0x80000)),
+                      ('noanim', dict(states=['combat']))):
+        for victim in ('Locke', 'Araknid'):
+            for pstate in (0, 2, 3):
+                kw2 = dict(kw)
+                kw2.setdefault('states', ['combat'] + rolls)
+                tcd = s['chars']['Locke' if victim == 'Araknid' else 'Araknid']
+                tplain = next(ad for ad in tcd['attacks'] if not ad['flags'] & (CA_MAGICATTACK | CA_PLAYANIM))
+                chars, rules = world(victim, foe_attacks=[synthetic(tplain, add_flags=CA_INTERACTIVE,
+                                                                    impacts=[impact('hold', CAI_INTERACTIVE)])], **kw2)
+                chars[0]['facing'] = chars[0]['moveangle'] = 0x40
+                if victim == 'Locke':
+                    chars[0]['playerstate'] = pstate
+                elif pstate:
+                    continue
+                add(f'dodge.{label}.{victim}.p{pstate}', 'dodge', chars, rules, args=dict(dir=1))
+    return finish(cases)
+
+
 TARGETS = {
     'melee-attack-choice': dict(fixture='slots/combat/melee_attack.py', cases=attack_choice_cases, compare=compare,
                                 port_fields=port_fields, unit=lambda r: len(r.get('calls', [])) or 1),
@@ -1462,4 +1652,6 @@ TARGETS = {
                       port_fields=port_fields, unit=lambda r: 1),
     'melee-damage': dict(fixture='slots/combat/melee_attack.py', cases=damage_cases, compare=compare,
                          port_fields=port_fields, unit=lambda r: 1),
+    'melee-resolvers': dict(fixture='slots/combat/melee_attack.py', cases=resolver_cases, compare=compare,
+                            port_fields=port_fields, unit=lambda r: 1),
 }

@@ -734,6 +734,9 @@ class TFixtureWorld
         j.End('}');
     }
 
+    // A block the case began with is gone: a new one at its address is new.
+    void ForgetBlock(const TActionBlock* ab) const { roles.erase(ab); }
+
     // Optional extras a target adds to its dumps: fields of each block, and
     // each character's attack bookkeeping (IFixtureChar::WriteAttackState).
     std::function<void(JsonOut&, const TActionBlock&)> blockExtra;
@@ -803,7 +806,7 @@ class TFixtureWorld
     std::map<const TCharacter*, IFixtureChar*> fixtures;
     std::map<std::string, TCharacter*> byname;
     std::map<const TObjectInstance*, std::string> names;
-    std::map<const TActionBlock*, std::string> roles;
+    mutable std::map<const TActionBlock*, std::string> roles;
     std::vector<TCharacter*> order;
 };
 

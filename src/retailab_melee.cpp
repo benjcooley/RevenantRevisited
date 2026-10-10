@@ -179,6 +179,13 @@ void CaseDamage(TCharacter* self, int32_t damage, int32_t damagetype, int32_t mo
         delete ab;
 }
 
+void CaseCombatFlash(TCharacter* self)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "EffectCombatFlash").FieldString("who", g_answers.world->NameOf(self)).End('}');
+    Seam(j.str());
+}
+
 void CaseEffectBurst(TCharacter* self, const char* name, int32_t height)
 {
     JsonOut j;
@@ -264,12 +271,13 @@ class SMeleeScope
         NoCombatResults = cs["globals"]["nocombatresults"].Bool(false);
         TCharacter::findCharactersSeam = CaseFound;
         TCharacter::blockedSeam = CaseBlocked;
-        TCharacter::blockSeam = CaseBlock;
+        TCharacter::blockSeam = cs["seam_block"].Bool(true) ? CaseBlock : nullptr;
         TCharacter::castSeam = CaseCast;
         TCharacter::isEnemySeam = CaseIsEnemy;
         TCharacter::beginFightingSeam = CaseBeginFighting;
         TCharacter::damageSeam = cs["seam_damage"].Bool(true) ? CaseDamage : nullptr;
         TCharacter::effectBurstSeam = CaseEffectBurst;
+        TCharacter::effectCombatFlashSeam = CaseCombatFlash;
         TSoundPlayer::findSeam = CaseSound;
         TPlayer::killExpSeam = CaseKillExp;
         TPlayer::awardSkillExpSeam = CaseSkillExp;
@@ -285,6 +293,7 @@ class SMeleeScope
         TCharacter::beginFightingSeam = nullptr;
         TCharacter::damageSeam = nullptr;
         TCharacter::effectBurstSeam = nullptr;
+        TCharacter::effectCombatFlashSeam = nullptr;
         TSoundPlayer::findSeam = nullptr;
         TPlayer::killExpSeam = nullptr;
         TPlayer::awardSkillExpSeam = nullptr;
@@ -424,7 +433,8 @@ void SetBlockFields(const TFixtureWorld& world, const JsonValue& cs)
 // Case (field 0, JSON): see slots/combat/melee_attack.py. `call`: "iva",
 // "find-button", "find-pcnt", "find-interactive", "do-attack",
 // "button-attack", "button-action", "random-attack", "specific-attack",
-// "resolve-attack", "resolve-hit", "on-attacked", "damage".
+// "resolve-attack", "resolve-hit", "on-attacked", "damage", "resolve-impact",
+// "resolve-block", "resolve-dead", "block", "stop-block", "dodge".
 std::string MeleeCall(const Case& c, std::string& error)
 {
     try
@@ -480,8 +490,15 @@ std::string MeleeCall(const Case& c, std::string& error)
             j.Field("returned", me->DoAttack((int32_t)a["attack"].Int(), (int32_t)a["impact"].Int(-1),
                 (int32_t)a["damage"].Int(0), (int32_t)a["tohit"].Int(0), (int32_t)a["roll"].Int(0),
                 Named(world, a["targ"])) ? 1 : 0);
-        else if (call == "resolve-attack")
-            j.Field("returned", world.Fixture(me)->RunResolver("attack", (int32_t)a["bits"].Int(0)));
+        else if (call == "resolve-attack" || call == "resolve-impact" || call == "resolve-block" ||
+                 call == "resolve-dead")
+            j.Field("returned", world.Fixture(me)->RunResolver(call.substr(8), (int32_t)a["bits"].Int(0)));
+        else if (call == "block")
+            j.Field("returned", me->Block((int32_t)a["frames"].Int(-1)) ? 1 : 0);
+        else if (call == "stop-block")
+            j.Field("returned", me->StopBlock() ? 1 : 0);
+        else if (call == "dodge")
+            j.Field("returned", me->Dodge((int32_t)a["dir"].Int(-1)) ? 1 : 0);
         else if (call == "resolve-hit")
         {
             SCharAttackData* ad = &me->GetCharData()->attacks[(int32_t)a["attack"].Int()];
@@ -539,6 +556,7 @@ std::string MeleeCall(const Case& c, std::string& error)
 // Registered with the A/B driver by name (retailab.h).
 static const bool registered = RegisterTarget("melee-attack-choice", MeleeCall) &&
                                RegisterTarget("melee-hit", MeleeCall) &&
-                               RegisterTarget("melee-damage", MeleeCall);
+                               RegisterTarget("melee-damage", MeleeCall) &&
+                               RegisterTarget("melee-resolvers", MeleeCall);
 
 }  // namespace RetailAB

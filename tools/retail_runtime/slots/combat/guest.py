@@ -63,6 +63,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1]))
 from fixturekit import Boundaries, MALLOC, s32, serve, start as crt_start  # noqa: E402,F401
+FREE = 0x4830f0                                   # engine free, cdecl (MALLOC's partner)
 
 ANGLE_TABLES = (0x41e2de, 0x41e535)
 
@@ -237,6 +238,7 @@ class CombatWorld:
         self.vm = vm
         self.boundaries = Boundaries(vm)
         b = self.boundaries
+        b.add(FREE, 'free', 0, self._free)
         b.add(FIND_STATE, 'FindState', 8, self._find_state)
         b.add(FIND_TRANSITION, 'FindTransitionState', 0xc, self._find_transition)
         for objclass, address in GET_OBJSTAT.items():
@@ -525,6 +527,12 @@ class CombatWorld:
         vm.put_u32(G_PS_5D8, int(g.get('ps_5d8', 0)))
         vm.put_u32(G_PS_CONTROL, int(g.get('control', 1)))
         vm.put_u32(G_AMBIENT, int(g.get('ambient', 128)))
+
+    def _free(self, args, ecx):
+        """The engine's free (observed, then run): a block the case began
+        with is gone, so a new one at its address is new (block_dump)."""
+        self.blocks.pop(args[0], None)
+        return Boundaries.ORIGINAL
 
     # -- objects ----------------------------------------------------------
     def new_block(self, spec, objmap):

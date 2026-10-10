@@ -1757,7 +1757,7 @@ void TPlayScreen::Command(GAMECOMMAND command)
         break;
     case GAMECMD_DODGE:
         if (Player)
-            Player->Dodge();
+            Player->Dodge(-1);  // the back roll: retail has eight dodge controls, one a direction
         break;
     case GAMECMD_JUMP:
         if (Player)

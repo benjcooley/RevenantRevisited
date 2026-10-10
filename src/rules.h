@@ -29,6 +29,8 @@
 #define CF_MAGICAL      0x0002  // This character can only be damaged by magical weapons
 #define CF_INFRAVISION  0x0004  // This character can see in the dark
 #define CF_LIGHTBLIND   0x0008  // This character is blinded by light (reverse dark/light sight)
+constexpr int32_t CF_BADBLEEDER = 0x0010; // FLAGS bit a BLEEDER value that fails to parse sets (the parse is
+                                          // then fatal): ResolveImpact bleeds without it, ResolveDead with it
 
 // Note, searches for attack by searching for 'combo' attacks first, then 'special'
 // attacks, then ordinary attacks.  This allows the same controller key to be used for

@@ -484,6 +484,7 @@ SCaseScope::SCaseScope(const JsonValue& cs, const TFixtureWorld& world)
     g_sees = cs["sees"].Bool(true);
     TCharacter::findCharactersSeam = EmptyWorld;
     TCharacter::canSeeSeam = CaseSees;
+    TActionBlock::destroyedSeam = [](const TActionBlock* ab) { g_world->ForgetBlock(ab); };
     TMapPane::playMouseClickSeam = [](int32_t button, int32_t x, int32_t y) {
         JsonOut j;
         j.Begin('{').FieldString("seam", "PlayMouseClick").Field("button", button).Field("x", x);
@@ -529,6 +530,7 @@ SCaseScope::~SCaseScope()
     TCharacter::blockedSeam = nullptr;
     TCharacter::canSeeSeam = nullptr;
     TPlayer::playerStateSeam = nullptr;
+    TActionBlock::destroyedSeam = nullptr;
     TMapPane::playMouseClickSeam = nullptr;
     TCharacter::nearbyCharactersSeam = nullptr;
     TMapPane::walkGridSeam = nullptr;
