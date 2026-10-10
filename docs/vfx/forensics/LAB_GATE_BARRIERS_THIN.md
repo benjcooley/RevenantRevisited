@@ -1,5 +1,13 @@
 # LabGateBarrierS/E: authored untextured frontend proof
 
+2026-10-10 correction: the red diffuse-fed fixture below does not establish the
+actual untextured software appearance. Original D3DVERTEX/Illuminate ignores
+material diffuse and produces normal-lit gray cards. The exact S/E map route
+now follows that producer in source-software lighting mode; modern/positional
+fallback retains prior material behavior. See the
+[current visual batch](SMALL_FAMILY_VISUAL_BATCH_20261010.md). The earlier red
+map captures are historical material-policy diagnostics, not native visual credit.
+
 Both exact shipped barrier roots pass original-code versus compiled-production
 geometry and untextured software image/depth comparisons. A separate actual-map
 test exposed white material fallback; the map fix and runtime evidence are

@@ -24,6 +24,8 @@ def function(text, signature):
 
 map_source = (ROOT/'src/maprenderer.cpp').read_text()
 renderer_source = (ROOT/'src/renderer.cpp').read_text()
+renderer_header = (ROOT/'src/renderer.h').read_text()
+lighting_policy = function(renderer_header, 'bool UsesRetailSoftwareMeshLighting()')
 selection = function(map_source, 'static TTextureHandle MapMeshTexture(')
 material = function(map_source, 'void LoadObjectMaterial(')
 tint_start = map_source.index('            m.tint[0] = m.tint[1] = m.tint[2] = 1.0f;')
@@ -50,7 +52,7 @@ struct T3DImagery{S3DTex texture;S3DMat material;int textures=1,material_index=0
 struct SMeshSubmit{uint32_t mesh=1,texture_override=0;float tint[4]{};int retail_lighting=0;bool retail_positive_face_cull=false;};
 struct SHelperMeshSubmit{float diffuse[4]{},ambient[4]{},specular[4]{},emissive[4]{},power=0;};
 constexpr int OBJCLASS_EFFECT=7;
-struct Owner{int kind;int ObjClass()const{return kind;}};
+struct Owner{int kind;uint32_t id=0;int ObjClass()const{return kind;}uint32_t ObjId()const{return id;}};
 struct Asset{int objnum=0;};
 struct Resource{uint32_t id=1;};using sg_buffer=Resource;
 struct sg_range{const void*ptr;size_t size;};
@@ -66,15 +68,34 @@ struct TRenderer{std::vector<SMeshSubmit>mesh_queue;std::vector<float>mesh_insta
  Resource mesh_pipeline,mesh_source_cull_pipeline;bool retail_mesh_rgb_enabled=true;
  struct{int mode=0;}light;std::vector<SMeshEntry>meshes{SMeshEntry{}};
  Resource NextMeshInstanceBuffer(){return {};}void PackMeshVsUniforms(float(&)[20]){}
+ RETAIL_POLICY
  uint32_t TextureImage(uint32_t t){return t;}void DrainMeshQueue();};
-'''
+TRenderer tint_renderer;TRenderer*Renderer=&tint_renderer;
+'''.replace('RETAIL_POLICY', lighting_policy)
 checks = r'''
 int main(){
  T3DImagery barrier;barrier.textures=0;barrier.material.matdesc.diffuse={1,0,0,0.25f};
  SMeshSubmit red;ApplyTint(&barrier,OBJCLASS_EFFECT,0.8f,red);
  assert(red.tint[0]==1&&red.tint[1]==0&&red.tint[2]==0&&red.tint[3]==0.2f);
+ for(uint32_t id:{0xad92bc10u,0xad92bc37u,0xad92bc38u}){
+  SMeshSubmit source;ApplyTint(&barrier,OBJCLASS_EFFECT,0.8f,source,id);
+  assert(source.tint[0]==1&&source.tint[1]==1&&source.tint[2]==1&&source.tint[3]==0.8f);
+ assert(source.retail_lighting==1);}
+ tint_renderer.light.mode=1;SMeshSubmit modern;
+ ApplyTint(&barrier,OBJCLASS_EFFECT,0.8f,modern,0xad92bc37u);
+ assert(modern.tint[1]==0&&modern.tint[3]==0.2f&&modern.retail_lighting==0);
+ tint_renderer.light.mode=0;tint_renderer.retail_mesh_rgb_enabled=false;SMeshSubmit positional;
+ ApplyTint(&barrier,OBJCLASS_EFFECT,0.8f,positional,0xad92bc38u);
+ assert(positional.tint[1]==0&&positional.tint[3]==0.2f&&positional.retail_lighting==0);
+ tint_renderer.retail_mesh_rgb_enabled=true;
+ SMeshSubmit unknown;ApplyTint(&barrier,OBJCLASS_EFFECT,0.8f,unknown,0xad92bc11u);
+ assert(unknown.tint[1]==0&&unknown.tint[3]==0.2f&&unknown.retail_lighting==0);
+ SMeshSubmit non_effect;ApplyTint(&barrier,0,0.8f,non_effect,0xad92bc10u);
+ assert(non_effect.tint[1]==1&&non_effect.retail_lighting==0);
  barrier.textures=1;ApplyTint(&barrier,OBJCLASS_EFFECT,0.8f,red);
  assert(red.tint[0]==1&&red.tint[1]==1&&red.tint[2]==1&&red.tint[3]==0.8f);
+ SMeshSubmit textured;ApplyTint(&barrier,OBJCLASS_EFFECT,0.8f,textured,0xad92bc37u);
+ assert(textured.tint[1]==1&&textured.tint[3]==0.8f&&textured.retail_lighting==0);
  barrier.textures=0;ApplyTint(&barrier,0,0.8f,red);assert(red.tint[1]==1&&red.tint[3]==0.8f);
  barrier.material_index=2;ApplyTint(&barrier,OBJCLASS_EFFECT,0.8f,red);
  assert(red.tint[0]==1&&red.tint[1]==1&&red.tint[2]==1&&red.tint[3]==0.8f);
@@ -99,7 +120,7 @@ int main(){
 '''
 with tempfile.TemporaryDirectory(prefix='revenant-map-texture-') as temp:
     source=Path(temp)/'test.cpp';binary=Path(temp)/'test'
-    tint_function = '\nvoid ApplyTint(T3DImagery*meshimg,int kind,float draw_alpha,SMeshSubmit&m){Owner owner{kind};Owner*oi=&owner;Asset asset;\n'+tint+'}\n'
+    tint_function = '\nvoid ApplyTint(T3DImagery*meshimg,int kind,float draw_alpha,SMeshSubmit&m,uint32_t id=0){Owner owner{kind,id};Owner*oi=&owner;Asset asset;\n'+tint+'}\n'
     source.write_text(prelude+selection+'\n'+material+tint_function+drain+'\n'+checks)
     subprocess.run(['clang++','-std=c++17',str(source),'-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True)

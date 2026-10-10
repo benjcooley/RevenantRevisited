@@ -686,6 +686,8 @@ public:
     // stacked point-light blow-out. Range typical [0.5..4.0].
     void SetLightCeiling(float ceiling);
     void SetRetailMeshLighting(const float ambient[3], const float directional[3], bool rgb_enabled);
+    [[nodiscard]] bool UsesRetailSoftwareMeshLighting() const
+    { return light.mode == 0 && retail_mesh_rgb_enabled; }
     // Z-buffer-based screen-space ambient occlusion.
     void SetAmbientOcclusion(bool enable, float radius_px, float strength,
                              float bias, float max_dist_wu);
