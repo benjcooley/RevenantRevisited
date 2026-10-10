@@ -4574,46 +4574,56 @@ bool TCharacter::SpecificAttack(int32_t attacknum)
     return DoAttack(attacknum, imp, dmg, th, rl, targ);
 }
 
+// REVSYNC: Leap @ 0x004d2be0 -- in a combat or bow root, alive, and (unless
+// the move is interactive, charflags 0x80000) not in an interactive attack
+// or impact: the root's leap toward `angle`, one of eight by the angle off
+// the facing's octant ("<root>leapf", "...fr", ... "...fl"). A player's
+// idle mark (state bit 2) goes. The block interrupts and keeps the doing
+// block's target; true once it's desired (SetDesired's answer isn't read).
 bool TCharacter::Leap(int32_t angle)
 {
-    if (!IsFighting())
+    if (!IsFighting() || Health() <= 0)
         return false;
-
-    int32_t roundangle = ((GetFace() + 15) & 0xE0); // round to 8 dirs
-    int32_t diff = (angle - roundangle) & 255;
-    int32_t anim = diff / 32;
-
-    TActionBlock* ab = nullptr;
-
-    char *sfx;
-
-    switch (anim)
+    if (!(charflags & kCharFlagInteractive))
     {
-        case 0: sfx = "leapf"; break;
-        case 1: sfx = "leapfr"; break;
-        case 2: sfx = "leapr"; break;
-        case 3: sfx = "leapbr"; break;
-        case 4: sfx = "leapb"; break;
-        case 5: sfx = "leapbl"; break;
-        case 6: sfx = "leapl"; break;
-        case 7: sfx = "leapfl"; break;
+        if (doing->attack && (doing->attack->flags & CA_INTERACTIVE))
+            return false;
+        if (doing->impact && (doing->impact->flags & CAI_INTERACTIVE))
+            return false;
+    }
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        auto* player = static_cast<TPlayer*>(this);
+        if (player->PlayerState() & 2)
+            player->SetPlayerState(player->PlayerState() & ~2);
     }
 
-    char animname[RESNAMELEN];
-    strcpy(animname, StName(root->name, sfx));
-
-    if (!HasActionAni(animname))
+    static constexpr const char* kSuffix[8] = {"leapf", "leapfr", "leapr", "leapbr",
+                                               "leapb", "leapbl", "leapl", "leapfl"};
+    const int32_t octant = ((angle - ((GetFace() + 15) & 0xe0)) & 0xff) / 32;
+    char name[RESNAMELEN];
+    snprintf(name, sizeof(name), "%s%s", root->name, kSuffix[octant]);
+    if (!HasActionAni(name))
         return false;
 
-    ab = new TActionBlock(animname, ACTION_COMBATLEAP);
+    auto* ab = new TActionBlock(name, ACTION_COMBATLEAP);
     ab->interrupt = true;
-
-    if (ab && doing)    // Copy current target
+    if (doing)
         ab->obj = doing->obj;
-
-    SetDesired(ab);
-
+    SetDesired(ab, 0);
     return true;
+}
+
+// REVSYNC: StartRetreat @ 0x004d5fc0 -- give up the fight and run: no target,
+// the walk stopped (unless already retreating), and 96 frames of retreat.
+void TCharacter::StartRetreat()
+{
+    SetFighting(nullptr);
+    if (!retreating)
+        Stop();
+    retreatframes = 0x60;
+    retreating = true;
+    retreatlatch = true;
 }
 
 bool TCharacter::Block(int32_t frames)

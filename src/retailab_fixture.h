@@ -275,9 +275,6 @@ class TFixtureChar : public Base, public IFixtureChar
         this->SetMoveAngle((int32_t)spec["moveangle"].Int(spec["facing"].Int()));
         this->state = (uint16_t)spec["state"].Int(0);
         this->charflags = (uint32_t)spec["charflags"].Int();
-        // The object flags combat code tests (immobile, paralysed, iced), as the case gives them.
-        constexpr uint32_t caseflags = OF_IMMOBILE | OF_PARALIZE | OF_ICED;
-        this->flags = (this->flags & ~caseflags) | ((uint32_t)spec["objflags"].Int(0) & caseflags);
         this->retreating = spec["retreating"].Bool();
         this->monsterkind = (int32_t)spec["monsterkind"].Int(0);
         for (const auto& [k, v] : spec["stats"].Members())
@@ -814,6 +811,7 @@ class SCaseScope
 
   private:
     int32_t savedAmbient = 0;
+    TPlayer* savedPlayer = nullptr;
 };
 
 }  // namespace RetailAB::Fixture
