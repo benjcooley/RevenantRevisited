@@ -136,12 +136,17 @@ class TCharacter : public TComplexObject
         // is calculated as damage * (100% + modifier) * (100% + chardmgmodifier).
     virtual void Damage(int32_t damage, int32_t damagetype = DT_NONE, int32_t modifier = 0,
         PTActionBlock action = nullptr, TCharacter* attacker = nullptr);
-        // Apply damage to the character.  If character hit, use 'action' action block
-        // instead of default "impact" state, or use 'action' block if he dies instead
-        // of default "dead" state.  If impact and death are nullptr, uses default "impact"
-        // and "dead".  Note that damage is modified based on monsters resistance to 
-        // 'damagetype' damage unless damagetype is DT_NONE, in which case the exact
-        // damage value in 'damage' is used without ANY modification.
+        // This character takes 'damage' from 'attacker' (retail 0x004c4950, vtable
+        // +0x228): exactly as given for DT_NONE, else through CalculateDamage. It
+        // shows it with the impact or death block 'action' when that suits, else
+        // one of its CHARIMPACTs or the stock "impact" / "dead" names. Damage owns
+        // 'action': it becomes one of this character's blocks or is freed.
+    virtual void Killed(TCharacter* /*victim*/) {}
+        // This character landed a killing blow (retail vtable +0x244; the
+        // player counts it)
+    virtual void Died(TCharacter* /*killer*/) {}
+        // This character's health reached 0 (retail +0x248): from Damage with the
+        // killer, from Pulse with none
     void RestoreHealth();
         // Cure them of all ailments and set health to max
 
@@ -393,6 +398,7 @@ class TCharacter : public TComplexObject
     // Retail charflags (+0x110) bits the combat code reads:
     static constexpr uint32_t kCharFlagNoTurn        = 0x4;       // DoAttack / Block / EndFighting leave the move
                                                                   // angle alone; the AI doesn't acquire (name unknown)
+    static constexpr uint32_t kCharFlagUnkillable    = 0x8;       // Damage leaves at least 1 health (setter unidentified)
     static constexpr uint32_t kCharFlagNoKill        = 0x80;      // IsValidAttack refuses a killing blow but an
                                                                   // interactive death (setter unidentified)
     static constexpr uint32_t kCharFlagDamageSeventh = 0x10;      // CalculateDamage /7 (not freeze); setter unidentified
@@ -402,6 +408,8 @@ class TCharacter : public TComplexObject
     static constexpr uint32_t kCharFlagWalkFighter   = 0x4000;    // fights in its walk root (BeginFighting, AI)
     static constexpr uint32_t kCharFlagNotTargetable = 0x8000;    // IsValidTarget refuses (setter unidentified)
     static constexpr uint32_t kCharFlagPlayAnimRoots = 0x10000;   // a PLAYANIM "c..." / "w..." needs that root
+    static constexpr uint32_t kCharFlagDead          = 0x40000;   // Died has been told (Damage; retail's Pulse
+                                                                  // too, which clears it when health returns)
     static constexpr uint32_t kCharFlagInteractive   = 0x80000;   // in an interactive move: Go skips its gates
     static constexpr uint32_t kCharFlagPlayerAI      = 0x100000;  // the player runs AI() (retail: set for
                                                                   // net players at 0x0051efc4; the arena's --playerai)
@@ -620,6 +628,19 @@ class TCharacter : public TComplexObject
     virtual int32_t ResolveLeap(PTActionBlock ab, int32_t bits);
     virtual int32_t ResolvePull(PTActionBlock ab, int32_t bits);
 
+    // Damage's steps (retail 0x004c4950, COMBAT_HIT.md §3.4)
+    SCharAttackImpact* DamageDeath(TActionBlock* given, TActionBlock*& made, int32_t damage, int32_t dir,
+        TCharacter* attacker);
+      // The death block (the given one, a CHARIMPACT's, or a stock name) forced;
+      // the impact whose snap follows. A block it makes is left in 'made'.
+    SCharAttackImpact* DamageImpact(TActionBlock* given, TActionBlock*& made, int32_t damage, int32_t dir,
+        TCharacter* attacker);
+      // Likewise the impact block ("blockimpact" while blocking)
+    void ForceDamageBlock(TActionBlock* ab, const SCharAttackImpact* imp);
+      // Turns 'ab' as its impact says, then forces the root and 'ab'
+    int32_t DamageShare(int32_t damage);
+      // damage as a percentage of what's left (at most 100): CHARIMPACT's range
+
     char *GetAngleMoveAnim(int32_t movedir, int32_t facedir, char *root, char *animname, int32_t buflen);
       // Returns the correct angle movce animation given the current movedir, facedir, and root name
     void AdvanceAngles(int32_t faceang, int32_t moveang, int32_t maxturn);
@@ -728,7 +749,7 @@ class TCharacter : public TComplexObject
     SHasSeen hasseen[MAXHASSEEN]; // List of characters seen recently
 
   // Snap stuff
-    int32_t snapticks;                // Total number of frames left in snap move
+    int32_t snapticks = -1;           // retail +0x220: Damage stores an impact's snaptime (nothing reads it)
 
   // combatflash delay
     int32_t combatflashticks = 0;     // retail +0x224 (a blow sets 5; Pulse counts it down)

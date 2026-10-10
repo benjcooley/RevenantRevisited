@@ -237,6 +237,7 @@ void ReadCharData(const JsonValue& c, SCharData& cd)
     ReadInt(c["poisonchance"], cd.poisonchance);
     if (c.Has("impacts"))
     {
+        std::fill(std::begin(cd.impacts), std::end(cd.impacts), SCharAttackImpact{});   // the unused slots zero, as retail's
         cd.numimpacts = 0;
         for (const JsonValue& imp : c["impacts"].Items())
             if (cd.numimpacts < MAXCHARIMPACTS)

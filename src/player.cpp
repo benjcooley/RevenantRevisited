@@ -782,9 +782,28 @@ uint32_t TPlayer::Move()
     return retval;
 }
 
+// REVSYNC: TPlayer::Damage @ 0x005191e0 (vtable +0x48).
 void TPlayer::Damage(int32_t damage, int32_t type)
 {
     TCharacter::Damage(damage, type);
+}
+
+// REVSYNC: TPlayer::Killed @ 0x00518ed0 (vtable +0x244) -- a kill counts in
+// the frag record: +0x650 for a player, +0x658 for anything else. (The
+// network score message and the HUD refresh are multiplayer's.)
+void TPlayer::Killed(TCharacter* victim)
+{
+    if (victim)
+        ++frags[victim->ObjClass() == OBJCLASS_PLAYER ? 0 : 2];
+}
+
+// REVSYNC: TPlayer::Died @ 0x00518f90 (vtable +0x248; SetFrags 0x00519050) --
+// a death counts: +0x654 by a player, +0x65c by anything else; none when
+// nothing killed it (Pulse's call).
+void TPlayer::Died(TCharacter* killer)
+{
+    if (killer)
+        ++frags[killer->ObjClass() == OBJCLASS_PLAYER ? 1 : 3];
 }
 
 // REVSYNC: TPlayer::Resist @ 0x005208d0 -- CalculateDamage's percent off:

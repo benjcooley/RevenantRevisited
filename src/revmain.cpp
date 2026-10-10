@@ -224,6 +224,7 @@ bool IsVooDoo        = false;       // True if using a voodoo card
 bool IsMMX           = false;       // Has MMX extensions
 bool NoAI            = false;       // Turns off monster AI
 bool CheatNahkranoth = false;       // retail 0x00668108 (IsValidAttack, Damage); no console toggle yet
+bool CheatAlreadyDead = false;      // retail 0x00668104 (Damage; also 0x004c2a20, 0x004d3590); no console toggle yet
 bool AutoBeginCombat = true;        // Automatically begins combat if enemy in range and facing him
 bool PlaySpeech      = true;        // Play speech wave files
 bool ShowDialog      = false;       // Show dialog lines (always shows if no speech file found)

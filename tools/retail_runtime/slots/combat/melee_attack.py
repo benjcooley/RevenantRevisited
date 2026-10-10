@@ -21,6 +21,12 @@ field names (data_parse.py's layouts) -- and their attack bookkeeping
 - `button-attack` ButtonAttack `0x4d2480` / `button-action` ButtonAction
   `0x4d27f0` (button), `random-attack` RandomAttack `0x4d2900` (pcnt),
   `specific-attack` SpecificAttack `0x4d2a60` (attack).
+- `resolve-attack` ResolveAttack `0x4c6dd0` (bits) on the doing block,
+  `resolve-hit` ResolveHit `0x4c62b0` (attack, impact, targ, damage, tohit,
+  roll), `on-attacked` OnAttacked `0x4cdce0` (attacker, victim, flag).
+- `damage` Damage `0x4c4950` (damage, type, mod, block, attacker): `block`
+  a block spec as the case's roles take them, its attack / impact the
+  attacker's by default; run with the case's `seam_damage` false.
 
 Runs as original code: the method and what it calls -- the searches,
 IsValidAttack, DoAttack, HasActionAni, CombatAnimName `0x4ce1b0` and the
@@ -46,7 +52,8 @@ Seams (guest.py's, and these), recorded in order:
 
 Rules (`rules` in the case, the combat-data dump's names): TOHITCENTER ..
 TOHITDAMAGE at Rules `0x65d7a8` + `0x94` .. `0xcc`, the six STATLEVEL
-tables behind `+0x58`. Globals: guest.py's, and `nahkranoth` (`0x668108`).
+tables behind `+0x58`. Globals: guest.py's, `nahkranoth` (`0x668108`),
+`alreadydead` (`0x668104`), `nocombatresults` (`0x668194`).
 
 Schema `combat.melee.v1`, shared with the port's `Revenant
 --retail-ab=melee-*` (src/retailab_melee.cpp).
@@ -91,22 +98,27 @@ COVERED = {'AnimPrefix': (0x4cdf60, 0x4ce1b0), 'CombatAnimName': (0x4ce1b0, 0x4c
            'DoAttack': (0x4d2120, 0x4d2480), 'ButtonAttack': (0x4d2480, 0x4d27e3),
            'ButtonAction': (0x4d27f0, 0x4d28fb), 'RandomAttack': (0x4d2900, 0x4d2a53),
            'SpecificAttack': (0x4d2a60, 0x4d2bd9), 'ResolveHit': (0x4c62b0, 0x4c6dca),
-           'ResolveAttack': (0x4c6dd0, 0x4c748c), 'OnAttacked': (0x4cdce0, 0x4cdef1)}
+           'ResolveAttack': (0x4c6dd0, 0x4c748c), 'OnAttacked': (0x4cdce0, 0x4cdef1),
+           'Damage': (0x4c4950, 0x4c5810), 'ObjectDamage': (0x46e970, 0x46ea0d),
+           'PlayerKilled': (0x518ed0, 0x518f8b), 'PlayerDied': (0x518f90, 0x518fda)}
 
 ATTACK_SIZE = 0x320
 RULES = 0x65d7a8
 RULES_TOHIT = [('tohitcenter', 0x94), ('tohitrangechar', 0x98), ('tohitrangeplyr', 0x9c),
                ('tohitblock', 0xa0), ('tohitface', 0xa4)]
 R_TOHITDAMAGE, R_STATLEVELS = 0xa8, 0x58
-G_NAHKRANOTH, G_NOCOMBATRESULTS, G_PLAYER = 0x668108, 0x668194, 0x667fcc
+G_NAHKRANOTH, G_ALREADYDEAD, G_NOCOMBATRESULTS, G_PLAYER = 0x668108, 0x668104, 0x668194, 0x667fcc
 
 # TCharacter attack bookkeeping (COMBAT_ATTACK_CHOICE.md §2.4). Defaults as
 # ClearChar 0x4c18a0 leaves them (the port's ClearChar is the same).
 ATTACKSTATE = [('nextattack', 0x120, 1), ('magictimer', 0x124, 1), ('requestbits', 0x128, 0),
                ('attackcount', 0x12c, 0), ('lastattackticks', 0x164, 0), ('lasthit', 0x168, 0),
                ('chainhits', 0x16c, 0), ('lastbutton', 0x28c, -1), ('buttonrepeat', 0x290, 0),
-               ('flashticks', 0x224, 0), ('autocombat', 0xe8, 1), ('movevert', 0xb8, None)]
+               ('flashticks', 0x224, 0), ('autocombat', 0xe8, 1), ('movevert', 0xb8, None),
+               ('snapticks', 0x220, -1), ('charflags', 0x110, None)]
 O_LASTATTACK = 0x160
+O_FLAGS, OF_ICED_PARALIZE = 0x8, 0x2800000
+P_FRAGS = 0x650                                 # TPlayer kills / deaths, 4 ints
 # TPlayer's modified stat copy (PLAYER_STATS.md §1): count +0x34c (short),
 # {id, value} pairs at +0x350. Resist reads entry type + 6.
 P_MODCOUNT, P_MODSTATS, RESIST_FIRST = 0x34c, 0x350, 6
@@ -385,29 +397,29 @@ class MeleeFixture:
         cd = vm.u32(obj + 0xfc)
         vm.put_u32(obj + O_LASTATTACK, vm.u32(vm.u32(cd + C_ATTACKS + 0x10) + 4 * last) if last is not None else 0)
 
-    def _block_fields(self, obj, spec):
+    def _apply_block_fields(self, ab, obj, b):
         """What a block of the case carries beyond the shared spec: its
-        attack (an index into the owner's table), impact (an index into that
-        attack's impacts), damage, to-hit and roll."""
+        attack (an index into the table of `obj`, or of the character
+        `attack_of` names), impact (of that attack, or of attack
+        `impact_attack` of `impact_of`), damage, to-hit and roll."""
         vm = self.vm
-        cd = vm.u32(obj + 0xfc)
-        for role, off in (('root', 0xe0), ('doing', 0xd8), ('desired', 0xdc)):
-            b = spec.get(role)
-            if not isinstance(b, dict):
-                continue
-            ab = vm.u32(obj + off)
 
-            def record(owner, index):
-                ocd = vm.u32((self.world.by_name[owner] if owner else obj) + 0xfc)
-                return vm.u32(vm.u32(ocd + C_ATTACKS + 0x10) + 4 * index)
-            if 'attack' in b:
-                vm.put_u32(ab + AB['attack'], record(b.get('attack_of'), b['attack']))
-            if 'impact' in b:
-                rec = record(b.get('impact_of', b.get('attack_of')), b.get('impact_attack', b.get('attack')))
-                vm.put_u32(ab + AB['impact'], rec + A_IMPACTS + IMPACT_SIZE * b['impact'])
-            for key, off2 in (('damage', AB['damage']), ('tohit', 0x54), ('roll', 0x58)):
-                if key in b:
-                    vm.put_u32(ab + off2, b[key] & 0xffffffff)
+        def record(owner, index):
+            ocd = vm.u32((self.world.by_name[owner] if owner else obj) + 0xfc)
+            return vm.u32(vm.u32(ocd + C_ATTACKS + 0x10) + 4 * index)
+        if 'attack' in b:
+            vm.put_u32(ab + AB['attack'], record(b.get('attack_of'), b['attack']))
+        if 'impact' in b:
+            rec = record(b.get('impact_of', b.get('attack_of')), b.get('impact_attack', b.get('attack')))
+            vm.put_u32(ab + AB['impact'], rec + A_IMPACTS + IMPACT_SIZE * b['impact'])
+        for key, off2 in (('damage', AB['damage']), ('tohit', 0x54), ('roll', 0x58)):
+            if key in b:
+                vm.put_u32(ab + off2, b[key] & 0xffffffff)
+
+    def _block_fields(self, obj, spec):
+        for role, off in (('root', 0xe0), ('doing', 0xd8), ('desired', 0xdc)):
+            if isinstance(spec.get(role), dict):
+                self._apply_block_fields(self.vm.u32(obj + off), obj, spec[role])
 
     def _resists(self, obj, spec):
         """A player's modified stat copy, as far as Resist reads it."""
@@ -446,13 +458,19 @@ class MeleeFixture:
         return f'{owner[0]}#{owner[1]}' if owner else f'{rec:#x}'
 
     def _impact_index(self, ab):
-        """An attack's impact as "<owner>#<attack>/<impact>"."""
+        """An attack's impact as "<owner>#<attack>/<impact>", a CHARIMPACT as
+        "<owner>/<impact>"; the slot after a full list (six) "past-end"."""
         imp = self.vm.u32(ab + AB['impact'])
         if not imp:
             return None
         for rec, (owner, i) in self.records.items():
-            if rec + A_IMPACTS <= imp < rec + A_IMPACTS + 6 * IMPACT_SIZE:
-                return f'{owner}#{i}/{(imp - rec - A_IMPACTS) // IMPACT_SIZE}'
+            k, r = divmod(imp - rec - A_IMPACTS, IMPACT_SIZE)
+            if r == 0 and 0 <= k <= 6:
+                return 'past-end' if k == 6 else f'{owner}#{i}/{k}'
+        for name, obj in self.world.by_name.items():
+            k, r = divmod(imp - self.vm.u32(obj + 0xfc) - C_IMPACTS, IMPACT_SIZE)
+            if r == 0 and 0 <= k <= 6:
+                return 'past-end' if k == 6 else f'{name}/{k}'
         return f'{imp:#x}'
 
     def _block_extra(self, ab, out):
@@ -470,8 +488,11 @@ class MeleeFixture:
         for role, off in (('root', 0xe0), ('doing', 0xd8), ('desired', 0xdc)):
             self._block_extra(vm.u32(obj + off), out[role])
         state = {name: s32(vm.u32(obj + off)) for name, off, _ in ATTACKSTATE}
+        state['objflags'] = vm.u32(obj + O_FLAGS) & OF_ICED_PARALIZE
         owner = self.records.get(vm.u32(obj + O_LASTATTACK))
         state['lastattack'] = owner[1] if owner and owner[0] == world._name(obj) else None
+        if self.specs[world._name(obj)].get('class', 12) == 11:
+            state['frags'] = [s32(vm.u32(obj + P_FRAGS + 4 * i)) for i in range(4)]
         out['attackstate'] = state
         out['motion'] = world.motion_dump(obj)
         return out
@@ -486,6 +507,7 @@ class MeleeFixture:
         self.specs = {c['name']: c for c in case['chars']}
         world.set_globals(case.get('globals', {}))
         vm.put_u32(G_NAHKRANOTH, int(case.get('globals', {}).get('nahkranoth', 0)))
+        vm.put_u32(G_ALREADYDEAD, int(case.get('globals', {}).get('alreadydead', 0)))
         vm.put_u32(G_NOCOMBATRESULTS, int(case.get('globals', {}).get('nocombatresults', 0)))
         vm.put_u32(G_PLAYER, 0)
         self._rules(case.get('rules', {}))
@@ -563,6 +585,15 @@ class MeleeFixture:
                      'random-attack': RANDOM_ATTACK, 'specific-attack': SPECIFIC_ATTACK}[kind]
             arg = a['pcnt'] if kind == 'random-attack' else a['attack'] if kind == 'specific-attack' else a['button']
             result['returned'] = s32(call(vm, entry, (arg & 0xffffffff,), this=me))
+        elif kind == 'damage':
+            ab = 0
+            attacker = self._obj(a.get('attacker'))
+            if isinstance(a.get('block'), dict):
+                ab = world.new_block(a['block'], world.by_name)
+                self._apply_block_fields(ab, attacker, a['block'])
+            call(vm, DAMAGE, (a['damage'] & 0xffffffff, a.get('type', -1) & 0xffffffff, a.get('mod', 0) & 0xffffffff,
+                              ab, attacker), this=me)
+            result['returned'] = 0
         else:
             raise ValueError(f'unknown call {kind!r}')
         # A block made in the call is `new N` per character, as the port numbers them.

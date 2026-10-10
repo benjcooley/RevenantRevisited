@@ -140,6 +140,43 @@ std::string ShownName(const char* name)
         shown.resize(kLength - 1);
     return shown;
 }
+
+// Where a character's combat target stands, as Damage filters its
+// CHARIMPACTs (0x004c4c78): the absolute bearing to it, not turned by the
+// character's facing, in three quarters about 0x80; none for 0xe0-0x1f.
+int32_t BearingFilter(int32_t bearing)
+{
+    if (bearing >= 0x20 && bearing < 0x60)
+        return CAI_TURNPLUS90;
+    if (bearing >= 0x60 && bearing < 0xa0)
+        return CAI_TURN180;
+    if (bearing >= 0xa0 && bearing < 0xe0)
+        return CAI_TURNMINUS90;
+    return 0;
+}
+
+// The angle a death or impact block takes: the bearing to whoever it
+// answers, turned as its impact's flags say (0x004c4eaf, 0x004c53c0).
+int32_t ImpactTurn(int32_t bearing, int32_t impflags)
+{
+    if (impflags & CAI_TURN180)
+        return (bearing - 0x80) & 0xff;
+    if (impflags & CAI_TURNPLUS90)
+        return (bearing + 0x40) & 0xff;
+    if (impflags & CAI_TURNMINUS90)
+        return (bearing - 0x40) & 0xff;
+    return bearing;
+}
+
+// The slot after an impact list's first `used`, where retail's searches end
+// when nothing matches: a zeroed record while the list has room.
+SCharAttackImpact* SlotAfter(SCharAttackImpact* list, int32_t used, int32_t capacity)
+{
+  // REVSYNC-DIVERGENCE: after a full list retail reads past it; an empty
+  // impact stands in.
+    static SCharAttackImpact none{};
+    return used < capacity ? &list[used] : &none;
+}
 }
 
 // *************************************************************
@@ -1044,6 +1081,14 @@ int32_t TCharacter::CalculateDamage(int32_t damage, int32_t damagetype, int32_t 
     return taken;
 }
 
+// REVSYNC: TCharacter::Damage @ 0x004c4950 (vtable +0x228; COMBAT_HIT.md
+// §3.4) -- this character takes `damage` from `attacker`: as it is with
+// DT_NONE, else through CalculateDamage with the attacker's `modifier`.
+// Then the block that shows it: a death or an impact, the given `action`
+// (ResolveHit's hit block) when it suits, else one of this character's
+// CHARIMPACTs or the stock names; then the impact's snap, and the retreat
+// a low-health hit starts. Damage owns `action`: it ends as one of this
+// character's blocks or is freed.
 void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
     TActionBlock* action, TCharacter* attacker)
 {
@@ -1052,153 +1097,297 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
         damageSeam(this, damage, damagetype, modifier, action, attacker);
         return;
     }
-  // Calculate total damage
-    if (damagetype >= 0)
-        damage = CalculateDamage(damage, damagetype, modifier);
 
-  // Apply damage to low level object
-    TObjectInstance::Damage(damage);
-    CombatTrace::Event(this, "damage", "amount=%d\ttype=%d\thp=%d\tby=%s", damage, damagetype, Health(),
-                       attacker && attacker->GetName() ? attacker->GetName() : "-");
-
-  // Get impact pointer
-    SCharAttackImpact* impactdata = nullptr;
-
-  // Do death...
-    if (Health() < 1)
+  // The given block and the one Damage makes: each ends as root, doing or
+  // desired, or is freed here. (Retail frees a given block it replaces at
+  // once and leaves the rest to its caller, ResolveHit, which frees the
+  // block unless installed.)
+    struct SOwnedBlocks
     {
-        CombatTrace::Event(this, "death", "by=%s", attacker && attacker->GetName() ? attacker->GetName() : "-");
-/*      if (!random(0, 2))
+        TCharacter* self;
+        TActionBlock* given;
+        TActionBlock* made = nullptr;
+        ~SOwnedBlocks()
         {
-            S3DPoint vel;
-            vel.x = random(-8, 8);
-            vel.y = random(-8, 8);
-            vel.z = random(7, 12); 
-            int32_t count = random(6, 16);
-            Pulp(vel, count, count * 30);
+            self->DropUnheld(given);
+            if (made != given)
+                self->DropUnheld(made);
         }
-*/
-        TActionBlock* death = action;
+    } owned{this, action};
 
-      // Caller didn't give us a special death to use so...
-        if (!death)
+    (void)Health();     // retail reads it first, for the network's damage message
+
+    if (attacker && (attacker->flags & (OF_ICED | OF_PARALIZE)))
+        return;
+    if (CheatAlreadyDead && ObjClass() == OBJCLASS_PLAYER)
+        return;
+    if (flags & OF_INVULNERABLE)
+        return;
+    if (CheatNahkranoth && attacker && attacker->ObjClass() == OBJCLASS_PLAYER)
+        damage = 100000;
+    if (attacker && !IsEnemy(attacker))
+        return;
+    if (ObjClass() == OBJCLASS_PLAYER && (static_cast<TPlayer*>(this)->PlayerState() & 2))
+        return;
+
+    if (damagetype >= 0)
+    {
+        damage = CalculateDamage(damage, damagetype, modifier);
+      // The victim's edge bonus for a player with an edged weapon (knife,
+      // sword, axe): IsValidAttack's line for the attacker, here for the
+      // one struck.
+        if (ObjClass() == OBJCLASS_PLAYER)
         {
-          // Find a 'death' impact in impact list (if there is one)
-            const char *deathname = "dead";
-            impactdata = chardata->impacts;
-            int32_t i;
-            for (i = 0; i < chardata->numimpacts; i++, impactdata++)
-            {
-                if (damage >= impactdata->damagemin &&
-                    damage <= impactdata->damagemax &&
-                    (impactdata->flags & CAI_DEATH) &&
-                    (!(impactdata->flags & CAI_WHENSTUNNED) || doing->action == ACTION_STUN) &&
-                    (!(impactdata->flags & CAI_WHENDOWN) || doing->action == ACTION_KNOCKDOWN) &&
-                    HasActionAni(impactdata->impactname) &&
-                    (impactdata->loopname[0] == '\0' || HasActionAni(impactdata->loopname)))
-                {
-                    deathname = impactdata->impactname;
-                    break;
-                }
-            }
-
-            if (i >= chardata->numimpacts)      // Not found, use default "dead" animation!
-                impactdata = nullptr;
-
-            if (!impactdata && !HasActionAni(deathname)) // Check to see if default "death" is there
-                return;
-
-            death = new TActionBlock(deathname, ACTION_DEAD);
-            death->impact = impactdata;
+            const int32_t wt = WeaponType();
+            if (wt > 0 && (wt <= 2 || wt == 4))
+                damage = damage * (static_cast<TPlayer*>(this)->EdgeBonus() + 100) / 100;
         }
-        else
-            impactdata = death->impact;
+    }
+    if ((charflags & kCharFlagUnkillable) && damage >= Health() - 1)
+        damage = Health() - 1;
 
-        death->obj = doing->obj;
-        death->damage = damage;
-        death->interrupt = true;
-        death->priority = true;
-        death->loop = true;
-        ForceCommand(root);     // Make sure we play "combat to" transitions
-        ForceCommand(death);
+  // Retail floats the amount over the character here (its animator's number
+  // list, TCharAnimator 0x004da3b0): not ported yet, see COMBAT_HIT.md §9.2.
+
+  // Held in an interactive move (another's), a character loses no health
+  // and shows no block.
+    if (!InteractiveLocked() && damage)
+        TObjectInstance::Damage(damage, 0);
+    if (CombatTrace::Enabled())
+        CombatTrace::Event(this, "damage", "amount=%d\ttype=%d\thp=%d\tby=%s", damage, damagetype, Health(),
+                           attacker && attacker->GetName() ? attacker->GetName() : "-");
+
+    const int32_t dir = root && (root->action == ACTION_COMBAT || root->action == ACTION_BOW) && root->obj
+                      ? BearingFilter(AngleTo(root->obj)) : 0;
+
+    if (Health() <= 0 && !(charflags & kCharFlagDead))
+    {
+        charflags |= kCharFlagDead;
+        if (CombatTrace::Enabled())
+            CombatTrace::Event(this, "death", "by=%s", attacker && attacker->GetName() ? attacker->GetName() : "-");
+        Died(attacker);
+        if (attacker)
+            attacker->Killed(this);
     }
 
-  // Or do impact...
+    if (!InteractiveLocked())
+    {
+        SCharAttackImpact* imp = Health() <= 0 ? DamageDeath(action, owned.made, damage, dir, attacker)
+                                               : DamageImpact(action, owned.made, damage, dir, attacker);
+        if (imp && imp->snapdist > 0 && attacker)
+        {
+            snapticks = imp->snaptime;
+            const int32_t away = (attacker->GetFace() - 0x80) & 0xff;
+            SetRotateZ(away);
+            SetMoveAngle(away);
+            S3DPoint p;
+            GetSnapPos(attacker, imp->snapdist, p);
+            MoveTo(p);
+        }
+    }
+
+    if (Health() <= chardata->retreatat && Health() >= 1)
+        retreatframes = chardata->retreatfor;
+}
+
+// Damage's death (0x004c4d45): the given block when it is a death, or
+// carries an interactive attack, else this character's first CHARIMPACT
+// death that fits, else the stock names; faced at the attacker. `made`:
+// the block made here. The impact whose snap follows.
+SCharAttackImpact* TCharacter::DamageDeath(TActionBlock* given, TActionBlock*& made, int32_t damage, int32_t dir,
+    TCharacter* attacker)
+{
+    TActionBlock* ab = given;
+    SCharAttackImpact* imp = nullptr;
+  // (Retail reads the given attack's flags unguarded.)
+    const bool usable = given && !(given->impact && !(given->impact->flags & CAI_DEATH) &&
+                                   !(given->attack && (given->attack->flags & CA_INTERACTIVE)));
+    if (usable)
+    {
+        imp = given->impact;
+        if (!imp && given->attack)
+        {
+          // The attack's impact of the block's name, or the slot after the last.
+            SCharAttackData* ad = given->attack;
+            int32_t k = 0;
+            while (k < ad->numimpacts && strcmp(ad->impacts[k].impactname, given->name) != 0)
+                ++k;
+            imp = SlotAfter(ad->impacts, k, MAXATTACKIMPACTS);
+        }
+    }
     else
     {
-        TActionBlock* impact = action;
-
-      // Caller didn't give us a special impact to use so...    
-        if (!impact)
+        char name[0x44] = "";
+        int32_t k = 0;
+        for (; k < chardata->numimpacts; ++k)
         {
-          // Find default impact from char's default impact list
-            const char *impactname = "impact";
-            ACTION impactaction = ACTION_IMPACT;
-            impactdata = chardata->impacts;
-            int32_t i;
-            for (i = 0; i < chardata->numimpacts; i++, impactdata++)
+            SCharAttackImpact& ci = chardata->impacts[k];
+            strncpyz(name, ci.impactname, sizeof(name));
+            if (!HasActionAni(name))
+                CombatAnimName(name, ci.impactname);
+            if ((ci.flags & dir) != dir || !(ci.flags & CAI_DEATH))
+                continue;
+            if (((ci.flags & CAI_WHENSTUNNED) && doing->action != ACTION_STUN) ||
+                ((ci.flags & CAI_WHENDOWN) && doing->action != ACTION_KNOCKDOWN))
+                continue;
+            if (!HasActionAni(name) || (ci.loopname[0] && !HasActionAni(ci.loopname)))
+                continue;
+            const int32_t share = DamageShare(damage);
+            if (share >= ci.damagemin && share <= ci.damagemax)
+                break;
+        }
+        imp = SlotAfter(chardata->impacts, k, MAXCHARIMPACTS);
+        if (k >= chardata->numimpacts || !name[0])
+        {
+            char dead[0x44];
+            CombatAnimName(name, "dead");
+            if (!HasActionAni(name))
             {
-                if (damage >= impactdata->damagemin &&
-                    damage <= impactdata->damagemax &&
-                    !(impactdata->flags & CAI_DEATH) &&
-                    (!(impactdata->flags & CAI_WHENSTUNNED) || doing->action == ACTION_STUN) &&
-                    (!(impactdata->flags & CAI_WHENDOWN) || doing->action == ACTION_KNOCKDOWN) &&
-                    HasActionAni(impactdata->impactname) &&
-                    (impactdata->loopname[0] == '\0' || HasActionAni(impactdata->loopname)))
+                CombatAnimName(dead, "dead");
+                snprintf(name, sizeof(name), "%s to %s", root->name, dead);
+                if (!HasActionAni(name))
                 {
-                    impactname = impactdata->impactname;
-                    if (impactdata->flags & CAI_STUN)
-                        impactaction = ACTION_STUN;
-                    else if (impactdata->flags & CAI_KNOCKDOWN)
-                        impactaction = ACTION_KNOCKDOWN;
-                    break;
+                    snprintf(name, sizeof(name), "%s to dead", root->name);
+                    if (!HasActionAni(name))
+                    {
+                        strncpyz(name, "dead", sizeof(name));
+                        if (!HasActionAni(name))
+                            name[0] = '\0';
+                    }
                 }
             }
-
-            if (i >= chardata->numimpacts)      // Not found, use default "impact" animation!
-                impactdata = nullptr;
-
-            if (!impactdata && !HasActionAni(impactname)) // Check to see if default "impact" is there
-                return;
-
-            impact = new TActionBlock(impactname, impactaction);
-            impact->impact = impactdata;
-
-            if (impactdata)
-                impact->wait = impactdata->looptime;
         }
-        else
-            impactdata = impact->impact;
-
-        impact->obj = doing->obj;
-        impact->damage = damage;
-        impact->interrupt = true;
-        ForceCommand(root);     // Make sure we play "combat to" transitions
-        ForceCommand(impact);
-
-        if (impact && impact->attack)
-            int32_t q = impact->attack->fatigue;
+      // No name: the given block (if any) stands, as retail leaves it.
+        if (name[0])
+        {
+            ab = made = new TActionBlock(name, ACTION_DEAD);
+            ab->impact = imp;
+        }
     }
 
-  // Do snap/push if needed
-    if (impactdata && impactdata->snapdist > 0 && attacker)
+    if (attacker)
     {
-        S3DPoint snap;
-        GetSnapPos(attacker, impactdata->snapdist, snap);
-//      if (impactdata->snaptime == 0)      // Immediate snap
-//      {
-            MoveTo(snap);
-//      }
-//      else                                // Time based snap
-//      {
-//          int32_t rollsnap = impactdata->snapdist * ROLLOVER / max(impactdata->snaptime, 1);
-//          S3DPoint snapvect;
-//          ConvertToVector(attacker->AngleTo(this), rollsnap, snapvect);
-//          SetVel(snapvect);
-//          snapticks = impactdata->snaptime;
-//      }
+        const int32_t a = AngleTo(attacker);
+        SetRotateZ(a);
+        SetMoveAngle(a);
+    }
+    if (!ab)
+        return imp;
+    ab->damage = damage;
+    ab->obj = doing->obj;
+    ab->priority = ab->interrupt = true;
+    if (!strstr(ab->name, " to "))
+        ab->loop = true;
+    ab->angle = ab->moveangle = doing->angle;
+    if (attacker && attacker->doing)
+        ab->attack = attacker->doing->attack;
+    ForceDamageBlock(ab, imp);
+    return imp;
+}
+
+// Damage's impact (0x004c52ab): blocking, a "blockimpact" unless the hit is
+// interactive; else the given block unless its impact is a death; else
+// this character's first CHARIMPACT that fits, or "impact". `made`: the
+// block made here. The impact whose snap follows.
+SCharAttackImpact* TCharacter::DamageImpact(TActionBlock* given, TActionBlock*& made, int32_t damage, int32_t dir,
+    TCharacter* attacker)
+{
+    TActionBlock* ab = given;
+    SCharAttackImpact* imp = nullptr;
+    if (doing->action == ACTION_BLOCK)
+    {
+      // (Retail reads the given attack's flags unguarded.)
+        const bool interactive = given && given->impact &&
+            ((given->attack && (given->attack->flags & CA_INTERACTIVE)) || (given->impact->flags & CAI_INTERACTIVE));
+        if (!interactive)
+        {
+            char name[0x44];
+            CombatAnimName(name, "blockimpact");
+            if (!HasActionAni(name))
+            {
+                strncpyz(name, "blockimpact", sizeof(name));
+                if (!HasActionAni(name))
+                    name[0] = '\0';
+            }
+            if (name[0])
+            {
+              // Retail's action 15 (the 1998 FLYBACK): played once, back to the root.
+                ab = made = new TActionBlock(name, ACTION_FLYBACK);
+                ab->priority = true;
+                ab->impact = nullptr;
+                ab->angle = GetFace();
+            }
+        }
+    }
+    else if (given && !(given->impact && (given->impact->flags & CAI_DEATH)))
+        imp = given->impact;
+    else
+    {
+        const char* name = "impact";
+        ACTION act = ACTION_IMPACT;
+        int32_t k = 0;
+        for (; k < chardata->numimpacts; ++k)
+        {
+            SCharAttackImpact& ci = chardata->impacts[k];
+            const int32_t share = DamageShare(damage);
+            if (share < ci.damagemin || share > ci.damagemax)
+                continue;
+            if ((ci.flags & dir) != dir || (ci.flags & CAI_DEATH))
+                continue;
+            if (((ci.flags & CAI_WHENSTUNNED) && doing->action != ACTION_STUN) ||
+                ((ci.flags & CAI_WHENDOWN) && doing->action != ACTION_KNOCKDOWN))
+                continue;
+            if (!HasActionAni(ci.impactname) || (ci.loopname[0] && !HasActionAni(ci.loopname)))
+                continue;
+            imp = &ci;
+            name = ci.impactname;
+            act = (ci.flags & CAI_STUN) ? ACTION_STUN : (ci.flags & CAI_KNOCKDOWN) ? ACTION_KNOCKDOWN : ACTION_IMPACT;
+            break;
+        }
+        if (imp || HasActionAni(name))
+        {
+            ab = made = new TActionBlock(name, act);
+            ab->impact = imp;
+            if (imp)
+                ab->wait = imp->looptime;
+        }
     }
 
+    if (!ab)
+        return imp;
+    ab->damage = damage;
+    ab->obj = doing->obj;
+    ab->interrupt = true;
+    if (attacker && attacker->doing)
+        ab->attack = attacker->doing->attack;
+    ForceDamageBlock(ab, imp);
+    SetRotateZ(ab->angle);
+    SetMoveAngle(ab->angle);
+    return imp;
+}
+
+// Damage's last steps for its block: an impact that doesn't snap or keep
+// the angle turns it from whoever it answers; then the root (for the
+// "combat to" transition) and the block, forced past any priority.
+void TCharacter::ForceDamageBlock(TActionBlock* ab, const SCharAttackImpact* imp)
+{
+    if (doing->obj && imp && imp->snapdist == 0 && !(imp->flags & CAI_KEEPANGLE))
+        ab->angle = ab->moveangle = ImpactTurn(AngleTo(doing->obj), imp->flags);
+    doing->priority = false;
+    if (desired)        // (retail's is never empty)
+        desired->priority = false;
+    ForceCommand(root);
+    ForceCommand(ab);
+}
+
+// The share of what's left that `damage` is, capped at 100: damage·100 /
+// max(1, max(Health(), damage)), Health() after the damage, read as
+// retail's code reads it. CHARIMPACT's damage range is in these terms.
+int32_t TCharacter::DamageShare(int32_t damage)
+{
+    const int32_t most = Health() > damage ? Health() : damage;
+    const int32_t denom = most < 1 ? 1 : (Health() > damage ? Health() : damage);
+    return damage * 100 / denom;
 }
 
 void TCharacter::RestoreHealth()
@@ -3964,7 +4153,8 @@ bool TCharacter::IsBowDrawn()
 
 // REVSYNC: the five-line gate retail opens ButtonAttack 0x004d2480,
 // RandomAttack 0x004d2900, SpecificAttack 0x004d2a60 (and SetFighting, Go,
-// EndFighting) with: no acting while held in an interactive attack.
+// EndFighting, Block, Dodge; Damage spares a held victim) with: held in
+// another's interactive move (its attack or an interactive impact).
 bool TCharacter::InteractiveLocked() const
 {
     if (charflags & kCharFlagInteractive)

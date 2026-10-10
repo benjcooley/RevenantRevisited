@@ -216,6 +216,10 @@ class TComplexObject : public TObjectInstance
         // False when refused (a block still waits while doing has priority);
         // the caller then still owns `ab`
       // Set desired pointer and update pointers
+    void DropUnheld(PTActionBlock ab)
+        { if (ab && ab != root && ab != doing && ab != desired) delete ab; }
+      // Frees a block that isn't the root, doing or desired one: what a
+      // refused SetDesired or ForceCommand leaves with its caller
     virtual bool IsFinalState() { return false; }
       // Returns whether character is in their last days
 
