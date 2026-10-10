@@ -189,10 +189,10 @@ def move_cases(data: Path, workdir: Path) -> list[dict]:
         case(f'char.combat-target.at{dist}', [fighter, blocker(dist)])
         case(f'wall.combat-target.at{dist}', [fighter, blocker(200, angle=0)],
              dict(z=BASE, cells=[_wall_ahead(AT, 64, dist - 10, BASE + 0x40)]))
-    # A blocked step clears the sight fields (+0x254..+0x25c).
-    case('blocked.sight', [_walking(64, movedist=0x100000, out_of_sight=1, out_of_sight_prev=1,
-                                    sight_lost_ticks=5), blocker(40)])
-    case('clear.sight', [_walking(64, movedist=STEP, out_of_sight=1, out_of_sight_prev=1, sight_lost_ticks=5)])
+    # A blocked step clears the retreat (+0x254..+0x25c).
+    case('blocked.sight', [_walking(64, movedist=0x100000, retreating=1, retreat_latch=1,
+                                    retreat_frames=5), blocker(40)])
+    case('clear.sight', [_walking(64, movedist=STEP, retreating=1, retreat_latch=1, retreat_frames=5)])
 
     # MoveTo: straight there (Move's up to ten MoveSteps), already there,
     # past a character (ignored), into a wall.

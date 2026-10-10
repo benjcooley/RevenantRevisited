@@ -322,7 +322,7 @@ Retail, verified against the disassembly where a fixture relies on them.
   (short), moveangle `+0xb0`.
 - TComplexObject: doing `+0xd8`, desired `+0xdc`, root `+0xe0`.
 - TCharacter (0x2a0 bytes, vtable `0x5a7848`): chardata `+0xfc`,
-  charflags `+0x110`, combat-engage `+0x254`, per-monster id `+0x280`.
+  charflags `+0x110`, retreating `+0x254`, per-monster id `+0x280`.
   Motion: vel `+0x1c`, accum `+0x28` (1/0x10000 units), inventnum
   `+0x7c` (short), movedist `+0xb4`, movevert `+0xb8`, movetopos `+0xec`,
   movepos `+0xf0`, forcenomove `+0x10c`, shovedir `+0x11c`, the sight
