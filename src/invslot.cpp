@@ -7,276 +7,166 @@
 
 #include "animation.h"
 #include "imagery.h"
-#include "renderer.h"
-#include "logging.h"
 #include "object.h"
-#include "time.h"
+#include "renderer.h"
+#include "revdefs.h"
+#include "surface.h"
 
-#include <cstdio>
-#include <cstring>
-
-// ----------------------------------------------------------------------
-// Constructor + content setters.
-// ----------------------------------------------------------------------
-TInvSlot::TInvSlot(int32_t x, int32_t y, int32_t w, int32_t h,
-                   int32_t allowed_type,
-                   PTBitmap empty_placeholder,
-                   const SInvSlotStyle* style)
-    : x_(x), y_(y), w_(w), h_(h),
-      allowed_type_(allowed_type),
-      empty_placeholder_(empty_placeholder),
-      style_(style)
-{
-}
-
-void TInvSlot::SetItem(TObjectInstance* item, PTBitmap icon, int32_t qty)
-{
-    item_ = item;
-    icon_ = icon;
-    qty_  = qty;
-    pouch_inner_ = nullptr;
-    if (!item || !icon)
-        kind_ = EInvSlotKind::Empty;
-    else
-        kind_ = EInvSlotKind::Regular;
-}
-
-void TInvSlot::SetPouchOverlay(PTBitmap inner)
-{
-    pouch_inner_ = inner;
-    if (inner) kind_ = EInvSlotKind::Pouch;
-}
-
-void TInvSlot::BindItem(TObjectInstance* item)
-{
-    SetItem(item, ItemIcon(item), item ? item->Amount() : 1);
-    if (!item || stricmp(item->GetName(), "Pouch") != 0)
-        return;
-
-    // A pouch: the first item inside, and how many items it holds.
-    TObjectInstance* first = nullptr;
-    int32_t count = 0;
-    for (TInventoryIterator i(item); i; i++)
-    {
-        if (!first)
-            first = i.Item();
-        ++count;
-    }
-    SetPouchOverlay(ItemIcon(first));
-    qty_ = count;
-}
+#include <algorithm>
+#include <string>
 
 namespace {
 
-// The current frame of an animated inventory icon. Retail's panes step
-// these in their Animate pass (EquipPane_SPEC §9); here the 24 Hz tick.
-TBitmap* AnimatedIconFrame(TAnimation* anim)
+// REVSYNC: 0x0052cd80 / 0x0052ca70. An item whose state has an inventory
+// animation shows the frame the game frame picks (Animate); any other shows
+// its inventory icon (paint, through the item's own draw).
+SInvIcon ItemIcon(TObjectInstance* item, int32_t frame)
 {
-    if (!anim || anim->NumFrames() <= 0)
-        return nullptr;
-    return anim->GetFrame(int32_t(TTime::LegacyFrameCount() % anim->NumFrames()));
+    SInvIcon icon;
+    if (!item)
+        return icon;
+    if (TObjectImagery* imagery = item->GetImagery())
+        if (TAnimation* anim = imagery->GetInvAnimation(item->GetState()); anim && anim->NumFrames() > 0)
+        {
+            icon.Add(anim->GetFrame(frame % anim->NumFrames()), 0, 0);
+            return icon;
+        }
+    return item->InventoryIcon();
+}
+
+// The icon's images at (x, y), each clipped to the icon's INVITEMREALWIDTH x
+// INVITEMREALHEIGHT, as retail's composed icons were.
+void DrawIcon(const SInvIcon& icon, int32_t x, int32_t y, int32_t target_w, int32_t target_h)
+{
+    for (int32_t i = 0; i < icon.count; ++i)
+    {
+        const SInvIconPart& part = icon.parts[i];
+        const int32_t left = (std::max)(0, -part.x);
+        const int32_t top = (std::max)(0, -part.y);
+        const int32_t right = (std::min)(part.image->width, INVITEMREALWIDTH - part.x);
+        const int32_t bottom = (std::min)(part.image->height, INVITEMREALHEIGHT - part.y);
+        if (right > left && bottom > top)
+            Renderer->DrawBitmapSubrectToTarget(part.image, x + part.x + left, y + part.y + top, left, top,
+                                                right - left, bottom - top, target_w, target_h);
+    }
+}
+
+void DrawText(const SInvSlotText& text, int32_t value, int32_t cellX, int32_t cellY,
+              int32_t target_w, int32_t target_h)
+{
+    if (!text.font)
+        return;
+    DrawTextShadowedToTarget(text.font, std::to_string(value).c_str(), cellX + text.x, cellY + text.y,
+                             text.w, 0, text.align, text.color.red / 255.0f, text.color.green / 255.0f,
+                             text.color.blue / 255.0f, target_w, target_h);
 }
 
 }  // namespace
 
-TBitmap* TInvSlot::ItemIcon(TObjectInstance* item)
+bool SInvSlotContent::operator==(const SInvSlotContent& other) const
 {
-    if (!item)
-        return nullptr;
-    TObjectImagery* img = item->GetImagery();
-    if (img)
-        if (TBitmap* frame = AnimatedIconFrame(img->GetInvAnimation(item->GetState())))
-            return frame;
-    if (TBitmap* bm = item->InventoryImage())
-        return bm;
-
-    // Items whose icon is baked on another state (or still streaming in).
-    if (img)
-        for (int32_t s = 0; s < img->NumStates(); ++s)
-        {
-            if (TBitmap* bm = img->GetInvImage(s))
-                return bm;
-            if (TBitmap* frame = AnimatedIconFrame(img->GetInvAnimation(s)))
-                return frame;
-        }
-    return nullptr;
+    return item == other.item && icon == other.icon && amount == other.amount
+        && pouchItem == other.pouchItem && pouchCount == other.pouchCount;
 }
 
-// ----------------------------------------------------------------------
-// Hit test (TButton-style — interior of [x, x+w) × [y, y+h)).
-// ----------------------------------------------------------------------
+TInvSlot::TInvSlot(int32_t x, int32_t y, int32_t w, int32_t h, int32_t allowedType,
+                   TBitmap* emptyPlaceholder, const SInvSlotStyle* style)
+    : x(x), y(y), w(w), h(h), allowedType(allowedType), emptyPlaceholder(emptyPlaceholder), style(style)
+{
+}
+
+TInvSlot::~TInvSlot() = default;
+TInvSlot::TInvSlot(TInvSlot&&) noexcept = default;
+TInvSlot& TInvSlot::operator=(TInvSlot&&) noexcept = default;
+
+// REVSYNC: 0x0052ca70. A pouch shows the item in its slot 0 (GetInventory
+// 0x004701f0) by that item's inventory icon (vtable +0x130, not its
+// animation), with the pouch's item count. Retail counts the pouch's
+// inventory array (0x00470040, +0x68), which keeps the holes items taken out
+// leave; the count here is of the items in it.
+bool TInvSlot::BindItem(TObjectInstance* item, int32_t frame)
+{
+    SInvSlotContent shown;
+    if (item)
+    {
+        shown.item = item;
+        shown.icon = ItemIcon(item, frame);
+        shown.amount = item->Amount();
+        if (stricmp(item->GetName(), "Pouch") == 0)
+            if (TObjectInstance* first = item->GetInventorySlot(0))
+                if (!(shown.pouchItem = first->InventoryIcon()).Empty())
+                    shown.pouchCount = item->RealNumInventoryItems();
+    }
+    if (shown == content)
+        return false;
+    content = shown;
+    return true;
+}
+
 bool TInvSlot::OnSlot(int32_t mx, int32_t my) const
 {
-    return (mx >= x_) && (mx < x_ + w_)
-        && (my >= y_) && (my < y_ + h_);
+    return mx >= x && mx < x + w && my >= y && my < y + h;
 }
 
-// ----------------------------------------------------------------------
-// Drop-target policy (stubbed).
-//
-// Inventory + BarInv accept anything. Equip cells use the item's EqSlot stat
-// as the first-line filter; the top-level drop manager still performs the
-// authoritative Player::CanEquip / swap-or-return commit.
-// ----------------------------------------------------------------------
 bool TInvSlot::CanAcceptDrop(TObjectInstance* dragged) const
 {
-    if (allowed_type_ == kInvSlotAcceptAny)
+    if (allowedType == kInvSlotAcceptAny)
         return true;
     if (!dragged || dragged->FindStat("EqSlot") < 0)
         return false;
-    return dragged->GetStat("EqSlot") == allowed_type_;
+    return dragged->GetStat("EqSlot") == allowedType;
 }
 
-// ----------------------------------------------------------------------
-// Paint helpers (file-local).
-// ----------------------------------------------------------------------
-namespace {
-
-void StampIcon(int32_t tw, int32_t th,
-               PTBitmap bm,
-               int32_t cellX, int32_t cellY,
-               int32_t cellW, int32_t cellH,
-               const SInvSlotStyle& style)
+// A pouch's stacked item is halved as a whole, as retail halves the bitmap
+// it composed (0x004a31a0): put it together in a layer of its own first.
+void TInvSlot::Prepare()
 {
-    if (!bm) return;
-    if (style.icon_fit_to_cell) {
-        const int32_t inset = style.icon_fit_inset;
-        const int32_t dw = cellW - 2 * inset;
-        const int32_t dh = cellH - 2 * inset;
-        if (dw <= 0 || dh <= 0) return;
-        Renderer->DrawBitmapSubrectStretchedToTarget(
-            bm,
-            /*dst*/ cellX + inset, cellY + inset, dw, dh,
-            /*src*/ 0, 0, bm->width, bm->height,
-            tw, th);
-    } else {
-        // Retail-faithful native stamp at cell TL (Inventory).
-        Renderer->DrawBitmapToTarget(bm, cellX, cellY, tw, th);
-    }
-}
-
-void StampPouchOverlay(int32_t tw, int32_t th,
-                       PTBitmap inner,
-                       int32_t cellX, int32_t cellY,
-                       const SInvSlotStyle& style)
-{
-    if (!inner) return;
-    const int32_t dx = cellX + style.pouch_inner_dx;
-    const int32_t dy = cellY + style.pouch_inner_dy;
-    if (style.pouch_overlay_stretch) {
-        Renderer->DrawBitmapSubrectStretchedToTarget(
-            inner,
-            /*dst*/ dx, dy, style.pouch_inner_w, style.pouch_inner_h,
-            /*src*/ 0, 0, inner->width, inner->height,
-            tw, th);
-    } else {
-        Renderer->DrawBitmapToTarget(inner, dx, dy, tw, th);
-    }
-}
-
-void StampCount(int32_t tw, int32_t th,
-                int32_t value,
-                int32_t cellX, int32_t cellY,
-                int32_t dx, int32_t dy, int32_t w, int32_t hPad,
-                ETextAlign align,
-                float r, float g, float b,
-                const SFontAtlas* font)
-{
-    if (!font) return;
-    const int32_t lineH = (int32_t)(TextLineHeight(font) + 0.5f);
-    const int32_t cellH = lineH + hPad;
-    char buf[16];
-    std::snprintf(buf, sizeof(buf), "%d", value);
-    DrawTextShadowedToTarget(font, buf,
-                             cellX + dx, cellY + dy, w, cellH,
-                             align,
-                             r, g, b, tw, th);
-}
-
-}  // namespace
-
-// ----------------------------------------------------------------------
-// Draw — the canonical per-cell paint.
-//
-// Composition order (matches retail's per-cell sequence in
-// `cls_0x5a58c0::DrawGrid :537d19..:537e4f` and the same shape used by
-// TBarInv's slot loop):
-//   1. Empty-cell placeholder (Equip slot pictograms; null for inv/bar)
-//   2. Main item icon (native stamp OR stretch-fit to cell)
-//   3. Pouch overlay (Pouch kind only; the bag drawn over the cell)
-//   4. Regular item quantity text (qty > 1, NOT pouches) — Inventory
-//      paints RED top-right; BarInv paints WHITE top-left.
-//   5. Pouch contents-count text — Inventory paints WHITE bottom-center;
-//      BarInv paints WHITE left of cell.
-// ----------------------------------------------------------------------
-void TInvSlot::Draw(TSurface* /*target*/, int32_t tw, int32_t th,
-                    const SFontAtlas* font)
-{
-    if (!style_) return;
-    const SInvSlotStyle& style = *style_;
-
-    // (1) Empty-cell placeholder. Only painted when there's no item;
-    //     lets EquipPane show "Head", "Hand2", … pictograms in unfilled
-    //     slots. Inventory + BarInv leave this null.
-    if (kind_ == EInvSlotKind::Empty) {
-        if (empty_placeholder_) {
-            StampIcon(tw, th, empty_placeholder_,
-                      x_, y_, w_, h_, style);
-        }
+    if (content.pouchItem.Empty() || content.pouchItem.Single())
+    {
+        pouchStack.reset();
+        pouchStackIcon = {};
         return;
     }
-
-    // (2) Main item icon. Native TL stamp (Inventory) or stretch-fit
-    //     into the cell interior (BarInv convention).
-    if (icon_) {
-        StampIcon(tw, th, icon_, x_, y_, w_, h_, style);
-    }
-
-    // (3) Pouch overlay (the bag drawn over the cell's contents).
-    if (kind_ == EInvSlotKind::Pouch && pouch_inner_) {
-        StampPouchOverlay(tw, th, pouch_inner_, x_, y_, style);
-    }
-
-    // (4) Regular item quantity text (qty > 1, NOT pouches).
-    //     Inventory: RED top-right. BarInv: WHITE top-left.
-    if (kind_ == EInvSlotKind::Regular
-        && style.draw_qty && qty_ > 1)
-    {
-        StampCount(tw, th, qty_, x_, y_,
-                   style.qty_rect_dx, style.qty_rect_dy,
-                   style.qty_rect_w, style.qty_rect_h_pad,
-                   style.qty_align,
-                   style.qty_r, style.qty_g, style.qty_b,
-                   font);
-    }
-
-    // (5) Pouch contents-count text.
-    //     Inventory: WHITE bottom-center on bag's bottom edge.
-    //     BarInv:    WHITE left of cell.
-    if (kind_ == EInvSlotKind::Pouch && style.draw_bag_count)
-    {
-        StampCount(tw, th, qty_, x_, y_,
-                   style.bag_rect_dx, style.bag_rect_dy,
-                   style.bag_rect_w, style.bag_rect_h_pad,
-                   style.bag_align,
-                   style.bag_r, style.bag_g, style.bag_b,
-                   font);
-    }
+    if (pouchStack && pouchStackIcon == content.pouchItem)
+        return;
+    if (!Renderer)
+        return;
+    if (!pouchStack)
+        pouchStack = std::make_unique<TSurface>(INVITEMREALWIDTH, INVITEMREALHEIGHT, SG_PIXELFORMAT_RGBA8);
+    pouchStack->StartPass(0.0f, 0.0f, 0.0f, 0.0f);
+    DrawIcon(content.pouchItem, 0, 0, INVITEMREALWIDTH, INVITEMREALHEIGHT);
+    pouchStack->EndPass();
+    pouchStackIcon = content.pouchItem;
 }
 
-// ----------------------------------------------------------------------
-// Interaction dispatch (stubbed).
-//
-// Routes to the cross-pane drag-state owner once that lands. The retail
-// owner is `cls_0x5a5320_TPlayScreen` via its `virt_meth_0x44f140`
-// (12 read/write XREFs to the drag globals listed in the header banner).
-// In the port: a singleton owned by TPlayScreen.
-// ----------------------------------------------------------------------
-bool TInvSlot::HandleEvent(EInvSlotEvent /*kind*/,
-                           int32_t /*mouse_x*/, int32_t /*mouse_y*/)
+// REVSYNC: 0x0052ca70 / 0x0052cd80 -- the icon, a pouch's item and count,
+// then the amount.
+void TInvSlot::Draw(int32_t target_w, int32_t target_h) const
 {
-    // Stubbed — wires through to the cross-pane drag-state owner in a
-    // follow-up pass. Return false so the pane's existing event paths
-    // remain authoritative until the dispatcher lands.
+    if (!Renderer)
+        return;
+    if (!content.item)
+    {
+        Renderer->DrawBitmapToTarget(emptyPlaceholder, x, y, target_w, target_h);
+        return;
+    }
+    DrawIcon(content.icon, x, y, target_w, target_h);
+    if (!style)
+        return;
+    if (!content.pouchItem.Empty())
+    {
+        const int32_t px = x + style->pouchItemX, py = y + style->pouchItemY;
+        if (content.pouchItem.Single())
+            Renderer->DrawBitmapHalvedToTarget(content.pouchItem.parts[0].image, px, py, target_w, target_h);
+        else if (pouchStack && pouchStackIcon == content.pouchItem)
+            Renderer->DrawSurfaceHalvedToTarget(pouchStack.get(), px, py, target_w, target_h);
+        DrawText(style->pouchCount, content.pouchCount, x, y, target_w, target_h);
+    }
+    if (content.amount > 1)
+        DrawText(style->amount, content.amount, x, y, target_w, target_h);
+}
+
+bool TInvSlot::HandleEvent(EInvSlotEvent /*kind*/, int32_t /*mouse_x*/, int32_t /*mouse_y*/)
+{
     return false;
 }

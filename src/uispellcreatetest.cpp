@@ -75,7 +75,7 @@
 //
 // GAP-4 (button state cycling): Test mode shows the resting Up state for
 //       every button. Down/Glow states (SpellInvD/SpellBackD/etc.) would
-//       need a synthetic press-state cycler analogous to uiquickspelltest;
+//       need a synthetic press-state cycler;
 //       not implemented here because the click handler body (`0x543c40`)
 //       isn't fully decoded.
 //

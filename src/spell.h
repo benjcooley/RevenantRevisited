@@ -56,6 +56,7 @@ struct SSpellData
     int32_t flags;                          // Spell flags
     char name[NAMELEN];                 // Name of spell type (not individual name)
     char objname[RESNAMELEN];           // Name of spell object to build when spell is cast
+    char iconname[RESNAMELEN] = {};     // ICONNAME: its circle in SpellIcons.dat (retail; empty: none)
     char *desc;                         // Spell description for spell book
 //  PTBitmap icon;                      // Spell book icon for spell
     int32_t damagetype;                     // Type of damage spell does
@@ -90,13 +91,13 @@ class TSpellList
       // Returns number of spells
     PSSpellData GetSpellData(int32_t num) { return spelldata[num]; }
       // Gets pointer to spell data based on talisman list
-    PSSpellData GetSpellDataByTalismans(char *talismans);
+    PSSpellData GetSpellDataByTalismans(const char *talismans);
       // Gets pointer to spell data based on talisman list
     PSSpellData GetSpellDataByName(char *name);
       // Gets pointer to spell data based on spell name
     PSSpellVariant GetVariantDataByName(char *name);
       // Gets pointer to a variant data based on spell name
-    PSSpellVariant GetVariantDataByTalismans(char *talismans);
+    PSSpellVariant GetVariantDataByTalismans(const char *talismans);
       // Gets pointer to a variant data based on talismans name
     bool Load();
       // Loads spell data from SPELL.DEF file

@@ -46,7 +46,6 @@
 #include "uidragstate.h"
 #include "uidemoplayer.h"
 #include "uianchortest.h"
-#include "uibarinvtest.h"
 #include "uibottombartest.h"
 #include "uicliptest.h"
 #include "uiequiptest.h"
@@ -58,7 +57,6 @@
 #include "uimaptest.h"
 #include "uinineslicetest.h"
 #include "uiplyrstatusbartest.h"
-#include "uiquickspelltest.h"
 #include "uisidebartest.h"
 #include "uisidetabstest.h"
 #include "uiscrollpanetest.h"
@@ -3486,8 +3484,8 @@ bool DumpIconsToFolder(const char* path)
 static bool UsesDemoPlayer(const char* mode)
 {
     static constexpr const char* kModes[] = {
-        "ui-hud", "ui-plyrstatusbar", "ui-stats", "ui-equip", "ui-inventory",
-        "ui-barinv", "ui-sidebar", "ui-quickspell", "ui-spellbook",
+        "ui-hud", "ui-plyrstatusbar", "ui-bottombar", "ui-stats", "ui-equip",
+        "ui-inventory", "ui-sidebar", "ui-spellbook",
     };
     for (const char* m : kModes)
         if (strcmp(mode, m) == 0)
@@ -3551,6 +3549,8 @@ bool Initialize(const char* mode)
         return InitializeUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         return InitializeUIPlyrStatusBarMode();
+    if (strcmp(mode, "ab-plyrstatusbar") == 0)
+        return InitializeABPlyrStatusBarMode();
     if (strcmp(mode, "ui-sidetabs") == 0)
         return InitializeUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)
@@ -3558,15 +3558,10 @@ bool Initialize(const char* mode)
         SetUISidebarSyntheticStateEnabled(true);
         return InitializeUISidebarMode();
     }
-    if (strcmp(mode, "ui-quickspell") == 0)
-    {
-        SetUIQuickSpellSyntheticStateEnabled(true);
-        return InitializeUIQuickSpellMode();
-    }
     if (strcmp(mode, "ui-bottombar") == 0)
         return InitializeUIBottomBarMode();
-    if (strcmp(mode, "ui-barinv") == 0)
-        return InitializeUIBarInvMode();
+    if (strcmp(mode, "ab-bottombar") == 0)
+        return InitializeABBottomBarMode();
     if (strcmp(mode, "ui-map") == 0)
         return InitializeUIMapMode();
     if (strcmp(mode, "ui-scrollpane") == 0)
@@ -3584,9 +3579,8 @@ bool Initialize(const char* mode)
     if (strcmp(mode, "ui-hud") == 0)
     {
         SetUISidebarSyntheticStateEnabled(true);
-        SetUIQuickSpellSyntheticStateEnabled(true);
         SetUIHudCursorOverlayEnabled(true);
-        return InitializeUIHudMode();
+        return InitializeUIHudMode() && InitializeUIBottomBarModeEmbedded();
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
@@ -3630,16 +3624,16 @@ void Close(const char* mode)
         CloseUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         CloseUIPlyrStatusBarMode();
+    if (strcmp(mode, "ab-plyrstatusbar") == 0)
+        CloseABPlyrStatusBarMode();
     if (strcmp(mode, "ui-sidetabs") == 0)
         CloseUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)
         CloseUISidebarMode();
-    if (strcmp(mode, "ui-quickspell") == 0)
-        CloseUIQuickSpellMode();
     if (strcmp(mode, "ui-bottombar") == 0)
         CloseUIBottomBarMode();
-    if (strcmp(mode, "ui-barinv") == 0)
-        CloseUIBarInvMode();
+    if (strcmp(mode, "ab-bottombar") == 0)
+        CloseABBottomBarMode();
     if (strcmp(mode, "ui-map") == 0)
         CloseUIMapMode();
     if (strcmp(mode, "ui-scrollpane") == 0)
@@ -3655,7 +3649,10 @@ void Close(const char* mode)
     if (strcmp(mode, "ui-inventory") == 0)
         CloseUIInventoryMode();
     if (strcmp(mode, "ui-hud") == 0)
+    {
+        CloseUIBottomBarMode();
         CloseUIHudMode();
+    }
     if (strcmp(mode, "ui-loadscreen") == 0)
         CloseUILoadScreenMode();
     if (IsUIDefScreenMode(mode))
@@ -3711,16 +3708,16 @@ void Render(const char* mode)
         return RenderUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         return RenderUIPlyrStatusBarMode();
+    if (strcmp(mode, "ab-plyrstatusbar") == 0)
+        return RenderABPlyrStatusBarMode();
     if (strcmp(mode, "ui-sidetabs") == 0)
         return RenderUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)
         return RenderUISidebarMode();
-    if (strcmp(mode, "ui-quickspell") == 0)
-        return RenderUIQuickSpellMode();
     if (strcmp(mode, "ui-bottombar") == 0)
         return RenderUIBottomBarMode();
-    if (strcmp(mode, "ui-barinv") == 0)
-        return RenderUIBarInvMode();
+    if (strcmp(mode, "ab-bottombar") == 0)
+        return RenderABBottomBarMode();
     if (strcmp(mode, "ui-map") == 0)
         return RenderUIMapMode();
     if (strcmp(mode, "ui-scrollpane") == 0)
@@ -3736,7 +3733,11 @@ void Render(const char* mode)
     if (strcmp(mode, "ui-inventory") == 0)
         return RenderUIInventoryMode();
     if (strcmp(mode, "ui-hud") == 0)
-        return RenderUIHudMode();
+    {
+        RenderUIHudMode();
+        RenderUIBottomBarMode();
+        return;
+    }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return RenderUILoadScreenMode();
     if (IsUIDefScreenMode(mode))
@@ -3752,25 +3753,20 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 {
     if (strcmp(mode, "ui-hud") == 0)
     {
+        // The test screen has routed the click to its panes (the bottom bar).
         const SHudState& s = GetHudState();
         if (HandleMouseClickUISidebarModeConsumed(button, x, y))
             return;
-        if (s.bottomBarOpen ||
-            (UIDragState::IsActive() &&
-             UIDragState::Get().source == EDragSource::SpellPane))
-        {
-            HandleMouseClickUIQuickSpellMode(button, x, y);
-        }
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
             HandleMouseClickUISpellbookMode(button, x, y);
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
             HandleMouseClickUIEquipMode(button, x, y);
+        if (button == MB_LEFTUP)
+            UIDragState::ReleaseUnclaimed();
         return;
     }
     if (strcmp(mode, "ui-sidebar") == 0)
         return HandleMouseClickUISidebarMode(button, x, y);
-    if (strcmp(mode, "ui-quickspell") == 0)
-        return HandleMouseClickUIQuickSpellMode(button, x, y);
     if (strcmp(mode, "ui-spellbook") == 0)
         return HandleMouseClickUISpellbookMode(button, x, y);
     if (strcmp(mode, "ui-spellcreate") == 0)
@@ -3845,7 +3841,7 @@ void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
         if (UIDragState::IsActive() &&
             UIDragState::Get().source == EDragSource::SpellPane)
         {
-            HandleMouseMoveUIQuickSpellMode(button, x, y);
+            UIDragState::UpdateDrag(x, y);
             return;
         }
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
@@ -3854,8 +3850,6 @@ void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
             HandleMouseMoveUIEquipMode(button, x, y);
         return;
     }
-    if (strcmp(mode, "ui-quickspell") == 0)
-        return HandleMouseMoveUIQuickSpellMode(button, x, y);
     if (strcmp(mode, "ui-equip") == 0)
         return HandleMouseMoveUIEquipMode(button, x, y);
     if (strcmp(mode, "sector") != 0) return;

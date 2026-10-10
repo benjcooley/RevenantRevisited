@@ -1,258 +1,384 @@
 // *************************************************************************
 // *                  Revenant Revisited (port) - 2026                     *
-// *  uibottombartest.cpp - --test=ui-bottombar                            *
+// *  uibottombartest.cpp - --test=ui-bottombar: TBottomBarPane            *
 // *************************************************************************
 //
-// Clean-room reconstruction of TBottomBarPane (the full-width 60px dark chrome
-// strip pinned to the bottom of the play screen). Built ONLY from
-// docs/ui/forensics/BottomBarPane_SPEC.md (with FORENSICS_PROTOCOL,
-// UI_METHOD_MAP §12, RECONSTRUCTION_PROTOCOL).
-//
-// What this pane draws (spec §1 / §4 / §5):
-//   - UtilityBar (bottombar.dat idx 0, 640x60 RGB555 opaque) X-stretched to
-//     fill the full live pane width (= display width) at bar-pane-local (0,0).
-//   - BarEndCap (bottombar.dat idx 2, 10x60 RGB555 opaque) stamped at the
-//     right edge at bar-pane-local (w-10, 0).
-//
-// Both assets are 15-bit, kc=0 with NO alpha and NO chroma key — they are plain
-// opaque plates (spec §7: "no drop shadow, no chroma key, no text").
-//
-// The pane is BOTTOM-anchored: pane_y = display_h - 60 (spec §3 corner
-// verification). Width is greedy: live width tracks the display width via the
-// retail SetRect path (spec §3 / §9).
-//
-// Architecture (spec §3 direct-renderer contract): compose the chrome into
-// ONE offscreen TSurface render target via *ToTarget primitives, then
-// DrawSurface it once in the HUD pass at (0, display_h-60). This mirrors the
-// canonical pipeline used by uiplyrstatusbartest / uisidetabstest.
-//
-// Primitives (UI_METHOD_MAP §12 — canonical shared toolbox only):
-//   Renderer->DrawBitmapSubrectStretchedToTarget — for the UtilityBar X-stretch
-//       (the to-target twin of retail meth_0x4bd5e0, added once in renderer
-//       per spec §13 / §14 "method-map gap"; reused going forward).
-//   Renderer->DrawBitmapToTarget — for the BarEndCap opaque stamp (the to-
-//       target twin of retail meth_0x4bd680 with drawmode 0x80000000).
-//
-// Sibling controls (spec §1 / §5): the quick-spell ring, the BarInv potion
-// slots and the action arrows are OUT OF SCOPE for this pane — they belong to
-// TQuickSpellPane / TBarInvPane and will render on top of the chrome plate
-// once those panes are reconstructed. This test mode draws only the chrome.
+// See uibottombartest.h.
 //
 // *************************************************************************
 
 #include "uibottombartest.h"
 
-#include "bitmap.h"
-#include "bitmapatlas.h"
+#include "bottombar.h"
 #include "display.h"
 #include "hudstate.h"
+#include "jsonout.h"
 #include "logging.h"
-#include "multi.h"
+#include "object.h"
+#include "player.h"
+#include "playscreen.h"
 #include "renderer.h"
-#include "surface.h"
+#include "revdefs.h"
+#include "screen.h"
+#include "spell.h"
+#include "testconfig.h"
+#include "textencoding.h"
+#include "time.h"
+#include "uidemoplayer.h"
 
 #include <cstdint>
-#include <cstring>
+#include <cstdio>
+#include <fstream>
+#include <memory>
+#include <sstream>
+#include <string>
+#include <vector>
+
+extern TObjectClass TalismanClass;
 
 namespace {
 
-// =====================================================================
-// Geometry constants — all cited to BottomBarPane_SPEC.md.
-// =====================================================================
+constexpr int32_t kSidePanelWidth = 0xbc;   // TPlayScreen::Pulse 0x0047b4d0
+constexpr int32_t kQuickSpells = 4;
 
-// Pane height — literal `0x3c = 60` from spec §3 / §4 (`cls_0x5a5808.cpp:36`).
-// The Draw stretch passes dh = 0x3c regardless of the live mbr_0x10, so the
-// chrome height is fixed at 60 (spec §4 footnote).
-constexpr int32_t kBarH = 0x3c;          // 60 — chrome height (§3, §4)
-
-// Sidebar width contribution — retail TPlayScreen::Pulse sets DAT_0066615c =
-// 0xbc = 188 when the sidebar is OPEN, 0 when CLOSED (Pulse:84, Pulse:72).
-// The bottom-bar live width formula is: display_w - DAT_0066615c
-// (Pulse:269: `_DAT_0065be64 = (display_w - DAT_0065be5c) - DAT_0066615c`
-//  where DAT_0065be5c is 0 for this pane — cite Pulse_47b4d0.cpp:269).
-// We read SHudState::sidebarState each frame (versions-over-flags pattern).
-constexpr int32_t kSidebarW = 0xbc;      // 188 — sidebar chrome width (Pulse:84)
-
-// Source bitmap dimensions (spec §2 asset roster — measured via dump_dat.py).
-constexpr int32_t kUtilityBarSrcW = 640; // measured (§2)
-constexpr int32_t kUtilityBarSrcH = 60;  // measured (§2)
-constexpr int32_t kBarEndCapW     = 10;  // measured (§2); literal `0xa = 10` at §6 call table
-constexpr int32_t kBarEndCapH     = 60;  // measured (§2)
-
-// Asset names (spec §2 — archive bottombar.dat, entries 0 + 2).
-constexpr const char* kArchive     = "bottombar.dat";
-constexpr const char* kUtilityName = "UtilityBar";   // §2 idx 0 (`cls_0x5a5808.cpp:181`)
-constexpr const char* kEndCapName  = "BarEndCap";    // §2 idx 2 (`cls_0x5a5808.cpp:182`)
-
-// =====================================================================
-// Loaded assets + cached RT.
-// =====================================================================
-TMulti*   g_bottombarDat = nullptr;
-PTBitmap  g_utilityBar   = nullptr;
-PTBitmap  g_barEndCap    = nullptr;
-
-TSurface* g_pane         = nullptr;
-int32_t   g_paneW        = 0;   // live pane width (this+0xc, §3) = display width
-
-PTBitmap LookupByName(TMulti* m, const char* name)
+// Black under the bar, as retail's frame is cleared (alone, the demo too:
+// the bar is opaque).
+class TBackdrop final : public THudDrawable
 {
-    if (!m || !name) return nullptr;
-    for (int32_t i = 0; i < m->numoffsets; ++i)
-    {
-        const char* nm = (const char*)m->names[i].ptr();
-        if (nm && !std::strcmp(nm, name))
-            return m->Bitmap(i);
-    }
-    return nullptr;
-}
-
-// =====================================================================
-// HUD drawable — composes the chrome RT then DrawSurface's it once
-// at the bottom-anchored screen origin (spec §3 / §5).
-// =====================================================================
-class TBottomBarHud : public THudDrawable
-{
-public:
-    void Draw() override
-    {
-        if (!GetHudState().bottomBarOpen) return;
-        if (!g_pane) return;
-        // Spec §3: pane_y = display_h - 60 (bottom-anchored, mandatory formula).
-        const int32_t dh = Display.Height();
-        const int32_t y  = (dh > 0 ? dh : kBarH) - kBarH;
-        Renderer->DrawSurface(g_pane, 0, y);
-    }
-
-    void Refresh()
-    {
-        if (!GetHudState().bottomBarOpen) return;
-        if (!g_utilityBar || !g_barEndCap) return;
-        EnsurePane();
-        if (!g_pane) return;
-
-        const int32_t tw = g_pane->Width();
-        const int32_t th = g_pane->Height();
-
-        // Opaque clear — the bar is OPAQUE chrome (spec §7: "no chroma key,
-        // no alpha"). Clearing transparent would leak the playfield through
-        // any unstretched gap; the chrome itself covers every pixel, but a
-        // black clear is the closest match to "solid plate" intent.
-        g_pane->StartPass(0.0f, 0.0f, 0.0f, 1.0f);
-
-        // Spec §6 step 1 (chrome `0x52c880`, `cls_0x5a5808.cpp:181`):
-        //   meth_0x4bd5e0(surf, 0, 0, UtilityBar, 0, 0, mbr_0xc(=w), 0x3c(=60))
-        // = sub-rect → stretch blit of the full UtilityBar bitmap (sx=0, sy=0,
-        //   sw=640, sh=60) into the dst rect (0, 0, w, 60) at the target. The
-        //   chrome is X-stretched to fill the live pane width; Y is fixed at
-        //   60 (NOT mbr_0x10 — spec §4 footnote).
-        // Port primitive: DrawBitmapSubrectStretchedToTarget — the to-target
-        // twin of retail meth_0x4bd5e0 (spec §13 / §14 "method-map gap"; added
-        // once in renderer.{h,cpp} for reuse).
-        Renderer->DrawBitmapSubrectStretchedToTarget(
-            g_utilityBar,
-            /*dst*/ 0, 0, tw, kBarH,
-            /*src*/ 0, 0, kUtilityBarSrcW, kUtilityBarSrcH,
-            tw, th);
-
-        // Spec §6 step 2 (chrome `0x52c880`, `cls_0x5a5808.cpp:182`):
-        //   meth_0x4bd680(surf, mbr_0xc - 0xa, 0, BarEndCap, 0x80000000)
-        // = opaque sprite stamp of the full 10x60 BarEndCap at (w-10, 0).
-        //   `0x80000000` = DM_USEDEFAULT → opaque copy (UI_METHOD_MAP §1).
-        // Port primitive: DrawBitmapToTarget (opaque copy at dst, full size).
-        Renderer->DrawBitmapToTarget(
-            g_barEndCap,
-            /*dst*/ tw - kBarEndCapW, 0,
-            tw, th);
-
-        g_pane->EndPass();
-    }
-
-private:
-    void EnsurePane()
-    {
-        // Spec §3: live pane width = display width (greedy, X-stretched),
-        // minus sidebar width when the sidebar is OPEN (item #3 in the
-        // HUD verification list). Retail formula: display_w - DAT_0066615c
-        // where DAT_0066615c is 0xbc=188 (OPEN) or 0 (CLOSED).
-        // Cite: TPlayScreen::Pulse_47b4d0.cpp:269, Pulse:84, Pulse:72.
-        const int32_t dw         = Display.Width();
-        const SHudState& hs      = GetHudState();
-        const int32_t sidebarAdj = (hs.sidebarState == HUD_SIDEBAR_OPEN) ? kSidebarW : 0;
-        const int32_t want       = (dw > 0 ? dw : kUtilityBarSrcW) - sidebarAdj;
-        if (g_pane && g_paneW == want) return;
-        delete g_pane;
-        g_paneW = want;
-        // Compose the WHOLE bar (UtilityBar + BarEndCap) into one RT of
-        // (live_w x 60) — spec §3 direct-renderer contract.
-        g_pane = new TSurface(g_paneW > 0 ? g_paneW : kUtilityBarSrcW, kBarH, SG_PIXELFORMAT_RGBA8);
-    }
+  public:
+    void Draw() override { Renderer->FillScreen(0.0f, 0.0f, 0.0f, 1.0f); }
 };
 
-TBottomBarHud g_hud;
+TBackdrop g_backdropDrawable;
+std::unique_ptr<TBottomBarPane> g_bar;
+THudDrawable* g_backdrop = nullptr;
+int64_t g_lastTick = 0;
 
-}  // namespace
+int32_t DisplayWidth() { return Display.Width() > 0 ? Display.Width() : WIDTH; }
+int32_t DisplayHeight() { return Display.Height() > 0 ? Display.Height() : HEIGHT; }
 
-// =====================================================================
-// Entry points (testmodes.cpp links these — keep the signatures).
-// =====================================================================
-bool InitializeUIBottomBarMode()
+// Along the bottom of the display, as wide as the map view: the display less
+// the side panel while it is open.
+int32_t MapViewWidth()
 {
-    log_info("[ui-bottombar] === TBottomBarPane (clean-room from spec) ===");
+    return DisplayWidth() - (GetHudState().sidebarState == HUD_SIDEBAR_OPEN ? kSidePanelWidth : 0);
+}
 
-    // Spec §2: real retail bottombar.dat — UtilityBar (idx 0) + BarEndCap (idx
-    // 2). LoadMulti goes through the standard archive path used by all panes.
-    g_bottombarDat = TMulti::LoadMulti((char*)kArchive);
-    RegisterUIBitmapAtlasArchive(g_bottombarDat);
-
-    if (g_bottombarDat)
+bool HostBar(int32_t width, bool backdrop)
+{
+    g_bar = std::make_unique<TBottomBarPane>();
+    g_bar->Place(0, DisplayHeight() - TBottomBarPane::kHeight, width);
+    if (!CurrentScreen || !g_bar->Initialize())
     {
-        g_utilityBar = LookupByName(g_bottombarDat, kUtilityName);
-        g_barEndCap  = LookupByName(g_bottombarDat, kEndCapName);
+        log_error("[ui-bottombar] the bottom bar did not initialize");
+        g_bar.reset();
+        return false;
     }
-
-    log_info("[ui-bottombar] assets: UtilityBar=%s BarEndCap=%s",
-             g_utilityBar ? "OK" : "MISS",
-             g_barEndCap  ? "OK" : "MISS");
-
-    if (g_utilityBar)
-        log_info("[ui-bottombar] UtilityBar %dx%d (expect 640x60)",
-                 g_utilityBar->width, g_utilityBar->height);
-    if (g_barEndCap)
-        log_info("[ui-bottombar] BarEndCap %dx%d (expect 10x60)",
-                 g_barEndCap->width, g_barEndCap->height);
-
-    delete g_pane;
-    g_pane  = nullptr;
-    g_paneW = 0;
-
-    Renderer->AddHud(&g_hud, 0.0f);
+    CurrentScreen->AddPane(g_bar.get());
+    if (backdrop && Renderer)
+    {
+        g_backdrop = &g_backdropDrawable;
+        Renderer->AddHud(g_backdrop, 0.0f);
+    }
+    log_info("[ui-bottombar] bar at (%d, %d) %d x %d, %d boxes", g_bar->GetPosX(), g_bar->GetPosY(),
+             g_bar->GetWidth(), g_bar->GetHeight(), g_bar->Shelf().NumBoxes());
     return true;
 }
 
-void RenderUIBottomBarMode()
+void UnhostBar()
 {
-    RenderUIBottomBarModeEmbedded();
-
-    // Backdrop so the bar's bottom-anchored placement reads clearly in
-    // isolation (no playfield behind it in test mode). A muted slate-blue
-    // approximates the open-world tint enough that the dark bar plate
-    // contrasts against it visually.
-    Display.BackBuffer()->StartPass(0.18f, 0.20f, 0.26f, 1.0f);
-    Display.BackBuffer()->EndPass();
+    if (Renderer && g_backdrop)
+        Renderer->RemoveHud(g_backdrop);
+    g_backdrop = nullptr;
+    if (!g_bar)
+        return;
+    if (CurrentScreen)
+        CurrentScreen->RemovePane(g_bar.get());
+    g_bar->Close();
+    g_bar.reset();
 }
 
-void RenderUIBottomBarModeEmbedded()
+// ---- the A/B case ----------------------------------------------------------
+
+struct SItem
 {
-    g_hud.Refresh();
+    std::string type;               // empty: the slot is empty
+    int32_t amount = 1;
+    std::vector<SItem> contents;    // a pouch's slots 0, 1, ...
+};
+
+struct SCase
+{
+    int32_t width = WIDTH - kSidePanelWidth;
+    std::string spells[kQuickSpells];
+    std::vector<std::string> castable;
+    std::vector<SItem> belt;
+    int32_t frame = 0;
+};
+
+std::vector<std::string> Split(const std::string& text, char separator)
+{
+    std::vector<std::string> parts;
+    std::istringstream in(text);
+    for (std::string part; std::getline(in, part, separator);)
+        parts.push_back(part);
+    if (!text.empty() && text.back() == separator)
+        parts.emplace_back();
+    return parts;
+}
+
+// "Type", "Type*N", "Pouch(Type,Type*N)", or "-" for an empty slot.
+bool ParseItem(const std::string& text, SItem& item)
+{
+    if (text == "-")
+        return true;
+    std::string head = text;
+    const size_t open = text.find('(');
+    if (open != std::string::npos)
+    {
+        if (text.back() != ')')
+            return false;
+        head = text.substr(0, open);
+        for (const std::string& content : Split(text.substr(open + 1, text.size() - open - 2), ','))
+            if (!ParseItem(content, item.contents.emplace_back()) || item.contents.back().type.empty())
+                return false;
+    }
+    const size_t star = head.find('*');
+    item.type = head.substr(0, star);
+    if (star != std::string::npos && (std::sscanf(head.c_str() + star + 1, "%d", &item.amount) != 1 || item.amount < 1))
+        return false;
+    return !item.type.empty();
+}
+
+// "width=W;spells=A,B,C,D;castable=A,B;belt=I|I|...;frame=N"
+bool ParseCase(const std::string& text, SCase& c)
+{
+    for (const std::string& field : Split(text, ';'))
+    {
+        const size_t eq = field.find('=');
+        const std::string key = field.substr(0, eq);
+        const std::string value = eq == std::string::npos ? std::string() : field.substr(eq + 1);
+        if (key == "width")
+        {
+            if (std::sscanf(value.c_str(), "%d", &c.width) != 1 || c.width <= 0)
+                return false;
+        }
+        else if (key == "spells")
+        {
+            const std::vector<std::string> spells = Split(value, ',');
+            if (spells.size() > kQuickSpells)
+                return false;
+            for (size_t i = 0; i < spells.size(); ++i)
+                c.spells[i] = spells[i];
+        }
+        else if (key == "castable")
+            c.castable = value.empty() ? std::vector<std::string>() : Split(value, ',');
+        else if (key == "belt")
+        {
+            for (const std::string& slot : Split(value, '|'))
+                if (!ParseItem(slot, c.belt.emplace_back()))
+                    return false;
+            if (c.belt.size() > size_t(kInvSlotLast - kInvSlotBeltFirst + 1))
+                return false;
+        }
+        else if (key == "frame")
+        {
+            if (std::sscanf(value.c_str(), "%d", &c.frame) != 1 || c.frame < 0)
+                return false;
+        }
+        else
+            return false;
+    }
+    return true;
+}
+
+// The talisman type whose Code is `code`, or null.
+const char* TalismanType(char code)
+{
+    for (int32_t type = 0; type < TalismanClass.NumTypes(); ++type)
+        if (const SObjectInfo* info = TalismanClass.GetObjType(type))
+            if (TalismanClass.GetStat(type, "Code") == code)
+                return info->name;
+    return nullptr;
+}
+
+// A Spell Pouch holding the talismans of each castable spell. The player
+// can then cast exactly those (TPlayer::HasTalismans) -- so a case doesn't
+// make a ring castable whose spell the castable ones' talismans also make.
+bool GiveTalismans(const std::vector<std::string>& castable)
+{
+    if (castable.empty())
+        return true;
+    TObjectInstance* pouch = UIDemoPlayer::AddItem(Player, "Spell Pouch", -1);
+    if (!pouch)
+        pouch = UIDemoPlayer::AddItem(Player, "spellpouch", -1);
+    if (!pouch)
+        return false;
+    for (const std::string& talismans : castable)
+        for (const char code : talismans)
+        {
+            const char* type = TalismanType(code);
+            if (!type || !UIDemoPlayer::AddItem(pouch, type, -1))
+            {
+                log_error("[ab-bottombar] no talisman '%c' for \"%s\"", code, talismans.c_str());
+                return false;
+            }
+        }
+    return true;
+}
+
+bool PlaceItem(TObjectInstance* owner, const SItem& item, int32_t slot)
+{
+    if (item.type.empty())
+        return true;
+    TObjectInstance* placed = UIDemoPlayer::AddItem(owner, item.type.c_str(), slot, item.amount);
+    if (!placed)
+        return false;
+    for (size_t index = 0; index < item.contents.size(); ++index)
+        if (!PlaceItem(placed, item.contents[index], int32_t(index)))
+            return false;
+    return true;
+}
+
+bool ApplyCase(const SCase& c)
+{
+    for (int32_t ring = 1; ring <= kQuickSpells; ++ring)
+    {
+        std::string talismans = c.spells[ring - 1];
+        Player->SetQuickSpell(ring, talismans.data());
+    }
+    if (!GiveTalismans(c.castable))
+        return false;
+    UIDemoPlayer::RemoveItems(Player, kInvSlotBeltFirst, kInvSlotLast);
+    for (size_t n = 0; n < c.belt.size(); ++n)
+        if (!PlaceItem(Player, c.belt[n], kInvSlotBeltFirst + int32_t(n)))
+        {
+            log_error("[ab-bottombar] could not put \"%s\" in belt slot %d", c.belt[n].type.c_str(), int32_t(n));
+            return false;
+        }
+    PlayScreen.SetFixtureState(c.frame, PlayScreen.IsControlOn(), PlayScreen.IsDemoMode());
+    return true;
+}
+
+// What the rings and the boxes show, for the A/B's report.
+bool WriteShown(const std::string& path)
+{
+    JsonOut json;
+    json.Begin('{');
+    json.FieldString("schema", "port.bottombar.v1");
+    json.Key("pane").Begin('[').Value(g_bar->GetPosX()).Value(g_bar->GetPosY()).Value(g_bar->GetWidth())
+        .Value(g_bar->GetHeight()).End(']');
+    json.Field("frame", PlayScreen.GameFrame());
+    json.Key("rings").Begin('[');
+    for (int32_t ring = 1; ring <= kQuickSpells; ++ring)
+    {
+        char* talismans = Player->GetQuickSpell(ring);
+        json.Begin('{').FieldString("talismans", talismans ? talismans : "")
+            .Field("castable", talismans && *talismans && Player->HasTalismans(talismans) ? 1 : 0).End('}');
+    }
+    json.End(']');
+    json.Key("boxes").Begin('[');
+    for (int32_t box = 0; box < g_bar->Shelf().NumBoxes(); ++box)
+    {
+        TObjectInstance* item = Player->GetInventorySlot(kInvSlotBeltFirst + box);
+        if (!item)
+        {
+            json.Null();
+            continue;
+        }
+        json.Begin('{').FieldString("type", ToUtf8(item->GetName())).Field("amount", item->Amount())
+            .Field("items", item->RealNumInventoryItems()).End('}');
+    }
+    json.End(']');
+    json.End('}');
+    std::ofstream out(path, std::ios::binary);
+    out << json.str() << '\n';
+    return bool(out);
+}
+
+SCase g_case;
+bool g_caseRun = false;
+double g_timeScale = 1.0;
+
+void RunCase()
+{
+    g_timeScale = TTime::TimeScale();
+    TTime::SetTimeScale(0.0);
+    g_bar->Pulse();
+    g_caseRun = true;
+    if (!StartupAbOut.empty() && !WriteShown(StartupAbOut))
+        log_error("[ab-bottombar] could not write %s", StartupAbOut.c_str());
+    log_info("[ab-bottombar] pulsed at frame %lld", static_cast<long long>(TTime::FrameCount()));
+}
+
+}  // namespace
+
+bool InitializeUIBottomBarMode()
+{
+    if (!HostBar(MapViewWidth(), true))
+        return false;
+    g_lastTick = TTime::LegacyFrameCount() - 1;
+    return true;
+}
+
+bool InitializeUIBottomBarModeEmbedded()
+{
+    if (!HostBar(MapViewWidth(), false))
+        return false;
+    g_lastTick = TTime::LegacyFrameCount() - 1;
+    return true;
+}
+
+// The test screen doesn't run the screen's pane pass, so the host does what
+// TPlayScreen does for the bar: shows it with the lower panel, lays it out
+// against the map view, and pulses it once a tick.
+void RenderUIBottomBarMode()
+{
+    if (!g_bar)
+        return;
+    const bool open = GetHudState().bottomBarOpen != 0;
+    if (open)
+        g_bar->Place(0, DisplayHeight() - TBottomBarPane::kHeight, MapViewWidth());
+    if (open == g_bar->IsHidden())
+        open ? g_bar->Show() : g_bar->Hide();
+    for (const int64_t now = TTime::LegacyFrameCount(); g_lastTick < now; ++g_lastTick)
+        if (open)
+            g_bar->Pulse();
 }
 
 void CloseUIBottomBarMode()
 {
-    Renderer->RemoveHud(&g_hud);
-    delete g_pane;
-    g_pane         = nullptr;
-    g_paneW        = 0;
-    g_utilityBar   = nullptr;
-    g_barEndCap    = nullptr;
-    g_bottombarDat = nullptr;
+    UnhostBar();
+}
+
+bool InitializeABBottomBarMode()
+{
+    g_case = {};
+    g_caseRun = false;
+    if (!ParseCase(StartupAbCase, g_case))
+    {
+        log_error("[ab-bottombar] bad --ab-case \"%s\"", StartupAbCase.c_str());
+        return false;
+    }
+    if (!UIDemoPlayer::Install() || !Player)
+    {
+        log_error("[ab-bottombar] no demo player");
+        return false;
+    }
+    return ApplyCase(g_case) && HostBar(g_case.width, true);
+}
+
+void RenderABBottomBarMode()
+{
+    if (g_bar && !g_caseRun && TTime::LegacyFrameFraction() == 0.0)
+        RunCase();
+}
+
+void CloseABBottomBarMode()
+{
+    if (g_caseRun)
+        TTime::SetTimeScale(g_timeScale);
+    g_caseRun = false;
+    UnhostBar();
+    UIDemoPlayer::Remove();
 }

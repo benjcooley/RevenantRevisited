@@ -9,7 +9,6 @@
 #include "imagery.h"
 #include "money.h"
 #include "mappane.h"
-#include "inventory.h"
 #include "logging.h"
 
 REGISTER_BUILDER(TMoney)
@@ -24,9 +23,6 @@ DEFOBJSTAT(Money, Amount,   AMT, 0, 1, 1, 10000)
 
 // These were originally static members of TMoney but the compiler wasn't
 // very hip on that, so they are now here.
-PTBitmap invitem[MAXMONEYTYPES][MAXMONEYIMAGE]; // Bitmaps built on the fly
-int32_t invusecount[MAXMONEYTYPES][MAXMONEYIMAGE];      // Use count for each image
-
 PTBitmap grounditem[MAXMONEYTYPES][MAXMONEYIMAGE];  // Ground images
 int32_t groundusecount[MAXMONEYTYPES][MAXMONEYIMAGE];   // Use count for ground
 
@@ -48,8 +44,8 @@ bool TMoney::Initialize()
     for (int32_t t = 0; t < MAXMONEYTYPES; t++)
         for (int32_t i = 0; i < MAXMONEYIMAGE; i++)
         {
-            invitem[t][i] = grounditem[t][i] = nullptr;
-            invusecount[t][i] = groundusecount[t][i] = 0;
+            grounditem[t][i] = nullptr;
+            groundusecount[t][i] = 0;
         }
 
     return true;
@@ -60,12 +56,6 @@ void TMoney::Close()
     for (int32_t t = 0; t < MAXMONEYTYPES; t++)
         for (int32_t i = 0; i < MAXMONEYIMAGE; i++)
         {
-            if (invusecount[t][i])
-            {
-                invusecount[t][i] = 1;
-                FreeInvItem(t, i);
-            }
-
             if (groundusecount[t][i])
             {
                 groundusecount[t][i] = 1;
@@ -78,27 +68,8 @@ TMoney::~TMoney()
 {
     int32_t count = max(1, min(Amount(), MAXMONEYIMAGE-1));
 
-    if (invusecount[objtype][count] && GetOwner() == Inventory.GetContainer())
-        FreeInvItem(objtype, count);
-
     if (groundusecount[objtype][count])
         FreeGroundItem(objtype, count);
-}
-
-void TMoney::SignalAddedToInventory()
-{
-    TObjectInstance::SignalAddedToInventory();
-
-    if (GetOwner() == Inventory.GetContainer() && imagery)
-        AllocInvItem(imagery->GetInvImage(GetState()), objtype, Amount());
-}
-
-void TMoney::RemoveFromInventory()
-{
-    TObjectInstance::RemoveFromInventory();
-
-    if (GetOwner() == Inventory.GetContainer())
-        FreeInvItem(objtype, Amount());
 }
 
 namespace {
@@ -106,6 +77,9 @@ namespace {
 // The name retail's merge looks the pile up by (0x005e1d98); class.def has
 // one money type, "Gold".
 constexpr const char* kPileName = "Gold";
+
+// REVSYNC: 0x00516370 -- an inventory icon shows 1..64 coins.
+constexpr int32_t kPileCoins = 64;
 
 // REVSYNC: the state retail's SetAmount (0x00515c90) gives a pile of
 // `amount`: bigger piles look bigger.
@@ -126,8 +100,9 @@ int32_t PileState(int32_t amount)
 
 // REVSYNC: TMoney::MergeInto @ 0x00515b50 (vtable 0x98). Gold joins the first
 // "Gold" in the new owner's inventory, bags included, when that is money of
-// the same type. Not ported: retail's inventory-icon count on the path that
-// doesn't merge; the port counts in SignalAddedToInventory.
+// the same type. (Retail also counts the uses of its composed inventory icons
+// on the path that doesn't merge; the port draws icons as they are,
+// InventoryIcon.)
 bool TMoney::MergeInto(TObjectInstance* newowner)
 {
     TObjectInstance* pile = newowner->FindObjInventory(kPileName);
@@ -146,13 +121,6 @@ void TMoney::SetAmount(int32_t amt)
 {
     if (Amount() == amt || amt < 1)
         return;
-
-    if (GetOwner() == Inventory.GetContainer())
-    {
-        FreeInvItem(objtype, Amount());
-        if (imagery)
-            AllocInvItem(imagery->GetInvImage(GetState()), objtype, amt);
-    }
 
     if (!GetOwner())
     {
@@ -223,45 +191,6 @@ void TMoney::Save(RTOutputStream os)
     TObjectInstance::Save(os);
 }
 
-void TMoney::AllocInvItem(PTBitmap inv, int32_t type, int32_t count)
-{
-    if (!inv)
-        return;
-
-    if (type >= MAXMONEYTYPES)
-        Error("Only one type of money object 'Gold' allowed in class.def");
-
-    count = max(1, min(count, MAXMONEYIMAGE-1));
-
-    if (invusecount[type][count] < 1)
-    {
-        invitem[type][count] = TBitmap::NewBitmap(INVITEMREALWIDTH, INVITEMREALHEIGHT, BM_15BIT);
-
-        memset(invitem[type][count]->data16, 0, INVITEMREALWIDTH*INVITEMREALHEIGHT*2);
-
-        for (int32_t i = 0; i < count; i++)
-            invitem[type][count]->Put(MoneyPos[i].x, MoneyPos[i].y, inv, DM_TRANSPARENT);
-
-        invusecount[type][count] = 1;
-    }
-    else
-        invusecount[type][count]++;
-}
-
-void TMoney::FreeInvItem(int32_t type, int32_t count)
-{
-    count = max(1, min(count, MAXMONEYIMAGE-1));
-
-    if (invusecount[type][count] == 0)
-        return;
-
-    if (--(invusecount[type][count]) < 1 && invitem[type][count])
-    {
-        delete invitem[type][count];
-        invitem[type][count] = nullptr;
-    }
-}
-
 void TMoney::AllocGroundItem(PTBitmap ground, int32_t type, int32_t count)
 {
     if (!ground)
@@ -299,19 +228,19 @@ void TMoney::FreeGroundItem(int32_t type, int32_t count)
     }
 }
 
-void TMoney::DrawInvItem(int32_t x, int32_t y)
+// REVSYNC: 0x00516370 / 0x00515fb0 -- the pile retail composed into its
+// inventory icon: the state's inventory image at the first 1..64 MoneyPos.
+// Retail first makes the coin's key 0 (its inventory images carry 0 anyway).
+SInvIcon TMoney::InventoryIcon()
 {
-    int32_t count = max(1, min(Amount(), MAXMONEYIMAGE-1));
-
-    if (invusecount[objtype][count] < 1 && imagery)
-        AllocInvItem(imagery->GetInvImage(GetState()), objtype, count);
-
-    imagery->DrawInvItem(this, x, y);
-}
-
-PTBitmap TMoney::InventoryImage()
-{
-    return invitem[objtype][max(1, min(Amount(), MAXMONEYIMAGE-1))];
+    SInvIcon icon;
+    TBitmap* coin = imagery ? imagery->GetInvImage(GetState(), 0) : nullptr;
+    if (!coin)
+        return icon;
+    coin->keycolor = 0;
+    for (int32_t i = 0, count = max(1, min(Amount(), kPileCoins)); i < count; i++)
+        icon.Add(coin, MoneyPos[i].x, MoneyPos[i].y);
+    return icon;
 }
 
 void TMoney::GetScreenRect(SRect &r)

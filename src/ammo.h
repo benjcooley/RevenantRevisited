@@ -16,7 +16,7 @@
 #define AT_BOLT     2
 #define AT_HAND     3
 
-#define MAXAMMOTYPES    4
+#define MAXAMMOTYPES    16      // REVSYNC: retail's limit (0x004bfda0 errors at 16 types)
 #define MAXAMMOIMAGE    32
 
 _CLASSDEF(TAmmo)
@@ -32,10 +32,6 @@ class TAmmo : public TObjectInstance
     static void Close();
         // Clear static vars
 
-    static void AllocInvItem(TObjectImagery* img, int32_t state, int32_t type, int32_t count);
-        // Allocate a new inventory item for the given count and return it
-    static void FreeInvItem(int32_t type, int32_t count);
-        // Free up use of an instance of this count
     static void AllocGroundItem(TObjectImagery* img, int32_t state, int32_t type, int32_t count);
         // Allocate a new ground item for the given count and return it
     static void FreeGroundItem(int32_t type, int32_t count);
@@ -46,15 +42,8 @@ class TAmmo : public TObjectInstance
     virtual void Save(RTOutputStream os);
         // Saves data to the sector
 
-    virtual void SignalAddedToInventory();
-        // Called to signal object that it was added to a new inventory
-    virtual void RemoveFromInventory();
-        // Remove this object from whatever inventory it is in
-
-    virtual void DrawInvItem(int32_t x, int32_t y);
-        // Returns bitmap for the inventory image
-    virtual PTBitmap InventoryImage();
-        // Returns bitmap for the inventory image
+    SInvIcon InventoryIcon() override;
+        // REVSYNC: 0x004bfda0. A stack of copies of the inventory image
 
     virtual void GetScreenRect(SRect &r);
         // Get screen bounding rectangle for object (in world coordinates)
