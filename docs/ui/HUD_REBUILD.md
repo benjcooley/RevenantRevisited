@@ -180,8 +180,7 @@ pre-engine `--retail-ab` dump (`src/uiplyrstatusbartest.*` for the first).
    levels, stats, the portraits' TBitmap bytes) as JSON (`--ab-out`). The
    retail side runs on exactly those inputs.
 
-**Compare: `tools/retail_ab/hud_ab.py <pane>`** (run it under
-`caffeinate -du`: headless captures stall while the display sleeps).
+**Compare: `tools/retail_ab/hud_ab.py <pane>`.**
 - Runs both sides over the case set, quantises both frames to RGB565.
 - Holds each pixel to a tolerance the fixture's masks give:
   - exact by default;
@@ -336,5 +335,3 @@ each, merged back after their A/B report is clean.
       `DAT_0065a9d0`, which is `StatusBar.dat` on the Classic path.
     - `invslot.cpp`'s probe of other states for an icon is redundant now
       that GetInvImage follows retail.
-    - `--max-runtime` is armed on the first frame, so it never fires when no
-      frame comes (a sleeping display).

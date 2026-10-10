@@ -73,5 +73,4 @@ Shared by the pane fixtures:
 | `overlayraster.py` | draws the overlay quads (T3DScene `0x00414550`) as the D3D device does: texels 1:1, modulated by the tint, alpha-blended. Retail's own fallback rasterizer ignores the tint's alpha and drifts a texel on wide quads |
 | `blendmap.py` | marks the screen pixels drawn from texels retail blended in 4-bit steps while composing its ARGB4444 textures |
 
-The port side and the compare are `tools/retail_ab/hud_ab.py` (run under
-`caffeinate -du`; see docs/DEBUG_TOOLING.md).
+The port side and the compare are `tools/retail_ab/hud_ab.py`.
