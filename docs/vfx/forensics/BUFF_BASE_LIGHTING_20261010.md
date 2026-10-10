@@ -83,3 +83,90 @@ Artifacts are under
 - `speed-independent-emitter/manifest.json`: `71a7f7d80601d2fb9d983fb1582e6790d190e15e9b2d602904eea16338ec9309`.
 - `quicksilver-independent-emitter/manifest.json`: `dba0841c3c9489d7c1469b0c66a4a8b7e22d674270b2eedc607f0c767821d66f`.
 - `speed-quicksilver-composites/manifest.json`: `f77b2afc30931c6b60f904788925d5543259c99973b31d29f620c393011d4d47`.
+
+## Actual Metal closure review: 2026-10-10
+
+The new exact-owner `TSpeed_AUTHORED_TAGS` and `TQuicksilver_AUTHORED_TAGS`
+previews instantiate the shipped generic effects, retain their real default
+animators, and use the same production particle submission, authored base mesh,
+base world matrix, mode80 and controller-before-base order as the map route.
+The existing Fmastery preview is included with explicit incoming mode16. These
+are capture adapters, not replacement simulation or renderer corrections.
+
+`buff_visual_reference.py` executes the native parser, integer authored poses,
+Pulse, RenderSample, prototype matrix, original normal illumination and software
+raster for all three complete effects. The fixed owner is origin0/face0 and the
+viewport is640x340 centered320,170. Native NextFrame precedes Pulse; render1 is
+warmup, so recorded capture1 uses animation frame2. Captures1/5/15/29/45/59 are
+compared to fresh actual Metal frames with the same cadence. No camera fitting,
+image registration, replacement geometry or host-provided base colors occurs.
+The reference's authored sample-to-device handoff remains the declared boundary
+from the earlier packet proofs; this is not execution of an entire retail map.
+
+Final private evidence root:
+`/Users/benjamincooley/RevenantRetailLab/research/vfx-wide-20261010/hard-astra/`.
+
+- `native-visual-pinned/`:18 complete native images; all18 exactly repeat
+  `native-visual-final/`. Quality0, native seed1, no point lights, RGB565 assets.
+- `isolated-metal-final/`:60 actual Metal frames per effect, clean exits,
+  final binary SHA256
+  `40a08056eab423f56a12ef051ca99fb2ddb16ce3eca8af823930e30783b57fb5`.
+  Each run has an independent SAVE directory and retained scenario/command/log.
+- `buff-visual-final/manifest.json`:18 fixed-frame comparisons and3 map
+  lifecycle checks, SHA256
+  `dd470bdbbc6dab87d7fab387458674daa70c279bfd255e0e70cd582e51ad9f02`.
+  `native-metal.png` uses identical fixed crops and nearest resizing; raw images
+  remain untouched. The tool deliberately reports `review_ready`, not accepted.
+- `actual-map/`:58 fresh FontRuntimeLab frames per effect using the earlier
+  gameplay-identical binary76742d62906dc434da76cc3a4f02c5d719f4f4eecb6398fe96171aca2e77a621.
+  All6 ADDAT/expect/MOVE/expect/DELETE/absent rows pass;41 distinct active frames
+  each, visible displacement, and13 exact original-floor tail frames each.
+  Camera110,10000,10000,16; ambient32white; quality0; explicit Fmastery incoming16.
+
+Actual `[vfx-source-light]` logs prove source32white, Ambient3D100,
+UseDirLight=true, DirLightPercent85, ambient(0.149019614)x3 (=38/255),
+directional(1)x3 and pointlights0. Saturation makes Ambient3D100 and130 identical
+for this input. These exact values feed `SetRetailMeshLighting` and the helper
+vertex uniforms; the native branch calls its ambient38 and directional1 APIs.
+This is declared source lighting, not a fit to vertex colors.
+
+`[vfx-rng-scope]` confirms0 global random draws before first render. At the six
+comparison points the actual pre-render draw counts match the independently
+executed native seed1 stream: Speed/Quicksilver4,24,72,144,224,292;
+Fmastery6,36,108,216,336,438. The report retains both counts. This verifies stream
+consumption/cadence, not every actual GPU particle packet. No RNG correction or
+seed fitting was introduced.
+
+The green star, blue star/halo and orange/red flame have matching overall
+families and authored forms. Metal is visibly brighter/smoother, with different
+nonblack extents. For capture15: Speed native58x26 versus Metal61x30;
+Quicksilver65x39 versus78x40; Fmastery50x31 versus52x35. Known common projection,
+software RGB565 modulation/additive quantization and GPU sampling remain
+separate residuals; these measurements do not establish which one explains each
+pixel. In particular the Quicksilver horizontal extent cannot be attributed to
+the roughly1% common horizontal projection difference alone. Overall appearance
+is for explicit human review; strict pixels, natural caster/caller, map light
+selection, audio and device edge cases remain open.
+
+Validation: full Metal build; all3 isolated and all3 map runs complete;18 native
+images repeat exactly;11 focused composite/capture/ARGB fixture tests pass.
+Reproduce native references with `buff_visual_reference.py`, actual map scenarios
+with `buff_map_capture.py`, isolated captures with `port_capture.py` and retained
+scenario JSON, then validate/panel with `buff_visual_review.py`.
+
+### Corrected native camera startup replays
+
+After a7291cb binds the original camera additive tables through54df70, all
+previous case records and image hashes remain unchanged. The current replay
+locations, rather than earlier startup manifests, are:
+
+- `firecone-owner-camera-replay/manifest.json`:44cases,30 nonempty pairs,
+  SHA256 `dca0939bff25ce520e7735fda75192cfac48b52ced13bd1268b1959fe5c4c0d3`.
+- `buff-base-camera-replay/manifest.json`:90cases, SHA256
+  `c97c79c53328ad2bac66e5441ebc397dcfef772e9f853a96182b718fc2b24d30`.
+- `composite-camera-replay/manifest.json`:6cases, SHA256
+  `f77b2afc30931c6b60f904788925d5543259c99973b31d29f620c393011d4d47`.
+
+The latter two manifest hashes themselves are unchanged; all three were freshly
+executed with the corrected fixture. Their identical output does not waive the
+camera binding requirement for other raster modes.

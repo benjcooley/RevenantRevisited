@@ -34,6 +34,7 @@
 #include "effects/mightpreview.h"
 #include "effects/immortalmightpreview.h"
 #include "effects/fmasterypreview.h"
+#include "effects/speedpreview.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -1560,6 +1561,12 @@ void Render()
         return;
 
     ++g_state.frames_rendered;
+    if (g_state.frames_rendered == 1 || g_state.frames_rendered == 2 ||
+        g_state.frames_rendered == 6 || g_state.frames_rendered == 16 ||
+        g_state.frames_rendered == 30 || g_state.frames_rendered == 46 || g_state.frames_rendered == 60)
+        log_info("[vfx-rng-scope] before_render=%llu global_random_draws=%llu",
+            static_cast<unsigned long long>(g_state.frames_rendered),
+            static_cast<unsigned long long>(RandomDraws()));
 
     const int32_t vw = Display.Width();
     const int32_t vh = Display.Height();
@@ -1585,6 +1592,12 @@ void Render()
             {StartupSceneAmbient[1], StartupSceneAmbient[2], StartupSceneAmbient[3]},
             UseDirLight, DirLightPercent);
         Renderer->SetRetailMeshLighting(lighting.ambient.data(), lighting.directional.data(), true);
+        if (g_state.frames_rendered == 1)
+            log_info("[vfx-source-light] source=%d,%d,%d,%d ambient3d=%d use_directional=%d percent=%d ambient=(%.9g,%.9g,%.9g) directional=(%.9g,%.9g,%.9g) point_lights=0",
+                StartupSceneAmbient[0], StartupSceneAmbient[1], StartupSceneAmbient[2], StartupSceneAmbient[3],
+                Ambient3D, int(UseDirLight), DirLightPercent,
+                lighting.ambient[0], lighting.ambient[1], lighting.ambient[2],
+                lighting.directional[0], lighting.directional[1], lighting.directional[2]);
         Renderer->SetLightingMode(0); // Explicit source ambient selects the opaque prelit/software path.
     }
     // Apply only the diagnostic mode after identical source-light inputs.
@@ -6628,6 +6641,24 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(e);
         }
 
+        {
+            VfxTest::SEffect e={};e.id="TSpeed_AUTHORED_TAGS";e.family="spell";e.pipeline="partsys+IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return speed_authored_preview::Spawn(o, false);};
+            e.submit=[](void*c,EFxDebugMode){speed_authored_preview::Advance(static_cast<speed_authored_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode d){speed_authored_preview::SubmitWorld(static_cast<speed_authored_preview::State*>(c),d);};
+            e.destroy=[](void*c){speed_authored_preview::Destroy(static_cast<speed_authored_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TQuicksilver_AUTHORED_TAGS";e.family="spell";e.pipeline="partsys+IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return speed_authored_preview::Spawn(o, true);};
+            e.submit=[](void*c,EFxDebugMode){speed_authored_preview::Advance(static_cast<speed_authored_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode d){speed_authored_preview::SubmitWorld(static_cast<speed_authored_preview::State*>(c),d);};
+            e.destroy=[](void*c){speed_authored_preview::Destroy(static_cast<speed_authored_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
         {
             VfxTest::SEffect e={};e.id="TFmastery_AUTHORED_TAGS";e.family="spell";e.pipeline="IM";
             e.preview_style=VfxTest::EVfxPreviewStyle::Static;
