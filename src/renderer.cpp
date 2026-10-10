@@ -920,6 +920,7 @@ struct helper_vs_params {
     float4 w0; float4 w1; float4 w2; float4 w3;
     float4 vp; float4 camz; float4 camw;
     float4 retail_ambient; float4 retail_directional; // directional.w: mode
+    float4 uv_shift;
 };
 struct vs_in {
     float3 pos    [[attribute(0)]];
@@ -960,7 +961,7 @@ vertex vs_out _main(vs_in in [[stage_in]],
     o.pos.w = 1.0;
     o.wpos = wp;
     o.wnormal = wn;
-    o.uv = in.uv;
+    o.uv = in.uv + p.uv_shift.xy;
     // blue/swscene.cpp::Illuminate quantizes each vertex before interpolation.
     float3 source_light = p.retail_ambient.xyz + p.retail_directional.xyz *
         max(dot(wn, float3(0.0, 0.78125, 0.625)), 0.0);
@@ -1000,6 +1001,7 @@ fragment float4 _main(vs_out in [[stage_in]],
         uint2 size = uint2(albedo_tex.get_width(), albedo_tex.get_height());
         uint2 xy = min(uint2(floor(fract(in.uv) * float2(size))), size - uint2(1));
         float4 tex = albedo_tex.read(xy);
+        if (in.retail_mode > 1.5) return tex; // ARGB4444: wrapped nearest, unlit alpha
         return float4(tex.rgb * in.retail_color, tex.a);
     }
     float4 tex = albedo_tex.sample(smp, in.uv);
@@ -1067,6 +1069,7 @@ layout(std140) uniform helper_vs_params {
     vec4 w0; vec4 w1; vec4 w2; vec4 w3;
     vec4 vp; vec4 camz; vec4 camw;
     vec4 retail_ambient; vec4 retail_directional;
+    vec4 uv_shift;
 };
 out vec3  v_wpos;
 out vec3  v_wnormal;
@@ -1094,7 +1097,7 @@ void main() {
                        scene_z_n, 1.0);
     v_wpos = wp;
     v_wnormal = wn;
-    v_uv = uv;
+    v_uv = uv + uv_shift.xy;
     vec3 source_light = retail_ambient.xyz + retail_directional.xyz *
         max(dot(wn, vec3(0.0, 0.78125, 0.625)), 0.0);
     v_retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
@@ -1125,6 +1128,7 @@ void main() {
         ivec2 size = textureSize(albedo_tex, 0);
         ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
         vec4 tex = texelFetch(albedo_tex, xy, 0);
+        if (v_retail_mode > 1.5) { fragColor = tex; return; }
         fragColor = vec4(tex.rgb * v_retail_color, tex.a);
         return;
     }
@@ -1190,6 +1194,7 @@ cbuffer helper_vs_params : register(b0) {
     float4 w0; float4 w1; float4 w2; float4 w3;
     float4 vp; float4 camz; float4 camw;
     float4 retail_ambient; float4 retail_directional;
+    float4 uv_shift;
 };
 struct vs_in {
     float3 pos    : POSITION;
@@ -1226,7 +1231,7 @@ vs_out main_vs(vs_in i) {
                    scene_z_n, 1.0);
     o.wpos = wp;
     o.wnormal = wn;
-    o.uv = i.uv;
+    o.uv = i.uv + uv_shift.xy;
     float3 source_light = retail_ambient.xyz + retail_directional.xyz *
         max(dot(wn, float3(0.0, 0.78125, 0.625)), 0.0);
     o.retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
@@ -1261,6 +1266,7 @@ float4 main_ps(ps_in input) : SV_Target0 {
         uint2 size = uint2(width, height);
         uint2 xy = min(uint2(floor(frac(input.uv) * float2(size))), size - uint2(1,1));
         float4 tex = albedo_tex.Load(int3(xy,0));
+        if (input.retail_mode > 1.5) return tex;
         return float4(tex.rgb * input.retail_color, tex.a);
     }
     float4 tex = albedo_tex.Sample(smp, input.uv);
@@ -1873,7 +1879,7 @@ void TRenderer::InitMeshPipeline()
     hsh.attrs[2].name = "uv";        hsh.attrs[2].sem_name = "TEXCOORD"; hsh.attrs[2].sem_index = 0;
     hsh.vs.source = kHelperMeshVs;
     hsh.vs.entry  = kShaderVsEntry;
-    hsh.vs.uniform_blocks[0].size = 9 * sizeof(float) * 4;
+    hsh.vs.uniform_blocks[0].size = 10 * sizeof(float) * 4;
     hsh.vs.uniform_blocks[0].uniforms[0].name = "w0";
     hsh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     hsh.vs.uniform_blocks[0].uniforms[1].name = "w1";
@@ -1892,6 +1898,8 @@ void TRenderer::InitMeshPipeline()
     hsh.vs.uniform_blocks[0].uniforms[7].type = SG_UNIFORMTYPE_FLOAT4;
     hsh.vs.uniform_blocks[0].uniforms[8].name = "retail_directional";
     hsh.vs.uniform_blocks[0].uniforms[8].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.vs.uniform_blocks[0].uniforms[9].name = "uv_shift";
+    hsh.vs.uniform_blocks[0].uniforms[9].type = SG_UNIFORMTYPE_FLOAT4;
     hsh.fs.source = kHelperMeshFs;
     hsh.fs.entry  = kShaderFsEntry;
     hsh.fs.uniform_blocks[0].size = 8 * sizeof(float) * 4;
@@ -2780,7 +2788,7 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     bind.fs_images[0] = TextureImage(s.texture_override != kInvalidTexture ? s.texture_override : me.albedo);
     sg_apply_bindings(&bind);
 
-    float vsu[36] = {};
+    float vsu[40] = {};
     int vo = 0;
     std::memcpy(&vsu[vo], s.world + 0,  sizeof(float) * 4); vo += 4;
     std::memcpy(&vsu[vo], s.world + 4,  sizeof(float) * 4); vo += 4;
@@ -2805,7 +2813,10 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     for (int c = 0; c < 3; ++c) vsu[vo++] = retail_mesh_ambient[c];
     vsu[vo++] = 0.0f;
     for (int c = 0; c < 3; ++c) vsu[vo++] = retail_mesh_directional[c];
-    vsu[vo++] = s.retail_lighting == 1 ? 1.0f : 0.0f;
+    vsu[vo++] = float(s.retail_lighting);
+    vsu[vo++] = s.uv_offset[0];
+    vsu[vo++] = s.uv_offset[1];
+    vsu[vo++] = 0.0f; vsu[vo++] = 0.0f;
     const sg_range vsr = { vsu, sizeof(vsu) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vsr);
 

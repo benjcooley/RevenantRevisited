@@ -7,7 +7,7 @@ state, geometry, animation, motion and comparisons stay in this fast loop.
 Existing guest recordings remain evidence. Unsupported fixtures stay queued
 while the next easy effect moves forward.
 
-Latest bounded rendered coverage is 55/176. StillWater and all active watcher
+Latest bounded rendered coverage is 65/176. StillWater and all active watcher
 texture frames pass original-selector/matrix/raster comparisons; CharUtility
 and SewerWater pass all-part static comparisons and actual native animator
 lookup. Use `static_texture_probe.py` and `default_static_probe.py`.
@@ -15,6 +15,31 @@ lookup. Use `static_texture_probe.py` and `default_static_probe.py`.
 detects frozen textures even when owner frame counters advance. It requires a
 prepared floor-only module and an installed data root; use `--help` for inputs.
 These remain bounded tests, with natural context and full device parity open.
+
+The seven TeleportDoorInside colors now use the shared production
+[`warp_atlas.h`](../../src/effects/warp_atlas.h) state and alpha-helper payload.
+Use `warp_probe.py <retail-exe> --compare --no-images --output <new-directory>`
+for the 154-case repeated software comparison, or `test_warp.py` for the fast
+native/header regression. Original custom factories and mode2 execute; a
+one-frame STILL header does not mean a static texture. The map animator steps
+each owner's UVs at24Hz and the helper shader performs wrapped-nearest unlit
+ARGB sampling, retaining all three authored faces and depth-test/no-write.
+
+For independent normal-map cases, import `map_texture_probe.run` and pass one
+profile at a time, for example
+`[{"name":"TeleportDoorInsideB","id":"0xad92bc28","owner_frames":1,"render_frames":4}]`.
+Use a separate output directory for each owner. `owner_frames` drives typed
+frame assertions; `render_frames` checks changing imagery independently of
+that owner counter. Final seven-case evidence is
+`recon/retail_asm/runtime/effects/warp-map-final-20261009/manifest.json`.
+The [Warp note](../../docs/vfx/forensics/TELEPORT_DOOR_INSIDE_THIN.md) declares
+the upstream illumination, natural caller and device limits.
+
+Speaker adds six repeated complete untextured geometry/material-input pairs;
+use `speaker_static_probe.py`. FireCone's actual defined native particle pool
+state/order/RNG now matches after local arithmetic fixes; use
+`firecone_state_probe.py` or `test_firecone_state.py`. Neither replaces the
+remaining original illumination/render/combat/audio checks.
 
 The complete scope remains the 176 retail type rows in
 [`EFFECT_BURNDOWN.json`](../../docs/vfx/EFFECT_BURNDOWN.json). As audited for this

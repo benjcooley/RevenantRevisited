@@ -418,6 +418,52 @@ bool T3DImagery::ValidateRetailImmortalmightPartSysProfile()
         pf.dwBBitMask==0x001f && pf.dwRGBAlphaBitMask==0 && materials[0].texture==0;
 }
 
+bool T3DImagery::HasRetailWarpProfile(uint32_t type_id)
+{
+    const char* expected = retail_warp::AssetPath(type_id);
+    if (!expected) return false;
+    // NumObjects loads the immutable imagery before inspecting its metadata.
+    if (NumObjects()!=1 || version!=3 || flags!=0xdc || NumStates()!=1 ||
+        GetAniLength(0)!=1 || GetAniFlags(0)!=0x2001 || NumTags()!=0 ||
+        NumMaterials()!=1 || NumTextures()!=1 || numverts!=4 || numfaces!=3 ||
+        !GetResFilename()) return false;
+    auto normalized = [](const char* value) {
+        std::string result(value);
+        for (char& c:result) c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+        return result;
+    };
+    const std::string path=normalized(GetResFilename()), suffix=normalized(expected);
+    if (path.size()<suffix.size() || path.compare(path.size()-suffix.size(),suffix.size(),suffix) ||
+        (path.size()!=suffix.size() && path[path.size()-suffix.size()-1]!='/')) return false;
+    const auto& object=objects[0];
+    if (std::strcmp(object.name,"gate") || object.parent[0]!=-1 || object.material!=0 ||
+        object.numverts!=4 || object.numfaces!=3 || object.numanikeys[0]!=9 ||
+        !object.anikeys[0] || object.numtexfaces[0]!=0 || object.numtexfaces[1]!=3) return false;
+    auto fingerprint = [](const void* data,size_t length) {
+        uint64_t hash=1469598103934665603ull;
+        const auto* bytes=static_cast<const uint8_t*>(data);
+        for(size_t i=0;i<length;++i) { hash^=bytes[i]; hash*=1099511628211ull; }
+        return hash;
+    };
+    if (fingerprint(object.anikeys[0],9*sizeof(SAniKey32))!=0x99e1daf6cdfd3ca4ull) return false;
+    S3DVertex vertices[4]{}; GetObjVerts(0,vertices);
+    if (fingerprint(vertices,sizeof(vertices))!=0x9caa112ebf96f34cull) return false;
+    S3DFace faces[3]{}; GetObjFaces(0,faces);
+    constexpr uint16_t expected_faces[9]={2,0,1,3,0,2,1,0,3};
+    if (sizeof(faces)!=sizeof(expected_faces) || std::memcmp(faces,expected_faces,sizeof(faces))) return false;
+    const auto& diffuse=materials[0].matdesc.diffuse;
+    if (diffuse.r!=1 || diffuse.g!=1 || diffuse.b!=1 || diffuse.a!=1) return false;
+    const auto& material=materials[0].matdesc;
+    if (material.ambient.r!=1 || material.ambient.g!=1 || material.ambient.b!=1 || material.ambient.a!=1 ||
+        material.emissive.r!=1 || material.emissive.g!=1 || material.emissive.b!=1 || material.emissive.a!=1 ||
+        material.specular.r!=.9f || material.specular.g!=.9f || material.specular.b!=.9f || material.specular.a!=1 ||
+        material.power!=0) return false;
+    const auto& texture=textures[0]; const auto& format=texture.desc.pixelFormat;
+    return texture.desc.width==256 && texture.desc.height==256 && texture.numframes==1 &&
+        format.dwRGBBitCount==16 && format.dwRBitMask==0x0f00 && format.dwGBitMask==0x00f0 &&
+        format.dwBBitMask==0x000f && format.dwRGBAlphaBitMask==0xf000 && materials[0].texture==0;
+}
+
 bool T3DImagery::ValidateRetailFmasteryPartSysProfile()
 {
     if (!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
@@ -3533,6 +3579,10 @@ void T3DAnimator::Initialize()
     inst->SetFlags(OF_MOVING);
 
     SetupObjects();
+    retail_warp_state.Reset();
+    retail_warp_enabled = inst->GetState()==0 && Get3DImagery()->HasRetailWarpProfile(inst->ObjId());
+    if (retail_warp_enabled)
+        log_info("[warp-atlas] init id=%08x map_index=%d mode=2 state=0",inst->ObjId(),inst->GetMapIndex());
     if(inst->ObjId()==0x82aeb30fu && inst->GetState()==0 && Get3DImagery()->HasRetailImmortalmightPartSysProfile()) {
         if(auto* prototype=GetObject(0))prototype->flags|=OBJ3D_GOLD_CAMERA_FACING;
         // Retail409e57..5c skips material-alpha detection when texture alpha
@@ -3610,6 +3660,8 @@ void T3DAnimator::Initialize()
 
 void T3DAnimator::Close()
 {
+    retail_warp_enabled = false;
+    retail_warp_state.Reset();
     partsys_controllers.reset();
     Scene3D.RemoveAnimator(animid);
 
@@ -3704,8 +3756,19 @@ void T3DAnimator::AnimateResetBoundRect()
 
 void T3DAnimator::Pulse()
 {
+    // Map Pulse is authoritative: one call per 24Hz tick, including catch-up.
+    // Each owner begins at (0,0), independently of the global animation clock.
+    if (retail_warp_enabled && inst->GetState()==0) retail_warp_state.Step();
     AdvancePartSysControllers();
     ((T3DImagery*)image)->PlaySound(inst, state, frame);
+}
+
+bool T3DAnimator::WarpAtlasOffset(int32_t object, float output[2]) const
+{
+    if (!retail_warp_enabled || object!=0 || inst->GetState()!=0) return false;
+    output[0]=retail_warp_state.u;
+    output[1]=retail_warp_state.v;
+    return true;
 }
 
 // ---------------------------------------------------------------------------

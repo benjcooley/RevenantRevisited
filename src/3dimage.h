@@ -27,6 +27,7 @@
 #include "render3d_types.h"
 #include "resource.h"
 #include "transform.h"
+#include "effects/warp_atlas.h"
 
 // **************************************************************
 // * T3DImagery - Shared imagery resource for a given 3D object *
@@ -332,6 +333,7 @@ class T3DImagery : public TObjectImagery
     bool HasRetailShadowfistProfile() const { return retail_shadowfist_profile; }
     bool HasRetailWarriorbornProfile() const { return retail_warriorborn_profile; }
     bool HasRetailTeleportationProfile() const { return retail_teleportation_profile; }
+    bool HasRetailWarpProfile(uint32_t type_id);
     bool HasCombatFlashStart1PartSysProfile() const { return combatflash_start1_partsys_profile; }
     char *GetObjectName(int32_t objnum);
     int32_t GetObjectNum(char *objname);
@@ -491,6 +493,8 @@ class T3DAnimator : public TObjectAnimator
     SRenderRect      extents;
     hmm_mat4         matrix;
     bool             updated;
+    bool             retail_warp_enabled = false;
+    retail_warp::State retail_warp_state;
     struct SPartSysControllers;
     std::unique_ptr<SPartSysControllers> partsys_controllers;
     void RefreshPartSysControllers();
@@ -550,6 +554,7 @@ class T3DAnimator : public TObjectAnimator
 
     virtual void Pulse();
     virtual void Animate(bool draw);
+    bool WarpAtlasOffset(int32_t object, float output[2]) const;
 
     // True for the hidden particle prototype, or every mesh when an authored
     // controller is unsupported. The caller must not submit a static substitute.

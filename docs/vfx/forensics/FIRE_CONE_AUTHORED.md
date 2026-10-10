@@ -194,3 +194,12 @@ Final binary `e829e8dbd53c8d4d26f7c82f21159147137d0905181d2591bf9cde7670764870` 
 The shared [geometry validation](/Users/benjamincooley/RevenantRetailLab/research/fire-helper-software-20261005/geometry-validation.json) passes 5,040 matrix cases and 20,160 vertex comparisons. Maximum absolute world error 0.0009765625 stays below `32*float32_epsilon*(1+max_abs_world_coordinate)`; this bounds CPU two-step versus composed GPU matrix arithmetic only. It does not certify rendered projection or software lighting. Current source hashes match that proof. Root passes 16 particle, 108 transform and 25 capture tests in the final build.
 
 A bounded software RGB565 audit finds both additive and direct-store kernels. The existence of either does not establish the selected scene/effect caller path, so no blanket overwrite patch or visual pass is warranted.
+
+## Thin native state follow-up, 2026-10-09
+
+The [executed native pool comparison](FIRECONE_THIN_STATE_20261009.md) now verifies
+100 ticks through null-spell drain against compiled production: all 260 slot
+occupancies, 73,806 defined active float fields, 1,243 RNG calls and shared-pool
+entry ordering match. FireCone-only extended scale/MID approach intermediates
+remove premature rounding stores absent from native x87. Rendered fidelity and
+natural caller/context remain separate and open.

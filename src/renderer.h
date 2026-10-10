@@ -483,6 +483,7 @@ struct SHelperMeshSubmit
 {
     MeshHandle mesh = 0;
     TTextureHandle texture_override = kInvalidTexture;
+    float      uv_offset[2] = {0.0f, 0.0f}; // per-owner atlas/scroll, shared geometry stays immutable
     float      world[16] = {};
     bool       shadow_plane = false;
     bool       additive_blend = false;   // ONE, ONE; otherwise SRC_ALPHA, ONE_MINUS_SRC_ALPHA
