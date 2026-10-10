@@ -164,13 +164,6 @@ constexpr int kInvSlotLast        = 0x115;
 #define MULTICTRLPANEWIDTH  72
 #define MULTICTRLPANEHEIGHT 142
 
-// Quick spell buttons
-#define QUICKSPELLX         2
-#define QUICKSPELLY         343
-#define QUICKSPELLWIDTH     437
-#define QUICKSPELLHEIGHT    35
-#define NUMQUICKSPELLS      4
-
 // Inventory position and size
 #define INVENTORYPANEX      16
 #define INVENTORYPANEY      386
