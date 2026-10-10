@@ -25,10 +25,6 @@ class TMoney : public TObjectInstance
     static void Close();
         // Clear static vars
 
-    static void AllocInvItem(PTBitmap inv, int32_t type, int32_t count);
-        // Allocate a new inventory item for the given count and return it
-    static void FreeInvItem(int32_t type, int32_t count);
-        // Free up use of an instance of this count
     static void AllocGroundItem(PTBitmap ground, int32_t type, int32_t count);
         // Allocate a new ground item for the given count and return it
     static void FreeGroundItem(int32_t type, int32_t count);
@@ -46,15 +42,8 @@ class TMoney : public TObjectInstance
 
     bool MergeInto(TObjectInstance* newowner) override;
         // REVSYNC: 0x00515b50. Joins newowner's gold pile
-    virtual void SignalAddedToInventory();
-        // Called to signal object that it was added to a new inventory
-    virtual void RemoveFromInventory();
-        // Remove this object from whatever inventory it is in
-
-    virtual void DrawInvItem(int32_t x, int32_t y);
-        // Returns bitmap for the inventory image
-    virtual PTBitmap InventoryImage();
-        // Returns bitmap for the inventory image
+    SInvIcon InventoryIcon() override;
+        // REVSYNC: 0x00516370. A pile of copies of the inventory image
 
     virtual void GetScreenRect(SRect &r);
         // Get screen bounding rectangle for object (in world coordinates)
