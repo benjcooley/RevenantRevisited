@@ -54,6 +54,9 @@ void WriteSeamsSince(JsonOut& j, size_t first);   // "seams": those from `first`
 // for a direct draw), from its `tape` and then retail's generator from its
 // `seed`, as the retail fixture answers them (SCaseScope installs it).
 void WriteDraws(JsonOut& j);
+// Forget the draws so far (the tape goes on where it was): a case that sets
+// something up with draws of its own before the call it compares.
+void ClearDraws();
 
 // Action block flags by meaning (the port's bits under retail's names).
 uint32_t FlagBits(const JsonValue& names);
@@ -350,6 +353,11 @@ class TFixtureChar : public Base, public IFixtureChar
                 weapontype = (int32_t)spec["weapon"]["type"].Int();
                 weapondamage = (int32_t)spec["weapon"]["damage"].Int();
             }
+            if (spec.Has("maxmana"))
+            {
+                hasmaxmana = true;
+                maxmana = (int32_t)spec["maxmana"].Int();
+            }
         }
     }
     TFixtureChar(const TFixtureChar&) = delete;
@@ -560,6 +568,15 @@ class TFixtureChar : public Base, public IFixtureChar
         throw std::runtime_error("no resolver '" + which + "'");
     }
 
+    // A player's MaxMana, when the case gives `maxmana` (retail's seam at
+    // TPlayer::MaxMana 0x00520770); a character's is its chardata's.
+    int32_t MaxMana() override
+    {
+        if (!hasmaxmana)
+            return Base::MaxMana();
+        return ValueSeam("MaxMana", maxmana);
+    }
+
     void WriteAttackState(JsonOut& j) override
     {
         j.Key("attackstate").Begin('{');
@@ -637,6 +654,8 @@ class TFixtureChar : public Base, public IFixtureChar
 
     bool weapon = false;
     int32_t weapontype = 0, weapondamage = 0;
+    bool hasmaxmana = false;
+    int32_t maxmana = 0;
 
     std::string who;
     std::vector<SFixtureState> states;

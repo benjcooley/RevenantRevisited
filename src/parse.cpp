@@ -207,7 +207,7 @@ moretext:
         {
             if (pos >= MAXTOKENTEXT - 1)
                 Error("String too int32_t");
-            if (ch == '\\')
+            if (ch == '\\' && !literalbackslash)
             {
                 ch = ReadChar();
                 if (ch == 'n')
@@ -536,6 +536,41 @@ void TToken::DoEnd()
     LineGet();
 }
 
+// REVSYNC: TToken::GetRestOfLine @ 0x004799b0 -- the current token's text and
+// the rest of its line into buf (len bytes, always terminated): words,
+// strings and symbols as written, numbers as their integer value, each run
+// of blanks as one space; the return is consumed. False when len < 0.
+bool TToken::GetRestOfLine(char *buf, int32_t len)
+{
+    if (len < 0)
+        return false;
+    strcpy(buf, text);
+    Get();
+    while (type != TKN_RETURN && type != TKN_EOF)
+    {
+        const char *piece = nullptr;
+        char number[16];
+        if (type == TKN_IDENT || type == TKN_TEXT || type == TKN_SYMBOL)
+            piece = text;
+        else if (type == TKN_NUMBER)
+        {
+            snprintf(number, sizeof(number), "%d", index);
+            piece = number;
+        }
+        else if (type == TKN_WHITESPACE)
+            piece = " ";
+        if (piece)
+        {
+            const size_t used = strlen(buf);
+            strncpy(buf + used, piece, len - used - 1);
+            buf[len - 1] = 0;
+        }
+        Get();
+    }
+    Get();
+    return true;
+}
+
 void TToken::Error(const char *err, const char *extra)
 {
     char buf[100];
@@ -631,8 +666,10 @@ bool ParseAnything(bool stack, TToken &t, const char *format, va_list ap)
                             switch (*f)
                             {
                               case 'b':
+                                // REVSYNC: 0x00479ca5 -- an absent field's
+                                // byte is skipped, not written (as the others)
                                 if (stack)
-                                    *va_arg(ap,unsigned char *) = (uint8_t)t.Index();
+                                    va_arg(ap, unsigned char *);
                                 else
                                     *(unsigned char **)from += 1;
                                 break;
@@ -722,6 +759,16 @@ bool ParseAnything(bool stack, TToken &t, const char *format, va_list ap)
           case '%':
           {
             f++;
+            // REVSYNC: 0x00479d89 -- `%\` before the conversion: the tokens
+            // read while the field is taken (the one after it) keep their
+            // backslashes as written; the token's setting comes back after.
+            const bool literal = (*f == '\\');
+            const bool wasliteral = t.literalbackslash;
+            if (literal)
+            {
+                f++;
+                t.literalbackslash = true;
+            }
             if (isdigit(*f))
             {
                 len = 0;
@@ -894,6 +941,8 @@ bool ParseAnything(bool stack, TToken &t, const char *format, va_list ap)
                 break;
 
             } // End of '%' value parse
+            if (literal)
+                t.literalbackslash = wasliteral;
             break;
           }
 
