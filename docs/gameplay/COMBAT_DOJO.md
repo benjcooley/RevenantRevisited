@@ -442,6 +442,11 @@ python3 tools/retail_ab/retail_ab.py combat-sequence    # M8
 python3 tools/retail_ab/retail_ab.py combat-input       # M6
 python3 tools/retail_ab/retail_ab.py combat-steps       # M10
 python3 tools/retail_ab/retail_ab.py combat-perceive    # M9b
+python3 tools/retail_ab/retail_ab.py melee-attack-choice   # C3 (melee-hit C4, melee-damage C2,
+                                                           # melee-resolvers C5, melee-ai C3b)
+python3 tools/retail_ab/retail_ab.py spell-cast         # S2 (spell-data D1s; spell-lookup, -talismans,
+                                                        # -quick S1; spell-new, -damage S3)
+python3 tools/retail_ab/retail_ab.py missile-bow        # S4 (missile-area, -arrow, -fireball)
 tools/walktest/walktest.py "<slot dir>" [--pattern sweep|walks|both|none] [--exec "player.goto X Y; ..."]
 python3 tools/retail_ab/retail_ab.py combat-data        # D1, every record field by field
 python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2
