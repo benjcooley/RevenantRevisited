@@ -248,6 +248,12 @@ class IFixtureChar
     // The attack bookkeeping (timers, request bits, the player's button
     // repeats, the chain, the last attack by index), by retail's names.
     virtual void WriteAttackState(JsonOut& j) = 0;
+    // The AI's own state: its waypoint or look-at (retail +0x234), the
+    // target's last place (+0x23c), the waypoint's ticks (+0x248), the boss
+    // kind (+0x280). The look-at is the caller's to name.
+    virtual void ReadAIState(const JsonValue& a, TObjectInstance* lookat) = 0;
+    [[nodiscard]] virtual TObjectInstance* AILookAt() const = 0;
+    virtual void WriteAIState(JsonOut& j) const = 0;
     // Another resolver on the doing block: "attack", "impact", "block",
     // "dead" (ResolveAction's dispatch, retail 0x004c3490).
     virtual int32_t RunResolver(const std::string& which, int32_t bits) = 0;
@@ -558,6 +564,23 @@ class TFixtureChar : public Base, public IFixtureChar
         if (which == "dead")
             return Base::ResolveDead(this->doing, bits);
         throw std::runtime_error("no resolver '" + which + "'");
+    }
+
+    void ReadAIState(const JsonValue& a, TObjectInstance* lookat) override
+    {
+        this->ai_lookat = lookat;
+        if (a.Has("lastpos"))
+            this->target_last_position = Point(a["lastpos"]);
+        this->waypointticks = (int32_t)a["waypointticks"].Int(0);
+    }
+
+    TObjectInstance* AILookAt() const override { return this->ai_lookat; }
+
+    void WriteAIState(JsonOut& j) const override
+    {
+        const S3DPoint& p = this->target_last_position;
+        j.Key("lastpos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']');
+        j.Field("waypointticks", this->waypointticks).Field("monsterkind", this->monsterkind);
     }
 
     void WriteAttackState(JsonOut& j) override

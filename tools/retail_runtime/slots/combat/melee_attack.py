@@ -31,6 +31,9 @@ field names (data_parse.py's layouts) -- and their attack bookkeeping
   `0x4c77a0`, `resolve-dead` ResolveDead `0x4c7810` (bits) on the doing
   block; `block` Block `0x4d2e30` (frames; with `seam_block` false),
   `stop-block` StopBlock `0x4d30f0`, `dodge` Dodge `0x4d3150` (dir).
+- `ai` AI `0x4c8b60` (one tick). A character's `aistate` gives its AI
+  state: `lookat` (+0x234, a name), `lastpos` (+0x23c), `waypointticks`
+  (+0x248); NetOwner reads 1 (`0x676838`, single player).
 
 Runs as original code: the method and what it calls -- the searches,
 IsValidAttack, DoAttack, HasActionAni, CombatAnimName `0x4ce1b0` and the
@@ -48,6 +51,13 @@ Seams (guest.py's, and these), recorded in order:
 - Block `0x4d2e30` (frames): recorded on the character, the case's
   `block_result` (1); the original runs with the case's `seam_block` false.
 - EffectCombatFlash `0x4c8500`: recorded (it spawns an effect).
+- TMapPane::FindObjectsInRange `0x452060` (AI's waypoint search): the
+  case's `waypoints` ({name, pos, type}), in order, recorded; GetInstance
+  `0x452690` gives each (a helper: class 0xf, its type's name at +0x4c);
+  LineOfSight `0x4533d0` from one (to a character) clear unless the case's
+  `walls` name the pair -- only in a case with waypoints.
+- CanSeeCharacter `0x4cd540` (target, angle): the case's `sees` (1; or
+  the names seen), recorded.
 - The spell list's Find `0x53f010` and Cast `0x4d5c20`, as one record
   `CastByName` (spell, targets, source, result): a spell in the case's
   `spells` is cast with `cast_result` (1); any other isn't found (result 0).
@@ -88,6 +98,11 @@ FIND_CHARACTERS, FIND_CLEAR_PATH, BLOCK = 0x4cd690, 0x4c39d0, 0x4d2e30
 STOP_BLOCK, DODGE = 0x4d30f0, 0x4d3150
 RESOLVE_IMPACT, RESOLVE_BLOCK, RESOLVE_DEAD = 0x4c74b0, 0x4c77a0, 0x4c7810
 EFFECT_COMBAT_FLASH = 0x4c8500
+AI, FIND_OBJECTS_IN_RANGE, CAN_SEE = 0x4c8b60, 0x452060, 0x4cd540
+GET_INSTANCE, LINE_OF_SIGHT = 0x452690, 0x4533d0
+HELPER_INDEX = 0x7000                           # map indices the case's helpers take
+G_NETOWNER, G_EDITOR = 0x676838, 0x668154
+O_LOOKAT, O_LASTPOS, O_WAYPOINTTICKS, O_MONSTERKIND = 0x234, 0x23c, 0x248, 0x280
 SPELL_FIND, CAST = 0x53f010, 0x4d5c20
 PLAYER_WEAPONTYPE, PLAYER_WEAPONDAMAGE, SET_PLAYER_STATE = 0x520810, 0x520830, 0x51d680
 # Hit resolution (COMBAT_HIT.md): original ResolveAttack / ResolveHit /
@@ -111,7 +126,7 @@ COVERED = {'AnimPrefix': (0x4cdf60, 0x4ce1b0), 'CombatAnimName': (0x4ce1b0, 0x4c
            'PlayerKilled': (0x518ed0, 0x518f8b), 'PlayerDied': (0x518f90, 0x518fda),
            'ResolveImpact': (0x4c74b0, 0x4c7798), 'ResolveBlock': (0x4c77a0, 0x4c7804),
            'ResolveDead': (0x4c7810, 0x4c7973), 'Block': (0x4d2e30, 0x4d30ec), 'StopBlock': (0x4d30f0, 0x4d3147),
-           'Dodge': (0x4d3150, 0x4d3471)}
+           'Dodge': (0x4d3150, 0x4d3471), 'AI': (0x4c8b60, 0x4c9453), 'AIPerMonster': (0x4c9b70, 0x4c9cd8)}
 
 ATTACK_SIZE = 0x320
 RULES = 0x65d7a8
@@ -144,6 +159,10 @@ class MeleeFixture:
         b.add(FIND_CHARACTERS, 'FindCharacters', 0x18, self._find_characters)
         b.add(FIND_CLEAR_PATH, 'FindClearPath', 0x14, self._find_clear_path)
         b.add(EFFECT_COMBAT_FLASH, 'EffectCombatFlash', 0, self._combat_flash)
+        b.add(FIND_OBJECTS_IN_RANGE, 'FindObjectsInRange', 0x20, self._find_objects)
+        b.add(CAN_SEE, 'CanSeeCharacter', 8, self._can_see)
+        b.add(GET_INSTANCE, 'GetInstance', 8, self._get_instance)
+        b.add(LINE_OF_SIGHT, 'LineOfSight', 0x14, self._helper_sight)
         b.add(SPELL_FIND, 'SpellFind', 4, self._spell_find)
         b.add(CAST, 'Cast', 0x10, self._cast)
         b.add(PLAYER_WEAPONTYPE, 'WeaponType', 0, lambda a, c: self._weapon(c, 'type', 'WeaponType'))
@@ -165,6 +184,7 @@ class MeleeFixture:
         self.vm.checkpoint()
         self.setup_ms = (time.perf_counter() - started) * 1000
         self.case = {}
+        self.helpers = []
 
     def _coverage(self):
         """With MELEE_COVERAGE=<dir>: the code reached in the melee functions
@@ -214,6 +234,58 @@ class MeleeFixture:
         result = int(self.case.get('block_result', 1))
         self.world.seams.append(dict(seam='Block', who=self.world._name(ecx), frames=s32(args[0]), result=result))
         return result
+
+    def _can_see(self, args, ecx):
+        """`sees`: yes or no, or the names seen."""
+        sees = self.case.get('sees', True)
+        them = self.world._name(args[0])
+        seen = int(them in sees) if isinstance(sees, list) else int(bool(sees))
+        self.world.seams.append(dict(seam='CanSeeCharacter', who=self.world._name(ecx), target=them, result=seen))
+        return seen
+
+    def _find_objects(self, args, ecx):
+        centre = list(struct.unpack('<3i', self.vm.uc.mem_read(args[0], 12)))
+        n = len(self.helpers)
+        for i in range(min(n, s32(args[6]))):
+            self.vm.put_u32(args[2] + 4 * i, HELPER_INDEX + i)
+        self.world.seams.append(dict(seam='FindObjectsInRange', who=self.world._name(self._ai_self), centre=centre,
+                                     max=s32(args[6]), result=n))
+        return n
+
+    def _get_instance(self, args, ecx):
+        i = s32(args[0]) - HELPER_INDEX
+        if not 0 <= i < len(self.helpers):
+            return Boundaries.ORIGINAL
+        return self.helpers[i][1]
+
+    def _helper_sight(self, args, ecx):
+        if not self.helpers:
+            return Boundaries.ORIGINAL
+        fx, fy, _ = struct.unpack('<3i', self.vm.uc.mem_read(args[0], 12))
+        to = struct.unpack('<3i', self.vm.uc.mem_read(args[1], 12))
+        a = next((name for name, obj in self.helpers
+                  if struct.unpack('<2i', self.vm.uc.mem_read(obj + 0x10, 8)) == (fx, fy)), '?')
+        b = next((name for name, obj in self.world.by_name.items()
+                  if struct.unpack('<3i', self.vm.uc.mem_read(obj + 0x10, 12)) == to), '?')
+        clear = int([a, b] not in self.case.get('walls', []))
+        self.world.seams.append(dict(seam='LineOfSight', **{'from': a}, to=b, result=clear))
+        return clear
+
+    def _make_helpers(self, case):
+        """The case's helpers: class 0xf, a type record whose first word
+        names the type, the position."""
+        vm = self.vm
+        self.helpers = []
+        for w in case.get('waypoints', []):
+            obj = vm.allocate(0x200)
+            name = vm.allocate(32)
+            vm.write(name, w.get('type', 'Waypoint').encode(TEXT) + b'\0')
+            info = vm.allocate(16)
+            vm.put_u32(info, name)
+            vm.write(obj + 4, struct.pack('<h', 0xf))
+            vm.write(obj + 0x10, struct.pack('<3i', *w['pos']))
+            vm.put_u32(obj + 0x4c, info)
+            self.helpers.append((w['name'], obj))
 
     def _combat_flash(self, args, ecx):
         self.world.seams.append(dict(seam='EffectCombatFlash', who=self.world._name(ecx)))
@@ -432,6 +504,22 @@ class MeleeFixture:
             if key in b:
                 vm.put_u32(ab + off2, b[key] & 0xffffffff)
 
+    def _aistate(self, obj, a):
+        vm = self.vm
+        look = a.get('lookat')
+        helper = next((o for name, o in self.helpers if name == look), None)
+        vm.put_u32(obj + O_LOOKAT, helper or self._obj(look))
+        vm.write(obj + O_LASTPOS, struct.pack('<3i', *a.get('lastpos', [0, 0, 0])))
+        vm.put_u32(obj + O_WAYPOINTTICKS, a.get('waypointticks', 0) & 0xffffffff)
+
+    def _ai_dump(self, obj):
+        vm = self.vm
+        look = vm.u32(obj + O_LOOKAT)
+        helper = next((name for name, o in self.helpers if o == look), None)
+        return dict(lookat=helper or (self.world._name(look) if look else None),
+                    lastpos=list(struct.unpack('<3i', vm.uc.mem_read(obj + O_LASTPOS, 12))),
+                    waypointticks=s32(vm.u32(obj + O_WAYPOINTTICKS)), monsterkind=s32(vm.u32(obj + O_MONSTERKIND)))
+
     def _block_fields(self, obj, spec):
         for role, off in (('root', 0xe0), ('doing', 0xd8), ('desired', 0xdc)):
             if isinstance(spec.get(role), dict):
@@ -522,8 +610,12 @@ class MeleeFixture:
         self.records = {}
         self.specs = {c['name']: c for c in case['chars']}
         world.set_globals(case.get('globals', {}))
+        world.set_ground(case)
+        self._make_helpers(case)
         vm.put_u32(G_NAHKRANOTH, int(case.get('globals', {}).get('nahkranoth', 0)))
         vm.put_u32(G_ALREADYDEAD, int(case.get('globals', {}).get('alreadydead', 0)))
+        vm.put_u32(G_EDITOR, int(case.get('globals', {}).get('editor', 0)))
+        vm.put_u32(G_NETOWNER, 1)
         vm.put_u32(G_NOCOMBATRESULTS, int(case.get('globals', {}).get('nocombatresults', 0)))
         vm.put_u32(G_PLAYER, 0)
         self._rules(case.get('rules', {}))
@@ -538,8 +630,10 @@ class MeleeFixture:
             world.set_blocks(obj, spec)
             self._block_fields(obj, spec)
             self._attackstate(obj, spec)
+            self._aistate(obj, spec.get('aistate', {}))
         world.seams.clear()
         me = world.by_name[case['self']]
+        self._ai_self = me
         kind = case['call']
         a = case.get('args', {})
         outs = vm.allocate(32)
@@ -592,6 +686,9 @@ class MeleeFixture:
             result['returned'] = s32(call(vm, STOP_BLOCK, (), this=me))
         elif kind == 'dodge':
             result['returned'] = s32(call(vm, DODGE, (a.get('dir', -1) & 0xffffffff,), this=me))
+        elif kind == 'ai':
+            call(vm, AI, (), this=me)
+            result['returned'] = 0
         elif kind == 'resolve-hit':
             cd = vm.u32(me + 0xfc)
             rec = vm.u32(vm.u32(cd + C_ATTACKS + 0x10) + 4 * a['attack'])
@@ -621,6 +718,7 @@ class MeleeFixture:
             raise ValueError(f'unknown call {kind!r}')
         # A block made in the call is `new N` per character, as the port numbers them.
         result['chars'] = {spec['name']: self._dump(world.by_name[spec['name']], []) for spec in case['chars']}
+        result['ai'] = {spec['name']: self._ai_dump(world.by_name[spec['name']]) for spec in case['chars']}
         result['seams'] = list(world.seams)
         result['draws'] = list(world.draws)
         return result

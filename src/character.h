@@ -107,6 +107,10 @@ class TCharacter : public TComplexObject
     using EffectCombatFlashSeam = void (*)(TCharacter* self);
     static inline EffectCombatFlashSeam effectCombatFlashSeam = nullptr;
       // EffectCombatFlash (retail 0x004c8500)
+    using WaypointsSeam = int32_t (*)(TCharacter* self, const S3DPoint& centre, TObjectInstance** found, int32_t max);
+    static inline WaypointsSeam waypointsSeam = nullptr;
+      // The helpers AI's waypoint search finds near a point (retail
+      // TMapPane::FindObjectsInRange 0x00452060 and GetInstance 0x00452690)
     using KnockBackSeam = void (*)(TCharacter* self, const S3DPoint& from, int32_t variant);
     static inline KnockBackSeam knockBackSeam = nullptr;
       // KnockBack (retail 0x004d3750)
@@ -648,6 +652,16 @@ class TCharacter : public TComplexObject
     int32_t DamageShare(int32_t damage);
       // damage as a percentage of what's left (at most 100): CHARIMPACT's range
 
+    // AI's steps (retail 0x004c8b60, COMBAT_ATTACK_CHOICE.md §3.10)
+    void AIAttack(TCharacter* target);
+      // In the combat stance: the attack timers, the attack or the walk to reach it
+    void AIMove(TCharacter* target);
+      // Otherwise: run while retreating, chase, search, or step aside
+    TObjectInstance* NearestWaypoint(const S3DPoint& centre);
+      // The waypoint in sight nearest `centre`, or none
+    void AIPerMonster();
+      // The boss kind (retail AI_PerMonster's first part)
+
     char *GetAngleMoveAnim(int32_t movedir, int32_t facedir, char *root, char *animname, int32_t buflen);
       // Returns the correct angle movce animation given the current movedir, facedir, and root name
     void AdvanceAngles(int32_t faceang, int32_t moveang, int32_t maxturn);
@@ -671,14 +685,6 @@ class TCharacter : public TComplexObject
       // Find closest character in this direction
     TCharacter* FindClosestEnemy(int32_t angle = -1, int32_t anglerange = 32);
       // Finds the closest character attacking this character
-    TObjectInstance* WanderToWaypoint(const S3DPoint& search_center, int32_t range = 250);
-      // Retail TCharacter::AI (FUN_004c8b60) waypoint-search branch. Used by the
-      // out-of-sight target chase: when a monster has lost sight of its target, it
-      // hops between "waypoint" objects to thread its way toward the target's last
-      // known position. Each call: if there's a committed waypoint, tick the commit
-      // timer (decrement/clear); otherwise scan reachable waypoints near
-      // search_center, pick the closest, commit for ~6 frames. Returns the
-      // currently committed waypoint instance (or nullptr if none).
     void ResetStealthValues();
       // Based on character position, lights, and stealth, sets noise and glimpse
 
@@ -783,27 +789,13 @@ protected:
   // Last bow shot ticks (so we don't shoot bow too fast)
     int32_t lastbowshot = 0;
 
-  // AI fix, this variable keeps track of the last position we saw the enemy at
+  // Retail +0x23c: where the AI last saw or heard its target (the centre of
+  // its waypoint search when it loses it).
     S3DPoint target_last_position{};
-  // AI fix, this variable keeps track of when to save the last position of the enemy
-    int32_t last_position_count = 0;
-    int32_t last_position_distance = 0;
-    S3DPoint last_position_start_point{};
-    int32_t target_last_angle = 0;
 
-  // Retail wander state (from FUN_004c8b60 lines 199-205).
-  // field_map.md: 0x238 = wander_target  (retail mbr_0x8d / param_1[0x8d])
-  // field_map.md: 0x248 = wander_commit  (retail mbr_0x92 / param_1[0x92])
-  // The AI body caches the currently-targeted waypoint instance here and
-  // ticks `wander_commit` down each frame while we walk toward it. While
-  // commit > 0 we keep the same waypoint; when the search re-finds the
-  // same waypoint as already-committed we treat that as arrival and clear,
-  // letting the next tick pick a different one. Replaces the pre-release
-  // version's missing waypoint state (it had only a closest-waypoint
-  // search per tick which pingponged at arrival). Source-side we keep
-  // wander_target as a TSafeRef for safe-pointer semantics.
-    TSafeRef<TObjectInstance> wander_target;
-    int32_t  wander_commit = 0;
+  // Retail +0x248: how many more ticks the AI keeps facing its waypoint
+  // (ai_lookat) while chasing; a new waypoint gives it 6.
+    int32_t  waypointticks = 0;
 
   // retail +0x288: the item a Goto carries (the map pane's walk to an item
   // out of reach, 0x004cedb0), picked up when that walk arrives (0x004c6155,
@@ -823,14 +815,14 @@ protected:
     bool     retreatlatch = false;
     int32_t  retreatframes = 0;
   // Retail +0x234: an object the AI walks toward and ResolveCombat faces
-  // when no visible target overrides it (written by AI 0x004c8b60 and
-  // WanderToWaypoint 0x004c9790; no port writer yet).
+  // when no visible target overrides it: the waypoint AI 0x004c8b60 heads
+  // for (Wander 0x004c9790 writes it too, not ported).
     TObjectInstance* ai_lookat = nullptr;
   // Retail +0x28c / +0x290: the player's last attack button and how many
   // times running it was pressed (ButtonAttack 0x004d2480's same-button
   // rule); SetFighting resets them.
-  // Retail +0x280: the per-monster AI kind (AI_PerMonster 0x004c9b70 sets
-  // it; 1 is Baez, whom magic can't hurt). No port writer yet.
+  // Retail +0x280: the boss kind AI_PerMonster 0x004c9b70 gives, once (1
+  // Baez, whom magic can't hurt, 2 Solifuge, 3 Jhaga, 4 Yhagoro, -1 any other).
     int32_t monsterkind  = 0;
     int32_t lastbutton   = -1;
     int32_t buttonrepeat = 0;

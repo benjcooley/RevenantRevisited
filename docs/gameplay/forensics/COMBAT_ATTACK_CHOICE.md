@@ -1135,6 +1135,47 @@ Arena (Locke vs an Araknid, 1440 ticks): 74 attacks after C3 against
 1812 before; with C4 and C2, 27 attacks, 3 hits, 2 deaths; deterministic
 (two runs, identical traces).
 
-Left: the rest of AI() (C3b), on the movement callees as they land
-(StartRetreat, Leap, KnockBack are in; Wander, which only the player AI
-reaches, is not).
+### 9.2 C3b `melee-ai` (925 cases)
+
+AI `0x4c8b60` whole (port `TCharacter::AI`, `AIAttack`, `AIMove`,
+`NearestWaypoint`) and AI_PerMonster's first part (`AIPerMonster`: the
+boss kind). One tick per case: the gates (a player without the AI switch,
+disabled, dead, the dummies cheat, the editor), the target kept while
+valid or found every 32 frames (aggressive, not no-turn; a retreating
+monster takes it without fighting), the attack branch (in the stance, a
+walk-fighter's walk, asked by OnAttacked; every timer combination, still
+making the last attack, out of reach, someone in the way at each side),
+the move branch (retreat, standing beside a blocker, stepping: stop near
+the target, a PLAYANIM under way, chase seen or heard, lost: the target's
+own fight in sight, the waypoint search over case helpers in sight or
+walled, of another type, near and far, more than ten, the committed one
+reached or not), the retreat state, bow and walk roots. Coverage: AI
+202/203 blocks; AI_PerMonster 11/27 (the bosses' state allocations: the
+bosses aren't ported). The fixture's helpers are real helper objects of the
+case's type (class.def's "Waypoint", "Axis") on both sides; their line of
+sight is the case's `walls`.
+
+Corrections to §3.10:
+
+- AI_PerMonster, for anyone but the four bosses, only sets `+0x280` to −1
+  once. Baez 1, Solifuge 2, Jhaga 3, Yhagoro 4 each get a zeroed state at
+  `+0x284` (0x58 / 0x34 / 0x5c / 0xc bytes) and their behaviour
+  (`0x4c9ce8`–`0x4cd491`; Baez's sets charflags `0x88` every tick).
+  **Not ported**: the bosses (BURNDOWN phase H).
+- `0x668110` is the "dummies" cheat (the port's NoAI), `0x668154` the
+  editor flag (Editor).
+- NetOwner (slot `0x178`, `0x4d6020`): `[0x676838]` unless `+0x264` is set
+  (then 2 in a session, 1 for G_PLAYER). The port has no session: no gate.
+- §3.10.5: `0x470bc0` is SetNextMove, given the **waypoint's position** as
+  the move vector: each new nearest candidate sets moveangle, movedist and
+  movevert from it. And the nearest is taken only under 1000, but with
+  none under 1000 the **first** candidate is still chosen (the best index
+  starts at 0). WaypointReachable (`0x528850`) is the line of sight from
+  (waypoint x, y, the character's z) to the character. The search is
+  FindObjectsInRange(centre, 250, helpers (class 0xf), at most 10).
+- `+0x234` (the port's ai_lookat) is the waypoint; field_map.md's "0x238
+  wander_target" was it (`param_1[0x8d]` is `+0x234`). The port's
+  WanderToWaypoint and its fields are gone.
+
+Left: Wander `0x4c9790` (Pulse runs it before AI for a character with
+charflags `0x100000`, the player AI) and the four bosses' behaviours.
