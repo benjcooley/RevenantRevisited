@@ -38,6 +38,7 @@ CLASS_PLAYER, CLASS_CHARACTER = 0x0b, 0x0c
 VTABLE_COPY = 0x400                          # bytes of the real vtable copied (256 slots)
 O_CLASS, O_NAME, O_ACTION = 0x04, 0x38, 0xe0
 BM_RGB565 = 0x4
+ARCHIVE_DATA = 0x404                         # an archive blob's dataOff table
 ACTION_SIZE, ACTION_COMBAT, ACTION_TARGET = 0x64, 3, 0x44
 
 # HUD input slots of a character: vtable offset -> field of `Stats`
@@ -109,6 +110,19 @@ class HudScene:
         self.archives[name] = blob
         return blob
 
+    def bitmap_names(self):
+        """{pointer: 'Archive:Name'} over every archive loaded. An archive
+        blob is `{count; nameOff[256]; dataOff[256]}`, each offset relative
+        to its own slot (FUN_0046d710)."""
+        names = {}
+        for archive, blob in self.archives.items():
+            stem = archive.rsplit('.', 1)[0]
+            for i in range(self.vm.u32(blob)):
+                name_slot, data_slot = blob + 4 + 4 * i, blob + ARCHIVE_DATA + 4 * i
+                name = self.vm.string(name_slot + self.vm.u32(name_slot))
+                names[data_slot + self.vm.u32(data_slot)] = f'{stem}:{name}'
+        return names
+
     # ---- characters ----------------------------------------------------
 
     def bitmap(self, data):
@@ -170,6 +184,15 @@ class HudScene:
         call(self.slot(pane, SLOT_2D_PASS), this=pane, instruction_limit=200_000_000)
 
     # ---- capture -------------------------------------------------------
+
+    def screen_surface(self, pointer):
+        """'display' or 'back_buffer' for the display's surfaces, else None."""
+        display = self.vm.u32(DISPLAY_POINTER)
+        if pointer == display:
+            return 'display'
+        if pointer == self.vm.u32(display + DISPLAY_BACK):
+            return 'back_buffer'
+        return None
 
     def back_buffer(self):
         """The surface retail renders frames into: the display object's
