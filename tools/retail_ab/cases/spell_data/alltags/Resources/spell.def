@@ -1,0 +1,96 @@
+// Kata D1s edge file: every SPELL and CONTROLDATA tag retail's loader
+// takes (SSpellData::Load 0x53e4e0, LoadControlData 0x53dd10), the
+// defaults of a bare block, and the forms the shipped file doesn't use.
+
+#define DT_NONE		-1
+#define DT_BURN     7
+#define TP_BASIC	3
+#define TRUE		1
+#define FALSE		0
+
+SPELL "Bare"
+BEGIN
+	LIGHT INT 5
+	VARIANT "Bare One", TP_BASIC, "A", "fizzle", 0, 0, 0, 0, -1, 0, FALSE, 0
+END
+
+SPELL "Every Spell Tag"
+BEGIN
+	NAME "Every Object"
+	ICONNAME "Every Icon"
+	DESCRIPTION "A long description, with commas, and words: 0123456789"
+	FLAGS 0x0010
+	DAMAGETYPE DT_BURN
+	ANIMATION "invoke3"
+	DELAY 12
+	POISONCHANCE 33
+	LIGHT COLOR 1, 2, 3 INT 40 MULT 7 POS 10, -20, 30 FADEIN 2 FADEOUT 9
+
+	VARIANT "Six Codes", TP_BASIC, "ABCDEF", "fireball", 10, 30, 1, 9, 2, 5, TRUE, 15
+	VARIANT "lower codes", TP_BASIC, "jfi", "Funnel", 11, 31, 2, 8, 3, 6, FALSE, 16
+	VARIANT "No Block", TP_BASIC, "GHI", "StrikeEffect", 12, 32, 3, 7, 4, 7, TRUE, 17
+	CONTROLDATA "Strike"
+
+	VARIANT "Every Control Tag", TP_BASIC, "IJK", "StrikeEffect", 13, 33, 4, 6, 5, 8, TRUE, 18
+	CONTROLDATA "Strike"
+	BEGIN
+		RADIUS 75
+		HITS 3
+		DURATION 240 12
+		SHAKE 4
+		PLAY "loop sound"
+		POS 5 -6 7
+		PATTERN "spiral"
+		ONCASTER
+		HITTARGET
+		FOLLOW
+		ATTACHMULTIPLE "lhand" "rhand" "head"
+		MULTIPLETARGETS
+		REPEATDAMAGE 48
+		STATLINE   STRN  -2 Agil %10  RFLX ( 5 ) TIME 0480
+		IMAGERY "magic\first.i3d"
+		IMAGERY "magic\second.i3d"
+		WAIT 36
+		RANGEDAMAGE 150 30
+	END
+
+	VARIANT "Once And Attach", TP_BASIC, "JKL", "StrikeEffect", 14, 34, 5, 5, 6, 9, FALSE, 19
+	CONTROLDATA "Other"
+	BEGIN
+		PLAYONCE "once"
+		ATTACH "rhand"
+		PATTERN "random"
+	END
+	VARIANT "Circle", TP_BASIC, "KL", "StrikeEffect", 1, 1, 1, 1, 1, 1, FALSE, 1
+	CONTROLDATA "Strike"
+	BEGIN
+		PATTERN "circle"
+	END
+	VARIANT "Line", TP_BASIC, "LA", "StrikeEffect", 1, 1, 1, 1, 1, 1, FALSE, 1
+	CONTROLDATA "Strike"
+	BEGIN
+		pattern "LINE"
+		hits 2
+	END
+	VARIANT "Cluster", TP_BASIC, "AB", "StrikeEffect", 1, 1, 1, 1, 1, 1, FALSE, 1
+	CONTROLDATA "Strike"
+	BEGIN
+		PATTERN "Cluster"
+	END
+	VARIANT "Cross", TP_BASIC, "BC", "StrikeEffect", 1, 1, 1, 1, 1, 1, FALSE, 1
+	CONTROLDATA "Strike"
+	BEGIN
+		PATTERN "x"
+		STATLINE Health 1018
+	END
+END
+
+SPELL "Lower Tags"
+BEGIN
+	name "lower"
+	damagetype DT_NONE
+	animation "invoke2"
+	delay 3
+	LIGHT COLOR 250, 250, 0 INT 180 MULT 20
+	variant "Lower Variant", TP_BASIC, "CD", "heal", 1, 2, 3, 4, 5, 6, TRUE, 7
+END
