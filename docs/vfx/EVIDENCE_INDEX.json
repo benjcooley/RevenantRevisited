@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 84,
-    "visual_fidelity_confirmed_rows": 45,
+    "visual_fidelity_confirmed_rows": 46,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 71,
-    "reviewed_visual_pass_rows": 45,
-    "remaining_visual_review_rows": 131
+    "reviewed_visual_pass_rows": 46,
+    "remaining_visual_review_rows": 130
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -966,6 +966,13 @@
       "check": "current_renderer_visual_regression",
       "status": "pass_for_existing_isolated_scope",
       "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+    },
+    "recon/retail_asm/runtime/effects/fireflash-current-visual-20261010/review-approved.json": {
+      "sha256": "b51a6244eae867b3b636e44f532d1e87bda31441601fc93bb632dad9a5ab30ad",
+      "retail_row": "FireFlash:0x37780ae2",
+      "check": "fireflash_current_whole_lifecycle_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Null-spell isolated source-light full sampled rise/annulus/collapse/greenfade. Original Init/Animate/RenderObject/normalIlluminate/raster versus actual512squareMetal, fixed24Hz phase mapping verified6CRT callcounts, nofit. Pixel equality/naturalcaller/ABSPOS/device remain separate."
     }
   }
 }

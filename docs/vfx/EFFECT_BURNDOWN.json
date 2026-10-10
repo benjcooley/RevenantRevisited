@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 84,
-    "visual_fidelity_confirmed_rows": 45,
+    "visual_fidelity_confirmed_rows": 46,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 71,
-    "reviewed_visual_pass_rows": 45,
-    "remaining_visual_review_rows": 131
+    "reviewed_visual_pass_rows": 46,
+    "remaining_visual_review_rows": 130
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -11826,7 +11826,8 @@
         "TFireFlashEffect_BESPOKE"
       ],
       "source_fixes": [
-        "Replaced tinted single-billboard1.6second placeholder with shipped two meshes/UV/materials/textures and literal150-slot source pool;75 initial sphere slots, source integer vector/life/texture threshold and RNG order,26/35/71/100 milestones, true24Hz, no preview respawn. Exact typed component follows owner MOVE and expires normally; procedural D3D translation separated from raw mesh Z stretch."
+        "Replaced tinted single-billboard1.6second placeholder with shipped two meshes/UV/materials/textures and literal150-slot source pool;75 initial sphere slots, source integer vector/life/texture threshold and RNG order,26/35/71/100 milestones, true24Hz, no preview respawn. Exact typed component follows owner MOVE and expires normally; procedural D3D translation separated from raw mesh Z stretch.",
+        "2026-10-10: SourceRGB565 modulation/low-bit threshold and nativenormal-space correction restore original orange annulus without altering geometry, simulation, tint or timing."
       ],
       "port_smoke_ids": [
         "TFireFlashEffect_BESPOKE"
@@ -11847,13 +11848,13 @@
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_fireflash_builder_reference_component_verified_through_create_move_natural_expiry_and_delete",
-      "next_action": "Keep exact native angle/fade arithmetic; residual sphere-position differences are in shared matrix accumulation (max3.78994e-6). Defer shared math and unvalidated common-Z pixel route; next comparison must separately establish rendered projection/material and actual caster/target behavior. Additive ONE/ONE is already correct.",
+      "next_action": "Preserve nullspell/source-light isolated visual lifecycle pass; target/caster/ABSPOS, source projector and destination framebuffer quantization remain separate.",
       "notes": [
         "2026-10-05: one bounded26.169sec native probe yields62 distinct viewport images; last change9.867sec, then frozen flame. FireFlash.delete reports no context. Nudge/return restores exact floor. No accurate-reference, port-fix or visual acceptance credit.",
         "FPS-enabled bounded recovery now has independently clean canonical floor, animated native reference and exact cleanup without camera nudge. Historical FPS-off residue is superseded as active reference; not a visual/controller acceptance claim.",
@@ -11889,7 +11890,7 @@
           ]
         }
       },
-      "work_queue_status": "native_angle_and_fade_corrected_shared_matrix_and_render_gates_open",
+      "work_queue_status": "visual_pass_followups",
       "source_preflight": {
         "forensics": "docs/vfx/forensics/FIREFLASH_REFERENCE_PROBE.md",
         "standalone_safe": true,
@@ -12019,11 +12020,15 @@
         "identical_final_ground_tail_frames": 152
       },
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "deferred",
-        "finding": "Source software-helper lighting corrects the color, but at1.6seconds native retains an orange annulus while port has a softer filled cloud. Actual software blend/raster, initial-visible phase and stochastic coverage remain a bounded deferral; no fitted tint, scale, phase or clock change.",
-        "scope": "Own stable native software pair and authored controller/runtime are retained; visual fidelity, natural target damage/multiplicity and original context remain open."
+        "date": "2026-10-10",
+        "reviewer": "root independent13 fixedsample inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Null-spell isolated source-light full sampled rise/annulus/collapse/greenfade. Original Init/Animate/RenderObject/normalIlluminate/raster versus actual512squareMetal, fixed24Hz phase mapping verified6CRT callcounts, nofit. Pixel equality/naturalcaller/ABSPOS/device remain separate.",
+        "finding": "Orange open-center annulus restored after native sourceRGB565 thresholds and inversegeometry-only normal bridge; early plume and final decay/fade match overall across13 samples.",
+        "report": "recon/retail_asm/runtime/effects/fireflash-current-visual-20261010/review-approved.json",
+        "sha256": "b51a6244eae867b3b636e44f532d1e87bda31441601fc93bb632dad9a5ab30ad",
+        "note": "docs/vfx/forensics/SOURCE_RASTER_CHANNELS_20261010.md"
       },
       "historical_runtime_regressions": [
         {
@@ -12110,7 +12115,16 @@
         "exit_code": 0,
         "elapsed_seconds": 16.70452125000884,
         "scope": "Actual final angle/fade-corrected preview under the decoded-pixel capture validator. Visibility/clean exit only, no retail pixel or natural-caller acceptance."
-      }
+      },
+      "historical_visual_reviews": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "deferred",
+          "finding": "Source software-helper lighting corrects the color, but at1.6seconds native retains an orange annulus while port has a softer filled cloud. Actual software blend/raster, initial-visible phase and stochastic coverage remain a bounded deferral; no fitted tint, scale, phase or clock change.",
+          "scope": "Own stable native software pair and authored controller/runtime are retained; visual fidelity, natural target damage/multiplicity and original context remain open."
+        }
+      ]
     },
     {
       "index": 48,
