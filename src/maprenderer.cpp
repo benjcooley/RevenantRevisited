@@ -11,6 +11,7 @@
 #include "animimagebody.h"
 #include "area.h"
 #include "3dimage.h"
+#include "staticpartsysprofiles.h"
 #include "bitmap.h"
 #include "bitmapdata.h"
 #include "chunkcache.h"
@@ -1280,6 +1281,9 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         {++stats.mesh_skipped;return;} // exactprofile only, no staticprototype substitute
         if((oi->ObjId()==0xad92bd36u || oi->ObjId()==0xad92bd35u) &&
            (state!=0 || !meshimg->HasRetailSpeedFamilyPartSysProfile(oi->ObjId())))
+        {++stats.mesh_skipped;return;}
+        if(retail_static_particles::IsType(oi->ObjId()) &&
+           (state!=0 || !meshimg->HasRetailStaticParticleProfile(oi->ObjId())))
         {++stats.mesh_skipped;return;}
         // The animator says how opaque the object draws this frame. A
         // character that is OF_INVISIBLE, or faded below retail's threshold,

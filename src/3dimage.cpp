@@ -26,6 +26,7 @@
 #include "testconfig.h"
 #include "goldauthoredmatrix.h"
 #include "speedauthoredmatrix.h"
+#include "staticpartsysprofiles.h"
 #include "animation.h"
 #include "bitmap.h"
 #include "logging.h"
@@ -586,6 +587,49 @@ bool T3DImagery::ValidateRetailQuicksilverPartSysProfile()
     return materials[0].texture==-1 && materials[1].texture==0 && materials[2].texture==1;
 }
 
+uint32_t T3DImagery::ValidateRetailStaticParticleProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+       GetAniFlags(0)!=0x2001 || NumTextures()!=1 || NumTags()!=1 ||
+       numverts!=4 || numfaces!=2)return 0;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    const auto fingerprint=[](const void* data,size_t length){
+        uint64_t h=1469598103934665603ull;const auto* b=static_cast<const uint8_t*>(data);
+        for(size_t i=0;i<length;++i){h^=b[i];h*=1099511628211ull;}return h;
+    };
+    for(const auto& profile:retail_static_particles::profiles){
+        const size_t length=std::strlen(profile.suffix);
+        if(path.size()<length || path.compare(path.size()-length,length,profile.suffix) ||
+           (path.size()!=length && path[path.size()-length-1]!='/'))continue;
+        if(GetAniLength(0)!=profile.frames || NumObjects()!=profile.objects ||
+           NumMaterials()!=profile.materials)return 0;
+        for(int i=0;i<profile.objects;++i){const auto& o=objects[i];const auto& p=profile.object[i];
+            if(std::strcmp(o.name,p.name) || o.parent[0]!=-1 || o.material!=p.material ||
+               o.numverts!=(i==0?4:0) || o.numfaces!=(i==0?2:0) || !o.anikeys[0] ||
+               o.numanikeys[0]!=p.key_count ||
+               fingerprint(o.anikeys[0],p.key_count*sizeof(SAniKey32))!=p.keys ||
+               o.numtexfaces[0]!=0 || o.numtexfaces[1]!=(i==0?2:0))return 0;
+        }
+        const auto& tag=*GetTag(0);
+        if(tag.state!=0 || tag.frame!=profile.tag_frame || !tag.name || !tag.str ||
+           std::strcmp(tag.name,"partsys") || std::strcmp(tag.str,profile.parameters))return 0;
+        const auto& t=textures[0];const auto& pf=t.desc.pixelFormat;
+        if(t.desc.width!=profile.texture_size || t.desc.height!=profile.texture_size || t.numframes!=1 ||
+           pf.dwRGBBitCount!=16 || pf.dwRBitMask!=0xf800 || pf.dwGBitMask!=0x07e0 ||
+           pf.dwBBitMask!=0x001f || pf.dwRGBAlphaBitMask)return 0;
+        for(int i=0;i<profile.materials;++i)
+            if(materials[i].texture!=(i==0?0:-1) ||
+               fingerprint(&materials[i].matdesc.diffuse,17*sizeof(float))!=profile.material[i])return 0;
+        S3DVertex vertices[4]{};S3DFace faces[2]{};
+        GetObjVerts(0,vertices,0,0);GetObjFaces(0,faces);
+        constexpr uint16_t indices[6]={2,3,0,1,2,0};
+        if(fingerprint(vertices,sizeof(vertices))!=profile.vertices || std::memcmp(faces,indices,sizeof(faces)))return 0;
+        return profile.id;
+    }
+    return 0;
+}
+
 void T3DImagery::InitializePartSysTracks()
 {
     partsys_tracks.clear();
@@ -595,6 +639,7 @@ void T3DImagery::InitializePartSysTracks()
     fmastery_partsys_profile = ValidateRetailFmasteryPartSysProfile();
     speed_partsys_profile = ValidateRetailSpeedPartSysProfile();
     quicksilver_partsys_profile = ValidateRetailQuicksilverPartSysProfile();
+    static_particles_profile = ValidateRetailStaticParticleProfile();
     combatflash_start1_partsys_profile = ValidateCombatFlashStart1PartSysProfile();
     for (int32_t i = 0; i < NumTags(); ++i)
     {
@@ -1536,6 +1581,7 @@ void T3DImagery::ClearMesh()
     fmastery_partsys_profile = false;
     speed_partsys_profile = false;
     quicksilver_partsys_profile = false;
+    static_particles_profile = 0;
     retail_punch_keys = false;
     retail_mpappear_start_profile = false;
     retail_shadowfist_profile = false;
@@ -3124,6 +3170,7 @@ struct T3DAnimator::SPartSysControllers
             (owner.ObjId()==0x82aeb30fu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailImmortalmightPartSysProfile()) ||
             (owner.ObjId()==0xb0e024dfu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailFmasteryPartSysProfile()) ||
             (owner.GetState()==0 && animator.Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(owner.ObjId())) ||
+            (owner.GetState()==0 && animator.Get3DImagery()->HasRetailStaticParticleProfile(owner.ObjId())) ||
             (owner.ObjId() == 0xad92bd29u && owner.GetState() == 0)) ? animator.GetFrame() : owner.GetFrame();
         // Retail Initialize obtains object zero's origin before resolving the
         // authored emitter list. Keep that distinct from its first emitter.
@@ -3176,10 +3223,11 @@ void T3DAnimator::RefreshPartSysControllers()
     const bool immortalmight = id==0x82aeb30fu && imagery->immortalmight_partsys_profile && current_state==0;
     const bool fmastery=id==0xb0e024dfu && imagery->fmastery_partsys_profile && current_state==0;
     const bool speed=imagery->HasRetailSpeedFamilyPartSysProfile(id) && current_state==0;
-    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && !speed && (id < 0xd0c0f036u || id > 0xd0c0f039u))
+    const bool static_particles=imagery->HasRetailStaticParticleProfile(id) && current_state==0;
+    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && !speed && !static_particles && (id < 0xd0c0f036u || id > 0xd0c0f039u))
     {
         if (!state.initialized)
-            log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only audited water, Goldp, CombatFlash start1 and exact Might/Immortalmight/Fmastery/Speed/Quicksilver profiles are enabled",
+            log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only exact audited particle profiles are enabled",
                      inst->GetTypeName(), id, inst->GetMapIndex());
         state.unsupported = true;
         state.controllers.clear();
@@ -3196,6 +3244,8 @@ void T3DAnimator::RefreshPartSysControllers()
             return controller.track.state != -1 && controller.track.state != current_state;
         }), controllers.end());
     state.unsupported = false;
+    if(static_particles)
+        if(S3DAnimObj* prototype=GetObject(0))prototype->flags|=OBJ3D_GOLD_CAMERA_FACING;
     if (gold || combat_start1 || speed)
     {
         // Retail blendcont Initialize 405940: immediate state-entry writes to
@@ -3644,7 +3694,8 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // CalcObjectMatrix scale gate40a591..5c1 returns0. Sampling still
             // happens first, preserving its three render-time RNG calls.
             if(inst->GetState()==0 &&
-               Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2 &&
+               ((Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2) ||
+                (Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId()) && track.prototype==0)) &&
                sample.scale<=9.999999747378752e-6f)continue;
             hmm_mat4 matrix;
             MtxClear(&matrix);
@@ -3661,7 +3712,9 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                 Get3DImagery()->HasRetailFmasteryPartSysProfile() && track.prototype==0;
             const bool speed=inst->GetState()==0 &&
                 Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2;
-            if (might || immortalmight || fmastery || speed || inst->ObjId() == 0xd0c0f035u ||
+            const bool static_particles=inst->GetState()==0 &&
+                Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId()) && track.prototype==0;
+            if (might || immortalmight || fmastery || speed || static_particles || inst->ObjId() == 0xd0c0f035u ||
                 (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0 &&
                  Get3DImagery()->HasCombatFlashStart1PartSysProfile() && track.prototype == 0))
                 ApplyRetailGoldCameraOrientation(matrix); // actual '#' flag retained on both audited prototypes
@@ -3676,12 +3729,12 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             item.key.blend = uint8_t(sample.blendmode == 2 ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
             // Preserve source packed prelit vertex color. Combat particles are
             // RGB565 with litadd16, not normal-lit material meshes or alpha coins.
-            item.retail_texture = (might || immortalmight || fmastery || speed || inst->ObjId() == 0xd0c0f035u ||
+            item.retail_texture = (might || immortalmight || fmastery || speed || static_particles || inst->ObjId() == 0xd0c0f035u ||
                 (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0)) ? 1 : 0;
             item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
             item.light_mode = EFxLightMode::Unlit;
             for (int c = 0; c < 3; ++c)
-                item.color_rgba[c] = (might || immortalmight || fmastery || speed) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
+                item.color_rgba[c] = (might || immortalmight || fmastery || speed || static_particles) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
             // Actual SW LV prelit channels are5bit; canonicalDEST_ONE ignores
             // alpha in its8wordXYZ/UV/RGB packet. Keep literal alpha metadata,
             // no premultiplication/alternateblend. PixelLSB-table raster gate open.
