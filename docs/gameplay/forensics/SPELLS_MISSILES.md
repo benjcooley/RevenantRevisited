@@ -478,8 +478,12 @@ behaviour read in the asm is listed.
 
 `AreaDamage(attacker, pos*, radius, min, max, type, minradius)`, cdecl.
 
-- attacker counts only when it is a character or player.
-- TMapIterator(pos, radius, `0xe0`, 2 (characters), 0, level).
+- **No attacker: returns at once** (`0x4de3cc`), nobody is hurt.
+- attacker counts (IsEnemy, SpellDamageInc, kill exp) only when it is a
+  character or player; Damage is still handed the attacker object
+  whatever it is.
+- TMapIterator(pos, radius, `0xe0`, 2 (characters), 0, the attacker's
+  level `+0xe`).
 - For each character other than the attacker, with
   `minradius <= Distance(pos, its pos) <= radius` (`0x46de60`), Health > 0,
   an enemy of the attacker (when there is one), and doing action `!= 0xc`:
@@ -1095,3 +1099,33 @@ player DmgResMagical, no attacker passed -- so no IsEnemy check in
 Damage -- no kill experience, no null check). The magic-resistance cut
 works in double (retail: the float times the int on the x87, truncated),
 exact for every damage spell.def gives.
+
+### S4a `missile-area`: AreaDamage
+
+Fixture `spell_damage.py`, call `area-damage`: AreaDamage `0x4de3c0` over
+the case's characters, the map's characters near the point from
+guest.py's iterator (`0x44ceb0` / `0x44d080`: the case's `nearby` order,
+else every character; port side `TCharacter::nearbyCharactersSeam`).
+Seams beyond S3's: IsEnemy `0x4c89c0` (answered as the melee kata does:
+an enemy unless the case's `friends` lists the pair) and KnockBack
+`0x4d3750` (from, variant), both recorded.
+
+- `missile-area`, 64/64: a player, a monster and no attacker; three
+  characters (straight and diagonal) at radius 0, 1, 50, 106, 149, 150,
+  151, 200 with radius 150; minimum radius 0/49/50/51 against a ring at
+  50; the gates (dead, health 1, in an impact, a friend, a second player
+  with DmgResMagical 40); a fixed roll and a reversed range; the map's
+  order with the attacker inside it; SpellDamageInc 0/25/-50/200 against
+  DmgResMagical 0/30/100/-50.
+
+Port changes: AreaDamage is new (`src/spell.cpp`; the 1998 tree had no
+port of it -- effects carried `(void)impact_pos` placeholders), iterating
+retail's way (the attacker's level, the loaded sectors, the map
+rectangle); `TCharacter::KnockBack` gained retail's variant argument and
+a seam. Correction to section 2.15 above: with a null attacker retail
+hurts nobody (it was read as "no IsEnemy check").
+
+REVSYNC-DIVERGENCE: Damage is handed the attacker only when it is a
+character (retail passes whatever object it was given; every caller
+listed in 2.15 passes its spell's invoker, `+4`, which is a character or
+null).

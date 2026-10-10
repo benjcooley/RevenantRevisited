@@ -19,10 +19,17 @@ as spell_cast.py. A character's `magicresist` (per mille: the float at
 player's `resists` (its modified copy, which Resist slot 0x2c8 reads) come
 from its spec.
 
+- `area-damage`: AreaDamage `0x4de3c0` (cdecl (attacker, pos, radius, min,
+  max, type, minradius)) over the case's characters: the map's characters
+  near the point come from guest.py's iterator (the case's `nearby`, else
+  every character), IsEnemy `0x4c89c0` and KnockBack `0x4d3750` are seams.
+
 Seams beyond spell_cast.py's: TCharacter::Damage `0x4c4950` (slot 0x228):
 recorded as the melee kata records it -- {who (the victim), damage, type,
 mod, attacker, block} -- and not run; TPlayer AwardKillExp `0x51a630` (slot
-0x414): recorded, not run.
+0x414): recorded, not run; IsEnemy (as the melee kata answers it: an
+enemy unless the case's `friends` lists [who, other]) and KnockBack
+(from, variant): recorded.
 
 Schema `combat.spell.v1`, shared with the port's `Revenant
 --retail-ab=spell-damage`.
@@ -44,6 +51,8 @@ from spell_guest import SD_VARIANTS, SPELL_LIST, items, spells  # noqa: E402
 CREATORS = {'Spell': (0x670630, 0x542200), 'Strike': (0x670628, 0x542290)}
 SPELL_DAMAGE = 0x53f560
 DAMAGE, AWARD_KILL_EXP = 0x4c4950, 0x51a630
+AREA_DAMAGE = 0x4de3c0                            # cdecl (attacker, pos*, radius, min, max, type, minradius)
+IS_ENEMY, KNOCK_BACK = 0x4c89c0, 0x4d3750         # thiscall (other) ret 4 / (from*, variant) ret 8
 O_MAGICRESIST = 0x190
 P_MODCOUNT, P_MODSTATS, RESIST_FIRST = 0x34c, 0x350, 6
 
@@ -56,6 +65,8 @@ class DamageFixture(CastFixture):
         b = self.world.boundaries
         b.add(DAMAGE, 'Damage', 0x14, self._damage)
         b.add(AWARD_KILL_EXP, 'AwardKillExp', 4, self._kill_exp)
+        b.add(IS_ENEMY, 'IsEnemy', 4, self._is_enemy)
+        b.add(KNOCK_BACK, 'KnockBack', 8, self._knock_back)
         self.by_names = {}
         for sd in spells(vm):
             for v in items(vm, sd + SD_VARIANTS):
@@ -70,6 +81,21 @@ class DamageFixture(CastFixture):
         w.seams.append(dict(seam='Damage', who=w._name(ecx), damage=s32(args[0]), type=s32(args[1]),
                             mod=s32(args[2]), attacker=w._name(args[4]) if args[4] else None, block=None))
         return 0
+
+    def _is_enemy(self, args, ecx):
+        """As the melee kata answers it: an enemy unless the case's `friends`
+        lists the pair [who, other]."""
+        w = self.world
+        who, other = w._name(ecx), w._name(args[0])
+        result = 0 if [who, other] in self.case.get('friends', []) else 1
+        w.seams.append(dict(seam='IsEnemy', who=who, other=other, result=result))
+        return result
+
+    def _knock_back(self, args, ecx):
+        w = self.world
+        frm = list(struct.unpack('<3i', self.vm.uc.mem_read(args[0], 12)))
+        w.seams.append(dict(seam='KnockBack', who=w._name(ecx), **{'from': frm}, variant=s32(args[1])))
+        return 1
 
     def _kill_exp(self, args, ecx):
         w = self.world
@@ -89,6 +115,10 @@ class DamageFixture(CastFixture):
 
     def build(self, case):
         """The world and the spell, as spell_cast.py builds a case's world."""
+        self.build_world(case)
+        return self.build_spell(case)
+
+    def build_world(self, case):
         vm, w = self.vm, self.world
         vm.restore()
         w.reset()
@@ -96,6 +126,7 @@ class DamageFixture(CastFixture):
         g = case.get('globals', {})
         w.set_globals(g)
         w.set_rng(case)
+        w.set_ground(case)
         self.specs = {}
         for spec in case['chars']:
             obj = w.new_character(spec)
@@ -107,6 +138,9 @@ class DamageFixture(CastFixture):
         for spec in case['chars']:
             w.set_blocks(w.by_name[spec['name']], spec)
         w.seams.clear()
+
+    def build_spell(self, case):
+        vm, w = self.vm, self.world
         names = case.get('targets')
         targets = 0
         if names is not None:
@@ -126,8 +160,19 @@ class DamageFixture(CastFixture):
 
     def run(self, case):
         vm, w = self.vm, self.world
-        spell = self.build(case)
         kind = case['call']
+        if kind == 'area-damage':
+            self.build_world(case)
+            pos = vm.allocate(12)
+            vm.write(pos, struct.pack('<3i', *case['pos']))
+            attacker = w.by_name[case['attacker']] if case.get('attacker') else 0
+            call(vm, AREA_DAMAGE, (attacker, pos, case['radius'] & 0xffffffff, case['min'] & 0xffffffff,
+                                   case['max'] & 0xffffffff, case['type'] & 0xffffffff,
+                                   case.get('minradius', 0) & 0xffffffff))
+            names = [spec['name'] for spec in case['chars']]
+            return dict(schema=SCHEMA, side='retail', casters={n: self.caster_dump(w.by_name[n]) for n in names},
+                        seams=list(w.seams), draws=list(w.draws))
+        spell = self.build(case)
         if kind == 'spell-damage':
             w.seams.clear()
             w.draws.clear()

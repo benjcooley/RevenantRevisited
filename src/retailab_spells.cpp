@@ -263,16 +263,16 @@ void CasePlayerState(TPlayer* self, int32_t value)
 }
 
 // The objects around a caster a buff cast walks (retail's map iterator over
-// OBJSET_ANIMATE, 5): the case's `nearby`, recorded.
-std::vector<std::string> g_nearby;
+// OBJSET_ANIMATE, 5): the case's `around`, recorded.
+std::vector<std::string> g_around;
 
-std::vector<TObjectInstance*> CaseNearby(TObjectInstance* center)
+std::vector<TObjectInstance*> CaseAround(TObjectInstance* center)
 {
     std::vector<TObjectInstance*> around;
     JsonOut j;
     j.Begin('{').FieldString("seam", "MapIterator").FieldString("who", g_spellWorld->NameOf(center));
     j.Field("objset", OBJSET_ANIMATE).Key("result").Begin('[');
-    for (const std::string& n : g_nearby)
+    for (const std::string& n : g_around)
     {
         around.push_back(g_spellWorld->Get(n));
         j.String(n);
@@ -308,13 +308,13 @@ class SSpellScope
             TCharacter::castSeam = CaseCastByName;
             TCharacter::castByTalismansSeam = CaseCastByTalismans;
         }
-        g_nearby.clear();
-        for (const JsonValue& v : cs["nearby"].Items())
-            g_nearby.push_back(v.Str());
+        g_around.clear();
+        for (const JsonValue& v : cs["around"].Items())
+            g_around.push_back(v.Str());
         TPlayer::skillExpSeam = CaseSkillExp;
         TPlayer::statEffectSeam = CaseStatEffect;
         TPlayer::playerStateSeam = CasePlayerState;
-        TSpellManager::nearbySeam = CaseNearby;
+        TSpellManager::nearbySeam = CaseAround;
         savedEditor = Editor;
         Editor = cs["globals"]["editor"].Bool(false);
         MagicCheat = cs["globals"]["cheat"].Bool(false);
@@ -553,7 +553,7 @@ void WriteCaster(JsonOut& j, const TFixtureWorld& world, TCharacter* c)
 }
 
 // Case (field 0, JSON): {"call", "self", "text", "targets", "numtargs",
-// "sourcepos", "invoker", "chars", "globals", "nearby", ...}; see
+// "sourcepos", "invoker", "chars", "globals", "around", ...}; see
 // spell_cast.py.
 std::string SpellCast(const Case& c, std::string& error)
 {
@@ -669,6 +669,34 @@ void CaseKillExp(TPlayer* self, TCharacter* victim)
     Seam(j.str());
 }
 
+// IsEnemy as the melee kata answers it (retail 0x004c89c0): an enemy unless
+// the case's `friends` lists [who, other].
+std::vector<std::pair<std::string, std::string>> g_friends;
+
+bool CaseIsEnemy(TCharacter* self, TCharacter* other)
+{
+    const std::string who = g_spellWorld->NameOf(self), them = g_spellWorld->NameOf(other);
+    bool enemy = true;
+    for (const auto& [a, b] : g_friends)
+        if (a == who && b == them)
+            enemy = false;
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "IsEnemy").FieldString("who", who).FieldString("other", them);
+    j.Field("result", enemy ? 1 : 0).End('}');
+    Seam(j.str());
+    return enemy;
+}
+
+// KnockBack (retail 0x004d3750): recorded.
+void CaseKnockBack(TCharacter* self, const S3DPoint& from, int32_t variant)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "KnockBack").FieldString("who", g_spellWorld->NameOf(self));
+    j.Key("from").Begin('[').Value(from.x).Value(from.y).Value(from.z).End(']');
+    j.Field("variant", variant).End('}');
+    Seam(j.str());
+}
+
 // The case's variant, [spell, variant] by name: the first of that pair.
 std::pair<SSpellData*, SSpellVariant*> FindVariant(const JsonValue& names)
 {
@@ -703,14 +731,44 @@ std::string SpellDamage(const Case& c, std::string& error)
         SSpellScope spells(cs, world, false);
         TCharacter::damageSeam = CaseDamage;
         TPlayer::killExpSeam = CaseKillExp;
+        TCharacter::isEnemySeam = CaseIsEnemy;
+        TCharacter::knockBackSeam = CaseKnockBack;
+        g_friends.clear();
+        for (const JsonValue& f : cs["friends"].Items())
+            g_friends.emplace_back(f[0].Str(), f[1].Str());
         struct SDamageSeamsOff
         {
             ~SDamageSeamsOff()
             {
                 TCharacter::damageSeam = nullptr;
                 TPlayer::killExpSeam = nullptr;
+                TCharacter::isEnemySeam = nullptr;
+                TCharacter::knockBackSeam = nullptr;
             }
         } off;
+        const std::string call = cs["call"].Str();
+
+        if (call == "area-damage")
+        {
+            const JsonValue& p = cs["pos"];
+            const S3DPoint pos((int32_t)p[0].Int(), (int32_t)p[1].Int(), (int32_t)p[2].Int());
+            TObjectInstance* attacker = cs["attacker"].IsNull() ? nullptr : world.Get(cs["attacker"].Str());
+            AreaDamage(attacker, pos, (int32_t)cs["radius"].Int(), (int32_t)cs["min"].Int(), (int32_t)cs["max"].Int(),
+                       (int32_t)cs["type"].Int(), (int32_t)cs["minradius"].Int(0));
+            JsonOut j;
+            j.Begin('{').FieldString("schema", "combat.spell.v1").FieldString("side", "port");
+            j.Key("casters").Begin('{');
+            for (const JsonValue& spec : cs["chars"].Items())
+            {
+                j.Key(spec["name"].Str().c_str());
+                WriteCaster(j, world, world.Get(spec["name"].Str()));
+            }
+            j.End('}');
+            WriteSeams(j);
+            WriteDraws(j);
+            j.End('}');
+            return j.str();
+        }
 
         std::vector<TObjectInstance*> targets;
         const bool hasTargets = cs.Has("targets") && !cs["targets"].IsNull();
@@ -737,7 +795,6 @@ std::string SpellDamage(const Case& c, std::string& error)
         std::unique_ptr<TSpell> spell(cls->create(invoker, hasTargets ? targets.data() : nullptr, numtargs, sourcepos,
                                                   sd, variant, nullptr));
 
-        const std::string call = cs["call"].Str();
         if (call == "spell-damage")
         {
             ClearSeams();
@@ -779,6 +836,7 @@ static const bool registered = RegisterTarget("spell-data", SpellData) &&
                                RegisterTarget("spell-quick", SpellTalismans) &&
                                RegisterTarget("spell-cast", SpellCast) &&
                                RegisterTarget("spell-new", SpellDamage) &&
-                               RegisterTarget("spell-damage", SpellDamage);
+                               RegisterTarget("spell-damage", SpellDamage) &&
+                               RegisterTarget("missile-area", SpellDamage);
 
 }  // namespace RetailAB

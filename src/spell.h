@@ -332,6 +332,15 @@ struct SSpellClass
 [[nodiscard]] const SSpellClass* FindSpellClass(const char* name);
   // The class of that name, case-blind; nullptr if none
 
+// REVSYNC: AreaDamage @ 0x004de3c0 -- every living enemy character between
+// `minradius` and `radius` of `pos` and not in an impact takes
+// random(min, max) of `damagetype` (a player attacker's SpellDamageInc
+// added, a player target's DmgResMagical taken off), knocked back from
+// `pos` first; a player attacker is offered each kill. FireBall's blast and
+// the area spells' damage.
+void AreaDamage(TObjectInstance* attacker, const S3DPoint& pos, int32_t radius, int32_t mindamage,
+                int32_t maxdamage, int32_t damagetype, int32_t minradius);
+
 typedef TPointerArray<TSpell, 32, 16> TSpellArray;
 
 // *********************************************

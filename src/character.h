@@ -77,6 +77,7 @@ class TCharacter : public TComplexObject
       // Likewise for Blocked (retail FindClearPath 0x004c39d0)
     using CanSeeSeam = bool (*)(TCharacter* self, TCharacter* chr, int32_t angle);
     static inline CanSeeSeam canSeeSeam = nullptr;
+      // Likewise for CanSeeCharacter (retail 0x004cd540)
     using BlockSeam = bool (*)(TCharacter* self, int32_t frames);
     static inline BlockSeam blockSeam = nullptr;
       // Likewise for Block (retail 0x004d2e30), which IsValidAttack calls on
@@ -99,7 +100,9 @@ class TCharacter : public TComplexObject
     using EffectBurstSeam = void (*)(TCharacter* self, const char* name, int32_t height);
     static inline EffectBurstSeam effectBurstSeam = nullptr;
       // Likewise for EffectBurst (retail 0x004c85d0)
-      // Likewise for CanSeeCharacter (retail 0x004cd540)
+    using KnockBackSeam = void (*)(TCharacter* self, const S3DPoint& from, int32_t variant);
+    static inline KnockBackSeam knockBackSeam = nullptr;
+      // Likewise for KnockBack (retail 0x004d3750)
     using NearbyCharactersSeam = std::vector<TCharacter*> (*)(const S3DPoint& pos, int32_t range);
     static inline NearbyCharactersSeam nearbyCharactersSeam = nullptr;
       // Likewise for the characters CharBlocking walks (retail's map iterator
@@ -184,7 +187,9 @@ class TCharacter : public TComplexObject
       // Sets burning pointer to nullptr
     bool Flail();
       // Causes a character to act a fool
-    bool KnockBack(S3DPoint frompos);
+    bool KnockBack(S3DPoint frompos, int32_t variant = -1);
+      // Retail 0x004d3750 KnockBack(from, variant): `variant` picks the impact
+      // (-1: random); this 1998 body plays "cimpk" whatever it is
       // Causes a character to react with a heavy imapct animation, facing towards frompos
     bool Jump();
       // Causes character to jump (in normal mode, use Leap in Combat mode)

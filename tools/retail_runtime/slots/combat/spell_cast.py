@@ -31,7 +31,7 @@ Seams (recorded in `seams`, in order; guest.py's shared ones, and):
   chardata `mana`, read as original code);
 - SetPlayerState `0x51d680`: the value, stored;
 - the map walk a buff cast makes (iterator `0x44cf10` / next `0x44d080`):
-  the case's `nearby` (none by default); the walk recorded.
+  the case's `around` (none by default); the walk recorded.
 
 Globals: authority `0x676838` = 3 (the single-player session's; a cast
 needs >= 2), the editor flag `0x668154` and the magic cheat `0x66810c`
@@ -61,7 +61,7 @@ MANAGER_CAST_BY_NAME, MANAGER_CAST_BY_TALISMANS = 0x53f920, 0x53fe80
 SPELL_CLASS_INITS = (0x540b80, 0x540ba0)
 POINTER_ARRAY_CTOR = 0x41c7f0                    # thiscall (size, grow), ret 8
 ADD_SKILL_EXP, ADD_STAT_EFFECT, PLAYER_MAXMANA, SET_PLAYER_STATE = 0x51ac90, 0x51c2c0, 0x520770, 0x51d680
-MAP_ITERATOR, MAP_ITERATOR_NEXT = 0x44cf10, 0x44d080
+MAP_ITERATOR = 0x44cf10                          # the walk round an object; next is guest.py's 0x44d080
 G_AUTHORITY, G_EDITOR, G_CHEAT = 0x676838, 0x668154, 0x66810c
 O_MANAGER, O_INVOKEDELAY = 0x170, 0x188
 SPELL_VTABLES = {0x5b99c0: 'Spell', 0x5b9bdc: 'Strike'}
@@ -87,13 +87,11 @@ class CastFixture:
         b.add(PLAYER_MAXMANA, 'MaxMana', 0, self._max_mana)
         b.add(SET_PLAYER_STATE, 'SetPlayerState', 4, self._set_player_state)
         b.add(MAP_ITERATOR, 'MapIterator', 0x14, self._iterator)
-        b.add(MAP_ITERATOR_NEXT, 'MapIteratorNext', 0, self._iterator_next)
         self.by_variant, self.by_spell = variant_names(vm)
         self.text = vm.allocate(256)
         vm.checkpoint()
         self.setup_ms = (time.perf_counter() - started) * 1000
         self.case = {}
-        self.walk = []
 
     # -- seams --------------------------------------------------------------
     def _add_skill_exp(self, args, ecx):
@@ -119,19 +117,15 @@ class CastFixture:
         return 0
 
     def _iterator(self, args, ecx):
-        """The walk around an object: the case's `nearby` (names) in order;
-        the iterator's current object is at +0x0c."""
+        """The walk around an object: the case's `around` (names) in order,
+        handed out by guest.py's iterator (next 0x44d080, the item at +0x0c)."""
         w = self.world
-        self.walk = [w.by_name[n] for n in self.case.get('nearby', [])]
+        walk = [w.by_name[n] for n in self.case.get('around', [])]
         w.seams.append(dict(seam='MapIterator', who=w._name(args[0]), objset=s32(args[2]),
-                            result=[w._name(o) for o in self.walk]))
-        self.vm.put_u32(ecx + 0x0c, self.walk.pop(0) if self.walk else 0)
+                            result=[w._name(o) for o in walk]))
+        w.iters[ecx] = walk
+        w._iter_next(args, ecx)
         return ecx
-
-    def _iterator_next(self, args, ecx):
-        item = self.walk.pop(0) if self.walk else 0
-        self.vm.put_u32(ecx + 0x0c, item)
-        return item
 
     # -- the dump -----------------------------------------------------------
     def spell_dump(self, sp):

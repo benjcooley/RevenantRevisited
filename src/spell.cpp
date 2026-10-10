@@ -642,6 +642,58 @@ void TSpell::ManaDrain()
         caster->SetMana(caster->MaxMana());
 }
 
+// No attacker, no damage. A target is the attacker's enemy when the attacker
+// is a character (anyone else hits every character).
+// REVSYNC-DIVERGENCE: retail hands Damage the attacker object whatever it is;
+// the port hands it the attacker only when it is a character (every retail
+// caller passes its spell's invoker, a character or null).
+void AreaDamage(TObjectInstance* attacker, const S3DPoint& pos, int32_t radius, int32_t mindamage,
+                int32_t maxdamage, int32_t damagetype, int32_t minradius)
+{
+    if (!attacker)
+        return;
+    TCharacter* caster = (attacker->ObjClass() == OBJCLASS_CHARACTER || attacker->ObjClass() == OBJCLASS_PLAYER)
+                             ? static_cast<TCharacter*>(attacker)
+                             : nullptr;
+    TPlayer* player = (caster && caster->ObjClass() == OBJCLASS_PLAYER) ? static_cast<TPlayer*>(caster) : nullptr;
+
+    // Retail's iterator (0x0044ceb0): the attacker's level, flags 0xe0 -- no
+    // inventories, the map rectangle, the loaded sectors.
+    std::vector<TCharacter*> around;
+    if (TCharacter::nearbyCharactersSeam)
+        around = TCharacter::nearbyCharactersSeam(pos, radius);
+    else
+    {
+        SRect r{pos.x - radius, pos.y - radius, pos.x + radius, pos.y + radius};
+        for (TMapIterator i(attacker->GetLevel(), &r, CHECK_NOINVENT, OBJSET_CHARACTER); i; i++)
+            around.push_back(static_cast<TCharacter*>(i.Item()));
+    }
+
+    for (TCharacter* target : around)
+    {
+        if (target == caster)
+            continue;
+        const int32_t distance = ::Distance(pos, target->Pos());
+        if (distance > radius || distance < minradius)
+            continue;
+        if (target->Health() <= 0)
+            continue;
+        if (caster && !caster->IsEnemy(target))
+            continue;
+        if (target->IsDoing(ACTION_IMPACT))
+            continue;
+        int32_t damage = random(mindamage, maxdamage);
+        if (player)
+            damage = (player->SpellDamageInc() + 100) * damage / 100;
+        if (target->ObjClass() == OBJCLASS_PLAYER)
+            damage = (100 - target->DamageModifier(DT_MAGICAL)) * damage / 100;
+        target->KnockBack(pos, -1);
+        target->Damage(damage, damagetype, 0, nullptr, caster);
+        if (player)
+            player->AwardKillExp(target);
+    }
+}
+
 // *********************
 // *** TSpellManager ***
 // *********************
