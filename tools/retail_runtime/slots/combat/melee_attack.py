@@ -83,7 +83,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from guest import AB, CombatWorld, call, flag_names, s32, serve, start  # noqa: E402
+from guest import AB, CombatWorld, call, flag_names, s32, serve, start, write_fields, write_text  # noqa: E402
 from data_parse import (A_IMPACTS, A_NUMIMPACTS, ATTACK_BODY, ATTACK_HEAD, ATTACK_MAGIC, C_ATTACKS,  # noqa: E402
                         C_IMPACTS, C_NUMIMPACTS, CA_MAGICATTACK, CHAR_FIELDS, IMPACT_FIELDS, IMPACT_SIZE)
 
@@ -417,29 +417,9 @@ class MeleeFixture:
         vm.uc.hook_add(UC_HOOK_CODE, enter, begin=address, end=address)
 
     # -- the world ------------------------------------------------------------
-    def _text(self, address, size, text):
-        raw = text.encode(TEXT)[:size - 1]
-        self.vm.write(address, raw + bytes(size - len(raw)))
-
-    def _fields(self, base, fields, values):
-        vm = self.vm
-        for name, kind in fields:
-            if name not in values:
-                continue
-            v = values[name]
-            if isinstance(kind, int):
-                vm.put_u32(base + kind, int(v) & 0xffffffff)
-            elif kind[0] == 's':
-                self._text(base + kind[1], kind[2], v)
-            elif kind[0] == 'b':
-                vm.write(base + kind[1], bytes([int(v) & 0xff]))
-            else:
-                for i, x in enumerate(v[:kind[2]]):
-                    vm.put_u32(base + kind[1] + 4 * i, int(x) & 0xffffffff)
-
     def _impact(self, address, imp):
-        self._text(address, 32, imp.get('name', ''))
-        self._fields(address, IMPACT_FIELDS, imp)
+        write_text(self.vm, address, 32, imp.get('name', ''))
+        write_fields(self.vm, address, IMPACT_FIELDS, imp)
 
     def _chardata(self, obj, spec):
         """The case's whole character data over what CombatWorld wrote:
@@ -448,7 +428,7 @@ class MeleeFixture:
         vm = self.vm
         cd = vm.u32(obj + 0xfc)
         data = spec.get('chardata', {})
-        self._fields(cd, CHAR_FIELDS, data)
+        write_fields(self.vm, cd, CHAR_FIELDS, data)
         if 'impacts' in data:
             vm.put_u32(cd + C_NUMIMPACTS, len(data['impacts']))
             for i, imp in enumerate(data['impacts']):
@@ -464,12 +444,12 @@ class MeleeFixture:
             # impact one past the last (0x4d1d35).
             rec = vm.allocate(ATTACK_SIZE + 0x60)
             vm.put_u32(items + 4 * i, rec)
-            self._text(rec, 32, ad['name'])
-            self._fields(rec, ATTACK_HEAD, ad)
+            write_text(self.vm, rec, 32, ad['name'])
+            write_fields(self.vm, rec, ATTACK_HEAD, ad)
             if ad['flags'] & CA_MAGICATTACK:
-                self._fields(rec, ATTACK_MAGIC, ad)
+                write_fields(self.vm, rec, ATTACK_MAGIC, ad)
             else:
-                self._fields(rec, ATTACK_BODY, ad)
+                write_fields(self.vm, rec, ATTACK_BODY, ad)
                 vm.put_u32(rec + A_NUMIMPACTS, len(ad.get('impacts', [])))
                 for k, imp in enumerate(ad.get('impacts', [])):
                     self._impact(rec + A_IMPACTS + IMPACT_SIZE * k, imp)
