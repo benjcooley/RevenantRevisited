@@ -176,6 +176,7 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
     {
         SPalette* pal = (SPalette*)bm->palette.ptr();
         if (!pal) return false;
+        const bool keyed = decode != EBitmapDecode::Unkeyed && decode != EBitmapDecode::MagentaKeyed;
         const uint8_t key = (uint8_t)bm->keycolor;
         const uint8_t* src = bm->data8;
         for (int32_t y = 0; y < h; y++)
@@ -184,16 +185,13 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
             for (int32_t x = 0; x < w; x++)
             {
                 const uint8_t idx = src[y * w + x];
-                if (idx == key) { row[0]=row[1]=row[2]=row[3]=0; }
+                if (keyed && idx == key) { row[0]=row[1]=row[2]=row[3]=0; }
                 else
-                {
-                    // rgbcolors is Windows COLORREF: 0x00BBGGRR.
-                    const uint32_t c = pal->rgbcolors[idx];
-                    row[0] = (uint8_t)( c        & 0xFF);
-                    row[1] = (uint8_t)((c >> 8)  & 0xFF);
-                    row[2] = (uint8_t)((c >> 16) & 0xFF);
-                    row[3] = 255;
-                }
+                    // The 15-bit palette, as retail draws an 8-bit bitmap (it
+                    // converts that palette to the display's format). The data
+                    // also carries 24-bit colours, not always in the same byte
+                    // order (the "Arrow" icon's are RGB, most are COLORREF).
+                    Decode555(pal->colors[idx], row);
                 row += 4;
             }
         }
@@ -229,6 +227,8 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
     {
         const bool rgb565 = (bm->flags & BM_16BIT) != 0;
         const bool overlay4444 = decode == EBitmapDecode::Overlay4444;
+        const bool keyBitmap = decode == EBitmapDecode::Pixels || decode == EBitmapDecode::Alias;
+        const bool keyMagenta = decode != EBitmapDecode::Unkeyed;
         const uint16_t key = (uint16_t)bm->keycolor;
         // Magenta (R=max,G=0,B=max) is the implicit transparency key in many
         // Revenant retail sprites. Match the packed value to the pixel format:
@@ -257,7 +257,7 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
                     const uint8_t a5 = alpha5[y * w + x] & 0x1f;
                     a = (uint8_t)((a5 << 3) | (a5 >> 2));   // 5-bit -> 8-bit
                 }
-                if (a == 0 || (!overlay4444 && px == key) || px == magentaKey)
+                if (a == 0 || (keyBitmap && px == key) || (keyMagenta && px == magentaKey))
                 {
                     row[0]=row[1]=row[2]=row[3]=0;
                 }

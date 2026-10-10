@@ -933,7 +933,8 @@ public:
     // RGBA8 render-target composite pipeline into the currently active
     // TSurface pass.
     void DrawBitmapToTarget(PTBitmap bm, int32_t x, int32_t y,
-                            int32_t target_w, int32_t target_h);
+                            int32_t target_w, int32_t target_h,
+                            EBitmapDecode decode = EBitmapDecode::Pixels);
     void DrawBitmapSubrectToTarget(PTBitmap bm,
                                    int32_t dst_x, int32_t dst_y,
                                    int32_t src_x, int32_t src_y,
@@ -952,6 +953,16 @@ public:
                                             int32_t src_x, int32_t src_y,
                                             int32_t src_w, int32_t src_h,
                                             int32_t target_w, int32_t target_h);
+    // The bitmap at half its size: each pixel the mean of the opaque texels
+    // in its 2x2 block (each RGB565 channel the floor of the mean, as retail
+    // takes it), empty where fewer than three of the four are opaque.
+    // Retail's 2:1 reduction (0x004a31a0); a pouch shows the first item inside
+    // it this way.
+    void DrawBitmapHalvedToTarget(PTBitmap bm, int32_t x, int32_t y,
+                                  int32_t target_w, int32_t target_h);
+    // The same of a composed layer (a stacked icon put together first).
+    void DrawSurfaceHalvedToTarget(TSurface* surf, int32_t x, int32_t y,
+                                   int32_t target_w, int32_t target_h);
     void DrawBitmapTintedToTarget(PTBitmap bm, int32_t x, int32_t y,
                                   int32_t target_w, int32_t target_h,
                                   float tr, float tg, float tb, float ta);
@@ -1211,6 +1222,13 @@ private:
                    bool chroma_key = false,
                    const float* chroma_key_rgb = nullptr,
                    ECompositeAlpha alpha = ECompositeAlpha::Straight);
+    // The reduce pipeline: (dst_w x dst_h) from the (2 dst_w x 2 dst_h) texels
+    // at (src_x, src_y).
+    void CompositeHalved(sg_image img,
+                         int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                         int32_t target_w, int32_t target_h,
+                         int32_t src_x, int32_t src_y,
+                         int32_t src_tex_w, int32_t src_tex_h);
     void CompositeTinted(sg_image img,
                          int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                          int32_t target_w, int32_t target_h,
@@ -1249,6 +1267,8 @@ private:
     sg_pipeline composite_pip_swap = {};   // Swapchain variant
     sg_pipeline composite_pip_premul_rt   = {};   // RGBA8 RT, premultiplied source
     sg_pipeline composite_pip_premul_swap = {};   // Swapchain, premultiplied source
+    sg_shader   composite_reduce_shader = {};     // the 2:1 reduction
+    sg_pipeline composite_pip_reduce_rt = {};     // RGBA8 RT, the 2:1 reduction
 
     // ---- Passes ---------------------------------------------------------
     sg_pass default_pass = {};   // G-buffer MRT fill

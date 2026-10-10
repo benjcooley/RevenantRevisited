@@ -16,8 +16,17 @@
 enum class EBitmapDecode : uint8_t
 {
     // The data array. 15/16-bit pixels equal to the bitmap's key or to
-    // magenta (0x7c1f / 0xf81f, retail's surface key) are transparent.
+    // magenta (0x7c1f / 0xf81f, retail's surface key) are transparent: a
+    // DM_TRANSPARENT draw.
     Pixels,
+    // The data array with nothing keyed: a draw without DM_TRANSPARENT, which
+    // puts the key colour like any other (the bottom bar's plates and boxes;
+    // its rings, which blend through their BM_ALPHA coverage with DM_ALPHA).
+    Unkeyed,
+    // The data array with only magenta transparent: a DM_TRANSPARENT draw of a
+    // bitmap retail keys on the display's own key first, so its stored key
+    // (often 0, black) stays opaque (the quick-spell circles, 0x00542ab3).
+    MagentaKeyed,
     // The BM_ALIAS RLE coverage buffer, for the draws that want the
     // anti-aliased form (the cursor's ground shadow, soft text shadows,
     // glows); the data array when the bitmap has none. Sprites such as the
