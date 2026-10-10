@@ -70,7 +70,7 @@ ANGLE_TABLES = (0x41e2de, 0x41e535)
 O_VTABLE, O_CLASS, O_FLAGS, O_POS, O_FACING, O_NAME, O_ID = 0x00, 0x04, 0x08, 0x10, 0x36, 0x38, 0x40
 O_MOVEANGLE = 0xb0
 O_DOING, O_DESIRED, O_ROOT = 0xd8, 0xdc, 0xe0
-O_CHARDATA, O_CHARFLAGS, O_OUT_OF_SIGHT, O_MONSTER = 0xfc, 0x110, 0x254, 0x280
+O_CHARDATA, O_CHARFLAGS, O_RETREATING, O_MONSTER = 0xfc, 0x110, 0x254, 0x280
 O_PLAYERSTATE = 0x36c
 # Motion (forensics/COMBAT_MOTION.md §3.8): vel and the carried fraction in
 # 1/0x10000 units, the animation's move (GetNextMove 0x470c30), a MoveTo, the
@@ -78,7 +78,7 @@ O_PLAYERSTATE = 0x36c
 O_VEL, O_ACCUM, O_INVENTNUM = 0x1c, 0x28, 0x7c
 O_MOVEDIST, O_MOVEVERT = 0xb4, 0xb8
 O_MOVETOPOS, O_MOVEPOS, O_FORCENOMOVE, O_SHOVEDIR = 0xec, 0xf0, 0x10c, 0x11c
-O_OUT_OF_SIGHT_PREV, O_SIGHT_LOST_TICKS = 0x258, 0x25c
+O_RETREAT_LATCH, O_RETREAT_FRAMES = 0x258, 0x25c
 CHAR_SIZE, PLAYER_SIZE = 0x2a0, 0x674
 CHAR_FLAGS = 0x8 | 0x20 | 0x4000 | 0x8000        # OF_MOVING | OF_AI | OF_ANIMATE | OF_PULSE
 CHAR_VTABLE, PLAYER_VTABLE = 0x5a7848, 0x5b4f30
@@ -570,9 +570,9 @@ class CombatWorld:
             vm.write(obj + O_MOVEPOS, struct.pack('<3i', *spec['moveto']))
         vm.put_u32(obj + O_FORCENOMOVE, int(spec.get('forcenomove', 0)))
         vm.put_u32(obj + O_SHOVEDIR, spec.get('shovedir', -1) & 0xffffffff)
-        vm.put_u32(obj + O_OUT_OF_SIGHT, int(spec.get('out_of_sight', 0)))
-        vm.put_u32(obj + O_OUT_OF_SIGHT_PREV, int(spec.get('out_of_sight_prev', 0)))
-        vm.put_u32(obj + O_SIGHT_LOST_TICKS, spec.get('sight_lost_ticks', 0))
+        vm.put_u32(obj + O_RETREATING, int(spec.get('retreating', 0)))
+        vm.put_u32(obj + O_RETREAT_LATCH, int(spec.get('retreat_latch', 0)))
+        vm.put_u32(obj + O_RETREAT_FRAMES, spec.get('retreat_frames', 0))
         vm.put_u32(obj + O_COMMANDDONE, int(spec.get('commanddone', 0)))
         if spec.get('animator'):
             vm.put_u32(obj + O_ANIMATOR, self.new_animator(obj))
@@ -658,9 +658,9 @@ class CombatWorld:
                     accum=list(struct.unpack('<3i', vm.uc.mem_read(obj + O_ACCUM, 12))),
                     movetopos=vm.u32(obj + O_MOVETOPOS), forcenomove=vm.u32(obj + O_FORCENOMOVE),
                     shovedir=s32(vm.u32(obj + O_SHOVEDIR)),
-                    out_of_sight=vm.u32(obj + O_OUT_OF_SIGHT),
-                    out_of_sight_prev=vm.u32(obj + O_OUT_OF_SIGHT_PREV),
-                    sight_lost_ticks=s32(vm.u32(obj + O_SIGHT_LOST_TICKS)),
+                    retreating=vm.u32(obj + O_RETREATING),
+                    retreat_latch=vm.u32(obj + O_RETREAT_LATCH),
+                    retreat_frames=s32(vm.u32(obj + O_RETREAT_FRAMES)),
                     movedist=s32(vm.u32(obj + O_MOVEDIST)), commanddone=vm.u32(obj + O_COMMANDDONE),
                     glimpse=s32(vm.u32(obj + O_GLIMPSE)), noise=s32(vm.u32(obj + O_NOISE)),
                     framerate=struct.unpack('<h', vm.uc.mem_read(obj + O_FRAMERATE, 2))[0],
