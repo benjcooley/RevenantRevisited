@@ -42,10 +42,29 @@ the same existing bound as Speed. The independent integer decoder itself still
 matches all 810 authored TRS channels exactly. The older full-state comparison
 is unchanged and remains a separate shared-emitter state contract.
 
-Full particle-plus-base composites, production common-world owner conversion,
-modern projection/Metal, fractional/cross-state poses, native point-light
-selection and natural map/caster/audio remain open. The historical pale Fmastery
-composite discrepancy is not closed by these base-only pairs.
+Production common-world owner conversion, modern projection/Metal,
+fractional/cross-state poses, native point-light selection and natural
+map/caster/audio remain open. The historical pale Fmastery composite discrepancy
+is not closed by these base-only pairs.
+
+The follow-up `speed_composite_probe.py` combines both complete isolated
+Speed/Quicksilver components at stationary origin/face 0, ticks 5,15,29. Independently
+produced particle packets render first in mode 16; each authored base follows
+with actual normal illumination and mode 80. **Six nonempty complete isolated
+composite pairs have zero differing RGB565/depth pixels**, with identical native
+warm replays. Base addition changes 296–1,608 pixels per image, so a missing base
+cannot silently pass. Particle counts are 6,18,27. These samples precede the
+separate owner-movement fixture at tick 60; moving-owner composites and actual
+map/Metal appearance are not certified. The existing MODELZ particle boundary
+is still explicit; no camera or coordinate correction was fitted.
+
+Reproduce the composite and its regression:
+
+```sh
+python tools/retail_runtime/speed_composite_probe.py \
+  recon/retail_asm/baseline/Revenant.rebuilt.exe --output <new-private-directory>
+python -m unittest discover -s tools/retail_runtime -p test_speed_composite.py
+```
 
 ```sh
 python tools/retail_runtime/buff_base_lighting_probe.py \
@@ -55,7 +74,7 @@ python -m unittest discover -s tools/retail_runtime -p test_speed_packets.py
 python -m unittest discover -s tools/retail_runtime -p test_quicksilver.py
 ```
 
-All four tests pass. The fresh Metal Release game build also passed after the
+The four matrix/particle tests and the composite regression pass. The fresh Metal Release game build also passed after the
 FireCone correction; this follow-up changes probes/tests/documentation only.
 Artifacts are under
 `/Users/benjamincooley/RevenantRetailLab/research/vfx-wide-20261010/hard-astra/`:
@@ -63,3 +82,4 @@ Artifacts are under
 - `buff-base-lit-final/manifest.json`: `c97c79c53328ad2bac66e5441ebc397dcfef772e9f853a96182b718fc2b24d30`.
 - `speed-independent-emitter/manifest.json`: `71a7f7d80601d2fb9d983fb1582e6790d190e15e9b2d602904eea16338ec9309`.
 - `quicksilver-independent-emitter/manifest.json`: `dba0841c3c9489d7c1469b0c66a4a8b7e22d674270b2eedc607f0c767821d66f`.
+- `speed-quicksilver-composites/manifest.json`: `f77b2afc30931c6b60f904788925d5543259c99973b31d29f620c393011d4d47`.
