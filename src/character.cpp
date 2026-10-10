@@ -4808,21 +4808,48 @@ bool TCharacter::Burn()
 }
 
 
-bool TCharacter::KnockBack(S3DPoint frompos)
+// REVSYNC: KnockBack @ 0x004d3750 -- thrown back by a blow from `frompos`:
+// an IMPACT with priority, forced at once. From behind (the facing more than
+// 0x48 off the blow's bearing, which retail measures without wrapping) the
+// back impact "impb" when the character has one, keeping its facing; else
+// one of five (`variant` 0..4, else random) turning to face the blow. An
+// idle player isn't knocked back; a paralysed character is left as it is
+// (true). The network notify is inert offline.
+bool TCharacter::KnockBack(S3DPoint frompos, int32_t variant)
 {
-    S3DPoint pos;
-
-    if (IsParalized())
+    if (knockBackSeam)
+    {
+        knockBackSeam(this, frompos, variant);
         return true;
+    }
+    if (ObjClass() == OBJCLASS_PLAYER && (static_cast<TPlayer*>(this)->PlayerState() & 2))
+        return false;
+    if (flags & OF_PARALIZE)
+        return true;
+    combatflashticks = 5;
 
-    GetPos(pos);
-    float dx = (float)(frompos.x - pos.x), dy = (float)(frompos.y - pos.y);
-    float ang = (float)atan2(dy, dx);
-    TActionBlock* ab = new TActionBlock("cimpk", ACTION_IMPACT);
+    static constexpr const char* kImpacts[5] = {"impk", "imphh", "imph", "implh", "impl"};
+    char name[RESNAMELEN];
+    const int32_t bearing = ConvertToFacing(pos, frompos);
+    bool back = false;
+    if (std::abs(GetFace() - bearing) > 0x48)
+    {
+        CombatAnimName(name, "impb");
+        back = HasActionAni(name);
+    }
+    if (!back)
+    {
+        if (variant < 0 || variant > 4)
+            variant = random(0, 4);
+        CombatAnimName(name, kImpacts[variant]);
+        Face(bearing);
+    }
+    if (!HasActionAni(name))
+        return false;
+
+    auto* ab = new TActionBlock(name, ACTION_IMPACT);
     ab->priority = true;
-    ForceCommand(ab);
-    Face((int32_t)((ang * 256) / M_2PI));
-    
+    ForceCommand(ab, 0, 0);
     return true;
 }
 
