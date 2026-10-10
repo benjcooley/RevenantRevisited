@@ -1611,10 +1611,27 @@ void TRenderer::InitCompositePipeline()
     pip.depth.pixel_format     = SG_PIXELFORMAT_NONE;
     pip.label = "renderer.composite.pipeline.rt.premul";
     composite_pip_premul_rt = sg_make_pipeline(&pip);
+
+    // The 2:1 reduction (DrawBitmapHalvedToTarget): the composite quad with
+    // its own fragment stage, the third vec4 the size of a source texel.
+    sh.fs.source = kCompositeReduceFs;
+    sh.fs.uniform_blocks[0].uniforms[2].name = "texel";
+    sh.label = "renderer.composite.reduce.shader";
+    composite_reduce_shader = sg_make_shader(&sh);
+
+    pip.shader = composite_reduce_shader;
+    pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
+    pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    pip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+    pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    pip.label = "renderer.composite.reduce.pipeline.rt";
+    composite_pip_reduce_rt = sg_make_pipeline(&pip);
 }
 
 void TRenderer::ShutdownCompositePipeline()
 {
+    if (composite_pip_reduce_rt.id) { sg_destroy_pipeline(composite_pip_reduce_rt); composite_pip_reduce_rt = {}; }
+    if (composite_reduce_shader.id) { sg_destroy_shader(composite_reduce_shader);   composite_reduce_shader = {}; }
     if (composite_pip_premul_rt.id)   { sg_destroy_pipeline(composite_pip_premul_rt);   composite_pip_premul_rt   = {}; }
     if (composite_pip_premul_swap.id) { sg_destroy_pipeline(composite_pip_premul_swap); composite_pip_premul_swap = {}; }
     if (composite_pip_add_rt.id) { sg_destroy_pipeline(composite_pip_add_rt); composite_pip_add_rt = {}; }
@@ -4559,18 +4576,18 @@ void TRenderer::DrawBitmapSubrectTinted(PTBitmap bm,
 }
 
 void TRenderer::DrawBitmapToTarget(PTBitmap bm, int32_t x, int32_t y,
-                                   int32_t target_w, int32_t target_h)
+                                   int32_t target_w, int32_t target_h, EBitmapDecode decode)
 {
     if (!bm) return;
     SBitmapAtlasSlice slice;
-    if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
+    if (LookupUIBitmapAtlasSlice(bm, decode, &slice))
     {
         Composite(slice.texture, x, y, bm->width, bm->height, target_w, target_h,
                   slice.src_x, slice.src_y, bm->width, bm->height,
                   slice.tex_width, slice.tex_height);
         return;
     }
-    const TTextureHandle tex = BitmapAsTexture(bm);
+    const TTextureHandle tex = BitmapAsTexture(bm, decode);
     if (tex == kInvalidTexture) return;
     Composite(tex, x, y, bm->width, bm->height, target_w, target_h,
               0, 0, bm->width, bm->height,
@@ -4624,6 +4641,68 @@ void TRenderer::DrawBitmapSubrectStretchedToTarget(PTBitmap bm,
     Composite(tex, dst_x, dst_y, dst_w, dst_h, target_w, target_h,
               src_x, src_y, src_w, src_h,
               bm->width, bm->height);
+}
+
+// REVSYNC: 0x004a31a0 (the 2:1 reduction retail runs in software; here the
+// reduce pipeline does it as it draws). An odd last row or column is dropped,
+// as retail's halving loop drops it.
+void TRenderer::DrawBitmapHalvedToTarget(PTBitmap bm, int32_t x, int32_t y,
+                                         int32_t target_w, int32_t target_h)
+{
+    if (!bm || bm->width < 2 || bm->height < 2) return;
+    const int32_t w = bm->width / 2;
+    const int32_t h = bm->height / 2;
+    SBitmapAtlasSlice slice;
+    if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
+    {
+        CompositeHalved(TextureImage(slice.texture), x, y, w, h, target_w, target_h,
+                        slice.src_x, slice.src_y, slice.tex_width, slice.tex_height);
+        return;
+    }
+    const TTextureHandle tex = BitmapAsTexture(bm);
+    if (tex == kInvalidTexture) return;
+    CompositeHalved(TextureImage(tex), x, y, w, h, target_w, target_h, 0, 0, bm->width, bm->height);
+}
+
+void TRenderer::DrawSurfaceHalvedToTarget(TSurface* surf, int32_t x, int32_t y,
+                                          int32_t target_w, int32_t target_h)
+{
+    if (!surf || surf->Width() < 2 || surf->Height() < 2) return;
+    CompositeHalved(surf->GetSGImage(), x, y, surf->Width() / 2, surf->Height() / 2, target_w, target_h,
+                    0, 0, surf->Width(), surf->Height());
+}
+
+void TRenderer::CompositeHalved(sg_image img,
+                                int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                                int32_t target_w, int32_t target_h,
+                                int32_t src_x, int32_t src_y,
+                                int32_t src_tex_w, int32_t src_tex_h)
+{
+    if (!img.id || !composite_pip_reduce_rt.id) return;
+    if (target_w <= 0 || target_h <= 0 || src_tex_w <= 0 || src_tex_h <= 0) return;
+
+    sg_apply_pipeline(composite_pip_reduce_rt);
+    sg_bindings bind = {};
+    bind.vertex_buffers[0] = composite_vbuf;
+    bind.fs_images[0]      = img;
+    sg_apply_bindings(&bind);
+
+    const float texel_u = 1.0f / float(src_tex_w);
+    const float texel_v = 1.0f / float(src_tex_h);
+    const float uniforms[16] = {
+        (2.0f * dst_x / target_w) - 1.0f,                // rect
+        1.0f - (2.0f * (dst_y + dst_h) / target_h),
+        (2.0f * dst_w) / target_w,
+        (2.0f * dst_h) / target_h,
+        float(src_x) * texel_u, float(src_y) * texel_v,  // uv_rect: twice the destination
+        float(2 * dst_w) * texel_u, float(2 * dst_h) * texel_v,
+        texel_u, texel_v, 0.0f, 0.0f,                    // texel
+        1.0f, 1.0f, 1.0f, 1.0f,                          // color_tint
+    };
+    const sg_range u_range = { uniforms, sizeof(uniforms) };
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &u_range);
+    sg_draw(0, 6, 1);
 }
 
 void TRenderer::DrawBitmapTintedToTarget(PTBitmap bm, int32_t x, int32_t y,
