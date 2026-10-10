@@ -96,7 +96,7 @@ int main(int argc,char**argv){if(argc!=3)return 2;
 def sha(data):return hashlib.sha256(data).hexdigest()
 
 
-def run(executable,archive,output):
+def run(executable,archive,output,retain_draws=False):
     output.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(archive)as z:data=z.read('Imagery/Magic/speed.I3D')
     asset=read_asset(data);asset['name']='speed';f=NativeSpeed(executable,asset);punctuation(f);f.initialize(0)
@@ -237,6 +237,9 @@ def run(executable,archive,output):
             'raw-world portZ compared via declared MODELZ bridge using actual native sample centre. Shared original software '
             'projector/raster used at fixed512white/color fixture; no actual map/Metal projector, base material lighting/caster/full acceptance.')
     (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n')
+    if retain_draws:
+        report['selected_frontend_draws']={tick:draws[tick] for tick in (5,15,29)}
+        report['independent_base_matrices']={frame:pose['base'] for frame,pose in emitter_matrices.items()}
     return report
 
 
