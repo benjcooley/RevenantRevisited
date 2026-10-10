@@ -100,6 +100,9 @@ class TCharacter : public TComplexObject
       // Likewise for CastByName (retail SpellList::Find 0x0053f010 + Cast
       // 0x004d5c20), which DoAttack calls for a MAGICATTACK
       // Likewise for CanSeeCharacter (retail 0x004cd540)
+    using KnockBackSeam = void (*)(TCharacter* self, const S3DPoint& from, int32_t variant);
+    static inline KnockBackSeam knockBackSeam = nullptr;
+      // Likewise for KnockBack (retail 0x004d3750)
     using NearbyCharactersSeam = std::vector<TCharacter*> (*)(const S3DPoint& pos, int32_t range);
     static inline NearbyCharactersSeam nearbyCharactersSeam = nullptr;
       // Likewise for the characters CharBlocking walks (retail's map iterator
@@ -181,8 +184,10 @@ class TCharacter : public TComplexObject
       // Sets burning pointer to nullptr
     bool Flail();
       // Causes a character to act a fool
-    bool KnockBack(S3DPoint frompos);
-      // Causes a character to react with a heavy imapct animation, facing towards frompos
+    bool KnockBack(S3DPoint frompos, int32_t variant = -1);
+      // Thrown back by a blow from frompos: one of five impacts (`variant`
+      // 0..4, else random) facing it, or the back impact from behind (retail
+      // 0x004d3750)
     bool Jump();
       // Causes character to jump (in normal mode, use Leap in Combat mode)
     bool Pivot(int32_t angle);
@@ -726,7 +731,7 @@ class TCharacter : public TComplexObject
     int32_t snapticks;                // Total number of frames left in snap move
 
   // combatflash delay
-    int32_t combatflashticks;
+    int32_t combatflashticks = 0;     // retail +0x224 (a blow sets 5; Pulse counts it down)
 
   // Diagnostic counters. ai_pulse_count increments at every Pulse()
   // entry, ai_ai_count at every AI() entry. The overlay reads these
