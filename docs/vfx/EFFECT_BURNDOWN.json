@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 84,
-    "visual_fidelity_confirmed_rows": 38,
+    "visual_fidelity_confirmed_rows": 45,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 71,
-    "reviewed_visual_pass_rows": 38,
-    "remaining_visual_review_rows": 138
+    "reviewed_visual_pass_rows": 45,
+    "remaining_visual_review_rows": 131
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -8064,7 +8064,15 @@
         ],
         "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
       },
-      "visual_fidelity_scope": "Current corrected-parser actual Revisited map renderer versus retained native software reference: tested isolated state0 steady appearance at measured quality1. Independent RNG and fixed elapsed-time comparison. Normal floor illumination, exact device/raster/projection, natural caster/story/audio and full acceptance remain separate."
+      "visual_fidelity_scope": "Current corrected-parser actual Revisited map renderer versus retained native software reference: tested isolated state0 steady appearance at measured quality1. Independent RNG and fixed elapsed-time comparison. Normal floor illumination, exact device/raster/projection, natural caster/story/audio and full acceptance remain separate.",
+      "current_renderer_visual_recheck": {
+        "date": "2026-10-10",
+        "result": "pass_for_existing_isolated_scope",
+        "reviewer": "root independent six-sample contact inspection",
+        "report": "recon/retail_asm/runtime/effects/accepted-helper-immortalmight-20261010/review.json",
+        "sha256": "5d39ba1a6524d1269dc6e9d1e3d82ce826e7a5d3eef2b15792033d314be6a694",
+        "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+      }
     },
     {
       "index": 10,
@@ -8630,6 +8638,14 @@
         },
         "visual_status": "pass isolated overall actualmap appearance/occlusion; nativephase/context/audio/full separate",
         "scope": "Only sharedMetaloffscreen depth/stencilStore sourcecorrection; no pertypegeometry/controller/shader/camera/fits."
+      },
+      "current_renderer_visual_recheck": {
+        "date": "2026-10-10",
+        "result": "pass_for_existing_isolated_scope",
+        "reviewer": "root independent six-sample contact inspection",
+        "report": "recon/retail_asm/runtime/effects/accepted-helper-shadowfist-20261010/review.json",
+        "sha256": "678068386ecb9a3857548ef77f89eb215d1ebf0822c9b10f509ba5b152fdfbdd",
+        "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
       }
     },
     {
@@ -9060,6 +9076,14 @@
         },
         "visual_status": "pass isolated overall actualmap appearance/occlusion; nativephase/context/audio/full separate",
         "scope": "Only sharedMetaloffscreen depth/stencilStore sourcecorrection; no pertypegeometry/controller/shader/camera/fits."
+      },
+      "current_renderer_visual_recheck": {
+        "date": "2026-10-10",
+        "result": "pass_for_existing_isolated_scope",
+        "reviewer": "root independent six-sample contact inspection",
+        "report": "recon/retail_asm/runtime/effects/accepted-helper-warriorborn-20261010/review.json",
+        "sha256": "2c888ff432cea49da3410b24b1f2342cb1e1ede9a0558602e5eb5e1ee2bc188d",
+        "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
       }
     },
     {
@@ -9564,7 +9588,8 @@
       "source_fixes": [
         "Colored Ribbon preview now submits both authored static subobjects and all texture slots through normal mesh pass. Removed inherited base Ribbon lift/fade/retrigger behavior; base Ribbon custom animator remains separate.",
         "Classic EFFECT meshes use original software RGB565 directional/ambient vertex illumination and five-bit vertex light, unlit ARGB textures, and direct nearest wrapped texel lookup. RGB meshes with resident positional lights retain the prior deferred path until original per-owner light selection is ported; no per-asset tuning.",
-        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass."
+        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass.",
+        "2026-10-10: exact4444 source channels, post-light alpha blend and original NewObject alpha mode4 CULL_NONE/ZWRITE0 preserve rear layers; legacy/other-format material policies retained."
       ],
       "port_smoke_ids": [
         "TRibbonAnimator_BESPOKE__RibbonB"
@@ -9584,13 +9609,13 @@
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "default_animator_visible_command_lifecycle_verified",
-      "next_action": "Defer remaining shared software raster/shading/blending differences with own retained reference. Advance simple effect references; natural authored context remains separate.",
+      "next_action": "Preserve corrected source-mode4 static color/coil/glow appearance and lifecycle; exact source projector/framebuffer rounding and natural placement remain separate.",
       "notes": [
         "2026-10-05: two fixed authored objects, no tags, one STILL frame. Actual native RibbonB confirms fixed spiral and floor glow. Existing base-Ribbon halo factory did not preserve this asset.",
         "2026-10-05: source software lighting and direct texel lookup built and rechecked; current exact-type visible movement/deletion passes. Own A/B retained; residual shared raster differences remain open."
@@ -9605,13 +9630,17 @@
         "deleted_image_equals_ground": true,
         "render_lifecycle_pass": true
       },
-      "work_queue_status": "deferred_shared_software_raster",
+      "work_queue_status": "visual_pass_followups",
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "fail",
-        "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
-        "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        "date": "2026-10-10",
+        "reviewer": "root independent seven-color contact inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair.",
+        "finding": "Whole colored spiral including lower coil, colored floor halo and white core match overall after native mode4 no-cull/no-depth-write correction. No fitted tint/geometry; remaining shared projection/quantization/natural context explicit.",
+        "report": "recon/retail_asm/runtime/effects/ribbon-mode4-ribbonb-20261010/pair.json",
+        "sha256": "714849f93121d1bef2424cda7bded444162578c4ecc5b0ae68fd665a244ee2bc",
+        "appearance_fitted": false
       },
       "runtime_regression_history": [
         {
@@ -9651,7 +9680,16 @@
         "report": "recon/retail_asm/runtime/effects/current-static-ribbonb-20261010/visual-review.json",
         "sha256": "53bb48efae7862ad50edf826cb2b0a6461ec6a72d034a325b6268db6e7c9cf74",
         "finding": "Authored colored spiral and floor-glow form agree, but modern white-core/halo brightness and sampling differ visibly. Keep full visual pass pending shared alpha/light investigation."
-      }
+      },
+      "historical_visual_reviews": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "fail",
+          "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
+          "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        }
+      ]
     },
     {
       "index": 22,
@@ -9665,7 +9703,8 @@
       "source_fixes": [
         "Colored Ribbon preview now submits both authored static subobjects and all texture slots through normal mesh pass. Removed inherited base Ribbon lift/fade/retrigger behavior; base Ribbon custom animator remains separate.",
         "Classic EFFECT meshes use original software RGB565 directional/ambient vertex illumination and five-bit vertex light, unlit ARGB textures, and direct nearest wrapped texel lookup. RGB meshes with resident positional lights retain the prior deferred path until original per-owner light selection is ported; no per-asset tuning.",
-        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass."
+        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass.",
+        "2026-10-10: exact4444 source channels, post-light alpha blend and original NewObject alpha mode4 CULL_NONE/ZWRITE0 preserve rear layers; legacy/other-format material policies retained."
       ],
       "port_smoke_ids": [],
       "reference_runs": [
@@ -9682,13 +9721,13 @@
         "port_smoke": false,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "default_animator_visible_command_lifecycle_verified",
-      "next_action": "Defer remaining shared software raster/shading/blending differences with own retained reference. Advance simple effect references; natural authored context remains separate.",
+      "next_action": "Preserve corrected source-mode4 static color/coil/glow appearance and lifecycle; exact source projector/framebuffer rounding and natural placement remain separate.",
       "notes": [
         "2026-10-05: two fixed authored objects, no tags, one STILL frame. Actual native RibbonB confirms fixed spiral and floor glow. Existing base-Ribbon halo factory did not preserve this asset.",
         "2026-10-05: source software lighting and direct texel lookup built and rechecked; current exact-type visible movement/deletion passes. Own A/B retained; residual shared raster differences remain open."
@@ -9703,7 +9742,7 @@
         "deleted_image_equals_ground": true,
         "render_lifecycle_pass": true
       },
-      "work_queue_status": "deferred_shared_software_raster",
+      "work_queue_status": "visual_pass_followups",
       "runtime_regression_history": [
         {
           "manifest": "captures/runtime-fixtures/static-ribbons-20261005/command-capture/manifest.json",
@@ -9717,11 +9756,15 @@
       ],
       "visual_review_history": [],
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "fail",
-        "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
-        "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        "date": "2026-10-10",
+        "reviewer": "root independent seven-color contact inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair.",
+        "finding": "Whole colored spiral including lower coil, colored floor halo and white core match overall after native mode4 no-cull/no-depth-write correction. No fitted tint/geometry; remaining shared projection/quantization/natural context explicit.",
+        "report": "recon/retail_asm/runtime/effects/ribbon-mode4-ribbong-20261010/pair.json",
+        "sha256": "a90de228611301ca8a5597a40e4d3b5c52f5bd2e7fe0d020e7af9667d043fcc7",
+        "appearance_fitted": false
       },
       "thin_emulator_checks": [
         {
@@ -9741,7 +9784,16 @@
         "report": "recon/retail_asm/runtime/effects/current-static-ribbong-20261010/visual-review.json",
         "sha256": "5bca400b29c81e75152b4a6e76416502771efa94420e1e9275c70214cab7eb37",
         "finding": "Authored colored spiral and floor-glow form agree, but modern white-core/halo brightness and sampling differ visibly. Keep full visual pass pending shared alpha/light investigation."
-      }
+      },
+      "historical_visual_reviews": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "fail",
+          "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
+          "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        }
+      ]
     },
     {
       "index": 23,
@@ -9755,7 +9807,8 @@
       "source_fixes": [
         "Colored Ribbon preview now submits both authored static subobjects and all texture slots through normal mesh pass. Removed inherited base Ribbon lift/fade/retrigger behavior; base Ribbon custom animator remains separate.",
         "Classic EFFECT meshes use original software RGB565 directional/ambient vertex illumination and five-bit vertex light, unlit ARGB textures, and direct nearest wrapped texel lookup. RGB meshes with resident positional lights retain the prior deferred path until original per-owner light selection is ported; no per-asset tuning.",
-        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass."
+        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass.",
+        "2026-10-10: exact4444 source channels, post-light alpha blend and original NewObject alpha mode4 CULL_NONE/ZWRITE0 preserve rear layers; legacy/other-format material policies retained."
       ],
       "port_smoke_ids": [],
       "reference_runs": [
@@ -9772,13 +9825,13 @@
         "port_smoke": false,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "default_animator_visible_command_lifecycle_verified",
-      "next_action": "Defer remaining shared software raster/shading/blending differences with own retained reference. Advance simple effect references; natural authored context remains separate.",
+      "next_action": "Preserve corrected source-mode4 static color/coil/glow appearance and lifecycle; exact source projector/framebuffer rounding and natural placement remain separate.",
       "notes": [
         "2026-10-05: two fixed authored objects, no tags, one STILL frame. Actual native RibbonB confirms fixed spiral and floor glow. Existing base-Ribbon halo factory did not preserve this asset.",
         "2026-10-05: source software lighting and direct texel lookup built and rechecked; current exact-type visible movement/deletion passes. Own A/B retained; residual shared raster differences remain open."
@@ -9793,7 +9846,7 @@
         "deleted_image_equals_ground": true,
         "render_lifecycle_pass": true
       },
-      "work_queue_status": "deferred_shared_software_raster",
+      "work_queue_status": "visual_pass_followups",
       "runtime_regression_history": [
         {
           "manifest": "captures/runtime-fixtures/static-ribbons-20261005/command-capture/manifest.json",
@@ -9807,11 +9860,15 @@
       ],
       "visual_review_history": [],
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "fail",
-        "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
-        "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        "date": "2026-10-10",
+        "reviewer": "root independent seven-color contact inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair.",
+        "finding": "Whole colored spiral including lower coil, colored floor halo and white core match overall after native mode4 no-cull/no-depth-write correction. No fitted tint/geometry; remaining shared projection/quantization/natural context explicit.",
+        "report": "recon/retail_asm/runtime/effects/ribbon-mode4-ribbono-20261010/pair.json",
+        "sha256": "910711980d05f170996161740603fdf5e92c02b73921e7b07892f3d8ccc8ecb9",
+        "appearance_fitted": false
       },
       "thin_emulator_checks": [
         {
@@ -9831,7 +9888,16 @@
         "report": "recon/retail_asm/runtime/effects/current-static-ribbono-20261010/visual-review.json",
         "sha256": "ac894b909f80ff683760f9bb6a0adc4ecb71f68af22e7acae3df7b40f061dee4",
         "finding": "Authored colored spiral and floor-glow form agree, but modern white-core/halo brightness and sampling differ visibly. Keep full visual pass pending shared alpha/light investigation."
-      }
+      },
+      "historical_visual_reviews": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "fail",
+          "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
+          "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        }
+      ]
     },
     {
       "index": 24,
@@ -9845,7 +9911,8 @@
       "source_fixes": [
         "Colored Ribbon preview now submits both authored static subobjects and all texture slots through normal mesh pass. Removed inherited base Ribbon lift/fade/retrigger behavior; base Ribbon custom animator remains separate.",
         "Classic EFFECT meshes use original software RGB565 directional/ambient vertex illumination and five-bit vertex light, unlit ARGB textures, and direct nearest wrapped texel lookup. RGB meshes with resident positional lights retain the prior deferred path until original per-owner light selection is ported; no per-asset tuning.",
-        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass."
+        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass.",
+        "2026-10-10: exact4444 source channels, post-light alpha blend and original NewObject alpha mode4 CULL_NONE/ZWRITE0 preserve rear layers; legacy/other-format material policies retained."
       ],
       "port_smoke_ids": [],
       "reference_runs": [
@@ -9862,13 +9929,13 @@
         "port_smoke": false,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "default_animator_visible_command_lifecycle_verified",
-      "next_action": "Defer remaining shared software raster/shading/blending differences with own retained reference. Advance simple effect references; natural authored context remains separate.",
+      "next_action": "Preserve corrected source-mode4 static color/coil/glow appearance and lifecycle; exact source projector/framebuffer rounding and natural placement remain separate.",
       "notes": [
         "2026-10-05: two fixed authored objects, no tags, one STILL frame. Actual native RibbonB confirms fixed spiral and floor glow. Existing base-Ribbon halo factory did not preserve this asset.",
         "2026-10-05: source software lighting and direct texel lookup built and rechecked; current exact-type visible movement/deletion passes. Own A/B retained; residual shared raster differences remain open."
@@ -9883,7 +9950,7 @@
         "deleted_image_equals_ground": true,
         "render_lifecycle_pass": true
       },
-      "work_queue_status": "deferred_shared_software_raster",
+      "work_queue_status": "visual_pass_followups",
       "runtime_regression_history": [
         {
           "manifest": "captures/runtime-fixtures/static-ribbons-20261005/command-capture/manifest.json",
@@ -9897,11 +9964,15 @@
       ],
       "visual_review_history": [],
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "fail",
-        "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
-        "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        "date": "2026-10-10",
+        "reviewer": "root independent seven-color contact inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair.",
+        "finding": "Whole colored spiral including lower coil, colored floor halo and white core match overall after native mode4 no-cull/no-depth-write correction. No fitted tint/geometry; remaining shared projection/quantization/natural context explicit.",
+        "report": "recon/retail_asm/runtime/effects/ribbon-mode4-ribbonp-20261010/pair.json",
+        "sha256": "14c9f8265ea2836d0f8263fdbd00301ed56830a47096a9dcbe522ab487fc9214",
+        "appearance_fitted": false
       },
       "thin_emulator_checks": [
         {
@@ -9921,7 +9992,16 @@
         "report": "recon/retail_asm/runtime/effects/current-static-ribbonp-20261010/visual-review.json",
         "sha256": "4c034217e08824877e7a9542e1cbdbd22161b4e43457ce4506281a4bb2120aec",
         "finding": "Authored colored spiral and floor-glow form agree, but modern white-core/halo brightness and sampling differ visibly. Keep full visual pass pending shared alpha/light investigation."
-      }
+      },
+      "historical_visual_reviews": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "fail",
+          "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
+          "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        }
+      ]
     },
     {
       "index": 25,
@@ -9935,7 +10015,8 @@
       "source_fixes": [
         "Colored Ribbon preview now submits both authored static subobjects and all texture slots through normal mesh pass. Removed inherited base Ribbon lift/fade/retrigger behavior; base Ribbon custom animator remains separate.",
         "Classic EFFECT meshes use original software RGB565 directional/ambient vertex illumination and five-bit vertex light, unlit ARGB textures, and direct nearest wrapped texel lookup. RGB meshes with resident positional lights retain the prior deferred path until original per-owner light selection is ported; no per-asset tuning.",
-        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass."
+        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass.",
+        "2026-10-10: exact4444 source channels, post-light alpha blend and original NewObject alpha mode4 CULL_NONE/ZWRITE0 preserve rear layers; legacy/other-format material policies retained."
       ],
       "port_smoke_ids": [],
       "reference_runs": [
@@ -9952,13 +10033,13 @@
         "port_smoke": false,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "default_animator_visible_command_lifecycle_verified",
-      "next_action": "Defer remaining shared software raster/shading/blending differences with own retained reference. Advance simple effect references; natural authored context remains separate.",
+      "next_action": "Preserve corrected source-mode4 static color/coil/glow appearance and lifecycle; exact source projector/framebuffer rounding and natural placement remain separate.",
       "notes": [
         "2026-10-05: two fixed authored objects, no tags, one STILL frame. Actual native RibbonB confirms fixed spiral and floor glow. Existing base-Ribbon halo factory did not preserve this asset.",
         "2026-10-05: source software lighting and direct texel lookup built and rechecked; current exact-type visible movement/deletion passes. Own A/B retained; residual shared raster differences remain open."
@@ -9973,7 +10054,7 @@
         "deleted_image_equals_ground": true,
         "render_lifecycle_pass": true
       },
-      "work_queue_status": "deferred_shared_software_raster",
+      "work_queue_status": "visual_pass_followups",
       "runtime_regression_history": [
         {
           "manifest": "captures/runtime-fixtures/static-ribbons-20261005/command-capture/manifest.json",
@@ -9987,11 +10068,15 @@
       ],
       "visual_review_history": [],
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "fail",
-        "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
-        "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        "date": "2026-10-10",
+        "reviewer": "root independent seven-color contact inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair.",
+        "finding": "Whole colored spiral including lower coil, colored floor halo and white core match overall after native mode4 no-cull/no-depth-write correction. No fitted tint/geometry; remaining shared projection/quantization/natural context explicit.",
+        "report": "recon/retail_asm/runtime/effects/ribbon-mode4-ribbonr-20261010/pair.json",
+        "sha256": "f43df0e59dc020cdade78bb23e89579ae9687516d99a2e2c37c8d28b95a02b31",
+        "appearance_fitted": false
       },
       "thin_emulator_checks": [
         {
@@ -10011,7 +10096,16 @@
         "report": "recon/retail_asm/runtime/effects/current-static-ribbonr-20261010/visual-review.json",
         "sha256": "c7d6d34a89f5fb880c704a90ffaa8043a39c2175c2b85ab173d3a7d2f9249a00",
         "finding": "Authored colored spiral and floor-glow form agree, but modern white-core/halo brightness and sampling differ visibly. Keep full visual pass pending shared alpha/light investigation."
-      }
+      },
+      "historical_visual_reviews": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "fail",
+          "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
+          "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        }
+      ]
     },
     {
       "index": 26,
@@ -10025,7 +10119,8 @@
       "source_fixes": [
         "Colored Ribbon preview now submits both authored static subobjects and all texture slots through normal mesh pass. Removed inherited base Ribbon lift/fade/retrigger behavior; base Ribbon custom animator remains separate.",
         "Classic EFFECT meshes use original software RGB565 directional/ambient vertex illumination and five-bit vertex light, unlit ARGB textures, and direct nearest wrapped texel lookup. RGB meshes with resident positional lights retain the prior deferred path until original per-owner light selection is ported; no per-asset tuning.",
-        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass."
+        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass.",
+        "2026-10-10: exact4444 source channels, post-light alpha blend and original NewObject alpha mode4 CULL_NONE/ZWRITE0 preserve rear layers; legacy/other-format material policies retained."
       ],
       "port_smoke_ids": [],
       "reference_runs": [
@@ -10042,13 +10137,13 @@
         "port_smoke": false,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "default_animator_visible_command_lifecycle_verified",
-      "next_action": "Defer remaining shared software raster/shading/blending differences with own retained reference. Advance simple effect references; natural authored context remains separate.",
+      "next_action": "Preserve corrected source-mode4 static color/coil/glow appearance and lifecycle; exact source projector/framebuffer rounding and natural placement remain separate.",
       "notes": [
         "2026-10-05: two fixed authored objects, no tags, one STILL frame. Actual native RibbonB confirms fixed spiral and floor glow. Existing base-Ribbon halo factory did not preserve this asset.",
         "2026-10-05: source software lighting and direct texel lookup built and rechecked; current exact-type visible movement/deletion passes. Own A/B retained; residual shared raster differences remain open."
@@ -10063,7 +10158,7 @@
         "deleted_image_equals_ground": true,
         "render_lifecycle_pass": true
       },
-      "work_queue_status": "deferred_shared_software_raster",
+      "work_queue_status": "visual_pass_followups",
       "runtime_regression_history": [
         {
           "manifest": "captures/runtime-fixtures/static-ribbons-20261005/command-capture/manifest.json",
@@ -10077,11 +10172,15 @@
       ],
       "visual_review_history": [],
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "fail",
-        "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
-        "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        "date": "2026-10-10",
+        "reviewer": "root independent seven-color contact inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair.",
+        "finding": "Whole colored spiral including lower coil, colored floor halo and white core match overall after native mode4 no-cull/no-depth-write correction. No fitted tint/geometry; remaining shared projection/quantization/natural context explicit.",
+        "report": "recon/retail_asm/runtime/effects/ribbon-mode4-ribbonw-20261010/pair.json",
+        "sha256": "d216f60c66529d79d39dfb43afb9745a112d3f9a4fb229f0129b32bf2240fbf4",
+        "appearance_fitted": false
       },
       "thin_emulator_checks": [
         {
@@ -10101,7 +10200,16 @@
         "report": "recon/retail_asm/runtime/effects/current-static-ribbonw-20261010/visual-review.json",
         "sha256": "91f919c3129b9582219f036d673d879d12ea3b751487d18de93d1dc36ec08069",
         "finding": "Authored colored spiral and floor-glow form agree, but modern white-core/halo brightness and sampling differ visibly. Keep full visual pass pending shared alpha/light investigation."
-      }
+      },
+      "historical_visual_reviews": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "fail",
+          "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
+          "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        }
+      ]
     },
     {
       "index": 27,
@@ -10115,7 +10223,8 @@
       "source_fixes": [
         "Colored Ribbon preview now submits both authored static subobjects and all texture slots through normal mesh pass. Removed inherited base Ribbon lift/fade/retrigger behavior; base Ribbon custom animator remains separate.",
         "Classic EFFECT meshes use original software RGB565 directional/ambient vertex illumination and five-bit vertex light, unlit ARGB textures, and direct nearest wrapped texel lookup. RGB meshes with resident positional lights retain the prior deferred path until original per-owner light selection is ported; no per-asset tuning.",
-        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass."
+        "Shared recovered key-pose matrix ordering corrected from native40a420: scale rotation then store translation. Seven coloredRibbon static assets now match original geometry/UV and softwarepixels; nonuniform translated numeric regression and prior13static profiles pass.",
+        "2026-10-10: exact4444 source channels, post-light alpha blend and original NewObject alpha mode4 CULL_NONE/ZWRITE0 preserve rear layers; legacy/other-format material policies retained."
       ],
       "port_smoke_ids": [],
       "reference_runs": [
@@ -10132,13 +10241,13 @@
         "port_smoke": false,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "default_animator_visible_command_lifecycle_verified",
-      "next_action": "Defer remaining shared software raster/shading/blending differences with own retained reference. Advance simple effect references; natural authored context remains separate.",
+      "next_action": "Preserve corrected source-mode4 static color/coil/glow appearance and lifecycle; exact source projector/framebuffer rounding and natural placement remain separate.",
       "notes": [
         "2026-10-05: two fixed authored objects, no tags, one STILL frame. Actual native RibbonB confirms fixed spiral and floor glow. Existing base-Ribbon halo factory did not preserve this asset.",
         "2026-10-05: source software lighting and direct texel lookup built and rechecked; current exact-type visible movement/deletion passes. Own A/B retained; residual shared raster differences remain open."
@@ -10153,7 +10262,7 @@
         "deleted_image_equals_ground": true,
         "render_lifecycle_pass": true
       },
-      "work_queue_status": "deferred_shared_software_raster",
+      "work_queue_status": "visual_pass_followups",
       "runtime_regression_history": [
         {
           "manifest": "captures/runtime-fixtures/static-ribbons-20261005/command-capture/manifest.json",
@@ -10167,11 +10276,15 @@
       ],
       "visual_review_history": [],
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "fail",
-        "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
-        "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        "date": "2026-10-10",
+        "reviewer": "root independent seven-color contact inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair.",
+        "finding": "Whole colored spiral including lower coil, colored floor halo and white core match overall after native mode4 no-cull/no-depth-write correction. No fitted tint/geometry; remaining shared projection/quantization/natural context explicit.",
+        "report": "recon/retail_asm/runtime/effects/ribbon-mode4-ribbony-20261010/pair.json",
+        "sha256": "fff529518601324d98abdd99a074c4969fd8f5c0e434d8375285c6775975c8de",
+        "appearance_fitted": false
       },
       "thin_emulator_checks": [
         {
@@ -10191,7 +10304,16 @@
         "report": "recon/retail_asm/runtime/effects/current-static-ribbony-20261010/visual-review.json",
         "sha256": "68ef6e9c15e3de5c148902aad6a0d7a95660195c09869d53e92a578aecad565e",
         "finding": "Authored colored spiral and floor-glow form agree, but modern white-core/halo brightness and sampling differ visibly. Keep full visual pass pending shared alpha/light investigation."
-      }
+      },
+      "historical_visual_reviews": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "fail",
+          "finding": "All seven own named references confirm fixed colored spiral and floor glow, corresponding geometry and color. Port glows are smoother with different highlight/glow distribution; source lighting/sampling corrections alone do not close the shared software raster/blending difference. No per-color fitting.",
+          "scope": "Own exact named native software reference versus current real map original pose; no family-only sign-off or exact-pixel requirement. Natural authored placement remains separate."
+        }
+      ]
     },
     {
       "index": 28,
@@ -19629,6 +19751,14 @@
         },
         "work_queue_status": "actual_map_owner_pair_visual_mismatch_floorflare_shared_depth_pending",
         "next_action": "Preserve exact authored100-loop geometry/keys/mode16depthTestNoWrite; port whitefloorflare is visible while native hides it. Audit shared source software pertriangle-depth/projector/raster with actual opcodes/controlledfixture; no fittedpose/height/brightness or unproved pertypecause. Native fullcycle/simclock/fractional and naturalcaller/context remain open."
+      },
+      "current_renderer_visual_recheck": {
+        "date": "2026-10-10",
+        "result": "pass_for_existing_isolated_scope",
+        "reviewer": "root independent six-sample contact inspection",
+        "report": "recon/retail_asm/runtime/effects/accepted-helper-teleportation-20261010/review.json",
+        "sha256": "0454dbad0c7b5f10ccdec609d1e954b4cf6285def84da667eda156438e0ee120",
+        "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
       }
     },
     {
@@ -20890,6 +21020,14 @@
           }
         ],
         "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
+      },
+      "current_renderer_visual_recheck": {
+        "date": "2026-10-10",
+        "result": "pass_for_existing_isolated_scope",
+        "reviewer": "root independent six-sample contact inspection",
+        "report": "recon/retail_asm/runtime/effects/accepted-helper-goldeffect-20261010/review.json",
+        "sha256": "5c9dee8a692fcf9842d94c9b71146e9e0852d65ea8f332c6708c731434eab52d",
+        "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
       }
     },
     {

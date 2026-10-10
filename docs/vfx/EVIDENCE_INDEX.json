@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 84,
-    "visual_fidelity_confirmed_rows": 38,
+    "visual_fidelity_confirmed_rows": 45,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 71,
-    "reviewed_visual_pass_rows": 38,
-    "remaining_visual_review_rows": 138
+    "reviewed_visual_pass_rows": 45,
+    "remaining_visual_review_rows": 131
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -882,6 +882,90 @@
       "check": "static_particles_map",
       "status": "pass",
       "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbonb-20261010/pair.json": {
+      "sha256": "714849f93121d1bef2424cda7bded444162578c4ecc5b0ae68fd665a244ee2bc",
+      "retail_row": "RibbonB:0x562c743a",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbong-20261010/pair.json": {
+      "sha256": "a90de228611301ca8a5597a40e4d3b5c52f5bd2e7fe0d020e7af9667d043fcc7",
+      "retail_row": "RibbonG:0x562c743b",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbono-20261010/pair.json": {
+      "sha256": "910711980d05f170996161740603fdf5e92c02b73921e7b07892f3d8ccc8ecb9",
+      "retail_row": "RibbonO:0x562c743c",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbonp-20261010/pair.json": {
+      "sha256": "14c9f8265ea2836d0f8263fdbd00301ed56830a47096a9dcbe522ab487fc9214",
+      "retail_row": "RibbonP:0x562c743d",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbonr-20261010/pair.json": {
+      "sha256": "f43df0e59dc020cdade78bb23e89579ae9687516d99a2e2c37c8d28b95a02b31",
+      "retail_row": "RibbonR:0x562c743e",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbonw-20261010/pair.json": {
+      "sha256": "d216f60c66529d79d39dfb43afb9745a112d3f9a4fb229f0129b32bf2240fbf4",
+      "retail_row": "RibbonW:0x562c743f",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbony-20261010/pair.json": {
+      "sha256": "fff529518601324d98abdd99a074c4969fd8f5c0e434d8375285c6775975c8de",
+      "retail_row": "RibbonY:0x562c7440",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/accepted-helper-immortalmight-20261010/review.json": {
+      "sha256": "5d39ba1a6524d1269dc6e9d1e3d82ce826e7a5d3eef2b15792033d314be6a694",
+      "retail_row": "Immortalmight:0x82aeb30f",
+      "check": "current_renderer_visual_regression",
+      "status": "pass_for_existing_isolated_scope",
+      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+    },
+    "recon/retail_asm/runtime/effects/accepted-helper-shadowfist-20261010/review.json": {
+      "sha256": "678068386ecb9a3857548ef77f89eb215d1ebf0822c9b10f509ba5b152fdfbdd",
+      "retail_row": "Shadowfist:0x550decaf",
+      "check": "current_renderer_visual_regression",
+      "status": "pass_for_existing_isolated_scope",
+      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+    },
+    "recon/retail_asm/runtime/effects/accepted-helper-warriorborn-20261010/review.json": {
+      "sha256": "2c888ff432cea49da3410b24b1f2342cb1e1ede9a0558602e5eb5e1ee2bc188d",
+      "retail_row": "Warriorborn:0x9de2a0fe",
+      "check": "current_renderer_visual_regression",
+      "status": "pass_for_existing_isolated_scope",
+      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+    },
+    "recon/retail_asm/runtime/effects/accepted-helper-teleportation-20261010/review.json": {
+      "sha256": "0454dbad0c7b5f10ccdec609d1e954b4cf6285def84da667eda156438e0ee120",
+      "retail_row": "teleportation:0xad92bd40",
+      "check": "current_renderer_visual_regression",
+      "status": "pass_for_existing_isolated_scope",
+      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+    },
+    "recon/retail_asm/runtime/effects/accepted-helper-goldeffect-20261010/review.json": {
+      "sha256": "5c9dee8a692fcf9842d94c9b71146e9e0852d65ea8f332c6708c731434eab52d",
+      "retail_row": "goldeffect:0xd0c0f035",
+      "check": "current_renderer_visual_regression",
+      "status": "pass_for_existing_isolated_scope",
+      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
     }
   }
 }
