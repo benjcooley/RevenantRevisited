@@ -72,6 +72,11 @@ bool SSpellData::Load(char *aname, TToken &t)
             if (!Parse(t, "NAME %30s\n", objname))
                 t.Error("Error parsing NAME tag");
         }
+        else if (t.Is("ICONNAME"))
+        {
+            if (!Parse(t, "ICONNAME %30s\n", iconname))
+                t.Error("Error parsing ICONNAME tag");
+        }
         else if (t.Is("DESCRIPTION"))
         {
             char buf[1024];
@@ -128,7 +133,7 @@ bool SSpellData::Load(char *aname, TToken &t)
         {
             // Retail added spell tags not in the pre-release source. Skip
             // them rather than aborting. Tags come in two flavors: single-
-            // line (ICONNAME, LIGHT) and ones followed by a BEGIN/END block
+            // line (LIGHT) and ones followed by a BEGIN/END block
             // (CONTROLDATA). Detect the block form by peeking for BEGIN.
             // One warning per tag name, not per spell.
             static std::set<std::string> reported;

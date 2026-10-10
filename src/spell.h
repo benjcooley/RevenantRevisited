@@ -56,6 +56,7 @@ struct SSpellData
     int32_t flags;                          // Spell flags
     char name[NAMELEN];                 // Name of spell type (not individual name)
     char objname[RESNAMELEN];           // Name of spell object to build when spell is cast
+    char iconname[RESNAMELEN] = {};     // ICONNAME: its circle in SpellIcons.dat (retail; empty: none)
     char *desc;                         // Spell description for spell book
 //  PTBitmap icon;                      // Spell book icon for spell
     int32_t damagetype;                     // Type of damage spell does

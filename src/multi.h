@@ -36,7 +36,9 @@ class TMulti : public TMultiData
       { return offsets[i]; }
     void *Object(const char *name);
       // The named entry; a missing name is fatal ("Unable to find ... in
-      // multiresource"), as in retail.
+      // multiresource"), as in retail (0x0046d710).
+    [[nodiscard]] void *Find(const char *name);
+      // The named entry, or null (retail 0x0046d6b0). Names match ignoring case.
 
     PTAnimation Animation(int32_t i)
       { return (PTAnimation)(void *)offsets[i]; }
@@ -49,6 +51,8 @@ class TMulti : public TMultiData
       { return (PTAnimation)Object(name); }
     PTBitmap Bitmap(const char *name)
       { return (PTBitmap)Object(name); }
+    [[nodiscard]] TBitmap *FindBitmap(const char *name)
+      { return (TBitmap *)Find(name); }
     TFont* Font(const char *name)
       { return (TFont*)Object(name); }
     PTWaveData Wave(const char *name)

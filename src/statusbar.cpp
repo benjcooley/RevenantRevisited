@@ -119,19 +119,6 @@ constexpr int32_t kCellsHeight = kNameTop + kNameSize;
 static_assert(std::size(kBarArt) == TPlyrStatusBar::kNumBars && std::size(kIconTop) == TPlyrStatusBar::kNumBars
               && std::size(kValueTop) == TPlyrStatusBar::kNumBars);
 
-// REVSYNC: 0x0054af20 -- an opponent goes by the dialog line tagged with its
-// name less everything but ASCII letters and digits ("Lizard Man" ->
-// LIZARDMAN), else by the name itself.
-std::string DisplayName(const char* name)
-{
-    std::string tag;
-    for (const char* c = name; *c; ++c)
-        if ((*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') || (*c >= '0' && *c <= '9'))
-            tag += *c;
-    const int32_t id = DialogList.FindLine(tag.c_str());
-    return id >= 0 ? DialogList.GetLine(id) : name;
-}
-
 // REVSYNC: 0x0054ae10 -- a player's name cell is the STATBARFMT line
 // ("%s\nLevel %d" without one) filled with its name and level; any other
 // character's is its name.
@@ -271,8 +258,10 @@ void TPlyrStatusBar::ReadCharacter(ESide side, TCharacter* character, bool readT
         text.values[bar] = chip.stats[bar].value;
     if (changed)
     {
+        // REVSYNC: 0x0054af20 -- the player's own name; the opponent's as the
+        // game shows names (0x0046e7f0).
         const char* name = character->GetName() ? character->GetName() : "";
-        text.name = side == ESide::Target ? DisplayName(name) : name;
+        text.name = side == ESide::Target ? DialogList.DisplayName(name) : name;
     }
     else
         text.name = chip.text.name;
