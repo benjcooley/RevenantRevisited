@@ -277,6 +277,68 @@ P0 and P1 are done in this worktree to prove the pattern. P2–P5 can then
 fan out to sub-agents in their own worktrees off `feature/ui`, one pane
 each, merged back after their A/B report is clean.
 
+## 6a. P2 design: the bottom bar
+
+**What retail draws** (measured with `slots/hud/bottombar.py`, 2026-10-09;
+the cases' recipes name every bitmap). TBottomBarPane (`0x0065b638`) is a
+TButtonPane with no buttons. Its slot 20 (`0x0052c800`) paints itself, then
+the shelf (TBarInvPane `0x0065b028`, `0x0052ca70`), then the rings
+(TQuickSpellPane `0x0065c6f8`, `0x005444c0`). All three share one rect: x 0,
+y = display − 60, map-view width (452), 60 tall. `SetRect` `0x0052c930`
+sizes all three. They draw in 2D, straight onto the screen, through
+retail's own blitters: no overlay quads.
+
+- **Bar** (`0x0052c880`): `UtilityBar` (640×60) *cropped* to the bar's width
+  at (0, 0), not stretched. Then `BarEndCap` (10×60) at (w − 10, 0).
+- **Shelf**: `BarInvBox` (42×42, mode 0x10) at (220 + 45k, 10) for
+  k < (w − 220) / 45 (5 at 452 wide).
+  - Items: the player's belt slots (`0x10b + n`), after a scroll offset.
+    Each item draws its own inventory image at the box (item vtable
+    +0x108), and its count when Amount (+0x198) > 1.
+  - A "Pouch" also shows its first item's icon at 20×20 and that item's
+    count. (Measured in P2b.)
+- **Rings**: buttons "1".."4" (class `0x005b9c54`) at (10 + 50k, 10), 32×32
+  hit rects, built from SpellIcons.dat RingU / RingD / RingG. Each frame the
+  pane disables a ring (flag 4) unless the player has a quick spell there,
+  the spell exists, and the player can cast it (`0x0051b7c0`). A ring's
+  draw (`0x00542900`):
+  1. restores the background around it: (x − 6, y − 10, 51×75);
+  2. Puts the spell's icon (SpellIcons, its ICONNAME), magenta-keyed;
+  3. Puts the ring with alpha: RingG disabled, RingD down, RingU otherwise.
+     Down (flag 0x10000) shifts icon and ring by (+1, +1).
+  4. Writes the spell's name in white "Small", centred, with no shadow.
+     The first word goes in (x − 6, y − 10, 52 × 2 lines); the rest goes in
+     (x − 6, y + 36, 52 × line + 4). A part over 9 characters shows its
+     first 7 and "..". An empty ring shows only RingG.
+
+**Port classes.** All three are production panes, drawn through the
+engine's pane contract (§5):
+- **`TButtonPane` composes.** It composes into one cached layer: a virtual
+  background, then each visible button's `Compose`. It recomposes when a
+  button or the pane goes dirty, and Draw submits the layer. This is the
+  modern form of retail's draw loop (`0x00435de0`: dirty buttons drawn onto
+  the pane's surface, each restoring its own background).
+  - `TButton::Draw` (`Display.Put`) becomes `TButton::Compose` (to-target).
+    All of the port's buttons are bitmap buttons; the 1998 generic frame
+    path is dead and goes.
+  - `TDialogPane` keeps its own Compose/Draw.
+- **`TBottomBarPane`** (new, `src/bottombar.*`). It lays out against the
+  map view and composes the bar. The shelf and the rings are its children
+  (TPane hierarchy): retail's slot 20 paints them after it, and its
+  SetRect sizes them. `TPlayScreen` adds it as one pane.
+- **`TQuickSpellPane`** (evolves `src/spellpane.*`). Retail's four ring
+  buttons replace the 1998 `TTalismanButton` strip; the quick spells are
+  the player's (`TPlayer::GetQuickSpell`). Pulse sets each ring's
+  disabled state. `TQuickSpellButton` composes icon, ring and label as
+  above.
+- **`TBarInvPane`** (new, `src/barinv.*`). It composes the boxes, and the
+  items through the shared item cell (`TInvSlot`) once P2b has measured
+  them.
+
+The A/B is `hud_ab.py bottombar` over `--test=ab-bottombar`. Its cases vary
+the bar's width (452, 640), the quick spells (empty, castable, not
+castable, one word, long names) and, from P2b, the belt.
+
 ## 7. Status
 
 - 2026-10-07: survey done; retail pipeline verified (§3); P0 started.
