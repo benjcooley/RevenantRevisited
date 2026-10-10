@@ -42,6 +42,14 @@ print('assets='+os.environ['REVENANT_ASSETS_PATH'],flush=True)
         self.assertEqual((output/'effects.def').read_bytes(),(assets/'effects.def').read_bytes())
         self.assertEqual(report['pixel_summary']['nonblack_frames'],1)
 
+    def test_native_domain_requires_adapter_confirmation(self):
+        scenario,output,_=self.exercise()
+        scenario['native_domain']=True
+        with self.assertRaises(RuntimeError):capture(scenario,output)
+        report=json.loads((output/'manifest.json').read_text())
+        self.assertEqual(report['status'],'fail')
+        self.assertIn('coordinate policy',report['error'])
+
     def test_empty_black_preview_cannot_pass_as_visible_effect(self):
         scenario,output,_=self.exercise(visible=False)
         with self.assertRaises(RuntimeError):capture(scenario,output)

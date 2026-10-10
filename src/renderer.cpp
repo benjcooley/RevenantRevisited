@@ -950,9 +950,17 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * ISO_COS30;
     float scene_z_wu = p.camz.z - ISO_COS30 * sum - 0.5 * wz;
+    // Opt-in native MODELZ owner domain; coefficients execute56cdc0 then56d5f0.
+    bool native_projection = p.uv_shift.z > 0.5;
+    if (native_projection) {
+        float native_z = wz - p.uv_shift.w;
+        S = 1.0101525783538818 * (wx - wy);
+        T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
+        scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
+    }
     float scene_z_n  = (scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);
     float zoom = max(p.camw.z, 0.0001);
-    float persp_scale = ((p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float persp_scale = ((!native_projection && p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = p.vp.x + S * persp_scale;
     float spy = p.vp.y + T * persp_scale;
     vs_out o;
@@ -1106,9 +1114,17 @@ void main() {
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * ISO_COS30;
     float scene_z_wu = camz.z - ISO_COS30 * sum - 0.5 * wz;
+    // Opt-in native MODELZ owner domain; coefficients execute56cdc0 then56d5f0.
+    bool native_projection = uv_shift.z > 0.5;
+    if (native_projection) {
+        float native_z = wz - uv_shift.w;
+        S = 1.0101525783538818 * (wx - wy);
+        T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
+        scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
+    }
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
-    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
     float spy = vp.y + T * persp_scale;
     gl_Position = vec4(2.0 * spx / max(vp.z, 1.0) - 1.0,
@@ -1258,9 +1274,17 @@ vs_out main_vs(vs_in i) {
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * ISO_COS30;
     float scene_z_wu = camz.z - ISO_COS30 * sum - 0.5 * wz;
+    // Opt-in native MODELZ owner domain; coefficients execute56cdc0 then56d5f0.
+    bool native_projection = uv_shift.z > 0.5;
+    if (native_projection) {
+        float native_z = wz - uv_shift.w;
+        S = 1.0101525783538818 * (wx - wy);
+        T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
+        scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
+    }
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
-    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
     float spy = vp.y + T * persp_scale;
     vs_out o;
@@ -3031,7 +3055,8 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     vsu[vo++] = float(s.retail_lighting == 3 && !UsesRetailSoftwareMeshLighting() ? 2 : s.retail_lighting);
     vsu[vo++] = s.uv_offset[0];
     vsu[vo++] = s.uv_offset[1];
-    vsu[vo++] = 0.0f; vsu[vo++] = 0.0f;
+    vsu[vo++] = s.retail_software_projection ? 1.0f : 0.0f;
+    vsu[vo++] = s.retail_camera_z;
     const sg_range vsr = { vsu, sizeof(vsu) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vsr);
 
@@ -5429,7 +5454,7 @@ namespace {
 //   strip     : wp(3) + wt(3) + hw(1) + uv(2) + col(4) + dbg(1) + light(1) + pad(1) = 16 floats (stays 64B)
 constexpr int32_t kFxBillboardInstanceFloats = 16;
 constexpr int32_t kFxParticleInstanceFloats  = 20;
-constexpr int32_t kFxStripVertexFloats       = 16;
+constexpr int32_t kFxStripVertexFloats       = 18;
 
 // Static corner quad for billboards / particles. CCW with z=0.
 constexpr float kFxCorners[] = {
@@ -5688,7 +5713,7 @@ void TRenderer::InitFxPipeline()
         sh.attrs[4].name = "color";       sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 4;
         sh.attrs[5].name = "debug_mode";  sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 5;
         sh.attrs[6].name = "light_mode";  sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 6;
-        sh.attrs[7].name = "retail_texture"; sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 7;
+        sh.attrs[7].name = "retail_metadata"; sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 7;
         sh.vs.source = kFxStripVs;
         sh.vs.entry  = kShaderVsEntry;
         FillFxSharedVsUbo(sh.vs.uniform_blocks[0]);
@@ -5714,7 +5739,7 @@ void TRenderer::InitFxPipeline()
         pip.layout.attrs[4].buffer_index = 0; pip.layout.attrs[4].offset = 9  * sizeof(float); pip.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
         pip.layout.attrs[5].buffer_index = 0; pip.layout.attrs[5].offset = 13 * sizeof(float); pip.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT;
         pip.layout.attrs[6].buffer_index = 0; pip.layout.attrs[6].offset = 14 * sizeof(float); pip.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT;
-        pip.layout.attrs[7].buffer_index = 0; pip.layout.attrs[7].offset = 15 * sizeof(float); pip.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[7].buffer_index = 0; pip.layout.attrs[7].offset = 15 * sizeof(float); pip.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT3;
         pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
         pip.cull_mode      = SG_CULLMODE_NONE;
         for (int32_t b = 0; b < kFxBlendCount; ++b)
@@ -6301,7 +6326,8 @@ void TRenderer::DrainFxQueue()
                     scratch.push_back(color[0]); scratch.push_back(color[1]); scratch.push_back(color[2]); scratch.push_back(color[3]);
                     scratch.push_back(dbg);
                     scratch.push_back(lit);
-                    scratch.push_back(0.0f);  // pad to kFxStripVertexFloats (16)
+                    scratch.push_back(0.0f); // ordinary strip: texture policy, native projection, cameraZ
+                    scratch.push_back(0.0f); scratch.push_back(0.0f);
                 };
                 // V sub-range support: left edge samples seg.v_left, right
                 // edge samples seg.v_right (default 0/1 = full V span,
@@ -6355,6 +6381,8 @@ void TRenderer::DrainFxQueue()
                 scratch.push_back(float(uint8_t(quad.debug_mode)));
                 scratch.push_back(float(uint8_t(quad.light_mode)));
                 scratch.push_back(float(quad.retail_texture));
+                scratch.push_back(quad.retail_software_projection ? 1.0f : 0.0f);
+                scratch.push_back(quad.retail_camera_z);
             }
             spans.push_back(ds);
         }

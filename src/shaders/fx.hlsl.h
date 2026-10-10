@@ -211,7 +211,7 @@ struct vs_in {
     float4 color        : TEXCOORD4;
     float  debug_mode   : TEXCOORD5;
     float  light_mode   : TEXCOORD6;
-    float  retail_texture : TEXCOORD7;
+    float3 retail_metadata : TEXCOORD7;
 };
 struct vs_out {
     float4 pos      : SV_Position;
@@ -235,9 +235,16 @@ vs_out main_vs(vs_in i) {
     float S = wx - wy;
     float T = 0.5 * sum - wz * 0.867;
     float scene_z_wu = camz.z - 0.867 * sum - 0.5 * wz;
+    bool native_projection = i.retail_metadata.y > 0.5;
+    if (native_projection) {
+        float native_z = wz - i.retail_metadata.z;
+        S = 1.0101525783538818 * (wx - wy);
+        T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
+        scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
+    }
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
-    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
     float spy = vp.y + T * persp_scale;
     vs_out o;
@@ -254,7 +261,7 @@ vs_out main_vs(vs_in i) {
     o.color = i.color;
     o.lit   = lit;
     o.debug = i.debug_mode;
-    o.retail_texture = i.retail_texture;
+    o.retail_texture = i.retail_metadata.x;
     return o;
 }
 )HLSL";

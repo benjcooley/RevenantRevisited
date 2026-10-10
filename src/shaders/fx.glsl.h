@@ -193,7 +193,7 @@ layout(location = 3) in vec2 uv;
 layout(location = 4) in vec4 color;
 layout(location = 5) in float debug_mode;
 layout(location = 6) in float light_mode;
-layout(location = 7) in float retail_texture;
+layout(location = 7) in vec3 retail_metadata;
 layout(std140) uniform fx_params {
     vec4 vp;
     vec4 camz;
@@ -224,9 +224,16 @@ void main() {
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * 0.867;
     float scene_z_wu = camz.z - 0.867 * sum - 0.5 * wz;
+    bool native_projection = retail_metadata.y > 0.5;
+    if (native_projection) {
+        float native_z = wz - retail_metadata.z;
+        S = 1.0101525783538818 * (wx - wy);
+        T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
+        scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
+    }
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
-    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
     float spy = vp.y + T * persp_scale;
     gl_Position.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
@@ -242,7 +249,7 @@ void main() {
     v_color = color;
     v_lit   = lit;
     v_debug = debug_mode;
-    v_retail_texture = retail_texture;
+    v_retail_texture = retail_metadata.x;
 }
 )GLSL";
 

@@ -3569,7 +3569,7 @@ bool T3DAnimator::FmasteryBaseMeshBlend(int32_t object,uint32_t& blend) const
     return blend==0u || blend==16u || blend==80u;
 }
 
-bool T3DAnimator::FmasteryBaseMeshWorldMatrix( hmm_mat4& world)
+bool T3DAnimator::FmasteryBaseMeshWorldMatrix(hmm_mat4& world, const hmm_mat4* owner_override)
 {
     uint32_t blend=0;
     if (!FmasteryBaseMeshBlend(2,blend) || !IsObjectEnabled(2)) return false;
@@ -3586,7 +3586,7 @@ bool T3DAnimator::FmasteryBaseMeshWorldMatrix( hmm_mat4& world)
     MtxRotateX(&world,rotation.X); MtxRotateY(&world,rotation.Y); MtxRotateZ(&world,rotation.Z);
     if (animobjs[2]->flags&OBJ3D_GOLD_CAMERA_FACING) ApplyRetailGoldCameraOrientation(world);
     MtxTranslate(&world,&position); // source preserves XYZ after fixed '#' camera matrices
-    MtxMultiply(&world,&world,&inst->Transform().Matrix());
+    MtxMultiply(&world,&world,owner_override ? owner_override : &inst->Transform().Matrix());
     return true;
 }
 
@@ -3613,7 +3613,7 @@ bool T3DAnimator::SpeedBaseMeshBlend(int32_t object,uint32_t& blend) const
     blend=animobjs[1]->blend;return blend==80u;
 }
 
-bool T3DAnimator::SpeedBaseMeshWorldMatrix(hmm_mat4& world)
+bool T3DAnimator::SpeedBaseMeshWorldMatrix(hmm_mat4& world, const hmm_mat4* owner_override)
 {
     uint32_t blend=0;
     if(!SpeedBaseMeshBlend(1,blend) || !IsObjectEnabled(1))return false;
@@ -3621,7 +3621,7 @@ bool T3DAnimator::SpeedBaseMeshWorldMatrix(hmm_mat4& world)
     imagery->SetPrevState(inst->GetPrevState(),inst->GetPrevFrame());
     if(!imagery->GetAniKey(1,0,inst->GetFrame(),position,rotation,scale))return false;
     BuildRetailSpeedCameraMatrix(world,position,rotation,scale);
-    MtxMultiply(&world,&world,&inst->Transform().Matrix());return true;
+    MtxMultiply(&world,&world,owner_override ? owner_override : &inst->Transform().Matrix());return true;
 }
 
 uint64_t T3DAnimator::PartSysPulseCount() const
@@ -3666,7 +3666,7 @@ T3DAnimator::SAuthoredPartSysStats T3DAnimator::PartSysStats() const
 }
 
 int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
-                                  int32_t texture_slot, const hmm_vec3& render_scale)
+                                  int32_t texture_slot, const hmm_vec3& render_scale, bool native_software)
 {
     if (!partsys_controllers || partsys_controllers->unsupported) return 0;
     int32_t submitted = 0;
@@ -3722,6 +3722,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             MtxTranslate(&matrix, &position);
 
             SQuadDrawItem item = {};
+            item.retail_software_projection = native_software;
             item.key.texture = texture;
             // Retail particle Render overwrites the prototype's companion
             // blend with its own per-particle mode. Gold coins are alpha2;
@@ -3753,7 +3754,8 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                 // Particle.position remains raw map/common-world simulation XYZ.
                 // Match ordinary mesh raw translation + local MODELZ stretch;
                 // ABS particles bypass the owner's transform, so bridge here once.
-                item.world_pos[c][2] = (particles[slot].position[2] +
+                // The explicit native draw policy keeps the literal MODELZ vertex.
+                item.world_pos[c][2] = (native_software ? world.Z : particles[slot].position[2] +
                     (world.Z - sample.position[2]) * WORLD3D_Z_SCALE) * render_scale.Z;
                 item.uv[c][0] = vertex.tu;
                 item.uv[c][1] = vertex.tv;

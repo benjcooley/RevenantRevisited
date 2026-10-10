@@ -28,6 +28,7 @@ char  StartupVfxId[64]        = "";
 bool  StartupVfxHideUi        = false;
 bool  StartupVfxWireframe     = false;
 int32_t StartupVfxLightingMode = -1;
+bool StartupVfxNativeDomain = false;
 int32_t StartupPartSysQuality = 0;
 int32_t StartupPartSysIncomingBlend = 0;
 char  StartupCinematicPath[MAXPATHLEN] = "";

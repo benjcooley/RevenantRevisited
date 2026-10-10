@@ -34,6 +34,8 @@ def capture(scenario,output):
         f'--filmstrip={count},{1/fps:.16f}',f'--snapstep={1/fps:.16f}',
         '--snapseed='+str(scenario.get('seed',1)),'--snapwarmup='+str(scenario.get('warmup',1)),
         '--snaprect='+','.join(map(str,rectangle)),'--snapprefix='+str(output/'frame-')]
+    if scenario.get('native_domain',False):
+        command += ['--vfx-native-domain']
     if 'ambient' in scenario:
         command += ['--scene-ambient='+','.join(map(str,scenario['ambient']))]
     if 'partsys_quality' in scenario:
@@ -91,6 +93,8 @@ def capture(scenario,output):
         if "--vfx='"+scenario['effect']+"' matched" not in log.read_text(errors='replace'):
             report['status']='fail';report['error']='Requested effect did not match the actual catalogue'
         log_text=log.read_text(errors='replace')
+        if scenario.get('native_domain',False) and '[native-domain] enabled=1 camera_z=0' not in log_text:
+            report['status']='fail';report['error']='Requested native-domain preview did not confirm its owner/particle coordinate policy'
         if '[authored-static] missing objects or unsupported controller tags' in log_text:
             report['status']='fail';report['error']='Requested preview rejected its asset/controller contract'
         try:
