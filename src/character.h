@@ -91,6 +91,8 @@ class TCharacter : public TComplexObject
     static inline CastSeam castSeam = nullptr;
       // CastByName (retail SpellList::Find 0x0053f010 + Cast 0x004d5c20),
       // which DoAttack calls for a MAGICATTACK
+    static inline CastSeam castByTalismansSeam = nullptr;
+      // CastByTalismans (retail 0x004d5c20), as castSeam for CastByName
     using IsEnemySeam = bool (*)(TCharacter* self, TCharacter* other);
     static inline IsEnemySeam isEnemySeam = nullptr;
       // IsEnemy (retail 0x004c89c0)
@@ -216,14 +218,21 @@ class TCharacter : public TComplexObject
       // Says something given a dialog tag id number
     bool SayTag(const char *tag, int32_t wait = -1, const char *anim = nullptr);
       // Says something given a dialog tag
+    bool MayCast();
+      // The gates every cast opens with (retail inline in 0x004d5c20, 0x004d5b90,
+      // 0x004d5ae0): alive, not locked in an interactive move, not immobile,
+      // iced or paralyzed
     bool CastByName(char* name, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
-      // Cast a spell by usings its name
+      // REVSYNC: TCharacter::CastByName @ 0x004d5b90 -- the variant of that
+      // name, cast by its talismans
     bool CastByTalismans(char* talismans, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
-      // Cast a spell by using a talisman list
+      // REVSYNC: TCharacter::CastByTalismans @ 0x004d5c20 -- the manager's
+      // cast; a player's failed cast of a spell with a cost fizzles
     bool SetCast(char* ani, TObjectInstance* target, int32_t invoke_delay = INVOKE_DELAY);
-      // Set the character to the cast animation
+      // REVSYNC: TCharacter::SetCast @ 0x004d5900 -- the invoke animation
     bool Cast(char* talismans, S3DPoint* sourcepos = nullptr);
-      // quick cast a spell
+      // REVSYNC: TCharacter::Cast @ 0x004d5ae0 -- cast at the combat or bow
+      // root's opponent
     bool BeginFighting(TCharacter* target = nullptr, ACTION action = ACTION_COMBAT);
       // Engage character in combat
     bool EndFighting();
@@ -396,6 +405,8 @@ class TCharacter : public TComplexObject
                                                                   // angle alone; the AI doesn't acquire (name unknown)
     static constexpr uint32_t kCharFlagNoKill        = 0x80;      // IsValidAttack refuses a killing blow but an
                                                                   // interactive death (setter unidentified)
+    static constexpr uint32_t kCharFlagBuffed        = 0x20;      // a spell's stat effect was put on (TSpell ctor
+                                                                  // 0x0053f190); a buff cast ends his others
     static constexpr uint32_t kCharFlagDamageSeventh = 0x10;      // CalculateDamage /7 (not freeze); setter unidentified
     static constexpr uint32_t kCharFlagHalfPhysical  = 0x100;     // CalculateDamage halves physical; setter unidentified
     static constexpr uint32_t kCharFlagHalfMagic     = 0x200;     // CalculateDamage halves magic (6-9); setter unidentified
@@ -416,6 +427,8 @@ class TCharacter : public TComplexObject
       // Incidentals are the random "NN:" variants of a character's root and idle
       // states (fidgets); off, the character always plays the 100% variant
     bool Incidentals() const { return !(charflags & kCharFlagNoIncidentals); }
+    void SetBuffed() { charflags |= kCharFlagBuffed; }
+    [[nodiscard]] bool IsBuffed() const { return (charflags & kCharFlagBuffed) != 0; }
 
     // Static access functions
     static TCharacter* CharBlocking(TObjectInstance* inst, const S3DPoint& pos, int32_t radius = 0);
@@ -446,6 +459,9 @@ class TCharacter : public TComplexObject
     void MakeVisible();
       // Makes character visible
     PTSpellManager GetSpellManager() { return &SpellManager; }
+    [[nodiscard]] uint32_t CharFlags() const { return charflags; }
+    [[nodiscard]] int32_t InvokeDelay() const { return invokedelay; }
+      // Pulses the invoke animation holds the spell's effect back (retail +0x188, SetCast)
       // Get spell manager object
 
   // Streaming functions

@@ -295,6 +295,11 @@ void TPlayer::LogStats(const char *why)
 // experience read are the modified stats', as retail's.
 void TPlayer::AddSkillExp(int32_t skillnum, int32_t exp)
 {
+    if (skillExpSeam)
+    {
+        skillExpSeam(this, skillnum, exp);
+        return;
+    }
     const int32_t have = GetObjStat(SKE_FIRST + skillnum);
     const int32_t level = GetObjStat(SK_FIRST + skillnum);
     if (level >= TRules::kMaxSkillLevel)
@@ -465,6 +470,11 @@ void TPlayer::ApplyStatLine(const char *statline, int32_t effect)
 // has lost its INITIALIZE, so in practice all of them: one effect at a time.
 void TPlayer::AddStatEffect(const char *statline)
 {
+    if (statEffectSeam)
+    {
+        statEffectSeam(this, statline);
+        return;
+    }
     if (!statline)
         return;
 
@@ -1137,37 +1147,55 @@ void TPlayer::SetQuickSpell(int32_t button, char *talismans)
         QuickSpells.SetDirty(true);
 }
 
-// Invokes one of players quickspells
+// REVSYNC: TPlayer::InvokeQuickSpell @ 0x0051b5d0 -- cast quick spell
+// `button` with no target: alive and not in an interactive attack or impact;
+// an empty slot or a missing talisman fizzles; a cast that fails fizzles
+// (TCharacter::CastByTalismans has usually fizzled already). The main player
+// is told how it went. Retail's multiplayer-client branches (no fizzle and
+// no message when a talisman is missing or the cast fails) have no port: the
+// port has no network play.
 bool TPlayer::InvokeQuickSpell(int32_t button)
 {
-    if ((uint32_t)button >= QSPELL_NUM)
+    if ((uint32_t)button >= QSPELL_NUM || Health() <= 0)
         return false;
-
-    if (quickspells[button][0] != '\0')
+    if (!(charflags & kCharFlagInteractive))
     {
-        if (HasTalismans(quickspells[button]))
-        {
-            if (!CastByTalismans(quickspells[button]))
-            {
-                CastByName("Fizzle");
-                TextBar.Print("Spell failed");
-            }
-            else
-                TextBar.Print("Spell cast successfully");
-        }
-        else
-        {
-            TextBar.Print("Some of the talismans you need are missing");
-            CastByName("Fizzle");
-        }
+        if (doing->attack && (doing->attack->flags & CA_INTERACTIVE))
+            return false;
+        if (doing->impact && (doing->impact->flags & CAI_INTERACTIVE))
+            return false;
     }
-    else
-        CastByName("Fizzle");
 
+    char *talismans = quickspells[button];
+    const bool mainplayer = (this == Player);
+    if (!talismans[0])
+    {
+        if (mainplayer)
+            TextBar.Print("%s", DialogList.GetLine("SPLNOTAL"));
+        CastByName("Fizzle");
+        return true;
+    }
+    if (!HasTalismans(talismans))
+    {
+        if (mainplayer)
+            TextBar.Print("%s", DialogList.GetLine("SPLMISTAL"));
+        CastByName("Fizzle");
+        return true;
+    }
+    if (!CastByTalismans(talismans))
+    {
+        CastByName("Fizzle");
+        if (mainplayer)
+            TextBar.Print("%s", DialogList.GetLine("SPLCASTFAIL"));
+    }
+    else if (mainplayer)
+        TextBar.Print("%s", DialogList.GetLine("SPLCASTOK"));
     return true;
 }
 
-// Player has talismans for spell
+// REVSYNC: TPlayer::HasTalismans @ 0x0051b7c0 -- the Spell Pouch's talismans,
+// counted by TALISMAN type name, cover the string: each code (the type's Code
+// stat, case-sensitive) takes one. Codes of no type (M-P) cost nothing.
 bool TPlayer::HasTalismans(char *talismans)
 {
     bool has = true;
@@ -1180,10 +1208,11 @@ bool TPlayer::HasTalismans(char *talismans)
         quanttal[x] = 0;
 
     // now parse the inventory and count how many of each talisman there are
-    // find their spell pouch
+    // find their spell pouch. Retail looks for a "spellpouch" when there is
+    // none and drops the answer, so only a Spell Pouch counts.
     TObjectInstance* pouch = FindObjInventory("Spell Pouch");
     if (!pouch)
-        TObjectInstance* pouch = FindObjInventory("spellpouch");
+        (void)FindObjInventory("spellpouch");
     if (pouch)
     {
         for(x = 0; x < TalismanClass.NumTypes(); ++x)

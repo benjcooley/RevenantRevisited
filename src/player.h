@@ -192,12 +192,17 @@ class TPlayer : public TCharacter
       // What overcoming something worth 'value' earns at this level (retail 0x0051a5b0)
     // Retail A/B fixtures only: when set, each answers its call as the
     // retail fixture's seam does -- recorded, not run: AwardKillExp (vtable
-    // +0x414), AwardSkillExp (+0x41c), AwardStealthExp (+0x420); and
-    // SetPlayerState (0x0051d680), recorded with the state still set.
+    // +0x414), AddSkillExp (+0x418), AwardSkillExp (+0x41c), AwardStealthExp
+    // (+0x420), AddStatEffect (0x0051c2c0); and SetPlayerState (0x0051d680),
+    // recorded with the state still set.
     using KillExpSeam = void (*)(TPlayer* self, TCharacter* victim);
     static inline KillExpSeam killExpSeam = nullptr;
+    using SkillExpSeam = void (*)(TPlayer* self, int32_t skillnum, int32_t exp);
+    static inline SkillExpSeam skillExpSeam = nullptr;
     using AwardSkillExpSeam = void (*)(TPlayer* self, int32_t skillnum, TCharacter* victim);
     static inline AwardSkillExpSeam awardSkillExpSeam = nullptr;
+    using StatEffectSeam = void (*)(TPlayer* self, const char* statline);
+    static inline StatEffectSeam statEffectSeam = nullptr;
     using StealthExpSeam = void (*)(TPlayer* self, TCharacter* victim);
     static inline StealthExpSeam stealthExpSeam = nullptr;
     using PlayerStateSeam = void (*)(TPlayer* self, int32_t newstate);
