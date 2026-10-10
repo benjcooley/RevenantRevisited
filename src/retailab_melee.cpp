@@ -13,7 +13,7 @@
 
 #include "gameoptions.h"          // NoCombatResults
 #include "logging.h"
-#include "revenant.h"             // CheatNahkranoth, Player
+#include "revenant.h"             // CheatNahkranoth
 #include "sound.h"
 
 namespace RetailAB
@@ -210,14 +210,6 @@ void CaseKillExp(TPlayer* self, TCharacter* victim) { ExpRecord(self, "kill", -1
 void CaseSkillExp(TPlayer* self, int32_t skill, TCharacter* victim) { ExpRecord(self, "skill", skill, victim); }
 void CaseStealthExp(TPlayer* self, TCharacter* victim) { ExpRecord(self, "stealth", -1, victim); }
 
-void CasePlayerState(TPlayer* self, int32_t state)
-{
-    JsonOut j;
-    j.Begin('{').FieldString("seam", "SetPlayerState").FieldString("who", g_answers.world->NameOf(self));
-    j.Field("value", state).End('}');
-    Seam(j.str());
-}
-
 // What the text bar is sent (TTextBar logs each message as "[textbar] ..."):
 // retail's 0x0054d170.
 void CaptureTextBar(log_Event* ev)
@@ -268,9 +260,6 @@ class SMeleeScope
         g_answers.castResult = cs["cast_result"].Bool(true);
         g_answers.cs = &cs;
         g_answers.active = true;
-        for (const JsonValue& spec : cs["chars"].Items())
-            if (spec["class"].Int(OBJCLASS_CHARACTER) == OBJCLASS_PLAYER)
-                Player = static_cast<TPlayer*>(world.Get(spec["name"].Str()));
         NoCombatResults = cs["globals"]["nocombatresults"].Bool(false);
         TCharacter::findCharactersSeam = CaseFound;
         TCharacter::blockedSeam = CaseBlocked;
@@ -284,7 +273,6 @@ class SMeleeScope
         TPlayer::killExpSeam = CaseKillExp;
         TPlayer::awardSkillExpSeam = CaseSkillExp;
         TPlayer::stealthExpSeam = CaseStealthExp;
-        TPlayer::playerStateSeam = CasePlayerState;
         static const bool captured = log_add_callback(CaptureTextBar, nullptr, LOG_DEBUG) == 0;
         (void)captured;
     }
@@ -300,10 +288,8 @@ class SMeleeScope
         TPlayer::killExpSeam = nullptr;
         TPlayer::awardSkillExpSeam = nullptr;
         TPlayer::stealthExpSeam = nullptr;
-        TPlayer::playerStateSeam = nullptr;
         CheatNahkranoth = false;
         NoCombatResults = false;
-        Player = nullptr;
         g_answers = SMeleeAnswers{};
     }
     SMeleeScope(const SMeleeScope&) = delete;
