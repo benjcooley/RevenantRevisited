@@ -44,11 +44,11 @@ def generate(ledger_path=LEDGER,executable=BASELINE):
                 data=path.read_bytes();value=json.loads(data)
                 diffs=[]
                 def measured_pixels(case):
-                    for key in ('differing_rgb565_pixels','pixel_differences','different_pixels'):
+                    for key in ('differing_rgb565_pixels','pixel_differences','different_pixels','color_different_bytes'):
                         if type(case.get(key)) is int:diffs.append(case[key])
-                    for key in ('cases','poses'):
+                    for key in ('cases','poses','pairs'):
                         for child in case.get(key,[]):measured_pixels(child)
-                for case in value.get('cases',[]):measured_pixels(case)
+                measured_pixels(value)
                 total=value.get('differing_rgb565_pixels')
                 pixel_checked=bool(diffs) or type(total) is int or value.get('shared_original_raster_pixel_status')=='pass'
                 pixel_equal=pixel_checked and (not diffs or max(diffs)==0) and (type(total) is not int or total==0)
@@ -92,6 +92,9 @@ def generate(ledger_path=LEDGER,executable=BASELINE):
                     natural_context_verified=bool(acceptance.get('map_or_character_context')),command_evidence=command_evidence,
                     scope='Fixture lifecycle, command lifecycle and natural game triggers are distinct'),
                 gpu=dict(status=gpu_status,checks=[c['name'] for c in gpu]),
+                visual_review=dict(status='pass_for_tested_configuration' if acceptance.get('visual_fidelity') else 'pending',
+                    review=row.get('visual_review'),
+                    scope='Reviewed actual port appearance against retail; retain the recorded configuration and limitations'),
                 full_acceptance=dict(status='accepted' if acceptance.get('accepted') else 'open')),
             evidence=checks,ledger_next_action=row['next_action'],routing_next_step=
                 ('Use typed controls for the stated subset; pursue open runtime/map/GPU gates separately' if route else
@@ -101,7 +104,10 @@ def generate(ledger_path=LEDGER,executable=BASELINE):
         pixel_controls_sha256=hashlib.sha256(Path(__file__).with_name('pixel_controls.py').read_bytes()).hexdigest(),
         executable_sha256=capabilities['build']['executable_sha256']),counts=dict(
             ledger_rows=len(types),exposed_real_type_ids=len(routes),ledger_reported_render_frontend_rows=ledger['counts'].get('thin_bounded_render_frontend_rows'),
-            evidence_rows_with_shared_raster_pixel_pass=len(rendered),fully_accepted_rows=sum(bool(r['acceptance'].get('accepted')) for r in ledger['retail_effects'])),
+            evidence_rows_with_shared_raster_pixel_pass=len(rendered),
+            reviewed_visual_pass_rows=sum(bool(r['acceptance'].get('visual_fidelity')) for r in ledger['retail_effects']),
+            remaining_visual_review_rows=sum(not r['acceptance'].get('visual_fidelity') for r in ledger['retail_effects']),
+            fully_accepted_rows=sum(bool(r['acceptance'].get('accepted')) for r in ledger['retail_effects'])),
         exposed_without_ledger=[type_id for type_id in routes if type_id not in types],
         rendered_without_direct_adapter=[type_id for type_id in rendered if type_id not in routes],
         auxiliary_profiles={name:value for name,value in capabilities['profiles'].items() if not value['catalog']},

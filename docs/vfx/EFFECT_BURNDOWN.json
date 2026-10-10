@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "audited_date": "2026-10-09",
-  "authority": "Retail CLASS EFFECT TYPES entries are the scope; completion requires all acceptance gates. Preview associations are candidates only.",
+  "authority": "Retail CLASS EFFECT TYPES entries are the scope. Primary VFX progress is reviewed visual passes for the recorded test configuration; bounded frontend comparisons are supporting coverage. End-to-end gameplay/device acceptance is tracked separately. Preview associations are candidates only.",
   "source": {
     "archive": "data/imagery.rvi",
     "member": "class.def",
@@ -34,7 +34,9 @@
     "actual_runtime_verified_rows": 80,
     "visual_fidelity_confirmed_rows": 14,
     "repeatable_ab_rows": 7,
-    "thin_bounded_render_frontend_rows": 66
+    "thin_bounded_render_frontend_rows": 66,
+    "reviewed_visual_pass_rows": 14,
+    "remaining_visual_review_rows": 162
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -24221,5 +24223,16 @@
     "user_amendment": "DOSBox-X with the emulated 3D device may check software-rendering issues; not for most work. Routine VFX comparisons and controls remain in the fast emulator.",
     "current_direct_controls_report": "recon/retail_asm/runtime/controls-verification.json",
     "current_warm_batch_report": "recon/retail_asm/runtime/current-profiles-batch-verification.json"
+  },
+  "completion_policy": {
+    "updated_date": "2026-10-10",
+    "primary_metric": "reviewed_visual_pass_rows",
+    "row_source": "acceptance.visual_fidelity with retained visual_review result pass; use its scope and configuration",
+    "pass_standard": "Actual port output compared with actual retail reference; review authored form, scale, color/blending, animation, motion and lifetime for the tested configuration. Different random seeds are allowed. Projectiles must move; point-to-point fixtures must supply both endpoints.",
+    "supporting_evidence": "Shared-original-raster/frontend or state proofs alone do not imply a visual pass for the running port. A partial component pass is explicitly partial.",
+    "followups": "Natural map/character/story trigger, audio, additional configurations and targeted device checks remain separate, actionable followups. Their absence does not erase a reviewed isolated visual pass.",
+    "regression_policy": "Reopen the affected visual pass after a behavior-changing fix until current-code output is reviewed; preserve historical evidence.",
+    "end_to_end_metric": "fully_accepted_rows retains the earlier all-gates definition; it is not the headline VFX progress measure.",
+    "parallel_work": "Run visual closure, new effect conversion/comparisons and shared harness fixes concurrently, with independent sessions and coordinated shared-source changes."
   }
 }
