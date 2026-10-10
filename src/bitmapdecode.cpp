@@ -257,6 +257,12 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
         // 0..31; matches the 15-bit colour depth). Expand 5->8 bit so the brass
         // ring reads opaque and the glass disc its true coverage. Without this
         // the ring rendered at ~12% alpha (effectively invisible).
+        // REVSYNC: retail's alpha blit (0x004b349d: dst = dst*(31-a) + src*a
+        // through the colour tables) reads only the alpha byte, never the key
+        // colour, so with an alpha track the alpha alone decides coverage.
+        // These bitmaps' key is 0 (black), and their dark glass and shadows are
+        // black pixels with alpha: keying them out made the popup background a
+        // hole (35,917 of its pixels) and dropped every UI frame's dark edge.
         const uint8_t* alpha5 = (bm->flags & BM_ALPHA)
                                     ? (const uint8_t*)bm->alpha.ptr() : nullptr;
         for (int32_t y = 0; y < h; y++)
@@ -271,7 +277,8 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
                     const uint8_t a5 = alpha5[y * w + x] & 0x1f;
                     a = (uint8_t)((a5 << 3) | (a5 >> 2));   // 5-bit -> 8-bit
                 }
-                if (a == 0 || px == key || px == magentaKey)
+                const bool keyed = alpha5 ? false : (px == key || px == magentaKey);
+                if (a == 0 || keyed)
                 {
                     row[0]=row[1]=row[2]=row[3]=0;
                 }

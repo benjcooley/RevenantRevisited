@@ -338,6 +338,12 @@ These items aren't part of any single track but block others:
       idle-sleep under a run (now `NSActivityUserInitiated |
       NSActivityLatencyCritical`, 08e59c8; the display may still sleep).
       DEBUG_TOOLING.md "Headless runs".
+- [ ] DEF screens' "tex" backgrounds (in-game menu, Save, Load, Options;
+      flags 0x10000/0x10400, a texture format with its own alpha) show the game
+      through their middles — track ui (tex-overlay path). Check the decoded
+      alpha against retail's D3D overlay draw before changing anything; the
+      "alpha" variants (popups, widgets) were fixed 2026-10-09 (key colour no
+      longer applied with an alpha track, retail 0x004b349d).
 - [ ] Text baseline in the canonical glyph walk — track ui (`font.cpp`).
       The baseline is `cellY + ` the tallest printable-ASCII glyph's rise
       `- kGdiTopLeading (2)`, a constant calibrated on the HUD's Arial
