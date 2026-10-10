@@ -105,3 +105,37 @@ colors preserve the cloudy perimeter, four atlas states and floor transparency
 under strict4444 decoding. The previously declared7px apex/projection difference
 remains; this is scoped appearance evidence, not exact device or original-scene
 acceptance. The native references use a declared RGB565-quantized modern floor.
+
+Root independently reviewed all seven corrected Ribbon comparisons and accepted
+scoped appearance: whole coil including its lower loop, colored halo and white
+core. `scene-mode4/review.json` freezes each per-type pair manifest plus native,
+wrong-state negative control and corrected Metal file hashes. Known projector,
+RGB565 quantization and floor/backend differences remain outside that verdict.
+
+### FireFlash matched elapsed-time appearance
+
+`tools/retail_runtime/fireflash_visual_reference.py` executes original null-spell
+Initialize/Animate/Render every frame, original owner/world composition and
+D3DFVF0x112 normal Illuminate/raster with both literal assets. A fresh actual
+Metal capture uses the same origin, facing, source lighting, seed1 and24Hz.
+Thirteen samples at ticks2..70 cover the plume, orange annulus, collapse and late
+green fade. Six independently observed original CRT call counts exactly match
+Metal's logged counts before renders2/6/16/30/46/60 (240/315/518/518/752/752).
+The first recorded frame is tick2 after one warmup; no fitted phase is used.
+
+Private `hard-alpha/fireflash-elapsed-512/` retains the70-frame Metal recording,
+normal-lit native reference,13 immutable paired hashes and fixed pixel crops in
+`review/annulus.png` and `review/ends.png`. The viewed pairs closely match the
+open center and orange annulus that the former filled bright burst lost. The
+normal bridge and executed RGB565 channel correction are the production causes.
+Actual70-frame map create/delete/floor restoration is retained separately in
+`fireflash-normal-map/`. Target/spell attachment, natural caller, arbitrary
+scene point lights and exact device pixels remain unclaimed.
+
+Root independently inspected the FireFlash annulus and end-phase panels and
+accepted scoped null-spell/source-light appearance: rising plume, bright orange
+annulus/open center, collapse and green fade. `review-complete/` additionally
+shows ticks27/31 in `transitions.png`, so all13 reported samples are displayed.
+`review-approved.json` freezes raw native/Metal pairs, both recording manifests,
+all three comparison panels and the explicit scope limits. No exact pixel or
+natural-caller claim is added.
