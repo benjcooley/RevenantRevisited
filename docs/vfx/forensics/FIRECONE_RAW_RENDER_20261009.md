@@ -1,5 +1,9 @@
 # FireCone original render packet diagnostic
 
+2026-10-10 follow-up: [executed owner composition and normal-lit software
+pixels](FIRECONE_OWNER_LIGHTING_20261010.md) identify and correct the relative
+translation defect. The raw-stage results below describe the prior source.
+
 2026-10-09: original FireCone Render `4eaae0` and shared particle Render
 `50c220` execute in the thin runtime. The actual compiled production
 `TFireConeEffect_Bespoke::SubmitPool` also executes against compiled production

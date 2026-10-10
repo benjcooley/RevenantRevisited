@@ -17863,12 +17863,10 @@ void TFireConeEffect_Bespoke::SubmitPool(const Pool& pool, int object, EFxDebugM
         // fire.Render()/smoke.Render()/burst.Render() all use default
         // flicker=false; the per-particle flicker flag does not enlarge this draw.
         MtxScale(&local, &particle.scl);
-        // Literal source translation is FIX_Z_VALUE(local particle Z). Convert
-        // that procedural offset back to common world before the owner's raw
-        // mesh Z stretch; authored geometry remains under that existing stretch.
-        const float local_z = REV_FIX_Z_VALUE(FIX_Z_VALUE(particle.pos.Z)) / WORLD3D_Z_SCALE;
-        const hmm_vec3 pos = {particle.pos.X, particle.pos.Y, local_z};
-        MtxTranslate(&local, &pos);
+        // Retail 50c374..50c3bc only applies FIX_Z_VALUE when abs_pos is true.
+        // FireCone passes false: particle translation and authored vertices
+        // share the same local domain before RenderObject applies the owner.
+        MtxTranslate(&local, &particle.pos);
         bool source_faces_visible = true;
         for (size_t face = 0; face + 2 < indices_[object].size(); face += 3) {
             hmm_vec3 face_points[3] = {};
