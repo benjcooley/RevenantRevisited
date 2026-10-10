@@ -246,13 +246,14 @@ Callers: script `cast` (`0x42114c`), monster AI "Priest Fireball"
    (`+0x24`) stricmp-equal `tal`. variant = the first such variant
    (variants in order, `0x540ad0`). Either null → 0. **Order-sensitive,
    case-insensitive, first match wins.**
-2. `wait != 0 && [0x668154] == 0` → 0 (`0x668154` is a debug no-wait flag,
-   0 in play).
+2. `wait != 0 && [0x668154] == 0` → 0 (`0x668154` is the Editor flag: no
+   cooldown in the editor; 0 in play).
 3. cost = `variant->mana` (`+0x4c`). With an invoker:
    1. Player: `cost += trunc(-(ManaCostPct · cost) / 100)` (slot `0x3c4`,
       ManaCostPct, TPlayer only).
-   2. `Mana()` (slot `0x1d0`) `< cost` and `[0x66810c] == 0` (no-mana
-      cheat): the main player gets text `SPLMANA` (the multiplayer server
+   2. `Mana()` (slot `0x1d0`) `< cost` and `[0x66810c] == 0` (the
+      "abracadabra" text cheat, `0x54d988`, which also fills a spell pouch
+      with every talisman): the main player gets text `SPLMANA` (the multiplayer server
       variant goes through `0x587280`). Return 0 for every invoker.
    3. `variant->skill` (`+0x5c`) `>= 0` and no cheat:
       - **r = random(1, 100)**, drawn for every invoker.
@@ -477,8 +478,12 @@ behaviour read in the asm is listed.
 
 `AreaDamage(attacker, pos*, radius, min, max, type, minradius)`, cdecl.
 
-- attacker counts only when it is a character or player.
-- TMapIterator(pos, radius, `0xe0`, 2 (characters), 0, level).
+- **No attacker: returns at once** (`0x4de3cc`), nobody is hurt.
+- attacker counts (IsEnemy, SpellDamageInc, kill exp) only when it is a
+  character or player; Damage is still handed the attacker object
+  whatever it is.
+- TMapIterator(pos, radius, `0xe0`, 2 (characters), 0, the attacker's
+  level `+0xe`).
 - For each character other than the attacker, with
   `minradius <= Distance(pos, its pos) <= radius` (`0x46de60`), Health > 0,
   an enemy of the attacker (when there is one), and doing action `!= 0xc`:
@@ -784,8 +789,8 @@ rolls → Damage's roll.
 | `0x667c38` | TSpellList (`+4` count, `+0x14` items) | loaded from spell.def |
 | `0x670220` / `0x67021c` | spell-class registry | "Spell", "Strike" |
 | `0x667fcc` | main player | the player |
-| `0x668154` | no-wait cheat | 0 |
-| `0x66810c` | no-mana / no-skill cheat | 0 |
+| `0x668154` | Editor (the editor is running: no spell cooldown) | 0 |
+| `0x66810c` | the "abracadabra" cheat (no mana, no skill failure) | 0 |
 | `0x66829c` | multiplayer | 0 |
 | `0x676828`, `0x67682c` | session up / server | 0 |
 | `0x676838` | local authority | 3 (unverified, must be ≥ 2) |
@@ -917,3 +922,210 @@ Port files: `src/spell.cpp/.h`, `src/character.cpp`, `src/player.cpp`,
   / `0x540750` / `0x5408d0` are TSpellManager methods.
 - The `TPlayScreen::meth_*` labels on `0x4d5c20`, `0x4d3590`, `0x4d3750`
   and `0x4de7d0` are TCharacter / TEffect methods.
+
+## 8. Port status / kata
+
+Katas built by the spells agent (2026-10-08), run with
+`python3 tools/retail_ab/retail_ab.py <target>`. Retail fixtures
+`tools/retail_runtime/slots/combat/spell_*.py` (shared pieces in
+`spell_guest.py`: retail's own TSpellList loaded from resources.rvr's
+spell.def), port `src/retailab_spells.cpp`, cases and compares
+`tools/retail_ab/targets_spells.py`.
+
+### D1s `spell-data`: the spell.def parse
+
+TSpellList::Load `0x53ead0` → SSpellData::Load `0x53e4e0` →
+LoadControlData `0x53dd10`, original code over the case's file (seams: the
+file layer, FatalError, the imagery lookup `0x446aa0`). Cases: the shipped
+file (resources.rvr), GOG's loose copy, and
+`tools/retail_ab/cases/spell_data/alltags` (every SPELL and CONTROLDATA tag,
+the defaults, six talisman codes, lower-case tags, partial LIGHT). 3/3.
+
+Port changes (`src/spell.{h,cpp}`, `src/parse.{h,cpp}`):
+
+- The loader is retail's: every tag (ICONNAME, LIGHT, CONTROLDATA and its
+  block, STATLINE) is read; an unknown tag is fatal again. NEXTSPELLWAIT is
+  kept raw (the port multiplied it by 24, so its cooldowns were 24 times
+  retail's). Talisman strings are cut at 5 codes.
+- `SSpellControlData` (retail's 0xc4-byte block) and the variant's
+  `controldata` / `statline` pointers; `SSpellLight`.
+- `TToken::GetRestOfLine` (`0x4799b0`, how STATLINE is stored); Parse's
+  `%\` field (`0x479d89`: strings read during the field keep their
+  backslashes); an absent `<...>` `%b` field is skipped, not written (the
+  port wrote the current token's number into it, `0x479ca5`).
+
+Corrections to this document, from the asm and the runs:
+
+- §2.3: talisman strings are duplicated in the shipped data: `MDR` five
+  times (Sid / Green / White / Blue / Red Dragon Attack) and `KBEF` twice
+  (Aura, Priest Aura). A cast by name of a later one casts the first.
+- §5.5: retail's GetSpellDataByName (`0x53ede0`) does match the SPELL name
+  first, then the variant names, as the port's does.
+- §2.17: LIGHT's INT is `+0xb0` and MULT `+0xac`; `<...>` fields must come
+  in the format's order (`FADEIN 3 COLOR ...` is fatal). Control data
+  `+0x40` is set to −1 and never parsed. IMAGERY is a lookup of an already
+  registered imagery by file name (`0x446aa0`), not a load. STATLINE is the
+  rest of the line with blanks collapsed and numbers re-printed
+  (`STRN  -2 ... TIME 0480` → `STRN -2 ... TIME 480`), no leading space.
+
+### S1: talismans to spell
+
+Fixture `spell_talismans.py` (retail's TSpellList from the shipped
+spell.def, the TALISMAN class built from class.def's, inventories as
+plain objects the walk `0x46dfb0` reads: count `+0x68`, items `+0x78`,
+container `+0x64`, index `+0x7e`, vtable slot `0x170`).
+
+- `spell-lookup`, 75 cases (one per spell, ~12,000 queries): every shipped
+  talisman string and its near misses (case, order, each permutation, a
+  code dropped / added / changed / doubled, blanks), every variant and
+  spell name and its near misses, through GetSpellDataByTalismans
+  `0x53ed70`, GetVariantDataByTalismans `0x53ef90`, GetSpellDataByName
+  `0x53ede0`, GetVariantDataByName `0x53f010`. 75/75. The port's two
+  talisman lookups compared talisman counts (any order) and kept the last
+  match; they are retail's whole-string `_stricmp`, first match.
+- `spell-talismans`, 340 cases: TPlayer::HasTalismans `0x51b7c0` with
+  FindInventory `0x470280` and the walk as original code, over pouches
+  that cover, just miss and overshoot each shipped string, every type, no
+  pouch, a pouch in a pouch, a bag in the pouch, a pouch called
+  "spellpouch", other-case names, two pouches; ~500 queries each. 340/340
+  (the port's algorithm already matched; its shadowed "spellpouch" lookup
+  is now the explicit discarded call retail makes).
+- `spell-quick`, 49 cases: TPlayer::InvokeQuickSpell `0x51b5d0` over every
+  button and the edges, empty / held / missing / untyped slots, the cast's
+  answer, dead, the attack and impact interactive gates and charflags
+  `0x80000`, main player or not. Seams: the text bar, and TCharacter::
+  CastByTalismans / CastByName (`TCharacter::castSeam` on the port side).
+  49/49. The port's version had English texts, no Health or interactive
+  gates. Retail's multiplayer-client branches are not ported (no network).
+
+Fixture fix: `RetailAB::Fixture::LoadGameData` set the imagery path to
+`NORMAL\`; the game uses `IMAGERY\` (NoNormals, InitGlobals step 8). With
+the wrong one 18 class.def types whose headers aren't in the quick-load
+cache didn't register, the Chaos talisman among them.
+
+### S2 `spell-cast`: the cast
+
+Fixture `spell_cast.py`: TCharacter::CastByTalismans `0x4d5c20`,
+CastByName `0x4d5b90`, Cast `0x4d5ae0`, and the managers' CastByName
+`0x53f920` / CastByTalismans `0x53fe80`, with everything under them as
+original code -- the gates, the lookups, the cooldown, mana and skill
+roll, the spell class registry (its static init run at setup) and both
+creators, the TSpell constructor, ManaDrain, SetCast with CombatAnimName /
+AnimPrefix / HasActionAni and ForceCommand. Seams: object stats (melee's
+GetObjStat / SetObjStat, with poisoned, manacostpct, spelldamageinc and
+invokeexp added), TPlayer::MaxMana, AddSkillExp, AddStatEffect,
+SetPlayerState, the text bar, the buff walk's map iterator. Globals:
+authority `0x676838` = 3, the Editor flag and the cheat from the case.
+
+2071 cases, 2071/2071: every shipped variant cast by talismans (a player,
+a monster), by name, and through the manager's by-name cast for another
+invoker (an arrow's proc); every SPELL name; the gates; the cooldown with
+and without the editor; mana at each cost's edge with ManaCostPct and the
+cheat; the skill roll at every chance and both edges, main player or not;
+the Invoke experience across its clamp; the invoke animation by root, by
+which states exist, under a doing block with priority, the walk prefix;
+targets and numtargs (none, an empty array, 1-3, fewer than given); the
+poison roll's edges; Cast's target by root; a buff with the buff flag on.
+
+Port changes (`src/spell.{h,cpp}`, `src/character.{h,cpp}`):
+
+- TSpellManager::CastByTalismans / CastByName are retail's (§2.5 and the
+  differences below). Before: no cooldown exception, no ManaCostPct, no
+  skill roll or SPLLVL* texts, no Invoke experience, no buff handling, a
+  plain TSpell always, no cheat.
+- The spell class registry (`FindSpellClass`: "Spell", "Strike") and
+  `TStrikeSpell` (its own Timer / Pulse / Kill not ported yet: TSpell's
+  run).
+- The TSpell constructor's STATLINE step (charflags `0x20`,
+  AddStatEffect on a player invoker); ManaDrain's ManaCostPct and cheat
+  (and no stamina bar push).
+- TCharacter::CastByTalismans / CastByName / Cast with their gates (alive,
+  not interactive-locked, not OF_IMMOBILE, OF_PARALIZE or OF_ICED), the
+  player state bit, the fizzle after a player's failed cast of a spell
+  that costs mana. **CastByName now casts the first variant with the named
+  variant's talismans** (so every dragon attack casts Sid's, and Priest
+  Aura casts Aura), as retail does; only the managers' CastByName (the
+  arrow procs) takes the named variant.
+- SetCast is retail's: `<prefix>inv<n>` from the ANIMATION's last
+  character through CombatAnimName (any name containing "inv"), else
+  "invoke"; the block has no priority (the port gave it priority); a
+  block ForceCommand didn't take is freed.
+- `MagicCheat` (retail `0x66810c`) exists; the text cheat that sets it
+  isn't ported.
+
+Retail details the asm settled (corrections and additions to §2.4, §2.5):
+
+- `0x668154` is the Editor flag, `0x66810c` the "abracadabra" cheat.
+- The object-flag gate `& 1`, `& 0x2800000` is OF_IMMOBILE, OF_PARALIZE |
+  OF_ICED.
+- The manager's CastByName differs from CastByTalismans: its cooldown
+  holds even in the editor; the skill roll is drawn for every invoker
+  whatever the variant's skill; a failed chance fails **any** player (only
+  the main player is told), where CastByTalismans lets every player but the
+  main one through; under the cheat the chance and the Invoke experience
+  are skipped (CastByTalismans still awards it); a class that makes no
+  spell refuses.
+- With a null invoker and a STATLINE, both read the invoker's charflags
+  (a crash); with an empty target array and POISONCHANCE the constructor
+  rolls for the copied empty slot and calls through null. The port guards
+  both (REVSYNC-DIVERGENCE); the kata leaves those cases out.
+
+### S3 `spell-new`, `spell-damage`: the spell and its damage
+
+Fixture `spell_damage.py` (built on spell_cast.py's): a spell made by its
+class's registered creator (`0x542200` "Spell" / `0x542290` "Strike"),
+dumped (`spell-new`), or then TSpell::Damage `0x53f560` on a target
+(`spell-damage`). Seams beyond S2's: TCharacter::Damage `0x4c4950`
+recorded as the melee kata records it (`{"seam":"Damage", who, damage,
+type, mod, attacker, block}`, not run; on the port side melee's
+`TCharacter::damageSeam`), AwardKillExp `0x51a630`. A player target's
+DmgResMagical is read from its modified copy (Resist `0x5208d0`), as the
+melee fixture lays it out; a target's magic resistance (the float at
+`+0x190`) comes per mille from the case.
+
+- `spell-new`, 426/426: every shipped variant through both classes with a
+  player, a monster (no targets, a source) and no invoker; the poison roll
+  at 89/90/0/100 for one to three targets; numtargs fewer than given, 0,
+  negative; a STATLINE on a player, a monster, no invoker.
+- `spell-damage`, 1090/1090: every variant from a player at a monster
+  (kill experience offered), from a monster at the player (DmgResMagical
+  20), with no caster; a grid over magic resistance (none, 0, 0.001, 0.1,
+  0.25, 0.333, 0.5, 0.999, 1, 1.5, -0.2), SpellDamageInc (0, 25, -50),
+  DmgResMagical (0, 30, 100, -50) and the roll's two ends on three
+  variants; no target.
+
+Port changes: TSpell::Damage is retail's (before: no SpellDamageInc, no
+player DmgResMagical, no attacker passed -- so no IsEnemy check in
+Damage -- no kill experience, no null check). The magic-resistance cut
+works in double (retail: the float times the int on the x87, truncated),
+exact for every damage spell.def gives.
+
+### S4a `missile-area`: AreaDamage
+
+Fixture `spell_damage.py`, call `area-damage`: AreaDamage `0x4de3c0` over
+the case's characters, the map's characters near the point from
+guest.py's iterator (`0x44ceb0` / `0x44d080`: the case's `nearby` order,
+else every character; port side `TCharacter::nearbyCharactersSeam`).
+Seams beyond S3's: IsEnemy `0x4c89c0` (answered as the melee kata does:
+an enemy unless the case's `friends` lists the pair) and KnockBack
+`0x4d3750` (from, variant), both recorded.
+
+- `missile-area`, 64/64: a player, a monster and no attacker; three
+  characters (straight and diagonal) at radius 0, 1, 50, 106, 149, 150,
+  151, 200 with radius 150; minimum radius 0/49/50/51 against a ring at
+  50; the gates (dead, health 1, in an impact, a friend, a second player
+  with DmgResMagical 40); a fixed roll and a reversed range; the map's
+  order with the attacker inside it; SpellDamageInc 0/25/-50/200 against
+  DmgResMagical 0/30/100/-50.
+
+Port changes: AreaDamage is new (`src/spell.cpp`; the 1998 tree had no
+port of it -- effects carried `(void)impact_pos` placeholders), iterating
+retail's way (the attacker's level, the loaded sectors, the map
+rectangle); `TCharacter::KnockBack` gained retail's variant argument and
+a seam. Correction to section 2.15 above: with a null attacker retail
+hurts nobody (it was read as "no IsEnemy check").
+
+REVSYNC-DIVERGENCE: Damage is handed the attacker only when it is a
+character (retail passes whatever object it was given; every caller
+listed in 2.15 passes its spell's invoker, `+4`, which is a character or
+null).

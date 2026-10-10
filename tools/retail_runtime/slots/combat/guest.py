@@ -121,13 +121,17 @@ G_PLAYER = 0x667fcc
 OBJSTAT_IDS = {'health': (0x66ca4c, 0x101), 'fatigue': (0x66ca3c, 0x102), 'mana': (0x66ca38, 0x103),
                # Retail's own ids for the rest (charstats.h), the globals static init fills.
                'aggressive': (0x66caa4, 0), 'sleeping': (0x66ca58, 0x104), 'damagemod': (0x66ca28, 16),
-               'level': (0x66da34, 17), 'acbonus': (0x66da38, 30), 'edgebonus': (0x66d950, 33)}
+               'level': (0x66da34, 17), 'acbonus': (0x66da38, 30), 'edgebonus': (0x66d950, 33),
+               # The spells' (SPELLS_MISSILES.md: SetPoisoned 0x4d6eb0, the cast and
+               # ManaDrain's ManaCostPct, TSpell::Damage's SpellDamageInc).
+               'poisoned': (0x66ca5c, 1), 'manacostpct': (0x66d9d0, 31), 'spelldamageinc': (0x66da30, 32)}
 # Object stats the code asks for by a literal id: the player's attack level,
 # attributes and skills (charstats.h; IsValidAttack 0x4d1652, TPlayer
 # 0x51a480 / 0x51a580 / 0x520900).
 LITERAL_OBJSTATS = {20: 'attacklevel', 34: 'strn', 35: 'cons', 36: 'agil', 37: 'rflx', 38: 'mind', 39: 'luck',
                     **{40 + i: n for i, n in enumerate(('attack', 'defense', 'invoke', 'hands', 'knife', 'sword',
-                                                        'bludgeons', 'axes', 'bows', 'stealth', 'lockpick'))}}
+                                                        'bludgeons', 'axes', 'bows', 'stealth', 'lockpick'))},
+                    53: 'invokeexp'}                # the cast's skill experience reads it (0x54012f)
 # SetObjStat (slot 0xe8, thiscall (id, value) ret 8): recorded, the value stored.
 SET_OBJSTAT = {CLASS_CHARACTER: 0x4d74b0, CLASS_PLAYER: 0x51adb0}
 G_AMBIENT = 0x6671a4                             # MapPane ambient light (Visibility 0x4c5aa0)
