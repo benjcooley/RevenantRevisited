@@ -182,6 +182,18 @@ const char *TDialogList::GetLine(const char *tag) const
     return it->second.c_str();
 }
 
+std::string TDialogList::DisplayName(const char *name) const
+{
+    if (!name)
+        return {};
+    std::string tag;
+    for (const char *c = name; *c; ++c)
+        if ((*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') || (*c >= '0' && *c <= '9'))
+            tag += *c;
+    const int32_t id = FindLine(tag.c_str());
+    return id >= 0 ? GetLine(id) : name;
+}
+
 // ************************************************************
 // * TDialogPane - Shows the dialog options for the character *
 // ************************************************************

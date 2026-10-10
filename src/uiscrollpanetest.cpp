@@ -562,7 +562,7 @@ bool InitializeUIScrollPaneMode()
 
     // Spec §2 / §14 UNCONFIRMED-C: SpellIcons.dat for the spell-scroll
     // variant's 40×40 icon (reference image shows one). Same archive as
-    // uiquickspelltest / uispellbooktest.
+    // the quick-spell rings (spellpane.cpp) / uispellbooktest.
     g_spellIconsDat = TMulti::LoadMulti((char*)kSpellIconsDat);
     if (g_spellIconsDat)
     {

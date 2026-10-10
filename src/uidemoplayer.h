@@ -16,6 +16,11 @@
 
 #pragma once
 
+#include <cstdint>
+
+class TObjectInstance;
+class TPlayer;
+
 namespace UIDemoPlayer
 {
 
@@ -29,5 +34,16 @@ void Pulse();
 
 // Release the main player and delete everything Install built.
 void Remove();
+
+// The opponent Install built (fighting the player), or null.
+TPlayer* Opponent();
+
+// For the A/B hosts that lay out a case's inventory:
+// A new item of the named type (whatever its class) in `owner`'s inventory
+// at `slot` (a free slot when negative), `amount` of it, never stacked with
+// another. Null if there is no such type or the slot is taken.
+TObjectInstance* AddItem(TObjectInstance* owner, const char* name, int32_t slot, int32_t amount = 1);
+// Deletes the items in `owner`'s inventory slots first..last.
+void RemoveItems(TObjectInstance* owner, int32_t first, int32_t last);
 
 } // namespace UIDemoPlayer

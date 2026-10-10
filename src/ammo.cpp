@@ -11,7 +11,6 @@
 #include "dialog.h"
 #include "editorstub.h"
 #include "imagery.h"
-#include "inventory.h"
 #include "mappane.h"
 #include "player.h"
 #include "rules.h"
@@ -43,13 +42,25 @@ DEFOBJSTAT(Ammo, Amount,    AMT,  0, 0, 0, 1000)
 
 // These were originally static members of TAmmo but the compiler wasn't
 // very hip on that, so they are now here.
-PTBitmap ammoinvitem[MAXAMMOTYPES][MAXAMMOIMAGE];   // Bitmaps built on the fly
-int32_t ammoinvusecount[MAXAMMOTYPES][MAXAMMOIMAGE];        // Use count for each image
-
 PTBitmap ammogrounditem[MAXAMMOTYPES][MAXAMMOIMAGE];    // Ground images
 int32_t ammogroundusecount[MAXAMMOTYPES][MAXAMMOIMAGE]; // Use count for ground
 
 #define IMGAMOUNT(x)    ((x) < MAXAMMOIMAGE ? (x) : ((x) - (MAXAMMOIMAGE/2)) % (MAXAMMOIMAGE/2) + (MAXAMMOIMAGE/2))
+
+namespace {
+
+// REVSYNC: 0x004bf990 -- each copy in an inventory icon sits AmmoPos less this.
+constexpr int32_t kAmmoNudge = 4;
+
+// REVSYNC: 0x004bfda0 / 0x004bfcb0 -- how many arrows an inventory icon
+// shows: a stack of "Arrow" its amount (16..31 over again past 31), any
+// other ammo one.
+int32_t InvImageCount(TAmmo& ammo)
+{
+    return stricmp(ammo.GetName(), "Arrow") == 0 ? IMGAMOUNT(ammo.Amount()) : 1;
+}
+
+}  // namespace
 
 struct { int32_t num, x, y; } AmmoPos[MAXAMMOIMAGE] =
 { { 0, 4, 4 }, { 0, 5, 7 }, { 0, 1, 5 },
@@ -71,8 +82,8 @@ bool TAmmo::Initialize()
     for (int32_t t = 0; t < MAXAMMOTYPES; t++)
         for (int32_t i = 0; i < MAXAMMOIMAGE; i++)
         {
-            ammoinvitem[t][i] = ammogrounditem[t][i] = nullptr;
-            ammoinvusecount[t][i] = ammogroundusecount[t][i] = 0;
+            ammogrounditem[t][i] = nullptr;
+            ammogroundusecount[t][i] = 0;
         }
 
     return true;
@@ -83,12 +94,6 @@ void TAmmo::Close()
     for (int32_t t = 0; t < MAXAMMOTYPES; t++)
         for (int32_t i = 0; i < MAXAMMOIMAGE; i++)
         {
-            if (ammoinvusecount[t][i])
-            {
-                ammoinvusecount[t][i] = 1;
-                FreeInvItem(t, i);
-            }
-
             if (ammogroundusecount[t][i])
             {
                 ammogroundusecount[t][i] = 1;
@@ -101,40 +106,14 @@ TAmmo::~TAmmo()
 {
     int32_t count = IMGAMOUNT(Amount());
 
-    if (ammoinvusecount[objtype][count] && GetOwner() == Inventory.GetContainer())
-        FreeInvItem(objtype, count);
-
     if (ammogroundusecount[objtype][count])
         FreeGroundItem(objtype, count);
-}
-
-void TAmmo::SignalAddedToInventory()
-{
-    TObjectInstance::SignalAddedToInventory();
-
-    if (GetOwner() == Inventory.GetContainer() && imagery)
-        AllocInvItem(imagery, state, objtype, Amount());
-}
-
-void TAmmo::RemoveFromInventory()
-{
-    TObjectInstance::RemoveFromInventory();
-
-    if (GetOwner() == Inventory.GetContainer())
-        FreeInvItem(objtype, Amount());
 }
 
 void TAmmo::SetAmount(int32_t amt)
 {
     if (Amount() == amt || amt < 1)
         return;
-
-    if (GetOwner() == Inventory.GetContainer())
-    {
-        FreeInvItem(objtype, Amount());
-        if (imagery)
-            AllocInvItem(imagery, state, objtype, amt);
-    }
 
     if (!GetOwner())
     {
@@ -165,46 +144,10 @@ void TAmmo::Save(RTOutputStream os)
     TObjectInstance::Save(os);
 }
 
-void TAmmo::AllocInvItem(TObjectImagery* img, int32_t state, int32_t type, int32_t count)
-{
-    if (!img)
-        return;
-
-    count = min(count, MAXAMMOIMAGE-1);
-
-    if (ammoinvusecount[type][count] < 1)
-    {
-        ammoinvitem[type][count] = TBitmap::NewBitmap(INVITEMREALWIDTH, INVITEMREALHEIGHT, BM_15BIT);
-
-        memset(ammoinvitem[type][count]->data16, 0, INVITEMREALWIDTH*INVITEMREALHEIGHT*2);
-
-        for (int32_t i = 0; i < count; i++)
-            ammoinvitem[type][count]->Put(AmmoPos[i].x, AmmoPos[i].y, img->GetInvImage(state, AmmoPos[i].num), DM_TRANSPARENT);
-
-        ammoinvusecount[type][count] = 1;
-    }
-    else
-        ammoinvusecount[type][count]++;
-}
-
-void TAmmo::FreeInvItem(int32_t type, int32_t count)
-{
-    count = min(count, MAXAMMOIMAGE-1);
-
-    if (ammoinvusecount[type][count] == 0)
-        return;
-
-    if (--(ammoinvusecount[type][count]) < 1 && ammoinvitem[count])
-    {
-        delete ammoinvitem[type][count];
-        ammoinvitem[type][count] = nullptr;
-    }
-}
-
 void TAmmo::AllocGroundItem(TObjectImagery* img, int32_t state, int32_t type, int32_t count)
 {
-    if (!img)
-        return;
+    if (!img || !img->GetStillImage(state))
+        return;                                 // 3D imagery has no still image to build it from
 
     count = min(count, MAXAMMOIMAGE-1);
 
@@ -238,19 +181,16 @@ void TAmmo::FreeGroundItem(int32_t type, int32_t count)
     }
 }
 
-void TAmmo::DrawInvItem(int32_t x, int32_t y)
+// REVSYNC: 0x004bfda0 / 0x004bf990 -- the stack retail composed into its
+// inventory icon: InvImageCount copies of the state's inventory image, each
+// at AmmoPos less 4.
+SInvIcon TAmmo::InventoryIcon()
 {
-    int32_t count = IMGAMOUNT(Amount());
-
-    if (ammoinvusecount[objtype][count] < 1 && imagery)
-        AllocInvItem(imagery, state, objtype, count);
-
-    imagery->DrawInvItem(this, x, y);
-}
-
-PTBitmap TAmmo::InventoryImage()
-{
-    return ammoinvitem[objtype][IMGAMOUNT(Amount())];
+    SInvIcon icon;
+    TBitmap* arrow = imagery ? imagery->GetInvImage(state, 0) : nullptr;
+    for (int32_t i = 0, count = InvImageCount(*this); i < count; i++)
+        icon.Add(arrow, AmmoPos[i].x - kAmmoNudge, AmmoPos[i].y - kAmmoNudge);
+    return icon;
 }
 
 void TAmmo::GetScreenRect(SRect &r)

@@ -164,13 +164,6 @@ constexpr int kInvSlotLast        = 0x115;
 #define MULTICTRLPANEWIDTH  72
 #define MULTICTRLPANEHEIGHT 142
 
-// Quick spell buttons
-#define QUICKSPELLX         2
-#define QUICKSPELLY         343
-#define QUICKSPELLWIDTH     437
-#define QUICKSPELLHEIGHT    35
-#define NUMQUICKSPELLS      4
-
 // Inventory position and size
 #define INVENTORYPANEX      16
 #define INVENTORYPANEY      386
@@ -188,17 +181,6 @@ constexpr int kInvSlotLast        = 0x115;
 #define TEXTBARY        336
 #define TEXTBARWIDTH    198
 #define TEXTBARHEIGHT   14
-
-// Status bars
-#define HEALTHBARX          16
-#define HEALTHBARY          94
-#define HEALTHBARWIDTH      12
-#define HEALTHBARHEIGHT     164
-
-#define STAMINABARX         612
-#define STAMINABARY         94
-#define STAMINABARWIDTH     12
-#define STAMINABARHEIGHT    164
 
 // Status bar for editor
 #define STATUSBARX      4
@@ -310,6 +292,12 @@ constexpr int kInvSlotLast        = 0x115;
 #define BM_5BITPAL     0x1000   // Bitmap palette is 5 bit for r,g,b instead of 8 bit
 #define BM_COMPRESSED  0x4000   // Bitmap is compressed.
 #define BM_CHUNKED     0x8000   // Bitmap is chunked out
+// Retail's texture formats (the TSurface +0x38 / TBitmap flag values the
+// shipped Draw routine selector 0x004ad1d0 tests). The HUD archives store
+// their art as ARGB4444 (StatusBar.dat, SideBarTabs.dat, ...).
+#define BM_ARGB4444    0x10000  // Bitmap data is 16 bit A4 R4 G4 B4.
+#define BM_ARGB1555    0x20000  // Bitmap data is 16 bit A1 R5 G5 B5.
+#define BM_2BYTEFORMATS (BM_15BIT | BM_16BIT | BM_ARGB4444 | BM_ARGB1555)
 
 // Animation Drawing mode flags
 #define DM_DEFAULT      0x00000000  // Default is always defined as 0

@@ -22,8 +22,7 @@ PTBitmap TBitmap::NewBitmap(int32_t width, int32_t height, int32_t bmflags,
 {
     int32_t bytesperpixel;
 
-    switch (bmflags & (BM_8BIT + BM_15BIT + BM_16BIT + BM_24BIT +
-        BM_32BIT))
+    switch (bmflags & (BM_8BIT + BM_2BYTEFORMATS + BM_24BIT + BM_32BIT))
     {
         case BM_8BIT:
         bytesperpixel=1;
@@ -31,6 +30,8 @@ PTBitmap TBitmap::NewBitmap(int32_t width, int32_t height, int32_t bmflags,
     
         case BM_15BIT:
         case BM_16BIT:
+        case BM_ARGB4444:
+        case BM_ARGB1555:
         bytesperpixel=2;
         break;
 

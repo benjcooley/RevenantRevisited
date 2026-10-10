@@ -16,7 +16,6 @@
 #include "gameoptions.h"
 #include "multi.h"
 #include "animation.h"
-#include "statusbar.h"
 #include "dialog.h"
 #include "effect.h"
 #include "textbar.h"

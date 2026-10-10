@@ -272,6 +272,7 @@ class TDefPane : public TPane
 
   private:
     void ReleaseAssets();
+    void RequestEnd();                               // EndModal once; the screen removes it next tick
     void Render();                                   // compose widgets into `surface`
     void        OnMouseDown(int32_t lx, int32_t ly);
     const char* OnMouseUp(int32_t lx, int32_t ly);   // name of the activated widget
@@ -337,5 +338,6 @@ class TDefPane : public TPane
     double   fadeStartTime = 0.0;                // when the current fade began
     float    fadeFromLevel = 0.0f;               // the level it began at
     bool     finishing     = false;              // fading out before ending
+    bool     endRequested  = false;              // faded out; the screen removes it next
     int32_t  finishResult  = 0;
 };

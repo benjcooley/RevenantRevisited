@@ -48,6 +48,10 @@ class TDialogList
     [[nodiscard]] const char *GetTag(int32_t id) const;
     // REVSYNC: 0x0049d800 -- "[TAG]" when absent.
     [[nodiscard]] const char *GetLine(const char *tag) const;
+    // REVSYNC: 0x0046e7f0 -- how the game shows an object's or a spell's name:
+    // the line tagged with the name less everything but ASCII letters and
+    // digits ("Lizard Man" -> LIZARDMAN), else the name itself.
+    [[nodiscard]] std::string DisplayName(const char *name) const;
 
   private:
     struct SLine

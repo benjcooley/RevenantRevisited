@@ -155,12 +155,8 @@ run ui-inventory      inventory      2 "pause 400; take_snapshot baseline; pause
 run ui-map            map            2 "pause 400; take_snapshot baseline; pause 800; take_snapshot late"
 # Spell creation / talisman composer
 run ui-spellcreate    spellcreate    2 "pause 400; take_snapshot baseline; pause 800; take_snapshot late"
-# QuickSpell ring strip (verifies the +4/+4 ring offset + word split fix)
-run ui-quickspell     quickspell     4 "pause 400; take_snapshot baseline; pause 1000; take_snapshot pressed-state; pause 1000; take_snapshot disabled-state; pause 1000; take_snapshot late"
-# BarInv 9-slot quick shelf
-run ui-barinv         barinv         2 "pause 400; take_snapshot baseline; pause 800; take_snapshot late"
-# BottomBar chrome only
-run ui-bottombar      bottombar      1 "pause 500; take_snapshot baseline"
+# Bottom bar: the bar, the quick-spell rings and the belt (TBottomBarPane)
+run ui-bottombar      bottombar      2 "pause 400; take_snapshot baseline; pause 800; take_snapshot late"
 # Player stat bar (top of screen)
 run ui-plyrstatusbar  plyrstatusbar  2 "pause 400; take_snapshot baseline; pause 800; take_snapshot late"
 # TextBar (transparent overlay)

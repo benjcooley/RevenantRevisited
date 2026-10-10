@@ -9,6 +9,7 @@
 #include "revenant.h"
 #include "objectcomponent.h"
 #include "imagery.h"
+#include "invicon.h"
 #include "saferef.h"
 #include "stream.h"
 #include "lightdef.h"
@@ -438,13 +439,13 @@ class TObjectClass
 
     int32_t GetStat(int32_t objtype, int32_t statid) const { return objinfo[objtype].stats[statid]; }
         // Returns a statistic for an object
-    int32_t GetStat(int32_t objtype, char *statname) const
+    int32_t GetStat(int32_t objtype, const char *statname) const
         { int32_t statid = statdefs.FindStat(statname); 
           if (statid >= 0) return objinfo[objtype].stats[statid]; else return 0; }
         // Returns a statistic for an object
     void SetStat(int32_t objtype, int32_t statid, int32_t newvalue) { objinfo[objtype].stats[statid] = newvalue; }
         // Sets a statistic for an object (Note: converted to a string if stat is string stat)
-    void SetStat(int32_t objtype, char *statname, int32_t newvalue)
+    void SetStat(int32_t objtype, const char *statname, int32_t newvalue)
         { int32_t statid = statdefs.FindStat(statname); 
           if (statid >= 0) objinfo[objtype].stats[statid] = newvalue; }
         // Sets a statistic for an object (Note: converted to a string if stat is a string stat)
@@ -1131,6 +1132,9 @@ class TObjectInstance : protected SObjectDef
     virtual PTBitmap GetStillImage(int32_t ostate = -1) { return imagery ? imagery->GetStillImage(ostate < 0 ? GetState() : ostate) : nullptr; }
         // Get still bitmap, if any
     virtual PTBitmap InventoryImage();
+    virtual SInvIcon InventoryIcon();
+        // The icon an inventory cell shows: the inventory image, or for ammo
+        // and money a stack of copies of it (SInvIcon)
         // Returns bitmap for the inventory image. Retail FUN_0046f190: prefers the static
         // `invitem` (GetInvImage); when null, falls back to frame 0 of the inventory
         // animation (GetInvAnimation). Items shipped with only `invanim` (potions etc.)
