@@ -206,6 +206,7 @@ class Runtime:
             'ReleaseMutex':(1,self.scheduler.release_mutex),
             'SetEvent':(1,self.scheduler.set_event),
             'ResetEvent':(1,self.scheduler.reset_event),
+            'PulseEvent':(1,self.scheduler.pulse_event),
             'WaitForSingleObject':(2,self.scheduler.wait_single),
             'WaitForMultipleObjects':(4,self.scheduler.wait_multiple),
             'InitializeCriticalSection':(1,self.scheduler.initialize_critical),
