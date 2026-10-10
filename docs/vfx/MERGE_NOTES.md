@@ -1,5 +1,30 @@
 # Retail VFX source integration
 
+## Current integration: 2026-10-10
+
+GitHub main at 8514139 is combined with the complete VFX source checkpoint
+bdd5409. This includes current controller, authored-rendering, texture/UV,
+particle-birth and Quicksilver changes plus the tests and evidence documentation.
+Generated builds, retail executables/assembly and captures remain ignored.
+
+The combined RelWithDebInfo Metal build passes. All 112 retail-runtime tests
+and all 12 native test executables pass, including shipped audio decode inputs
+with no skipped tests. The merged Quicksilver map smoke completes 48 frames,
+eight typed creation/controller/movement/deletion checks, 31 distinct active
+images, exact floor restoration and a clean exit. A separate diagnostic retains
+pixel differences between the earlier Debug and merged optimized captures;
+this lifecycle smoke does not grant native visual or device parity.
+
+Current progress is 17 reviewed visual passes for recorded configurations,
+67 bounded rendered frontend comparisons, 81 controlled runtime rows and
+91 rows with source fixes. Follow-up integration/device checks stay explicit.
+See EFFECT_BURNDOWN.md and EVIDENCE_INDEX.json for scope and pinned artifacts.
+
+A focused independent code review found no concrete merge integration bugs.
+The source-only diff, synchronized ledger/checklist counts and 87 hashed
+local evidence reports are checked. The dated records below describe prior
+integration checkpoints.
+
 This branch restores retail effect controllers, authored geometry/UV/material
 submission and runtime ownership, and provides a fast x86 retail comparison
 toolchain. It is a working VFX milestone; the catalogue's map/character/device

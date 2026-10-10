@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import subprocess
 import time
+from PIL import Image
 
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -81,6 +82,25 @@ def capture(scenario,output):
         report['timing']=timing
         if "--vfx='"+scenario['effect']+"' matched" not in log.read_text(errors='replace'):
             report['status']='fail';report['error']='Requested effect did not match the actual catalogue'
+        log_text=log.read_text(errors='replace')
+        if '[authored-static] missing objects or unsupported controller tags' in log_text:
+            report['status']='fail';report['error']='Requested preview rejected its asset/controller contract'
+        try:
+            pixel_hashes=[];nonempty=0
+            for frame in frames:
+                with Image.open(frame) as source:
+                    pixels=source.convert('RGB')
+                    pixel_hashes.append(hashlib.sha256(pixels.tobytes()).hexdigest())
+                    nonempty+=pixels.getbbox() is not None
+            report['pixel_summary']=dict(nonblack_frames=nonempty,
+                distinct_frames=len(set(pixel_hashes)),pixel_sha256=pixel_hashes)
+            # Black-background visual captures need actual effect pixels.
+            # Empty/control recordings opt out explicitly; other backgrounds
+            # require a separate backdrop/ROI comparison for visibility.
+            if scenario.get('background','black')=='black' and scenario.get('expect_visible',True) and not nonempty:
+                report['status']='fail';report['error']='No visible effect pixels in the black-background capture'
+        except (OSError,ValueError) as error:
+            report['status']='fail';report['error']='Invalid captured image: '+str(error)
     (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n')
     if report['status']!='pass':raise RuntimeError('Port capture failed; see '+str(output/'manifest.json'))
     return report

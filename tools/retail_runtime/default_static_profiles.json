@@ -1,0 +1,7 @@
+{
+  "scope": "Exact default-animator, no-tag constant root meshes; no character utility selection or map/GPU acceptance",
+  "profiles": [
+    {"name":"CharUtility","id":"0xadbcef13","asset":"Misc/CharUtility.I3D","asset_sha256":"c4ec995f0278f9a81eec5278797828d57a841147f4fb0b715efc0b7f36e26a3b","vertices":50,"faces":40,"objects":5,"textures":5,"frames":100},
+    {"name":"SewerWater","id":"0xadbcef19","asset":"Misc/SewerW.I3D","asset_sha256":"bd51a4024f39f21fdd6d7a2342dd9c7cd02c59ce0f77d379e3aa43729260b983","vertices":4,"faces":2,"objects":1,"textures":1,"frames":1}
+  ]
+}

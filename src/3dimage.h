@@ -27,6 +27,7 @@
 #include "render3d_types.h"
 #include "resource.h"
 #include "transform.h"
+#include "effects/warp_atlas.h"
 
 // **************************************************************
 // * T3DImagery - Shared imagery resource for a given 3D object *
@@ -236,6 +237,10 @@ class T3DImagery : public TObjectImagery
     bool might_partsys_profile = false;
     bool immortalmight_partsys_profile = false;
     bool fmastery_partsys_profile = false;
+    bool speed_partsys_profile = false;
+    bool quicksilver_partsys_profile = false;
+    bool ValidateRetailSpeedPartSysProfile();
+    bool ValidateRetailQuicksilverPartSysProfile();
     bool ValidateRetailFmasteryPartSysProfile();
     bool ValidateRetailImmortalmightPartSysProfile();
     bool ValidateRetailMightPartSysProfile();
@@ -327,11 +332,17 @@ class T3DImagery : public TObjectImagery
     bool HasRetailMightPartSysProfile() const { return might_partsys_profile; }
     bool HasRetailImmortalmightPartSysProfile() const { return immortalmight_partsys_profile; }
     bool HasRetailFmasteryPartSysProfile() const { return fmastery_partsys_profile; }
+    bool HasRetailSpeedPartSysProfile() const { return speed_partsys_profile; }
+    bool HasRetailQuicksilverPartSysProfile() const { return quicksilver_partsys_profile; }
+    bool HasRetailSpeedFamilyPartSysProfile(uint32_t type_id) const
+    { return (type_id==0xad92bd36u && speed_partsys_profile) ||
+             (type_id==0xad92bd35u && quicksilver_partsys_profile); }
     bool HasRetailPunchProfile() const { return retail_punch_keys; }
     bool HasRetailMPAppearStartProfile() const { return retail_mpappear_start_profile; }
     bool HasRetailShadowfistProfile() const { return retail_shadowfist_profile; }
     bool HasRetailWarriorbornProfile() const { return retail_warriorborn_profile; }
     bool HasRetailTeleportationProfile() const { return retail_teleportation_profile; }
+    bool HasRetailWarpProfile(uint32_t type_id);
     bool HasCombatFlashStart1PartSysProfile() const { return combatflash_start1_partsys_profile; }
     char *GetObjectName(int32_t objnum);
     int32_t GetObjectNum(char *objname);
@@ -491,6 +502,8 @@ class T3DAnimator : public TObjectAnimator
     SRenderRect      extents;
     hmm_mat4         matrix;
     bool             updated;
+    bool             retail_warp_enabled = false;
+    retail_warp::State retail_warp_state;
     struct SPartSysControllers;
     std::unique_ptr<SPartSysControllers> partsys_controllers;
     void RefreshPartSysControllers();
@@ -550,6 +563,7 @@ class T3DAnimator : public TObjectAnimator
 
     virtual void Pulse();
     virtual void Animate(bool draw);
+    bool WarpAtlasOffset(int32_t object, float output[2]) const;
 
     // True for the hidden particle prototype, or every mesh when an authored
     // controller is unsupported. The caller must not submit a static substitute.
@@ -565,6 +579,10 @@ class T3DAnimator : public TObjectAnimator
     bool MPAppearStartMeshWorldMatrix(int32_t object, hmm_mat4& world);
     bool FmasteryBaseMeshBlend(int32_t object, uint32_t& blend) const;
     bool FmasteryBaseMeshWorldMatrix(hmm_mat4& world);
+    bool SpeedEmitterLocalMatrix(hmm_mat4& matrix, hmm_vec3* position = nullptr,
+                                 hmm_vec3* scale = nullptr);
+    bool SpeedBaseMeshBlend(int32_t object, uint32_t& blend) const;
+    bool SpeedBaseMeshWorldMatrix(hmm_mat4& world);
     bool ImmortalmightBaseMeshBlend(int32_t object, uint32_t& blend) const;
     bool ImmortalmightBaseMeshWorldMatrix(hmm_mat4& world);
     bool GoldBaseMeshBlend(int32_t object, uint32_t& blend) const;
