@@ -9,17 +9,17 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 92,
+    "retail_rows_with_source_fixes_recorded": 95,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 81,
+    "actual_runtime_verified_rows": 84,
     "visual_fidelity_confirmed_rows": 38,
     "repeatable_ab_rows": 7,
-    "thin_bounded_render_frontend_rows": 68,
+    "thin_bounded_render_frontend_rows": 71,
     "reviewed_visual_pass_rows": 38,
     "remaining_visual_review_rows": 138
   },
@@ -840,6 +840,48 @@
       "check": "firecone_relative_owner_normal_lit_frontend",
       "status": "pass",
       "scope": "Compiled actual SubmitPool receives independently executed native owner matrices. Exact authored normals, UVs and RGB565 textures; original mode8, CCW culling, normal illumination and software projection/raster. Scene ambient/directional descriptors are explicit inputs. Production common-world owner conversion, complete scene lighting selection, point lights, GPU, live spell/caster/audio and actual map appearance remain separate. No inverse-Z/pixel adapter or matrix fit."
+    },
+    "recon/retail_asm/runtime/effects/static-particles-regeneration-render-20261010/manifest.json": {
+      "sha256": "f21bca6b67b67e03ae5d1d66dc8f2fca0b259b1403f78780094a7234f74052ff",
+      "retail_row": "Regeneration:0x10ac03de",
+      "check": "static_particles_render",
+      "status": "pass",
+      "scope": "Actual compiled parser/State/SubmitPartSys against native whole parser/Initialize/Pulse/liveSample/#CalcObjectMatrix/x87transform; exact native-authored emitter poses common inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; raw-world portZ compared via declared MODELZ bridge using actual native sample centre. Shared original software projector/raster used at fixed512white/color fixture; no actual map/Metal projector, base material lighting/caster/full acceptance."
+    },
+    "recon/retail_asm/runtime/effects/static-particles-regeneration-map-20261010/manifest.json": {
+      "sha256": "931ff68d2d26851f6fa45288f1c797dfc6c87eae635ecb99cddd8678f447d845",
+      "retail_row": "Regeneration:0x10ac03de",
+      "check": "static_particles_map",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/static-particles-swiftstrike-render-20261010/manifest.json": {
+      "sha256": "7548dd31a106dcb7b9c47cd3bba74bae8f69e30a3202f56be79696f8b175068e",
+      "retail_row": "SwiftStrike:0xe0a3bc43",
+      "check": "static_particles_render",
+      "status": "pass",
+      "scope": "Actual compiled parser/State/SubmitPartSys against native whole parser/Initialize/Pulse/liveSample/#CalcObjectMatrix/x87transform; exact native-authored emitter poses common inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; raw-world portZ compared via declared MODELZ bridge using actual native sample centre. Shared original software projector/raster used at fixed512white/color fixture; no actual map/Metal projector, base material lighting/caster/full acceptance."
+    },
+    "recon/retail_asm/runtime/effects/static-particles-swiftstrike-map-20261010/manifest.json": {
+      "sha256": "f9c88fd28ff022fbbe4b3f35065f088412992f260df14f743616370d7e3e5c16",
+      "retail_row": "SwiftStrike:0xe0a3bc43",
+      "check": "static_particles_map",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/static-particles-fspray-render-20261010/manifest.json": {
+      "sha256": "74b83beeb5bb289cf548b5a35bb5065849f45bf1216d8cfec17b1c9bdae6c0c1",
+      "retail_row": "fspray:0x0c052638",
+      "check": "static_particles_render",
+      "status": "pass",
+      "scope": "Actual compiled parser/State/SubmitPartSys against native whole parser/Initialize/Pulse/liveSample/#CalcObjectMatrix/x87transform; exact native-authored emitter poses common inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; raw-world portZ compared via declared MODELZ bridge using actual native sample centre. Shared original software projector/raster used at fixed512white/color fixture; no actual map/Metal projector, base material lighting/caster/full acceptance."
+    },
+    "recon/retail_asm/runtime/effects/static-particles-fspray-map-20261010/manifest.json": {
+      "sha256": "409053e8048443424ee83544e7aa76aea4b494350eb64fe3c673f579b34c91f3",
+      "retail_row": "fspray:0x0c052638",
+      "check": "static_particles_map",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
     }
   }
 }
