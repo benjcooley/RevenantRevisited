@@ -91,13 +91,13 @@ class TSpellList
       // Returns number of spells
     PSSpellData GetSpellData(int32_t num) { return spelldata[num]; }
       // Gets pointer to spell data based on talisman list
-    PSSpellData GetSpellDataByTalismans(char *talismans);
+    PSSpellData GetSpellDataByTalismans(const char *talismans);
       // Gets pointer to spell data based on talisman list
     PSSpellData GetSpellDataByName(char *name);
       // Gets pointer to spell data based on spell name
     PSSpellVariant GetVariantDataByName(char *name);
       // Gets pointer to a variant data based on spell name
-    PSSpellVariant GetVariantDataByTalismans(char *talismans);
+    PSSpellVariant GetVariantDataByTalismans(const char *talismans);
       // Gets pointer to a variant data based on talismans name
     bool Load();
       // Loads spell data from SPELL.DEF file

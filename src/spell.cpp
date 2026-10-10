@@ -246,30 +246,16 @@ bool TSpellList::Load()
     return true;
 }
 
-// return spell by talismans list
-PSSpellData TSpellList::GetSpellDataByTalismans(char* talismans)
+// REVSYNC: 0x0053ed70 -- the first spell with a variant cast by exactly these
+// talismans, in this order (case aside): "Advanced healing" is DEB, "Restore
+// Life" BED.
+PSSpellData TSpellList::GetSpellDataByTalismans(const char* talismans)
 {
-    PSSpellData return_spell = nullptr;
-    int32_t *tal = (int32_t *)malloc(TalismanClass.NumTypes() * sizeof(int32_t));
-    int32_t *cmp = (int32_t *)malloc(TalismanClass.NumTypes() * sizeof(int32_t));
-    
-    TSpellList::GetTalList(talismans, tal);
-
-    for(int32_t i = 0; i < spelldata.NumItems(); i++)
-    {
-        for(int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
-        {
-            TSpellList::GetTalList(spelldata[i]->variants[j].talismans, cmp);
-
-            if (TSpellList::CompareTalList(tal, cmp))
-                return_spell = spelldata[i];
-        }
-    }
-
-    free(tal);
-    free(cmp);
-    
-    return return_spell;
+    for (int32_t i = 0; i < spelldata.NumItems(); i++)
+        for (int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
+            if (stricmp(spelldata[i]->variants[j].talismans, talismans) == 0)
+                return spelldata[i];
+    return nullptr;
 }
 
 // return spell data based on name
@@ -325,30 +311,15 @@ bool TSpellList::CompareTalList(int32_t* tal1, int32_t* tal2)
     return true;
 }
 
-// return variant data based on talismans
-PSSpellVariant TSpellList::GetVariantDataByTalismans(char* talismans)
+// REVSYNC: 0x0053ef90 -- the first variant cast by exactly these talismans,
+// as GetSpellDataByTalismans matches them.
+PSSpellVariant TSpellList::GetVariantDataByTalismans(const char* talismans)
 {
-    PSSpellVariant return_variant = nullptr;
-    int32_t *tal = (int32_t *)malloc(TalismanClass.NumTypes() * sizeof(int32_t));
-    int32_t *cmp = (int32_t *)malloc(TalismanClass.NumTypes() * sizeof(int32_t));
-
-    TSpellList::GetTalList(talismans, tal);
-
-    for(int32_t i = 0; i < spelldata.NumItems(); i++)
-    {
-        for(int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
-        {
-            TSpellList::GetTalList(spelldata[i]->variants[j].talismans, cmp);
-
-            if (TSpellList::CompareTalList(tal, cmp))
-                return_variant = &spelldata[i]->variants[j];
-        }
-    }
-
-    free(tal);
-    free(cmp);
-
-    return return_variant;
+    for (int32_t i = 0; i < spelldata.NumItems(); i++)
+        for (int32_t j = 0; j < spelldata[i]->variants.NumItems(); j++)
+            if (stricmp(spelldata[i]->variants[j].talismans, talismans) == 0)
+                return &spelldata[i]->variants[j];
+    return nullptr;
 }
 
 // return variant data based on name
