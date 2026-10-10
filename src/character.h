@@ -212,7 +212,7 @@ class TCharacter : public TComplexObject
       // Pivots character to given direction (in 32 increments)
     bool FollowChar(TObjectInstance* inst);
       // Causes character to follow another character.
-    bool Pickup(TObjectInstance* inst);
+    bool Pickup(TObjectInstance* inst, TObjectInstance* to = nullptr);
       // Causes character to move to and pickup object.
     bool Pull(TObjectInstance* inst);
       // Causes character to pull lever
