@@ -47,6 +47,7 @@ enum class EFxDebugMode:uint8_t{Normal=0};enum class EFxLightMode:uint8_t{Unlit=
 enum class EFxPipeline:uint16_t{Billboard=1,Particle=2,Strip=3};
 struct SFxBatchKey{TTextureHandle texture=0;uint16_t pipeline_id=1;uint8_t blend=0,depth_mode=0;};
 struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};SFxBatchKey key;
+ bool retail_software_projection=false;
  uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
 struct S3DVertex{hmm_vec3 pos,normal;float tu,tv;};
 uint32_t type_id=0;
@@ -70,7 +71,7 @@ struct T3DAnimator{struct SPartSysControllers{
  std::vector<Controller>controllers;bool unsupported=false;uint64_t renders=0,quads=0;};
  std::unique_ptr<SPartSysControllers>partsys_controllers;Owner*inst;Imagery im;
  Imagery*Get3DImagery(){return &im;}
- int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&);};
+ int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&,bool=false);};
 constexpr float WORLD3D_Z_SCALE=1.5f;
 '''
 MAIN = r'''
