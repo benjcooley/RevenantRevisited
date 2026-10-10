@@ -24,17 +24,17 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 89,
+    "retail_rows_with_source_fixes_recorded": 90,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 79,
-    "visual_fidelity_confirmed_rows": 16,
-    "repeatable_ab_rows": 8,
-    "thin_bounded_render_frontend_rows": 65
+    "actual_runtime_verified_rows": 80,
+    "visual_fidelity_confirmed_rows": 14,
+    "repeatable_ab_rows": 7,
+    "thin_bounded_render_frontend_rows": 66
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -6873,7 +6873,8 @@
         "TMight_AUTHORED_TAGS"
       ],
       "source_fixes": [
-        "Exact guardedMight2objects/#rect/cfire/RGB565/rawtag/key profile and30loop genericowner, canonicalONE/ONE/depthtestno-write ownRGB5/nearest, literalalpha retained/no premultiply; source halfquantizedSWraster remainsgate. Frozen49defb19 sevenfiles/applied/builda026,277compiledprofile/RGB5+7ownerclock/reap cases passASan/UBSan. Existing31slot90tickpool65396meaningfulfields proof unchanged. Actualcontroller oneinit/cap31 and450frames13commands/no visibilityfit; caller/context and nativefidelity remainopen."
+        "Exact guardedMight2objects/#rect/cfire/RGB565/rawtag/key profile and30loop genericowner, canonicalONE/ONE/depthtestno-write ownRGB5/nearest, literalalpha retained/no premultiply; source halfquantizedSWraster remainsgate. Frozen49defb19 sevenfiles/applied/builda026,277compiledprofile/RGB5+7ownerclock/reap cases passASan/UBSan. Existing31slot90tickpool65396meaningfulfields proof unchanged. Actualcontroller oneinit/cap31 and450frames13commands/no visibilityfit; caller/context and nativefidelity remainopen.",
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
       ],
       "port_smoke_ids": [
         "TMight_AUTHORED_TAGS"
@@ -6893,20 +6894,21 @@
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": true,
+        "visual_fidelity": false,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_generic_guarded_might30loop_onepartsys_create_wrap_move_delete",
-      "next_action": "Preserve actualnativequality1 match, sourcePPS30\u2192initialized7.5/cap7 andpassed isolatedsparseyellow/orangesparks appearance, independentRNG/no fits. Verify naturalbuff/caster/spell/invoker/collision/audio/context, exactnativecadence/fullcycle and exactsoftware-raster requirements beforefull acceptance. Keepquality0 andwrongfirstbirth histories.",
+      "next_action": "Retain actual cold-parser/native numeric state proof; record fresh actual port output and re-review against retained native reference before restoring visual/repeat credit. Natural caller/context/device remain open.",
       "notes": [
         "Clean FPS-on/ambient32 native8second persistentexcerpt afterfixed2secondwarmup has193distinct referenceimages, background/delete/restore0, rootyellow-orange rising sparks. Nativeos09525.697377seconds1799frames/jobs264\u2013266terminal0.30-loop singlepartsys14literalfields recognised read-only, no compiledpacket/renderproof or enginepatchstaged. OldTBuffcandidate is non-authoritative invented proxy only, not exactcontroller/port support.",
         "Prior relvel0/alpha1 packet tests do not cover Might nonzero.25/partial-alpha/friction.1/randomrotationY0\u219215. RGB565 ownpackedcolor5-bit/triangle min-alpha5 and raster partial/full31 branches need actual source execution; nearesttexels alone not sufficient. NativeSoftware1 is verified for currentread-onlyPID/session, not all historicaldriver states.",
         "Canonicalroute correction: sourceagent initially associated Might with54e810/minAlpha5/567020 nonadditivepath. ActualDEST_ONE selectsADD56e2b8..56e616 and8-intvertex54e3a0at56e58b; keepONE/ONE.36nonadditivefinalpixelstores and6conversion/6dispatcher proofs retained with correctscope, no Might pixel credit. Existing actualproduction parser/state fullpool31slots90ticks65396 meaningfulfieldsPASS0;1564never-spawned alpha/scale defaults only excluded/overwrittenbirth, rawallfieldFAILretained.",
         "Frozen source49defb19 built/applieda026 nowverified, prior staged-only descriptions historical. Actual450frames/13commands/oneinit/cap31/30loop/MOVE/deletion/50exactgroundtail pass. Early frame3newparticles were ground; failedmanifest preserved, fixed1second frame30visibility correction usesunchangedrawimages/no rerender. Own240linked60..299pair completebg0each; rootprelimdenser/brighter, visualreviewpending.",
         "Read-onlyMCP267 sameRev98PID confirms currentquality005d79e4=1/SWflag1; originalportquality0, so previousmatch recipe had settingsdifference. Root adds explicit --partsys-quality default0 selector usingexistingState policy, not authoredPPS/color fit. Currentcapture/session only, no retroactivequality claim for allhistoricaldrivers.",
-        "Current73e55 quality1 runtime450frames13rows/oneinitcap7/50tail andown240linkedpair ROOTisolatedappearancePASS. Nativejob267 quality1/software1, authoredPPS30\u2192sourceinitialized7.5 quarter policy, no fittedvalues. Samequality1pool14924meaningfulfieldsPASS; initialwrongminAlive firstbirth capture retainedFAILED. Default0Gold/Cure480exactpostZbaseline. Sourcequality0 historicalmismatch notcurrentfidelity gate; naturalcaller/context/cadence/audio/full remainopen."
+        "Current73e55 quality1 runtime450frames13rows/oneinitcap7/50tail andown240linkedpair ROOTisolatedappearancePASS. Nativejob267 quality1/software1, authoredPPS30\u2192sourceinitialized7.5 quarter policy, no fittedvalues. Samequality1pool14924meaningfulfieldsPASS; initialwrongminAlive firstbirth capture retainedFAILED. Default0Gold/Cure480exactpostZbaseline. Sourcequality0 historicalmismatch notcurrentfidelity gate; naturalcaller/context/cadence/audio/full remainopen.",
+        "2026-10-09: current visual credit suspended after original curve destination first-slot zero behavior fixed. Prior pair/review preserved as historical; numerical full-parser recheck does not renew pixel claims."
       ],
       "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
       "software_reference_validation": {
@@ -7036,7 +7038,7 @@
           "production_changes_not_yet_safe": "Do not alias nearest-only flag to claim source own-colour fidelity; explicit scoped RGB565 prelit policy needed if adopting original SW semantics"
         }
       },
-      "work_queue_status": "matched_quality1_isolated_might_appearance_pass_naturalcaller_context_cadence_audio_pending",
+      "work_queue_status": "cold_parser_state_corrected_current_appearance_repeat_revalidation_pending",
       "source_pool_validation": {
         "status": "PASS meaningful live/previously-spawned fields",
         "ticks": 90,
@@ -7159,40 +7161,6 @@
         "scope": "Actual ADDAT owner on a loaded nine-plate map with real ground depth, adopted unchanged completed frames. Each side retains its own floor raster and clear color; no background substitution or pose/phase/size/color fit. Elapsed comparison begins after a fixed two-second warmup; natural spell/context separate."
       },
       "render_smoke_scope": "Exact declaredowner renderedthrough actualmap450frames and240unchangedselectedpair; standaloneSpawnForTest execution notclaimed.",
-      "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "pass",
-        "visual_pass": true,
-        "scope": "Exact Might state0/start generic authored-tag steady appearance on a loaded nine-plate floor versus retained actual retail software reference, with measured retail particle quality1. Independent random seeds. Exact logical cadence, original spell/actor/collision/audio and full acceptance remain separate.",
-        "finding": "Sparse rising yellow/orange sparks, bright cores, authored shape/scale and overall distribution agree visually across retained active samples. Matching source quality1 removes the persistent dense white base cluster seen in historical portquality0 pair. Each own-floor all240frames changed-area mean314.89retail/342.08port and bright-core9.77/8.01 are supporting distribution diagnostics, not pixel/RNG identity criteria. No fitted authored values, particle geometry, timing or rendering blend.",
-        "quality": {
-          "native_read_job": 267,
-          "native_memory_address": "005d79e4",
-          "native_value": 1,
-          "port_command": "--partsys-quality=1",
-          "source_pps": 30,
-          "source_initialized_pps": 7.5,
-          "source_capacity": 7
-        },
-        "sample_frames": [
-          0,
-          48,
-          96,
-          143,
-          191,
-          239
-        ],
-        "phase_search": false,
-        "position_or_scale_fitted": false,
-        "random_streams_synchronized": false,
-        "requires_pixel_identity": false,
-        "comparison_manifest_sha256": "1d96d86a43ffc011e4ca3fab9d6f5e8a9ab2841b819cb11f5784130965376bb5",
-        "contact": "active-zoom.png",
-        "contact_sha256": "1905fb5337024cb6273707d5123e97e0a99322e03b72a1366b076ee72e76e39f",
-        "activity_summary_sha256": "0fd9a73ff61049c3c146617e69f37974697a86fba4355efc0e04db6043f9f3d6",
-        "software_raster_exactness_proved": false
-      },
       "scope_protection": {
         "manifest": {
           "manifest": "research/ledger-reconciliation-20261005/might-applied-runtime-checkpoint/scope-regressions-manifest.json",
@@ -7344,6 +7312,63 @@
       "quality1_source_validation": {
         "manifest": "research/ledger-reconciliation-20261005/might-quality1-final-checkpoint/quality1-validation.json",
         "manifest_sha256": "1c49e9d83b92dcf933d36bb0f861d385cd8b27dd64250961bb47d5445dab7386"
+      },
+      "historical_visual_reviews": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "pass",
+          "visual_pass": true,
+          "scope": "Exact Might state0/start generic authored-tag steady appearance on a loaded nine-plate floor versus retained actual retail software reference, with measured retail particle quality1. Independent random seeds. Exact logical cadence, original spell/actor/collision/audio and full acceptance remain separate.",
+          "finding": "Sparse rising yellow/orange sparks, bright cores, authored shape/scale and overall distribution agree visually across retained active samples. Matching source quality1 removes the persistent dense white base cluster seen in historical portquality0 pair. Each own-floor all240frames changed-area mean314.89retail/342.08port and bright-core9.77/8.01 are supporting distribution diagnostics, not pixel/RNG identity criteria. No fitted authored values, particle geometry, timing or rendering blend.",
+          "quality": {
+            "native_read_job": 267,
+            "native_memory_address": "005d79e4",
+            "native_value": 1,
+            "port_command": "--partsys-quality=1",
+            "source_pps": 30,
+            "source_initialized_pps": 7.5,
+            "source_capacity": 7
+          },
+          "sample_frames": [
+            0,
+            48,
+            96,
+            143,
+            191,
+            239
+          ],
+          "phase_search": false,
+          "position_or_scale_fitted": false,
+          "random_streams_synchronized": false,
+          "requires_pixel_identity": false,
+          "comparison_manifest_sha256": "1d96d86a43ffc011e4ca3fab9d6f5e8a9ab2841b819cb11f5784130965376bb5",
+          "contact": "active-zoom.png",
+          "contact_sha256": "1905fb5337024cb6273707d5123e97e0a99322e03b72a1366b076ee72e76e39f",
+          "activity_summary_sha256": "0fd9a73ff61049c3c146617e69f37974697a86fba4355efc0e04db6043f9f3d6",
+          "software_raster_exactness_proved": false
+        }
+      ],
+      "visual_review": {
+        "date": "2026-10-09",
+        "result": "revalidation_pending_after_native_curve_template_fix",
+        "finding": "Full original parser clears curve destination scalar at birth; prior production retained1. New numerical cold-parser/birth/update proof is positive, but historical port/native appearance and repeat evidence does not establish current-code output.",
+        "scope": "Original native recordings remain valid references; fresh current-map/paired appearance review required."
+      },
+      "cold_parser_revalidation": {
+        "date": "2026-10-09",
+        "status": "pass",
+        "reports": [
+          {
+            "manifest": "recon/retail_asm/runtime/effects/curve-destination-buff-final/Might-quality0/comparison/manifest.json",
+            "sha256": "5d12469e8f8418c337d7e3a152ceb2fed71ead3e9a6781715654e2edc4c28d98"
+          },
+          {
+            "manifest": "recon/retail_asm/runtime/effects/curve-destination-buff-final/Might-quality1/comparison/manifest.json",
+            "sha256": "522819d56495ddeca489ce6c0cec8e7288f89d1e7cfe84647bb1e7776aa36593"
+          }
+        ],
+        "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
       }
     },
     {
@@ -7418,7 +7443,8 @@
         "TFmastery_AUTHORED_TAGS"
       ],
       "source_fixes": [
-        "Fmastery exactowner/profile correctedfrozen a18122b0 eightfiles built11419e64, old03055b1#flareR\u2192S wrong8.8003cornerunits. Actual#branchS\u2192RxRyRz\u2192fixedcamera/order preservedtranslation; extractedcompiled stagedmatrix vsunmodifiedoriginal30poses120corners840channels max1.4081e-6ASan/UBSanPASS plusindependentproof. Particle11414/810key numerical scopes unchanged. World/view/projection/raster/GPU/nativeappearance andactualruntime completion separate; no fittedscale."
+        "Fmastery exactowner/profile correctedfrozen a18122b0 eightfiles built11419e64, old03055b1#flareR\u2192S wrong8.8003cornerunits. Actual#branchS\u2192RxRyRz\u2192fixedcamera/order preservedtranslation; extractedcompiled stagedmatrix vsunmodifiedoriginal30poses120corners840channels max1.4081e-6ASan/UBSanPASS plusindependentproof. Particle11414/810key numerical scopes unchanged. World/view/projection/raster/GPU/nativeappearance andactualruntime completion separate; no fittedscale.",
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
       ],
       "port_smoke_ids": [
         "TFmastery_AUTHORED_TAGS"
@@ -7621,6 +7647,21 @@
         "activity_summary_sha256": "649f734ac79713434fb773f24d45a958a6183906437acea419e99b3cef7c7da0",
         "color_diagnostic_sha256": "d2d879cb4c2cd5eeda58af59281ae43d9b14b6695e7415e76759cd229eaa300b",
         "work_queue": "bounded_deferred_colour_raster_or_lighting_input_gate"
+      },
+      "cold_parser_revalidation": {
+        "date": "2026-10-09",
+        "status": "pass",
+        "reports": [
+          {
+            "manifest": "recon/retail_asm/runtime/effects/curve-destination-buff-final/Fmastery-quality0/comparison/manifest.json",
+            "sha256": "4388e7c93039346d354afb0c0febd71cec91479891f73e21f31e3379e7798392"
+          },
+          {
+            "manifest": "recon/retail_asm/runtime/effects/curve-destination-buff-final/Fmastery-quality1/comparison/manifest.json",
+            "sha256": "da2660568bf4c5e9c285825ce5f971b2794b62842a8fe9290c4d1a396076e8b6"
+          }
+        ],
+        "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
       }
     },
     {
@@ -7634,7 +7675,8 @@
       ],
       "source_fixes": [
         "Immortalmight typedowner/tag/key/particle guard andloop/MOVE/delete sourceprogress built e4ef;90poses810channels and19445controlledparticle/sample fields plus13runtime command proof valid. Forcedbasealpha4bridge is WRONGsourcepolicy and remainshistorical; actualRGB565alphamask0 bypassesmaterialgate, #flareNOOBJBLEND/baseinheritsparticleONEONE16insteady. Correctedbaseflags/initialemptydevice-state bridge pending frozenproof, no visual/full acceptance.",
-        "Correctedsourcepatchffe7b6e eightfiles cc7379; rendererh/cpp restoredBYTEEXACTpre-alphaextension. ActualindependentABI/sourceflags andRGB565alphaMask0 gate NOOBJBLEND; baseinheritscontroller16steady, no materialalpha4 override. Explicit incoming16matchesreadonlynativeSRC2/DST2/Zwrite0/Zenab1 beforeADD. Two240-frame scopedsteady reviewsPASS,13runtime rows/450frames/oneinitcap7Q1/50tail. Unmeasuredcoldcaller auto andfullraster/context/cadence remainopen."
+        "Correctedsourcepatchffe7b6e eightfiles cc7379; rendererh/cpp restoredBYTEEXACTpre-alphaextension. ActualindependentABI/sourceflags andRGB565alphaMask0 gate NOOBJBLEND; baseinheritscontroller16steady, no materialalpha4 override. Explicit incoming16matchesreadonlynativeSRC2/DST2/Zwrite0/Zenab1 beforeADD. Two240-frame scopedsteady reviewsPASS,13runtime rows/450frames/oneinitcap7Q1/50tail. Unmeasuredcoldcaller auto andfullraster/context/cadence remainopen.",
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
       ],
       "port_smoke_ids": [
         "TImmortalmight_AUTHORED_TAGS"
@@ -7655,20 +7697,21 @@
         "source_behavior_audited": false,
         "port_smoke": true,
         "accurate_software_reference": true,
-        "repeatable_ab": true,
-        "visual_fidelity": true,
+        "repeatable_ab": false,
+        "visual_fidelity": false,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_NOOBJBLEND_inherited_base_controller16_quality1_incoming16_lifecycle_verified",
-      "next_action": "Preserve correctedNOOBJBLEND/baseinherit16 andtwo independentnative steadyappearancePASS. Incoming16captured/measured; autoordinarycold compatibility andunmeasuredinitialcaller state notnativeacceptance. Verify naturalbuff/caster/invoker/audio/collision/context/exactnativecadence/raster/full gates; no fittedscalar/blend/geometry.",
+      "next_action": "Retain actual cold-parser/native numeric state proof; record fresh actual port output and re-review against retained native reference before restoring visual/repeat credit. Natural caller/context/device remain open.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "FinalnativeSHA2b48b552\u2026195distinct8secondsteadyexcerpt afterfixed2secondwarmup, markerfreeSW/background-cleanup0; os09632.896643seconds2303nativeframes/jobs269\u2013271terminal0. Quality1/software1 measuredreadonlyjob268; actual#flare mode4 alpha/test-no-write/material preflight pending. Native only, no source/runtime/pair/visual credit.",
         "Currente4ef built/source450runtime13rows/cap7quality1/50tail andown240unchangedpair complete; rootblackhalo MISMATCH, source texture/materialhandoff underaudit,no proven fittedcause. Combinedmode16ADDparticles andadditional#flare alpha4material, not wholeeffectmode4. Gold/Cure480currentframes exactpostZbaseline.",
         "Datedsource correction: priorbasealpha4claim rejected. Actual409e57/409e5a/409e5c skipsmaterialtest whenRGB565alphaMask0; NOOBJBLEND #flare inheritsONEONE16 aftercontroller render withoutrestoringstate. Oldmode4scope waswrongsourceassociation, noauthoritativecorrectedpatchhash yet. Olde4efruntime/lifecycle andnumericparticle proofs staypartial; no appearancecredit.",
-        "FinalOct6 checkpointcorrectedcc7379 steadyincoming16/Q1 appearancePASSagainst original195image andnew194image independentlycaptured refs. Job273 actualSRC2DST2Zwrite0Zenab1/requested16 beforeADD274. Oldalpha4andbadABI labels retainedsuperseded. Runtime450/13/oneinitcap7/50tail;480defaultGold/Cure exactcontrol. Protocoltwoindependentrefs+retainedpairs warrantsrepeat row, notsecondreference-type count."
+        "FinalOct6 checkpointcorrectedcc7379 steadyincoming16/Q1 appearancePASSagainst original195image andnew194image independentlycaptured refs. Job273 actualSRC2DST2Zwrite0Zenab1/requested16 beforeADD274. Oldalpha4andbadABI labels retainedsuperseded. Runtime450/13/oneinitcap7/50tail;480defaultGold/Cure exactcontrol. Protocoltwoindependentrefs+retainedpairs warrantsrepeat row, notsecondreference-type count.",
+        "2026-10-09: current visual credit suspended after original curve destination first-slot zero behavior fixed. Prior pair/review preserved as historical; numerical full-parser recheck does not renew pixel claims."
       ],
       "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
       "software_reference_validation": {
@@ -7730,7 +7773,7 @@
         "full_cycle_frame_coverage_proven": false,
         "simulation_clock_equivalence_proven": false
       },
-      "work_queue_status": "isolated_incoming16_steady_appearance_pass_two_native_refs_uncertain_coldcaller_context_pending",
+      "work_queue_status": "cold_parser_state_corrected_current_appearance_repeat_revalidation_pending",
       "runtime_regression": {
         "manifest": "captures/runtime-fixtures/immortalmight-incoming16-loop-20261005/command-capture/manifest.json",
         "manifest_sha256": "74087154216b8cad0f39e2b93d3b7822ce85adb189fce964d679143ef45d440b",
@@ -7791,33 +7834,6 @@
           "retail.mp4": "36200eac0f821ce51129be8a70b8d93a42ad471b0d7a4bbbdee09faabcaac0cb",
           "port.mp4": "8c39905dae6635ae26da5066c72d8a1c58f687ef3f65a0ac49175a3c6114ee43"
         }
-      },
-      "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "pass",
-        "visual_pass": true,
-        "scope": "Exact Immortalmight state0/start generic authored-tag steady appearance on loaded nineplate map versus actual retailSWreference, measuredparticlequality1 and explicitincoming16 source state; originalnaturalcaster/context/unmeasuredcoldcallerstate/exactlogicalcadence/audio/raster/fullacceptance separate.",
-        "finding": "Source-correct inherited additive baseflare removes opaque darkhalo. Yellowgold authoredstar geometry,scale,breathing and risingparticleappearance agree overall across six fixedelapsedcrops and retained240frame distribution diagnostics. Independent RNG and unmatched exactlogicalphase allowed; no fittedphysics/PPS/height/color/geometry/timing/blendflip unsupported bysource.",
-        "source_correction": "RGB565alphaMask0 bypassesmaterial-alpha switch; unflaggedbaseinheritscontroller mode16. Beforefirstparticle,no originalreset:explicit measuredincoming16 supplied,auto initialcaller parity unverified.",
-        "sample_frames": [
-          0,
-          48,
-          96,
-          143,
-          191,
-          239
-        ],
-        "random_streams_synchronized": false,
-        "requires_pixel_identity": false,
-        "phase_search": false,
-        "position_or_scale_fitted": false,
-        "comparison_manifest_sha256": "fd9de2d97c2cb31f9473c383de96c4b6c9e583d49a6d0a024dfd2fafadf66db5",
-        "contact": "active-zoom.png",
-        "contact_sha256": "84064da134b9f7b97482881c9f8cb02968890130159934a62f4b362818cc979e",
-        "activity_summary_sha256": "a8412506b0addc623f6494cc05e5339720c3c87c155b53418e2a2f55c54cd60e",
-        "quality": 1,
-        "incoming_blend": 16
       },
       "source_policy_scope_correction": {
         "status": "corrected_source_applied_verifiedsteady_inherited16",
@@ -7966,6 +7982,56 @@
           "retail.mp4": "cb2c6893c131ab445c57166e8c180dcca20850f46fee5ea0f93d82bd9d2f77a6",
           "port.mp4": "8c39905dae6635ae26da5066c72d8a1c58f687ef3f65a0ac49175a3c6114ee43"
         }
+      },
+      "historical_visual_reviews": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "pass",
+          "visual_pass": true,
+          "scope": "Exact Immortalmight state0/start generic authored-tag steady appearance on loaded nineplate map versus actual retailSWreference, measuredparticlequality1 and explicitincoming16 source state; originalnaturalcaster/context/unmeasuredcoldcallerstate/exactlogicalcadence/audio/raster/fullacceptance separate.",
+          "finding": "Source-correct inherited additive baseflare removes opaque darkhalo. Yellowgold authoredstar geometry,scale,breathing and risingparticleappearance agree overall across six fixedelapsedcrops and retained240frame distribution diagnostics. Independent RNG and unmatched exactlogicalphase allowed; no fittedphysics/PPS/height/color/geometry/timing/blendflip unsupported bysource.",
+          "source_correction": "RGB565alphaMask0 bypassesmaterial-alpha switch; unflaggedbaseinheritscontroller mode16. Beforefirstparticle,no originalreset:explicit measuredincoming16 supplied,auto initialcaller parity unverified.",
+          "sample_frames": [
+            0,
+            48,
+            96,
+            143,
+            191,
+            239
+          ],
+          "random_streams_synchronized": false,
+          "requires_pixel_identity": false,
+          "phase_search": false,
+          "position_or_scale_fitted": false,
+          "comparison_manifest_sha256": "fd9de2d97c2cb31f9473c383de96c4b6c9e583d49a6d0a024dfd2fafadf66db5",
+          "contact": "active-zoom.png",
+          "contact_sha256": "84064da134b9f7b97482881c9f8cb02968890130159934a62f4b362818cc979e",
+          "activity_summary_sha256": "a8412506b0addc623f6494cc05e5339720c3c87c155b53418e2a2f55c54cd60e",
+          "quality": 1,
+          "incoming_blend": 16
+        }
+      ],
+      "visual_review": {
+        "date": "2026-10-09",
+        "result": "revalidation_pending_after_native_curve_template_fix",
+        "finding": "Full original parser clears curve destination scalar at birth; prior production retained1. New numerical cold-parser/birth/update proof is positive, but historical port/native appearance and repeat evidence does not establish current-code output.",
+        "scope": "Original native recordings remain valid references; fresh current-map/paired appearance review required."
+      },
+      "cold_parser_revalidation": {
+        "date": "2026-10-09",
+        "status": "pass",
+        "reports": [
+          {
+            "manifest": "recon/retail_asm/runtime/effects/curve-destination-buff-final/Immortalmight-quality0/comparison/manifest.json",
+            "sha256": "2bf2a4970fbd149f70e68bdb1d18b76a5de2dd0656993b2cac7cca18fcab21c8"
+          },
+          {
+            "manifest": "recon/retail_asm/runtime/effects/curve-destination-buff-final/Immortalmight-quality1/comparison/manifest.json",
+            "sha256": "7ea79c24214338658c826f9efda393f1af2ea24d6ecf416389634b3e1fe184e1"
+          }
+        ],
+        "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
       }
     },
     {
@@ -16711,7 +16777,23 @@
         "changing_gpu_samples": 4,
         "binary_sha256": "c2ad8c9545f4aa6345ef3496e6f6347b09b737c75cb90205b8656a1f5db15bdf"
       },
-      "work_queue_status": "thin_bounded_frontend_and_controlled_map_pass_context_open"
+      "work_queue_status": "thin_bounded_frontend_and_controlled_map_pass_context_open",
+      "authored_saved_map_smoke": {
+        "manifest": "/Users/benjamincooley/RevenantRetailLab/research/vfx-next-20261009/warp-blue-authored-sector/manifest.json",
+        "sha256": "be47bec3d9155c374cfbd0cac35feb704c03fe1472988aeece66ab579f073205",
+        "status": "authored_saved_map_smoke_pass",
+        "module": "Ahkuilon",
+        "level": 53,
+        "position": [
+          9954,
+          10004,
+          559
+        ],
+        "saved_map_index": 1473492260,
+        "frames": 24,
+        "distinct_scene_frames": 16,
+        "scope": "Original saved actor/terrain/lights and areaambient; full native scene A/B/story/background/teleport remain unverified."
+      }
     },
     {
       "index": 114,
@@ -17859,7 +17941,8 @@
       ],
       "source_fixes": [
         "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested misc\\Impact.i3d is distinguished from Imagery/Magic/impact.I3D.",
-        "Integrated bounded combatflash0xad92bd29 default-animator state0/start1 profile: actual Impact asset/prototype/emitter/base, cached expression frame/current-owner emitter pose, # fixed-camera matrices, separate prelit RGB565 mode16 particles and source normal/material base, controller-before-base draw order,19-frame nonlooping cleanup and real exact-owner preview.24 source contracts and frozen staged/applied file hashes retained; other states remain unsupported. No visual/full/natural-combat acceptance."
+        "Integrated bounded combatflash0xad92bd29 default-animator state0/start1 profile: actual Impact asset/prototype/emitter/base, cached expression frame/current-owner emitter pose, # fixed-camera matrices, separate prelit RGB565 mode16 particles and source normal/material base, controller-before-base draw order,19-frame nonlooping cleanup and real exact-owner preview.24 source contracts and frozen staged/applied file hashes retained; other states remain unsupported. No visual/full/natural-combat acceptance.",
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
       ],
       "port_smoke_ids": [
         "TCombatFlashEffect_AUTHORED_START1"
@@ -18175,6 +18258,17 @@
           "contact_sha256": "4c6b10842e0bf8e25112e0142d99c87da1f17f0770759410b30e738a2434d477"
         },
         "scope": "Actual generic authored-tag CombatFlash start1 against actual retail software reference, with one-frame warmup. Actual RGB565 prelit particles plus authored mode16 base mesh with native ambient32; no position, scale, color or phase fitting; fidelity pending."
+      },
+      "cold_parser_revalidation": {
+        "date": "2026-10-09",
+        "status": "pass",
+        "reports": [
+          {
+            "manifest": "recon/retail_asm/runtime/effects/curve-destination-combat-final/comparison/manifest.json",
+            "sha256": "d642b699a4194c7b7834c1b494dc5023fe4cd3f7eff8b1a4474e29f84ca68fe8"
+          }
+        ],
+        "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
       }
     },
     {
@@ -18387,15 +18481,17 @@
       "preview_candidates": [
         "TBuffEffect_Bespoke__speed_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-09: exact strict Speed admission, inclusive pose keys, native #camera emitter/base matrices, explicit base80/particle16, native cached curve zero and post-sampling nearzero-scale rejection. No fitted geometry/color/clock or generic fallback."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -18404,10 +18500,57 @@
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
-      "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "runtime_dispatch": "exact_speed_partsysemittance_and_animated_base_profile_verified_map_lifecycle",
+      "next_action": "Retain bounded particle/cold-state and actual map proof; verify animated baseflare lighting/material/raster, independent original device/Metal projection and natural caster/attachment before full acceptance.",
+      "notes": [
+        "2026-10-09: particle-only shared-software comparison is bridge-relative, not fullbase output. Native nearzero admission preserves all48 map pixelhashes while restoring draw counts and RNG."
+      ],
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "speed_particle_frontend_bridge_relative",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/speed-particle-centre-verified/manifest.json",
+          "scope": "Particle frontend only: whole native parser/Pulse/sample/#matrices versus actual compiled State/SubmitPartSys;2109draws/112zero rejections, five repeated exact shared-software color/depth pairs. Declared raw-world/MODELZ bridge. Baseflare lighting/raster, independent device/caster remain open.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "baseflare material/normal lighting/raster",
+            "native full-scene/Metal projection",
+            "natural caster/attachment/sound/context"
+          ],
+          "sha256": "69e98839559ee1639adad8ef00fccabd2d4ae2c13896d229482446b373b1cc38",
+          "independent_raw_and_native_FIX_center_checks": 4218
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/speed-map-final-20261009/manifest.json",
+        "sha256": "23246cda60d42f9b2f34963a5864d0da3278310ef92cb8cddbc1ca60265ece53",
+        "status": "pass",
+        "exact_type_id_verified": true,
+        "move_verified": true,
+        "persistent_until_delete_verified": true,
+        "normal_object_removal_verified": true,
+        "clean_floor_restored": true,
+        "natural_trigger_verified": false,
+        "observations": 8,
+        "frames": 48,
+        "distinct_active_frames": 31,
+        "capacity": 31,
+        "quality": 0,
+        "binary_sha256": "7a377760d05d3a006f3578e825e30208a20d324862e6c4f554d3a90730124fc6"
+      },
+      "work_queue_status": "bounded_particle_frontend_and_controller_map_pass_base_lighting_context_open",
+      "cold_parser_revalidation": {
+        "status": "pass",
+        "reports": [
+          {
+            "manifest": "recon/retail_asm/runtime/effects/curve-destination-buff-final/speed-quality0/comparison/manifest.json",
+            "sha256": "a82a3544d190d85c7c50b9e574c60ecfd962077c25aa96b6ba335c2bc51c7880"
+          }
+        ],
+        "scope": "Whole native literal parser with authored emitter poses versus corrected source. Rendering/caster bounds separate."
+      }
     },
     {
       "index": 139,
@@ -20196,6 +20339,17 @@
           },
           "scope": "Raw elapsed mask intensity>8 relative to unchanged floor; no phase/height/RNG matching."
         }
+      },
+      "cold_parser_revalidation": {
+        "date": "2026-10-09",
+        "status": "pass",
+        "reports": [
+          {
+            "manifest": "recon/retail_asm/runtime/effects/curve-destination-buff-final/goldeffect-quality0/comparison/manifest.json",
+            "sha256": "9e0c20a427933f872fa5dd3ac58f517393d7bf2c070278e498a7c585211ef152"
+          }
+        ],
+        "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
       }
     },
     {
@@ -20209,7 +20363,8 @@
       ],
       "source_fixes": [
         "Exact-ID TEffect::Pulse skips obsolete snapshot frame0 reset, matching retail default-animator path. Post-build actual frame observations prove progression/wrap; this is a prerequisite, not partsys render coverage.",
-        "Source-backed immutable partsys parser and owner-bound default-animator controller restored: six authored emitters, 140 fall/52 cap slots, original simulation/RNG/curve order and 24Hz Pulse. Source Render preserves authored quad/UV, packed color, absolute pose and litadd ONE/ONE depth-test/no-write. Tagframe5 is retained metadata, ignored by this retail controller; loops do not reset the pool."
+        "Source-backed immutable partsys parser and owner-bound default-animator controller restored: six authored emitters, 140 fall/52 cap slots, original simulation/RNG/curve order and 24Hz Pulse. Source Render preserves authored quad/UV, packed color, absolute pose and litadd ONE/ONE depth-test/no-write. Tagframe5 is retained metadata, ignored by this retail controller; loops do not reset the pool.",
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -20349,6 +20504,17 @@
         "deletion_tail_static": true,
         "initializer": "22:29:51 INFO  [partsys] init type=WaterFlft id=d0c0f036 map_index=231055555 state=0 tagframe=5 emitters=6 capacity=140 quality=0 prototype=#particle01",
         "scope": "Actual unchanged saved object on synthetic floor; source-backed partsys runtime, not retail visual parity."
+      },
+      "cold_parser_revalidation": {
+        "date": "2026-10-09",
+        "status": "pass",
+        "reports": [
+          {
+            "manifest": "recon/retail_asm/runtime/effects/curve-destination-water-final/WaterFlft/comparison/manifest.json",
+            "sha256": "14dd097d020466e7d983a8192ecb6b675e77bf74d1df29af8b07f262c3ed0c8f"
+          }
+        ],
+        "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
       }
     },
     {
@@ -20362,7 +20528,8 @@
       ],
       "source_fixes": [
         "Exact-ID TEffect::Pulse skips obsolete snapshot frame0 reset, matching retail default-animator path. Post-build actual frame observations prove progression/wrap; this is a prerequisite, not partsys render coverage.",
-        "Source-backed immutable partsys parser and owner-bound default-animator controller restored: six authored emitters, 140 fall/52 cap slots, original simulation/RNG/curve order and 24Hz Pulse. Source Render preserves authored quad/UV, packed color, absolute pose and litadd ONE/ONE depth-test/no-write. Tagframe5 is retained metadata, ignored by this retail controller; loops do not reset the pool."
+        "Source-backed immutable partsys parser and owner-bound default-animator controller restored: six authored emitters, 140 fall/52 cap slots, original simulation/RNG/curve order and 24Hz Pulse. Source Render preserves authored quad/UV, packed color, absolute pose and litadd ONE/ONE depth-test/no-write. Tagframe5 is retained metadata, ignored by this retail controller; loops do not reset the pool.",
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -20475,6 +20642,17 @@
         "deletion_tail_static": true,
         "initializer": "22:30:10 INFO  [partsys] init type=WaterFrt id=d0c0f037 map_index=1698617881 state=0 tagframe=5 emitters=6 capacity=140 quality=0 prototype=#particle01",
         "scope": "Actual unchanged saved object on synthetic floor; source-backed partsys runtime, not retail visual parity."
+      },
+      "cold_parser_revalidation": {
+        "date": "2026-10-09",
+        "status": "pass",
+        "reports": [
+          {
+            "manifest": "recon/retail_asm/runtime/effects/curve-destination-water-final/WaterFrt/comparison/manifest.json",
+            "sha256": "6ab303042889777dd06db1cb446e3c788e4b60b5b386940eb176b9d05047766e"
+          }
+        ],
+        "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
       }
     },
     {
@@ -20488,7 +20666,8 @@
       ],
       "source_fixes": [
         "Exact-ID TEffect::Pulse skips obsolete snapshot frame0 reset, matching retail default-animator path. Post-build actual frame observations prove progression/wrap; this is a prerequisite, not partsys render coverage.",
-        "Source-backed immutable partsys parser and owner-bound default-animator controller restored: six authored emitters, 140 fall/52 cap slots, original simulation/RNG/curve order and 24Hz Pulse. Source Render preserves authored quad/UV, packed color, absolute pose and litadd ONE/ONE depth-test/no-write. Tagframe5 is retained metadata, ignored by this retail controller; loops do not reset the pool."
+        "Source-backed immutable partsys parser and owner-bound default-animator controller restored: six authored emitters, 140 fall/52 cap slots, original simulation/RNG/curve order and 24Hz Pulse. Source Render preserves authored quad/UV, packed color, absolute pose and litadd ONE/ONE depth-test/no-write. Tagframe5 is retained metadata, ignored by this retail controller; loops do not reset the pool.",
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -20601,6 +20780,17 @@
         "deletion_tail_static": true,
         "initializer": "22:30:30 INFO  [partsys] init type=WaterClft id=d0c0f038 map_index=224724730 state=0 tagframe=5 emitters=6 capacity=52 quality=0 prototype=#particle01",
         "scope": "Actual unchanged saved object on synthetic floor; source-backed partsys runtime, not retail visual parity."
+      },
+      "cold_parser_revalidation": {
+        "date": "2026-10-09",
+        "status": "pass",
+        "reports": [
+          {
+            "manifest": "recon/retail_asm/runtime/effects/curve-destination-water-final/WaterClft/comparison/manifest.json",
+            "sha256": "5f68c0d98a144896d392c8fe151edf97346fdaa1bf36f1edd8a5d0d993f1d4b8"
+          }
+        ],
+        "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
       }
     },
     {
@@ -20614,7 +20804,8 @@
       ],
       "source_fixes": [
         "Exact-ID TEffect::Pulse skips obsolete snapshot frame0 reset, matching retail default-animator path. Post-build actual frame observations prove progression/wrap; this is a prerequisite, not partsys render coverage.",
-        "Source-backed immutable partsys parser and owner-bound default-animator controller restored: six authored emitters, 140 fall/52 cap slots, original simulation/RNG/curve order and 24Hz Pulse. Source Render preserves authored quad/UV, packed color, absolute pose and litadd ONE/ONE depth-test/no-write. Tagframe5 is retained metadata, ignored by this retail controller; loops do not reset the pool."
+        "Source-backed immutable partsys parser and owner-bound default-animator controller restored: six authored emitters, 140 fall/52 cap slots, original simulation/RNG/curve order and 24Hz Pulse. Source Render preserves authored quad/UV, packed color, absolute pose and litadd ONE/ONE depth-test/no-write. Tagframe5 is retained metadata, ignored by this retail controller; loops do not reset the pool.",
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -20727,6 +20918,17 @@
         "deletion_tail_static": true,
         "initializer": "22:30:50 INFO  [partsys] init type=WaterCrt id=d0c0f039 map_index=1711762412 state=0 tagframe=5 emitters=6 capacity=52 quality=0 prototype=#particle01",
         "scope": "Actual unchanged saved object on synthetic floor; source-backed partsys runtime, not retail visual parity."
+      },
+      "cold_parser_revalidation": {
+        "date": "2026-10-09",
+        "status": "pass",
+        "reports": [
+          {
+            "manifest": "recon/retail_asm/runtime/effects/curve-destination-water-final/WaterCrt/comparison/manifest.json",
+            "sha256": "57c3819a0809bb346bb575863db1ab1ebdeb5d6a00b0fc81bc3721b9223e2d14"
+          }
+        ],
+        "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
       }
     },
     {

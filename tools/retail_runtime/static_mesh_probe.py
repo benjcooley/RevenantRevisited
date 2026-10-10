@@ -90,7 +90,7 @@ struct T3DImagery {
  std::vector<S3DVertex> vertices;std::vector<S3DFace> faces;std::vector<SAniKey32> keys;
  S3DObj objects[1];int key_count=0,frame_count=100;void* key_pointer=nullptr;int flags=0xdc;bool meshinitialized=true;
  bool retail_punch_keys=false,retail_mpappear_start_profile=false,retail_shadowfist_profile=false,retail_warriorborn_profile=false,
- retail_teleportation_profile=false,might_partsys_profile=false,immortalmight_partsys_profile=false,fmastery_partsys_profile=false;
+ retail_teleportation_profile=false,might_partsys_profile=false,immortalmight_partsys_profile=false,fmastery_partsys_profile=false,speed_partsys_profile=false;
  int prevstate=-1,prevframe=0;StubHeader header;
  int NumObjects()const{return 1;}int NumStates()const{return 1;}int GetAniLength(int)const{return frame_count;}
  int NumTextures()const{return 1;}int NumObjVerts(int)const{return int(vertices.size());}int NumObjFaces(int)const{return int(faces.size());}

@@ -9,7 +9,37 @@ Prioritize speed and repeatability, with known renderer limits recorded
 separately from VFX defects. The counts and earlier captures below are retained
 historical evidence; this migration alone grants no additional acceptance.
 
-**Latest thin-emulator coverage: 65 / 176 bounded rendered frontends.**
+**Latest thin-emulator coverage: 66 / 176 bounded rendered frontends.**
+
+**Speed and actual curve parsing (2026-10-09):** native literal parsing exposed
+a shared cached-default error: entering a curve clears only its first destination
+to zero. The port retained its absent-field default1, making newborn particles
+start at the wrong scale/alpha. The corrected parser preserves absent/literal
+defaults and other dimensions. Fresh whole-parser/Initialize/Pulse comparisons
+now pass for Might/Immortalmight/Fmastery, all four authored water assets,
+CombatFlash start1 and unchanged literal-scale Gold, including fresh repeats.
+Previously injected template1 records remain conditional historical evidence.
+
+Speed now runs through strict profile admission, actual native `#` emitter/base
+matrix contracts and explicit base80/particle16 blend/depth policies. Its
+**particle frontend only** adds five repeated original-software color/depth
+pairs, 2,109 admitted draws and112 actual near-zero rejections, with the declared
+raw-world/MODELZ bridge. Baseflare lighting/raster and full device/caster remain
+open. The normal map passes eight typed controller/live-particle/movement/delete
+observations,48frames/31distinctactiveimages and exact floor restoration.
+[Scope and reproduction](forensics/SPEED_CONTROLLER_PREFLIGHT_20261009.md).
+
+Source fixes are90 rows and controlled runtime coverage80 rows. Two prior
+Might/Immortalmight visual passes and Immortalmight's repeat credit are suspended
+pending fresh current-code footage: current visual14/repeat7, full0. Numerical
+rechecks do not renew appearance claims. Build,106runtime tests and focused
+source regressions pass. Original recorded retail references remain available.
+
+The [saved Warp map check](forensics/WARP_AUTHORED_MAP_CONTEXT.md) now shows
+the animated blue door in its original Labyrinth room with saved identity,
+terrain/lights and area ambient. It adds contextual port footage, not a full
+native-scene comparison. The locator also records that all eight original
+LabGate barrier objects are invisible during normal play; preserve those flags.
 
 **Speaker and seven Warp colors (2026-10-09):** Speaker's complete 55-vertex,
 30-face untextured mesh passes six original-software pairs with repeat, explicit
@@ -919,11 +949,11 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 ## Batch 5 — Buffs, debuffs, late boss effects and unresolved retail types (72 retail rows)
 
 - [ ] **Labback** `0xdcc4011d` — `Misc\Labback.I3D`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **Might** `0x5be39ae0` — `magic\might.i3d`. Candidate: `TMight_AUTHORED_TAGS`. Progress: exactsource/build, matched measurednativequality1 actual450frames13checks/oneinitcap7/50tail andown240unchanged-frame pair root isolatedappearancePASS; authoredPPS30→source7.5, no fit. Preserve oldquality0 mismatch/incorrectfirstbirth assertions. Naturalbuff/caster/collision/audio/context/nativecadence/exactraster/full acceptance remain open.
+- [ ] **Might** `0x5be39ae0` — `magic\might.i3d`. Progress: current full literal native parser/newborn/update Q0/Q1 recheck passes after curve destination fix. Prior map/pair appearance evidence is historical; current visual pass suspended. Next: fresh current port/pair review, then natural caster/context/device. [Scope](forensics/SPEED_CONTROLLER_PREFLIGHT_20261009.md).
 - [ ] **Dexterity** `0x8cd3ea0f` — `magic\Dexterity.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **Antimagic** `0xd3ae043a` — `magic\Antimagic.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **Fmastery** `0xb0e024df` — `magic\Fmaster.i3d`. Candidate: `TFmastery_AUTHORED_TAGS`. Source/runtime/450frames13rowscap4Q1incoming16/50tail andown240paircomplete. RootvisualMISMATCH palerwhiterbasecore; correctnonuniform#matrix/alpha1/whiteatlas/freshlighting doesnotjustifytint/fade/blendfit. DefercommonRGB565raster/normal-lighting ormatchedsceneinput proof; guestloan respected. Naturalcontext/cadence/raster/full open.
-- [ ] **Immortalmight** `0x82aeb30f` — `magic\Imight.i3d`. Candidate: `TImmortalmight_AUTHORED_TAGS`. Progress: correctedNOOBJBLEND/baseinherits16, measuredincoming16/Q1 actual450frames13rows/oneinitcap7/50tail andtwo240-frame independentnative-reference steadyappearancePASS. Oldalpha4/badABI claims superseded. Unmeasuredcoldcallerauto/naturalbuff/audio/context/exactcadence/raster/full gates open.
+- [ ] **Immortalmight** `0x82aeb30f` — `magic\Imight.i3d`. Progress: current full literal native parser/newborn/update Q0/Q1 recheck passes; earlier incoming16 map/pair evidence historical after curve destination fix. Current visual/repeat credit suspended. Next: fresh port/pair, cold caller/zero-scale admission and natural caster/context/device. [Scope](forensics/SPEED_CONTROLLER_PREFLIGHT_20261009.md).
 - [ ] **Ogrestrength** `0x42e0fcd0` — `magic\Ogre.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **Regeneration** `0x10ac03de` — `magic\Regen.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **Shadowfist** `0x550decaf` — `magic\Sfist.i3d`. Candidate: `TShadowfist_AUTHORED_OWNER`. Progress: exact authored source/build and realmap lifecycle pass; currentab3e400frames10rows50tail/own240unchanged-frame pair root **isolated overall appearance/occlusion PASS** after sharedMetaldepthStore. Nativephase/cadence/fullcycle, fractional/source-raster requirements and naturalspell/character/story/audio/context/full acceptance remain open; no fittedeffect changes.
@@ -965,7 +995,7 @@ Each checkbox below means all gates are accepted. Every box is currently open. P
 - [ ] **stoneskin** `0xad92bd33` — `magic\Stone.i3d`. Candidates: `TBuffEffect_Bespoke__Stoneskin_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **ironskin** `0xad92bd34` — `magic\Iskin.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **quicksilver** `0xad92bd35` — `magic\Quicksilver.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
-- [ ] **speed** `0xad92bd36` — `magic\Speed.i3d`. Candidates: `TBuffEffect_Bespoke__speed_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
+- [ ] **speed** `0xad92bd36` — `magic\Speed.i3d`. Progress: strict native profile/#matrices/mode80 base+16 particles, repeated bridge-relative particle software pairs and eight actual map lifecycle checks pass. Next: baseflare lighting/raster, independent device/projection and natural caster/attachment. [Scope](forensics/SPEED_CONTROLLER_PREFLIGHT_20261009.md).
 - [ ] **charm** `0xad92bd37` — `magic\Charm.i3d`. Candidates: `TBuffEffect_Bespoke__charm_BESPOKE`. Progress: source/behavior acceptance open. Next: Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.
 - [ ] **nullifier** `0xad92bd38` — `magic\Nullifier.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.
 - [ ] **trollblood** `0xad92bd39` — `magic\Trollblood.i3d`. Candidates: none identified. Progress: source/behavior acceptance open. Next: Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger. No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.

@@ -237,6 +237,8 @@ class T3DImagery : public TObjectImagery
     bool might_partsys_profile = false;
     bool immortalmight_partsys_profile = false;
     bool fmastery_partsys_profile = false;
+    bool speed_partsys_profile = false;
+    bool ValidateRetailSpeedPartSysProfile();
     bool ValidateRetailFmasteryPartSysProfile();
     bool ValidateRetailImmortalmightPartSysProfile();
     bool ValidateRetailMightPartSysProfile();
@@ -328,6 +330,7 @@ class T3DImagery : public TObjectImagery
     bool HasRetailMightPartSysProfile() const { return might_partsys_profile; }
     bool HasRetailImmortalmightPartSysProfile() const { return immortalmight_partsys_profile; }
     bool HasRetailFmasteryPartSysProfile() const { return fmastery_partsys_profile; }
+    bool HasRetailSpeedPartSysProfile() const { return speed_partsys_profile; }
     bool HasRetailPunchProfile() const { return retail_punch_keys; }
     bool HasRetailMPAppearStartProfile() const { return retail_mpappear_start_profile; }
     bool HasRetailShadowfistProfile() const { return retail_shadowfist_profile; }
@@ -570,6 +573,10 @@ class T3DAnimator : public TObjectAnimator
     bool MPAppearStartMeshWorldMatrix(int32_t object, hmm_mat4& world);
     bool FmasteryBaseMeshBlend(int32_t object, uint32_t& blend) const;
     bool FmasteryBaseMeshWorldMatrix(hmm_mat4& world);
+    bool SpeedEmitterLocalMatrix(hmm_mat4& matrix, hmm_vec3* position = nullptr,
+                                 hmm_vec3* scale = nullptr);
+    bool SpeedBaseMeshBlend(int32_t object, uint32_t& blend) const;
+    bool SpeedBaseMeshWorldMatrix(hmm_mat4& world);
     bool ImmortalmightBaseMeshBlend(int32_t object, uint32_t& blend) const;
     bool ImmortalmightBaseMeshWorldMatrix(hmm_mat4& world);
     bool GoldBaseMeshBlend(int32_t object, uint32_t& blend) const;
