@@ -41,6 +41,15 @@ fixture world (docs/gameplay/COMBAT_DOJO.md on feature/combat). The case's
   the case's `bits` (the last Move's): ResolveAction and the resolvers,
   ResetStealthValues, TryCommand / ForceCommand as original; Sleeping /
   SetSleeping through the object-stat seams. Adds `motion`.
+- `find-characters` / `can-see` / `is-enemy` / `hearing` / `sight` (kata
+  M9b): FindCharacters
+  `0x4cd690` (the case's `max`, `range`, `angle`, `anglerange`, `flags`),
+  CanSeeCharacter `0x4cd540` (`target`, `angle`), IsEnemy `0x4c89c0`
+  (`target`), Hearing `0x4cda80` / Sight `0x4cdb30` (slots 0x2e0 / 0x2e4,
+  the case's `dist`), as original with IsValidTarget, HasSeenMe /
+  SetHasSeen, over the map iterator's characters; the case sets
+  `perception`. Adds `found` (FindCharacters' list) and `memory` (the
+  characters remembered, +0x1c0).
 
 Schema `combat.call.v1`, shared with the port's `Revenant
 --retail-ab=combat-go` / `combat-resolve`.
@@ -57,11 +66,19 @@ Seams (guest.py for the shared ones), recorded in order:
   (default clear), the probe point recorded -- except in a case with a
   `ground`, where it runs as original;
 - FindCharacters `0x4cd690` (thiscall, 6 args): an empty world (M3); the
-  query recorded. M4 gives it a world;
+  query recorded -- except in a case with `perception`, where it runs as
+  original;
 - TPlayer SetPlayerState `0x51d680` (thiscall, 1 arg): recorded, the value
   stored at +0x36c (assumption: the UI side of it is not modelled);
 - CanSeeCharacter `0x4cd540` (thiscall, 2 args): the case's `sees`
-  (default yes), recorded.
+  (default yes), recorded -- original with `perception`;
+- TMapPane LineOfSight `0x4533d0` (thiscall (from, to, level, 0, 0), ret
+  0x14): clear unless the case's `walls` holds the pair of characters whose
+  eyes (LIGHTINGCHARHEIGHT above their positions) the points are, recorded.
+
+The case's characters also take their `chardata` whole (data_parse's
+layout), the type name (`type`, else the name), `invisiblespell`, a
+player's `team`, and `hasseen` ([name, frame, noautocombat] entries).
 
 Usage:
     combat_call.py EXE --serve             # {"id":..,"case":{...}} per line
@@ -77,7 +94,9 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from guest import SLOT_MOVE, Boundaries, CombatWorld, call, s32, serve, start  # noqa: E402
+from guest import (O_CHARDATA, O_POS, SLOT_MOVE, Boundaries, CombatWorld, call, s32, serve, start,  # noqa: E402
+                   write_fields)
+from data_parse import CHAR_FIELDS  # noqa: E402
 
 SCHEMA = 'combat.call.v1'
 GO = 0x4ce350
@@ -100,6 +119,11 @@ KNOCK_BACK = 0x4d3750                            # thiscall (S3DPoint* from, var
 COMPLEX_PULSE = 0x4db190                         # TComplexObject::Pulse (UpdateAction with +0xbc)
 SET_OBJECT_MOTION, NEXT_FRAME = 0x470bb0, 0x470cc0
 CAN_SEE = 0x4cd540
+IS_ENEMY = 0x4c89c0                              # thiscall (chr) ret 4
+LINE_OF_SIGHT = 0x4533d0                         # TMapPane, thiscall (from*, to*, level, 0, 0) ret 0x14
+EYE_HEIGHT = 50                                  # LIGHTINGCHARHEIGHT
+SLOT_HEARING, SLOT_SIGHT = 0x2e0, 0x2e4             # thiscall (dist) ret 4
+PERCEPTION_CALLS = ('find-characters', 'can-see', 'is-enemy', 'hearing', 'sight')
 
 
 class CallFixture:
@@ -112,6 +136,7 @@ class CallFixture:
         b.add(FIND_CHARACTERS, 'FindCharacters', 0x18, self._find_characters)
         b.add(SET_PLAYER_STATE, 'SetPlayerState', 4, self._set_player_state)
         b.add(CAN_SEE, 'CanSeeCharacter', 8, self._can_see)
+        b.add(LINE_OF_SIGHT, 'LineOfSight', 0x14, self._line_of_sight)
         b.add(PLAY_MOUSE_CLICK, 'PlayMouseClick', 0xc, self._play_mouse_click)
         for address, name, pop in INPUT_SEAMS:
             b.add(address, name, pop, (lambda n: lambda args, ecx: self._input_seam(n, args, ecx))(name))
@@ -129,6 +154,8 @@ class CallFixture:
         return blocked
 
     def _find_characters(self, args, ecx):
+        if self.case.get('perception'):
+            return Boundaries.ORIGINAL
         query = dict(max=s32(args[1]), range=s32(args[2]), angle=s32(args[3]),
                      anglerange=s32(args[4]), flags=s32(args[5]))
         self.world.seams.append(dict(seam='FindCharacters', who=self.world._name(ecx), **query, result=0))
@@ -140,10 +167,27 @@ class CallFixture:
         return 0
 
     def _can_see(self, args, ecx):
+        if self.case.get('perception'):
+            return Boundaries.ORIGINAL
         sees = int(bool(self.case.get('sees', True)))
         self.world.seams.append(dict(seam='CanSeeCharacter', who=self.world._name(ecx),
                                      target=self.world._name(args[0]), result=sees))
         return sees
+
+    def _line_of_sight(self, args, ecx):
+        line = [self._eyes_of(args[0]), self._eyes_of(args[1])]
+        clear = int(line not in self.case.get('walls', []))
+        self.world.seams.append(dict(seam='LineOfSight', **{'from': line[0]}, to=line[1], result=clear))
+        return clear
+
+    def _eyes_of(self, point):
+        """The character whose eyes are at the S3DPoint at `point`."""
+        x, y, z = struct.unpack('<3i', self.vm.uc.mem_read(point, 12))
+        for name, obj in self.world.by_name.items():
+            px, py, pz = struct.unpack('<3i', self.vm.uc.mem_read(obj + O_POS, 12))
+            if (px, py, pz + EYE_HEIGHT) == (x, y, z):
+                return name
+        return '?'
 
     def _play_mouse_click(self, args, ecx):
         self.world.seams.append(dict(seam='PlayMouseClick', button=s32(args[0]), x=s32(args[1]), y=s32(args[2])))
@@ -165,7 +209,10 @@ class CallFixture:
         for spec in case['chars']:
             world.new_character(spec)
         for spec in case['chars']:
-            world.set_blocks(world.by_name[spec['name']], spec)
+            obj = world.by_name[spec['name']]
+            world.set_blocks(obj, spec)
+            write_fields(vm, vm.u32(obj + O_CHARDATA), CHAR_FIELDS, spec.get('chardata', {}))
+            world.set_memory(obj, spec)
         world.seams.clear()                       # building the blocks made none, but be sure
         me = world.by_name[case['self']]
         kind = case.get('call', 'go')
@@ -201,6 +248,21 @@ class CallFixture:
         elif kind == 'update-action':
             call(vm, vm.u32(vm.u32(me) + SLOT_UPDATE_ACTION), (case.get('bits', 0) & 0xffffffff,), this=me)
             result = 0
+        elif kind == 'find-characters':
+            most = case.get('max', 1)
+            chars = vm.allocate(4 * max(most, 1))
+            result = s32(call(vm, FIND_CHARACTERS, tuple(v & 0xffffffff for v in (
+                chars, most, case.get('range', 0), case.get('angle', 0), case.get('anglerange', 0),
+                case.get('flags', 0))), this=me))
+            found = [world._name(vm.u32(chars + 4 * i)) for i in range(max(result, 0))]
+        elif kind == 'can-see':
+            result = s32(call(vm, CAN_SEE, (world.by_name[case['target']], case.get('angle', -1) & 0xffffffff),
+                              this=me))
+        elif kind in ('hearing', 'sight'):
+            slot = SLOT_HEARING if kind == 'hearing' else SLOT_SIGHT
+            result = s32(call(vm, vm.u32(vm.u32(me) + slot), (case['dist'] & 0xffffffff,), this=me))
+        elif kind == 'is-enemy':
+            result = s32(call(vm, IS_ENEMY, (world.by_name[case['target']],), this=me))
         elif kind == 'calculate-damage':
             result = [s32(call(vm, CALCULATE_DAMAGE, tuple(v & 0xffffffff for v in inp), this=me))
                       for inp in case['inputs']]
@@ -212,6 +274,9 @@ class CallFixture:
                    draws=list(world.draws))
         if kind in ('move', 'update-action', 'start-retreat', 'knockback'):
             out['motion'] = world.motion_dump(me)
+        if kind in PERCEPTION_CALLS:
+            out['found'] = found if kind == 'find-characters' else []
+            out['memory'] = world.memory_dump(me)
         if kind == 'update-move':
             out['controls'] = dict(state=vm.u32(G_CMDSTATE), changed=vm.u32(G_CMDCHANGED))
         return out

@@ -135,6 +135,13 @@ G_AMBIENT = 0x6671a4                             # MapPane ambient light (Visibi
 O_COMMANDDONE, O_ANIMATOR, O_GLIMPSE, O_NOISE = 0x80, 0x58, 0x130, 0x134
 O_FRAMERATE, O_PREVSTATE, O_PREVFRAME, O_MOVEBITS = 0x5e, 0x60, 0x62, 0xbc
 O_COMBATFLASH = 0x224                            # combat flash ticks (a blow sets 5)
+# Perception (kata M9b): the object info (its first field the type name,
+# GetTypeName), the invisibility spell, the memory of characters seen
+# (MAXHASSEEN entries of 12 bytes: character, game frame, no-autocombat),
+# a player's team record name (char[50]).
+O_INFO, O_INVISIBLE_SPELL, O_HASSEEN, O_TEAM = 0x4c, 0x1a4, 0x1c0, 0x494
+MAXHASSEEN, HASSEEN_SIZE = 8, 12
+TEXT = 'cp1252'
 # Type stats, read through slot 0xd8. Radius: TCharacter::Radius (slot
 # 0x258, 0x4d6e40), which Distance (0x4d61b0) subtracts.
 CLASSSTAT_IDS = {'radius': (0x66ca30, 0x201)}
@@ -226,6 +233,31 @@ def flag_names(flags):
     if rest:
         names.append(f'bits-{rest:#x}')
     return sorted(names)
+
+
+def write_text(vm, address, size, text):
+    """A fixed char[size], NUL-padded."""
+    raw = text.encode(TEXT)[:size - 1]
+    vm.write(address, raw + bytes(size - len(raw)))
+
+
+def write_fields(vm, base, fields, values):
+    """The `fields` that `values` names, at `base`, by kind: an offset (an
+    int32), ('s', offset, size) text, ('b', offset) a byte, ('i', offset,
+    n) int32s (data_parse's tables)."""
+    for name, kind in fields:
+        if name not in values:
+            continue
+        v = values[name]
+        if isinstance(kind, int):
+            vm.put_u32(base + kind, int(v) & 0xffffffff)
+        elif kind[0] == 's':
+            write_text(vm, base + kind[1], kind[2], v)
+        elif kind[0] == 'b':
+            vm.write(base + kind[1], bytes([int(v) & 0xff]))
+        else:
+            for i, x in enumerate(v[:kind[2]]):
+                vm.put_u32(base + kind[1] + 4 * i, int(x) & 0xffffffff)
 
 
 class CombatWorld:
@@ -591,6 +623,14 @@ class CombatWorld:
         vm.write(name, spec['name'].encode('cp1252') + b'\0')
         vm.put_u32(obj + O_NAME, name)
         vm.put_u32(obj + O_ID, spec.get('id', 0))
+        typename = spec.get('type', spec['name'])
+        info, text = vm.allocate(4), vm.allocate(len(typename) + 1)
+        vm.write(text, typename.encode(TEXT) + b'\0')
+        vm.put_u32(info, text)
+        vm.put_u32(obj + O_INFO, info)
+        vm.put_u32(obj + O_INVISIBLE_SPELL, int(spec.get('invisiblespell', 0)))
+        if player:
+            write_text(vm, obj + O_TEAM, 50, spec.get('team', ''))
         cd = vm.allocate(CHARDATA_SIZE)
         chardata = spec.get('chardata', {})
         vm.put_u32(cd + CD_COMBATRANGEMAX, chardata.get('combatrangemax', 0))
@@ -630,7 +670,23 @@ class CombatWorld:
         self.vm.put_u32(obj + O_DOING, made['doing'])
         self.vm.put_u32(obj + O_DESIRED, made['desired'])
 
+    def set_memory(self, obj, spec):
+        """The characters it remembers seeing (`hasseen`: [name, frame,
+        noautocombat] each), once every character exists."""
+        for i, (name, frame, noauto) in enumerate(spec.get('hasseen', [])[:MAXHASSEEN]):
+            self.vm.write(obj + O_HASSEEN + HASSEEN_SIZE * i,
+                          struct.pack('<IiI', self.by_name[name], frame, int(bool(noauto))))
+
     # -- results ----------------------------------------------------------
+    def memory_dump(self, obj):
+        """The memory as compared: each entry's character (None when empty),
+        frame and no-autocombat flag."""
+        out = []
+        for i in range(MAXHASSEEN):
+            chr_, frame, noauto = struct.unpack('<IiI', self.vm.uc.mem_read(obj + O_HASSEEN + HASSEEN_SIZE * i, 12))
+            out.append([self._name(chr_) if chr_ else None, frame, int(noauto != 0)])
+        return out
+
     def block_dump(self, ab, new_blocks):
         """A block as the compared record. Identity: the role it had when the
         case began, or `new N` in the order the function made them."""

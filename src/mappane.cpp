@@ -2216,6 +2216,8 @@ void TMapPane::ClearWalkmaps()
 
 bool TMapPane::LineOfSight(S3DPoint& pos, S3DPoint& to, S3DPoint* obst)
 {
+    if (lineOfSightSeam)
+        return lineOfSightSeam(pos, to);
     int32_t sx, sy, sz, ex, ey, ez, dx, dy, dz;
 
   // Get starting values in grid coordinates

@@ -84,10 +84,33 @@ extern TDialogPane DialogPane;
 // Returns a turn rate value based on how far character is turning
 #define MAKETURNRATE(diff) (MAXTURNRATE + max(0, (diff) - 32) / 32 * (MAXTURNRATE / 2))
 
-#define MAXSEENTIME (FRAMERATE * 10)
+// How long a character remembers one it saw or heard (HasSeenMe): retail
+// 0x438, 45 seconds (the 1998 source had ten).
+constexpr int32_t kMaxSeenTime = FRAMERATE * 45;
 
 namespace
 {
+// The characters within `range` of pos (a square) on `level`, in map order,
+// until `visit` returns false: retail's map iterator 0x0044ceb0 / 0x0044d080
+// as CharBlocking and FindCharacters make it (characters, flags 0xe0: no
+// inventories, the map rectangle, the loaded sectors -- what the level
+// constructor sets), or the A/B fixture's.
+template <class Visit>
+void ForCharactersNear(int32_t level, const S3DPoint& pos, int32_t range, Visit&& visit)
+{
+    if (TCharacter::nearbyCharactersSeam)
+    {
+        for (TCharacter* c : TCharacter::nearbyCharactersSeam(pos, range))
+            if (!visit(c))
+                return;
+        return;
+    }
+    SRect r{pos.x - range, pos.y - range, pos.x + range, pos.y + range};
+    for (TMapIterator i(level, &r, CHECK_NOINVENT, OBJSET_CHARACTER); i; i++)
+        if (!visit(static_cast<TCharacter*>(i.Item())))
+            return;
+}
+
 // Retail's three moving actions (walk, combat, bow steps).
 bool IsMoveAction(const TActionBlock* ab)
 {
@@ -1242,13 +1265,14 @@ bool TCharacter::GetFieldText(const char *field, char *buf, int32_t buflen)
     return true;
 }
 
-// Returns true if character has seen 'me'
+// REVSYNC: HasSeenMe @ 0x004c58f0 -- 'me' is in my memory, seen or heard
+// within kMaxSeenTime (FindCharacters inlines it).
 bool TCharacter::HasSeenMe(TCharacter* me)
 {
     for (int32_t c = 0; c < MAXHASSEEN; c++)
     {
         if (hasseen[c].chr == me &&
-            PlayScreen.GameFrame() - hasseen[c].time < MAXSEENTIME)
+            PlayScreen.GameFrame() - hasseen[c].time < kMaxSeenTime)
                 return true;
     }
 
@@ -2530,12 +2554,30 @@ bool TCharacter::IsFinalState()
     return false;
 }
 
+// REVSYNC: IsEnemy @ 0x004c89c0 -- never an idle player (state bit 2), nor,
+// between players, one of my team or either of us not a player killer;
+// always the one fighting me; else one named, typed or grouped among my
+// ENEMIES, if he's aggressive or a player.
 bool TCharacter::IsEnemy(TCharacter* chr)
 {
     if (isEnemySeam)
         return isEnemySeam(this, chr);
+    if (chr->ObjClass() == OBJCLASS_PLAYER)
+    {
+        const auto* other = static_cast<const TPlayer*>(chr);
+        if (other->PlayerState() & 2)
+            return false;
+        if (ObjClass() == OBJCLASS_PLAYER)
+        {
+            const auto* me = static_cast<const TPlayer*>(this);
+            if (!me->Team().name.empty() && stricmp(me->Team().name.c_str(), other->Team().name.c_str()) == 0)
+                return false;
+            if (!other->IsPlayerKiller() || !me->IsPlayerKiller())
+                return false;
+        }
+    }
   // Is this character attacking me
-    if (chr->IsFighting() && chr->Fighting() == this)
+    if (chr->Fighting() == this)
         return true;    // That makes me hostile no matter what
 
   // Is this character a PARTICULAR enemy of mine (i.e. enemy by name)
@@ -2882,35 +2924,38 @@ sight_tail:
     }
 }
 
+// REVSYNC: retail inlines this in FindCharacters (0x004cd7bd): heard if
+// visible, within HEARINGRANGE (edge to edge) and making more noise than
+// 100 less this hearing (Hearing) -- no line of sight, unlike the 1998
+// source's.
 bool TCharacter::CanHearCharacter(TCharacter* chr)
 {
-    bool hear = true;
-    int32_t dist = Distance(chr);
-    int32_t noise = chr->LastNoise();
-    S3DPoint from, to;
-    GetPos(from);
-    from.z += LIGHTINGCHARHEIGHT; // Nominal character height
-    chr->GetPos(to);
-    to.z += LIGHTINGCHARHEIGHT; // Nominal character height
-    if (dist > chardata->hearingrange ||    // Within hearing range
-         noise < (100 - Hearing(dist)) ||   // Last noise made was too quiet
-        !MapPane.LineOfSight(from, to))     // Has line of sight
-        hear = false;
-
-    return hear;
+    if (chr->flags & OF_INVISIBLE)
+        return false;
+    const int32_t dist = Distance(chr);
+    const int32_t noise = chr->LastNoise();
+    return dist <= chardata->hearingrange && noise > 100 - Hearing(dist);
 }
 
+// REVSYNC: CanSeeCharacter @ 0x004cd540 -- eye to eye (LIGHTINGCHARHEIGHT
+// above each position), centre to centre: within SIGHTRANGE, within
+// SIGHTANGLE of `angle` (the facing below 1), in line of sight, and lit
+// enough -- the glimpse he gave off (always seen with infravision, reversed
+// when light-blind) at least 100 less this sight (Sight). Never an
+// invisible object.
 bool TCharacter::CanSeeCharacter(TCharacter* chr, int32_t angle)
 {
     if (canSeeSeam)
         return canSeeSeam(this, chr, angle);
-    bool see = true;
-
+    if (chr->flags & OF_INVISIBLE)
+        return false;
+    S3DPoint from = pos, to = chr->Pos();
+    from.z += LIGHTINGCHARHEIGHT;
+    to.z += LIGHTINGCHARHEIGHT;
     if (angle < 1)
         angle = GetFace();
-    int32_t dist = Distance(chr);
-    int32_t angleto = AngleTo(chr);
-    int32_t anglediff = abs(AngleDiff(angle, angleto));
+    const int32_t dist = ::Distance(from, to);
+    const int32_t anglediff = abs(AngleDiff(angle, AngleTo(chr)));
 
     int32_t glimpse = chr->LastGlimpse();
     if (chardata->flags & CF_INFRAVISION)
@@ -2918,19 +2963,8 @@ bool TCharacter::CanSeeCharacter(TCharacter* chr, int32_t angle)
     else if (chardata->flags & CF_LIGHTBLIND)
         glimpse = 100 - glimpse; // Reverse glimpse value so more light is less visible!
 
-    S3DPoint from, to;
-    GetPos(from);
-    from.z += LIGHTINGCHARHEIGHT; // Nominal character height
-    chr->GetPos(to);
-    to.z += LIGHTINGCHARHEIGHT; // Nominal character height
-
-    if (dist > chardata->sightrange ||
-        anglediff > chardata->sightangle ||
-        !MapPane.LineOfSight(from, to) ||
-        glimpse < (100 - Sight(dist)))
-        see = false;
-
-    return see;
+    return dist <= chardata->sightrange && anglediff <= chardata->sightangle && MapPane.LineOfSight(from, to) &&
+           glimpse >= 100 - Sight(dist);
 }
 
 // Finds characters in range, with closest guy at head of list
@@ -2965,8 +2999,19 @@ bool TCharacter::IsValidTarget(TCharacter* target)
     return target->ObjClass() != OBJCLASS_PLAYER;      // a script holds control: not the player
 }
 
-int32_t TCharacter::FindCharacters(TCharacter* chars[], int32_t maxchars, 
-    int32_t range, int32_t angle, int32_t anglerange, int32_t flags)
+// REVSYNC: FindCharacters @ 0x004cd690 -- the characters near me, in map
+// order, the best at the head. The range is at least the hearing range when
+// listening and the sight range when looking (and when below 0). Not me,
+// nor one under the invisibility spell. Looking for enemies, one who isn't
+// is marked as seen and passed over, and an invalid target passed over.
+// Listening or looking, one neither heard nor seen is kept only if I
+// remember him (HasSeenMe); one heard or seen is remembered. With an angle,
+// only those within `anglerange` of it, the score the edge distance times
+// how far off it they are (plus 1); without, the edge distance alone. A
+// better (or equal) score goes to the head, the one it displaces to the
+// end -- but the first found is never scored: the best starts at 10000.
+int32_t TCharacter::FindCharacters(TCharacter* chars[], int32_t maxchars, int32_t range, int32_t angle,
+                                   int32_t anglerange, int32_t flags)
 {
     if (findCharactersSeam)
         return findCharactersSeam(this, chars, maxchars, range, angle, anglerange, flags);
@@ -2975,84 +3020,58 @@ int32_t TCharacter::FindCharacters(TCharacter* chars[], int32_t maxchars,
         return 0;
 
     chars[0] = nullptr;
-    int32_t bestdist = 10000;
-    
     if (range < 0 || (flags & FINDCHAR_HEAR))
         range = max(range, chardata->hearingrange);
     if (range < 0 || (flags & FINDCHAR_SEE))
         range = max(range, chardata->sightrange);
 
     int32_t numchars = 0;
-
-    for (TMapIterator i(Pos(), range, CHECK_NOINVENT | CHECK_MAPRECT, OBJSET_CHARACTER); i; i++)
-    {
-        TCharacter* chr = (TCharacter*)i.Item();
-
-        if (chr == this)
-            continue;
-
-    // if the invisible spell is cast
-        if (chr->IsInvisibleSpell())
-            continue;
-
-        if ((flags & FINDCHAR_ENEMY) && (!IsEnemy(chr) || chr->IsDead()))
+    int32_t best = 10000;
+    ForCharactersNear(GetLevel(), pos, range, [&](TCharacter* chr) {
+        if (chr == this || chr->IsInvisibleSpell())
+            return true;
+        if (flags & FINDCHAR_ENEMY)
         {
-            SetHasSeen(chr);
-            continue;
+            if (!IsEnemy(chr))
+            {
+                SetHasSeen(chr);
+                return true;
+            }
+            if (!IsValidTarget(chr))
+                return true;
         }
+        int32_t score = Distance(chr);
+        if (score > range)
+            return true;
+        const int32_t angleto = AngleTo(chr);
 
-        int32_t dist = Distance(chr);
-        if (dist > range)
-            continue;
-
-        int32_t angleto = AngleTo(chr);
-
-     // Do we hear this guy?
-        bool hear = true;
-        if (flags & FINDCHAR_HEAR)
-            hear = CanHearCharacter(chr);
-
-      // Do we see this guy
-        bool see = true;
-        if (flags & FINDCHAR_SEE)
-            see = CanSeeCharacter(chr, angle); // Uses 'angle' if >= 0, otherwise uses facing
-
-      // Set has seen if we see or hear char
+        const bool hear = !(flags & FINDCHAR_HEAR) || CanHearCharacter(chr);
+        const bool see = !(flags & FINDCHAR_SEE) || CanSeeCharacter(chr, angle);
         if (flags & (FINDCHAR_HEAR | FINDCHAR_SEE))
         {
             if (hear || see)
                 SetHasSeen(chr);
-            else
-                if (!HasSeenMe(chr))  // Didn't see me, and hasn't seen me in a while...
-                    continue;
+            else if (!HasSeenMe(chr))
+                return true;
         }
 
-      // Is this guy in the direction we're checking?   
         if (angle >= 0)
         {
-            int32_t diff = abs(AngleDiff(angle, angleto));
+            const int32_t diff = abs(AngleDiff(angle, angleto));
             if (diff > anglerange)
-                continue;
-            dist = dist * ((anglerange + 1) - diff); // Dist gets bigger when diff between angles small
-        }
-    
-      // Put closest guy at head of list
-        if (chars[0] != nullptr && dist <= bestdist)
-        {
-            TCharacter* temp = chars[0];
-            chars[0] = chr;
-            chr = temp;
-            bestdist = dist;
+                return true;
+            score *= anglerange - diff + 1;
         }
 
-      // Add to end of list
+        if (chars[0] && score <= best)
+        {
+            std::swap(chars[0], chr);
+            best = score;
+        }
         if (numchars < maxchars)
-        {
-            chars[numchars] = chr;
-            numchars++;
-        }
-    }
-
+            chars[numchars++] = chr;
+        return true;
+    });
     return numchars;
 }
 
@@ -3150,46 +3169,38 @@ TObjectInstance* TCharacter::WanderToWaypoint(const S3DPoint& search_center, int
     return closest;
 }
 
-// Returns a 1-100 hearing value which indicates how the average noise will be heard
-// by a monster.  If the monster is sleeping, the listening value is 20% of normal. 
-// The hearing value is based on the minhearing/maxhearing values in the chardata structure,
-// where minhearing is the hearing value at the characters maximum hearing range, and 
-// maxhearing is the hearing value right in front of the character.
+// REVSYNC: Hearing @ 0x004cda80 (slot 0x2e0) -- 0 beyond HEARINGRANGE (the
+// distance less my radius and 32), else 100: the scaling (a draw of -2..2
+// on 100, times the distance over the range, over 100; halved asleep) is
+// then held to at most 0 and floored at 100 -- a clamp to 0..100 turned
+// inside out. So anything in range making any noise is heard. (The 1998
+// source scaled from HEARINGMAX close to HEARINGMIN at the range; retail
+// reads neither.)
 int32_t TCharacter::Hearing(int32_t dist)
 {
-    dist = max(0, dist - (Radius() + 32));
-
+    dist = max(0, dist - Radius() - 32);
     if (dist > chardata->hearingrange)
         return 0;
 
-    int32_t hearing = chardata->hearingmin +
-        (chardata->hearingrange - dist) *
-        (chardata->hearingmax - chardata->hearingmin) / 
-        chardata->hearingrange;
-
+    int32_t hearing = (random(-2, 2) + 100) * dist / chardata->hearingrange / 100;
     if (Sleeping())
-        hearing = hearing * 20 / 100;
-
-    return hearing;
+        hearing /= 2;
+    hearing = min(hearing, 0);
+    return hearing > 100 ? hearing : 100;
 }
 
-// Returns a 1-100 sight value which indicates how the average char will be seen
-// by a monster in the darkness.  The sight value is based on the minsight/maxsight
-// values in the chardata structure, where minsight is the sight value at the characters
-// maximum sight range, and maxsight is the sight value right in front of the character.
-// If the monster is sleeping, the sight value is always 0.
+// REVSYNC: Sight @ 0x004cdb30 (slot 0x2e4) -- 0 asleep or beyond SIGHTRANGE
+// (centre to centre), else a draw of -2..2 on 100, times the distance over
+// the range, over 100, held to 0..100: 0 or 1. So CanSeeCharacter wants a
+// glimpse of 99 or more. (The 1998 source scaled from SIGHTMAX close to
+// SIGHTMIN at the range, less the radius and 32; retail reads neither.)
 int32_t TCharacter::Sight(int32_t dist)
 {
-    dist = max(0, dist - (Radius() + 32));
-
+    dist = max(dist, 0);
     if (Sleeping() || dist > chardata->sightrange)
         return 0;
-    
-  // Basically return min + (max - min) * dist/range
-    return chardata->sightmin +
-        (chardata->sightrange - dist) *
-        (chardata->sightmax - chardata->sightmin) / 
-        chardata->sightrange;
+
+    return std::clamp((random(-2, 2) + 100) * dist / chardata->sightrange / 100, 0, 100);
 }
 
 // Resets the noise and glimpse values to control whether monsters see you or not
@@ -5189,20 +5200,14 @@ TCharacter* TCharacter::CharBlocking(TObjectInstance* inst, const S3DPoint& pos,
         return !(c->ObjClass() == OBJCLASS_PLAYER && (static_cast<TPlayer*>(c)->PlayerState() & 2));
     };
 
-    if (nearbyCharactersSeam)
-    {
-        for (TCharacter* c : nearbyCharactersSeam(pos, kRange))
-            if (blocks(c))
-                return c;
-        return nullptr;
-    }
-    // Retail's iterator flags 0xe0: no inventories, the map rectangle, the
-    // loaded sectors -- what the level constructor sets.
-    SRect r{pos.x - kRange, pos.y - kRange, pos.x + kRange, pos.y + kRange};
-    for (TMapIterator i(inst->GetLevel(), &r, CHECK_NOINVENT, OBJSET_CHARACTER); i; i++)
-        if (TCharacter* c = static_cast<TCharacter*>(i.Item()); blocks(c))
-            return c;
-    return nullptr;
+    TCharacter* found = nullptr;
+    ForCharactersNear(inst->GetLevel(), pos, kRange, [&](TCharacter* c) {
+        if (!blocks(c))
+            return true;
+        found = c;
+        return false;
+    });
+    return found;
 }
 
 // ------------- Streaming functions ------------------

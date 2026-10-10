@@ -80,14 +80,10 @@ std::string Sequence(const JsonValue& cs, TFixtureWorld& world, TCharacter* me)
     return j.str();
 }
 
-// Case (field 0, JSON): {"globals", "chars": [...], "self", "call", ...};
-// see slots/combat/combat_call.py. `call`: "go" (Go(angle), kata M3),
-// "resolve-combat" / "resolve-combat-move" (the resolvers on the doing
-// block with `bits`, kata M5), "move" (Move, kata M7: the case's ground and
-// nearby characters, retailab_fixture.h; adds "motion"). Not modelled on the port side, because the
-// port has no such thing yet: CombatFace (the case's value is ignored),
-// FindClearPath (the port's Go doesn't probe ahead), CanSeeCharacter in the
-// resolvers, the frame cadence of retargeting.
+// Case (field 0, JSON): {"globals", "chars": [...], "self", "call", ...}.
+// slots/combat/combat_call.py documents each `call` (the katas M1u-M10,
+// M9b, C1) and what it adds to the dump; the seams answered from the case
+// are SCaseScope's (retailab_fixture.cpp).
 std::string CombatCall(const Case& c, std::string& error)
 {
     try
@@ -102,6 +98,7 @@ std::string CombatCall(const Case& c, std::string& error)
         const std::string call = cs.Has("call") ? cs["call"].Str() : "go";
         int32_t returned = 0;
         std::vector<int32_t> outputs;
+        std::vector<TCharacter*> found;
         if (call == "calculate-damage")
             for (const JsonValue& in : cs["inputs"].Items())
                 outputs.push_back(me->CalculateDamage((int32_t)in[0].Int(), (int32_t)in[1].Int(), (int32_t)in[2].Int()));
@@ -132,6 +129,22 @@ std::string CombatCall(const Case& c, std::string& error)
             returned = me->KnockBack(S3DPoint((int32_t)f[0].Int(), (int32_t)f[1].Int(), (int32_t)f[2].Int()),
                                      (int32_t)cs["variant"].Int(-1)) ? 1 : 0;
         }
+        else if (call == "find-characters")
+        {
+            const int32_t max = (int32_t)cs["max"].Int(1);
+            found.assign((size_t)(std::max)(max, 1), nullptr);
+            returned = fx->RunFindCharacters(found.data(), max, (int32_t)cs["range"].Int(), (int32_t)cs["angle"].Int(),
+                                             (int32_t)cs["anglerange"].Int(), (int32_t)cs["flags"].Int());
+            found.resize((size_t)(std::max)(returned, 0));
+        }
+        else if (call == "can-see")
+            returned = me->CanSeeCharacter(world.Get(cs["target"].Str()), (int32_t)cs["angle"].Int(-1)) ? 1 : 0;
+        else if (call == "is-enemy")
+            returned = me->IsEnemy(world.Get(cs["target"].Str())) ? 1 : 0;
+        else if (call == "hearing")
+            returned = me->Hearing((int32_t)cs["dist"].Int());
+        else if (call == "sight")
+            returned = me->Sight((int32_t)cs["dist"].Int());
         else if (call == "update-move")
         {
             const JsonValue& ctl = cs["controls"];
@@ -157,6 +170,15 @@ std::string CombatCall(const Case& c, std::string& error)
         WriteDraws(j);
         if (call == "move" || call == "update-action" || call == "start-retreat" || call == "knockback")
             fx->WriteMotion(j);
+        if (call == "find-characters" || call == "can-see" || call == "is-enemy" || call == "hearing" ||
+            call == "sight")
+        {
+            j.Key("found").Begin('[');
+            for (TCharacter* f : found)
+                j.String(world.NameOf(f));
+            j.End(']');
+            world.WriteMemory(j, me);
+        }
         if (call == "update-move")
         {
             uint32_t state, changed;
@@ -237,6 +259,7 @@ static const bool registered = RegisterTarget("combat-go", CombatCall) &&
                                RegisterTarget("combat-sequence", CombatCall) &&
                                RegisterTarget("combat-input", CombatCall) &&
                                RegisterTarget("combat-steps", CombatCall) &&
+                               RegisterTarget("combat-perceive", CombatCall) &&
                                RegisterTarget("combat-kernels", CombatKernels);
 
 }  // namespace RetailAB

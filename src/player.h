@@ -274,6 +274,14 @@ class TPlayer : public TCharacter
     [[nodiscard]] int32_t PlayerState() const { return playerstate; }
     void SetPlayerState(int32_t newstate);
         // Player state bits (retail +0x36c)
+    [[nodiscard]] bool IsPlayerKiller() const { return (playerstate >> 24) & 1; }
+        // REVSYNC: 0x0051e480 -- may this player fight other players: state
+        // bit 24, under the session's player-killer rule (DAT_00676804: 1
+        // everyone, 2 no one, 0 -- single player -- each his own bit), which
+        // lives with multiplayer and isn't ported
+    [[nodiscard]] const SPlayerTeamRecord& Team() const { return team; }
+    void SetTeam(const SPlayerTeamRecord& record) { team = record; }
+        // The multiplayer team record, set as a whole (0x0051e4d0 compares it)
     [[nodiscard]] const SPlayerHudWords& HudWords() const { return hudwords; }
     void SetHudWords(const SPlayerHudWords& words) { hudwords = words; }
         // The HUD state written into a save
