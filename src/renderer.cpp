@@ -1983,10 +1983,11 @@ void TRenderer::InitMeshPipeline()
     tpip.label = "renderer.mesh.translucent.pipeline";
     mesh_translucent_pipeline = sg_make_pipeline(&tpip);
     // Blue ARGB4444 blends with the already-lit framebuffer in face order,
-    // while retaining ordinary Z writes and positive screen-down culling.
-    tpip.depth.write_enabled = true;
+    // Native NewObject/RenderObject selects blend mode 4 for alpha textures:
+    // test scene depth, but blend both face directions without depth writes.
+    tpip.depth.write_enabled = false;
     tpip.face_winding = SG_FACEWINDING_CW;
-    tpip.cull_mode = SG_CULLMODE_BACK;
+    tpip.cull_mode = SG_CULLMODE_NONE;
     tpip.label = "renderer.mesh.source-alpha.pipeline";
     mesh_source_alpha_pipeline = sg_make_pipeline(&tpip);
 
