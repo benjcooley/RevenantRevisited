@@ -103,6 +103,9 @@ class TCharacter : public TComplexObject
     using KnockBackSeam = void (*)(TCharacter* self, const S3DPoint& from, int32_t variant);
     static inline KnockBackSeam knockBackSeam = nullptr;
       // Likewise for KnockBack (retail 0x004d3750)
+    using SignalAttackSeam = void (*)(TCharacter* self, TObjectInstance* actor, TObjectInstance* target, int32_t flag);
+    static inline SignalAttackSeam signalAttackSeam = nullptr;
+      // Likewise for SignalAttack (retail OnAttacked 0x004cdce0, vtable +0x240)
     using NearbyCharactersSeam = std::vector<TCharacter*> (*)(const S3DPoint& pos, int32_t range);
     static inline NearbyCharactersSeam nearbyCharactersSeam = nullptr;
       // Likewise for the characters CharBlocking walks (retail's map iterator
@@ -159,8 +162,8 @@ class TCharacter : public TComplexObject
         // Actor is moving
     virtual void SignalHostility(TObjectInstance* actor, TObjectInstance* target);
         // Actor is hostile to target
-    virtual void SignalAttack(TObjectInstance* actor, TObjectInstance* target);
-        // Actor is attacking target
+    virtual void SignalAttack(TObjectInstance* actor, TObjectInstance* target, int32_t flag = 0);
+        // Actor is attacking target (retail OnAttacked 0x004cdce0, slot 0x240; flag 2 for a spell)
 
   // ActionBlock generic function callers
     bool SetWalkMode();
@@ -325,6 +328,10 @@ class TCharacter : public TComplexObject
       // Character leaps in the given direction (combat mode only)
     bool PlayAnim(char *string);
       // Causes character to play animation name.
+    bool ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAttackImpact* impact, int32_t damage,
+        int32_t tohit, int32_t roll);
+      // REVSYNC: 0x004c62b0 -- one character struck by an attack at its impact frame
+      // (ResolveAttack calls it for the target and each character in reach)
 
   // Info functions specific to characters
     bool IsFighting() { return IsCombat() || IsBowMode(); }
@@ -613,11 +620,6 @@ class TCharacter : public TComplexObject
     virtual void UpdateAction(int32_t bits = 0);
       // Called by Pulse() to update the action blocks
 
-    bool ResolveHit(TCharacter* targ, 
-        PSCharAttackData attack, PSCharAttackImpact attackimpact, int32_t attackdamage);
-    // This function is called by the ResolveAttack() function to resolve hits for
-    // multiple characters.  The characters are usually found by calling the FindCharacters()
-    // function, then calling this function for each character found.
 
     // Resolve functions - redefine these in derived classes for different functionality
     virtual int32_t ResolveAction(int32_t bits = 0);
@@ -767,10 +769,14 @@ public:
     int32_t  DoingTargetX() const { return doing ? doing->target.x : 0; }
     int32_t  DoingTargetY() const { return doing ? doing->target.y : 0; }
     int32_t  NextAttack()   const { return nextattack; }
+    int32_t  LastBowShot()  const { return lastbowshot; }
+    int32_t  BowShots()     const { return bowshots; }
 protected:
 
   // Last bow shot ticks (so we don't shoot bow too fast)
-    int32_t lastbowshot = 0;
+    int32_t lastbowshot = 0;    // +0x22c
+  // Shots ShootBow has queued for ResolveBowShoot
+    int32_t bowshots = 0;       // +0x230
 
   // AI fix, this variable keeps track of the last position we saw the enemy at
     S3DPoint target_last_position{};

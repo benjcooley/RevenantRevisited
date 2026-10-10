@@ -695,6 +695,11 @@ void TPlayer::AwardKillExp(TCharacter *victim)
 // dead victim, by its Value.
 void TPlayer::AwardSkillExp(int32_t skillnum, TCharacter *victim)
 {
+    if (awardSkillExpSeam)
+    {
+        awardSkillExpSeam(this, skillnum, victim);
+        return;
+    }
     if (!victim || victim->Health() > 0)
         return;
     AddSkillExp(skillnum, KillExp(victim->GetStat("Value")));
@@ -704,6 +709,11 @@ void TPlayer::AwardSkillExp(int32_t skillnum, TCharacter *victim)
 // victim that never saw the player (0x004c58f0).
 void TPlayer::AwardStealthExp(TCharacter *victim)
 {
+    if (stealthExpSeam)
+    {
+        stealthExpSeam(this, victim);
+        return;
+    }
     if (victim && !victim->HasSeenMe(this))
         AwardSkillExp(SK_STEALTH, victim);
 }
@@ -889,6 +899,8 @@ void TPlayer::OnInventoryRemove(TObjectInstance* item)
 // the body-part rebuild (0x00584e00).
 bool TPlayer::Equip(TObjectInstance* oi, int32_t slot)
 {
+    if (equipSeam)
+        return equipSeam(this, oi, slot);
     if (slot < 0)
     {
         if (!oi || oi->FindStat("EqSlot") < 0)

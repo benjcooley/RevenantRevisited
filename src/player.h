@@ -167,6 +167,9 @@ class TPlayer : public TCharacter
     bool CanEquip(TObjectInstance* oi, int32_t slot);
         // Returns true if player can be equiped by the given object
     bool Equip(TObjectInstance* oi, int32_t slot);
+    using EquipSeam = bool (*)(TPlayer* self, TObjectInstance* oi, int32_t slot);
+    static inline EquipSeam equipSeam = nullptr;
+      // Retail A/B fixtures only: when set, it answers Equip (retail 0x005199b0)
         // Set up equipment pointers from objects in player's inventory
     void OnInventoryRemove(TObjectInstance* item) override;
         // An equipped item leaving the inventory is unequipped first
@@ -189,20 +192,27 @@ class TPlayer : public TCharacter
 
     // Retail A/B fixtures only: when set, each answers its call as the
     // retail fixture's seam does -- recorded, not run: AddSkillExp (vtable
-    // +0x418), AwardKillExp (+0x414), AddStatEffect (0x0051c2c0).
+    // +0x418), AddStatEffect (0x0051c2c0). The experience seams are below.
     using SkillExpSeam = void (*)(TPlayer* self, int32_t skillnum, int32_t exp);
     static inline SkillExpSeam skillExpSeam = nullptr;
-    using KillExpSeam = void (*)(TPlayer* self, TCharacter* victim);
-    static inline KillExpSeam killExpSeam = nullptr;
     using StatEffectSeam = void (*)(TPlayer* self, const char* statline);
     static inline StatEffectSeam statEffectSeam = nullptr;
-    using PlayerStateSeam = void (*)(TPlayer* self, int32_t newstate);
-    static inline PlayerStateSeam playerStateSeam = nullptr;
-      // SetPlayerState (0x0051d680): recorded, and the state still set
 
     // Experience
     [[nodiscard]] int32_t KillExp(int32_t value);
       // What overcoming something worth 'value' earns at this level (retail 0x0051a5b0)
+    // Retail A/B fixtures only: when set, each answers its call as the
+    // retail fixture's seam does -- recorded, not run: AwardKillExp (vtable
+    // +0x414), AwardSkillExp (+0x41c), AwardStealthExp (+0x420); and
+    // SetPlayerState (0x0051d680), recorded with the state still set.
+    using KillExpSeam = void (*)(TPlayer* self, TCharacter* victim);
+    static inline KillExpSeam killExpSeam = nullptr;
+    using AwardSkillExpSeam = void (*)(TPlayer* self, int32_t skillnum, TCharacter* victim);
+    static inline AwardSkillExpSeam awardSkillExpSeam = nullptr;
+    using StealthExpSeam = void (*)(TPlayer* self, TCharacter* victim);
+    static inline StealthExpSeam stealthExpSeam = nullptr;
+    using PlayerStateSeam = void (*)(TPlayer* self, int32_t newstate);
+    static inline PlayerStateSeam playerStateSeam = nullptr;
     void AwardKillExp(TCharacter *victim);
       // Experience for a dead victim; may raise the level (retail vtable +0x414, 0x0051a630)
     void AwardSkillExp(int32_t skillnum, TCharacter *victim);

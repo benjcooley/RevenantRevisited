@@ -386,6 +386,11 @@ class TSpellManager
     // 0x0044d080 over OBJSET_ANIMATE), instead of the map.
     using NearbySeam = std::vector<TObjectInstance*> (*)(TObjectInstance* center);
     static inline NearbySeam nearbySeam = nullptr;
+    // Likewise, when set, it answers CastByName (retail 0x0053f920).
+    using CastByNameSeam = bool (*)(TSpellManager* self, const char* name, TObjectInstance* invoker,
+                                    TObjectInstance** targets, int32_t numtargs, const S3DPoint* sourcepos,
+                                    const TSpell* master);
+    static inline CastByNameSeam castByNameSeam = nullptr;
 
   private:
     bool CanAfford(TCharacter* caster, const SSpellVariant& variant, bool byname) const;
