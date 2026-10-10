@@ -109,6 +109,181 @@ void WriteFlags(JsonOut& j, uint32_t bits)
     j.End(']');
 }
 
+// ---- Character data from the case --------------------------------------------
+
+namespace
+{
+void ReadText(const JsonValue& v, char* out, size_t size)
+{
+    if (!v.IsNull())
+        strncpyz(out, v.Str().c_str(), (int32_t)size);
+}
+
+template <typename T>
+void ReadInt(const JsonValue& v, T& out)
+{
+    if (!v.IsNull())
+        out = (T)v.Int();
+}
+
+template <typename T>
+void ReadInts(const JsonValue& v, T* out, size_t count)
+{
+    for (size_t i = 0; i < count && i < v.Items().size(); ++i)
+        out[i] = (T)v[i].Int();
+}
+
+void ReadImpact(const JsonValue& v, SCharAttackImpact& ai)
+{
+    memset(&ai, 0, sizeof(ai));
+    ReadText(v["name"], ai.impactname, sizeof(ai.impactname));
+    ReadInt(v["index"], ai.index);
+    ReadInt(v["flags"], ai.flags);
+    ReadText(v["loopname"], ai.loopname, sizeof(ai.loopname));
+    ReadInt(v["looptime"], ai.looptime);
+    ReadInt(v["damagemin"], ai.damagemin);
+    ReadInt(v["damagemax"], ai.damagemax);
+    ReadInt(v["snapdist"], ai.snapdist);
+    ReadInt(v["snaptime"], ai.snaptime);
+}
+
+void ReadAttack(const JsonValue& v, SCharAttackData& ad)
+{
+    memset(&ad, 0, sizeof(ad));
+    ReadText(v["name"], ad.attackname, sizeof(ad.attackname));
+    ReadInt(v["flags"], ad.flags);
+    ReadInt(v["button"], ad.button);
+    ReadInt(v["attackpcnt"], ad.attackpcnt);
+    ReadInt(v["mindist"], ad.mindist);
+    ReadInt(v["maxdist"], ad.maxdist);
+    if (ad.flags & CA_MAGICATTACK)
+    {
+        ReadText(v["spellname"], ad.spellname, sizeof(ad.spellname));
+        const JsonValue& src = v["spellsource"];
+        ad.spellsource = S3DPoint((int32_t)src[0].Int(), (int32_t)src[1].Int(), (int32_t)src[2].Int());
+        ReadInt(v["condition"], ad.condition);
+        ReadInt(v["conditionvalue"], ad.conditionvalue);
+        return;
+    }
+    ReadText(v["responsename"], ad.responsename, sizeof(ad.responsename));
+    ReadText(v["blockname"], ad.blockname, sizeof(ad.blockname));
+    ReadText(v["missname"], ad.missname, sizeof(ad.missname));
+    ReadText(v["chainname"], ad.chainname, sizeof(ad.chainname));
+    ReadInt(v["blocktime"], ad.blocktime);
+    ReadInt(v["impacttime"], ad.impacttime);
+    ReadInt(v["chainexptime"], ad.chainexptime);
+    ReadInt(v["nextwait"], ad.nextwait);
+    ReadInt(v["hitminrange"], ad.hitminrange);
+    ReadInt(v["hitmaxrange"], ad.hitmaxrange);
+    ReadInt(v["hitangle"], ad.hitangle);
+    ReadInt(v["damagemod"], ad.damagemod);
+    ReadInt(v["fatigue"], ad.fatigue);
+    ReadInt(v["attackskill"], ad.attackskill);
+    ReadInt(v["weaponmask"], ad.weaponmask);
+    ReadInt(v["weaponskill"], ad.weaponskill);
+    ReadInt(v["swipeframeon"], ad.swipeframeon);
+    ReadInt(v["swipeframeoff"], ad.swipeframeoff);
+    ReadInt(v["maxfatigue"], ad.maxfatigue);
+    for (const JsonValue& imp : v["impacts"].Items())
+        if (ad.numimpacts < MAXATTACKIMPACTS)
+            ReadImpact(imp, ad.impacts[ad.numimpacts++]);
+}
+}  // namespace
+
+void ReadCharData(const JsonValue& c, SCharData& cd)
+{
+    ReadText(c["groups"], cd.groups, sizeof(cd.groups));
+    ReadText(c["enemies"], cd.enemies, sizeof(cd.enemies));
+    ReadInt(c["flags"], cd.flags);
+    ReadText(c["blocksounds"], cd.blocksounds, sizeof(cd.blocksounds));
+    ReadText(c["misssounds"], cd.misssounds, sizeof(cd.misssounds));
+    int32_t three[3] = {cd.playerblockmin, cd.playerblockstep, cd.playerblockinc};
+    ReadInts(c["playerblock"], three, 3);
+    cd.playerblockmin = three[0], cd.playerblockstep = three[1], cd.playerblockinc = three[2];
+    int32_t two[2] = {cd.combatrangemin, cd.combatrangemax};
+    ReadInts(c["combatrange"], two, 2);
+    cd.combatrangemin = two[0], cd.combatrangemax = two[1];
+    ReadInt(c["maxattackrange"], cd.maxattackrange);
+    ReadInt(c["bleeder"], cd.bleeder);
+    ReadText(c["bodytype"], cd.bodytype, sizeof(cd.bodytype));
+    int32_t block[3] = {cd.blockfreq, cd.blockmin, cd.blockmax};
+    ReadInts(c["block"], block, 3);
+    cd.blockfreq = block[0], cd.blockmin = block[1], cd.blockmax = block[2];
+    int32_t sight[4] = {cd.sightmin, cd.sightmax, cd.sightrange, cd.sightangle};
+    ReadInts(c["sight"], sight, 4);
+    cd.sightmin = sight[0], cd.sightmax = sight[1], cd.sightrange = sight[2], cd.sightangle = sight[3];
+    int32_t hearing[3] = {cd.hearingmin, cd.hearingmax, cd.hearingrange};
+    ReadInts(c["hearing"], hearing, 3);
+    cd.hearingmin = hearing[0], cd.hearingmax = hearing[1], cd.hearingrange = hearing[2];
+    ReadInt(c["weapontype"], cd.weapontype);
+    ReadInt(c["weapondamage"], cd.weapondamage);
+    ReadInt(c["defensemod"], cd.defensemod);
+    ReadInt(c["attackmod"], cd.attackmod);
+    int32_t freq[2] = {cd.minattackfreq, cd.maxattackfreq};
+    ReadInts(c["attackfreq"], freq, 2);
+    cd.minattackfreq = freq[0], cd.maxattackfreq = freq[1];
+    int32_t magic[2] = {cd.minmagicfreq, cd.maxmagicfreq};
+    ReadInts(c["magicfreq"], magic, 2);
+    cd.minmagicfreq = magic[0], cd.maxmagicfreq = magic[1];
+    ReadInt(c["mana"], cd.mana);
+    ReadInt(c["fatigue"], cd.fatigue);
+    ReadInt(c["health"], cd.health);
+    ReadInt(c["retreatat"], cd.retreatat);
+    ReadInt(c["retreatatmana"], cd.retreatatmana);
+    ReadInt(c["retreatfor"], cd.retreatfor);
+    ReadInts(c["runfatigue"], cd.runfatigue, 2);
+    if (!c["noparalyze"].IsNull())
+        cd.noparalyze = c["noparalyze"].Bool();
+    ReadInt(c["poisonchance"], cd.poisonchance);
+    if (c.Has("impacts"))
+    {
+        cd.numimpacts = 0;
+        for (const JsonValue& imp : c["impacts"].Items())
+            if (cd.numimpacts < MAXCHARIMPACTS)
+                ReadImpact(imp, cd.impacts[cd.numimpacts++]);
+    }
+    if (c.Has("attacks"))
+    {
+        cd.attacks.Clear();
+        for (const JsonValue& v : c["attacks"].Items())
+        {
+            SCharAttackData ad;
+            ReadAttack(v, ad);
+            cd.attacks.Add(ad);
+        }
+    }
+}
+
+// Retail's stat ids (charstats.h) under the names the retail fixture
+// (slots/combat/guest.py) gives them.
+const char* ObjStatName(int32_t statid)
+{
+    static const char* const flags[] = {"aggressive", "poisoned", "sleeping"};
+    static const char* const values[] = {"health", "fatigue", "mana"};
+    static const char* const attributes[] = {"strn", "cons", "agil", "rflx", "mind", "luck"};
+    static const char* const skills[] = {"attack", "defense", "invoke", "hands", "knife", "sword",
+                                         "bludgeons", "axes", "bows", "stealth", "lockpick"};
+    if (statid >= CHRFLAG_FIRST && statid < CHRFLAG_FIRST + NUM_CHRFLAGS)
+        return flags[statid - CHRFLAG_FIRST];
+    if (statid >= CHRSTAT_FIRST && statid < CHRSTAT_FIRST + NUM_CHRSTATS)
+        return values[statid - CHRSTAT_FIRST];
+    if (statid == CHRVAL_DAMAGEMOD)
+        return "damagemod";
+    if (statid == PLRVAL_FIRST + PLRVAL_LEVEL)
+        return "level";
+    if (statid == PLRVAL_FIRST + PLRVAL_ATTACKLEVEL)
+        return "attacklevel";
+    if (statid == PLRVAL_FIRST + PLRVAL_ACBONUS)
+        return "acbonus";
+    if (statid == PLRVAL_FIRST + PLRVAL_EDGEBONUS)
+        return "edgebonus";
+    if (statid >= PLRSTAT_FIRST && statid < PLRSTAT_FIRST + NUM_PLRSTATS)
+        return attributes[statid - PLRSTAT_FIRST];
+    if (statid >= SK_FIRST && statid < SK_FIRST + NUM_SKILLS)
+        return skills[statid - SK_FIRST];
+    return nullptr;
+}
+
 std::vector<SFixtureState> ReadStates(const JsonValue& list)
 {
     std::vector<SFixtureState> states;
@@ -166,8 +341,10 @@ bool CaseSees(TCharacter* self, TCharacter* chr, int32_t angle)
     return g_sees;
 }
 
-bool CaseBlocked(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, uint32_t bits)
+bool CaseBlocked(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, uint32_t bits, TCharacter** bychar)
 {
+    if (bychar)
+        *bychar = nullptr;
     JsonOut j;
     j.Begin('{').FieldString("seam", "FindClearPath").FieldString("who", g_world->NameOf(self));
     j.Key("to").Begin('[').Value(newpos.x).Value(newpos.y).Value(newpos.z).End(']');
@@ -312,7 +489,7 @@ SCaseScope::SCaseScope(const JsonValue& cs, const TFixtureWorld& world)
         j.Field("y", y).End('}');
         Seam(j.str());
     };
-    TPlayer::setPlayerStateSeam = [](TPlayer* player, int32_t newstate) {
+    TPlayer::playerStateSeam = [](TPlayer* player, int32_t newstate) {
         JsonOut j;
         j.Begin('{').FieldString("seam", "SetPlayerState").FieldString("who", g_world->NameOf(player));
         j.Field("value", newstate).End('}');
@@ -350,7 +527,7 @@ SCaseScope::~SCaseScope()
     TCharacter::findCharactersSeam = nullptr;
     TCharacter::blockedSeam = nullptr;
     TCharacter::canSeeSeam = nullptr;
-    TPlayer::setPlayerStateSeam = nullptr;
+    TPlayer::playerStateSeam = nullptr;
     TMapPane::playMouseClickSeam = nullptr;
     TCharacter::nearbyCharactersSeam = nullptr;
     TMapPane::walkGridSeam = nullptr;

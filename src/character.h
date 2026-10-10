@@ -71,11 +71,34 @@ class TCharacter : public TComplexObject
     using FindCharactersSeam = int32_t (*)(TCharacter* self, TCharacter* chars[], int32_t maxchars,
         int32_t range, int32_t angle, int32_t anglerange, int32_t flags);
     static inline FindCharactersSeam findCharactersSeam = nullptr;
-    using BlockedSeam = bool (*)(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, uint32_t bits);
+    using BlockedSeam = bool (*)(TCharacter* self, const S3DPoint& pos, const S3DPoint& newpos, uint32_t bits,
+        TCharacter** bychar);
     static inline BlockedSeam blockedSeam = nullptr;
       // Likewise for Blocked (retail FindClearPath 0x004c39d0)
     using CanSeeSeam = bool (*)(TCharacter* self, TCharacter* chr, int32_t angle);
     static inline CanSeeSeam canSeeSeam = nullptr;
+    using BlockSeam = bool (*)(TCharacter* self, int32_t frames);
+    static inline BlockSeam blockSeam = nullptr;
+      // Likewise for Block (retail 0x004d2e30), which IsValidAttack calls on
+      // a target about to be hit glancingly
+    using CastSeam = bool (*)(TCharacter* self, const char* spell, TObjectInstance** targets, int32_t numtargs,
+        const S3DPoint* source);
+    static inline CastSeam castSeam = nullptr;
+    using IsEnemySeam = bool (*)(TCharacter* self, TCharacter* other);
+    static inline IsEnemySeam isEnemySeam = nullptr;
+      // Likewise for IsEnemy (retail 0x004c89c0)
+    using BeginFightingSeam = bool (*)(TCharacter* self, TCharacter* target, ACTION action);
+    static inline BeginFightingSeam beginFightingSeam = nullptr;
+      // Likewise for BeginFighting (retail 0x004d3b90)
+    using DamageSeam = void (*)(TCharacter* self, int32_t damage, int32_t damagetype, int32_t modifier,
+        TActionBlock* action, TCharacter* attacker);
+    static inline DamageSeam damageSeam = nullptr;
+      // Likewise for Damage (retail 0x004c4950); the seam owns `action` as Damage does
+    using EffectBurstSeam = void (*)(TCharacter* self, const char* name, int32_t height);
+    static inline EffectBurstSeam effectBurstSeam = nullptr;
+      // Likewise for EffectBurst (retail 0x004c85d0)
+      // Likewise for CastByName (retail SpellList::Find 0x0053f010 + Cast
+      // 0x004d5c20), which DoAttack calls for a MAGICATTACK
       // Likewise for CanSeeCharacter (retail 0x004cd540)
     using NearbyCharactersSeam = std::vector<TCharacter*> (*)(const S3DPoint& pos, int32_t range);
     static inline NearbyCharactersSeam nearbyCharactersSeam = nullptr;
@@ -130,8 +153,8 @@ class TCharacter : public TComplexObject
         // Actor is moving
     virtual void SignalHostility(TObjectInstance* actor, TObjectInstance* target);
         // Actor is hostile to target
-    virtual void SignalAttack(TObjectInstance* actor, TObjectInstance* target);
-        // Actor is attacking target
+    virtual void SignalAttack(TObjectInstance* actor, TObjectInstance* target, int32_t flag = 0);
+        // Actor is attacking target (retail OnAttacked 0x004cdce0, slot 0x240; flag 2 for a spell)
 
   // ActionBlock generic function callers
     bool SetWalkMode();
@@ -229,6 +252,42 @@ class TCharacter : public TComplexObject
       // Find a random attack (for a monster) based on a value from 1-100
     bool SpecificAttack(int32_t attacknum);
       // Do a specific attack given the attacknum
+
+  // The attack search (retail's signatures). Every search shares one set of
+  // out-values -- impact, damage, to-hit, roll -- that its caller starts at
+  // -1 (the roll at 100 for a repeated button); the first candidate that
+  // gets as far as the damage fixes them for the rest of the search.
+    bool IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &damage, int32_t &tohit, int32_t &roll,
+        int32_t tdist, int32_t button, int32_t pcnt, int32_t dmgpcnt, int32_t flagmask, int32_t flags,
+        TCharacter* targ);
+      // REVSYNC: 0x004d1120 -- whether attack `attacknum` can be made now at `targ` (null: none,
+      // `tdist` then 10000), fixing the out-values on the way
+    bool FindButtonAttack(int32_t button, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum,
+        int32_t &damage, int32_t &tohit, int32_t &roll, bool isaction, TCharacter* targ);
+      // REVSYNC: 0x004d1dd0 -- the first valid attack on `button`: responses, then
+      // specials, then the rest, each in table order
+    bool FindPcntAttack(int32_t pcnt, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum,
+        int32_t &damage, int32_t &tohit, int32_t &roll);
+      // REVSYNC: 0x004d1eb0 -- up to 2n random picks of a valid attack whose
+      // percentage is at least `pcnt`, against the fighting target
+    bool FindInteractiveAttack(int32_t pcnt, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum,
+        int32_t &damage, int32_t &tohit, int32_t &roll);
+      // REVSYNC: 0x004d1ff0 -- the first valid CA_INTERACTIVE attack, in table order
+    bool DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage, int32_t tohit, int32_t roll,
+        TCharacter* targ);
+      // REVSYNC: 0x004d2120 -- start the chosen attack: an ATTACK block carrying
+      // its numbers (or the spell of a MAGICATTACK)
+    void CombatAnimName(char *buf, const char *name);
+      // REVSYNC: 0x004ce1b0 -- `name` with this character's animation prefix
+      // ("c", or the player's weapon/mode prefix); buf holds RESNAMELEN
+    const char *AnimPrefix();
+      // REVSYNC: slot 0x310, 0x004cdf60 -- the player's animation prefix for his root:
+      // h/hr (hand), b/br (bow), c/cr (combat), s (sneak), w/r, t/tr (with a torch)
+    bool InteractiveLocked() const;
+      // Held in someone's interactive attack (retail's five-line gate opening
+      // ButtonAttack, RandomAttack, SpecificAttack, SetFighting, Go, ...): the doing
+      // attack is CA_INTERACTIVE or its impact CAI_INTERACTIVE, unless this character
+      // is the one making the move (charflags 0x80000)
     bool Swing() { return ButtonAttack(1); }
       // Character swings their weapon at their current target
     bool Thrust() { return ButtonAttack(2); }
@@ -253,6 +312,10 @@ class TCharacter : public TComplexObject
       // Character leaps in the given direction (combat mode only)
     bool PlayAnim(char *string);
       // Causes character to play animation name.
+    bool ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAttackImpact* impact, int32_t damage,
+        int32_t tohit, int32_t roll);
+      // REVSYNC: 0x004c62b0 -- one character struck by an attack at its impact frame
+      // (ResolveAttack calls it for the target and each character in reach)
 
   // Info functions specific to characters
     bool IsFighting() { return IsCombat() || IsBowMode(); }
@@ -323,13 +386,24 @@ class TCharacter : public TComplexObject
 
     static constexpr uint32_t kCharFlagNoIncidentals = 0x2;
     // Retail charflags (+0x110) bits the combat code reads:
+    static constexpr uint32_t kCharFlagNoTurn        = 0x4;       // DoAttack / Block / EndFighting leave the move
+                                                                  // angle alone; the AI doesn't acquire (name unknown)
+    static constexpr uint32_t kCharFlagNoKill        = 0x80;      // IsValidAttack refuses a killing blow but an
+                                                                  // interactive death (setter unidentified)
     static constexpr uint32_t kCharFlagDamageSeventh = 0x10;      // CalculateDamage /7 (not freeze); setter unidentified
     static constexpr uint32_t kCharFlagHalfPhysical  = 0x100;     // CalculateDamage halves physical; setter unidentified
     static constexpr uint32_t kCharFlagHalfMagic     = 0x200;     // CalculateDamage halves magic (6-9); setter unidentified
+    static constexpr uint32_t kCharFlagWalkPrefix    = 0x2000;    // CombatAnimName tries a "w" name in the walk root
+    static constexpr uint32_t kCharFlagWalkFighter   = 0x4000;    // fights in its walk root (BeginFighting, AI)
     static constexpr uint32_t kCharFlagNotTargetable = 0x8000;    // IsValidTarget refuses (setter unidentified)
+    static constexpr uint32_t kCharFlagPlayAnimRoots = 0x10000;   // a PLAYANIM "c..." / "w..." needs that root
     static constexpr uint32_t kCharFlagInteractive   = 0x80000;   // in an interactive move: Go skips its gates
     static constexpr uint32_t kCharFlagPlayerAI      = 0x100000;  // the player runs AI() (retail: set for
                                                                   // net players at 0x0051efc4; the arena's --playerai)
+    // AI request bits (retail +0x128), set by OnAttacked 0x004cdce0
+    static constexpr uint32_t kRequestAttackNow   = 0x1;          // the AI tries an attack this tick
+    static constexpr uint32_t kRequestNoPlayAnim  = 0x2;          // IsValidAttack refuses PLAYANIM attacks
+    static constexpr uint32_t kRequestInteractive = 0x4;          // RandomAttack tries an interactive attack first
       // charflags bit (retail +0x110 & 2): `incidentals off`
     void SetIncidentals(bool on)
         { if (on) charflags &= ~kCharFlagNoIncidentals; else charflags |= kCharFlagNoIncidentals; }
@@ -435,7 +509,8 @@ class TCharacter : public TComplexObject
     OBJSTAT(DmgResBurn)
     OBJSTAT(DmgResFreeze)
     OBJSTAT(DmgResPoison)
-    OBJSTAT(DamageMod)
+    OBJSTATFUNC(DamageMod)
+      // REVSYNC: slot 0x2b0, 0x004d7220 -- percent added to the damage this character deals
 
    // Calculated stats
     virtual int32_t MaxHealth() { return chardata->health; }
@@ -462,6 +537,20 @@ class TCharacter : public TComplexObject
       // Returns the type of weapon being used
     virtual int32_t WeaponDamage() { return chardata->weapondamage; }
       // Returns current weapon damage
+    virtual int32_t Offense();
+      // REVSYNC: slot 0x2c4, 0x004d72e0 -- what this character adds to its to-hit:
+      // ATTACKMOD, the type's Value x TOHITRANGECHAR, its spells' offense
+    virtual int32_t Defense();
+      // REVSYNC: slot 0x2c0, 0x004d72a0 -- what it takes off an attacker's to-hit:
+      // DEFENSEMOD, Value x TOHITRANGECHAR, its spells' defense
+    virtual int32_t LuckMod() { return 0; }
+      // REVSYNC: slot 0x2ec, 0x004d7370 -- added to both sides of a to-hit; 0 but
+      // for the player (his Luck STATLEVEL)
+    virtual int32_t StrengthMod() { return 0; }
+      // REVSYNC: slot 0x2f4, 0x004d7390 -- percent added to the damage; 0 but for the
+      // player (his Strength STATLEVEL)
+    virtual bool HoldsLight() { return false; }
+      // REVSYNC: slot 0x250, 0x004d6de0 -- holding a light source (the player's torch)
     int32_t GetDamageType(int32_t weapontype, int32_t attackflags);
       // Returns the DT_XXX damage type flags for the given weapon type and attack flags
     virtual int32_t Transparency();
@@ -508,11 +597,6 @@ class TCharacter : public TComplexObject
     virtual void UpdateAction(int32_t bits = 0);
       // Called by Pulse() to update the action blocks
 
-    bool ResolveHit(TCharacter* targ, 
-        PSCharAttackData attack, PSCharAttackImpact attackimpact, int32_t attackdamage);
-    // This function is called by the ResolveAttack() function to resolve hits for
-    // multiple characters.  The characters are usually found by calling the FindCharacters()
-    // function, then calling this function for each character found.
 
     // Resolve functions - redefine these in derived classes for different functionality
     virtual int32_t ResolveAction(int32_t bits = 0);
@@ -566,25 +650,6 @@ class TCharacter : public TComplexObject
     void ResetStealthValues();
       // Based on character position, lights, and stealth, sets noise and glimpse
 
-  // Attack functions   
-    bool IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &damage,
-        int32_t tdist, int32_t id, int32_t pcnt, int32_t dmgpcnt, int32_t flagmask, int32_t flags);
-      // Checks attack to see if attack is valid or not, returns true if valid, and the correct impact and
-      // damage value for the attack in 'impactnum' and 'damage'.  Must give function target distance in 'tdist',
-      // button id in 'id' or -1 if no button, random attack pcnt in 'pcnt' or -1 if no random attack pcnt, 
-      // the random damage percentage 1-100 in 'dmgpcnt', and the attack flagmask and flags to specify what
-      // kinds of attacks we're looking for.
-    bool FindButtonAttack(int32_t id, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum, int32_t &damage, bool isaction = false);
-      // Finds a valid attack given an attack id (i.e. controller button), and the given random damage
-      // percentage 1-100.
-      // Returns the correct attacknum, impactnum, and damage value for the found attack.
-      // If 'isaction' is set, will find an attack entry with a CA_ACTION flag set instead (called by ButtonAction())
-    bool FindPcntAttack(int32_t id, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum, int32_t &damage);
-      // Finds a valid attack given a randomly generated percentage (0-100) number and a given damage percentage.
-      // Returns the correct attacknum, impactnum, and damage value for the found attack.
-    bool DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage);
-      // Executes a particular attack (using index into SCharData's attack array)
-
     // -- Data members --
     bool autocombat;            // this mimics the global, but works as a way to allow locke to flee in
                                 // the face of too many enemies.
@@ -594,7 +659,8 @@ class TCharacter : public TComplexObject
 
     PSCharData chardata;        // Pointer to global character settings for this type of char
 
-    int32_t waitticks;              // Number of ticks to wait for no action block wait
+    int32_t magictimer = 1;         // retail +0x124: frames until a MAGICATTACK may be tried
+                                    // (AI re-arms it from MAGICFREQ; IsValidAttack spends it)
 
     bool forcecommanddone;      // For skipping past animations
     bool forcenomove;           // For forcing end movement
@@ -608,7 +674,8 @@ class TCharacter : public TComplexObject
     int32_t shovedir;               // Last choice (left/right) for going around an obstacle
     
   // Stealth Stuff
-    int32_t nextattack;             // Ticks till next attack
+    int32_t nextattack = 1;         // retail +0x120: frames until the AI may attack again
+                                    // (IsValidAttack refuses a monster's attack while non-zero)
     int32_t glimpse;                // Value from 1-100 indicating how visible last move was
     int32_t noise;                  // Value from 1-100 indicating how quiet last move was
 
@@ -621,9 +688,12 @@ class TCharacter : public TComplexObject
     int32_t lastpoisondamage;
 
   // Attack stuff
-    PSCharAttackData lastattack; // Last attack
-    int32_t lastattackticks;         // Game ticks when last attack occured
-    int32_t chainhits;               // Number of hits in a chain attack
+    PSCharAttackData lastattack = nullptr; // retail +0x160: the attack last started (ResolveAttack)
+    int32_t lastattackticks = 0;     // retail +0x164: GameFrame it started on
+    int32_t lasthit = 0;             // retail +0x168: whether it hit its main target (ResolveAttack)
+    int32_t chainhits = 0;           // retail +0x16c: chain presses banked (ButtonAttack, at most 3)
+    uint32_t requestbits = 0;        // retail +0x128: AI requests (kRequest*), set by OnAttacked
+    int32_t attackcount = 0;         // retail +0x12c: decremented by the AI per attack made (no reader found)
 
   // spells stuff
     TSpellManager SpellManager;  // handles the spells the character casts

@@ -22,6 +22,12 @@ Seams (each call recorded in `world.seams`, in order):
 - GetStat `0x4d74d0`, slot 0xd8: the stats of the object's type (class.def
   STATS: Radius, ...), from the case's `classstats` (CLASSSTAT_IDS).
   Names as the port's: OBJSTATFUNC / STATFUNC.
+- GetStat by name `0x4d7510`, slot 0xd4 (TCharacter's and TPlayer's): a
+  type stat the case's `classstats` names ("Value" -> value).
+- SetObjStat `0x4d74b0` (TCharacter) / `0x51adb0` (TPlayer), slot 0xe8:
+  recorded, the case's stat takes the value. Object stats the code names by
+  a literal id (the player's attributes and skills, charstats.h) are named
+  by LITERAL_OBJSTATS.
 - The RNG tape: random(lo, hi) `0x483300` and rand `0x58c582` answer from
   the case's `tape` (values 0..32767, in order), then retail's generator
   from the case's `seed`; every draw is recorded in `world.draws` as
@@ -112,7 +118,15 @@ G_PLAYSCREEN = 0x65caf0                          # GameFrame = [+0x688] - [+0x68
 G_PS_5D8, G_PS_CONTROL = 0x65d0c8, 0x65d0d0
 G_PLAYER = 0x667fcc
 OBJSTAT_IDS = {'health': (0x66ca4c, 0x101), 'fatigue': (0x66ca3c, 0x102), 'mana': (0x66ca38, 0x103),
-               'sleeping': (0x66ca58, 0x104)}
+               # Retail's own ids for the rest (charstats.h), the globals static init fills.
+               'aggressive': (0x66caa4, 0), 'sleeping': (0x66ca58, 0x104), 'damagemod': (0x66ca28, 16),
+               'level': (0x66da34, 17), 'acbonus': (0x66da38, 30), 'edgebonus': (0x66d950, 33)}
+# Object stats the code asks for by a literal id: the player's attack level,
+# attributes and skills (charstats.h; IsValidAttack 0x4d1652, TPlayer
+# 0x51a480 / 0x51a580 / 0x520900).
+LITERAL_OBJSTATS = {20: 'attacklevel', 34: 'strn', 35: 'cons', 36: 'agil', 37: 'rflx', 38: 'mind', 39: 'luck',
+                    **{40 + i: n for i, n in enumerate(('attack', 'defense', 'invoke', 'hands', 'knife', 'sword',
+                                                        'bludgeons', 'axes', 'bows', 'stealth', 'lockpick'))}}
 # SetObjStat (slot 0xe8, thiscall (id, value) ret 8): recorded, the value stored.
 SET_OBJSTAT = {CLASS_CHARACTER: 0x4d74b0, CLASS_PLAYER: 0x51adb0}
 G_AMBIENT = 0x6671a4                             # MapPane ambient light (Visibility 0x4c5aa0)
@@ -144,6 +158,8 @@ MAP_NOOPS = ((0x471020, 'RedrawBackground', 4), (0x4548a0, 'MapPane.Redraw', 8),
              (0x452750, 'MapPane.Walkmap', 0xc), (0x456790, 'MapPane.Lock', 8), (0x4567c0, 'MapPane.Unlock', 0))
 IM_HEADER, HDR_STATES, STATE_SIZE, ST_FRAMES = 0x04, 0x54, 0x4c, 0x32
 GET_STAT = 0x4d74d0                              # slot 0xd8, thiscall (id), ret 4
+GET_STAT_NAMED = 0x4d7510                        # slot 0xd4, thiscall (name), ret 4
+O_FRAME_SHORT = 0x5c
 RANDOM, RAND = 0x483300, 0x58c582                 # random(lo, hi) cdecl; MSVC rand()
 GET_OBJSTAT = {CLASS_CHARACTER: 0x4d7520, CLASS_PLAYER: 0x51ae30}
 FIND_SECTOR, RETURN_WALKMAP = 0x499e10, 0x499720  # cdecl (level, sx, sy); thiscall (x, y) ret 8
@@ -225,6 +241,7 @@ class CombatWorld:
         for objclass, address in GET_OBJSTAT.items():
             b.add(address, 'GetObjStat', 4, self._get_objstat)
         b.add(GET_STAT, 'GetStat', 4, self._get_stat)
+        b.add(GET_STAT_NAMED, 'GetStat', 4, self._get_stat_named)
         for objclass, address in SET_OBJSTAT.items():
             b.add(address, 'SetObjStat', 8, self._set_objstat)
         b.add(SET_STATE, 'SetState', 4, self._set_state)
@@ -249,6 +266,7 @@ class CombatWorld:
         self.states = {}           # guest address -> [state names]
         self.stats = {}            # guest address -> {object stat id: value}
         self.classstats = {}       # guest address -> {type stat id: value}
+        self.classstats_named = {} # guest address -> {type stat name: value}
         self.imagery = {}          # stand-in imagery address -> character
         self.animators.clear()
         self.needs_animator = {}   # character -> imagery NeedsAnimator answer
@@ -354,6 +372,8 @@ class CombatWorld:
         sid = s32(args[0])
         stats = table.get(ecx, {})
         names = {v[1]: k for k, v in ids.items()}
+        if ids is OBJSTAT_IDS:
+            names = {**LITERAL_OBJSTATS, **names}
         if sid not in stats:
             raise KeyError(f'{self._name(ecx)} has no {names.get(sid, sid)} in the case')
         self.seams.append(dict(seam=seam, who=self._name(ecx), stat=names.get(sid, sid), result=stats[sid]))
@@ -364,13 +384,21 @@ class CombatWorld:
 
     def _set_objstat(self, args, ecx):
         sid, value = s32(args[0]), s32(args[1])
-        names = {v[1]: k for k, v in OBJSTAT_IDS.items()}
+        names = {**LITERAL_OBJSTATS, **{v[1]: k for k, v in OBJSTAT_IDS.items()}}
         self.stats.setdefault(ecx, {})[sid] = value
         self.seams.append(dict(seam='SetObjStat', who=self._name(ecx), stat=names.get(sid, sid), value=value))
         return 0
 
     def _get_stat(self, args, ecx):
         return self._stat('GetStat', self.classstats, CLASSSTAT_IDS, args, ecx)
+
+    def _get_stat_named(self, args, ecx):
+        name = self.vm.string(args[0]).lower()
+        stats = self.classstats_named.get(ecx, {})
+        if name not in stats:
+            raise KeyError(f'{self._name(ecx)} has no {name} in the case')
+        self.seams.append(dict(seam='GetStat', who=self._name(ecx), stat=name, result=stats[name]))
+        return stats[name]
 
     def _set_state(self, args, ecx):
         if self.real_setstate:
@@ -578,8 +606,13 @@ class CombatWorld:
         self.states[obj] = table
         vm.put_u32(obj + O_IMAGERY, self._new_imagery(obj, table))
         vm.write(obj + O_STATE, struct.pack('<h', spec.get('state', 0)))
-        self.stats[obj] = {OBJSTAT_IDS[k][1]: v for k, v in spec.get('stats', {}).items()}
-        self.classstats[obj] = {CLASSSTAT_IDS[k][1]: v for k, v in spec.get('classstats', {}).items()}
+        vm.write(obj + O_FRAME_SHORT, struct.pack('<h', spec.get('frame', 0)))
+        literal = {n: i for i, n in LITERAL_OBJSTATS.items()}
+        self.stats[obj] = {OBJSTAT_IDS[k][1] if k in OBJSTAT_IDS else literal[k]: v
+                           for k, v in spec.get('stats', {}).items()}
+        self.classstats[obj] = {CLASSSTAT_IDS[k][1]: v for k, v in spec.get('classstats', {}).items()
+                                if k in CLASSSTAT_IDS}
+        self.classstats_named[obj] = dict(spec.get('classstats', {}))
         return obj
 
     def set_blocks(self, obj, spec):

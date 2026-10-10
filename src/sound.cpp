@@ -495,6 +495,8 @@ void TSoundPlayer::UnloadModuleSounds()
 // without case.
 int32_t TSoundPlayer::FindSound(const char* soundname, int32_t nr) const
 {
+    if (findSeam)
+        return findSeam(soundname, nr);
     if (!soundname) return -1;
 
     char buf[80];
