@@ -4739,8 +4739,14 @@ bool TCharacter::Burn()
 }
 
 
-bool TCharacter::KnockBack(S3DPoint frompos)
+bool TCharacter::KnockBack(S3DPoint frompos, int32_t variant)
 {
+    if (knockBackSeam)
+    {
+        knockBackSeam(this, frompos, variant);
+        return true;
+    }
+    (void)variant;
     S3DPoint pos;
 
     if (IsParalized())

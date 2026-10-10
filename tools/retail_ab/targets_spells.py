@@ -561,7 +561,63 @@ def spell_damage_cases(data: Path, workdir: Path) -> list[dict]:
     return finish(cases)
 
 
+# ---- S4: missiles -------------------------------------------------------------------------
+
+def area_cases(data: Path, workdir: Path) -> list[dict]:
+    """AreaDamage around a point: who attacks (a player, a monster, nobody);
+    characters on each side of the radius and the minimum radius, straight
+    and diagonal; the attacker in range; the dead, a friend, one in an impact,
+    a player with DmgResMagical; a player attacker's SpellDamageInc; the
+    order the map gives them; a fixed and a rolled damage."""
+    at = [1000, 1000, 0]
+    cases = []
+
+    def char(name, dx, dy, player=False, health=30, impact=False, resist=0, monster_type='Araknid'):
+        if player:
+            spec = _caster(name, root=('combat', 3), states=[], health=health)
+            spec['resists'] = [0, 0, 0, 0, 0, 0, resist, 0, 0, 0]
+        else:
+            spec = _target(name, monster_type)
+            spec['stats']['health'] = health
+        spec['pos'] = [at[0] + dx, at[1] + dy, 0]
+        if impact:
+            spec['doing'] = dict(name='impact', action=12)
+        return spec
+
+    def case(name, attacker, chars, radius=150, minradius=0, lo=40, hi=60, sdi=0, friends=(), nearby=None, tape=None):
+        for c in chars:
+            if c['name'] == attacker and c['class'] == 11:
+                c['stats']['spelldamageinc'] = sdi
+        extra = dict(nearby=nearby) if nearby is not None else {}
+        cases.append(dict(name=f'area.{name}', call='area-damage', attacker=attacker, pos=at, radius=radius,
+                          minradius=minradius, min=lo, max=hi, type=7, friends=[list(f) for f in friends],
+                          globals=dict(frame=0), chars=chars, tape=tape or [100, 2000, 30000, 7, 0, 32767],
+                          ground=dict(z=0), **extra))   # ground: the map's characters come from the case
+
+    ring = lambda r: [char('E', r, 0), char('N', 0, -r), char('SW', -r * 7 // 10, r * 7 // 10)]
+    for who in ('Locke', 'Monster', None):
+        attackers = [char('Locke', 5, 5, player=True), char('Monster', -5, 5, monster_type='Arakna')]
+        for r in (0, 1, 50, 106, 149, 150, 151, 200):
+            case(f'{who}.ring{r}', who, attackers + ring(r))
+        for minr in (0, 49, 50, 51):
+            case(f'{who}.min{minr}', who, attackers + ring(50), minradius=minr)
+        case(f'{who}.gates', who, attackers + [char('Dead', 20, 0, health=0), char('Alive1', 0, 20, health=1),
+                                               char('Hit', 20, 20, impact=True), char('Friend', -20, 0),
+                                               char('Player2', 0, -20, player=True, resist=40)],
+             friends=[('Locke', 'Friend'), ('Monster', 'Friend')])
+        case(f'{who}.fixed', who, attackers + ring(60), lo=33, hi=33)
+        case(f'{who}.reversed', who, attackers + ring(60), lo=60, hi=40)
+        case(f'{who}.order', who, attackers + ring(60), nearby=['SW', 'Locke', 'N', 'Monster', 'E'])
+    for sdi, resist in itertools.product((0, 25, -50, 200), (0, 30, 100, -50)):
+        case(f'sdi{sdi}.res{resist}', 'Locke', [char('Locke', 5, 5, player=True),
+                                                char('Player2', 30, 0, player=True, resist=resist),
+                                                char('Mon', -30, 0)], sdi=sdi)
+    return finish(cases)
+
+
 TARGETS = {
+    'missile-area': dict(fixture='slots/combat/spell_damage.py', cases=area_cases, compare=generic_compare,
+                         port_fields=port_fields, unit=lambda r: 1),
     'spell-new': dict(fixture='slots/combat/spell_damage.py', cases=spell_new_cases, compare=generic_compare,
                       port_fields=port_fields, unit=lambda r: 1),
     'spell-damage': dict(fixture='slots/combat/spell_damage.py', cases=spell_damage_cases, compare=generic_compare,
