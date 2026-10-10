@@ -55,6 +55,7 @@
 //   REGISTER_3DANIMATOR("Vortex", TVortexAnimator)
 //   REGISTER_3DANIMATOR("Speaker", TAmbSoundAnimator)
 
+#include "retailmeshlighting.h"
 #include "revenant.h"
 #include "effect.h"
 #include "fireballquad.h"
@@ -15382,7 +15383,7 @@ TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const
             if (slot > 0) {
                 S3DTex desc = {};
                 img->GetTexture(slot - 1, &desc);
-                part.retail_lighting = desc.desc.pixelFormat.dwRGBAlphaBitMask ? 2 : 1;
+                part.retail_lighting = RetailMeshTextureLighting(desc.desc.pixelFormat);
             }
             if(animate_textures && slot>0) {
                 S3DTex desc{};img->GetTexture(slot-1,&desc);
@@ -17314,6 +17315,10 @@ void TFireFlashEffect_Bespoke::Submit(EFxDebugMode debug_mode)
         SHelperMeshSubmit submit = {};
         submit.mesh = meshes_[j]; submit.additive_blend = true;
         submit.retail_lighting = 1; // Audited RGB565 Blue SW normal-light modulation.
+        // Owner1.5Z / ABSPOS1.46Z above bridge geometry into common world.
+        // Native RenderObject/Illuminate uses the pre-bridge normal matrix.
+        submit.retail_normal_z_scale = target ? 1.0f / REV_FIX_Z_VALUE(1.0f)
+                                              : 1.0f / WORLD3D_Z_SCALE;
         for (int row = 0; row < 4; ++row) for (int col = 0; col < 4; ++col)
             submit.world[row * 4 + col] = mesh_world.Elements[col][row];
         const auto& material = materials_[j].matdesc;

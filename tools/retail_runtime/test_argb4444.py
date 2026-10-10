@@ -59,5 +59,30 @@ class NativeARGB4444(unittest.TestCase):
         output,_ = f.draw(QUAD,INDICES,z_enabled=True,z_write=False)
         self.assertEqual(struct.unpack_from('<H',output,2*(16*32+16))[0],0xf3ce)
 
+    def test_additive_rgb565_channel_ramps_and_destination_rounding(self):
+        import random
+        f = LitSoftwareFixture(IMAGE,32,32)
+        for address,value in ((0x5d7a28,1),(0x66818c,0),(0x5e8790,0)):
+            f.vm.put_u32(address,value)
+        f.vm.call(0x417d60,(8,1),this=0x65a57c)
+        rng = random.Random(1)
+        for texel in [0xffff,0xf800,0x7e0,0x1f,*[rng.randrange(65536) for _ in range(12)]]:
+            f.set_texture(2,2,struct.pack('<4H',*[texel]*4))
+            for light in range(32):
+                quad = [(x,y,100,light,light,light,31,0,0) for x,y in ((8,8),(24,8),(24,24),(8,24))]
+                for background in (0,0x7bef,0xffff,0x1234):
+                    f.clear(color=background)
+                    output,_ = f.draw(quad,INDICES,z_enabled=True,z_write=False)
+                    expected = 0
+                    for shift,mask in ((11,31),(5,63),(0,31)):
+                        # Green starts with its high five texture bits, then
+                        # expands to six bits before the additive table masks.
+                        source = ((texel >> (6 if shift == 5 else shift)) & 31) * light // 31
+                        source = (source * (2 if shift == 5 else 1)) & ~1
+                        destination = ((background >> shift) & mask) & ~1
+                        expected |= min(mask,source+destination) << shift
+                    with self.subTest(texel=texel,light=light,background=background):
+                        self.assertEqual(struct.unpack_from('<H',output,2*(16*32+16))[0],expected)
+
 
 if __name__ == '__main__': unittest.main()

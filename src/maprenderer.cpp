@@ -2580,7 +2580,7 @@ void TMapRenderer::RebuildForCurrentMap()
                             if (texslot > 0) {
                                 S3DTex texture = {};
                                 meshimg->GetTexture(texslot - 1, &texture);
-                                asset.retail_lighting = texture.desc.pixelFormat.dwRGBAlphaBitMask ? 2 : 1;
+                                asset.retail_lighting = RetailMeshTextureLighting(texture.desc.pixelFormat);
                             }
                             if (oi->ObjClass() == OBJCLASS_HELPER ||
                                 (oi->ObjId() == 0xd0c0f035u && meshimg->HasGoldPartSysProfile()) ||

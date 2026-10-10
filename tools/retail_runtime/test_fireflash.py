@@ -40,9 +40,49 @@ class FireFlashNativeComparison(unittest.TestCase):
                 if case['original_draw_count']is not None:
                     self.assertEqual(case['original_draw_count'],len(b['draws']))
                     self.assertTrue(all(d['additive']for d in b['draws']))
+                    self.assertTrue(all(f32(d['normal_z_scale']) == f32(1/1.5) for d in b['draws']))
             self.assertEqual(report['cases'][0]['float32_differences'],0)
             self.assertFalse(report['software_pixel_comparison_executed'])
             self.assertFalse(report['full_acceptance'])
+            self.check_native_normal_bridge(report)
+
+    def check_native_normal_bridge(self, report):
+        import math
+        import zipfile
+        from fireflash_probe import FireFlashFixture
+        from firecone_owner_probe import native_owner, native_world
+        from lit_software_probe import LitSoftwareFixture
+        with zipfile.ZipFile(ROOT/'data/imagery.rvi') as archive:
+            asset = archive.read('Imagery/Magic/fireflash.i3d')
+        image = ROOT/'recon/retail_asm/baseline/Revenant.rebuilt.exe'
+        native = FireFlashFixture(image,asset)
+        native.reset()
+        native.vm.write(native.owner+0x10,struct.pack('<3i',10000,10000,16))
+        owner = native_owner(native)
+        self.assertEqual(owner[:12],[1,0,0,0,0,1,0,0,0,0,1,0])
+        lit = LitSoftwareFixture(image,camera=(10000,10000,0))
+        lit.lighting((38,38,38),(1,1,1))
+        for _ in range(30): native.step()
+        draws = native.render()
+        current = report['cases'][30]['port_state']['draws']
+        self.assertEqual(len(draws),len(current))
+        changed = 0
+        for before,after in zip(draws,current):
+            matrix = native_world(native,before)
+            part = native.parts[before['object']]
+            _,_,transformed = lit.draw_authored(part['vertices'],part['indices'],matrix,raster=False)
+            for vertex,reference in zip(part['vertices'],transformed):
+                m,n = after['matrix'],vertex[3:6]
+                wn = [sum(n[j]*m[j*4+i] for j in range(3)) for i in range(3)]
+                def shader_light(z_scale):
+                    w = [wn[0],wn[1],wn[2]*z_scale]
+                    length = math.sqrt(sum(x*x for x in w))
+                    return math.floor(min(1,38/255+max(0,(w[1]*.78125+w[2]*.625)/length))*31)
+                expected = shader_light(after['normal_z_scale'])
+                self.assertEqual(list(reference[3:6]),[expected]*3)
+                changed += shader_light(1) != expected
+        self.assertGreater(changed,0) # Reject omitting the explicit geometry bridge.
+
 
 
 if __name__=='__main__':unittest.main()
