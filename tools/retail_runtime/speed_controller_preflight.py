@@ -224,7 +224,7 @@ class NativeSpeed:
             object_blend_modes=[v.u32(p+0x348) for p in self.animobjs],
             original_call_counts=self.calls, resource_boundaries=self.boundaries)
 
-    def state_trace(self, ticks=90):
+    def state_trace(self, ticks=90, frame_offset=0, move_tick=60):
         """Full initialized controller Pulse and actual live RenderSample path.
 
         Emitters use the original asset decoder/matrix; no emitter-transform
@@ -248,9 +248,9 @@ class NativeSpeed:
         rf = lambda address: struct.unpack('<f',v.uc.mem_read(address,4))[0]
         initialized_origin = [rf(c+0x170+i*4)for i in range(3)]
         for tick in range(ticks):
-            frame = tick % self.asset['state0_frames']
+            frame = (tick + frame_offset) % self.asset['state0_frames']
             v.put_u32(self.animator+0x14, frame)
-            if tick == 60:
+            if tick == move_tick:
                 for off,value in zip((16,20,24),(16,-8,4)):
                     v.put_u32(self.owner+off,value&0xffffffff)
             for obj in self.animobjs:
@@ -300,7 +300,7 @@ class NativeSpeed:
             unused_state0_pose_rejections=sorted(self.unused_rejected_pose_indices),
             original_emitter_matrix_executed=True,full_parser_initialize_executed=True,
             render_stop='0x4028e2 before owner virtual/device geometry handoff',
-            explicit_external_inputs=['MSVC RNG seed1','ground height0','owner initially0; MOVE(16,-8,4) at tick60'])
+            explicit_external_inputs=['MSVC RNG seed1','ground height0',f'owner initially0; MOVE(16,-8,4) at tick{move_tick}', f'animation frame offset{frame_offset}'])
 
 
 def main():

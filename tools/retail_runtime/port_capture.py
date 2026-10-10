@@ -34,7 +34,15 @@ def capture(scenario,output):
         f'--filmstrip={count},{1/fps:.16f}',f'--snapstep={1/fps:.16f}',
         '--snapseed='+str(scenario.get('seed',1)),'--snapwarmup='+str(scenario.get('warmup',1)),
         '--snaprect='+','.join(map(str,rectangle)),'--snapprefix='+str(output/'frame-')]
+    if 'ambient' in scenario:
+        command += ['--scene-ambient='+','.join(map(str,scenario['ambient']))]
+    if 'partsys_quality' in scenario:
+        command += ['--partsys-quality='+str(scenario['partsys_quality'])]
+    if 'partsys_incoming_blend' in scenario:
+        command += ['--partsys-incoming-blend='+str(scenario['partsys_incoming_blend'])]
     env=os.environ.copy();env['REVENANT_DATA_PATH']=str(data)
+    if 'save_root' in scenario:
+        env['REVENANT_SAVE_PATH']=str(Path(scenario['save_root']).resolve())
     assets=Path(scenario.get('assets_root',env.get('REVENANT_ASSETS_PATH',ROOT/'assets'))).resolve()
     env['REVENANT_ASSETS_PATH']=str(assets)
     binary_sha=sha(binary)
