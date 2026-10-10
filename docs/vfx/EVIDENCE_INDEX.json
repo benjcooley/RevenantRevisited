@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 91,
+    "retail_rows_with_source_fixes_recorded": 92,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 81,
-    "visual_fidelity_confirmed_rows": 17,
+    "visual_fidelity_confirmed_rows": 38,
     "repeatable_ab_rows": 7,
-    "thin_bounded_render_frontend_rows": 67,
-    "reviewed_visual_pass_rows": 17,
-    "remaining_visual_review_rows": 159
+    "thin_bounded_render_frontend_rows": 68,
+    "reviewed_visual_pass_rows": 38,
+    "remaining_visual_review_rows": 138
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -693,6 +693,153 @@
       "check": "merged_main_actual_map_regression",
       "status": "pass",
       "scope": "Optimized merged main:48frames/8typedlifecyclechecks/31distinctactive/floorrestored/cleanexit. No additional visual/full acceptance."
+    },
+    "docs/vfx/forensics/SMALL_FAMILY_VISUAL_BATCH_20261010.json": {
+      "sha256": "e9db4bf59468b45a25b50a3f223a2a69eda26366398e77e067b5a68583f9bf4b",
+      "retail_row": "nine_types_see_record_cases",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current Metal map output versus original software full authored-normal lighting/transform/raster56eb30 with actual source ambient38/directional1; no injected vertex/material color. Synthetic floor, recorded stationary state and move/delete lifecycle only. Natural context/device and known projection/quantization remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbonb-20261010/visual-review.json": {
+      "sha256": "53bb48efae7862ad50edf826cb2b0a6461ec6a72d034a325b6268db6e7c9cf74",
+      "retail_row": "RibbonB:0x562c743a",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbong-20261010/visual-review.json": {
+      "sha256": "5bca400b29c81e75152b4a6e76416502771efa94420e1e9275c70214cab7eb37",
+      "retail_row": "RibbonG:0x562c743b",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbono-20261010/visual-review.json": {
+      "sha256": "ac894b909f80ff683760f9bb6a0adc4ecb71f68af22e7acae3df7b40f061dee4",
+      "retail_row": "RibbonO:0x562c743c",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbonp-20261010/visual-review.json": {
+      "sha256": "4c034217e08824877e7a9542e1cbdbd22161b4e43457ce4506281a4bb2120aec",
+      "retail_row": "RibbonP:0x562c743d",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbonr-20261010/visual-review.json": {
+      "sha256": "c7d6d34a89f5fb880c704a90ffaa8043a39c2175c2b85ab173d3a7d2f9249a00",
+      "retail_row": "RibbonR:0x562c743e",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbonw-20261010/visual-review.json": {
+      "sha256": "91f919c3129b9582219f036d673d879d12ea3b751487d18de93d1dc36ec08069",
+      "retail_row": "RibbonW:0x562c743f",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbony-20261010/visual-review.json": {
+      "sha256": "68ef6e9c15e3de5c148902aad6a0d7a95660195c09869d53e92a578aecad565e",
+      "retail_row": "RibbonY:0x562c7440",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-olihootsign-20261010/visual-review.json": {
+      "sha256": "01db814c76d26a6cf32c808a48058302e8ffaae111cd9318309ec7fc619cc765",
+      "retail_row": "OlihootSign:0xad92bc1e",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ogroksign-20261010/visual-review.json": {
+      "sha256": "9502f5dc43c01b314813c0c99ab6527171b22b69d8d7ff622bebd34f57bf7312",
+      "retail_row": "OgrokSign:0xad92bc1f",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-campsign-20261010/visual-review.json": {
+      "sha256": "2db9cc623c5b36bc2e1e2353f0884a5046d01bbf2cc956b198f0a56ad9922b1a",
+      "retail_row": "CampSign:0xad92bc20",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-towersign-20261010/visual-review.json": {
+      "sha256": "03406d42291272d33fa641ac1514b6ca9303064768dc1df35b07f941fcc208b6",
+      "retail_row": "TowerSign:0xad92bc21",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-druhgsign-20261010/visual-review.json": {
+      "sha256": "6519f70c21c4477ff70248a6532285f5c62eebbc450f86fb66a6dec3634c9a5a",
+      "retail_row": "DruhgSign:0xad92bc22",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ruinssign-20261010/visual-review.json": {
+      "sha256": "ee084f5693ba022ab4926ef30d0843e6adb68f2155192b0070d67783380e47f6",
+      "retail_row": "RuinsSign:0xad92bc23",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-bonesign-20261010/visual-review.json": {
+      "sha256": "a5179f43ddfe64680044eb92741d09f329a56708d3b5102254d35cd45d927bc3",
+      "retail_row": "BoneSign:0xad92bc24",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-yardsign-20261010/visual-review.json": {
+      "sha256": "844ca73307e19b8621c2beda0e3b41aeabe154b1904f3ecbe81b5dfea701ce10",
+      "retail_row": "YardSign:0xad92bc26",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ancientsign-20261010/visual-review.json": {
+      "sha256": "d0ed4d78cb162abf3ebbd80cb4d48623ea7b523ee3bf68965609cf154d76b1f5",
+      "retail_row": "AncientSign:0xad92bc25",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-villagesign-20261010/visual-review.json": {
+      "sha256": "d293783010815775a1f0b4969ad634d9da543c44ba6a64eb524dca4a09920b86",
+      "retail_row": "VillageSign:0xad92bc27",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-mistsign-20261010/visual-review.json": {
+      "sha256": "d6b83e0dcc918a6f841ba1c8df30bbe4f5a05eda2082efaf52e562a6f48cdb2b",
+      "retail_row": "MistSign:0xad92bc35",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-havensign-20261010/visual-review.json": {
+      "sha256": "2cb052581f7a296cc1ea4581f69272c4b048224ebe096f84965234fcd88f82ad",
+      "retail_row": "HavenSign:0xad92bc36",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/firecone-owner-lit-20261010/manifest.json": {
+      "sha256": "b1412f7272923fa2bc88994f5ee0f36d51f91b1e0cbbe1e230fc1ac666482a68",
+      "retail_row": "FireCone:0xab92cd01",
+      "check": "firecone_relative_owner_normal_lit_frontend",
+      "status": "pass",
+      "scope": "Compiled actual SubmitPool receives independently executed native owner matrices. Exact authored normals, UVs and RGB565 textures; original mode8, CCW culling, normal illumination and software projection/raster. Scene ambient/directional descriptors are explicit inputs. Production common-world owner conversion, complete scene lighting selection, point lights, GPU, live spell/caster/audio and actual map appearance remain separate. No inverse-Z/pixel adapter or matrix fit."
     }
   }
 }
