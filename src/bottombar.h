@@ -20,8 +20,8 @@ class TMulti;
 // two, and its SetRect (0x0052c930) sizes all three; here they are the bar's
 // children, sharing its rect.
 //
-// The play screen shows the bar while the HUD's lower panel is open
-// (TPlayScreen::Pulse); it lays itself out against the map view.
+// The play screen shows the bar while the HUD's lower panel is open, along
+// the bottom of the map view and as wide as it (TPlayScreen::UpdateBottomBar).
 class TBottomBarPane final : public TButtonPane
 {
   public:
@@ -32,10 +32,13 @@ class TBottomBarPane final : public TButtonPane
     TBottomBarPane(const TBottomBarPane&) = delete;
     TBottomBarPane& operator=(const TBottomBarPane&) = delete;
 
+    // The bar's rect: at (x, y), `width` wide, kHeight tall (0x0052c930).
+    void Place(int32_t x, int32_t y, int32_t width);
+
     bool Initialize() override;     // 0x0052c780; the shelf's 0x0052c970, the rings' 0x00544160
     void Close() override;
     void Pulse() override;
-    void PaneResized() override;    // the children take the bar's rect (0x0052c930)
+    void PaneResized() override;    // the children take the bar's rect
 
     [[nodiscard]] TBarInvPane& Shelf() { return shelf; }
 
@@ -43,8 +46,6 @@ class TBottomBarPane final : public TButtonPane
     void ComposeBackground(int32_t target_w, int32_t target_h) override;    // slot 21, 0x0052c880
 
   private:
-    void LayOut();
-
     std::unique_ptr<TMulti> archive;    // BottomBar.dat (retail DAT_0065a570)
     TBitmap* utilitybar = nullptr;
     TBitmap* endcap = nullptr;

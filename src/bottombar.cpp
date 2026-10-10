@@ -8,7 +8,6 @@
 #include "bitmap.h"
 #include "logging.h"
 #include "multi.h"
-#include "playscreen.h"
 #include "renderer.h"
 #include "spellpane.h"
 
@@ -39,8 +38,14 @@ bool TBottomBarPane::Initialize()
     endcap = archive->Bitmap("BarEndCap");
     shelf.SetBoxArt(archive->Bitmap("BarInvBox"));
 
-    LayOut();
-    if (!TButtonPane::Initialize() || !shelf.Initialize() || !QuickSpells.Initialize())
+    if (!TButtonPane::Initialize())
+    {
+        Close();
+        return false;
+    }
+    for (TPane* child : { static_cast<TPane*>(&shelf), static_cast<TPane*>(&QuickSpells) })
+        child->Resize(GetPosX(), GetPosY(), GetWidth(), GetHeight());
+    if (!shelf.Initialize() || !QuickSpells.Initialize())
     {
         log_error("[bottombar] the shelf or the quick-spell rings did not initialize");
         Close();
@@ -62,21 +67,19 @@ void TBottomBarPane::Close()
     archive.reset();
 }
 
-// The bar lies along the bottom of the map view, as wide as it (retail:
-// TPlayScreen::Pulse 0x0047b4d0 gives it the display less the side pane).
-void TBottomBarPane::LayOut()
+// REVSYNC: 0x0052c930 (SetRect) -- the bar and its two panes take the rect.
+// Before Initialize it is the rect the bar opens with; once open it applies
+// at once.
+void TBottomBarPane::Place(int32_t x, int32_t y, int32_t width)
 {
-    int32_t mapx = 0, mapy = 0, mapw = 0, maph = 0;
-    PlayScreen.GetMapViewRect(mapx, mapy, mapw, maph);
-    Resize(mapx, mapy + maph, mapw, kHeight);
-    shelf.Resize(mapx, mapy + maph, mapw, kHeight);
-    QuickSpells.Resize(mapx, mapy + maph, mapw, kHeight);
+    Resize(x, y, width, kHeight);
+    if (IsOpen() && WasResized())
+        PaneResized();
 }
 
 // The screen pulses its own panes; the bar pulses its children.
 void TBottomBarPane::Pulse()
 {
-    LayOut();
     shelf.Pulse();
     QuickSpells.Pulse();
 }
@@ -93,11 +96,13 @@ void TBottomBarPane::PaneResized()
 }
 
 // REVSYNC: 0x0052c880 -- UtilityBar cropped to the bar's width (not
-// stretched), then BarEndCap at its right end.
+// stretched), then BarEndCap at its right end; both opaque (their own draw
+// mode, 0).
 void TBottomBarPane::ComposeBackground(int32_t target_w, int32_t target_h)
 {
     if (!Renderer)
         return;
-    Renderer->DrawBitmapSubrectToTarget(utilitybar, 0, 0, 0, 0, target_w, kHeight, target_w, target_h);
-    Renderer->DrawBitmapToTarget(endcap, target_w - kEndCapWidth, 0, target_w, target_h);
+    Renderer->DrawBitmapSubrectToTarget(utilitybar, 0, 0, 0, 0, target_w, kHeight, target_w, target_h,
+                                        EBitmapDecode::Unkeyed);
+    Renderer->DrawBitmapToTarget(endcap, target_w - kEndCapWidth, 0, target_w, target_h, EBitmapDecode::Unkeyed);
 }

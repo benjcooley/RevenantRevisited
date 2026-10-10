@@ -165,12 +165,14 @@ class TQuickSpellPane final : public TButtonPane
     bool Initialize() override;     // 0x00544160
     void Close() override;
     void Pulse() override;          // each ring's spell and state, as 0x005444c0 sets them
+    void MouseClick(int32_t button, int32_t x, int32_t y) override;    // 0x00544890: a spell dropped on a ring
 
     void Invoke(int32_t ring);
         // Cast the spell on ring 1..4 (the rings' functions, 0x005440a0 ...)
 
   private:
     [[nodiscard]] TQuickSpellButton *Ring(int32_t ring);
+    [[nodiscard]] int32_t RingAt(int32_t x, int32_t y);    // 1..4, or 0 off the rings
 
     std::unique_ptr<TMulti> icons;                  // SpellIcons.dat (retail DAT_0065bc3c)
 };

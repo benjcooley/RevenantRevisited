@@ -36,6 +36,7 @@
 #include "player.h"
 #include "renderer.h"
 #include "surface.h"
+#include "time.h"
 #include "uidragstate.h"
 
 #include <cstdint>
@@ -136,38 +137,13 @@ bool g_hudVisible = true;
 SInvSlotStyle MakeInventorySlotStyle()
 {
     SInvSlotStyle s;
-    s.icon_fit_to_cell  = false;   // native TL stamp — retail literal
-
-    // Regular qty: RED top-right (spec §8 row 2 LIVE-VERIFIED #6)
-    s.draw_qty          = true;
-    s.qty_r             = 1.00f;
-    s.qty_g             = 0.18f;
-    s.qty_b             = 0.14f;
-    s.qty_align         = ETextAlign::Right;
-    s.qty_rect_dx       = 0;
-    s.qty_rect_dy       = 0;
-    s.qty_rect_w        = kCellInner;
-    s.qty_rect_h_pad    = 0;
-
-    // Bag-contents count: WHITE centered at cellY + 26 (spec §0 disasm
-    // `:537de2 LEA EDX, [EBX + 0x1a]`; spec §5 step 8b).
-    s.draw_bag_count    = true;
-    s.bag_r             = 1.0f;
-    s.bag_g             = 1.0f;
-    s.bag_b             = 1.0f;
-    s.bag_align         = ETextAlign::Center;
-    s.bag_rect_dx       = 0;
-    s.bag_rect_dy       = 26;
-    s.bag_rect_w        = kCellInner;
-    s.bag_rect_h_pad    = 0;
-
-    // Pouch overlay at cellY + 20 (spec §5 step 8b `:537d83`).
-    s.pouch_overlay_stretch = false;
-    s.pouch_inner_dx    = 0;
-    s.pouch_inner_dy    = 20;
-    s.pouch_inner_w     = 20;
-    s.pouch_inner_h     = 20;
-
+    // Regular qty: RED top-right (spec §8 row 2 LIVE-VERIFIED #6).
+    s.amount = { nullptr, { 0xff, 0x2e, 0x24 }, 0, 0, kCellInner, ETextAlign::Right };
+    // Pouch overlay at cellY + 20 (spec §5 step 8b `:537d83`); its count
+    // WHITE centered at cellY + 26 (spec §0 disasm `:537de2`).
+    s.pouchItemX = 0;
+    s.pouchItemY = 20;
+    s.pouchCount = { nullptr, { 0xff, 0xff, 0xff }, 0, 26, kCellInner, ETextAlign::Center };
     return s;
 }
 
@@ -291,8 +267,8 @@ public:
             TObjectInstance* item = Player->GetInventorySlot(slot);
             if (!item || !g_invSlots[cell]) continue;   // chrome border shows through
 
-            g_invSlots[cell]->BindItem(item);
-            g_invSlots[cell]->Draw(g_pane, tw, th, g_countFont);
+            g_invSlots[cell]->BindItem(item, int32_t(TTime::LegacyFrameCount()));
+            g_invSlots[cell]->Draw(tw, th);
         }
 
         // #7e: Scroll arrows with gray-out at page boundaries (spec §5 step 10).
@@ -374,6 +350,7 @@ bool InitializeUIInventoryMode()
 
     // Stack-count font (Arimo TTF).
     g_countFont = BuildTTFAtlas(TTFFilePath(kCountFontFile).c_str(), kCountFontPx);
+    g_invSlotStyle.amount.font = g_invSlotStyle.pouchCount.font = g_countFont;
 
     log_info("[ui-inventory] fonts: Gold=%s  count=%s",
              g_goldFont ? "OK" : "MISS", g_countFont ? "OK" : "MISS");

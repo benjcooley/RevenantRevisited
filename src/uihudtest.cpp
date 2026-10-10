@@ -3,9 +3,11 @@
 // *  uihudtest.cpp - --test=ui-hud                                        *
 // *************************************************************************
 //
-// Composes the full in-game HUD by delegating to the existing per-panel
-// test modes. The sidebar owns only tab selection state in composed mode;
-// each selected content pane owns and refreshes its own render texture.
+// Composes the side of the in-game HUD not yet rebuilt by delegating to the
+// existing per-panel test modes. The sidebar owns only tab selection state in
+// composed mode; each selected content pane owns and refreshes its own render
+// texture. The rebuilt panes are the play screen's own (the status bar, the
+// bottom bar); --test=ui-hud hosts them beside this (testmodes.cpp).
 //
 // 2026-05-31: Added Inventory pane initialization so page-offset (#7a),
 // drag visual (#7b), and arrow gray-out (#7e) are visible in ui-hud
@@ -25,12 +27,9 @@
 #include "revenant.h"
 #include "surface.h"
 
-#include "uibarinvtest.h"
-#include "uibottombartest.h"
 #include "uiequiptest.h"
 #include "uiinventorytest.h"
 #include "uimaptest.h"
-#include "uiquickspelltest.h"
 #include "uisidebartest.h"
 #include "uispellbooktest.h"
 #include "uispellcreatetest.h"
@@ -38,9 +37,6 @@
 
 namespace {
 
-bool g_initBottomBar = false;
-bool g_initBarInv    = false;
-bool g_initQuickSp   = false;
 bool g_initSidebar   = false;
 bool g_initInventory = false;
 bool g_initMap       = false;
@@ -79,11 +75,6 @@ bool InitializeUIHudMode()
     log_info("[ui-hud] === full HUD assembly ===");
     BeginUIBitmapAtlasBuild();
     RegisterUIBitmapAtlasArchive(GameData);
-
-    // Anchored to bottom of screen — three layered pieces
-    SafeInit("BottomBar",     g_initBottomBar, &InitializeUIBottomBarMode);
-    SafeInit("BarInv",        g_initBarInv,    &InitializeUIBarInvMode);
-    SafeInit("QuickSpell",    g_initQuickSp,   &InitializeUIQuickSpellMode);
 
     // Right-anchored side-tab selector. In composed HUD mode the selected
     // content panes below draw their own chrome and dynamic contents.
@@ -138,9 +129,6 @@ void RenderUIHudMode()
 
 void RenderUIHudModeEmbedded()
 {
-    if (g_initBottomBar) RenderUIBottomBarModeEmbedded();
-    if (g_initBarInv)    RenderUIBarInvModeEmbedded();
-    if (g_initQuickSp)   RenderUIQuickSpellModeEmbedded();
     if (g_initSidebar)   RenderUISidebarModeEmbedded();
     const SHudState& s = GetHudState();
     const bool upperVisible = (s.sidebarState == HUD_SIDEBAR_OPEN);
@@ -192,8 +180,5 @@ void CloseUIHudMode()
     SafeClose("Spellbook",     g_initBook,      &CloseUISpellbookMode);
     SafeClose("Stats",         g_initStats,     &CloseUIStatsMode);
     SafeClose("Sidebar",       g_initSidebar,   &CloseUISidebarMode);
-    SafeClose("QuickSpell",    g_initQuickSp,   &CloseUIQuickSpellMode);
-    SafeClose("BarInv",        g_initBarInv,    &CloseUIBarInvMode);
-    SafeClose("BottomBar",     g_initBottomBar, &CloseUIBottomBarMode);
     ClearUIBitmapAtlas();
 }
