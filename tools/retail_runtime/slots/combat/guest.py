@@ -134,6 +134,7 @@ G_AMBIENT = 0x6671a4                             # MapPane ambient light (Visibi
 # tested for null: a case's `animator` gives a stand-in), the stealth values.
 O_COMMANDDONE, O_ANIMATOR, O_GLIMPSE, O_NOISE = 0x80, 0x58, 0x130, 0x134
 O_FRAMERATE, O_PREVSTATE, O_PREVFRAME, O_MOVEBITS = 0x5e, 0x60, 0x62, 0xbc
+O_COMBATFLASH = 0x224                            # combat flash ticks (a blow sets 5)
 # Type stats, read through slot 0xd8. Radius: TCharacter::Radius (slot
 # 0x258, 0x4d6e40), which Distance (0x4d61b0) subtracts.
 CLASSSTAT_IDS = {'radius': (0x66ca30, 0x201)}
@@ -666,7 +667,8 @@ class CombatWorld:
                     framerate=struct.unpack('<h', vm.uc.mem_read(obj + O_FRAMERATE, 2))[0],
                     prevstate=struct.unpack('<h', vm.uc.mem_read(obj + O_PREVSTATE, 2))[0],
                     prevframe=struct.unpack('<h', vm.uc.mem_read(obj + O_PREVFRAME, 2))[0],
-                    animate=int(bool(vm.u32(obj + O_FLAGS) & 0x4000)), animator=int(bool(vm.u32(obj + O_ANIMATOR))))
+                    animate=int(bool(vm.u32(obj + O_FLAGS) & 0x4000)), animator=int(bool(vm.u32(obj + O_ANIMATOR))),
+                    combatflash=s32(vm.u32(obj + O_COMBATFLASH)))
 
     def character_dump(self, obj, new_blocks):
         vm = self.vm

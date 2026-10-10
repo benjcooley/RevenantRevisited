@@ -72,7 +72,7 @@ only).
 | M7 | displacement: Move / MoveStep (velocity, blocking, shove), FindClearPath, CharBlocking, GetWalkHeight / GetWalkHeightRadius | `0x4c46d0` `0x4c3bc0`, TPlayer `0x518df0`, `0x4c39d0` `0x4d4db0` `0x452e10` `0x4530a0` | `TCharacter::Move`, `MoveStep`, `Blocked`, `CharBlocking`, `TMapPane::GetWalkHeight*` | [x] 786/786 (`combat-move`; six mutations caught) |
 | M8 | orbit sequence: N ticks of Go → Pulse (UpdateAction) → Move → SetObjectMotion → frame → NextFrame, with SetState / ResetState / T3DImagery::SetObjectMotion / NextFrame as original over motion tables; walking, strafing round a target, a monster curving, walls, loop / ping-pong / reverse roots | `0x490bd0` order; `0x46f250` `0x46f1e0` `0x40cd20` `0x40cc40` `0x470cc0` | the tick, `TObjectInstance::SetState` / `NextFrame`, `T3DImagery::SetObjectMotion` | [~] 32/32 sequences, ~1,500 ticks (`combat-sequence`); motion tables synthetic, real I3D motion next |
 | M9 | AI combat movement: approach, combat range, retreat, wander | `0x4c8b60`, `0x4c9790` | `TCharacter::AI` | [ ] |
-| M10 | leap, side step, knock back, pivot, stop | `0x4d2be0` `0x4d6220` `0x4d3750` `0x4c8470` `0x4cee70` | same | [~] SideStep, Leap, StartRetreat `0x4d5fc0`: 223/223 (`combat-steps`; four mutations caught); Stop in M6; KnockBack, pivot open |
+| M10 | leap, side step, knock back, pivot, stop | `0x4d2be0` `0x4d6220` `0x4d3750` `0x4c8470` `0x4cee70` | same | [~] SideStep, Leap, StartRetreat `0x4d5fc0`, KnockBack: 482/482 (`combat-steps`; five mutations caught); Stop in M6; Pivot `0x4c8470` open |
 
 ### C — melee
 
@@ -309,6 +309,15 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
     diagonal (retail: the lowest bit), for keyboards with no numpad. Not
     ported: the debug camera's turn of the direction (0x006671f0, the dev
     'X' key).
+12. **Knock-back (kata M10, 2026-10-09).** A blow from behind (the facing
+    more than 0x48 off the blow's bearing, which retail measures without
+    wrapping: a facing of 250 takes a blow at 10 as from behind) plays the
+    back impact `impb` if the character has one and keeps its facing;
+    otherwise one of five (`impk`, `imphh`, `imph`, `implh`, `impl`; the
+    caller's variant, else `random(0, 4)`) turns it to face the blow. Both
+    are named through CombatAnimName (the player's prefix), set the combat
+    flash (+0x224) to 5, and force an IMPACT with priority. The port played
+    `cimpk` every time and faced the blow by atan2.
 
 ## 6. Layouts used by the fixtures
 
