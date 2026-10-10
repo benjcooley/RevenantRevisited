@@ -457,7 +457,8 @@ struct SMeshSubmit
     float      tint[4] = { 1.0f, 1.0f, 1.0f, 1.0f };   // rgba multiplier; alpha < kOpaqueMeshAlpha = translucent
     uint32_t   obj_id = 0;    // packed into id_target (RGBA8) for picking
     float      uv_offset[2] = {0.0f, 0.0f}; // authored scrolltex, per instance
-    // Classic software I3D: 0 deferred, 1 RGB565 vertex-lit, 2 ARGB unlit.
+    // Classic software I3D: 0 deferred, 1 RGB565 vertex-lit, 2 ARGB unlit,
+    // 3 exact ARGB4444 lookup (RGB565 channels and alpha nibble plus one).
     int32_t    retail_lighting = 0;
     // Opt-in source positive screen-down faces. Ordinary opaque depth/write
     // policy is retained; default meshes keep their existing two-sided path.
@@ -498,8 +499,11 @@ struct SHelperMeshSubmit
     float      sort_depth = 0.0f;
     // 0: existing helper material shader. 1: Blue SW RGB565 normal lighting,
     // five-bit vertex Gouraud modulation, nearest wrapped texture sampling.
+    // 2: normalized ARGB unlit. 3: exact ARGB4444 software lookup.
     // Material specular/emissive are not implemented by the source SW path.
     int32_t    retail_lighting = 0;
+    // Undo an explicit geometry-only Z bridge before source normal lighting.
+    float      retail_normal_z_scale = 1.0f;
     bool       retail_gold_no_depth = false; // audited authored mode80, no depth test/write
     bool       retail_positive_face_cull = false; // source positive screen-down; opt-in only
 };
@@ -1319,6 +1323,7 @@ private:
     sg_shader   mesh_shader      = {};
     sg_pipeline mesh_pipeline    = {};
     sg_pipeline mesh_source_cull_pipeline = {};
+    sg_pipeline mesh_source_alpha_pipeline = {};
     // Translucent meshes, in the transparent-world pass: a depth-only pass
     // per surface, then its lit colour where that left the nearest depth.
     sg_shader   mesh_depth_shader          = {};

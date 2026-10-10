@@ -38,7 +38,7 @@ class WarpNativeTests(unittest.TestCase):
             for p in PROFILES:
                 for a,b in zip(native[p['name']],modern[p['name']]):
                     self.assertEqual(a['offset'],b['offset'])
-                    self.assertEqual(b['flags'],[0,0,1,2])
+                    self.assertEqual(b['flags'],[0,0,1,3])
                     for x,y in zip(a['uvs'],b['uvs']):
                         for c,d in zip(x,y):self.assertEqual(struct.pack('<f',c),struct.pack('<f',d))
 

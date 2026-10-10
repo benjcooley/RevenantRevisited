@@ -131,6 +131,12 @@ fs_out main_ps(vs_out in_) {
         int2 size = int2(width, height);
         int2 xy = min(int2(floor(frac(in_.uv) * float2(size))), size - int2(1, 1));
         texel = albedo_tex.Load(int3(xy, 0));
+        if (in_.retail_mode > 2.5) {
+            // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
+            float4 nibble = floor(texel * 15.0 + 0.5);
+            texel = float4(nibble.rgb * float3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
+                           (nibble.a + 1.0) / 16.0);
+        }
     }
     float4 c = texel * in_.tint;
     if (in_.retail_mode > 0.5 && in_.retail_mode < 1.5) c.rgb *= in_.retail_color;
@@ -168,6 +174,12 @@ void main_ps(vs_out in_) {
         int2 size = int2(width, height);
         int2 xy = min(int2(floor(frac(in_.uv) * float2(size))), size - int2(1, 1));
         texel = albedo_tex.Load(int3(xy, 0));
+        if (in_.retail_mode > 2.5) {
+            // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
+            float4 nibble = floor(texel * 15.0 + 0.5);
+            texel = float4(nibble.rgb * float3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
+                           (nibble.a + 1.0) / 16.0);
+        }
     }
     if (texel.a * in_.tint.a < 0.01) discard;
 }
@@ -197,6 +209,12 @@ float4 main_ps(vs_out in_) : SV_Target0 {
         int2 size = int2(width, height);
         int2 xy = min(int2(floor(frac(in_.uv) * float2(size))), size - int2(1, 1));
         texel = albedo_tex.Load(int3(xy, 0));
+        if (in_.retail_mode > 2.5) {
+            // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
+            float4 nibble = floor(texel * 15.0 + 0.5);
+            texel = float4(nibble.rgb * float3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
+                           (nibble.a + 1.0) / 16.0);
+        }
     }
     float4 c = texel * in_.tint;
     if (in_.retail_mode > 0.5 && in_.retail_mode < 1.5) c.rgb *= in_.retail_color;

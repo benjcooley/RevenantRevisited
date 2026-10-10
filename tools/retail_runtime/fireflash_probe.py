@@ -139,7 +139,7 @@ def build_port(output,parts,rng,lookup,ticks):
 enum class EFxDebugMode{Normal};using MeshHandle=unsigned;
 struct SMeshVertex{float pos[3]{},normal[3]{},uv[2]{};};
 struct Material{float diffuse[4]{},ambient[4]{},specular[4]{},emissive[4]{},power=0;};struct S3DMat{Material matdesc;};
-struct SHelperMeshSubmit{unsigned mesh=1;bool additive_blend=false;int retail_lighting=0;float world[16]{},diffuse[4]{},ambient[4]{},specular[4]{},emissive[4]{},power=0,sort_depth=0;};
+struct SHelperMeshSubmit{unsigned mesh=1;bool additive_blend=false;int retail_lighting=0;float retail_normal_z_scale=1;float world[16]{},diffuse[4]{},ambient[4]{},specular[4]{},emissive[4]{},power=0,sort_depth=0;};
 struct TRenderer{std::vector<SHelperMeshSubmit>draws;void SubmitHelperMesh(const SHelperMeshSubmit&s){draws.push_back(s);}unsigned RegisterMeshAsset(uint64_t,const SMeshVertex*,int,const uint16_t*,int,TTextureHandle){return1;}void AddMeshAssetRef(unsigned){}};TRenderer renderer;TRenderer*Renderer=&renderer;
 struct TObjectInstance{S3DPoint Pos()const{return{};}};struct Imagery{int ImageryId()const{return1;}}imagery;
 struct Target{TObjectInstance*Get(){return nullptr;}void Clear(){}};struct Spell{void Kill(){}};
@@ -159,7 +159,7 @@ int main(int argc,char**argv){inputs.open(argv[1]);std::ifstream tables(argv[2],
  for(int tick=0;tick<=TICKS;++tick){if(tick)effect.Advance(1.0/24.0);renderer.draws.clear();effect.Submit(EFxDebugMode::Normal);
  printf("S %d %d %d %.9g %.9g %.9g %.9g %.9g %.9g\n",tick,effect.frameon_,rng_count,effect.gsphere_.X,effect.gsphere_.Y,effect.gsphere_.Z,effect.mainscale_,effect.gsize_,effect.rsize_);
  for(int i=0;i<150;++i){const auto&p=effect.particles_[i];printf("P %d %d",tick,i);for(const auto*v:{&p.pos,&p.pivot,&p.vel,&p.angle,&p.angvel})printf(" %.9g %.9g %.9g",v->X,v->Y,v->Z);printf(" %.9g %.9g %d %d %d %d %d\n",p.scale,p.dist,p.state,p.life,p.startfade,p.stopfade,p.color);}
- for(const auto&d:renderer.draws){printf("D %d %u %d",tick,d.mesh-1,int(d.additive_blend));for(int row=0;row<4;++row)for(int col=0;col<4;++col)printf(" %.9g",d.world[col*4+row]);puts("");}}
+ for(const auto&d:renderer.draws){printf("D %d %u %d",tick,d.mesh-1,int(d.additive_blend));for(int row=0;row<4;++row)for(int col=0;col<4;++col)printf(" %.9g",d.world[col*4+row]);printf(" %.9g\n",d.retail_normal_z_scale);}}
 }
 '''.replace('TICKS',str(ticks))
     cpp=output/'fireflash-port.cpp';cpp.write_text(prelude+vector+'\nvoid TFireFlashEffect_Bespoke::Initialize(bool attach_runtime_component){\n'+initialize+'}\n'+'\n'.join(methods.values())+trailer)
@@ -175,7 +175,7 @@ int main(int argc,char**argv){inputs.open(argv[1]);std::ifstream tables(argv[2],
         p=line.split();tick=int(p[1])
         if p[0]=='S':frames[tick]=dict(frame=int(p[2]),random_count=int(p[3]),values=list(map(float,p[4:])),particles=[],draws=[])
         elif p[0]=='P':frames[tick]['particles'].append(dict(index=int(p[2]),values=list(map(float,p[3:20])),integers=list(map(int,p[20:]))))
-        else:frames[tick]['draws'].append(dict(object=int(p[2]),additive=bool(int(p[3])),matrix=list(map(float,p[4:]))))
+        else:frames[tick]['draws'].append(dict(object=int(p[2]),additive=bool(int(p[3])),matrix=list(map(float,p[4:20])),normal_z_scale=float(p[20])))
     return frames,dict(command=command,binary_sha256=sha(binary.read_bytes()),driver_sha256=sha(cpp.read_bytes()),method_sha256={k:sha(v.encode())for k,v in methods.items()},initialize_sha256=sha(initialize.encode()),owner_common_z_scale=1.5)
 
 

@@ -27,3 +27,20 @@ inline SRetailMeshLighting RetailSoftwareMeshLighting(int ambient, int ambient3d
     }
     return out;
 }
+
+// Only this exact format has the Blue 56ca90 nibble-to-RGB565 lookup.
+// Other alpha formats retain their existing normalized channel contract.
+template<class PixelFormat>
+inline int RetailMeshTextureLighting(const PixelFormat& p)
+{
+    if (!p.dwRGBAlphaBitMask) return 1;
+    return p.dwRGBBitCount == 16 && p.dwRBitMask == 0x0f00 &&
+           p.dwGBitMask == 0x00f0 && p.dwBBitMask == 0x000f &&
+           p.dwRGBAlphaBitMask == 0xf000 ? 3 : 2;
+}
+
+inline int RetailMeshLightingMode(int mode, bool software)
+{
+    if (software) return mode;
+    return mode == 1 ? 0 : mode == 3 ? 2 : mode;
+}

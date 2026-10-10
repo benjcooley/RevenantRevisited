@@ -32,6 +32,7 @@ tint_start = map_source.index('            m.tint[0] = m.tint[1] = m.tint[2] = 1
 tint = map_source[tint_start:map_source.index('            m.obj_id = obj_id;', tint_start)]
 drain = function(renderer_source, 'void TRenderer::DrainMeshQueue()')
 prelude = r'''
+#include "retailmeshlighting.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -122,5 +123,5 @@ with tempfile.TemporaryDirectory(prefix='revenant-map-texture-') as temp:
     source=Path(temp)/'test.cpp';binary=Path(temp)/'test'
     tint_function = '\nvoid ApplyTint(T3DImagery*meshimg,int kind,float draw_alpha,SMeshSubmit&m,uint32_t id=0){Owner owner{kind,id};Owner*oi=&owner;Asset asset;\n'+tint+'}\n'
     source.write_text(prelude+selection+'\n'+material+tint_function+drain+'\n'+checks)
-    subprocess.run(['clang++','-std=c++17',str(source),'-o',str(binary)],check=True)
+    subprocess.run(['clang++','-std=c++17','-iquote',str(ROOT/'src'),str(source),'-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True)
