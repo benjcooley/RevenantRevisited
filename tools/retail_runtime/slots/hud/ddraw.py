@@ -519,8 +519,12 @@ class DirectDraw:
             pixel_format = raw[SD_PIXELFORMAT:SD_PIXELFORMAT + 32] if flags & DDSD_PIXELFORMAT else RGB565
             if caps & DDSCAPS_ZBUFFER and not flags & DDSD_PIXELFORMAT:
                 pixel_format = struct.pack('<8I', 32, DDPF_ZBUFFER, 0, 16, 0, 0xffff, 0, 0)
+        # A caller's pitch describes its own memory (DDSD_LPSURFACE); for a
+        # surface DirectDraw allocates it ignores DDSD_PITCH and picks the
+        # pitch itself. Retail's texture upload (0x0040bb30) sets DDSD_PITCH
+        # with the width in texels there.
         memory = struct.unpack_from('<I', raw, SD_SURFACE)[0] if flags & DDSD_LPSURFACE else 0
-        pitch = struct.unpack_from('<I', raw, SD_PITCH)[0] if flags & DDSD_PITCH else 0
+        pitch = struct.unpack_from('<I', raw, SD_PITCH)[0] if flags & DDSD_PITCH and memory else 0
         pointer = self._new_surface(width, height, caps, pixel_format, memory, pitch)
         if flags & DDSD_CKSRCBLT:
             self.surfaces[pointer].color_keys[DDCKEY_SRCBLT] = struct.unpack_from('<II', raw, SD_CKSRCBLT)
