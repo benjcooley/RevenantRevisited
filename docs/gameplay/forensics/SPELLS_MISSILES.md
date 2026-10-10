@@ -661,11 +661,16 @@ players only, others return 0):
      - pos = shooter pos + chardata `+0x1fc` offset rotated by the facing
        (`0x46dbe0` / `0x46de10` / `0x46db20`), z + chardata `+0x204`;
      - velocity = ConvertToVector(facing, chardata `+0x208` << 16);
-     - NewObject; when it is ammo, SetShooter(this) (`0x4c00b0`) and the
-       map add `0x451090`.
-   - With any ammo: `ammo->slot 0x198()` (count left) and `slot 0x78(name,
-     1)` (remove one). At 1 left, Equip(0, 8) unequips the ammo slot.
-   - Sound "bowshoot" + `'1' + random(0, 5)`. `[0x65b830] = 1`.
+     - NewObject; **only when it gives an AMMO object** does the rest
+       happen: SetShooter(this) (`0x4c00b0`), the map add `0x451090` (a
+       no-op: NewObject has added it), then the ammo and the sound below.
+       No object, no ammo spent and no sound.
+   - (A multiplayer client skips the arrow and goes straight to the ammo.)
+     `ammo->slot 0x198()` (Amount, the count left) and `slot 0x78(name,
+     1)` (DeleteFromInventory one). At 1 left, Equip(0, 8) unequips the
+     ammo slot.
+   - Sound "bowshoot" + `'1' + random(0, 5)`. `[0x65b830] = 1` (a pane's
+     redraw flag, the one at `0x65b7e0`; Equip sets it too).
 3. `+0x22c = GameFrame`, `+0x230 -= 1`. Return `+0x230 <= 0 ? 0 : 2`.
 
 **Bow aim `0x4c80c0`** (thiscall(ab, bits) ret 8): `+0xb4 = 0`.
@@ -682,15 +687,20 @@ base Move's bits):
    arrow is flying (flags `0x10000`).
 2. Hit test:
    - victim = `0x4d4db0(this, pos, level, 0)` (the character at the
-     arrow's position; seam). A victim with `|Δz| > 80` counts as no hit.
+     arrow's position; seam). A victim with `|Δz| > 80` ends the step at
+     once: the bits are returned and a blocked arrow isn't handled either.
    - Continue only when `+0xdc < 0` (not handled yet) and (bits `& 2`
      (blocked) or there is a victim).
 3. **Ice arrow** (type name "ice arrow"):
-   - FindObjectsInRange(pos, 200, ...) (`0x452060`). Each object is
-     skipped when it is a Solifuge, the main player, dead, attack/impact
-     gated, or its state name contains "skywalk".
-   - Every other one gets an `Iced` effect at its position (init, then
-     `0x4ec930(obj)`).
+   - FindObjectsInRange(pos, level, ids, 200, 0, -1, 10, characters)
+     (`0x452060`). **Only a Solifuge is iced** (`stricmp` then `jne` skips
+     every other type); of them, the main player, the dead, one held in an
+     interactive attack or impact (unless charflags `0x80000`) and one
+     whose doing block's name holds "skywalk" are skipped.
+   - Each one left gets an `Iced` effect at its position: class `0x19`,
+     the map level, HasAnimator / CreateAnimator (slots `0x20` / `0x28`),
+     then `0x4ec930(obj)`: the target `|= 0x800000 | 0x2000000`
+     (paralysed, iced) and "FREEZECUBE" played there.
    - Ice arrows deal **no damage** (step 7).
 4. Sound "impact*bow" with `'1' + random(0, 2)`: drawn for every hit, before
    the damage.
@@ -705,9 +715,11 @@ base Move's bits):
      (`+0x2bc`) GetStat("damagemod") when there is one, and
      `base += (m · base) / 100`. Then `shooter->slot 0x41c(8, victim)`
      (bow skill exp).
-   - **character shooter:** `20 + 6·slot 0x190()` (level, unverified name).
-   - **no shooter (traps):** `20 + 6·victim's Level (player) or slot 0x190
-     (character)`.
+   - **character shooter:** `20 + 6·slot 0x190()`. Slot `0x190` is
+     Value() (TAmmo's reads its Value stat), and no character class
+     overrides it: it is 0, so a monster's arrow is always `20`.
+   - **no shooter (traps):** `20 + 6·victim's Level (player) or Value()
+     (character, 0)`.
 8. **d = random(base · 25 / 100, base)**. Then, when `d != 0` and the arrow
    is not an ice arrow:
    - arrow damage type (slot `0x200`) 9 (poison) and **random(0, 100) < 33**:
@@ -1129,3 +1141,150 @@ REVSYNC-DIVERGENCE: Damage is handed the attacker only when it is a
 character (retail passes whatever object it was given; every caller
 listed in 2.15 passes its spell's invoker, `+4`, which is a character or
 null).
+
+### S4b `missile-arrow`: an arrow's hit
+
+Fixture `spell_arrow.py` (built on spell_damage.py's): TAmmo::Move
+`0x4c01f0` and TAmmo::Pulse `0x4c0880` on a guest TAmmo (its real vtable
+`0x5a6b68`). CharBlocking `0x4d4db0` runs as original over guest.py's map
+iterator. Seams beyond S3's: the base move `0x470920` (the case's bits),
+the arrow's MagicType / DamageMod (slots `0x200` / `0x208`), a bow's
+GetStat, FindObjectsInRange `0x452060` (the case's `iced`), NewObject
+`0x450e40` (the def recorded), the sound lookup `0x49c430` (no sound),
+AwardSkillExp `0x51abe0`, TSpellManager::CastByName `0x53f920`, OnAttacked
+`0x4cdce0`. AMMODATA (`0x65d884..`) comes from the case (the fixture runs no
+Rules clear), the message table is the game's (english.def through
+`0x49ceb0`, its pointer arrays built first).
+
+- `missile-arrow`, 119/119: no hit (flying on, not flying, handled, a wall
+  with nobody there from each kind of shooter); the height window at
+  ±80/±81 with and without a wall; a player shooter over Level, bows and the
+  bow's DamageMod (none, 0, 20, 100, -50); a friend; no main player; a
+  monster shooter, at a monster and at the player; traps on a monster and
+  on the player at three levels; every class.def arrow type from a player
+  and a trap; the poison and fire procs either side of 33 / 66 with the
+  cast answered both ways, from each kind of shooter; the damage roll's
+  ends and a zero range; AMMODATA's defaults, rules.def's commented line
+  and others; the ice burst's filters, its cap of ten, a wall, a friend,
+  the victim a Solifuge; Pulse over the wait (-1, 0, 1, 2, 5), the
+  velocity, the editor and an owner.
+
+Port changes: TAmmo is the flying arrow, as retail's is (`src/ammo.cpp`):
+Move, Pulse, SetShooter, the shooter (a TSafeRef where retail keeps the
+id) and the wait (`+0xd8` / `+0xdc`), the AMMO stats SaleType..Stack
+(retail's ids 3-7), the constructor's OF_MOVING | OF_PULSE. The 1998
+TArrow3D ("Arrow3D", no such type in class.def) is gone; retail's five
+arrow builders differ only in their destructors. New seams: TMapPane
+NewObject / FindObjectsInRange, TSpellManager::CastByName,
+TCharacter::SignalAttack (OnAttacked), TAmmo's base move.
+
+Findings (the data): class.def's "Poison Arrow" row is `{8,150,1,9,2,5,1,0}`
+-- the 9 sits in SaleType, so its MagicType is 2 and **no shipped arrow
+poisons**; "Fire Arrow" (7) procs Fire Flash at 66 %, "Ice Arrow" (8)
+freezes Solifuges and does no damage. Unverified in play: an ammo object
+lying still outside any inventory is removed when it pulses (Pulse kills it
+when its velocity is zero), so a pulsed arrow bundle on the ground would
+vanish.
+
+REVSYNC-DIVERGENCEs: a shooter removed while the arrow flew crashes retail
+(the class read through a null instance); the port's arrow has no shooter
+then. Retail hands the text bar its message as the format; the port prints
+it as text. The ice burst's Iced effect isn't built yet (effects): the port
+makes the object and stops before `0x4ec930`, so nobody is frozen.
+
+### S4c `missile-bow`: the bow
+
+The bow's commands, retail's (they were the 1998 ones):
+
+- DrawBow `0x4d0aa0`: in the bow root (action `0x19`) and not aiming yet,
+  alive, not held in an interactive attack or impact (unless charflags
+  `0x80000`). A player needs an arrow in the inventory (FindObjInventory
+  AMMO type 1); with the ammo slot empty the first one is equipped (Equip
+  is called even when there is none). A doing walk / step (actions 2, 4,
+  `0x1a`) is stopped; then "bowaim" (`0x1b`, interrupt, frame 20) at the
+  facing is desired. The 1998 one took the root's name + "aim" and needed
+  no ammo slot.
+- AimBow `0x4d0c70`: the same gates; nothing once the shot is called for
+  (stop); the doing block's angles, and its turn rate
+  `8 + max(|AngleDiff| - 32, 0) / 32 * 4`. AimBowLeft / Right `0x4d0dc0` /
+  `0x4d0de0` step it by chardata BOWAIMSPEED.
+- ShootBow `0x4d0e00`: the same gates; an idle player (state bit 2) wakes;
+  the aim stops at `angle`; "bowshoot" (`0x1c`) at `angle` is desired and
+  **one shot is queued** (`+0x230`). The pace is ResolveBowShoot's: the
+  1998 ShootBow refused a shot within BOWWAIT itself. `0x4d0fd0` wraps it
+  with the network notice, `0x4d1000` shoots at an object.
+- IsBowDrawn `0x4d1050`: the bow root and the doing block named root +
+  "aim" (any case).
+
+Fixture `spell_bow.py` (built on spell_arrow.py's): the commands and both
+resolvers as original over the guest world; the inventory walk of
+FindObjInventory runs over guest ammo items (GetStat("Type") and Amount
+answered as data). Seams beyond S4b's: Equip `0x5199b0`,
+DeleteFromInventory (slot `0x78`, `0x477950`), the map add `0x451090`
+(unrecorded: it returns at once).
+
+- `missile-bow`, 114/114: DrawBow from the idle, walking, moving, aiming,
+  combat roots, dead, held and moving-interactive, with ammo equipped,
+  carried or none, a monster, three facings; AimBow over the turn rate's
+  steps and both directions, stopped, not drawn, dead, held; the left /
+  right steps at four facings and two speeds; ShootBow at four angles, a
+  queue, an idle player, not drawn, dead, a monster; IsBowDrawn by root
+  name and case; ResolveBowAim stopped / turning; ResolveBowShoot with no
+  object made, a non-ammo object, one / three / none / negative shots, the
+  pace either side of BOWWAIT, the last arrow and two, no ammo, ammo only
+  carried, every arrow type, ARROWPOS x facing x aim (the vector angle and
+  length `0x46dbe0` / `0x46de10`), four speeds, a monster.
+
+Port changes (`src/character.cpp`): DrawBow, AimBow, AimBowLeft / Right,
+ShootBow, IsBowDrawn, ResolveBowAim (the root and doing angles follow the
+aim), ResolveBowShoot (the arrow from the equipped ammo through NewObject,
+its shooter, the ammo counted down, the slot emptied, the sound; the 1998
+one made "Arrow3D" on the first tick only). `bowshots` is `+0x230`;
+`lastbowshot` `+0x22c`. New seams: TPlayer::Equip; fixture characters'
+DeleteFromInventory (`inventorySeams`). PlayAt (sound.h) is retail's
+positioned one-shot.
+
+Not ported: the network notices and the multiplayer client's path (no
+network game); the pane redraw flag `0x65b830` (UI).
+
+### S4d `missile-fireball`: a spell's fireball, tick by tick
+
+Fixture `spell_missile.py` (built on spell_damage.py's): a guest FireBall
+(vtable `0x5b408c`, 0x198 bytes, inventnum -1: IsInInventory, slot `0xb4`,
+is `+0x7c >= 0`) with the case's spell, FireBall's Init `0x510bd0`, then
+Pulse `0x510c10` once a tick. The base Move `0x470920` runs as original over
+the case's ground; the hit test over guest.py's map iterator; the blast's
+AreaDamage as original. TEffect::Pulse `0x4de800` is left out (the generic
+effect's lights, attachments and RANGEDAMAGE) and KillThisEffect
+`0x4defe0` stands as the port has it (the flags; its poison cure and the
+spell's Kill belong to the spell's lifetime). The FireBall's SetState /
+SetPos store without a record (the port's missile keeps both). A record per
+tick: state, position, velocity, accumulator, life, flags, the blast's
+armed flag, the tick's seams and draws.
+
+- `missile-fireball`, 21/21 (840 ticks): at targets ahead, beside, behind
+  and off-axis; no target (the caster's facing), the caster as its own
+  target; out of life; into a wall (a raised walk cell); past a friend and
+  the dead; into a crowd (the blast's 150 over two enemies and a friend,
+  two beyond); a monster's at the player; no caster; no spell (no blast);
+  the Priest variant; high, low, below the walk height; no walkmap (a walk
+  height of 0 blocks at once).
+
+Port changes: TFireBallEffect's blast (`src/effect.cpp`): PulseMissile =
+the missile step then the blast (`+0x194` armed by Initialize, disarmed by
+the blast; the ball's offset added as retail's ftol truncates), Pulse runs
+it before the animator's step; the animator's placeholder for the damage is
+gone (retail moved the damage into the object's Pulse). The fly state's hit
+test walks retail's iterator (the level, the loaded sectors, flags `0xe0`)
+and the A/B characters seam. YFireBall (`0x513140`, the same blast, no
+animator check) inherits it.
+
+REVSYNC-DIVERGENCE: retail hands AreaDamage the spell's invoker pointer,
+which dangles once the caster is gone; the port's safe reference gives none
+then (nobody is hurt).
+
+Not ported (left): TEffect::Pulse's RANGEDAMAGE blast (the Strike spells'
+Meteor Storm / Cataclysm: radius / frame from CONTROLDATA, `0x4dee7c`) and
+the rest of the generic effect Pulse; TEffect::KillThisEffect's poison cure
+and spell Kill; TSpell Timer / Pulse / Kill (the spell's lifetime: making
+the effects). The Iced effect the ice arrow makes.

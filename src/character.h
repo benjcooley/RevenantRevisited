@@ -116,6 +116,9 @@ class TCharacter : public TComplexObject
     using KnockBackSeam = void (*)(TCharacter* self, const S3DPoint& from, int32_t variant);
     static inline KnockBackSeam knockBackSeam = nullptr;
       // KnockBack (retail 0x004d3750)
+    using SignalAttackSeam = void (*)(TCharacter* self, TObjectInstance* actor, TObjectInstance* target, int32_t flag);
+    static inline SignalAttackSeam signalAttackSeam = nullptr;
+      // SignalAttack (retail OnAttacked 0x004cdce0, vtable +0x240)
     using NearbyCharactersSeam = std::vector<TCharacter*> (*)(const S3DPoint& pos, int32_t range);
     static inline NearbyCharactersSeam nearbyCharactersSeam = nullptr;
       // The characters near a point that CharBlocking and FindCharacters
@@ -800,10 +803,14 @@ public:
     int32_t  DoingTargetX() const { return doing ? doing->target.x : 0; }
     int32_t  DoingTargetY() const { return doing ? doing->target.y : 0; }
     int32_t  NextAttack()   const { return nextattack; }
+    int32_t  LastBowShot()  const { return lastbowshot; }
+    int32_t  BowShots()     const { return bowshots; }
 protected:
 
   // Last bow shot ticks (so we don't shoot bow too fast)
-    int32_t lastbowshot = 0;
+    int32_t lastbowshot = 0;    // +0x22c
+  // Shots ShootBow has queued for ResolveBowShoot
+    int32_t bowshots = 0;       // +0x230
 
   // Retail +0x23c: where the AI last saw or heard its target (the centre of
   // its waypoint search when it loses it).

@@ -95,7 +95,7 @@ only).
 | S1 | talismans → spell, quick spell, fizzle | `0x51b5d0` `0x51b7c0` | `TSpellList::GetSpellDataByTalismans`, `TPlayer::HasTalismans` | [x] `spell-lookup` 75, `spell-talismans` 340, `spell-quick` 49 |
 | S2 | cast gates: mana, wait, fail roll | `0x53fe80` (CastByTalismans), `0x4d5c20` | `TSpellManager::Cast*` | [x] 2071/2071 (`spell-cast`) |
 | S3 | spell damage, poison roll | `0x53f560` `0x53f090` | `TSpell::Damage`, `TSpell` ctor | [x] `spell-new` 426, `spell-damage` 1090 |
-| S4 | missiles: flight, hit, damage | `0x510220`, AreaDamage `0x4de3c0` | missile effects | [~] AreaDamage 64/64 (`missile-area`); arrows, the bow and the fireball (S4b–d) are green in the spells worktree, not yet committed |
+| S4 | missiles: flight, hit, damage | `0x510220`, AreaDamage `0x4de3c0` | missile effects | [x] `missile-area` 64 (AreaDamage `0x4de3c0`), `missile-arrow` 119 (TAmmo), `missile-bow` 114 (DrawBow ... ResolveBowShoot), `missile-fireball` 21 cases / 840 ticks; spell lifetimes, RANGEDAMAGE effects and the Iced effect open |
 
 ### D — data
 
