@@ -144,7 +144,8 @@ Pool fire_{80},smoke_{80},burst_{100};std::vector<SMeshVertex>vertices_[2];std::
 const World&Transform()const{return world;}void SubmitPool(const Pool&,int,EFxDebugMode)const;};
 '''.replace('PARTICLE', particle).replace('FIELDS', fields)
     trailer = r'''
-int main(int argc,char**argv){if(argc!=4)return 2;TFireConeEffect_Bespoke e;e.facing_=std::atof(argv[3]);
+int main(int argc,char**argv){if(argc!=4&&argc!=5)return 2;TFireConeEffect_Bespoke e;e.facing_=std::atof(argv[3]);
+if(argc==5){FILE*w=fopen(argv[4],"rb");if(!w||fread(&e.world.m,1,64,w)!=64)return 8;fclose(w);}
 FILE*a=fopen(argv[1],"rb");if(!a)return 3;for(int j=0;j<2;++j){e.vertices_[j].resize(4);e.indices_[j].resize(6);
 if(fread(e.vertices_[j].data(),1,128,a)!=128||fread(e.indices_[j].data(),1,12,a)!=12||fread(&e.materials_[j].matdesc,1,68,a)!=68)return 4;}fclose(a);
 FILE*f=fopen(argv[2],"rb");if(!f)return 5;
@@ -170,10 +171,15 @@ renderer.pool="burst";e.SubmitPool(e.burst_,0,EFxDebugMode::Normal);}
                                driver_sha256=sha(cpp.read_bytes()), binary_sha256=sha(binary.read_bytes()))
 
 
-def candidate_packets(binary, assets, output, state, facing, parts):
+def candidate_packets(binary, assets, output, state, facing, parts, owner_matrix=None):
     inputs = output / 'candidate-slots.bin'
     inputs.write_bytes(b''.join(struct.pack('<18f4I', *p['values'], p['flicker'], p['life'], p['span'], p['used']) for name, _, _ in POOL_SPECS for p in state['pools'][name]))
-    text = subprocess.check_output([str(binary), str(assets), str(inputs), str(facing)], text=True)
+    command = [str(binary), str(assets), str(inputs), str(facing)]
+    if owner_matrix is not None:
+        owner = output / 'candidate-owner.bin'
+        owner.write_bytes(struct.pack('<16f', *owner_matrix))
+        command.append(str(owner))
+    text = subprocess.check_output(command, text=True)
     packets = []
     for line in text.splitlines():
         p = line.split()
