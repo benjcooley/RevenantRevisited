@@ -190,6 +190,18 @@ class TPlayer : public TCharacter
     // Experience
     [[nodiscard]] int32_t KillExp(int32_t value);
       // What overcoming something worth 'value' earns at this level (retail 0x0051a5b0)
+    // Retail A/B fixtures only: when set, each answers its call as the
+    // retail fixture's seam does -- recorded, not run: AwardKillExp (vtable
+    // +0x414), AwardSkillExp (+0x41c), AwardStealthExp (+0x420); and
+    // SetPlayerState (0x0051d680), recorded with the state still set.
+    using KillExpSeam = void (*)(TPlayer* self, TCharacter* victim);
+    static inline KillExpSeam killExpSeam = nullptr;
+    using AwardSkillExpSeam = void (*)(TPlayer* self, int32_t skillnum, TCharacter* victim);
+    static inline AwardSkillExpSeam awardSkillExpSeam = nullptr;
+    using StealthExpSeam = void (*)(TPlayer* self, TCharacter* victim);
+    static inline StealthExpSeam stealthExpSeam = nullptr;
+    using PlayerStateSeam = void (*)(TPlayer* self, int32_t newstate);
+    static inline PlayerStateSeam playerStateSeam = nullptr;
     void AwardKillExp(TCharacter *victim);
       // Experience for a dead victim; may raise the level (retail vtable +0x414, 0x0051a630)
     void AwardSkillExp(int32_t skillnum, TCharacter *victim);
@@ -239,8 +251,9 @@ class TPlayer : public TCharacter
       // Invokes the given quickspell for the player
 
     // Info functions
-    virtual int32_t GetResistance(int32_t type);
-      // Get character's resistance to the given damage type
+    int32_t DamageModifier(int32_t damagetype) override;
+      // REVSYNC: TPlayer::Resist @ 0x005208d0 (slot 0x2c8) -- the modified copy's
+      // DmgRes stat for the type (0 past the copy's end)
     bool GetFieldText(const char *field, char *buf, int32_t buflen) override;
       // Player fields of the stat sheet (retail 0x0051dfb0)
 
@@ -260,9 +273,6 @@ class TPlayer : public TCharacter
   // Shipped-game player record (SAVE_GAME.md §11.4)
     [[nodiscard]] int32_t PlayerState() const { return playerstate; }
     void SetPlayerState(int32_t newstate);
-    using SetPlayerStateSeam = void (*)(TPlayer* player, int32_t newstate);
-    static inline SetPlayerStateSeam setPlayerStateSeam = nullptr;
-      // Retail A/B fixtures only: told every SetPlayerState (retail's seam at 0x0051d680)
         // Player state bits (retail +0x36c)
     [[nodiscard]] const SPlayerHudWords& HudWords() const { return hudwords; }
     void SetHudWords(const SPlayerHudWords& words) { hudwords = words; }
@@ -369,8 +379,23 @@ class TPlayer : public TCharacter
         return ((PTWeapon)PrimeHand())->Type();
         else return WT_HAND; }
       // Returns the type of weapon being used
-//  virtual int32_t WeaponDamage() { if (PrimeHand()) return PrimeHand()->GetStat("Damage"); else return chardata->handdamage; }
-      // Returns the current weapon's damage value
+    int32_t WeaponDamage() override;
+      // REVSYNC: 0x00520830 -- the held item's Damage, else the character data's
+    int32_t AttackModifier() override;
+      // REVSYNC: 0x0051a480 -- ATTACKMOD, Agility's STATLEVEL, the spells' offense,
+      // the skill of the weapon held
+    int32_t DefenseModifier() override;
+      // REVSYNC: 0x0051a4e0 -- DEFENSEMOD, Reflexes' STATLEVEL, the spells' defense
+    int32_t Offense() override;
+      // REVSYNC: 0x0051a520 -- Level x TOHITRANGEPLYR + AttackModifier
+    int32_t Defense() override;
+      // REVSYNC: 0x0051a550 -- Level x TOHITRANGEPLYR + DefenseModifier
+    int32_t LuckMod() override { return Rules.StatLevel(PLRSTAT_LUCK, Luck()); }
+      // REVSYNC: 0x0051a580
+    int32_t StrengthMod() override { return Rules.StatLevel(PLRSTAT_STRN, Strn()); }
+      // REVSYNC: 0x00520900
+    bool HoldsLight() override;
+      // REVSYNC: 0x00519970 -- a light source in equipment slot 6 (retail +0x2b8): the torch
     int32_t StealthMod() override { 
         return SkillPcnt(SK_STEALTH, 10) + 
             (Body()?Body()->GetStat("Stealth"):0) + 

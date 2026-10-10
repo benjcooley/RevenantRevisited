@@ -186,6 +186,10 @@ class TSoundPlayer
   // Finds sound id's by name
     int32_t FindSound(const char *soundname, int32_t nr = -1) const;
         // Find a given sound: name (plus nr, if given) without case, -1 if none
+    using FindSeam = int32_t (*)(const char* soundname, int32_t nr);
+    static inline FindSeam findSeam = nullptr;
+        // Retail A/B fixtures only: answers FindSound (retail's sound lookup
+        // 0x0049c430, which the combat fixtures answer with "no such sound")
 
   // Simple sound garbage-collector functions to make playing sounds a bit handier
   // These functions work with the sound id returned from FindSound()
