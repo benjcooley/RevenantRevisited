@@ -137,7 +137,7 @@ def go_cases(data: Path, workdir: Path) -> list[dict]:
                 ('dead', dict(health=0), {}),
                 ('blocked', {}, dict(blocked=True)),
                 ('busy', dict(charflags=0x80000), {}),
-                ('outofsight', dict(out_of_sight=1), {})):
+                ('outofsight', dict(retreating=1), {})):
             for angle in (0, 128, 160):
                 chars = [_char(name, objclass, me_at, 0, root_obj='Target', **mine), target]
                 cases.append(dict(name=f'go.{who}.{label}.a{angle}', call='go', globals=dict(combatface=1, frame=100),

@@ -771,7 +771,6 @@ protected:
     S3DPoint target_last_position{};
   // AI fix, this variable keeps track of when to save the last position of the enemy
     int32_t last_position_count = 0;
-    bool target_out_of_sight = false;
     int32_t last_position_distance = 0;
     S3DPoint last_position_start_point{};
     int32_t target_last_angle = 0;
@@ -795,20 +794,18 @@ protected:
   // 0x004c7fc3). Kept until then, or until a Goto carries another.
     TSafeRef<TObjectInstance> gotoitem;
 
-  // field_map.md: 0x254 = target_out_of_sight (retail mbr_0x95)
-  // field_map.md: 0x258 = target_out_of_sight_prev (retail mbr_0x96)
-  // field_map.md: 0x25c = sight_lost_ticks (retail mbr_0x97)
-  // The pair (out_of_sight, out_of_sight_prev) tracks both the current
-  // and previous-frame value of the "I can't see my target" flag, so the
-  // AI body can detect first-frame transitions. sight_lost_ticks
-  // decrements each frame after sight is lost; when it hits zero AI
-  // forces out_of_sight back to false (gives up on the search).
-  // MoveStep zeroes all three when the character commits to "stuck and
-  // can't sidestep" — sight tracking is invalidated when the path to the
-  // target is provably broken.
-  // (target_out_of_sight is declared above at line ~606 with the existing
-  // AI-fix sight tracking fields; the prev/lost_ticks pair lives here.)
-    bool     target_out_of_sight_prev = false;
+  // Retail +0x254 / +0x258 / +0x25c: the retreat (COMBAT_ATTACK_CHOICE.md
+  // §3.10.6). The AI's tail, every tick it runs: retreating = latch =
+  // (Health <= RETREATAT || latch) && frames != 0, then frames counts down.
+  // Damage arms the frames with RETREATFOR when a hit leaves 1 <= Health <=
+  // RETREATAT; StartRetreat (0x004d5fc0) with 96 and sets both flags. A
+  // retreating character runs straight away from its target (and takes
+  // no new one); ResolveCombat doesn't face it; a blocked step (MoveStep)
+  // clears all three. (The 1998 AI body below reads them as "target out
+  // of sight" until its retail port, C3b.)
+    bool     retreating = false;
+    bool     retreatlatch = false;
+    int32_t  retreatframes = 0;
   // Retail +0x234: an object the AI walks toward and ResolveCombat faces
   // when no visible target overrides it (written by AI 0x004c8b60 and
   // WanderToWaypoint 0x004c9790; no port writer yet).
@@ -821,7 +818,6 @@ protected:
     int32_t monsterkind  = 0;
     int32_t lastbutton   = -1;
     int32_t buttonrepeat = 0;
-    int32_t  sight_lost_ticks = 0;
 };
 
 DEFINE_BUILDER("Character", TCharacter)
