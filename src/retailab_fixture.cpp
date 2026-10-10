@@ -242,6 +242,12 @@ void ReadCharData(const JsonValue& c, SCharData& cd)
     if (!c["noparalyze"].IsNull())
         cd.noparalyze = c["noparalyze"].Bool();
     ReadInt(c["poisonchance"], cd.poisonchance);
+    int32_t arrow[3] = {cd.arrowpos.x, cd.arrowpos.y, cd.arrowpos.z};
+    ReadInts(c["arrowpos"], arrow, 3);
+    cd.arrowpos = S3DPoint(arrow[0], arrow[1], arrow[2]);
+    ReadInt(c["arrowspeed"], cd.arrowspeed);
+    ReadInt(c["bowwait"], cd.bowwait);
+    ReadInt(c["bowaimspeed"], cd.bowaimspeed);
     if (c.Has("impacts"))
     {
         std::fill(std::begin(cd.impacts), std::end(cd.impacts), SCharAttackImpact{});   // the unused slots zero, as retail's

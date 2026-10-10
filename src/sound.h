@@ -297,6 +297,15 @@ inline bool PLAY(const char *x)
     return true;
 }
 
+// Retail's one-shot at a point: the sound found (0x0049c430), loaded
+// (0x0049b650) and played at full volume there (0x0049b990; its 0x50 /
+// 0x2bc falloff distances are the port's sound model's).
+inline bool PlayAt(const char *name, S3DPoint at)
+{
+    const int32_t id = SoundPlayer.FindSound(name);
+    return id >= 0 && SoundPlayer.Mount(id) && SoundPlayer.Play(id, 0, 0, &at);
+}
+
 inline bool PLAYN(const char *x, int32_t n)
 {
     int32_t id = SoundPlayer.FindSound(x, n);

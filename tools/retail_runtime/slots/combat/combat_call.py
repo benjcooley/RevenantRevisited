@@ -108,7 +108,6 @@ SET_PLAYER_STATE = 0x51d680
 SLOT_UPDATE_ACTION = 0x210                       # TCharacter::UpdateAction 0x4c3260 (both classes)
 UPDATE_MOVE = 0x47de30                           # TPlayScreen::UpdateMove (thiscall, PlayScreen)
 G_CMDSTATE, G_CMDCHANGED, G_DEBUGCAMERA = 0x65a9c4, 0x65a9c8, 0x6671f0
-PLAY_MOUSE_CLICK = 0x44f140                      # TMapPane::MouseClick (thiscall (button, x, y), ret 0xc)
 # Block / StopBlock and the bow aim are the melee and spell tracks' (seams
 # here, recorded: a case that reaches them shows it).
 INPUT_SEAMS = ((0x4d2e30, 'Block', 4), (0x4d30f0, 'StopBlock', 0), (0x4d1050, 'IsBowDrawn', 0),
@@ -137,7 +136,6 @@ class CallFixture:
         b.add(SET_PLAYER_STATE, 'SetPlayerState', 4, self._set_player_state)
         b.add(CAN_SEE, 'CanSeeCharacter', 8, self._can_see)
         b.add(LINE_OF_SIGHT, 'LineOfSight', 0x14, self._line_of_sight)
-        b.add(PLAY_MOUSE_CLICK, 'PlayMouseClick', 0xc, self._play_mouse_click)
         for address, name, pop in INPUT_SEAMS:
             b.add(address, name, pop, (lambda n: lambda args, ecx: self._input_seam(n, args, ecx))(name))
         self.vm.checkpoint()
@@ -188,10 +186,6 @@ class CallFixture:
             if (px, py, pz + EYE_HEIGHT) == (x, y, z):
                 return name
         return '?'
-
-    def _play_mouse_click(self, args, ecx):
-        self.world.seams.append(dict(seam='PlayMouseClick', button=s32(args[0]), x=s32(args[1]), y=s32(args[2])))
-        return 0
 
     def _input_seam(self, name, args, ecx):
         self.world.seams.append(dict(seam=name, who=self.world._name(ecx)))

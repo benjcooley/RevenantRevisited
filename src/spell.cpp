@@ -870,6 +870,8 @@ bool TSpellManager::CastByTalismans(char* talismans, TObjectInstance* invoker,
 bool TSpellManager::CastByName(char* name, TObjectInstance* invoker,
     TObjectInstance* *targets, int32_t numtargs, S3DPoint* sourcepos, PTSpell mst)
 {
+    if (castByNameSeam)
+        return castByNameSeam(this, name, invoker, targets, numtargs, sourcepos, mst);
     SSpellData* spelldata = SpellList.GetSpellDataByName(name);
     SSpellVariant* variant = SpellList.GetVariantDataByName(name);
     if (!spelldata || !variant)

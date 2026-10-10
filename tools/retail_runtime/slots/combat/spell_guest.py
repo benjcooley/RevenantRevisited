@@ -68,12 +68,14 @@ def shipped_spell_def() -> bytes:
 
 
 class SpellFiles:
-    """The file seams under TToken::Open for spell.def, and the imagery
-    lookup. `seams` records each call in order."""
+    """The file seams under TToken::Open for spell.def (and any file in
+    `files`, by lower-case name), and the imagery lookup. `seams` records
+    each call in order."""
 
     def __init__(self, vm, boundaries):
         self.vm = vm
         self.spell_def = b''
+        self.files = {}
         self.handles = {}
         self.imagery = []                         # file names the imagery lookup was asked for
         self.seams = []
@@ -91,10 +93,12 @@ class SpellFiles:
     def _open(self, args, ecx):
         path = self.vm.string(args[0])
         self.seams.append(['open', path.lower()])
-        if not path.lower().endswith('spell.def'):
+        name = path.lower().replace('/', '\\').rsplit('\\', 1)[-1]
+        data = self.spell_def if name == 'spell.def' else self.files.get(name)
+        if data is None:
             return 0
         handle = self.vm.allocate(16)
-        self.handles[handle] = [self.spell_def, 0]
+        self.handles[handle] = [data, 0]
         return handle
 
     def _read(self, args, ecx):

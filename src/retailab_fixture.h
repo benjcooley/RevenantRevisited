@@ -258,7 +258,8 @@ class IFixtureChar
     [[nodiscard]] virtual TObjectInstance* AILookAt() const = 0;
     virtual void WriteAIState(JsonOut& j) const = 0;
     // Another resolver on the doing block: "attack", "impact", "block",
-    // "dead" (ResolveAction's dispatch, retail 0x004c3490).
+    // "dead", "bow-aim", "bow-shoot" (ResolveAction's dispatch, retail
+    // 0x004c3490).
     virtual int32_t RunResolver(const std::string& which, int32_t bits) = 0;
     virtual void RunUpdateAction(int32_t bits) = 0;
     virtual void RunComplexPulse() = 0;         // TComplexObject::Pulse (UpdateAction with the move bits)
@@ -268,7 +269,13 @@ class IFixtureChar
     virtual void WriteMotion(JsonOut& j) = 0;
     // The characters it remembers seeing (retail +0x1c0, MAXHASSEEN entries).
     virtual SHasSeen* Memory() = 0;
+    // The case's object stats again, over what setting the case up wrote
+    // (an Equip's RefreshStats, say).
+    virtual void ResetStats(const JsonValue& spec) = 0;
 };
+
+// When set, the fixture characters answer DeleteFromInventory as a seam.
+inline bool inventorySeams = false;
 
 // A TCharacter or TPlayer built from the case, without a class record or
 // loaded imagery: it answers the seams itself.
@@ -324,6 +331,8 @@ class TFixtureChar : public Base, public IFixtureChar
         this->shovedir = (int32_t)spec["shovedir"].Int(-1);
         this->retreatlatch = spec["retreat_latch"].Bool();
         this->retreatframes = (int32_t)spec["retreat_frames"].Int();
+        this->lastbowshot = (int32_t)spec["lastbowshot"].Int();
+        this->bowshots = (int32_t)spec["bowshots"].Int();
         if constexpr (std::is_same_v<Base, TPlayer>)
             this->TPlayer::SetPlayerState((int32_t)spec["playerstate"].Int(0));   // as the retail fixture's zeroed +0x36c
 
@@ -561,6 +570,26 @@ class TFixtureChar : public Base, public IFixtureChar
         return ValueSeam("WeaponDamage", weapondamage);
     }
 
+    // Taking items out by name (retail's seam at TObjectInstance slot 0x78,
+    // 0x00477950), when a target sets inventorySeams: recorded, not done.
+    int32_t DeleteFromInventory(const char* name, int32_t number) override
+    {
+        if (!inventorySeams)
+            return Base::DeleteFromInventory(name, number);
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "DeleteFromInventory").FieldString("who", who);
+        j.FieldString("name", name ? name : "").Field("count", number).End('}');
+        Seam(j.str());
+        return 1;
+    }
+
+    void ResetStats(const JsonValue& spec) override
+    {
+        stats.clear();
+        for (const auto& [k, v] : spec["stats"].Members())
+            stats[k] = (int32_t)v.Int();
+    }
+
     int32_t RunResolver(const std::string& which, int32_t bits) override
     {
         if (which == "attack")
@@ -571,6 +600,10 @@ class TFixtureChar : public Base, public IFixtureChar
             return Base::ResolveBlock(this->doing, bits);
         if (which == "dead")
             return Base::ResolveDead(this->doing, bits);
+        if (which == "bow-aim")
+            return Base::ResolveBowAim(this->doing, bits);
+        if (which == "bow-shoot")
+            return Base::ResolveBowShoot(this->doing, bits);
         throw std::runtime_error("no resolver '" + which + "'");
     }
 

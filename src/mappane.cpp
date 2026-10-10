@@ -1416,6 +1416,8 @@ void TMapPane::SetMapPos(S3DPoint& newpos)
 // Create object
 int32_t TMapPane::NewObject(SObjectDef* def)
 {
+    if (newObjectSeam)
+        return newObjectSeam(def);
     TObjectClass* oc = TObjectClass::GetClass(def->objclass);
     if (!oc)
     {
@@ -1725,6 +1727,8 @@ TObjectInstance* TMapPane::FindClosestObject(const char *name, TObjectInstance* 
 
 int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height, int32_t objclass, int32_t maxnum, int32_t objset)
 {
+    if (findObjectsSeam)
+        return findObjectsSeam(pos, array, width, height, objclass, maxnum, objset);
     if (maxnum < 1)
         return 0;
 

@@ -178,6 +178,9 @@ GET_OBJSTAT = {CLASS_CHARACTER: 0x4d7520, CLASS_PLAYER: 0x51ae30}
 FIND_SECTOR, RETURN_WALKMAP = 0x499e10, 0x499720  # cdecl (level, sx, sy); thiscall (x, y) ret 8
 ITER_INIT, ITER_NEXT, ITER_ITEM = 0x44ceb0, 0x44d080, 0x0c   # init thiscall, 6 args, ret 0x18
 SET_POS = 0x46ed70                               # slot 8, thiscall (pos*, level, override), ret 0xc
+# TMapPane::MouseClick (thiscall (button, x, y), ret 0xc): what the player's
+# Stop calls to let go of the right-button walk (button 5), recorded.
+PLAY_MOUSE_CLICK = 0x44f140
 SLOT_MOVE = 0x114                                # TCharacter::Move 0x4c46d0, TPlayer::Move 0x518df0
 
 
@@ -291,6 +294,7 @@ class CombatWorld:
         b.add(ITER_INIT, 'MapIterator', 0x18, self._iter_init)
         b.add(ITER_NEXT, 'MapIterator.Next', 0, self._iter_next)
         b.add(SET_POS, 'SetPos', 0xc, self._set_pos)
+        b.add(PLAY_MOUSE_CLICK, 'PlayMouseClick', 0xc, self._play_mouse_click)
         self.animators = {}        # stand-in animator address -> character
         self.imagery = {}
         self._imagery_stubs()
@@ -388,6 +392,10 @@ class CombatWorld:
         self.vm.write(ecx + O_POS, struct.pack('<3i', *pos))
         self.seams.append(dict(seam='SetPos', who=self._name(ecx), pos=pos))
         return 1
+
+    def _play_mouse_click(self, args, ecx):
+        self.seams.append(dict(seam='PlayMouseClick', button=s32(args[0]), x=s32(args[1]), y=s32(args[2])))
+        return 0
 
     def _name(self, address):
         return self.objects.get(address, f'{address:#x}')

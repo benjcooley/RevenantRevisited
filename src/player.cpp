@@ -918,6 +918,8 @@ void TPlayer::OnInventoryRemove(TObjectInstance* item)
 // the body-part rebuild (0x00584e00).
 bool TPlayer::Equip(TObjectInstance* oi, int32_t slot)
 {
+    if (equipSeam)
+        return equipSeam(this, oi, slot);
     if (slot < 0)
     {
         if (!oi || oi->FindStat("EqSlot") < 0)

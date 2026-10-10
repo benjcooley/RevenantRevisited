@@ -394,6 +394,10 @@ class TMapPane : public TPane
       // Makes a unique id map index for an object
     int32_t NewObject(SObjectDef* def);
       // Create a new object with the given objdef
+    using NewObjectSeam = int32_t (*)(SObjectDef* def);
+    static inline NewObjectSeam newObjectSeam = nullptr;
+      // Retail A/B fixtures only: when set, it answers NewObject (retail
+      // 0x00450e40): the def recorded, the id it gives returned
     int32_t AddObject(TObjectInstance* oi);
       // Adds the given object to the map and returns unique id
     void ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32_t newflags);
@@ -428,6 +432,10 @@ class TMapPane : public TPane
         // As above, from an object's position and level (else the camera's)
     int32_t FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height = 0, int32_t objclass = -1, int32_t maxnum = MAXFOUNDOBJS, int32_t objset = OBJSET_ALL);
       // Finds objects within given range. If height not given uses width as radius
+    using FindObjectsSeam = int32_t (*)(const S3DPoint& pos, int32_t* array, int32_t width, int32_t height,
+        int32_t objclass, int32_t maxnum, int32_t objset);
+    static inline FindObjectsSeam findObjectsSeam = nullptr;
+      // Likewise for FindObjectsInRange (retail 0x00452060)
     TObjectInstance* ObjectInCube(PS3DRect cube, int32_t level, int32_t objset = OBJSET_ALL);
         // The first object on level inside the cube, faces included, from
         // the level's loaded sectors (a CUBE trigger's search)

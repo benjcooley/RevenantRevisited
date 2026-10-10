@@ -170,6 +170,9 @@ class TPlayer : public TCharacter
     bool CanEquip(TObjectInstance* oi, int32_t slot);
         // Returns true if player can be equiped by the given object
     bool Equip(TObjectInstance* oi, int32_t slot);
+    using EquipSeam = bool (*)(TPlayer* self, TObjectInstance* oi, int32_t slot);
+    static inline EquipSeam equipSeam = nullptr;
+      // Retail A/B fixtures only: when set, it answers Equip (retail 0x005199b0)
         // Set up equipment pointers from objects in player's inventory
     void OnInventoryRemove(TObjectInstance* item) override;
         // An equipped item leaving the inventory is unequipped first
