@@ -2368,8 +2368,19 @@ void TMapPane::SetAmbientColor(SColor &color, bool stopfade)
 }
 
 // Fades to the given ambient light in 'frame' frames in 'steps' discreet steps
+// REVSYNC: FadeAmbient @ 0x00453720 -- the cross-fade between nearby areas
+// (TArea::Enter 0x0041ba00: same level, within 0x400) and a load into the
+// same room.
+// REVSYNC-DIVERGENCE: retail stores the target as given, without the
+// GammaLevel offset every other ambient setter adds (SetAmbientLight
+// 0x00453640), so each such fade dropped the room's ambient by the offset
+// (+10 at the default level 3: the Keep went from 14 to 4, an orange wash)
+// until a day/night area set it again. Not reproduced: the target gets the
+// offset too (LIGHTING_FIDELITY.md §2.5).
 void TMapPane::FadeAmbient(int32_t light, SColor &color, int32_t frames, int32_t steps)
 {
+    light = (std::max)(0, light + GammaAmbientOffset(GammaLevel));
+
     if (GameSpeed == 5)
         steps = frames; // Do smooth ambient fading for fast computers
 

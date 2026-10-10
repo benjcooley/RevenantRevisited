@@ -374,6 +374,10 @@ bool TPlayScreen::Initialize()
     else
         log_error("[playscreen] Trouble initializing the bottom bar");
 
+    // The session made the main player under the loading screen: the panes
+    // show it now that they exist.
+    PlayerManager.BindMainPlayerToScreen();
+
     // The HUD starts as the loaded game left it (building the HUD resets it).
     if (Player)
         TSaveGame::RestoreHud(Player->HudWords());

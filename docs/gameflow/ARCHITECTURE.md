@@ -501,6 +501,7 @@ perform.
 | Retail | Port | Why | Behavior impact |
 |---|---|---|---|
 | Re-entrant frame loop for modals (`RunModal`, `TimerLoop(1)`) | Modal stack + completion continuations | sokol owns the outer loop | none |
+| `FadeAmbient` (`0x00453720`) fades to the area ambient without the GammaLevel offset | the fade target gets the offset, as every other ambient setter's does | a retail bug: a cross-fade into a nearby area, or a load into the same room, darkened the room (the Keep 14 → 4) | no darkening after an area cross-fade or an in-game load (LIGHTING_FIDELITY.md §2.5) |
 | In-game dialogs load and save inside their button handler; the load behind a "loadingmap" progress popup | the dialog's host hands the slot to `TGameSession::RequestLoad` / `RequestSave`, carried out at the start of the next tick; the load stages a step a tick behind a still of the world, under the same popup | one owner of the world's replacement; no frame drawn of a half-replaced world | the load starts a frame later; the panes over the still stay live (forensics/INGAME_MENU.md §10) |
 | DEF dialogs branch on a from-game flag (load: start mode or in-place load; exit: close or switch screens) | the host decides through the pane's activation handler / modal completion | panes don't switch screens | none |
 | World lives in `TPlayScreen` | `TGameSession` owned by `TGameFlow` | overlays, loads and movies don't rebuild the screen; testable | none |
