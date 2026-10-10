@@ -24,8 +24,10 @@ Targets:
   dialog-layout  the dialog pane and entry pulses: positions and slides.
 
 Environment / defaults:
-  RETAIL_RUNTIME  the emulator (main checkout tools/retail_runtime)
+  RETAIL_RUNTIME  the emulator (this repo's tools/retail_runtime)
   RETAIL_PY       its Python (the retail-asm venv)
+  RETAIL_EXE      the generated retail baseline (this checkout's, else the
+                  main checkout's recon/retail_asm/baseline/Revenant.rebuilt.exe)
   REVENANT_DATA_PATH  the retail install (Modules/, resources.rvr, Resources/)
 """
 from __future__ import annotations
@@ -46,9 +48,23 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 MAIN_CHECKOUT = Path('/Users/benjamincooley/projects/RevenantRevisited/RevenantRevisited')
-RUNTIME = Path(os.environ.get('RETAIL_RUNTIME', MAIN_CHECKOUT / 'tools' / 'retail_runtime'))
+RUNTIME = Path(os.environ.get('RETAIL_RUNTIME', REPO / 'tools' / 'retail_runtime'))
 RETAIL_PY = Path(os.environ.get('RETAIL_PY', '/Users/benjamincooley/RevenantRetailLab/research/retail-asm/venv/bin/python'))
-RETAIL_EXE = RUNTIME.parents[1] / 'recon' / 'retail_asm' / 'baseline' / 'Revenant.rebuilt.exe'
+
+
+def _baseline_exe() -> Path:
+    """The generated retail baseline (tools/retail_runtime/SETUP.md): it stays
+    local and ignored, so take this checkout's, else the main checkout's."""
+    if 'RETAIL_EXE' in os.environ:
+        return Path(os.environ['RETAIL_EXE'])
+    for root in (REPO, MAIN_CHECKOUT):
+        exe = root / 'recon' / 'retail_asm' / 'baseline' / 'Revenant.rebuilt.exe'
+        if exe.exists():
+            return exe
+    return REPO / 'recon' / 'retail_asm' / 'baseline' / 'Revenant.rebuilt.exe'
+
+
+RETAIL_EXE = _baseline_exe()
 DATA = Path(os.environ.get('REVENANT_DATA_PATH', Path.home() / 'RevenantRetailLab' / 'retail-cd' / 'REVENANT'))
 TEXT = 'cp1252'
 
@@ -766,6 +782,10 @@ TARGETS = {
                          unit=lambda r: 1 + len(r.get('sweep', []))),
 }
 
+# The combat dojo's targets (combat_targets.py, docs/gameplay/COMBAT_DOJO.md).
+from combat_targets import TARGETS as COMBAT_TARGETS  # noqa: E402
+TARGETS.update(COMBAT_TARGETS)
+
 
 # =====================================================================
 # Driver
@@ -789,6 +809,8 @@ def main():
     parser.add_argument('--jobs', type=int, default=max(1, (os.cpu_count() or 2) // 2),
                         help='retail fixture processes at once (default: half the cores)')
     args = parser.parse_args()
+    # The port reads the same install the cases come from.
+    os.environ.setdefault('REVENANT_DATA_PATH', str(args.data))
 
     spec = TARGETS[args.target]
     workdir = (args.out / args.target).resolve()
@@ -798,13 +820,13 @@ def main():
         cases = [c for c in cases if any(s in c['name'] for s in args.case)]
     case_hash = hashlib.sha256(json.dumps([(c['name'], c['sha256']) for c in cases]).encode()).hexdigest()
 
+    fixture = RUNTIME / spec['fixture']
     if spec.get('port_first'):
         port_info, port = run_port(args.port, args.target, cases, workdir, spec['port_fields'])
         retail_cases = [spec['retail_case'](c, port.get(c['name'])) for c in cases]
-        retail_info, retail = run_retail(RUNTIME / spec['fixture'], retail_cases, args.jobs)
+        retail_info, retail = run_retail(fixture, retail_cases, args.jobs)
     else:
-        retail_info, retail = run_retail(RUNTIME / spec['fixture'], cases, args.jobs,
-                                         spec.get('split'), spec.get('merge'))
+        retail_info, retail = run_retail(fixture, cases, args.jobs, spec.get('split'), spec.get('merge'))
         port_info, port = run_port(args.port, args.target, cases, workdir, spec['port_fields'])
     # The retail dump beside the port's (<target>.port.jsonl), for reading
     # a run in full.

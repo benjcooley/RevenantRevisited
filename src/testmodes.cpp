@@ -9,6 +9,7 @@
 
 #include <sokol_app.h>          // sapp_request_quit on script drain
 #include <stb_image_write.h>   // for i3ddump test mode (impl lives in framesnap.cpp)
+#include "retailab_json.h"      // i3ddump motion.json
 
 #include "3dimage.h"
 #include "animimage.h"
@@ -824,6 +825,33 @@ bool DumpI3DToPath(const char* asset_path_cstr, const char* out_dir_cstr)
         if (r.empty()) r = "unnamed";
         return r;
     };
+
+    // ---- motion.json: each state's name, frames, flags as loaded and its
+    // motion a frame in SMotionData's units ([dist, vert, ang, rotx, roty,
+    // rotz]; GetMotion's dist and vert are those << 8) -- the motion tables
+    // of the combat dojo's sequence cases (docs/gameplay/COMBAT_DOJO.md M8).
+    if (!img3d->MeshInitialized())
+        img3d->InitializeMesh((S3DImageryBody*)img3d->GetBody());
+    {
+        RetailAB::JsonOut j;
+        j.Begin('{').FieldString("asset", asset_path_cstr).Key("states").Begin('[');
+        for (int32_t st = 0; st < img3d->NumStates(); ++st)
+        {
+            j.Begin('{').FieldString("name", img3d->GetHeader()->states[st].animname);
+            j.Field("frames", img3d->GetAniLength(st)).Field("aniflags", img3d->GetAniFlags(st));
+            j.Key("motion").Begin('[');
+            for (int32_t fr = 0; fr < img3d->GetAniLength(st); ++fr)
+            {
+                int32_t dist, vert, ang, rotx, roty, rotz;
+                if (!img3d->GetMotion(st, fr, dist, vert, ang, rotx, roty, rotz))
+                    break;
+                j.Begin('[').Value(dist >> 8).Value(vert >> 8).Value(ang).Value(rotx).Value(roty).Value(rotz).End(']');
+            }
+            j.End(']').End('}');
+        }
+        j.End(']').End('}');
+        std::ofstream(out_dir / "motion.json") << j.str() << "\n";
+    }
 
     // ---- manifest.txt ----
     std::ofstream mf(out_dir / "manifest.txt");

@@ -134,7 +134,7 @@ class TPlayer : public TCharacter
     TPlayer(SObjectDef* def, TObjectImagery* newim);
     ~TPlayer();
 
-    bool GetZ(TSurface* surface) override { if (!Editor) return false; return TCharacter::GetZ(surface); }
+    bool GetZ(const TObjectInstance* frontmost) override { if (!Editor) return false; return TCharacter::GetZ(frontmost); }
     bool AlwaysOnTop() override { if (!Editor) return false; return TCharacter::AlwaysOnTop(); }
     bool Use(TObjectInstance* user, int32_t with = -1) override { return false; }
     int32_t CursorType(TObjectInstance* inst = nullptr) override { return CURSOR_NONE; }
@@ -143,7 +143,6 @@ class TPlayer : public TCharacter
     void Pulse() override;
     uint32_t Move() override;
 
-    void AI() override { }
 
     void Damage(int32_t damage, int32_t type = DAMAGE_UNDEFINED) override;
         // Apply damage to the player

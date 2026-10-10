@@ -2316,6 +2316,126 @@ bool TRenderer::ReadIdTargetPixel(int32_t x, int32_t y, uint8_t out_rgba[4]) con
     return RendererReadback::ReadPixel(id_target, x, y, out_rgba);
 }
 
+// ---- Id probe ---------------------------------------------------------------
+
+static_assert(RendererReadback::kAsyncReadSlots == 2, "one id probe read per slot");
+static_assert(TRenderer::kIdProbeSize * TRenderer::kIdProbeSize * 4 <=
+              RendererReadback::kMaxAsyncReadBytes, "id probe fits a slot");
+
+// The probe square around viewport pixel (x, y), in id-target pixels (the
+// G-buffer's padded border included), clipped to the target.
+bool TRenderer::IdProbeRect(int32_t x, int32_t y, int32_t& rx, int32_t& ry,
+                            int32_t& rw, int32_t& rh) const
+{
+    if (!id_target.id || width <= 0 || height <= 0)
+        return false;
+    const int32_t gbw = width  + 2 * kGBufPad;
+    const int32_t gbh = height + 2 * kGBufPad;
+    const int32_t x0 = (std::max)(x + kGBufPad - kIdProbeRadius, 0);
+    const int32_t y0 = (std::max)(y + kGBufPad - kIdProbeRadius, 0);
+    const int32_t x1 = (std::min)(x + kGBufPad + kIdProbeRadius + 1, gbw);
+    const int32_t y1 = (std::min)(y + kGBufPad + kIdProbeRadius + 1, gbh);
+    if (x1 <= x0 || y1 <= y0)
+        return false;
+    rx = x0; ry = y0; rw = x1 - x0; rh = y1 - y0;
+    return true;
+}
+
+void TRenderer::DecodeIdProbe(const uint8_t* rgba, int32_t rx, int32_t ry, int32_t rw,
+                              int32_t rh, SIdProbe& probe) const
+{
+    for (uint32_t& id : probe.ids)
+        id = 0;
+    for (int32_t j = 0; j < rh; ++j)
+        for (int32_t i = 0; i < rw; ++i)
+        {
+            const int32_t dx = rx + i - kGBufPad - probe.x;
+            const int32_t dy = ry + j - kGBufPad - probe.y;
+            if (dx < -kIdProbeRadius || dx > kIdProbeRadius ||
+                dy < -kIdProbeRadius || dy > kIdProbeRadius)
+                continue;
+            const uint8_t* p = rgba + (size_t(j) * size_t(rw) + size_t(i)) * 4;
+            probe.ids[(dy + kIdProbeRadius) * kIdProbeSize + (dx + kIdProbeRadius)] =
+                uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) |
+                (uint32_t(p[3]) << 24);
+        }
+}
+
+void TRenderer::RequestIdProbe(int32_t x, int32_t y, uint64_t tag)
+{
+    idProbeRequested   = true;
+    idProbeRequest     = {};
+    idProbeRequest.x   = x;
+    idProbeRequest.y   = y;
+    idProbeRequest.tag = tag;
+}
+
+// From FlipPage, after the frame is committed: collect the copies that have
+// finished (the newest wins) and start this frame's, if one was asked for and
+// a slot is free (a slot still busy two frames on drops the request).
+void TRenderer::ResolveIdProbe()
+{
+    for (int32_t slot = 0; slot < RendererReadback::kAsyncReadSlots; ++slot)
+    {
+        SIdProbeRead& r = idProbeReads[slot];
+        if (!r.active)
+            continue;
+        uint8_t rgba[kIdProbeSize * kIdProbeSize * 4] = {};
+        if (!RendererReadback::PollReadRect(slot, rgba, int32_t(sizeof(rgba))))
+            continue;
+        r.active = false;
+        int32_t rx = 0, ry = 0, rw = 0, rh = 0;
+        if (!IdProbeRect(r.probe.x, r.probe.y, rx, ry, rw, rh))
+            continue;
+        DecodeIdProbe(rgba, rx, ry, rw, rh, r.probe);
+        idProbeLatest      = r.probe;
+        idProbeLatestValid = true;
+    }
+
+    if (!idProbeRequested)
+        return;
+    idProbeRequested = false;
+    int32_t rx = 0, ry = 0, rw = 0, rh = 0;
+    if (!IdProbeRect(idProbeRequest.x, idProbeRequest.y, rx, ry, rw, rh))
+        return;
+    for (int32_t slot = 0; slot < RendererReadback::kAsyncReadSlots; ++slot)
+    {
+        SIdProbeRead& r = idProbeReads[slot];
+        if (r.active)
+            continue;
+        if (RendererReadback::BeginReadRect(slot, id_target, rx, ry, rw, rh))
+        {
+            r.active = true;
+            r.probe  = idProbeRequest;
+        }
+        return;
+    }
+}
+
+bool TRenderer::LatestIdProbe(SIdProbe& out) const
+{
+    if (!idProbeLatestValid)
+        return false;
+    out = idProbeLatest;
+    return true;
+}
+
+bool TRenderer::ReadIdProbe(int32_t x, int32_t y, uint64_t tag, SIdProbe& out) const
+{
+    int32_t rx = 0, ry = 0, rw = 0, rh = 0;
+    if (!IdProbeRect(x, y, rx, ry, rw, rh))
+        return false;
+    uint8_t rgba[kIdProbeSize * kIdProbeSize * 4] = {};
+    if (!RendererReadback::ReadRect(id_target, rx, ry, rw, rh, rgba))
+        return false;
+    out     = {};
+    out.x   = x;
+    out.y   = y;
+    out.tag = tag;
+    DecodeIdProbe(rgba, rx, ry, rw, rh, out);
+    return true;
+}
+
 void TRenderer::AddTextureAssetRef(TTextureHandle handle, uint32_t count)
 {
     if (handle == 0 || handle > texture_assets.size())

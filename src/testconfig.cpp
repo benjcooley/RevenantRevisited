@@ -20,6 +20,7 @@ float StartupAssetScale       = 0.0f;   // 0 = auto-fit based on bbox
 char  StartupDumpTilesPath[MAXPATHLEN] = "";
 char  StartupDumpIconsPath[MAXPATHLEN] = "";
 char  StartupDumpGltfPath[MAXPATHLEN]    = "";
+bool  StartupPlayerAI                    = false;
 char  StartupDumpGltfOutPath[MAXPATHLEN] = "";
 char  StartupDumpI3DPath[MAXPATHLEN]    = "";
 char  StartupDumpI3DOutPath[MAXPATHLEN] = "";

@@ -1,0 +1,8 @@
+{
+  "name": "druid_vs_araknid",
+  "about": "A spellcaster against a spider (char.def: Druid's ENEMIES include spider, 4 MAGICATTACKs; Araknid's include humanoid/player, not human). Spawned beside Locke in the forest, left to the AI. Control off.",
+  "slot": "Port Resave",
+  "seed": 1,
+  "ticks": 1440,
+  "exec": ["sleep 24", "control off", "addat 6050 24760 Druid", "addat 6050 24900 Araknid"]
+}
