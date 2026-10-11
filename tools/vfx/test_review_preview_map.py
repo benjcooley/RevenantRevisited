@@ -1,6 +1,6 @@
 """Admission tests: source implementation audit is independent of ledger status."""
 import unittest
-from generate_review_preview_map import PARTIAL, admitted_candidates, candidate_metadata
+from generate_review_preview_map import PARTIAL, SOURCE_MAPPINGS, admitted_candidates, candidate_metadata
 
 
 class ReviewPreviewAdmission(unittest.TestCase):
@@ -46,7 +46,9 @@ TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
         self.assertNotIn('0x98974eab', PARTIAL)
         for retail_id, (name, reason) in PARTIAL.items():
             row = {'retail_type_id': retail_id, 'preview_candidates': [name]}
-            self.assertEqual(admitted_candidates(row), [name])
+            # Exact authored replacements precede retained partial previews.
+            exact = [SOURCE_MAPPINGS[retail_id]] if retail_id in SOURCE_MAPPINGS else []
+            self.assertEqual(admitted_candidates(row), exact + [name])
             partial, description = candidate_metadata(row, name)
             self.assertTrue(partial)
             self.assertIn(reason, description)
@@ -54,7 +56,7 @@ TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
             self.assertEqual(admitted_candidates({'retail_type_id': '0xffffffff',
                                                  'preview_candidates': [name]}), [])
             self.assertEqual(admitted_candidates({'retail_type_id': retail_id,
-                                                 'preview_candidates': []}), [])
+                                                 'preview_candidates': []}), exact)
         fog={'retail_type_id':'0xc24b2a85','preview_candidates':['TFogEffect_BESPOKE']}
         self.assertEqual(admitted_candidates(fog), ['TFogEffect_BESPOKE'])
         self.assertTrue(candidate_metadata(fog, 'TFogEffect_BESPOKE')[0])

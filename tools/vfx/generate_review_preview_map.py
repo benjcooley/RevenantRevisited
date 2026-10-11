@@ -88,6 +88,8 @@ SOURCE_MAPPINGS = {
     '0xfacedbed': 'TIcedEffect_BESPOKE__Snow',
     '0x0c052637': 'Dust_AUTHORED',
     '0xad92bd31': 'FGeyser_AUTHORED',
+    '0xad92bd34': 'Tironskin_AUTHORED_TAGS',
+    '0xad92bd33': 'Tstoneskin_AUTHORED_TAGS',
     '0xd3ae043a': 'TAntimagic_AUTHORED_TAGS',
     '0x8cd3ea0f': 'TDexterity_AUTHORED_TAGS',
     '0xb3ae0fed': 'TRestorelife_AUTHORED_TAGS',

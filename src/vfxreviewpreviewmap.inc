@@ -89,7 +89,9 @@
 {0xad92bd25u, "TFairyEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Fairy
 {0xad92bd29u, "TCombatFlashEffect_AUTHORED_START1", false, "Implemented preview controller; map caller not certified"}, // combatflash
 {0xad92bd31u, "FGeyser_AUTHORED", false, "Implemented preview controller; map caller not certified"}, // fgeyser
+{0xad92bd33u, "Tstoneskin_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // stoneskin
 {0xad92bd33u, "TBuffEffect_Bespoke__Stoneskin_BESPOKE", true, "Partial preview: tinted asset billboard; original buff controller incomplete; not complete original implementation"}, // stoneskin
+{0xad92bd34u, "Tironskin_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // ironskin
 {0xad92bd35u, "TQuicksilver_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // quicksilver
 {0xad92bd36u, "TSpeed_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // speed
 {0xad92bd37u, "TBuffEffect_Bespoke__charm_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // charm

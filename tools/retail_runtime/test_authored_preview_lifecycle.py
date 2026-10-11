@@ -6,7 +6,7 @@ from pathlib import Path
 from speed_profile_contract import function
 
 ROOT = Path(__file__).resolve().parents[2]
-NAMES = ('quick', 'restorelife', 'fairy', 'labback', 'dexterity', 'charm', 'antimagic')
+NAMES = ('quick', 'restorelife', 'fairy', 'labback', 'dexterity', 'charm', 'antimagic', 'skin')
 PRELUDE = r'''
 #include <cassert>
 #include <cmath>
