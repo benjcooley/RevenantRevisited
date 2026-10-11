@@ -24,15 +24,15 @@ def sha(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def capture(scenario,output):
     binary=Path(scenario.get('binary',ROOT.parent/'build/Revenant')).resolve()
     data=Path(scenario.get('data_root',ROOT/'data')).resolve()
-    count=int(scenario['frames']);fps=int(scenario.get('fps',24))
-    if count<1 or fps<1:raise ValueError('Positive frame count and FPS required')
+    count=int(scenario['frames']);fps=int(scenario.get('fps',24));stride=int(scenario.get('capture_stride',1))
+    if count<1 or fps<1 or stride<1:raise ValueError('Positive frame count, FPS and capture stride required')
     output=output.resolve();output.mkdir(parents=True,exist_ok=False)
     origin=scenario.get('origin',[0,0,0]);camera=scenario.get('camera',[320,170])
     rectangle=scenario.get('rectangle',[272,122,96,96])
     command=[str(binary),'--headless','--test=vfx','--vfx='+scenario['effect'],'--vfx-no-ui',
         '--vfx-bg='+scenario.get('background','black'),
         '--vfx-camera='+','.join(map(str,camera)),'--vfx-origin='+','.join(map(str,origin)),
-        f'--filmstrip={count},{1/fps:.16f}',f'--snapstep={1/fps:.16f}',
+        f'--filmstrip={count},{stride/fps:.16f}',f'--snapstep={1/fps:.16f}',
         '--snapseed='+str(scenario.get('seed',1)),'--snapwarmup='+str(scenario.get('warmup',1)),
         '--snaprect='+','.join(map(str,rectangle)),'--snapprefix='+str(output/'frame-')]
     if 'resolution' in scenario:
@@ -95,9 +95,11 @@ def capture(scenario,output):
     if complete:
         with (output/'frame-timing.csv').open() as timing_file:
             timing=list(csv.DictReader(timing_file))
-        if len(timing)!=count or any(abs(float(row['relative_seconds'])-i/fps)>1e-6 for i,row in enumerate(timing)):
+        if len(timing)!=count or any(abs(float(row['relative_seconds'])-i*stride/fps)>1e-6 for i,row in enumerate(timing)):
             report['status']='fail';report['error']='Simulation cadence differs from the explicit scenario'
         report['timing']=timing
+        report['simulation_fps']=fps;report['capture_stride']=stride
+        report['sample_simulation_ticks']=[round(float(row['simulation_seconds'])*fps) for row in timing]
         if "--vfx='"+scenario['effect']+"' matched" not in log.read_text(errors='replace'):
             report['status']='fail';report['error']='Requested effect did not match the actual catalogue'
         log_text=log.read_text(errors='replace')

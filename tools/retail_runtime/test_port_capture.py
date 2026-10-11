@@ -44,6 +44,22 @@ print('assets='+os.environ['REVENANT_ASSETS_PATH'],flush=True)
         self.assertEqual((output/'effects.def').read_bytes(),(assets/'effects.def').read_bytes())
         self.assertEqual(report['pixel_summary']['nonblack_frames'],1)
 
+    def test_sparse_output_preserves_simulation_step(self):
+        scenario,output,_=self.exercise()
+        scenario['capture_stride']=8
+        report=capture(scenario,output)
+        self.assertIn('--filmstrip=1,0.3333333333333333',report['command'])
+        self.assertIn('--snapstep=0.0416666666666667',report['command'])
+        self.assertEqual(report['capture_stride'],8)
+        self.assertEqual(report['sample_simulation_ticks'],[2])
+
+    def test_nonpositive_capture_stride_rejects_before_launch(self):
+        scenario,output,_=self.exercise()
+        scenario['capture_stride']=0
+        with self.assertRaisesRegex(ValueError,'capture stride'):
+            capture(scenario,output)
+        self.assertFalse(output.exists())
+
     def test_filmstrip_flush_can_use_remaining_declared_budget(self):
         scenario,output,_=self.exercise(flush_delay=3)
         report=capture(scenario,output)
