@@ -1349,7 +1349,7 @@ void TPlayer::Load(RTInputStream is, int32_t version, int32_t objversion)
     // Retail kept these in a member nothing reads; the port restores the HUD
     // from them (TSaveGame).
     if (objversion >= 7)
-        is >> hudwords.sidebarOpen >> hudwords.upperMode >> hudwords.lowerMode >> hudwords.unknown19c;
+        is >> hudwords.sidebarOpen >> hudwords.upperMode >> hudwords.lowerMode >> hudwords.drawerOpen;
 
     levelupstats = {};
     if (objversion >= 8)
@@ -1424,7 +1424,7 @@ void TPlayer::Save(RTOutputStream os)
     for (const TSpellCode& code : knownspells)
         os.WriteBytes(code.data(), kSpellCodeBytes);
 
-    os << hudwords.sidebarOpen << hudwords.upperMode << hudwords.lowerMode << hudwords.unknown19c;
+    os << hudwords.sidebarOpen << hudwords.upperMode << hudwords.lowerMode << hudwords.drawerOpen;
     os << levelupstats[0] << levelupstats[1] << levelupstats[2];
 
     os << team.name.c_str() << team.name2.c_str();

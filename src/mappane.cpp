@@ -803,9 +803,11 @@ void TMapPane::ScreenToMapPos(int32_t x, int32_t y, S3DPoint &p, int32_t zoffset
     S3DPoint curpos;
     Player->GetPos(curpos);
 
-    // The map view sits at the screen's top left: the pointer is in its pixels.
+    // The map view sits at the screen's top left: the pointer is in its
+    // pixels. Retail's x + posx has no bounds: past the view (over the HUD)
+    // the point lies on beyond its edge.
     int32_t mapx = 0, mapy = 0;
-    PaneToMapScreen(x, y, mapx, mapy);
+    (void)PaneToMapScreen(x, y, mapx, mapy);
     ScreenToWorld(mapx, mapy, p, curpos.z + zoffset);
 }
 
@@ -1033,8 +1035,10 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
 
 // REVSYNC: MouseClick @ 0x0044f140, outside the editor
 // (docs/gameflow/forensics/MAP_INPUT.md §4). Retail first left a point over
-// the side tabs' controls to them; the play screen's HUD routing does that in
-// the port. Not ported: the stats pane's info (the right button in its info
+// the side tabs' controls to them; the play screen's routing does that in
+// the port (TPlayScreen::ClickRoute). It hands the map every release, as
+// retail's screen did, wherever it lands: the right one ends the walk
+// anywhere, a left one off the view only forgets the press. Not ported: the stats pane's info (the right button in its info
 // mode, a left press on an item, 0x005496a0): the stats pane has no info mode.
 void TMapPane::PlayMouseClick(int32_t button, int32_t x, int32_t y)
 {

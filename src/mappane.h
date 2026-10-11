@@ -199,8 +199,8 @@ class TMapPane : public TPane
         // last frame put things, for the pick and the pointer's map point
     bool PaneToMapScreen(int32_t x, int32_t y, int32_t& mapx, int32_t& mapy) const;
         // The map-screen point (WorldToScreen's space) under pane pixel
-        // (x, y) as the last frame drew it: retail's (x + posx, y + posy).
-        // False off the map view
+        // (x, y) as the last frame drew it: retail's (x + posx, y + posy),
+        // written past the view's edge too. False off the map view
 
   // Map management (retail Load/Save/ClearCurMap) lives on TMapManager,
   // which owns the loaded sectors in the port.

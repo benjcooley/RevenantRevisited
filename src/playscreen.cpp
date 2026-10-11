@@ -332,6 +332,18 @@ bool TPlayScreen::Initialize()
     if (!SpellList.Initialize())
         log_warn("[playscreen] spell.def failed to load; no spells");
 
+    // REVSYNC: 0x0047ae4c..0x0047ae7a, 0x0047ebc0(1) -- every entry into play
+    // (a new game, or a load from the title or death screen) shows the side
+    // panel open on Equip and Inventory, and the bottom bar. A save's HUD
+    // words never come back (TPlayer::Load keeps them at +0x304, unread), and
+    // an in-game load, which runs in the pulse (0x0047bf01..0x0047bfd9), leaves
+    // the HUD as it was.
+    SHudState& hud = GetHudState();
+    hud.topSlot       = HUD_TOP_EQUIP;
+    hud.bottomSlot    = HUD_BOT_INV;
+    hud.sidebarState  = HUD_SIDEBAR_OPEN;
+    hud.bottomBarOpen = 1;
+
     SetUIHudCursorOverlayEnabled(false);
     SetUISidebarSyntheticStateEnabled(false);
     g_playHudInitialized = InitializeUIHudMode();
@@ -398,10 +410,6 @@ bool TPlayScreen::Initialize()
     // The session made the main player under the loading screen: the panes
     // show it now that they exist.
     PlayerManager.BindMainPlayerToScreen();
-
-    // The HUD starts as the loaded game left it (building the HUD resets it).
-    if (Player)
-        TSaveGame::RestoreHud(Player->HudWords());
 
     // REVSYNC: 0x0047b10c -- the fader, starting black, outside the
     // editor. TScreen fades it in once Initialize returns.
@@ -1022,14 +1030,19 @@ int32_t TPlayScreen::DrawerHeight() const
     return GetHudState().bottomBarOpen ? kBottomBarH : 0;
 }
 
-// Retail's close request reaches whatever the drawer holds; only the shop is
-// closed here. The HUD's bottom bar (mode 2) belongs to the HUD, whose Lower
-// Panel toggle is SHudState::bottomBarOpen; retail's LoadGame (0x0047ece0)
-// and hideresponse would close it too (AUTHOR_QUESTIONS.md 81).
+// REVSYNC: 0x0047ecc0 / 0x0047ece0 -- a close request reaches whatever the
+// drawer holds: the shop, or the HUD's bottom bar (mode 2, the HUD's Lower
+// Panel, SHudState::bottomBarOpen), which stays closed until that command
+// opens it again. An in-game load closes the bar so (LoadGame's reset;
+// seen in the emulator, AUTHOR_QUESTIONS.md 81), as would `hideresponse`,
+// which no shipped script uses; entering play opens it (Initialize). The
+// camera and fadescreenout ask only in mode 3, for the shop.
 void TPlayScreen::CloseDrawer()
 {
     if (drawer == EDrawer::BuySell)
         drawerclose = true;
+    else if (drawer == EDrawer::Hud)
+        GetHudState().bottomBarOpen = 0;
 }
 
 // REVSYNC: the drawer half of Pulse 0x0047b4d0, mode 3. A shop request opens
@@ -1733,43 +1746,58 @@ TPlayScreen::EClickRoute TPlayScreen::ClickRoute(int32_t x, int32_t y)
     return EClickRoute::World;
 }
 
+static bool IsButtonRelease(int32_t button)
+{
+    return button == MB_LEFTUP || button == MB_RIGHTUP || button == MB_MIDDLEUP;
+}
+
 void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
 {
+    // REVSYNC: TScreen::MouseClick 0x004904ef..0x004904fc -- a release goes
+    // to every pane wherever it lands, the map's too, which leaves one on a
+    // side tab's button alone (0x0044f17b) and off its rect only forgets its
+    // press or ends the right-button walk (0x0044f917, 0x0044fbad). The HUD's
+    // item drag takes its own release (the drop).
+    const bool releaseToWorld = IsButtonRelease(button) && !UIDragState::IsActive() &&
+                                !(g_playHudInitialized && UISideTabButtonAt(x, y) >= 0);
     switch (ClickRoute(x, y))
     {
       case EClickRoute::Modal:
-      case EClickRoute::BuySell:
         TScreen::MouseClick(button, x, y);
         return;
       case EClickRoute::Ignored:
         return;
-      case EClickRoute::Hud:
-      {
-        const SHudState& s = GetHudState();
-        if (HandleMouseClickUISidebarModeConsumed(button, x, y))
-            return;
-        TScreen::MouseClick(button, x, y);      // the screen's panes: the bottom bar
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseClickUISpellbookMode(button, x, y);
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
-            HandleMouseClickUIEquipMode(button, x, y);
-        if (button == MB_LEFTUP)
-            UIDragState::ReleaseUnclaimed();    // a drag no pane took ends here
-        return;
-      }
-      case EClickRoute::World:
+      case EClickRoute::BuySell:
+        TScreen::MouseClick(button, x, y);
         break;
+      case EClickRoute::Hud:
+        if (!HandleMouseClickUISidebarModeConsumed(button, x, y))
+        {
+            const SHudState& s = GetHudState();
+            TScreen::MouseClick(button, x, y);  // the screen's panes: the bottom bar
+            if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
+                HandleMouseClickUISpellbookMode(button, x, y);
+            if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+                HandleMouseClickUIEquipMode(button, x, y);
+            if (button == MB_LEFTUP)
+                UIDragState::ReleaseUnclaimed();    // a drag no pane took ends here
+        }
+        break;
+      case EClickRoute::World:
+        TScreen::MouseClick(button, x, y);
+        // Route to the active runtime mode; editor mode forwards to the
+        // renderer's gizmo / drag picker, game mode forwards to MapPane's
+        // gameplay click handler (movement / interact / combat).
+        CurrentMode()->HandleMouseClick(button, x, y);
+        return;
     }
-    TScreen::MouseClick(button, x, y);
-    // Route to the active runtime mode; editor mode forwards to the
-    // renderer's gizmo / drag picker, game mode forwards to MapPane's
-    // gameplay click handler (movement / interact / combat).
-    CurrentMode()->HandleMouseClick(button, x, y);
+    if (releaseToWorld)
+        CurrentMode()->HandleMouseClick(button, x, y);
 }
 
 void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
 {
-    if (ModalHas(MODAL_MOUSE) || InBuySellDrawer(x, y))
+    if (ModalHas(MODAL_MOUSE))
     {
         TScreen::MouseMove(button, x, y);
         return;
@@ -1777,35 +1805,31 @@ void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
     if (GameFlow.Session().Loading())
         return;
 
-    if (g_playHudInitialized)
+    if (g_playHudInitialized && !InBuySellDrawer(x, y))
     {
-        const SHudState& s = GetHudState();
-        if (HandleMouseMoveUISidebarModeConsumed(button, x, y))
-            return;
-        if (UIDragState::IsActive() &&
-            UIDragState::Get().source == EDragSource::SpellPane)
-        {
+        // A HUD item drag follows the pointer; otherwise the spell book,
+        // the paper doll and the screen's panes (the bottom bar, the side
+        // panes) see the move.
+        if (UIDragState::IsActive() && UIDragState::Get().source == EDragSource::SpellPane)
             UIDragState::UpdateDrag(x, y);
-            return;
-        }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseMoveUISpellbookMode(button, x, y);
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
-            HandleMouseMoveUIEquipMode(button, x, y);
-        // Over the side tabs the map has the move too: retail offers every
-        // pane every move (TScreen::MouseMove 0x00490530) and the map's has
-        // no side-tab test (0x004504d0).
-        if (IsOffMapPane(x, y) || UIDragState::IsActive())
+        else if (!HandleMouseMoveUISidebarModeConsumed(button, x, y))
         {
-            TScreen::MouseMove(button, x, y);   // the screen's panes, as clicks: the bottom bar, the side panes
-            return;
+            const SHudState& s = GetHudState();
+            if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
+                HandleMouseMoveUISpellbookMode(button, x, y);
+            if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+                HandleMouseMoveUIEquipMode(button, x, y);
+            TScreen::MouseMove(button, x, y);
         }
     }
+    else
+        TScreen::MouseMove(button, x, y);
 
-    TScreen::MouseMove(button, x, y);
-    // Game mode -> MapPane.MouseMove (drives wedge cursor while walking,
-    // bow aim, etc.). Editor mode default no-op until we wire its
-    // hover/drag overlays.
+    // REVSYNC: TScreen::MouseMove 0x00490530 -- every pane gets every move,
+    // with no rect test (0x004905b9..0x0049063d), so the map's comes wherever
+    // the pointer is: a right-button walk steers, and a drawn bow aims, over
+    // the HUD as over the play field (TMapPane::MouseMove 0x004504d0). Game
+    // mode -> MapPane.MouseMove; editor mode has no move handling yet.
     CurrentMode()->HandleMouseMove(button, x, y);
 }
 

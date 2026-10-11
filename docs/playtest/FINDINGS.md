@@ -4,6 +4,168 @@ Bugs and gaps that Jev's sessions surfaced in the games, with what reproduces
 each. Newest first. Each entry: what was seen, the evidence, the repro, and
 who owns the fix.
 
+## F5. The right-button walk stopped steering over the HUD (port bug, fixed)
+
+**Seen 2026-10-11.** With the right button held, moving the pointer over
+the side panel left Locke walking his old way. In retail he turns
+toward the pointer there as anywhere.
+
+**Evidence.**
+- `TScreen::MouseMove` (`0x00490530`) gives every pane every move with
+  no rect test (`0x004905b9..0x0049063d`).
+- `TMapPane::MouseMove` (`0x004504d0`) steers the right-button walk
+  (`0x0044ee00`) and aims a drawn bow at the pointer wherever it is.
+- Its map point, `posx − pane.x + cursorx`, has no bounds.
+- The port gave the world a move only over the play field.
+- Its pointer-to-map conversion (`TMapRenderer::ScreenToMapScreen`)
+  wrote nothing past the view's edge, so a point there read as the map
+  origin.
+- **Retail** (play slot, `opening`): right held at (120, 240), then 12
+  ticks at (560, 240) over the side panel. Locke moves (+20, −20), the
+  same as with the pointer at (380, 215) inside the view, under the
+  wedge cursor.
+- **Port before the fix:** (0, +68); he kept his old heading.
+
+**Repro (port).** As F4. Compare the 12 ticks with the pointer at
+(560, 240) against the same with it at (380, 215).
+
+**Resolution.** Fixed on `playtest/tabs`.
+- `TPlayScreen::MouseMove` gives the world every move. A modal holding
+  the mouse and a running load still stop them.
+- The HUD's own move handling (item drags, the spell book, the paper
+  doll, the screen's panes) is unchanged.
+- `ScreenToMapScreen` writes the map point past the view's edge too, and
+  still returns false there; `ScreenToMapPos` uses it.
+- After the fix, the port moves the same over the panel as inside the
+  view: (+59, +16) at both points, wedge cursor over the panel.
+- Drags, click-walk and tab clicks are unchanged.
+
+**Open (movement, not routing).** For the same pointer, the two games
+head differently. Retail turns in place and moves (+20, −20) in 12
+ticks; the port moves (+59, +16), whether the pointer is in the view or
+not. That is a variance in the right-button walk itself (its direction
+sector or its turn) and belongs to whoever owns player movement.
+
+## F4. A right-button walk released over the HUD never stopped (port bug, fixed)
+
+**Seen 2026-10-11**, while checking where retail sends button releases.
+Hold the right button on the play field so Locke walks, move over the
+side panel, and let go there. Locke kept walking until the next right
+click.
+
+**Evidence.**
+- `TScreen::MouseClick` hands a release (4, 5, 6) to every pane,
+  whatever the point (`0x004904ef..0x004904fc`).
+- The map pane's right release (`0x0044f917..0x0044f96a`) ends the walk
+  with no rect test: the arrow cursor comes back, the held direction key
+  is released, and `+0x11c` is cleared.
+- Its left release off the pane only clears `clicked` (`0x0044fbad` →
+  `0x0045046f`).
+- On a side tab's button it does nothing (`0x0044f17b`).
+- The port routed a release by its point, like a press. One over the
+  side panel or the bottom bar went to the HUD only, so the map kept
+  `walking` and its held key.
+- **Retail** (play slot, `opening`): right held at (120, 240), then over
+  the side panel at (560, 240), let go there. Locke stops (0 units in
+  the next 24 ticks).
+- **Port before the fix:** he walked on 131 units.
+
+**Repro (port).** From `opening`, through the port host:
+`{"mouse": [120, 240], "buttons": 2}`, 12 ticks later
+`{"mouse": [560, 240], "buttons": 2}`, 12 ticks later
+`{"mouse": [560, 240], "buttons": 0}`, then step 24 and compare
+`player.pos`.
+
+**Resolution.** Fixed on `playtest/tabs`.
+- `TPlayScreen::MouseClick` also gives the world every release, wherever
+  it lands. The exceptions are a release on a side tab's button and one
+  that ends a HUD item drag, which the drag's drop takes.
+- The map's own cases do the rest, as in retail.
+- After the fix: Locke stops (0 units).
+- Unchanged before and after: drags pack → belt, belt → pack, a drag let
+  go over the map (cancelled; see Open), a click on a pack item, and
+  click-walk and tab clicks.
+
+**Open (not routing).** Retail drops an item dragged out of the HUD onto
+the map, or uses it on the object there: `0x0044fff8`, the `FULLSINGDROP`
+/ `FULLMULTDROP` messages (MAP_INPUT.md §4.3). The port's HUD drag
+(`UIDragState`) cancels instead and the item goes back.
+
+## F3. The side panel came back from the save (port bug, fixed)
+
+**Seen 2026-10-11.** `crosscheck.py --from port:forest` listed the four
+pack cells as variances. The port showed Book and Map with the inventory
+hidden; retail showed Equip and Inventory.
+
+**Evidence.**
+- The `forest` save's HUD words (the player record, SAVE_GAME.md §11.4)
+  say Book / Map. The port applied them on every load
+  (`TSaveGame::RestoreHud`, a deliberate divergence).
+- Retail only writes them. `TPlayer::Load` keeps them at `+0x304..+0x310`
+  and nothing reads them. Entering play (`TPlayScreen::Initialize`
+  `0x0047a660`) sets the side pane to Equip and Inventory (`0x0047ae4c`,
+  `0x0047ae57`) and opens the side panel and the bottom bar (`0x0047ae7a`,
+  `0x0047ebc0(1)`).
+- An in-game load runs in the pulse (`0x0047bf01..0x0047bfd9`). It leaves
+  the side panel as it was, and `LoadGame` closes the bottom bar
+  (`0x0047ece0`; AUTHOR_QUESTIONS.md 81).
+- Emulator, play slot (SAVE_GAME.md §11.4a). Booted, the words are 0.
+  Set to Stats / Map before a start, nothing writes them, yet the panes
+  show Equip and Inventory. Map picked in play and then an in-game load
+  of the same slot: still Map, with the bottom bar closed.
+- The fourth word, once "unidentified", is `+0x6ac`: the bottom drawer
+  is open.
+
+**Repro (port).** `crosscheck.py --from port:forest`: the `pack slot N`
+variances. In the port host, from `forest`, pick the Map tab and type
+`@loadgame "Port Resave"` at the text bar. Before the fix, the load put
+Book / Map back; retail keeps Map.
+
+**Resolution.** Fixed on `playtest/tabs`.
+- `TPlayScreen::Initialize` resets the side panel to Equip and
+  Inventory, open, with the bottom bar.
+- Loads no longer apply the words. The port still writes them, the
+  fourth from the drawer.
+- `CloseDrawer` closes the bottom bar as well as the shop, so an in-game
+  load leaves the bar closed.
+- Retail bug, not reproduced: after tabs were changed in a session,
+  entering play again presses the old tabs over Equip and Inventory
+  (§11.4a).
+- After the fix, the `forest` crosscheck has no pack variances. Through
+  the port host: Equip and Inventory on entering play, Map kept across
+  an in-game load, bottom bar closed.
+
+## F2. Clicks around the side tabs never reached the world (port bug, fixed)
+
+**Seen 2026-10-11.** `crosscheck.py --from port:opening` showed 32 grid
+cells in the strip x 384..448, y 176..416 where a left click reached the
+world in retail but not in the port.
+
+**Evidence.**
+- `TMapPane::MouseClick` leaves a press to the side tabs only when one
+  of their buttons holds it: `0x004364d0` on `0x0065be50`, asked at
+  `0x0044f17b`.
+- The buttons are plain 36×35 rects, because their flags (`0x180010`)
+  lack the pixel-test bit `0x20000` of `0x0042d0d0`. The 2 px gaps and
+  the strip's margins belong to the map.
+- The port gave the HUD a 64×240 box there.
+- The port also drew the strip 4 px left and 2 px up. Retail lays it
+  flush in the play field's corner (Pulse `0x0047bc1a..0x0047bc3d`): at
+  (400, 188) with both panels open. A pixel probe of retail's routing
+  gave x 403..438 and y 190+37n..224+37n for the buttons.
+
+**Repro (port).** `crosscheck.py --from port:opening` before `dd4b8f71`:
+`clicks world port=0 retail=32`.
+
+**Resolution.** Fixed in `dd4b8f71`.
+- `TPlayScreen::ClickRoute` asks the strip's own hit test
+  (`UISideTabButtonAt`).
+- Moves and the hover cursor stay the map's over the whole strip.
+- The strip sits flush in the corner.
+- After the fix: no `clicks world` variance; the port's pixel runs are
+  retail's; a click in a gap walks Locke and a click on a tab switches it
+  (MAP_INPUT.md §4, §7.1).
+
 ## F1. A dead character saved and loaded is gone (retail behaviour)
 
 **Seen 2026-10-10.** Jev killed Rahul from the `opening` waypoint and the

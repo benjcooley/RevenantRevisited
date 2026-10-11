@@ -75,14 +75,15 @@ extern SSkill SkillTree[NUM_SKILLS];    // Master skill tree
 constexpr int32_t kSpellCodeBytes = 6;
 using TSpellCode = std::array<char, kSpellCodeBytes + 1>;
 
-// The HUD state retail writes into the player record: its globals at save
-// time (DAT_0065d190, DAT_0065d1b8, DAT_0065d1bc, DAT_0065d19c).
+// The HUD state retail writes into the player record: the play screen's
+// flags at save time (TPlayScreen 0x0065caf0 +0x6a0, +0x6c8, +0x6cc, +0x6ac).
+// Written, never read back.
 struct SPlayerHudWords
 {
     int32_t sidebarOpen = 0;    // DAT_0065d190: the sidebar is showing
     int32_t upperMode   = 0;    // DAT_0065d1b8: 0 equip, 1 stats, 2 spellbook
     int32_t lowerMode   = 0;    // DAT_0065d1bc: 0 inventory, 1 map, 2 spell composer
-    int32_t unknown19c  = 0;    // DAT_0065d19c: unidentified (written, never read)
+    int32_t drawerOpen  = 0;    // DAT_0065d19c: the bottom drawer is open (0x0047ebc0, 0x0047ece0)
 };
 
 // The multiplayer team record (retail +0x490, 0x60 bytes). Set from the

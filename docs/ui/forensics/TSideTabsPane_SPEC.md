@@ -466,6 +466,30 @@ non-selected button shows idle art, brightening on hover; the selected button
 shows the pressed/Select art and (per the flag) does not need the hover ramp to
 look engaged.
 
+### What sets the hover (2026-10-11, from the asm)
+
+- `Initialize` sets the pane's hover flag (`+0x60 |= 2`, line 206, the
+  port's `TButtonPane::BPF_HOVER`). It does not set keep-hover (`4`).
+- Every pointer move reaches the pane, wherever the pointer is
+  (`TScreen::MouseMove` `0x00490530`, no rect test).
+- `TButtonPane::MouseMove` (`0x00436660`):
+  - The first button whose rect holds the point takes the hover, through
+    `SetHover` `0x004369f0`. A selected (pressed) tab can take it too.
+  - On a point no button holds, the hover clears (`SetHover(-1)`).
+- `SetHover`, when the hover moves to another button, plays
+  `frontend_move` (`0x0049b990(id, 0x7f, 1, 0, 0x50, 700)`).
+- The hovered button's flag 8 then drives the ramp above.
+
+**Port (2026-10-11): not wired.** The in-game strip (`src/uisidebartest.cpp`)
+draws the ramp and the Select overlay. Its `hovered` flags come only from
+the `--test=ui-sidebar` synthetic driver, so in play no tab brightens
+under the pointer and no `frontend_move` sound plays.
+
+Wiring it is small: set the button under `UISideTabButtonAt` from
+`TPlayScreen::MouseMove`, and play the sound when it changes. It waits
+for P3 of the HUD rebuild (HUD_REBUILD.md), whose pane A/B covers the
+ramp's frames; the strip has no A/B case yet.
+
 ### Dirty / redraw model
 
 There is no per-button value cache (unlike TPlyrStatusBar). The pane redraws its

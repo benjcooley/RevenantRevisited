@@ -105,11 +105,6 @@ class TSaveGame
     [[nodiscard]] static bool ReadThumbnail(const std::filesystem::path& slot,
                                             std::vector<uint8_t>& rgba);
 
-    // Shows the HUD sidebar the way the saved HUD words in the player record
-    // say (SAVE_GAME.md §11.4). Called by a load and again by the PlayScreen
-    // once it has built the HUD.
-    static void RestoreHud(const SPlayerHudWords& words);
-
     // Merchant unique items already bought (SAVE_GAME.md §6).
     // REVSYNC: HasPair @ 0x0048e630 / AddPair @ 0x0048e670.
     [[nodiscard]] bool HasSoldUnique(int32_t objclass, int32_t objtype) const;
