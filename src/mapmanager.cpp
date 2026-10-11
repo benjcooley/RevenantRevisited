@@ -68,6 +68,20 @@ TGameMap* TMapManager::LoadStaged(int32_t level, int32_t count)
     return map;
 }
 
+TGameMap* TMapManager::CreateTransient(int32_t level, int32_t min_sx, int32_t min_sy,
+                                       int32_t max_sx, int32_t max_sy)
+{
+    if (GetCached(level))
+        return nullptr;
+    auto fresh = std::make_unique<TGameMap>();
+    if (!fresh->InitializeTransient(level, min_sx, min_sy, max_sx, max_sy))
+        return nullptr;
+    TGameMap* raw = fresh.get();
+    cache.emplace_back(std::move(fresh));
+    SetCurrentMap(raw);
+    return raw;
+}
+
 TGameMap* TMapManager::Cached(int32_t i) const
 {
     return (i >= 0 && i < NumCached()) ? cache[size_t(i)].get() : nullptr;
@@ -192,6 +206,11 @@ void TMapManager::ReloadLevel(int32_t level, const std::function<void()>& editFi
             editFiles();
         return;
     }
+
+    // A disk reload must not turn a disposable map into a persistent map or
+    // run file-edit callbacks against unrelated files at the same level.
+    if (map->IsTransient())
+        return;
 
     // The players outlive the sectors (a sector lets go of its OF_NONMAP
     // objects when it is freed). Hold them by reference: `editFiles` runs
