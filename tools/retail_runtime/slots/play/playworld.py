@@ -84,7 +84,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1]))
 sys.path.insert(0, str(HERE.parent / 'hud'))
-from unicorn import UC_HOOK_CODE  # noqa: E402
+from unicorn import UC_HOOK_CODE, UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.x86_const import UC_X86_REG_EBP, UC_X86_REG_ECX, UC_X86_REG_EIP, UC_X86_REG_ESP  # noqa: E402
 from hudworld import HudWorld, RETAIL_INSTALL, GAME_INITIALIZED  # noqa: E402
 from machine import PlayMachine  # noqa: E402
@@ -324,8 +324,12 @@ class PlayWorld:
         """Call a retail function that only reads game state (a getter), in
         a quiet machine, without disturbing it: on the main thread's TIB with
         a stack of its own (the blocked main thread's frames stay intact),
-        the main thread and scheduler put back afterwards. A call that makes
-        an API call or draws a random number is not a getter: it fails."""
+        the main thread and scheduler put back afterwards, and every byte it
+        wrote outside the host's own stack and scratch buffer put back too
+        (getters write: IsEnemy lowercases names into a static buffer at
+        0x00666648, TMapPane::OnObject narrows a surface's clip rect and
+        widens it again). A call that makes an API call or draws a random
+        number is not a getter: it fails."""
         vm = self.vm
         scheduler = vm.scheduler
         if not self._quiet():
@@ -334,16 +338,40 @@ class PlayWorld:
         saved = (dataclasses.replace(main, wait=copy.deepcopy(main.wait), tls=dict(main.tls)),
                  vm.call_sp, list(scheduler.ready), vm.uc.context_save())
         calls, draws = vm.api_calls, self.draws
+        original = {}                          # address -> its byte before the call's first write to it
+
+        def wrote(uc, access, at, size, value, user):
+            for a, byte in zip(range(at, at + size), uc.mem_read(at, size)):
+                original.setdefault(a, byte)
+        hooks = [vm.uc.hook_add(UC_HOOK_MEM_WRITE, wrote, begin=begin, end=end)
+                 for begin, end in self._game_memory()]
         vm.call_sp = self.peek_stack
         try:
             result = vm.call(address, args, this=this, instruction_limit=100_000_000)
         finally:
+            for hook in hooks:
+                vm.uc.hook_del(hook)
             scheduler.threads[1], vm.call_sp, scheduler.ready, context = saved
             scheduler.current = 1
             vm.uc.context_restore(context)
+            for a, byte in original.items():
+                vm.uc.mem_write(a, bytes([byte]))
         if vm.api_calls != calls or self.draws != draws:
             raise RuntimeError(f'0x{address:08x} is not a getter: it made API calls or drew numbers')
         return result
+
+    def _game_memory(self):
+        """The address ranges outside the host's own peek stack and scratch
+        buffer, as (first, last) pairs for Unicorn's hook ranges."""
+        own = sorted([(self.peek_stack + 0x100 - PEEK_STACK, self.peek_stack + 0x100),
+                      (self.scratch, self.scratch + SCRATCH)])
+        ranges, start = [], 0
+        for begin, end in own:
+            if begin > start:
+                ranges.append((start, begin - 1))
+            start = max(start, end)
+        ranges.append((start, 0xffffffff))
+        return ranges
 
     @property
     def frame(self):
