@@ -50,14 +50,28 @@ remains complete; there is no fitted scale or deleted outer component.
 
 Private evidence root:
 `/Users/benjamincooley/RevenantRetailLab/research/vfx-wide-20261010/hard-astra`.
-The frozen640x480 fifteen-phase contact is `energy-review-final`, manifest
-SHA256 `62e3f7eb54282b254923f48dca7e683c246327c42452ba49625ed850802f230a`,
-original comparison common/native-domain Metal binary SHA256
-`0897cd4317011b85201dcd29eec24c49e61bb20cebdb5efffde14a30d46dbc30`.
+The corrected640x480 fifteen-phase contact is `energy-review-final-v2`,
+manifest SHA256
+`ffc77f40307aeb5fd53829d0411dbdc34800722c7cfe5e5a92d917ebaa476206`,
+common/native-domain Metal binary SHA256
+`e1647e36b68d3ae3d8ec6e79fdce53bdb11203f54ecbb1df77bb35f16c1712ae`.
+The earlier `energy-review-final` is historical: it omitted the untextured
+primitive-span admission and did not show the complete outer fan. All140
+common frames remain byte-identical after that native-only correction.
 It records birth, phase transition60/61, fan, native primitive rejection,
 shrink120/130/135, kill136 and blank140. Its outer fan is clipped by that
-viewport; supported larger overlapping views are recorded separately before
-appearance acceptance.
+viewport. `energy-wide-final3` adds four supported1920x1080 fixed overlapping
+screen-origin views, covering projected x[-1280,1280], y[-1440,540]. Its three
+whole phases70/90/110 retain every visible fan tip without geometry scaling or
+world-camera changes. Actual Metal still renders24Hz; stride20 saves only the
+selected frames. Original intervening Render calls preserve every state, RNG
+and draw packet against the complete original replay; selected phases execute
+full software raster. The contact combines viewports by integer translation.
+Wide manifest SHA256:
+`473fa2c6ab7113ed39282e26b3a5dfad629a3f9352a690b5ba1f715fd5a56b25`.
+All twelve large Metal captures use the same final e1647e36 binary, with actual
+1920x1080 image dimensions checked. Earlier `energy-wide-final2` is a retained
+negative comparison that exposed the omitted untextured guard.
 
 Scope: facing0, null spell, owner/camera world0, seed1,24Hz, black background,
 source ambient38/directional1. Reference boundaries are immutable decoded
@@ -68,3 +82,11 @@ fixture to its station. Natural actor hand/spell target/damage/audio, nonzero
 facing, natural caller, end-to-end device behavior, framebuffer destination
 rounding and exact pixels remain open. Common projection/full oversized
 geometry are separately retained and are not native-domain appearance claims.
+
+Root independently approved the final fifteen-phase detail and three complete
+fixed-tile fan views: radial cards, core, colored fan, both primitive rejection
+paths, shrink, kill136 and blank140. This is scoped overall native-domain
+appearance, not exact pixels or natural actor/caller completion. Frozen
+`energy-review-final-v2/root-approval.json` SHA256:
+`9e455d84008037c7c39757ceea0a339eb58b08f1f8fdd1f32d5bdcf943c87220`. Overlapping-viewport dependence, destination rounding and
+the natural caller/device limits above remain open.

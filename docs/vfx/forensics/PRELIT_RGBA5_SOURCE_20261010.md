@@ -37,3 +37,10 @@ Evidence under `research/vfx-wide-20261010/hard-astra`:
 MSL executed; GLSL/HLSL source branches mirror it but their devices were not
 executed. A final HLSL-only variable spelling correction (`i.normal`) follows
 that capture; it does not alter the executed Metal branch.
+
+Current same-source Metal replay uses binary
+`e1647e36b68d3ae3d8ec6e79fdce53bdb11203f54ecbb1df77bb35f16c1712ae`
+and `energy-prelit-gpu-final2-v2/review.json`, SHA256
+`c91b55d383212ae7051b8ff62f048e3553b598ce2bc0fe4b1dd49dc20e68770d`.
+All three diagnostic films are byte-identical to their prior captures; all11
+prelit/depth and7ARGB assertions pass after the HLSL source spelling fix.
