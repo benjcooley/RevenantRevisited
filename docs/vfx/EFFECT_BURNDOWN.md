@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-11)
 
-**146 / 176 effects have reviewed visual passes for their recorded test configuration; 30 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
+**147 / 176 effects have reviewed visual passes for their recorded test configuration; 29 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
 **YTelekinesis (2026-10-11):** four moving/rotating chunks match through actual owner completion across six fixed supported capture views; all 39,600 triangles covered and 24 root-repeated Metal frames identical. Corrected exact-ID mapping displays and restarts it in the gallery. Natural actor/spell/audio and raster overlap limits remain open. [Evidence and scope](forensics/YTELEKINESIS_ORIGINAL.md).
 
@@ -1011,7 +1011,7 @@ Preview associations remain candidates. Batch groups partition all 176 retail ty
 - [x] **teleportation** `0xad92bd40` — `magic\Teleportation.i3d`. Candidate: `TTeleportation_AUTHORED_OWNER`. Progress: exact authored source/build and realmap lifecycle pass; currentab3e400frames10rows50tail/own240unchanged-frame pair root **isolated overall appearance/occlusion PASS** after sharedMetaldepthStore. Nativephase/cadence/fullcycle, fractional/source-raster requirements and naturalspell/character/story/audio/context/full acceptance remain open; no fittedeffect changes.
 - [x] **gvortex** `0xad99bd33` — configured whole-extent appearance pass. Greenpillar/coiledbands/risingflares,240-frame lifecycle; two fixedviews with explicit native viewport/raster overlap limit.
 - [ ] **headfireball** `0xd000f005` — `magic\Hfire.i3d`. Candidates: `TFireSwarmEffect_BESPOKE__headfireball`. Progress: fabricated FireSwarm proxy removed;12 exact-ground frames verify explicit unsupported path. Next: implement actual animator/caller, not generic cylinder reuse; other candidates remain unaccepted.
-- [ ] **dragonattack** `0xba09fead` — `magic\Hfire.i3d`. Candidates: `TFireSwarmEffect_BESPOKE__dragonattack`. Progress: fabricated FireSwarm proxy removed;12 exact-ground frames verify explicit unsupported path. Next: implement actual animator/caller, not generic cylinder reuse; other candidates remain unaccepted.
+- [x] **dragonattack** `0xba09fead` — declared moving-caller appearance pass. Complete flight/terrain impact/decay, distant particles covered by immutable supported views;25PNG integrated repeat/946live witnesses and real gallery recreation pass. Broader/brighter headglow, naturaldragon/bones/map/combat/audio/device remain open. [Evidence](forensics/DRAGONATTACK_ORIGINAL.md).
 - [ ] **fspray** `0x0c052638` — `misc\Fspray.i3d`. Candidates: none identified. Progress: exact profile, whole native/production controller plus repeated particle image pairs and8 typed map lifecycle observations pass. Next: independent emitter matrices, whole native/Metal appearance and natural caller/character. [Scope](forensics/STATIC_PARTICLE_BATCH_20261010.md).
 
 ## Batch 5 — Buffs, debuffs, late boss effects and unresolved retail types (72 retail rows)

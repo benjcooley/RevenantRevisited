@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 146,
+    "visual_fidelity_confirmed_rows": 147,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 146,
-    "remaining_visual_review_rows": 30
+    "reviewed_visual_pass_rows": 147,
+    "remaining_visual_review_rows": 29
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1848,6 +1848,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Sixteen whole original/actual Metal phases of Physical Paralysis variant1 with genuine stationary Acolyte invoker/target, offset96 and radius16: sprites converge/orbit, three purple egg passes, shrink/kill260 and blanktail280. Original280tick owner/RNG and complete custom Render/RenderObject/software execute; sampled submitted geometry fits fixed1280x960. Exact integer/RNG/draw counts,13392 authoredXYZ/17388 indices; retained22 float diagnostics max0.006254world/0.003663matrix and UV9.35e-5. Integrated70 same-phase PNGs repeat byte-identically at24Hz through278 with clean exit. Actual configured gallery completes260twice, recreates without reseeding shared RNG, restores target flags/Health102/position and cleans early shutdown. Null-invoker branch stayspartial. Natural spell/map selection, animated attachment, othervariants/radii/endpoints, audio/device/framebuffer precision and exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-dragonattack-original-20261011/root-approval.json": {
+      "sha256": "e90a110c8d539283e42fc4ba01faeccab690dafffedb38b9e0dc87db9a8d484d",
+      "retail_row": "dragonattack:0xba09fead",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Complete declared Sid Dragon Attack/Fighting configuration, genuine nonresident Acolytes source3185/3185/16 and target+280X/ground0, face96 muzzle14/14/+100. Nineteen actual original/Metal active pairs plus4blank controls; all110ticks submitted triangles covered by immutable16view1920x1080 grid,6active films/5676witness fields. Same pre-Render VM/CRT replay keeps all110 canonical before/after states exact and5extraRender controls exact. Root25same-phase PNG repeat byte-identical and946actuallive witnesses pass; incomplete witness rejected. Root real gallery58/100visible,5factorycreations through flight/impact/lifetime andcleanexit. OriginalbasePulse precedes custom movement; cached prototype preserves distant impact. Scoped appearance passes with explicitly broader/brighter Metal headglow at13/25/29; overlap/framebufferquantization causal and exactpixel gates remain open. Naturaldragon/bones/mapcollision/combat/audio/device and arbitraryendpoints remain open."
     }
   }
 }

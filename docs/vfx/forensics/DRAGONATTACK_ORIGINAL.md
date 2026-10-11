@@ -171,3 +171,28 @@ Fighting/ground0 movement executes internally. Arbitrary endpoint creation,
 missing lifetime/world hooks, wrong style and the old FireSwarm alias are
 rejected. The generic map route also treats the ID as a projectile, preventing
 an unconfigured generic factory from bypassing the controlled adapter.
+
+## Independent scoped approval
+
+Root inspected the main/distant contacts, full-resolution main pairs and distant
+raw pairs41/view6 and49/view13, verifying67 paired/control/contact file hashes.
+The integrated executable repeats all25 main PNGs byte-identically and passes
+946 live owner/particle/cache witness fields. Removing one actual render record
+fails the completeness check. The actual mapped scrolling gallery creates the
+effect five times, shows58/100 label-free samples, and exits cleanly.
+
+The scoped appearance pass preserves the broader/brighter head-glow residual
+above. It does not establish exact pixels, arbitrary endpoints, natural dragon
+attachment or gameplay combat. Approval is pinned at
+`recon/retail_asm/runtime/effects/current-dragonattack-original-20261011/root-approval.json`,
+SHA256 `e90a110c8d539283e42fc4ba01faeccab690dafffedb38b9e0dc87db9a8d484d`.
+Root evidence is under
+`/Users/benjamincooley/RevenantRetailLab/research/vfx-dragon-root-20261011/`.
+
+The integrated build,17 mapping tests, bridge lifecycle/rejection tests and
+actual map dispatch ASan/UBSan test pass. Quicksilver's complete independent
+particle-state/packet/shared-raster regression also passes. Adding the actual
+`PrototypeOrigin` member to three extracted-code harnesses resolves their
+compile dependency on the new production cache; effect behavior and expected
+results remain unchanged. The earlier failed compile is retained in the local
+validation logs. The reviewed total advances to147/176, with29 remaining.

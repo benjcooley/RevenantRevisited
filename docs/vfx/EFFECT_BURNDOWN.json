@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 146,
+    "visual_fidelity_confirmed_rows": 147,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 146,
-    "remaining_visual_review_rows": 30
+    "reviewed_visual_pass_rows": 147,
+    "remaining_visual_review_rows": 29
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -21198,10 +21198,10 @@
       "retail_type_id": "0xba09fead",
       "asset": "magic\\Hfire.i3d",
       "preview_candidates": [
-        "TFireSwarmEffect_BESPOKE__dragonattack"
+        "Dragonattack_ORIGINAL"
       ],
       "source_fixes": [
-        "Unsupported-path correction: removed fabricated FireSwarm controller reuse for a different shipped asset/animator; this proxy now fails explicitly unsupported, not an implementation."
+        "2026-10-11: Exact Sid Dragon Attack moving caller, base-before-custom owner pulse, original prototype cache and full flight/terrainimpact/kill86; scoped immutable multi-view appearance review and integrated movie/gallery repeat. Broader/brighter Metal glow remains recorded."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -21209,20 +21209,20 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Identify actual typed animator/caller and implement this shipped asset; unsupported FireSwarm proxy is not runtime/render/fidelity coverage.",
+      "next_action": "Preserve scoped moving Dragon appearance; resolve headglow residual and verify naturaldragon/bones/map/combat/audio/device.",
       "notes": [
-        "FireSwarm proxy rejected explicitly;12 ground-only frames verify unsupported behavior. Other candidates remain independent and unaccepted."
+        "Only declared face96/offset280/ground0 caller is approved. Natural dragon attachment/combat and arbitrary endpoints remain open; exact gallery API rejects those claims."
       ],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "unsupported_candidate_validation": {
@@ -21232,6 +21232,16 @@
         "binary_sha256": "c1f1c512770c933f9af1c1744f4e5393cbf5d5eff0227156d8a6fe2e290be244",
         "scope": "Unsupported FireSwarm asset substitution must report unavailable and never submit an invented proxy; not an implementation or fidelity pass.",
         "all_frames_equal_ground": true
+      },
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent full-resolution main/distant review and integrated repeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Complete declared Sid Dragon Attack/Fighting configuration, genuine nonresident Acolytes source3185/3185/16 and target+280X/ground0, face96 muzzle14/14/+100. Nineteen actual original/Metal active pairs plus4blank controls; all110ticks submitted triangles covered by immutable16view1920x1080 grid,6active films/5676witness fields. Same pre-Render VM/CRT replay keeps all110 canonical before/after states exact and5extraRender controls exact. Root25same-phase PNG repeat byte-identical and946actuallive witnesses pass; incomplete witness rejected. Root real gallery58/100visible,5factorycreations through flight/impact/lifetime andcleanexit. OriginalbasePulse precedes custom movement; cached prototype preserves distant impact. Scoped appearance passes with explicitly broader/brighter Metal headglow at13/25/29; overlap/framebufferquantization causal and exactpixel gates remain open. Naturaldragon/bones/mapcollision/combat/audio/device and arbitraryendpoints remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-dragonattack-original-20261011/root-approval.json",
+        "sha256": "e90a110c8d539283e42fc4ba01faeccab690dafffedb38b9e0dc87db9a8d484d",
+        "note": "docs/vfx/forensics/DRAGONATTACK_ORIGINAL.md"
       }
     },
     {
