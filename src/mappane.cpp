@@ -2158,8 +2158,8 @@ bool TMapPane::WalkCellKnown(int32_t x, int32_t y)
     const int32_t sy = world_sy - sectory;
     if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
         return true;
-    TGameMap* m = MapManager.CurrentMap();
-    return m && m->FindSector(world_sx, world_sy);
+    const TGameMap* m = MapManager.CurrentMap();
+    return m && m->IsLoaded();
 }
 
 // Returns the maximum walk height in the area bounded by 

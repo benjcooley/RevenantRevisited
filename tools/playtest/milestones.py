@@ -21,7 +21,7 @@ KEEP = [
     Milestone('rand questioned',
               'Explore the Keep. Talk to the people there, and find the guard Rand in the dungeon below '
               'to question him about the cult.',
-              talked_to('Rand'), save=True, goal='RandK'),
+              after_scene(talked_to('Rand')), save=True, goal='RandK'),
 ]
 
 # The reference host's toy world (fakehost.py): one person to reach.

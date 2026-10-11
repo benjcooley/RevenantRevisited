@@ -51,6 +51,7 @@ from world import Place, World
 
 ENGAGE_RADIUS = 500                  # a living enemy this close means a fight
 WALKGRID_RADIUS = 480
+WIDE_WALKGRID_RADIUS = 2400          # once per stop, when the way to it isn't in the map yet
 DIGITS = '123456'
 # Each direction straight after its opposite, so calibrating ends where it began.
 CALIBRATION_ORDER = tuple(DIRECTIONS[i + offset] for i in range(4) for offset in (0, 4))
@@ -93,6 +94,7 @@ class Director:
     stuck: int = 0                                             # stalls in a row at one spot while travelling
     stuck_at: list | None = None
     dead_ends: int = 0                                         # dead ends since Locke last got nearer
+    wide_looks: set = field(default_factory=set)               # (level, stop) a wide walk grid was fetched for
     best_gap: float = math.inf                                 # the nearest he has been to the next stop
 
     def __post_init__(self) -> None:
@@ -308,7 +310,15 @@ class Director:
             return False
         grid = WalkGrid(full['walkgrid'])
         self.maps.merge(level, grid)
-        path = self.maps.plan(level, pos, stop_pos, player.get('radius') or DEFAULT_RADIUS)
+        radius = player.get('radius') or DEFAULT_RADIUS
+        path = self.maps.plan(level, pos, stop_pos, radius)
+        if path and distance(path[-1], stop_pos) > USE_REACH and (level, tuple(stop_pos)) not in self.wide_looks:
+            # the way isn't in the map yet: look wider once (the host holds the whole level)
+            self.wide_looks.add((level, tuple(stop_pos)))
+            wide = self.host.observe(objects=0, walkgrid=WIDE_WALKGRID_RADIUS)
+            if wide.get('walkgrid'):
+                self.maps.merge(level, WalkGrid(wide['walkgrid']))
+                path = self.maps.plan(level, pos, stop_pos, radius)
         if len(path) < 2 or distance(path[-1], pos) < 32:
             # nowhere new to go on the map seen so far: mark it, and let exploring take a turn
             self.maps.dead_end(level, pos)
