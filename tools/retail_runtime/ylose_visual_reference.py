@@ -23,9 +23,9 @@ class YLoseWorld(MissileProbe):
 
 class YLoseScene(FireBallScene):
  owner_pulse,anim_factory,anim_vtable,anim_init,anim_pulse,anim_render,builder=(0x4de800,0x40dc00,0x5a370c,0x40dd60,0x40e2e0,0x40e8d0,0x5e8508)
- def __init__(self,exe,data):
+ def __init__(self,exe,data,width=1024,height=768,center=(512,640)):
   self.put_string=lambda s:self.bytes(s.encode('latin1')+b'\0');self.data=data;self.asset=read_fireball(data);
-  self.rng_draws=0;self.software=LitSoftwareFixture(exe,1024,768,camera=(0,0,0));self.vm=self.software.vm;v=self.vm;self.software.lighting((38,38,38),(1,1,1));v.put_u32(0x675fc0,512);v.put_u32(0x675fc4,640)
+  self.rng_draws=0;self.software=LitSoftwareFixture(exe,width,height,camera=(0,0,0));self.vm=self.software.vm;v=self.vm;self.software.lighting((38,38,38),(1,1,1));v.put_u32(0x675fc0,center[0]);v.put_u32(0x675fc4,center[1])
   self.missile=YLoseWorld(exe,vm=v);self.missile.configure([0,0,78],[0,-500,78],target_hp=0,animator_present=True);self.owner=self.missile.obj;self.imagery=v.allocate(0x200)
   # Generic EFFECT owner vtable, not the missile subclass used to allocate world services.
   v.write(self.missile.vtable,bytes(v.uc.mem_read(0x5a85ac,0x184)))
@@ -113,22 +113,22 @@ class YLoseScene(FireBallScene):
   return self.vm.surface_bytes('screen')
 
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--output',type=Path,required=True);p.add_argument('--frames',type=int,default=30);p.add_argument('--render-stride',type=int,default=1);p.add_argument('--state-only',action='store_true');args=p.parse_args();args.output.mkdir(parents=True,exist_ok=True)
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--output',type=Path,required=True);p.add_argument('--frames',type=int,default=30);p.add_argument('--render-stride',type=int,default=1);p.add_argument('--width',type=int,default=1024);p.add_argument('--height',type=int,default=768);p.add_argument('--center',type=int,nargs=2,default=(512,640));p.add_argument('--state-only',action='store_true');args=p.parse_args();args.output.mkdir(parents=True,exist_ok=True)
  assert sha(args.executable.read_bytes())=='28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5'
  with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read('Imagery/Magic/ylose.I3D')
  assert sha(data)=='ffcba84f57a77bbcf56d0863253584195b7a95393a9aa682a156bf90ef67af87'
- f=YLoseScene(args.executable,data);initial=f.state();records=[]
+ f=YLoseScene(args.executable,data,args.width,args.height,args.center);initial=f.state();records=[]
  selected=(0,1,2,3,4,5,6,7,8,9,10,11,12,13,19,29)
  for tick in range(args.frames):
   f.step();before=f.state();draw=args.render_stride>0 and (tick+1)%args.render_stride==0
   f.raster_enabled=not args.state_only and tick in selected and args.render_stride==1
   if draw:f.animate();pixels=f.render()
   else:f.draws=[];f.software.clear();pixels=f.vm.surface_bytes('screen')
-  if f.raster_enabled:save_rgb565_png(args.output/f'native-{tick:03}.png',pixels,1024,768)
+  if f.raster_enabled:save_rgb565_png(args.output/f'native-{tick:03}.png',pixels,args.width,args.height)
   records.append(dict(tick=tick,before=before,after=f.state(),rendered=draw,draws=f.draws if tick in selected else []));print(tick,before['state'],before['frame'],before['position'],len(f.draws),flush=True)
  report=dict(dispatch=f.dispatch,effect='YLose',type_id='0xaeaeeb31',initial=initial,records=records,render_stride=args.render_stride,
   executable_sha256=sha(args.executable.read_bytes()),asset_sha256=sha(data),source_sha256=sha(Path(__file__).read_bytes()),
-  policy=dict(null_spell=True,source=[0,0,0],facing=0,ground_height=1,camera=[0,0,0],viewport=[1024,768],screen_center=[512,640],ambient=[38,38,38],directional=[1,1,1],seed=1,
+  policy=dict(null_spell=True,source=[0,0,0],facing=0,ground_height=1,camera=[0,0,0],viewport=[args.width,args.height],screen_center=list(args.center),ambient=[38,38,38],directional=[1,1,1],seed=1,
    executed=['401d40','4021a0','4022b0','470cc0','4de800','40df90','40e2e0','40e460','40e8d0','40a8f0','56eb30'],
    boundaries=['decoded literal I3D resource/COM surfaces','silent audio','flat walk-height 1 for particle queries','map redraw/lock notifications','base script callback'],
    limits=['No natural spell targeting/damage/audio acceptance','Only original live-owner leaf, not natural scene/device caller']))

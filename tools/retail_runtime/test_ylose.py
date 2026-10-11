@@ -12,6 +12,12 @@ class YLoseTests(unittest.TestCase):
    r=json.loads((out/'manifest.json').read_text());self.assertEqual(r['status'],'pass',r)
    self.assertEqual(r['key_fields'],2142);self.assertEqual(r['matrix_fields'],3808)
    self.assertIn('profile_mutations=591',r['controls']);self.assertIn('default_unchanged=238',r['controls']);self.assertIn('inclusive_changed=220',r['controls'])
+ def test_faded_mesh_uses_actual_integer_quad_policy(self):
+  self.invoke('ylose_quad_policy_probe.py')
+ def test_actual_fvf_color_conversion(self):
+  with tempfile.TemporaryDirectory(prefix='ylose-carrier-')as tmp:
+   out=Path(tmp);self.invoke('ylose_color_carrier_probe.py',ROOT/'recon/retail_asm/baseline/Revenant.rebuilt.exe','--output',out)
+   r=json.loads((out/'proof.json').read_text());self.assertEqual(r['status'],'pass');self.assertEqual(r['fields'],15522)
  def test_original_render_cache_across_skipped_renders(self):
   with tempfile.TemporaryDirectory(prefix='ylose-fade-')as tmp:
    out=Path(tmp);self.invoke('ylose_fade_probe.py',ROOT/'recon/retail_asm/baseline/Revenant.rebuilt.exe','--output',out)

@@ -106,7 +106,7 @@ void SubmitWorld(State* c,EFxDebugMode)
             for(size_t face=0;face<part.triangles.size();++face){
                 const auto& triangle=part.triangles[face];
                 if(StartupVfxNativeDomain && Renderer->UsesRetailSoftwareMeshLighting() && !RetailCometTriangleAllowed(triangle.data(),world))continue;
-                SQuadDrawItem item{};item.corner_count=3;item.key.texture=part.texture;item.key.blend=uint8_t(EFxBlend::Additive);item.key.depth_mode=uint8_t(EFxDepthMode::None);
+                SQuadDrawItem item{};item.corner_count=3;item.key.texture=part.texture;item.key.blend=uint8_t(EFxBlend::AdditiveStraight);item.key.depth_mode=uint8_t(EFxDepthMode::None);
                 item.retail_texture=1;item.retail_rgb565_additive=true;item.retail_software_projection=StartupVfxNativeDomain;
                 for(int corner=0;corner<3;++corner){hmm_vec3 point;MtxTransform(&world,&triangle[corner],&point);
                     item.world_pos[corner][0]=point.X;item.world_pos[corner][1]=point.Y;item.world_pos[corner][2]=point.Z;
