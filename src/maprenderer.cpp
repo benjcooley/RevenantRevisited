@@ -1862,6 +1862,7 @@ void TMapRenderer::SetPointLightMultipliers(float intensity_mul, float range_mul
 
 void TMapRenderer::SetLightingMode(int32_t mode) { if (impl) impl->lighting_mode = mode; }
 void TMapRenderer::SetDaylightCycle(bool has_cycle) { if (impl) impl->daylight_cycle = has_cycle; }
+void TMapRenderer::SetGroundTilesVisible(bool visible) { if (impl) impl->sectorShowGroundTiles = visible; }
 
 TMapRenderer::SDrawCounts TMapRenderer::GetLastDrawCounts() const
 {
@@ -3504,6 +3505,10 @@ void TMapRenderer::RenderFrame()
         if (idx < 0 || idx >= int32_t(s.sectorDrawInst.size()))
             continue;
         ++stats.draw_candidates;
+        if (!s.sectorShowGroundTiles) {
+            if (TObjectInstance* owner = s.sectorDrawInst[idx].src.Get())
+                if (owner->ObjClass() == OBJCLASS_TILE) continue;
+        }
         // A late replacement can inherit several cached submesh records.
         // Submit its whole visual once per gather, including any old billboard
         // record; ordinary meshes and particle-component owners keep their path.

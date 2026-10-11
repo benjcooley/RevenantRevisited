@@ -38,6 +38,7 @@ char StartupVfxReviewEffects[2048] = "";
 char StartupVfxReviewSpacingOverrides[2048] = "";
 float StartupVfxReviewPathTilt = .25f;
 float StartupVfxReviewPathLength = 200.0f;
+bool StartupVfxReviewFirst = false;
 int32_t StartupPartSysQuality = 0;
 int32_t StartupPartSysIncomingBlend = 0;
 char  StartupCinematicPath[MAXPATHLEN] = "";

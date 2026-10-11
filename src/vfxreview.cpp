@@ -1,6 +1,7 @@
 // A disposable real-map conveyor for the shipped EFFECT catalogue.
 #include "vfxreview.h"
 #include "vfxreviewschedule.h"
+#include "vfxreviewlayout.h"
 #include "vfxreviewspawn.h"
 #include "gamemap.h"
 #include "mapmanager.h"
@@ -40,6 +41,7 @@ struct Entry {
     S3DPoint station{};
     int map_index = -1;
     double clearance = 420;
+    double review_footprint = 0;
     unsigned cycles = 0;
     int sound_tags = 0;
     double next_spawn = 0;
@@ -120,16 +122,40 @@ bool SelectCatalogue() {
 }
 
 bool LayoutStations() {
+    VfxReviewLayout layout;
+    layout.ratio=schedule.ratio; layout.requested_minimum=schedule.spacing;
+    const double scale=(std::max)(Display.Width()/640.0,Display.Height()/480.0);
+    layout.width=Display.Width()/scale; layout.height=Display.Height()/scale;
+    const auto direction=schedule.StepDirection();
     for(auto& e:entries) {
         e.clearance=schedule.spacing;
+        // Header bounds cover authored poses; broad emitter hints below cover
+        // known trajectories extending beyond those bounds. Layout only.
+        const auto* info=EffectClass.GetObjType(e.type);
+        const auto* image=info?TObjectImagery::GetImageryEntry(info->imageryid):nullptr;
+        if(image && image->header) {
+            for(int i=0;i<image->header->numstates;++i) {
+                const auto& state=image->header->states[i];
+                const double projected=(std::max)(0,int(state.width))*direction.x+
+                    (std::max)(0,int(state.height))*std::abs(direction.y);
+                e.review_footprint=(std::max)(e.review_footprint,projected);
+            }
+        }
         switch(e.id) {
             case 0xab92cd01u: case 0xf32bcfacu: case 0xad92bc19u:
             case 0xad92fc13u: case 0xaeaeeb26u: case 0xae5eeb26u:
-                e.clearance=(std::max)(e.clearance,1000.0); break;
+                e.review_footprint=(std::max)(e.review_footprint,1000.0); break;
             case 0x37780ae2u: case 0x63fd382au: case 0x10da54d0u:
             case 0x98974eabu: case 0x98974ea7u: case 0x452dade0u:
             case 0xad92bc15u: case 0xad92bc17u: case 0xad99bd33u:
-                e.clearance=(std::max)(e.clearance,720.0); break;
+                e.review_footprint=(std::max)(e.review_footprint,720.0); break;
+        }
+        const auto support=DescribeVfxReviewSpawn(e.id);
+        if(support.projectile || support.supports_endpoints) {
+            const double path_projection=StartupVfxReviewPathLength*
+                std::abs(direction.x*StartupVfxReviewPathTilt-direction.y)/
+                std::hypot(StartupVfxReviewPathTilt,1.0);
+            e.review_footprint=(std::max)(e.review_footprint,path_projection);
         }
     }
     const std::string overrides=StartupVfxReviewSpacingOverrides;
@@ -148,10 +174,19 @@ bool LayoutStations() {
         if(end==std::string::npos) break;
         begin=end+1; if(begin==overrides.size()) return false;
     }
+    for(auto& e:entries) {
+        e.clearance=layout.Clearance(e.review_footprint,e.clearance);
+        log_info("[vfx-review] layout name=%s type=%08x footprint=%.1f clearance=%.1f minimum=%.1f view_span=%.1f",
+            e.name.c_str(),e.id,e.review_footprint,e.clearance,layout.MinimumClearance(),layout.ViewSpan());
+    }
     schedule.station_distances.assign(entries.size(),0);
     for(size_t i=1;i<entries.size();++i)
-        schedule.station_distances[i]=schedule.station_distances[i-1]+(std::max)(entries[i-1].clearance,entries[i].clearance);
-    schedule.gap=(std::max)(schedule.gap,(std::max)(entries.front().clearance,entries.back().clearance));
+        schedule.station_distances[i]=schedule.station_distances[i-1]+layout.Separation(
+            entries[i-1].review_footprint,entries[i-1].clearance,entries[i].review_footprint,entries[i].clearance);
+    // End padding needs to clear the visible footprint, not the whole empty
+    // slot; large isolation gaps should not become a long blank lead-in.
+    schedule.gap=(std::max)(schedule.gap,layout.ViewSpan()*.5+
+        (std::max)(entries.front().review_footprint,entries.back().review_footprint)*.5+96.0);
     return schedule.IsValid();
 }
 
@@ -227,7 +262,7 @@ void TextBox(const SFontAtlas* font,const std::vector<std::string>& lines,float 
     for(const auto& line:lines) text_width=(std::max)(text_width,TextWidth(font,line.c_str()));
     const int left=int(x-(centered?text_width*.5f:0));
     const int line_height=int(std::ceil(TextLineHeight(font)))+1;
-    Renderer->DrawSolidRectToTarget(left-6,int(y)-4,int(text_width)+12,int(lines.size())*line_height+8,width,height,8,12,16,220);
+    Renderer->DrawSolidRectToTarget(left-6,int(y)-4,int(text_width)+12,int(lines.size())*line_height+8,width,height,0,0,0,220);
     for(size_t i=0;i<lines.size();++i)
         DrawTextToTarget(font,lines[i].c_str(),left,int(y)+int(i)*line_height,int(text_width)+1,line_height,
             ETextAlign::Left,warning?1.0f:.92f,warning?.73f:.95f,warning?.43f:.97f,width,height);
@@ -283,12 +318,14 @@ bool Initialize() {
     if (!BuildFloor()) { Close(); return false; }
     renderer.Initialize(); renderer.SetMap(map,false,origin.x>>SECTORWSHIFT,origin.y>>SECTORHSHIFT);
     renderer.SetDaylightCycle(false); renderer.SetSunShadowEnabled(false);
+    renderer.SetGroundTilesVisible(false);
     renderer.SetLightingMode(StartupVfxLightingMode>=0?StartupVfxLightingMode:0);
     MapPane.SetAmbientLight(StartupSceneAmbientSet?StartupSceneAmbient[0]:32);
     SColor color{255,255,255};
     if (StartupSceneAmbientSet) color={uint8_t(StartupSceneAmbient[1]),uint8_t(StartupSceneAmbient[2]),uint8_t(StartupSceneAmbient[3])};
     MapPane.SetAmbientColor(color);
-    elapsed=StartupVfxReviewOffset/schedule.speed; ticks=0; pulsed_tick=-1; loop=schedule.LoopCount(elapsed); paused=false;
+    elapsed=(StartupVfxReviewFirst?schedule.gap:StartupVfxReviewOffset)/schedule.speed;
+    ticks=0; pulsed_tick=-1; loop=schedule.LoopCount(elapsed); paused=false;
     log_info("[vfx-review] ready types=%zu spacing=%.1f speed=%.1f ratio=%.2f gap=%.1f loop_seconds=%.3f transient=1",entries.size(),schedule.spacing,schedule.speed,schedule.ratio,schedule.gap,schedule.Duration());
     return true;
 }

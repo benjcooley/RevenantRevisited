@@ -1708,6 +1708,7 @@ void GetParameters(int argc, char **argv)
 
   // Scrolling real-map VFX review configuration.
     {
+        if(arg_flag(cmd,"vfx-review-first")) StartupVfxReviewFirst=true;
         struct ReviewArg { const char* name; float* value; float minimum; float maximum; };
         const ReviewArg args[] = {
             {"vfx-review-speed", &StartupVfxReviewSpeed, 0.1f, 240.0f},
