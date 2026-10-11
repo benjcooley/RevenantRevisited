@@ -14,17 +14,19 @@ bool NeedsEndpoints(uint32_t id)
     switch (id) {
         case 0x63fd382au: case 0x63fd3827u: case 0x113803f4u:
         case 0xb1c4c90fu: case 0x10da54d0u: case 0xad92bd1eu:
-        case 0xad92bd1fu: case 0xd000f005u: return true;
+        case 0xad92bd1fu: case 0xd000f005u: case 0xba09feadu: return true;
         default: return false;
     }
 }
 
-bool IsSelfMovingTrap(uint32_t id,const VfxTest::SEffect& effect)
+bool IsDeclaredSelfMoving(uint32_t id,const VfxTest::SEffect& effect)
 {
-    // This exact source-backed route executes RunFireHeadN movement and its
-    // target-plane collision internally. Other headfireball aliases still
-    // require endpoints; this does not certify arbitrary trap directions.
-    return id==0xd000f005u && effect.id=="HeadFireBall_ORIGINAL" &&
+    // These exact audited routes implement their declared movement/collision
+    // internally: Head's trap plane and Dragon's Fighting target/ground0.
+    // Other aliases still require endpoints; arbitrary directions are not certified.
+    const bool exact=(id==0xd000f005u && effect.id=="HeadFireBall_ORIGINAL") ||
+        (id==0xba09feadu && effect.id=="Dragonattack_ORIGINAL");
+    return exact &&
         effect.preview_style==VfxTest::EVfxPreviewStyle::Static &&
         bool(effect.is_alive) && bool(effect.submit_world);
 }
@@ -40,7 +42,7 @@ const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nu
             return e.id == mapping.preview_id;
         });
         if (it == catalogue.end() || !it->factory || !it->destroy) continue;
-        if (NeedsEndpoints(id) && !it->factory_endpoints && !IsSelfMovingTrap(id,*it)) continue;
+        if (NeedsEndpoints(id) && !it->factory_endpoints && !IsDeclaredSelfMoving(id,*it)) continue;
         if (!it->submit) {
             if (it->submit_attached && unavailable)
                 *unavailable={false,it->id.c_str(),"Preview attachment API unavailable; label only",false,true};
@@ -115,7 +117,7 @@ std::optional<bool> VfxReviewPreview::Alive() const
 std::unique_ptr<VfxReviewPreview> CreateVfxReviewPreview(uint32_t type_id, const S3DPoint& origin)
 {
     const auto* effect = Find(type_id);
-    if (!effect || (NeedsEndpoints(type_id) && !IsSelfMovingTrap(type_id,*effect))) return {};
+    if (!effect || (NeedsEndpoints(type_id) && !IsDeclaredSelfMoving(type_id,*effect))) return {};
     void* context = effect->factory(origin);
     if (!context) return {};
     return std::make_unique<VfxReviewPreview>(*effect,context,origin);

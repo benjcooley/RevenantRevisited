@@ -87,6 +87,7 @@ PARTIAL = {
 SOURCE_MAPPINGS = {
     '0xad92bc16': 'Invisible_AUTHORED',
     '0xd000f005': 'HeadFireBall_ORIGINAL',
+    '0xba09fead': 'Dragonattack_ORIGINAL',
     '0xaeaeeb32': 'JhagaAttack_ORIGINAL',
     '0x224a5adf': 'BarrierEW_ORIGINAL',
     '0x224b5adc': 'BarrierNS_ORIGINAL',
@@ -164,6 +165,8 @@ def admitted_candidates(row):
 
 
 def candidate_metadata(row, name):
+    if row.get('retail_type_id','').lower()=='0xba09fead' and name=='Dragonattack_ORIGINAL':
+        return False, 'Declared Fighting caller: target offset(280,0), ground0, face96 muzzle(14,14,+100); arbitrary endpoints and natural dragon actors not certified'
     if row.get('retail_type_id','').lower()=='0xad92bc14' and name=='TParalize1_CONFIGURED_TARGET':
         return False, 'Configured genuine Acolyte target: offset(96,0,0), radius16; original variant1 lifecycle; arbitrary targets and bones not certified'
     partial = PARTIAL.get(row.get('retail_type_id', '').lower())

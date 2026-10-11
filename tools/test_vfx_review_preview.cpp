@@ -11,7 +11,7 @@
 #include <cstring>
 
 namespace {
-int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0;
+int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0, dragon_negative=0;
 void* Spawn(const S3DPoint& p) {
     assert(p.x==17 && p.y==33 && p.z==21); ++creates; return new int(0);
 }
@@ -45,10 +45,17 @@ std::vector<SEffect> ReviewCatalogue() {
     auto head=Row("HeadFireBall_ORIGINAL",EVfxPreviewStyle::Static);
     head.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
     head.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
+    auto dragon=Row("Dragonattack_ORIGINAL",EVfxPreviewStyle::Static);
+    dragon.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
+    dragon.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
+    if(dragon_negative==1)dragon.is_alive={};
+    if(dragon_negative==2)dragon.submit_world={};
+    if(dragon_negative==3)dragon.preview_style=EVfxPreviewStyle::Projectile;
+    if(dragon_negative==4)dragon.id="TFireSwarmEffect_BESPOKE__dragonattack";
     auto paralize=Row("TParalize1_CONFIGURED_TARGET",EVfxPreviewStyle::Static);
     paralize.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
     paralize.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
-    return {paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    return {dragon,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -67,8 +74,17 @@ float ReviewRestartInterval(EVfxPreviewStyle style) {
     return style==EVfxPreviewStyle::Combat?.5f:style==EVfxPreviewStyle::Projectile?.001f:0;
 }
 }
-int main() {
+int main(int argc,char** argv) {
     const S3DPoint origin{17,33,21};
+    if(argc>1){
+        assert(argc==2 && std::strlen(argv[1])==1 && argv[1][0]>='1' && argv[1][0]<='4');
+        dragon_negative=argv[1][0]-'0';
+        assert(!DescribeVfxReviewPreview(0xba09feadu).supported);
+        assert(!CreateVfxReviewPreview(0xba09feadu,origin));
+        assert(!CreateVfxReviewPreview(0xba09feadu,origin,{80,-120,128}));
+        assert(creates==0 && destroys==0);
+        std::cout<<"Dragon invalid route rejected\n";return 0;
+    }
     assert(!DescribeVfxReviewPreview(0xffffffff).supported);
     assert(DescribeVfxReviewPreview(0x63fd382a).requires_endpoints);
     assert(!CreateVfxReviewPreview(0x63fd382a,origin));
@@ -149,6 +165,19 @@ int main() {
         head->Submit();head->Submit();
         assert(head->Alive()==false && creates==initial);
         head->Submit();assert(head->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0xba09feadu);
+        assert(info.supported && !info.partial && !info.requires_endpoints && info.lifetime_known);
+        assert(std::strstr(info.description,"target offset(280,0), ground0"));
+        assert(!CreateVfxReviewPreview(0xba09feadu,origin,{80,-120,128}));
+        auto dragon=CreateVfxReviewPreview(0xba09feadu,origin);
+        assert(dragon && dragon->Id()=="Dragonattack_ORIGINAL" && dragon->RestartInterval()==0);
+        const int initial=creates;
+        dragon->Submit();dragon->Submit();assert(dragon->Alive()==false && creates==initial);
+        dragon->Submit();assert(dragon->Alive()==true && creates==initial+1);
+        dragon->SubmitWorld();
     }
     assert(creates==destroys);
     {

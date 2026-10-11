@@ -50,6 +50,15 @@ TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertNotIn('TParalize1_NAMED_NO_TARGET', admitted_candidates({
             'retail_type_id': '0xad92bc15', 'preview_candidates': []}))
 
+    def test_dragonattack_uses_exact_declared_caller(self):
+        row={'retail_type_id':'0xba09fead','preview_candidates':['TFireSwarmEffect_BESPOKE__dragonattack']}
+        self.assertEqual(admitted_candidates(row),['Dragonattack_ORIGINAL'])
+        partial,description=candidate_metadata(row,'Dragonattack_ORIGINAL')
+        self.assertFalse(partial)
+        self.assertIn('target offset(280,0), ground0',description)
+        self.assertIn('arbitrary endpoints',description)
+        self.assertNotIn('Dragonattack_ORIGINAL',admitted_candidates({'retail_type_id':'0xad92bc1a','preview_candidates':[]}))
+
     def test_headfireball_uses_exact_self_moving_trap(self):
         row={'retail_type_id':'0xd000f005','preview_candidates':[]}
         self.assertEqual(admitted_candidates(row),['HeadFireBall_ORIGINAL'])

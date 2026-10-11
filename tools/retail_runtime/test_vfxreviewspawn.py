@@ -45,11 +45,11 @@ MAIN=r'''
 int main(){
  assert(!DescribeVfxReviewSpawn(1).safe_factory);TObjectClass c;TObjectClass::catalog=&c;
  TObjectBuilder generic{"EFFECT"},fire{"FireBall"},unknown{"Unknown"},wave{"Wave"};
- c.entries={{1,&generic},{0x63fd382a,&fire},{0x63fd3827,&generic},{0x113803f4,&generic},{0xb1c4c90f,&generic},{0xad92bd1f,&generic},{2,&unknown},{3,nullptr},{4,&generic,-1},{0x10ac03de,&generic},{5,&wave},{0xad92bc37,&generic},{0xadbcef19,&generic}};
+ c.entries={{1,&generic},{0x63fd382a,&fire},{0x63fd3827,&generic},{0x113803f4,&generic},{0xb1c4c90f,&generic},{0xad92bd1f,&generic},{0xba09fead,&generic},{2,&unknown},{3,nullptr},{4,&generic,-1},{0x10ac03de,&generic},{5,&wave},{0xad92bc37,&generic},{0xadbcef19,&generic}};
  assert(!DescribeVfxReviewSpawn(42).safe_factory);assert(DescribeVfxReviewSpawn(1).safe_factory);
  assert(DescribeVfxReviewSpawn(5).safe_factory&&!DescribeVfxReviewSpawn(5).uses_effect_runtime);
  assert(!DescribeVfxReviewSpawn(2).safe_factory);assert(!DescribeVfxReviewSpawn(3).safe_factory);assert(!DescribeVfxReviewSpawn(4).safe_factory);
- for(uint32_t id:{0x63fd3827u,0x113803f4u,0xb1c4c90fu,0xad92bd1fu}){auto d=DescribeVfxReviewSpawn(id);assert(d.projectile&&!d.safe_factory&&!d.supports_endpoints);}
+ for(uint32_t id:{0x63fd3827u,0x113803f4u,0xb1c4c90fu,0xad92bd1fu,0xba09feadu}){auto d=DescribeVfxReviewSpawn(id);assert(d.projectile&&!d.safe_factory&&!d.supports_endpoints);}
  c.present=false;assert(!DescribeVfxReviewSpawn(1).safe_factory);c.present=true;
  TObjectInstance owner;owner.id=1;owner.position={100,200,16};S3DPoint source{80,180,60},destination{180,280,60};
  auto d=ConfigureVfxReviewSpawn(owner,source,destination);assert(d.safe_factory&&!d.renderer_supported&&!d.uses_effect_runtime);assert(owner.position.x==100);

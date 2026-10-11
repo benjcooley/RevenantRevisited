@@ -158,3 +158,16 @@ by this lane; the root reviewer owns that decision.
 Final review pair-manifest SHA256: `0b62f4520668b6cc9442b938cc1ccd5c2ead9ec9f3e350cf6f18e29dfb05f600`.
 
 Captured binary SHA256: `a0134abe73ca2c0a4d6636eeabc6af422e1dc58f12f5536dd43c12fec6431d23`.
+
+
+The root review notes a visible residual: the Metal head glow is somewhat
+broader/brighter at records13,25,29. Overlap/framebuffer quantization remains
+an open explanation, not a demonstrated correction or exact-pixel claim.
+The raw paired inputs and original frozen pair hash are retained.
+
+Gallery admission now selects only exact0xba09fead/Dragonattack_ORIGINAL,
+Static style, a real IsAlive callback and world submission. Its declared
+Fighting/ground0 movement executes internally. Arbitrary endpoint creation,
+missing lifetime/world hooks, wrong style and the old FireSwarm alias are
+rejected. The generic map route also treats the ID as a projectile, preventing
+an unconfigured generic factory from bypassing the controlled adapter.
