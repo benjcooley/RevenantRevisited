@@ -73,3 +73,11 @@ Frozen evidence (2026-10-10):
 - `review-final/manifest.json`: SHA256 `4efbe5facad3ce5f75dcd3ae6473c3d40a7fe6fb37435fe3f7e91d57f31af555`.
 - `map-current/manifest.json`: SHA256 `a4ee44ccc331592e43e29f4b9017e476142c88bbc1983c2574eba069bc8f0e6f`.
 - Metal binary: SHA256 `18584c2fb2645004ae7d1468d0126319cd61db5c4776ca345fa1bbc24285cd84`.
+
+Root independently reviewed final contact/detail and approved the scoped
+native-domain crystal reveal/hold,30-cube shatter/tumble,late320 andblank tail.
+The approval retains the explicit living stationary-victim contract and all
+natural-caller/audio/context limits above. `root-approval.json`: SHA256
+`9410ae1ba6ab0c4666b12bb5e2576b99b28e41d349446fbb5ac2a548d30e7121` pins the16 phase triples, binary, live
+RNG/light logs and state/gallery proofs. This grants one scoped appearance
+pass only.
