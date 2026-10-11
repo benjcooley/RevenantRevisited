@@ -14,6 +14,7 @@
 #include <chrono>
 #include <fcntl.h>
 #include <math.h>
+#include <cmath>
 #include <sstream>
 #include <stdarg.h>
 #include <stdio.h>
@@ -1558,6 +1559,10 @@ void GetParameters(int argc, char **argv)
         "loadmap", "lang", "test", "level", "resolution", "res",
         "cinematic", "menu", "exec", "vfx-lighting-mode", "partsys-quality", "partsys-incoming-blend",
         "seed", "combattrace", "combattrace-rng",
+        "vfx-review-speed", "vfx-review-ratio", "vfx-review-spacing",
+        "vfx-review-gap", "vfx-review-offset", "vfx-review-effects",
+        "vfx-review-spacing-overrides",
+        "vfx-review-path-tilt", "vfx-review-path-length",
     });
     cmd.parse(argc, argv);
 
@@ -1699,6 +1704,42 @@ void GetParameters(int argc, char **argv)
         std::string p;
         if (arg_param(cmd, "test", p))
             strncpyz(StartupTestMode, p.c_str(), sizeof(StartupTestMode));
+    }
+
+  // Scrolling real-map VFX review configuration.
+    {
+        struct ReviewArg { const char* name; float* value; float minimum; float maximum; };
+        const ReviewArg args[] = {
+            {"vfx-review-speed", &StartupVfxReviewSpeed, 0.1f, 240.0f},
+            {"vfx-review-ratio", &StartupVfxReviewRatio, 2.0f, 3.0f},
+            {"vfx-review-spacing", &StartupVfxReviewSpacing, 180.0f, 800.0f},
+            {"vfx-review-gap", &StartupVfxReviewGap, 640.0f, 1600.0f},
+            {"vfx-review-offset", &StartupVfxReviewOffset, 0.0f, 1000000.0f},
+            {"vfx-review-path-tilt", &StartupVfxReviewPathTilt, -1.0f, 1.0f},
+            {"vfx-review-path-length", &StartupVfxReviewPathLength, 80.0f, 640.0f},
+        };
+        for (const auto& arg : args) {
+            std::string p;
+            if (arg_param(cmd, arg.name, p)) {
+                char* end = nullptr; const double value = strtod(p.c_str(), &end);
+                if (p.empty() || *end || !std::isfinite(value) || value < arg.minimum || value > arg.maximum)
+                    FatalError("Invalid VFX review numeric argument", nullptr);
+                *arg.value = float(value);
+            } else if (arg_flag(cmd, arg.name)) {
+                FatalError("Missing VFX review argument value", nullptr);
+            }
+        }
+        std::string p;
+        if (arg_param(cmd, "vfx-review-effects", p)) {
+            if (p.empty() || p.size() >= sizeof(StartupVfxReviewEffects))
+                FatalError("Invalid --vfx-review-effects list", nullptr);
+            strncpyz(StartupVfxReviewEffects, p.c_str(), sizeof(StartupVfxReviewEffects));
+        }
+        if (arg_param(cmd, "vfx-review-spacing-overrides", p)) {
+            if(p.empty() || p.size()>=sizeof(StartupVfxReviewSpacingOverrides))
+                FatalError("Invalid --vfx-review-spacing-overrides",nullptr);
+            strncpyz(StartupVfxReviewSpacingOverrides,p.c_str(),sizeof(StartupVfxReviewSpacingOverrides));
+        }
     }
 
   // VFX=<effect_id> — pre-select an effect in --test=vfx (e.g.

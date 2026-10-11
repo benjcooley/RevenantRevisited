@@ -11,6 +11,8 @@
 #include "parse.h"
 #include "revutils.h"
 #include "sectorstore.h"
+#include "gamemap.h"
+#include "mapmanager.h"
 #include "stream.h"
 #include "textbar.h"
 
@@ -405,7 +407,9 @@ void TSector::GetMaxScreenRect(RSRect r)
 
 void TSector::GetMaxMapRect(RSRect r)
 {
-    if ((uint32_t)sectorx >= MAXSECTORX || (uint32_t)sectory >= MAXSECTORY)
+    const TGameMap* map = MapManager.GetCached(level);
+    if ((!map || !map->IsTransient()) &&
+        ((uint32_t)sectorx >= MAXSECTORX || (uint32_t)sectory >= MAXSECTORY))
         r.left = r.top = r.right = r.bottom = 0;
     else
     {
@@ -860,4 +864,3 @@ bool TSector::InPreloadArea(const S3DPoint& p, int32_t level)
 #ifdef _MAPPANE_H
 #error If you need to access TMapPane from this file, you're doing something wrong... BEN
 #endif
-

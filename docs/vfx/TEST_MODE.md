@@ -1,5 +1,8 @@
 # `--test=vfx` Specification
 
+For the scrolling, labeled catalogue on a disposable real map, use
+[`--test=vfx-review`](REVIEW_MODE.md).
+
 The VFX restoration test harness. Boots a minimal scene that displays exactly
 one effect at a time, with keyboard navigation through the full catalogue.
 
