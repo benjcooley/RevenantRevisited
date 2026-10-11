@@ -892,9 +892,17 @@ Corrections to §3.4:
   TCharAnimator::Animate `0x4d7a00` counts them down (`0x4da6f0`: rise
   += 400 a tick, in 1/256 px); the map pass (`0x4141f2`) draws them
   (`0x4da750`) at (x − 32, y − rise/256) less the scroll, alpha 255 until
-  the last 24 ticks, then ticks·255/24. **Not ported**: the port has no
-  post-character overlay yet (TPlayScreen::AddPostCharText is empty);
-  Damage marks the spot.
+  the last 24 ticks, then ticks·255/24. The bitmap's text is the "Med"
+  font (`0x0065caec`, set by the font table's init `0x00485de3`), drawn
+  by `0x004be2b0` with flags `0x402`: centred, the 3-pass black shadow.
+  `0x00669324` (64-high bitmaps) is a display mode, not the Classic one.
+  **Ported (2026-10-11)**: TCharAnimator's rising numbers (ShowNumber,
+  the count in its per-tick Pulse, as Animate `0x004d7a00` ran it even
+  paralysed or iced), drawn by the play screen's TRisingNumberLayer over
+  the world and under the HUD (src/risingnumbers.cpp), each composed once
+  into its 64 × 32 image; between ticks the rise and the fade ease toward
+  the next tick's. The A/B fixtures record the call (`animator.ShowNumber`,
+  retail's at `0x004da3b0`).
 
 Divergences (none noticeable): the slot after a full impact list (six)
 is an empty impact (retail reads past the list); the given block's attack
