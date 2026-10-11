@@ -9,6 +9,7 @@
 #include "revenant.h"
 #include "textbar.h"
 #include "complexobj.h"
+#include "playscreen.h"
 
 //#define SHOWSTATES
 
@@ -283,6 +284,7 @@ void TComplexObject::SetDoing(PTActionBlock ab)
         if (doing && doing != root && doing != desired && doing != ab)
             delete doing;
         doing = ab;
+        doingsince = PlayScreen.GameFrame();
     }
     root->interrupt = false;    // Now that we're doing, don't interrupt
 }

@@ -1711,6 +1711,19 @@ bool TMapRenderer::ScreenToMapScreen(int32_t screen_x, int32_t screen_y,
     return true;
 }
 
+bool TMapRenderer::MapScreenToScreen(int32_t map_x, int32_t map_y,
+                                     int32_t& screen_x, int32_t& screen_y) const
+{
+    if (!impl || !Display.IsActive()) return false;
+    const Impl& s = *impl;
+    const SViewUnwrap v = ComputeViewUnwrap(s);
+    int32_t cam_sx = 0, cam_sy = 0;
+    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x, s.sectorCameraWorld.y, 0), cam_sx, cam_sy);
+    screen_x = v.cam_ox + int32_t(std::lround(float(map_x - cam_sx) * v.zoom));
+    screen_y = v.cam_oy + int32_t(std::lround(float(map_y - cam_sy) * v.zoom));
+    return screen_x >= 0 && screen_y >= 0 && screen_x < v.vw && screen_y < v.vh;
+}
+
 void TMapRenderer::GetViewportSize(int32_t& w, int32_t& h) const
 {
     w = impl ? EffectiveViewportW(*impl) : WIDTH;

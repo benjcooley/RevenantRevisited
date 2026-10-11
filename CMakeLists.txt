@@ -155,6 +155,17 @@ endif()
 add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
 target_link_libraries(Revenant PRIVATE imgui revsmk)
 
+# buildinfo.h: the commit the binary is built from (the playtest recordings
+# name it). Regenerated every build, rewritten only when it changes.
+set(BUILDINFO_DIR "${CMAKE_BINARY_DIR}/generated")
+add_custom_target(buildinfo
+  COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+          -DOUTPUT=${BUILDINFO_DIR}/buildinfo.h -P ${CMAKE_SOURCE_DIR}/cmake/BuildInfo.cmake
+  BYPRODUCTS ${BUILDINFO_DIR}/buildinfo.h
+  COMMENT "Recording the build's git commit")
+add_dependencies(Revenant buildinfo)
+target_include_directories(Revenant PRIVATE ${BUILDINFO_DIR})
+
 # Propagate the SOKOL_<BACKEND> macro to every TU that pulls in
 # <sokol_gfx.h> / <sokol_app.h> / sokol_imgui.h.
 target_compile_definitions(Revenant PRIVATE SOKOL_${SOKOL_BACKEND})

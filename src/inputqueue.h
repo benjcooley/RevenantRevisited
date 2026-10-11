@@ -42,8 +42,6 @@ struct SInputEvent
     [[nodiscard]] static SInputEvent Key(int32_t vk, bool down);
     [[nodiscard]] static SInputEvent Char(int32_t code);
     [[nodiscard]] static SInputEvent Pointer(int32_t x, int32_t y, int32_t buttons);
-
-    [[nodiscard]] bool operator==(const SInputEvent& other) const = default;
 };
 
 class TInputQueue

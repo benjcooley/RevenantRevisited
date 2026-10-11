@@ -39,6 +39,7 @@
 #include "graphics.h"
 #include "module.h"
 #include "playscreen.h"
+#include "playtest.h"
 #include "revisited_defaults.h"
 #include "revisited_settings.h"
 #include "testscreen.h"
@@ -2627,6 +2628,8 @@ sapp_desc sokol_main(int argc, char* argv[])
     return desc;
 }
 
+static bool BootGame();
+
 static void AppInit()
 {
     // Equivalent to the top of the retired WinMain: set paths, load INI,
@@ -2641,12 +2644,35 @@ static void AppInit()
     // the executable directory, SavePath is the per-user writable
     // Application Support / XDG_DATA_HOME dir (created if missing).
     rev_resolve_program_paths(RunPath, SavePath, MAXPATHLEN);
+
+    // A playtest session (--control, --record, --replay; playtest.h). Under
+    // --control the game boots when the director sends `start`.
+    if (!Playtest.Initialize(g_argc, g_argv, &BootGame))
+    {
+        sapp_request_quit();
+        return;
+    }
+    if (Playtest.WaitsForStart())
+    {
+        if (HeadlessWindow::ParseArgs(g_argc, g_argv))
+            HeadlessWindow::HideAllWindows();
+        return;
+    }
+    BootGame();
+}
+
+// The rest of the retired WinMain: the INI and the command line, the data,
+// the engine, and the first screen. At launch, or on a playtest `start`.
+static bool BootGame()
+{
+    Playtest.BeforeIni();
     INISetPath(RunPath);
 
     GetINISettings();
     ReadOptions();   // retail's order (0x004865a0): INI, [Options], command line
 
     GetParameters(g_argc, g_argv);
+    Playtest.ApplyStart();
 
     // Headless snap / filmstrip flags. Parsed once after GetParameters so
     // the args[] argh consumed are still around (we read argv ourselves).
@@ -2701,7 +2727,7 @@ static void AppInit()
     if (!InitGlobals())
     {
         sapp_request_quit();
-        return;
+        return false;
     }
 
     // Revisited tunables. Layered defaults, lowest priority first:
@@ -2772,6 +2798,8 @@ static void AppInit()
     TestModes::InputSimArm();   // no-op without --input-script
 
     SystemInitialized = true;
+    Playtest.Started();
+    return true;
 }
 
 // --max-runtime=N: wall-clock hard ceiling that std::_Exit(0)s the process
@@ -2788,6 +2816,25 @@ void SetMaxRuntimeSeconds(double s)
     g_max_runtime_started = false;
 }
 
+// A frame that runs no game: a playtest host waiting between steps keeps
+// its window showing the last frame, under the director's caption.
+static void PresentIdleFrame()
+{
+    if (!SystemInitialized || Closing || HeadlessWindow::IsActive() || !Display.IsActive())
+        return;
+    simgui_frame_desc_t fd = {};
+    fd.width      = sapp_width();
+    fd.height     = sapp_height();
+    fd.delta_time = sapp_frame_duration();
+    fd.dpi_scale  = sapp_dpi_scale();
+    simgui_new_frame(&fd);
+    Playtest.DrawOverlay();
+    const uint64_t draws = RandomDraws();
+    Display.Represent();
+    if (RandomDraws() != draws)
+        log_error("[playtest] presenting the last frame again drew game random numbers");
+}
+
 static void AppFrame()
 {
     // Drive the legacy screen dispatch. The pre-port top-level loop was:
@@ -2799,18 +2846,6 @@ static void AppFrame()
     // when the screen sets `done`, we EndCurrentScreen and advance to
     // GetNextScreen (or quit if there isn't one).
 
-    if (!SystemInitialized || Closing)
-        return;
-
-    // --fixedstep: one game tick per frame on an integer count; otherwise
-    // a frame capture's --snapstep, otherwise the live clock.
-    const auto& snap_config = FrameSnap::GetConfig();
-    if (FixedStep)
-        TTime::BeginFixedFrame();
-    else
-        TTime::BeginFrame(FrameSnap::Active() && snap_config.fixed_step_sec > 0.0
-                         ? snap_config.fixed_step_sec : sapp_frame_duration());
-
     // --max-runtime hard ceiling: if a positive limit was passed, hard-
     // exit when wall-clock elapsed since first frame exceeds it. Belt-
     // and-suspenders with the input-script auto-exit -- catches engine
@@ -2820,7 +2855,7 @@ static void AppFrame()
     // be swallowed by a hung screen TimerLoop -- the whole point of this
     // safety net is that it WORKS even when something is stuck. Mid-
     // capture PNGs may be lost, which is fine: max-runtime hitting means
-    // the run was already broken.
+    // the run was already broken. A recording gets its end line first.
     if (g_max_runtime_sec > 0.0)
     {
         const auto now = std::chrono::steady_clock::now();
@@ -2834,9 +2869,31 @@ static void AppFrame()
         {
             log_info("[max-runtime] hit %.1fs limit -- hard exit",
                      g_max_runtime_sec);
+            Playtest.Shutdown();
             std::_Exit(0);
         }
     }
+
+    // A playtest session decides whether a frame runs: under --control only
+    // while a step has ticks left (docs/playtest/PLAN.md §6.2).
+    if (Playtest.Active() && !Playtest.BeginFrame())
+    {
+        PresentIdleFrame();
+        return;
+    }
+
+    if (!SystemInitialized || Closing)
+        return;
+
+    // --fixedstep (and a lockstep playtest session): one game tick per frame
+    // on an integer count; otherwise a frame capture's --snapstep, otherwise
+    // the live clock (a replay's recorded frame times).
+    const auto& snap_config = FrameSnap::GetConfig();
+    if (FixedStep || (Playtest.Active() && Playtest.Lockstep()))
+        TTime::BeginFixedFrame();
+    else
+        TTime::BeginFrame(Playtest.FrameTime(FrameSnap::Active() && snap_config.fixed_step_sec > 0.0
+                                             ? snap_config.fixed_step_sec : sapp_frame_duration()));
 
     // Start the ImGui frame before Animate/draw so screens can build debug
     // panels from their normal per-frame code. simgui_render() is called
@@ -2877,8 +2934,10 @@ static void AppFrame()
     }
 
     // The frame's input, in order, before the tick (inputqueue.h): what the
-    // hardware sent since the last frame, then scripted input (--input-script).
+    // hardware sent since the last frame, then scripted input (--input-script),
+    // then a playtest session's (its step's events, or its recording's).
     TestModes::InputSimTick(CurrentScreen);
+    Playtest.BeforeDrain();
     InputQueue.Drain(CurrentScreen);
 
     // Tick / Draw split (see docs/FRAME_PIPELINE.md). Tick catches up
@@ -2890,6 +2949,7 @@ static void AppFrame()
     TObjectComponent::RunUpdateList();
     CurrentScreen->DrawFrame();
     DebugUI::DrawFrame();
+    Playtest.DrawOverlay();     // over the window only: frame captures leave it out
 
     // Present the frame: composite backbuffer onto the swapchain and commit
     // the Metal command buffer. Without this, sokol's cmd_buffer is never
@@ -2910,6 +2970,8 @@ static void AppFrame()
     if (FrameSnap::Active())
         FrameSnap::TickAfterRender();
 
+    Playtest.EndFrame();
+
     // A closing screen runs on until its fade-out reaches black.
     if (CurrentScreen->ReadyToEnd() || Closing)
     {
@@ -2929,12 +2991,17 @@ static void AppCleanup()
     // The log lines bracket the teardown so a test run can confirm the
     // process went through it rather than a hard exit.
     log_info("[shutdown] begin");
+    Playtest.Shutdown();        // a recording's end line, while the game is still up
     // REVSYNC: 0x004870ee -- retail saved [Options] once its main loop ended.
     SaveOptions();
     if (SystemInitialized)
         ShutdownGlobals();
     UnmountAll();
     log_info("[shutdown] complete");
+    // A verified replay that diverged exits 1, a session that couldn't
+    // start 2 (playtest.h).
+    if (const int code = Playtest.ExitCode())
+        std::exit(code);
 }
 
 // Translate an sapp_keycode into the Windows virtual-key code the screen and
@@ -3021,6 +3088,15 @@ static void AppEvent(const sapp_event* ev)
     ImGuiIO& io = ImGui::GetIO();
     const bool imgui_kbd   = io.WantCaptureKeyboard;
     const bool imgui_mouse = io.WantCaptureMouse;
+
+    // A controlled or replayed session's input is its director's or its
+    // recording's alone; the window still closes.
+    if (Playtest.OwnsInput())
+    {
+        if (ev->type == SAPP_EVENTTYPE_QUIT_REQUESTED)
+            Closing = true;
+        return;
+    }
 
     switch (ev->type)
     {

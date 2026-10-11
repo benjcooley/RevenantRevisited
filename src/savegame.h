@@ -76,6 +76,11 @@ class TSaveGame
 
     [[nodiscard]] const std::vector<SSaveSlot>& Slots() const { return slots; }
 
+    // Where the single-player slots live: <SavePath>/<SaveGamePath>Single.
+    [[nodiscard]] static std::filesystem::path SlotsDir();
+    // The slot this run wrote last (empty: none yet).
+    [[nodiscard]] const std::string& LastSaved() const { return lastSaved; }
+
     // True while a load is replacing the world.
     [[nodiscard]] bool IsLoading() const { return loading; }
 
@@ -131,6 +136,7 @@ class TSaveGame
     void CopyThumbnailTo(const std::filesystem::path& slot);
 
     std::vector<SSaveSlot>   slots;
+    std::string              lastSaved;
     std::vector<SSoldUnique> soldUniques;
     bool                     loading = false;
     int32_t                  thumbnailVersion = 0;         // bumped by each thumbnail written

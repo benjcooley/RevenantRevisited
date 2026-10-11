@@ -12,8 +12,10 @@
 
 #include <array>
 #include <cstdarg>
+#include <deque>
 #include <memory>
 #include <string>
+#include <vector>
 
 class TSurface;
 struct SFontAtlas;
@@ -106,6 +108,13 @@ class TTextBar : public TPane
     // REVSYNC: 0x0054cad0 -- the bar goes; the newest line stays as a message.
     void ClearHealthDisplay();
 
+    // Every line the feed has taken, counted from the start (the newest
+    // kRecentLines kept): a reader that saw `seen` lines asks for the rest.
+    // The playtest observation's text-bar messages.
+    static constexpr int32_t kRecentLines = 32;
+    [[nodiscard]] int64_t LinesAdded() const { return linesadded; }
+    [[nodiscard]] std::vector<std::string> LinesSince(int64_t seen) const;
+
     // The feed, newest first.
     [[nodiscard]] int32_t NumLines() const { return numlines; }
     [[nodiscard]] const SLine& Line(int32_t index) const { return lines[index]; }
@@ -128,6 +137,8 @@ class TTextBar : public TPane
 
     std::array<SLine, kMaxLines> lines{};          // +0x6c
     int32_t numlines = 0;                          // +0x60
+    std::deque<std::string> recent;                // the newest lines added, oldest first
+    int64_t linesadded = 0;
     const SFontAtlas* font = nullptr;              // "Small" (DAT_0065abc4)
     int32_t lineheight = 0;                        // +0x78
     std::unique_ptr<TSurface> surface;             // the composed lines (+0x84..+0x8c)
