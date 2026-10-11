@@ -85,6 +85,7 @@ PARTIAL = {
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
     '0xad92bd26': 'TFairy2_AUTHORED',
+    '0xad92bc11': 'TPuke_BESPOKE_NULLSPELL',
     '0xaeaefb27': 'PowerUp_AUTHORED',
     '0xaeaeeb27': 'YPowerUp_AUTHORED',
     '0xe0a3bc42': 'Poison_AUTHORED',

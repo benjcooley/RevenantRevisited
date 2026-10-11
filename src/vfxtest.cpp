@@ -57,6 +57,7 @@
 #include "effects/dexteritypreview.h"
 #include "effects/antimagicpreview.h"
 #include "effects/skinpreview.h"
+#include "effects/pukepreview.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -7348,6 +7349,19 @@ struct SVfxTestBootstrap {
             e.submit_world=[](void* c,EFxDebugMode){antimagic_preview::SubmitWorld(static_cast<antimagic_preview::State*>(c));};
             e.is_alive=[](void* c){return antimagic_preview::Alive(static_cast<antimagic_preview::State*>(c));};
             e.destroy=[](void* c){antimagic_preview::Destroy(static_cast<antimagic_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TPuke_BESPOKE_NULLSPELL";
+            e.family        = "magic";
+            e.pipeline      = "IM";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return puke_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){puke_preview::Advance(static_cast<puke_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){puke_preview::SubmitWorld(static_cast<puke_preview::State*>(c));};
+            e.is_alive=[](void* c){return puke_preview::Alive(static_cast<puke_preview::State*>(c));};
+            e.destroy=[](void* c){puke_preview::Destroy(static_cast<puke_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
