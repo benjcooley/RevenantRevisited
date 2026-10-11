@@ -269,7 +269,7 @@ td.ok {{ background:var(--ok); }} td.notok {{ background:var(--notok); }}
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--out', type=Path, required=True)
-    parser.add_argument('--games', nargs='+', choices=GAMES, default=list(GAMES))
+    parser.add_argument('--games', nargs='+', choices=GAMES, default=['port', 'retail'])
     parser.add_argument('--story', default='keep', choices=sorted(LISTS))
     parser.add_argument('--stages', nargs='+', help='milestone names (default all)')
     parser.add_argument('--minutes', type=float, default=10.0, help='game minutes a stage may take')
