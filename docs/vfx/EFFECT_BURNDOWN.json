@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "bebd711c6d5bccdb79e60e1caa5b210619c723730eb0600b0085f12e6bdd2b92",
+    "harness_sha256": "59941f905a4dcb7cc0215d2608c9f60af6fddd9aa369dc1a42810e881b024e9e",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 104,
+    "retail_rows_with_source_fixes_recorded": 105,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 83,
+    "visual_fidelity_confirmed_rows": 84,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 83,
-    "remaining_visual_review_rows": 93
+    "reviewed_visual_pass_rows": 84,
+    "remaining_visual_review_rows": 92
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -12463,25 +12463,27 @@
         "TIceBoltEffect_BESPOKE",
         "TIceBoltAnimator_SHIM"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: reconstructed actual stationary IceBolt,50 frost/snow slots and all7 authored meshes. Original ten-unit endpoint march,4 rings and untextured flat farthest-vertex depth replace guessed billboard/missile behavior. Scoped helper flags preserve ordinary/default pipelines."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve current stationary beam appearance and actual original endpoint march. Natural spell victim/Iced/audio and broader device/context gates remain open.",
       "notes": [],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "scenario_contract": {
@@ -12498,6 +12500,16 @@
           "authored cylinder/spiral/ring and particle geometry"
         ],
         "fixture_ready": false
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Fourteen original full software versus actual Metal native-domain stationary beam/rings/spirals/endpoint glows, moving frost, decay and blank tail. Explicit endpoint/world interfaces; natural live victim/Iced/audio/caller and exactpixels/device remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-icebolt-full-visual-20261010/root-approval.json",
+        "sha256": "202cea5d826f0447d2321001bcdf386dfd843532da0131af9ae627e843032cdd",
+        "note": "docs/vfx/forensics/ICEBOLT_NATIVE_VISUAL.md"
       }
     },
     {

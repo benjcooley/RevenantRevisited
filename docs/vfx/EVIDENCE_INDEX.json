@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 104,
+    "retail_rows_with_source_fixes_recorded": 105,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 83,
+    "visual_fidelity_confirmed_rows": 84,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 83,
-    "remaining_visual_review_rows": 93
+    "reviewed_visual_pass_rows": 84,
+    "remaining_visual_review_rows": 92
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1393,6 +1393,13 @@
       "check": "riverfall_full_native_actual_metal_visual",
       "status": "pass",
       "scope": "Six full original software and actual Metal native-domain whole1280x960 UV phases, blue water texture/mesh/scroll; original bounds unclipped. Normal map lifecycle separate; natural scene/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-icebolt-full-visual-20261010/root-approval.json": {
+      "sha256": "202cea5d826f0447d2321001bcdf386dfd843532da0131af9ae627e843032cdd",
+      "retail_row": "IceBolt:0xb1c4c90f",
+      "check": "icebolt_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Fourteen original full software versus actual Metal native-domain stationary beam/rings/spirals/endpoint glows, moving frost, decay and blank tail. Explicit endpoint/world interfaces; natural live victim/Iced/audio/caller and exactpixels/device remain open."
     }
   }
 }

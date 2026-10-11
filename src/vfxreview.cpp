@@ -52,6 +52,7 @@ struct Entry {
     std::unique_ptr<VfxReviewPreview> preview;
     std::unique_ptr<TFireBallEffect> projectile;
     std::unique_ptr<TPhotonEffect_Bespoke> photon;
+    std::unique_ptr<TIceBoltEffect_Bespoke> beam;
     int projectile_state = -1;
 };
 TMapRenderer renderer;
@@ -87,6 +88,7 @@ void Remove(Entry& e) {
     e.preview.reset();
     e.projectile.reset();
     e.photon.reset();
+    e.beam.reset();
     if (auto* object = Resolve(e)) MapPane.DeleteObject(object);
     e.map_index = -1;
 }
@@ -254,7 +256,8 @@ void Spawn(Entry& e, size_t index) {
     const auto support=DescribeVfxReviewSpawn(e.id);
     const bool authored_yfireball = e.id==0x63fd3827u;
     const bool authored_photon = e.id==0x113803f4u;
-    if (!support.safe_factory && !authored_yfireball && !authored_photon) {
+    const bool authored_icebolt = e.id==0xb1c4c90fu;
+    if (!support.safe_factory && !authored_yfireball && !authored_photon && !authored_icebolt) {
         const auto preview_info=DescribeVfxReviewPreview(e.id);
         if(preview_info.supported) e.preview=CreateVfxReviewPreview(e.id,e.station);
         if(e.preview) {
@@ -271,6 +274,18 @@ void Spawn(Entry& e, size_t index) {
     if (support.projectile || support.supports_endpoints) {
         source=PathEndpoint(index,false);
         target=PathEndpoint(index,true);
+    }
+    if(authored_icebolt) {
+        e.beam.reset(TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE(source));
+        if(!e.beam || !e.beam->SetBeamEndpoints(e.beam->Pos(),target)) {
+            e.beam.reset(); e.failed=true; e.missing_visual=true;
+            e.status="Beam runtime initialization failed"; return;
+        }
+        e.missing_visual=false; e.status="Authored stationary beam and endpoint march"; ++e.cycles;
+        const auto& lifted=e.beam->Pos();
+        log_info("[vfx-review] beam name=%s cycle=%u source=%d,%d,%d target=%d,%d,%d target_fixture=1",
+            e.name.c_str(),e.cycles,lifted.x,lifted.y,lifted.z,target.x,target.y,target.z);
+        return;
     }
     if(authored_photon) {
         e.photon.reset(TPhotonEffect_Bespoke::SpawnForTest_BESPOKE(source));
@@ -389,6 +404,11 @@ bool Initialize() {
     renderer.SetReviewSubmissionCallbacks(
         [] { for(auto& e:entries) {
             if(e.preview) e.preview->Submit();
+            if(e.beam) {
+                if(!e.beam->IsAlive()) {
+                    e.beam.reset(); e.next_spawn=ticks/24.0+1.5;
+                } else e.beam->TickAndSubmitForTest_BESPOKE(EFxDebugMode::Normal);
+            }
             if(e.photon) {
                 if(!e.photon->IsAlive()) {
                     e.photon.reset(); e.next_spawn=ticks/24.0+1.5;
@@ -418,6 +438,7 @@ bool Initialize() {
         } },
         [] { for(auto& e:entries) {
             if(e.preview) e.preview->SubmitWorld();
+            if(e.beam) e.beam->SubmitWorldMeshes_BESPOKE(EFxDebugMode::Normal);
             if(e.projectile) e.projectile->SubmitWorldRing(EFxDebugMode::Normal);
         } });
     renderer.SetDaylightCycle(false); renderer.SetSunShadowEnabled(false);
@@ -468,7 +489,7 @@ void Render() {
     for (size_t i=0;i<entries.size();++i) {
         auto& e=entries[i];
         if (std::abs(schedule.SlotDistance(i)-distance)>650) { Remove(e); continue; }
-        if (!e.preview && !e.projectile && !e.photon && !Resolve(e) && !e.failed && ticks/24.0>=e.next_spawn) {
+        if (!e.preview && !e.projectile && !e.photon && !e.beam && !Resolve(e) && !e.failed && ticks/24.0>=e.next_spawn) {
             Spawn(e,i); e.next_spawn=ticks/24.0+.35;
         }
     }
