@@ -151,6 +151,7 @@ class Walker:
     rings: tuple[int, ...] = (80, 160)
     playfield: tuple[int, int, int, int] = (0, 0, 640, 480)
     under: Callable[[int, int], int | None] | None = None   # the object a click at a pixel acts on
+    run: bool = False                                        # hold the run key on a walk (CLICKWALK.md)
 
     def destinations(self, host, obs: dict, grid: WalkGrid | None) -> list[Destination]:
         player = obs['player']
@@ -239,7 +240,7 @@ class Walker:
                 return x, y
         return None
 
-    def walk(self, host, state, dest: Destination, run: bool = False, limit: int = 24 * 15,
+    def walk(self, host, state, dest: Destination, run: bool | None = None, limit: int = 24 * 15,
              chunk: int = 6, observe=None) -> tuple[str, dict, object]:
         """Click `dest` and step until Locke arrives ('arrived'), stops short
         ('stalled'), never sets off ('refused'), or `limit` ticks pass
@@ -248,6 +249,7 @@ class Walker:
         reach the game uses it from (MAP_INPUT.md §4: 96). `observe`, when
         given, is called in place of the host's (the director's logs)."""
         observe = observe or host.observe
+        run = self.run if run is None else run
         if not dest.use and dest.object_id is None:
             spot = self.uncovered(dest.screen)
             if spot is None:                                 # every pixel there is on some object

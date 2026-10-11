@@ -62,6 +62,8 @@ LOOT_TRIES = 2                       # clicks on one item before it's left lying
 LOOT_WAIT = 24 * 6                   # ticks a pickup may take: the walk to it, then the pickup
 SITE_REACH = 300                     # this near a site's centre is at it
 ROAM_LEGS = 6                        # walks round a quiet site before moving on to the next
+PURSUIT_STALE = 12                   # closing-in steps without getting 24 nearer before an enemy is out of reach
+IGNORE_UNREACHABLE = 24 * 60         # ticks an enemy Locke can't get to is left alone
 WIDE_WALKGRID_RADIUS = 2400          # once per stop, when the way to it isn't in the map yet
 DIGITS = '123456'
 # Each direction straight after its opposite, so calibrating ends where it began.
@@ -120,9 +122,11 @@ class Director:
     site: Site | None = None                                   # the hunting site now being worked
     site_legs: int = 0                                         # quiet walks at it
     loot_tries: dict = field(default_factory=dict)             # object id -> clicks on it
+    pursuit: dict = field(default_factory=dict)                # enemy id -> (nearest Locke got, steps since)
+    unreachable: dict = field(default_factory=dict)            # enemy id -> tick until which it's left alone
 
     def __post_init__(self) -> None:
-        self.walker = Walker(self.jev, self.bindings, under=self.object_under)
+        self.walker = Walker(self.jev, self.bindings, under=self.object_under, run=True)
         self.maps = LevelMaps()                                 # walk heights seen so far, per level
         self.tactician = Tactician(self.jev, self.kb, self.bindings, messages=self.messages)
         self.current = self.start
@@ -206,7 +210,8 @@ class Director:
         player = obs['player']
         return [o for o in obs.get('objects', [])
                 if o.get('class') == 'character' and o.get('enemy') and (o.get('health') or [1])[0] > 0
-                and distance(o['pos'], player['pos']) < ENGAGE_RADIUS]
+                and distance(o['pos'], player['pos']) < ENGAGE_RADIUS
+                and self.unreachable.get(o['id'], 0) <= self.host.tick]
 
     # -- equipment --
     def equip(self, obs: dict) -> bool:
@@ -270,10 +275,12 @@ class Director:
             return
         if not self.tactician.history:
             self.observe(frame=True)                                 # the first contact of a fight
+        self.tactician.ignore = {i for i, until in self.unreachable.items() if until > self.host.tick}
         tactic = self.tactician.decide(obs)
         if not tactic:
             self.host.step(6)
             return
+        self.pursue(tactic, self.tactician.assess(obs))
         plan = Plan(self.state)
         ticks = self.tactician.plan(tactic, obs, plan)
         s = self.tactician.assess(obs)
@@ -282,6 +289,22 @@ class Director:
         self.note('tactic', tactic=tactic.name, reason=tactic.reason, confidence=round(tactic.confidence, 2))
         self.host.step(plan.ticks(ticks), plan.events())
         self.state = plan.state
+
+    def pursue(self, tactic, s) -> None:
+        """Closing in on an enemy that gets no nearer (across water, behind
+        a wall, up a ledge) ends the chase: it's left alone for a while, so
+        the fight ends and Locke gets on."""
+        if tactic.name != 'close_in':
+            self.pursuit.pop(s.target['id'], None)
+            return
+        best, stale = self.pursuit.get(s.target['id'], (math.inf, 0))
+        best, stale = (s.d, 0) if s.d < best - 24 else (best, stale + 1)
+        self.pursuit[s.target['id']] = (best, stale)
+        if stale >= PURSUIT_STALE:
+            self.unreachable[s.target['id']] = self.host.tick + IGNORE_UNREACHABLE
+            self.pursuit.pop(s.target['id'])
+            self.note('out of reach', enemy=s.target.get('name') or s.target.get('type'), id=s.target['id'],
+                      distance=round(s.d))
 
     # -- grinding (PLAN.md §14) --
     def loose_items(self, obs: dict) -> list[dict]:

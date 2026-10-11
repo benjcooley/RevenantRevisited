@@ -80,7 +80,8 @@ class Session(unittest.TestCase):
             self.assertEqual([m.kind for m in recording.marks], ['milestone', 'saved'])
             self.assertEqual(recording.marks[1].extra['slot'], 'Quick Save 1')
             keys = [(e.key, e.down) for e in recording.events if isinstance(e, rec.Key)]
-            self.assertEqual(keys, [('CONTROL', True), ('BACK', True), ('BACK', False), ('CONTROL', False)])
+            self.assertEqual(keys[:2], [('R', True), ('R', False)])               # the walk ran
+            self.assertEqual(keys[-4:], [('CONTROL', True), ('BACK', True), ('BACK', False), ('CONTROL', False)])
             kinds = [json.loads(line)['kind'] for line in (bundle / 'director.jsonl').read_text().splitlines()]
             self.assertIn('walk', kinds)
             self.assertIn('waypoint', kinds)

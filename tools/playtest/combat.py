@@ -182,6 +182,7 @@ class Tactician:
     presses: list[tuple[int, int]] = field(default_factory=list)   # (target id, attack button), in order
     refused: set[tuple[str, int]] = field(default_factory=set)     # (monster kind, grapple button) refused
     pending: tuple[str, int, frozenset[str]] | None = None         # a grapple pressed: kind, button, its moves
+    ignore: set[int] = field(default_factory=set)                  # enemies left alone (out of reach)
 
     def target_of(self, obs: dict) -> dict | None:
         """The enemy to fight: Locke's own target while it lives, else the
@@ -189,7 +190,7 @@ class Tactician:
         to another)."""
         player = obs['player']
         enemies = [o for o in obs.get('objects', []) if o.get('class') == 'character' and o.get('enemy')
-                   and (o.get('health') or [1])[0] > 0]
+                   and (o.get('health') or [1])[0] > 0 and o['id'] not in self.ignore]
         chosen = next((o for o in enemies if o['id'] == player.get('target')), None)
         return chosen or (min(enemies, key=lambda o: distance(o['pos'], player['pos'])) if enemies else None)
 
