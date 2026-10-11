@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 121,
+    "retail_rows_with_source_fixes_recorded": 126,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 102,
+    "visual_fidelity_confirmed_rows": 107,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 102,
-    "remaining_visual_review_rows": 74
+    "reviewed_visual_pass_rows": 107,
+    "remaining_visual_review_rows": 69
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1540,6 +1540,41 @@
       "check": "independent_native_software_actual_metal_appearance",
       "status": "pass_for_recorded_configuration",
       "scope": "Six original full software/actual Metal active swarm phases on declared gray background. Positions/motion and overall tiny authored-plane appearance pass;0/1px extent, sparse darker/warm pixels and background123vs128 quantization residual remain open.91 native states/RNG, real map and five clockrates checked. Black visibility/natural caller/device/exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-antimagic-authored-20261010/root-approval.json": {
+      "sha256": "021d8bccc79da8749a4ae8673bbe328c69355ed0147099595eeed95f57376e92",
+      "retail_row": "Antimagic:0xd3ae043a",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Fifteen original full-software/actual Metal native-domain three gold sphere/fire-trail phases through300-tick owner kill.134,966 fields/RNG and1,800 poses checked. Four unsampled stale capture frames are retained explicitly; natural caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-powerup-authored-20261010/root-approval.json": {
+      "sha256": "63f9f20979d8dd7c43d3d5daae288e4c7ae21d375bac25410b92538e4774d946",
+      "retail_row": "PowerUp:0xaeaefb27",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Seventeen whole original normal-lit software/actual Metal native-domain keyed ring/cone/trail phases through real tick89 owner kill and blanktail.12,285 keys/7,696 accepted matrices, strict profile and fresh native replay. Natural caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-ypowerup-authored-20261010/root-approval.json": {
+      "sha256": "3b44b9d4709384dd31b41d19f630242457ea041e9e2d183daae37a528240b01d",
+      "retail_row": "YPowerUp:0xaeaeeb27",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Twenty whole original software/actual Metal native-domain green/yellow sphere phases including short last-live fan, real tick72 kill and blanktail. Native-only proven640/480 primitive-span rule; common/hardware full rays retained.36,135 keys/64,240 matrices and original winding controls. Natural caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-ironskin-authored-20261010/root-approval.json": {
+      "sha256": "fefbaaf7307fa709220958d3526cd88d00a8d1c7442d5614ed5ffe7748c6b6b7",
+      "retail_row": "ironskin:0xad92bd34",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Thirteen original full software/actual Metal native-domain purple flare/trail phases across three30-frame loops. Exact three-position history/current duplication, stride1/3 state/RNG and malformed zero-vector native semantics. Natural buff/endstate/audio/depth/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-stoneskin-authored-20261010/root-approval.json": {
+      "sha256": "975aa865305dc3aabebb6e45c42f983edee0afd2a0a63befcf52aa7543f5273b",
+      "retail_row": "stoneskin:0xad92bd33",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Thirteen original full software/actual Metal native-domain gold flare/trail phases across three30-frame loops. Exact three-position history/current duplication, stride1/3 state/RNG and malformed zero-vector native semantics. Natural buff/endstate/audio/depth/device/exactpixels remain open."
     }
   }
 }

@@ -5340,6 +5340,7 @@ struct SVfxTestBootstrap {
             original.factory=[](const S3DPoint& o)->void*{return powerup_original::Spawn(o);};
             original.submit=[](void* c,EFxDebugMode){powerup_original::Advance(static_cast<powerup_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){powerup_original::SubmitWorld(static_cast<powerup_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return powerup_original::IsAlive(static_cast<powerup_original::State*>(c));};
             original.destroy=[](void* c){powerup_original::Destroy(static_cast<powerup_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
@@ -5349,6 +5350,7 @@ struct SVfxTestBootstrap {
             original.factory=[](const S3DPoint& o)->void*{return ypowerup_original::Spawn(o);};
             original.submit=[](void* c,EFxDebugMode){ypowerup_original::Advance(static_cast<ypowerup_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){ypowerup_original::SubmitWorld(static_cast<ypowerup_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return ypowerup_original::IsAlive(static_cast<ypowerup_original::State*>(c));};
             original.destroy=[](void* c){ypowerup_original::Destroy(static_cast<ypowerup_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
