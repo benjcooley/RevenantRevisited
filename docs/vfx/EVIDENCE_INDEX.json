@@ -9,19 +9,19 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 95,
+    "retail_rows_with_source_fixes_recorded": 99,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 84,
-    "visual_fidelity_confirmed_rows": 49,
+    "actual_runtime_verified_rows": 88,
+    "visual_fidelity_confirmed_rows": 58,
     "repeatable_ab_rows": 7,
-    "thin_bounded_render_frontend_rows": 71,
-    "reviewed_visual_pass_rows": 49,
-    "remaining_visual_review_rows": 127
+    "thin_bounded_render_frontend_rows": 75,
+    "reviewed_visual_pass_rows": 58,
+    "remaining_visual_review_rows": 118
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -994,6 +994,125 @@
       "check": "native_domain_buff_actual_visual_review",
       "status": "scoped_visual_pass",
       "scope": "Explicit native-domain isolated preview: original software versus actual Metal; six fixed sampled frames, matching RNG counts and source lighting. Overall form, color family and size pass. Exact framebuffer parity, ordinary map projection, natural attachment and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-mist-visual-20261010/review-approved.json": {
+      "sha256": "67f9b9fb3ac62272c3c5dfe3b244e5fc65f3f9f81e588b0083a787076682dceb",
+      "retail_row": "Mist:0x2093487a",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Six fixed elapsed original software/actual Metal pairs, matched native RNG cadence and source light inputs. Overall white-drop form, distribution and continuous lifecycle pass. Original ARGB4444/caller blend/cull policy verified; common projection, framebuffer rounding and natural scenes remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-symglow-visual-20261010/review-approved.json": {
+      "sha256": "22c08e675ffcd70bc95be9dec75cad1c5714cb873daa42a764d1de495a653dff",
+      "retail_row": "SymGlow:0x27df45be",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Six fixed elapsed original software/actual Metal pairs, matched native RNG cadence and source light inputs. Overall complete red/white cylinder, U scrolling and Z breathing pass. Original ARGB4444/caller blend/cull policy verified; common projection, framebuffer rounding and natural scenes remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-firecone-visual-20261010/review-approved.json": {
+      "sha256": "038ebd89b25221bec3a077178d64a83f433f19c245839808c56d6da1a497f4d5",
+      "retail_row": "FireCone:0xab92cd01",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Fixed null-spell/source-light native-domain preview, 14 sampled original full-normal-lit/Metal pairs. Overall fire/smoke form, color, expansion and visible drain pass; exact framebuffer parity, ordinary map projection and natural caster/device scenes remain open."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-yenergy-render-20261010/manifest.json": {
+      "sha256": "3ea40199b42f2efe7cc26ce074a930706c59d8f343cb8940b60d37362a652483",
+      "retail_row": "YEnergy:0xaeaeeb30",
+      "check": "quoted_particle_independent_emitter_frontend",
+      "status": "pass",
+      "scope": "Original whole parser/Initialize/Pulse/RenderSample against actual compiled State/SubmitPartSys and independently compiled integer-key/root emitter matrices. Five nonempty pixel/depth pairs replay twice; shared original software raster at stated1024 viewport, no actual Metal appearance credit. Declared geometry bounds and source pose/clock limits remain."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-yenergy-map-20261010/manifest.json": {
+      "sha256": "68f8cb043c37e18d5c71d3cfee4ee2fed8b5281dbdec070f5b0fb4703c8cca1e",
+      "retail_row": "YEnergy:0xaeaeeb30",
+      "check": "quoted_particle_actual_map_lifecycle",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-yenergylose-render-20261010/manifest.json": {
+      "sha256": "a1c4526bccbfc76cea93204c3b21b6206246206ee9ccc928575f6762a6c51b05",
+      "retail_row": "YEnergyLose:0xaeaeeb33",
+      "check": "quoted_particle_independent_emitter_frontend",
+      "status": "pass",
+      "scope": "Original whole parser/Initialize/Pulse/RenderSample against actual compiled State/SubmitPartSys and independently compiled integer-key/root emitter matrices. Five nonempty pixel/depth pairs replay twice; shared original software raster at stated1024 viewport, no actual Metal appearance credit. Declared geometry bounds and source pose/clock limits remain."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-yenergylose-map-20261010/manifest.json": {
+      "sha256": "8fdca23bcf8d6ccd2fc9b84ce9c868d29bc9dabe55c4cdf496637dc6a1f046c7",
+      "retail_row": "YEnergyLose:0xaeaeeb33",
+      "check": "quoted_particle_actual_map_lifecycle",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-yabsorb-render-20261010/manifest.json": {
+      "sha256": "f57b2dd25eb9325cc75cb91ccfa7a859d5bca8b4923e67b9794032301fa5dfcc",
+      "retail_row": "YAbsorb:0xaeaeeb29",
+      "check": "quoted_particle_independent_emitter_frontend",
+      "status": "pass",
+      "scope": "Original whole parser/Initialize/Pulse/RenderSample against actual compiled State/SubmitPartSys and independently compiled integer-key/root emitter matrices. Five nonempty pixel/depth pairs replay twice; shared original software raster at stated1024 viewport, no actual Metal appearance credit. Declared geometry bounds and source pose/clock limits remain."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-yabsorb-map-20261010/manifest.json": {
+      "sha256": "87e4b3b7fd9979f06560a36078a534f2c97cc11c1633b27bad5973f834cdd77b",
+      "retail_row": "YAbsorb:0xaeaeeb29",
+      "check": "quoted_particle_actual_map_lifecycle",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-nullifier-render-20261010/manifest.json": {
+      "sha256": "85d8b79b0e99c85e4851be41dc5acd742224f28e0fd28f4aab8c9d0120500991",
+      "retail_row": "nullifier:0xad92bd38",
+      "check": "quoted_particle_independent_emitter_frontend",
+      "status": "pass",
+      "scope": "Original whole parser/Initialize/Pulse/RenderSample against actual compiled State/SubmitPartSys and independently compiled integer-key/root emitter matrices. Five nonempty pixel/depth pairs replay twice; shared original software raster at stated1024 viewport, no actual Metal appearance credit. Declared geometry bounds and source pose/clock limits remain."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-nullifier-map-20261010/manifest.json": {
+      "sha256": "d9de39b1d71519fac50412204d036d7bd1687f2bd9ff9588086dd9fab11ba938",
+      "retail_row": "nullifier:0xad92bd38",
+      "check": "quoted_particle_actual_map_lifecycle",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/current-faultfire-visual-20261010/review-approved.json": {
+      "sha256": "be91857b20eb919ba4fda619f2d3b498e1208f34c9550b3eea881eefe87c93e1",
+      "retail_row": "Faultfire:0x51753bce",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Fixed source-light/native-domain isolated preview against complete original owner/normal/projector/raster. Overall two-layer red/white gradient and UV-phase evolution pass. Thirteen retained pairs support six fixed root-reviewed phases; exact raster and natural scenes/caller/audio remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-streamer-visual-20261010/review-approved.json": {
+      "sha256": "0dc59a8fbfbee026a2171e7fd59a20e7520429181a20255ca05b89543f2a8a57",
+      "retail_row": "Streamer:0x482dfe82",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Fixed source-light/native-domain isolated preview against complete original owner/normal/projector/raster. Overall purple/blue/red spiral form, expansion and late fading pass. Thirteen retained pairs support six fixed root-reviewed phases; exact raster and natural scenes/caller/audio remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-yenergy-visual-20261010/review-approved.json": {
+      "sha256": "b2db1d8bd9b3f609b5375b7f5a68d60d6bd4ff7c6d6d623eefe0c7f359384dea",
+      "retail_row": "YEnergy:0xaeaeeb30",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall particle form/color and sampled emission/decay pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-yenergylose-visual-20261010/review-approved.json": {
+      "sha256": "2aa309f4029fcec133d70104794e59c3e0426b8661a98dc5c0b554c7987b4d1d",
+      "retail_row": "YEnergyLose:0xaeaeeb33",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall particle form/color and sampled emission/decay pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-yabsorb-visual-20261010/review-approved.json": {
+      "sha256": "92f1860e518ce57af9aca3f2e842fa755186c500d67b03122cc0b82a228fb1af",
+      "retail_row": "YAbsorb:0xaeaeeb29",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall particle form/color and sampled emission/decay pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-nullifier-visual-20261010/review-approved.json": {
+      "sha256": "ed7b000cb26878eecef8af9095dab85cfdef803c5b3971a487e613ae45ea3533",
+      "retail_row": "nullifier:0xad92bd38",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall animated ring/fan emitter phase pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open."
     }
   }
 }

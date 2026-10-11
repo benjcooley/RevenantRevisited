@@ -24,19 +24,19 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 95,
+    "retail_rows_with_source_fixes_recorded": 99,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 84,
-    "visual_fidelity_confirmed_rows": 49,
+    "actual_runtime_verified_rows": 88,
+    "visual_fidelity_confirmed_rows": 58,
     "repeatable_ab_rows": 7,
-    "thin_bounded_render_frontend_rows": 71,
-    "reviewed_visual_pass_rows": 49,
-    "remaining_visual_review_rows": 127
+    "thin_bounded_render_frontend_rows": 75,
+    "reviewed_visual_pass_rows": 58,
+    "remaining_visual_review_rows": 118
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -10787,7 +10787,8 @@
       "source_fixes": [
         "Replaced guessed scrolling billboard and invented light with actual66-vertex/92-triangle SymGlow cylinder, source1.4XY scale,24Hz2..5 Z breathing and U scroll, one-time V offset, alpha/no-depth-write and software wrapped-nearest texture lookup. Runtime attaches once after final type/map identity; preview diagnostic no longer dereferences an absent class definition.",
         "Corrected software winding: Blue tests Y-up then negates raster Y; screen-down determinant must cull negative winding. No authored topology/cull disabling or appearance fitting.",
-        "Preserved native render-owned per-vertex UV float stores andfloat0.01scroll reciprocal; removed sharedoffset accumulation/4096wrap andavoid duplicate scrollwithinoneframe.160failedticks/8509UVfielddifferences nowzero;162states/14imagepairs andrenderstride3 pass."
+        "Preserved native render-owned per-vertex UV float stores andfloat0.01scroll reciprocal; removed sharedoffset accumulation/4096wrap andavoid duplicate scrollwithinoneframe.160failedticks/8509UVfielddifferences nowzero;162states/14imagepairs andrenderstride3 pass.",
+        "2026-10-10: strict sourceARGB4444 quad decode uses native alpha-nibble-plus-one/RGB565 lookup; actual RenderObject caller mode2 preserves CULL_NONE and no Z writes; older injected cull references are conditional."
       ],
       "port_smoke_ids": [
         "TSymGlowAnimator_BESPOKE"
@@ -10807,13 +10808,13 @@
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_effect_builder_symglow_reference_component_verified",
-      "next_action": "Use exact breathing/UV lifecycle fixture, including skipped-render regression. Check natural map binding, owner pose/light and independent hardware/GPU gates separately.",
+      "next_action": "Retain the recorded scoped appearance pass; close remaining exact raster/projection and natural caster/map/device configurations separately.",
       "notes": [
         "2026-10-05: retained5-second native recording,96 distinct ROI images,zero outside-ROI drift and exact restored floor. Six exact-type create/move/delete observations pass, animation changes at both positions, all17 deleted-tail frames equal ground. Visual review fails missing near/lower rim; independent RNG does not explain it.",
         "Current source winding correction changes rendered surface selection; earlier mesh captures are historical. Current-binary cylinder preview/runtime regressions retained separately after correction."
@@ -10835,11 +10836,14 @@
         }
       },
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "deferred",
-        "finding": "Source winding correction restores the missing lower rim. Current port and native retain different breathing/scroll phases; native elapsed cadence and complete visual fidelity still require review. No phase or geometry fitting.",
-        "scope": "Fresh actual retail/port pair after source cull sign correction; not full effect acceptance."
+        "date": "2026-10-10",
+        "reviewer": "root independent fixed-sample inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six fixed elapsed original software/actual Metal pairs, matched native RNG cadence and source light inputs. Overall complete red/white cylinder, U scrolling and Z breathing pass. Original ARGB4444/caller blend/cull policy verified; common projection, framebuffer rounding and natural scenes remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-symglow-visual-20261010/review-approved.json",
+        "sha256": "22c08e675ffcd70bc95be9dec75cad1c5714cb873daa42a764d1de495a653dff",
+        "note": "docs/vfx/forensics/SOURCE_RASTER_CHANNELS_20261010.md"
       },
       "software_reference_validation": {
         "manifest": "captures/runs/sw-quick-symglow-20261005/manifest.json",
@@ -10900,7 +10904,16 @@
         "distinct_images": 42,
         "exit_code": 0,
         "retail_hardware_parity_compared": false
-      }
+      },
+      "visual_review_history": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "deferred",
+          "finding": "Source winding correction restores the missing lower rim. Current port and native retain different breathing/scroll phases; native elapsed cadence and complete visual fidelity still require review. No phase or geometry fitting.",
+          "scope": "Fresh actual retail/port pair after source cull sign correction; not full effect acceptance."
+        }
+      ]
     },
     {
       "index": 34,
@@ -12520,13 +12533,13 @@
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_streamer_builder_authored_four_stream_component_verified",
-      "next_action": "Use thin typed controls for the proven identity-owner four-stream lifecycle. Check natural map binding/illumination and GPU separately; optional poison-cure/audio later.",
+      "next_action": "Retain scoped actual native/Metal appearance pass; natural caller/other scenes and exact framebuffer parity remain separate.",
       "notes": [
         "Port240frames/91distinct and no respawn;15 exact-ground natural-expiry and29 deletion-tail frames,11 timeline checks pass. Actual retail34.425sec/86distinct leaves bright frozen spiral; camera nudge restores exact floor. Native reference remains diagnostic. First authored preview failed all-triangle culling and is retained; corrected sign is derived from Blue testing Y-up before negating raster Y.",
         "FPS-enabled native27.954seconds/86 distinct images clears naturally to exact ground without camera nudge. Eight-second derivative73 distinct images and paired backgrounds0; prior FPS-off native spiral residue is historical."
@@ -12627,11 +12640,14 @@
         }
       },
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "pending",
-        "finding": "Both render discrete colored authored streams and clear after expiry. Raw elapsed samples show different initial visible progression/phase, notably at1.6seconds; source clock is unchanged, and native first-visible simulation phase is unresolved. No timing, geometry, color or RNG fitting.",
-        "scope": "Clean actual retail reference replaces FPS-off accumulated-trail diagnostic; visual cadence and natural poison-cure caller/context remain separate."
+        "date": "2026-10-10",
+        "reviewer": "root independent fixed-sample inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Fixed source-light/native-domain isolated preview against complete original owner/normal/projector/raster. Overall purple/blue/red spiral form, expansion and late fading pass. Thirteen retained pairs support six fixed root-reviewed phases; exact raster and natural scenes/caller/audio remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-streamer-visual-20261010/review-approved.json",
+        "sha256": "0dc59a8fbfbee026a2171e7fd59a20e7520429181a20255ca05b89543f2a8a57",
+        "note": "docs/vfx/forensics/MESH_LEAF_CURRENT_VISUAL_20261010.md"
       },
       "work_queue_status": "clean_reference_initial_phase_cadence_review_pending",
       "software_comparison_history": [
@@ -12708,6 +12724,15 @@
           ],
           "full_acceptance_granted": false
         }
+      ],
+      "visual_review_history": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "pending",
+          "finding": "Both render discrete colored authored streams and clear after expiry. Raw elapsed samples show different initial visible progression/phase, notably at1.6seconds; source clock is unchanged, and native first-visible simulation phase is unresolved. No timing, geometry, color or RNG fitting.",
+          "scope": "Clean actual retail reference replaces FPS-off accumulated-trail diagnostic; visual cadence and natural poison-cure caller/context remain separate."
+        }
       ]
     },
     {
@@ -12783,12 +12808,13 @@
         "accepted": false
       },
       "runtime_dispatch": "exact_fireswarm_builder_authored_cylinder_component_verified",
-      "next_action": "Retain bounded stationary cylinder native state/render proof; verify early visible phases with a suitable original device and natural owner/map/lighting plus full Metal parity. This leaf has no missile/source-destination contract.",
+      "next_action": "Later full-native/current Metal cylinder/ring appearance is close after sourceARGB4444; early original software rejects oversized triangles and remains empty while Metal draws. Resolve targeted device reference before full sampled-lifecycle appearance credit.",
       "notes": [
         "2026-10-05: source geometry/texture/timing and actual runtime repaired. Port240frames/76distinct/120exact-ground tail;5 natural expiry and6 explicit deletion checks pass. Retail43.65sec/26distinct retains large cylinder residue; exact camera-nudge floor reset proves cache residue. Diagnostic only, no accurate reference/visual acceptance. Historical combined runtime fixture failed because its generation-bound selector refused a recreated owner; separate corrected fixtures preserve identity checks.",
         "Current source winding correction changes rendered surface selection; earlier mesh captures are historical. Current-binary cylinder preview/runtime regressions retained separately after correction.",
         "FPS redraw prerequisite was absent in the previous frozen-trail capture. Enabling Ctrl+Shift+F recovered two clean native lifecycles, exact ground cleanup without camera nudge, and a stable-background A/B. First pair binary7018fc568d28 predates SetVortex build; retained provenance is unchanged.",
-        "Fresh stationary FireSwarm tube frontend passes79ticks/kill76/237floatfields and12selectedimage-depthpairs; onlyfive nonempty matchingticks30/36/48/60/72 earn rendered-sample credit. Empty early source-software samples retain renderer-limit scope."
+        "Fresh stationary FireSwarm tube frontend passes79ticks/kill76/237floatfields and12selectedimage-depthpairs; onlyfive nonempty matchingticks30/36/48/60/72 earn rendered-sample credit. Empty early source-software samples retain renderer-limit scope.",
+        "2026-10-10: late mesh-leaf actual appearance reviewed; early software triangle-cap mismatch explicitly held, no primary visual pass."
       ],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "runtime_regression": {
@@ -13384,7 +13410,8 @@
       "source_fixes": [
         "Authored bespoke quad/UV and source transforms; true 24Hz bespoke clock; engine emitter definitions corrected. Engine billboard geometry still differs.",
         "Explicit SOFTWARE_ALPHA_DIAGNOSTIC preview changes only blend policy; canonical additive, art/state/geometry/timing unchanged.",
-        "Actual Mist builder/animator attaches one owner-bound reference component after final identity; initialization, true24Hz advance and authored submission separated; persistent owner survives offscreen and deletes normally.1600 snapshot state/RNG cases passed;150 preview frames unchanged."
+        "Actual Mist builder/animator attaches one owner-bound reference component after final identity; initialization, true24Hz advance and authored submission separated; persistent owner survives offscreen and deletes normally.1600 snapshot state/RNG cases passed;150 preview frames unchanged.",
+        "2026-10-10: strict sourceARGB4444 quad decode uses native alpha-nibble-plus-one/RGB565 lookup; native mode8 alpha-over replaces software-policy additive without altering modern fallback."
       ],
       "port_smoke_ids": [
         "TMistEffect_BESPOKE",
@@ -13408,13 +13435,13 @@
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "reference_component_verified_through_actual_command_map_lifecycle",
-      "next_action": "Verify fixed RGB565 alpha table/sampling and locate a natural runtime caller. Actual create/move/persist/delete passes; Alpha diagnostic remains explicitly separate from canonical additive.",
+      "next_action": "Retain the recorded scoped appearance pass; close remaining exact raster/projection and natural caster/map/device configurations separately.",
       "notes": [
         "Fresh software reference renders grey alpha-composited wisps; canonical hardware additive preview renders white overlapping particles. Original software source ignores blend requests; see docs/vfx/forensics/M05_SOFTWARE_REFERENCE.md. Do not calibrate a tint to hide device semantics.",
         "Paired Alpha and authored-additive diagnostics retain matching binary/definitions hashes; both outside-effect backgrounds are exactly stable. Independent phase/RNG differences and quantization remain open."
@@ -13463,7 +13490,17 @@
           ],
           "full_acceptance_granted": false
         }
-      ]
+      ],
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent fixed-sample inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six fixed elapsed original software/actual Metal pairs, matched native RNG cadence and source light inputs. Overall white-drop form, distribution and continuous lifecycle pass. Original ARGB4444/caller blend/cull policy verified; common projection, framebuffer rounding and natural scenes remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-mist-visual-20261010/review-approved.json",
+        "sha256": "67f9b9fb3ac62272c3c5dfe3b244e5fc65f3f9f81e588b0083a787076682dceb",
+        "note": "docs/vfx/forensics/SOURCE_RASTER_CHANNELS_20261010.md"
+      }
     },
     {
       "index": 67,
@@ -13497,13 +13534,13 @@
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_faultfire_builder_authored_two_pass_component_verified",
-      "next_action": "Corrected phase wrap and per-vertex scroll match native state/geometry/two-pass pixels; retain hardware upper-mesh/material diagnostic and natural context/Metal gates separately.",
+      "next_action": "Retain scoped actual native/Metal appearance pass; natural caller/other scenes and exact framebuffer parity remain separate.",
       "notes": [
         "2026-10-05: own actual native Faultfire reference122 changing images, exact outside-ROI floor and exact camera-nudge cleanup retained. Corrected authored mesh preview150 frames/121 distinct images/one initialization;6 exact type/owner command checks, animation at both poses and17 exact-ground deleted-tail frames pass. Native opaque/port-translucent upper section remains a visual failure; older shim approximation is not accepted."
       ],
@@ -13541,13 +13578,14 @@
         }
       },
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "fail",
-        "finding": "Authored upright mesh replaces the old floor patch and no longer fades/retriggers. Native red upper column remains solid while current port is translucent; source/software-device alpha/raster cause not resolved. No tint, scale, phase or alpha fitting applied.",
-        "scope": "Actual isolated software Faultfire versus persistent authored mesh. Natural caller/context and precise elapsed cadence separate.",
-        "requires_pixel_identity": false,
-        "random_streams_synchronized": false
+        "date": "2026-10-10",
+        "reviewer": "root independent fixed-sample inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Fixed source-light/native-domain isolated preview against complete original owner/normal/projector/raster. Overall two-layer red/white gradient and UV-phase evolution pass. Thirteen retained pairs support six fixed root-reviewed phases; exact raster and natural scenes/caller/audio remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-faultfire-visual-20261010/review-approved.json",
+        "sha256": "be91857b20eb919ba4fda619f2d3b498e1208f34c9550b3eea881eefe87c93e1",
+        "note": "docs/vfx/forensics/MESH_LEAF_CURRENT_VISUAL_20261010.md"
       },
       "runtime_regression": {
         "manifest": "captures/runtime-fixtures/faultfire-authored-20261005/command-capture/manifest.json",
@@ -13587,6 +13625,17 @@
             "retail upper-mesh/device transparency and Metal"
           ],
           "full_acceptance_granted": false
+        }
+      ],
+      "visual_review_history": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "fail",
+          "finding": "Authored upright mesh replaces the old floor patch and no longer fades/retriggers. Native red upper column remains solid while current port is translucent; source/software-device alpha/raster cause not resolved. No tint, scale, phase or alpha fitting applied.",
+          "scope": "Actual isolated software Faultfire versus persistent authored mesh. Natural caller/context and precise elapsed cadence separate.",
+          "requires_pixel_identity": false,
+          "random_streams_synchronized": false
         }
       ]
     },
@@ -14239,7 +14288,8 @@
       "source_fixes": [
         "Removed invented tinted billboard/growth/fixed1.8second lifetime; restored exact FireCone type and authored two meshes/normals/materials with source fire80/smoke80/burst100 helper pools, full state/RNG operation order,6/15/33 phases, first-free allocation, negative fire scale, no fictitious flicker, live owner movement and idempotent Z+100 initialization. Uses source RGB565 software-helper draw with24Hz Advance/Submit separation.",
         "2026-10-09: preserve native x87 extended intermediates for fire/smoke scale and MID approach; all260occupancies and73,806defined active float fields match through100ticks/naturaldrain93, with exact1,243RNG calls and native pool operation order.",
-        "2026-10-10: relative FireCone particle translation no longer wrongly cancels owner Z scale; native relative Render skips FIX, sameowner applies to geometry+translation."
+        "2026-10-10: relative FireCone particle translation no longer wrongly cancels owner Z scale; native relative Render skips FIX, sameowner applies to geometry+translation.",
+        "2026-10-10: explicit native owner/MODELZ/projector preserves original full-lit FireCone preview; ordinary map policy unchanged."
       ],
       "port_smoke_ids": [
         "TFireConeEffect_BESPOKE"
@@ -14260,13 +14310,13 @@
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_firecone_builder_reference_component_verified_through_create_move_natural_expiry_and_delete",
-      "next_action": "Retain exact native null-spell pool/RNG/order proof; next establish authored render matrices/projection/blend and actual caster/target/damage without tuning controller constants. Existing map lifecycle remains a separate scoped proof.",
+      "next_action": "Retain the recorded scoped appearance pass; close remaining exact raster/projection and natural caster/map/device configurations separately.",
       "notes": [
         "Frozen natural-expiry residue observed, but FPS redraw prerequisite was absent. Historical diagnostic only; repeat one bounded FPS-enabled attempt before diagnosing device or controller failure.",
         "FPS-enabled bounded recovery now has independently clean canonical floor, animated native reference and exact cleanup without camera nudge. Historical FPS-off residue is superseded as active reference; not a visual/controller acceptance claim.",
@@ -14424,11 +14474,14 @@
         "identical_final_ground_tail_frames": 143
       },
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "deferred",
-        "finding": "Source software-helper output is now visible, but port has a brighter/denser white core than native orange flame/smoke scatter. Actual software blend/raster, initial-visible phase and stochastic coverage remain a bounded deferral; no fitting.",
-        "scope": "Own stable native software pair and authored controller/runtime are retained; full visual and natural caster/target/context acceptance remain open."
+        "date": "2026-10-10",
+        "reviewer": "root independent fixed-sample inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Fixed null-spell/source-light native-domain preview, 14 sampled original full-normal-lit/Metal pairs. Overall fire/smoke form, color, expansion and visible drain pass; exact framebuffer parity, ordinary map projection and natural caster/device scenes remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-firecone-visual-20261010/review-approved.json",
+        "sha256": "038ebd89b25221bec3a077178d64a83f433f19c245839808c56d6da1a497f4d5",
+        "note": "docs/vfx/forensics/FIRECONE_CURRENT_VISUAL_20261010.md"
       },
       "source_preflight": {
         "implementation_complete": true,
@@ -14462,6 +14515,15 @@
             "actual map/Metal common-world owner and projection",
             "live caster/context/device"
           ]
+        }
+      ],
+      "visual_review_history": [
+        {
+          "date": "2026-10-05",
+          "reviewer": "root",
+          "result": "deferred",
+          "finding": "Source software-helper output is now visible, but port has a brighter/denser white core than native orange flame/smoke scatter. Actual software blend/raster, initial-visible phase and stochastic coverage remain a bounded deferral; no fitting.",
+          "scope": "Own stable native software pair and authored controller/runtime are retained; full visual and natural caster/target/context acceptance remain open."
         }
       ]
     },
@@ -19298,29 +19360,68 @@
       "retail_type_id": "0xad92bd38",
       "asset": "magic\\Nullifier.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: exact quoted authored particle profile; original numeric integer view, pinned prototype slot, independent compiled emitter matrices and runtime controller admission verified.",
+        "2026-10-10: exact admitted static emitter keys use actual cached animator frame; original full draw caller/cull/FVF and render-stride3 verified. No generic animation or shader changes."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Retain scoped actual native/Metal appearance pass; natural caller/other scenes and exact framebuffer parity remain separate.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "quoted_particle_independent_emitter_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/quoted-particles-nullifier-render-20261010/manifest.json",
+          "sha256": "85d8b79b0e99c85e4851be41dc5acd742224f28e0fd28f4aab8c9d0120500991",
+          "scope": "Original whole parser/Initialize/Pulse/RenderSample against actual compiled State/SubmitPartSys and independently compiled integer-key/root emitter matrices. Five nonempty pixel/depth pairs replay twice; shared original software raster at stated1024 viewport, no actual Metal appearance credit. Declared geometry bounds and source pose/clock limits remain.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "actual full native caller/Metal appearance",
+            "natural scene and caller clocks"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/quoted-particles-nullifier-map-20261010/manifest.json",
+        "manifest_sha256": "d9de39b1d71519fac50412204d036d7bd1687f2bd9ff9588086dd9fab11ba938",
+        "status": "pass",
+        "observations": 8,
+        "frames": 48,
+        "first_visible_frame": 5,
+        "floor_restored": true,
+        "natural_trigger_verified": false,
+        "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent fixed-sample inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall animated ring/fan emitter phase pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-nullifier-visual-20261010/review-approved.json",
+        "sha256": "ed7b000cb26878eecef8af9095dab85cfdef803c5b3971a487e613ae45ea3533",
+        "note": "docs/vfx/forensics/STATIC_PARTICLES_FULL_VISUAL.md"
+      }
     },
     {
       "index": 141,
@@ -22753,29 +22854,68 @@
       "retail_type_id": "0xaeaeeb29",
       "asset": "magic\\yabsorb.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: exact quoted authored particle profile; original numeric integer view, pinned prototype slot, independent compiled emitter matrices and runtime controller admission verified.",
+        "2026-10-10: exact admitted static emitter keys use actual cached animator frame; original full draw caller/cull/FVF and render-stride3 verified. No generic animation or shader changes."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Retain scoped actual native/Metal appearance pass; natural caller/other scenes and exact framebuffer parity remain separate.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "quoted_particle_independent_emitter_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/quoted-particles-yabsorb-render-20261010/manifest.json",
+          "sha256": "f57b2dd25eb9325cc75cb91ccfa7a859d5bca8b4923e67b9794032301fa5dfcc",
+          "scope": "Original whole parser/Initialize/Pulse/RenderSample against actual compiled State/SubmitPartSys and independently compiled integer-key/root emitter matrices. Five nonempty pixel/depth pairs replay twice; shared original software raster at stated1024 viewport, no actual Metal appearance credit. Declared geometry bounds and source pose/clock limits remain.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "actual full native caller/Metal appearance",
+            "natural scene and caller clocks"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/quoted-particles-yabsorb-map-20261010/manifest.json",
+        "manifest_sha256": "87e4b3b7fd9979f06560a36078a534f2c97cc11c1633b27bad5973f834cdd77b",
+        "status": "pass",
+        "observations": 8,
+        "frames": 48,
+        "first_visible_frame": 7,
+        "floor_restored": true,
+        "natural_trigger_verified": false,
+        "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent fixed-sample inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall particle form/color and sampled emission/decay pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-yabsorb-visual-20261010/review-approved.json",
+        "sha256": "92f1860e518ce57af9aca3f2e842fa755186c500d67b03122cc0b82a228fb1af",
+        "note": "docs/vfx/forensics/STATIC_PARTICLES_FULL_VISUAL.md"
+      }
     },
     {
       "index": 170,
@@ -22815,29 +22955,68 @@
       "retail_type_id": "0xaeaeeb30",
       "asset": "magic\\yenergy.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: exact quoted authored particle profile; original numeric integer view, pinned prototype slot, independent compiled emitter matrices and runtime controller admission verified.",
+        "2026-10-10: exact admitted static emitter keys use actual cached animator frame; original full draw caller/cull/FVF and render-stride3 verified. No generic animation or shader changes."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Retain scoped actual native/Metal appearance pass; natural caller/other scenes and exact framebuffer parity remain separate.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "quoted_particle_independent_emitter_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/quoted-particles-yenergy-render-20261010/manifest.json",
+          "sha256": "3ea40199b42f2efe7cc26ce074a930706c59d8f343cb8940b60d37362a652483",
+          "scope": "Original whole parser/Initialize/Pulse/RenderSample against actual compiled State/SubmitPartSys and independently compiled integer-key/root emitter matrices. Five nonempty pixel/depth pairs replay twice; shared original software raster at stated1024 viewport, no actual Metal appearance credit. Declared geometry bounds and source pose/clock limits remain.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "actual full native caller/Metal appearance",
+            "natural scene and caller clocks"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/quoted-particles-yenergy-map-20261010/manifest.json",
+        "manifest_sha256": "68f8cb043c37e18d5c71d3cfee4ee2fed8b5281dbdec070f5b0fb4703c8cca1e",
+        "status": "pass",
+        "observations": 8,
+        "frames": 48,
+        "first_visible_frame": 5,
+        "floor_restored": true,
+        "natural_trigger_verified": false,
+        "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent fixed-sample inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall particle form/color and sampled emission/decay pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-yenergy-visual-20261010/review-approved.json",
+        "sha256": "b2db1d8bd9b3f609b5375b7f5a68d60d6bd4ff7c6d6d623eefe0c7f359384dea",
+        "note": "docs/vfx/forensics/STATIC_PARTICLES_FULL_VISUAL.md"
+      }
     },
     {
       "index": 172,
@@ -22846,29 +23025,68 @@
       "retail_type_id": "0xaeaeeb33",
       "asset": "magic\\yenergylose.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: exact quoted authored particle profile; original numeric integer view, pinned prototype slot, independent compiled emitter matrices and runtime controller admission verified.",
+        "2026-10-10: exact admitted static emitter keys use actual cached animator frame; original full draw caller/cull/FVF and render-stride3 verified. No generic animation or shader changes."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Retain scoped actual native/Metal appearance pass; natural caller/other scenes and exact framebuffer parity remain separate.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "quoted_particle_independent_emitter_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/quoted-particles-yenergylose-render-20261010/manifest.json",
+          "sha256": "a1c4526bccbfc76cea93204c3b21b6206246206ee9ccc928575f6762a6c51b05",
+          "scope": "Original whole parser/Initialize/Pulse/RenderSample against actual compiled State/SubmitPartSys and independently compiled integer-key/root emitter matrices. Five nonempty pixel/depth pairs replay twice; shared original software raster at stated1024 viewport, no actual Metal appearance credit. Declared geometry bounds and source pose/clock limits remain.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "actual full native caller/Metal appearance",
+            "natural scene and caller clocks"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/quoted-particles-yenergylose-map-20261010/manifest.json",
+        "manifest_sha256": "8fdca23bcf8d6ccd2fc9b84ce9c868d29bc9dabe55c4cdf496637dc6a1f046c7",
+        "status": "pass",
+        "observations": 8,
+        "frames": 48,
+        "first_visible_frame": 5,
+        "floor_restored": true,
+        "natural_trigger_verified": false,
+        "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent fixed-sample inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall particle form/color and sampled emission/decay pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-yenergylose-visual-20261010/review-approved.json",
+        "sha256": "2aa309f4029fcec133d70104794e59c3e0426b8661a98dc5c0b554c7987b4d1d",
+        "note": "docs/vfx/forensics/STATIC_PARTICLES_FULL_VISUAL.md"
+      }
     },
     {
       "index": 173,
