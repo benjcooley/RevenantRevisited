@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-11)
 
-**158 / 176 effects have reviewed visual passes for their recorded test configuration; 18 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
+**159 / 176 effects have reviewed visual passes for their recorded test configuration; 17 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
 **YTelekinesis (2026-10-11):** four moving/rotating chunks match through actual owner completion across six fixed supported capture views; all 39,600 triangles covered and 24 root-repeated Metal frames identical. Corrected exact-ID mapping displays and restarts it in the gallery. Natural actor/spell/audio and raster overlap limits remain open. [Evidence and scope](forensics/YTELEKINESIS_ORIGINAL.md).
 
@@ -1123,3 +1123,5 @@ Audited `class.def`: 233,484 bytes; SHA-256 `bf46eaa4e25a43fa9828e1e8737114d63b9
 - [x] **Pulp** `0x152dafdd` — scoped original/Metal appearance, integrated repeat and gallery checks pass. Natural caller/map/audio/device and pixel residuals remain open. [Evidence](forensics/PULP_AUTHENTIC_RENDER_20261011.md).
 
 - [x] **setvortex** `0xad92bc15` — scoped original/Metal appearance, integrated repeat and gallery checks pass. Natural caller/map/audio/device and pixel residuals remain open. [Evidence](forensics/SETVORTEX_AUTHORED.md).
+
+- [x] **dragonfire** `0xad92bc1a` — exact two-pool moving plume/nullspell appearance pass.14phase review/101PNG integratedrepeat/unreseeded finitegallery pass. Naturalspell/caster/map/audio/device remainopen. [Evidence](forensics/DRAGONFIRE_NATIVE_RENDER_20261011.md).

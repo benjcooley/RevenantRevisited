@@ -25,3 +25,9 @@ Evidence root: `/Users/benjamincooley/RevenantRetailLab/research/vfx-wide-202610
 - `dragonfire-review-final2/manifest.json`: `b2edb2793521605143155e9c2628f7fba74c929f5751503b379db87e4632af4f`.
 
 Reproduce with `dragonfire_visual_reference.py --boot-image ... --output ... --frames 100`, `dragonfire_state_probe.py`, `dragonfire_pose_probe.py`, `port_capture.py --scenario dragonfire-scenario.json`, `dragonfire_visual_review.py`, and `dragonfire_gallery_smoke.py`. Each tool has explicit argparse inputs; scenarios are frozen privately. Root repeat substitutes only its current binary in the same scenario.
+
+## Independent root review
+
+Exact Dragonfire0xad92bc1a genuine loaded nullspell/facing0 owner/custom two300-slot fire/smoke pools, own meshes. Actual executable births random(-4,4)XYZ, no snapshot+18/-50/+15 offsets. Full100originalupdates/render/raster,34emissionticks, realkill93/blanktail. Rootindependent453120definedstatefields/RNG exact and19626orderedmatrices/314016channels bitexact; snapshotbirthoffset/doubleAnimate negativesreject. Fourteen whole original/actualMetal phases, five fullresolutiondetailstrips and four actualsizeimages independentlyreviewed,35pinsverified/allgeometrycontained. Integrated101PNGs byteidentical92visible/cleanexit; sourcebuild/compiledmapping/lifecycle pass. Roottranslatedgallery20/20visible through458updates, fourunreseededcompletions93/95/96/96+partial78cleanup. Uninitializedflicker/deadstorage ignored asunused byRender(false,false). Commonprojection/live-spell/casterfacing/naturalactor/map/audio/device/exactpixels andsampling/RGB565overlap residualsremainopen; noFireConecontrolleralias orfit.
+
+Rootapproval SHA256 `78f3bc3ad8378617f31efd70ab8a3634dd44a79f934c526871ae49bd1f7c0b64`; fullacceptance remainsopen.

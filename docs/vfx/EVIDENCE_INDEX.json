@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 158,
+    "visual_fidelity_confirmed_rows": 159,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 158,
-    "remaining_visual_review_rows": 18
+    "reviewed_visual_pass_rows": 159,
+    "remaining_visual_review_rows": 17
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1932,6 +1932,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Exact persistent nullspell SetVortex genuine loaded owner/customAnimate/fullRender, original nonlinear FIX(+30) cachedheight, complete12authored triangles/CULL_NONE and strictARGB4444 decode. Full10524Hzupdates/render; source315bobfields max4.89e-8,1260triangles/18900XYZUVchannels checked, oldlinearZnegative differs0.79544. Rootnative/sourceunitPASS35.165s;27exacttick original/actualMetal wholepairs and nine4x detailpages independentlyreviewed,96pinsverified. Integrated27PNGsatstride4/all105renders byte-identical/cleanexit. Realruntime map gallery100/100visible52distinct/onepersistentfactory/cleanexit is liveness only, not standaloneappearance certification; initialcopiedvalidator incorrectly expectedpreviewruntime0/log retained and corrected againstactualruntime1 route. Initialcapture duringbuild rejectedchangedbinary, finalstablebinaryrepeatused. Spellteleportmarking/previousmarkerremoval,naturalmapcaller/skippedrenders/ordinaryprojection/audio/device/exactpixels andnearest/alphaRGB565overlap residualsremainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-dragonfire-null-20261011/root-approval.json": {
+      "sha256": "78f3bc3ad8378617f31efd70ab8a3634dd44a79f934c526871ae49bd1f7c0b64",
+      "retail_row": "dragonfire:0xad92bc1a",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact Dragonfire0xad92bc1a genuine loaded nullspell/facing0 owner/custom two300-slot fire/smoke pools, own meshes. Actual executable births random(-4,4)XYZ, no snapshot+18/-50/+15 offsets. Full100originalupdates/render/raster,34emissionticks, realkill93/blanktail. Rootindependent453120definedstatefields/RNG exact and19626orderedmatrices/314016channels bitexact; snapshotbirthoffset/doubleAnimate negativesreject. Fourteen whole original/actualMetal phases, five fullresolutiondetailstrips and four actualsizeimages independentlyreviewed,35pinsverified/allgeometrycontained. Integrated101PNGs byteidentical92visible/cleanexit; sourcebuild/compiledmapping/lifecycle pass. Roottranslatedgallery20/20visible through458updates, fourunreseededcompletions93/95/96/96+partial78cleanup. Uninitializedflicker/deadstorage ignored asunused byRender(false,false). Commonprojection/live-spell/casterfacing/naturalactor/map/audio/device/exactpixels andsampling/RGB565overlap residualsremainopen; noFireConecontrolleralias orfit."
     }
   }
 }
