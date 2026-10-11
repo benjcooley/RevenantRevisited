@@ -48,3 +48,11 @@ Nineteen phase comparisons are frozen under
 One-based film fileN follows pulseN+1/native recordN, verified from CSV and RNG
 logs. Independent appearance approval is pending. Natural queen/bow dispatch,
 actor selection/reaction/damage, audio/device and exact pixels remain open.
+
+Root approved QueenArrow's scoped native-domain moving appearance after all19
+whole/detail phases and full actual-size9/17 impact views. Original gray
+untextured brightness, launch, trail growth, collision collapse and real kill
+agree; the caller/device/exact-pixel limits above remain open. Frozen private
+`queen-arrow-review-final/root-approval.json` pins the pairs, panels, native
+replay and captured binary. Approval SHA-256:
+`5d7ec006a594db826d78997689ce53b54c234c2c77fcfa68f3a8a419b05f7ee9`.
