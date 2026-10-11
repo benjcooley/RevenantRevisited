@@ -4,6 +4,37 @@ Bugs and gaps that Jev's sessions surfaced in the games, with what reproduces
 each. Newest first. Each entry: what was seen, the evidence, the repro, and
 who owns the fix.
 
+## F2. Clicks around the side tabs never reached the world (port bug, fixed)
+
+**Seen 2026-10-11.** `crosscheck.py --from port:opening` showed 32 grid
+cells in the strip x 384..448, y 176..416 where a left click reached the
+world in retail but not in the port.
+
+**Evidence.**
+- `TMapPane::MouseClick` leaves a press to the side tabs only when one
+  of their buttons holds it: `0x004364d0` on `0x0065be50`, asked at
+  `0x0044f17b`.
+- The buttons are plain 36×35 rects, because their flags (`0x180010`)
+  lack the pixel-test bit `0x20000` of `0x0042d0d0`. The 2 px gaps and
+  the strip's margins belong to the map.
+- The port gave the HUD a 64×240 box there.
+- The port also drew the strip 4 px left and 2 px up. Retail lays it
+  flush in the play field's corner (Pulse `0x0047bc1a..0x0047bc3d`): at
+  (400, 188) with both panels open. A pixel probe of retail's routing
+  gave x 403..438 and y 190+37n..224+37n for the buttons.
+
+**Repro (port).** `crosscheck.py --from port:opening` before `dd4b8f71`:
+`clicks world port=0 retail=32`.
+
+**Resolution.** Fixed in `dd4b8f71`.
+- `TPlayScreen::ClickRoute` asks the strip's own hit test
+  (`UISideTabButtonAt`).
+- Moves and the hover cursor stay the map's over the whole strip.
+- The strip sits flush in the corner.
+- After the fix: no `clicks world` variance; the port's pixel runs are
+  retail's; a click in a gap walks Locke and a click on a tab switches it
+  (MAP_INPUT.md §4, §7.1).
+
 ## F1. A dead character saved and loaded is gone (retail behaviour)
 
 **Seen 2026-10-10.** Jev killed Rahul from the `opening` waypoint and the
