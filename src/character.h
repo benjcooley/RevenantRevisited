@@ -399,6 +399,10 @@ class TCharacter : public TComplexObject
       // Returns true if the character is an enemy
     bool IsFinalState();
       // Returns whether character is in their last days
+    [[nodiscard]] const SCharAttackData* CurrentBlow() const
+      { return doing && doing->action == ACTION_ATTACK ? doing->attack : nullptr; }
+      // The attack its doing block carries while it's in an ATTACK, else
+      // null: what an onlooker reads from the wind-up
     int32_t SqrRadius() { int32_t s = Radius(); s *= s; return s; }
       // Util function
     bool ExecutingQueued();

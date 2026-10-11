@@ -26,6 +26,8 @@ Scenario keys:
   ini       optional Revenant.ini overrides {"Section": {"Key": "Value"}}
   playerai  true: Locke runs the character AI and fights on his own
             (--playerai; retail's charflags 0x100000)
+  playerbot true: Locke is played by the player bot, through the player's
+            keys (--playerbot; docs/gameplay/PLAYER_BOT.md)
 
 Environment: REVENANT_DATA_PATH (the install; default the retail lab's).
 """
@@ -119,6 +121,8 @@ def run_once(scn: dict, port: Path, out: Path, watch: bool = False, extra: list[
         args.insert(1, '--headless')
     if scn.get('playerai'):
         args.append('--playerai')
+    if scn.get('playerbot'):
+        args.append('--playerbot')          # Locke played by code (docs/gameplay/PLAYER_BOT.md)
     args += list(extra)
     env = dict(os.environ, REVENANT_SAVE_PATH=str(save), REVENANT_DATA_PATH=str(DATA))
     (out / 'cmd.txt').write_text(' '.join(repr(a) for a in args) + '\n')

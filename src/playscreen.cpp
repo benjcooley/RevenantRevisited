@@ -27,6 +27,7 @@
 #include "combattrace.h"
 #include "testconfig.h"
 #include "playscreen.h"
+#include "playerbot.h"
 
 #include "audio_backend.h"
 #include "dialog.h"
@@ -908,6 +909,9 @@ void TPlayScreen::Update()
     // --playerai: the player fights on his own (testconfig.h).
     if (StartupPlayerAI && Player)
         Player->SetRunsAI(true);
+    // --playerbot: Locke played by code, once he's in the world.
+    if (StartupPlayerBot && Player && !PlayerBot.Enabled())
+        PlayerBot.Enable(true);
 
     // --exec console queue (no-op unless the flag was given).
     PulseStartupExec();

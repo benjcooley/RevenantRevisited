@@ -39,6 +39,7 @@
 #include "graphics.h"
 #include "module.h"
 #include "playscreen.h"
+#include "playerbot.h"
 #include "revisited_defaults.h"
 #include "revisited_settings.h"
 #include "testscreen.h"
@@ -1576,10 +1577,13 @@ void GetParameters(int argc, char **argv)
         if (arg_param(cmd, "seed", p))
         {
             SeedRandom((uint32_t)std::stoul(p));
+            PlayerBot.Seed((uint32_t)std::stoul(p));
             log_info("[determinism] random seed %s", p.c_str());
         }
         if (arg_flag(cmd, "playerai"))
             StartupPlayerAI = true;
+        if (arg_flag(cmd, "playerbot"))
+            StartupPlayerBot = true;
         if (arg_flag(cmd, "fixedstep"))
         {
             FixedStep = true;
