@@ -16,6 +16,7 @@
 #include "effects/funneloriginal.h"
 #include "effects/arroworiginal.h"
 #include "effects/ytelekinesisoriginal.h"
+#include "effects/jhagaattackoriginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
@@ -5324,6 +5325,16 @@ struct SVfxTestBootstrap {
             original.submit=[](void* c,EFxDebugMode){lightstrip_original::Advance(static_cast<lightstrip_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){lightstrip_original::SubmitWorld(static_cast<lightstrip_original::State*>(c),mode);};
             original.destroy=[](void* c){lightstrip_original::Destroy(static_cast<lightstrip_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="JhagaAttack_ORIGINAL";
+            original.family="projectile";original.pipeline="IM+QUAD";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return jhagaattack_original::Spawn({o.x,o.y+60,o.z+78});};
+            original.submit=[](void* c,EFxDebugMode){jhagaattack_original::Advance(static_cast<jhagaattack_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode d){jhagaattack_original::SubmitWorld(static_cast<jhagaattack_original::State*>(c),d);};
+            original.is_alive=[](void* c){return jhagaattack_original::IsAlive(static_cast<jhagaattack_original::State*>(c));};
+            original.destroy=[](void* c){jhagaattack_original::Destroy(static_cast<jhagaattack_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
         {

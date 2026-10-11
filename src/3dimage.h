@@ -240,8 +240,10 @@ class T3DImagery : public TObjectImagery
     bool speed_partsys_profile = false;
     bool quicksilver_partsys_profile = false;
     bool lightstrip_partsys_profile = false;
+    bool jhagaattack_partsys_profile = false;
     bool funnel_partsys_profile = false;
     bool ValidateRetailLightStripProfile();
+    bool ValidateRetailJhagaAttackProfile();
     bool ValidateRetailFunnelProfile();
     bool comet_partsys_profile=false;
     bool fgeyser_partsys_profile=false;
@@ -347,6 +349,7 @@ class T3DImagery : public TObjectImagery
     bool HasRetailDustProfile() const { return dust_partsys_profile; }
     bool HasRetailPoisonProfile() const { return poison_partsys_profile; }
     bool HasRetailLightStripProfile() const { return lightstrip_partsys_profile; }
+    bool HasRetailJhagaAttackProfile() const { return jhagaattack_partsys_profile; }
     bool HasRetailFunnelProfile() const { return funnel_partsys_profile; }
     bool HasGoldPartSysProfile() const { return gold_partsys_profile; }
     bool HasRetailMightPartSysProfile() const { return might_partsys_profile; }
@@ -535,6 +538,8 @@ class T3DAnimator : public TObjectAnimator
     retail_warp::State retail_warp_state;
     struct SPartSysControllers;
     std::unique_ptr<SPartSysControllers> partsys_controllers;
+    bool jhagaattack_object_zero_sampled=false;
+    hmm_vec3 jhagaattack_object_zero_origin{}; // outgoing-flight origin consumed by controller initialization
     std::function<int(int,int,int)> lightstrip_ground;
     void RefreshPartSysControllers();
     void AdvancePartSysControllers();
@@ -597,6 +602,10 @@ class T3DAnimator : public TObjectAnimator
 
     // True for the hidden particle prototype, or every mesh when an authored
     // controller is unsupported. The caller must not submit a static substitute.
+    hmm_vec3 JhagaAttackObjectZeroOrigin() const { return jhagaattack_object_zero_origin; }
+    void SetJhagaAttackObjectZeroOrigin(const hmm_vec3& origin);
+    void NoteJhagaAttackPrototypeSample();
+    void SetJhagaAttackGround(std::function<int(int,int,int)> query);
     void SetLightStripGround(std::function<int(int,int,int)> query);
     void SetFunnelGround(std::function<int(int,int,int)> query);
     void SetCometGround(std::function<int(int,int,int)> query);
