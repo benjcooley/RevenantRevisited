@@ -160,12 +160,13 @@ class FakeHost:
         return obs
 
     def project(self, req: dict) -> dict:
-        return {'screen': [self.world.screen(p) for p in req['points']]}
+        screen = [self.world.screen(p) for p in req['points']]
+        return {'screen': screen, 'world': [0 <= x < 640 and 0 <= y < 480 for x, y in screen]}
 
     def pick(self, req: dict) -> dict:
         pos = self.world.world(req['x'], req['y'])
         near = abs(pos[0] - SARDOK['pos'][0]) <= 4 and abs(pos[1] - SARDOK['pos'][1]) <= 4
-        return {'pos': pos, 'object': SARDOK['id'] if near else None}
+        return {'pos': pos, 'object': SARDOK['id'] if near else None, 'world': True}
 
     def mark(self, req: dict) -> dict:
         extra = {k: v for k, v in req.items() if k not in ('id', 'cmd', 'kind')}

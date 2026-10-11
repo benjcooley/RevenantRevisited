@@ -146,6 +146,11 @@ class TPlayScreen : public TScreen
     void DrawBackground() override;
 
     // ---- Input ---------------------------------------------------------
+    // Who a click at (x, y) goes to, as MouseClick routes it: a modal that
+    // holds the mouse, nobody (a load is under way), the shop drawer, the
+    // HUD, or the world (the map pane, through the runtime mode).
+    enum class EClickRoute { Modal, Ignored, BuySell, Hud, World };
+    [[nodiscard]] EClickRoute ClickRoute(int32_t x, int32_t y);
     void MouseClick(int32_t button, int32_t x, int32_t y) override;
     void MouseMove (int32_t button, int32_t x, int32_t y) override;
     void KeyPress  (int32_t key, bool down)               override;

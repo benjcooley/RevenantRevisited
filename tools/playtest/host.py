@@ -135,8 +135,14 @@ class Host:
         response.pop('ok', None)
         return response
 
-    def project(self, points: Sequence[Sequence[int]]) -> list[list[int] | None]:
-        return self.request('project', points=[list(p) for p in points])['screen']
+    def project(self, points: Sequence[Sequence[int]]) -> list[tuple[list[int] | None, bool]]:
+        """Each world point's screen pixel (None off the play field) and
+        whether a click there reaches the world rather than the HUD (a host
+        that doesn't say: whenever it is on screen)."""
+        response = self.request('project', points=[list(p) for p in points])
+        screen = response['screen']
+        world = response.get('world') or [s is not None for s in screen]
+        return list(zip(screen, world))
 
     def pick(self, x: int, y: int) -> dict:
         return self.request('pick', x=x, y=y)

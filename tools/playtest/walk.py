@@ -30,7 +30,9 @@ from inputs import Bindings, Plan
 from jev import Choice, Jev
 
 STEP_LIMIT = 32                      # TCharacter::Blocked's MAXZMOVE: higher steps block
-CELL = 16                            # walk grid cell, world units
+CELL = 16                            # walk grid cell, world units; cell k is centred on k * CELL
+CLICK_HEIGHT = 50                    # a click's map point is taken at Locke's height + 50 (MAP_INPUT.md §5)
+UNKNOWN = -1                         # a walk grid cell no loaded sector holds
 EXPLORED_CELL = 256                  # memory cell for "been there", world units
 SNAP = 8                             # Goto snaps onto its point within this
 ARRIVE = 24                          # stopped this close to a ground point is arrived
@@ -40,6 +42,12 @@ SHUNNED = 6                          # choices a destination sits out after a re
 COMPASS = ('right', 'up and right', 'up', 'up and left', 'left', 'down and left', 'down', 'down and right')
 DESTINATION_CLASSES = {'character', 'exit', 'container', 'item', 'weapon', 'armor', 'food', 'potion',
                        'money', 'scroll', 'talisman', 'key', 'tool', 'lightsource'}
+
+
+def cell_of(x: float) -> int:
+    """The walk cell holding world coordinate x: GetWalkHeight's
+    (x + GRIDSIZE / 2) >> WALKMAPSHIFT, so cell k spans k*16-8 .. k*16+7."""
+    return (int(math.floor(x)) + CELL // 2) >> 4
 
 
 def screen_direction(dx: float, dy: float) -> str:
@@ -78,7 +86,8 @@ class Memory:
 
 
 class WalkGrid:
-    """The observation's walk grid: heights by cell, 0 where there is no floor."""
+    """The observation's walk grid: heights by cell, 0 where there is no
+    floor, UNKNOWN where no loaded sector holds the cell."""
 
     def __init__(self, grid: dict):
         self.ox, self.oy = grid['origin']
@@ -86,11 +95,15 @@ class WalkGrid:
         self.w, self.h = grid['w'], grid['h']
         self.heights = grid['heights']
 
+    def cell_height(self, gx: int, gy: int) -> int:
+        x, y = gx - self.ox, gy - self.oy
+        if 0 <= x < self.w and 0 <= y < self.h:
+            return self.heights[y * self.w + x]
+        return UNKNOWN
+
     def height(self, x: float, y: float) -> int:
-        gx, gy = int(x // self.cell) - self.ox, int(y // self.cell) - self.oy
-        if 0 <= gx < self.w and 0 <= gy < self.h:
-            return self.heights[gy * self.w + gx]
-        return 0
+        """The floor height under a world point; 0 for none or unknown."""
+        return max(0, self.cell_height(cell_of(x), cell_of(y)))
 
     def open_line(self, a: Sequence[int], b: Sequence[int]) -> bool:
         """Every cell on the straight line from a to b has floor, and no step
@@ -149,8 +162,8 @@ class Walker:
                 f = BESIDE / gap
                 spot = (round(o['pos'][0] + (player['pos'][0] - o['pos'][0]) * f),
                         round(o['pos'][1] + (player['pos'][1] - o['pos'][1]) * f), o['pos'][2])
-                shown = host.project([spot])[0]
-                if (key in self.shunned or not shown or not in_rect(shown, field_rect)
+                shown, reaches = host.project([(spot[0], spot[1], player['pos'][2] + CLICK_HEIGHT)])[0]
+                if (key in self.shunned or not shown or not reaches or not in_rect(shown, field_rect)
                         or (grid and not grid.open_line(player['pos'], spot))):
                     continue
                 found.append(Destination(key, f"walk up to '{name}', {way}", tuple(shown), spot, name=name))
@@ -174,8 +187,8 @@ class Walker:
                     continue
                 picked = host.pick(*point)
                 pos = picked.get('pos')
-                if picked.get('object') is not None or not pos:
-                    continue
+                if picked.get('object') is not None or not pos or not picked.get('world', True):
+                    continue                                     # an object, nothing, or the HUD there
                 if grid and not grid.open_line(player['pos'], pos):
                     continue
                 key = f'ground:{sector}:{label}'

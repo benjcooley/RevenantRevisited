@@ -148,6 +148,7 @@ void WritePlayer(JsonOut& out, TPlayer& p)
     ScreenPos(out, pos);
     out.Field("level", p.GetLevel());
     out.Field("facing", p.GetFace());
+    out.Field("radius", p.Radius());
     Pair(out, "health", p.Health(), p.MaxHealth());
     Pair(out, "mana", p.Mana(), p.MaxMana());
     Pair(out, "fatigue", p.Fatigue(), p.MaxFatigue());
@@ -324,9 +325,11 @@ void WriteWalkGrid(JsonOut& out, int32_t radius)
     out.Field("w", cells);
     out.Field("h", cells);
     out.Key("heights").Begin('[');
+    // -1 where no sector is loaded to read the cell from: unknown ground,
+    // not "no floor" (0), which a director's map must not confuse.
     for (int32_t y = 0; y < cells; ++y)
         for (int32_t x = 0; x < cells; ++x)
-            out.Value(MapPane.GetWalkGridHeight(gx + x, gy + y));
+            out.Value(MapPane.WalkCellKnown(gx + x, gy + y) ? MapPane.GetWalkGridHeight(gx + x, gy + y) : -1);
     out.End(']');
     out.End('}');
 }

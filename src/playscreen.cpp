@@ -1729,29 +1729,34 @@ uint32_t TPlayScreen::ControlModeMask() const
     return CTRL_NORMALMODE;
 }
 
-void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
+TPlayScreen::EClickRoute TPlayScreen::ClickRoute(int32_t x, int32_t y)
 {
     // REVSYNC: 0x00490530 -- a modal holding the mouse (MODAL_MOUSE) gets
     // every click; the HUD and the world get none.
     if (ModalHas(MODAL_MOUSE))
-    {
-        TScreen::MouseClick(button, x, y);
-        return;
-    }
-
+        return EClickRoute::Modal;
     // A load is under way: the world takes no clicks.
     if (GameFlow.Session().Loading())
-        return;
-
+        return EClickRoute::Ignored;
     if (InBuySellDrawer(x, y))
+        return EClickRoute::BuySell;
+    if (g_playHudInitialized && (IsReconstructedHudPoint(x, y) || UIDragState::IsActive()))
+        return EClickRoute::Hud;
+    return EClickRoute::World;
+}
+
+void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
+{
+    switch (ClickRoute(x, y))
     {
+      case EClickRoute::Modal:
+      case EClickRoute::BuySell:
         TScreen::MouseClick(button, x, y);
         return;
-    }
-
-    if (g_playHudInitialized &&
-        (IsReconstructedHudPoint(x, y) || UIDragState::IsActive()))
-    {
+      case EClickRoute::Ignored:
+        return;
+      case EClickRoute::Hud:
+      {
         const SHudState& s = GetHudState();
         if (HandleMouseClickUISidebarModeConsumed(button, x, y))
             return;
@@ -1763,8 +1768,10 @@ void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
         if (button == MB_LEFTUP)
             UIDragState::ReleaseUnclaimed();    // a drag no pane took ends here
         return;
+      }
+      case EClickRoute::World:
+        break;
     }
-
     TScreen::MouseClick(button, x, y);
     // Route to the active runtime mode; editor mode forwards to the
     // renderer's gizmo / drag picker, game mode forwards to MapPane's

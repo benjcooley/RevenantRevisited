@@ -833,9 +833,13 @@ bool TPlaytest::CmdObserve(const JsonValue& req, JsonOut& out, std::string& erro
     return true;
 }
 
+// `screen`: each point's game-screen pixel, null off the play field;
+// `world`: whether a click there reaches the world rather than the HUD or a
+// modal (TPlayScreen::ClickRoute), so a director never aims at a panel.
 bool TPlaytest::CmdProject(const JsonValue& req, JsonOut& out, std::string& error)
 {
-    out.Key("screen").Begin('[');
+    std::vector<std::pair<int32_t, int32_t>> shown;
+    std::vector<bool> projected;
     for (const JsonValue& p : req["points"].Items())
     {
         if (!p.IsArray() || p.Items().size() < 2)
@@ -845,11 +849,20 @@ bool TPlaytest::CmdProject(const JsonValue& req, JsonOut& out, std::string& erro
         }
         const S3DPoint world(int32_t(p[0].Int()), int32_t(p[1].Int()), int32_t(p[2].Int()));
         int32_t sx = 0, sy = 0;
-        if (Observation::Project(world, sx, sy))
-            out.Begin('[').Value(sx).Value(sy).End(']');
+        projected.push_back(Observation::Project(world, sx, sy));
+        shown.emplace_back(sx, sy);
+    }
+    out.Key("screen").Begin('[');
+    for (size_t i = 0; i < shown.size(); ++i)
+        if (projected[i])
+            out.Begin('[').Value(shown[i].first).Value(shown[i].second).End(']');
         else
             out.Null();
-    }
+    out.End(']');
+    out.Key("world").Begin('[');
+    for (size_t i = 0; i < shown.size(); ++i)
+        out.Bool(projected[i] && CurrentScreen == &PlayScreen
+                 && PlayScreen.ClickRoute(shown[i].first, shown[i].second) == TPlayScreen::EClickRoute::World);
     out.End(']');
     return true;
 }
@@ -869,6 +882,9 @@ bool TPlaytest::CmdPick(const JsonValue& req, JsonOut& out, std::string& error)
         out.Value(object);
     else
         out.Null();
+    const int32_t x = int32_t(req["x"].Int()), y = int32_t(req["y"].Int());
+    out.FieldBool("world", CurrentScreen == &PlayScreen
+                           && PlayScreen.ClickRoute(x, y) == TPlayScreen::EClickRoute::World);
     return true;
 }
 

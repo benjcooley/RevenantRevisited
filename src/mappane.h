@@ -486,6 +486,10 @@ class TMapPane : public TPane
         // Gets walk height for a given walk map
     int32_t GetWalkGridHeight(int32_t x, int32_t y);
         // Gets walk height given walk grid x and y
+    [[nodiscard]] bool WalkCellKnown(int32_t x, int32_t y);
+        // Whether GetWalkGridHeight has a sector to read the cell from (the
+        // window's, or the current map's); its 0 is then "no floor", not
+        // "not loaded". For the playtest director's map.
     using WalkGridSeam = int32_t (*)(int32_t x, int32_t y);
     static inline WalkGridSeam walkGridSeam = nullptr;
         // Retail A/B fixtures only: when set, it answers every walk cell's

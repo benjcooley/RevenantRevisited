@@ -131,8 +131,8 @@ stderr.
 | `start` | `from`, `slot` (a bundle `start/` path when `from` is `slot`), `seed`, `record` (bundle directory, optional), `ini` (path, optional) | `t: 0` once play is reached and control can be given |
 | `step` | `ticks`, `events` (each with `t` relative to this step, `0 <= t < ticks`) | `t`: the session tick reached |
 | `observe` | `frame` (PNG path, optional), `objects` (radius in world units, default 800), `walkgrid` (radius, optional) | the observation (§7) |
-| `project` | `points`: `[[x, y, z], …]` | `screen`: `[[sx, sy] or null, …]`: game-screen pixels, `null` when off the play field |
-| `pick` | `x`, `y` | `pos`: the map point under that pixel by the game's pointer conversion (the right-button walk's: Locke's height + 50), `object`: the id under it or `null` |
+| `project` | `points`: `[[x, y, z], …]` | `screen`: `[[sx, sy] or null, …]`: game-screen pixels, `null` when off the play field; `world`: `[bool, …]`, whether a click at each reaches the world rather than the HUD or a modal (the port's `TPlayScreen::ClickRoute`). A click's map point is taken at Locke's height + 50, so project a point to click at that height |
+| `pick` | `x`, `y` | `pos`: the map point under that pixel by the game's pointer conversion (the right-button walk's: Locke's height + 50), `object`: the id under it or `null`, `world`: whether a click there reaches the world |
 | `export_slot` | `slot` (a slot name, or `@last` for the slot the game wrote most recently: Quick Save picks its own "Quick Save N"), `to` | `path`, `slot` (the name exported) |
 | `mark` | `kind`, other fields | writes the mark and a check line to the recording |
 | `replay` | `bundle`, `verify` (bool), `until` (tick, optional) | `t`, and with `verify`: `diverged: null` or `{t, fields}`. A replay starts the way the recording did: a new game, or the bundle's own `start/<slot>` with its seed and INI |
@@ -223,6 +223,10 @@ a NUL byte, the file's bytes and a NUL byte.
   `item`, `container`, `exit`, `helper`, …), and `screen` is `null` off
   screen.
 - `walkgrid` (when asked): `{"origin": [gx, gy], "cell": 16, "w": W,
-  "h": H, "heights": [...]}`, row-major walk heights, 0 for no floor.
+  "h": H, "heights": [...]}`, row-major walk heights: 0 for no floor, -1 for
+  a cell no loaded sector holds (unknown, not "no floor"). Cell k is centred
+  on world k*16, as `GetWalkHeight` reads it (`(x + 8) >> 4`).
+- `player.radius`: the radius the game tests Locke's steps over
+  (`GetWalkHeightRadius`).
 
 Raw numbers only: bucketing for Jev is the director's job.

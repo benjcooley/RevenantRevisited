@@ -44,10 +44,11 @@ class Pieces(unittest.TestCase):
         heights[1 * 4 + 2] = 0                       # a hole at cell (2, 1)
         heights[3 * 4 + 1] = 60                      # a ledge at cell (1, 3)
         grid = WalkGrid({'origin': [0, 0], 'cell': 16, 'w': 4, 'h': 4, 'heights': heights})
-        self.assertTrue(grid.open_line((8, 8), (8, 40)))
-        self.assertFalse(grid.open_line((8, 24), (60, 24)))     # through the hole
-        self.assertFalse(grid.open_line((8, 56), (40, 56)))     # up the ledge
-        self.assertFalse(grid.open_line((8, 8), (200, 8)))      # off the grid: no floor
+        # cell (x, y) is centred on (16x, 16y), as the game's walk cells are
+        self.assertTrue(grid.open_line((0, 0), (0, 48)))
+        self.assertFalse(grid.open_line((0, 16), (48, 16)))     # through the hole at (2, 1)
+        self.assertFalse(grid.open_line((0, 48), (32, 48)))     # up the ledge at (1, 3)
+        self.assertFalse(grid.open_line((0, 0), (200, 0)))      # off the grid: unknown
 
     def test_memory(self):
         memory = Memory()

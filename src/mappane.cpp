@@ -2148,6 +2148,20 @@ int32_t TMapPane::GetWalkGridHeight(int32_t x, int32_t y)
     return 0;
 }
 
+bool TMapPane::WalkCellKnown(int32_t x, int32_t y)
+{
+    if (walkGridSeam)
+        return true;
+    const int32_t world_sx = x >> (SECTORWSHIFT - WALKMAPSHIFT);
+    const int32_t world_sy = y >> (SECTORHSHIFT - WALKMAPSHIFT);
+    const int32_t sx = world_sx - sectorx;
+    const int32_t sy = world_sy - sectory;
+    if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
+        return true;
+    TGameMap* m = MapManager.CurrentMap();
+    return m && m->FindSector(world_sx, world_sy);
+}
+
 // Returns the maximum walk height in the area bounded by 
 // pos - width/2,height/2 to pos + with/2,height/2
 int32_t TMapPane::GetWalkHeightArea(S3DPoint& pos, int32_t width, int32_t height)

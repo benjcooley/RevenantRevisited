@@ -44,8 +44,8 @@ from inputs import Bindings, InputState, Plan, chord
 from rec import BUTTON_RIGHT
 from jev import Choice, Jev, Router, tool
 from knowledge import Knowledge
-from nav import LevelMaps, farthest_clear
-from walk import USE_REACH, Destination, Walker, WalkGrid, in_rect
+from nav import DEFAULT_RADIUS, LevelMaps, farthest_clear
+from walk import CLICK_HEIGHT, USE_REACH, Destination, Walker, WalkGrid, in_rect
 from waypoints import Catalogue, Waypoint
 from world import Place, World
 
@@ -308,14 +308,21 @@ class Director:
             return False
         grid = WalkGrid(full['walkgrid'])
         self.maps.merge(level, grid)
-        path = self.maps.plan(level, pos, stop_pos)
-        shown = dict(zip(path, self.host.project([[x, y, pos[2]] for x, y in path]) if path else []))
+        path = self.maps.plan(level, pos, stop_pos, player.get('radius') or DEFAULT_RADIUS)
+        if len(path) < 2 or distance(path[-1], pos) < 32:
+            # nowhere new to go on the map seen so far: mark it, and let exploring take a turn
+            self.maps.dead_end(level, pos)
+            self.note('dead end', at=list(pos[:2]), toward=stop_name, why='no way on the known map')
+            return False
+        # the game takes a click's point at Locke's height + 50, so aim there
+        shown = dict(zip(path, self.host.project([[x, y, pos[2] + CLICK_HEIGHT] for x, y in path])))
         field_rect = full.get('playfield', self.walker.playfield)
-        point = farthest_clear(grid, pos, path, lambda p: bool(shown.get(p)) and in_rect(shown[p], field_rect))
+        point = farthest_clear(grid, pos, path, lambda p: bool(shown[p][0]) and shown[p][1]
+                               and in_rect(shown[p][0], field_rect))
         if not point:
             return False
         self.caption('travel', f'walking toward {words}')
-        dest = Destination(f'nav:{point[0]}:{point[1]}', f'toward {words}', tuple(shown[point]), (*point, pos[2]))
+        dest = Destination(f'nav:{point[0]}:{point[1]}', f'toward {words}', tuple(shown[point][0]), (*point, pos[2]))
         result, after, self.state = self.walker.walk(self.host, self.state, dest, observe=self.observe)
         self.note('travel', to=stop_name, goal=goal, result=result, point=list(point))
         here = after['player']['pos']

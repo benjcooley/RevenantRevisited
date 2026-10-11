@@ -1,85 +1,108 @@
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from nav import LevelMaps, farthest_clear, plan_path  # noqa: E402
-from walk import WalkGrid  # noqa: E402
+from nav import LevelMaps, farthest_clear, footprint, plan_path, search  # noqa: E402
+from walk import UNKNOWN, WalkGrid, cell_of  # noqa: E402
 from world import Exit, Place, World, parse_exit_list  # noqa: E402
 
 DATA = Path(__file__).resolve().parents[3] / 'data'
 
 
 def grid(rows: list[str]) -> WalkGrid:
-    """'.' floor at 10, '#' no floor, '^' a ledge at 100."""
-    heights = [{'.': 10, '#': 0, '^': 100}[c] for row in rows for c in row]
+    """'.' floor at 10, '#' no floor, '^' a ledge at 100, '?' unknown; cell
+    (x, y) is centred on (16x, 16y), as the game's walk cells are."""
+    heights = [{'.': 10, '#': 0, '^': 100, '?': UNKNOWN}[c] for row in rows for c in row]
     return WalkGrid({'origin': [0, 0], 'cell': 16, 'w': len(rows[0]), 'h': len(rows), 'heights': heights})
 
 
 ROOM = [
-    '...........',
-    '...........',
-    '...........',
-    '#####...###',
-    '...........',
-    '...........',
-    '...........',
+    '###############',
+    '#.............#',
+    '#.............#',
+    '#.............#',
+    '#.............#',
+    '#######...#####',
+    '#.............#',
+    '#.............#',
+    '#.............#',
+    '#.............#',
+    '###############',
 ]
 
 
-class Paths(unittest.TestCase):
-    def test_around_a_wall_through_its_gap(self):
+class Cells(unittest.TestCase):
+    def test_cells_are_centred_like_the_game(self):
+        self.assertEqual([cell_of(x) for x in (-8, 7, 8, 23, 24)], [0, 0, 1, 1, 2])
+
+    def test_footprint_mirrors_get_walk_height_radius(self):
         g = grid(ROOM)
-        path = plan_path(g, (8, 8), (8, 104))                      # cell (0,0) to cell (0,6)
-        self.assertEqual(path[0], (8, 8))
-        self.assertEqual(path[-1], (8, 104))
-        self.assertIn((104, 56), path)                              # through the gap's middle, (6, 3), clear of its sides
-        self.assertNotIn((88, 56), path)                            # (5, 3) touches the wall
+        height = lambda c: g.cell_height(*c)
+        under, step, hole = footprint(height, 7 * 16, 2 * 16, 24)        # mid-room
+        self.assertEqual((under, step, hole), (10, 0, False))
+        under, step, hole = footprint(height, 1 * 16, 1 * 16, 24)        # in a corner: walls within reach
+        self.assertTrue(hole)
+
+
+class Paths(unittest.TestCase):
+    def test_through_the_doorway_with_room_to_spare(self):
+        g = grid(ROOM)
+        path = plan_path(g, (3 * 16, 2 * 16), (3 * 16, 8 * 16), radius=12)
+        self.assertEqual(path[0], (48, 32))
+        self.assertEqual(path[-1], (48, 128))
+        self.assertIn((128, 80), path)                                   # the doorway's middle cell (8, 5)
+
+    def test_a_radius_too_wide_for_the_doorway(self):
+        g = grid(ROOM)
+        path = plan_path(g, (3 * 16, 2 * 16), (3 * 16, 8 * 16), radius=40)
+        self.assertLess(path[-1][1], 80)                                 # stays on the near side
 
     def test_the_next_click_is_the_farthest_point_in_sight(self):
         g = grid(ROOM)
-        path = plan_path(g, (8, 8), (8, 104))
-        point = farthest_clear(g, (8, 8), path)
-        self.assertTrue(g.open_line((8, 8), point))
-        self.assertGreater(path.index(point), 1)
-        self.assertLess(path.index(point), len(path) - 1)           # the wall hides the end
+        path = plan_path(g, (3 * 16, 2 * 16), (3 * 16, 8 * 16), radius=12)
+        point = farthest_clear(g, (48, 32), path)
+        self.assertTrue(g.open_line((48, 32), point))
+        self.assertLess(path.index(point), len(path) - 1)                # the wall hides the end
 
-    def test_a_ledge_blocks_and_an_unreachable_target_gets_the_nearest(self):
-        g = grid(['.........', '....^....', '.........', '....^....', '.........'])
-        path = plan_path(g, (8, 40), (136, 40))
-        self.assertTrue(path[-1][0] < 72 or path[-1] == (136, 40))   # around or short of the ledge, never over it
-        self.assertNotIn((72, 24), path)
-        self.assertEqual(plan_path(g, (72, 8), (8, 8)), [(72, 8)])  # on the ledge's top: every step down is too far
-        self.assertEqual(plan_path(grid(['#.']), (8, 8), (24, 8)), [])  # standing on no floor the grid knows
-
-    def test_target_outside_the_grid(self):
-        g = grid(ROOM)
-        path = plan_path(g, (24, 24), (2000, 24))
-        self.assertEqual(path[-1][1], 24)
-        self.assertGreaterEqual(path[-1][0], 136)                   # toward the edge nearest the target
+    def test_a_ledge_blocks(self):
+        g = grid(['..........', '..........', '....^.....', '....^.....', '....^.....',
+                  '....^.....', '..........', '..........'])
+        path = plan_path(g, (16, 64), (144, 64), radius=8)
+        self.assertNotIn((64, 64), path)
+        self.assertEqual(path[-1], (144, 64))                            # around it
 
 
-class Maps(unittest.TestCase):
-    def test_merging_keeps_floor_and_grows(self):
+class Exploring(unittest.TestCase):
+    def test_an_unreachable_target_draws_the_path_to_the_frontier(self):
+        g = grid(['?????????',
+                  '?.......?',
+                  '?.......?',
+                  '?...#...?',
+                  '?.......?',
+                  '#########'])
+        path = search(lambda c: g.cell_height(*c), (2 * 16, 2 * 16), (40 * 16, 2 * 16), radius=4)
+        end = (path[-1][0] // 16, path[-1][1] // 16)
+        self.assertEqual(end[0], 7)                                      # the edge beside the unknown, toward the target
+
+    def test_merging_keeps_known_cells_and_skips_unknown(self):
         maps = LevelMaps()
-        maps.merge(2, WalkGrid({'origin': [0, 0], 'cell': 16, 'w': 3, 'h': 1, 'heights': [10, 10, 10]}))
-        maps.merge(2, WalkGrid({'origin': [2, 0], 'cell': 16, 'w': 3, 'h': 1, 'heights': [0, 10, 10]}))
-        self.assertEqual(maps.heights[2], {(0, 0): 10, (1, 0): 10, (2, 0): 10, (3, 0): 10, (4, 0): 10})
+        maps.merge(2, WalkGrid({'origin': [0, 0], 'cell': 16, 'w': 3, 'h': 1, 'heights': [10, 0, UNKNOWN]}))
+        maps.merge(2, WalkGrid({'origin': [2, 0], 'cell': 16, 'w': 2, 'h': 1, 'heights': [10, UNKNOWN]}))
+        self.assertEqual(maps.heights[2], {(0, 0): 10, (1, 0): 0, (2, 0): 10})
 
     def test_a_dead_end_turns_the_search_elsewhere(self):
-        # two pockets near the target: the nearer one is where Locke got stuck
-        rows = ['............',
-                '............',
-                '............',
-                '............']
+        rows = ['????????????????',
+                '?..............?',
+                '?..............?',
+                '?..............?',
+                '?..............?',
+                '????????????????']
         maps = LevelMaps()
         maps.merge(0, grid(rows))
-        target = (600, 40)                                          # beyond the grid's right edge
-        first = maps.plan(0, (24, 24), target)
-        self.assertGreaterEqual(first[-1][0], 152)
+        first = maps.plan(0, (2 * 16, 2 * 16), (40 * 16, 3 * 16), radius=4)
         maps.dead_end(0, first[-1])
-        second = maps.plan(0, (24, 24), target)
+        second = maps.plan(0, (2 * 16, 2 * 16), (40 * 16, 3 * 16), radius=4)
         self.assertGreaterEqual(abs(second[-1][0] - first[-1][0]) + abs(second[-1][1] - first[-1][1]), 100)
 
 
@@ -97,7 +120,7 @@ class Routes(unittest.TestCase):
                 Exit('jailexit', 2, (6258, 4434, 32), 2, (12810, 11392, 161)))}.get(level, ())
         rand = Place(2, (5760, 4528, 44), 'RandK', 'Rand', 'CHARACTER')
         self.assertEqual([e.name for e in world.route(2, (1342, 578, 17), rand)], ['ressexit', 'jailenter'])
-        self.assertEqual(world.route(2, (6000, 4400, 33), rand), [])              # already there: walk
+        self.assertEqual(world.route(2, (6000, 4400, 33), rand), [])
         self.assertIsNone(world.route(2, (0, 0, 0), Place(9, (0, 0, 0), 'X', 'X', 'ITEM')))
 
     @unittest.skipUnless((DATA / 'Modules' / 'Ahkuilon.rvm').exists(), 'no game data')
