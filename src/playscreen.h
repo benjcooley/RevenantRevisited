@@ -41,6 +41,7 @@
 
 class TInGameMenu;
 class TMapRenderer;
+class TRisingNumberLayer;
 class TObjectImagery;
 class TBottomBarPane;
 class TPlyrStatusBar;
@@ -327,6 +328,9 @@ class TPlayScreen : public TScreen
     TTextureHandle                frozenTexture = kInvalidTexture;
     std::unique_ptr<THudDrawable> frozenLayer;
     bool                          stillShown = false;
+
+    // The characters' rising damage numbers, over the world.
+    std::unique_ptr<TRisingNumberLayer> risingNumbers;
 
     // The bottom drawer (+0x6c0 mode, +0x6b8 shop request, +0x6b4 close
     // request).

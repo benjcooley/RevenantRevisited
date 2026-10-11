@@ -1,5 +1,13 @@
 # FloatingText (TPlayScreen post-char anim/text queues) — Forensics SPEC
 
+> **Correction (combat track, 2026-10-11):** shipped retail *does* float
+> damage numbers, through its own path rather than these queues:
+> TCharacter::Damage calls TCharAnimator `0x004da3b0` (eight slots per
+> character, 36 ticks, rising 400/256 px a tick, fading over the last 24),
+> and the map pass draws them after the scene (`0x004141f2` ->
+> `0x004da750`). Spec and port: `docs/gameplay/forensics/COMBAT_HIT.md`
+> §9.2, `src/risingnumbers.cpp`. The queues below remain unported.
+
 > **Status:** `forensics-partial` (mechanism + emitters + retail-side font
 > picked from snapshot + FONT.DEF; retail-side per-frame drain loop NOT
 > extracted from Ghidra recon — see §0 + §14). The spec captures the system
