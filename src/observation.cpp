@@ -6,6 +6,7 @@
 #include "observation.h"
 
 #include "cinematicscreen.h"
+#include "cursor.h"
 #include "death.h"
 #include "dialog.h"
 #include "inventory.h"
@@ -310,6 +311,17 @@ void WriteObjects(JsonOut& out, int32_t radius)
     out.End(']');
 }
 
+// The object under the pointer, as the map pane's hover picks it from the
+// last drawn frame (TMapPane::Animate, while the map has the pointer): what
+// a click there acts on. Null for nothing, or a pointer the map doesn't have.
+void WriteCursor(JsonOut& out)
+{
+    TObjectInstance* on = nullptr;
+    if (CurrentScreen == &PlayScreen && PlayScreen.MapRenderer() && PlayScreen.MapHasPointer(cursorx, cursory))
+        on = MapPane.OnObject(cursorx, cursory, nullptr);
+    Id(out, "cursor", on);
+}
+
 // Walk heights (0: no floor) of the 16-unit cells around Locke, row-major.
 void WriteWalkGrid(JsonOut& out, int32_t radius)
 {
@@ -416,6 +428,7 @@ void Observation::Write(JsonOut& out, int32_t objects, int32_t walkgrid)
         WritePlayer(out, *Player);
     else
         out.Key("player").Null();
+    WriteCursor(out);
     WriteDialog(out);
 
     out.Key("messages").Begin('[');
