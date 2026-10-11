@@ -143,6 +143,13 @@ class Retail_rules(unittest.TestCase):
         t.learn(observation(d=30))                                           # Locke didn't go into a throw
         self.assertNotIn('grapple:4', t.options(obs, t.assess(obs))['attack'])
 
+    def test_a_dead_target_is_left_for_the_nearest_living_enemy(self):
+        t = tactician()
+        obs = observation()
+        obs['objects'][0]['health'] = [0, 50]
+        obs['objects'].append(dict(obs['objects'][0], id=8, health=[30, 50], pos=[1100, 1000, 0]))
+        self.assertEqual(t.target_of(obs)['id'], 8)
+
     def test_a_grapple_needs_contact(self):
         t = tactician()
         obs = observation(d=60)

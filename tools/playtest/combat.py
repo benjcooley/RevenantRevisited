@@ -181,8 +181,12 @@ class Tactician:
     pending: tuple[str, int, frozenset[str]] | None = None         # a grapple pressed: kind, button, its moves
 
     def target_of(self, obs: dict) -> dict | None:
+        """The enemy to fight: Locke's own target while it lives, else the
+        nearest living enemy (the game keeps a dead target until he turns
+        to another)."""
         player = obs['player']
-        enemies = [o for o in obs.get('objects', []) if o.get('class') == 'character' and o.get('enemy')]
+        enemies = [o for o in obs.get('objects', []) if o.get('class') == 'character' and o.get('enemy')
+                   and (o.get('health') or [1])[0] > 0]
         chosen = next((o for o in enemies if o['id'] == player.get('target')), None)
         return chosen or (min(enemies, key=lambda o: distance(o['pos'], player['pos'])) if enemies else None)
 
