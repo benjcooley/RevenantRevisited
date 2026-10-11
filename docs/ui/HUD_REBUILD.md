@@ -348,6 +348,57 @@ castable, one word, long names), and the belt: still and animated items at
 several game frames, pouches, amounts (ammo, money), a pouch holding a
 stack.
 
+## 6b. P4 design: the inventory
+
+**What retail draws** (measured with `slots/hud/inventory.py`, 2026-10-10).
+TInventory (`0x0065d4f8`, vtable `0x005a58c0`) is a TButtonPane in the side
+panel's lower slot, (452, 306), 188×174, sharing it with the automap and the
+spell pane. Its art is Inventory.dat (`0x0065c130`). Slot 20 (`0x00537a30`)
+repaints the grid (slot 21, `0x00537a70`) when dirty, then the buttons;
+Animate (`0x00537f90`) draws the animated items.
+
+- `Inventory` (188×174) at (0, 0), opaque.
+- The container's icon, 20×20 at (10, 10), keyed on 0 (`0x00438df0`,
+  DM_TRANSPARENT): `Backpack` for the player's own inventory; for a bag,
+  the bag's inventory icon reduced to 20×20 when the pane opens it
+  (`0x00538e40`). That reduction is not the shelf's: the icon goes on a
+  black 40×40 surface, every 2×2 block is averaged unkeyed (red and blue
+  the floor of the mean, green half the sum of the top five bits) and what
+  comes out black is keyed (`EHalving::BoxOverBlack`).
+- The player's gold, `GetInventoryAmount("Gold")`, as `"%d$"` in the
+  "Gold" bitmap font (retail's font 9; the forensics' "GoldMed" was wrong),
+  left-aligned at (80, 13) (the font draws `$` as "gp"); "0$" with no gold.
+  Then `GoldPile` (32×32) at (40, 5) with alpha. The pile is a fixed
+  bitmap, not a stack.
+- A bitmap font hangs a line from its 'A': the font table gives it
+  StartHeight('A') as its ascent (`0x004ac990`), and a glyph's top is at
+  y + ascent − StartHeight(ch). Each glyph is one blit (`0x004b5820`) in
+  the font's draw mode, DM_TRANSPARENT | DM_ALIAS: the keyed data and the
+  alias buffer's edge pixels, each at its own coverage.
+- Twelve cells at (8 + 45·col, 42 + 44·row), column-major: slot
+  first + col·3 + row. Each is the shared item cell, exactly the shelf's
+  recipe (`TInvSlot`): the icon, the amount over 1 in "Numbers", a pouch's
+  slot-0 item halved with its count in white "Small".
+- Two arrow buttons, "scrollleft" at (140, 11) and "scrollright" at (161, 12),
+  24×24 with alpha (DM_USEDEFAULT | DM_ALPHA: DM_USEDEFAULT adds the
+  bitmap's mode to the flags, it doesn't replace them), from
+  `InvArwL{U,D,G}` / `InvArwR{U,D,G}`. A click moves
+  the first slot one column (3), within 0..243 (`0x00537520`); an arrow that
+  can't move is grey.
+- The pane's container (+0x17c) is the main player's, set as the player
+  becomes main (`0x0051eef0`, on the play screen only); SetContainer
+  (`0x005391a0`) builds the bag icon and goes back to the first page.
+  Clicking a bag opens it, clicking the container icon climbs back to its
+  owner.
+
+**Port.** `TInventory` (`src/inventory.*`) evolves into retail's pane: a
+`TButtonPane` with the two arrows, twelve `TInvSlot` cells and the art
+above; it owns its first slot (retail +0x188), which the side panel's drag
+hit-tests read until the drag moves into the pane. `TPlayScreen` hosts it in
+the lower slot while the side panel shows the inventory. The A/B is
+`hud_ab.py inventory` over `--test=ab-inventory`: gold amounts, stacks and
+pouches, animated items, pages, an opened bag.
+
 ## 7. Status
 
 - 2026-10-07: survey done; retail pipeline verified (§3); P0 started.
@@ -397,7 +448,7 @@ stack.
     - Retail's "Small" is `CreateFontA(+12, "Arial")`: a 12 px cell, about
       9 px em. The port's "Small" atlas is 12 px by stb's
       ScaleForPixelHeight, about 10.7 px em.
-    - `font.cpp`'s `kGdiTopLeading = 2` puts glyphs 2 px above the cell top,
+    - `ttfatlas.cpp`'s `kGdiTopLeading = 2` puts glyphs 2 px above the cell top,
       where GDI's DT_TOP never draws (the A/B's text overflow).
     - Both change every pane's text, so they get settled together against
       Win98 GDI captures.
@@ -456,3 +507,28 @@ stack.
       (`0x0043a820`). P4, with the other item panes.
     - Revisited at 16:9: the shelf shows (w − 220) / 45 boxes, more than the
       belt's 11 slots at wide widths. A layout question for P7.
+- 2026-10-10: **P4: the inventory done (still frames).**
+  - `TInventory` is retail's pane (§6b), hosted by `TPlayScreen` in the side
+    panel's lower slot and bound to the main player there (a game loaded
+    before the screen opened made its player main without it).
+    `--test=ui-inventory` and `--test=ab-inventory` are thin hosts over
+    `uipanehost.*`, which the bottom bar's hosts share.
+  - `hud_ab.py inventory`: 14/14 cases with no defects (gold 0 / 1 / 64 /
+    large, stacks, pouches, animated frames, pages 0 / 3 / 12 / last, an
+    opened bag). Bottom bar 19/19 and status bar 20/20 still.
+  - What the A/B found and fixed:
+    - The gold readout sat a row high: bitmap fonts took the GDI fonts'
+      top leading. A font atlas now carries its own cell baseline
+      (`TextCellBaseline`): a bitmap font's 'A', a TrueType stand-in's
+      ascent less 2 (P6 still settles that one).
+    - Bitmap glyphs lacked their anti-aliased edges: the font atlas
+      decodes them as retail draws them (`EBitmapDecode::PixelsAndAlias`),
+      blitted once (the double strike is the TrueType stand-ins').
+    - The backpack is keyed on 0, not on magenta alone.
+    - The bag's icon takes retail's second reduction (`EHalving::BoxOverBlack`).
+  - Fixture fixes: the alpha mask follows DM_USEDEFAULT as retail does and
+    takes the glyphs' alias edges (same 5-bit tables, same tolerance); the
+    pane gets its container through SetContainer, which builds the bag icon.
+  - Open (P4, interactions): retail's clicks and drags (`0x00538210`:
+    opening a bag, climbing out, use and swap) are still the side panel
+    harness's hit tests.

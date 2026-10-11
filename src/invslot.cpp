@@ -6,6 +6,7 @@
 #include "invslot.h"
 
 #include "animation.h"
+#include "fonttable.h"
 #include "imagery.h"
 #include "object.h"
 #include "renderer.h"
@@ -62,6 +63,26 @@ void DrawText(const SInvSlotText& text, int32_t value, int32_t cellX, int32_t ce
 }
 
 }  // namespace
+
+SInvSlotStyle SInvSlotStyle::Retail()
+{
+    constexpr int32_t kCellWidth = INVITEMREALWIDTH;
+    constexpr int32_t kPouchItemTop = 0x14;
+    constexpr int32_t kPouchCountLeft = 0x14;
+    constexpr int32_t kPouchCountTop = 0x1a;
+    constexpr int32_t kPouchCountWidth = 0x14;
+    constexpr SColor kPouchCountColor = { 0xff, 0xff, 0xff };
+
+    const TGenericFont* numbers = FontTable ? FontTable->FindFont("Numbers") : nullptr;
+    SInvSlotStyle style;
+    style.amount = { FontTable ? FontTable->Atlas("Numbers") : nullptr, numbers ? numbers->color : SColor{},
+                     0, 0, kCellWidth, ETextAlign::Right };
+    style.pouchItemX = 0;
+    style.pouchItemY = kPouchItemTop;
+    style.pouchCount = { FontTable ? FontTable->Atlas("Small") : nullptr, kPouchCountColor,
+                         kPouchCountLeft, kPouchCountTop, kPouchCountWidth, ETextAlign::Left };
+    return style;
+}
 
 bool SInvSlotContent::operator==(const SInvSlotContent& other) const
 {

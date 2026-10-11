@@ -69,6 +69,12 @@ class TButton
         // Set the up bitmap
     void SetDownBitmap(PTBitmap dbm) { downbitmap = dbm; SetDirty(); }
         // Set the down bitmap
+    void SetGreyBitmap(PTBitmap gbm) { greybitmap = gbm; SetDirty(); }
+        // Set the bitmap a disabled button shows (retail's constructor takes it)
+
+  // Disabled (retail button flag 4): shown grey, takes no press or hover.
+    void SetDisabled(bool on) { if (on != disabled) { disabled = on; if (on) { down = hover = false; } SetDirty(); } }
+    [[nodiscard]] bool IsDisabled() const { return disabled; }
 
   // Hover (retail button flags 0x10 "can hover" and 8 "hovered"). The pane
   // sets it (TButtonPane::SetHover); only a visible, hoverable button takes it.
@@ -97,10 +103,12 @@ class TButton
     int32_t counter = 0;                    // For repeating
     PTBitmap upbitmap = nullptr;            // Button up bitmap
     PTBitmap downbitmap = nullptr;          // Button down bitmap
+    PTBitmap greybitmap = nullptr;          // Disabled bitmap
     uint16_t key = 0;                       // Hotkey for button
     bool down = false;                      // Is button down
     bool dirty = true;                      // Needs to be redrawn
     bool hidden = false;                    // Whether button is visible or not
+    bool disabled = false;                  // Shown grey, takes no press (retail flag 4)
     bool hoverable = false;                 // Takes the hover (retail flag 0x10)
     bool hover = false;                     // The pane's hovered button (retail flag 8)
     void (*buttonfunc)() = nullptr;         // Function associated with button

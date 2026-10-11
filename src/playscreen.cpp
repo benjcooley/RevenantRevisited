@@ -38,6 +38,7 @@
 #include "automap.h"
 #include "bottombar.h"
 #include "buysell.h"
+#include "inventory.h"
 #include "consoleexec.h"
 #include "cursor.h"
 #include "debugui.h"
@@ -374,6 +375,21 @@ bool TPlayScreen::Initialize()
     else
         log_error("[playscreen] Trouble initializing the bottom bar");
 
+    // REVSYNC: 0x0047ab8f -- the inventory, in the side panel's lower slot
+    // while the side panel shows it (UpdateSidePanes). Its container is the
+    // main player's, set as a player becomes main on this screen
+    // (TPlayerManager::SetMainPlayer, 0x0051eef0); a game loaded before the
+    // screen opened made its player main already.
+    if (Inventory.Initialize())
+    {
+        AddPane(&Inventory);
+        Inventory.SetContainer(Player);
+        Inventory.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the inventory");
+
     // The HUD starts as the loaded game left it (building the HUD resets it).
     if (Player)
         TSaveGame::RestoreHud(Player->HudWords());
@@ -675,6 +691,8 @@ void TPlayScreen::Close()
     BuySellPane.Close();
     buysellrequest = false;
     drawerclose    = false;
+    RemovePane(&Inventory);
+    Inventory.Close();
     RemovePane(bottombar.get());
     bottombar->Close();
     RemovePane(statusbar.get());
@@ -800,9 +818,10 @@ void TPlayScreen::Update()
     GameFlow.Session().ProcessRequests();
 
     // The bottom drawer follows its requests (the shop opening or closing),
-    // and the bottom bar the HUD's lower panel.
+    // the bottom bar the HUD's lower panel, the side panes the side panel.
     UpdateDrawer();
     UpdateBottomBar();
+    UpdateSidePanes();
 
     // REVSYNC: 0x0048fda0 / 0x0052b9f0 / 0x0047c2c0 -- under a MODAL_PAUSE
     // modal (the single-player in-game menu and its dialogs) only the modal
@@ -1074,6 +1093,27 @@ void TPlayScreen::UpdateBottomBar()
     }
     if (open == bottombar->IsHidden())
         open ? bottombar->Show() : bottombar->Hide();
+}
+
+// The side panel's rebuilt panes: the inventory, in the lower slot at the
+// display's right edge, while the side panel is open on it. (The other side
+// panes are still the HUD harness's.)
+void TPlayScreen::UpdateSidePanes()
+{
+    if (!Inventory.IsOpen())
+        return;
+    constexpr int32_t kLowerSlotTop = 306;              // the upper slot is 306 tall
+    const SHudState& hud = GetHudState();
+    const bool shown = hud.sidebarState == HUD_SIDEBAR_OPEN && hud.bottomSlot == HUD_BOT_INV;
+    if (shown)
+    {
+        const int32_t dw = Display.Width() > 0 ? Display.Width() : WIDTH;
+        Inventory.Resize(dw - TInventory::kWidth, kLowerSlotTop, TInventory::kWidth, TInventory::kHeight);
+        if (Inventory.WasResized())
+            Inventory.PaneResized();
+    }
+    if (shown == Inventory.IsHidden())
+        shown ? Inventory.Show() : Inventory.Hide();
 }
 
 // The shop's rect while the drawer holds it: its clicks and moves are its

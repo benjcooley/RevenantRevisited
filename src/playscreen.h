@@ -278,6 +278,7 @@ class TPlayScreen : public TScreen
     void OpenBuySellDrawer();
     void CloseBuySellDrawer();
     void UpdateBottomBar();
+    void UpdateSidePanes();
 
     std::unique_ptr<TMapRenderer> mapRenderer;
     TMapManager::EventListenerId  mapListener = 0;

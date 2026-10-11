@@ -3576,11 +3576,13 @@ bool Initialize(const char* mode)
         return InitializeUIEquipMode();
     if (strcmp(mode, "ui-inventory") == 0)
         return InitializeUIInventoryMode();
+    if (strcmp(mode, "ab-inventory") == 0)
+        return InitializeABInventoryMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         SetUISidebarSyntheticStateEnabled(true);
         SetUIHudCursorOverlayEnabled(true);
-        return InitializeUIHudMode() && InitializeUIBottomBarModeEmbedded();
+        return InitializeUIHudMode() && InitializeUIBottomBarModeEmbedded() && InitializeUIInventoryModeEmbedded();
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
@@ -3648,8 +3650,11 @@ void Close(const char* mode)
         CloseUIEquipMode();
     if (strcmp(mode, "ui-inventory") == 0)
         CloseUIInventoryMode();
+    if (strcmp(mode, "ab-inventory") == 0)
+        CloseABInventoryMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
+        CloseUIInventoryMode();
         CloseUIBottomBarMode();
         CloseUIHudMode();
     }
@@ -3732,10 +3737,13 @@ void Render(const char* mode)
         return RenderUIEquipMode();
     if (strcmp(mode, "ui-inventory") == 0)
         return RenderUIInventoryMode();
+    if (strcmp(mode, "ab-inventory") == 0)
+        return RenderABInventoryMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         RenderUIHudMode();
         RenderUIBottomBarMode();
+        RenderUIInventoryMode();
         return;
     }
     if (strcmp(mode, "ui-loadscreen") == 0)

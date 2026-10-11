@@ -59,15 +59,19 @@ TButton::TButton(const char *bname, int32_t bx, int32_t by, int32_t bw, int32_t 
 
 // The up or down bitmap at the button's place, less the bitmap's
 // registration point (DM_USEREG: the radial buttons centre theirs).
+// A disabled button shows its grey bitmap, a pressed one its down bitmap. A
+// bitmap with an alpha track is put with DM_ALPHA and no key (retail's mode
+// 0x80002000: the inventory's arrows), any other keyed.
 void TButton::Compose(int32_t target_w, int32_t target_h)
 {
     dirty = false;
-    TBitmap* bitmap = down && downbitmap ? downbitmap : upbitmap;
+    TBitmap* bitmap = disabled && greybitmap ? greybitmap : down && downbitmap ? downbitmap : upbitmap;
     if (hidden || !bitmap || !Renderer)
         return;
     const bool registered = (bitmap->flags & BM_REGPOINT) != 0;
     Renderer->DrawBitmapToTarget(bitmap, x - (registered ? bitmap->regx : 0), y - (registered ? bitmap->regy : 0),
-                                 target_w, target_h);
+                                 target_w, target_h,
+                                 (bitmap->flags & BM_ALPHA) ? EBitmapDecode::Unkeyed : EBitmapDecode::Pixels);
 }
 
 #define REPEATWAIT      7
@@ -83,9 +87,11 @@ void TButton::Animate(bool draw)
 }
 
 // REVSYNC: 0x0042d0d0 (rectangular: x <= bx < x + w)
+// A disabled button takes no press: retail's hit test doesn't look at flag
+// 4, its pane's press path does.
 bool TButton::OnButton(int32_t bx, int32_t by)
 {
-    if (hidden || (radiogroup >= 0 && down))
+    if (hidden || disabled || (radiogroup >= 0 && down))
         return false;
 
     if (radial)

@@ -7,12 +7,10 @@
 // existing per-panel test modes. The sidebar owns only tab selection state in
 // composed mode; each selected content pane owns and refreshes its own render
 // texture. The rebuilt panes are the play screen's own (the status bar, the
-// bottom bar); --test=ui-hud hosts them beside this (testmodes.cpp).
+// bottom bar, the inventory); --test=ui-hud hosts them beside this
+// (testmodes.cpp).
 //
-// 2026-05-31: Added Inventory pane initialization so page-offset (#7a),
-// drag visual (#7b), and arrow gray-out (#7e) are visible in ui-hud
-// filmstrips.  The live Equip paperdoll is embedded when the upper
-// sidebar slot is Equip.
+// The live Equip paperdoll is embedded when the upper sidebar slot is Equip.
 //
 // *************************************************************************
 
@@ -28,7 +26,6 @@
 #include "surface.h"
 
 #include "uiequiptest.h"
-#include "uiinventorytest.h"
 #include "uimaptest.h"
 #include "uisidebartest.h"
 #include "uispellbooktest.h"
@@ -38,7 +35,6 @@
 namespace {
 
 bool g_initSidebar   = false;
-bool g_initInventory = false;
 bool g_initMap       = false;
 bool g_initSpell     = false;
 bool g_initStats     = false;
@@ -86,7 +82,6 @@ bool InitializeUIHudMode()
     // by SHudState, matching the retail upper/lower region selectors.
     SafeInit("Stats",         g_initStats,     &InitializeUIStatsMode);
     SafeInit("Spellbook",     g_initBook,      &InitializeUISpellbookMode);
-    SafeInit("Inventory",     g_initInventory, &InitializeUIInventoryMode);
     SafeInit("Map",           g_initMap,       &InitializeUIMapMode);
     SafeInit("SpellCreate",   g_initSpell,     &InitializeUISpellCreateMode);
 
@@ -143,11 +138,6 @@ void RenderUIHudModeEmbedded()
         SetUISpellbookModeVisible(upperVisible && s.topSlot == HUD_TOP_BOOK);
         RenderUISpellbookModeEmbedded();
     }
-    if (g_initInventory)
-    {
-        SetUIInventoryModeVisible(lowerVisible && s.bottomSlot == HUD_BOT_INV);
-        RenderUIInventoryModeEmbedded();
-    }
     if (g_initMap)
     {
         SetUIMapModeVisible(lowerVisible && s.bottomSlot == HUD_BOT_MAP);
@@ -176,7 +166,6 @@ void CloseUIHudMode()
     SafeClose("Equip",         g_initEquip,     &CloseUIEquipMode);
     SafeClose("SpellCreate",   g_initSpell,     &CloseUISpellCreateMode);
     SafeClose("Map",           g_initMap,       &CloseUIMapMode);
-    SafeClose("Inventory",     g_initInventory, &CloseUIInventoryMode);
     SafeClose("Spellbook",     g_initBook,      &CloseUISpellbookMode);
     SafeClose("Stats",         g_initStats,     &CloseUIStatsMode);
     SafeClose("Sidebar",       g_initSidebar,   &CloseUISidebarMode);

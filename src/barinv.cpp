@@ -6,7 +6,6 @@
 #include "barinv.h"
 
 #include "bitmap.h"
-#include "fonttable.h"
 #include "logging.h"
 #include "player.h"
 #include "playscreen.h"
@@ -28,16 +27,6 @@ constexpr int32_t kBoxTop = 10;
 constexpr int32_t kCellSize = 0x28;
 constexpr int32_t kBeltSlots = kInvSlotLast - kInvSlotBeltFirst + 1;
 
-// REVSYNC: 0x0052ca70 / 0x0052cd80 -- an amount over 1 right-aligned across
-// the cell's top in "Numbers" (FONT.DEF: Arial 12, red), shadowed; a pouch's
-// slot-0 item at half size 20 down, and the pouch's count beside it in white
-// "Small", shadowed, in a cell 20 wide at (20, 26).
-constexpr int32_t kPouchItemTop = 0x14;
-constexpr int32_t kPouchCountLeft = 0x14;
-constexpr int32_t kPouchCountTop = 0x24 - kBoxTop;
-constexpr int32_t kPouchCountWidth = 0x14;
-constexpr SColor kPouchCountColor = { 0xff, 0xff, 0xff };
-
 }  // namespace
 
 TBarInvPane::TBarInvPane() : TPane(0, 0, 0, 0) {}
@@ -49,13 +38,7 @@ bool TBarInvPane::Initialize()
 {
     if (IsOpen())
         return true;
-    const TGenericFont* numbers = FontTable ? FontTable->FindFont("Numbers") : nullptr;
-    style.amount = { FontTable ? FontTable->Atlas("Numbers") : nullptr, numbers ? numbers->color : SColor{},
-                     0, 0, kCellSize, ETextAlign::Right };
-    style.pouchItemX = 0;
-    style.pouchItemY = kPouchItemTop;
-    style.pouchCount = { FontTable ? FontTable->Atlas("Small") : nullptr, kPouchCountColor,
-                         kPouchCountLeft, kPouchCountTop, kPouchCountWidth, ETextAlign::Left };
+    style = SInvSlotStyle::Retail();
     if (!boxart || !style.amount.font || !style.pouchCount.font)
     {
         log_error("[barinv] no box art, or the \"Numbers\" or \"Small\" font is missing");

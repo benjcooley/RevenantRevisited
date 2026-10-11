@@ -4,252 +4,207 @@
 // *                  Inventory.cpp - TInvetory object                     *
 // *************************************************************************
 
-#include <stdlib.h>
-
-#include "revenant.h"
 #include "inventory.h"
-#include "object.h"
-#include "mappane.h"
-#include "display.h"
-#include "cursor.h"
-#include "player.h"
-#include "equip.h"
-#include "font.h"
-#include "money.h"
-#include "animation.h"
-#include "textbar.h"
 
+#include "bitmap.h"
+#include "fonttable.h"
+#include "logging.h"
+#include "multi.h"
+#include "object.h"
+#include "player.h"
+#include "playscreen.h"
+#include "renderer.h"
+#include "revdefs.h"
+#include "uidragstate.h"
+
+#include <algorithm>
+#include <cstdio>
+#include <iterator>
+
+namespace {
+
+// REVSYNC: 0x00537a70 -- the art and where it goes.
+constexpr int32_t kContainerIconLeft = 10;
+constexpr int32_t kContainerIconTop = 10;
+constexpr int32_t kGoldPileLeft = 0x28;
+constexpr int32_t kGoldPileTop = 5;
+constexpr int32_t kGoldTextLeft = 0x50;
+constexpr int32_t kGoldTextTop = 0xd;
+constexpr const char* kGoldFormat = "%d$";          // "Gold" draws '$' as "gp" (0x005e41a8)
+constexpr const char* kGoldName = "Gold";           // the item the readout totals (0x005e41a0)
+constexpr int32_t kCellsLeft = 8;
+constexpr int32_t kCellsTop = 0x2a;
+constexpr int32_t kCellPitchX = 0x2d;
+constexpr int32_t kCellPitchY = 0x2c;
+
+// REVSYNC: 0x00537650 -- the arrows, 24 x 24: "scrollleft" at (140, 11),
+// "scrollright" at (161, 12), with up, down and grey art.
+constexpr int32_t kArrowSize = 0x18;
+struct SArrow
+{
+    const char* name;
+    int32_t x, y;
+    const char* up;
+    const char* down;
+    const char* grey;
+    int32_t columns;
+};
+constexpr SArrow kArrows[] = {
+    { "scrollleft", 0x8c, 0xb, "InvArwLU", "InvArwLD", "InvArwLG", -1 },
+    { "scrollright", 0xa1, 0xc, "InvArwRU", "InvArwRD", "InvArwRG", 1 },
+};
+void (*const kArrowFunctions[])() = { [] { Inventory.Scroll(-1); }, [] { Inventory.Scroll(1); } };
+static_assert(std::size(kArrows) == std::size(kArrowFunctions));
+
+}  // namespace
+
+TInventory::TInventory() : TButtonPane(0, 0, kWidth, kHeight) {}
+TInventory::~TInventory() = default;
+
+// REVSYNC: 0x00537650. Its host places it in the side panel's lower slot.
 bool TInventory::Initialize()
 {
-    grabslot = heldslot = -1;
-    isdragging = false;
-
-    SetDirty(true);
-
+    if (IsOpen())
+        return true;
+    archive.reset(TMulti::LoadMulti("Inventory.dat"));
+    goldFont = FontTable ? FontTable->Atlas("Gold") : nullptr;
+    style = SInvSlotStyle::Retail();
+    if (!archive || !goldFont || !style.amount.font || !style.pouchCount.font)
+    {
+        log_error("[inventory] Inventory.dat, or the \"Gold\", \"Numbers\" or \"Small\" font is missing");
+        archive.reset();
+        return false;
+    }
+    background = archive->Bitmap("Inventory");
+    backpack = archive->Bitmap("Backpack");
+    goldpile = archive->Bitmap("GoldPile");
+    if (!TButtonPane::Initialize())
+        return false;
+    for (size_t i = 0; i < std::size(kArrows); ++i)
+    {
+        const SArrow& arrow = kArrows[i];
+        auto* button = new TButton(arrow.name, arrow.x, arrow.y, kArrowSize, kArrowSize, 0, kArrowFunctions[i],
+                                   archive->Bitmap(arrow.down), archive->Bitmap(arrow.up));
+        button->SetGreyBitmap(archive->Bitmap(arrow.grey));
+        NewButton(button);
+    }
+    cells.clear();
+    cells.reserve(kColumns * kRows);
+    for (int32_t column = 0; column < kColumns; ++column)
+        for (int32_t row = 0; row < kRows; ++row)
+            cells.emplace_back(kCellsLeft + column * kCellPitchX, kCellsTop + row * kCellPitchY, INVITEMREALWIDTH,
+                               INVITEMREALHEIGHT, kInvSlotAcceptAny, nullptr, &style);
+    firstSlot = 0;
+    RefreshArrows();
     return true;
 }
 
 void TInventory::Close()
 {
-}
-
-void TInventory::DrawBackground()
-{
-    if (container && IsDirty())
-    {
-        Display.Box(INVENTORYCONTX, INVENTORYCONTY,
-            INVITEMREALHEIGHT, INVITEMREALWIDTH, 0, 0xffff, 0, DM_BACKGROUND);
-        container->DrawInvItem(INVENTORYCONTX, INVENTORYCONTY);
-
-        for (int32_t y = 0; y < INVITEMSY; y++)
-            for (int32_t x = 0; x < INVITEMSX; x++)
-                Display.Box((x * INVITEMHEIGHT) + INVENTORYSTARTX,
-                    (y * INVITEMWIDTH) + INVENTORYSTARTY, INVITEMREALHEIGHT,
-                    INVITEMREALWIDTH, 0, 0xffff, 0, DM_BACKGROUND);
-
-        for (TInventoryIterator i(container); i; i++)
-        {
-            TObjectInstance* oi = i.Item();
-
-            if ((!isdragging || oi->InventNum() != grabslot) && oi->InventNum() < 256)
-            {
-                if (oi->InventNum() < 0)
-                {
-                    oi->SetInventNum(container->FindFreeInventorySlot());
-                    TextBar.Print("Bad inventory slot for %s", oi->GetName());
-                }
-
-                int32_t x = (oi->InventNum() % INVITEMSX) * INVITEMWIDTH;
-                int32_t y = (oi->InventNum() / INVITEMSX) * INVITEMHEIGHT;
-                x += INVENTORYSTARTX;
-                y += INVENTORYSTARTY;
-
-                oi->DrawInvItem(x, y);
-
-                if (oi->Amount() > 1)
-                {
-                    char buf[80];
-                    itos(oi->Amount(), buf, 80);
-                    Display.WriteText(buf, x, y-1, 1, GameData->Font("numbers"));
-                }
-            }
-        }
-
-        if (grabslot < 0)
-            heldslot = -1;
-        SetDirty(false);
-    }
-}
-
-void TInventory::Animate(bool draw)
-{
-    if (draw && container && !mousebutton)
-    {
-        TObjectInstance* inst = container->GetInventorySlot(OnSlot(cursorx - GetPosX(), cursory - GetPosY()));
-        CursorOverObject(inst);
-    }
-}
-
-void TInventory::MouseClick(int32_t button, int32_t x, int32_t y)
-{
-    if (!container)
+    if (!IsOpen())
         return;
-
-    if (button == MB_LEFTDOWN && InPane(x, y))
-    {
-        heldslot = grabslot = OnSlot(x, y);
-        startposx = x;
-        startposy = y;
-        isdragging = false;
-    }
-    else if (button == MB_LEFTUP)
-    {
-        // check to see if they are on the far left (ie, chest/bag/pack icon)
-        if (x >= 0 && x <= INVENTORYSTARTX && y >= 0 && y < INVENTORYPANEHEIGHT)
-        {
-            if (container->GetOwner())
-            {
-                if (grabslot < 0)
-                    SetContainer(container->GetOwner());
-                else
-                {
-                    TObjectInstance* inst = container->GetInventorySlot(grabslot);
-                    if (inst && container->GetOwner()->FindFreeInventorySlot() < MAXINVITEMS)
-                    {
-                        inst->RemoveFromInventory();
-                        container->GetOwner()->AddToInventory(inst);
-                    }
-                }
-            }
-        }
-        else if (grabslot >= 0)
-        {
-            // handle swaping and using objects
-            int32_t newslot = OnSlot(x, y);
-
-            if (newslot >= 0)
-            {
-                TObjectInstance* inst = container->GetInventorySlot(grabslot);
-                TObjectInstance* oi = container->GetInventorySlot(newslot);
-
-                bool used = false;
-
-                if (inst && oi && ((isdragging && oi != inst) || (!isdragging && oi == inst)))
-                {
-                    if (oi->Use(GetTopContainer(), oi != inst ? inst->GetMapIndex() : -1))
-                    {
-                        used = true;
-                        Update();
-                    }
-                }
-
-                if (!used)
-                    SwapSlots(grabslot, newslot);
-            }
-        }
-        else if (InPane(x, y))
-        {
-            // handle transfers from other panes
-            if (EquipPane.GetHeldSlot() >= 0)
-            {
-                TObjectInstance* inst = ((TPlayer*)GetTopContainer())->GetEquip(EquipPane.GetHeldSlot());
-                int32_t newslot = OnSlot(x, y);
-                if (inst && newslot >= 0)
-                {
-                    if (GetTopContainer()->GetInventorySlot(newslot) == nullptr)
-                    {
-                        ((TPlayer*)GetTopContainer())->Equip(nullptr, EquipPane.GetHeldSlot());    // clear from eq list
-                        inst->SetInventNum(newslot);                    // add to inventory
-                        Update();
-                    }
-                }
-            }
-        }
-
-        grabslot = -1;
-        SetDragBitmap(nullptr);
-        SetDragObj(nullptr);
-        isdragging = false;
-
-        if (InPane(x, y))
-            Update();
-    }
+    TButtonPane::Close();
+    cells.clear();
+    goldText.clear();
+    containerIcon = nullptr;
+    archive.reset();
 }
 
-void TInventory::MouseMove(int32_t button, int32_t x, int32_t y)
+TObjectInstance* TInventory::GetTopContainer() const
 {
-    if (!container)
+    TObjectInstance* top = container;
+    while (top && top->GetOwner())
+        top = top->GetOwner();
+    return top;
+}
+
+// REVSYNC: 0x005391a0 -- a new container opens on its first page.
+void TInventory::SetContainer(TObjectInstance* cont)
+{
+    if (container == cont)
         return;
-
-    if (!isdragging && InPane(x, y))
-        if (button == MB_LEFTDOWN || button == MB_RIGHTDOWN)
-        {
-            // don't bother switching to drag mode until they actually move it
-            if (absval(startposx - x) >= 2 || absval(startposy - y) >= 2)
-            {
-                TObjectInstance* inst = container->GetInventorySlot(grabslot);
-
-                if (inst && inst->InventoryImage())
-                {
-                    int32_t grabx = (startposx - INVENTORYSTARTX) % INVITEMWIDTH;
-                    int32_t graby = (startposy - INVENTORYSTARTY) % INVITEMHEIGHT;
-
-                    if (!inst->InventoryImage()->OnPixel(grabx, graby))
-                        grabx = graby = 20;
-
-                    SetDragBitmap(inst->InventoryImage(), grabx, graby);
-                    SetDragObj(inst);
-                }
-
-                isdragging = true;
-                Update();
-            }
-        }
+    container = cont;
+    firstSlot = 0;
+    RefreshArrows();
+    SetDirty(true);
 }
 
-void TInventory::DrawAnim(TObjectInstance* inst, PTBitmap bm)
+// REVSYNC: 0x00537520. A column at a time; an arrow that can't move greys out.
+void TInventory::Scroll(int32_t columns)
 {
-    if (!container || inst->GetOwner() != container)
+    const int32_t first = std::clamp(firstSlot + columns * kRows, 0, kLastFirstSlot);
+    if (first == firstSlot)
         return;
+    firstSlot = first;
+    RefreshArrows();
+    SetDirty(true);
+}
 
-    if (inst->InventNum() >= 256)
-        EquipPane.DrawAnim(inst, bm);
-    else
+void TInventory::RefreshArrows()
+{
+    if (Buttons.NumItems() < static_cast<int32_t>(std::size(kArrows)))
+        return;
+    Button(0)->SetDisabled(firstSlot <= 0);
+    Button(1)->SetDisabled(firstSlot >= kLastFirstSlot);
+}
+
+// REVSYNC: 0x00537a70 -- cell n shows slot first + n (column-major), the
+// item being dragged off the grid left empty (+0x18c, +0x180; the drag is
+// UIDragState's); the gold readout is the main player's.
+void TInventory::Pulse()
+{
+    TButtonPane::Pulse();
+    const int32_t frame = PlayScreen.GameFrame();
+    const SUIDragState& drag = UIDragState::Get();
+    const int32_t dragged = UIDragState::IsDragging() && drag.source == EDragSource::Inventory ? drag.source_idx : -1;
+    bool changed = false;
+    for (size_t n = 0; n < cells.size(); ++n)
     {
-        int32_t x = (inst->InventNum() % INVITEMSX) * INVITEMWIDTH;
-        int32_t y = (inst->InventNum() / INVITEMSX) * INVITEMHEIGHT;
-        x += INVENTORYSTARTX;
-        y += INVENTORYSTARTY;
-
-        int32_t sx, sy, sw, sh;
-        Display.GetClipRect(sx, sy, sw, sh);
-        SetClipRect();
-        Display.Put(x, y, bm);
-        Display.SetClipRect(sx, sy, sw, sh);
+        const int32_t slot = firstSlot + static_cast<int32_t>(n);
+        TObjectInstance* item = container && slot != dragged ? container->GetInventorySlot(slot) : nullptr;
+        changed |= cells[n].BindItem(item, frame);
+    }
+    char gold[32] = {};
+    if (Player)
+        std::snprintf(gold, sizeof(gold), kGoldFormat, Player->GetInventoryAmount(kGoldName));
+    TBitmap* icon = !container ? nullptr : container == Player ? backpack : container->InventoryImage();
+    if (changed || goldText != gold || containerIcon != icon)
+    {
+        goldText = gold;
+        containerIcon = icon;
+        SetDirty(true);
     }
 }
 
-int32_t TInventory::OnSlot(int32_t x, int32_t y)
+void TInventory::Compose()
 {
-    x -= INVENTORYSTARTX;
-    y -= INVENTORYSTARTY;
-
-    if (x < 0 || y < 0 ||
-        (x / INVITEMWIDTH) >= INVITEMSX || (y / INVITEMHEIGHT) >= INVITEMSY ||
-        (x % INVITEMWIDTH) >= INVITEMREALWIDTH || (y % INVITEMHEIGHT) >= INVITEMREALHEIGHT)
-        return -1;
-        
-    return ((y / INVITEMHEIGHT) * INVITEMSX) + (x / INVITEMWIDTH);
+    for (TInvSlot& cell : cells)
+        cell.Prepare();
+    TButtonPane::Compose();
 }
 
-void TInventory::SwapSlots(int32_t oldslot, int32_t newslot)
+// REVSYNC: 0x00537a70 -- the background (opaque), the container's icon (the
+// backpack, or the bag's icon reduced to 20 x 20, 0x00538e40), the gold
+// readout and its pile (with alpha), then the cells. The arrows follow as
+// the pane's buttons.
+void TInventory::ComposeBackground(int32_t target_w, int32_t target_h)
 {
-    TObjectInstance* inst0 = container->GetInventorySlot(oldslot);
-    TObjectInstance* inst1 = container->GetInventorySlot(newslot);
-
-    if (inst0)
-        inst0->SetInventNum(newslot);
-
-    if (inst1)
-        inst1->SetInventNum(oldslot);
+    if (!Renderer)
+        return;
+    Renderer->DrawBitmapToTarget(background, 0, 0, target_w, target_h, EBitmapDecode::Unkeyed);
+    if (containerIcon == backpack)
+        Renderer->DrawBitmapToTarget(backpack, kContainerIconLeft, kContainerIconTop, target_w, target_h);
+    else if (containerIcon)
+        Renderer->DrawBitmapHalvedToTarget(containerIcon, kContainerIconLeft, kContainerIconTop, target_w, target_h,
+                                           EHalving::BoxOverBlack);
+    if (!goldText.empty())
+    {
+        DrawTextToTarget(goldFont, goldText.c_str(), kGoldTextLeft, kGoldTextTop, kWidth - kGoldTextLeft,
+                         static_cast<int32_t>(TextLineHeight(goldFont)), ETextAlign::Left, 1.0f, 1.0f, 1.0f,
+                         target_w, target_h);
+        Renderer->DrawBitmapToTarget(goldpile, kGoldPileLeft, kGoldPileTop, target_w, target_h,
+                                     EBitmapDecode::Unkeyed);
+    }
+    for (const TInvSlot& cell : cells)
+        cell.Draw(target_w, target_h);
 }

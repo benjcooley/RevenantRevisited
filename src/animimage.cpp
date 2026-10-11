@@ -352,34 +352,31 @@ void TAnimAnimator::Animate(bool draw)
         if (anim == nullptr)
             return;
 
+        // An item in an inventory: the inventory panes draw its animation
+        // (TInvSlot).
         PTBitmap bm = anim->GetFrame(frame);
-        if (bm)
-        {
-            if (inst->IsInInventory())
-                Inventory.DrawAnim(inst, bm);
-            else
-            {
-                uint32_t drawmode = DM_TRANSPARENT | DM_USEREG;
+        if (!bm || inst->IsInInventory())
+            return;
 
-                if (bm->flags & BM_ALPHA)
-                    drawmode |= DM_ALPHA;
+        uint32_t drawmode = DM_TRANSPARENT | DM_USEREG;
 
-                S3DPoint pos, spos;
-                inst->GetPos(pos);
-                WorldToScreen(pos, spos);
-                spos.x += image->GetAnimRegX(state);
-                spos.y += image->GetAnimRegY(state);
-                spos.z -= image->GetAnimRegZ(state);
+        if (bm->flags & BM_ALPHA)
+            drawmode |= DM_ALPHA;
 
-                if (NoScrollZBuffer)
-                    MapPane.DrawRestoreRect(spos.x, spos.y, bm->width, bm->height, DM_WRAPCLIPSRC | DM_NORESTORE | DM_ZBUFFER | DM_NODRAW);
+        S3DPoint pos, spos;
+        inst->GetPos(pos);
+        WorldToScreen(pos, spos);
+        spos.x += image->GetAnimRegX(state);
+        spos.y += image->GetAnimRegY(state);
+        spos.z -= image->GetAnimRegZ(state);
 
-                if (bm->flags & BM_ZBUFFER)
-                    Display.ZPut(spos.x, spos.y, spos.z, bm, drawmode | DM_ZBUFFER);
-                else
-                    PlayScreen.AddPostCharAnim(spos.x, spos.y, spos.z, bm, drawmode | DM_ZSTATIC);
-            }
-        }
+        if (NoScrollZBuffer)
+            MapPane.DrawRestoreRect(spos.x, spos.y, bm->width, bm->height, DM_WRAPCLIPSRC | DM_NORESTORE | DM_ZBUFFER | DM_NODRAW);
+
+        if (bm->flags & BM_ZBUFFER)
+            Display.ZPut(spos.x, spos.y, spos.z, bm, drawmode | DM_ZBUFFER);
+        else
+            PlayScreen.AddPostCharAnim(spos.x, spos.y, spos.z, bm, drawmode | DM_ZSTATIC);
     }
 }
 
