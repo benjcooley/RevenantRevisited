@@ -590,8 +590,7 @@ bool T3DImagery::ValidateRetailQuicksilverPartSysProfile()
 uint32_t T3DImagery::ValidateRetailStaticParticleProfile()
 {
     if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
-       GetAniFlags(0)!=0x2001 || NumTextures()!=1 || NumTags()!=1 ||
-       numverts!=4 || numfaces!=2)return 0;
+       NumTextures()!=1)return 0;
     std::string path(GetResFilename());
     for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
     const auto fingerprint=[](const void* data,size_t length){
@@ -602,27 +601,32 @@ uint32_t T3DImagery::ValidateRetailStaticParticleProfile()
         const size_t length=std::strlen(profile.suffix);
         if(path.size()<length || path.compare(path.size()-length,length,profile.suffix) ||
            (path.size()!=length && path[path.size()-length-1]!='/'))continue;
-        if(GetAniLength(0)!=profile.frames || NumObjects()!=profile.objects ||
-           NumMaterials()!=profile.materials)return 0;
+        if(GetAniLength(0)!=profile.frames || GetAniFlags(0)!=profile.ani_flags ||
+           NumObjects()!=profile.objects || NumMaterials()!=profile.materials ||
+           NumTags()!=(profile.blend_tag<0?1:2) || numverts!=profile.total_vertices ||
+           numfaces!=profile.total_faces)return 0;
         for(int i=0;i<profile.objects;++i){const auto& o=objects[i];const auto& p=profile.object[i];
             if(std::strcmp(o.name,p.name) || o.parent[0]!=-1 || o.material!=p.material ||
-               o.numverts!=(i==0?4:0) || o.numfaces!=(i==0?2:0) || !o.anikeys[0] ||
+               o.numverts!=p.vertices || o.numfaces!=p.faces || !o.anikeys[0] ||
                o.numanikeys[0]!=p.key_count ||
                fingerprint(o.anikeys[0],p.key_count*sizeof(SAniKey32))!=p.keys ||
-               o.numtexfaces[0]!=0 || o.numtexfaces[1]!=(i==0?2:0))return 0;
+               o.numtexfaces[0]!=0 || o.numtexfaces[1]!=p.faces)return 0;
         }
-        const auto& tag=*GetTag(0);
+        const auto& tag=*GetTag(profile.partsys_tag);
         if(tag.state!=0 || tag.frame!=profile.tag_frame || !tag.name || !tag.str ||
            std::strcmp(tag.name,"partsys") || std::strcmp(tag.str,profile.parameters))return 0;
+        if(profile.blend_tag>=0){const auto& blend=*GetTag(profile.blend_tag);
+            if(blend.state!=0 || blend.frame!=profile.blend_frame || !blend.name || !blend.str ||
+               std::strcmp(blend.name,"blendcont") || std::strcmp(blend.str,"litaddz"))return 0;}
         const auto& t=textures[0];const auto& pf=t.desc.pixelFormat;
         if(t.desc.width!=profile.texture_size || t.desc.height!=profile.texture_size || t.numframes!=1 ||
            pf.dwRGBBitCount!=16 || pf.dwRBitMask!=0xf800 || pf.dwGBitMask!=0x07e0 ||
            pf.dwBBitMask!=0x001f || pf.dwRGBAlphaBitMask)return 0;
         for(int i=0;i<profile.materials;++i)
-            if(materials[i].texture!=(i==0?0:-1) ||
+            if(materials[i].texture!=(i==profile.object[profile.prototype].material?0:-1) ||
                fingerprint(&materials[i].matdesc.diffuse,17*sizeof(float))!=profile.material[i])return 0;
         S3DVertex vertices[4]{};S3DFace faces[2]{};
-        GetObjVerts(0,vertices,0,0);GetObjFaces(0,faces);
+        GetObjVerts(profile.prototype,vertices,0,0);GetObjFaces(profile.prototype,faces);
         constexpr uint16_t indices[6]={2,3,0,1,2,0};
         if(fingerprint(vertices,sizeof(vertices))!=profile.vertices || std::memcmp(faces,indices,sizeof(faces)))return 0;
         return profile.id;
@@ -706,7 +710,7 @@ void T3DImagery::InitializePartSysTracks()
         for (int32_t j = 0; j < NumTags() && track.supported; ++j)
         {
             const char* name = GetTag(j)->name;
-            if ((gold_partsys_profile || combatflash_start1_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
+            if ((gold_partsys_profile || combatflash_start1_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || static_particles_profile) && name && !stricmp(name, "blendcont")) continue;
             if (name && stricmp(name, "partsys") && stricmp(name, "scrolltex") &&
                 stricmp(name, "play") && stricmp(name, "beg") && stricmp(name, "end"))
             {
@@ -2028,7 +2032,7 @@ bool T3DImagery::GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t 
                 // visibly goes second-last -> first -> held first.
                 // Actual retail4096bc JGE is inclusive. Opt in only the
                 // exact audited Punch, Appear, Sfist and Wborn keys; others keep their policy.
-                const bool reached = (retail_punch_keys || retail_mpappear_start_profile || retail_shadowfist_profile || retail_warriorborn_profile || retail_teleportation_profile || might_partsys_profile || immortalmight_partsys_profile || fmastery_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile) ? frame <= curframe + frames : frame < curframe + frames;
+                const bool reached = (retail_punch_keys || retail_mpappear_start_profile || retail_shadowfist_profile || retail_warriorborn_profile || retail_teleportation_profile || might_partsys_profile || immortalmight_partsys_profile || fmastery_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || static_particles_profile) ? frame <= curframe + frames : frame < curframe + frames;
                 if ((num <= 0) || reached)
                 {
                     GetAniKey32(curkey, keys, numkeys,
@@ -3245,8 +3249,14 @@ void T3DAnimator::RefreshPartSysControllers()
         }), controllers.end());
     state.unsupported = false;
     if(static_particles)
-        if(S3DAnimObj* prototype=GetObject(0))prototype->flags|=OBJ3D_GOLD_CAMERA_FACING;
-    if (gold || combat_start1 || speed)
+        for(int object=0;object<NumObjects();++object)
+            if(S3DAnimObj* bone=GetObject(object)){
+                const char* name=imagery->GetObjectName(object);
+                if(name && name[0]=='#')bone->flags|=OBJ3D_GOLD_CAMERA_FACING;
+                if(name && name[0]=='*')bone->flags|=OBJ3D_HIDE;
+            }
+    const bool static_litaddz=static_particles && imagery->NumTags()==2;
+    if (gold || combat_start1 || speed || static_litaddz)
     {
         // Retail blendcont Initialize 405940: immediate state-entry writes to
         // every animator object, preserving the prior no-depth-test bit. Its
@@ -3266,11 +3276,11 @@ void T3DAnimator::RefreshPartSysControllers()
                     if (std::strchr(name, '$')) bone->blend |= 0x40u;
                 }
                 bone->flags |= OBJ3D_BLEND;
-                bone->blend = (bone->blend & 0x40u) | (speed?80u:16u);
+                bone->blend = (bone->blend & 0x40u) | ((speed||static_litaddz)?80u:16u);
             }
         log_info("[blendcont] init type=%s id=%08x map_index=%d state=0 tagframe=%d mode=%d objects=%d profile=%s",
-                 inst->GetTypeName(), id, inst->GetMapIndex(), gold ? 5 : speed ? 1 : 0,
-                 speed ? 80 : 16,NumObjects(),gold ? "gold" : speed ? (id==0xad92bd35u ? "quicksilver" : "speed") : "combatflash-start1");
+                 inst->GetTypeName(), id, inst->GetMapIndex(), gold ? 5 : speed ? 1 : static_litaddz ? 2 : 0,
+                 (speed||static_litaddz) ? 80 : 16,NumObjects(),gold ? "gold" : speed ? (id==0xad92bd35u ? "quicksilver" : "speed") : static_litaddz ? "quoted-static-particles" : "combatflash-start1");
     }
     for (const auto& track : imagery->partsys_tracks)
     {
@@ -3695,7 +3705,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // happens first, preserving its three render-time RNG calls.
             if(inst->GetState()==0 &&
                ((Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2) ||
-                (Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId()) && track.prototype==0)) &&
+                Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId())) &&
                sample.scale<=9.999999747378752e-6f)continue;
             hmm_mat4 matrix;
             MtxClear(&matrix);
@@ -3713,7 +3723,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             const bool speed=inst->GetState()==0 &&
                 Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2;
             const bool static_particles=inst->GetState()==0 &&
-                Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId()) && track.prototype==0;
+                Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId());
             if (might || immortalmight || fmastery || speed || static_particles || inst->ObjId() == 0xd0c0f035u ||
                 (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0 &&
                  Get3DImagery()->HasCombatFlashStart1PartSysProfile() && track.prototype == 0))
