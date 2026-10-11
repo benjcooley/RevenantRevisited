@@ -274,19 +274,25 @@ const char* ObjStatName(int32_t statid)
 {
     static const char* const flags[] = {"aggressive", "poisoned", "sleeping"};
     static const char* const values[] = {"health", "fatigue", "mana"};
+    static const char* const playervalues[] = {"level", "exp", "nextexp", "attacklevel", "healthpct", "manapct",
+                                               "fatiguepct"};
     static const char* const attributes[] = {"strn", "cons", "agil", "rflx", "mind", "luck"};
     static const char* const skills[] = {"attack", "defense", "invoke", "hands", "knife", "sword",
                                          "bludgeons", "axes", "bows", "stealth", "lockpick"};
+    static const char* const skillexp[] = {"attackexp", "defenseexp", "invokeexp", "handsexp", "knifeexp",
+                                           "swordexp", "bludgeonsexp", "axesexp", "bowsexp", "stealthexp",
+                                           "lockpickexp"};
+    static const char* const skillnext[] = {"attacknext", "defensenext", "invokenext", "handsnext", "knifenext",
+                                            "swordnext", "bludgeonsnext", "axesnext", "bowsnext", "stealthnext",
+                                            "lockpicknext"};
     if (statid >= CHRFLAG_FIRST && statid < CHRFLAG_FIRST + NUM_CHRFLAGS)
         return flags[statid - CHRFLAG_FIRST];
     if (statid >= CHRSTAT_FIRST && statid < CHRSTAT_FIRST + NUM_CHRSTATS)
         return values[statid - CHRSTAT_FIRST];
     if (statid == CHRVAL_DAMAGEMOD)
         return "damagemod";
-    if (statid == PLRVAL_FIRST + PLRVAL_LEVEL)
-        return "level";
-    if (statid == PLRVAL_FIRST + PLRVAL_ATTACKLEVEL)
-        return "attacklevel";
+    if (statid >= PLRVAL_FIRST + PLRVAL_LEVEL && statid <= PLRVAL_FIRST + PLRVAL_FATIGUEPCT)
+        return playervalues[statid - PLRVAL_FIRST];
     if (statid == PLRVAL_FIRST + PLRVAL_ACBONUS)
         return "acbonus";
     if (statid == PLRVAL_FIRST + PLRVAL_EDGEBONUS)
@@ -295,13 +301,23 @@ const char* ObjStatName(int32_t statid)
         return "manacostpct";
     if (statid == PLRVAL_FIRST + PLRVAL_SPELLDAMAGEINC)
         return "spelldamageinc";
-    if (statid == SKE_FIRST + SK_INVOKE)
-        return "invokeexp";
     if (statid >= PLRSTAT_FIRST && statid < PLRSTAT_FIRST + NUM_PLRSTATS)
         return attributes[statid - PLRSTAT_FIRST];
     if (statid >= SK_FIRST && statid < SK_FIRST + NUM_SKILLS)
         return skills[statid - SK_FIRST];
+    if (statid >= SKE_FIRST && statid < SKE_FIRST + NUM_SKILLS)
+        return skillexp[statid - SKE_FIRST];
+    if (statid >= SKN_FIRST && statid < SKN_FIRST + NUM_SKILLS)
+        return skillnext[statid - SKN_FIRST];
     return nullptr;
+}
+
+int32_t ObjStatId(const std::string& name)
+{
+    for (int32_t id = 0; id < SKC_FIRST; ++id)
+        if (const char* n = ObjStatName(id); n && name == n)
+            return id;
+    throw std::runtime_error("no object stat '" + name + "'");
 }
 
 std::vector<SFixtureState> ReadStates(const JsonValue& list)

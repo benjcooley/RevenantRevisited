@@ -1,0 +1,8 @@
+{
+  "name": "arena_a1_araknid_approach",
+  "about": "Arena test A1 (docs/gameplay/COMBAT_ARENA.md): an Araknid 450 east of an idle Locke on the flat arena -- when it notices him, its way in, where it stops, its blows. The slot (make_arena_slot.py ArenaA1) is the one retail loads.",
+  "slotdir": "build/arena_slots/ArenaA1",
+  "seed": 1,
+  "ticks": 1440,
+  "exec": []
+}

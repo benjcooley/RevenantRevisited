@@ -61,15 +61,14 @@ runs in Animate.
     when something calls Kill, which sets `timer = 0`: the effect (FireFlash
     after 100 pulses), or the Strike class's DURATION (§2.13).
 - **TSpell::Pulse `0x53f800`** (only while `[0x65d0c4] == 0`): for each
-  effect in the spell's list (`+0x13c`) whose `+0x44` is 0 (meaning
-  unverified; it is a pointer), it calls effect slot `0x110` (Pulse) and
-  then slot `0x8c`. **This is how spell effects get pulsed.** The retail
-  TEffect constructor (`0x4de770`, inlined in the effect creators) ORs
-  `def.flags | 0x48001` (IMMOBILE | ANIMATE | NOTIFY), with no OF_PULSE. The
-  def TSpell::Timer builds has flags 0, so these effects are pulsed by
-  their spell inside the caster's TCharacter::Pulse. That class.def /
-  object-type flags never add OF_PULSE is **unverified**. The port's TEffect
-  constructor sets OF_PULSE. If the map also pulses them, they pulse twice.
+  effect in the spell's list (`+0x13c`) whose sector (`+0x44`) is 0, it
+  calls effect slot `0x110` (Pulse) and then slot `0x8c` (MapPane.AddObject).
+  The retail TEffect constructor (`0x4de770`, inlined in the effect
+  creators) ORs `0x48001` = IMMOBILE | **PULSE** | NOTIFY (corrected in
+  §2.19; this read it as ANIMATE), and the object constructor `0x46e1f0`
+  gives class `0x19` ANIMATE | PULSE: **spell effects are pulsed by the
+  map**, like the port's. Their spell pulses only one NewObject couldn't
+  put in a sector.
 - **Where each damage call runs:**
 
 | Damage site | Function (slot) | Class (builder name) | Path |
@@ -741,6 +740,186 @@ base Move's bits):
     probably "attacked by"). Then arrow flags `|= 0x1000` (OF_KILL).
     Return bits.
 
+### 2.19 Spell lifetimes and effects (S5, read from the asm)
+
+Corrections first:
+
+- **TEffect's constructor `0x4de770` ORs `0x48001` = IMMOBILE | PULSE |
+  NOTIFY** (not ANIMATE): spell effects are pulsed by the map like any
+  pulsed object. TSpell::Pulse pulses only the effects that are **not in a
+  sector** (`+0x44` is the sector) and then tries to put each into the map
+  (slot `0x8c`, `0x46f3a0`: `MapPane.AddObject(this) >= 0`). §0's "spell
+  effects are pulsed by their spell" holds only for those.
+- `0x4dee7c` in TEffect::Pulse is the **RANGEDAMAGE** blast (§2.15's
+  caller list): Meteor Storm and Cataclysm.
+- TSpell::Kill removes **slot 0** of the effect list once per effect
+  (`0x540af0` takes its index from its third argument, 0): every effect is
+  killed and let go, the list is left with its count.
+- "StrikeEffect" (the effect most Strike variants make) is a plain TEffect
+  (builder `0x540b60`, vtable `0x5b99d8` differs only in its destructor).
+
+**TSpellManager::Pulse `0x540750`**: §0, and the order is Pulse, Timer, and
+when Timer says done: **Kill**, delete, the slot nulled.
+
+**TSpell::Timer `0x53f410`** (base): `timer > 0` → −1; `wait > 0` → −1 and
+return; at `wait == 0`: `wait = −1`; the def (class `0x19`, the map level,
+the invoker's position + the source unless it is (−1, −1, −1), facing per
+FACING, the variant's EFFECT type); `NewObject(def, −1)`, GetInstance;
+when made: SetSpell(this) (`0x4de7d0`: `+0xd8` = spell, the light fields
+`+0x13c..+0x148` zeroed), add to the effect list (`+0x13c`), `+8` = it.
+Returns `timer == 0`. No rhand source, no HEIGHT fallback (§2.10).
+
+**TSpell::Pulse `0x53f800`**: nothing while paused (`[0x65d0c4]`). For each
+effect without a sector: its Pulse (slot `0x110`), then slot `0x8c`
+(add it to the map).
+
+**TSpell::Kill `0x53f860`**: `timer = 0`; for each effect: a POISONCHANCE
+spell with a first target cures it (SetPoisoned(0), **once per effect**),
+the effect's flags get OF_KILL (SetFlags, slot `0x40`), SetSpell(0), slot 0
+of the list is let go.
+
+**TSpell::ObjectRemoved `0x53f730`(mode, obj)**, from the manager's
+`0x5408d0`, which TCharacter::Notify `0x4c36c0` calls at `0x4c3965` for
+every notice but `0x10` (N_DELETINGOBJECT 1:
+`obj` is the object; N_DELETINGSECTOR 2: `obj` is the sector being
+unloaded, and only objects in it that aren't OF_NONMAP count):
+the invoker gone → Kill, `invoker = 0`; any effect gone → Kill (once);
+each target slot gone → nulled. The manager then runs **Timer** on the
+spell and deletes it (and nulls its slot) when Timer says done, with no
+Kill. So **every notice a character gets is a Timer more for each of his
+spells**: an object removed anywhere in the map while a spell waits out its
+DELAY makes the effect come sooner (kata `life.removed.each.tick`: four
+removals, the effect at tick 2 instead of 5).
+
+**TSpell's destructor `0x540b20`** frees the list only: the effects keep
+their spell pointer unless Kill ran first.
+
+**TStrikeSpell::Pulse `0x540d70`**: §2.13 (verified), and nothing while
+paused.
+
+**TStrikeSpell::Timer `0x540eb0`**:
+
+1. `timer`, `wait` as the base. At `wait == 0`: `wait = −1`.
+2. The anchor: HITTARGET and not ONCASTER: with an invoker, his root
+   block's obj when his root action is 3 (combat) or `0x19` (bow); none →
+   **return 1** (the spell ends). With no invoker: targets[0] (an empty
+   target list reads an uninitialized local). Otherwise: the invoker.
+3. BuildEffectDef(anchor) `0x540bc0`: class `0x19`, the map level, the
+   anchor's position, then POS (and nothing else) / else ATTACH: the
+   anchor animator's object-map point of the ATTACH name (`0x40edc0` /
+   `0x40ef80`, truncated), none without an animator / else (50, 50, 50);
+   then (not after POS) the source (GetSourcePos `0x53f1f0`: the source, or
+   0, always true). Facing per FACING (the invoker's). Type = EFFECT.
+4. `+0x150` (the struck target) = with an invoker: his combat / bow root
+   obj, else 0; without: the anchor. **targets[0] = `+0x150`.**
+5. The sound (controldata `+0x74`) at the def's position, full volume:
+   PLAY (flag 4) loops (`0x49b990`'s loop count 0, Miles' "forever"),
+   else PLAYONCE (flag 8) plays once (count 1). Kill stops it.
+6. FOLLOW or ATTACH, an anchor that is OF_NONMAP: the def is OF_NONMAP.
+7. Then one of:
+   - **ATTACHMULTIPLE** (ATTACH given and the name list): per HITS i, an
+     effect (NewObject(def, IMAGERY)); SetSpell; with FOLLOW:
+     Follow(anchor, 0, 0, 0) (`0x4def90`), the i-th name into the
+     effect's attach name (`+0xec`), its follow time (`+0xe8`) =
+     DURATION; then its duration (`+0x12c`) = DURATION, blink (`+0x134`)
+     = DURATION2, timed (`+0x130`) = 1, start wait (`+0x138`) =
+     **random(0, WAIT)**; into the list.
+   - **MULTIPLETARGETS** with an invoker: the center is his position.
+     Without ONCASTER: each map character within RADIUS (iterator flags
+     `0xe0`, characters) but the invoker and the dead gets an effect built
+     on it as above (FOLLOW follows the anchor). With ONCASTER: one
+     effect, no timing, its SetSpell unguarded. Then
+     **AreaDamage(invoker, center, RADIUS, min, max, type, 0)**.
+   - **PATTERN** (`+0x38`), HITS effects (half each way for X), each
+     placed at the def's position + ConvertToVector(angle, dist), FOLLOW
+     (anchor, angle, dist, 1) (orbiting), timed as above:
+     - none: HITS at the def's position, Follow(anchor, 0, 0, 0);
+     - random: angle = **random(0, 255)**, dist = **random(0, RADIUS)**;
+     - circle: angle = ftol(i · 255/HITS) + 64, dist = RADIUS;
+     - line: angle = the def's facing, dist = ftol(RADIUS − i · 2R/HITS);
+     - cluster: angle = ftol(i · 255/HITS), dist = RADIUS − 10, and the
+       def's **velocity** = ConvertToVector(angle, ftol((R−10)/HITS));
+     - X: HITS/2 at the facing, dist = ftol(R − i·4R/HITS + 2R/HITS),
+       then HITS/2 at the facing + 64, the same dists;
+     - spiral: angle = ftol(i · 255/HITS), dist = ftol(i · 2R/HITS).
+     (x87: the step factors are floats; 255/HITS, 2R/HITS, 4R/HITS.)
+8. Return `timer == 0`.
+
+**TStrikeSpell::Kill `0x542340`**: the base Kill's loop, then the PLAY
+sound is stopped (`0x49bd90`).
+
+**Follow `0x4def90`(target, angle, dist, orbit)**: `+0xe4` = target (the
+effect asks to be notified of deletions), `+0x124` angle, `+0x128` dist,
+`+0x120` orbit; the attach name cleared.
+
+**TEffect::Pulse `0x4de800`** (gameplay; the spell LIGHT's fade in / out
+is the effect's light, VFX):
+
+1. Start wait `+0x138 > 0`: above 1 the effect is hidden (OF_ANIMATE
+   off), at 1 shown (on); count down; **return** (nothing else runs).
+2. The object's Pulse (`0x4708e0`: the animator, the script).
+3. Following (`+0xe4`): the target's position (+ ConvertToVector(angle,
+   dist) when orbiting; else its animator's object-map point of the attach
+   name when it has one), + the CONTROLDATA POS; SetPos on the target's
+   level. The follow time `+0xe8` counts down; at 0 the effect is killed
+   (OF_KILL | OF_PULSE). A "visible while" name (`+0x15c`, set by some
+   subclasses) shows the effect only while the target's root block matches.
+4. A POISONCHANCE spell's first target is **poisoned again every pulse**.
+5. Timed (`+0x130`): the duration counts down; at 0 the poison is cured
+   and the effect killed (OF_KILL | OF_PULSE); within the last DURATION2
+   ticks it blinks (OF_INVISIBLE by phase ftol((1 − (D2−left)/D2)·4):
+   0: left % 4 == 0 hidden, 1: left % 3 == 0 hidden, 2: left % 2 == 0
+   hidden, 3: left % 3 != 0 hidden).
+6. **RANGEDAMAGE** (radius, frame): at that animation frame (`+0x5c`),
+   AreaDamage(invoker, the effect's position, radius, the variant's min,
+   max, the spell's type, 0).
+7. No spell and an animator: a non-looping state that has played out
+   kills it.
+8. SetCommandDone(false).
+
+**KillThisEffect `0x4defe0`**: a POISONCHANCE spell's first target is
+cured; OF_KILL (TEffect's SetFlags `0x4def30` starts the light's fade
+out), OF_PULSE; then, when the effect is ready to go (slot `0x3c`
+`0x4def00`: OF_KILL and no light still fading), **its spell is killed**.
+The fade only runs with Realtime lighting (`[0x5d7a18]`, Options
+"Realtime"); without it an effect is ready at once. With it, a LIGHT
+spell's effect (FADEOUT, default 5) lingers that many ticks, and its spell
+ends when the map deletes it (ObjectRemoved).
+
+**The Iced effect** (builder "Iced" `0x4ec860`, its animator "Iced"
+`0x4eca40`): Init `0x4ec880` clears the target (`+0x184`) and the ticks
+(`+0x188`). **Set `0x4ec930`(target)** (only the ice arrow calls it): the
+target, OF_PARALIZE and OF_ICED on it, "FREEZECUBE" at it. **Pulse
+`0x4ec890`**: TEffect::Pulse; ticks + 1; with a target: its **Stop** every
+pulse; before 240 ticks a target no longer iced or dead ends it (ticks =
+240); at 240 (single player or the server) OF_PARALIZE and OF_ICED come off.
+The Build `0x4f7dc0` (0x18c bytes, vtable `0x5ab25c`) zeroes both fields
+itself; Init is its slot `0x1fc`. The ice arrow creates the animator at
+once (slot `0x28`). **The Iced animator ends the effect**: its Animate
+`0x4ecaa0` does nothing without a target; with one it clears the effect's
+command-done flag every frame (so TEffect::Pulse step 7 never ends it),
+at tick 240 starts the shatter (thirty shards, many `random()` draws in
+the draw pass) and, once every shard has bounced out, runs
+KillThisEffect inline. The target is stopped every pulse until then.
+TObjectInstance::Damage `0x46e970` thaws on any hit but DAMAGE_ICE (13).
+
+Retail crashes the S5 katas avoid:
+
+- an invoker removed on the tick his spell's DELAY ends: TSpell::Timer
+  reads his position through null (`0x53f475`);
+- a Strike spell with no invoker and no HITTARGET (or ONCASTER): the def
+  is built on no anchor (`0x540bea`); with HITTARGET and no first target
+  the anchor is an uninitialized local;
+- a Strike class on a variant without CONTROLDATA (only a direct build can
+  do it: casting picks the class from CONTROLDATA).
+
+Angles past 255: ConvertToVector `0x46db20` indexes its X table
+(`0x634d44`, 256 words) with the raw angle; the Y table (`0x634f44`)
+follows it, so an angle of 256..383 takes its X from `Y[angle - 256]`.
+The Strike CIRCLE pattern (angle + 64, past 255 for the last quarter of
+HITS above 4) and X (facing + 64) reach it, and so do their orbiting
+effects. No shipped variant does (circles of 1 and 2 HITS, no X).
+
 ## 3. RNG draws (all `random()` `0x483300` unless noted)
 
 | Site | Range | Decides | When |
@@ -842,12 +1021,8 @@ Port files: `src/spell.cpp/.h`, `src/character.cpp`, `src/player.cpp`,
      (character.cpp:5401/5407) skip all of retail's gates: dead,
      attack/impact flags, object flags `0x2800000`, player state bit 2.
    - The port does not fizzle inside `CastByTalismans` on failure.
-6. **Buff replacement and stat effects.**
-   - The port has no STATLINE / controldata, so it has no AddStatEffect on
-     cast, no charflag `0x20`, and does not kill the old buff effect.
-   - CONTROLDATA blocks are skipped (spell.cpp:130 onward). The Strike
-     class (DURATION, HITTARGET, ATTACHMULTIPLE, MULTIPLETARGETS, PATTERN,
-     WAIT, RANGEDAMAGE, PLAY) does not exist.
+6. **Buff replacement and stat effects.** Ported (D1s, S2, S5): the
+   STATLINE step, CONTROLDATA, the Strike class.
 7. **TSpell::Damage** (spell.cpp:502):
    - missing SpellDamageInc for a player caster;
    - missing the player target's DmgResMagical cut;
@@ -855,14 +1030,14 @@ Port files: `src/spell.cpp/.h`, `src/character.cpp`, `src/player.cpp`,
      friendly-fire behaviour;
    - missing the kill-experience call.
    - The port casts the target to TCharacter without retail's null check.
-8. **Timer / Kill.**
-   - The port's Timer kills a spell whose effect failed to spawn
-     (`!effect && wait < 0`); retail doesn't.
-   - The port places the effect at the right hand, with a HEIGHT fallback;
-     retail uses `invoker pos + source` only.
-   - The port's Pulse loop deletes a spell without calling Kill. Retail
-     calls `vt+0xc` Kill first: it cures a poison target, sets OF_KILL on
-     the effects and detaches them.
+8. **Timer / Kill.** Retail's since S5 (§8 S5). What still differs:
+   - ConvertToVector wraps an angle past 255 (an ASan fix); retail reads
+     its Y table there (§2.19). Unreached by shipped spell data.
+   - The Iced effect ends at the shatter (the port's Iced animator is the
+     VFX track's and isn't ported); retail's ends when its shards have
+     bounced out, the thawed target stopped until then.
+   - KillThisEffect ends the spell at once: the port's effect lights don't
+     fade (retail with Realtime lighting off).
 9. **Poison roll.** The port (spell.cpp:396) now rolls `random(0, 100)` per
    target like retail, but only SetPoisoned's TCharacter targets (retail
    calls slot `0x1b4` on any object), and in retail's order relative to
@@ -876,8 +1051,7 @@ Port files: `src/spell.cpp/.h`, `src/character.cpp`, `src/player.cpp`,
     - retail sets `block->wait = delay` and `+0x188 = delay`.
 11. **Tick path.** Retail ticks spells in TCharacter::Pulse (§0). This is
     now ported (character.cpp:229). The skip while `[0x65d0c4]` is set is
-    not. Effects in the port carry OF_PULSE (effect.h:50); in retail the
-    spell pulses them.
+    not. Effects carry OF_PULSE on both sides (§2.19's correction).
 12. **Missiles.** `missileeffect.cpp` is `#if 0`. The retail base missile
     is described in §2.16: life 480 / speed, hit at ≤ 32 on a living enemy,
     explode on blocked or timeout, FireBall area damage 150.
@@ -910,18 +1084,18 @@ Port files: `src/spell.cpp/.h`, `src/character.cpp`, `src/player.cpp`,
    order, retail's stricmp makes order matter. Check the spell panes
    `0x545f10` / `0x542842` and SetQuickSpell.
 2. `[0x676838]` (local authority) in a single-player run: 3 expected.
-3. Effect `+0x44`, the pulse filter in TSpell::Pulse: meaning?
+3. (Answered in §2.19: `+0x44` is the object's sector.)
 4. Who calls effect slot `0x1fc` for missiles (init)? FireFlash's comes
-   from its animator.
+   from its animator; the Iced effect's Build zeroes its fields itself.
 5. Target selection and RNG in FIRECONE, Quicksand, Paralize1, RockStorm,
-   LightningStorm, JhagaAttack, DragonAttack, WindStrip, Puke; the full
-   Strike Timer; the Strike Kill `0x542340`.
+   LightningStorm, JhagaAttack, DragonAttack, WindStrip, Puke. (The Strike
+   Timer and Kill: §2.19.)
 6. Arrows: the `+0xec` default (25?), the identity of slot `0x190`
    (character level?) and slot `0x240`, and whether a proc cast really
    drains the shooter's mana and plays the shooter's invoke animation.
    Character hit-finder `0x4d4db0` not read.
-7. Can class.def effect types carry OF_PULSE, so that some spell effects
-   are pulsed by the map as well as by their spell?
+7. (Answered in §2.19: every effect carries OF_PULSE; the map pulses
+   them, their spell only those in no sector.)
 
 ## 7. Recon labels corrected
 
@@ -1189,8 +1363,7 @@ vanish.
 REVSYNC-DIVERGENCEs: a shooter removed while the arrow flew crashes retail
 (the class read through a null instance); the port's arrow has no shooter
 then. Retail hands the text bar its message as the format; the port prints
-it as text. The ice burst's Iced effect isn't built yet (effects): the port
-makes the object and stops before `0x4ec930`, so nobody is frozen.
+it as text. (The ice burst's Iced effect now freezes: S5.)
 
 ### S4c `missile-bow`: the bow
 
@@ -1283,8 +1456,121 @@ REVSYNC-DIVERGENCE: retail hands AreaDamage the spell's invoker pointer,
 which dangles once the caster is gone; the port's safe reference gives none
 then (nobody is hurt).
 
-Not ported (left): TEffect::Pulse's RANGEDAMAGE blast (the Strike spells'
-Meteor Storm / Cataclysm: radius / frame from CONTROLDATA, `0x4dee7c`) and
-the rest of the generic effect Pulse; TEffect::KillThisEffect's poison cure
-and spell Kill; TSpell Timer / Pulse / Kill (the spell's lifetime: making
-the effects). The Iced effect the ice arrow makes.
+What this left (the generic effect Pulse and its RANGEDAMAGE blast,
+KillThisEffect's cure and spell Kill, the spells' lifetime, the Iced
+effect) is S5's.
+
+### S5 `spell-life`, `spell-strike`, `effect-pulse`, `effect-iced`: lifetimes and effects
+
+Fixture `spell_life.py` (built on spell_arrow.py's: NewObject, GetInstance,
+FindObjType, the sound lookup, the damage seams). The spells are built by
+their class's creator and put in their owner's manager (the array's Add
+`0x41c840`); every tick runs the case's events, then each character's
+TSpellManager::Pulse `0x540750` -- Pulse, Timer, Kill of both classes as
+original. NewObject makes TEffect-shaped guest effects (vtable `0x5a85ac`,
+"fx1".., id 99 + n) in a stand-in sector unless the case keeps one out
+(then TSpell::Pulse pulses it, TEffect::Pulse as original, and asks
+MapPane.AddObject `0x451090`, a recorded seam). Events: KillThisEffect
+`0x4defe0`; TSpellManager::ObjectRemoved `0x5408d0` (an object, or with
+mode 2 the sector it is in). Seams beyond S4b's: TObjectInstance::Pulse
+`0x4708e0` (no animator or script: unrecorded), MapPane ObjectFlagsChanged
+`0x451a50` (the stand-in sector's lists: unrecorded), AddObject. Realtime
+lighting `0x5d7a18` and the pause flag `0x65d0c4` off. NewObject's record
+now names the type without case and the imagery by its file's base name
+(the two sides' imagery registries number differently; S4b / S4c records
+follow). A tick's record: each manager's wait and spells (each with its
+effect list and last effect), every effect made (position, the flags that
+matter, its spell, follow / follow time / attach / orbit, the timed life,
+the start wait; an Iced one's target and ticks), each character's
+OF_PARALIZE / OF_ICED, the seams and draws.
+
+- `spell-life`, 229/229 (2748 ticks): every shipped variant as the base
+  class from a player facing 64 and from a monster with a source (the
+  DELAY, the effect at the caster plus the source, the facing with
+  FACING, never ending alone); KillThisEffect after the effect and on the
+  tick after it is made; the effect, the caster, a target and an
+  unrelated object removed (by object and by sector, a NONMAP caster out
+  of it), a cancel notice (each notice a Timer more: a removal each tick
+  brings the effect at tick 2); a notice to a character who doesn't own
+  the spell; NewObject refusing; an effect out of the map (pulsed and put
+  back each tick; a poison spell's poisoning each pulse, cured by
+  KillThisEffect or its removal); two spells; two owners; the cooldown;
+  no target array.
+- `spell-strike`, 413/413 (4110 ticks): every shipped CONTROLDATA variant
+  cast at the one the caster fights (a crowd with a friend and a corpse),
+  by a caster walking (HITTARGET: over at the DELAY), by a monster with a
+  source, and with DURATION 8 (the end, its Kill twice, the poison cure);
+  each PATTERN over HITS 0/1/3/4/7, RADIUS 0/120, FOLLOW, the def's facing
+  (and RADIUS 265 with WAIT 48, 12 HITS); an unknown pattern; RANGEDAMAGE
+  from effects out of the map, held by their start waits; DURATION at the
+  edges for Poison, its cure when the caster fights nobody, himself;
+  REPEATDAMAGE alive, dead, in the bow root, walking; no invoker
+  (HITTARGET: the first target); ONCASTER; a NONMAP anchor with FOLLOW,
+  without, with ATTACH; POS (with a source given); ATTACH on a target with
+  no animator; FACING 0/1; ATTACHMULTIPLE with and without FOLLOW, 1 and 2
+  HITS; MULTIPLETARGETS (Full Paralysis) with FOLLOW / ONCASTER, the map's
+  order, the blast; an effect and the caster removed; KillThisEffect; an
+  effect out of the map following and timed; NewObject refusing.
+- `effect-pulse`, 53/53: the start wait 0-4; following with a follow time
+  of -1/0/1/5; orbiting at 0/64/100/200/255 by 0/50/265; an attach point on
+  a target with no animator; the CONTROLDATA POS (Anti-magic, StoneSkin)
+  plain and orbiting; "visible while" matching, not, a pattern, an
+  invisible effect; the poison kept at both rolls, timed (cured at the
+  end), no targets; the timed life and its blink (12/8, 12/12, 5/0, 0/0,
+  9/20, 30/30; a DURATION of -1, Strike's default, against 0/24/3) and
+  with a start wait; RANGEDAMAGE at frame 29/30 and with
+  no caster; KillThisEffect with a poison spell, none, a plain spell.
+- `effect-iced`, 5/5 (499 ticks): a monster frozen to the thaw at tick
+  240; the player; no target; a dead target (thawed at once); a walking
+  one (stopped).
+
+Port changes:
+
+- TSpell (`src/spell.{h,cpp}`): the effect list (safe references) and the
+  last effect; Timer `0x53f410` (no right hand, no HEIGHT fallback, no
+  "no effect, no spell" rule: SourceOffset is `0x53f1f0`); Pulse `0x53f800`
+  (the effects in no sector); Kill `0x53f860` (the cure per effect, OF_KILL,
+  let go); ObjectRemoved `0x53f730`; the destructor lets go of the effects.
+- TStrikeSpell: Pulse `0x540d70`, Timer `0x540eb0` (the anchor, EffectDef
+  `0x540bc0`, the struck target, PLAY / PLAYONCE, NONMAP,
+  ATTACHMULTIPLE, MULTIPLETARGETS and its blast, the seven patterns with
+  retail's float steps), Kill `0x542340` (the sound stopped).
+- TSpellManager: Pulse kills a spell before deleting it; ObjectRemoved
+  `0x5408d0`; Add puts a spell in the first vacant slot as retail's array
+  does (the port's array appended). TCharacter::Notify tells the spells.
+- TEffect (`src/effect.{h,cpp}`): retail's Pulse `0x4de800` (§2.19's
+  eight steps; the LIGHT fade is the VFX track's), KillThisEffect (the
+  cure, the spell's Kill), Follow `0x4def90` and the Strike fields.
+- TIcedEffect (builder "Iced"): Set `0x4ec930`, Pulse `0x4ec890`; the ice
+  arrow's burst freezes its Solifuges.
+- NewObject takes the imagery (TMapPane `0x450e40`, TObjectClass
+  `0x474bb0`: a given imagery doesn't replace the type's).
+- TSound::SetLooping reaches the playing source (it only set a flag), so
+  PLAY loops.
+
+Mutations: 22 one-line mutants of the port's S5 code (the source offset,
+ObjectRemoved's Timer, Kill's cure, the NONMAP test, the manager's Kill,
+the circle's +64, X's halves, REPEATDAMAGE's 24, the corpse filter, the
+def's +50, the anchor-less end, the Strike sound stop, the cluster's
+speed, a blink phase, the follow time's end, RANGEDAMAGE's frame, the
+start wait's hide, KillThisEffect's spell Kill, the poison kept, the Iced
+health test, its ice clear, its 240): every one fails its kata (1 to 262
+cases).
+
+The blink's phase divides by DURATION2; with 0 (a DURATION of -1 left
+running) retail's x87 gives the integer indefinite and no case matches.
+The port skips the blink then (a float-to-int conversion of an infinity
+is undefined in C++).
+
+REVSYNC-DIVERGENCEs (all crash guards or unnoticeable): no effect when the
+invoker is gone as the DELAY ends, and a Strike with no anchor ends (retail
+reads through null); Kill lets go of every effect (retail only slot 0, the
+rest killed and spell-less; a second Kill reran the cure, so a
+multi-effect POISONCHANCE spell cured its target again -- no shipped
+variant is one); an effect follows a target through a safe reference and
+asks no notices; the object-map point is the 3D animator's; the Iced
+effect ends at the shatter (§5.8); ConvertToVector's wrap (§5.8).
+
+Not ported: the network paths; the abracadabra cheat; effect classes'
+own behaviour (the VFX track's: their animators, lights, and the Iced
+animator's shatter and its RNG draws in the draw pass).

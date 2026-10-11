@@ -124,14 +124,22 @@ OBJSTAT_IDS = {'health': (0x66ca4c, 0x101), 'fatigue': (0x66ca3c, 0x102), 'mana'
                'level': (0x66da34, 17), 'acbonus': (0x66da38, 30), 'edgebonus': (0x66d950, 33),
                # The spells' (SPELLS_MISSILES.md: SetPoisoned 0x4d6eb0, the cast and
                # ManaDrain's ManaCostPct, TSpell::Damage's SpellDamageInc).
-               'poisoned': (0x66ca5c, 1), 'manacostpct': (0x66d9d0, 31), 'spelldamageinc': (0x66da30, 32)}
+               'poisoned': (0x66ca5c, 1), 'manacostpct': (0x66d9d0, 31), 'spelldamageinc': (0x66da30, 32),
+               # The player's experience (SetExp 0x00520220, SetNextExp 0x00520250).
+               'exp': (0x66d9d8, 18), 'nextexp': (0x66d908, 19)}
 # Object stats the code asks for by a literal id: the player's attack level,
 # attributes and skills (charstats.h; IsValidAttack 0x4d1652, TPlayer
 # 0x51a480 / 0x51a580 / 0x520900).
-LITERAL_OBJSTATS = {20: 'attacklevel', 34: 'strn', 35: 'cons', 36: 'agil', 37: 'rflx', 38: 'mind', 39: 'luck',
-                    **{40 + i: n for i, n in enumerate(('attack', 'defense', 'invoke', 'hands', 'knife', 'sword',
-                                                        'bludgeons', 'axes', 'bows', 'stealth', 'lockpick'))},
-                    53: 'invokeexp'}                # the cast's skill experience reads it (0x54012f)
+_SKILLS = ('attack', 'defense', 'invoke', 'hands', 'knife', 'sword', 'bludgeons', 'axes', 'bows', 'stealth',
+           'lockpick')
+# ... and the recovery percentages (TCharacter::Pulse 0x004c2baf), each
+# skill's experience and next figure (AddSkillExp 0x0051ac90; the cast's
+# reads invokeexp, 0x54012f).
+LITERAL_OBJSTATS = {20: 'attacklevel', 21: 'healthpct', 22: 'manapct', 23: 'fatiguepct',
+                    34: 'strn', 35: 'cons', 36: 'agil', 37: 'rflx', 38: 'mind', 39: 'luck',
+                    **{40 + i: n for i, n in enumerate(_SKILLS)},
+                    **{51 + i: n + 'exp' for i, n in enumerate(_SKILLS)},
+                    **{62 + i: n + 'next' for i, n in enumerate(_SKILLS)}}
 # SetObjStat (slot 0xe8, thiscall (id, value) ret 8): recorded, the value stored.
 SET_OBJSTAT = {CLASS_CHARACTER: 0x4d74b0, CLASS_PLAYER: 0x51adb0}
 G_AMBIENT = 0x6671a4                             # MapPane ambient light (Visibility 0x4c5aa0)
@@ -322,6 +330,7 @@ class CombatWorld:
         self.real_setstate = False # kata M8: SetState runs as original
         self.blocks = {}           # guest address -> label of a block built by the fixture
         self.seams = []
+        self.quiet = False         # stat reads unrecorded (the tick's katas)
         self.draws = []
         self.tape = []
         self.vm.rng_seed = 1
@@ -435,7 +444,8 @@ class CombatWorld:
             names = {**LITERAL_OBJSTATS, **names}
         if sid not in stats:
             raise KeyError(f'{self._name(ecx)} has no {names.get(sid, sid)} in the case')
-        self.seams.append(dict(seam=seam, who=self._name(ecx), stat=names.get(sid, sid), result=stats[sid]))
+        if not self.quiet:
+            self.seams.append(dict(seam=seam, who=self._name(ecx), stat=names.get(sid, sid), result=stats[sid]))
         return stats[sid]
 
     def _get_objstat(self, args, ecx):
@@ -456,7 +466,8 @@ class CombatWorld:
         stats = self.classstats_named.get(ecx, {})
         if name not in stats:
             raise KeyError(f'{self._name(ecx)} has no {name} in the case')
-        self.seams.append(dict(seam='GetStat', who=self._name(ecx), stat=name, result=stats[name]))
+        if not self.quiet:
+            self.seams.append(dict(seam='GetStat', who=self._name(ecx), stat=name, result=stats[name]))
         return stats[name]
 
     def _set_state(self, args, ecx):
@@ -526,7 +537,7 @@ class CombatWorld:
         none = lambda owner, args: 0
         self.animator_vtable = self._stub_table(ANIMATOR_SLOTS, {
             0x00: ('delete', 4, none), 0x1c: ('Close', 0, none), 0x20: ('ResetState', 0, none),
-            0x24: ('SetComplete', 4, none), 0x28: ('SetNewState', 4, none)},
+            0x24: ('SetComplete', 4, none), 0x28: ('SetNewState', 4, none), 0x2c: ('Pulse', 0, none)},
             lambda ecx: self.animators.get(ecx), 'animator')
 
     def _state(self, owner, args):

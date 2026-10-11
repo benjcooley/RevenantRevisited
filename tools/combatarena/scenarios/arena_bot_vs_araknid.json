@@ -1,0 +1,15 @@
+{
+  "name": "arena_bot_vs_araknid",
+  "about": "The flat test arena (make_arena.py: 2048 x 2048 of floor on level 2's empty sectors 24..25, 2..3): Locke played by the bot at the west side, an Araknid at the east, nothing else. The same lines set it up in retail (docs/gameplay/COMBAT_ARENA.md).",
+  "slot": "Port Resave",
+  "seed": 1,
+  "ticks": 1440,
+  "arena": {},
+  "exec": [
+    "sleep 24",
+    "pos 25375 3072 17 2",
+    "sleep 24",
+    "addat 25825 3072 Araknid"
+  ],
+  "playerbot": true
+}

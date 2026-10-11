@@ -18,6 +18,7 @@
 #include "object.h"
 #include "player.h"
 #include "playscreen.h"
+#include "playerbot.h"
 #include "renderer.h"
 #include "revenant.h"
 #include "revtypes.h"
@@ -109,6 +110,9 @@ class TGameModeImpl final : public IRuntimeMode
         // Mouse-click walk-to is the primary input path; keyboard
         // arrows are the secondary fallback. UpdateMove translates
         // CMDFLAG bits into Player->Go / Stop.
+        // --playerbot presses the player's keys first, as a player's
+        // hands would before the held controls are read.
+        PlayerBot.Tick();
         if (PlayScreen.IsControlOn() && !PlayScreen.IsDemoMode())
             PlayScreen.UpdateMove();
 

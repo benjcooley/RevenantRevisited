@@ -78,6 +78,56 @@ bool HasMatchingEndBegTransition(T3DImagery* img,
     return begstate && endstate && stricmp(endstate, begstate) == 0;
 }
 
+// REVSYNC: T3DImagery::GetAniKey @ 0x00409950 -- a state's first five frames
+// blend from the previous state's key, unless interpolation is off, either
+// state is AF_NOINTERPOLATION (attacks and impacts snap in), the previous
+// state ended on the end tag this one begins with, or this state is shorter
+// than the blend. (A loop wrapping onto itself is no state change here.)
+bool BlendsFromPreviousState(T3DImagery* img, int32_t state, int32_t frame,
+                             int32_t prevstate, int32_t prevframe)
+{
+    if (!img || !Interpolate || state < 0 || state >= img->NumStates() ||
+        prevstate < 0 || prevstate >= img->NumStates())
+        return false;
+    if ((img->GetAniFlags(state) | img->GetAniFlags(prevstate)) & AF_NOINTERPOLATION)
+        return false;
+    if (HasMatchingEndBegTransition(img, state, prevstate, prevframe) ||
+        IsLoopingSameStateTransition(img, state, prevstate))
+        return false;
+    return frame >= 0 && frame < kLegacyTransitionBlendFrames &&
+           img->GetAniLength(state) >= kLegacyTransitionBlendFrames;
+}
+
+// A key is relative to its object's parent in that state, and an object can
+// change parent from one state to the next (Locke's sword hangs off his
+// chest in one state, his hand in the next). Two keys under different
+// parents, or a key and none, don't interpolate: the object holds its
+// current key until the next state shows, as retail, which draws whole
+// 24 Hz frames, always does.
+void HoldBonesAcrossStates(T3DImagery* img,
+                           const SAnimPoseLayout& layout,
+                           int32_t state,
+                           int32_t nextstate,
+                           const float* current,
+                           float* blended,
+                           int32_t out_count)
+{
+    if (!img || state < 0 || nextstate < 0 ||
+        state >= img->NumStates() || nextstate >= img->NumStates())
+        return;
+    const int32_t bones = (std::min)(layout.bone_count, img->NumObjects());
+    for (int32_t objnum = 0; objnum < bones; ++objnum)
+    {
+        if (img->GetObjectParent(objnum, state) == img->GetObjectParent(objnum, nextstate) &&
+            img->IsHidden(objnum, state) == img->IsHidden(objnum, nextstate))
+            continue;
+        const int32_t base = layout.BoneOffset(objnum);
+        if (base < 0 || base + ANIM_BONE_STRIDE > out_count)
+            continue;
+        std::copy_n(current + base, ANIM_BONE_STRIDE, blended + base);
+    }
+}
+
 } // namespace
 
 void ConfigureI3DLegacyPoseLayout(T3DImagery* img, SAnimPoseLayout& layout)
@@ -175,17 +225,14 @@ bool SampleI3DLegacyFrameBlendToPose(T3DImagery* img,
         {
             AnimPoseBlendTwo(layout, current_out, next_out, alpha,
                 blended_out, out_count);
+            if (nextstate != state)
+                HoldBonesAcrossStates(img, layout, state, nextstate,
+                                      current_out, blended_out, out_count);
             pose = blended_out;
         }
     }
 
-    const bool has_transition =
-        !IsLoopingSameStateTransition(img, state, prevstate) &&
-        !HasMatchingEndBegTransition(img, state, prevstate, prevframe) &&
-        img &&
-        prevstate >= 0 && prevstate < img->NumStates() &&
-        frame >= 0 && frame < kLegacyTransitionBlendFrames;
-    if (has_transition &&
+    if (BlendsFromPreviousState(img, state, frame, prevstate, prevframe) &&
         SampleI3DLegacyFrameToPose(img, layout, prevstate, prevframe,
             -1, 0, next_out, out_count))
     {

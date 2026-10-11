@@ -342,8 +342,10 @@ not what shipped.
 **Port.** `TCharAnimator::DrawsCombatFlash()`; `SMeshSubmit::additive`
 draws a mesh's lit colour again with ONE/ONE against its own depth
 (LESS_EQUAL, no writes; `renderer.cpp`); the map renderer submits that
-second pass while the ticks run. Worn equipment is not drawn on characters
-in the port yet, so its mode 8 pass waits for it.
+second pass while the ticks run, for the body and, since feature/combat
+draws equipment (`submitEquipment`), for each worn item (retail's mode 8
+pass, `0x004d8148..0x004d8173`; with retail's software flag `0x0066818c`
+mode 16 is drawn as 8 as well, `0x00417da7`).
 [struck_body_retail_vs_port.png](combat_effects/struck_body_retail_vs_port.png).
 
 ## 5. Sparks (unchanged)
@@ -504,8 +506,9 @@ blade at any frame rate. No random numbers are drawn.
   `test_weapon_swipe.py` adds three negative controls that must fail and
   do: the snapshot's strip from sample 0, the tip at max.y, and no reset
   when the window opens.
-- **Combat arena**, `locke_vs_araknid`, one tick a frame: Locke's sword
-  swing and chop,
+- **Combat arena**, `locke_vs_araknid`, one tick a frame: Locke's
+  equipped sword (drawn since feature/combat's equipment work, on the
+  per-state parent the swipe samples too) through a swing and a chop,
   [swipe_arena_locke.png](combat_effects/swipe_arena_locke.png).
 - **Gallery**, one Skeleton swinging,
   [swipe_gallery_skeleton.png](combat_effects/swipe_gallery_skeleton.png).

@@ -20,6 +20,7 @@
 #include "imageres.h"
 #include "player.h"
 #include "rules.h"
+#include "script.h"
 
 #include <algorithm>
 #include <array>
@@ -70,6 +71,8 @@ void ReadCharData(const JsonValue& c, SCharData& cd);
 // The name a case gives an object stat (retail's stat ids: charstats.h),
 // as the retail fixture names them; null for one it doesn't name.
 const char* ObjStatName(int32_t statid);
+int32_t ObjStatId(const std::string& name);
+      // Its inverse, for the case's names (throws on an unknown one)
 
 // ---- Fixture imagery ------------------------------------------------------
 
@@ -222,6 +225,7 @@ class TFixtureAnimator : public TObjectAnimator
     {
         Record("ShowNumber", {amount, x, y, int32_t(rgb)});
     }
+    void Pulse() override { Record("Pulse", {}); }
 
   private:
     void Record(const char* name, std::initializer_list<int32_t> args) const
@@ -276,10 +280,25 @@ class IFixtureChar
     // The case's object stats again, over what setting the case up wrote
     // (an Equip's RefreshStats, say).
     virtual void ResetStats(const JsonValue& spec) = 0;
+    // An object stat as the case holds it now, unrecorded (null: not given).
+    [[nodiscard]] virtual const int32_t* PeekStat(const char* stat) const = 0;
+    // The tick's own state (kata C6, melee_attack.py PULSESTATE), the object
+    // and character flags it sets, a player's clock and level-up picks.
+    virtual void WritePulseState(JsonOut& j) = 0;
 };
 
 // When set, the fixture characters answer DeleteFromInventory as a seam.
 inline bool inventorySeams = false;
+// Kata C6 / C7 (retail_ab melee-pulse, melee-exp): reading a stat isn't
+// recorded (the tick reads them over and over; what is set is); the
+// tick's UpdateAction and AI recorded and skipped.
+inline bool quietReads = false;
+inline bool seamUpdateAction = false;
+inline bool seamAI = false;
+
+// The object flags the tick sets or clears: OF_KILL, OF_ONEXIT,
+// OF_PARALIZE, OF_ICED, OF_VIRGIN (melee_attack.py PULSE_OBJFLAGS).
+constexpr uint32_t kPulseObjFlags = OF_KILL | OF_ONEXIT | OF_PARALIZE | OF_ICED | OF_VIRGIN;
 
 // A TCharacter or TPlayer built from the case, without a class record or
 // loaded imagery: it answers the seams itself.
@@ -320,6 +339,7 @@ class TFixtureChar : public Base, public IFixtureChar
 
         // Motion (kata M7): object flags, inventory slot, vel and accum,
         // the animation's move, a MoveTo, the shove side, the sight fields.
+        this->flags &= ~OF_VIRGIN;          // the retail fixture's object has only the case's
         this->flags |= (uint32_t)spec["objflags"].Int();
         this->SetInventNum((short)spec["inventnum"].Int(-1));
         this->vel = Point(spec["vel"]);
@@ -377,7 +397,30 @@ class TFixtureChar : public Base, public IFixtureChar
                 hasmaxmana = true;
                 maxmana = (int32_t)spec["maxmana"].Int();
             }
+            if (spec.Has("maxhealth"))
+            {
+                hasmaxhealth = true;
+                maxhealth = (int32_t)spec["maxhealth"].Int();
+            }
+            if (spec.Has("maxfatigue"))
+            {
+                hasmaxfatigue = true;
+                maxfatigue = (int32_t)spec["maxfatigue"].Int();
+            }
+            for (const auto& [k, v] : spec["basestats"].Members())
+                Base::SetObjStat(ObjStatId(k), (int32_t)v.Int());
+            if (spec.Has("levelup"))
+                this->SetLevelUpPicks({(int32_t)spec["levelup"][0].Int(), (int32_t)spec["levelup"][1].Int(),
+                                       (int32_t)spec["levelup"][2].Int()});
         }
+        if (spec["noai"].Bool())
+            this->flags &= ~OF_AI;
+        if (spec.Has("pulsestate"))
+            ReadPulseState(spec["pulsestate"]);
+        // An empty script (kata C6: a corpse tells its script, then stops
+        // fidgeting); retail's stand-in answers its Trigger 0x00492640.
+        if (spec["script"].Bool())
+            this->InitScript(new TScript());
     }
     TFixtureChar(const TFixtureChar&) = delete;
     TFixtureChar& operator=(const TFixtureChar&) = delete;
@@ -514,6 +557,31 @@ class TFixtureChar : public Base, public IFixtureChar
         Seam(j.str());
     }
 
+    // The tick's (kata C6): UpdateAction and AI recorded and skipped while
+    // the case asks.
+    void UpdateAction(int32_t bits) override
+    {
+        if (!seamUpdateAction)
+        {
+            Base::UpdateAction(bits);
+            return;
+        }
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "UpdateAction").FieldString("who", who).Field("bits", bits).End('}');
+        Seam(j.str());
+    }
+    void AI() override
+    {
+        if (!seamAI)
+        {
+            Base::AI();
+            return;
+        }
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "AI").FieldString("who", who).End('}');
+        Seam(j.str());
+    }
+
     int32_t Health() override { return ObjStat("health"); }
     int32_t Fatigue() override { return ObjStat("fatigue"); }
     int32_t Mana() override { return ObjStat("mana"); }
@@ -587,6 +655,37 @@ class TFixtureChar : public Base, public IFixtureChar
         return 1;
     }
 
+    const int32_t* PeekStat(const char* stat) const override
+    {
+        auto it = stats.find(stat);
+        return it == stats.end() ? nullptr : &it->second;
+    }
+
+    void WritePulseState(JsonOut& j) override
+    {
+        j.Begin('{');
+        j.Field("lasthealth", this->lasthealthrecov).Field("lastfatigue", this->lastfatiguerecov);
+        j.Field("lastmana", this->lastmanarecov).Field("lastrun", this->lastrunfatigue);
+        j.Field("accumhealth", this->healthaccum).Field("accumfatigue", this->fatigueaccum);
+        j.Field("accummana", this->manaaccum).Field("accumrun", this->runaccum);
+        j.Field("accumpoison", this->poisonaccum).Field("lastpoison", this->lastpoisondamage);
+        j.Field("invokedelay", this->invokedelay).Field("fade", this->fade).Field("fadestep", this->fade_step);
+        j.Field("fadelimit", this->fade_limit).Field("fadedir", this->fade_direction);
+        j.Field("burnticks", this->burnticks).Field("deadticks", this->deadticks);
+        j.Field("exittimestamp", this->exittimestamp).Field("forcecommanddone", this->forcecommanddone ? 1 : 0);
+        if constexpr (std::is_base_of_v<TPlayer, Base>)
+        {
+            const TPlayer::SClockState c = this->ClockState();
+            j.Field("deathcountdown", c.deathcountdown).Field("stateframes", c.frames);
+            j.Field("statetime", c.time).Field("stateffectexpires", c.effectexpires);
+        }
+        j.Field("objflags", (int64_t)(this->flags & kPulseObjFlags)).Field("charflags", (int64_t)this->charflags);
+        if constexpr (std::is_base_of_v<TPlayer, Base>)
+            j.Key("levelup").Begin('[').Value(this->LevelUpPick(0)).Value(this->LevelUpPick(1))
+                .Value(this->LevelUpPick(2)).End(']');
+        j.End('}');
+    }
+
     void ResetStats(const JsonValue& spec) override
     {
         stats.clear();
@@ -635,6 +734,19 @@ class TFixtureChar : public Base, public IFixtureChar
         if (!hasmaxmana)
             return Base::MaxMana();
         return ValueSeam("MaxMana", maxmana);
+    }
+    // Likewise MaxHealth (0x00520630) and MaxFatigue (0x005206d0).
+    int32_t MaxHealth() override
+    {
+        if (!hasmaxhealth)
+            return Base::MaxHealth();
+        return ValueSeam("MaxHealth", maxhealth);
+    }
+    int32_t MaxFatigue() override
+    {
+        if (!hasmaxfatigue)
+            return Base::MaxFatigue();
+        return ValueSeam("MaxFatigue", maxfatigue);
     }
 
     void WriteAttackState(JsonOut& j) override
@@ -688,6 +800,8 @@ class TFixtureChar : public Base, public IFixtureChar
         auto it = from.find(stat);
         if (it == from.end())
             throw std::runtime_error(who + " has no " + stat + " in the case");
+        if (quietReads)
+            return it->second;
         JsonOut j;
         j.Begin('{').FieldString("seam", seam).FieldString("who", who).FieldString("stat", stat);
         j.Field("result", it->second).End('}');
@@ -697,10 +811,39 @@ class TFixtureChar : public Base, public IFixtureChar
 
     int32_t ValueSeam(const char* seam, int32_t value) const
     {
+        if (quietReads)
+            return value;
         JsonOut j;
         j.Begin('{').FieldString("seam", seam).FieldString("who", who).Field("result", value).End('}');
         Seam(j.str());
         return value;
+    }
+
+    // The tick's own state (melee_attack.py PULSESTATE; the case gives all of it).
+    void ReadPulseState(const JsonValue& p)
+    {
+        this->lasthealthrecov = (int32_t)p["lasthealth"].Int();
+        this->lastfatiguerecov = (int32_t)p["lastfatigue"].Int();
+        this->lastmanarecov = (int32_t)p["lastmana"].Int();
+        this->lastrunfatigue = (int32_t)p["lastrun"].Int();
+        this->healthaccum = (int32_t)p["accumhealth"].Int();
+        this->fatigueaccum = (int32_t)p["accumfatigue"].Int();
+        this->manaaccum = (int32_t)p["accummana"].Int();
+        this->runaccum = (int32_t)p["accumrun"].Int();
+        this->poisonaccum = (int32_t)p["accumpoison"].Int();
+        this->lastpoisondamage = (int32_t)p["lastpoison"].Int();
+        this->invokedelay = (int32_t)p["invokedelay"].Int();
+        this->fade = (int32_t)p["fade"].Int();
+        this->fade_step = (int32_t)p["fadestep"].Int();
+        this->fade_limit = (int32_t)p["fadelimit"].Int();
+        this->fade_direction = (int32_t)p["fadedir"].Int();
+        this->burnticks = (int32_t)p["burnticks"].Int();
+        this->deadticks = (int32_t)p["deadticks"].Int();
+        this->exittimestamp = (int32_t)p["exittimestamp"].Int();
+        this->forcecommanddone = p["forcecommanddone"].Bool();
+        if constexpr (std::is_base_of_v<TPlayer, Base>)
+            this->SetClockState({(int32_t)p["stateframes"].Int(), (int32_t)p["statetime"].Int(),
+                                 (int32_t)p["stateffectexpires"].Int(), (int32_t)p["deathcountdown"].Int()});
     }
 
     // The case's attack bookkeeping, where given (retail +0x120 ... +0x290).
@@ -726,6 +869,10 @@ class TFixtureChar : public Base, public IFixtureChar
     int32_t weapontype = 0, weapondamage = 0;
     bool hasmaxmana = false;
     int32_t maxmana = 0;
+    bool hasmaxhealth = false;
+    int32_t maxhealth = 0;
+    bool hasmaxfatigue = false;
+    int32_t maxfatigue = 0;
 
     std::string who;
     std::vector<SFixtureState> states;

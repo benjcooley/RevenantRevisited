@@ -389,8 +389,9 @@ class TObjectClass
         // Removes an object type
 
   // Object functions
-    TObjectInstance* NewObject(SObjectDef* objectdef);
-        // Create a new object based on the given object definition
+    TObjectInstance* NewObject(SObjectDef* objectdef, int32_t imageryid = -1);
+        // REVSYNC: 0x00474bb0 -- a new object of the def's type, with that
+        // registered imagery (-1: the type's, kept as the type's)
 
   // Type functions
     int32_t NumTypes() const { return objinfo.NumItems(); }
@@ -1438,7 +1439,9 @@ class TObjectInstance : protected SObjectDef
 
     // members to optimize function calls
     mutable S3DPoint oldpos;                    // Where it was last time function was called
-    mutable int32_t screenx, screeny, screenz;  // Pixel/zbuf coords as of oldpos
+    mutable int32_t screenx = 0, screeny = 0, screenz = 0;  // Pixel/zbuf coords as of oldpos
+    void Project() const;
+      // pos's screen point into screenx/y/z, oldpos = pos (GetScreenPos)
 };
 
 // TSafeRef<T>, safe_cast helpers, and TSafeObjectBase<Self> live in

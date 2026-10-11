@@ -142,6 +142,9 @@ class TPlayer : public TCharacter
 
     void Pulse() override;
     uint32_t Move() override;
+    int32_t Clock() override { return statetime; }
+        // REVSYNC: slot 0x314 @ 0x0051d800 -- his recovery and poison run on the play clock
+    int32_t RecoveryBonus(EVital vital) override;
 
 
     void Damage(int32_t damage, int32_t type = DAMAGE_UNDEFINED) override;
@@ -199,8 +202,8 @@ class TPlayer : public TCharacter
     // Retail A/B fixtures only: when set, each answers its call as the
     // retail fixture's seam does -- recorded, not run: AwardKillExp (vtable
     // +0x414), AddSkillExp (+0x418), AwardSkillExp (+0x41c), AwardStealthExp
-    // (+0x420), AddStatEffect (0x0051c2c0); and SetPlayerState (0x0051d680),
-    // recorded with the state still set.
+    // (+0x420), AddStatEffect (0x0051c2c0), RefreshStats (0x0051c660); and
+    // SetPlayerState (0x0051d680), recorded with the state still set.
     using KillExpSeam = void (*)(TPlayer* self, TCharacter* victim);
     static inline KillExpSeam killExpSeam = nullptr;
     using SkillExpSeam = void (*)(TPlayer* self, int32_t skillnum, int32_t exp);
@@ -213,6 +216,8 @@ class TPlayer : public TCharacter
     static inline StealthExpSeam stealthExpSeam = nullptr;
     using PlayerStateSeam = void (*)(TPlayer* self, int32_t newstate);
     static inline PlayerStateSeam playerStateSeam = nullptr;
+    using RefreshStatsSeam = void (*)(TPlayer* self);
+    static inline RefreshStatsSeam refreshStatsSeam = nullptr;
     void AwardKillExp(TCharacter *victim);
       // Experience for a dead victim; may raise the level (retail vtable +0x414, 0x0051a630)
     void AwardSkillExp(int32_t skillnum, TCharacter *victim);
@@ -321,6 +326,19 @@ class TPlayer : public TCharacter
         // pick 2 is which of them was made last
     void SetLevelUpPicks(const std::array<int32_t, 3> &picks) { levelupstats = picks; }
         // All three, as a save holds them
+    struct SClockState
+    {
+        int32_t frames = 0;             // +0x374
+        int32_t time = 0;               // +0x370
+        int32_t effectexpires = -1;     // +0x354
+        int32_t deathcountdown = 0xc0;  // +0x39c
+    };
+    [[nodiscard]] SClockState ClockState() const
+        { return {stateframes, statetime, stateffectexpires, deathcountdown}; }
+    void SetClockState(const SClockState &s)
+        { stateframes = s.frames; statetime = s.time; stateffectexpires = s.effectexpires; deathcountdown = s.deathcountdown; }
+        // The play clock, the next stat-effect expiry and the death screen
+        // countdown together (retail A/B fixtures set and read them)
     void SetMoney(int32_t amount);
         // REVSYNC: 0x0051e900 -- the gold carried becomes `amount`: the pile
         // set to it, added when there is none, removed below 1

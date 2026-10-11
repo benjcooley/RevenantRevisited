@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -563,6 +564,10 @@ class T3DAnimator : public TObjectAnimator
     int64_t          pose_update_render_frame = -1;
     int32_t          pose_update_state = -1;
     int32_t          pose_update_frame = -1;
+    int32_t          parents_state = -1;      // state the object parents are wired for; -1 = not
+                                              // wired from the imagery (a custom SetupObjects)
+    int32_t          parents_count = 0;       // objects when they were wired
+    std::array<uint8_t, MAX3DANIMOBJECTS> parent_order{}; // object indices, each after its parent
     int32_t          pose_update_next_state = -1;
     int32_t          pose_update_next_frame = -1;
     int32_t          pose_update_prev_state = -1;
@@ -681,6 +686,12 @@ class T3DAnimator : public TObjectAnimator
 
   // Object Functions
     virtual void SetupObjects();
+    void ResolveObjectParents(int32_t state);
+      // Points each object (and its transform) at its parent object in the
+      // imagery for this state; a root hangs off the instance's transform.
+      // An I3D object can change parent from state to state (a sword sits in
+      // the hand in one, on the back in another). OBJ3D_PARENT keeps the
+      // parent a caller set.
     void GetVerts(S3DAnimObj* obj, ERender3DVertex verttype = ERender3DVertex::Vertex);
     void FreeVerts(S3DAnimObj* obj);
     void GetFaces(S3DAnimObj* obj);

@@ -1142,27 +1142,134 @@ static TGenericEffectBuilder g_effect_wavem_builder("WaveM");
 static TGenericEffectBuilder g_effect_speaker_builder("speaker");
 static TGenericEffectBuilder g_effect_speaker_caps_builder("Speaker");
 
+// REVSYNC-DIVERGENCE: retail turns the point with the object's facing in its
+// own float math (TEffect::Pulse 0x004dea44..0x004deb92; the Strike def's
+// 0x0040edc0 / 0x0040ef80 matrix); the port takes the 3D animator's
+// object-map position, which carries the same placement.
+bool ObjectMapOffset(TObjectInstance* target, const char* name, S3DPoint& offset)
+{
+    auto* animator = dynamic_cast<T3DAnimator*>(target->GetAnimator());
+    return animator && animator->GetObjectMapPos(name, offset);
+}
+
 // REVSYNC: TEffect::Pulse @ 0x004de800 (vtable 0x005a85ac slot 0x110), the
-// part every effect runs: the object pulse (animator: tag sounds; script),
-// then an effect whose imagery state doesn't loop removes itself once that
-// animation has played out (CommandDone, which NextFrame sets at its last
-// frame). A script-added effect such as the opening's gvortex lives exactly
-// one run of its animation this way. The 1998 body's SetFrame(0) is gone in
-// retail.
-// REVSYNC-DIVERGENCE: the rest of 0x004de800 isn't ported here: the start
-// delay (+0x138: animation held until it counts down), a spell effect
-// following its invoker or target (+0xe4 spell), the light fade of effects
-// with a light definition (+0xd8, whose presence also skips the removal
-// above) and the timed life (+0x130: a countdown, +0x12c, that blinks the
-// effect out over its last +0x134 ticks). Script-added effects use none.
+// part every effect runs (SPELLS_MISSILES.md 2.19):
+//  1. a staggered start: hidden until its start wait runs out, nothing else;
+//  2. the object pulse (the animator: tag sounds; the script);
+//  3. following: at the followed object (orbiting, or on its attach point),
+//     plus the CONTROLDATA POS, on its level; the follow time runs out to
+//     its end; a "visible while" name shows it only while the followed
+//     character's root matches;
+//  4. a poison spell keeps its first target poisoned;
+//  5. a timed life counts down, blinking out over its last ticks, and ends
+//     curing that poison;
+//  6. RANGEDAMAGE: at its frame, the blast around the effect;
+//  7. without a spell, a state that doesn't loop removes it once played out;
+//  8. SetCommandDone(false).
+// Retail's spell LIGHT fade in and out (0x004de860..0x004de9c4) is the
+// effect's light, the VFX track's: not here.
 void TEffect::Pulse()
 {
+    if (startwait > 0)
+    {
+        if (startwait > 1)
+            ResetFlags(flags & ~OF_ANIMATE);
+        else
+            ResetFlags(flags | OF_ANIMATE);
+        startwait--;
+        return;
+    }
+
     TObjectInstance::Pulse();
+
+    SSpellVariant* variant = spell ? spell->VariantData() : nullptr;
+    SSpellControlData* control = variant ? variant->controldata : nullptr;
+
+    if (TObjectInstance* target = follow.Get())
+    {
+        S3DPoint at = target->Pos();
+        if (orbit)
+        {
+            S3DPoint around;
+            ConvertToVector(orbitangle, orbitdist, around);
+            at.x += around.x;
+            at.y += around.y;
+            at.z += around.z;
+        }
+        else if (S3DPoint offset; attachname[0] && ObjectMapOffset(target, attachname, offset))
+        {
+            at.x += offset.x;
+            at.y += offset.y;
+            at.z += offset.z;
+        }
+        if (control)
+        {
+            at.x += control->pos[0];
+            at.y += control->pos[1];
+            at.z += control->pos[2];
+        }
+        SetPos(at, target->GetLevel(), false);
+
+        if (followtime > 0)
+            followtime--;
+        if (followtime == 0)
+            ResetFlags(flags | OF_KILL | OF_PULSE);
+
+        if (visiblewhen[0] && (target->ObjClass() == OBJCLASS_CHARACTER || target->ObjClass() == OBJCLASS_PLAYER))
+        {
+            const TActionBlock* root = static_cast<TCharacter*>(target)->RootBlock();
+            if (root && root->Is(visiblewhen))
+                ResetFlags(flags & ~OF_INVISIBLE);
+            else
+                ResetFlags(flags | OF_INVISIBLE);
+        }
+    }
+
+    if (TObjectInstance* poisoned = (spell ? spell->PoisonTarget() : nullptr))
+        poisoned->SetPoisoned(1);
+
+    if (timed)
+    {
+        if (duration > 0)
+            duration--;
+        if (duration == 0)
+        {
+            if (TObjectInstance* poisoned = (spell ? spell->PoisonTarget() : nullptr))
+                poisoned->SetPoisoned(0);
+            ResetFlags(flags | OF_KILL | OF_PULSE);
+        }
+        else if (blinktime > 0 && duration < blinktime)
+        {
+            // The last stretch blinks: a phase 0..3 from how much is left.
+            // Without a blink time retail's phase is the x87's integer
+            // indefinite (a division by zero, Strike's default DURATION2 of
+            // 0 against a DURATION of -1): no blink, as here.
+            const int32_t phase =
+                int32_t((1.0 - double(blinktime - duration) / double(blinktime)) * 4.0);
+            bool hidden = false;
+            bool blinks = true;
+            switch (phase)
+            {
+                case 0: hidden = duration % 4 == 0; break;
+                case 1: hidden = duration % 3 == 0; break;
+                case 2: hidden = duration % 2 == 0; break;
+                case 3: hidden = duration % 3 != 0; break;
+                default: blinks = false; break;
+            }
+            if (blinks)
+                ResetFlags(hidden ? (flags | OF_INVISIBLE) : (flags & ~OF_INVISIBLE));
+        }
+    }
+
+    // REVSYNC-DIVERGENCE: retail hands AreaDamage the invoker pointer the
+    // spell keeps (it dangles once the caster is gone); the port's safe
+    // reference gives none then, and nobody is hurt.
+    if (control && control->rangedamage[0] && control->rangedamage[1] == GetFrame())
+        AreaDamage(spell->GetInvokerRef().Get(), Pos(), control->rangedamage[0], variant->mindamage,
+                   variant->maxdamage, spell->SpellData()->damagetype, 0);
 
     // Retail preserves the owner's normal animation frames for all effects;
     // the old per-type whitelist kept the snapshot reset for other types.
-    // Keep the audited null-spell lifetime gate and mark, rather than erase,
-    // existing flags so the normal map sweep can reap the object.
     // A replacing runtime visual has its own verified lifetime (for
     // example Cure, Mist and Drip). Its companion generic animator's
     // header can finish earlier; the visual simulator requests its own kill.
@@ -1179,7 +1286,92 @@ void TEffect::Pulse()
 
 void TEffect::KillThisEffect()
 {
-    flags |= OF_KILL | OF_PULSE;
+    if (TObjectInstance* poisoned = (spell ? spell->PoisonTarget() : nullptr))
+        poisoned->SetPoisoned(0);
+    ResetFlags(flags | OF_KILL);
+    ResetFlags(flags | OF_PULSE);
+    // Retail ends the spell once the effect is ready to go (slot 0x3c,
+    // 0x004def00: removed, and no light still fading out -- the port's
+    // effect lights don't fade, so at once).
+    if (spell)
+        spell->Kill();
+}
+
+void TEffect::Follow(TObjectInstance* target, int32_t a, int32_t dist, bool around)
+{
+    follow = target;
+    if (target)
+        SetNotify(N_DELETINGOBJECT | N_DELETINGSECTOR);
+    orbit = around;
+    orbitangle = a;
+    orbitdist = dist;
+    memset(attachname, 0, sizeof(attachname));
+}
+
+void TEffect::SetAttachName(const char* name)
+{
+    strncpy(attachname, name ? name : "", sizeof(attachname) - 1);
+    attachname[sizeof(attachname) - 1] = 0;
+}
+
+void TEffect::SetVisibleWhen(const char* name)
+{
+    strncpy(visiblewhen, name ? name : "", sizeof(visiblewhen) - 1);
+    visiblewhen[sizeof(visiblewhen) - 1] = 0;
+}
+
+// ***************
+// * TIcedEffect *
+// ***************
+
+// REVSYNC: the "Iced" builder @ 0x004ec860 (Build 0x004f7dc0: 0x18c bytes,
+// vtable 0x005ab25c, no target and no ticks; its Init 0x004ec880, slot
+// 0x1fc, clears both again).
+DEFINE_BUILDER("Iced", TIcedEffect)
+REGISTER_BUILDER(TIcedEffect)
+
+void TIcedEffect::Set(TObjectInstance* victim)
+{
+    if (!victim)
+        return;
+    target = victim;
+    victim->SetFlags(OF_PARALIZE);
+    victim->SetFlags(OF_ICED);
+    PlayAt("FREEZECUBE", victim->Pos());
+}
+
+void TIcedEffect::Pulse()
+{
+    TEffect::Pulse();
+    ++ticks;
+    if (TObjectInstance* victim = target.Get())
+    {
+        if (auto* chr = dynamic_cast<TCharacter*>(victim))
+            chr->Stop();
+        if (ticks < kThawTicks && (!(victim->GetFlags() & OF_ICED) || victim->Health() <= 0))
+            ticks = kThawTicks;
+        if (ticks == kThawTicks)
+        {
+            victim->ResetFlags(victim->GetFlags() & ~OF_PARALIZE);
+            victim->ResetFlags(victim->GetFlags() & ~OF_ICED);
+        }
+    }
+}
+
+// Retail's Iced animator (0x004eca40; its Animate 0x004ecaa0) holds the
+// effect: each frame it clears the effect's command-done flag, so a
+// played-out state never ends it (TEffect::Pulse), and once its shatter
+// (from tick 240) has bounced out it removes it (KillThisEffect); the target
+// is stopped every pulse until then.
+// REVSYNC-DIVERGENCE: that animator is the VFX track's and isn't ported (its
+// shatter draws on the game's RNG in the draw pass); the port's Animate
+// keeps the hold and removes the effect at the shatter.
+void TIcedEffect::Animate(bool draw)
+{
+    TEffect::Animate(draw);
+    SetCommandDone(false);
+    if (ticks >= kThawTicks && !(GetFlags() & OF_KILL))
+        KillThisEffect();
 }
 
 int32_t TEffect::GetAngle()

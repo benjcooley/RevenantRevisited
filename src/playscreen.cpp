@@ -27,6 +27,7 @@
 #include "combattrace.h"
 #include "testconfig.h"
 #include "playscreen.h"
+#include "playerbot.h"
 
 #include "audio_backend.h"
 #include "dialog.h"
@@ -186,7 +187,17 @@ static SControlEntry g_defaultGameControls[] =
 
     // -- combat strikes / blocks / dodge / leap --
     {"Combat Block",  "CombatBlock",  CTRL_COMBATMODE, {{'Q'}}, GAMECMD_BLOCKDOWN, GAMECMD_BLOCKUP, CMDFLAG_BLOCK, false},
-    {"Combat Dodge",  "CombatDodge",  CTRL_COMBATMODE, {{'W'}}, GAMECMD_DODGE,     0,                0,            false},
+    // REVSYNC: retail's control table 0x005d5500, entries 37-44: Ctrl + a
+    // direction key, or a double tap of the joystick's (COMBAT_HIT.md §3.10).
+    // The 1998 build had one "Combat Dodge" on W instead.
+    {"Combat Dodge Left",      "DodgeLeft",      CTRL_COMBATMODE, {{VK_CONTROL, VK_LEFT},  {VK_JOYLEFT | VK_DBLTAP}},      GAMECMD_DODGELEFT,      0, 0, false},
+    {"Combat Dodge Right",     "DodgeRight",     CTRL_COMBATMODE, {{VK_CONTROL, VK_RIGHT}, {VK_JOYRIGHT | VK_DBLTAP}},     GAMECMD_DODGERIGHT,     0, 0, false},
+    {"Combat Dodge Up",        "DodgeUp",        CTRL_COMBATMODE, {{VK_CONTROL, VK_UP},    {VK_JOYUP | VK_DBLTAP}},        GAMECMD_DODGEUP,        0, 0, false},
+    {"Combat Dodge Down",      "DodgeDown",      CTRL_COMBATMODE, {{VK_CONTROL, VK_DOWN},  {VK_JOYDOWN | VK_DBLTAP}},      GAMECMD_DODGEDOWN,      0, 0, false},
+    {"Combat Dodge UpLeft",    "DodgeUpLeft",    CTRL_COMBATMODE, {{VK_CONTROL, VK_HOME},  {VK_JOYUPLEFT | VK_DBLTAP}},    GAMECMD_DODGEUPLEFT,    0, 0, false},
+    {"Combat Dodge UpRight",   "DodgeUpRight",   CTRL_COMBATMODE, {{VK_CONTROL, VK_PRIOR}, {VK_JOYUPRIGHT | VK_DBLTAP}},   GAMECMD_DODGEUPRIGHT,   0, 0, false},
+    {"Combat Dodge DownLeft",  "DodgeDownLeft",  CTRL_COMBATMODE, {{VK_CONTROL, VK_END},   {VK_JOYDOWNLEFT | VK_DBLTAP}},  GAMECMD_DODGEDOWNLEFT,  0, 0, false},
+    {"Combat Dodge DownRight", "DodgeDownRight", CTRL_COMBATMODE, {{VK_CONTROL, VK_NEXT},  {VK_JOYDOWNRIGHT | VK_DBLTAP}}, GAMECMD_DODGEDOWNRIGHT, 0, 0, false},
     {"Combat Leap",   "CombatLeap",   CTRL_COMBATMODE, {{'F'}}, GAMECMD_LEAPDOWN,  GAMECMD_LEAPUP,   CMDFLAG_LEAP,  false},
     {"Combat Swing",  "CombatSwing",  CTRL_COMBATMODE, {{'A'}}, GAMECMD_SWING,     0,                0,            false},
     {"Combat Thrust", "CombatThrust", CTRL_COMBATMODE, {{'S'}}, GAMECMD_THRUST,    0,                0,            false},
@@ -908,6 +919,9 @@ void TPlayScreen::Update()
     // --playerai: the player fights on his own (testconfig.h).
     if (StartupPlayerAI && Player)
         Player->SetRunsAI(true);
+    // --playerbot: Locke played by code, once he's in the world.
+    if (StartupPlayerBot && Player && !PlayerBot.Enabled())
+        PlayerBot.Enable(true);
 
     // --exec console queue (no-op unless the flag was given).
     PulseStartupExec();
@@ -1922,9 +1936,12 @@ void TPlayScreen::Command(GAMECOMMAND command)
         if (Player)         // 0x24-0x2f: ButtonAttack(4..15)
             Player->Combo(command - GAMECMD_COMBO1 + 1);
         break;
-    case GAMECMD_DODGE:
-        if (Player)
-            Player->Dodge(-1);  // the back roll: retail has eight dodge controls, one a direction
+    case GAMECMD_DODGELEFT:     case GAMECMD_DODGERIGHT:
+    case GAMECMD_DODGEUP:       case GAMECMD_DODGEDOWN:
+    case GAMECMD_DODGEUPLEFT:   case GAMECMD_DODGEUPRIGHT:
+    case GAMECMD_DODGEDOWNLEFT: case GAMECMD_DODGEDOWNRIGHT:
+        if (Player)         // 0x30-0x37 (0x0047d900): Dodge(0..7)
+            Player->Dodge(command - GAMECMD_DODGELEFT);
         break;
     case GAMECMD_JUMP:
         if (Player)

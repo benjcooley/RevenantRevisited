@@ -47,6 +47,10 @@ extern char StartupDumpI3DPath[MAXPATHLEN];
 // which the shipped game set for network players): Locke fights on his own
 // in the combat arena (tools/combatarena, docs/gameplay/COMBAT_DOJO.md).
 extern bool StartupPlayerAI;
+// --playerbot -- Locke played by code the way a person plays him (stands
+// off, comes in to strike, steps out of blows and missiles, prefers open
+// ground; docs/gameplay/PLAYER_BOT.md), pressing the player's keys.
+extern bool StartupPlayerBot;
 extern char StartupDumpI3DOutPath[MAXPATHLEN];
 // --vfx=<id> — pre-select an effect by id in --test=vfx (e.g.
 // --vfx=TStripEffect). Empty = first alphabetically-sorted entry.

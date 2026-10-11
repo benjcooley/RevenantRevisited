@@ -62,7 +62,8 @@ enum GAMECOMMAND : int32_t
     GAMECMD_COMBO4, GAMECMD_COMBO5, GAMECMD_COMBO6,
     GAMECMD_COMBO7, GAMECMD_COMBO8, GAMECMD_COMBO9,
     GAMECMD_COMBO10, GAMECMD_COMBO11, GAMECMD_COMBO12,
-    GAMECMD_DODGE,
+    GAMECMD_DODGELEFT, GAMECMD_DODGERIGHT, GAMECMD_DODGEUP, GAMECMD_DODGEDOWN,      // retail 0x30-0x37,
+    GAMECMD_DODGEUPLEFT, GAMECMD_DODGEUPRIGHT, GAMECMD_DODGEDOWNLEFT, GAMECMD_DODGEDOWNRIGHT,  // Dodge(0..7)
     GAMECMD_COMBATACTION1, GAMECMD_COMBATACTION2, GAMECMD_COMBATACTION3,
     GAMECMD_BOWAIM, GAMECMD_BOWSHOOT,
     GAMECMD_BOWACTION1, GAMECMD_BOWACTION2, GAMECMD_BOWACTION3,
@@ -217,6 +218,9 @@ class TPlayScreen : public TScreen
       // Retail A/B fixtures only (retailab_combat.cpp): the frame count and
       // the control / demo flags as a case sets them, without
       // SetControlOn(false)'s input release
+    void SetFixtureScreenFrames(int32_t frames) { screenframes = frames; }
+      // Retail A/B fixtures only: the screen's frame count (retail
+      // CurrentScreen +0x48, the clock the exit mark wears off on)
     [[nodiscard]] int32_t GameTime()     const { return gametime; }
     void                   SetGameTime(int32_t t);
     [[nodiscard]] int32_t TimeOfDay()    const;

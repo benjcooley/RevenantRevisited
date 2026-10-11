@@ -959,7 +959,325 @@ def fireball_cases(data: Path, workdir: Path) -> list[dict]:
     return finish(cases)
 
 
+# ---- S5: spell lifetimes and effects -----------------------------------------------------
+
+def strike_variants(data: Path) -> list[tuple[str, str]]:
+    """[(spell, variant)] of the shipped variants with a CONTROLDATA block,
+    in file order."""
+    found, spell, variant = [], None, None
+    for raw in shipped_spell_def(data).decode('cp1252').splitlines():
+        line = raw.split('//', 1)[0].strip()
+        m = re.match(r'SPELL\s+"([^"]*)"', line)
+        if m:
+            spell, variant = m.group(1), None
+            continue
+        m = re.match(r'VARIANT\s+"([^"]*)"', line, re.I)
+        if m:
+            variant = m.group(1)
+            continue
+        if re.match(r'CONTROLDATA\b', line, re.I) and variant:
+            found.append((spell, variant))
+    return found
+
+
+def _life_caster(name='Locke', player=True, root=('combat', 3), fight='Mon', facing=0, oid=1, **extra):
+    """A caster fighting `fight`; a player is out of the map's keeping
+    (OF_NONMAP, as TPlayer::ClearPlayer leaves one)."""
+    spec = _caster(name, player=player, root=root, root_obj=fight, states=[], id=oid, facing=facing,
+                   moveangle=facing, objflags=0x80000 if player else 0)
+    spec['stats'].update(poisoned=0, fatigue=100)
+    spec.update(extra)
+    return spec
+
+
+def _life_mon(name='Mon', at=(1200, 1000, 0), oid=3, health=30, **extra):
+    spec = _target(name, 'Araknid', id=oid)
+    spec['pos'] = list(at)
+    spec['stats'].update(health=health)
+    spec.update(extra)
+    return spec
+
+
+def _spell(variant, cls='Spell', invoker='Locke', targets=('Mon',), sourcepos=None, **extra):
+    spec = dict(variant=list(variant), invoker=invoker, targets=list(targets) if targets is not None else None,
+                sourcepos=sourcepos, **{'class': cls})
+    spec.update(extra)
+    return spec
+
+
+def _tag(variant) -> str:
+    return re.sub(r'\W+', '_', variant[1]).strip('_')
+
+
+def life_cases(data: Path, workdir: Path) -> list[dict]:
+    """TSpell's lifetime under its manager, tick by tick: every shipped
+    variant as the base class (the DELAY, the effect at the caster plus the
+    source, facing his way with FACING); then the ends -- KillThisEffect, an
+    effect, the caster or a target removed (by object, by sector, out of the
+    map), any other notice (each a Timer more) -- an effect the map
+    refuses, one in no sector (pulsed and put in the map by its spell,
+    poisoning), two spells, the cooldown."""
+    cases = []
+
+    def case(name, spells, chars=None, ticks=12, **extra):
+        c = dict(name=f'life.{name}', call='spell-ticks', ticks=ticks, spells=spells,
+                 chars=chars or [_life_caster(), _life_mon()], globals=dict(frame=0), tape=[50, 95, 10, 70])
+        c.update(extra)
+        cases.append(c)
+
+    for i, (s, v) in enumerate((s, v) for s in shipped_spells(data) for v in s['variants']):
+        variant = (s['name'], v['name'])
+        tag = f'{i:02d}.{_tag(variant)}'
+        case(f'variant.{tag}', [_spell(variant)], chars=[_life_caster(facing=64), _life_mon()])
+        case(f'source.{tag}', [_spell(variant, invoker='Archer', targets=('Mon',), sourcepos=[7, -8, 9])],
+             chars=[_life_caster('Archer', player=False, facing=200, oid=2), _life_mon()])
+    ff = ('Fire Flash', 'Fire Flash')
+    poison = ('Poison', 'Poison')
+    three = [_life_caster(), _life_mon(), _life_mon('Pal', at=(900, 1000, 0), oid=4)]
+    monster = [_life_caster('Archer', player=False, oid=2), _life_mon()]
+    # The effect is made in tick 5's pulse (DELAY 5), after that tick's
+    # events. An invoker removed then is read through null by retail's
+    # Timer (0x53f475) as the DELAY ends: no case.
+    case('kill.after', [_spell(ff)], events=[dict(tick=7, do='kill', effect='fx1')])
+    case('kill.made', [_spell(ff)], events=[dict(tick=6, do='kill', effect='fx1')])
+    for tick in (6, 8):
+        case(f'removed.effect.t{tick}', [_spell(ff)], events=[dict(tick=tick, do='removed', mode=1, what='fx1')])
+        case(f'removed.sector.effect.t{tick}', [_spell(ff)],
+             events=[dict(tick=tick, do='removed', mode=2, what='fx1')])
+    for tick in (2, 8):
+        case(f'removed.invoker.t{tick}', [_spell(ff)], events=[dict(tick=tick, do='removed', mode=1, what='Locke')])
+        case(f'removed.sector.none.t{tick}', [_spell(ff, invoker='Archer')], chars=monster,
+             events=[dict(tick=tick, do='removed', mode=2, what='Mon')])
+    for tick in (2, 5, 8):
+        case(f'removed.target.t{tick}', [_spell(ff)], events=[dict(tick=tick, do='removed', mode=1, what='Mon')])
+        case(f'removed.other.t{tick}', [_spell(ff)], chars=three,
+             events=[dict(tick=tick, do='removed', mode=1, what='Pal')])
+        case(f'removed.cancel.t{tick}', [_spell(ff)], events=[dict(tick=tick, do='removed', mode=4, what='Mon')])
+    case('removed.sector.nonmap', [_spell(ff)], events=[dict(tick=3, do='removed', mode=2, what='Mon')])
+    case('removed.each.tick', [_spell(ff)], chars=three,
+         events=[dict(tick=t, do='removed', mode=1, what='Pal') for t in range(4)])
+    case('removed.notowner', [_spell(ff)], chars=three,
+         events=[dict(tick=8, do='removed', mode=1, what='fx1', who=['Pal'])])
+    case('fail', [_spell(ff)], fail=[1], events=[dict(tick=9, do='removed', mode=1, what='Locke')])
+    case('sectorless', [_spell(ff)], sectorless=[1])
+    case('sectorless.poison', [_spell(poison)], sectorless=[1], tape=[10],
+         events=[dict(tick=9, do='kill', effect='fx1')])
+    case('sectorless.poison.removed', [_spell(poison)], sectorless=[1], tape=[10],
+         events=[dict(tick=9, do='removed', mode=1, what='fx1')])
+    case('poison.kill', [_spell(poison)], tape=[10], events=[dict(tick=7, do='kill', effect='fx1')])
+    case('two', [_spell(ff), _spell(('Heal', 'Heal'))], ticks=14,
+         events=[dict(tick=7, do='kill', effect='fx1')])
+    case('two.owners', [_spell(ff), _spell(ff, invoker='Pal', owner='Pal', targets=('Locke',))], chars=three,
+         events=[dict(tick=6, do='removed', mode=1, what='fx2')])
+    case('cooldown', [_spell(ff)], chars=[_life_caster(spellwait=3), _life_mon()])
+    case('notargets', [_spell(ff, targets=None)])
+    return finish(cases)
+
+
+def strike_cases(data: Path, workdir: Path) -> list[dict]:
+    """The Strike class tick by tick: every shipped CONTROLDATA variant cast
+    at the one the caster fights; its anchor (HITTARGET, ONCASTER, no
+    caster, a caster not fighting), the def (POS, ATTACH, the source, the
+    facing), PLAY / PLAYONCE, the effects -- ATTACHMULTIPLE, MULTIPLETARGETS
+    with its blast, each PATTERN over HITS, RADIUS, FOLLOW and WAIT --
+    DURATION's end and its cure, REPEATDAMAGE, the stopped sound, an effect
+    out of the map, an anchor out of it."""
+    cases = []
+
+    def case(name, spells, chars=None, ticks=9, **extra):
+        c = dict(name=f'strike.{name}', call='spell-ticks', ticks=ticks, spells=spells,
+                 chars=chars or [_life_caster(), _life_mon()], globals=dict(frame=0))
+        c.update(extra)
+        cases.append(c)
+
+    def strike(variant, **extra):
+        return _spell(variant, 'Strike', **extra)
+
+    for i, variant in enumerate(strike_variants(data)):
+        tag = f'{i:02d}.{_tag(variant)}'
+        crowd = [_life_caster(facing=40), _life_mon(), _life_mon('Pal', at=(1100, 1100, 0), oid=4),
+                 _life_mon('Corpse', at=(1150, 950, 0), oid=5, health=0)]
+        case(f'variant.{tag}', [strike(variant)], chars=crowd, ticks=13, friends=[('Locke', 'Pal')])
+        case(f'walking.{tag}', [strike(variant)], ticks=13,
+             chars=[_life_caster(root=('walk', 1), fight=None), _life_mon()])
+        case(f'monster.{tag}', [strike(variant, invoker='Archer', sourcepos=[3, 4, 5])], ticks=13,
+             chars=[_life_caster('Archer', player=False, facing=90, oid=2), _life_mon()])
+        case(f'end.{tag}', [strike(variant)], ticks=14, controlvariant=list(variant),
+             control=dict(duration=8, duration2=3))
+
+    meteor = ('Meteor Storm', 'Meteor Storm')
+    # No angle past 255 (the circle's last HITS / 4 add 64 to it): retail's
+    # ConvertToVector (0x46db20) reads its Y table there, the port's wraps
+    # (SPELLS_MISSILES.md 5). Shipped data never gets there.
+    def angles_ok(pattern, hits):
+        return pattern != 2 or hits <= 4
+
+    for pattern, hits, radius, follow in itertools.product(range(7), (0, 1, 3, 4, 7), (0, 120), (0, 1)):
+        if angles_ok(pattern, hits):
+            case(f'pattern{pattern}.h{hits}.r{radius}.f{follow}', [strike(meteor)], ticks=8,
+                 chars=[_life_caster(facing=37), _life_mon()], controlvariant=list(meteor),
+                 control=dict(pattern=pattern, hits=hits, radius=radius, follow=follow, wait=5, duration=-1),
+                 variantfields=dict(facing=1))
+    for pattern in range(7):
+        hits = 12 if angles_ok(pattern, 12) else 4
+        case(f'pattern{pattern}.r265.h{hits}.wait48', [strike(meteor)], ticks=8, controlvariant=list(meteor),
+             control=dict(pattern=pattern, hits=hits, radius=265))
+    case('pattern9', [strike(meteor)], ticks=8, controlvariant=list(meteor), control=dict(pattern=9))
+    # Meteor Storm's blast from effects in no sector (pulsed by the spell),
+    # at frame 0, held for their start waits.
+    case('rangedamage.sectorless', [strike(meteor)], ticks=16, sectorless=[1, 2, 3, 4], controlvariant=list(meteor),
+         control=dict(rangedamage=[150, 0], wait=6),
+         chars=[_life_caster(), _life_mon(), _life_mon('Pal', at=(1100, 1100, 0), oid=4)], friends=[('Locke', 'Pal')])
+    # The ends.
+    poison = ('Poison', 'Poison')
+    for d in (6, 7, 8):
+        case(f'duration{d}.poison', [strike(poison)], ticks=12, tape=[10], controlvariant=list(poison),
+             control=dict(duration=d))
+    case('duration.poison.notfighting', [strike(poison)], ticks=12, tape=[10], controlvariant=list(poison),
+         control=dict(duration=8, hittarget=0), chars=[_life_caster(root=('walk', 1), fight=None), _life_mon()])
+    case('duration.poison.self', [strike(poison, targets=('Locke',))], ticks=12, tape=[10],
+         controlvariant=list(poison), control=dict(duration=8, hittarget=0),
+         chars=[_life_caster(fight='Locke'), _life_mon()])
+    case('duration.zero', [strike(meteor)], ticks=8, controlvariant=list(meteor), control=dict(duration=0))
+    for health, root in ((30, ('combat', 3)), (0, ('combat', 3)), (30, ('bow', 25))):
+        case(f'repeat.h{health}.{root[0]}', [strike(meteor)], ticks=50, controlvariant=list(meteor),
+             control=dict(repeatset=1, duration=-1, hits=1), chars=[_life_caster(root=root), _life_mon(health=health)])
+    case('repeat.walking', [strike(meteor)], ticks=26, controlvariant=list(meteor),
+         control=dict(repeatset=1, duration=-1, hits=1), chars=[_life_caster(root=('walk', 1), fight=None), _life_mon()])
+    # Anchors.
+    ff = ('Fire Flash', 'Fire Flash')
+    case('noinvoker', [strike(ff, invoker=None, owner='Locke')], ticks=9)
+    case('oncaster', [strike(ff)], controlvariant=list(ff), control=dict(oncaster=1))
+    case('nonmap.follow', [strike(('Might', 'Might'))], chars=[_life_caster(objflags=0x80000), _life_mon()])
+    case('nonmap.nofollow', [strike(meteor)], chars=[_life_caster(objflags=0x80000), _life_mon()])
+    case('nonmap.attach', [strike(('Lightning', 'Electric Bolt'))], chars=[_life_caster(objflags=0x80000), _life_mon()])
+    # The def.
+    for pos in ([0, 0, 0], [5, -6, 70]):
+        case(f'pos.{"_".join(map(str, pos))}', [strike(ff, sourcepos=[9, 9, 9])], controlvariant=list(ff),
+             control=dict(posset=1, pos=pos))
+    case('attach.source', [strike(('Lightning', 'Electric Bolt'), sourcepos=[1, 2, 3])])
+    case('plain.source', [strike(ff, sourcepos=[-4, 0, 12])])
+    for facing in (0, 1):
+        case(f'facing{facing}', [strike(ff)], chars=[_life_caster(facing=99), _life_mon()],
+             controlvariant=list(ff), variantfields=dict(facing=facing))
+    # ATTACHMULTIPLE.
+    might = ('Might', 'Might')
+    for follow in (0, 1):
+        for hits in (1, 2):
+            case(f'attachmultiple.f{follow}.h{hits}', [strike(might)], controlvariant=list(might),
+                 control=dict(follow=follow, hits=hits, wait=4))
+    # MULTIPLETARGETS.
+    para = ('Full Paralysis', 'Full Paralysis')
+    crowd = [_life_caster(), _life_mon(), _life_mon('Pal', at=(1100, 1100, 0), oid=4),
+             _life_mon('Corpse', at=(1150, 950, 0), oid=5, health=0), _life_mon('Far', at=(1900, 1000, 0), oid=6)]
+    for follow, oncaster in itertools.product((0, 1), (0, 1)):
+        case(f'multiple.f{follow}.o{oncaster}', [strike(para)], chars=crowd, friends=[('Locke', 'Pal')],
+             controlvariant=list(para), control=dict(follow=follow, oncaster=oncaster, duration=11))
+    case('multiple.nearby', [strike(para)], chars=crowd, nearby=['Far', 'Locke', 'Mon'], controlvariant=list(para),
+         control=dict(wait=9))
+    # With no invoker and no HITTARGET retail builds the def on none (a
+    # crash, 0x540bea): no case.
+    # The sound stopped, an effect removed, out of the map.
+    case('removed.effect', [strike(might)], events=[dict(tick=7, do='removed', mode=1, what='fx2')])
+    case('removed.invoker', [strike(might)], events=[dict(tick=7, do='removed', mode=1, what='Locke')])
+    case('kill.effect', [strike(ff)], events=[dict(tick=7, do='kill', effect='fx1')])
+    case('sectorless.follow', [strike(('Anti-magic', 'Anti-magic'))], ticks=12, sectorless=[1])
+    case('sectorless.timed', [strike(meteor)], ticks=14, sectorless=[1, 2, 3, 4], controlvariant=list(meteor),
+         control=dict(duration=4, duration2=3, wait=3, rangedamage=[0, 0]))
+    case('fail', [strike(might)], fail=[1])
+    return finish(cases)
+
+
+def effect_pulse_cases(data: Path, workdir: Path) -> list[dict]:
+    """TEffect::Pulse alone: the start wait, following (at, orbiting, on an
+    attach point, with the CONTROLDATA POS, its time running out), "visible
+    while", the poison kept, the timed life and its blink, RANGEDAMAGE at
+    its frame; KillThisEffect (the cure, the spell's end)."""
+    cases = []
+
+    def case(name, effect, ticks=8, spell=None, chars=None, **extra):
+        e = dict(type='StrikeEffect', pos=[1000, 1000, 0])
+        e.update(effect)
+        c = dict(name=f'effect.{name}', call='effect-pulse', ticks=ticks, effect=e,
+                 chars=chars or [_life_caster(), _life_mon()], globals=dict(frame=0))
+        if spell:
+            c['spell'] = spell
+        c.update(extra)
+        cases.append(c)
+
+    for wait in (0, 1, 2, 4):
+        case(f'startwait{wait}', dict(startwait=wait))
+    for followtime in (-1, 0, 1, 5):
+        case(f'follow.t{followtime}', dict(follow='Mon', followtime=followtime))
+    # Not past 255: retail's ConvertToVector (0x46db20) reads past its
+    # 256-entry X table there; the port's wraps (SPELLS_MISSILES.md 5).
+    for angle, dist in itertools.product((0, 64, 100, 200, 255), (0, 50, 265)):
+        case(f'orbit.a{angle}.d{dist}', dict(follow='Mon', followtime=-1, orbit=True, angle=angle, dist=dist), ticks=3)
+    case('attach', dict(follow='Mon', followtime=-1, attach='lhand'), ticks=3)
+    case('follow.wait', dict(follow='Mon', followtime=3, startwait=2))
+    for name, variant in (('antimagic', ('Anti-magic', 'Anti-magic')), ('stoneskin', ('Stone Skin', 'StoneSkin'))):
+        case(f'pos.{name}', dict(follow='Mon', followtime=-1), ticks=3, spell=_spell(variant, 'Strike'))
+        case(f'pos.orbit.{name}', dict(follow='Mon', followtime=-1, orbit=True, angle=30, dist=40), ticks=3,
+             spell=_spell(variant, 'Strike'))
+    for when in ('combat', 'walk', 'com*'):
+        case(f'visible.{when}', dict(follow='Mon', followtime=-1, visiblewhen=when), ticks=3)
+    case('visible.locke', dict(follow='Locke', followtime=-1, visiblewhen='combat', flags=0x80), ticks=3)
+    poison = ('Poison', 'Poison')
+    for roll in (10, 95):
+        case(f'poison.r{roll}', dict(), ticks=4, spell=_spell(poison, 'Strike'), tape=[roll])
+    case('poison.timed', dict(timed=True, duration=3, blink=0), ticks=5, spell=_spell(poison, 'Strike'), tape=[10])
+    case('poison.notargets', dict(), ticks=3, spell=_spell(poison, 'Strike', targets=None), tape=[10])
+    for duration, blink in ((12, 8), (12, 12), (5, 0), (0, 0), (9, 20), (30, 30), (-1, 0), (-1, 24), (-1, 3)):
+        case(f'timed.d{duration}.b{blink}', dict(timed=True, duration=duration, blink=blink),
+             ticks=min(duration + 2, 32) if duration >= 0 else 6)
+    case('timed.wait', dict(timed=True, duration=4, blink=2, startwait=3))
+    meteor = ('Meteor Storm', 'Meteor Storm')
+    crowd = [_life_caster(), _life_mon(at=(1050, 1000, 0)), _life_mon('Pal', at=(1100, 1100, 0), oid=4),
+             _life_mon('Far', at=(1300, 1300, 0), oid=6)]
+    for frame in (29, 30):
+        case(f'rangedamage.f{frame}', dict(frame=frame), ticks=2, spell=_spell(meteor, 'Strike'), chars=crowd,
+             friends=[('Locke', 'Pal')])
+    case('rangedamage.noinvoker', dict(frame=30), ticks=2, spell=_spell(meteor, 'Strike', invoker=None), chars=crowd)
+    case('kill.poison', dict(), ticks=4, spell=_spell(poison, 'Strike'), tape=[10],
+         events=[dict(tick=2, do='kill', effect='fx1')])
+    case('kill.nospell', dict(), ticks=3, events=[dict(tick=1, do='kill', effect='fx1')])
+    case('kill.spell', dict(), ticks=3, spell=_spell(('Fire Flash', 'Fire Flash')),
+         events=[dict(tick=0, do='kill', effect='fx1')])
+    return finish(cases)
+
+
+def iced_cases(data: Path, workdir: Path) -> list[dict]:
+    """The ice arrow's freeze: Set on a monster, the player, none; the
+    ticks to the thaw at 240 (the target stopped every pulse); a dead target
+    thawing at once; a target walking when frozen."""
+    cases = []
+
+    def case(name, target='Mon', ticks=243, chars=None, **extra):
+        c = dict(name=f'iced.{name}', call='effect-iced', ticks=ticks, target=target,
+                 iced=dict(type='Iced', pos=[1200, 1000, 0]),
+                 chars=chars or [_life_caster(), _life_mon()], globals=dict(frame=0))
+        c.update(extra)
+        cases.append(c)
+
+    case('monster')
+    case('player', target='Locke', ticks=4)
+    case('none', target=None, ticks=4)
+    case('dead', chars=[_life_caster(), _life_mon(health=0)], ticks=3)
+    walking = _life_mon(states=['combat', 'walk'], doing=dict(name='walk', action=2),
+                        desired=dict(name='walk', action=2))
+    case('walking', chars=[_life_caster(), walking], ticks=3)
+    return finish(cases)
+
+
 TARGETS = {
+    'spell-life': dict(fixture='slots/combat/spell_life.py', cases=life_cases, compare=generic_compare,
+                       port_fields=port_fields, unit=lambda r: len(r.get('ticks', []))),
+    'spell-strike': dict(fixture='slots/combat/spell_life.py', cases=strike_cases, compare=generic_compare,
+                         port_fields=port_fields, unit=lambda r: len(r.get('ticks', []))),
+    'effect-pulse': dict(fixture='slots/combat/spell_life.py', cases=effect_pulse_cases, compare=generic_compare,
+                         port_fields=port_fields, unit=lambda r: len(r.get('ticks', []))),
+    'effect-iced': dict(fixture='slots/combat/spell_life.py', cases=iced_cases, compare=generic_compare,
+                        port_fields=port_fields, unit=lambda r: len(r.get('ticks', []))),
     'missile-fireball': dict(fixture='slots/combat/spell_missile.py', cases=fireball_cases, compare=generic_compare,
                              port_fields=port_fields, unit=lambda r: len(r.get('ticks', []))),
     'missile-bow': dict(fixture='slots/combat/spell_bow.py', cases=bow_cases, compare=generic_compare,

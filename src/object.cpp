@@ -170,18 +170,24 @@ void ScreenToWorld(int32_t x, int32_t y, S3DPoint& pos, int32_t zheight)
     pos.z = zheight;
 }
 
+// REVSYNC: ConvertToVector @ 0x0046db20 -- x from the X table at the angle,
+// y from the Y table at |angle - 128|, each times the length over 256
+// (rounding toward zero). Retail doesn't wrap the angle, and its Y table
+// follows its X table (0x00634d44, 0x00634f44): an angle of 256..383 takes
+// x from Y[angle - 256], as the strike spell's circle and X patterns can
+// pass (SPELLS_MISSILES.md). Past that retail reads beyond both tables;
+// the port wraps those angles (MoveStep's shove probes mask theirs first,
+// 0x004c4477, as the port's do).
 void ConvertToVector(int32_t angle, int32_t speed, S3DPoint& vect, int32_t zangle)
 {
-    // Revenant uses an 8-bit facing system: angles are 0..255 wrapping.
-    // Several callers (e.g. TCharacter::Move's ±64 sidestep probes) pass
-    // raw `face + 64` values that exceed 255; without this mask we read
-    // past the 256-element DistX/DistY lookup tables. ASan caught it as
-    // a load2 mid-frame in TMapPane::MoveObjects.
-    angle  &= 255;
     zangle &= 255;
     if (zangle == 0)
     {
-        vect.x = (DistX[angle] * speed) / 256;
+        const bool spill = angle >= 256 && angle < 384;     // into the Y table
+        if (!spill)
+            angle &= 255;
+        const int32_t x = spill ? DistY[angle - 256] : DistX[angle];
+        vect.x = (x * speed) / 256;
         vect.y = (DistY[angle > 128 ? angle - 128 : 128 - angle] * speed) / 256;
         vect.z = 0;
     }
@@ -930,44 +936,38 @@ int32_t TObjectInstance::FaceAngleTo(const TObjectInstance* inst) const
     return angle;
 }
 
+// REVSYNC: TObjectInstance::GetScreenPos @ 0x0046eb40 (x, y) and
+// 0x0046ec50 (x, y, z) -- the screen point, kept until the object moves.
+// Both project through the float matrix at 0x005d4740 and truncate each sum
+// once (_ftol): x = px - py, y = 0.5 px + 0.5 py - 0.867 pz, z = 47359 -
+// 0.867 py - 0.867 px - 0.5 pz, to 16 bits. WorldToScreen's integer form
+// truncates the height term on its own, so off the ground its y can be one
+// more. In doubles the sums are exact, as on the x87.
 void TObjectInstance::GetScreenPos(int32_t &x, int32_t &y) const
 {
-    if (oldpos == pos)
-    {
-        x = screenx;
-        y = screeny;
-    }
-    else
-    {
-        WorldToScreen(pos, x, y);
-        WorldToScreenZ(pos, screenz);
-
-        screenx = x;
-        screeny = y;
-
-        oldpos = pos;
-    }
+    if (oldpos != pos)
+        Project();
+    x = screenx;
+    y = screeny;
 }
 
 void TObjectInstance::GetScreenPos(S3DPoint& s) const
 {
-    if (oldpos == pos)
-    {
-        s.x = screenx;
-        s.y = screeny;
-        s.z = screenz;
-    }
-    else
-    {
-        WorldToScreen(pos, screenx, screeny);
-        WorldToScreenZ(pos, screenz);
+    if (oldpos != pos)
+        Project();
+    s.x = screenx;
+    s.y = screeny;
+    s.z = screenz;
+}
 
-        s.x = screenx;
-        s.y = screeny;
-        s.z = screenz;
-
-        oldpos = pos;
-    }
+void TObjectInstance::Project() const
+{
+    constexpr float kHalf = 0.5f, kHeight = 0.867f;     // retail's floats
+    const double px = pos.x, py = pos.y, pz = pos.z;
+    screenx = int32_t(px - py);
+    screeny = int32_t(px * kHalf + py * kHalf - pz * kHeight);
+    screenz = int32_t(47359.0 - pz * kHalf - py * kHeight - px * kHeight) & 0xffff;
+    oldpos = pos;
 }
 
 // Sets the current object position. REVSYNC: 0x0046ed70 -- a level not given
@@ -3230,7 +3230,7 @@ bool TObjectClass::RemoveType(int32_t objtype)
     return true;
 }
 
-TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef)
+TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef, int32_t imageryid)
 {
     if (objectdef->pos.x < 0)
         objectdef->pos.x = 0;
@@ -3245,13 +3245,16 @@ TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef)
     if (!objinfo[objectdef->objtype].objbuilder)
         return nullptr;
 
-    objinfo[objectdef->objtype].imagery = TObjectImagery::LoadImagery(objinfo[objectdef->objtype].imageryid);
-
-    if (!objinfo[objectdef->objtype].imagery)
+    SObjectInfo& info = objinfo[objectdef->objtype];
+    TObjectImagery* imagery = nullptr;
+    if (imageryid < 0)
+        imagery = info.imagery = TObjectImagery::LoadImagery(info.imageryid);
+    else
+        imagery = TObjectImagery::LoadImagery(imageryid);
+    if (!imagery)
         return nullptr;
 
-    TObjectInstance* inst = objinfo[objectdef->objtype].objbuilder->Build(objectdef,
-        objinfo[objectdef->objtype].imagery);
+    TObjectInstance* inst = info.objbuilder->Build(objectdef, imagery);
 
     if (objectdef->objclass == OBJCLASS_TILE || objectdef->objclass == OBJCLASS_EXIT)
         inst->SetFlags(OF_IMMOBILE);

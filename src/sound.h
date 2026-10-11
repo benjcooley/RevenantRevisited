@@ -72,7 +72,8 @@ class TSound
     uint32_t GetStatus();
     bool IsPlaying();
     bool IsLooping();
-    void SetLooping(bool state) { looping = state; }
+    void SetLooping(bool state);
+      // Loop (or not) from the next play on, and a playing one too
 
     PTSound Next() { return next; }
     void SetNext(PTSound n) { next = n; }

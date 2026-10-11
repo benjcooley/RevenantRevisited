@@ -557,6 +557,21 @@ set (`0x60 − ftol(0x667208 · k)`), falls in one of eight sectors
 If `HasActionAni(name)`: `new AB(name, 9 DODGE)`, `obj = doing->obj`,
 priority set, interrupt cleared, SetDesired. Network notify first.
 
+The controls (retail's control table `0x5d5500`, entries 37–44, combat
+mode only): "Combat Dodge Left / Right / Up / Down / UpLeft / UpRight /
+DownLeft / DownRight" (INI `DodgeLeft` … `DodgeDownRight`), keys Ctrl +
+Left / Right / Up / Down / Home / PgUp / End / PgDn, or a double tap of
+the joystick's direction (`0x420 + dir`: VK_JOY… | VK_DBLTAP); commands
+`0x30`–`0x37`, which PlayScreen's Command (`0x47d900`) turns into
+`Player->Dodge(command − 0x30)`, so `dir` 0–7 is left, right, up, down,
+up-left, up-right, down-left, down-right. There is no undirected dodge
+control (the 1998 build had "Combat Dodge" on W). **Ported
+(2026-10-11)**: the eight entries in the port's control table
+(`playscreen.cpp`, `GAMECMD_DODGELEFT` … `GAMECMD_DODGEDOWNRIGHT`), the
+1998 one dropped; not exercised by a kata (the rest of the port's control
+table is still the 1998 one: retail's blocks on F, its combos on Ctrl / Alt
++ Q W E A S D, and so on).
+
 ### 3.11 KnockBack `0x4d3750`
 
 `KnockBack(const S3DPoint *from, variant)`: player state bit 2 → 0;
@@ -855,7 +870,7 @@ Emulator note: the block-sound switch in ResolveAttack (`0x4c727c`,
 under Unicorn; the fixture takes the `ja` as the hardware does (a hook at
 `0x4c7281`). Only that site is patched; no general fix.
 
-### 9.2 C2 `melee-damage` (1137 cases)
+### 9.2 C2 `melee-damage` (1193 cases)
 
 TCharacter::Damage `0x4c4950` whole (port `TCharacter::Damage`,
 `DamageDeath`, `DamageImpact`, `ForceDamageBlock`, `DamageShare`),
@@ -906,6 +921,23 @@ Corrections to §3.4:
   into its 64 × 32 image; between ticks the rise and the fade ease toward
   the next tick's. The A/B fixtures record the call (`animator.ShowNumber`,
   retail's at `0x004da3b0`).
+- The number in the kata (2026-10-11, `damage.number.*`, 88 cases, an
+  animator on the struck character): the amount (overkill included), the
+  colour on both sides of 25 % and 50 % for an Araknid (MaxHealth from
+  its data) and the player (slot `0x1d8`), three ground positions and two
+  off the ground, the gates. Two things found. Retail reads Health() once or twice more than
+  the port (`0x4c4b24`, `0x4c4bb5`; no side effect), so these cases don't
+  record stat reads. And GetScreenPos `0x46eb40` is a float matrix
+  (`0x5d4740`: x = px − py, y = 0.5·px + 0.5·py − 0.867·pz, truncated
+  once by `_ftol`), where the port's WorldToScreen truncates the height
+  term on its own: off the ground y can be one more than retail's (at
+  (1300, 700, 40): retail 965, port 966, so the number stands one pixel
+  lower). Fixed: the port's GetScreenPos (both overloads, `0x46eb40`
+  and `0x46ec50`, z = 47359 − 0.867·py − 0.867·px − 0.5·pz to 16 bits)
+  projects as retail's does, checked over 23k points by the kernel
+  kata's `screen-xy` / `screen-pos`. WorldToScreen, the free function,
+  keeps its integer form: each of its callers is a different retail
+  routine, to be checked on its own.
 
 Divergences (none noticeable): the slot after a full impact list (six)
 is an empty impact (retail reads past the list); the given block's attack

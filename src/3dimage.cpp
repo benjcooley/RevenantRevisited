@@ -2449,11 +2449,13 @@ bool T3DImagery::GetAniKey(int32_t objnum, int32_t state, int32_t frame,
         !stricmp(endstate, begstate))
         return true;
 
+    // REVSYNC: GetAniKey @ 0x00409950 also leaves a state shorter than the
+    // blend unblended.
     int32_t iframes = kLegacyTransitionBlendFrames;
 
     float i = 1.0f;
     hmm_vec3 ipos, irot, iscl;
-    if (prevstate >= 0 && frame < iframes)
+    if (prevstate >= 0 && frame < iframes && GetAniLength(state) >= iframes)
     {
         i = (float)(frame + 1) / (float)iframes;
         GetUninterpolatedAniKey(objnum, prevstate, prevframe, ipos, irot, iscl);
@@ -4396,6 +4398,7 @@ void T3DAnimator::Close()
     pose_update_render_frame = -1;
     pose_update_state = -1;
     pose_update_frame = -1;
+    parents_state = -1;
     pose_update_next_state = -1;
     pose_update_next_frame = -1;
     pose_update_prev_state = -1;
@@ -4710,22 +4713,19 @@ void T3DAnimator::UpdateBoneTransforms()
             pose_current.Count(), &pose) || !pose)
         return;
 
+    // The keys are relative to this state's parents.
+    if (parents_state >= 0 && (parents_state != s || parents_count != animobjs.NumItems()))
+        ResolveObjectParents(s);
+
+    auto layers_over_animation = [](const S3DAnimObj* obj) {
+        return (obj->flags & (OBJ3D_ROTMASK | OBJ3D_POSMASK | OBJ3D_SCLMASK | OBJ3D_ADDTOANI)) != 0;
+    };
+
     for (int32_t c = 0; c < animobjs.NumItems(); c++)
     {
         S3DAnimObj* obj = animobjs[c];
-        if (!obj) continue;
-
-        const bool hastrans =
-            (obj->flags & (OBJ3D_ROTMASK | OBJ3D_POSMASK | OBJ3D_SCLMASK)) != 0;
-        if (hastrans || (obj->flags & OBJ3D_ADDTOANI))
-        {
-            // Quarantined legacy matrix path for the small set of objects that
-            // layer authored masks/transforms over animation. The ordinary bone
-            // path below is fixed-buffer pose data only.
-            img->SetPrevState(sample_prevstate, sample_prevframe);
-            img->CalcObjectMatrix(obj, s, f, /*pos*/nullptr, /*calcparents*/false);
+        if (!obj || layers_over_animation(obj))
             continue;
-        }
 
         const int32_t target = (obj->flags & OBJ3D_ANIMTRACK)
             ? obj->animtrack
@@ -4753,10 +4753,25 @@ void T3DAnimator::UpdateBoneTransforms()
         obj->transform.SetLocalPos(obj->pos);
         obj->transform.SetLocalRot(q);
         obj->transform.SetLocalScl(obj->scl);
+    }
 
-        // Keep the old per-bone matrix mirror alive for attachment/render
-        // paths that have not moved to TTransform yet. This is composition of
-        // already-written local transforms, not another legacy key sample.
+    // The character-local object matrices (retail S3DAnimObj +0x58) that
+    // attachment and effect callers read, each composed onto its parent's
+    // after the parent's (CalcObjectMatrix 0x0040a420 chains to the parent).
+    // Objects that layer authored transforms over the animation keep the
+    // legacy matrix path.
+    const bool ordered = parents_state >= 0 && parents_count == animobjs.NumItems();
+    for (int32_t i = 0; i < animobjs.NumItems(); i++)
+    {
+        S3DAnimObj* obj = animobjs[ordered ? parent_order[size_t(i)] : i];
+        if (!obj)
+            continue;
+        if (layers_over_animation(obj))
+        {
+            img->SetPrevState(sample_prevstate, sample_prevframe);
+            img->CalcObjectMatrix(obj, s, f, /*pos*/nullptr, /*calcparents*/false);
+            continue;
+        }
         obj->matrix = obj->transform.LocalMatrix();
         if (obj->parent)
             MtxMultiply(&obj->matrix, &obj->matrix, &obj->parent->matrix);
@@ -4905,18 +4920,7 @@ bool T3DAnimator::Render()
     int32_t stackpos;
     int32_t c;
 
-    for (c = 0; c < animobjs.NumItems(); c++)
-    {
-        if (!(animobjs[c]->flags & OBJ3D_PARENT))
-        {
-            int32_t parent = ((T3DImagery*)image)->GetObjectParent(animobjs[c]->objnum, state);
-            if ((uint32_t)parent < (uint32_t)animobjs.NumItems() &&
-                animobjs[parent]->objnum == parent)
-                animobjs[c]->parent = animobjs[parent];
-            else
-                animobjs[c]->parent = nullptr;
-        }
-    }
+    ResolveObjectParents(state);
 
     for (int32_t t = 0; t < Get3DImagery()->NumTextures() + 1; t++)
     {
@@ -4970,6 +4974,9 @@ void T3DAnimator::PostRender()
 // * Animator Object Functions *
 // *****************************
 
+// REVSYNC: T3DAnimator::SetupObjects @ 0x0040ebd0 -- one object per imagery
+// object, parented as in state 0. Render (0x0040e8d0) re-parents them for the
+// drawn state; UpdateBoneTransforms does that here.
 void T3DAnimator::SetupObjects()
 {
     for (int32_t c = 0; c < Get3DImagery()->NumObjects(); c++)
@@ -4977,37 +4984,68 @@ void T3DAnimator::SetupObjects()
         S3DAnimObj* o = NewObject(c);
         AddObject(o);
     }
+    ResolveObjectParents(0);
+}
 
-    // Wire the bone hierarchy. Both linkages are established:
-    //   * Legacy `parent` raw pointer (still consumed by
-    //     CalcObjectMatrix's manual parent-chain compose) -- stays
-    //     nullptr at the imagery's roots so the legacy chain
-    //     terminates correctly.
-    //   * TTransform parent linkage. In-tree parents go to the
-    //     parent bone's transform; root bones (no in-tree parent)
-    //     are parented under the OWNING object's transform_ so
-    //     bone.transform.Matrix() yields a world-space matrix
-    //     directly. Lifetime is safe: bones live in the animator
-    //     component, which is destroyed before the instance's own
-    //     transform_ member, so each bone's dtor runs while
-    //     inst->Transform() is still alive and detaches itself
-    //     from the children list cleanly.
-    for (int32_t c = 0; c < animobjs.NumItems(); c++)
+// REVSYNC: T3DAnimator::Render @ 0x0040e8d0, the head -- an object without
+// OBJ3D_PARENT takes the imagery's parent for the animator's state (the
+// object's parent table, +0x20, indexed by +0xc), when that parent is an
+// object of this animator; otherwise it is a root.
+//
+// Both links are kept: the raw `parent` (CalcObjectMatrix's chain) and the
+// TTransform parent, which the renderer reads. A root hangs off the
+// instance's transform, so bone.transform.Matrix() is world space. Bones
+// live in the animator component, destroyed before the instance's own
+// transform, so each bone detaches itself cleanly.
+//
+// Retail walks a parent chain at most 64 deep, so a parent loop in the
+// data never hangs it. A transform loop would recurse forever, so an object
+// whose chain comes back to itself is made a root instead.
+void T3DAnimator::ResolveObjectParents(int32_t state)
+{
+    T3DImagery* img = Get3DImagery();
+    const int32_t count = animobjs.NumItems();
+    if (!img || state < 0 || state >= img->NumStates() || count > MAX3DANIMOBJECTS)
+        return;
+
+    for (int32_t c = 0; c < count; c++)
     {
-        const int32_t parent = ((T3DImagery*)image)
-                               ->GetObjectParent(animobjs[c]->objnum, 0);
-        if ((uint32_t)parent < (uint32_t)animobjs.NumItems() &&
-            animobjs[parent]->objnum == parent)
-        {
-            animobjs[c]->parent = animobjs[parent];
-            animobjs[c]->transform.SetParent(&animobjs[parent]->transform);
-        }
-        else
-        {
-            animobjs[c]->parent = nullptr;
-            animobjs[c]->transform.SetParent(inst ? &inst->Transform() : nullptr);
-        }
+        S3DAnimObj* obj = animobjs[c];
+        if (!obj || (obj->flags & OBJ3D_PARENT))
+            continue;
+        const int32_t parent = img->GetObjectParent(obj->objnum, state);
+        obj->parent = ((uint32_t)parent < (uint32_t)count && animobjs[parent] &&
+                       animobjs[parent]->objnum == parent) ? animobjs[parent] : nullptr;
     }
+
+    std::array<uint8_t, MAX3DANIMOBJECTS> depths{};
+    for (int32_t c = 0; c < count; c++)
+    {
+        S3DAnimObj* obj = animobjs[c];
+        if (!obj)
+            continue;
+        int32_t depth = 0;
+        for (const S3DAnimObj* up = obj->parent; up; up = up->parent)
+            if (up == obj || ++depth >= count)
+            {
+                obj->parent = nullptr;
+                depth = 0;
+                break;
+            }
+        depths[size_t(c)] = uint8_t(depth);
+        obj->transform.SetParent(obj->parent ? &obj->parent->transform
+                                             : (inst ? &inst->Transform() : nullptr));
+    }
+
+    // Each object after its parent (a parent is one link nearer the root),
+    // so the object matrices compose in one pass.
+    int32_t next = 0;
+    for (int32_t depth = 0; next < count && depth < count; depth++)
+        for (int32_t c = 0; c < count; c++)
+            if (depths[size_t(c)] == depth)
+                parent_order[size_t(next++)] = uint8_t(c);
+    parents_state = state;
+    parents_count = count;
 }
 
 S3DAnimObj* T3DAnimator::NewObject(int32_t objnum, int32_t newflags)

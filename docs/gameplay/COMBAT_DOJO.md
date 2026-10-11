@@ -64,7 +64,7 @@ only).
 |---|---|---|---|---|
 | M1 | action-state core: SetRoot / SetDoing / SetDesired / TryCommand / ForceCommand / UpdateAction | `0x4db2d0` `0x4db340` `0x4db3a0` `0x4db450` (Try) `0x4db4d0` (Force) `0x4db1d0` | `TComplexObject::*` | [~] SetDesired, ForceCommand ported (exercised by M3/M5); own kata open |
 | M1u | the action tick: UpdateAction (stealth reset, sleep, ResolveAction dispatch, the done rule, the fall, TryCommand), ResolveMove, ResolvePivot, ResolveSay, ResetStealthValues, Visibility | `0x4c3260` `0x4c3490` `0x4c5e90` `0x4c8470` `0x4c8400` `0x4cdbb0` `0x4c5aa0` | `TCharacter::UpdateAction` and the resolvers | [x] 259/259 (`combat-update`; six mutations caught; `say.noroot.*`: a root the model lacks, 2026-10-10) |
-| M2 | angle/distance kernels: AngleDiff, ConvertToFacing, Distance, ConvertToVector, object Distance/AngleTo | `0x46ded0` `0x46dc60` `0x46de60` `0x46db20` `0x46ea20` `0x46ea90` | `AngleDiff`, `ConvertToFacing`, `Distance`, `ConvertToVector`, `TObjectInstance::Distance/AngleTo` | [x] 30 batches, every angle pair, ~28k vectors |
+| M2 | angle/distance kernels: AngleDiff, ConvertToFacing, Distance, ConvertToVector, object Distance/AngleTo, the screen point | `0x46ded0` `0x46dc60` `0x46de60` `0x46db20` `0x46ea20` `0x46ea90` `0x46eb40` `0x46ec50` | `AngleDiff`, `ConvertToFacing`, `Distance`, `ConvertToVector`, `TObjectInstance::Distance/AngleTo/GetScreenPos` | [x] 37 batches, every angle pair, ~28k vectors, 23k screen points |
 | M3 | combat walking: Go(angle), empty world | `0x4ce350` | `TCharacter::Go(int)` | [x] 762/762 |
 | M4 | combat walking with retargeting (world + sight/hearing seams) | `0x4ce350`, FindCharacters `0x4cd690` | same | [ ] |
 | M5 | combat resolve tick: ResolveCombat / ResolveCombatMove (+ SetFighting `0x4d4790`) | `0x4c7980` `0x4c7f80` | `ResolveCombat`, `ResolveCombatMove` | [x] 654/654 |
@@ -95,7 +95,9 @@ only).
 | S1 | talismans → spell, quick spell, fizzle | `0x51b5d0` `0x51b7c0` | `TSpellList::GetSpellDataByTalismans`, `TPlayer::HasTalismans` | [x] `spell-lookup` 75, `spell-talismans` 340, `spell-quick` 49 |
 | S2 | cast gates: mana, wait, fail roll | `0x53fe80` (CastByTalismans), `0x4d5c20` | `TSpellManager::Cast*` | [x] 2071/2071 (`spell-cast`) |
 | S3 | spell damage, poison roll | `0x53f560` `0x53f090` | `TSpell::Damage`, `TSpell` ctor | [x] `spell-new` 426, `spell-damage` 1090 |
-| S4 | missiles: flight, hit, damage | `0x510220`, AreaDamage `0x4de3c0` | missile effects | [x] `missile-area` 64 (AreaDamage `0x4de3c0`), `missile-arrow` 119 (TAmmo), `missile-bow` 114 (DrawBow ... ResolveBowShoot), `missile-fireball` 21 cases / 840 ticks; spell lifetimes, RANGEDAMAGE effects and the Iced effect open |
+| S4 | missiles: flight, hit, damage | `0x510220`, AreaDamage `0x4de3c0` | missile effects | [x] `missile-area` 64 (AreaDamage `0x4de3c0`), `missile-arrow` 119 (TAmmo), `missile-bow` 114 (DrawBow ... ResolveBowShoot), `missile-fireball` 21 cases / 840 ticks |
+| S5 | spell lifetimes and effects: TSpell Timer / Pulse / Kill / ObjectRemoved, TStrikeSpell, TEffect Pulse / KillThisEffect / Follow, the Iced effect | `0x53f410` `0x53f800` `0x53f860` `0x540d70` `0x540eb0` `0x542340` `0x4de800` `0x4ec930` | `TSpell`, `TStrikeSpell`, `TEffect`, `TIcedEffect` | [x] `spell-life` 229, `spell-strike` 413, `effect-pulse` 53, `effect-iced` 5 (22 mutations caught); the Iced shatter and the LIGHT fade-out are the VFX track's |
+| S5 | spell lifetimes and effects | TSpell `0x53f410` `0x53f800` `0x53f860`, Strike `0x540eb0` `0x540d70` `0x542340`, TEffect::Pulse `0x4de800`, Iced `0x4ec890` | `TSpell`, `TStrikeSpell`, `TEffect`, `TIcedEffect` | [x] `spell-life` 229, `spell-strike` 413, `effect-pulse` 53, `effect-iced` 5 |
 
 ### D — data
 
@@ -447,6 +449,7 @@ python3 tools/retail_ab/retail_ab.py melee-attack-choice   # C3 (melee-hit C4, m
 python3 tools/retail_ab/retail_ab.py spell-cast         # S2 (spell-data D1s; spell-lookup, -talismans,
                                                         # -quick S1; spell-new, -damage S3)
 python3 tools/retail_ab/retail_ab.py missile-bow        # S4 (missile-area, -arrow, -fireball)
+python3 tools/retail_ab/retail_ab.py spell-strike       # S5 (spell-life, effect-pulse, effect-iced)
 tools/walktest/walktest.py "<slot dir>" [--pattern sweep|walks|both|none] [--exec "player.goto X Y; ..."]
 python3 tools/retail_ab/retail_ab.py combat-data        # D1, every record field by field
 python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2

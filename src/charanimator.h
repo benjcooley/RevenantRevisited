@@ -10,6 +10,7 @@
 #include "weaponswipe.h"
 
 #include <array>
+#include <vector>
 
 _CLASSDEF(TCharAnimator)
 
@@ -67,6 +68,20 @@ class TCharAnimator : public T3DAnimator
                                  const hmm_mat4& model_to_world);
       // A swipe strip's triangles, alpha-blended and depth-tested
 
+  // What a player's equipment draws this frame (retail +0x594, rebuilt for
+  // each object it draws). Retail draws an equipped item's mesh object with
+  // the matrix of the character object it names; UpdateDrawState lists the
+  // pairs and hides the character objects they replace, the scene manager
+  // submits them. A character that isn't the player draws only its own
+  // objects, less any named sword or weapon.
+    struct SEquipAttachment
+    {
+        TSafeRef<TObjectInstance> item;     // the equipped item; its imagery is the mesh
+        int32_t object = -1;                // the item's object drawn
+        int32_t bone = -1;                  // this character's object whose matrix it takes
+    };
+    [[nodiscard]] const std::vector<SEquipAttachment>& EquipAttachments() const { return equipment; }
+
   protected:
 
   // Poison functions
@@ -80,15 +95,11 @@ class TCharAnimator : public T3DAnimator
   // Vision Indicator (to show the player in sneak mode how close he is to making himself known)
     void RenderVisionIndicator();
 
-  // Equipment rendering functions
-    void ProcessEquipment(int32_t task);
-      // Iterates through equipment list for player and hides char parts or renders equip
-    void HideCharParts();
-      // Hides the character parts that will be replaced by the equipment
-      // Calls ProcessEquipment()
+  // Equipment
+    void UpdateEquipment();
+      // Hides this frame's replaced objects and lists what the equipment draws
     void RenderEquipment();
-      // Renders the equipment parts (
-      // Calls ProcessEquipment()
+      // The legacy draw of EquipAttachments() through T3DImagery::RenderObject
 
   // Transparency functions
     [[nodiscard]] bool IsHidden() const;
@@ -142,6 +153,7 @@ class TCharAnimator : public T3DAnimator
     float visindicator_shiftval = 0.0f;
 
     std::array<SRisingNumber, kRisingNumberSlots> numbers{};
+    std::vector<SEquipAttachment> equipment;    // this frame's (UpdateEquipment)
 
     TWeaponSwipe swipe;
     TWeaponSwipe::SRing swipe_next{};   // where the next tick's update takes the history

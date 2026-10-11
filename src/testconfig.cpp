@@ -21,6 +21,7 @@ char  StartupDumpTilesPath[MAXPATHLEN] = "";
 char  StartupDumpIconsPath[MAXPATHLEN] = "";
 char  StartupDumpGltfPath[MAXPATHLEN]    = "";
 bool  StartupPlayerAI                    = false;
+bool  StartupPlayerBot                   = false;
 char  StartupDumpGltfOutPath[MAXPATHLEN] = "";
 char  StartupDumpI3DPath[MAXPATHLEN]    = "";
 char  StartupDumpI3DOutPath[MAXPATHLEN] = "";

@@ -18,6 +18,7 @@ docs/gameflow/RETAIL_CAPTURE.md has the recipe and the traps.
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -34,6 +35,15 @@ INI = r'C:\REVENANT\revenant.ini'
 BACKUP = r'C:\MCP\GFPRE.INI'
 SCRIPT_DIR = 'C:\\MCP\\SCRIPTS\\'
 NEW_GAME_BUTTON = (430, 162)        # title screen, 640x480
+LOAD_GAME_BUTTON = (430, 212)       # title screen
+LOAD_ROW0_Y, LOAD_ROW_H = 100, 16   # the Load Game list's first row, its pitch
+LOAD_LIST_X = 400
+LOAD_CONFIRM = (226, 421)           # the Load Game dialog's Load Game button
+SAVES = 'C:\\REVENANT\\Save\\Single'
+# The combat arena's sectors (docs/gameplay/COMBAT_ARENA.md): level 2's empty
+# block, sector x 22..31. An arena slot's other CurMap sectors are retail's
+# own map as the port saved it; the guest reads those from its base map.
+ARENA_SECTOR = re.compile(r'2_(2[2-9]|3[01])_\d+\.DAT', re.I)
 
 # One driver at a time: `start` takes the lock, `restore` releases it. Agents
 # and sessions share the lab; a second `start` refuses instead of stealing
@@ -179,10 +189,34 @@ def type_prompt(control, text, scratch, attempts=30):
         control.capture(shot)
         if prompt_open(shot):
             for ch in text:
-                press(control, ch)
+                control.key(*Control.character(ch))     # shifted characters (@, :, ...) too
             press(control, 'enter')
             return attempt
     raise RuntimeError('the prompt never opened')
+
+
+def upload_slot(slot: Path) -> list[str]:
+    """An arena slot into the guest's saves: game.sav, its thumbnail and the
+    arena's sectors (tools/combatarena/make_arena_slot.py)."""
+    remote = SAVES + '\\' + slot.name
+    files = [slot / 'game.sav', slot / 'ss.bmp']
+    files += sorted(f for f in (slot / 'CurMap').iterdir() if ARENA_SECTOR.fullmatch(f.name))
+    sent = []
+    with Guest() as g:
+        for d in (SAVES, remote, remote + '\\CurMap'):
+            try:
+                g.mkdir(d)
+            except RuntimeError:
+                pass                                    # already there
+        for f in files:
+            target = remote + '\\' + str(f.relative_to(slot)).replace('/', '\\')
+            try:
+                g.rpc('delete ' + g.path(target))       # a shorter file mustn't keep the old tail
+            except RuntimeError:
+                pass
+            g.upload(str(f), target)
+            sent.append(target)
+    return sent
 
 
 def main():
@@ -193,6 +227,12 @@ def main():
     s.add_argument('--owner', default=os.environ.get('USER', 'gameflow'), help='who holds the lab (shown to others)')
     sub.add_parser('restore', help='close the game, restore the INI, relaunch the editor')
     sub.add_parser('newgame', help='click New Game on the title screen')
+    s = sub.add_parser('upload', help='copy an arena slot into the guest saves (game.sav, thumbnail, arena sectors)')
+    s.add_argument('slot', type=Path)
+    s = sub.add_parser('load', help='title screen -> Load Game -> the slot on --row -> load')
+    s.add_argument('--row', type=int, default=0)
+    s = sub.add_parser('click', help='left-click guest pixels (640x480), in order: X,Y ...')
+    s.add_argument('points', nargs='+', help='X,Y')
     s = sub.add_parser('key', help='press keys one at a time (keyboard-map.json names)')
     s.add_argument('keys', nargs='+')
     s = sub.add_parser('prompt', help="type a line into retail's Enter prompt (cheats, @script)")
@@ -211,9 +251,25 @@ def main():
     elif a.cmd == 'restore':
         print(run_lua(LUA_RESTORE, {}, 'gf_restore'))
         release_lock()
+    elif a.cmd == 'upload':
+        for target in upload_slot(a.slot.resolve()):
+            print(target)
+    elif a.cmd == 'load':
+        run_lua(LUA_CLICK, {'x': LOAD_GAME_BUTTON[0], 'y': LOAD_GAME_BUTTON[1]}, 'gf_click')
+        time.sleep(3)
+        run_lua(LUA_CLICK, {'x': LOAD_LIST_X, 'y': LOAD_ROW0_Y + a.row * LOAD_ROW_H}, 'gf_click')
+        time.sleep(1)
+        run_lua(LUA_CLICK, {'x': LOAD_CONFIRM[0], 'y': LOAD_CONFIRM[1]}, 'gf_click')
     elif a.cmd == 'newgame':
         x, y = NEW_GAME_BUTTON
         run_lua(LUA_CLICK, {'x': x, 'y': y}, 'gf_click')
+    elif a.cmd == 'click':
+        # An inventory item is picked up by one click and put down by the
+        # next (an equip slot equips it): `click 523,455 479,126`.
+        for point in a.points:
+            x, y = (int(v) for v in point.split(','))
+            run_lua(LUA_CLICK, {'x': x, 'y': y}, 'gf_click')
+            time.sleep(0.3)
     else:
         with Control() as c:
             if a.cmd == 'key':

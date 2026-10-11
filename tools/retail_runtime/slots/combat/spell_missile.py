@@ -18,10 +18,10 @@ the state and the position without a record (the port's missile keeps both
 itself); its animator is a stand-in (no calls reach it in these ticks).
 
 Seams beyond spell_damage.py's: TEffect::Pulse `0x4de800` (the generic
-effect's lights, attachments and RANGEDAMAGE: left out, not recorded);
-KillThisEffect `0x4defe0` as the port has it (the kill and pulse flags; its
-poison cure and the spell's Kill belong to the spell's lifetime, not
-ported), not recorded.
+effect's part, kata effect-pulse's: left out, not recorded).
+KillThisEffect `0x4defe0` runs as original (Realtime lighting `0x5d7a18`
+off: the effect is ready to go at once, and the spell is killed); the
+spell is dumped at the end.
 
 Schema `combat.spell.v1`, shared with the port's `Revenant
 --retail-ab=missile-fireball`.
@@ -42,7 +42,8 @@ from spell_damage import DamageFixture  # noqa: E402
 
 FIREBALL_VTABLE, FIREBALL_SIZE = 0x5b408c, 0x198
 FIREBALL_INIT, FIREBALL_PULSE = 0x510bd0, 0x510c10
-EFFECT_PULSE, KILL_EFFECT = 0x4de800, 0x4defe0
+EFFECT_PULSE = 0x4de800
+G_REALTIME = 0x5d7a18
 O_CLASS, O_FLAGS, O_STATE, O_LEVEL, O_POS, O_VEL, O_ACCUM = 0x04, 0x08, 0x0c, 0x0e, 0x10, 0x1c, 0x28
 O_NAME, O_IMAGERY, O_ANIMATOR, O_SPELL, O_LIFE, O_ARMED = 0x38, 0x54, 0x58, 0xd8, 0x184, 0x194
 O_INVENTNUM = 0x7c                               # IsInInventory (slot 0xb4) is inventnum >= 0
@@ -58,7 +59,6 @@ class FireBallFixture(DamageFixture):
         vm.restore()
         b = self.world.boundaries
         b.add(EFFECT_PULSE, 'TEffect::Pulse', 0, lambda args, ecx: 0)
-        b.add(KILL_EFFECT, 'KillThisEffect', 0, self._kill)
         # The fireball's own SetState / SetPos: stored, unrecorded.
         for address, store in ((SET_STATE, self._set_state), (SET_POS, self._set_pos)):
             name, pop, handler = b.handlers[address]
@@ -74,10 +74,6 @@ class FireBallFixture(DamageFixture):
     def _set_pos(self, args, ecx):
         self.vm.write(ecx + O_POS, bytes(self.vm.uc.mem_read(args[0], 12)))
         return 1
-
-    def _kill(self, args, ecx):
-        self.vm.put_u32(ecx + O_FLAGS, self.vm.u32(ecx + O_FLAGS) | 0x1000 | 0x8000)
-        return 0
 
     def build_fireball(self, case, spell):
         vm, w = self.vm, self.world
@@ -120,6 +116,7 @@ class FireBallFixture(DamageFixture):
         vm, w = self.vm, self.world
         self.fireball = 0
         self.build_world(case)
+        vm.put_u32(G_REALTIME, 0)
         spell = self.build_spell(case)
         w.seams.clear()
         w.draws.clear()
@@ -132,7 +129,8 @@ class FireBallFixture(DamageFixture):
             ticks.append(dict(tick=t, **self.tick_dump(fb), seams=list(w.seams), draws=list(w.draws)))
         names = [spec['name'] for spec in case['chars']]
         return dict(schema=SCHEMA, side='retail', ticks=ticks,
-                    casters={n: self.caster_dump(w.by_name[n]) for n in names})
+                    casters={n: self.caster_dump(w.by_name[n]) for n in names},
+                    spell=self.spell_dump(spell))
 
 
 def main():
