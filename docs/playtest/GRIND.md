@@ -535,8 +535,10 @@ while Baez attacks or is turned away.
   `0x004d4eb0`; [FINDINGS.md](FINDINGS.md) F1).
 - Even without a save, a corpse goes away. TCharacter::Pulse `0x004c1bb0`
   counts a dead character's ticks (`+0x228`, `0x004c2479`). At 240
-  (`0x004c2489`) it fades the corpse out, then sets KILL (`0x004c24a0`), and
-  PulseObjects deletes it. That is about 10–14 s after death [L].
+  (`0x004c2489`) it fades the corpse out, 1 a tick from fully seen
+  (`SetFade(100, 1, 0)`, `0x004c24c0`), then sets KILL (`0x004c24a0`), and
+  PulseObjects deletes it: 340 ticks, 14.2 s, after death [C; measured in
+  the emulator, [FINDINGS.md](FINDINGS.md) F9].
 - Only reloading a save made before the kill brings a monster back.
 - No script creates monsters. The module's `.s` files only toggle
   `AGGRESSIVE`, `INVISIBLE`, `POS` and `DELETE` on existing characters [C].
@@ -592,15 +594,11 @@ Four slots can never spawn, because their names match no type [L]:
 - an empty generator at (15699, 20671), level 0;
 - `"ogrok   "` on level 32.
 
-**The port has none of this** [C, from reading the code]:
-
-- There is no MonsterGen class; `addmonstertype` is `CmdNotPorted`
-  (`src/command.cpp:4448`).
-- Its dead branch (`src/character.cpp:409-422`) neither fades and deletes
-  corpses nor drops their inventory.
-
-A port grind runs out of monsters where retail keeps trickling them in, and
-port corpses keep their loot. Plan parity tests around this.
+**The port has no generators** [C, from reading the code]: there is no
+MonsterGen class; `addmonstertype` is `CmdNotPorted`
+(`src/command.cpp:4448`). A port grind runs out of monsters where retail
+keeps trickling them in. Plan parity tests around this. Its corpses drop
+their loot and fade out as retail's do ([FINDINGS.md](FINDINGS.md) F8, F9).
 
 **The base map's supply** (hostile = `Aggressive` 1 and Value ≥ 0):
 
@@ -772,11 +770,20 @@ shegra1, the slaves, SardokT):
   - **Every other item** goes in a random direction, in 16-unit steps that
     must be walkable. There are up to `2·(Radius/16) + 1` steps, so items
     land up to about 48 units away for most monsters, and 80 for the
-    Solifuge. Each item then plays its class sound.
+    Solifuge. The walk test checks the spot a step leaves, so the item lies
+    one step past the last spot that passed. Each item then plays its class
+    sound (`0x00473a10`).
+  - The item is **thrown** there (`TObjectAnimator::Toss` `0x00445ef0`, its
+    pulse `0x00445b20`) [C]: from 60 above the corpse (armour from the
+    corpse's own height), it lands raised by its registration height + 2,
+    settles a step short of its spot about 1.5–2.5 s later and faces where
+    its spin left it. Every item has an animator for this, 2D or 3D
+    (`TAnimImagery::NeedsAnimator` `0x00418fc0`). The observation shows the
+    item at its spot at once and at its resting place once it settles.
 - Items with `Value −1` stay in the corpse. No placed monster on any of the
   33 levels carries one, so every corpse empties.
-- The corpse fades and is deleted about 10–14 s later (§3.1). The items on
-  the floor are ordinary map objects, so they are probably saved with the
+- The corpse fades and is deleted 14.2 s later (§3.1). The items on the
+  floor are ordinary map objects, so they are probably saved with the
   sector and survive a reload [L].
 - In retail, the solifuge key (a `Copper Key`, Value 0) lands on the floor
   when the Solifuge dies. STORY.md S7's "take it from the body" is the
@@ -825,11 +832,14 @@ The tier is the generator slot's treasure type. Tier 0 gives nothing.
 Level 0's slots are tiers 1–3: 78 at tier 1, 28 at tier 2 and 7 at tier 3.
 For example, Druhgs are tier 1, and Lurkers and green dragons tier 3.
 
-**The port differs.** It has no DropInventory, so items stay in the corpse.
-`TCharacter::Use` (`src/character.cpp:5302`) takes one item per click on the
-corpse while the hand cursor shows. Retail's own corpse-looting path
-(`0x004d4a60`) has an inverted free-slot test and never works. It doesn't
-matter there, because retail corpses are empty.
+**The port** drops and throws as retail does ([FINDINGS.md](FINDINGS.md)
+F8). Its renderer doesn't draw the flight (the item shows at its spot
+until it settles), the gold pile, or a 2D item put on the map in play, so
+a player sees less loot than is there; the observation lists it all. Its
+`TCharacter::Use` still takes one item per click from a corpse
+that holds any; retail's corpse-looting path (`0x004d4a60`) has an inverted
+free-slot test and never works. Neither matters while corpses empty
+themselves.
 
 ### 4.2 Picking things up [C]
 
@@ -869,9 +879,8 @@ matter there, because retail corpses are empty.
 Pickup's messages: "29 Gold Picked up.", "Short Sword Picked up.", and on
 failure "Can't carry any more." (CARRYFULL2).
 
-**Port:** `TPlayScreen::Command` dispatches neither Use nor Get, so **U and G
-do nothing in the port** (`src/playscreen.cpp`, around lines 1843–1921).
-Click instead.
+**Port:** U, G and Combat Get work as in retail ([FINDINGS.md](FINDINGS.md)
+F10).
 
 **Containers** (`TContainer::Use` `0x004dc180`). The hand cursor shows when
 a container is Openable or holds items (`0x004dd370`). Each use does one
@@ -909,8 +918,11 @@ decompile is garbled, but it matches the 1998 code.
   - A new item with no slot goes into a Pouch whose first item is of the
     same class.
 - **When the pack is full:**
-  - Pickup removes the item from the map **before** the add fails. The item
-    probably vanishes in retail [L]. The port puts it back.
+  - Pickup removes the item from the map **before** the add fails, and
+    nothing puts it back: "Can't carry any more." and **the item is lost**
+    [C; emulator, [FINDINGS.md](FINDINGS.md) F11]. Gold too: the free-slot
+    test comes before the merge into Locke's pile [C]. The port does the
+    same since F11.
   - A take from a container checks for room first.
   - A shop buy needs an empty slot (§7.2).
 
@@ -1580,9 +1592,9 @@ marked.
 | Gap | Retail | Port |
 |---|---|---|
 | Monster generators | MonsterGen respawns (§3.1) | not ported: `addmonstertype` is `CmdNotPorted` (`src/command.cpp:4448`) |
-| Death loot | the inventory drops to the floor; the corpse fades out after about 10 s | items stay on the corpse; it never fades (`src/character.cpp:409-422`) |
-| U and G keys | Use and Get (§4.2) | not dispatched by `TPlayScreen::Command` |
-| A pickup into a full pack | the item probably vanishes [L] | the item goes back on the map |
+| Death loot | the inventory drops to the floor; the corpse fades out from 10 s and goes at 14.2 s | the same since FINDINGS F8, F9; the items' flight isn't drawn |
+| U and G keys | Use and Get (§4.2) | the same since FINDINGS F10 |
+| A pickup into a full pack | the item is lost (§4.3) | the same since FINDINGS F11 |
 | Item numbers | `weapon.def` and `armor.def` BASICMODS copied over class.def (§5.1) | the same since FINDINGS F6 |
 | Jong's lessons | `player.lastattack` completes the lesson | the same since FINDINGS F7 |
 | Boss AI (Baez, the Solifuge, Jhaga, Yhagoro) | `AIPerMonster` cases 1–4 | the boss kind is set, but its behaviour isn't ported (`src/character.cpp:3065`) |
@@ -1596,7 +1608,8 @@ marked.
    75 s. Also whether a fading corpse counts toward a generator's cap.
 2. **Floor drops.** Do they survive a save and reload? They should, being
    sector objects.
-3. **Full pack.** Does a pickup into a full pack destroy the item?
+3. **Full pack.** Answered: the item is lost, gone from the map and not
+   carried (FINDINGS F11).
 4. **Chests.** The exact order of open, take and close. Does a take always
    say "Can't carry any more" while the pack pane is closed (the current
    container `DAT_0065d674`)?
@@ -1620,8 +1633,10 @@ marked.
     Locke outrun what he disengages from?
 14. **"Cure Posion".** Does the generators' misspelled Cure Poison ever
     drop?
-15. **Corpse fade.** What `+0x194` (index `0x65`) holds before the fade
-    starts. Either way the corpse is gone within about 14 s.
+15. **Corpse fade.** Answered: `+0x194` is the character's fade (0..100,
+    what it draws with), 100 unless a fade is under way; the corpse's fade
+    sets it to 100 first. The corpse is gone 340 ticks after death in the
+    emulator (FINDINGS F9).
 16. **Notes for STORY.md** (not edited here):
     - S6: GIVEWEAPONS takes every weapon, ammo and ranged weapon, equipped
       or in bags, and leaves the armour (`0x00477780`).

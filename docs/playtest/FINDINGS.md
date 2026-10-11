@@ -4,6 +4,174 @@ Bugs and gaps that Jev's sessions surfaced in the games, with what reproduces
 each. Newest first. Each entry: what was seen, the evidence, the repro, and
 who owns the fix.
 
+## F11. A pickup into a full pack put the item back (port bug, fixed)
+
+**Seen 2026-10-11**, reading for GRIND.md §4.3, which left it [L]: "the
+item probably vanishes in retail; the port puts it back".
+
+**Retail.** Pickup (`0x004cfef0`) takes the item off the map
+(RemoveFromMap, vtable `0x90`), then AddToInventory (`0x0046f3d0`). With no
+free carried slot (0–254) the add fails before any merge, so even gold
+that could join a pile fails. Pickup then only prints CARRYFULL2. Nothing
+puts the item back: it is off the map and in no inventory.
+
+**Evidence.** The `left the keep` waypoint: the Arakna killed at the
+prompt (F8), the pack filled to slot 254 with 250 `@addinv "Club"` lines,
+Locke put 40 west of the Arakna's 56 gold and turned to it, then G.
+- Retail: "Get Gold", "56 Gold Picked up.", "Can't carry any more."; the
+  gold is gone from the floor and not carried (gold 0).
+- Port before: the same lines, and the gold back on the floor.
+- Port after: as retail.
+- A left click on the gold was tried first; neither game's hover pick
+  found the coins at their projected pixel, so G (F10) stands in.
+
+**Resolution.** Fixed on `playtest/loot`: Pickup no longer puts the item
+back. It prints CARRYFULL2 and deletes the item, which retail leaks; it is
+out of reach either way. Pickup also plays the item's class sound now.
+
+## F10. The U and G keys did nothing (port bug, fixed)
+
+**Seen 2026-10-11**, reading for GRIND.md §4.2: the port's
+`TPlayScreen::Command` dispatched neither Use nor Get, and its control
+table had no Combat Get.
+
+**Retail.** Command (`0x0047cf40`) runs Use (`0x004d01e0`) for command 0xe
+and Get (`0x004d0430`) for 0xf. The control table (`0x005d5500`) binds Use
+to U and T (normal mode), Get to G (normal mode) and Combat Get to G
+(combat and bow modes).
+- Use: the nearest container, exit, or character neither the user nor its
+  enemy, within 60 of the point 60 ahead; nothing flagged invisible. "Use
+  <name>" or "Talk to <type>", or "There is nothing to use".
+- Get: the nearest object within 80 of the point 40 ahead that shows a
+  cursor or is an item, not the user, nothing invisible. "Get <name>" or
+  "There is nothing to get", then Pickup, which takes only items: a nearer
+  chest or door blocks it with "Get <name>" and nothing else.
+
+**Evidence.** The `left the keep` waypoint, the retail emulator and the
+port fed the same input. Each target was set up at the prompt: Locke put
+30 west of it (`@pos`), turned to it (`@faceobject`), then the key.
+
+| Step | Retail | Port before | Port after |
+|---|---|---|---|
+| G by the dead Arakna's gold | "Get Gold", "56 Gold Picked up.", gold 56 | (no drop, F8) | as retail |
+| C, then G by its Bread (combat mode) | "Get Bread", "Bread Picked up." | (no drop, F8) | as retail |
+| U by the chest ForChestE (3488, 23216) | "Use gothic chest", "gothic chest opened.", open | nothing | as retail |
+| G by a Club put down 10 away (`@addat`) | "Get Club", "Club Picked up." | nothing | as retail |
+
+**Resolution.** Fixed on `playtest/loot`: Command dispatches both, the
+table has Combat Get, and TryUse / TryGet are retail's Use and Get (the
+1998 versions searched 60 ahead for both, printed fixed English and
+skipped the invisible and enemy tests).
+
+The first run found a second bug: Use answered "There is nothing to use"
+beside the chest. `TMapPane::FindObjectsInRange` kept the 1998 insertion,
+which copied bytes rather than entries of its distances and never moved
+the ids. With two or more objects in range the list held stale ids. Retail
+(`0x00452060`) moves both, nearest first; so does the port now. This
+affects every caller: AI searches, spells, missiles, the console.
+
+**Open.** `addat` puts a new object at the camera's height. After the same
+input the port's camera stood at z 41 and retail's at 32, so the Club came
+in at different heights (the camera, not loot).
+
+## F9. Corpses never went away (port bug, fixed)
+
+**Seen 2026-10-11**, reading for GRIND.md §3.1: a corpse lay in the port
+until its sector reloaded.
+
+**Retail.** TCharacter::Pulse (`0x004c1bb0`) counts a dead character's
+pulses (`+0x228`). On the 240th it starts the fade the character draws
+with, `SetFade(100, 1, 0)`: fully seen, then 1 less a pulse. When the fade
+reaches 0 it sets KILL, and the next PulseObjects (`0x004580f0`) deletes
+the object, unless it is a player.
+
+**Evidence.** The `left the keep` waypoint; Locke put at (3361, 23235),
+the Arakna (3269, 23173) killed at the prompt with `@arakna.stat health =
+0`; 400 ticks observed one by one.
+- Retail: the corpse is listed through tick 339 after the kill and gone at
+  tick 340 (two runs, Locke at (3017, 23195) and at (3361, 23235)).
+- Port before: the corpse is listed all 400 ticks.
+- Port after: gone at tick 340, as retail. In the frames it is drawn whole
+  until tick 240, faint by 320 and gone by 338.
+- The emulator's frames show the corpse whole until it goes. Its machine
+  runs retail's software renderer, whose rasterizer most likely ignores
+  the material alpha TCharAnimator sets (`0x004d82a0`) [L]; on a 3D card
+  retail blends the corpse out [L]. The port draws that fade, as it does
+  the invisibility spell's.
+
+**Resolution.** Fixed on `playtest/loot`: the dead branch counts the
+pulses (`deadticks`), fades and KILLs as retail. PulseObjects no longer
+deletes a KILLed player (retail fades and KILLs a dead player too, and
+keeps him).
+
+**Open.** A character killed by setting its health (the prompt's
+`stat health = 0`, a script) plays no death in the port: the dead branch
+forces the 1998 "blood" block, where retail's builds `<root> to cdead`,
+then `cdead` or `dead` (`0x004c21e9..0x004c243d`). In the emulator the
+Arakna's corpse moves a few units as its death plays; the port's stands
+still. Deaths by Damage are unaffected.
+
+## F8. A dead monster kept its loot (port bug, fixed)
+
+**Seen 2026-10-11**, reading for GRIND.md §4.1: the port left a dead
+monster's things in its corpse, to be taken a click at a time.
+
+**Retail.** On every pulse a dead character other than the player holds
+anything, Pulse calls DropInventory (`0x004d6570`):
+- The "gold" sound plays.
+- Every item it can trade (vtable `0x5c`: Value ≠ −1, every container but
+  the Swag Bag) goes to the floor:
+  - gold at the corpse's x + 30, y + 30;
+  - anything else a few 16-unit steps out in a random direction;
+  - then its class sound (`0x00473a10`).
+- Each item is thrown there by its animator (`0x00445ef0`, pulse
+  `0x00445b20`): raised by its registration height + 2, it settles a step
+  short of its spot and faces where it spun to.
+- Every item has an animator: `TAnimImagery::NeedsAnimator` (`0x00418fc0`)
+  says yes for any item, 2D ones included.
+
+**Evidence.** As F9, with a Short Sword added to the Arakna first
+(`@arakna.addinv "short sword"`); it carried Bread and 56 gold.
+- Retail, on the tick of the kill: Gold at (3299, 23203, 35), the corpse +
+  (30, 30); Bread at z 50 and the sword at z 36, each about 48 units out.
+  The Bread moves 8 units on to rest at tick 37, the sword 17 units at
+  tick 41. The corpse holds nothing. (A second run, Locke at (3017,
+  23195), threw them elsewhere: Bread 12 units on at tick 37, the sword
+  14 at tick 59.)
+- Port before: nothing on the floor for 400 ticks; the things stay in the
+  corpse.
+- Port after: Gold at the same spot; Bread at z 50 and the sword at z 38,
+  48 units out; they settle 15 units on, at ticks 57 and 59. The
+  directions and settling times differ from retail's because each game
+  draws its own random numbers by then.
+
+**Repro.** Through either host, from `left the keep`: one tick with Enter,
+the line `@pos 3361 23235 32` and Enter (a line opens, is typed and runs in
+one tick: a monster reaching Locke mid-line puts him in a fight, which
+commits it half typed); 3 ticks; the same with `@arakna.addinv "short
+sword"`, then with `@arakna.stat health = 0`; observe each tick. The port's
+INI needs retail's `[Controls]` (Combat Mode on C), or Enter toggles
+combat.
+
+**Resolution.** Fixed on `playtest/loot`: `TCharacter::DropInventory`, the
+toss on `TObjectAnimator`, `PlayClassSound`, `TMoney::AddToMap` (the pile's
+state first) and retail's `TAnimImagery::NeedsAnimator`. Where the
+corpse's own spot fails the walk test, retail tries new directions for
+ever; the port leaves the item at the corpse.
+
+**Open (drawing, for the renderer's owners).**
+- The flight isn't drawn. Retail draws the item along its arc with a
+  four-copy trail (`0x0040f5b0`); the port shows it at its spot until it
+  settles.
+- The gold pile isn't drawn at all. Coin.I3D carries a particle controller
+  the port hasn't audited (`[partsys] unsupported runtime type=Gold`), so
+  the renderer suppresses the whole mesh rather than draw a substitute.
+- A 2D item put on the map in play isn't seen either: the dropped Bread,
+  and a Bread or Apple put down with `@addat`. The renderer's rebuild
+  collects them with their still image (checked with a log); they are lost
+  later, in the draw. A chest loaded with the sector draws. In the
+  emulator all of them show.
+
 ## F7. Jong's lessons never completed: `player.lastattack` wasn't ported (port bug, fixed)
 
 **Seen 2026-10-11**, reading for GRIND.md §2.3 and §10. Each of Jong's
