@@ -25,3 +25,26 @@ Private initial evidence is in RevenantRetailLab
 `research/vfx-wide-20261010/hard-alpha/{arrow-native-preflight,queen-arrow-first,queen-arrow-core-first}`.
 No Metal appearance acceptance is granted by this checkpoint. ArrowEffect's
 attached moving-owner path and natural arrow/bow/queen callers remain open.
+
+The QueenArrow adapter now selects exact type0xad92bd1e and fingerprints all
+seven literal untextured mesh streams. It registers seven shared meshes, carries
+the original object2 material in common hardware, and uses the already proven
+untextured RGB5/flat-depth software helper without renderer changes. Full
+geometry and the authored Scene8 additive policy remain available in hardware.
+The registered `QueenArrow_ORIGINAL` exposes real core/owner liveness.
+
+Build and two native regression tests pass (27.945s). The full/stride3 controls
+execute original moving Pulse/Render and compare all state, RNG and available
+packet matrices to the compiled production core. Both actual24-frame Metal
+films exit cleanly. Their36 active RNG milestones match the independent native
+reference exactly. Fresh26-tick native state replay is exact and phase1/10/17/18
+PNGs are byte-identical. All full original/native frames fit640x480. The fixed
+detail crop is supplemental and may cut the bottom of the last tiny impact
+shape; complete whole frames remain authoritative.
+
+Nineteen phase comparisons are frozen under
+`hard-alpha/queen-arrow-review-final`; pair-manifest SHA-256:
+`a9bab890cbe30a91d67a6364d1d0752d95548021c62720aa405d2e63e013af19`.
+One-based film fileN follows pulseN+1/native recordN, verified from CSV and RNG
+logs. Independent appearance approval is pending. Natural queen/bow dispatch,
+actor selection/reaction/damage, audio/device and exact pixels remain open.

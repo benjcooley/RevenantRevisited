@@ -1,6 +1,6 @@
 """Original ArrowEffect/QueenArrow moving owner and complete custom Render.
 
-Experimental native caller fixture; no appearance acceptance implied.
+Declared moving native caller fixture; appearance acceptance is separate.
 """
 from cataclysm_visual_reference import *
 from unicorn.x86_const import UC_X86_REG_ESP
@@ -33,13 +33,15 @@ class QueenArrowScene(CataclysmScene):
   return dict(position=list(struct.unpack('<3i',v.uc.mem_read(o+0x10,12))),velocity=list(struct.unpack('<3f',v.uc.mem_read(o+0x184,12))),initial=v.u32(o+0x190),angle=v.u32(o+0x194),grow=v.u32(o+0x198),color=v.u32(o+0x19c),countdown=struct.unpack('<i',v.uc.mem_read(o+0x1a0,4))[0],flags=v.u32(o+8),rng_draws=self.rng_draws,seed=v.rng_seed,events=list(self.events))
 
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('exe',type=Path);p.add_argument('--output',type=Path,required=True);p.add_argument('--frames',type=int,default=40);p.add_argument('--samples',type=int,nargs='+',default=[0,1,3,5,10,15,20,25,30,35,39]);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
+ p=argparse.ArgumentParser();p.add_argument('exe',type=Path);p.add_argument('--output',type=Path,required=True);p.add_argument('--frames',type=int,default=40);p.add_argument('--state-only',action='store_true');p.add_argument('--render-stride',type=int,default=1);p.add_argument('--resolution',type=int,nargs=2,default=[1280,960]);p.add_argument('--center',type=int,nargs=2,default=[640,640]);p.add_argument('--samples',type=int,nargs='+',default=[0,1,3,5,10,15,20,25,30,35,39]);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
  with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read('Imagery/Misc/arroweffects.i3d')
- f=QueenArrowScene(a.exe,data);rows=[]
+ f=QueenArrowScene(a.exe,data,width=a.resolution[0],height=a.resolution[1],center=a.center);rows=[]
  for tick in range(a.frames):
   f.step()
   if not(f.vm.u32(f.owner+8)&0x1000):f.animate()
-  f.raster_enabled=tick in a.samples;pixels=f.render()
-  if f.raster_enabled:save_rgb565_png(a.output/f'native-{tick:03}.png',pixels,1280,960)
-  row=dict(tick=tick,state=f.state(),draws=f.draws if tick in a.samples else []);rows.append(row);print(tick,f.state(),len(f.draws),flush=True)
- (a.output/'trace.json').write_text(json.dumps(dict(records=rows,asset_sha256=sha(data)),indent=2)+'\n')
+  f.raster_enabled=not a.state_only and tick in a.samples
+  if tick%a.render_stride==0:pixels=f.render()
+  else:f.draws=[];f.software.clear();pixels=f.vm.surface_bytes("screen")
+  if f.raster_enabled:save_rgb565_png(a.output/f'native-{tick:03}.png',pixels,*a.resolution)
+  row=dict(tick=tick,state=f.state(),draws=f.draws);rows.append(row);print(tick,f.state(),len(f.draws),flush=True)
+ (a.output/'trace.json').write_text(json.dumps(dict(records=rows,asset_sha256=sha(data),retail_sha256=sha(a.exe.read_bytes()),viewport=a.resolution,center=a.center,source=[-180,0,38],target=[180,0,78],ambient=[38,38,38],directional=[1,1,1],seed=1,render_hz=24,render_stride=a.render_stride,scope='Original QueenArrow complete owner Pulse and custom Render/normal lighting/software raster. Declared non-character launch face64 and stationary target-plane query; reaction/damage, resource/COM, base animator Initialize and map/script/audio are explicit boundaries.'),indent=2)+'\n')

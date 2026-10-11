@@ -14,6 +14,7 @@
 #include "effects/rockstormoriginal.h"
 #include "effects/lightstriporiginal.h"
 #include "effects/funneloriginal.h"
+#include "effects/arroworiginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
@@ -5317,6 +5318,16 @@ struct SVfxTestBootstrap {
             original.submit=[](void* c,EFxDebugMode){lightstrip_original::Advance(static_cast<lightstrip_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){lightstrip_original::SubmitWorld(static_cast<lightstrip_original::State*>(c),mode);};
             original.destroy=[](void* c){lightstrip_original::Destroy(static_cast<lightstrip_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="QueenArrow_ORIGINAL";
+            original.family="projectile";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return arrow_original::SpawnQueen({o.x-180,o.y,o.z+38},{o.x+180,o.y,o.z+78});};
+            original.submit=[](void* c,EFxDebugMode){arrow_original::Advance(static_cast<arrow_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode d){arrow_original::SubmitWorld(static_cast<arrow_original::State*>(c),d);};
+            original.is_alive=[](void* c){return arrow_original::IsAlive(static_cast<arrow_original::State*>(c));};
+            original.destroy=[](void* c){arrow_original::Destroy(static_cast<arrow_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
         {
