@@ -7,7 +7,7 @@ are truncated to five bits. For each RGB565 channel, the actual kernel returns
 its RGB5 input. Alpha0 still contributes 1/32; it is not a discard or color key.
 
 The new default-false `SHelperMeshSubmit::retail_prelit_rgba5` is an explicit
-vertex format, admitted only with mode4 and software lighting. The existing
+vertex format, admitted only with mode4. The existing
 normal attribute carries literal RGB5 and uv.x carries literal alpha5; it does
 not reinterpret any existing normal-lit draw. Internal shader mode5 preserves
 the original source contribution and alpha. Existing untextured cull-none,
@@ -37,6 +37,21 @@ Evidence under `research/vfx-wide-20261010/hard-astra`:
 MSL executed; GLSL/HLSL source branches mirror it but their devices were not
 executed. A final HLSL-only variable spelling correction (`i.normal`) follows
 that capture; it does not alter the executed Metal branch.
+
+Integrated debug validation on20261011 exposed an empty texture binding in
+the untextured EnergySpray and diagnostic meshes. Both now bind the existing
+identity white texture; mode5 does not sample it. The explicit RGB5/A5 format
+also keeps mode5 and its source-alpha policy under modern scene lighting,
+rather than interpreting packed colors as normals. Flag-false draws retain
+their previous scene-lighting behavior.
+
+The integrated debug build passes all11 prelit/depth and7 ARGB pixel checks,
+with the previous complete ARGB diagnostic unchanged. A second capture without
+the software ambient opt-in preserves all11 explicit-format pixels while the
+flag-false normal-lit control changes. Evidence:
+`research/vfx-review-survey-20261010/118-integrated-gpu-binding-v2/review.json`
+and `modern-format-check.json`; binary SHA256
+`76c9c963c90d46cf396607a9d178ee9746f10810b5920969207fb9933773a473`.
 
 Current same-source Metal replay uses binary
 `e1647e36b68d3ae3d8ec6e79fdce53bdb11203f54ecbb1df77bb35f16c1712ae`

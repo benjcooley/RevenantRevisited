@@ -3144,7 +3144,11 @@ void TRenderer::EmitTransparentTile(const STileSubmit& t)
 
 void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
 {
-    const bool source_alpha = s.retail_source_alpha && !s.additive_blend && UsesRetailSoftwareMeshLighting();
+    // The explicit prelit format carries RGB5/A5, not normals. Its decoding
+    // and blend policy remain valid when the surrounding scene is modern-lit.
+    const bool prelit_rgba5 = s.retail_lighting == 4 && s.retail_prelit_rgba5;
+    const bool source_alpha = s.retail_source_alpha && !s.additive_blend &&
+        (UsesRetailSoftwareMeshLighting() || prelit_rgba5);
     sg_pipeline back_pipeline = s.additive_blend ? helper_mesh_add_back_pipeline : helper_mesh_back_pipeline;
     sg_pipeline front_pipeline = s.additive_blend ? helper_mesh_add_front_pipeline : helper_mesh_front_pipeline;
     if (s.retail_gold_no_depth && s.additive_blend && s.retail_lighting == 1)
@@ -3191,7 +3195,7 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     for (int c = 0; c < 3; ++c) vsu[vo++] = retail_mesh_ambient[c];
     vsu[vo++] = s.retail_normal_z_scale;
     for (int c = 0; c < 3; ++c) vsu[vo++] = retail_mesh_directional[c];
-    vsu[vo++] = float(s.retail_lighting == 4 && s.retail_prelit_rgba5 && UsesRetailSoftwareMeshLighting() ? 5 : !UsesRetailSoftwareMeshLighting() && s.retail_lighting == 4 ? 0 : s.retail_lighting == 3 && !UsesRetailSoftwareMeshLighting() ? 2 : s.retail_lighting);
+    vsu[vo++] = float(prelit_rgba5 ? 5 : !UsesRetailSoftwareMeshLighting() && s.retail_lighting == 4 ? 0 : s.retail_lighting == 3 && !UsesRetailSoftwareMeshLighting() ? 2 : s.retail_lighting);
     vsu[vo++] = s.uv_offset[0];
     vsu[vo++] = s.uv_offset[1];
     vsu[vo++] = s.retail_software_projection ?
