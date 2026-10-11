@@ -10,6 +10,7 @@ the contract the hosts implement: [docs/playtest/PROTOCOL.md](../../docs/playtes
 | `rec.py` | the `.rvrec` format: read, write, validate, compare check lines, slot hashes; also a command line (`show`, `validate`, `diff`, `slotsha`) |
 | `inputs.py` | a step's events from game controls, with the INI's own bindings (`Bindings.from_ini`), clicks and typing; pointer and held keys carried between steps |
 | `host.py` | the protocol's client: `PortHost` (`Revenant --control=stdio`), `RetailHost` (the emulator's play slot) |
+| `knowledge.py` | game knowledge from the game's data: char.def (every character's damage modifiers, Locke's attacks and combos with their skill needs), spell.def (talismans, mana, damage); `monster_brief` in words for Jev |
 | `fakehost.py` | a reference host over a toy world, for tests |
 
 Python 3.12, standard library only. The key is `$OPEN_ROUTER_KEY`.
