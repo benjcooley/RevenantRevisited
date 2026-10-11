@@ -96,3 +96,23 @@ negative control. Build initially exposed the older checkout's missing
 `UsesRetailSoftwareMeshLighting` accessor from00008ec; its exact existing
 implementation is included for the70c0aa3 dependency. The helper uniform fixture
 was updated for that accessor and mode3's software route.
+
+## Root appearance approval, October 10
+
+After independently viewing the original/common/native-domain comparisons,
+root approved the overall form, size and color family of Speed (`0xad92bd36`),
+Quicksilver (`0xad92bd35`) and Fmastery (`0xb0e024df`) for the explicit native-domain
+isolated fixture. This records one scoped appearance pass per shipped type.
+It does not accept common-domain projection residuals, gameplay camera changes,
+strict framebuffer equality or all remaining effect gates.
+
+`hard-astra/buff-root-approved/manifest.json` freezes that decision at SHA256
+`34478260c150e24c91c82171f02d8a717bc26cd643988902cf9589a97c71a520`.
+Separate `Speed.json`, `Quicksilver.json` and `Fmastery.json` records each retain
+six native/Metal image pairs and hashes, capture/binary provenance, exact source
+light logs and matching RNG draw counts. All18 pairs were hash-checked again.
+The original review manifest remains unchanged at `ec0367f7…` above. The declared
+source policy is `EXPLICIT_NATIVE_DOMAIN_ISOLATED_PREVIEW`: ambient38/255,
+directional1, no point lights, quality0, owner/facing/cameraZ0, seed1, warmup1,
+24Hz. No position, scale, color or timing fit was introduced. Remaining RGB,
+raster/interpolation and destination framebuffer differences remain explicit.
