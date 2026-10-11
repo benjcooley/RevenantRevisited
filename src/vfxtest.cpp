@@ -6,6 +6,7 @@
 #include "effects/ypoweruporiginal.h"
 #include "effects/yloseoriginal.h"
 #include "effects/yattackoriginal.h"
+#include "effects/mpappearoriginal.h"
 #include "effects/lightstriporiginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
@@ -5376,6 +5377,15 @@ struct SVfxTestBootstrap {
             original.submit_world=[](void* c,EFxDebugMode mode){yattack_original::SubmitWorld(static_cast<yattack_original::State*>(c),mode);};
             original.is_alive=[](void* c){return yattack_original::IsAlive(static_cast<yattack_original::State*>(c));};
             original.destroy=[](void* c){yattack_original::Destroy(static_cast<yattack_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="MPAppear_ORIGINAL";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return mpappear_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){mpappear_original::Advance(static_cast<mpappear_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){mpappear_original::SubmitWorld(static_cast<mpappear_original::State*>(c),mode);};
+            original.destroy=[](void* c){mpappear_original::Destroy(static_cast<mpappear_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
 
