@@ -19,6 +19,7 @@
 #include "effects/jhagaattackoriginal.h"
 #include "effects/headfireballoriginal.h"
 #include "effects/dragonattackoriginal.h"
+#include "effects/quicksandoriginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
@@ -5675,6 +5676,14 @@ struct SVfxTestBootstrap {
         mist.destroy       = [](void* c) { MistDestroy(c); };
         VfxTest::DeferredRegister(mist);
 
+        {
+            VfxTest::SEffect original{};original.id="Quicksand_ORIGINAL_TARGET";original.family="spell";original.pipeline="HM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return quicksand_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){quicksand_original::Advance(static_cast<quicksand_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode){quicksand_original::SubmitWorld(static_cast<quicksand_original::State*>(c));};
+            original.is_alive=[](void* c){return quicksand_original::IsAlive(static_cast<quicksand_original::State*>(c));};
+            original.destroy=[](void* c){quicksand_original::Destroy(static_cast<quicksand_original::State*>(c));};VfxTest::DeferredRegister(original);
+        }
         VfxTest::SEffect drip = {};
         drip.id            = "TDripEffect";
         drip.family        = "water";
