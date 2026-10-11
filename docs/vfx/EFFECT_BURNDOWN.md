@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-10)
 
-**81 / 176 effects have reviewed visual passes for their recorded test configuration; 95 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
+**82 / 176 effects have reviewed visual passes for their recorded test configuration; 94 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
 Examples of passed appearance cases: CyanFont, RedFont, GreenFont, BlueFont, base Flame, Ripple emitted by Drip, Globe, Sparks editor defaults, isolated Cure, isolated Pixie, Shadowfist, Warriorborn, teleportation, goldeffect, Might, Immortalmight and blue TeleportDoorInsideB. The additional passes are all12 town signs, the other6 Warp colors, Speaker and both LabGate barriers. Their per-row visual reviews record the configuration and remaining limitations. Fresh Might/Immortalmight footage passes after the parser correction. Blue Warp retains an open seven-pixel apex/projection discrepancy despite its scoped overall appearance pass.
 
@@ -32,6 +32,8 @@ historical evidence; this migration alone grants no additional acceptance.
 **RGB565 correction (2026-10-10):** fspray now passes its twelve-sample original/Metal appearance review after exact software RGB5 modulation replaces normalized multiplication. Fresh films preserve the other eight affected scoped passes. The gallery also retains all62 previously verified types in a label-free centered draw audit; normal scroll-in lifetime controls are separate. [Source and measured scope](forensics/RGB565_PARTICLE_MODULATION.md).
 
 **Six further passes (2026-10-10):** Faultfire, Streamer, YEnergy, YEnergyLose, YAbsorb and nullifier pass actual native/Metal appearance for their declared configurations. Original cached-emitter sampling fixes nullifier's phase. FireSwarm late phases improve, but its early software rejection remains held for a device reference.
+
+**Iced closed (2026-10-10):** the actual crystal and 30 authored shatter cubes replace stacked billboards. Original victim initialization, crystal reveal and hold, shatter, tumble and decay match the recorded actual Metal native-domain condition. Natural attachment and audio remain open. [Evidence](forensics/ICED_NATIVE_DOMAIN_VISUAL_20261010.md).
 
 **Four authored water effects closed (2026-10-10):** WaterFlft/Frt/Clft/Crt run exact six-emitter source profiles. Root reviewed six complete original software and actual Metal phase comparisons for each. Controlled map creation, movement and deletion pass. Small numeric packet residuals stay recorded; exact pixels and natural scenes remain open. [Evidence](forensics/AUTHORED_WATER_VISUAL_BATCH_20261010.md).
 

@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 103,
+    "retail_rows_with_source_fixes_recorded": 104,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 81,
+    "visual_fidelity_confirmed_rows": 82,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 81,
-    "remaining_visual_review_rows": 95
+    "reviewed_visual_pass_rows": 82,
+    "remaining_visual_review_rows": 94
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1379,6 +1379,13 @@
       "check": "actual_gallery_presence",
       "status": "diagnostic",
       "scope": "Actual Metal viewer presence only; no animation correctness or retail fidelity credit."
+    },
+    "recon/retail_asm/runtime/effects/current-iced-full-visual-20261010/root-approval.json": {
+      "sha256": "9410ae1ba6ab0c4666b12bb5e2576b99b28e41d349446fbb5ac2a548d30e7121",
+      "retail_row": "Iced:0xfacecabb",
+      "check": "iced_native_domain_actual_metal_visual",
+      "status": "pass",
+      "scope": "Original software versus actual Metal native-domain crystal reveal/hold, shatter at240,30chunk tumble/bounce, decay and blank322/421. Explicit living stationary victim handshake; natural caller/attachment/audio/device/exactpixels remain open."
     }
   }
 }
