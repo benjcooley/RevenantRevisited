@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 160,
+    "visual_fidelity_confirmed_rows": 161,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 160,
-    "remaining_visual_review_rows": 16
+    "reviewed_visual_pass_rows": 161,
+    "remaining_visual_review_rows": 15
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1946,6 +1946,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Exact genuine loaded PunchAndJudy0x0c05263a/defaultowner/animator, eightroots/twoRGB565textures, complete600Pulse/Animate/PreRender/Render/Post/raster updates and581framewrap580\u21920\u21921, zeroRNG/controllers. NativeScene1/CULL3/depthtest/write/ONEZERO, existingopaquehelper/nativeownerprojector. Leaf passes actualowner previousstate0/frame0 toGetAniKey first5frames includingwrap; missingcallernegative26matrices fails. Rootall600\u00d78\u00d716=76800GPUmatrixchannels matchmax9.55e-7. Eighteenwholephasepairs/fivefullresolutiondetailstrips/fiveactualsizeimages independentlyreviewed,46pinsverified/allgeometrycontained. Integrated31stride20PNGsexact/all60124Hzupdates/render retained/cleanexit. Rootmappedgallery32/32visible, onepersistentowner,746modulo581framescorrect/cleanteardown. Ordinary31PNGs unchanged agentcontrol. Nativecaller/fractionalstate scheduling/terrain/light/audio/device/exactpixels andedge/surfacequantization remainopen; no fittedcamera/time/geometry or inventedlifetime."
+    },
+    "recon/retail_asm/runtime/effects/current-combatflash-state0-20261011/root-approval.json": {
+      "sha256": "1dcc5e3bd57ef3c132092a0c56fbbda6549a7b166b6ba0a920cccc88ca582467",
+      "retail_row": "combatflash:0xad92bd29",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact CombatFlash0xad92bd29 state0/start1 only, genuine loaded generic owner/default animator/nullspell and full64original NextFrame/wholePulse/controllerPulse/Animate/PreRender/Render/Post/raster; seed1/camera0/sourceambient38/dir1. Inclusiveobject2 keys/fiveframetransition18matrices288channels max2.42e-7; strengthenedactualsourceowner1.5scale negative1.64 exposes nativeowner correction. Twelve projectedvertices/36channels formula error1.06e-4; original324normaltriangles/7776integerfields truncateXYZ/UV64, all144extraobjectdraws blank across18liveframes. Exactnativeowner/intgridUV mesh removes flarestretch; originalRGB5normal21 preserved. Elevenwholephasepairs and sixactualsizedetailpanels independentlyreviewed,39imagepins; moving15particles/baseflare/growth/fade andkill19/blanktail align. Root64GPUrepeat byteidentical17visible/blank19+, coldtick1blankcontrolpass; renderOF_KILLguardfix preventsformerextraframe. Componentcontrol20fullPNGunchanged/noRNGsuppression90tickproofPASS, existingdefaultstatic regressionPASS5.565s. Realmapgallery100frames95visible92distinct/six exactstate0creations/cleanexit is liveness only; initialcopiedadaptervalidator mismatchretained/correctedagainstactualnormalmaproute. Smallscanline/RGB565destinationquantizationresiduals remain. Other17states/impactselector/naturalcombat/catchupcadence/audio/device/exactpixels remainopen; noallvariants/fullacceptanceclaim."
     }
   }
 }

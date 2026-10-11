@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-11)
 
-**160 / 176 effects have reviewed visual passes for their recorded test configuration; 16 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
+**161 / 176 effects have reviewed visual passes for their recorded test configuration; 15 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
 **YTelekinesis (2026-10-11):** four moving/rotating chunks match through actual owner completion across six fixed supported capture views; all 39,600 triangles covered and 24 root-repeated Metal frames identical. Corrected exact-ID mapping displays and restarts it in the gallery. Natural actor/spell/audio and raster overlap limits remain open. [Evidence and scope](forensics/YTELEKINESIS_ORIGINAL.md).
 
@@ -1127,3 +1127,5 @@ Audited `class.def`: 233,484 bytes; SHA-256 `bf46eaa4e25a43fa9828e1e8737114d63b9
 - [x] **dragonfire** `0xad92bc1a` — exact two-pool moving plume/nullspell appearance pass.14phase review/101PNG integratedrepeat/unreseeded finitegallery pass. Naturalspell/caster/map/audio/device remainopen. [Evidence](forensics/DRAGONFIRE_NATIVE_RENDER_20261011.md).
 
 - [x] **PunchAndJudy** `0x0c05263a` — complete581frame isolatedloop appearance pass.18phase review/all600matrixrepeat/31sampledPNGexact/persistentgallery pass. Naturalcaller/fractionalstate/map/audio/device remainopen. [Evidence](forensics/PUNCHANDJUDY_FULL_RENDER_20261011.md).
+
+- [x] **combatflash** `0xad92bd29` — state0/start1 scoped appearance pass.11phase whole/detail review/64PNG exactrepeat/realmapgallery; other17 states, combat selector/caller, audio/device remainopen. [Evidence](forensics/COMBATFLASH_LOADED_REFERENCE_20261011.md).

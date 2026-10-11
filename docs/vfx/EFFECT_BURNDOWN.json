@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 160,
+    "visual_fidelity_confirmed_rows": 161,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 160,
-    "remaining_visual_review_rows": 16
+    "reviewed_visual_pass_rows": 161,
+    "remaining_visual_review_rows": 15
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -19538,7 +19538,8 @@
       "source_fixes": [
         "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested misc\\Impact.i3d is distinguished from Imagery/Magic/impact.I3D.",
         "Integrated bounded combatflash0xad92bd29 default-animator state0/start1 profile: actual Impact asset/prototype/emitter/base, cached expression frame/current-owner emitter pose, # fixed-camera matrices, separate prelit RGB565 mode16 particles and source normal/material base, controller-before-base draw order,19-frame nonlooping cleanup and real exact-owner preview.24 source contracts and frozen staged/applied file hashes retained; other states remain unsupported. No visual/full/natural-combat acceptance.",
-        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical.",
+        "2026-10-11: State0/start1 inclusivebase keys/nativeowner removing1.5Zstretch/integerXYZUVgrid/postkillrenderguard; wholecycleappearance independentlyreviewed,64PNG repeat/mapgallery pass. Other17states unverified."
       ],
       "port_smoke_ids": [
         "TCombatFlashEffect_AUTHORED_START1"
@@ -19553,18 +19554,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_generic_default_animator_state0_start1_verified_through_real_creation_natural_cleanup_move_delete",
-      "next_action": "Retain exact state0/start1 implementation,12 runtime checks and own inconclusive pair. Establish native onset/cadence and raster/progression with a second seed or source-backed review without fitting. Other17 states, even-state impact selection, collision normal/attacker/victim, multi-tick cached-frame scheduling and natural combat remain mandatory open work; advance simple missing-native RGB565 queue.",
+      "next_action": "Preserve approved state0/start1; convert/test other17 Impact states and actual combat selector/caller, catchupcadence/audio/device and statedrasterresiduals.",
       "notes": [
         "VFS collision corrected. Earlier port evidence must be checked against the requested asset before certifying visual fidelity; old bytes differ.",
         "Pre-implementation checkpoint: Actual generic EFFECT/default animator Impact asset has18 authored states and controller tags. Current reference is only state0/start1; the old tinted billboard proxy does not implement state/caller/tag behavior. No new implementation/runtime/visual credit; only the prior VFS path correction remains recorded as a source fix.",
@@ -19720,23 +19721,14 @@
         }
       },
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "inconclusive",
-        "visual_pass": false,
-        "scope": "CombatFlash exactstate0/start1 only aftersharedZhandoff, no fittedphase/geometry/color. Wholecaster/combat selection and other17states unverified.",
-        "finding": "Retainednewpairedrawactive samples show expectedyellowflash/sparks, but native is substantially later-phase atsame elapsedlabels whileport remainsbright at0.4/0.6seconds. Initialvisiblephase, actualmapdepth versus PNGpreview and native cadence remainopen; no visualpassinferred.",
-        "sample_frames": [
-          3,
-          6,
-          12,
-          18,
-          24,
-          30
-        ],
-        "comparison_manifest_sha256": "4bbea40705bed511079fadef6a2ed43d06dd5b8769742ba3e7c0d2fabdcfcc61",
-        "contact": "active-zoom.png",
-        "contact_sha256": "4c6b10842e0bf8e25112e0142d99c87da1f17f0770759410b30e738a2434d477"
+        "date": "2026-10-11",
+        "reviewer": "root independent state0 whole/detail review and fullcycle repeat/map liveness",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Exact CombatFlash0xad92bd29 state0/start1 only, genuine loaded generic owner/default animator/nullspell and full64original NextFrame/wholePulse/controllerPulse/Animate/PreRender/Render/Post/raster; seed1/camera0/sourceambient38/dir1. Inclusiveobject2 keys/fiveframetransition18matrices288channels max2.42e-7; strengthenedactualsourceowner1.5scale negative1.64 exposes nativeowner correction. Twelve projectedvertices/36channels formula error1.06e-4; original324normaltriangles/7776integerfields truncateXYZ/UV64, all144extraobjectdraws blank across18liveframes. Exactnativeowner/intgridUV mesh removes flarestretch; originalRGB5normal21 preserved. Elevenwholephasepairs and sixactualsizedetailpanels independentlyreviewed,39imagepins; moving15particles/baseflare/growth/fade andkill19/blanktail align. Root64GPUrepeat byteidentical17visible/blank19+, coldtick1blankcontrolpass; renderOF_KILLguardfix preventsformerextraframe. Componentcontrol20fullPNGunchanged/noRNGsuppression90tickproofPASS, existingdefaultstatic regressionPASS5.565s. Realmapgallery100frames95visible92distinct/six exactstate0creations/cleanexit is liveness only; initialcopiedadaptervalidator mismatchretained/correctedagainstactualnormalmaproute. Smallscanline/RGB565destinationquantizationresiduals remain. Other17states/impactselector/naturalcombat/catchupcadence/audio/device/exactpixels remainopen; noallvariants/fullacceptanceclaim.",
+        "report": "recon/retail_asm/runtime/effects/current-combatflash-state0-20261011/root-approval.json",
+        "sha256": "1dcc5e3bd57ef3c132092a0c56fbbda6549a7b166b6ba0a920cccc88ca582467",
+        "note": "docs/vfx/forensics/COMBATFLASH_LOADED_REFERENCE_20261011.md"
       },
       "historical_fixture_failures": [
         {

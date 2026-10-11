@@ -113,7 +113,7 @@ void Advance(State* context, double seconds)
 
 void SubmitWorld(State* context, EFxDebugMode)
 {
-    if (!context || !Renderer || !context->owner) return;
+    if (!context || !Renderer || !context->owner || (context->owner->GetFlags() & OF_KILL)) return;
     TObjectInstance* owner = context->identity.Get();
     if (!owner || owner != context->owner.get() || owner->GetState() != 0) return;
     owner->Animate(false); // render pose refresh only; never advances NextFrame/Pulse
