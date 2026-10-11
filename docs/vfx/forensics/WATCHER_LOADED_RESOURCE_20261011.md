@@ -170,3 +170,5 @@ explicitly uses the qualified semantic-alpha device adaptation. Decoder, origina
 fullRender pose/state, and actual Metal evidence are distinct supporting proofs,
 not a claim that the original software device renders1555 correctly. No approval
 or primary acceptance is written by these tools.
+
+Root independently inspected all three native-projector whole/detail pairs and verified63 frozenpins. Independent1920stream/matrix checks and786432decoder assertions pass; all24 integratedGPU PNGs byte-identical withcleanexit. Private `vfx-watcher-root-20261011/qualified-review.json` records this adapted-device comparison separately. Original1555software misdispatch and RGB5-to-RGB4 device adaptation remain explicit; primaryreview count stays159.

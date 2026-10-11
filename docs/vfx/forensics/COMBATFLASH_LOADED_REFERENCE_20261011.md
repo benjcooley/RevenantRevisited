@@ -127,3 +127,5 @@ all144 nonbase draws individually contributezero pixels. This establishes the
 bounded blank extra-object contribution, without claiming complete compositing or
 other CombatFlash states. Reports remain under `full-normal-observation`,
 `normal-sweep-final`, `suppression-final` and `component-{base,particles,full-final}`.
+
+`combatflash_normal_isolation.py` now retains the all-normal-packet replay as a reusable source tool. Root rerun reproduces162isolated draws with all144 extra-object contributions blank. It remains a diagnostic; primary appearance is held for the visible base sampling residual.
