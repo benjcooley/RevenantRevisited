@@ -47,7 +47,10 @@ Binary SHA256: `2d7e39ae6db8ee941a36326f3476b6415770fc94b15566c59bfcd4281381101b
 Original native manifest SHA256: `371845fccba6fc38711f53e68e8588b45968a63860891bdc4e0e2dcd90ea4ab1`.
 GPU literal-control review SHA256: `bb9a007bea43142ebe9b4b9876a51bff4df7770d8e84edece8603e0d324c43e0`.
 
-Independent appearance review is pending. Scope is explicit null-spell,
+Root independently approved all fifteen phases: eight purple rings, motion,
+startup, kill46 and blanktail. Frozen `shriek-review-final/root-approval.json`
+SHA256: `46facc58e0e4813731fd03442320ff6a6da0c9c20fc107d79b3d88ad0d803420`. This is a scoped overall appearance pass.
+Scope is explicit null-spell,
 seed1, owner/camera0, 640x480 native-domain software-policy fixture. Natural
 invoker/bone placement, damage/audio, device behavior and complete natural
 caller remain open; common projection/skirt are separately retained.
