@@ -2,6 +2,9 @@
 // provider makes any accidental browser initialization an unresolved symbol.
 #include "../src/vfxreviewpreview.h"
 #include "../src/time.h"
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <iostream>
 

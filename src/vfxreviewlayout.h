@@ -4,7 +4,8 @@
 #include <cmath>
 
 // Logical screen-pixel layout policy. Footprints are projected lengths along
-// the conveyor, so separation also bounds their one-dimensional overlap.
+// the conveyor. Automatic gaps are bounded even for oversized asset bounds;
+// explicit overrides can reserve more room for a particular effect.
 struct VfxReviewLayout
 {
     double ratio = 2.5;
@@ -30,14 +31,17 @@ struct VfxReviewLayout
         footprint = Nonnegative(footprint);
         const double span = ViewSpan();
         const double margin = footprint >= 0.75 * span ? span + 96.0 : 96.0;
-        return (std::max)({MinimumClearance(), Nonnegative(requested), footprint + margin});
+        const double automatic = (std::min)(footprint + margin, span * 1.15);
+        return (std::max)({MinimumClearance(), Nonnegative(requested), automatic});
     }
 
     double Separation(double leftFootprint, double leftClearance,
                       double rightFootprint, double rightClearance) const
     {
-        return (std::max)({Nonnegative(leftClearance), Nonnegative(rightClearance),
-            (Nonnegative(leftFootprint) + Nonnegative(rightFootprint)) * 0.5 + 96.0});
+        const double automatic = (std::min)(
+            (Nonnegative(leftFootprint) + Nonnegative(rightFootprint)) * 0.5 + 96.0,
+            ViewSpan() * 1.15);
+        return (std::max)({Nonnegative(leftClearance), Nonnegative(rightClearance), automatic});
     }
 
 private:

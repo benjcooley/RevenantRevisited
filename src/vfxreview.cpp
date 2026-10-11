@@ -3,6 +3,7 @@
 #include "vfxreviewschedule.h"
 #include "vfxreviewlayout.h"
 #include "vfxreviewspawn.h"
+#include "vfxreviewpreview.h"
 #include "gamemap.h"
 #include "mapmanager.h"
 #include "mappane.h"
@@ -47,6 +48,7 @@ struct Entry {
     double next_spawn = 0;
     bool failed = false;
     bool missing_visual = false;
+    std::unique_ptr<VfxReviewPreview> preview;
 };
 TMapRenderer renderer;
 TGameMap* map = nullptr;
@@ -78,6 +80,7 @@ TObjectInstance* Resolve(Entry& e) {
     return object && object->ObjId() == e.id ? object : nullptr;
 }
 void Remove(Entry& e) {
+    e.preview.reset();
     if (auto* object = Resolve(e)) MapPane.DeleteObject(object);
     e.map_index = -1;
 }
@@ -148,7 +151,7 @@ bool LayoutStations() {
                 const double projected=(std::max)(0,int(state.width))*direction.x+
                     (std::max)(0,int(state.height))*std::abs(direction.y);
                 e.review_footprint=(std::max)(e.review_footprint,
-                    (std::min)(projected,layout.ViewSpan()*.5));
+                    (std::min)(projected,layout.ViewSpan()*.25));
             }
         }
         switch(e.id) {
@@ -258,7 +261,25 @@ void Spawn(Entry& e, size_t index) {
     e.map_index=MapPane.NewObject(&def);
     auto* object=Resolve(e);
     if (!object) { e.status="Factory failed"; e.failed=true; return; }
+    object->OnScreen();
+    object->Animate(false);
     auto result=ConfigureVfxReviewSpawn(*object,source,target);
+    if(!result.uses_effect_runtime) {
+        // Bare I3D faces are not an effect implementation. Use the actual
+        // registered initializer/controller/submission when one exists.
+        Remove(e);
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) {
+            e.failed=true; e.missing_visual=true;
+            e.status=DescribeVfxReviewPreview(e.id).description;
+            log_info("[vfx-review] unavailable name=%s type=%08x status=%s",e.name.c_str(),e.id,e.status.c_str());
+            return;
+        }
+        e.missing_visual=false; e.status="Registered effect runtime";
+        ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s",e.name.c_str(),e.id,e.preview->Id().c_str());
+        return;
+    }
     e.status=result.description;
     e.missing_visual=!result.renderer_supported;
     e.sound_tags=result.authored_sound_tags;
@@ -315,6 +336,9 @@ bool Initialize() {
     if (!map) { log_error("[vfx-review] cannot create disposable corridor"); Close(); return false; }
     if (!BuildFloor()) { Close(); return false; }
     renderer.Initialize(); renderer.SetMap(map,false,origin.x>>SECTORWSHIFT,origin.y>>SECTORHSHIFT);
+    renderer.SetReviewSubmissionCallbacks(
+        [] { for(auto& e:entries) if(e.preview) e.preview->Submit(); },
+        [] { for(auto& e:entries) if(e.preview) e.preview->SubmitWorld(); });
     renderer.SetDaylightCycle(false); renderer.SetSunShadowEnabled(false);
     renderer.SetGroundTilesVisible(false);
     renderer.SetLightingMode(StartupVfxLightingMode>=0?StartupVfxLightingMode:0);
@@ -363,7 +387,7 @@ void Render() {
     for (size_t i=0;i<entries.size();++i) {
         auto& e=entries[i];
         if (std::abs(schedule.SlotDistance(i)-distance)>650) { Remove(e); continue; }
-        if (!Resolve(e) && !e.failed && ticks/24.0>=e.next_spawn) {
+        if (!e.preview && !Resolve(e) && !e.failed && ticks/24.0>=e.next_spawn) {
             Spawn(e,i); e.next_spawn=ticks/24.0+.35;
         }
     }

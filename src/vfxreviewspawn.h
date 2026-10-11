@@ -15,6 +15,8 @@ struct VfxReviewSpawnInfo
     // Current map drawing/controller path available; no fidelity claim.
     // Describe cannot inspect lazy assets; Configure refines this after spawn.
     bool renderer_supported = false;
+    // A real effect builder/component/controller, rather than bare asset faces.
+    bool uses_effect_runtime = false;
     int object_type = -1;
     int authored_sound_tags = 0;
     const char* builder_name = "";

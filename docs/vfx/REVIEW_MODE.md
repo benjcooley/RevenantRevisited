@@ -10,9 +10,9 @@ the lower left. The default slope is 2.5 horizontal units per vertical unit.
 The default minimum clearance is 240 logical screen pixels: about three small
 station centers per view, with partial neighbors at the edges. An absolute
 240-pixel floor prevents dense rows even when a smaller override is requested.
-Padded stored culling bounds contribute at most half a viewport to layout.
-Known broad-emitter hints and explicit overrides increase clearance as needed. Large effects get their footprint plus a viewport of clearance,
-so they pass alone, with fewer than one center per view on average.
+Padded stored culling bounds contribute at most a quarter of a viewport to layout.
+Known broad-emitter hints and explicit overrides increase clearance as needed. Automatic spacing is capped at 1.15 viewport lengths, including large effects.
+Explicit per-effect overrides can reserve more room.
 Scrolling runs at 48 pixels/sec.
 There are 720 pixels of empty lead-in and tail before the view loops.
 Effects stay in view for roughly 14 seconds at the default viewport. A full
@@ -58,16 +58,18 @@ the previous/next station. Home returns to the lead-in. Escape exits.
 
 Labels show only a large, centered name beneath each station. Missing drawables
 remain in the catalogue, with an amber name marking their empty slot.
-Factory/type/asset diagnostics remain in the log. Endpoint-unavailable entries
+Factory/type/asset diagnostics remain in the log. Unavailable entries retain a name-only slot; endpoint-unavailable entries
 use minimum spacing rather than reserving large invisible bounds.
 Adjacent stations use the larger of their
 two clearances. End padding grows enough to clear the first/last footprint,
 without inheriting the entire large-effect isolation gap.
 Spacing changes layout only, never effect geometry or physics.
-Effects are made with the normal map factory, advanced at
-24 Hz, and drawn by the normal map renderer. A completed one-shot is recreated
-after cleanup; a looping effect continues its authored animation. The mode
-does not shorten a live effect to force a retrigger.
+Dedicated map effects and admitted authored controllers use the normal map
+factory. Other implemented effects use exact-type registered preview
+initializers/controllers through the same world render pass. Bare asset geometry
+is not presented as an implemented effect. Effects advance at their existing
+24 Hz/runtime cadence and draw through the normal renderer. A completed one-shot is recreated
+after cleanup; a looping effect continues its authored animation. Fallbacks retain their existing browser repeat policy.
 
 Endpoint-enabled effects launch mostly vertically from a lower-left source
 toward an upper-right target, independently of the review row. Unavailable

@@ -15,13 +15,6 @@ static unsigned MaxVisibleCenters(double span, double separation)
     // Includes both viewport edges: N intervals contain N+1 centers.
     return unsigned(std::floor(span / separation)) + 1;
 }
-static void NoOverlap(double leftFootprint, double rightFootprint, double separation)
-{
-    const double leftEnd = leftFootprint * 0.5;
-    const double rightBegin = separation - rightFootprint * 0.5;
-    assert(rightBegin - leftEnd >= 96.0 - 1e-8);
-}
-
 int main()
 {
     for (double ratio : {2.0, 2.5, 3.0}) {
@@ -42,30 +35,29 @@ int main()
             assert(usual>=420);
             assert(MaxVisibleCenters(span,usual)<=4);
             assert(Near(layout.Clearance(32,1200),(std::max)(1200.0,usual)));
-            // Large effects reserve their own span plus a whole viewport.
+            // Automatic large-effect gaps stay near one viewport; explicit requests can be wider.
             const double bigFootprint=(std::max)(1000.0,0.75*span);
             const double big=layout.Clearance(bigFootprint);
-            assert(Near(big,(std::max)(layout.MinimumClearance(),bigFootprint+span+96)));
+            assert(Near(big,(std::max)(layout.MinimumClearance(),span*1.15)));
             assert(span/big<1.0); // time-averaged visible center density
-            NoOverlap(bigFootprint,bigFootprint,layout.Separation(bigFootprint,big,bigFootprint,big));
-            NoOverlap(bigFootprint,32,layout.Separation(bigFootprint,big,32,usual));
-            NoOverlap(32,bigFootprint,layout.Separation(32,usual,bigFootprint,big));
+            assert(layout.Separation(bigFootprint,big,bigFootprint,big)<= (std::max)(layout.MinimumClearance(),span*1.15));
+            assert(layout.Separation(bigFootprint,big,32,usual)==big);
+            assert(layout.Separation(32,usual,bigFootprint,big)==big);
             assert(Near(layout.Separation(bigFootprint,big,32,usual),
                         layout.Separation(32,usual,bigFootprint,big)));
             // An arbitrary rectangular screen footprint projects to |dx|W+|dy|H.
             const double rectangle=(ratio/norm)*400+(1/norm)*200;
             const double other=(ratio/norm)*120+(1/norm)*300;
-            NoOverlap(rectangle,other,layout.Separation(rectangle,layout.Clearance(rectangle),
-                                                       other,layout.Clearance(other)));
-            // Exact threshold opts into isolation; just below retains basic margin.
+            assert(layout.Separation(rectangle,layout.Clearance(rectangle),other,layout.Clearance(other)) <= (std::max)(layout.MinimumClearance(),span*1.15));
+            // Large-footprint threshold stays capped; just below keeps its basic margin.
             const double threshold=0.75*span;
             assert(Near(layout.Clearance(threshold),
-                        (std::max)(layout.MinimumClearance(),threshold+span+96)));
+                        (std::max)(layout.MinimumClearance(),span*1.15)));
             assert(Near(layout.Clearance(threshold-0.01),
-                        (std::max)(layout.MinimumClearance(),threshold-0.01+96)));
-            // Separation still prevents footprint overlap when callers supply
+                        (std::max)(layout.MinimumClearance(),(std::min)(threshold-0.01+96,span*1.15))));
+            // Automatic gaps are bounded even when callers supply
             // small clearances rather than precomputing this policy's clearance.
-            assert(Near(layout.Separation(1000,180,200,180),696));
+            assert(Near(layout.Separation(1000,180,200,180),(std::max)(180.0,(std::min)(696.0,span*1.15))));
         }
     }
     VfxReviewLayout defaults;
@@ -76,5 +68,5 @@ int main()
     assert(defaults.MinimumClearance()==240);
     defaults.ratio=std::numeric_limits<double>::quiet_NaN(); assert(defaults.ViewSpan()==0);
     assert(defaults.Clearance(-1,-10)==240);
-    std::puts("VFX review layout: density, isolation, mixed footprints, cropped views and interval separation pass");
+    std::puts("VFX review layout: compact density, bounded automatic gaps and explicit overrides pass");
 }
