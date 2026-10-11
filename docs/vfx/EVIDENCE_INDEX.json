@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 88,
-    "visual_fidelity_confirmed_rows": 58,
+    "visual_fidelity_confirmed_rows": 60,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 75,
-    "reviewed_visual_pass_rows": 58,
-    "remaining_visual_review_rows": 118
+    "reviewed_visual_pass_rows": 60,
+    "remaining_visual_review_rows": 116
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1113,6 +1113,20 @@
       "check": "current_actual_metal_native_visual_review",
       "status": "scoped_visual_pass",
       "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall animated ring/fan emitter phase pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-regeneration-visual-20261010/review-approved.json": {
+      "sha256": "8bbac0850f3e6ccf9e52fda3624ad4114026a134af2a60dabeae316bc48cebf6",
+      "retail_row": "Regeneration:0x10ac03de",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Twelve fixed samples of original complete particle controller/RenderObject/FVF1e2/software raster versus independent normal-factory Metal runtime: sampled emission, color, form and continuing animation pass in the recorded native-domain configuration. All logged RNG checkpoints match. Minor software/Metal raster differences remain; exact pixels, natural caster/caller and other scenes are open."
+    },
+    "recon/retail_asm/runtime/effects/current-swiftstrike-visual-20261010/review-approved.json": {
+      "sha256": "3a4df0ad26ddf0fb409174b37b13b8653521a8cee3f6cdaaefa3e47de08f9850",
+      "retail_row": "SwiftStrike:0xe0a3bc43",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Twelve fixed samples of original complete particle controller/RenderObject/FVF1e2/software raster versus independent normal-factory Metal runtime: sampled emission, color, form and continuing animation pass in the recorded native-domain configuration. All logged RNG checkpoints match. Minor software/Metal raster differences remain; exact pixels, natural caster/caller and other scenes are open."
     }
   }
 }
