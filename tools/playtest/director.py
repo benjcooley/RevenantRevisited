@@ -1,6 +1,7 @@
 """The play loop: modes owned by code, narrow questions to Jev.
 
-    director = Director(host, jev, router, kb, bindings, bundle, milestones, saves)
+    director = Director(host, jev, router, kb, bindings, bundle, milestones,
+                        waypoints=Catalogue(), story='keep', start=0, parent='newgame')
     director.run(max_ticks=24 * 60 * 20)
 
 Each turn observes the game and picks a mode from the observation
@@ -14,10 +15,18 @@ Each turn observes the game and picks a mode from the observation
 - dead      the death screen: end the session (or reload, later)
 - unknown   a screen with no state: the router looks at the frame
 
-The milestone list gives the objective; a milestone is done when its check
-holds, and a milestone marked for saving quick-saves and exports the slot
-to the save library with its recording. Everything the director does goes
-to the host as input, so the session's recording replays it.
+The milestone list (a story) gives the objective; a milestone is done when
+its check holds, and a milestone marked for saving quick-saves and adds the
+slot to the waypoint catalogue (waypoints.py) as the next point sessions
+can play from. Everything the director does goes to the host as input, so
+the session's recording replays it.
+
+The bundle keeps the whole session for finding bugs (timeline.py renders
+it): every observation (observations.jsonl), every decision and what it was
+based on (director.jsonl, and Jev's states, questions and answers in
+session.rvlog), every input and check line (session.rvrec), frames every
+two seconds of game time and at every notable moment (frames/), and the
+host's own logs (logs/, at the end).
 """
 from __future__ import annotations
 
@@ -35,6 +44,7 @@ from inputs import Bindings, InputState, Plan, chord
 from jev import Choice, Jev, Router, tool
 from knowledge import Knowledge
 from walk import Walker, WalkGrid
+from waypoints import Catalogue, Waypoint
 
 COMBAT_RADIUS = 400                  # an enemy this close and on Locke means a fight
 WALKGRID_RADIUS = 480
@@ -52,26 +62,6 @@ class Milestone:
 
 
 @dataclass
-class SaveLibrary:
-    """`<root>/<game>/<milestone>/<slot>/` with a manifest beside the slot."""
-    root: Path
-
-    def keep(self, host: Host, game: str, milestone: str, obs: dict, bundle: Path) -> Path:
-        target = self.root / game / milestone.replace('/', '-')
-        if target.exists():
-            shutil.rmtree(target)
-        target.mkdir(parents=True)
-        exported = host.export_slot('@last', target / 'slot')
-        player = obs.get('player', {})
-        (target / 'manifest.json').write_text(json.dumps({
-            'game': game, 'build': host.info.get('build'), 'milestone': milestone, 'tick': host.tick,
-            'slot': exported.get('slot'), 'level': player.get('level'), 'pos': player.get('pos'),
-            'health': player.get('health'), 'xp': player.get('xp'), 'recording': str(bundle),
-            'created': time.strftime('%Y-%m-%dT%H:%M:%S')}, indent=2))
-        return target
-
-
-@dataclass
 class Director:
     host: Host
     jev: Jev
@@ -80,8 +70,12 @@ class Director:
     bindings: Bindings
     bundle: Path
     milestones: list[Milestone]
-    saves: SaveLibrary | None = None
+    waypoints: Catalogue | None = None
+    story: str = ''                  # the milestone list's name, for waypoints
+    start: int = 0                   # milestones already done where the session starts
+    parent: str = 'newgame'          # the waypoint the session starts from
     game: str = 'port'
+    frame_every: int = 48            # ticks between kept frames
     watch: Path | None = None        # where a watcher's page reads state.json (watch.py)
     state: InputState = field(default_factory=InputState)
     log: list[dict] = field(default_factory=list)
@@ -91,7 +85,9 @@ class Director:
     def __post_init__(self) -> None:
         self.walker = Walker(self.jev, self.bindings)
         self.tactician = Tactician(self.jev, self.kb, self.bindings)
-        self.current = 0
+        self.current = self.start
+        self.created: list[tuple[Waypoint, int]] = []           # waypoints made, and the tick of their mark
+        self.last_frame = -self.frame_every
         self.shown = ('', '')                                   # the caption: mode, text
         if self.watch:
             self.watch.mkdir(parents=True, exist_ok=True)
@@ -103,7 +99,8 @@ class Director:
 
     def run(self, max_ticks: int) -> dict:
         while self.host.tick < max_ticks and self.milestone:
-            obs = self.host.observe(objects=800)
+            obs = self.observe()
+            self.jev.ledger.context['t'] = self.router.ledger.context['t'] = self.host.tick
             self.messages += obs.get('messages', [])
             self.walker.memory.note(obs)
             if self.milestone.done(obs, self):
@@ -115,8 +112,23 @@ class Director:
             self.publish()
             if mode == 'dead':
                 break
-        return {'tick': self.host.tick, 'reached': [m.name for m in self.milestones[:self.current]],
-                'spend': self.jev.ledger.summary()}
+        return {'tick': self.host.tick, 'reached': [m.name for m in self.milestones[self.start:self.current]],
+                'waypoints': [str(w.dir) for w, _ in self.created], 'spend': self.jev.ledger.summary()}
+
+    def observe(self, frame: bool = False, walkgrid: int | None = None) -> dict:
+        """An observation, logged (all of them: the gameplay log), with a
+        frame when one is due. The walk grid, when asked for, is used but
+        not logged: it is large and the map's, not the session's."""
+        due = frame or self.host.tick - self.last_frame >= self.frame_every
+        path = self.bundle / 'frames' / f't{self.host.tick:07d}.png' if due else None
+        if path:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self.last_frame = self.host.tick
+        obs = self.host.observe(objects=800, frame=path, walkgrid=walkgrid)
+        logged = {k: v for k, v in obs.items() if k != 'walkgrid'}
+        with (self.bundle / 'observations.jsonl').open('a', encoding='utf-8') as f:
+            f.write(json.dumps(logged, separators=(',', ':')) + '\n')
+        return obs
 
     def mode(self, obs: dict) -> str:
         screen = obs.get('screen')
@@ -170,6 +182,8 @@ class Director:
         if not self.tactician.directions and self.host.capable('project'):
             self.calibrate()
             return
+        if not self.tactician.history:
+            self.observe(frame=True)                                 # the first contact of a fight
         tactic = self.tactician.decide(obs)
         if not tactic:
             self.host.step(6)
@@ -187,7 +201,7 @@ class Director:
         if obs['player'].get('mode') == 'combat':                    # a click in combat attacks
             self.press(self.bindings['CombatMode'], then=6)
             return
-        full = self.host.observe(objects=800, walkgrid=WALKGRID_RADIUS)
+        full = self.observe(walkgrid=WALKGRID_RADIUS)
         grid = WalkGrid(full['walkgrid']) if full.get('walkgrid') else None
         candidates = self.walker.destinations(self.host, full, grid)
         if not candidates:
@@ -195,18 +209,20 @@ class Director:
             return
         dest = self.walker.choose(self.milestone.objective, full, candidates)
         self.caption('explore', f'walking to {dest.words}')
-        result, _, self.state = self.walker.walk(self.host, self.state, dest)
+        result, _, self.state = self.walker.walk(self.host, self.state, dest, observe=self.observe)
         self.note('walk', to=dest.key, words=dest.words, result=result)
+        if result != 'arrived':
+            self.observe(frame=True)
 
     def dead(self, obs: dict) -> None:
+        self.observe(frame=True)
         self.host.mark('death')
         self.note('dead')
 
     def unknown(self, obs: dict, why: str = 'a screen the director has no state for') -> None:
         self.caption('looking', f'{why}: asking the router')
+        self.observe(frame=True)
         frame = self.bundle / 'frames' / f't{self.host.tick:07d}.png'
-        frame.parent.mkdir(parents=True, exist_ok=True)
-        self.host.observe(frame=frame)
         reply = self.router.ask(
             f'This is the 1999 PC game Revenant, 640x480. The player character is Locke. Objective: '
             f'{self.milestone.objective}. Situation: {why}. Choose one action with a tool.',
@@ -241,27 +257,34 @@ class Director:
         began."""
         steps: dict[str, tuple[float, float]] = {}
         for name in CALIBRATION_ORDER:
-            before = self.host.observe(objects=0)['player']['pos']
+            before = self.observe()['player']['pos']
             self.press(self.bindings[name], then=hold)
-            after = self.host.observe(objects=0)['player']['pos']
+            after = self.observe()['player']['pos']
             a, b = self.host.project([before, after])
             if a and b and (a[0], a[1]) != (b[0], b[1]):
                 steps[name] = (b[0] - a[0], b[1] - a[1])
         self.tactician.directions = steps
         self.note('calibrated', steps={k: [round(v, 1) for v in s] for k, s in steps.items()})
 
-    # -- milestones and saves --
+    # -- milestones and waypoints --
     def _reached(self, obs: dict) -> None:
         milestone = self.milestone
         self.caption('milestone', milestone.name)
+        self.observe(frame=True)
         self.host.mark('milestone', name=milestone.name)
         self.note('milestone', name=milestone.name)
-        if milestone.save and self.saves:
+        if milestone.save and self.waypoints:
             try:
                 self.press(self.bindings['QuickSave'], then=48)
-                kept = self.saves.keep(self.host, self.game, milestone.name, obs, self.bundle)
-                self.host.mark('saved', milestone=milestone.name, path=str(kept))
-                self.note('saved', path=str(kept))
+                exported = self.host.export_slot('@last', self.bundle / 'exports' / str(self.host.tick))
+                waypoint = self.waypoints.add(
+                    self.game, milestone.name, self.story, self.current + 1, self.parent, exported['path'],
+                    obs=obs, build=self.host.info.get('build'), tick=self.host.tick,
+                    slot_name=exported['slot'])
+                self.host.mark('saved', waypoint=waypoint.dir.name, slot=exported['slot'])
+                self.created.append((waypoint, self.host.tick))
+                self.parent = waypoint.name
+                self.note('waypoint', name=milestone.name, path=str(waypoint.dir), slot=exported['slot'])
             except (HostError, KeyError) as error:
                 self.note('save failed', error=str(error))
         self.current += 1

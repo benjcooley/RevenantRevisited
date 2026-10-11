@@ -118,6 +118,9 @@ class FakeHost:
 
     def start(self, req: dict) -> dict:
         self.world = World(req.get('seed', 1), self.drift_at)
+        if req.get('from') == 'slot':
+            saved = json.loads((Path(req['slot']) / 'game.sav').read_text())
+            self.world.pos = saved['pos']
         if req.get('record'):
             self.bundle = Path(req['record'])
             self.bundle.mkdir(parents=True, exist_ok=True)
@@ -166,12 +169,17 @@ class FakeHost:
     def export_slot(self, req: dict) -> dict:
         target = Path(req['to'])
         target.mkdir(parents=True, exist_ok=True)
-        (target / 'game.sav').write_bytes(f'fake slot at tick {self.world.t}'.encode())
+        (target / 'game.sav').write_text(json.dumps({'pos': self.world.pos, 'tick': self.world.t}))
         return {'path': str(target), 'slot': 'Quick Save 1' if req['slot'] == '@last' else req['slot']}
 
     def replay(self, req: dict) -> dict:
-        recorded = rec.Recording.load(Path(req['bundle']))
+        bundle = Path(req['bundle'])
+        recorded = rec.Recording.load(bundle)
         self.world = World(recorded.header.get('seed', 1), self.drift_at)
+        start = recorded.header.get('start', {})
+        if start.get('from') == 'slot':                       # the bundle carries its start slot
+            saved = json.loads((bundle / rec.START_DIR / start['slot'] / 'game.sav').read_text())
+            self.world.pos = saved['pos']
         until = req.get('until') or recorded.end or 0
         actual: dict[int, dict] = {}
         events = [e.line() for e in recorded.events]

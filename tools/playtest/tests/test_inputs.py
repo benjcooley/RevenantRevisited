@@ -42,6 +42,17 @@ class Chords(unittest.TestCase):
         with self.assertRaises(KeyError):
             bindings['Sneak']
 
+    def test_an_ini_without_controls_plays_with_the_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shipped, mine = Path(tmp) / 'shipped.ini', Path(tmp) / 'mine.ini'
+            shipped.write_text(CONTROLS, encoding='cp1252')
+            mine.write_text('[Paths]\nSavePath = .\n[Controls]\nCombatSwing = Z\n', encoding='cp1252')
+            self.assertEqual(Bindings.from_ini(mine, defaults=shipped)['CombatSwing'].keys, ('Z',))
+            self.assertEqual(Bindings.from_ini(mine, defaults=shipped)['QuickSave'].keys, ('CONTROL', 'BACK'))
+            mine.write_text('[Paths]\nSavePath = .\n', encoding='cp1252')
+            self.assertEqual(Bindings.from_ini(mine, defaults=shipped)['CombatSwing'].keys, ('A',))
+            self.assertEqual(Bindings.from_ini(mine).controls, {})
+
     @unittest.skipUnless(RETAIL_INI.exists(), 'the retail lab install is not here')
     def test_the_shipped_bindings_resolve(self):
         bindings = Bindings.from_ini(RETAIL_INI)

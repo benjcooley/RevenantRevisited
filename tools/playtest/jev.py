@@ -63,8 +63,10 @@ class Ledger:
     calls: int = 0
     cost: float = 0.0
     seconds: float = 0.0
+    context: dict = field(default_factory=dict)  # merged into each entry: the caller's tick, say
 
     def record(self, entry: dict) -> None:
+        entry = {**self.context, **entry}
         self.calls += 1
         self.cost += entry.get('cost') or 0.0
         self.seconds += entry.get('seconds') or 0.0

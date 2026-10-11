@@ -129,7 +129,7 @@ stderr.
 | `pick` | `x`, `y` | `pos`: the map point under that pixel by the game's pointer conversion (the right-button walk's: Locke's height + 50), `object`: the id under it or `null` |
 | `export_slot` | `slot` (a slot name, or `@last` for the slot the game wrote most recently: Quick Save picks its own "Quick Save N"), `to` | `path`, `slot` (the name exported) |
 | `mark` | `kind`, other fields | writes the mark and a check line to the recording |
-| `replay` | `bundle`, `verify` (bool), `until` (tick, optional) | `t`, and with `verify`: `diverged: null` or `{t, fields}` |
+| `replay` | `bundle`, `verify` (bool), `until` (tick, optional) | `t`, and with `verify`: `diverged: null` or `{t, fields}`. A replay starts the way the recording did: a new game, or the bundle's own `start/<slot>` with its seed and INI |
 | `checkpoint`, `restore` | `name` | retail only |
 | `caption` | `text` (one or two short lines; empty clears) | shown to a person watching (§8); never part of the game, the frame `observe` captures or the recording |
 | `quit` | | ends the recording with its end line and exits |

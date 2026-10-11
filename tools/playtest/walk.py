@@ -109,6 +109,7 @@ class Walker:
     jev: Jev
     bindings: Bindings
     memory: Memory = field(default_factory=Memory)
+    recent: list[str] = field(default_factory=list)          # destination keys reached lately, newest last
     rings: tuple[int, ...] = (80, 160)
     playfield: tuple[int, int, int, int] = (0, 0, 640, 480)
 
@@ -123,9 +124,14 @@ class Walker:
             if (o.get('class') not in DESTINATION_CLASSES or not screen or not in_rect(screen, field_rect)
                     or o.get('enemy')):
                 continue
+            key = f"obj:{o['id']}"
+            beside = math.hypot(o['pos'][0] - player['pos'][0], o['pos'][1] - player['pos'][1]) <= USE_REACH
+            if beside and key in self.recent:
+                continue                                         # just reached, and still here
             way = screen_direction(screen[0] - here[0], screen[1] - here[1])
             kind = 'person' if o['class'] == 'character' else o['class']
-            found.append(Destination(f"obj:{o['id']}", f"{kind} '{o.get('name') or o.get('type')}', {way}",
+            lately = ', went there just now' if key in self.recent else ''
+            found.append(Destination(key, f"{kind} '{o.get('name') or o.get('type')}', {way}{lately}",
                                      tuple(screen), tuple(o['pos']), o['id']))
         for sector, word in enumerate(COMPASS):
             angle = math.radians(45 * sector)
@@ -157,12 +163,14 @@ class Walker:
         return next(c for c in candidates if c.key == answer.choice)
 
     def walk(self, host, state, dest: Destination, run: bool = False, limit: int = 24 * 15,
-             chunk: int = 6) -> tuple[str, dict, object]:
+             chunk: int = 6, observe=None) -> tuple[str, dict, object]:
         """Click `dest` and step until Locke arrives ('arrived'), stops short
         ('stalled'), never sets off ('refused'), or `limit` ticks pass
         ('timeout'). Returns the result, the last observation and the input
         state to carry on with. An object counts as reached within the
-        reach the game uses it from (MAP_INPUT.md §4: 96)."""
+        reach the game uses it from (MAP_INPUT.md §4: 96). `observe`, when
+        given, is called in place of the host's (the director's logs)."""
+        observe = observe or host.observe
         arrive = USE_REACH if dest.object_id is not None else ARRIVE
         plan = Plan(state)
         if run:
@@ -170,14 +178,14 @@ class Walker:
         end = plan.click(0, *dest.screen)
         host.step(plan.ticks(end), plan.events())
         state = plan.state
-        obs = host.observe()
+        obs = observe()
         start = last = obs['player']['pos']
         still, ran = 0, end
         result = 'timeout'
         while ran < limit:
             host.step(chunk)
             ran += chunk
-            obs = host.observe()
+            obs = observe()
             pos = obs['player']['pos']
             self.memory.note(obs)
             moving = math.hypot(pos[0] - last[0], pos[1] - last[1]) >= 2
@@ -197,4 +205,6 @@ class Walker:
             plan.release(0, self.bindings['Run'])
             host.step(1, plan.events())
             state = plan.state
+        if result == 'arrived':
+            self.recent = [k for k in self.recent if k != dest.key][-4:] + [dest.key]
         return result, obs, state

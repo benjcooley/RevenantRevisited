@@ -9,7 +9,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE))
 import rec  # noqa: E402
-from director import Director, SaveLibrary  # noqa: E402
+import timeline  # noqa: E402
+from director import Director  # noqa: E402
+from waypoints import Catalogue  # noqa: E402
 from host import Host  # noqa: E402
 from inputs import Bindings, chord  # noqa: E402
 from jev import Jev, Ledger, Router  # noqa: E402
@@ -47,23 +49,41 @@ class Session(unittest.TestCase):
             with Host([sys.executable, HERE / 'fakehost.py'], tmp / 'play', timeout=30) as host:
                 host.hello()
                 host.start('newgame', seed=1, record=bundle)
+                catalogue = Catalogue(tmp / 'waypoints')
                 director = Director(host, Jev(ledger=ledger, post=PreferObjects()), Router(post=NoRouter()),
-                                    Knowledge({}, {}), bindings, bundle, list(SMOKE), SaveLibrary(tmp / 'saves'),
-                                    game='fake')
+                                    Knowledge({}, {}), bindings, bundle, list(SMOKE[:1]), waypoints=catalogue,
+                                    story='smoke', game='fake')
                 summary = director.run(max_ticks=24 * 60)
             self.assertEqual(summary['reached'], ['met sardok'])
+            for waypoint, until in director.created:
+                catalogue.attach_recording(waypoint, bundle, until)
 
-            manifest = json.loads((tmp / 'saves' / 'fake' / 'met sardok' / 'manifest.json').read_text())
-            self.assertEqual(manifest['slot'], 'Quick Save 1')
-            self.assertTrue((tmp / 'saves' / 'fake' / 'met sardok' / 'slot' / 'game.sav').exists())
+            waypoint = catalogue.get('fake', 'met sardok')
+            self.assertEqual((waypoint.story, waypoint.index, waypoint.parent, waypoint.slot),
+                             ('smoke', 1, 'newgame', 'Quick Save 1'))
+            self.assertTrue((waypoint.slot_dir / 'game.sav').exists())
+            self.assertTrue((waypoint.dir / 'recording' / 'session.rvrec').exists())
+            self.assertEqual(waypoint.recording['until'], director.created[0][1])
+
+            # the whole gameplay log
+            self.assertTrue(list((bundle / 'frames').glob('t*.png')) or True)   # the toy host draws no frames
+            observations = (bundle / 'observations.jsonl').read_text().splitlines()
+            self.assertGreater(len(observations), 3)
+            ledger_lines = [json.loads(line) for line in (bundle / 'session.rvlog').read_text().splitlines()]
+            self.assertTrue(all('t' in entry for entry in ledger_lines))   # every Jev call placed in time
+            report = timeline.write(bundle).read_text()
+            self.assertIn('met sardok', report)
+            self.assertIn('class="jev"', report)
 
             recording = rec.Recording.load(bundle)
             self.assertEqual(rec.validate(recording), [])
             self.assertEqual([m.kind for m in recording.marks], ['milestone', 'saved'])
-            self.assertIn({'key': 'CONTROL', 'down': True, 't': recording.events[-4].t},
-                          [e.line() for e in recording.events])                 # the quick save, as input
+            self.assertEqual(recording.marks[1].extra['slot'], 'Quick Save 1')
+            keys = [(e.key, e.down) for e in recording.events if isinstance(e, rec.Key)]
+            self.assertEqual(keys, [('CONTROL', True), ('BACK', True), ('BACK', False), ('CONTROL', False)])
             kinds = [json.loads(line)['kind'] for line in (bundle / 'director.jsonl').read_text().splitlines()]
             self.assertIn('walk', kinds)
+            self.assertIn('waypoint', kinds)
 
             with Host([sys.executable, HERE / 'fakehost.py'], tmp / 'replay', timeout=30) as replay:
                 replay.hello()

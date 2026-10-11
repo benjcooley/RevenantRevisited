@@ -116,6 +116,8 @@ class WithTheReferenceHost(unittest.TestCase):
         sardok = next(d for d in w.destinations(self.host, obs, None) if d.key == 'obj:5')
         result, obs, _ = w.walk(self.host, InputState(), sardok)
         self.assertEqual(result, 'arrived')
+        # beside him now, just reached: not offered again, so a walk can't loop on him
+        self.assertNotIn('obj:5', {d.key for d in w.destinations(self.host, self.host.observe(), None)})
 
     def _ground(self, obs, x, y):
         from walk import Destination

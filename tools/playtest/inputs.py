@@ -60,10 +60,21 @@ class Bindings:
         self.controls = controls
 
     @classmethod
-    def from_ini(cls, path: Path) -> Bindings:
+    def from_ini(cls, path: Path, defaults: Path | None = None) -> Bindings:
+        """The INI's bindings over `defaults`' (the shipped Revenant.ini): an
+        INI without a `[Controls]` section plays with the shipped keys, as
+        the game does."""
+        controls = cls._read(defaults) if defaults else {}
+        controls.update(cls._read(path))
+        return cls(controls)
+
+    @staticmethod
+    def _read(path: Path) -> dict[str, Chord]:
         ini = configparser.ConfigParser(interpolation=None, strict=False)
         ini.optionxform = str
         ini.read_string(Path(path).read_text(encoding='cp1252'))
+        if not ini.has_section('Controls'):
+            return {}
         controls = {}
         for name, value in ini.items('Controls'):
             for text in value.split(','):
@@ -75,7 +86,7 @@ class Bindings:
                 except ValueError:
                     continue
                 break
-        return cls(controls)
+        return controls
 
     def __getitem__(self, control: str) -> Chord:
         try:

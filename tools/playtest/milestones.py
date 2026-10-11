@@ -27,6 +27,8 @@ KEEP = [
 # The reference host's toy world (fakehost.py): one person to reach.
 SMOKE = [
     Milestone('met sardok', 'Find Sardok and go to him.', near((1000, 1800), 110), save=True),
+    Milestone('explored', 'Leave Sardok and explore unexplored ground.',
+              lambda obs, d: not near((1000, 1800), 200)(obs, d), save=True),
 ]
 
 LISTS = {'keep': KEEP, 'smoke': SMOKE}
