@@ -60,5 +60,10 @@ Manifest pins:
 - `labback-metal-common`: `cb644e6069f21f9c1dfd8ea2f84235706bf1263abac26cd7558cac7adadc05f3`
 - `labback-review-final`: `c8875523bc7ffeee8ad2ad4174a993dba2f01e21e34286cd390968b6563b80d6`
 
-Scoped appearance decision is recorded separately by root; source progress
-alone does not establish full-effect/natural-caller acceptance.
+Root independently reviewed the nine-phase contact/detail and approved scoped
+state0 native-domain appearance: three sphere layers, dark red/yellow forms,
+outward sparks, and 399→0 wrap. Frozen approval
+`labback-review-final/root-approval.json` SHA256:
+`b6baf91637cef7dcd2af557bf1b3bdda6df24064787feb7ffbb94d761121cb1b`. Common projection, float accumulation, declared camera/light/ground,
+natural caller/audio and exact device/raster limits remain explicit. Root owns
+the integrated gallery capture and central ledger.
