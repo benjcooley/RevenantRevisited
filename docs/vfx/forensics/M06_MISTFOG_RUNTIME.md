@@ -303,3 +303,13 @@ unlit/host-RNG control; `metal-after` isolates the lighting correction before
 fixing live RNG. These are historical controls, not the final comparison.
 Overall appearance approval is a separate root review; no full-map/natural
 caller/device or exact-pixel credit is implied here.
+
+Root independently reviewed all11 final phases and approved the scoped overall
+25-puff form/color/size and phase progression under the recorded source-light
+configuration. Frozen private `mistfog-visual/root-approval.json` SHA-256:
+`6bd421033eab2ef67c9a7753fa5dca16847a87352072a351c20407fa71cf9a9f`.
+It pins every sample pair, `review/manifest.json` SHA-256
+`bd1ce175bd52de07fb24da152f272834fa312ee178c8e437c29129dc134ba6d0`,
+and actual Metal binary SHA-256
+`1db58a485b8dc57e4638c42abfbbb8ea8f25fd4774efe30b556de3e77e4bf1cc`.
+This approval retains all exact-pixel/natural-caller/full-map/device limits above.
