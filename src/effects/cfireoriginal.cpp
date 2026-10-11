@@ -17,7 +17,7 @@ struct State {
  std::unique_ptr<TObjectInstance> owner;
  struct Part {MeshHandle mesh=0;S3DMat material{};int object=0;};
  std::vector<Part> parts;double accumulated=0;int ticks=0;int64_t rendered=-1;
- ~State(){if(Renderer)for(auto&p:parts)if(p.mesh)Renderer->ReleaseMeshAssetRef(p.mesh);}
+ ~State(){log_info("[cfire-cleanup] tick=%d alive=%d",ticks,int(owner && !(owner->GetFlags()&OF_KILL)));if(Renderer)for(auto&p:parts)if(p.mesh)Renderer->ReleaseMeshAssetRef(p.mesh);}
 };
 static bool ValidateCFire(T3DImagery& image)
 {

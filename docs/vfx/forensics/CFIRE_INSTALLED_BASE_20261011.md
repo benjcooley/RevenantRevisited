@@ -56,3 +56,9 @@ Private evidence root:
 and nearest-neighbor 8x presentation. It retains full raw pairs and makes no
 brightness, geometry, phase or camera adjustment. Independent root review,
 integrated repeat and gallery routing are separate acceptance steps.
+
+## Root independent approval
+
+Exact cfire 0xad92bd27 Misc/cfire resource, genuine factory/default animator and installed missing cfire/csparks presets: zero controllers, two authored ARGB4444 base sprites. Original64tick repeat/state/draws/requests identical; source1856 matrix/key fields max5e-8 and13 guard negatives pass, zero RNG,29 visible ticks, real kill30 and blanktail through64. Root independent native regression passes; actual64 source frames pixel-identical to frozen port and all13 review panels byte-identical,37 pins verified. Root inspected active detail phases1/2/9/15/29 and blank30/31/45/60/64. Exact finite viewer mapping and8 callback/style/alias negative controls pass; root gallery746ticks,24 genuine30tick completions plus26 partial teardown, clean exit. Missing intended particle definitions remain open, approximately one-pixel sampling residual retained. No invented presets, intended complete-particle effect/natural caller/audio/device/exact-pixel claim.
+
+Report: `recon/retail_asm/runtime/effects/current-cfire-installed-20261011/root-approval.json`. Scoped visual passes:167/176.

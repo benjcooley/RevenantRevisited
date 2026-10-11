@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 166,
+    "visual_fidelity_confirmed_rows": 167,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 166,
-    "remaining_visual_review_rows": 10
+    "reviewed_visual_pass_rows": 167,
+    "remaining_visual_review_rows": 9
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1988,6 +1988,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Exact sgeyser 0xad92bd30 genuine generic owner and loaded CavSGeyser resource at declared saved position1019/11935/289; one104-slot inline controller and authored #blast, original failed optional vapor preset retained. Full120-tick original state/pool/RNG/draw evidence; current243672 particle fields,1215 keys/2160 matrices pass; actual10560 runtime/ground fields pass,1745 terrain queries return0. Initial zero emitter cache and previous-owner origin, original material mode0 then16 preserved. All15 whole/detail phases independently reviewed with complete submitted bounds in1280x960 center640/640; all25 root review panels byte-identical. Independent120native+60common phase PNGs identical to frozen port with clean exits; source state/runtime matches in both projections. Real kill45/frame44,37 visible lifecycle ticks and blanktail retained. Gallery746ticks,16 genuine45-tick completion cycles plus26-tick teardown, live RNG/no factory reseed, clean exit. Declared empty ground only: actual natural trap/map layers/audio/device and exact raster pixel equality remain open; optional missing vapor definition not invented."
+    },
+    "recon/retail_asm/runtime/effects/current-cfire-installed-20261011/root-approval.json": {
+      "sha256": "ad37ac0af1319ca578947793a8f3f1f488302eeba6889e3bd4c46e909b2b2133",
+      "retail_row": "cfire:0xad92bd27",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact cfire 0xad92bd27 Misc/cfire resource, genuine factory/default animator and installed missing cfire/csparks presets: zero controllers, two authored ARGB4444 base sprites. Original64tick repeat/state/draws/requests identical; source1856 matrix/key fields max5e-8 and13 guard negatives pass, zero RNG,29 visible ticks, real kill30 and blanktail through64. Root independent native regression passes; actual64 source frames pixel-identical to frozen port and all13 review panels byte-identical,37 pins verified. Root inspected active detail phases1/2/9/15/29 and blank30/31/45/60/64. Exact finite viewer mapping and8 callback/style/alias negative controls pass; root gallery746ticks,24 genuine30tick completions plus26 partial teardown, clean exit. Missing intended particle definitions remain open, approximately one-pixel sampling residual retained. No invented presets, intended complete-particle effect/natural caller/audio/device/exact-pixel claim."
     }
   }
 }

@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "2f5b63337d99e1ca825fe8396d7dfe7a30b7ee07236fd572307eef137749684e",
+    "harness_sha256": "253e42a3674a9e8b797c4b566502bb4b36347e45c5f5f9e9df6263a2d2adeddc",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 166,
+    "visual_fidelity_confirmed_rows": 167,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 166,
-    "remaining_visual_review_rows": 10
+    "reviewed_visual_pass_rows": 167,
+    "remaining_visual_review_rows": 9
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -19534,10 +19534,12 @@
       "retail_type_id": "0xad92bd27",
       "asset": "misc\\Cfire.i3d",
       "preview_candidates": [
+        "CFire_INSTALLED_NO_PRESETS",
         "TFlameAnimator_Bespoke__cfire_BESPOKE"
       ],
       "source_fixes": [
-        "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested misc\\Cfire.i3d is distinguished from Imagery/Magic/cfire.I3D."
+        "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested misc\\Cfire.i3d is distinguished from Imagery/Magic/cfire.I3D.",
+        "2026-10-11: Exact installed missing-presets authored base sprites full64 appearance and realkill30 approved;24rootgallerycycles pass. Intended absent particle definitions/natural caller remainopen."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -19545,25 +19547,35 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Bind authored cfire/csparks particle controllers before a reference comparison; defer controller research and advance easy effects.",
+      "next_action": "Recover intended cfire/csparks presets or actual natural caller evidence; preserve approved installed-no-presets fallback and device/precision limitations.",
       "notes": [
         "VFS collision corrected. Earlier port evidence must be checked against the requested asset before certifying visual fidelity; old bytes differ.",
         "2026-10-05: exact Misc/Cfire asset exists with four subobjects,two textures,cfire/csparks tags. Corrected false no-asset stub diagnostic; factory remains explicitly unsupported, not accepted or silently replaced by Flame."
       ],
       "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
       "requires_post_vfs_fix_recheck": true,
-      "work_queue_status": "deferred_particle_controller_binding"
+      "work_queue_status": "deferred_particle_controller_binding",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent installed fallback lifecycle/detail inspection and integrated repeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Exact cfire 0xad92bd27 Misc/cfire resource, genuine factory/default animator and installed missing cfire/csparks presets: zero controllers, two authored ARGB4444 base sprites. Original64tick repeat/state/draws/requests identical; source1856 matrix/key fields max5e-8 and13 guard negatives pass, zero RNG,29 visible ticks, real kill30 and blanktail through64. Root independent native regression passes; actual64 source frames pixel-identical to frozen port and all13 review panels byte-identical,37 pins verified. Root inspected active detail phases1/2/9/15/29 and blank30/31/45/60/64. Exact finite viewer mapping and8 callback/style/alias negative controls pass; root gallery746ticks,24 genuine30tick completions plus26 partial teardown, clean exit. Missing intended particle definitions remain open, approximately one-pixel sampling residual retained. No invented presets, intended complete-particle effect/natural caller/audio/device/exact-pixel claim.",
+        "report": "recon/retail_asm/runtime/effects/current-cfire-installed-20261011/root-approval.json",
+        "sha256": "ad37ac0af1319ca578947793a8f3f1f488302eeba6889e3bd4c46e909b2b2133",
+        "note": "docs/vfx/forensics/CFIRE_INSTALLED_BASE_20261011.md"
+      }
     },
     {
       "index": 132,

@@ -11,7 +11,7 @@
 #include <cstring>
 
 namespace {
-int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0, dragon_negative=0, drip_negative=0, blood_negative=0,halo_negative=0,burn_negative=0,strike_negative=0,sgeyser_negative=0;
+int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0, dragon_negative=0, drip_negative=0, blood_negative=0,halo_negative=0,burn_negative=0,strike_negative=0,sgeyser_negative=0,cfire_negative=0;
 void* Spawn(const S3DPoint& p) {
     assert(p.x==17 && p.y==33 && p.z==21); ++creates; return new int(0);
 }
@@ -106,7 +106,12 @@ std::vector<SEffect> ReviewCatalogue() {
     if(sgeyser_negative==2)sgeyser.submit_world={};
     if(sgeyser_negative==3)sgeyser.preview_style=EVfxPreviewStyle::Combat;
     if(sgeyser_negative==4)sgeyser.id="TGeyserEffect_Bespoke__sgeyser_BESPOKE";
-    return {sgeyser,strike,aura,burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    auto cfire=food;cfire.id="CFire_INSTALLED_NO_PRESETS";
+    if(cfire_negative==1)cfire.is_alive={};
+    if(cfire_negative==2)cfire.submit_world={};
+    if(cfire_negative==3)cfire.preview_style=EVfxPreviewStyle::Combat;
+    if(cfire_negative==4)cfire.id="TCFireEffect_BESPOKE";
+    return {cfire,sgeyser,strike,aura,burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -127,6 +132,11 @@ float ReviewRestartInterval(EVfxPreviewStyle style) {
 }
 int main(int argc,char** argv) {
     const S3DPoint origin{17,33,21};
+    if(argc==2 && std::strlen(argv[1])==2 && argv[1][0]=='c'){
+        cfire_negative=argv[1][1]-'0';assert(cfire_negative>=1 && cfire_negative<=4);
+        assert(!DescribeVfxReviewPreview(0xad92bd27u).supported);
+        assert(!CreateVfxReviewPreview(0xad92bd27u,origin));assert(creates==0);return 0;
+    }
     if(argc==2 && std::strlen(argv[1])==2 && argv[1][0]=='u'){
         burn_negative=argv[1][1]-'0';assert(burn_negative>=1 && burn_negative<=4);
         assert(!DescribeVfxReviewPreview(0x55471bffu).supported);assert(!CreateVfxReviewPreview(0x55471bffu,origin));assert(creates==0 && destroys==0);return 0;
@@ -398,6 +408,13 @@ int main(int argc,char** argv) {
         auto strike=CreateVfxReviewPreview(0xad92bd32u,origin);assert(strike && strike->RestartInterval()==0);
         const int initial=creates;strike->Submit();strike->Submit();assert(strike->Alive()==false);
         strike->Submit();assert(strike->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
+    for(uint32_t id:{0xad92bd27u,0xad92bd30u}){
+        const auto info=DescribeVfxReviewPreview(id);assert(info.supported && !info.partial && info.lifetime_known);
+        auto preview=CreateVfxReviewPreview(id,origin);assert(preview && preview->RestartInterval()==0);
+        const int initial=creates;preview->Submit();preview->Submit();assert(preview->Alive()==false);
+        preview->Submit();assert(preview->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";

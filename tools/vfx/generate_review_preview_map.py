@@ -133,6 +133,7 @@ SOURCE_MAPPINGS = {
     '0xfacedbed': 'TIcedEffect_BESPOKE__Snow',
     '0x0c052637': 'Dust_AUTHORED',
     '0xad92bd31': 'FGeyser_AUTHORED',
+    '0xad92bd27': 'CFire_INSTALLED_NO_PRESETS',
     '0xad92bd30': 'SGeyser_LOADED_INLINE',
     '0xad92bd34': 'Tironskin_AUTHORED_TAGS',
     '0xad92bd33': 'Tstoneskin_AUTHORED_TAGS',
@@ -170,6 +171,8 @@ IMPLEMENTED.update(dict.fromkeys(
 
 
 def admitted_candidates(row):
+    if row.get("retail_type_id", "").lower()=="0xad92bd27":
+        return ["CFire_INSTALLED_NO_PRESETS"]
     row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n not in ('Burn_AUTHENTIC_ACOLYTE_INTEGER','Aura_AUTHENTIC_ACOLYTE_INTEGER')])
     if row.get("retail_type_id", "").lower()=="0xad92bd30":
         return ["SGeyser_LOADED_INLINE"]
@@ -199,6 +202,8 @@ def admitted_candidates(row):
 
 
 def candidate_metadata(row, name):
+    if row.get("retail_type_id", "").lower()=="0xad92bd27" and name=="CFire_INSTALLED_NO_PRESETS":
+        return False, "Exact installed Misc/cfire authored base sprites after genuine missing cfire/csparks presets; real kill30, intended particle definitions and natural caller remain open"
     if row.get('retail_type_id','').lower()=='0x00ab1d1d' and name=='Aura_AUTHENTIC_ACOLYTE_INTEGER':
         return False, 'Exact Aura public SetSpell(real Acolyte/named Aura), integer pose14/0/facing96 and original zero selector; natural bone initialization, attachment/interpolation/audio not certified'
     if row.get('retail_type_id','').lower()=='0x55471bff' and name=='Burn_AUTHENTIC_ACOLYTE_INTEGER':
