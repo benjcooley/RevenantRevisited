@@ -5300,6 +5300,7 @@ struct SVfxTestBootstrap {
             original.factory=[](const S3DPoint& o)->void*{return fgeyser_original::Spawn(o);};
             original.submit=[](void* c,EFxDebugMode){fgeyser_original::Advance(static_cast<fgeyser_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){fgeyser_original::SubmitWorld(static_cast<fgeyser_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return fgeyser_original::IsAlive(static_cast<fgeyser_original::State*>(c));};
             original.destroy=[](void* c){fgeyser_original::Destroy(static_cast<fgeyser_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }

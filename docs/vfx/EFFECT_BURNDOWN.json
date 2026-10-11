@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "c6507434159dd260586b8c0cf2883951e9c3d86e1b395a410917933982fd15d0",
+    "harness_sha256": "78dbd1cf239146c02db24ad1ed606542313b6d5d507a0c890733e1d3287d2be7",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 95,
+    "visual_fidelity_confirmed_rows": 96,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 95,
-    "remaining_visual_review_rows": 81
+    "reviewed_visual_pass_rows": 96,
+    "remaining_visual_review_rows": 80
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -19403,7 +19403,8 @@
         "TGeyserEffect_Bespoke__fgeyser_BESPOKE"
       ],
       "source_fixes": [
-        "Removed synthesized 100-particle geyser profile misattributed from PoisonCloud OOAnalyzer class. Exact geyser preview factory now fails closed without imagery allocation, map identity, RNG consumption or drawing; 200 extracted factory/RNG cases and direct no-op tick check pass. This is an unsupported-path correction, not a verified effect port."
+        "Removed synthesized 100-particle geyser profile misattributed from PoisonCloud OOAnalyzer class. Exact geyser preview factory now fails closed without imagery allocation, map identity, RNG consumption or drawing; 200 extracted factory/RNG cases and direct no-op tick check pass. This is an unsupported-path correction, not a verified effect port.",
+        "2026-10-10: Actual authored fire geyser and145/104-slot controllers replace null preview. Exact532,792 state fields,450 poses and original OF_KILL lifetime; independent full-render GPU appearance review."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -19411,18 +19412,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "unsupported_retail_partsys_and_blendcont_tag_path",
-      "next_action": "Implement/recover the actual retail partsys frame/controller subset, authored emitter/template poses, PPS/state/RNG/quality scaling and blendcont semantics; resolve steam filename vapor. Then exercise exact TRAP-to-EFFECT spawn and saved map setting. No guessed ballistic preview or default-mesh pixels establish coverage.",
+      "next_action": "Preserve approved fire geyser leaf; verify natural CavFGeyser trap timing/audio and map lighting.",
       "notes": [
         "Retail CavFGeyser/CavSGeyser TRAP builds exact EFFECT via MapPane.NewObject at trap position; actual animation comes from authored partsys tags, not the preceding PoisonCloud 100-particle initializer.",
         "partsys/blendcont/litadd handlers remain unsupported. Source-behavior audit, render smoke, natural trigger and visual acceptance remain false despite fail-closed validation."
@@ -19445,7 +19446,17 @@
         "scope": "Fail-closed only; no render coverage or complete source behavior audit."
       },
       "work_queue_status": "deferred_reference_or_controller_complexity",
-      "deferred_reason": "User requests easy-to-reproduce retail A/B first; visible native/device/controller investigation postponed. Existing port fixes and evidence retained."
+      "deferred_reason": "User requests easy-to-reproduce retail A/B first; visible native/device/controller investigation postponed. Existing port fixes and evidence retained.",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Sixteen full original software/actual Metal native-domain growth, flame/glow, separate sparks, decay and blank-tail phases. Exact90-frame owner lifetime and two PartSys pools. Natural trap caller/audio, common projection and device/exactpixel limits remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-fgeyser-authored-20261010/root-approval.json",
+        "sha256": "e7256c919e66d31539c039d6a47ffb2c8c52eef726700b41f9466bbb066d24a4",
+        "note": "docs/vfx/forensics/FGEYSER_NATIVE_VISUAL.md"
+      }
     },
     {
       "index": 135,

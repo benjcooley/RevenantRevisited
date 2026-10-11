@@ -84,6 +84,7 @@ PARTIAL = {
 # their owner constructors. These newer implementations predate their ledger
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
+    '0xad92bd31': 'FGeyser_AUTHORED',
     '0xf32bcfac': 'MeteorStorm_AUTHORED',
     '0xadbcef13': 'TCharUtility_AUTHORED_STILL',
     '0xad92bd23': 'TKinSecretDoor_NATIVE_STILL',

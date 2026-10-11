@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 95,
+    "visual_fidelity_confirmed_rows": 96,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 95,
-    "remaining_visual_review_rows": 81
+    "reviewed_visual_pass_rows": 96,
+    "remaining_visual_review_rows": 80
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1484,6 +1484,13 @@
       "check": "independent_native_software_actual_metal_appearance",
       "status": "pass_for_recorded_configuration",
       "scope": "Seventeen whole-effect original software/actual Metal native-domain launch, descent, impact and decay phases. Explicit native software primitive-span policy and16-bit depth range; common full impact ring remains diagnostic. Natural Strike caller, audio/device and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-fgeyser-authored-20261010/root-approval.json": {
+      "sha256": "e7256c919e66d31539c039d6a47ffb2c8c52eef726700b41f9466bbb066d24a4",
+      "retail_row": "fgeyser:0xad92bd31",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Sixteen full original software/actual Metal native-domain growth, flame/glow, separate sparks, decay and blank-tail phases. Exact90-frame owner lifetime and two PartSys pools. Natural trap caller/audio, common projection and device/exactpixel limits remain open."
     }
   }
 }
