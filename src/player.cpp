@@ -1473,6 +1473,24 @@ bool TPlayer::LearnSpell(const char* talismans)
     return true;
 }
 
+void TPlayer::SetMoney(int32_t amount)
+{
+    constexpr const char* kGoldName = "gold";       // 0x005e2b44
+    TObjectInstance* gold = FindObjInventory(kGoldName);
+    if (amount < 1)
+    {
+        if (gold)
+        {
+            gold->RemoveFromInventory();
+            delete gold;
+        }
+    }
+    else if (!gold)
+        AddToInventory(kGoldName, amount);
+    else
+        gold->SetAmount(amount);
+}
+
 // REVSYNC: TPlayer::SetPlayerState @ 0x0051d680. Not ported: with bit 2 set
 // retail also stopped certain actions in progress (0x004cee70), and the
 // multiplayer control and message handling.

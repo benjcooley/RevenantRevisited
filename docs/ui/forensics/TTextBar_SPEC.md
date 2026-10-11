@@ -369,17 +369,74 @@ for 1 s.
 
 ## §10 — Input
 
-Slot 28 `0x54d4a0` (`CharPress`): Enter with the prompt closed opens it
-(`0x54d2f0`: clears pending input, stops the player, adds a `0x20` line
-`GetLine("msgprefix")` = "Message: "); typed characters append (room
-`+0xa4` = 80 − prefix); Backspace deletes; Enter commits (`0x54d390`: line 0
-becomes type `0x40` in the player's colour, "<name>: <text>", then
-`SubmitInput`). `SubmitInput` `0x54d700`: multiplayer → send as chat; text
-starting `@` → run as a script line on the player; else the cheat words
-(`alreadydead`, `alchemy`, `nahkranoth`, `noamnesia`, `lookunderthehood`,
-`dummies`, `abracadabra`, `potionsnlotions`, `gimmesomegrub`, `debug`) with a
-"Cheat Enabled"/"Cheat Disabled" line. `TPlayScreen`'s key handling reads
-`+0xa0` (`0x0047c63e`, `0x0047cbd0`). **C**; **not ported**.
+The typed-message prompt. **C** throughout (decomp and asm of the four
+functions below; the cheat effects' callees named from their own bodies).
+
+State: `+0xa0` prompt open, `+0xa4` room (80 − prefix length), `+0xd0` the
+typed text (80 bytes). Nothing clears `+0xd0` but BeginInput.
+
+**CharPress** `0x54d4a0` (slot 28; WM_CHAR, so Enter is 13 and Backspace 8):
+```
+gate = control on (0x0065d0d0, PlayScreen +0x5e0) and not
+       (single player and Player's root action COMBAT or BOW)
+if !gate:
+    if prompt closed: return
+    CommitInput(); return                     // any char commits what is typed
+if !down: return
+if prompt closed:
+    if ch != 13: return
+    BeginInput(); return                      // inlined copy of 0x54d2f0
+if ch == 13: CommitInput(); return
+if ch == 8: drop the last byte (two for a DBCS pair)
+else if 32 <= ch < 256: append ch if room (+0xa4) allows
+(else, a control char: nothing)
+records[0].text = GetLine("msgprefix") + typed; Composite(0)
+```
+**BeginInput** `0x54d2f0`: only when closed. `ControlMap.ReleaseAll()`
+(`0x65a9c8 |= 0x65a9c4; 0x65a9c4 = 0`); with a Player: `Stop(0)`
+`0x4cee70` and `SetWalkMode()` `0x4cf000`; room = 80 − strlen(prefix);
+typed = ""; `AddLine(0x20, 0, GetLine("msgprefix"))` ("Message: "); open.
+
+**AddLine while open** puts the new line second, under the prompt (§6.2).
+
+**CommitInput** `0x54d390`: only when open. Closes; `records[0]` becomes
+type `0x40` in the player's colour (multiplayer slot colour
+`0x5e20b8[min(+0x4d8, 16)]` when `Player+0x494`, else the chat green
+`0x00670660`), text "<Player name>: <typed>" (79 chars at most);
+`Composite(0)`; `SubmitInput(typed)`. Other callers: `0x47d0d5`,
+`0x47d136` (TPlayScreen) and `0x4d3d2d` (BeginFighting): starting a fight
+commits the line.
+
+**TPlayScreen::KeyPress** `0x47c630` returns at once while the prompt is
+open (`0x47c63e`: `[0x65c670]`, which is TextBar `+0xa0`): no panes, no
+hotkeys, no Escape. Escape can't cancel the prompt; only Enter (or a
+gate change) ends it.
+
+**SubmitInput** `0x54d700`, `text`:
+- multiplayer: send as chat (`0x5701f0`); done.
+- `@` with a Player: the rest runs through CommandInterpreter
+  `0x41e8e0`(Player, a string stream over it, 1, 0); done.
+- otherwise a cheat word (stricmp), each followed by the line
+  `GetLine("cheatenabled")` ("Cheat Enabled") or `"cheatdisabled"` and the
+  sound `potionmix` (volume 0x7f). Any other text: nothing at all.
+
+| word | effect | line |
+|---|---|---|
+| `alreadydead` | toggle `0x668104`: nothing hurts the player | by state |
+| `alchemy` | Player: SetMoney(999999) `0x51e900` (the `gold` item set to that amount, added if missing) | enabled |
+| `nahkranoth` | toggle `0x668108`: the player's blows land and kill | by state |
+| `noamnesia` | Player: SetLevel(30) (slot `0x358`), then SetAttackLevel(Level()) (slot `0x370`, stat `AttackLevel`) | enabled |
+| `lookunderthehood` | toggle `0x66812c` | by state |
+| `dummies` | toggle `0x668110`: monster AI off | by state |
+| `abracadabra` | toggle `0x66810c` (casts cost no mana, can't fail); with a Player: a `spell pouch` (added if missing; the Player itself if none can be had) gets one of every TALISMAN type, moving any already carried elsewhere into it; every spell variant's talisman code is learned (`0x544fb0`); belt, side-tab and spellbook panes flagged dirty (`0x65b078`, `0x65d548`, `0x65aa28`) | by `0x66810c` |
+| `potionsnlotions` | every POTION type (class at `0x66d268`): 5 added if missing, else its amount raised to 5 | enabled |
+| `gimmesomegrub` | every FOOD type (class at `0x66d2a8`): as above | enabled |
+| `debug` | `0x668130 = 0x66812c = !0x668130`: the developer hotkeys in TPlayScreen::KeyPress (DebugOverlay_SPEC §5) | by state |
+
+`alchemy` and `noamnesia` with no Player still say "Cheat Enabled".
+
+**Hide** `0x54c9c0` closes the prompt and submits `+0xd0` whether or not
+it was open (§6.6, §11.3).
 
 ---
 
@@ -390,8 +447,10 @@ starting `@` → run as a script line on the player; else the cheat words
 2. **Print's last piece.** After a `'\n'`, the trailing piece is added as the
    buffer's start (`0x0054d2ba`: `lea eax,[esp+0xd0]`), so "A\nB" shows "A"
    twice. The port adds the trailing piece (question 53).
-3. **Hide submits the prompt** (§6.6). Moot until the prompt is ported
-   (question 55).
+3. **Hide submits the prompt** (§6.6), open or not. After a commit the
+   buffer still holds the last line, so each Hide (the bottom panel's
+   drawer opening or closing) runs the last cheat again, toggling it back.
+   The port submits only an open prompt.
 
 ---
 
@@ -446,12 +505,22 @@ Deviations:
   frame to load; the level loads a slice per frame instead, with the world
   held (EXITS.md §7). `TPane::DrawImmediate`/`PutToScreen` remain for the unused
   `TSector::LoadPreloadSectors`.
-- **Hide** skips the prompt submit (no prompt).
+- **Hide** submits only an open prompt (§11.3).
+- **Backspace** comes from macOS as DEL (0x7f); the event layer hands it
+  on as 8, the WM_CHAR value retail reads.
 - **The 1998 combat readout is gone.** `TCharacter::Pulse` no longer calls
   `SetHealthDisplay(name, health)` each tick; retail's `SetHealthDisplay` has
   one caller, the map loader.
-- **Not ported:** the typed-message prompt (§10) and the multiplayer chat
-  feed (§6.3).
+- **Not ported:** the multiplayer chat (SubmitInput's first branch, the
+  feed in §6.3) and DBCS input (the two-byte append and Backspace).
+
+Prompt (2026-10-10, from the post-opening save, `char enter` / `type` in
+the input script): "Message: alreadydead" in white while typing; Enter
+gives "Locke: alreadydead" in green and "Cheat Enabled" in gold;
+`@addinv "short sword"` adds a sword to the pack; Backspace trims
+"abcx" to "abc", which commits with no answer; `alchemy` sets the gold to
+999999, `noamnesia` Locke's level to 30, `potionsnlotions` five of each
+potion.
 
 Verification (2026-10-05): `--test=ui-textbar --headless --filmstrip=14,1`
 (stacking, gold/sky-blue/white colours, shadow over a mid-tone backdrop, the

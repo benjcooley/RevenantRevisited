@@ -38,6 +38,12 @@ build/Revenant --headless --max-runtime=<s> \
 - The input clock starts with the play screen and leaves out long frames;
   `--exec` sleeps count ticks. Line the two up with generous windows, not
   exact times.
+- `key_press` sends key events only. The text-bar prompt reads characters:
+  `char enter` (or a code, `char 13`; also `backspace`, `escape`) and
+  `type <text>`. `--exec "prompt <text>"` types a whole line at the prompt
+  on the tick it runs (Enter, the text, Enter), e.g. `prompt alreadydead`
+  or `prompt @addinv "short sword"`. The prompt needs control on and Locke
+  out of combat.
 
 ## 3. Conversations
 
@@ -176,7 +182,9 @@ never got back to root. The port now repairs such a root on load (DIALOG.md
 §2.5). Since 2026-10-10, Shegra (keys `2,1`), Slave1 and Slave2 run to their
 END. Druhgslave3 loops on its `Help` choice while `2` is pressed. Druhgslave1
 and 2 need Locke alive: the camp's monsters kill him during the 120-tick wait
-before `use`, and a dead speaker never finishes `player.say`.
+before `use`, and a dead speaker never finishes `player.say`. With `--god`
+(the `alreadydead` cheat typed at the text-bar prompt before the teleport,
+`--exec "prompt alreadydead"`) both run to END.
 
 ### 7.2 The run-on after a jump (2026-10-07)
 

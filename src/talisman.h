@@ -25,3 +25,5 @@ class TTalisman : public TObjectInstance
 };
 
 DEFINE_BUILDER("TALISMAN", TTalisman)
+
+extern TObjectClass TalismanClass;
