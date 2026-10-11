@@ -25,6 +25,19 @@ from typing import Any, Sequence
 PROTOCOL_VERSION = 1
 EMULATOR_PYTHON = Path('/Users/benjamincooley/RevenantRetailLab/research/retail-asm/venv/bin/python')
 REPO = Path(__file__).resolve().parents[2]
+PORT_BINARY = REPO / 'build' / 'Revenant'
+PORT_INI = Path.home() / 'RevenantRevisited-testsaves' / 'Revenant.ini'
+CLICKWALK_BUILDS = REPO / 'recon' / 'retail_asm' / 'variants' / 'clickwalk' / 'builds'
+
+
+def clickwalk_build() -> Path:
+    """The retail build sessions play: the `clickwalk` named build
+    (docs/playtest/CLICKWALK.md), the newest one built."""
+    builds = sorted(CLICKWALK_BUILDS.glob('clickwalk-*/build.json'), key=lambda p: p.stat().st_mtime)
+    if not builds:
+        raise FileNotFoundError(f'no clickwalk build in {CLICKWALK_BUILDS}: '
+                                'run recon/retail_asm/patches/clickwalk/build.py')
+    return builds[-1]
 
 
 class HostError(RuntimeError):

@@ -2,7 +2,7 @@
 """Run a Jev playtest session in either game: record it, log it, add waypoints.
 
     play.py port   --out SESSION_DIR [--from WAYPOINT | --slot SLOT_DIR] [--story keep] [--watch] [--verify]
-    play.py retail --out SESSION_DIR [--build EXE] [--from WAYPOINT] [--story keep] [--watch] [--verify]
+    play.py retail --out SESSION_DIR [--build BUILD_JSON] [--from WAYPOINT] [--story keep] [--watch] [--verify]
     play.py fake   --out SESSION_DIR [--story smoke]       the reference host (a smoke run)
 
 --from WAYPOINT  start from a waypoint (waypoints.py list): its save slot, and
@@ -40,7 +40,7 @@ sys.path.insert(0, str(HERE))
 import timeline  # noqa: E402
 import watch  # noqa: E402
 from director import Director  # noqa: E402
-from host import Host, PortHost, RetailHost  # noqa: E402
+from host import PORT_BINARY, PORT_INI, Host, PortHost, RetailHost, clickwalk_build  # noqa: E402
 from inputs import Bindings  # noqa: E402
 from jev import Jev, Ledger, Router  # noqa: E402
 from knowledge import Knowledge  # noqa: E402
@@ -64,7 +64,7 @@ def launch(args: argparse.Namespace, run: Path, purpose: str, watching: bool = F
                                args=['--clickwalk', *shown, *args.host_arg], headless=not watching)
     if args.game == 'retail':
         shown = ['--watch', str(frames), '--pace', str(WATCH_PACE)] if watching else []
-        return RetailHost.launch(where, build=args.build, args=[*shown, *args.host_arg])
+        return RetailHost.launch(where, build=args.build or clickwalk_build(), args=[*shown, *args.host_arg])
     return Host([sys.executable, HERE / 'fakehost.py', *args.host_arg], where)
 
 
@@ -72,9 +72,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('game', choices=('port', 'retail', 'fake'))
     parser.add_argument('--out', type=Path, required=True)
-    parser.add_argument('--binary', type=Path, default=REPO / 'build' / 'Revenant')
-    parser.add_argument('--build', type=Path, help='retail: a named build of the executable')
-    parser.add_argument('--ini', type=Path, default=Path.home() / 'RevenantRevisited-testsaves' / 'Revenant.ini')
+    parser.add_argument('--binary', type=Path, default=PORT_BINARY)
+    parser.add_argument('--build', type=Path, help='retail: a named build (build.json); default the clickwalk build')
+    parser.add_argument('--ini', type=Path, default=PORT_INI)
     parser.add_argument('--data', type=Path, default=REPO / 'data', help='the install, for game knowledge')
     parser.add_argument('--from', dest='waypoint', help='start from this waypoint')
     parser.add_argument('--slot', type=Path, help='start from this save slot directory (no story position)')

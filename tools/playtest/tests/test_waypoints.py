@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import rec  # noqa: E402
-from waypoints import Catalogue, slug  # noqa: E402
+from waypoints import ROOT, Catalogue, slug, story_states, wrong_states  # noqa: E402
 
 
 def slot(where: Path, text: str) -> Path:
@@ -53,6 +53,28 @@ class Catalogues(unittest.TestCase):
             self.assertEqual(loaded.recording, {'bundle': 'recording', 'until': 1234})
             self.assertTrue((loaded.dir / 'recording' / 'session.rvrec').exists())
             self.assertFalse((loaded.dir / 'recording' / 'frames').exists())          # frames stay with the session
+
+    def test_a_retired_waypoint_is_found_only_by_its_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            catalogue = Catalogue(tmp / 'waypoints')
+            good = catalogue.add('port', 'rahul defeated', 'keep', 2, 'newgame', slot(tmp / 'a' / 'Quick Save 1', 'a'))
+            time.sleep(1.1)
+            bad = catalogue.add('port', 'rahul defeated', 'keep', 2, 'newgame', slot(tmp / 'b' / 'Quick Save 2', 'b'),
+                                retired='story states {}')
+            self.assertEqual(catalogue.get('port', 'rahul defeated').dir, good.dir)     # the newest good one
+            self.assertEqual(catalogue.get('port', bad.dir.name).retired, 'story states {}')
+
+    def test_wrong_states(self):
+        self.assertEqual(wrong_states({'RANDSTATE': 1}, {'RANDSTATE': 1, 'TENDRICKSTATE': 1}),
+                         {'TENDRICKSTATE': [1, 0]})                          # a variable never set reads 0
+        self.assertEqual(wrong_states({'RAHULSTATE': 0}, {'RAHULSTATE': 0}), {})
+
+    @unittest.skipUnless(list(ROOT.glob('port/rand-questioned--*/slot/*/game.sav')), 'no saved waypoint')
+    def test_story_states_from_a_real_save(self):
+        sav = sorted(ROOT.glob('port/rand-questioned--*/slot/*/game.sav'))[0]
+        states = story_states(sav.parent)
+        self.assertEqual((states['RANDSTATE'], states['TENDRICKSTATE']), (1, 1))
 
     def test_slug(self):
         self.assertEqual(slug('Rahul defeated!'), 'rahul-defeated')

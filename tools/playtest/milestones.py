@@ -16,29 +16,33 @@ KEEP = [
     Milestone('opening',
               'Watch the opening scene in the Keep. When Locke is asked questions, ask who these people '
               'are, who Locke is and why he was brought here.',
-              lambda obs, d: bool(d.choices_taken) and control_on(obs, d)),
+              lambda obs, d: bool(d.choices_taken) and control_on(obs, d),
+              expect={'RAHULSTATE': 1}),                    # keep.s:660, SardokR sets Rahul on
     Milestone('rahul defeated',
               'A crazed priest, Rahul, attacks Locke in the summoning chamber. Fight him until he falls.',
-              after_scene(character_dead('Rahul')), save=True),
+              after_scene(character_dead('Rahul')), save=True,
+              expect={'RAHULSTATE': 0}),                    # keep.s:683, Tendrick's scene
     Milestone('at rand',
               'Explore the Keep and find the guard Rand, held in the dungeon below.',
               lambda obs, d: any((o.get('name') or '').lower() == 'randk'
                                  and math.hypot(o['pos'][0] - obs['player']['pos'][0],
                                                 o['pos'][1] - obs['player']['pos'][1]) <= 120
                                  for o in obs.get('objects', [])),
-              save=True, goal='RandK'),
+              save=True, goal='RandK', expect={'RAHULSTATE': 0}),
     Milestone('rand questioned',
               'Explore the Keep. Talk to the people there, and find the guard Rand in the dungeon below '
               'to question him about the cult.',
-              after_scene(talked_to('Rand')), save=True, goal='RandK'),
+              after_scene(talked_to('Rand')), save=True, goal='RandK',
+              expect={'RANDSTATE': 1, 'TENDRICKSTATE': 1}),   # keep.s:393-394
     # keep.s: TendrickT, told of Rand (TENDRICKSTATE 1), takes Locke to level 6
     # for GowE's scene, which brings him back to level 2 and unlocks KeepExit.
     Milestone('tendrick told',
               'Go back up through the Keep to Tendrick and tell him what Rand said.',
-              after_scene(every(talked_to('TendrickT'), level_is(6))), save=True, goal='TendrickT'),
+              after_scene(every(talked_to('TendrickT'), level_is(6))), save=True, goal='TendrickT',
+              expect={'TENDRICKSTATE': 2}),                 # keep.s:1251, GowE
     Milestone('left the keep',
               'Leave the Keep by its gate, out into the world.',
-              after_scene(level_is(0)), save=True, goal='KeepExit'),
+              after_scene(level_is(0)), save=True, goal='KeepExit', expect={'TENDRICKSTATE': 2}),
 ]
 
 # The reference host's toy world (fakehost.py): one person to reach.

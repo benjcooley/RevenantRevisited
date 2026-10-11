@@ -46,7 +46,7 @@ from jev import Choice, Jev, Router, tool
 from knowledge import Knowledge
 from nav import DEFAULT_RADIUS, LevelMaps, farthest_clear
 from walk import CLICK_HEIGHT, USE_REACH, Destination, Walker, WalkGrid, in_rect
-from waypoints import Catalogue, Waypoint
+from waypoints import Catalogue, Waypoint, story_states, wrong_states
 from world import Place, World
 
 ENGAGE_RADIUS = 500                  # a living enemy this close means a fight
@@ -64,6 +64,7 @@ class Milestone:
     done: Callable[[dict, 'Director'], bool]
     save: bool = False
     goal: str | None = None          # an object to travel to (instance name): code finds the way
+    expect: dict[str, int] = field(default_factory=dict)   # story variables its save must hold
 
 
 @dataclass
@@ -482,10 +483,13 @@ class Director:
             try:
                 self.press(self.bindings['QuickSave'], then=48)
                 exported = self.host.export_slot('@last', self.bundle / 'exports' / str(self.host.tick))
+                wrong = wrong_states(story_states(Path(exported['path'])), milestone.expect)
+                if wrong:                                    # kept as evidence, never played from
+                    self.note('save suspect', name=milestone.name, states=wrong)
                 waypoint = self.waypoints.add(
                     self.game, milestone.name, self.story, self.current + 1, self.parent, exported['path'],
                     obs=obs, build=self.host.info.get('build'), tick=self.host.tick,
-                    slot_name=exported['slot'])
+                    slot_name=exported['slot'], retired=f'story states {wrong}' if wrong else '')
                 self.host.mark('saved', waypoint=waypoint.dir.name, slot=exported['slot'])
                 self.created.append((waypoint, self.host.tick))
                 self.parent = waypoint.name
