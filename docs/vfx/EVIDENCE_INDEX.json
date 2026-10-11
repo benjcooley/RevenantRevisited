@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 165,
+    "retail_rows_with_source_fixes_recorded": 166,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 161,
+    "visual_fidelity_confirmed_rows": 162,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 161,
-    "remaining_visual_review_rows": 15
+    "reviewed_visual_pass_rows": 162,
+    "remaining_visual_review_rows": 14
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1953,6 +1953,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Exact CombatFlash0xad92bd29 state0/start1 only, genuine loaded generic owner/default animator/nullspell and full64original NextFrame/wholePulse/controllerPulse/Animate/PreRender/Render/Post/raster; seed1/camera0/sourceambient38/dir1. Inclusiveobject2 keys/fiveframetransition18matrices288channels max2.42e-7; strengthenedactualsourceowner1.5scale negative1.64 exposes nativeowner correction. Twelve projectedvertices/36channels formula error1.06e-4; original324normaltriangles/7776integerfields truncateXYZ/UV64, all144extraobjectdraws blank across18liveframes. Exactnativeowner/intgridUV mesh removes flarestretch; originalRGB5normal21 preserved. Elevenwholephasepairs and sixactualsizedetailpanels independentlyreviewed,39imagepins; moving15particles/baseflare/growth/fade andkill19/blanktail align. Root64GPUrepeat byteidentical17visible/blank19+, coldtick1blankcontrolpass; renderOF_KILLguardfix preventsformerextraframe. Componentcontrol20fullPNGunchanged/noRNGsuppression90tickproofPASS, existingdefaultstatic regressionPASS5.565s. Realmapgallery100frames95visible92distinct/six exactstate0creations/cleanexit is liveness only; initialcopiedadaptervalidator mismatchretained/correctedagainstactualnormalmaproute. Smallscanline/RGB565destinationquantizationresiduals remain. Other17states/impactselector/naturalcombat/catchupcadence/audio/device/exactpixels remainopen; noallvariants/fullacceptanceclaim."
+    },
+    "recon/retail_asm/runtime/effects/current-burn-public-20261011/root-approval.json": {
+      "sha256": "16e0966268aa84b62860f6a43bd8b56b4663328b9303e9fee80d34a76ce126d4",
+      "retail_row": "Burn:0x55471bff",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact Burn0x55471bff/own legacyBurnbabyburn twoRGB565quads, genuine Acolyte22bone APIs/state14frame0/facing96/publicSet4e2fa0, integer/no-transition reference control, explicit shared post-actor seed2. OriginalwholePreRender/ownerDamage/controller/render/raster execute, realHP102\u219297 atsame5damage ticks. Source correctedparentdependency mirrors and original nonlinearparticleZ used; no fakebones/pose/stat returns. Core108750state/90240matrix/90RNGfields max1.58e-5, strictownresource4positive815rejects, actualABSPOS22560vertices5640draws pass; rootthreeunitsPASS17.990s,27mappingtests/compiledbridge pass. Fourteenwholephasepairs/fixedcrop/allfive2xnearest detailstrips independentlyreviewed,31imagepins+8freezepinsverified; finite ramp/fire/smoke/fade/kill76/blank90 align. Integrated90PNGbyte-identical/cleanexit; gallery100frames89visible90distinct/twofinitecreations/liveRNG withoutfactoryreseed/cleanexit. Ordinarygalleryfractionalpose is liveness only; isolatedinteger control suppliesappearance. NaturalBurn map/poster/reignite, moving/animated/otheractors/defaultcachedtransition, spells/audio/lighting/hardware andfloat/edge/RGB565/exactpixel residualsremainopen."
     }
   }
 }

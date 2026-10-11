@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "6a91b1992040c4e172a1db438682cf4471b2aa2c1c1a0dec8a74a847c7d5c29f",
+    "harness_sha256": "b9e5e4b727ea9528946fecd881459af81314145983ea21c162735bfae1fd40e2",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 165,
+    "retail_rows_with_source_fixes_recorded": 166,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 161,
+    "visual_fidelity_confirmed_rows": 162,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 161,
-    "remaining_visual_review_rows": 15
+    "reviewed_visual_pass_rows": 162,
+    "remaining_visual_review_rows": 14
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -12661,30 +12661,43 @@
       "retail_type_id": "0x55471bff",
       "asset": "Magic\\Burnbabyburn.I3D",
       "preview_candidates": [
+        "Burn_AUTHENTIC_ACOLYTE_INTEGER",
         "TBurnEffect_BESPOKE",
         "TBurnAnimator_SHIM"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Genuine actor/publicSet Burn finitefire/smoke core/nativeZ/actualbones/realdamage independentlyverified and14phase appearance reviewed;90PNG integrated repeat/exactgallery pass. Naturalmovingactors/poster/reignite/transition/device remainopen."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Finish independent review/integrated repeat/gallery of genuine Acolyte/publicSet Burn; bone dependency and nonlinear particle Z corrections proven, source/render package pending.",
+      "next_action": "Preserve approved integer Acolyte/publicSet control; verify natural Burn poster/reignite/map, moving rigs/defaulttransition, spells/audio/device and retained pixel residuals.",
       "notes": [],
-      "batch": "2 \u2014 Close early parity and map/combat regressions"
+      "batch": "2 \u2014 Close early parity and map/combat regressions",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent14phase whole/detail review and integratedrepeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Exact Burn0x55471bff/own legacyBurnbabyburn twoRGB565quads, genuine Acolyte22bone APIs/state14frame0/facing96/publicSet4e2fa0, integer/no-transition reference control, explicit shared post-actor seed2. OriginalwholePreRender/ownerDamage/controller/render/raster execute, realHP102\u219297 atsame5damage ticks. Source correctedparentdependency mirrors and original nonlinearparticleZ used; no fakebones/pose/stat returns. Core108750state/90240matrix/90RNGfields max1.58e-5, strictownresource4positive815rejects, actualABSPOS22560vertices5640draws pass; rootthreeunitsPASS17.990s,27mappingtests/compiledbridge pass. Fourteenwholephasepairs/fixedcrop/allfive2xnearest detailstrips independentlyreviewed,31imagepins+8freezepinsverified; finite ramp/fire/smoke/fade/kill76/blank90 align. Integrated90PNGbyte-identical/cleanexit; gallery100frames89visible90distinct/twofinitecreations/liveRNG withoutfactoryreseed/cleanexit. Ordinarygalleryfractionalpose is liveness only; isolatedinteger control suppliesappearance. NaturalBurn map/poster/reignite, moving/animated/otheractors/defaultcachedtransition, spells/audio/lighting/hardware andfloat/edge/RGB565/exactpixel residualsremainopen.",
+        "report": "recon/retail_asm/runtime/effects/current-burn-public-20261011/root-approval.json",
+        "sha256": "16e0966268aa84b62860f6a43bd8b56b4663328b9303e9fee80d34a76ce126d4",
+        "note": "docs/vfx/forensics/BURN_AUTHENTIC_ACOLYTE_RENDER_20261011.md"
+      }
     },
     {
       "index": 51,
