@@ -224,7 +224,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | Locks and keys (`CheckKeyUse`), the door prototypes' USE scripts end to end | 2026-10-05 |
 | [x] | Doors and lift gates by mouse: the map pane's retail pick on the GPU id buffer, the door cursor, click-to-use; `ressexit` opens and teleports, `soldoor`'s INPORTEW runs ([forensics/MAP_INPUT.md](forensics/MAP_INPUT.md) §7.1) | 2026-10-08 |
 | [x] | Portcullis (InportNS) by mouse, seen lifting and closing behind Locke at the level-46 gatehouse; locked gates say "It seems to be locked" (MAP_INPUT §7.1) | 2026-10-09 |
-| [ ] | Hover's synchronous read while the pointer moves (MAP_INPUT §7.1 Open). Shown by mouse: click-to-talk and click-to-get (2026-10-09), an exit gate (`Lv46D5` PortNS: locked line, then through it, 2026-10-10) | 2026-10-10 |
+| [x] | Hover picks from the latest copied-back ids and never waits on the GPU (MAP_INPUT §7.1). Shown by mouse: click-to-talk and click-to-get (2026-10-09), an exit gate (`Lv46D5` PortNS: locked line, then through it, 2026-10-10) | 2026-10-10 |
 | [-] | curmap written on every transition: the port keeps visited levels loaded and writes them when saving (ARCHITECTURE §7) | 2026-10-05 |
 | [x] | Walk-on of an unscripted AutoActivate exit: a level-41 teleport pad sends Locke to `Lv41Tel5`'s target | 2026-10-05 |
 | [x] | The loading bar fills per sector during the world load (staged `TGameMap` load) | 2026-10-05 |

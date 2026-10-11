@@ -1704,18 +1704,19 @@ void TMapRenderer::SetPickPoint(int32_t x, int32_t y)
     impl->pickY = y;
 }
 
-bool TMapRenderer::Pick(int32_t x, int32_t y, SPick& out) const
+bool TMapRenderer::Pick(int32_t x, int32_t y, SPick& out, EPickRead read) const
 {
     out = {};
     if (!impl || !Renderer) return false;
     const Impl& s = *impl;
 
-    // The probe copied back at this point, else the last drawn frame read
-    // at once; either is decoded with the list its frame was drawn under.
+    // The probe copied back at this point (any point, for Latest), else the
+    // last drawn frame read at once; either is decoded with the list its
+    // frame was drawn under.
     TRenderer::SIdProbe probe;
-    const bool cached = Renderer->LatestIdProbe(probe) && probe.x == x && probe.y == y &&
-                        s.pickTable(probe.tag);
-    if (!cached && !Renderer->ReadIdProbe(x, y, s.renderedDrawListVersion, probe))
+    const bool copied = Renderer->LatestIdProbe(probe) && s.pickTable(probe.tag);
+    const bool cached = copied && (read == EPickRead::Latest || (probe.x == x && probe.y == y));
+    if (!cached && (read == EPickRead::Latest || !Renderer->ReadIdProbe(x, y, s.renderedDrawListVersion, probe)))
         return false;
     const Impl::SPickTable* table = s.pickTable(probe.tag);
     if (!table)
