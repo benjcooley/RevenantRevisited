@@ -23,6 +23,11 @@ TWaterFallEffect_BESPOKE__WaterFlft TWaterFallEffect_BESPOKE__RiverFall
 TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertEqual(admitted_candidates({'preview_candidates': candidates}), [])
 
+    def test_smoke_exact_quality_controller(self):
+        row={"retail_type_id":"0x224a5ccc","preview_candidates":[]}
+        self.assertEqual(admitted_candidates(row),["Smoke_ORIGINAL_QUALITY"])
+        self.assertFalse(candidate_metadata(row,"Smoke_ORIGINAL_QUALITY")[0])
+
     def test_icedsparks_uses_its_verified_default_factory(self):
         row={'retail_type_id':'0xacabfada','preview_candidates':['TIcedEffect_BESPOKE__Icedsparks']}
         self.assertEqual(admitted_candidates(row),['TIcedsparks_AUTHORED_STILL'])

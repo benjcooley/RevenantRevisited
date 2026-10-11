@@ -28,6 +28,7 @@
 {0x2093487au, "TMistEffect", false, "Implemented preview controller; map caller not certified"}, // Mist
 {0x22491405u, "TFountainAnimator_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // CyanFont
 {0x22491405u, "TCyanFountainAnimator_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // CyanFont
+{0x224a5cccu, "Smoke_ORIGINAL_QUALITY", false, "Implemented preview controller; map caller not certified"}, // Smoke
 {0x27df45beu, "TSymGlowAnimator_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // SymGlow
 {0x335a2516u, "TRedFountainAnimator_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // RedFont
 {0x37780ae2u, "TFireFlashEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // FireFlash

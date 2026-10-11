@@ -73,6 +73,7 @@
 #include "effects/antimagicpreview.h"
 #include "effects/skinpreview.h"
 #include "effects/pukepreview.h"
+#include "effects/smokepreview.h"
 #include "effects/shriekpreview.h"
 #include "effects/energyspraypreview.h"
 #include "effects/argbsourcecontrol.h"
@@ -7585,6 +7586,19 @@ struct SVfxTestBootstrap {
             e.submit_world=[](void* c,EFxDebugMode){shriek_preview::SubmitWorld(static_cast<shriek_preview::State*>(c));};
             e.is_alive=[](void* c){return shriek_preview::Alive(static_cast<shriek_preview::State*>(c));};
             e.destroy=[](void* c){shriek_preview::Destroy(static_cast<shriek_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "Smoke_ORIGINAL_QUALITY";
+            e.family        = "magic";
+            e.pipeline      = "IM";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return smoke_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){smoke_preview::Advance(static_cast<smoke_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){smoke_preview::SubmitWorld(static_cast<smoke_preview::State*>(c));};
+            e.is_alive=[](void* c){return smoke_preview::Alive(static_cast<smoke_preview::State*>(c));};
+            e.destroy=[](void* c){smoke_preview::Destroy(static_cast<smoke_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
