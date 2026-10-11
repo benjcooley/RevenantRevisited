@@ -17,13 +17,9 @@
 //   - Pane content right-anchored at x = display_w − 188; width 188.
 //   - Top slot:    y=0,   h=306 (Equip 188x306 / Scroll 188x306 / Stats 188x306)
 //   - Bottom slot: y=306, h=174 (Inv 188x174 / Amap 188x174 / spellconstr 188x174)
-//   - Side-tabs strip: 52x232 overlaying the right edge of the pane block.
-//     Strip x = display_w − 52 − inset; strip y = ~24 (UNCONFIRMED-A in spec —
-//     BSS constants DAT_0066614c/DAT_0065be5c/DAT_00667c60/DAT_0065be60 are
-//     read at TSideTabsPane Initialize 0x53cc30 but their VALUES are not yet
-//     extracted from the shipped Revenant.exe BSS init; the existing
-//     uisidetabstest.cpp approximation is reused here and refined in the
-//     pixel-perfect alignment pass).
+//   - Side-tabs strip: 52x232 in the play field's lower-right corner, flush
+//     against the side panel and the bottom drawer: (400, 188) with both
+//     open (TabStripOrigin).
 //
 // *************************************************************************
 
@@ -65,24 +61,11 @@ constexpr int32_t kBtnY[kBtnCount] = { 2, 0x27, 0x4c, 0x71, 0x96, 0xbb };
 constexpr int32_t kPaneW    = 188;
 constexpr int32_t kTopH     = 306;
 constexpr int32_t kBotH     = 174;
+constexpr int32_t kBottomBarH = 60;   // matches BottomBarPane_SPEC §3
 
 // Approximations matching uisidetabstest.cpp (UNCONFIRMED-A: BSS constants
 // not yet extracted; refined in pixel-perfect alignment pass).
 constexpr int32_t kPaneRightInset = 0;
-
-// Tab-strip placement is anchored to the LOWER-RIGHT corner of the live
-// PLAYFIELD VIEW, not the display:
-//   playfield_right  = display_w - (sidebar_open    ? kPaneW : 0)
-//   playfield_bottom = display_h - (bottombar_open  ? kBarH  : 0)
-//   strip rect       = playfield - (kStripW + insets, kStripH + insets)
-// So when the sidebar opens/closes (or bottombar toggles), the six-button
-// strip moves with the corner, sitting a constant distance inside it.
-// (UNCONFIRMED-A: spec leaves the inset literal as a BSS const; small
-// gap by visual measurement until refined.)
-constexpr int32_t kTabsRightInset  = 4;   // px gap from playfield right edge
-constexpr int32_t kTabsBottomInset = 2;   // px gap from playfield bottom edge
-constexpr int32_t kBottomBarH      = 60;  // matches BottomBarPane_SPEC §3
-// kPaneW (188) is the sidebar chrome width — defined above as kPaneW.
 
 // ---- hover-fade ramp (spec §6/§9) ---------------------------------------
 constexpr int32_t kRampMax    = 8;
@@ -277,10 +260,11 @@ void AdvanceRamps()
     }
 }
 
-// Tab-strip screen origin — anchored to the playfield's lower-right corner.
-// Playfield = display minus whatever chrome is currently open. See the
-// constants block above for the formula. Used by both DrawTabStrip and the
-// hit-test in HandleMouseClickUISidebarMode so the two stay in lockstep.
+// REVSYNC: Pulse 0x0047bc1a..0x0047bc3d -- the strip sits in the play
+// field's lower-right corner, flush: x = display_w - strip w - side panel
+// w, y = play field bottom - strip h. The play field is the display less
+// whatever chrome is open, so the strip moves with the corner. Used by both
+// DrawTabStrip and UISideTabButtonAt, so the two stay in lockstep.
 void TabStripOrigin(int32_t& x, int32_t& y)
 {
     const SHudState& s = GetHudState();
@@ -293,8 +277,8 @@ void TabStripOrigin(int32_t& x, int32_t& y)
     // drawer code, 0x0047b4d0).
     const int32_t playfieldBottom = (dh > 0 ? dh : kStripH + kBottomBarH)
                                   - PlayScreen.DrawerHeight();
-    x = playfieldRight  - kStripW - kTabsRightInset;
-    y = playfieldBottom - kStripH - kTabsBottomInset;
+    x = playfieldRight  - kStripW;
+    y = playfieldBottom - kStripH;
 }
 
 class TSidebarHud : public THudDrawable
@@ -534,6 +518,25 @@ void ToggleUIBottomPanel()
              s.bottomBarOpen ? "OPEN" : "CLOSED");
 }
 
+// REVSYNC: 0x004364d0 (TButtonPane, here on the side tabs 0x0065be50): the
+// point must be in the pane, then in a button's rect (TButton 0x0042d0d0).
+// The tabs' button flags (0x00180010, 0x0053cc30) carry no pixel test
+// (0x20000), so a round button's corners count and the gaps between buttons
+// don't; a selected (pressed) tab holds its point like the others.
+int32_t UISideTabButtonAt(int32_t x, int32_t y)
+{
+    int32_t strip_x = 0, strip_y = 0;
+    TabStripOrigin(strip_x, strip_y);
+    const int32_t px = x - strip_x;
+    const int32_t py = y - strip_y;
+    if (px < 0 || py < 0 || px >= kStripW || py >= kStripH)
+        return -1;
+    for (int32_t i = 0; i < kBtnCount; ++i)
+        if (px >= kBtnX && px < kBtnX + kBtnW && py >= kBtnY[i] && py < kBtnY[i] + kBtnH)
+            return i;
+    return -1;
+}
+
 // Hit-test the inventory 4x3 grid. Returns the carried slot number
 // (page + col*3 + row) when (x,y) is inside a cell, -1 otherwise.
 // Per InventoryPane_SPEC: origin pane-local (8, 42), pitch 45x44,
@@ -749,37 +752,28 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
     // The tab strip is its own controller at the playfield corner. It should
     // see clicks before content panes so tab changes never turn into item
     // grabs when the strip visually occupies the pointer point.
+    if (const int32_t i = UISideTabButtonAt(x, y); i >= 0)
     {
-        int32_t strip_x = 0, strip_y = 0;
-        TabStripOrigin(strip_x, strip_y);
-        for (int32_t i = 0; i < kBtnCount; ++i)
-        {
-            const int32_t bx = strip_x + kBtnX;
-            const int32_t by = strip_y + kBtnY[i];
-            if (x < bx || x >= bx + kBtnW) continue;
-            if (y < by || y >= by + kBtnH) continue;
+        const int32_t mode = g_buttons[i].mode;
+        const char*   region;
+        if (g_buttons[i].region == 0) { s.topSlot    = mode; region = "top"; }
+        else                          { s.bottomSlot = mode; region = "bottom"; }
+        s.sidebarState = HUD_SIDEBAR_OPEN;
 
-            const int32_t mode = g_buttons[i].mode;
-            const char*   region;
-            if (g_buttons[i].region == 0) { s.topSlot    = mode; region = "top"; }
-            else                          { s.bottomSlot = mode; region = "bottom"; }
-            s.sidebarState = HUD_SIDEBAR_OPEN;
+        // Retail dispatch pairs only the upper-region convenience presets:
+        // case 7/0xa = Book+Spell, case 9 = Equip+Inv. Lower-region
+        // commands 0xb/0xc update only DAT_0065d1bc, so clicking Inv/Map
+        // must not yank the upper pane away from Stats/Book/Equip.
+        bool paired = false;
+        if (s.topSlot == HUD_TOP_BOOK && g_buttons[i].region == 0)
+        { s.bottomSlot = HUD_BOT_SPELL; paired = true; }
+        else if (s.topSlot == HUD_TOP_EQUIP && g_buttons[i].region == 0)
+        { s.bottomSlot = HUD_BOT_INV;   paired = true; }
 
-            // Retail dispatch pairs only the upper-region convenience presets:
-            // case 7/0xa = Book+Spell, case 9 = Equip+Inv. Lower-region
-            // commands 0xb/0xc update only DAT_0065d1bc, so clicking Inv/Map
-            // must not yank the upper pane away from Stats/Book/Equip.
-            bool paired = false;
-            if (s.topSlot == HUD_TOP_BOOK && g_buttons[i].region == 0)
-            { s.bottomSlot = HUD_BOT_SPELL; paired = true; }
-            else if (s.topSlot == HUD_TOP_EQUIP && g_buttons[i].region == 0)
-            { s.bottomSlot = HUD_BOT_INV;   paired = true; }
-
-            log_info("[ui-sidebar] click btn %d (%s/mode %d)%s -> top=%d bottom=%d",
-                     i, region, mode, paired ? " [paired]" : "",
-                     s.topSlot, s.bottomSlot);
-            return true;
-        }
+        log_info("[ui-sidebar] click btn %d (%s/mode %d)%s -> top=%d bottom=%d",
+                 i, region, mode, paired ? " [paired]" : "",
+                 s.topSlot, s.bottomSlot);
+        return true;
     }
 
     // ---- Item slots: click-down on an item starts a drag. The items are

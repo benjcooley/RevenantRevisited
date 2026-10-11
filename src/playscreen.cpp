@@ -97,27 +97,17 @@ static void GetReconstructedPlayfieldRect(int32_t& x, int32_t& y,
     if (h < 1) h = 1;
 }
 
-static bool IsReconstructedHudPoint(int32_t x, int32_t y)
+// Whether (x, y) is off the map pane: over the side panel or the bottom
+// drawer beside it. Retail's map pane is the play field (Pulse 0x0047b4d0
+// sizes it to the display less both), and is offered a press only inside it
+// (TScreen::MouseClick 0x004904dd) and picks its hover cursor only there
+// (TMapPane::Animate 0x004544f6..0x00454527). The panes over the play field
+// (the side tabs, the status bar, the text bar) are inside it.
+static bool IsOffMapPane(int32_t x, int32_t y)
 {
-    const SHudState& s = GetHudState();
-    const int32_t dw = Display.Width()  > 0 ? Display.Width()  : WIDTH;
-    const int32_t dh = Display.Height() > 0 ? Display.Height() : HEIGHT;
-    constexpr int32_t kSidebarW = 188;
-    constexpr int32_t kBottomBarH = 60;
-    constexpr int32_t kTabW = 64;
-    constexpr int32_t kTabH = 240;
-
-    if (s.sidebarState == HUD_SIDEBAR_OPEN && x >= dw - kSidebarW)
-        return true;
-    if (s.bottomBarOpen && y >= dh - kBottomBarH)
-        return true;
-
-    int32_t playfieldX = 0, playfieldY = 0, playfieldW = 0, playfieldH = 0;
-    GetReconstructedPlayfieldRect(playfieldX, playfieldY, playfieldW, playfieldH);
-    const int32_t playfieldRight = playfieldX + playfieldW;
-    const int32_t playfieldBottom = playfieldY + playfieldH;
-    return x >= playfieldRight - kTabW && x < playfieldRight &&
-           y >= playfieldBottom - kTabH && y < playfieldBottom;
+    int32_t px = 0, py = 0, pw = 0, ph = 0;
+    GetReconstructedPlayfieldRect(px, py, pw, ph);
+    return x < px || y < py || x >= px + pw || y >= py + ph;
 }
 
 // Default game controls. Mirrors the retail table from
@@ -1712,7 +1702,9 @@ bool TPlayScreen::MapHasPointer(int32_t x, int32_t y) const
 {
     if (ModalHas(MODAL_MOUSE) || GameFlow.Session().Loading() || InBuySellDrawer(x, y))
         return false;
-    return !(g_playHudInitialized && (IsReconstructedHudPoint(x, y) || UIDragState::IsActive()));
+    // The side tabs over the play field don't take it: retail's hover
+    // cursor looks only at the map pane's rect (0x004544f6..0x00454527).
+    return !(g_playHudInitialized && (IsOffMapPane(x, y) || UIDragState::IsActive()));
 }
 
 uint32_t TPlayScreen::ControlModeMask() const
@@ -1731,8 +1723,9 @@ uint32_t TPlayScreen::ControlModeMask() const
 
 TPlayScreen::EClickRoute TPlayScreen::ClickRoute(int32_t x, int32_t y)
 {
-    // REVSYNC: 0x00490530 -- a modal holding the mouse (MODAL_MOUSE) gets
-    // every click; the HUD and the world get none.
+    // REVSYNC: TScreen::MouseClick 0x004903b0 -- a modal holding the mouse
+    // (MODAL_MOUSE) gets every click (0x004903f0); the HUD and the world get
+    // none.
     if (ModalHas(MODAL_MOUSE))
         return EClickRoute::Modal;
     // A load is under way: the world takes no clicks.
@@ -1740,7 +1733,12 @@ TPlayScreen::EClickRoute TPlayScreen::ClickRoute(int32_t x, int32_t y)
         return EClickRoute::Ignored;
     if (InBuySellDrawer(x, y))
         return EClickRoute::BuySell;
-    if (g_playHudInitialized && (IsReconstructedHudPoint(x, y) || UIDragState::IsActive()))
+    // The HUD: a pane beside the map, a drag in flight, or one of the side
+    // tabs' buttons over the play field. TMapPane::MouseClick leaves a press
+    // to the tabs only when a button holds it (0x004364d0, 0x0044f146..
+    // 0x0044f182); around and between the buttons it is the map's.
+    if (g_playHudInitialized &&
+        (IsOffMapPane(x, y) || UIDragState::IsActive() || UISideTabButtonAt(x, y) >= 0))
         return EClickRoute::Hud;
     return EClickRoute::World;
 }
@@ -1804,7 +1802,10 @@ void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
             HandleMouseMoveUISpellbookMode(button, x, y);
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
             HandleMouseMoveUIEquipMode(button, x, y);
-        if (IsReconstructedHudPoint(x, y) || UIDragState::IsActive())
+        // Over the side tabs the map has the move too: retail offers every
+        // pane every move (TScreen::MouseMove 0x00490530) and the map's has
+        // no side-tab test (0x004504d0).
+        if (IsOffMapPane(x, y) || UIDragState::IsActive())
         {
             TScreen::MouseMove(button, x, y);   // the screen's panes, as clicks: the bottom bar, the side panes
             return;

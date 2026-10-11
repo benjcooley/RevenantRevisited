@@ -248,8 +248,10 @@ class TPlayScreen : public TScreen
 
     // ---- Map input ------------------------------------------------------
     // Whether the map has the pointer at (x, y): no modal holding the mouse,
-    // no load, not over the shop or a HUD panel, no HUD drag. The play
-    // field's clicks, moves and cursor go to the map pane only then.
+    // no load, not over the shop or a panel beside the play field, no HUD
+    // drag. The play field's clicks, moves and cursor go to the map pane
+    // only then; the side tabs over it keep only presses on their buttons
+    // (ClickRoute).
     [[nodiscard]] bool MapHasPointer(int32_t x, int32_t y) const;
     // The control map's mode for the player's state (walk, combat, bow,
     // sneak): which binding a key's command comes from.
