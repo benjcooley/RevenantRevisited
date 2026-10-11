@@ -89,3 +89,17 @@ before transfer (timer−1 while live); all four factories log `seeded=0`.
 `ymanadrain-configured-gallery-final/manifest.json` SHA-256:
 `0ad450fb9093d282d0c88997afaa6c19d22c9952a59a39cf23fa4ca527f37e59`.
 This is runtime/restart/cleanup validation, not ordinary-world pixel parity.
+
+Root independently verified28 paired image hashes and reviewed all14 phases in
+four full-resolution fixed-crop pages. The integrated executable repeats all100
+numbered PNGs byte-identically with clean exit0. Root's24Hz gallery completes
+four91-tick lifecycles with the original uncapped caster mana, unchanged actor
+health/target position/flags, spell timer0 at completion, no shared RNG reseed,
+31/32 visible samples and clean shutdown.
+
+Approval:
+`recon/retail_asm/runtime/effects/current-ymanadrain-target-20261011/root-approval.json`,
+SHA256 `ae6753011a44b238b671ef6453de96860c0d7f3c10f8d922de4f81bf05ad62f3`.
+Root evidence: `/Users/benjamincooley/RevenantRetailLab/research/vfx-ymanadrain-root-20261011/`.
+The reviewed total advances to151/176, with25 remaining. Natural gameplay,
+moving attachment, other variants, audio/device and exact pixels stay open.

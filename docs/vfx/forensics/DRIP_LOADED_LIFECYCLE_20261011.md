@@ -158,3 +158,10 @@ No ordinary map/gameplay factory changes. Private build passes; actual40-frame
 label-free gallery selects the exact controlled route,40visible/36distinct,
 one persistent creation and clean exit. Evidence:
 `hard-alpha/drip-gallery-preferred/0x5975abde-Drip/manifest.json`.
+
+The integrated root build also confirms the preferred route:40/40 label-free
+samples are visible, the actual log selects `TDripEffect_LINKED_NO_SPLASH`, and
+one persistent instance exits cleanly. Root report:
+`/Users/benjamincooley/RevenantRetailLab/research/vfx-drip-root-20261011/gallery-preferred/0x5975abde-Drip/manifest.json`.
+The earlier default-map gallery remains supporting evidence rather than being
+relabeled as this configured capture.

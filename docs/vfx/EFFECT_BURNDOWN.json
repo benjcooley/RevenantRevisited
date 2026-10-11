@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 158,
+    "retail_rows_with_source_fixes_recorded": 159,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 150,
+    "visual_fidelity_confirmed_rows": 151,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 150,
-    "remaining_visual_review_rows": 26
+    "reviewed_visual_pass_rows": 151,
+    "remaining_visual_review_rows": 25
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -15987,29 +15987,43 @@
       "retail_type_id": "0xae92bc14",
       "asset": "Magic\\YManadrain.I3D",
       "preview_candidates": [
+        "TYManaDrain_CONFIGURED_TARGET",
+        "TYManaDrain_AUTHENTIC_TARGET_FIXTURE",
         "TManadrainEffect_Bespoke__YManadrain_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Distinct own greenasset/YManaDrain controller withpreowner customPulse/coldblank1, originaluncappedcastermana453 andkill91; realAcolyte/fighting context,14phase appearance reviewed andintegrated100PNG repeat exact. Livegallery4completions/cleanup/noreseed pass; nodamagecap normalization."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve distinctYmana appearance/cadence/uncappedmana; verify naturalmap/cast/movingactors/healthvariants/audio/device.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent fourteenphase whole/detail review and integratedfilm/galleryrepeat",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Distinct YManaDrain ae92bc14/genuine stationaryAcolyte Fighting targetoffset96/loadedYManaDrain160..260, own greencone/glow/15movingstreams. OriginalcustomanimatorPulse precedes ownerphase; coldblank1, real201 transfer21(caster252\u2192453/victim252\u219251), shrink/kill91/blank100. Native100ticks/source10490definedfields and19680matrices pass;704640ownvertexbytes/97560indices exact, wrongdoublePulse/cadence/castercap negativesreject. Fourteen whole original/actualMetal pairsindependently reviewed in4fullresolutiondetailpages,28pairedimagehashesverified; actualGPU90render RNGcounts/positions exact/maxphase4.56e-8. Root100samephasePNGs byte-identical/cleanexit. Rootgallery24Hz four91completions, realuncappedcastermana>252, health102/102,targetflags/position/spelltimer0 retained;4+unreseededfactories/31of32visible/cleanexit. Standaloneowner/spelllist association/basepre matrices/camera/materialCOM aredeclaredboundaries. Naturalmap/cast scheduling,movingactors/attachment,healthvariants,audio/device/quantization/exactpixels remainopen; invaliddoublePulse datasetsretained.",
+        "report": "recon/retail_asm/runtime/effects/current-ymanadrain-target-20261011/root-approval.json",
+        "sha256": "ae6753011a44b238b671ef6453de96860c0d7f3c10f8d922de4f81bf05ad62f3",
+        "note": "docs/vfx/forensics/YMANADRAIN_AUTHENTIC_TARGET_RENDER_20261011.md"
+      }
     },
     {
       "index": 88,
