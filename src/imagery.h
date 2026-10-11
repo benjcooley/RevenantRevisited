@@ -464,6 +464,9 @@ class TObjectAnimator : public TObjectComponent
       // The this is a new state (set to true when ResetState() is called, and false after first frame)
     virtual void Pulse() {}
       // Called during each timer Pulse() to update animaton.
+    virtual void ShowNumber(int32_t /*amount*/, int32_t /*x*/, int32_t /*y*/, uint32_t /*rgb*/) {}
+      // Float `amount` up from the map-screen point (x, y), in 0xRRGGBB: a
+      // character's animator shows it (TCharAnimator); others ignore it
     virtual void Animate(bool draw);
       // Animates object
 

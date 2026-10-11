@@ -218,6 +218,10 @@ class TFixtureAnimator : public TObjectAnimator
         Record("SetNewState", {newst ? 1 : 0});
         TObjectAnimator::SetNewState(newst);
     }
+    void ShowNumber(int32_t amount, int32_t x, int32_t y, uint32_t rgb) override
+    {
+        Record("ShowNumber", {amount, x, y, int32_t(rgb)});
+    }
 
   private:
     void Record(const char* name, std::initializer_list<int32_t> args) const

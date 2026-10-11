@@ -63,6 +63,35 @@ void TCharAnimator::Animate(bool draw)
     T3DAnimator::Animate(draw);
 }
 
+// REVSYNC: TCharAnimator::Animate @ 0x004d7a00 ticks the rising numbers
+// (0x004da6f0) once a frame, paralysed or iced too; the port's per-tick
+// animator call is Pulse. Each live number loses a tick: with none left it
+// goes, else it rises kRisingNumberRise.
+void TCharAnimator::Pulse()
+{
+    T3DAnimator::Pulse();
+    for (SRisingNumber& n : numbers)
+    {
+        if (n.ticks <= 0)
+            continue;
+        if (--n.ticks <= 0)
+            n = SRisingNumber{};
+        else
+            n.rise += kRisingNumberRise;
+    }
+}
+
+void TCharAnimator::ShowNumber(int32_t amount, int32_t x, int32_t y, uint32_t rgb)
+{
+    static uint32_t serials = 0;
+    for (size_t i = 1; i < numbers.size(); ++i)
+        if (numbers[i].ticks <= 0)
+        {
+            numbers[i] = SRisingNumber{amount, rgb, x, y, kRisingNumberTicks, 0, ++serials};
+            return;
+        }
+}
+
 bool TCharAnimator::Render()
 {
     // Programmers note: it's a good idea to put your functions down below, as

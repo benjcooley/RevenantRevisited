@@ -1168,8 +1168,21 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
     if ((charflags & kCharFlagUnkillable) && damage >= Health() - 1)
         damage = Health() - 1;
 
-  // Retail floats the amount over the character here (its animator's number
-  // list, TCharAnimator 0x004da3b0): not ported yet, see COMBAT_HIT.md §9.2.
+  // REVSYNC: 0x004c4af0..0x004c4be9 -- the blow's number floats up over
+  // the character (its animator's rising numbers, 0x004da3b0): minus the
+  // damage, at most the health it had, from 135 px above its screen point;
+  // red when under a quarter of its health is left, yellow under half,
+  // else white.
+    if (TObjectAnimator* animator = GetAnimator())
+    {
+        int32_t sx = 0, sy = 0;
+        GetScreenPos(sx, sy);
+        const int32_t left = (std::max)(Health() - damage, 0);
+        const int32_t maxhealth = MaxHealth();
+        const int32_t percent = maxhealth > 0 ? left * 100 / maxhealth : 0;   // retail divides unguarded
+        const uint32_t rgb = percent < 25 ? 0xff0000 : percent < 50 ? 0xffff00 : 0xffffff;
+        animator->ShowNumber(-(std::min)(Health(), damage), sx, sy - 135, rgb);
+    }
 
   // Held in an interactive move (another's), a character loses no health
   // and shows no block.
