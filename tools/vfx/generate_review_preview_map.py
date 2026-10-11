@@ -19,7 +19,7 @@ TSparksEffect_BESPOKE TSparkEffect TFireEffect_BESPOKE TFireEffect
 TFountainAnimator_BESPOKE TCyanFountainAnimator_BESPOKE
 TRedFountainAnimator_BESPOKE TGreenFountainAnimator_BESPOKE TBlueFountainAnimator_BESPOKE
 TRibbonAnimator_BESPOKE TFlameEffect_BESPOKE TFlameEffect
-TFlameEffect_BESPOKE__FlameB TFlameEffect_BESPOKE__FlameG TFireWindEffect_BESPOKE
+TFlameEffect_BESPOKE__FlameB TFlameEffect_BESPOKE__FlameG TFireWindEffect_BESPOKE TFireWindEffect_Bespoke__YFireWind_BESPOKE
 TFireBallEffect LightStrip TStripEffect TIceBoltEffect_BESPOKE TPhotonEffect_BESPOKE
 TSymGlowAnimator_BESPOKE TMeteorStormEffect_BESPOKE TFlyEffect_BESPOKE
 TCureEffect_BESPOKE TFireFlashEffect_BESPOKE TFireConeEffect_BESPOKE TBurnEffect_BESPOKE
@@ -71,7 +71,6 @@ PARTIAL = {
     '0xad92bd33': ('TBuffEffect_Bespoke__Stoneskin_BESPOKE', 'tinted asset billboard; original buff controller incomplete'),
     '0xad92bc16': ('TInvisibleEffect_Bespoke_BESPOKE', 'tinted asset billboard; original invisibility controller incomplete'),
     '0xad92bd37': ('TBuffEffect_Bespoke__charm_BESPOKE', 'tinted asset billboard; original buff controller incomplete'),
-    '0x98974ea7': ('TFireWindEffect_Bespoke__YFireWind_BESPOKE', 'own YFireWind asset billboard; original controller incomplete'),
     '0xad92fc13': ('TCataclysmEffect_Bespoke__YCataclysm_BESPOKE', 'own YCataclysm asset billboard; original controller incomplete'),
     '0xae92bc14': ('TManadrainEffect_Bespoke__YManadrain_BESPOKE', 'own YManadrain asset billboard; original controller incomplete'),
     '0xae5eeb26': ('TMaelstromEffect_Bespoke__ymaelstrom_BESPOKE', 'own ymaelstrom asset billboard; original controller incomplete'),

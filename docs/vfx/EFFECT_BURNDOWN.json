@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "3fc640da42d8173341b97000e125c35863b79d4d48882c526cbbf85dc243a589",
+    "harness_sha256": "6273b91f15f7a8f4f0545824b78c193bb19782c3fc9a6ac506c7496ba5467efc",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 108,
+    "retail_rows_with_source_fixes_recorded": 109,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 87,
+    "visual_fidelity_confirmed_rows": 88,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 87,
-    "remaining_visual_review_rows": 89
+    "reviewed_visual_pass_rows": 88,
+    "remaining_visual_review_rows": 88
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -12380,27 +12380,39 @@
         "TFireWindEffect_Bespoke__YFireWind_BESPOKE",
         "TFireWindEffect_BESPOKE__YFireWind"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: replaced own YFireWind card with separately verified Y factory/asset and shared visual core proven against own full161-tick native state/render trace. Both old Y IDs submit actual world meshes; own radius/facing/audio scope remains explicit."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved own Y visual renderer/controller; pursue natural Y radius/damage/facing/audio separately.",
       "notes": [],
-      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
+      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Eighteen own Y leaf original software and actual Metal native-domain green/yellow plume/sphere/annulus/rings/decay/empty tail, null-spell facing0. All native/image bounds fit. Natural Y radius/damage/facing/audio and exactpixels/device remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-yfirewind-full-visual-20261010/root-approval.json",
+        "sha256": "d8db2f3ab03c6b373cd8539120ebab0c2a5ba4ef353080e3b7d6d7ed48b61b5b",
+        "note": "docs/vfx/forensics/YFIREWIND_NATIVE_VISUAL.md"
+      }
     },
     {
       "index": 50,

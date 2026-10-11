@@ -147,7 +147,7 @@ bool LayoutStations() {
         const auto support=DescribeVfxReviewSpawn(e.id);
         // An unavailable entry still has a named slot. With no drawable, it
         // needs the minimum slot rather than its asset's oversized bounds.
-        if(!support.safe_factory && e.id!=0x98974eabu) continue;
+        if(!support.safe_factory && e.id!=0x98974eabu && e.id!=0x98974ea7u) continue;
         // These are padded culling/refresh bounds, not measured visible size.
         // Bound their layout contribution; explicit large-effect hints below
         // reserve space for genuinely broad trajectories.

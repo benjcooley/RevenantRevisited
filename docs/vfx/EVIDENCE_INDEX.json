@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 108,
+    "retail_rows_with_source_fixes_recorded": 109,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 87,
+    "visual_fidelity_confirmed_rows": 88,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 87,
-    "remaining_visual_review_rows": 89
+    "reviewed_visual_pass_rows": 88,
+    "remaining_visual_review_rows": 88
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1421,6 +1421,13 @@
       "check": "kinsecretdoor_full_native_actual_metal_visual",
       "status": "pass",
       "scope": "Closed still/state0 complete231vertices/260triangles and both texture slots, six whole original/software versus actual Metal native-domain samples. Opening states, depth/internal face edges, natural context and exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-yfirewind-full-visual-20261010/root-approval.json": {
+      "sha256": "d8db2f3ab03c6b373cd8539120ebab0c2a5ba4ef353080e3b7d6d7ed48b61b5b",
+      "retail_row": "YFireWind:0x98974ea7",
+      "check": "yfirewind_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Eighteen own Y leaf original software and actual Metal native-domain green/yellow plume/sphere/annulus/rings/decay/empty tail, null-spell facing0. All native/image bounds fit. Natural Y radius/damage/facing/audio and exactpixels/device remain open."
     }
   }
 }
