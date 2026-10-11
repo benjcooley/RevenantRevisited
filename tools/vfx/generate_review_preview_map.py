@@ -84,6 +84,7 @@ PARTIAL = {
 # their owner constructors. These newer implementations predate their ledger
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
+    '0x452dade0': 'TVortexEffect_BESPOKE',
     '0xded3dbed': 'TWindStrip_BESPOKE_NULLSPELL',
     '0xad92bc1c': 'TEnergySpray_BESPOKE_NULLSPELL',
     '0xad99bd33': 'GVortex_ORIGINAL',
