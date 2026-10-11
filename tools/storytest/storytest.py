@@ -3,7 +3,7 @@
 
     storytest.py [--slot DIR] locate [--scripts forest.s,town.s] [--levels 0,1] [--json FILE]
     storytest.py --slot DIR run --out DIR --ini FILE [--npc NAME ...] [--jobs N]
-                 [--keys 3,1 | --choice K] [--set VAR=N ...] [--window S] [--tag TAG]
+                 [--keys 3,1 | --choice K] [--set VAR=N ...] [--window S] [--tag TAG] [--god]
     storytest.py [--slot DIR] report [--reanalyze] [--retail] DIR [DIR ...]
 
 `locate` reads the module's scripts and maps: every OBJECT block with a
@@ -427,13 +427,16 @@ def parse_keys(spec: str) -> list[tuple[list[str], int | None]]:
 
 
 def plan(npc: Npc, keys: str, sets: list[str], tag: str, out: Path,
-         offset: tuple[int, int], window: int | None = None) -> RunSpec:
+         offset: tuple[int, int], window: int | None = None, god: bool = False) -> RunSpec:
     """One run: Locke placed beside the NPC, the states set, `use`; then every
     cycle of the window presses the phase's keys in turn (a number key picks a
-    choice when a menu is up and is ignored otherwise; `e` closes a shop)."""
+    choice when a menu is up and is ignored otherwise; `e` closes a shop).
+    `god` types the `alreadydead` cheat first, so monsters near the NPC can't
+    kill Locke while he waits."""
     m = npc.matches[0]
     x, y = m['x'] + offset[0], m['y'] + offset[1]
-    cmds = ['sleep 48', f'player.pos {x} {y} {m["z"]} {m["level"]}', 'sleep 120']
+    cmds = ['sleep 48'] + (['prompt alreadydead'] if god else [])
+    cmds += [f'player.pos {x} {y} {m["z"]} {m["level"]}', 'sleep 120']
     cmds += [s if " " in s.strip() else f'set {s.replace("=", " = ")}' for s in sets]
     cmds += [f'use {npc.name}']
     # The window: the conversation's lines at a few seconds each, plus the
@@ -849,6 +852,7 @@ def main(argv: list[str]) -> int:
     rp.add_argument('--set', action='append', default=[],
                     help='VAR=N: a game state set before `use`; any other console line (with a space) runs as is')
     rp.add_argument('--tag', default='')
+    rp.add_argument('--god', action='store_true', help='type the alreadydead cheat before the teleport')
     rp.add_argument('--window', type=int, help='seconds of key presses (default: from the block\'s length, at most 600)')
     rp.add_argument('--offset', default='32,32', help='dx,dy from the NPC where Locke is placed')
     rp.add_argument('--binary', type=Path, default=REPO / 'build' / 'Revenant')
@@ -895,7 +899,7 @@ def main(argv: list[str]) -> int:
     a.out.mkdir(parents=True, exist_ok=True)
     names_file(a.out, mod, a.slot)
     keys = a.keys or (f'{a.choice},1' if a.choice > 1 else str(a.choice))
-    specs = [plan(n, keys, a.set, a.tag, a.out, offset, a.window) for n in npcs if n.found]
+    specs = [plan(n, keys, a.set, a.tag, a.out, offset, a.window, a.god) for n in npcs if n.found]
     for n in npcs:
         if not n.found:
             print(f'skip {n.name} ({n.script}): no map object')

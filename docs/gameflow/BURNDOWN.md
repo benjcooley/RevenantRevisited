@@ -76,8 +76,8 @@ reads.
 | [x] | `[Controls]` read when the control map is built (it never was, so OK overwrote the player's bindings with the port's table) | 2026-10-05 |
 | [x] | Gamma on screen: the ambient offset in `TMapPane::SetAmbientLight` and OK's re-set, as retail; no display ramp, which the retail captures show has no effect (OPTIONS.md §7.11, §9; LIGHTING_FIDELITY.md §2.5, §8; question 92) | 2026-10-07 |
 | [ ] | Combat reads `CombatFace` and `NoCombatResults` (gameplay track; OPTIONS.md §7.4, §7.7) | — |
-| [ ] | DEF slider: a track click pages by the slider's page size, as retail (DEF engine; OPTIONS.md §8) | — |
-| [ ] | The control table → retail's (`0x005d5500`: order, defaults, entries), so a missing `[Controls]` gives retail's keys | — |
+| [x] | DEF slider as retail: a track click pages toward the pointer by the page (Options: 1 / 12 / 15 / 1), the thumb drags, an arrow steps on release (OPTIONS.md §8, §9) | 2026-10-10 |
+| [ ] | The control table → retail's (`0x005d5500`: order, defaults, entries), so a missing `[Controls]` gives retail's keys. Decoded 2026-10-10: 69 entries of 0x4c bytes in the port's `SControlEntry` layout, but retail's command numbers (Use 14, Invoke 20, belt 24-28, dodges 48-55, camera 70/71) are not the port's 1998 enum, and several have no dispatch yet (combat track). Until then the port's default binds Combat Mode to Enter, which also opens the text-bar prompt; retail's is `C` (the GOG INI's `[Controls]` says `C`, so only an INI without the section sees it) | 2026-10-10 |
 
 **Exit:** Options opens from the title and in game; changes take effect and persist in `Revenant.ini` as retail's did, and the GOG install's INI loads unchanged.
 
@@ -165,7 +165,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 |--------|------|--------------|
 | [x] | Retail death countdown (192 frames, TPlayer::Animate 0x00518aa0) -> `GameFlow.PlayerDied()` | 2026-10-04 (64c0f25) |
 | [x] | Retail `TDeathScreen` + `TDeathPane` (Restart / Load / Exit, death voice) | 2026-10-04 (64c0f25) |
-| [ ] | Restart semantics after a loaded game (author question 40) | — |
+| [x] | Restart after a loaded game starts a new game, as retail's (`0x00533950`: the start slot was consumed when that game began; `TGameFlow::RestartAfterDeath`). Author question 40 asks whether reloading was meant | 2026-10-10 |
 | [x] | Death "Load" -> Load Game screen (retail 0x00533970) | 2026-10-05 |
 | [x] | Death voices audible (MP3 voice support in the sound player; `gosar00` stays missing, as in retail) | 2026-10-05 |
 
@@ -191,7 +191,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | From the NPC sweep: a `jump` or a taken choice lands as deep as its label sits (retail `Jump`: blocks no longer end at an inner IF's END and skip `CONTROL ON`/`SETCDVOLUME FULL`); a line starting with quoted text runs (`"TRAINING SWORD".DELETE`); `set` steps past its value ([forensics/SCRIPT_ENGINE.md](forensics/SCRIPT_ENGINE.md) §7, [forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §4) | 2026-10-05 |
 | [x] | From the retail A/B ([RETAIL_AB.md](RETAIL_AB.md) targets 1, 4, 5): block stepping is retail's -- the prototype's text is the whole OBJECT block, `Jump` counts the object's BEGIN, so a block runs on after a jump through the next trigger to the object's END (Daly, Steffan, Jong and a dozen townsfolk walk one idle round as the conversation's tail; AUTHOR_QUESTIONS 104); the tokenizer reads CR-transparently and counts lines as retail's; `ELSE IF`; block levels as retail leaves them; a CUBE trigger searches the owner's level. Every shipped block and label steps as retail's; deviation: depth 10 ([forensics/SCRIPT_ENGINE.md](forensics/SCRIPT_ENGINE.md) §4) | 2026-10-07 |
 | [ ] | `lastattack` member (needs the combat track's attack result; Jong's training) | — |
-| [ ] | `Start` ending a running block (`0x00492440` calls `End`): a trigger interrupting an ALWAYS block gets back what that block took (RETAIL_AB.md, Next) | — |
+| [x] | `End` at every block's end (Continue `0x00493dc2`) and `Start` ending a running block (`0x00492440`): the trigger guard no longer outlives its block, so an NPC talks a second time (it didn't: BOY1 `use` twice), and an interrupted ALWAYS block gives back what it took (SCRIPT_ENGINE.md §4) | 2026-10-10 |
 | [ ] | Mainline ImGui console panel (replaces threaded TConsolePane) | — |
 
 **Exit:** Scripts pump every frame; triggered scripts fire from in-game; console executes commands.
@@ -210,7 +210,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | The Keep's story chain plays end to end (headless, choices by key): opening; Rahul's death and Tendrick's scene (`ressexit` unlocked); DOOR1; Rand in the jail (`RandK`: looped choice, two menus, `TENDRICKSTATE = 1`); Tendrick in the throne room (`TendrickT`: four choices with loops, `Finish`, Locke to level 6); the level-6 scene (`GowE`: walks, `cast "electric bolt"`, Rand dies, fade, back to the Keep, `TENDRICKSTATE = 2`, `KeepExit` unlocked); menu saves at each step | 2026-10-05 |
 | [x] | Dialog text in Windows-1252 (`’` 0x92, `è`): the TrueType path decodes CP1252 and its atlases hold the printable repertoire ([../ui/TEXT_RENDERING.md](../ui/TEXT_RENDERING.md)) | 2026-10-05 |
 | [x] | NPC sweep (`tools/storytest`, [STORY_TESTING.md](STORY_TESTING.md) §7): the 32 forest and town DIALOG NPCs from `New Game1`, several key schedules and `MISTSTATE=6`; every block runs to its END except Jong1 (`lastattack`, T8) | 2026-10-05 |
-| [ ] | Some speakers hold the speech wait far past their line: Kylie1 (dancing, root `walk`) ~40 s a line and ~34 s for `PIVOT 50` (others 4–10 s); the slave camp's (level 46: Shegra, Slave1, Slave2, Druhgslave2 on `say`, Druhgslave3 on `try pick`) never get back to root. Not the say's start: `Say` now starts the action as retail does (step 7, `0x004db4d0` = `ForceCommand`) and the hangs remain. The speech wait wants the speaker idle in root and not transitioning (DIALOG.md §2.5); these speakers' state machines don't get there (Kylie's dance root, the slaves' states) -- character/animation lane. Not the player's per-tick root reset fixed 2026-10-06 ([../gameplay/forensics/PLAYER_INPUT.md](../gameplay/forensics/PLAYER_INPUT.md) §4): that came from the player's movement-mode input and touched only the player. Leads: retail `TComplexObject::ForceCommand` `0x004db4d0` differs from the 1998 body the port runs (§8 there) | 2026-10-06 |
+| [x] | The level-46 slave camp's speakers (Shegra, Slave1, Slave2, the druhg slaves) never got back to root after a line: the shipped map saves them with a `combat` root their walk-and-say models lack, so ResolveSay's return to the root is impossible (retail does the same on that input: `combat-update` `say.noroot.*` 4/4). The port repairs such a root on load (`TComplexObject::Load`, a REVSYNC-DIVERGENCE; DIALOG.md §2.5). Shegra, Slave1 and Slave2 now run to END. Retail ground truth for Shegra is pending in the dosbox-x lab (AUTHOR_QUESTIONS 142). Kylie1's long holds went with the combat merge (2026-10-09) | 2026-10-10 |
 
 **Exit:** Clicking an NPC brings up dialog; choice routes back to script branch.
 
@@ -224,7 +224,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | Locks and keys (`CheckKeyUse`), the door prototypes' USE scripts end to end | 2026-10-05 |
 | [x] | Doors and lift gates by mouse: the map pane's retail pick on the GPU id buffer, the door cursor, click-to-use; `ressexit` opens and teleports, `soldoor`'s INPORTEW runs ([forensics/MAP_INPUT.md](forensics/MAP_INPUT.md) §7.1) | 2026-10-08 |
 | [x] | Portcullis (InportNS) by mouse, seen lifting and closing behind Locke at the level-46 gatehouse; locked gates say "It seems to be locked" (MAP_INPUT §7.1) | 2026-10-09 |
-| [ ] | By mouse, not yet shown: click-to-talk, click-to-get, a PortNS/PortEW exit gate; hover's synchronous read while the pointer moves (MAP_INPUT §7.1 Open) | 2026-10-09 |
+| [x] | Hover picks from the latest copied-back ids and never waits on the GPU (MAP_INPUT §7.1). Shown by mouse: click-to-talk and click-to-get (2026-10-09), an exit gate (`Lv46D5` PortNS: locked line, then through it, 2026-10-10) | 2026-10-10 |
 | [-] | curmap written on every transition: the port keeps visited levels loaded and writes them when saving (ARCHITECTURE §7) | 2026-10-05 |
 | [x] | Walk-on of an unscripted AutoActivate exit: a level-41 teleport pad sends Locke to `Lv41Tel5`'s target | 2026-10-05 |
 | [x] | The loading bar fills per sector during the world load (staged `TGameMap` load) | 2026-10-05 |
@@ -240,6 +240,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 
 | Status | Item | Last touched |
 |--------|------|--------------|
+| [x] | Retail's typed-message prompt on the text bar: Enter opens "Message: ", typing and Backspace, Enter commits "Locke: …"; `@<line>` runs a script line on Locke, the ten cheat words (`alreadydead`, `alchemy`, `nahkranoth`, `noamnesia`, `lookunderthehood`, `dummies`, `abracadabra`, `potionsnlotions`, `gimmesomegrub`, `debug`) answer "Cheat Enabled"/"Disabled" with `potionmix`; the play screen takes no keys while it is open; a fight commits it (TTextBar_SPEC §10; `src/cheats.cpp`). Tests type it with `--exec "prompt <text>"` or input-script `char enter` / `type`; storytest `--god` | 2026-10-10 |
 | [ ] | `src/gamelogpane.{h,cpp}` — retained-mode TPane | — |
 | [ ] | `SLogEntry` ring buffer | — |
 | [ ] | `log_to_player(category, fmt, ...)` API | — |

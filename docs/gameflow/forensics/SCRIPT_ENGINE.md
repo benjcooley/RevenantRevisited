@@ -92,7 +92,7 @@ character's (`0x004c3371`).
 4. Trigger scan, top prototype then parents: the first trigger that
    fires starts (`0x00492440`), unless an ALWAYS block is running and the
    new one is also ALWAYS. Starting (`Start` `0x00492440`: `End` first if
-   a block is running -- not ported -- then the ip, depth 0; the block
+   a block is running, then the ip, depth 0; the block
    levels are left as they are, §4.2) records the trigger type, calls the
    owner's (and user's) "script started" hook
    (vtable 0x148), and sets the trigger-user guard to the user's map index
@@ -105,7 +105,12 @@ character's (`0x004c3371`).
 
 `End` (`0x00493e40`) clears the guard, the wait and the choice list, and
 gives back what the script took: control on (flag 1), dialog pane closed
-(4), camera back on the player (8).
+(4), camera back on the player (8). It leaves the ip and the flags
+(`+0x48`/`+0x4c`) alone: Continue clears those when the block ends, then
+calls End (`0x00493dc2`); `Reset` (`0x00492490`) ends a running block and
+then clears the ip. The port ran End only from `Reset` until 2026-10-10,
+so a player's trigger guard outlived its block and the same NPC could
+not be talked to twice.
 
 ### 4.1 The prototype's text and the tokenizer
 
@@ -132,6 +137,13 @@ the stream has passed the LF and the line is counted. So:
   next `Get` returns it first (the `ELSE IF` rewind below depends on it).
 
 A 0xFF byte is the end of the stream (`GetChar` sign-extends it to −1).
+
+Quoted text (`0x00478c9c`, unless the token's flag 1 keeps backslashes
+literal) decodes `\n`, `\r`, `\t`, `\\` and `\xXX` (exactly two hex
+digits, either case; a bad one reports "Illegal \xXX character in
+string"). After any other character the backslash stays and that
+character is read as itself. A string past the buffer reports "String too
+long".
 
 ### 4.2 Block stepping (`0x00493827`–`0x00493d81`)
 

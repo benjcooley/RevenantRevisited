@@ -15,6 +15,7 @@
 #include "sector.h"
 
 class TMapRenderer;
+enum class EPickRead : uint8_t;
 
 // Grid snap
 #define GRIDSHIFT   4
@@ -444,6 +445,8 @@ class TMapPane : public TPane
         // a 3D mesh shown there, else the map's objects whose screen rect
         // holds the point (a visible pixel or always-on-top preferred) that
         // offer a cursor for `with` (or a pickup)
+    TObjectInstance* OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with, EPickRead read);
+        // The same, the frame's ids read as `read` says (the hover: Latest)
     TObjectInstance* GetInstance(int32_t index, int32_t objset = OBJSET_ALL);
         // Returns the instance given an object index. Backed by an
         // unordered_map keyed on mapindex (O(1) hit, falls back to a linear

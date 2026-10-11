@@ -134,8 +134,14 @@ void TScript::SetText(char *buf)
     ScriptManager.SetScriptsDirty();
 }
 
+// REVSYNC: Start @ 0x00492440 -- a running block ends first (End: what it
+// took goes back, its guard and wait clear), so a trigger that interrupts a
+// block starts clean.
 void TScript::Start(TScriptProto* startproto, int32_t pos, int32_t /*newpriority*/)
 {
+    if (Running())
+        End();
+
     if (!startproto)
         curproto = topproto;
     else
@@ -543,14 +549,18 @@ void TScript::Continue(TObjectInstance* context, bool commanddone)
     // Where an `ELSE IF`'s IF is read from on the next pass (0x00493b06).
     uint32_t pendingif = 0;
 
-    // The block is over (retail clears the ip and its flags, +0x48/+0x4c).
-    // A story test reads the trace to tell a block that ran to its end from
-    // one still waiting.
+    // The block is over (retail clears the ip and its flags, +0x48/+0x4c,
+    // then End at 0x00493dc2: the trigger's guard goes, so the same player
+    // can set it off again, and what the block took comes back). Not ported:
+    // the "script ended" hooks of the owner, user and second object (vtable
+    // 0x14c). A story test reads the trace to tell a block that ran to its
+    // end from one still waiting.
     const auto endblock = [&]() {
         log_trace("[script] %s: trigger %d ends", (context && context->GetName()) ? context->GetName() : "?",
                   trigger);
         ip = kNotRunning;
         priority = 0;
+        End();
     };
 
     while (ip != kNotRunning && (!(priority & SCRIPT_PAUSED)))
@@ -803,8 +813,6 @@ void TScript::End()
     triggerguard.Clear();
     wait = EScriptWait::None;
     waitobject.Clear();
-    ip = kNotRunning;
-    lastpriority = priority = 0;
 
     // Give back what the block took. A block cut off between `choice` and
     // its response still holds the dialog.
@@ -850,9 +858,14 @@ void TScript::SetBusyMessage(const char *text)
     busymessage = text ? text : "";
 }
 
+// REVSYNC: Reset @ 0x00492490 -- a running block ends, then the script
+// stands idle at the top prototype.
 void TScript::Reset()
 {
-    End();
+    if (Running())
+        End();
+    ip = kNotRunning;
+    lastpriority = priority = 0;
     curproto = topproto;
     newtrigger = trigger = 0;
     newtriggerstr[0] = '\0';

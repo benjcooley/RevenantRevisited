@@ -229,8 +229,15 @@ Its callers:
   carries the offset, so each OK adds it again (question 93).
 
 `FadeAmbient` (`FUN_00453720`), the 3-second cross-fade between nearby
-areas, stores its target without the offset; a `SetAmbientLight` during the
-fade replaces the target with the offset one.
+areas, stores its target without the offset (`mov [ecx+0x8dc], edi`, the
+argument as passed); a `SetAmbientLight` during the fade replaces the target
+with the offset one, but only day/night areas (flag 8, `FUN_0041b770`) call
+it again. So in retail every cross-fade into a nearby area without day and
+night, and an in-game load into the same room (`LoadGame` exits the areas,
+`0x0041c600`, but keeps the last level and position, `0x005e91ec..f4`),
+dropped the room's ambient by the offset: the Keep from 14 to 4, the orange
+wash. A retail bug; the port adds the offset to the fade target too
+(2026-10-10, `TMapPane::FadeAmbient`).
 
 The S1 capture confirms the offset is in effect at area entry: the ambient
 bytes it shows, (3, 3, 4), need `A` in 13–15 (§8).

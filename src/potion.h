@@ -32,3 +32,5 @@ class TPotion : public TFood
 };
 
 DEFINE_BUILDER("POTION", TPotion)
+
+extern TObjectClass PotionClass;
