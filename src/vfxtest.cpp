@@ -2,6 +2,7 @@
 #include "effects/fgeyseroriginal.h"
 #include "effects/dustoriginal.h"
 #include "effects/poisonoriginal.h"
+#include "effects/poweruporiginal.h"
 #include "effects/lightstriporiginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
@@ -5329,6 +5330,15 @@ struct SVfxTestBootstrap {
             original.submit_world=[](void* c,EFxDebugMode mode){poison_original::SubmitWorld(static_cast<poison_original::State*>(c),mode);};
             original.is_alive=[](void* c){return poison_original::IsAlive(static_cast<poison_original::State*>(c));};
             original.destroy=[](void* c){poison_original::Destroy(static_cast<poison_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="PowerUp_AUTHORED";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return powerup_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){powerup_original::Advance(static_cast<powerup_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){powerup_original::SubmitWorld(static_cast<powerup_original::State*>(c),mode);};
+            original.destroy=[](void* c){powerup_original::Destroy(static_cast<powerup_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
 
