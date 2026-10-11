@@ -264,6 +264,8 @@ struct SBillboardDrawItem
     float        size_wu[2]     = {1.0f, 1.0f};
     float        color_rgba[4]  = {1.0f, 1.0f, 1.0f, 1.0f};
     float        uv_rect[4]     = {0.0f, 0.0f, 1.0f, 1.0f};   // x,y,w,h normalized
+    // Ordered multipass sprites are barriers to material-based reordering.
+    bool preserve_submission_order = false;
     SFxBatchKey  key            = {};
     EFxDebugMode debug_mode     = EFxDebugMode::Normal;
     // Per-instance per PHASE1_SPINE.md §6: lighting is a runtime
