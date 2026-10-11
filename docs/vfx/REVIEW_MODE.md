@@ -7,11 +7,11 @@ An invisible disposable floor supplies normal walk-height/collision queries.
 
 The camera follows the row toward the upper right, so effects scroll toward
 the lower left. The default slope is 2.5 horizontal units per vertical unit.
-The default minimum clearance is 420 logical screen pixels: about two small
+The default minimum clearance is 240 logical screen pixels: about three small
 station centers per view, with partial neighbors at the edges. An absolute
-320-pixel floor prevents dense rows even when a smaller override is requested.
-Authored screen bounds and broad-emitter footprint hints increase clearance
-automatically. Large effects get their footprint plus a viewport of clearance,
+240-pixel floor prevents dense rows even when a smaller override is requested.
+Padded stored culling bounds contribute at most half a viewport to layout.
+Known broad-emitter hints and explicit overrides increase clearance as needed. Large effects get their footprint plus a viewport of clearance,
 so they pass alone, with fewer than one center per view on average.
 Scrolling runs at 48 pixels/sec.
 There are 720 pixels of empty lead-in and tail before the view loops.
@@ -34,8 +34,8 @@ Options:
 
 - `--vfx-review-speed=48`: logical pixels/sec, range 0.1–240.
 - `--vfx-review-ratio=2.5`: horizontal/vertical slope, range 2–3.
-- `--vfx-review-spacing=420`: requested minimum, range 180–800; effective
-  clearance respects the 320-pixel floor and viewport density limit.
+- `--vfx-review-spacing=240`: requested minimum, range 180–800; effective
+  clearance respects the 240-pixel floor and viewport density limit.
 - `--vfx-review-spacing-overrides=FireCone:1200,FireBall:900`: per-effect
   requested clearance in pixels, range 180–2400; names or hexadecimal type IDs.
   Overrides can increase spacing; they cannot bypass minimum/footprint clearance.
@@ -113,3 +113,5 @@ slots. Bright lighting records ambient 0.745/directional 0.372; the optional
 source-lighting flag retains ambient 0.149/directional 1.0. Three captured runs
 verify both lighting presets and an empty, labeled arroweffect slot.
 Local results: `/Users/benjamincooley/RevenantRetailLab/research/vfx-review-readable-20261010/verification.json`.
+
+Small-effect spacing is now 240px (previously 420). Stored culling bounds are capped for layout so inflated rectangles cannot create multi-minute empty gaps. All unavailable entries remain named slots.

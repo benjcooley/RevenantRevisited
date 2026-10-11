@@ -32,15 +32,15 @@ int main()
             const double norm=std::hypot(ratio,1.0);
             const double span=(std::min)(layout.width*norm/ratio,layout.height*norm);
             assert(Near(layout.ViewSpan(),span));
-            // A smaller requested setting cannot crowd more than three centers.
+            // A smaller requested setting cannot crowd more than four centers.
             layout.requested_minimum=180;
             const double small=layout.Clearance(32,180);
-            assert(small>=320 && small+1e-8>=span/2.25);
-            assert(MaxVisibleCenters(span,small)<=3);
+            assert(small>=240 && small+1e-8>=span/3.0);
+            assert(MaxVisibleCenters(span,small)<=4);
             layout.requested_minimum=420;
             const double usual=layout.Clearance(32);
             assert(usual>=420);
-            assert(MaxVisibleCenters(span,usual)<=3);
+            assert(MaxVisibleCenters(span,usual)<=4);
             assert(Near(layout.Clearance(32,1200),(std::max)(1200.0,usual)));
             // Large effects reserve their own span plus a whole viewport.
             const double bigFootprint=(std::max)(1000.0,0.75*span);
@@ -69,12 +69,12 @@ int main()
         }
     }
     VfxReviewLayout defaults;
-    assert(Near(defaults.MinimumClearance(),420));
-    assert(MaxVisibleCenters(defaults.ViewSpan(),defaults.Clearance(32))==2);
+    assert(Near(defaults.MinimumClearance(),240));
+    assert(MaxVisibleCenters(defaults.ViewSpan(),defaults.Clearance(32))==3);
     assert(defaults.ViewSpan()/defaults.Clearance(1000)<1.0);
     defaults.width=0; assert(defaults.ViewSpan()==0);
-    assert(defaults.MinimumClearance()==420);
+    assert(defaults.MinimumClearance()==240);
     defaults.ratio=std::numeric_limits<double>::quiet_NaN(); assert(defaults.ViewSpan()==0);
-    assert(defaults.Clearance(-1,-10)==420);
+    assert(defaults.Clearance(-1,-10)==240);
     std::puts("VFX review layout: density, isolation, mixed footprints, cropped views and interval separation pass");
 }
