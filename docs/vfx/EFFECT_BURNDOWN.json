@@ -24,19 +24,19 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 99,
+    "retail_rows_with_source_fixes_recorded": 101,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 88,
-    "visual_fidelity_confirmed_rows": 60,
+    "actual_runtime_verified_rows": 90,
+    "visual_fidelity_confirmed_rows": 62,
     "repeatable_ab_rows": 7,
-    "thin_bounded_render_frontend_rows": 75,
-    "reviewed_visual_pass_rows": 60,
-    "remaining_visual_review_rows": 116
+    "thin_bounded_render_frontend_rows": 77,
+    "reviewed_visual_pass_rows": 62,
+    "remaining_visual_review_rows": 114
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -8093,29 +8093,66 @@
       "retail_type_id": "0x42e0fcd0",
       "asset": "magic\\Ogre.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: strict exact camera-particle profile, independently decoded source camera emitter/base matrices, cached emission frame, native hidden-helper mesh flags. Complete measured source/Metal scope documented."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve scoped original/actual Metal appearance and controlled map proofs; natural caster/alternate state/scene and strict framebuffer parity remain open.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "camera_particle_independent_emitter_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/camera-particles-ogrestrength-render-20261010/manifest.json",
+          "sha256": "360c4f5aa2618d60717da7ff7a30dbfea6652cf985d72750f0b72f51e48d986a",
+          "scope": "Original parser/Initialize/Pulse/sample with independently compiled production integer-camera emitter matrices and exact base geometry; five nonempty pixel/depth pairs replay twice using shared original raster. Actual Metal appearance tracked separately.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "natural caller/scene",
+            "strict modern pixel parity"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/camera-particles-ogrestrength-map-20261010/manifest.json",
+        "manifest_sha256": "1ecbfe2075377be9024236ca146896903858f7856cecda45089b9ee22c3e7bbf",
+        "status": "pass",
+        "observations": 8,
+        "frames": 48,
+        "floor_restored": true,
+        "natural_trigger_verified": false,
+        "scope": "Real typed create/controller/three bases/particles/MOVE/DELETE/absence with exact restored floor; hidden helper paths rejected. Controlled map fixture, natural spell/caster not verified."
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent six-phase full-frame inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "report": "recon/retail_asm/runtime/effects/current-ogrestrength-visual-20261010/review-approved.json",
+        "sha256": "57c7331a6479aabb60a02346c00e83e6001fe5d4af44be72e5b3f167320c1d47",
+        "scope": "Recorded nullspell state0, fixed origin/facing0, native-domain actual Metal vs independently executed whole native software particles and all three bases; samples1/5/15/29/45/59, quality0 seed1, source lighting38+white directional, incoming16, warmup1. No crops, registration, fitting or invented geometry. Root reviewed overall form/color and three-base/trail evolution.",
+        "note": "docs/vfx/forensics/CAMERA_PARTICLE_BATCH_20261010.md"
+      }
     },
     {
       "index": 11,
@@ -19440,29 +19477,66 @@
       "retail_type_id": "0xad92bd39",
       "asset": "magic\\Trollblood.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: strict exact camera-particle profile, independently decoded source camera emitter/base matrices, cached emission frame, native hidden-helper mesh flags. Complete measured source/Metal scope documented."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve scoped original/actual Metal appearance and controlled map proofs; natural caster/alternate state/scene and strict framebuffer parity remain open.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "thin_emulator_checks": [
+        {
+          "name": "camera_particle_independent_emitter_frontend",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/camera-particles-trollblood-render-20261010/manifest.json",
+          "sha256": "6c3a947c20e26f037987d17ba84b01026cfb2169a857639af0482f22975adc99",
+          "scope": "Original parser/Initialize/Pulse/sample with independently compiled production integer-camera emitter matrices and exact base geometry; five nonempty pixel/depth pairs replay twice using shared original raster. Actual Metal appearance tracked separately.",
+          "modern_gpu_backend_compared": false,
+          "full_acceptance_granted": false,
+          "open": [
+            "natural caller/scene",
+            "strict modern pixel parity"
+          ]
+        }
+      ],
+      "command_lifecycle_validation": {
+        "manifest": "recon/retail_asm/runtime/effects/camera-particles-trollblood-map-20261010/manifest.json",
+        "manifest_sha256": "c26437a8d3e6dbd3721ab72155a725c15fc1945a38572ce38df810dc536bdf53",
+        "status": "pass",
+        "observations": 8,
+        "frames": 48,
+        "floor_restored": true,
+        "natural_trigger_verified": false,
+        "scope": "Real typed create/controller/three bases/particles/MOVE/DELETE/absence with exact restored floor; hidden helper paths rejected. Controlled map fixture, natural spell/caster not verified."
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent six-phase full-frame inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "report": "recon/retail_asm/runtime/effects/current-trollblood-visual-20261010/review-approved.json",
+        "sha256": "bd03dc0c91b979ca96e7249a7ec2f8c7a50a649e2b2e88df98a4ba74c345ac70",
+        "scope": "Recorded nullspell state0, fixed origin/facing0, native-domain actual Metal vs independently executed whole native software particles and all three bases; samples1/5/15/29/45/59, quality0 seed1, source lighting38+white directional, incoming16, warmup1. No crops, registration, fitting or invented geometry. Root reviewed overall form/color and three-base/trail evolution.",
+        "note": "docs/vfx/forensics/CAMERA_PARTICLE_BATCH_20261010.md"
+      }
     },
     {
       "index": 142,

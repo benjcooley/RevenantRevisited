@@ -32,6 +32,7 @@ struct Imagery {
  bool HasRetailImmortalmightPartSysProfile(){return false;}
  bool HasRetailFmasteryPartSysProfile(){return false;}
  bool HasRetailSpeedFamilyPartSysProfile(uint32_t){return false;}
+ bool HasRetailCameraParticleProfile(uint32_t){return false;}
  bool HasRetailStaticParticleProfile(uint32_t id){return id==0xad92bd38u;}
  bool GetUninterpolatedAniKey(int object,int state,int frame,hmm_vec3& p,hmm_vec3& r,hmm_vec3& s){
   assert(object==1 && state==0);sampled=frame;p={float(frame),0,0};r={0,0,0};s={float(frame+1),1,1};return true;
@@ -43,6 +44,7 @@ struct T3DAnimator { Imagery imagery; S3DAnimObj bone;int cached=7;
  S3DAnimObj* GetObject(int){return &bone;}
  bool GetObjectMatrix(int,hmm_mat4* m){MtxClear(m);m->Elements[3][0]=8;bone.pos={8,0,0};bone.scl={9,1,1};return true;}
  bool SpeedEmitterLocalMatrix(hmm_mat4&,hmm_vec3*,hmm_vec3*){assert(false);return false;}
+ bool CameraParticleEmitterLocalMatrix(int,hmm_mat4&,hmm_vec3*,hmm_vec3*){assert(false);return false;}
 };
 MAKE
 struct Extracted {
