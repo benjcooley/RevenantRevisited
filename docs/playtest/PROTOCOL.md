@@ -126,7 +126,7 @@ stderr.
 | `step` | `ticks`, `events` (each with `t` relative to this step, `0 <= t < ticks`) | `t`: the session tick reached |
 | `observe` | `frame` (PNG path, optional), `objects` (radius in world units, default 800), `walkgrid` (radius, optional) | the observation (§7) |
 | `project` | `points`: `[[x, y, z], …]` | `screen`: `[[sx, sy] or null, …]`: game-screen pixels, `null` when off the play field |
-| `pick` | `x`, `y` | `pos`: the map point under that pixel by the game's pointer conversion (the right-button walk's: Locke's height + 50), `object`: the id under it or `null` |
+| `pick` | `x`, `y` | `pos`: the map point under that pixel by the game's pointer conversion (the right-button walk's: Locke's height + 50), `object`: the id under it or `null`. The retail host answers `pos` only: retail finds the object under the pointer with its 3D pick, which draws a whole frame and changes the game's pick cache, so asking would change the game |
 | `export_slot` | `slot`, `to` | `path` |
 | `mark` | `kind`, other fields | writes the mark and a check line to the recording |
 | `replay` | `bundle`, `verify` (bool), `until` (tick, optional) | `t`, and with `verify`: `diverged: null` or `{t, fields}` |

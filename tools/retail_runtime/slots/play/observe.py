@@ -55,6 +55,12 @@ ITEM_SLOT = 0x7c                  # int16: 0..0xfe pack, 0x100.. equipment, 0x10
 BELT_FIRST, BELT_SLOTS = 0x10b, 5
 VT_MAX = dict(health=0x1d8, fatigue=0x1e0, mana=0x1e8)   # MaxHealth / MaxFatigue / MaxMana (HIT, HUD)
 VT_WEAPON_TYPE = 0x2cc            # WeaponType (ACH: player 0x00520810)
+VT_INVENTORY_AMOUNT = 0x84        # GetInventoryAmount(name) 0x0046fde0, nested (INVENTORY.md §2)
+GOLD = 0x005e41a0                 # "Gold", the string the inventory pane asks with (0x00537b3b)
+QUICK_SPELLS = 0x2cc              # TPlayer: char[6] talisman codes, slot 0 the cursor, 1-4 the buttons
+SPELL_LIST = 0x00667c38           # TSpellList: +4 pointer array of SSpellData (count +0, data +0x10)
+SPELL_NAME, SPELL_VARIANTS = 0x1c, 0x00   # SSpellData: char[32] name, variants pointer array
+VARIANT_TALISMANS = 0x24          # SSpellVariant: char[6] (slots/combat/spell_guest.py)
 CLASS_NAMES = ['item', 'weapon', 'armor', 'talisman', 'food', 'container', 'lightsource', 'tool',
                'money', 'tile', 'exit', 'player', 'character', 'trap', 'shadow', 'helper', 'key',
                'invcontainer', 'potion', None, None, 'ammo', 'scroll', 'rangedweapon', None,
@@ -264,7 +270,27 @@ class Observer:
         info['weapon'] = (dict(name=m.text(m.u32(hand + OBJ_NAME)), mask=1 << weapon_type)
                           if hand else dict(name=None, mask=0))
         info['belt'] = self.belt(player)
+        info['quick_spells'] = self.quick_spells(player)
+        info['gold'] = self.virtual(player, VT_INVENTORY_AMOUNT, GOLD)
         return info
+
+    def quick_spells(self, player):
+        """The spell each quick slot 1-4 casts: its talisman code matched
+        exactly (stricmp) against the spell list's variants, first in file
+        order, as retail casts by talismans (SPELLS_MISSILES.md §5.1)."""
+        m = self.m
+        spells = m.pointers(m.u32(SPELL_LIST + 4 + 0x10), m.i32(SPELL_LIST + 4))
+        names = {}
+        for spell in spells:
+            variants = m.pointers(m.u32(spell + SPELL_VARIANTS + 0x10), m.i32(spell + SPELL_VARIANTS))
+            for variant in variants:
+                code = (m.text(variant + VARIANT_TALISMANS, 6) or '').lower()
+                names.setdefault(code, m.text(spell + SPELL_NAME, 32))
+        slots = []
+        for slot in range(1, 5):
+            code = m.text(player + QUICK_SPELLS + 6 * slot, 6)
+            slots.append(names.get(code.lower()) if code else None)
+        return slots
 
     def belt(self, player):
         m = self.m

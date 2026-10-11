@@ -139,11 +139,14 @@ joystick) stays absent, as in the HUD machine.
 | `dialog` | the response entry's texts (`+0x5c` count, `+0x60` texts), the latest NPC entry's speaker and text |
 | `messages` | text-bar lines since the previous `observe` |
 
-`mode` is the root block's, as IsValidAttack's mode test reads it.
-Not read (not verified): `gold`
-(the MONEY amount stat), `quick_spells` (talisman codes at `+0x2cc`, not
-names), `walkgrid`; `action_tick` only for an attack (the one retail
-keeps as `lastattack` `+0x160`, started at GameFrame `+0x164`).
+`mode` is the root block's, as IsValidAttack's mode test reads it;
+`quick_spells` match each slot's talisman code (TPlayer `+0x2cc`, char[6],
+slots 1-4) exactly against the spell list's variants (`0x00667c38`), first
+in file order, as retail casts by talismans; `gold` is retail's
+GetInventoryAmount("Gold") (vtable `+0x84`, `0x0046fde0`, nested), called
+through `peek`. Not read (not verified): `walkgrid`; `action_tick` only
+for an attack (the one retail keeps as `lastattack` `+0x160`, started at
+GameFrame `+0x164`).
 
 ## Server (`server.py`)
 
@@ -170,7 +173,8 @@ See the commit that adds the evidence; numbers there.
 ## Gaps
 
 - Text glyphs are approximate (gditext.py): FreeType, not Win98 GDI.
-- `pick` without the object; `gold`, `quick_spells`, `walkgrid` not read;
-  `action_tick` for attacks only.
+- `pick` without the object; `walkgrid` not read; `action_tick` for
+  attacks only; `quick_spells` checked only empty (no spell bound in the
+  states tested).
 - The guest heap is 64 MB (`Runtime.HEAP_SIZE`); with block reuse a long
   session holds steady, but a level change has not been measured.
