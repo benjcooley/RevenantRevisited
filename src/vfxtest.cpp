@@ -38,6 +38,7 @@
 #include "effects/staticparticlespreview.h"
 #include "effects/cameraparticlespreview.h"
 #include "effects/scrollwaterpreview.h"
+#include "effects/genericstaticpreview.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -6770,6 +6771,18 @@ struct SVfxTestBootstrap {
             e.submit_world=[](void*c,EFxDebugMode d){immortalmight_authored_preview::SubmitWorld(static_cast<immortalmight_authored_preview::State*>(c),d);};
             e.destroy=[](void*c){immortalmight_authored_preview::Destroy(static_cast<immortalmight_authored_preview::State*>(c));};
             e.is_alive=[](void* c){return immortalmight_authored_preview::Alive(static_cast<immortalmight_authored_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+
+        for(const auto& entry:std::array<std::pair<const char*,uint32_t>,2>{{
+            {"TCharUtility_AUTHORED_STILL",0xadbcef13u},{"TKinSecretDoor_NATIVE_STILL",0xad92bd23u}}})
+        {
+            VfxTest::SEffect e={};e.id=entry.first;e.family="static";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;const uint32_t type=entry.second;
+            e.factory=[type](const S3DPoint&o)->void*{return generic_static_preview::Spawn(o,type);};
+            e.submit=[](void*c,EFxDebugMode){generic_static_preview::Advance(static_cast<generic_static_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode d){generic_static_preview::SubmitWorld(static_cast<generic_static_preview::State*>(c),d);};
+            e.destroy=[](void*c){generic_static_preview::Destroy(static_cast<generic_static_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
 
