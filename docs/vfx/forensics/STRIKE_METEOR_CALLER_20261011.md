@@ -60,3 +60,27 @@ requires a real liveness callback and world submission, and repeats after the
 source manager's completion. Four missing-callback/style/alias controls reject;
 existing Blood and Halo admission controls remain passing. No shader, renderer,
 ordinary Comet, generic spell manager, or global RNG policy changes are included.
+
+## Frozen review package and current gallery
+
+Final binary SHA256 is
+`0397f2b67ceebd2e6f1b499c1cef00502c003f5e0c09343e2ea1fabab4d488da`.
+`strike-review-frozen/manifest.json`, SHA256
+`ecc5403c45d8e5ed85e879ee41fabc3169aa7570f0a495f4d8598406fdccffd6`,
+pins130 source/native/GPU files. It contains16 whole lifecycle pairs and six
+additional complete1920×6840 seven-view pairs; every accepted submitted vertex
+bound across all100 native phases fits that fixed region. `contact.png` and
+`detail.png` cover the ordinary view; `whole-contact.png`, `whole-detail.png`
+and `whole-011.png` through `whole-061.png` cover escaped early particles.
+The overlapping native tiles differ at2,696 pixels; corresponding Metal tile
+overlaps are identical. Native viewport clipping/interpolation and RGB565
+framebuffer rounding remain explicit limits, not fitted coordinate corrections.
+
+Actual `strike-gallery-frozen/manifest.json` records746 continuous24Hz ticks,
+clean exit0,24/32 visible sampled frames and eight complete87-tick manager
+cycles. Each completed spell has timer0 and both actors retain health102.
+The ninth active instance is destroyed at tick50 on viewer shutdown. All
+configured factories retain the live seed(`seeded=0`); intrinsic original index
+reseeds remain. This is a translated current-gallery lifecycle check, separate
+from native-domain appearance and natural mapped damage. Approval is reserved
+for independent root review; this package does not write approval metadata.
