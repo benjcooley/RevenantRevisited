@@ -4209,6 +4209,8 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
     const bool funnel=inst->ObjId()==0xad92bc17u && Get3DImagery()->HasRetailFunnelProfile();
     const bool dragon=inst->ObjId()==0xba09feadu && Get3DImagery()->HasRetailHeadFireBallProfile();
     const bool head=(inst->ObjId()==0xd000f005u || dragon) && Get3DImagery()->HasRetailHeadFireBallProfile();
+    const bool combat_native=native_software && inst->ObjId()==0xad92bd29u &&
+        inst->GetState()==0 && Get3DImagery()->HasCombatFlashStart1PartSysProfile();
     const bool jhaga=inst->ObjId()==0xaeaeeb32u && Get3DImagery()->HasRetailJhagaAttackProfile();
     const bool lightstrip=inst->ObjId()==0x10da54d0u && Get3DImagery()->HasRetailLightStripProfile();
     int32_t submitted = 0;
@@ -4280,11 +4282,11 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // Strict static profile admission pins RGB565 masks and literal
             // particle prototype. The queue applies this only to software
             // lighting and ONE/ONE; modern/hardware and alpha retain fallback.
-            item.retail_rgb565_additive = (static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) && sample.blendmode == 16;
+            item.retail_rgb565_additive = (combat_native || static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) && sample.blendmode == 16;
             item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
             item.light_mode = EFxLightMode::Unlit;
             for (int c = 0; c < 3; ++c)
-                item.color_rgba[c] = (might || immortalmight || fmastery || speed || static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
+                item.color_rgba[c] = (combat_native || might || immortalmight || fmastery || speed || static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
             // Actual SW LV prelit channels are5bit; canonicalDEST_ONE ignores
             // alpha in its8wordXYZ/UV/RGB packet. Keep literal alpha metadata,
             // no premultiplication/alternateblend. PixelLSB-table raster gate open.

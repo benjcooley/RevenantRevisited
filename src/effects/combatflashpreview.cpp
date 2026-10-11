@@ -6,6 +6,8 @@
 #include "../meshextract.h"
 #include "../object.h"
 #include "../renderer.h"
+#include "../retailsoftwaretransform.h"
+#include "../testconfig.h"
 #include "../time.h"
 
 #include <cmath>
@@ -71,6 +73,7 @@ State* Spawn(const S3DPoint& origin)
     imagery->GetMaterial(object.material, &material);
     context->flare_material = material.matdesc;
     owner->Animate(false);
+    log_info("[native-domain] enabled=%d camera_z=0 owner=CombatFlash_START1_POS2",int(StartupVfxNativeDomain));
     log_info("[combatflash-start1-preview] actual owner id=%08x map_index=%d generation=%u default-animator=1 state=0 controllers=1 origin=(%d,%d,%d)",
              owner->ObjId(), owner->GetMapIndex(), owner->SafeRefGen(), origin.x, origin.y, origin.z);
     return context.release();
@@ -110,7 +113,7 @@ void SubmitWorld(State* context, EFxDebugMode)
     auto* animator = dynamic_cast<T3DAnimator*>(owner->GetAnimator());
     if (!animator || animator->PartSysUnsupported()) return;
     const hmm_vec3 render_scale = {1, 1, 1};
-    animator->SubmitPartSys(*Renderer, 0, 1, render_scale);
+    animator->SubmitPartSys(*Renderer, 0, 1, render_scale, StartupVfxNativeDomain);
     uint32_t blend = 0;
     S3DAnimObj* bone = animator->GetObject(2);
     if (!bone || !animator->CombatFlashStart1BaseMeshBlend(2, blend) || blend != 16) return;
@@ -118,6 +121,12 @@ void SubmitWorld(State* context, EFxDebugMode)
     mesh.mesh = context->flare_mesh;
     hmm_mat4 world;
     if (!animator->CombatFlashStart1BaseMeshWorldMatrix(world)) return;
+    if(StartupVfxNativeDomain) {
+        // The controlled generic owner has face0. Its local authored matrix
+        // is already MODELZ; replace only the owner's raw translation by the
+        // same original FIX_Z owner translation used by the native reference.
+        world.Elements[3][2] += RetailSoftwareOwnerZ(owner->Pos().z)-float(owner->Pos().z);
+    }
     for (int row = 0; row < 4; ++row)
         for (int column = 0; column < 4; ++column)
             mesh.world[row * 4 + column] = world.Elements[column][row];
@@ -131,6 +140,8 @@ void SubmitWorld(State* context, EFxDebugMode)
     mesh.power = material.power;
     mesh.additive_blend = true;
     mesh.retail_lighting = 1;
+    mesh.retail_software_projection = StartupVfxNativeDomain;
+    if(StartupVfxNativeDomain)mesh.retail_normal_z_scale=1.0f;
     mesh.retail_gold_no_depth = false; // Mode16 keeps depth testing; no '$' flag.
     Renderer->SubmitGoldFlareAfterFx(mesh); // Existing after-FX queue; depth remains enabled.
 }

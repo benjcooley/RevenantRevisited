@@ -37,3 +37,22 @@ passing A/B result. The next work is an explicit source-backed native-domain
 adapter, particle/base-mesh packet comparison, and fresh same-tick image review.
 State0/start1, other17 states, natural combat selection/audio/device and exact
 pixels remain separate gates; CombatFlash remains one of28 unreviewed rows.
+
+## Explicit native-policy follow-up
+
+The adapter now forwards the requested native-domain option to the existing
+particle and helper submission policies and confirms it in the capture log.
+Only exact CombatFlash/state0/profile native submissions enable RGB565
+additive modulation and native RGB5 prelit channels. Ordinary submissions and
+other effect identities keep their existing policy. The controlled face0 owner
+uses the original FIX_Z translation; no shader or fitted texture/geometry is
+added. The integrated build and actual extracted default SubmitPartSys compile
+check pass.
+
+`native-policy-retry/manifest.json` in the local evidence directory records
+64 actual GPU frames, proper input confirmation and clean exit0. Same-tick
+particle color is closer to the original, but the base flare has a visible
+vertical-shape/brightness residual. The additional original normal submissions
+and complete base-matrix/projection comparison are still unresolved. This
+follow-up is diagnostic progress, not an appearance pass. The ordinary path
+still needs its before/after identity control before publication.
