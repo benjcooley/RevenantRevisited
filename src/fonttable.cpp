@@ -102,11 +102,14 @@ const SFontAtlas* TFontTable::Atlas(const char* nm)
     if (!f)
         return nullptr;
     if (f->type != FONT_WINFONT)
-        return BuildFontAtlas(f->primary);
+        return BuildFontAtlas(f->primary, f->name);
     const char* file = !stricmp(f->facename, "Times New Roman")
                      ? "Tinos-Regular.ttf"
                      : "Arimo-Regular.ttf";
-    return BuildTTFAtlas(TTFFilePath(file).c_str(), f->height);
+    // The label the A/B matches against retail's CreateFontA arguments.
+    char face[64];
+    snprintf(face, sizeof(face), "%s %d%s", f->facename, f->height, f->bold ? " bold" : "");
+    return BuildTTFAtlas(TTFFilePath(file).c_str(), f->height, face);
 }
 
 TFont* TFontTable::LoadAtom(const char* resname)

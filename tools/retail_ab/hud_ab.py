@@ -412,14 +412,119 @@ def gdi_text_cells(text_calls):
     return mask, band & ~mask, cells
 
 
+# 0x004be2b0's flags: the alignment in the low bits, a drop shadow (black
+# passes at (1, 1), (2, 1), (1, 2) under the colour) at 0x400.
+TEXT_ALIGN = {1: 'left', 2: 'center', 4: 'right'}
+TEXT_SHADOWED = 0x400
+# FONT.DEF in order (0x004be2b0's font is 1-based): the names the port
+# records for a bitmap font; a GDI font is named as the emulator names it.
+FONT_DEF = [None, 'System', 'Dialog', 'Scroll', 'Book', 'Numbers', 'Small', 'Med', 'Large', 'Gold', 'GoldMed',
+            'SpellTitle', 'Version']
+
+
+def surface_origins(primitives, pane):
+    """Where each surface a pane composes lands in it: {name: (dx, dy, clip)}
+    -- the display at the pane's origin, an offscreen surface where it is
+    blitted to the display (clip: that blit's rect), all pane-local."""
+    whole = (0, 0, pane[2], pane[3])
+    origins = {'display': (0, 0, whole)}
+    for p in primitives:
+        if p['primitive'] == 'ParamBlit' and p['dst'] == 'display' and p['src'] and p['src'] not in origins:
+            d = p['drawparam']
+            x, y, w, h, sx, sy = d[10:16]
+            origins[p['src']] = (x - sx, y - sy, (x, y, x + w, y + h))
+    return origins
+
+
+def text_draws(result):
+    """Retail's text composes (0x004be2b0), pane-local, each with the lines
+    its GDI colour pass laid out: [{text, face, rect, align, color,
+    shadowed, wrapped, lines: [[x, y, line]], clip}]. A compose draws its
+    string into the text surface at (0, 0) -- three black passes first when
+    shadowed -- then blits it to `rect` on its surface."""
+    origins = surface_origins(result['primitives'], result['pane'])
+    calls = iter(result['text_calls'])
+    draws = []
+    for p in result['primitives']:
+        if p['primitive'] != 'Text':
+            continue
+        shadowed = bool(p['format'] & TEXT_SHADOWED)
+        gdi = None
+        for _ in range(4 if shadowed else 1):
+            gdi = next(calls, None)
+        if gdi is None or gdi['text'] != p['text']:
+            raise RuntimeError(f'retail text {p["text"]!r} has no GDI calls of its own')
+        dx, dy, clip = origins.get(p['dst'], (None, None, None))
+        if dx is None:
+            raise RuntimeError(f'retail text {p["text"]!r} lands on {p["dst"]}, never shown')
+        x, y, w, h = p['rect']
+        color = 0xffffff if p['color'] == 0xffffffff else p['color']
+        draws.append(dict(text=p['text'], face=gdi['font'], rect=[x + dx, y + dy, w, h],
+                          align=TEXT_ALIGN.get(p['format'] & 7, hex(p['format'] & 7)),
+                          color=[color >> 16 & 0xff, color >> 8 & 0xff, color & 0xff], shadowed=shadowed,
+                          wrapped=bool(gdi['format'] & 0x10),
+                          lines=[[lx + x + dx, ly + y + dy, line, width] for lx, ly, line, width in gdi['layout']],
+                          clip=list(clip), cell=int(gdi['font'].rsplit(' ', 1)[-1])))
+    return draws
+
+
+def text_draw_mask(draws, pane):
+    """The screen pixels retail's text can touch -> (mask, band): each line's
+    cell (its width, the font's height) and its shadow, inside the surface's
+    visible rect."""
+    mask = np.zeros((SCREEN[1], SCREEN[0]), dtype=bool)
+    band = np.zeros_like(mask)
+    shadow = TEXT_SHADOW
+    for draw in draws:
+        l, t, r, b = draw['clip']
+        for x, y, _line, width in draw['lines']:
+            x0, y0 = max(x, l) + pane[0], max(y, t) + pane[1]
+            x1, y1 = min(x + width + shadow, r) + pane[0], min(y + draw['cell'] + shadow, b) + pane[1]
+            if x1 > x0 and y1 > y0:
+                mask[y0:y1, x0:x1] = True
+                band[max(0, y0 - TEXT_BAND):y1 + TEXT_BAND, max(0, x0 - TEXT_BAND):x1 + TEXT_BAND] = True
+    return mask, band & ~mask
+
+
+def compare_text(retail, port):
+    """Retail's text composes against the port's text draws (the A/B host's
+    `text`, STextDraw): each must be there, the same font, place, colour and
+    lines. -> {matched, missing, extra, mismatched: [{text, field: [retail,
+    port]}]}"""
+    unmatched = list(port)
+    result = dict(matched=0, missing=[], extra=[], mismatched=[])
+    for draw in retail:
+        same = [d for d in unmatched if d['text'] == draw['text']]
+        if not same:
+            result['missing'].append(draw['text'])
+            continue
+        mine = min(same, key=lambda d: abs(d['x'] - draw['rect'][0]) + abs(d['y'] - draw['rect'][1]))
+        unmatched.remove(mine)
+        fields = dict(face=(draw['face'], mine['face']),
+                      rect=(draw['rect'], [mine['x'], mine['y'], mine['w'], mine['h']]),
+                      align=(draw['align'], mine['align']), color=(draw['color'], mine['color']),
+                      shadowed=(draw['shadowed'], mine['shadowed']), wrapped=(draw['wrapped'], mine['wrapped']))
+        if draw['wrapped']:
+            fields['lines'] = ([line for _x, _y, line, _w in draw['lines']], mine.get('lines', []))
+        wrong = {k: list(v) for k, v in fields.items() if v[0] != v[1]}
+        if wrong:
+            result['mismatched'].append(dict(text=draw['text'][:40], **wrong))
+        else:
+            result['matched'] += 1
+    result['extra'] = [d['text'] for d in unmatched]
+    return result
+
+
 def pane_target(args, workdir, cases, fixture, run_port, retail_case, report,
-                masks=(('alpha', ALPHA_TOLERANCE),)):
+                masks=(('alpha', ALPHA_TOLERANCE),), composed_text=False):
     """A pane's A/B over `cases`: run_port(case) -> (shown, frame);
     retail_case(case, shown) -> the fixture's case; report(shown) -> what the
     case's result records of it. Every pixel outside its GDI text must match
     exactly, but for the ones the fixture's blend `masks` mark: the 2D panes'
     `alpha` (ALPHA_TOLERANCE), the overlay panes' `screen`
-    (SCREEN_TOLERANCE)."""
+    (SCREEN_TOLERANCE). A pane whose text retail composes (0x004be2b0;
+    `composed_text`) masks where those composes can draw and compares them
+    with the port's text draws (compare_text) -- a mismatch is a defect."""
     cases = [c for c in cases if not args.only or c['name'] in args.only]
     retail = Fixture(SLOT / fixture, '--serve')
     results, timing = [], dict(port_seconds=0.0, retail_seconds=0.0)
@@ -439,7 +544,13 @@ def pane_target(args, workdir, cases, fixture, run_port, retail_case, report,
             pane = result['pane']
             if pane != shown['pane']:
                 raise RuntimeError(f'pane {shown["pane"]} in the port, {pane} in retail')
-            mask, band, cells = gdi_text_cells(result['text_calls'])
+            if composed_text:
+                draws = text_draws(result)
+                mask, band = text_draw_mask(draws, pane)
+                cells = [d['rect'] for d in draws]
+                entry['text'] = compare_text(draws, shown.get('text', []))
+            else:
+                mask, band, cells = gdi_text_cells(result['text_calls'])
             retail_rgb = retail_frame(workdir / 'retail' / f'{name}.rgb565')
             port_rgb = port_frame(port_png)
             tolerance = np.zeros((SCREEN[1], SCREEN[0]), dtype=np.int32)
@@ -615,7 +726,9 @@ def main():
     report.update(target=args.target, port_sha256=sha256(args.port))
     (workdir / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     results = report['results']
-    failing = [r for r in results if r.get('error') or r.get('defects')]
+    text_wrong = lambda r: bool(r.get('text') and (r['text']['missing'] or r['text']['extra']  # noqa: E731
+                                                  or r['text']['mismatched']))
+    failing = [r for r in results if r.get('error') or r.get('defects') or text_wrong(r)]
     print(f'{args.target}: {len(results) - len(failing)}/{len(results)} cases match '
           f'(port {report["timing"]["port_seconds"]}s, retail {report["timing"]["retail_seconds"]}s); '
           f'report {workdir / "report.json"}')
@@ -629,6 +742,12 @@ def main():
                   f'screen {worst["screen"]}, composed {worst["composed"]}, alpha {worst["alpha"]}), '
                   f'{r["text_overflow"]} text overflow'
                   + (f', defects in {r["defect_bbox"]}' if r.get('defect_bbox') else ''))
+            if r.get('text'):
+                t = r['text']
+                print(f'    text: {t["matched"]} match' + (f', missing {t["missing"]}' if t['missing'] else '')
+                      + (f', extra {t["extra"]}' if t['extra'] else ''))
+                for wrong in t['mismatched']:
+                    print(f'      {json.dumps(wrong)}')
     sys.exit(1 if failing else 0)
 
 

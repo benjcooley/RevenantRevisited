@@ -79,12 +79,16 @@ void SFontAtlas::MapGlyph(char32_t cp, uint16_t index)
         beyond.insert(it, { cp, index });
 }
 
-const SFontAtlas* BuildFontAtlas(TFont* font)
+const SFontAtlas* BuildFontAtlas(TFont* font, const char* face)
 {
     if (!font) return nullptr;
 
     if (SFontAtlas* existing = LookupAtlas(font))
+    {
+        if (face && existing->face.empty())
+            existing->face = face;
         return existing;
+    }
 
     const int32_t first = font->FirstChar();
     const int32_t count = font->Numchars();
@@ -156,6 +160,9 @@ const SFontAtlas* BuildFontAtlas(TFont* font)
     // (0x004ac990; GDI's tmAscent for a WINFONT), and text drawn in a cell
     // hangs from it.
     atlas->cellBaseline = ('A' >= first && 'A' < first + count) ? (float)font->StartHeight('A') : atlas->ascent;
+    atlas->lineStep = atlas->ascent + atlas->descent;
+    if (face)
+        atlas->face = face;
     atlas->height = shelf_y + shelf_h;
     if (atlas->height <= 0)
     {
@@ -441,7 +448,55 @@ float AlignedPenX(const SFontAtlas* atlas, const char* text, ETextEncoding encod
     return cellX + (cellW - tw);   // Right
 }
 
+// The coloured pass of the cell helpers: once, as retail blits a bitmap
+// font's glyphs; twice over for an atlas that asks (SFontAtlas::doubleStrike).
+void DrawColouredRun(const SFontAtlas* atlas, const char* text, ETextEncoding encoding,
+                     float penX, float baselineY,
+                     float r, float g, float b,
+                     int32_t target_w, int32_t target_h)
+{
+    DrawGlyphRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
+    if (atlas->doubleStrike)
+        DrawGlyphRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
+}
+
+// The shadowed text with its pen at (penX, baselineY).
+void DrawShadowedRun(const SFontAtlas* atlas, const char* text, ETextEncoding encoding,
+                     float penX, float baselineY, float r, float g, float b,
+                     int32_t target_w, int32_t target_h)
+{
+    // Retail FUN_004be2b0 with font flag 0x400 draws the string black at
+    // (+1,+1), (+2,+1) and (+1,+2), then in its colour at the pen: a drop
+    // shadow down and to the right, two pixels wide. Measured from retail's
+    // own DrawTextA calls in the emulator (tools/retail_runtime/slots/hud,
+    // docs/ui/HUD_REBUILD.md P1b).
+    constexpr float kShadowPasses[3][2] = { { 1.0f, 1.0f }, { 2.0f, 1.0f }, { 1.0f, 2.0f } };
+    for (const auto& offset : kShadowPasses)
+        DrawGlyphRun(atlas, text, encoding, penX + offset[0], baselineY + offset[1],
+                     0, 0, 0, target_w, target_h);
+    DrawColouredRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
+}
+
+std::vector<STextDraw>* g_textDrawRecorder = nullptr;
+
+// One public draw, as the A/B compares it with retail's text calls.
+void RecordTextDraw(const SFontAtlas* atlas, const char* text, int32_t x, int32_t y, int32_t w, int32_t h,
+                    ETextAlign align, float r, float g, float b, bool shadowed, bool baseline, bool wrapped,
+                    std::vector<std::string> lines = {})
+{
+    if (!g_textDrawRecorder)
+        return;
+    const auto byte = [](float c) { return static_cast<uint8_t>(std::clamp(c, 0.0f, 1.0f) * 255.0f + 0.5f); };
+    g_textDrawRecorder->push_back({ text, atlas->face, x, y, w, h, align, byte(r), byte(g), byte(b), shadowed,
+                                    baseline, wrapped, std::move(lines) });
+}
+
 } // namespace
+
+void SetTextDrawRecorder(std::vector<STextDraw>* recorder)
+{
+    g_textDrawRecorder = recorder;
+}
 
 void DrawTextAtBaseline(const SFontAtlas* atlas, const char* text,
                         float penX, float baselineY,
@@ -450,19 +505,9 @@ void DrawTextAtBaseline(const SFontAtlas* atlas, const char* text,
                         ETextEncoding encoding)
 {
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
+    RecordTextDraw(atlas, text, int32_t(penX), int32_t(baselineY), 0, 0, ETextAlign::Left, r, g, b, false, true,
+                   false);
     DrawGlyphRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
-}
-
-// The coloured pass of the cell helpers: once, as retail blits a bitmap
-// font's glyphs; twice over for an atlas that asks (SFontAtlas::doubleStrike).
-static void DrawColouredRun(const SFontAtlas* atlas, const char* text, ETextEncoding encoding,
-                            float penX, float baselineY,
-                            float r, float g, float b,
-                            int32_t target_w, int32_t target_h)
-{
-    DrawGlyphRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
-    if (atlas->doubleStrike)
-        DrawGlyphRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
 }
 
 void DrawTextToTarget(const SFontAtlas* atlas, const char* text,
@@ -471,8 +516,8 @@ void DrawTextToTarget(const SFontAtlas* atlas, const char* text,
                       int32_t target_w, int32_t target_h,
                       ETextEncoding encoding)
 {
-    (void)cellH;
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
+    RecordTextDraw(atlas, text, cellX, cellY, cellW, cellH, align, r, g, b, false, false, false);
     const float penX = AlignedPenX(atlas, text, encoding, cellX, cellW, align);
     const float baselineY = cellY + TextCellBaseline(atlas);
     DrawColouredRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
@@ -484,11 +529,11 @@ void DrawTextShadowedToTarget(const SFontAtlas* atlas, const char* text,
                               int32_t target_w, int32_t target_h,
                               ETextEncoding encoding)
 {
-    (void)cellH;
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
+    RecordTextDraw(atlas, text, cellX, cellY, cellW, cellH, align, r, g, b, true, false, false);
     const float penX = AlignedPenX(atlas, text, encoding, cellX, cellW, align);
     const float baselineY = cellY + TextCellBaseline(atlas);
-    DrawTextShadowedAtBaseline(atlas, text, penX, baselineY, r, g, b, target_w, target_h, encoding);
+    DrawShadowedRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
 }
 
 void DrawTextShadowedAtBaseline(const SFontAtlas* atlas, const char* text,
@@ -498,16 +543,37 @@ void DrawTextShadowedAtBaseline(const SFontAtlas* atlas, const char* text,
                                 ETextEncoding encoding)
 {
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
-    // Retail FUN_004be2b0 with font flag 0x400 draws the string black at
-    // (+1,+1), (+2,+1) and (+1,+2), then in its colour at the pen: a drop
-    // shadow down and to the right, two pixels wide. Measured from retail's
-    // own DrawTextA calls in the emulator (tools/retail_runtime/slots/hud,
-    // docs/ui/HUD_REBUILD.md P1b).
-    constexpr float kShadowPasses[3][2] = { { 1.0f, 1.0f }, { 2.0f, 1.0f }, { 1.0f, 2.0f } };
-    for (const auto& offset : kShadowPasses)
-        DrawGlyphRun(atlas, text, encoding, penX + offset[0], baselineY + offset[1],
-                     0, 0, 0, target_w, target_h);
-    DrawColouredRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
+    RecordTextDraw(atlas, text, int32_t(penX), int32_t(baselineY), 0, 0, ETextAlign::Left, r, g, b, true, true,
+                   false);
+    DrawShadowedRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
+}
+
+// Retail's description box (DrawTextA, DT_WORDBREAK | DT_EDITCONTROL):
+// word-wrapped to `w`, a line every lineStep, whole lines only.
+void DrawTextWrappedToTarget(const SFontAtlas* atlas, const char* text,
+                             int32_t x, int32_t y, int32_t w, int32_t h,
+                             ETextAlign align, float r, float g, float b, bool shadowed,
+                             int32_t target_w, int32_t target_h, ETextEncoding encoding)
+{
+    if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
+    std::vector<std::string> lines;
+    WrapTextLines(atlas, text, float(w), lines, encoding);
+    // DT_EDITCONTROL: the first line always, then whole lines only.
+    const float step = atlas->lineStep > 0.0f ? atlas->lineStep : TextLineHeight(atlas);
+    size_t shown = 1;
+    while (shown < lines.size() && float(shown + 1) * step <= float(h))
+        ++shown;
+    lines.resize(shown);
+    RecordTextDraw(atlas, text, x, y, w, h, align, r, g, b, shadowed, false, true, lines);
+    for (size_t i = 0; i < lines.size(); ++i)
+    {
+        const float penX = AlignedPenX(atlas, lines[i].c_str(), encoding, x, w, align);
+        const float baselineY = y + float(i) * step + TextCellBaseline(atlas);
+        if (shadowed)
+            DrawShadowedRun(atlas, lines[i].c_str(), encoding, penX, baselineY, r, g, b, target_w, target_h);
+        else
+            DrawColouredRun(atlas, lines[i].c_str(), encoding, penX, baselineY, r, g, b, target_w, target_h);
+    }
 }
 
 int32_t WrapTextLines(const SFontAtlas* atlas, const char* text, float wrapWidth,

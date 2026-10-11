@@ -116,11 +116,13 @@ std::string TTFFilePath(const char* file)
     return fonts_dir + "/" + file;
 }
 
-const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
+const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height, const char* face)
 {
     if (!path || pixel_height <= 0) return nullptr;
 
-    const std::string key = MakeKey(path, pixel_height);
+    // Labelled faces keep their own atlas: "Arial 16" and "Arial 16 bold"
+    // rasterize the same file today but are different retail fonts.
+    const std::string key = MakeKey(path, pixel_height) + "|" + (face ? face : "");
     if (auto it = g_ttfAtlases.find(key); it != g_ttfAtlases.end())
         return it->second;
 
@@ -273,6 +275,9 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
     // (HUD_REBUILD.md P6 settles it against Win98 GDI captures).
     constexpr float kGdiTopLeading = 2.0f;
     atlas->cellBaseline = atlas->ascent - kGdiTopLeading;
+    atlas->lineStep = float(pixel_height);      // GDI's tmHeight: the CreateFontA cell height
+    if (face)
+        atlas->face = face;
     // GDI's glyphs read heavier than one pass of the oversampled coverage.
     atlas->doubleStrike = true;
 

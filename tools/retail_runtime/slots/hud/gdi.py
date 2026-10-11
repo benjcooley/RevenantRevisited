@@ -13,8 +13,9 @@ its own shadow / color pass over the result (`0x004be2b0`). This module:
   a capture of real GDI (docs/ui/HUD_REBUILD.md P6); until then these are
   the font file's own device metrics.
 - Records TextOutA / DrawTextA (`text_calls`: DC surface, string, position
-  or rect, format, font, color, background mode) and draws NO glyphs yet:
-  the HUD A/B compares text calls structurally until the glyph shim lands.
+  or rect, format, font, color, background mode, and the lines GDI lays the
+  string out in: `layout`) and draws NO glyphs yet: the HUD A/B compares
+  text calls structurally until the glyph shim lands.
 """
 from __future__ import annotations
 
@@ -30,6 +31,8 @@ FACES = {('arial', False): '/System/Library/Fonts/Supplemental/Arial.ttf',
          ('times new roman', False): '/System/Library/Fonts/Supplemental/Times New Roman.ttf',
          ('times new roman', True): '/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf'}
 TRANSPARENT, OPAQUE = 1, 2
+DT_CENTER, DT_RIGHT, DT_VCENTER, DT_BOTTOM = 0x1, 0x2, 0x4, 0x8
+DT_WORDBREAK, DT_SINGLELINE, DT_CALCRECT, DT_EDITCONTROL = 0x10, 0x20, 0x400, 0x2000
 STOCK_BASE = 0x80000000
 SYSTEM_FONT = STOCK_BASE | 13         # what a new DC has selected
 
@@ -58,6 +61,7 @@ class DeviceContext:
     align: int = 0
     char_extra: int = 0               # SetTextCharacterExtra: added after every character
     position: tuple = (0, 0)          # MoveToEx current position
+    viewport: tuple = (0, 0)          # SetViewportOrgEx: device = logical + this (MM_TEXT)
 
 
 @dataclass
@@ -72,6 +76,7 @@ class TextCall:
     font: str
     color: int
     back_mode: int
+    layout: list = field(default_factory=list)      # [[x, y, line, width]]: where each line's cell starts
 
 
 class Gdi:
@@ -97,6 +102,7 @@ class Gdi:
                 ('GetDeviceCaps', 2, self._device_caps, gdi32),
                 ('GetCurrentPositionEx', 2, self._current_position, gdi32),
                 ('MoveToEx', 4, self._move_to, gdi32),
+                ('SetViewportOrgEx', 4, self._set_viewport_origin, gdi32),
                 ('GetTextMetricsA', 2, self._text_metrics, gdi32),
                 ('GetTextExtentPoint32A', 4, self._text_extent, gdi32),
                 ('TextOutA', 5, self._text_out, gdi32),
@@ -185,6 +191,13 @@ class Gdi:
         dc.position = struct.unpack('<ii', struct.pack('<II', args[1], args[2]))
         return 1
 
+    def _set_viewport_origin(self, args):
+        dc = self._dc(args[0])
+        if args[3]:
+            self.vm.write(args[3], struct.pack('<ii', *dc.viewport))
+        dc.viewport = struct.unpack('<ii', struct.pack('<II', args[1], args[2]))
+        return 1
+
     def _font(self, dc):
         font = self.fonts.get(dc.font)
         if font is None:
@@ -223,9 +236,64 @@ class Gdi:
     def _record(self, function, dc_handle, text, x, y, rect, fmt):
         dc = self._dc(dc_handle)
         font = self._font(dc)
+        if rect is None:
+            layout = [[x, y, text, self.width(dc, text.encode('cp1252'))]]
+        else:
+            layout = self.layout(dc, text, rect, fmt)
+        # Recorded where the glyphs land on the surface: device coordinates.
+        ox, oy = dc.viewport
+        x, y = x + ox, y + oy
+        rect = None if rect is None else (rect[0] + ox, rect[1] + oy, rect[2] + ox, rect[3] + oy)
+        layout = [[lx + ox, ly + oy, line, width] for lx, ly, line, width in layout]
         self.text_calls.append(TextCall(function, dc.surface, text, x, y, rect, fmt,
                                         f'{font.face} {font.height}{" bold" if font.bold else ""}',
-                                        dc.text_color, dc.back_mode))
+                                        dc.text_color, dc.back_mode, layout))
+
+    def layout(self, dc, text, rect, fmt):
+        """DrawTextA's lines in `rect`: [[x, y, line, width]], each line one
+        cell height (tmHeight) under the last. DT_WORDBREAK breaks a line
+        before the word that would cross the rect's right edge, dropping the
+        spaces at the break (they neither draw nor count for the alignment);
+        DT_EDITCONTROL drops a last line the rect would cut. Vertical
+        centring is a single line's (GDI ignores DT_VCENTER / DT_BOTTOM
+        otherwise)."""
+        left, top, right, bottom = rect
+        height = self._font(dc).metrics.height
+        measure = lambda line: self.width(dc, line.encode('cp1252'))     # noqa: E731
+        paragraphs = [text.replace('\n', ' ')] if fmt & DT_SINGLELINE else text.replace('\r\n', '\n').split('\n')
+        lines = []
+        for paragraph in paragraphs:
+            if not fmt & DT_WORDBREAK:
+                lines.append(paragraph)
+                continue
+            line = ''
+            for word in paragraph.split(' '):
+                trial = f'{line} {word}' if line else word
+                if line and measure(trial) > right - left:
+                    lines.append(line)
+                    line = word
+                else:
+                    line = trial
+            lines.append(line)
+        y = top
+        if fmt & DT_SINGLELINE and fmt & DT_VCENTER:
+            y = top + (bottom - top - height) // 2
+        elif fmt & DT_SINGLELINE and fmt & DT_BOTTOM:
+            y = bottom - height
+        result = []
+        for index, line in enumerate(lines):
+            line_top = y + index * height
+            if fmt & DT_EDITCONTROL and line_top + height > bottom and index:
+                break
+            line = line.rstrip(' ')
+            width = measure(line)
+            x = left
+            if fmt & DT_CENTER:
+                x = left + (right - left - width) // 2
+            elif fmt & DT_RIGHT:
+                x = right - width
+            result.append([x, line_top, line, width])
+        return result
 
     def _text_out(self, args):
         dc, x, y, text, count = args
