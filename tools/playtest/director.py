@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from combat import Tactician, distance
+from combat import DIRECTIONS, Tactician, distance
 from host import Host, HostError
 from inputs import Bindings, InputState, Plan, chord
 from jev import Choice, Jev, Router, tool
@@ -39,6 +39,8 @@ from walk import Walker, WalkGrid
 COMBAT_RADIUS = 400                  # an enemy this close and on Locke means a fight
 WALKGRID_RADIUS = 480
 DIGITS = '123456'
+# Each direction straight after its opposite, so calibrating ends where it began.
+CALIBRATION_ORDER = tuple(DIRECTIONS[i + offset] for i in range(4) for offset in (0, 4))
 
 
 @dataclass
@@ -157,6 +159,9 @@ class Director:
         if obs['player'].get('mode') != 'combat':
             self.press(self.bindings['CombatMode'], then=6)
             return
+        if not self.tactician.directions and self.host.capable('project'):
+            self.calibrate()
+            return
         tactic = self.tactician.decide(obs)
         if not tactic:
             self.host.step(6)
@@ -214,6 +219,23 @@ class Director:
             seconds = float((call.arguments if call else {}).get('seconds', 2))
             self.host.step(max(1, min(240, round(seconds * 24))))
         self.state = plan.state
+
+    def calibrate(self, hold: int = 3) -> None:
+        """Measure which way on screen each direction control steps Locke:
+        step briefly with each, and project where he started and ended with
+        the same camera (the camera follows him, so his own screen position
+        hardly moves). Opposite steps follow each other, so he ends where he
+        began."""
+        steps: dict[str, tuple[float, float]] = {}
+        for name in CALIBRATION_ORDER:
+            before = self.host.observe(objects=0)['player']['pos']
+            self.press(self.bindings[name], then=hold)
+            after = self.host.observe(objects=0)['player']['pos']
+            a, b = self.host.project([before, after])
+            if a and b and (a[0], a[1]) != (b[0], b[1]):
+                steps[name] = (b[0] - a[0], b[1] - a[1])
+        self.tactician.directions = steps
+        self.note('calibrated', steps={k: [round(v, 1) for v in s] for k, s in steps.items()})
 
     # -- milestones and saves --
     def _reached(self, obs: dict) -> None:

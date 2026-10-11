@@ -70,5 +70,27 @@ class Session(unittest.TestCase):
                 self.assertIsNone(replay.replay(bundle)['diverged'])
 
 
+class Calibration(unittest.TestCase):
+    def test_measures_each_direction_and_ends_where_it_began(self):
+        os.environ.setdefault('OPEN_ROUTER_KEY', 'test-key')
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            keys = dict(zip(('Right', 'UpRight', 'Up', 'UpLeft', 'Left', 'DownLeft', 'Down', 'DownRight'),
+                            ('RIGHT', 'PGUP', 'UP', 'HOME', 'LEFT', 'END', 'DOWN', 'PGDN')))
+            bindings = Bindings({name: chord(key) for name, key in keys.items()})
+            with Host([sys.executable, HERE / 'fakehost.py'], tmp / 'play', timeout=30) as host:
+                host.hello()
+                host.start('newgame', seed=1)
+                start = host.observe()['player']['pos']
+                director = Director(host, Jev(post=PreferObjects()), Router(post=NoRouter()), Knowledge({}, {}),
+                                    bindings, tmp, [])
+                director.calibrate()
+                self.assertEqual(host.observe()['player']['pos'], start)
+            steps = director.tactician.directions
+            self.assertEqual(steps['Right'], (2, 0))                   # the key held 2 ticks, a unit a tick
+            self.assertEqual(steps['Up'], (0, -2))
+            self.assertNotIn('UpRight', steps)                          # the toy world has no diagonal keys
+
+
 if __name__ == '__main__':
     unittest.main()

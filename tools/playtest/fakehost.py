@@ -114,7 +114,7 @@ class FakeHost:
     def hello(self, req: dict) -> dict:
         return {'game': 'port', 'build': {'sha': 'fake', 'name': 'fakehost', 'patches': []},
                 'protocol': 1, 'tick_hz': rec.TICK_HZ, 'screen': list(rec.SCREEN),
-                'capabilities': ['observe', 'mark', 'replay', 'export_slot', 'pick']}
+                'capabilities': ['observe', 'mark', 'replay', 'export_slot', 'pick', 'project']}
 
     def start(self, req: dict) -> dict:
         self.world = World(req.get('seed', 1), self.drift_at)
@@ -148,6 +148,9 @@ class FakeHost:
             heights = [10 if (ox + gx) * 16 < WALL_X else 0 for gy in range(2 * r) for gx in range(2 * r)]
             obs['walkgrid'] = {'origin': [ox, oy], 'cell': 16, 'w': 2 * r, 'h': 2 * r, 'heights': heights}
         return obs
+
+    def project(self, req: dict) -> dict:
+        return {'screen': [self.world.screen(p) for p in req['points']]}
 
     def pick(self, req: dict) -> dict:
         pos = self.world.world(req['x'], req['y'])
