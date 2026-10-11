@@ -1970,6 +1970,7 @@ void* FireSwarmBespokeSpawn(const S3DPoint& origin)
     if (!c->swarm)
         log_warn("[vfx] TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
                  " F05 bespoke entry will draw nothing");
+    if (c->swarm) c->swarm->SetNativeDomainForTest(StartupVfxNativeDomain);
     return c;
 }
 
@@ -2572,6 +2573,7 @@ void* StreamerBespokeSpawn(const S3DPoint& origin)
     c->eff    = TStreamerEffect_Bespoke::SpawnForTest_BESPOKE(origin);
     if (!c->eff)
         log_warn("[vfx] TStreamerEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+    if (c->eff) c->eff->SetNativeDomainForTest(StartupVfxNativeDomain);
     return c;
 }
 void StreamerBespokeDestroy(void* cp)
@@ -2585,7 +2587,13 @@ void StreamerBespokeSubmit(void* cp, EFxDebugMode dbg)
     auto* c = static_cast<SStreamerBespokeCtx*>(cp);
     if (!c) return;
     if (c->eff)
-        c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+        c->eff->Advance(TTime::DeltaTime());
+}
+
+void StreamerBespokeSubmitWorld(void* cp, EFxDebugMode dbg)
+{
+    auto* c=static_cast<SStreamerBespokeCtx*>(cp);
+    if (c && c->eff) c->eff->Submit(dbg);
 }
 
 // X11 TRibbonAnimator_Bespoke ---------------------------------------------
@@ -4896,6 +4904,7 @@ void* FaultFireBespokeSpawn(const S3DPoint& origin)
     c->eff    = TFaultFireEffect_Bespoke::SpawnForTest_BESPOKE(origin);
     if (!c->eff)
         log_warn("[vfx] TFaultFireEffect_Bespoke::SpawnForTest_BESPOKE returned null");
+    if (c->eff) c->eff->SetNativeDomainForTest(StartupVfxNativeDomain);
     return c;
 }
 
@@ -5155,6 +5164,7 @@ struct SVfxTestBootstrap {
         streamer_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
         streamer_bespoke.factory       = [](const S3DPoint& o) -> void* { return StreamerBespokeSpawn(o); };
         streamer_bespoke.submit        = [](void* c, EFxDebugMode d) { StreamerBespokeSubmit(c, d); };
+        streamer_bespoke.submit_world  = [](void* c, EFxDebugMode d) { StreamerBespokeSubmitWorld(c, d); };
         streamer_bespoke.destroy       = [](void* c) { StreamerBespokeDestroy(c); };
         VfxTest::DeferredRegister(streamer_bespoke);
 

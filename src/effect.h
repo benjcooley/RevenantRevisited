@@ -2764,10 +2764,13 @@ class TFireSwarmEffect_Bespoke : public TEffect
         const S3DPoint& origin,const char* asset_override=nullptr);
     void Initialize(bool attach_runtime_component=true);
     void Advance(double elapsed_seconds);
+    void SetNativeDomainForTest(bool enabled);
     void Submit(EFxDebugMode debug_mode) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return alive_; }
   private:
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
     int32_t frameon_=0;
     float cylhscl_=0.4f,cylvscl_=30.0f,cylth_=0.0f;
     TTextureHandle texture_=kInvalidTexture;
@@ -3065,18 +3068,22 @@ class TStreamerEffect_Bespoke : public TEffect
   public:
     TStreamerEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
     TStreamerEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
-    ~TStreamerEffect_Bespoke() override = default;
+    ~TStreamerEffect_Bespoke() override;
 
     void OffScreen() override { KillThisEffect(); }
 
     [[nodiscard]] static TStreamerEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
     void Initialize(bool attach_runtime_component=true);
     void Advance(double elapsed_seconds);
+    void SetNativeDomainForTest(bool enabled);
     void Submit(EFxDebugMode debug_mode=EFxDebugMode::Normal) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return alive_; }
 
   private:
+    bool BindMeshes() const;
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
     // Retail constants (preserved names; values from effect_old.cpp:10252-10256).
     static constexpr int32_t kStreamerMaxParticles = 50;   // STREAMER_MAXPARTICLES
     static constexpr int32_t kStreamerMaxStreams   = 4;    // STREAMER_MAXSTREAMS (from effect.h:1960)
@@ -3108,6 +3115,7 @@ class TStreamerEffect_Bespoke : public TEffect
         std::vector<SMeshVertex> vertices;
         std::vector<uint16_t> indices;
         TTextureHandle texture = kInvalidTexture;
+        mutable MeshHandle mesh = 0;
     };
     SAuthoredStream authored_[kStreamerMaxStreams];
     double   sim_accum_ms_ = 0.0;
@@ -6581,14 +6589,18 @@ class TFaultFireEffect_Bespoke : public TEffect
     [[nodiscard]] static TFaultFireEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
     void Initialize(bool attach_runtime_component = true);
     void Advance(double elapsed_seconds);
+    void SetNativeDomainForTest(bool enabled);
     void Submit(EFxDebugMode debug_mode) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return true; }
   private:
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
     TTextureHandle texture_ = kInvalidTexture;
     std::vector<SMeshVertex> vertices_;
     std::vector<uint16_t> indices_;
     bool initialized_ = false;
+    bool runtime_owned_ = false;
     float th_ = 0.0f;
     float u_offset_ = 0.0f;
     double sim_accum_ms_ = 0.0;

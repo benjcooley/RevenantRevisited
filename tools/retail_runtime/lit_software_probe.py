@@ -44,7 +44,7 @@ class LitSoftwareFixture(SoftwareFixture):
             v.call(0x56cf00, (self.directional,))
 
     def draw_authored(self, vertices, indices, world_matrix, cull=3, z_enabled=True,
-                      z_write=False, raster=True):
+                      z_write=False, raster=True, instruction_limit=5000000):
         if not vertices or len(vertices) > 4096 or len(indices) > 16384:
             raise ValueError('Authored fixture capacity exceeded')
         v = self.vm
@@ -58,6 +58,6 @@ class LitSoftwareFixture(SoftwareFixture):
             v.call(0x56d400, (key, value))
         # D3DFVF_VERTEX=0x112; actual retail dispatch and Illuminate execute.
         v.call(0x56eb30, (4, 0x112, self.authored, len(vertices), self.indices,
-                         len(indices) if raster else 0, 0), instruction_limit=5000000)
+                         len(indices) if raster else 0, 0), instruction_limit=instruction_limit)
         transformed = list(struct.iter_unpack('<3f4I2f', v.uc.mem_read(self.vertices, len(vertices) * 36)))
         return v.surface_bytes('screen'), v.surface_bytes('depth'), transformed
