@@ -55,4 +55,8 @@ particle color is closer to the original, but the base flare has a visible
 vertical-shape/brightness residual. The additional original normal submissions
 and complete base-matrix/projection comparison are still unresolved. This
 follow-up is diagnostic progress, not an appearance pass. The ordinary path
-still needs its before/after identity control before publication.
+is separately checked by `ordinary-policy-control/manifest.json`: all64 PNGs
+are byte-identical to the pre-change ignored-flag control, with clean exit0.
+The application rebuilt after water integration; no frozen copy of the earlier
+CombatFlash executable was created. Its captured manifest still records the
+actual binary hash and files. Base-matrix/extra-object diagnosis remains open.
