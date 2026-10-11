@@ -75,6 +75,7 @@
 #include "effects/skinpreview.h"
 #include "effects/pukepreview.h"
 #include "effects/smokepreview.h"
+#include "effects/barrierpreview.h"
 #include "effects/shriekpreview.h"
 #include "effects/energyspraypreview.h"
 #include "effects/argbsourcecontrol.h"
@@ -7592,6 +7593,17 @@ struct SVfxTestBootstrap {
             e.submit_world=[](void* c,EFxDebugMode){shriek_preview::SubmitWorld(static_cast<shriek_preview::State*>(c));};
             e.is_alive=[](void* c){return shriek_preview::Alive(static_cast<shriek_preview::State*>(c));};
             e.destroy=[](void* c){shriek_preview::Destroy(static_cast<shriek_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        for(uint32_t id:{0x224a5adfu,0x224b5adcu}) {
+            VfxTest::SEffect e={};
+            e.id=id==0x224a5adfu?"BarrierEW_ORIGINAL":"BarrierNS_ORIGINAL";
+            e.family="map";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[id](const S3DPoint& o)->void*{return barrier_preview::Spawn(id,o);};
+            e.submit=[](void* c,EFxDebugMode){barrier_preview::Advance(static_cast<barrier_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){barrier_preview::SubmitWorld(static_cast<barrier_preview::State*>(c));};
+            e.is_alive=[](void* c){return barrier_preview::Alive(static_cast<barrier_preview::State*>(c));};
+            e.destroy=[](void* c){barrier_preview::Destroy(static_cast<barrier_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {

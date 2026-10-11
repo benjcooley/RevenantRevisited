@@ -34,8 +34,24 @@ and rejects every byte mutation plus nine header/path/null/cross-resource
 controls (25,253 rejections per resource) under ASan/UBSan. The full-body
 fingerprint includes all five keys, parents, geometry, materials and textures.
 `barrier_profile_probe.py` reproduces this contract; private results are in
-`profile-first`. The predicate is not yet connected to the shared loader.
+`profile-first`. The narrow loader path now copies the five eight-byte keys.
+The extracted actual production branch passes 90 pose channels against
+original409950, complete-body negatives and unchanged zero-key defaults.
+Ribbon, Vortex and Smoke native key regressions all remain passing.
 
-This is a source/state checkpoint. Actual loader key-copy/pose controls, port
-wall UV/render ordering, matched Metal captures and natural caller/audio/device
-checks remain to do. It adds no visual pass.
+The preview retains one fixed wall mesh per resource and advances the complete
+flare pool even though the zero-Y flares do not draw. Both 31-frame actual
+Metal movies render and exit cleanly. Their recorded 24Hz cadence covers
+91 simulation ticks, saving every third frame. Original references render
+the same cadence without an extra initialization draw. The first EW pair
+matches the blue wall and texture placement, with a one-pixel edge offset.
+Full paired review and repeated/gallery captures remain pending.
+
+Original wall Render sets POS1 and position zero; its actual local matrix is
+identity after CalcObjectMatrix, rather than the authored key transform.
+The GPU uses a uniform accumulating UV offset; the original adds0.01 to each
+copied vertex separately. Differences in float rounding remain open and
+must be checked in the complete comparison.
+
+This checkpoint adds no visual pass. Whole appearance, UV rounding, natural
+caller/audio/device and exact framebuffer equality remain open.
