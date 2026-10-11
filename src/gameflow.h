@@ -46,6 +46,10 @@ class TGameFlow
     void ShowLoadGameScreen();              // title "Load Game", death "Load"
     void ShowOptionsScreen();               // title "Options"
     void PlayerDied();                      // TPlayer death countdown ran out
+    using PlayerDiedSeam = void (*)();
+    static inline PlayerDiedSeam playerDiedSeam = nullptr;
+                                            // Retail A/B fixtures only: answers
+                                            // PlayerDied (retail's 0x0048ea40)
     void RestartAfterDeath();               // death screen "Restart"
     void ReturnToTitle();                   // Quit Module, death Exit, endgame,
                                             // the Load Game / Options screens' Exit

@@ -34,6 +34,20 @@ field names (data_parse.py's layouts) -- and their attack bookkeeping
 - `ai` AI `0x4c8b60` (one tick). A character's `aistate` gives its AI
   state: `lookat` (+0x234, a name), `lastpos` (+0x23c), `waypointticks`
   (+0x248); NetOwner reads 1 (`0x676838`, single player).
+- `pulse` (kata C6, CHARACTER_PULSE.md): `ticks` ticks of the character's
+  Pulse (TCharacter `0x4c1bb0`, TPlayer `0x518aa0`). Tick k runs on game
+  frame `frame` + k, game time `gametime` + k * 100 / 24 (PlayScreen
+  `+0x68c`) and screen frame `screenframe` + k (CurrentScreen `+0x48`), and
+  is followed by a `Tick` record (the vitals). A character's `pulsestate`
+  gives the tick's own fields (PULSESTATE), `noai` takes OF_AI off; a
+  player's `maxhealth` / `maxfatigue` / `maxmana` answer those slots.
+- `kill-exp` KillExp `0x51a5b0` (value), `exp-kill` AwardKillExp
+  `0x51a630` (victim), `exp-skill` AwardSkillExp `0x51abe0` (skill,
+  victim), `exp-stealth` AwardStealthExp `0x51ad80` (victim),
+  `add-skill-exp` AddSkillExp `0x51ac90` (skill, exp) (kata C7): the
+  originals, with the case's `seam_exp` false. A player's `basestats` are
+  its stats themselves (`+0xa8` count, `+0xac` values), `levelup` the two
+  attributes the level-up raises (`+0x360`).
 
 Runs as original code: the method and what it calls -- the searches,
 IsValidAttack, DoAttack, HasActionAni, CombatAnimName `0x4ce1b0` and the
@@ -64,6 +78,15 @@ Seams (guest.py's, and these), recorded in order:
 - TPlayer WeaponType `0x520810` / WeaponDamage `0x520830`: the player's
   `weapon` {type, damage}.
 - TPlayer SetPlayerState `0x51d680`: recorded, the value stored.
+- The tick's (`pulse`, and the experience calls'): UpdateAction `0x4c3260`
+  (with the case's `seam_update`, by default) and AI `0x4c8b60` (with
+  `seam_ai`) recorded and skipped; the spell list's pulse `0x540750`
+  skipped; the death screen `0x48ea40` recorded; RefreshStats `0x51c660`
+  recorded and skipped; the effect type lookup `0x475210` and NewObject
+  `0x450e40` (the def recorded, a stand-in made whose SetParams, slot
+  0x200, is recorded as `blood.SetParams`); TPlayer MaxHealth / MaxFatigue
+  / MaxMana from the case. With `quiet_reads`, reading a stat isn't
+  recorded (the tick reads them over and over; what is set is).
 
 Rules (`rules` in the case, the combat-data dump's names): TOHITCENTER ..
 TOHITDAMAGE at Rules `0x65d7a8` + `0x94` .. `0xcc`, the six STATLEVEL
@@ -83,7 +106,8 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from guest import AB, CombatWorld, call, flag_names, s32, serve, start, write_fields, write_text  # noqa: E402
+from guest import (AB, G_PLAYSCREEN, LITERAL_OBJSTATS, OBJSTAT_IDS, Boundaries, CombatWorld, call,  # noqa: E402
+                   flag_names, s32, serve, start, write_fields, write_text)
 from data_parse import (A_IMPACTS, A_NUMIMPACTS, ATTACK_BODY, ATTACK_HEAD, ATTACK_MAGIC, C_ATTACKS,  # noqa: E402
                         C_IMPACTS, C_NUMIMPACTS, CA_MAGICATTACK, CHAR_FIELDS, IMPACT_FIELDS, IMPACT_SIZE)
 
@@ -114,6 +138,42 @@ TEXT_FIND, TEXT_GET = 0x49d6d0, 0x49d800         # the dialog list: id of a tag 
 TEXTBAR_PRINT = 0x54d170                         # cdecl (bar, fmt, ...)
 EXP = {'kill': (0x51a630, 4), 'skill': (0x51abe0, 8), 'stealth': (0x51ad80, 4)}   # TPlayer slots 0x414/0x41c/0x420
 
+# Kata C6, the character's tick (CHARACTER_PULSE.md), and C7, experience.
+PULSE = {12: 0x4c1bb0, 11: 0x518aa0}            # TCharacter::Pulse, TPlayer::Pulse
+SPELL_LIST_PULSE, UPDATE_ACTION, DEATH_SCREEN, REFRESH_STATS = 0x540750, 0x4c3260, 0x48ea40, 0x51c660
+FIND_OBJ_TYPE, NEW_OBJECT = 0x475210, 0x450e40   # thiscall (name, 0) ret 8; thiscall (def, -1) ret 8
+PLAYER_MAX = {'MaxHealth': (0x520630, 'maxhealth'), 'MaxFatigue': (0x5206d0, 'maxfatigue'),
+              'MaxMana': (0x520770, 'maxmana')}
+KILL_EXP, ADD_SKILL_EXP = 0x51a5b0, 0x51ac90
+SCRIPT_TRIGGER, O_SCRIPT = 0x492640, 0x84         # TScript::Trigger (thiscall, 7 args); the object's script
+G_SCREEN, G_UPDATING_RECT = 0x667fd0, 0x6682c4   # CurrentScreen (frames +0x48); TComplexObject::Pulse's skip
+G_PS_5D4 = 0x65d0c4                              # PlayScreen +0x5d4: Pulse returns at once while set
+G_GAMETYPES, G_GAMETYPE = 0x65a77c, 0x65a784     # game type table / index (flags bit 8: player killing)
+G_AUTOBEGIN, G_NETGAME, G_NETHOST = 0x5d7a68, 0x676828, 0x67682c
+PS_GAMETIME, SCREEN_FRAMES = 0x68c, 0x48
+BLOOD_INDEX = 0x7100                             # map indices the made objects take
+OF_AI = 0x20
+# Rules: the recovery data (HEALTHDATA etc.), the experience tables.
+RULES_RECOVERY = [('healthrecovval', 0x74), ('fatiguerecovval', 0x78), ('manarecovval', 0x7c),
+                  ('healthrecovrate', 0x80), ('fatiguerecovrate', 0x84), ('manarecovrate', 0x88),
+                  ('poisondamageval', 0x8c), ('poisondamagerate', 0x90)]
+R_EXP, R_SKILLEXP = 0xf0, 0x168
+# The tick's own fields (CHARACTER_PULSE.md §1), by retail's names.
+PULSESTATE = [('lasthealth', 0x138), ('lastfatigue', 0x13c), ('lastmana', 0x140), ('lastrun', 0x144),
+              ('accumhealth', 0x148), ('accumfatigue', 0x14c), ('accummana', 0x150), ('accumrun', 0x154),
+              ('accumpoison', 0x158), ('lastpoison', 0x15c), ('invokedelay', 0x188), ('fade', 0x194),
+              ('fadestep', 0x198), ('fadelimit', 0x19c), ('fadedir', 0x1a0), ('burnticks', 0x1bc),
+              ('deadticks', 0x228), ('exittimestamp', 0x114), ('forcecommanddone', 0x108)]
+PLAYER_PULSESTATE = [('deathcountdown', 0x39c), ('stateframes', 0x374), ('statetime', 0x370),
+                     ('stateffectexpires', 0x354)]
+# The object flags the tick sets or clears: OF_KILL, OF_ONEXIT, OF_PARALIZE, OF_ICED, OF_VIRGIN.
+PULSE_OBJFLAGS = 0x1000 | 0x100000 | 0x800000 | 0x2000000 | 0x4000000
+P_BASECOUNT, P_BASESTATS, P_LEVELUP = 0xa8, 0xac, 0x360
+O_CLASSREC = 0x48                                # the object's class record
+ATTRIBUTE_NAMES = {34: 'Strn', 35: 'Cons', 36: 'Agil', 37: 'Rflx', 38: 'Mind', 39: 'Luck'}
+NUM_OBJSTATS = 73                                # every player stat id (charstats.h)
+EXP_CALLS = ('kill-exp', 'exp-kill', 'exp-skill', 'exp-stealth', 'add-skill-exp')
+
 # The functions under test, for coverage: [start, end).
 COVERED = {'AnimPrefix': (0x4cdf60, 0x4ce1b0), 'CombatAnimName': (0x4ce1b0, 0x4ce290),
            'IsValidAttack': (0x4d1120, 0x4d1db8), 'FindButtonAttack': (0x4d1dd0, 0x4d1eab),
@@ -126,7 +186,11 @@ COVERED = {'AnimPrefix': (0x4cdf60, 0x4ce1b0), 'CombatAnimName': (0x4ce1b0, 0x4c
            'PlayerKilled': (0x518ed0, 0x518f8b), 'PlayerDied': (0x518f90, 0x518fda),
            'ResolveImpact': (0x4c74b0, 0x4c7798), 'ResolveBlock': (0x4c77a0, 0x4c7804),
            'ResolveDead': (0x4c7810, 0x4c7973), 'Block': (0x4d2e30, 0x4d30ec), 'StopBlock': (0x4d30f0, 0x4d3147),
-           'Dodge': (0x4d3150, 0x4d3471), 'AI': (0x4c8b60, 0x4c9453), 'AIPerMonster': (0x4c9b70, 0x4c9cd8)}
+           'Dodge': (0x4d3150, 0x4d3471), 'AI': (0x4c8b60, 0x4c9453), 'AIPerMonster': (0x4c9b70, 0x4c9cd8),
+           'Pulse': (0x4c1bb0, 0x4c3256), 'PlayerPulse': (0x518aa0, 0x518dea),
+           'TComplexObject::Pulse': (0x4db190, 0x4db1c5), 'KillExp': (0x51a5b0, 0x51a625),
+           'AwardKillExp': (0x51a630, 0x51abdb), 'AwardSkillExp': (0x51abe0, 0x51ac8e),
+           'AddSkillExp': (0x51ac90, 0x51ad7e), 'AwardStealthExp': (0x51ad80, 0x51ada8)}
 
 ATTACK_SIZE = 0x320
 RULES = 0x65d7a8
@@ -176,7 +240,24 @@ class MeleeFixture:
         b.add(TEXT_GET, 'TextGet', 4, self._text_get)
         b.add(TEXTBAR_PRINT, 'TextBar', 0, self._textbar)
         for kind, (address, pop) in EXP.items():
-            b.add(address, f'Exp{kind}', pop, lambda a, c, kind=kind: self._exp(kind, a, c))
+            self._conditional(address, pop, lambda a, c, kind=kind: self._exp(kind, a, c),
+                              lambda: self.case.get('seam_exp', True))
+        # The tick's (C6) and the experience calls' (C7).
+        ticking = lambda: self.case.get('call') == 'pulse' or self.case.get('call') in EXP_CALLS
+        b.add(SPELL_LIST_PULSE, 'SpellListPulse', 0, lambda a, c: 0)
+        b.add(DEATH_SCREEN, 'DeathScreen', 0, self._death_screen)
+        self._conditional(UPDATE_ACTION, 4, self._update_action,
+                          lambda: self.case.get('call') == 'pulse' and self.case.get('seam_update', True))
+        self._conditional(AI, 0, self._ai, lambda: self.case.get('call') == 'pulse' and self.case.get('seam_ai', True))
+        self._conditional(REFRESH_STATS, 0, self._refresh_stats, ticking)
+        # A case's script (`script`): empty, as the port's -- no trigger matches.
+        self._conditional(SCRIPT_TRIGGER, 0x1c, lambda a, c: 0, ticking)
+        self._conditional(FIND_OBJ_TYPE, 8, self._find_obj_type, ticking)
+        self._conditional(NEW_OBJECT, 8, self._new_object, ticking)
+        for seam, (address, key) in PLAYER_MAX.items():
+            b.add(address, seam, 0, lambda a, c, seam=seam, key=key: self._player_max(seam, key, c))
+        self.made_vtable = self.vm.allocate(0x400)
+        self.vm.put_u32(self.made_vtable + 0x200, b.add_stub('blood.SetParams', 0x18, self._blood_params))
         self._conditional(DAMAGE, 0x14, self._damage, lambda: self.case.get('seam_damage', True))
         self._conditional(BLOCK, 4, self._block, lambda: self.case.get('seam_block', True))
         self._emulator_fixes()
@@ -185,6 +266,8 @@ class MeleeFixture:
         self.setup_ms = (time.perf_counter() - started) * 1000
         self.case = {}
         self.helpers = []
+        self.types = []
+        self.made = []
 
     def _coverage(self):
         """With MELEE_COVERAGE=<dir>: the code reached in the melee functions
@@ -253,6 +336,8 @@ class MeleeFixture:
         return n
 
     def _get_instance(self, args, ecx):
+        if 0 <= s32(args[0]) - BLOOD_INDEX < len(self.made):
+            return self.made[s32(args[0]) - BLOOD_INDEX]
         i = s32(args[0]) - HELPER_INDEX
         if not 0 <= i < len(self.helpers):
             return Boundaries.ORIGINAL
@@ -314,7 +399,8 @@ class MeleeFixture:
         if 'weapon' not in spec:
             raise KeyError(f"{spec['name']}: a player needs `weapon` in the case")
         value = spec['weapon'][key]
-        self.world.seams.append(dict(seam=seam, who=spec['name'], result=value))
+        if not self.world.quiet:
+            self.world.seams.append(dict(seam=seam, who=spec['name'], result=value))
         return value
 
     def _set_player_state(self, args, ecx):
@@ -362,6 +448,58 @@ class MeleeFixture:
         victim = args[1] if kind == 'skill' else args[0]
         self.world.seams.append(dict(seam='Exp', who=self.world._name(ecx), kind=kind, skill=skill,
                                      victim=self.world._name(victim)))
+        return 0
+
+    def _update_action(self, args, ecx):
+        self.world.seams.append(dict(seam='UpdateAction', who=self.world._name(ecx), bits=s32(args[0])))
+        return 0
+
+    def _ai(self, args, ecx):
+        self.world.seams.append(dict(seam='AI', who=self.world._name(ecx)))
+        return 0
+
+    def _death_screen(self, args, ecx):
+        self.world.seams.append(dict(seam='DeathScreen'))
+        return 0
+
+    def _refresh_stats(self, args, ecx):
+        self.world.seams.append(dict(seam='RefreshStats', who=self.world._name(ecx)))
+        return 0
+
+    def _player_max(self, seam, key, ecx):
+        """A player's maximum, when the case gives it; else the original."""
+        spec = self.specs[self.world._name(ecx)]
+        if key not in spec:
+            return Boundaries.ORIGINAL
+        if not self.world.quiet:
+            self.world.seams.append(dict(seam=seam, who=spec['name'], result=spec[key]))
+        return spec[key]
+
+    def _find_obj_type(self, args, ecx):
+        self.types.append(self.vm.string(args[0]))
+        return len(self.types) - 1
+
+    def _new_object(self, args, ecx):
+        """The def recorded (as the spells katas record it); a stand-in made
+        at the next map index, its SetParams recorded."""
+        vm, d = self.vm, args[0]
+        objclass, objtype = struct.unpack('<hh', vm.uc.mem_read(d, 4))
+        state, level = struct.unpack('<HH', vm.uc.mem_read(d + 8, 4))
+        self.world.seams.append(dict(seam='NewObject', **{'class': objclass},
+                                     type=self.types[objtype].lower() if 0 <= objtype < len(self.types) else objtype,
+                                     flags=vm.u32(d + 4), state=state, level=level,
+                                     pos=list(struct.unpack('<3i', vm.uc.mem_read(d + 0x0c, 12))),
+                                     vel=list(struct.unpack('<3i', vm.uc.mem_read(d + 0x18, 12))),
+                                     facing=vm.uc.mem_read(d + 0x32, 1)[0]))
+        made = vm.allocate(0x100)
+        vm.put_u32(made, self.made_vtable)
+        self.made.append(made)
+        self.world.objects[made] = f'made {len(self.made)}'
+        return BLOOD_INDEX + len(self.made) - 1
+
+    def _blood_params(self, args, ecx):
+        self.world.seams.append(dict(seam='blood.SetParams', who=self.world._name(ecx),
+                                     args=[s32(a) for a in args[:6]], result=0))
         return 0
 
     def _damage(self, args, ecx):
@@ -521,6 +659,12 @@ class MeleeFixture:
         vm = self.vm
         for name, off in RULES_TOHIT:
             vm.put_u32(RULES + off, int(rules.get(name, 0)) & 0xffffffff)
+        for name, off in RULES_RECOVERY:
+            if name in rules:
+                vm.put_u32(RULES + off, int(rules[name]) & 0xffffffff)
+        for key, off in (('exp', R_EXP), ('skillexp', R_SKILLEXP)):
+            if key in rules:
+                vm.write(RULES + off, struct.pack(f'<{len(rules[key])}i', *rules[key]))
         for i, (key, pct) in enumerate(rules.get('tohitdamage', [[0, 0]] * 5)):
             vm.write(RULES + R_TOHITDAMAGE + 8 * i, struct.pack('<ii', key, pct))
         tables = rules.get('statlevels')
@@ -533,6 +677,60 @@ class MeleeFixture:
             vm.put_u32(RULES + R_STATLEVELS, ptrs)
         else:
             vm.put_u32(RULES + R_STATLEVELS, 0)
+
+    def _pulse_world(self, case):
+        """The tick's globals: the screen and its frames, the game type, no
+        network game, the AutoBeginCombat option, no bounding-rect update."""
+        vm, g = self.vm, case.get('globals', {})
+        self.screen = vm.allocate(0x100)
+        vm.put_u32(G_SCREEN, self.screen)
+        vm.put_u32(self.screen + SCREEN_FRAMES, int(g.get('screenframe', 0)))
+        vm.put_u32(G_PLAYSCREEN + PS_GAMETIME, int(g.get('gametime', 0)) & 0xffffffff)
+        gametype = vm.allocate(0x40)
+        vm.write(gametype, bytes([8 if g.get('pvp') else 0]))
+        table = vm.allocate(4)
+        vm.put_u32(table, gametype)
+        vm.put_u32(G_GAMETYPES, table)
+        vm.put_u32(G_GAMETYPE, 0)
+        for address in (G_NETGAME, G_NETHOST, G_UPDATING_RECT, G_PS_5D4):
+            vm.put_u32(address, 0)
+        vm.put_u32(G_AUTOBEGIN, int(g.get('autobegincombat', 1)))
+
+    def _pulse_state(self, obj, spec):
+        vm = self.vm
+        st = spec.get('pulsestate')
+        if st is not None:
+            fields = PULSESTATE + (PLAYER_PULSESTATE if spec.get('class', 12) == 11 else [])
+            for name, off in fields:
+                vm.put_u32(obj + off, int(st[name]) & 0xffffffff)
+        if spec.get('noai'):
+            vm.put_u32(obj + O_FLAGS, vm.u32(obj + O_FLAGS) & ~OF_AI)
+        if spec.get('script'):
+            vm.put_u32(obj + O_SCRIPT, vm.allocate(0x100))  # its Trigger answered below
+        if spec.get('class', 12) == 11:
+            base = spec.get('basestats', {})
+            literal = {n: i for i, n in LITERAL_OBJSTATS.items()}
+            values = vm.allocate(4 * NUM_OBJSTATS)
+            for name, value in base.items():
+                vm.put_u32(values + 4 * literal[name], value & 0xffffffff)
+            vm.write(obj + P_BASECOUNT, struct.pack('<h', NUM_OBJSTATS))
+            vm.put_u32(obj + P_BASESTATS, values)
+            for i, pick in enumerate(spec.get('levelup', [0, 0, 0])):
+                vm.put_u32(obj + P_LEVELUP + 4 * i, pick)
+
+    def _pulse_dump(self, obj, spec):
+        vm = self.vm
+        fields = PULSESTATE + (PLAYER_PULSESTATE if spec.get('class', 12) == 11 else [])
+        out = {name: s32(vm.u32(obj + off)) for name, off in fields}
+        out['objflags'] = vm.u32(obj + O_FLAGS) & PULSE_OBJFLAGS
+        out['charflags'] = vm.u32(obj + 0x110)
+        if spec.get('class', 12) == 11:
+            out['levelup'] = [s32(vm.u32(obj + P_LEVELUP + 4 * i)) for i in range(3)]
+        return out
+
+    def _vitals(self, obj):
+        stats = self.world.stats.get(obj, {})
+        return {k: stats.get(OBJSTAT_IDS[k][1]) for k in ('health', 'fatigue', 'mana', 'poisoned')}
 
     # -- dumps ------------------------------------------------------------------
     def _attack_name(self, rec):
@@ -611,6 +809,27 @@ class MeleeFixture:
             self._block_fields(obj, spec)
             self._attackstate(obj, spec)
             self._aistate(obj, spec.get('aistate', {}))
+            world.set_memory(obj, spec)
+            self._pulse_state(obj, spec)
+        self.types, self.made = [], []
+        ticking = case.get('call') == 'pulse' or case.get('call') in EXP_CALLS
+        if ticking:
+            self._pulse_world(case)
+            # A player's class record, as far as the level-up's
+            # STATCFG<name> messages read it (0x0051a8ae): its object
+            # stats' names (count +0x1c, records of 0x50 bytes at +0x20,
+            # the name first). Static init, which registers them in retail
+            # (0x00517af0 ...), doesn't run here.
+            record = vm.allocate(0x40)
+            names = vm.allocate(0x50 * NUM_OBJSTATS)
+            for sid, name in ATTRIBUTE_NAMES.items():
+                vm.write(names + 0x50 * sid, name.encode(TEXT) + b'\0')
+            vm.write(record + 0x1c, struct.pack('<h', NUM_OBJSTATS))
+            vm.put_u32(record + 0x20, names)
+            for spec in case['chars']:
+                if spec.get('class', 12) == 11:
+                    vm.put_u32(world.by_name[spec['name']] + O_CLASSREC, record)
+        world.quiet = bool(case.get('quiet_reads', ticking))
         world.seams.clear()
         me = world.by_name[case['self']]
         self._ai_self = me
@@ -685,6 +904,28 @@ class MeleeFixture:
                      'random-attack': RANDOM_ATTACK, 'specific-attack': SPECIFIC_ATTACK}[kind]
             arg = a['pcnt'] if kind == 'random-attack' else a['attack'] if kind == 'specific-attack' else a['button']
             result['returned'] = s32(call(vm, entry, (arg & 0xffffffff,), this=me))
+        elif kind == 'pulse':
+            pulse = PULSE[self.specs[case['self']].get('class', 12)]
+            g = case.get('globals', {})
+            frame, gametime, screenframe = int(g.get('frame', 0)), int(g.get('gametime', 0)), int(g.get('screenframe', 0))
+            for k in range(a.get('ticks', 1)):
+                vm.put_u32(G_PLAYSCREEN + 0x680, frame + k)
+                vm.put_u32(G_PLAYSCREEN + PS_GAMETIME, (gametime + k * 100 // 24) & 0xffffffff)
+                vm.put_u32(self.screen + SCREEN_FRAMES, screenframe + k)
+                call(vm, pulse, (), this=me)
+                world.seams.append(dict(seam='Tick', n=k, **self._vitals(me)))
+            result['returned'] = 0
+        elif kind == 'kill-exp':
+            result['returned'] = s32(call(vm, KILL_EXP, (a['value'] & 0xffffffff,), this=me))
+        elif kind in ('exp-kill', 'exp-stealth'):
+            call(vm, EXP['kill' if kind == 'exp-kill' else 'stealth'][0], (self._obj(a.get('victim')),), this=me)
+            result['returned'] = 0
+        elif kind == 'exp-skill':
+            call(vm, EXP['skill'][0], (a['skill'] & 0xffffffff, self._obj(a.get('victim'))), this=me)
+            result['returned'] = 0
+        elif kind == 'add-skill-exp':
+            call(vm, ADD_SKILL_EXP, (a['skill'] & 0xffffffff, a['exp'] & 0xffffffff), this=me)
+            result['returned'] = 0
         elif kind == 'damage':
             ab = 0
             attacker = self._obj(a.get('attacker'))
@@ -699,6 +940,9 @@ class MeleeFixture:
         # A block made in the call is `new N` per character, as the port numbers them.
         result['chars'] = {spec['name']: self._dump(world.by_name[spec['name']], []) for spec in case['chars']}
         result['ai'] = {spec['name']: self._ai_dump(world.by_name[spec['name']]) for spec in case['chars']}
+        if ticking:
+            result['pulse'] = {spec['name']: self._pulse_dump(world.by_name[spec['name']], spec)
+                               for spec in case['chars'] if 'pulsestate' in spec}
         result['seams'] = list(world.seams)
         result['draws'] = list(world.draws)
         return result

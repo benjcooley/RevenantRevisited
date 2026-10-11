@@ -350,6 +350,11 @@ void TPlayer::SetObjStat(int32_t statid, int32_t value)
 // effect, as retail's does. Ends with RefreshEquip.
 void TPlayer::RefreshStats()
 {
+    if (refreshStatsSeam)
+    {
+        refreshStatsSeam(this);
+        return;
+    }
     for (int32_t id = 0; id < (int32_t)modstats.size(); id++)
         modstats[id] = BaseObjStat(id);
 
@@ -600,9 +605,9 @@ int32_t TPlayer::KillExp(int32_t value)
 // Reaching the next level (to 30): Level + 1, NextExp to the level after,
 // the level-up attribute points (both chosen attributes up to level 15,
 // the first after) on the stats themselves, a chosen attribute already at
-// 29 moving on to the next one below 29, the messages, the PowerUp effect
-// and sound, health, mana and fatigue full. Not ported: the "invoke2"
-// animation (0x004d5900) and the network forwarding.
+// 29 moving on to the next one below 29, the messages, the "invoke2"
+// animation (SetCast 0x004d5900), the PowerUp sound and effect, health,
+// mana and fatigue full. Not ported: the network forwarding.
 void TPlayer::AwardKillExp(TCharacter *victim)
 {
     if (killExpSeam)
@@ -673,6 +678,9 @@ void TPlayer::AwardKillExp(TCharacter *victim)
         }
     }
 
+  // The level-up shows: the "invoke2" animation held 90 ticks, the PowerUp
+  // sound, then its effect.
+    SetCast("invoke2", nullptr, 90);
     extern TObjectClass EffectClass;
     SObjectDef def{};
     def.objclass = OBJCLASS_EFFECT;
@@ -680,9 +688,9 @@ void TPlayer::AwardKillExp(TCharacter *victim)
     def.level = MapPane.GetMapLevel();
     def.pos = pos;
     def.facing = facing;
+    SoundPlayer.Play("POWERUP");
     if (def.objtype >= 0)
         MapPane.NewObject(&def);
-    SoundPlayer.Play("POWERUP");
 
     RefreshStats();
     SetHealth(MaxHealth());
@@ -719,14 +727,17 @@ void TPlayer::AwardStealthExp(TCharacter *victim)
         AwardSkillExp(SK_STEALTH, victim);
 }
 
+// REVSYNC: TPlayer::Pulse @ 0x00518aa0 (PLAYER_STATS.md's "Animate": it
+// fills the Pulse slot and calls TCharacter's first) -- the character's
+// tick, then the play clock, the stat effects, the death screen countdown.
 void TPlayer::Pulse()
 {
     TCharacter::Pulse();
 
-    // REVSYNC: TPlayer::Animate @ 0x00518aa0. The play clock runs while the
-    // player state has bit 0 and not bit 1, in game time (1/100 s) from a
-    // frame count. When it passes the next stat-effect expiry the stats are
-    // refreshed (an expiry more than 50000 away is first pulled to now).
+  // The play clock runs while the player state has bit 0 and not bit 1, in
+  // game time (1/100 s) from a frame count. When it passes the next
+  // stat-effect expiry the stats are refreshed (an expiry more than 50000
+  // away is first pulled to now).
     if ((playerstate & 1) && !(playerstate & 2))
     {
         ++stateframes;
@@ -740,16 +751,18 @@ void TPlayer::Pulse()
             RefreshStats();
     }
 
-    // REVSYNC: TPlayer::Animate @ 0x00518aa0. While alive the countdown is held
-    // at 192 frames (8 s at 24 Hz); once health drops below 1 it runs down and
-    // at zero the game ends on the death screen. (The 1998 snapshot showed a
-    // death pane on the PlayScreen after 100 frames instead.)
-    // REVSYNC-DIVERGENCE: retail also holds the countdown at >= 1 while a
-    // character flag (+0x110 bit 0x1000) is set; that flag is not identified
-    // yet, so the hold is not ported. Retail counted in Animate (once per 24 Hz
-    // tick); the port counts in Pulse, the same rate on the simulation side.
+  // Placed and since touched (Load treats an untouched one as new).
+    ClearFlag(OF_VIRGIN);
+
+  // While alive the countdown is held at 192 frames (8 s at 24 Hz); once
+  // health drops below 1 it runs down and at zero the game ends on the
+  // death screen (it goes on below zero). A held death (charflags 0x1000)
+  // keeps it from reaching zero. (The 1998 snapshot showed a death pane on
+  // the PlayScreen after 100 frames instead.)
     if (!Editor)
     {
+        if (charflags & kCharFlagDeathHold)
+            deathcountdown = (std::max)(deathcountdown, 1);
         if (Health() < 1)
         {
             if (deathcountdown == 0)
@@ -759,6 +772,20 @@ void TPlayer::Pulse()
         else
             deathcountdown = 0xc0;
     }
+
+  // Not ported: the held torch's light at his left hand, flickering (two to
+  // four random draws a tick while he holds one, 0x00518bcc..0x00518d95),
+  // and a lit player's glow; nor the network sends every 120 frames.
+}
+
+// REVSYNC: 0x004c2baf (TCharacter::Pulse, for a player) -- HealthPct,
+// FatiguePct and ManaPct add to the recovery every tick, in 1/10000 points:
+// a 1440th of the stat, so that many points a minute at 24 ticks a second.
+int32_t TPlayer::RecoveryBonus(EVital vital)
+{
+    const int32_t pct = vital == EVital::Health ? HealthPct()
+                      : vital == EVital::Fatigue ? FatiguePct() : ManaPct();
+    return pct * 10000 / 1440;
 }
 
 uint32_t TPlayer::Move()
