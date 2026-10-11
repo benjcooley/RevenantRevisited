@@ -54,6 +54,7 @@
 #include "mappane.h"
 #include "object.h"
 #include "automap.h"
+#include "inputqueue.h"
 #include "inventory.h"
 #include "mainwnd.h"
 #include "savegame.h"
@@ -303,13 +304,6 @@ bool CtrlDown, ShiftDown, AltDown;
 
 // Is System Closing Down?
 bool Closing = false;
-
-// Set by SAPP_EVENTTYPE_MOUSE_MOVE; consumed once per frame in AppFrame. A
-// single frame can see dozens of move events on macOS — forwarding every one
-// synchronously to CurrentScreen->MouseMove() backs up the NSEvent queue and
-// the cursor appears to lag seconds behind reality. Coalesce to one call per
-// frame with the latest cursor position.
-static bool g_pendingMouseMove = false;
 
 // For setting up 3D object bounding rects in the editor
 bool UpdatingBoundingRect = false;
@@ -2882,16 +2876,10 @@ static void AppFrame()
         return;
     }
 
-    // Flush coalesced mouse move. See AppEvent MOUSE_MOVE for the rationale.
-    if (g_pendingMouseMove)
-    {
-        g_pendingMouseMove = false;
-        if (AppActive)
-            CurrentScreen->MouseMove(mousebutton, cursorx, cursory);
-    }
-
-    // Scripted input (--input-script) takes the same route as real input.
+    // The frame's input, in order, before the tick (inputqueue.h): what the
+    // hardware sent since the last frame, then scripted input (--input-script).
     TestModes::InputSimTick(CurrentScreen);
+    InputQueue.Drain(CurrentScreen);
 
     // Tick / Draw split (see docs/FRAME_PIPELINE.md). Tick catches up
     // missed legacy 24Hz pulses (pure sim, no draw calls); DrawFrame
@@ -2949,13 +2937,21 @@ static void AppCleanup()
     log_info("[shutdown] complete");
 }
 
-// Translate an sapp_keycode into the legacy VK_* codes the screen / pane
-// key handlers were written against. Only the keys the engine actually
-// switches on need an accurate mapping; everything else passes through
-// as the sokol enum value (the game's key-binding system compares codes
-// numerically, it doesn't care what they are as long as they're stable).
+// Translate an sapp_keycode into the Windows virtual-key code the screen and
+// pane key handlers were written against, and the recordings name
+// (docs/playtest/PROTOCOL.md §2). Letters and digits are their ASCII codes
+// in both; punctuation and the keypad have VK codes of their own (passing
+// sokol's through made ' read as Right and - as Insert). 0: no VK (the key
+// is not delivered).
 static int32_t SappKeyToVK(sapp_keycode key)
 {
+    if ((key >= SAPP_KEYCODE_A && key <= SAPP_KEYCODE_Z) ||
+        (key >= SAPP_KEYCODE_0 && key <= SAPP_KEYCODE_9))
+        return (int32_t)key;
+    if (key >= SAPP_KEYCODE_F1 && key <= SAPP_KEYCODE_F24)
+        return VK_F1 + (key - SAPP_KEYCODE_F1);
+    if (key >= SAPP_KEYCODE_KP_0 && key <= SAPP_KEYCODE_KP_9)
+        return VK_NUMPAD0 + (key - SAPP_KEYCODE_KP_0);
     switch (key)
     {
         case SAPP_KEYCODE_LEFT_CONTROL:
@@ -2964,8 +2960,12 @@ static int32_t SappKeyToVK(sapp_keycode key)
         case SAPP_KEYCODE_RIGHT_ALT:     return VK_MENU;
         case SAPP_KEYCODE_LEFT_SHIFT:
         case SAPP_KEYCODE_RIGHT_SHIFT:   return VK_SHIFT;
+        case SAPP_KEYCODE_LEFT_SUPER:    return VK_LWIN;
+        case SAPP_KEYCODE_RIGHT_SUPER:   return VK_RWIN;
+        case SAPP_KEYCODE_MENU:          return VK_APPS;
         case SAPP_KEYCODE_BACKSPACE:     return VK_BACK;
-        case SAPP_KEYCODE_ENTER:         return VK_RETURN;
+        case SAPP_KEYCODE_ENTER:
+        case SAPP_KEYCODE_KP_ENTER:      return VK_RETURN;
         case SAPP_KEYCODE_TAB:           return VK_TAB;
         case SAPP_KEYCODE_ESCAPE:        return VK_ESCAPE;
         case SAPP_KEYCODE_SPACE:         return VK_SPACE;
@@ -2979,22 +2979,36 @@ static int32_t SappKeyToVK(sapp_keycode key)
         case SAPP_KEYCODE_END:           return VK_END;
         case SAPP_KEYCODE_PAGE_UP:       return VK_PRIOR;
         case SAPP_KEYCODE_PAGE_DOWN:     return VK_NEXT;
-        case SAPP_KEYCODE_F1:            return VK_F1;
-        case SAPP_KEYCODE_F2:            return VK_F2;
-        case SAPP_KEYCODE_F3:            return VK_F3;
-        case SAPP_KEYCODE_F4:            return VK_F4;
-        case SAPP_KEYCODE_F5:            return VK_F5;
-        case SAPP_KEYCODE_F6:            return VK_F6;
-        case SAPP_KEYCODE_F7:            return VK_F7;
-        case SAPP_KEYCODE_F8:            return VK_F8;
-        case SAPP_KEYCODE_F9:            return VK_F9;
-        case SAPP_KEYCODE_F10:           return VK_F10;
-        case SAPP_KEYCODE_F11:           return VK_F11;
-        case SAPP_KEYCODE_F12:           return VK_F12;
-        default:                          return (int32_t)key;
+        case SAPP_KEYCODE_CAPS_LOCK:     return VK_CAPITAL;
+        case SAPP_KEYCODE_SCROLL_LOCK:   return VK_SCROLL;
+        case SAPP_KEYCODE_NUM_LOCK:      return VK_NUMLOCK;
+        case SAPP_KEYCODE_PRINT_SCREEN:  return VK_SNAPSHOT;
+        case SAPP_KEYCODE_PAUSE:         return VK_PAUSE;
+        case SAPP_KEYCODE_KP_DECIMAL:    return VK_DECIMAL;
+        case SAPP_KEYCODE_KP_DIVIDE:     return VK_DIVIDE;
+        case SAPP_KEYCODE_KP_MULTIPLY:   return VK_MULTIPLY;
+        case SAPP_KEYCODE_KP_SUBTRACT:   return VK_SUBTRACT;
+        case SAPP_KEYCODE_KP_ADD:        return VK_ADD;
+        // The US layout's OEM keys (VK_OEM_1 .. VK_OEM_7, VK_OEM_PLUS ..).
+        case SAPP_KEYCODE_SEMICOLON:     return 0xBA;
+        case SAPP_KEYCODE_EQUAL:         return 0xBB;
+        case SAPP_KEYCODE_COMMA:         return 0xBC;
+        case SAPP_KEYCODE_MINUS:         return 0xBD;
+        case SAPP_KEYCODE_PERIOD:        return 0xBE;
+        case SAPP_KEYCODE_SLASH:         return 0xBF;
+        case SAPP_KEYCODE_GRAVE_ACCENT:  return 0xC0;
+        case SAPP_KEYCODE_LEFT_BRACKET:  return 0xDB;
+        case SAPP_KEYCODE_BACKSLASH:     return 0xDC;
+        case SAPP_KEYCODE_RIGHT_BRACKET: return 0xDD;
+        case SAPP_KEYCODE_APOSTROPHE:    return 0xDE;
+        default:                         return 0;
     }
 }
 
+// sokol's events become the game's input. Window, focus and quit events are
+// handled here; game input passes the ImGui and focus gates and joins the
+// input queue, which the frame dispatches before its tick (AppFrame,
+// inputqueue.h).
 static void AppEvent(const sapp_event* ev)
 {
     if (!ev) return;
@@ -3011,46 +3025,32 @@ static void AppEvent(const sapp_event* ev)
     switch (ev->type)
     {
       case SAPP_EVENTTYPE_KEY_DOWN:
+      case SAPP_EVENTTYPE_KEY_UP:
       {
-        const int32_t vk = SappKeyToVK(ev->key_code);
-        if (vk == VK_CONTROL) CtrlDown = true;
-        else if (vk == VK_MENU) AltDown = true;
-        else if (vk == VK_SHIFT) ShiftDown = true;
+        const bool down = ev->type == SAPP_EVENTTYPE_KEY_DOWN;
 
         // macOS Cmd+Q quits the app, matching the platform convention.
         // ImGui doesn't get to swallow this -- the user always wants it
         // to work even if a slider has keyboard focus.
-        if (ev->key_code == SAPP_KEYCODE_Q
-            && (ev->modifiers & SAPP_MODIFIER_SUPER))
+        if (down && ev->key_code == SAPP_KEYCODE_Q && (ev->modifiers & SAPP_MODIFIER_SUPER))
         {
             sapp_request_quit();
             break;
         }
 
-        if (vk == VK_F10)
+        const int32_t vk = SappKeyToVK(ev->key_code);
+        if (down && vk == VK_F10)
         {
             DebugUI::SetVisible(!DebugUI::IsVisible());
             break;
         }
 
-        if (!AppActive) break;
-        if (imgui_kbd) break;
-        if (CurrentScreen)
-            CurrentScreen->KeyPress(vk, true);
-        break;
-      }
-
-      case SAPP_EVENTTYPE_KEY_UP:
-      {
-        const int32_t vk = SappKeyToVK(ev->key_code);
-        if (vk == VK_CONTROL) CtrlDown = false;
-        else if (vk == VK_MENU) AltDown = false;
-        else if (vk == VK_SHIFT) ShiftDown = false;
-
-        if (!AppActive) break;
-        if (imgui_kbd) break;
-        if (CurrentScreen)
-            CurrentScreen->KeyPress(vk, false);
+        // The modifiers always reach the game, so CtrlDown and the others
+        // follow the keyboard while ImGui has it or the app is inactive.
+        const bool modifier = vk == VK_CONTROL || vk == VK_MENU || vk == VK_SHIFT;
+        if (!vk || (!modifier && (!AppActive || imgui_kbd)))
+            break;
+        InputQueue.PushKey(vk, down);
         break;
       }
 
@@ -3058,11 +3058,10 @@ static void AppEvent(const sapp_event* ev)
       {
         if (!AppActive) break;
         if (imgui_kbd) break;
-        if (CtrlDown && ShiftDown) break;
+        if (InputQueue.QueuedCtrl() && InputQueue.QueuedShift()) break;
         // The game reads WM_CHAR codes; macOS reports Backspace as DEL.
         const int32_t ch = ev->char_code == 0x7f ? 0x08 : (int32_t)ev->char_code;
-        if (CurrentScreen)
-            CurrentScreen->CharPress(ch, true);
+        InputQueue.PushChar(ch);
         break;
       }
 
@@ -3078,64 +3077,39 @@ static void AppEvent(const sapp_event* ev)
       case SAPP_EVENTTYPE_MOUSE_MOVE:
       {
         // While an --input-script owns the cursor, ignore hardware moves so the
-        // script has exclusive control of cursorx/cursory + hover dispatch.
+        // script has exclusive control of the pointer + hover dispatch.
         if (TestModes::InputScriptActive()) break;
-        cursorx = (int32_t)ev->mouse_x;
-        cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
         const bool sector_test_drag =
             StartupTestMode[0] &&
             stricmp(StartupTestMode, "sector") == 0 &&
-            (mousebutton != 0);
+            (InputQueue.QueuedButtons() != 0);
         if (imgui_mouse && !sector_test_drag) break;
-        // Coalesce. A single frame can now see dozens of MOUSE_MOVE events
-        // (trackpads fire at 120–500 Hz and we drain the whole NSEvent queue
-        // at the top of drawRect). Calling CurrentScreen->MouseMove for each
-        // one drives pane/screen logic harder than needed — just flag a
-        // pending move and AppFrame forwards the latest cursor position once
-        // per frame.
-        g_pendingMouseMove = true;
+        // A frame can see dozens of moves (trackpads fire at 120–500 Hz);
+        // the queue keeps the latest of a run of them.
+        InputQueue.PushMove((int32_t)ev->mouse_x, (int32_t)ev->mouse_y);
         break;
       }
 
       case SAPP_EVENTTYPE_MOUSE_DOWN:
-      {
-        if (TestModes::InputScriptActive()) break;   // script owns the mouse
-        cursorx = (int32_t)ev->mouse_x;
-        cursory = (int32_t)ev->mouse_y;
-        if (!AppActive) break;
-        if (imgui_mouse) break;
-        int32_t btn = 0;
-        switch (ev->mouse_button)
-        {
-          case SAPP_MOUSEBUTTON_LEFT:   btn = MB_LEFTDOWN;   mousebutton |= MB_LEFTDOWN;   break;
-          case SAPP_MOUSEBUTTON_RIGHT:  btn = MB_RIGHTDOWN;  mousebutton |= MB_RIGHTDOWN;  break;
-          case SAPP_MOUSEBUTTON_MIDDLE: btn = MB_MIDDLEDOWN; mousebutton |= MB_MIDDLEDOWN; break;
-          default: break;
-        }
-        if (btn && CurrentScreen)
-            CurrentScreen->MouseClick(btn, cursorx, cursory);
-        break;
-      }
-
       case SAPP_EVENTTYPE_MOUSE_UP:
       {
         if (TestModes::InputScriptActive()) break;   // script owns the mouse
-        cursorx = (int32_t)ev->mouse_x;
-        cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
-        // MouseUp always forwarded so in-progress drags can clear even if
-        // the release lands over an ImGui panel; otherwise drag state latches.
-        int32_t btn = 0;
+        const bool down = ev->type == SAPP_EVENTTYPE_MOUSE_DOWN;
+        // A release always goes through so an in-progress drag can clear even
+        // if it lands over an ImGui panel; otherwise drag state latches.
+        if (down && imgui_mouse) break;
+        int32_t button = 0;
         switch (ev->mouse_button)
         {
-          case SAPP_MOUSEBUTTON_LEFT:   btn = MB_LEFTUP;   mousebutton &= ~MB_LEFTDOWN;   break;
-          case SAPP_MOUSEBUTTON_RIGHT:  btn = MB_RIGHTUP;  mousebutton &= ~MB_RIGHTDOWN;  break;
-          case SAPP_MOUSEBUTTON_MIDDLE: btn = MB_MIDDLEUP; mousebutton &= ~MB_MIDDLEDOWN; break;
+          case SAPP_MOUSEBUTTON_LEFT:   button = SInputEvent::kButtonLeft;   break;
+          case SAPP_MOUSEBUTTON_RIGHT:  button = SInputEvent::kButtonRight;  break;
+          case SAPP_MOUSEBUTTON_MIDDLE: button = SInputEvent::kButtonMiddle; break;
           default: break;
         }
-        if (btn && CurrentScreen)
-            CurrentScreen->MouseClick(btn, cursorx, cursory);
+        if (button)
+            InputQueue.PushButton(button, down, (int32_t)ev->mouse_x, (int32_t)ev->mouse_y);
         break;
       }
 
