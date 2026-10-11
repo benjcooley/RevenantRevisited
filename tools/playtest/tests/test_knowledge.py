@@ -73,8 +73,8 @@ class ShippedData(unittest.TestCase):
         self.assertFalse(self.kb.monster_brief('Nobody')['known'])
 
     def test_combos_need_skill(self):
-        unskilled = {a.button for a in self.kb.locke_moves(0x1e, attackskill=0, weaponskill=0)}
-        skilled = {a.button for a in self.kb.locke_moves(0x1e, attackskill=30, weaponskill=30)}
+        unskilled = {a.button for a in self.kb.locke_attacks(0x1e, attackskill=0, weaponskill=0)}
+        skilled = {a.button for a in self.kb.locke_attacks(0x1e, attackskill=30, weaponskill=30)}
         self.assertTrue({1, 2, 3} <= unskilled)
         self.assertFalse({10, 11, 12} & unskilled)
         self.assertTrue({10, 11, 12} <= skilled)

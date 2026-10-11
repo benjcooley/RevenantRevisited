@@ -18,6 +18,9 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+WM_HAND = 0x0001                     # char.def's weapon mask for bare hands
+CA_SPECIAL = 0x0001                  # char.def: a scripted special (finishers, throws)
+CATCH_ALL = 1000                     # attacks with maxdist past this are fallbacks at any distance
 DAMAGE_TYPES = ('misc', 'hand', 'puncture', 'cut', 'chop', 'bludgeon', 'magical', 'burn', 'freeze', 'poison')
 # spell.def's talisman letters (its header comment; class.def Codes 65-76).
 TALISMANS = dict(A='Sun', B='Life', C='Ocean', D='Law', E='Soul', F='Stars', G='Death', H='Chaos',
@@ -88,8 +91,9 @@ class Attack:
     blocktime: int                   # ticks the opponent has to block or counter
     impacttime: int                  # ticks from start to impact
     nextwait: int
-    mindist: int
+    mindist: int                     # the distances it is chosen at
     maxdist: int
+    hitmax: int                      # how far the blow lands
     damagemod: int                   # % added to damage
     fatigue: int
     attackskill: int
@@ -99,6 +103,18 @@ class Attack:
     @property
     def control(self) -> str | None:
         return BUTTON_CONTROLS.get(self.button)
+
+    @property
+    def special(self) -> bool:
+        return bool(self.flags & CA_SPECIAL)
+
+    @property
+    def ranged(self) -> bool:
+        """Chosen only within a distance band (not a fallback)."""
+        return self.maxdist < CATCH_ALL
+
+    def covers(self, d: float) -> bool:
+        return self.ranged and self.mindist <= d <= self.maxdist
 
 
 @dataclass
@@ -138,7 +154,7 @@ def parse_characters(text: str) -> dict[str, Character]:
             # damagemod, fatigue, attackskill, weaponmask, weaponskill, ...
             if len(a) >= 21 and isinstance(a[0], str):
                 current.attacks.append(Attack(a[0], a[1], a[2], a[7], a[8], a[9], a[11], a[12],
-                                              a[16], a[17], a[18], a[19], a[20]))
+                                              a[14], a[16], a[17], a[18], a[19], a[20]))
     return chars
 
 
@@ -202,25 +218,27 @@ class Knowledge:
 
     def monster_brief(self, name: str) -> dict:
         """What a fighter should know about `name`, in words: the damage it
-        resists or takes extra from, and how far its attacks reach."""
+        resists or takes extra from, and how far its ordinary attacks reach."""
         c = self.character(name)
         if not c:
             return {'kind': name, 'known': False}
         weak = [t for t, v in c.damagemods.items() if v > 0]
         resists = [t for t, v in c.damagemods.items() if v < 0]
-        reach = max((a.maxdist for a in c.attacks), default=0)
+        reach = max((a.maxdist for a in c.attacks if a.ranged and not a.special), default=0)
         return {'kind': name, 'known': True,
                 'takes_extra_damage_from': weak or ['nothing in particular'],
                 'resists': resists or ['nothing in particular'],
                 'attack_reach': 'long' if reach > 150 else 'medium' if reach > 60 else 'short'}
 
-    def locke_moves(self, weaponmask: int, attackskill: int, weaponskill: int) -> list[Attack]:
-        """Locke's attacks usable now: those for the weapon in hand whose
-        skill needs are met, one per button (the first in file order)."""
-        locke = self.characters['Locke']
-        moves: dict[int, Attack] = {}
-        for a in locke.attacks:
-            if (a.weaponmask & weaponmask and a.attackskill <= attackskill
-                    and a.weaponskill <= weaponskill and a.control and a.button not in moves):
-                moves[a.button] = a
-        return [moves[b] for b in sorted(moves)]
+    def attacks(self, kind: str) -> list[Attack]:
+        """`kind`'s ordinary attacks: not scripted specials."""
+        c = self.character(kind)
+        return [a for a in c.attacks if not a.special] if c else []
+
+    def locke_attacks(self, weaponmask: int, attackskill: int, weaponskill: int) -> list[Attack]:
+        """Locke's ordinary attacks usable with the weapon in hand and his
+        skills, every distance variant, in file order (the order the game
+        searches a button's variants)."""
+        return [a for a in self.attacks('Locke')
+                if a.control and a.weaponmask & weaponmask
+                and a.attackskill <= attackskill and a.weaponskill <= weaponskill]
