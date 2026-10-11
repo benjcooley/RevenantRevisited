@@ -252,11 +252,11 @@ class TPlayer : public TCharacter
     int32_t WeaponSkill(int32_t weapontype) { return Skill(SK_WEAPONSKILLS + weapontype); }
 
     // Spell casting
-    bool HasTalismans(char *talismans);
+    [[nodiscard]] bool HasTalismans(const char *talismans) const;
       // Player has talismans for spell
-    char *GetQuickSpell(int32_t button);
+    [[nodiscard]] const char *GetQuickSpell(int32_t button) const;
       // Gets the talisman list for the given quickspell
-    void SetQuickSpell(int32_t button, char *talismans);
+    void SetQuickSpell(int32_t button, const char *talismans);
       // Sets the quickspell button
     bool InvokeQuickSpell(int32_t button);
       // Invokes the given quickspell for the player

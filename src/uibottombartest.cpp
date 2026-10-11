@@ -195,7 +195,7 @@ bool WriteShown(const std::string& path)
     json.Key("rings").Begin('[');
     for (int32_t ring = 1; ring <= kQuickSpells; ++ring)
     {
-        char* talismans = Player->GetQuickSpell(ring);
+        const char* talismans = Player->GetQuickSpell(ring);
         json.Begin('{').FieldString("talismans", talismans ? talismans : "")
             .Field("castable", talismans && *talismans && Player->HasTalismans(talismans) ? 1 : 0).End('}');
     }

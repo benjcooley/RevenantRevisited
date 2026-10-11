@@ -1144,7 +1144,7 @@ void TPlayer::GetOnYerHog()
 }
 
 // Gets the talisman list for the given quickspell
-char *TPlayer::GetQuickSpell(int32_t button)
+const char *TPlayer::GetQuickSpell(int32_t button) const
 {
     if ((uint32_t)button >= QSPELL_NUM)
         return "";
@@ -1153,7 +1153,7 @@ char *TPlayer::GetQuickSpell(int32_t button)
 }
 
 // Sets the quickspell button
-void TPlayer::SetQuickSpell(int32_t button, char *talismans)
+void TPlayer::SetQuickSpell(int32_t button, const char *talismans)
 {
     if ((uint32_t)button >= QSPELL_NUM)
         return;
@@ -1216,7 +1216,7 @@ bool TPlayer::InvokeQuickSpell(int32_t button)
 // REVSYNC: TPlayer::HasTalismans @ 0x0051b7c0 -- the Spell Pouch's talismans,
 // counted by TALISMAN type name, cover the string: each code (the type's Code
 // stat, case-sensitive) takes one. Codes of no type (M-P) cost nothing.
-bool TPlayer::HasTalismans(char *talismans)
+bool TPlayer::HasTalismans(const char *talismans) const
 {
     bool has = true;
     int32_t len = strlen(talismans);

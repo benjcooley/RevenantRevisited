@@ -39,6 +39,7 @@
 #include "bottombar.h"
 #include "buysell.h"
 #include "inventory.h"
+#include "spellpane.h"
 #include "consoleexec.h"
 #include "cursor.h"
 #include "debugui.h"
@@ -387,6 +388,17 @@ bool TPlayScreen::Initialize()
     else
         log_error("[playscreen] Trouble initializing the inventory");
 
+    // REVSYNC: 0x0047a660 ("Trouble initializing spell pane") -- the spell
+    // pane, in the same slot while the side panel shows the spell tab.
+    if (SpellPane.Initialize())
+    {
+        AddPane(&SpellPane);
+        SpellPane.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the spell pane");
+
     // The session made the main player under the loading screen: the panes
     // show it now that they exist.
     PlayerManager.BindMainPlayerToScreen();
@@ -692,6 +704,8 @@ void TPlayScreen::Close()
     BuySellPane.Close();
     buysellrequest = false;
     drawerclose    = false;
+    RemovePane(&SpellPane);
+    SpellPane.Close();
     RemovePane(&Inventory);
     Inventory.Close();
     RemovePane(bottombar.get());
@@ -1096,25 +1110,34 @@ void TPlayScreen::UpdateBottomBar()
         open ? bottombar->Show() : bottombar->Hide();
 }
 
-// The side panel's rebuilt panes: the inventory, in the lower slot at the
-// display's right edge, while the side panel is open on it. (The other side
-// panes are still the HUD harness's.)
-void TPlayScreen::UpdateSidePanes()
+// A pane of the side panel's lower slot, at the display's right edge under
+// the 306-tall upper slot: placed and shown while the slot is its, else
+// hidden.
+static void PlaceLowerSlotPane(TPane& pane, bool shown)
 {
-    if (!Inventory.IsOpen())
+    if (!pane.IsOpen())
         return;
-    constexpr int32_t kLowerSlotTop = 306;              // the upper slot is 306 tall
-    const SHudState& hud = GetHudState();
-    const bool shown = hud.sidebarState == HUD_SIDEBAR_OPEN && hud.bottomSlot == HUD_BOT_INV;
+    constexpr int32_t kLowerSlotTop = 306;
     if (shown)
     {
         const int32_t dw = Display.Width() > 0 ? Display.Width() : WIDTH;
-        Inventory.Resize(dw - TInventory::kWidth, kLowerSlotTop, TInventory::kWidth, TInventory::kHeight);
-        if (Inventory.WasResized())
-            Inventory.PaneResized();
+        pane.Resize(dw - pane.GetWidth(), kLowerSlotTop, pane.GetWidth(), pane.GetHeight());
+        if (pane.WasResized())
+            pane.PaneResized();
     }
-    if (shown == Inventory.IsHidden())
-        shown ? Inventory.Show() : Inventory.Hide();
+    if (shown == pane.IsHidden())
+        shown ? pane.Show() : pane.Hide();
+}
+
+// The side panel's rebuilt panes, in the lower slot while the side panel is
+// open on theirs: the inventory and the spell pane. (The other side panes
+// are still the HUD harness's.)
+void TPlayScreen::UpdateSidePanes()
+{
+    const SHudState& hud = GetHudState();
+    const bool open = hud.sidebarState == HUD_SIDEBAR_OPEN;
+    PlaceLowerSlotPane(Inventory, open && hud.bottomSlot == HUD_BOT_INV);
+    PlaceLowerSlotPane(SpellPane, open && hud.bottomSlot == HUD_BOT_SPELL);
 }
 
 // The shop's rect while the drawer holds it: its clicks and moves are its

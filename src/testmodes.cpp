@@ -3485,7 +3485,7 @@ static bool UsesDemoPlayer(const char* mode)
 {
     static constexpr const char* kModes[] = {
         "ui-hud", "ui-plyrstatusbar", "ui-bottombar", "ui-stats", "ui-equip",
-        "ui-inventory", "ui-sidebar", "ui-spellbook",
+        "ui-inventory", "ui-sidebar", "ui-spellbook", "ui-spellcreate",
     };
     for (const char* m : kModes)
         if (strcmp(mode, m) == 0)
@@ -3578,11 +3578,14 @@ bool Initialize(const char* mode)
         return InitializeUIInventoryMode();
     if (strcmp(mode, "ab-inventory") == 0)
         return InitializeABInventoryMode();
+    if (strcmp(mode, "ab-spellpane") == 0)
+        return InitializeABSpellPaneMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         SetUISidebarSyntheticStateEnabled(true);
         SetUIHudCursorOverlayEnabled(true);
-        return InitializeUIHudMode() && InitializeUIBottomBarModeEmbedded() && InitializeUIInventoryModeEmbedded();
+        return InitializeUIHudMode() && InitializeUIBottomBarModeEmbedded() && InitializeUIInventoryModeEmbedded()
+            && InitializeUISpellCreateModeEmbedded();
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
@@ -3652,8 +3655,11 @@ void Close(const char* mode)
         CloseUIInventoryMode();
     if (strcmp(mode, "ab-inventory") == 0)
         CloseABInventoryMode();
+    if (strcmp(mode, "ab-spellpane") == 0)
+        CloseABSpellPaneMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
+        CloseUISpellCreateMode();
         CloseUIInventoryMode();
         CloseUIBottomBarMode();
         CloseUIHudMode();
@@ -3739,11 +3745,14 @@ void Render(const char* mode)
         return RenderUIInventoryMode();
     if (strcmp(mode, "ab-inventory") == 0)
         return RenderABInventoryMode();
+    if (strcmp(mode, "ab-spellpane") == 0)
+        return RenderABSpellPaneMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         RenderUIHudMode();
         RenderUIBottomBarMode();
         RenderUIInventoryMode();
+        RenderUISpellCreateMode();
         return;
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
@@ -3777,8 +3786,6 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
         return HandleMouseClickUISidebarMode(button, x, y);
     if (strcmp(mode, "ui-spellbook") == 0)
         return HandleMouseClickUISpellbookMode(button, x, y);
-    if (strcmp(mode, "ui-spellcreate") == 0)
-        return HandleMouseClickUISpellCreateMode(button, x, y);
     if (strcmp(mode, "ui-equip") == 0)
         return HandleMouseClickUIEquipMode(button, x, y);
     if (strcmp(mode, "ui-scrollpane") == 0)

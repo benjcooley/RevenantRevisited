@@ -86,6 +86,7 @@ bool TInventory::Initialize()
         auto* button = new TButton(arrow.name, arrow.x, arrow.y, kArrowSize, kArrowSize, 0, kArrowFunctions[i],
                                    archive->Bitmap(arrow.down), archive->Bitmap(arrow.up));
         button->SetGreyBitmap(archive->Bitmap(arrow.grey));
+        button->SetDrawMode(DM_USEDEFAULT | DM_ALPHA);     // retail +0xd4 |= 0x2000
         NewButton(button);
     }
     cells.clear();

@@ -399,6 +399,62 @@ the lower slot while the side panel shows the inventory. The A/B is
 `hud_ab.py inventory` over `--test=ab-inventory`: gold amounts, stacks and
 pouches, animated items, pages, an opened bag.
 
+## 6c. P4 design: the spell pane
+
+**What retail draws** (measured with `slots/hud/spellpane.py` and the
+disassembly, 2026-10-10). TSpellPane (`0x006661b0`, vtable `0x005a5978`)
+is a TButtonPane in the side panel's lower slot, (452, 306), 188×174:
+the player puts a spell together from the talismans in the spell pouch and
+casts it. Its art is SpellPane.dat (`0x0065a574`); the talismans' plates
+and icons are GameData's (playscrn.dat). Slot 20 (`0x005435c0`) repaints
+the background (slot 21, `0x005435f0`) when dirty, then the buttons.
+
+- `spellconstr` (188×174) at (0, 0), DM_BACKGROUND: unkeyed.
+- The talismans in the player's "spell pouch" (the lookup of "spellpouch"
+  after it is thrown away, retail's bug as in the snapshot), in talisman
+  type order, from (33, 10): each a `%scandy` plate (28×26) and its icon
+  (24×21), keyed, each first in black 2 px right (the plate) or 1 px right
+  and down of it (the icon) -- a Put with a colour, DM_CHANGECOLOR. Plate
+  at (x, y − 2), icon at (x + 2, y + 1); the pressed talisman 1 px down
+  and right. With names on, the name (the dialog list's line for it, else
+  the type name) in "Small", white, shadowed, at (x + 29, y + 10).
+  The next goes 30 px right, 60 with names; past x 130 it wraps to
+  33, 30 px down. Rows from y 126 are not drawn. With names on, the
+  talismans before the first line (+0x180) are skipped.
+- Buttons (`0x005432a0`): "spell" (24, 136) 142×36, SpellInvD/U, the
+  talisman button (vtable `0x005b9bf0`): the construct spell (quick spell
+  0) as glyphs `S<Talisman>` (32×32, DM_ALPHA) from x + 7 + (5 − n)·14,
+  25 px apart, at y + 5, 1 px down while pressed (`0x005424a0`); "back"
+  (164, 143) 22×20, SpellBackD/U, key VK_BACK; "up" (166, 82) and "down"
+  (166, 112) 20×26, SpellArwU*/D*, repeating at 8; "min" (166, 37)
+  18×18, SpellNameD/U with names on, SpellTalD/U off.
+- Up shows with names on and a first line ≥ 1; down with names on and more
+  than six talismans from the first line; hidden, they are released.
+- A button's draw mode is its own (+0xd4); the default takes the bitmap's
+  without DM_BACKGROUND / DM_USEREG, with DM_NORESTORE (`0x0042cc30`). So
+  these buttons are unkeyed: keying follows DM_TRANSPARENT, here too.
+
+**What it does.** A press on a talisman (x 33..162, y 10..135, the same
+layout, 30×30 cells) picks it; moving off and back follows it; the release
+on it adds its code to the construct spell (`0x00543b40`, `0x00543c40`,
+`0x00543ca0`) -- at most 5; if the player can't cast the result
+(`0x0051b7c0`) the talisman comes off again and the text bar says
+SPLOUTTAL (`0x00542640`). Only while the player has control. "spell" casts
+the construct spell (`0x0051b5d0`) and has the spellbook find it by its
+talismans (`0x00544fb0`); "back" drops the last talisman; up and down move
+the first line by two, not below 0; "min" toggles the names.
+
+**Port.** `TSpellPane` (`src/spellpane.*`) becomes retail's pane, shaped
+like TInventory: Pulse binds the pouch's talismans and the construct
+spell, marking the pane dirty on a change and setting the arrows and the
+names art; ComposeBackground draws from that; the layout is one function
+for the draw and the hit test. `TTalismanButton` draws the bound spell.
+`TButton` takes retail's draw-mode rule. `TPlayScreen` hosts the pane in
+the lower slot while the side panel shows the spell tab. The A/B is
+`hud_ab.py spellpane` over `--test=ab-spellpane`: no pouch, an empty one,
+a few talismans and all twelve with names on and off, first lines, spells
+of 0..5 talismans, a pressed talisman and a pressed "spell".
+
 ## 7. Status
 
 - 2026-10-07: survey done; retail pipeline verified (§3); P0 started.
@@ -533,3 +589,32 @@ pouches, animated items, pages, an opened bag.
   - Open (P4, interactions): retail's clicks and drags (`0x00538210`:
     opening a bag, climbing out, use and swap) are still the side panel
     harness's hit tests.
+- 2026-10-10: **P4: the spell pane done** (it never worked in the port).
+  - `TSpellPane` is retail's pane (§6c), hosted by `TPlayScreen` in the
+    lower slot for the spell tab, with its interactions: picking talismans
+    (press, follow, release), back, the page arrows, the names toggle, and
+    casting the construct spell. `--test=ui-spellcreate` hosts it for the
+    demo player with a pouch of talismans; `--test=ab-spellpane` is the
+    A/B's host. The 679-line harness pane is gone.
+  - `hud_ab.py spellpane`: 15/15 cases with no defects (no pouch, an empty
+    one, a few talismans, all twelve with names and without, first lines,
+    spells of 1..5 talismans, lower-case codes, a pressed talisman, the held
+    "spell" button). Inventory 14/14, bottom bar 19/19, status bar 20/20.
+  - What the A/B found and fixed:
+    - `TButton` puts its bitmap as retail does (`0x0042cc30`): its own draw
+      mode, by default the bitmap's less DM_BACKGROUND / DM_USEREG; keyed
+      only with DM_TRANSPARENT. The spell pane's buttons are unkeyed; the
+      inventory's arrows say DM_ALPHA themselves.
+    - The talisman names hang from a baseline: retail's text-at-a-point
+      (`0x00438ed0`) draws with flag 0x80.
+    - The A/B's text mask was too generous: a name laid out in an open-ended
+      rect (x, y, x + 10000, y + 10000) masked everything right of and
+      below it. A GDI call's cell is now bounded by its font's height a
+      character across and a line down (`text_cell`).
+  - Retail bug, reported, not reproduced: with no spell pouch the page
+    arrows show with nothing to page (the background sets them only while
+    there is a pouch). The fixture fixes it (`spellpane.py`).
+  - The quick-spell API is const-correct (`TPlayer::GetQuickSpell`,
+    `SetQuickSpell`, `HasTalismans`).
+  - Open: casting has the spellbook find the spell (`0x00544fb0`), with the
+    spellbook pane (P4).
