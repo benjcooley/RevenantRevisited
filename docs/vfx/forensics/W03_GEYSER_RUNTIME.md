@@ -1,5 +1,13 @@
 # W03 — sgeyser / fgeyser retail runtime audit
 
+Update, 2026-10-10: `fgeyser` now has its own original full default-controller
+and renderer proof plus an exact authored production path. See
+[FGEYSER_NATIVE_VISUAL.md](FGEYSER_NATIVE_VISUAL.md). `sgeyser` remains excluded:
+its external `filename vapor` contract is unresolved. The October4 audit below
+is retained historically; the later native execution shows PartSys tags are
+initialized together and use the animator's cached authored frame, rather than
+waiting for tagframe1 or50 as the original next-work list speculated.
+
 Status, 2026-10-04: **unsupported retail general particle components**. The guessed preview has been removed; neither effect is source-behavior audited, runtime verified, visually accepted, or complete. No geyser runtime builder/component was registered in this change.
 
 ## Correct identity and caller chain

@@ -1,5 +1,7 @@
 # Dust and Fog: authored paths and bounded retail probes
 
+2026-10-10 update: Dust now has an exact authored controller and a proven native-software quantization boundary; see [DUST_AUTHORED_NATIVE.md](DUST_AUTHORED_NATIVE.md). The historical unsupported-path audit below is superseded for Dust. No visual pass is claimed.
+
 Audit date: 2026-10-05. These effects remain unfinished. The retained software recordings are diagnostic; neither earns accurate-reference or visual-parity credit.
 
 ## Dust — `0x0c052637`

@@ -1,0 +1,16 @@
+{
+  "scope": "Exact generic RiverFall root/scrolltex state0 configuration.",
+  "profiles": [
+    {
+      "name": "RiverFall",
+      "id": "0xd0c0f03a",
+      "asset": "misc/Riverfall.i3d",
+      "asset_sha256": "3ca23b872888cb078bdafd6b7f6fb36c1e42a40a6b2da4fa30b7bba42dc12a32",
+      "frames": 100,
+      "objects": 1,
+      "vertices": 14,
+      "faces": 12,
+      "textures": 1
+    }
+  ]
+}

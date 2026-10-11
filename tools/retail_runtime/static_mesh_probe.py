@@ -100,7 +100,7 @@ struct T3DImagery {
  void* GetBody(){throw std::runtime_error("Unexpected body load");}void InitializeMesh(S3DImageryBody*){throw std::runtime_error("Unexpected mesh load");}
  StubHeader*GetHeader(){return &header;}char*FindTag(char*,int){return nullptr;}
  int GetObjectParent(int,int)const{return -1;}void SetPrevState(int s,int f){prevstate=s;prevframe=f;}
- bool GetUninterpolatedAniKey(int,int,int,hmm_vec3&,hmm_vec3&,hmm_vec3&);
+ bool GetUninterpolatedAniKey(int,int,int,hmm_vec3&,hmm_vec3&,hmm_vec3&,bool=false);
  bool GetAniKey(int,int,int,hmm_vec3&,hmm_vec3&,hmm_vec3&);
  bool CalcObjectMatrix(S3DAnimObj*,int,int,hmm_mat4*,bool);
  bool ScrollTexOffset(int,int,int,int64_t,float*)const{throw std::runtime_error("Unexpected scroll in static fixture");}

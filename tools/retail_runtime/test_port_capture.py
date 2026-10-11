@@ -8,7 +8,7 @@ from port_capture import capture
 
 
 class CaptureExitTests(unittest.TestCase):
-    def exercise(self,exit_code=0,stall=False,visible=True,rejected=False,corrupt=False):
+    def exercise(self,exit_code=0,stall=False,visible=True,rejected=False,corrupt=False,flush_delay=0,depth=None):
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
         root=Path(temporary.name).resolve();assets=root/'assets';assets.mkdir()
         (assets/'effects.def').write_text('Capture test definitions\n')
@@ -26,6 +26,8 @@ print('assets='+os.environ['REVENANT_ASSETS_PATH'],flush=True)
 '''.replace('COLOR',repr((255,255,255) if visible else (0,0,0)))+
             ("print('[authored-static] missing objects or unsupported controller tags',flush=True)\n" if rejected else '')+
             ("Path(prefix+'001-test.png').write_bytes(b'invalid PNG')\n" if corrupt else '')+
+            (f'print({depth!r},flush=True)\n' if depth else '')+
+            (f'time.sleep({flush_delay})\n')+
             ('time.sleep(60)\n' if stall else f'raise SystemExit({exit_code})\n'))
         binary.chmod(0o755)
         output=root/'output'
@@ -42,11 +44,50 @@ print('assets='+os.environ['REVENANT_ASSETS_PATH'],flush=True)
         self.assertEqual((output/'effects.def').read_bytes(),(assets/'effects.def').read_bytes())
         self.assertEqual(report['pixel_summary']['nonblack_frames'],1)
 
+    def test_sparse_output_preserves_simulation_step(self):
+        scenario,output,_=self.exercise()
+        scenario['capture_stride']=8
+        report=capture(scenario,output)
+        self.assertIn('--filmstrip=1,0.3333333333333333',report['command'])
+        self.assertIn('--snapstep=0.0416666666666667',report['command'])
+        self.assertEqual(report['capture_stride'],8)
+        self.assertEqual(report['sample_simulation_ticks'],[2])
+
+    def test_nonpositive_capture_stride_rejects_before_launch(self):
+        scenario,output,_=self.exercise()
+        scenario['capture_stride']=0
+        with self.assertRaisesRegex(ValueError,'capture stride'):
+            capture(scenario,output)
+        self.assertFalse(output.exists())
+
+    def test_filmstrip_flush_can_use_remaining_declared_budget(self):
+        scenario,output,_=self.exercise(flush_delay=3)
+        report=capture(scenario,output)
+        self.assertEqual(report['status'],'pass')
+        self.assertFalse(report['forced_owned_shutdown'])
+        self.assertLess(report['elapsed_seconds'],scenario['timeout_seconds'])
+
     def test_explicit_viewport_resolution_reaches_capture_command(self):
         scenario,output,_=self.exercise()
         scenario['resolution']=[1024,768]
         report=capture(scenario,output)
         self.assertIn('--resolution=1024x768',report['command'])
+
+    def test_explicit_depth_range_is_recorded(self):
+        scenario,output,_=self.exercise(depth='[vfx-source-depth] native=0 near=2238 far=3262')
+        scenario['depth_range']=[2238,3262]
+        report=capture(scenario,output)
+        self.assertEqual(report['depth_range'],[2238,3262])
+        self.assertFalse(report['depth_range_native_domain'])
+
+    def test_explicit_depth_range_requires_matching_runtime_marker(self):
+        for marker in (None,'[vfx-source-depth] native=0 near=2238 far=3262'):
+            with self.subTest(marker=marker):
+                scenario,output,_=self.exercise(depth=marker)
+                scenario['depth_range']=[0,65535]
+                with self.assertRaises(RuntimeError):capture(scenario,output)
+                report=json.loads((output/'manifest.json').read_text())
+                self.assertIn('viewer depth range',report['error'])
 
     def test_nonpositive_resolution_rejects_before_process_launch(self):
         scenario,output,_=self.exercise()

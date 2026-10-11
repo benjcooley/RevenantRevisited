@@ -4,7 +4,7 @@
 #include <cstring>
 
 namespace {
-struct Mapping { uint32_t type_id; const char* preview_id; };
+struct Mapping { uint32_t type_id; const char* preview_id; bool partial; const char* description; };
 constexpr Mapping mappings[] = {
 #include "vfxreviewpreviewmap.inc"
 };
@@ -39,10 +39,14 @@ const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nu
         using Style = VfxTest::EVfxPreviewStyle;
         // Character-style entries with a standalone submit callback already
         // accept this exact origin; only attachment-only hooks need a rig.
-        if (it->preview_style == Style::Projectile) {
+        // An explicitly audited partial may draw its stationary origin-only
+        // preview. This does not create endpoints or claim projectile motion.
+        if (it->preview_style == Style::Projectile && !mapping.partial) {
             if (unavailable) *unavailable={false,it->id.c_str(),"Preview endpoint API unavailable; label only",true};
             continue;
         }
+        if (unavailable)
+            *unavailable={true,it->id.c_str(),mapping.description,it->preview_style==Style::Projectile,false,bool(it->is_alive),mapping.partial};
         return &*it;
     }
     return nullptr;
@@ -53,8 +57,7 @@ VfxReviewPreviewInfo DescribeVfxReviewPreview(uint32_t type_id)
 {
     if (NeedsEndpoints(type_id)) return {false,"","Preview endpoint API unavailable; label only",true};
     VfxReviewPreviewInfo result;
-    if (const auto* effect = Find(type_id,&result))
-        return {true,effect->id.c_str(),"Implemented preview controller; map caller not certified",false,false,bool(effect->is_alive)};
+    Find(type_id,&result);
     return result;
 }
 

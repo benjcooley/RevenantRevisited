@@ -56,6 +56,8 @@
 //   REGISTER_3DANIMATOR("Speaker", TAmbSoundAnimator)
 
 #include "retailmeshlighting.h"
+#include "literalwatermesh.h"
+#include "fliesprofile.h"
 #include "revenant.h"
 #include "effect.h"
 #include "fireballquad.h"
@@ -69,6 +71,8 @@
 #include "mappane.h"
 #include "math3d.h"
 #include "retailsoftwaretransform.h"
+#include "testconfig.h"
+#include "effects/flamevariantspreview.h"
 #include "meshextract.h"   // M09b: ExtractSubMesh for I3D cylinder mesh
 #include "revutils.h"
 #include "logging.h"
@@ -1266,9 +1270,17 @@ class TFlameQuadComponent final : public TFlipbookBillboardComponent
         if (Texture() == kInvalidTexture)
             return;
         SQuadDrawItem item = {};
-        const hmm_mat4& world = inst.Transform().Matrix();
+        const bool variant = inst.ObjClass()==OBJCLASS_EFFECT && (inst.ObjId()==0x50ba373cu || inst.ObjId()==0x50ba373du);
+        const bool native = StartupVfxNativeDomain && variant;
+        item.retail_texture=variant?1:0;
+        item.retail_argb4444=variant;
+        hmm_mat4 native_owner;
+        if(native){const auto& p=inst.Pos();BuildRetailSoftwareOwner(native_owner,p.x,p.y,p.z,uint8_t(inst.GetFace()));}
+        const hmm_mat4& world = native?native_owner:inst.Transform().Matrix();
+        item.retail_software_projection=native;
         float rect[4] = {};
         UvRect(rect);
+        if(native && TTime::FrameCount()<=40)log_info("[flame-phase] tick=%lld uv=%.9g,%.9g,%.9g,%.9g",(long long)TTime::FrameCount(),rect[0],rect[1],rect[2],rect[3]);
         if (DebugMode() == EFxDebugMode::FullTexture)
         {
             rect[0] = rect[1] = 0.0f;
@@ -1330,6 +1342,13 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
     {
         // Constructors can run before T3DImagery has initialized texture
         // slots. The animator-builder hook calls us again after mesh init.
+        return;
+    }
+
+    const uint32_t flame_id=inst->ObjId();
+    if ((flame_id==0x50ba373cu || flame_id==0x50ba373du) &&
+        !flame_variants_preview::Matches(inst,img3d)) {
+        log_warn("[flame] rejected exact colored variant resource id=%08x",flame_id);
         return;
     }
 
@@ -7219,833 +7238,119 @@ void TIceEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debug_mode*
     // No-op (paired with the nullptr SpawnForTest above).
 }
 
-// --- I21 TIceBoltEffect bespoke -----------------------------------------
-//
-// FAITHFUL DIRECT PORT of TIceBoltAnimator (snapshot effect_old.cpp:
-// 8015-8688). Stationary freeze beam from caster outward — NOT a flying
-// missile (TIceBoltEffect base is TEffect; the TMissileEffect calls in
-// the snapshot Initialize/Pulse are commented out, retail-confirmed via
-// cls_0x5aaf28 inheritance, forensics §6.0).
-//
-// Engine adaptations:
-//   - Render path swaps RenderObject(obj) for SubmitFxBillboard. The
-//     7 sub-objects of icebolt.I3D collapse to billboard quads in the
-//     bespoke first-pass — the cylinder stretch / spiral twist / ring
-//     slide become spatial billboard placement, faithful in count and
-//     position but not in mesh geometry. This is the "compiles + boots
-//     + renders something" first pass per the brief; a future pass can
-//     swap the cylinders to SubmitHelperMesh (cf. F07 ring) for proper
-//     mesh draws once the cylinder UVs are extracted.
-//   - 24 Hz sim-tick gate (family pattern blood/spark/fireball/iced)
-//     replaces the snapshot's per-render-frame integration. Per-tick
-//     math (FROST_STEP=0.03, SPIRAL_STEP=1.0, etc.) runs once per
-//     accumulated 1/24 s of wall-clock time.
-//   - Length march (snapshot :8152-8233) is replaced with a fixed
-//     harness `length_` since --test=vfx has no caster/targets/MapPane.
-//   - Gameplay beats (DamageCharactersInRange @beat10,
-//     "Iced"-posting @beat20) are GUARDED OUT for the standalone
-//     harness (no spell/invoker/MapPane). They're preserved as comments
-//     citing the snapshot lines so the in-game wire-up is one paste away.
-//   - SetSubSpell(3) forced (snapshot :8049), all visual tiers active.
+// --- IceBolt: original stationary beam, animator Pulse4eba00/Render4ebea0 ---
 
-namespace {
+TIceBoltEffect_Bespoke::~TIceBoltEffect_Bespoke()
+{
+    if(Renderer)for(const auto& part:parts_)if(part.mesh)Renderer->ReleaseMeshAssetRef(part.mesh);
+}
 
-constexpr const char* kIceBoltImageryPath = "Magic\\icebolt.I3D";
-
-// Snapshot constants (forensics §3). Same names + values as
-// effect_old.cpp:7972-7982 — line-for-line preserved.
-constexpr int32_t kIceBoltGrowDuration     = 10;        // GROW_DURATION
-constexpr float   kIceBoltSphereStep       = 0.5f;      // SPHERE_STEP
-constexpr float   kIceBoltRingSpeed        = 20.0f;     // RING_SPEED
-constexpr float   kIceBoltSpiralStep       = 1.0f;      // SPIRAL_STEP
-constexpr float   kIceBoltSpiralScaleStep  = 0.1f;      // SPIRAL_SCALE_STEP
-constexpr float   kIceBoltFrostInitSize    = 0.5f;      // FROST_INIT_SIZE
-constexpr float   kIceBoltFrostStep        = 0.03f;     // FROST_STEP
-
-// Harness: --test=vfx has no caster facing / no target march. Beam runs
-// along local −y for a fixed length (snapshot length = ticks*10, ≤1000).
-// 500 wu sits between snapshot's plausible 300-800 sample range.
-constexpr float   kIceBoltHarnessLength    = 500.0f;
-constexpr int32_t kIceBoltHarnessAngle     = 0;         // byte facing (0..255); +Y
-
-// 7 sub-objects of icebolt.I3D (forensics §4). Names match the .I3D
-// file order; the snapshot animator addresses them via GetObject(idx).
-constexpr int32_t kIceBoltSubObjCount      = 7;
-constexpr int32_t kIceBoltCylBase          = 0;   // cylinder04 (and 01/02/03 at 1..3)
-constexpr int32_t kIceBoltBox01            = 4;   // glow sphere / frost / snow billboard
-constexpr int32_t kIceBoltCylRing          = 5;   // cylinder05 — rings
-constexpr int32_t kIceBoltCylSpiral        = 6;   // cylinder06 — spirals
-
-// In-plane billboard size (snapshot scales sub-object meshes; here we
-// approximate as a billboard quad). Tuned against the asset's bbox.
-constexpr float   kIceBoltCylSizeWu        = 24.0f;     // core beam quad
-constexpr float   kIceBoltGlowSizeWu       = 64.0f;     // end glow sphere — box01 native ~64wu (bbox)
-// Frost / snow billboard scale base: box01 is a flat quad ~64wu wide in
-// the I3D (matches the cyl04..03 z=[0..64] convention). Snapshot
-// `obj->scl = s[i]` (frost, :8612) and `sz[i]` (snow, :8639) multiply
-// the mesh-native size by per-particle scale. frost s[i] ∈ [0, 0.5];
-// snow sz[i] ∈ [0.03, 0.30]. Using 64wu × scale matches retail; using
-// 12wu (the prior iter4 value) gave particles 5× too small to read.
-constexpr float   kIceBoltFrostSizeWu      = 64.0f;     // frost particle (mesh-native)
-constexpr float   kIceBoltSnowSizeWu       = 64.0f;     // snow particle (mesh-native)
-constexpr float   kIceBoltRingSizeWu       = 32.0f;     // ring quad
-constexpr float   kIceBoltSpiralSizeWu     = 18.0f;     // spiral quad
-
-}   // namespace
+bool TIceBoltEffect_Bespoke::BindMeshes()
+{
+    auto* image=dynamic_cast<T3DImagery*>(imagery);
+    if(!Renderer||!image||image->NumObjects()!=7||image->NumTextures()!=3)return false;
+    constexpr int slots[7]={0,0,0,0,1,2,3};
+    constexpr int vertex_counts[7]={24,24,24,24,4,26,26};
+    constexpr int index_counts[7]={72,72,72,72,6,72,72};
+    for(int i=0;i<7;++i) {
+        auto& part=parts_[i];if(part.mesh)continue;
+        std::vector<SMeshVertex> vertices;std::vector<uint16_t> indices;
+        if(!ExtractSubMeshTextureSlot(image,i,slots[i],vertices,indices)||
+           int(vertices.size())!=vertex_counts[i]||int(indices.size())!=index_counts[i])return false;
+        S3DObj object{};image->GetObject(i,&object);image->GetMaterial(object.material,&part.material);
+        TTextureHandle texture=Renderer->WhiteTextureHandle();part.lighting=4;
+        if(slots[i]) {
+            S3DTex tex{};image->GetTexture(slots[i]-1,&tex);
+            if(tex.htexture==kInvalidTexture||tex.numframes!=1||RetailMeshTextureLighting(tex.desc.pixelFormat)!=3)return false;
+            texture=tex.htexture;part.lighting=3;
+        }
+        const uint64_t key=0x4943454200000000ull^(uint64_t(uint32_t(image->ImageryId()))<<16)^uint64_t(i);
+        part.mesh=Renderer->RegisterMeshAsset(key,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()),texture);
+        if(!part.mesh)return false;Renderer->AddMeshAssetRef(part.mesh);
+        if(part.lighting==4){part.vertices=std::move(vertices);part.indices=std::move(indices);}
+    }
+    return true;
+}
 
 TIceBoltEffect_Bespoke* TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    // --- Load Magic\icebolt.I3D (forensics §4 — byte-identical between
-    // snapshot and shipped retail, MD5 confirmed).
-    const int32_t img_id = TObjectImagery::FindImagery(kIceBoltImageryPath);
-    if (img_id < 0)
-    {
-        log_error("[icebolt] SpawnForTest: FindImagery('%s') failed",
-                  kIceBoltImageryPath);
-        return nullptr;
-    }
-    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
-    if (!base)
-    {
-        log_error("[icebolt] SpawnForTest: LoadImagery(id=%d '%s') failed",
-                  img_id, kIceBoltImageryPath);
-        return nullptr;
-    }
-    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
-    if (!img3d)
-    {
-        log_error("[icebolt] SpawnForTest: imagery for '%s' is not a T3DImagery",
-                  kIceBoltImageryPath);
-        TObjectImagery::FreeImagery(base);
-        return nullptr;
-    }
-
-    auto* bolt = new TIceBoltEffect_Bespoke(base);
-    // Mirror TIceBoltAnimator::Initialize :8022-8026 — z-lift +50 wu
-    // (caster pos → hand height for the beam origin).
-    S3DPoint anchored = origin;
-    anchored.z += 50;
-    bolt->ForcePos(anchored);
-    bolt->SetMapIndex(MapPane.MakeIndex());
-    bolt->ActivateComponents();
-
-    // Lazy-mesh-init poke (B01 / F07 / X22 pattern). NumObjects triggers
-    // the mesh load that fills in textures.
-    const int32_t num_obj = img3d->NumObjects();
-    const int32_t num_tex = img3d->NumTextures();
-    if (num_obj < kIceBoltSubObjCount || num_tex <= 0)
-    {
-        log_error("[icebolt] SpawnForTest: imagery underspec'd "
-                  "(objects=%d, textures=%d) — expected >=%d sub-objects",
-                  num_obj, num_tex, kIceBoltSubObjCount);
-        delete bolt;
-        return nullptr;
-    }
-
-    // Resolve each of the 7 sub-objects to (texture, UV sub-rect).
-    // Forensics §4: all 7 share the .I3D's inline texture pool. Index 4
-    // (box01) carries the glow sphere / frost / snow billboard; it's the
-    // critical one — if it fails to resolve the entire particle cloud
-    // draws nothing.
-    for (int32_t i = 0; i < kIceBoltSubObjCount; ++i)
-    {
-        const int32_t tex_slot = SubObjTextureSlot(img3d, i);
-        const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
-        S3DTex tex = {};
-        img3d->GetTexture(slot, &tex);
-        bolt->subobj_tex_[i] = tex.htexture;
-        ResolveSubObjUv(img3d, i, bolt->subobj_uv_[i]);
-    }
-    if (bolt->subobj_tex_[kIceBoltBox01] == kInvalidTexture)
-    {
-        log_error("[icebolt] SpawnForTest: box01 (sub-obj 4) texture "
-                  "unresolved — glow sphere / frost / snow particles "
-                  "will draw nothing");
-    }
-
-    // --- Register cyl04/01/02/03 + ring + spiral as real I3D meshes for
-    // the SubmitHelperMesh draw pass (snapshot effect_old.cpp:8475-8504
-    // calls RenderObject(obj) — that's a mesh draw, not a billboard).
-    //
-    // Cylinder sub-objects in icebolt.I3D have all-zero vertex UVs (the
-    // cylinder body is a single-color SOLID-FILL surface — the prior iter3
-    // diagnostic confirmed UV=(0,0,0,0) for sub-objs 0..3). Retail reads
-    // material colour for these; we mirror that by binding the renderer's
-    // white texture and routing the I3D material's diffuse / emissive
-    // through SHelperMeshSubmit (helper-mesh shader: base = tex.rgb *
-    // diffuse, so white * material.diffuse → pure material colour).
-    //
-    // Pattern follows F07 fireball ring (effect.cpp:7261-7302) and M09b
-    // teleporter loader (effect.cpp:5862-5945).
-    auto load_material = [img3d, num_tex](int32_t objnum,
-                                          float diff_out[4],
-                                          float emit_out[4])
-    {
-        diff_out[0] = diff_out[1] = diff_out[2] = diff_out[3] = 1.0f;
-        emit_out[0] = emit_out[1] = emit_out[2] = 0.0f;
-        emit_out[3] = 1.0f;
-        if (!img3d || objnum < 0) return;
-        S3DObj o = {};
-        img3d->GetObject(objnum, &o);
-        if (o.material < 0 || o.material >= img3d->NumMaterials()) return;
-        S3DMat m = {};
-        img3d->GetMaterial(o.material, &m);
-        diff_out[0] = m.matdesc.diffuse.r;
-        diff_out[1] = m.matdesc.diffuse.g;
-        diff_out[2] = m.matdesc.diffuse.b;
-        diff_out[3] = m.matdesc.diffuse.a > 0.001f ? m.matdesc.diffuse.a : 1.0f;
-        emit_out[0] = m.matdesc.emissive.r;
-        emit_out[1] = m.matdesc.emissive.g;
-        emit_out[2] = m.matdesc.emissive.b;
-        emit_out[3] = 1.0f;
-        (void)num_tex;
-    };
-    auto register_submesh = [img3d, num_tex](int32_t objnum) -> MeshHandle
-    {
-        if (!img3d || objnum < 0) return 0;
-        const int32_t texslots = num_tex + 1;  // +1 for slot 0 (untextured)
-        for (int32_t texslot = 0; texslot < texslots; ++texslot)
-        {
-            std::vector<SMeshVertex> verts;
-            std::vector<uint16_t>    indices;
-            if (!ExtractSubMeshTextureSlot(img3d, objnum, texslot, verts, indices))
-                continue;
-            if (verts.empty() || indices.empty()) continue;
-            // Log the mesh's native bounding box so we can sanity-check
-            // the snapshot's scale divisors (cyl: scl.z = length/64
-            // implies mesh-Z spans ~64 wu natively; cylscale/2 on x/y
-            // implies mesh radius is in the cylscale-unit frame).
-            float minx = verts[0].pos[0], maxx = minx;
-            float miny = verts[0].pos[1], maxy = miny;
-            float minz = verts[0].pos[2], maxz = minz;
-            for (const auto& v : verts)
-            {
-                minx = std::fmin(minx, v.pos[0]); maxx = std::fmax(maxx, v.pos[0]);
-                miny = std::fmin(miny, v.pos[1]); maxy = std::fmax(maxy, v.pos[1]);
-                minz = std::fmin(minz, v.pos[2]); maxz = std::fmax(maxz, v.pos[2]);
-            }
-            log_info("[icebolt]   sub-obj %d texslot %d bbox: "
-                     "x=[%.1f..%.1f] y=[%.1f..%.1f] z=[%.1f..%.1f] verts=%zu",
-                     objnum, texslot, minx, maxx, miny, maxy, minz, maxz,
-                     verts.size());
-            // Cyl bodies have degenerate UVs and sample (0,0) which is
-            // typically chroma-key black → transparent. Binding the
-            // renderer's white texture keeps `base = white * diffuse`
-            // = material colour, with no texture sampling for the cyl
-            // surfaces. For sub-objs whose verts ARE textured (rings /
-            // spirals carry full UVs per iter3 diag), the authored
-            // texture wins via the standard texslot binding.
-            TTextureHandle albedo = Renderer->WhiteTextureHandle();
-            if (texslot > 0 && texslot - 1 < num_tex)
-            {
-                S3DTex t = {};
-                img3d->GetTexture(texslot - 1, &t);
-                if (t.htexture != kInvalidTexture) albedo = t.htexture;
-            }
-            return Renderer->RegisterMesh(
-                verts.data(), int32_t(verts.size()),
-                indices.data(), int32_t(indices.size()),
-                albedo);
-        }
-        return 0;
-    };
-    for (int32_t cyl = 0; cyl < 4; ++cyl)
-    {
-        bolt->cyl_meshes_[cyl] = register_submesh(cyl);
-        load_material(cyl, bolt->cyl_diffuse_[cyl], bolt->cyl_emissive_[cyl]);
-    }
-    bolt->ring_mesh_   = register_submesh(kIceBoltCylRing);
-    load_material(kIceBoltCylRing, bolt->ring_diffuse_, bolt->ring_emissive_);
-    bolt->spiral_mesh_ = register_submesh(kIceBoltCylSpiral);
-    load_material(kIceBoltCylSpiral, bolt->spiral_diffuse_, bolt->spiral_emissive_);
-    log_info("[icebolt] meshes: cyl04=%u cyl01=%u cyl02=%u cyl03=%u "
-             "ring(cyl05)=%u spiral(cyl06)=%u",
-             bolt->cyl_meshes_[0], bolt->cyl_meshes_[1],
-             bolt->cyl_meshes_[2], bolt->cyl_meshes_[3],
-             bolt->ring_mesh_, bolt->spiral_mesh_);
-    log_info("[icebolt] cyl04 material diff=(%.2f,%.2f,%.2f,%.2f) "
-             "emit=(%.2f,%.2f,%.2f); ring diff=(%.2f,%.2f,%.2f) "
-             "spiral diff=(%.2f,%.2f,%.2f)",
-             bolt->cyl_diffuse_[0][0], bolt->cyl_diffuse_[0][1],
-             bolt->cyl_diffuse_[0][2], bolt->cyl_diffuse_[0][3],
-             bolt->cyl_emissive_[0][0], bolt->cyl_emissive_[0][1],
-             bolt->cyl_emissive_[0][2],
-             bolt->ring_diffuse_[0], bolt->ring_diffuse_[1],
-             bolt->ring_diffuse_[2],
-             bolt->spiral_diffuse_[0], bolt->spiral_diffuse_[1],
-             bolt->spiral_diffuse_[2]);
-
-    // Port of TIceBoltAnimator::Initialize (effect_old.cpp:8015-8135).
-    // Same variable names, same per-line assignment, same constants.
-    bolt->frameon_       = 0;
-    bolt->spherescale_[0] = kIceBoltSphereStep;          // :8029
-    bolt->spherescale_[1] = 1.0f;                         // :8030
-    bolt->cylscale_      = kIceBoltSphereStep;            // :8031
-    bolt->ringout_       = 0.0f;                          // :8032
-    bolt->spiralang_     = 0.0f;                          // :8033
-    bolt->spiralscale_   = kIceBoltSpiralScaleStep;       // :8034
-    bolt->cy_            = 0.0f;                          // :8129
-    bolt->angle_         = kIceBoltHarnessAngle;          // :8047 GetAngle — harness fixed
-    bolt->subspell_      = 3;                              // :8049 SetSubSpell(3) force
-    bolt->length_        = kIceBoltHarnessLength;         // length march replaced
-
-    // Frost particle seed (snapshot :8035-8045). Per-particle p[i],v[i]
-    // jitter ±10 / ±3 wu, s[i]=FROST_INIT_SIZE, staggered delay
-    // t[i] = random(0, FROST_INIT_SIZE*2/FROST_STEP) = random(0,33).
-    for (int32_t i = 0; i < kIceBoltMaxFrost; ++i)
-    {
-        SIceBoltFrostParticle& f = bolt->frost_[i];
-        f.pos.X = float(random(-10, 10));    // :8037
-        f.pos.Y = float(random(-10, 10));    // :8038
-        f.pos.Z = float(random(-10, 10));    // :8039
-        f.vel.X = float(random(-3, 3));      // :8040
-        f.vel.Y = float(random(-3, 3));      // :8041
-        f.vel.Z = float(random(-3, 3));      // :8042
-        f.s     = kIceBoltFrostInitSize;     // :8043
-        f.t     = float(random(0,
-            int32_t(kIceBoltFrostInitSize * 2.0f / kIceBoltFrostStep))); // :8044
-    }
-
-    // Snow particle seed (snapshot :8119-8133, subspell>2 branch — always
-    // true here since subspell forced to 3 at :8049).
-    for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)
-    {
-        SIceBoltSnowParticle& sn = bolt->snow_[i];
-        sn.h  = float(random(-50, 50));                                       // :8123
-        sn.th = float(random(0, 359)) * float(TORADIAN);                      // :8124
-        sn.rs = float(random(5, 15)) / 100.0f;                                // :8125
-        sn.sz = float(random(int32_t(kIceBoltFrostStep * 100.0f),
-                            int32_t(kIceBoltFrostStep
-                                    * float(kIceBoltGrowDuration) * 100.0f))) / 100.0f; // :8126
-        sn.r  = float(random(25, 50));                                        // :8127
-    }
-
-    log_info("[icebolt] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
-             "length=%.0f angle=%d subspell=%d subobj_tex={%u,%u,%u,%u,%u,%u,%u}",
-             kIceBoltImageryPath, bolt->GetMapIndex(),
-             anchored.x, anchored.y, anchored.z,
-             bolt->length_, bolt->angle_, bolt->subspell_,
-             bolt->subobj_tex_[0], bolt->subobj_tex_[1], bolt->subobj_tex_[2],
-             bolt->subobj_tex_[3], bolt->subobj_tex_[4], bolt->subobj_tex_[5],
-             bolt->subobj_tex_[6]);
-    for (int32_t i = 0; i < kIceBoltSubObjCount; ++i)
-    {
-        log_info("[icebolt] sub-obj %d uv=(%.3f,%.3f,%.3f,%.3f) area=%.4f",
-                 i, bolt->subobj_uv_[i][0], bolt->subobj_uv_[i][1],
-                 bolt->subobj_uv_[i][2], bolt->subobj_uv_[i][3],
-                 bolt->subobj_uv_[i][2] * bolt->subobj_uv_[i][3]);
-    }
+    auto* image=LoadWaterImagery("Magic\\icebolt.I3D","icebolt");if(!image)return nullptr;
+    auto* bolt=new TIceBoltEffect_Bespoke(image);
+    S3DPoint anchor=origin;anchor.z+=50;bolt->ForcePos(anchor);
+    bolt->SetMapIndex(MapPane.MakeIndex());bolt->ActivateComponents();
+    bolt->icebolt_core::State::Initialize([](int low,int high){return random(low,high);});
+    if(!bolt->BindMeshes()) {delete bolt;return nullptr;}
+    log_info("[icebolt] original stationary beam source=%d,%d,%d length=500 face=0",anchor.x,anchor.y,anchor.z);
     return bolt;
 }
 
-void TIceBoltEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+bool TIceBoltEffect_Bespoke::SetBeamEndpoints(const S3DPoint& source,const S3DPoint& destination)
 {
-    if (!Renderer)
-        return;
+    if(frameon_!=0)return false;
+    const double dx=double(destination.x)-source.x,dy=double(destination.y)-source.y;
+    const double distance=std::sqrt(dx*dx+dy*dy);if(distance<=0)return false;
+    // Explicit preview world boundary at the requested planar endpoint. Original
+    // Initialize tests one ten-unit step at a time and caps the march at50 steps.
+    angle_=ConvertToFacing(source,destination);
+    length_=icebolt_core::MarchLength(source.x,source.y,uint8_t(angle_),[&](int32_t x,int32_t y) {
+        const double qx=double(x)-source.x,qy=double(y)-source.y;
+        return qx*qx+qy*qy>=distance*distance;
+    });
+    FaceOnly(angle_);ForcePos(source);return true;
+}
 
-    // --- Update: port of TIceBoltAnimator::Animate (effect_old.cpp:
-    // 8144-8455), framerate-independent via the 24 Hz sim-tick
-    // accumulator. Each accumulated tick runs the original per-tick
-    // integration exactly once.
-    if (alive_)
-    {
-        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-        while (sim_accum_ms_ >= double(kIceBoltSimTickMs))
-        {
-            sim_accum_ms_ -= double(kIceBoltSimTickMs);
+void TIceBoltEffect_Bespoke::Pulse()
+{
+    if(alive_) {icebolt_core::State::Pulse([](int low,int high){return random(low,high);});alive_=frameon_<120;}
+    SetCommandDone(false);if(!alive_)KillThisEffect();TEffect::Pulse();
+}
 
-            // Snapshot :8152-8232 — length march. Harness skips
-            // (no caster/targets/MapPane); length_ pinned at spawn.
-
-            frameon_++;  // :8234
-
-            // Snow tick (snapshot :8236-8273). subspell>2 branch always
-            // true (force-3 at :8049).
-            if (subspell_ > 2)
-            {
-                for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)   // :8238
-                {
-                    SIceBoltSnowParticle& sn = snow_[i];
-                    sn.th += sn.rs;                              // :8240
-                    if (sn.th > float(M_2PI))
-                        sn.th -= float(M_2PI);                   // :8242
-                    sn.rs += 0.01f;                              // :8243
-                }
-                if (frameon_ > kIceBoltGrowDuration * 2)         // :8245
-                {
-                    cy_ += length_ / float(kIceBoltGrowDuration * 2);  // :8247
-                    if (cy_ >= length_)
-                        cy_ = length_;                           // :8249
-                }
-                if (frameon_ > kIceBoltGrowDuration * 5)         // :8251
-                {
-                    for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)
-                    {
-                        SIceBoltSnowParticle& sn = snow_[i];
-                        sn.h += 5.0f;                            // :8266
-                        sn.r -= 1.0f;                            // :8267
-                        if (sn.r < 1.0f)
-                            sn.r = 1.0f;                         // :8269
-                        sn.rs += 0.05f;                          // :8270
-                    }
-                }
-            }
-
-            // Frost tick (snapshot :8331-8355).
-            for (int32_t i = 0; i < kIceBoltMaxFrost; ++i)
-            {
-                SIceBoltFrostParticle& f = frost_[i];
-                f.t -= 1.0f;                                     // :8333
-                if (f.t > 0)
-                    continue;                                    // :8334
-                f.t = 0;                                          // :8337
-                f.pos.X += f.vel.X;                              // :8338
-                f.pos.Y += f.vel.Y;                              // :8339
-                f.pos.Z += f.vel.Z;                              // :8340
-                f.s -= kIceBoltFrostStep;                        // :8341
-                if (f.s < 0)                                      // :8342
-                {
-                    // Respawn (:8344-8353).
-                    f.pos.X = float(random(-10, 10));
-                    f.pos.Y = float(random(-10, 10));
-                    f.pos.Z = float(random(-10, 10));
-                    f.vel.X = float(random(-3, 3));
-                    f.vel.Y = float(random(-3, 3));
-                    f.vel.Z = float(random(-3, 3));
-                    f.s     = kIceBoltFrostInitSize;
-                    f.t     = float(random(0,
-                        int32_t(kIceBoltFrostInitSize / kIceBoltFrostStep)));
-                    if (frameon_ > kIceBoltGrowDuration * 3)
-                        f.t = 100.0f;                            // :8353
-                }
-            }
-
-            // Beam-body transform envelope (snapshot :8356-8392).
-            if (frameon_ < kIceBoltGrowDuration)                 // :8356
-            {
-                spherescale_[0] += kIceBoltSphereStep;
-                spherescale_[1] += kIceBoltSphereStep * 2.0f;
-                cylscale_       += kIceBoltSphereStep;
-                spiralscale_    += kIceBoltSpiralScaleStep;
-                spiralang_      += kIceBoltSpiralStep;
-                if (spiralang_ > float(M_2PI))
-                    spiralang_ -= float(M_2PI);
-            }
-            if (frameon_ >= kIceBoltGrowDuration
-                && frameon_ < kIceBoltGrowDuration * 2)          // :8366
-            {
-                cylscale_       -= kIceBoltSphereStep * 0.5f;
-                spherescale_[0] += kIceBoltSphereStep;
-                spherescale_[1] += kIceBoltSphereStep;
-                spiralang_      += kIceBoltSpiralStep;
-                if (spiralang_ > float(M_2PI))
-                    spiralang_ -= float(M_2PI);
-            }
-            if (frameon_ >= kIceBoltGrowDuration * 2
-                && frameon_ < kIceBoltGrowDuration * 3)          // :8375
-            {
-                cylscale_       -= kIceBoltSphereStep * 0.5f;
-                spherescale_[0] -= kIceBoltSphereStep;
-                spherescale_[1] -= kIceBoltSphereStep;
-                spiralang_      += kIceBoltSpiralStep;
-                if (spiralang_ > float(M_2PI))
-                    spiralang_ -= float(M_2PI);
-            }
-            if (frameon_ >= kIceBoltGrowDuration * 3
-                && frameon_ < kIceBoltGrowDuration * 4)          // :8384
-            {
-                spherescale_[0] -= kIceBoltSphereStep;
-                spherescale_[1] -= kIceBoltSphereStep * 2.0f;
-                spiralscale_    -= kIceBoltSpiralScaleStep;
-            }
-            ringout_ += kIceBoltRingSpeed;                       // :8390
-            if (ringout_ > length_)
-                ringout_ -= length_;                             // :8392
-
-            // Gameplay beats — guarded out in harness (no spell/invoker/
-            // MapPane). Snapshot :8393-8454 references for the gameflow
-            // wire-up:
-            //   frameon == GD       → DamageCharactersInRange(... DAMAGE_ICE)
-            //   frameon == 2*GD     → spawn "Iced" (I22) on each enemy
-            //   frameon == 12*GD    → KillThisEffect()
-            if (frameon_ >= kIceBoltGrowDuration * 12)           // :8451
-            {
-                alive_ = false;
-                break;
-            }
-        }
-    }
-
-    if (!alive_)
-        return;
-
-    // --- Render: 1:1 port of TIceBoltAnimator::Render (effect_old.cpp
-    // :8464-8688). The mesh draws (cyl04/01/02/03 + cylinder05 ring +
-    // cylinder06 spiral) live in SubmitWorldMeshes_BESPOKE — they need
-    // to be submitted from the harness's `submit_world` callback (after
-    // BeginTilePass clears the transparent_world_queue, mirroring F07
-    // fireball's SubmitWorldRing split). This method handles the box01
-    // billboard pass (end-glow / frost / snow) which goes through
-    // SubmitFxBillboard and runs from the regular `submit` callback.
-    //
-    // Per-sub-object call mapping (1:1 with snapshot effect_old.cpp):
-    //   :8475-8504  RenderObject(cyl04/01/02/03)  → SubmitHelperMesh   (SubmitWorldMeshes_BESPOKE)
-    //   :8510-8545  RenderObject(cyl06 spiral)    → SubmitHelperMesh   (SubmitWorldMeshes_BESPOKE)
-    //   :8547-8570  RenderObject(cyl05 ring)      → SubmitHelperMesh   (SubmitWorldMeshes_BESPOKE)
-    //   :8573-8600  RenderObject(box01 glow)      → SubmitFxBillboard  (below)
-    //   :8602-8628  RenderObject(box01 frost)     → SubmitFxBillboard  (below)
-    //   :8632-8657  RenderObject(box01 snow)      → SubmitFxBillboard  (below)
-    //
-    // Blend = Alpha (snapshot SetBlendState :8467, MODULATE,
-    // SRC_ALPHA/INV_SRC_ALPHA — NOT additive — forensics §7).
-
-    const S3DPoint& base_pos = Pos();
-    // Beam facing yaw. Snapshot :8155: (angle*360/256)*TORADIAN = the
-    // equivalent of byte-angle * (2π/256). The marching length-finder
-    // steps (10·sinθ, -10·cosθ) → at angle=0 the beam runs world -Y.
-    const float face_rad =
-        float(angle_) * (2.0f * float(M_PI)) / 256.0f;
-    const float dx = std::sin(face_rad);    // beam +X step direction
-    const float dy = -std::cos(face_rad);   // beam −Y step direction
-
-    // --- Box01 billboard template (used by the glow / frost / snow
-    // blocks below). Snapshot draws each via RenderObject(box01) with a
-    // per-instance screen-facing matrix (RotateX(-π/2); RotateX(-π/6);
-    // RotateZ(-π/4); RotateZ(-(face*360/256)*TORADIAN)) — that's the
-    // camera-facing convention. SubmitFxBillboard with ScreenAligned
-    // orientation is the exact-equivalent primitive (box01 IS a flat
-    // quad-mesh in the I3D — a screen-aligned billboard is the same
-    // geometry plus the same screen-facing rotation).
-    SBillboardDrawItem item = {};
-    item.color_rgba[0] = 1.0f;
-    item.color_rgba[1] = 1.0f;
-    item.color_rgba[2] = 1.0f;
-    item.color_rgba[3] = 1.0f;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;
-    item.debug_mode      = debug_mode;
-
-    // --- End glow spheres (snapshot :8573-8600). 2x box01, one at
-    // y=0 (caster end), one at y=−length (target end). subspell>0.
-    if (subspell_ > 0
-        && subobj_tex_[kIceBoltBox01] != kInvalidTexture)
-    {
-        for (int32_t i = 0; i < 2; ++i)
-        {
-            const float ypos = -length_ * float(i);   // :8595
-            item.world_pos[0] = float(base_pos.x) + dx * (-ypos);
-            item.world_pos[1] = float(base_pos.y) + dy * (-ypos);
-            item.world_pos[2] = float(base_pos.z);
-            item.size_wu[0] = item.size_wu[1] =
-                kIceBoltGlowSizeWu * (spherescale_[i] * 0.5f);
-            item.key.texture = subobj_tex_[kIceBoltBox01];
-            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
-                        sizeof(item.uv_rect));
-            Renderer->SubmitFxBillboard(item);
-        }
-    }
-
-    // --- Frost particles (snapshot :8602-8628). 50 box01 quads at
-    // p[i] offset −length in y (clustered at target end).
-    if (subobj_tex_[kIceBoltBox01] != kInvalidTexture)
-    {
-        for (int32_t i = 0; i < kIceBoltMaxFrost; ++i)
-        {
-            const SIceBoltFrostParticle& f = frost_[i];
-            if (f.t > 0)
-                continue;                                        // :8605
-            // Snapshot :8622-8624: pos = (p.x, p.y − length, p.z).
-            const float lx = f.pos.X;
-            const float ly = f.pos.Y - length_;
-            const float lz = f.pos.Z;
-            // Rotate local (lx,ly) into world by beam facing (dx,dy).
-            item.world_pos[0] =
-                float(base_pos.x) + dx * (-ly) + lx;
-            item.world_pos[1] =
-                float(base_pos.y) + dy * (-ly);
-            item.world_pos[2] = float(base_pos.z) + lz;
-            item.size_wu[0] = item.size_wu[1] =
-                kIceBoltFrostSizeWu * f.s;
-            item.key.texture = subobj_tex_[kIceBoltBox01];
-            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
-                        sizeof(item.uv_rect));
-            Renderer->SubmitFxBillboard(item);
-        }
-    }
-
-    // --- Snow flurry (snapshot :8630-8657). subspell>2; orbits the
-    // beam axis, sweeps along beam after beat 2*GD, blows up after 5*GD.
-    if (subspell_ > 2
-        && subobj_tex_[kIceBoltBox01] != kInvalidTexture)
-    {
-        for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)
-        {
-            const SIceBoltSnowParticle& sn = snow_[i];
-            // Snapshot :8649-8653: pos = (r·cos th, r·sin th − cy?, h).
-            const float lx = sn.r * std::cos(sn.th);
-            float       ly = sn.r * std::sin(sn.th);
-            if (frameon_ > kIceBoltGrowDuration * 2)
-                ly -= cy_;                                       // :8652
-            const float lz = sn.h;
-            item.world_pos[0] =
-                float(base_pos.x) + dx * (-ly) + lx;
-            item.world_pos[1] =
-                float(base_pos.y) + dy * (-ly);
-            item.world_pos[2] = float(base_pos.z) + lz;
-            item.size_wu[0] = item.size_wu[1] =
-                kIceBoltSnowSizeWu * sn.sz;
-            item.key.texture = subobj_tex_[kIceBoltBox01];
-            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
-                        sizeof(item.uv_rect));
-            Renderer->SubmitFxBillboard(item);
-        }
+void TIceBoltEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode)
+{
+    constexpr double step=1.0/24.0;sim_accum_+=TTime::DeltaTime();
+    while(alive_&&sim_accum_+1e-9>=step) {
+        sim_accum_-=step;icebolt_core::State::Pulse([](int low,int high){return random(low,high);});alive_=frameon_<120;
     }
 }
 
-// --- I21 SubmitWorldMeshes_BESPOKE -------------------------------------
-//
-// Cylinder/ring/spiral mesh submissions for IceBolt. Called from the
-// harness `submit_world` callback (vfxtest.cpp), which fires AFTER
-// TRenderer::BeginTilePass clears the transparent_world_queue but BEFORE
-// EndTilePass drains it (see vfxtest.cpp:1515-1529 + M09_FORENSICS §M09b
-// SubmitHelperMesh pipeline). Mirrors F07 fireball's SubmitWorldRing
-// pattern (effect.cpp:7542+).
-//
-// 1:1 port of TIceBoltAnimator::Render mesh blocks (effect_old.cpp:
-// 8472-8571). Each `RenderObject(obj)` → `SubmitHelperMesh(...)` with the
-// SAME matrix composition the snapshot builds via D3DMATRIXScale/RotateX/
-// RotateY/RotateZ/Translate. D3D row-vector convention = post-multiply
-// accumulation: M = I; M *= Scale; M *= RotateX; M *= RotateY; M *= RotateZ;
-// M *= Translate; → final M_local = S * Rx * Ry * Rz * T.
-//
-// Blend = Alpha (snapshot SetBlendState :8467, MODULATE,
-// SRC_ALPHA/INV_SRC_ALPHA — NOT additive — forensics §7).
-// SHelperMeshSubmit { additive_blend = false } selects the
-// helper_mesh_back/front pipeline = alpha-blended path
-// (renderer.cpp:2381-2384). Per-material colour from the cyl/ring/spiral
-// sub-object's authored S3DMaterial (loaded at SpawnForTest).
-void TIceBoltEffect_Bespoke::SubmitWorldMeshes_BESPOKE(EFxDebugMode /*debug_mode*/)
+void TIceBoltEffect_Bespoke::SubmitWorldMeshes_BESPOKE(EFxDebugMode)
 {
-    if (!Renderer || !alive_)
-        return;
-
-    const S3DPoint& base_pos = Pos();
-    const float face_rad =
-        float(angle_) * (2.0f * float(M_PI)) / 256.0f;
-    constexpr float kHalfPi = float(M_PI) * 0.5f;
-
-    // --- Inline matrix helpers (row-major 4×4; translation in [3]/[7]/
-    // [11]). Mirrors the F07 fireball ring path (effect.cpp:7553-7570)
-    // and teleporter ComposeFlareMatrix (effect.cpp:6007-6035).
-    auto mat_identity = [](float m[16])
-    {
-        for (int32_t i = 0; i < 16; ++i) m[i] = (i % 5 == 0) ? 1.0f : 0.0f;
-    };
-    auto mat_mul = [](const float a[16], const float b[16], float out[16])
-    {
-        for (int32_t r = 0; r < 4; ++r)
-            for (int32_t c = 0; c < 4; ++c)
-            {
-                float s = 0.0f;
-                for (int32_t k = 0; k < 4; ++k)
-                    s += a[r * 4 + k] * b[k * 4 + c];
-                out[r * 4 + c] = s;
-            }
-    };
-    // Bolt instance world matrix: T(base_pos) * Rz(face_rad).
-    float inst_world[16];
-    {
-        const float c = std::cos(face_rad);
-        const float s = std::sin(face_rad);
-        inst_world[0]  = c;    inst_world[1]  = -s;   inst_world[2]  = 0.0f; inst_world[3]  = float(base_pos.x);
-        inst_world[4]  = s;    inst_world[5]  =  c;   inst_world[6]  = 0.0f; inst_world[7]  = float(base_pos.y);
-        inst_world[8]  = 0.0f; inst_world[9]  = 0.0f; inst_world[10] = 1.0f; inst_world[11] = float(base_pos.z);
-        inst_world[12] = 0.0f; inst_world[13] = 0.0f; inst_world[14] = 0.0f; inst_world[15] = 1.0f;
-    }
-
-    // Compose M_local = T * Rz * Ry * Rx * S (snapshot intent: scale
-    // first, then rotate, then translate; applied to a vertex column
-    // vector).
-    //
-    // CONVENTION: the helper-mesh vertex shader
-    // (src/shaders/mesh.glsl.h:36-41) reads w0..w3 as ROWS of a 4×4
-    // matrix and computes
-    //   wp = vec3(dot(w0, ph), dot(w1, ph), dot(w2, ph))
-    // — that's the standard ROW-MAJOR COLUMN-VECTOR convention
-    // wp = M * ph. To get "scale first, then rotate, then translate"
-    // on the vertex, the matrix product order must be T * R * S (so
-    // that M * v = T * R * (S * v) applies S first, then R, then T).
-    //
-    // The D3D snapshot writes `M = I; M *= S; M *= Rx; … M *= T;` —
-    // that's D3D's ROW-VECTOR convention (v' = v * M):
-    //   v * M = v * (S * Rx * … * T) = ((v * S) * Rx) * … * T
-    // — same intent (scale first), just spelled with the operations on
-    // the right. Translating to column-vector convention reverses the
-    // chain: T * … * Rx * S.
-    //
-    // SIGN: snapshot writes RotateX(+π/2) and that's correct as-is. The
-    // bbox diag (cyl mesh z=[0..64]) plus the snapshot's -length
-    // target-end convention (snapshot :8595 `obj->pos.y = -length*i`)
-    // imply mesh +Z → local -Y after the tilt, which is what
-    // Rx(+π/2) produces under right-hand math.
-    auto compose_local = [&mat_identity, &mat_mul](float sx, float sy, float sz,
-                                                   float rx, float ry, float rz,
-                                                   float tx, float ty, float tz,
-                                                   float out[16])
-    {
-        float S[16];  mat_identity(S);  S[0]=sx; S[5]=sy; S[10]=sz;
-        float Rx[16]; mat_identity(Rx);
-        {
-            const float c = std::cos(rx), s = std::sin(rx);
-            Rx[5]=c; Rx[6]=-s; Rx[9]=s; Rx[10]=c;
-        }
-        float Ry[16]; mat_identity(Ry);
-        {
-            const float c = std::cos(ry), s = std::sin(ry);
-            Ry[0]=c; Ry[2]=s; Ry[8]=-s; Ry[10]=c;
-        }
-        float Rz[16]; mat_identity(Rz);
-        {
-            const float c = std::cos(rz), s = std::sin(rz);
-            Rz[0]=c; Rz[1]=-s; Rz[4]=s; Rz[5]=c;
-        }
-        float T[16]; mat_identity(T); T[3]=tx; T[7]=ty; T[11]=tz;
-        // out = T * Rz * Ry * Rx * S (column-vector: M * v applies S first).
-        float TRz[16], TRzRy[16], TRzRyRx[16];
-        mat_mul(T,       Rz, TRz);
-        mat_mul(TRz,     Ry, TRzRy);
-        mat_mul(TRzRy,   Rx, TRzRyRx);
-        mat_mul(TRzRyRx, S,  out);
-    };
-    auto submit_mesh = [this, &inst_world, &mat_mul](MeshHandle mesh,
-                                                     const float local[16],
-                                                     const float diffuse[4],
-                                                     const float emissive[4],
-                                                     float sort_z)
-    {
-        if (mesh == 0) return;
-        float world[16];
-        mat_mul(inst_world, local, world);
-        SHelperMeshSubmit m = {};
-        m.mesh           = mesh;
-        m.additive_blend = false;          // snapshot Alpha modulate
-        m.shadow_plane   = false;
-        std::memcpy(m.world, world, sizeof(world));
-        // Cyl bodies have UV(0,0) — we bound the renderer's white
-        // texture at SpawnForTest so helper-mesh FS `base = tex.rgb *
-        // diffuse` reduces to `base = diffuse` = the I3D material
-        // colour. Ambient = diffuse keeps the colour visible under
-        // scene ambient with no point-light hits.
-        std::memcpy(m.diffuse,  diffuse,  4 * sizeof(float));
-        std::memcpy(m.ambient,  diffuse,  4 * sizeof(float));
-        m.specular[0] = m.specular[1] = m.specular[2] = m.specular[3] = 0.0f;
-        std::memcpy(m.emissive, emissive, 4 * sizeof(float));
-        m.power      = 1.0f;
-        m.sort_depth = sort_z;
-        Renderer->SubmitHelperMesh(m);
-    };
-
-    // --- Core beam cylinders (snapshot :8472-8505). 1:1 port:
-    //   if (subspell > 1):
-    //     for i = 0..3:
-    //       obj = GetObject(i)          // cyl04/01/02/03
-    //       D3DMATRIXClear(obj->matrix)
-    //       obj->scl = (cylscale/2, cylscale/2, length/64)
-    //       D3DMATRIXScale(obj->matrix, obj->scl)        // M *= S
-    //       D3DMATRIXRotateX(obj->matrix, π/2)           // M *= Rx
-    //       D3DMATRIXRotateY(obj->matrix, 0)             // M *= I
-    //       D3DMATRIXRotateZ(obj->matrix, 0)             // M *= I
-    //       obj->pos = (0,0,0)
-    //       D3DMATRIXTranslate(obj->matrix, obj->pos)    // M *= I
-    //       RenderObject(obj)                            // → SubmitHelperMesh
-    if (subspell_ > 1)
-    {
-        const float scl_xy = cylscale_ * 0.5f;
-        const float scl_z  = length_ / 64.0f;
-        float local[16];
-        compose_local(scl_xy, scl_xy, scl_z,
-                      +kHalfPi, 0.0f, 0.0f,
-                      0.0f,     0.0f, 0.0f,
-                      local);
-        for (int32_t i = 0; i < 4; ++i)
-            submit_mesh(cyl_meshes_[i], local,
-                        cyl_diffuse_[i], cyl_emissive_[i],
-                        float(base_pos.z));
-    }
-
-    // --- Spirals + rings (snapshot :8507-8571). Outer gate:
-    //   if (frameon < GROW_DURATION * 3) { ... }
-    if (frameon_ < kIceBoltGrowDuration * 3)
-    {
-        // Spirals (snapshot :8509-8545, obj = GetObject(6) = cylinder06).
-        //   if (subspell > 0):
-        //     numrevs = (int)length / 100
-        //     zscale  = length / numrevs
-        //     for j = 0..numrevs-1: ypos = -j * zscale
-        //       for i = 0..1:
-        //         obj->scl = (spiralscale, spiralscale, zscale/64)
-        //         M *= Scale(scl); M *= RotateX(π/2)
-        //         M *= RotateY( i ? π - spiralang : spiralang )
-        //         M *= RotateZ(0)
-        //         obj->pos = (0, ypos, 0); M *= Translate(pos)
-        //         RenderObject(obj6)                       // → SubmitHelperMesh
-        if (subspell_ > 0 && spiral_mesh_ != 0)
-        {
-            const int32_t numrevs_raw = int32_t(length_) / 100;
-            const int32_t numrevs = numrevs_raw > 1 ? numrevs_raw : 1;
-            const float zscale = length_ / float(numrevs);
-            const float scl_z  = zscale / 64.0f;
-            for (int32_t j = 0; j < numrevs; ++j)
-            {
-                const float ypos = -float(j) * zscale;
-                for (int32_t i = 0; i < 2; ++i)
-                {
-                    const float ry =
-                        i ? float(M_PI) - spiralang_ : spiralang_;
-                    float local[16];
-                    compose_local(spiralscale_, spiralscale_, scl_z,
-                                  +kHalfPi, ry, 0.0f,
-                                  0.0f,     ypos, 0.0f,
-                                  local);
-                    submit_mesh(spiral_mesh_, local,
-                                spiral_diffuse_, spiral_emissive_,
-                                float(base_pos.z) + 0.5f);
+    if(!alive_||!BindMeshes())return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) {const auto p=Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace()));}
+    icebolt_core::Render(*this,uint8_t(GetFace()),[&](const icebolt_core::Packet& packet) {
+        const auto& part=parts_[packet.object];hmm_mat4 world;MtxMultiply(&world,&packet.local,&owner);
+        SHelperMeshSubmit submit{};submit.mesh=part.mesh;submit.retail_source_alpha=true;
+        submit.retail_lighting=part.lighting;submit.retail_software_projection=native_domain_;
+        submit.retail_normal_z_scale=native_domain_?1.0f:1.0f/WORLD3D_Z_SCALE;
+        for(int row=0;row<4;++row)for(int col=0;col<4;++col)submit.world[row*4+col]=world.Elements[col][row];
+        const auto& material=part.material.matdesc;
+        std::memcpy(submit.diffuse,&material.diffuse,4*sizeof(float));
+        std::memcpy(submit.ambient,&material.ambient,4*sizeof(float));
+        std::memcpy(submit.specular,&material.specular,4*sizeof(float));
+        std::memcpy(submit.emissive,&material.emissive,4*sizeof(float));submit.power=material.power;
+        // Identical sort depth preserves the original RenderObject sequence.
+        submit.sort_depth=float(Pos().z);
+        if(part.lighting==4 && Renderer->UsesRetailSoftwareMeshLighting()) {
+            // Actual untextured raster uses trunc(max of the triangle's three
+            // projected depths) for every covered pixel, even with ZWRITE=0.
+            // Keep source triangle order; textured packets remain whole draws.
+            submit.retail_flat_depth=true;submit.index_count=3;
+            for(size_t face=0;face<part.indices.size();face+=3) {
+                float farthest=-1.0e30f;
+                for(int corner=0;corner<3;++corner) {
+                    const auto& v=part.vertices[part.indices[face+corner]];
+                    hmm_vec3 local={v.pos[0],v.pos[1],v.pos[2]},point;MtxTransform(&world,&local,&point);
+                    const float offset=native_domain_
+                        ? -.8748177289962769f*(point.X+point.Y)-.7142857909202576f*point.Z
+                        : -.8660254037844386f*(point.X+point.Y)-.5f*point.Z;
+                    if(offset>farthest)farthest=offset;
                 }
+                submit.index_offset=int(face);submit.retail_flat_depth_offset=farthest;
+                Renderer->SubmitHelperMesh(submit);
             }
-        }
-        // Rings (snapshot :8547-8570, obj = GetObject(5) = cylinder05).
-        //   for i = 0..(int)(length/100) - 1:
-        //     obj->scl = (cylscale/2, cylscale/2, 1.0)
-        //     M *= Scale(scl); M *= RotateX(π/2)
-        //     M *= RotateY(spiralang); M *= RotateZ(0)
-        //     obj->pos.y = -((int)(ringout + 100*i) % (int)length)
-        //     M *= Translate(0, pos.y, 0)
-        //     RenderObject(obj5)                           // → SubmitHelperMesh
-        if (ring_mesh_ != 0)
-        {
-            const int32_t num_rings_raw = int32_t(length_) / 100;
-            const int32_t num_rings = num_rings_raw > 1 ? num_rings_raw : 1;
-            const float scl_xy = cylscale_ * 0.5f;
-            for (int32_t i = 0; i < num_rings; ++i)
-            {
-                const int32_t length_raw = int32_t(length_);
-                const int32_t lengthi = length_raw > 1 ? length_raw : 1;
-                const float ypos = float(
-                    -((int32_t(ringout_) + 100 * i) % lengthi));
-                float local[16];
-                compose_local(scl_xy, scl_xy, 1.0f,
-                              +kHalfPi, spiralang_, 0.0f,
-                              0.0f,     ypos,       0.0f,
-                              local);
-                submit_mesh(ring_mesh_, local,
-                            ring_diffuse_, ring_emissive_,
-                            float(base_pos.z) + 1.0f);
-            }
-        }
-    }
+        } else Renderer->SubmitHelperMesh(submit);
+    });
 }
 
 // --- I22 TIcedEffect bespoke -------------------------------------------
@@ -8087,96 +7392,45 @@ constexpr float kIcedFacetSizeWu    = 24.0f;   // single-facet billboard size
 TIcedEffect_Bespoke* TIcedEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
                                                               const char* asset_override)
 {
-    // --- Load Magic\iced.I3D (forensics §4 — byte-identical asset
-    // confirmed MD5 10e7e15b3cd6b491e47ab1743b5cdf8e snapshot vs ship).
-    // Wave-4 variants (Icedsparks, Snow) reuse the same Iced.i3d asset path;
-    // accept an override for future variants that may swap the asset.
-    const char* asset_path = asset_override ? asset_override : kIcedImageryPath;
-    int32_t img_id = TObjectImagery::FindImagery(asset_path);
-    if (img_id < 0)
-        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(asset_path));
-    if (img_id < 0)
-    {
-        log_error("[iced] SpawnForTest: FindImagery/RegisterImagery('%s') failed"
-                  " — asset missing",
-                  asset_path);
-        return nullptr;
-    }
-    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
-    if (!base)
-    {
-        log_error("[iced] SpawnForTest: LoadImagery(id=%d '%s') failed",
-                  img_id, asset_path);
-        return nullptr;
-    }
-    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
-    if (!img3d)
-    {
-        log_error("[iced] SpawnForTest: imagery for '%s' is not a T3DImagery",
-                  asset_path);
-        TObjectImagery::FreeImagery(base);
-        return nullptr;
-    }
-
-    auto* iced = new TIcedEffect_Bespoke(base);
+    auto* img = LoadWaterImagery(asset_override ? asset_override : kIcedImageryPath, "Iced");
+    if (!img || img->NumObjects() != 50 || img->NumTextures() != 2) return nullptr;
+    auto* iced = new TIcedEffect_Bespoke(img);
     iced->ForcePos(origin);
     iced->SetMapIndex(MapPane.MakeIndex());
     iced->ActivateComponents();
-
-    // Lazy-mesh-init poke.
-    const int32_t num_obj = img3d->NumObjects();
-    const int32_t num_tex = img3d->NumTextures();
-    if (num_obj <= 0 || num_tex <= 0)
-    {
-        log_error("[iced] SpawnForTest: imagery underspec'd "
-                  "(objects=%d, textures=%d)", num_obj, num_tex);
-        delete iced;
-        return nullptr;
+    iced->parts_.resize(50);
+    for (int j=0; j<50; ++j) {
+        S3DObj object{}; S3DTex texture{};
+        img->GetObject(j,&object);
+        if (object.material<0 || object.material>=2) { delete iced; return nullptr; }
+        auto& part=iced->parts_[j];
+        img->GetMaterial(object.material,&part.material);
+        img->GetTexture(object.material,&texture);
+        if (texture.htexture==kInvalidTexture || texture.numframes!=1 ||
+            !ExtractSubMeshTextureSlot(img,j,object.material+1,part.vertices,part.indices)) {
+            delete iced; return nullptr;
+        }
+        part.texture=texture.htexture;
     }
-
-    // Resolve sub-object 0 (the cube chunk mesh) texture for billboards.
-    // Forensics §4: iced.I3D has face01..43 reveal facets + icicle01..06
-    // + a cube chunk mesh at sub-obj 0 used for the shatter phase.
-    const int32_t tex_slot = SubObjTextureSlot(img3d, 0);
-    const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
-    S3DTex tex = {};
-    img3d->GetTexture(slot, &tex);
-    iced->facet_tex_ = tex.htexture;
-    ResolveSubObjUv(img3d, 0, iced->facet_uv_);
-    iced->facet_size_wu_ = kIcedFacetSizeWu;
-
-    if (iced->facet_tex_ == kInvalidTexture)
-    {
-        log_error("[iced] SpawnForTest: sub-obj 0 texture unresolved — "
-                  "facet/chunk billboards will draw nothing");
-    }
-
-    // Port of TIcedAnimator::Initialize (snapshot :8749-8756).
-    iced->frameon_      = 0;                                    // :8752
-    iced->angle_        = float(random(0, 359))
-                            * float(TORADIAN);                  // :8753
-    // icedchar_ stays nullptr (harness has no victim) — :8754
-    iced->donebouncing_ = 0;                                    // :8755
-
-    log_info("[iced] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
-             "angle=%.3f facet_tex=%u num_obj=%d",
-             asset_path, iced->GetMapIndex(),
-             origin.x, origin.y, origin.z,
-             iced->angle_, iced->facet_tex_, num_obj);
+    iced->frameon_=0;
+    // Original4eca7c..90 multiplies the integer by a binary64 angle constant.
+    iced->angle_=float(double(random(0,359))*0.017453292519943295);
+    iced->donebouncing_=0;
+    log_info("[iced] actual50meshes owner-policy=stationary-live-victim origin=(%d,%d,%d) angle=%.9g",
+             origin.x,origin.y,origin.z,iced->angle_);
     return iced;
 }
 
-void TIcedEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+void TIcedEffect_Bespoke::Advance(double seconds)
 {
-    if (!Renderer)
-        return;
+    if (!std::isfinite(seconds) || seconds<=0.0) return;
 
     // --- Update: port of TIcedAnimator::Animate (effect_old.cpp:
     // 8777-8891), framerate-independent via 24 Hz sim-tick gate.
     if (alive_)
     {
-        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-        while (sim_accum_ms_ >= double(kIcedSimTickMs))
+        sim_accum_ms_ += seconds * 1000.0;
+        while (sim_accum_ms_ + 1e-9 >= kIcedSimTickMs)
         {
             sim_accum_ms_ -= double(kIcedSimTickMs);
 
@@ -8212,7 +7466,8 @@ void TIcedEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
                     // angular velocity (:8821)
                     ch.ang.X = ch.ang.Y = float(random(0, 25) / 100.0);
                     // angular position (:8826: t.z = atan2(v.y, v.x))
-                    ch.rot.Z = std::atan2(ch.vel.Y, ch.vel.X);
+                    // Native FPATAN widens the stored float inputs before rounding.
+                    ch.rot.Z = float(std::atan2(double(ch.vel.Y), double(ch.vel.X)));
                     // scale (:8828-8839)
                     if (random(0, 1))
                     {
@@ -8273,79 +7528,79 @@ void TIcedEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
                 }
             }
 
+            if (frameon_==239 || frameon_==240 || frameon_==241)
+                log_info("[iced-runtime-phase] frame=%d alive=1 rng_draws=%llu", frameon_, static_cast<unsigned long long>(RandomDraws()));
+
             // Self-destruct (snapshot :8887-8890).
             if (donebouncing_)
             {
                 alive_ = false;
+                log_info("[iced-runtime-phase] frame=%d alive=0 rng_draws=%llu", frameon_, static_cast<unsigned long long>(RandomDraws()));
                 break;
             }
         }
     }
 
-    if (!alive_)
-        return;
+}
 
-    // --- Render: port of TIcedAnimator::Render (effect_old.cpp:
-    // 8900-8953). Blend = Alpha, Lit-mode = Unlit, Depth = TestNoWrite.
-    // Phase A (HOLD): min(frameon*4, 50) facet billboards at origin.
-    // Phase B+C: one billboard per live chunk at world pos.
-    if (facet_tex_ == kInvalidTexture)
-        return;
+TIcedEffect_Bespoke::~TIcedEffect_Bespoke()
+{
+    if (Renderer) for (const auto& part : parts_) if (part.mesh) Renderer->ReleaseMeshAssetRef(part.mesh);
+}
 
-    const S3DPoint& base_pos = Pos();
+void TIcedEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_=enabled;
+    const auto p=Pos();
+    if (enabled) BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(GetFace()));
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Iced victim=stationary-live",int(enabled));
+}
 
-    SBillboardDrawItem item = {};
-    item.color_rgba[0] = 1.0f;
-    item.color_rgba[1] = 1.0f;
-    item.color_rgba[2] = 1.0f;
-    item.color_rgba[3] = 1.0f;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;
-    item.debug_mode      = debug_mode;
-    item.key.texture     = facet_tex_;
-    std::memcpy(item.uv_rect, facet_uv_, sizeof(item.uv_rect));
-
-    if (frameon_ < kIcedDuration)
-    {
-        // Phase A: HOLD. Snapshot :8907-8920 — for i in 1..min(frameon*4, 50)
-        // RenderObject(GetObject(i)) with RotateZ(angle). All facets share
-        // origin transform; with billboard quads, they all stack visually.
-        // `min`/`max` are macros from revtypes.h:20-21; expand inline so
-        // std::min parses.
-        const int32_t reveal_raw = frameon_ * 4;
-        const int32_t reveal_count =
-            reveal_raw < kIcedRevealCap ? reveal_raw : kIcedRevealCap;
-        const float ring_scale = 1.0f;
-        for (int32_t i = 1; i < reveal_count; ++i)
-        {
-            item.world_pos[0] = float(base_pos.x);
-            item.world_pos[1] = float(base_pos.y);
-            item.world_pos[2] = float(base_pos.z);
-            item.size_wu[0] = item.size_wu[1] =
-                facet_size_wu_ * ring_scale;
-            Renderer->SubmitFxBillboard(item);
+void TIcedEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !alive_ || debug_mode!=EFxDebugMode::Normal) return;
+    auto* img=dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img) return;
+    const auto& owner=native_domain_ ? native_owner_ : Transform().Matrix();
+    auto submit=[&](int index,const hmm_mat4& local) {
+        const auto& part=parts_[index];
+        if (!part.mesh) {
+            const uint64_t key=0x4943454400000000ull ^ (uint64_t(uint32_t(img->ImageryId()))<<16) ^ uint64_t(index);
+            part.mesh=Renderer->RegisterMeshAsset(key,part.vertices.data(),int32_t(part.vertices.size()),
+                part.indices.data(),int32_t(part.indices.size()),part.texture);
+            if (part.mesh) Renderer->AddMeshAssetRef(part.mesh);
+        }
+        if (!part.mesh) return;
+        hmm_mat4 world{}; MtxMultiply(&world,&local,&owner);
+        SHelperMeshSubmit draw{};
+        draw.mesh=part.mesh; draw.retail_lighting=3; draw.retail_positive_face_cull=true;
+        draw.retail_software_projection=native_domain_; draw.sort_depth=0.0f;
+        for (int row=0; row<4; ++row) for (int col=0; col<4; ++col) draw.world[row*4+col]=world.Elements[col][row];
+        const auto& m=part.material.matdesc;
+        std::memcpy(draw.diffuse,&m.diffuse,4*sizeof(float));
+        std::memcpy(draw.ambient,&m.ambient,4*sizeof(float));
+        std::memcpy(draw.specular,&m.specular,4*sizeof(float));
+        std::memcpy(draw.emissive,&m.emissive,4*sizeof(float)); draw.power=m.power;
+        Renderer->SubmitHelperMesh(draw);
+    };
+    if (frameon_<kIcedDuration) {
+        hmm_mat4 local{}; MtxClear(&local); MtxRotateZ(&local,angle_);
+        const int count=frameon_*4<50 ? frameon_*4 : 50;
+        for (int index=1; index<count; ++index) submit(index,local);
+    } else {
+        for (const auto& chunk : chunks_) {
+            if (chunk.life==0) continue;
+            hmm_mat4 local{}; MtxClear(&local); MtxScale(&local,&chunk.scl);
+            MtxRotateX(&local,chunk.rot.X); MtxRotateY(&local,chunk.rot.Y); MtxRotateZ(&local,chunk.rot.Z);
+            MtxTranslate(&local,&chunk.pos); submit(0,local);
         }
     }
-    else
-    {
-        // Phase B+C: SHATTER chunks. Snapshot :8923-8948 — one
-        // RenderObject(GetObject(0)) per live chunk at p[i] world pos.
-        for (int32_t i = 0; i < MAX_ICED_CHUNKS; ++i)
-        {
-            const SIcedChunk& ch = chunks_[i];
-            if (ch.life == 0)
-                continue;
-            item.world_pos[0] = float(base_pos.x) + ch.pos.X;
-            item.world_pos[1] = float(base_pos.y) + ch.pos.Y;
-            item.world_pos[2] = float(base_pos.z) + ch.pos.Z;
-            item.size_wu[0] = item.size_wu[1] =
-                facet_size_wu_ * (ch.scl.X + ch.scl.Y) * 0.5f;
-            Renderer->SubmitFxBillboard(item);
-        }
-    }
+}
+
+void TIcedEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime());
+    Submit(debug_mode);
 }
 // --- end ice bespoke first-pass
 
@@ -8599,25 +7854,26 @@ void TAuraEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 
 THealEffect_Bespoke* THealEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    static const char* kHealCandidates[] = {
-        "Magic\\heal.i3d",
-        "Magic\\Heal.I3D",
-        "Magic\\heal1.i3d",
-    };
-
-    auto* heal = new THealEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    auto* img = LoadWaterImagery("Magic/Heal.I3D", "heal");
+    if (!img || img->NumObjects() != 8 || img->NumTextures() != 8) return nullptr;
+    auto* heal = new THealEffect_Bespoke(img);
     heal->ForcePos(origin);
     heal->SetMapIndex(MapPane.MakeIndex());
     heal->ActivateComponents();
-
-    heal->bubble_tex_ = TryLoadMagicTexture(kHealCandidates,
-                                            int32_t(sizeof(kHealCandidates) / sizeof(*kHealCandidates)),
-                                            heal->bubble_uv_, "heal-bubble");
-    heal->glow_tex_   = heal->bubble_tex_;
-    heal->glow_uv_[0] = heal->bubble_uv_[0];
-    heal->glow_uv_[1] = heal->bubble_uv_[1];
-    heal->glow_uv_[2] = heal->bubble_uv_[2];
-    heal->glow_uv_[3] = heal->bubble_uv_[3];
+    for (int j = 0; j < 2; ++j) {
+        S3DObj object = {}; S3DTex texture = {};
+        img->GetObject(j, &object);
+        if (object.material != j) { delete heal; return nullptr; }
+        img->GetMaterial(j, &heal->materials_[j]);
+        img->GetTexture(j, &texture);
+        if (texture.htexture == kInvalidTexture || texture.numframes != 1 ||
+            !ExtractSubMeshTextureSlot(img, j, j + 1, heal->vertices_[j], heal->indices_[j]) ||
+            heal->vertices_[j].size() != size_t(j ? 174 : 12) ||
+            heal->indices_[j].size() != size_t(j ? 576 : 36)) {
+            delete heal; return nullptr;
+        }
+        (j ? heal->glow_tex_ : heal->bubble_tex_) = texture.htexture;
+    }
 
     // Snapshot effect_old.cpp:628-685 — Initialize. heal_num/glow_num
     // depend on spell level; default branch is heal_num=0, glow_num=1.
@@ -8635,7 +7891,7 @@ THealEffect_Bespoke* THealEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& o
         heal->p_[n].X = float(random(-kHealingRadius, kHealingRadius));
         heal->p_[n].Y = float(random(-kHealingRadius, kHealingRadius));
         heal->p_[n].Z = 2.0f;
-        heal->rise_[n] = float(random(3, 6) * 4.0f / 3.0f);
+        heal->rise_[n] = float(random(3, 6)) * 1.3333333730697632f;
         // snapshot assigns scale[n] = 0 then immediately scale[n] = 4.5 —
         // preserve the second assignment (the live value); the leading 0
         // assignment is dead per snapshot effect_old.cpp:682-683.
@@ -8652,16 +7908,15 @@ THealEffect_Bespoke* THealEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& o
     return heal;
 }
 
-void THealEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+void THealEffect_Bespoke::Advance(double seconds)
 {
-    if (!Renderer)
-        return;
+    if (!std::isfinite(seconds) || seconds <= 0.0) return;
 
     // --- Animate port (effect_old.cpp:695-760), 24Hz sim-tick gated.
     if (alive_)
     {
-        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-        while (sim_accum_ms_ >= double(kHealSimTickMs))
+        sim_accum_ms_ += seconds * 1000.0;
+        while (sim_accum_ms_ + 1e-9 >= kHealSimTickMs)
         {
             sim_accum_ms_ -= double(kHealSimTickMs);
 
@@ -8710,7 +7965,7 @@ void THealEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
                                 p_[n].X = float(random(-kHealingRadius, kHealingRadius));
                                 p_[n].Y = float(random(-kHealingRadius, kHealingRadius));
                                 p_[n].Z = 2.0f;
-                                rise_[n] = float(random(3, 6) * 4.0f / 3.0f);
+                                rise_[n] = float(random(3, 6)) * 1.3333333730697632f;
                                 scale_[n] = 4.5f;
                                 framenum_[n] = -1;
                             }
@@ -8721,79 +7976,82 @@ void THealEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         }
     }
 
-    // --- Render port (effect_old.cpp:770-832). SetBlendState -> Alpha.
-    if (bubble_tex_ == kInvalidTexture)
-        return;
+}
 
-    const S3DPoint& base = Pos();
+THealEffect_Bespoke::~THealEffect_Bespoke()
+{
+    if (Renderer) for (auto mesh : meshes_) if (mesh) Renderer->ReleaseMeshAssetRef(mesh);
+}
 
-    // Snapshot :777-811 — per-visible-bubble billboard draws.
-    for (int32_t n = 1; n < kHealBubbles; ++n)
-    {
-        if (framenum_[n] <= 0 || scale_[n] <= 0.0f)
-            continue;
+void THealEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled;
+    const auto p = Pos();
+    if (enabled) BuildRetailSoftwareOwner(native_owner_, p.x, p.y, p.z, uint8_t(GetFace()));
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Heal level=1", int(enabled));
+}
 
-        // Bubble billboard.
-        SBillboardDrawItem item = {};
-        const float size = 8.0f * scale_[n];
-        item.size_wu[0] = size;
-        item.size_wu[1] = size;
-        // Soft green-blue heal tint (placeholder until forensics).
-        item.color_rgba[0] = 0.5f;
-        item.color_rgba[1] = 1.0f;
-        item.color_rgba[2] = 0.7f;
-        item.color_rgba[3] = 1.0f;
-        item.uv_rect[0] = bubble_uv_[0];
-        item.uv_rect[1] = bubble_uv_[1];
-        item.uv_rect[2] = bubble_uv_[2];
-        item.uv_rect[3] = bubble_uv_[3];
-        item.key.texture     = bubble_tex_;
-        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-        item.key.blend       = uint8_t(EFxBlend::Alpha);
-        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        item.light_mode      = EFxLightMode::Unlit;
-        item.orientation     = EFxBillboardOrientation::ScreenAligned;
-        item.debug_mode      = debug_mode;
-        item.world_pos[0] = float(base.x) + p_[n].X;
-        item.world_pos[1] = float(base.y) + p_[n].Y;
-        item.world_pos[2] = float(base.z) + p_[n].Z;
-        Renderer->SubmitFxBillboard(item);
+void THealEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !alive_ || debug_mode != EFxDebugMode::Normal) return;
+    auto* img = dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img) return;
+    for (int j = 0; j < 2; ++j) {
+        if (meshes_[j]) continue;
+        const uint64_t key = 0x4845414c00000000ull ^ (uint64_t(uint32_t(img->ImageryId())) << 16) ^ uint64_t(j);
+        meshes_[j] = Renderer->RegisterMeshAsset(key, vertices_[j].data(), int32_t(vertices_[j].size()),
+            indices_[j].data(), int32_t(indices_[j].size()), j ? glow_tex_ : bubble_tex_);
+        if (meshes_[j]) Renderer->AddMeshAssetRef(meshes_[j]);
     }
-
-    // Snapshot :813-826 — cylindrical glow at the player's feet, drawn
-    // TWICE (forward + reverse rotation), preserving the two-pass shape.
-    if (glow_tex_ != kInvalidTexture && scale_[0] > 0.0f)
-    {
-        SBillboardDrawItem glow = {};
-        const float size = 24.0f * scale_[0] * 0.75f;   // snapshot scl * 3/4
-        glow.size_wu[0] = size;
-        glow.size_wu[1] = size;
-        glow.color_rgba[0] = 0.6f;
-        glow.color_rgba[1] = 1.0f;
-        glow.color_rgba[2] = 0.7f;
-        glow.color_rgba[3] = 1.0f;
-        glow.uv_rect[0] = glow_uv_[0];
-        glow.uv_rect[1] = glow_uv_[1];
-        glow.uv_rect[2] = glow_uv_[2];
-        glow.uv_rect[3] = glow_uv_[3];
-        glow.key.texture     = glow_tex_;
-        glow.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-        glow.key.blend       = uint8_t(EFxBlend::Alpha);
-        glow.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        glow.light_mode      = EFxLightMode::Unlit;
-        glow.orientation     = EFxBillboardOrientation::WorldXY;   // ground-plane cylinder
-        glow.debug_mode      = debug_mode;
-        glow.world_pos[0] = float(base.x) + p_[0].X;
-        glow.world_pos[1] = float(base.y) + p_[0].Y;
-        glow.world_pos[2] = float(base.z) + p_[0].Z;
-        // Pass 1: forward rotation (snapshot obj->rot.z = rotation).
-        Renderer->SubmitFxBillboard(glow);
-        // Pass 2: reverse rotation (snapshot obj->rot.z = -rotation +
-        // RenderObject(obj) again). Preserves the two-pass shape; in our
-        // billboard path this duplicates the draw so the overlapping
-        // additive contributions stack as in the snapshot.
-        Renderer->SubmitFxBillboard(glow);
+    if (!meshes_[0] || !meshes_[1]) return;
+    const auto& owner = native_domain_ ? native_owner_ : Transform().Matrix();
+    auto submit = [&](int part, const hmm_mat4& local) {
+        hmm_mat4 world{}; MtxMultiply(&world, &local, &owner);
+        SHelperMeshSubmit draw{};
+        draw.mesh = meshes_[part]; draw.retail_lighting = 3;
+        draw.retail_positive_face_cull = true;
+        draw.retail_software_projection = native_domain_;
+        for (int row=0; row<4; ++row) for (int col=0; col<4; ++col)
+            draw.world[row*4+col] = world.Elements[col][row];
+        const auto& m = materials_[part].matdesc;
+        std::memcpy(draw.diffuse, &m.diffuse, 4*sizeof(float));
+        std::memcpy(draw.ambient, &m.ambient, 4*sizeof(float));
+        std::memcpy(draw.specular, &m.specular, 4*sizeof(float));
+        std::memcpy(draw.emissive, &m.emissive, 4*sizeof(float));
+        draw.power=m.power;
+        // Keep the original ordered alpha composite, including both glow passes.
+        draw.sort_depth=0.0f;
+        Renderer->SubmitHelperMesh(draw);
+    };
+    // Original4dfa9c starts at zero: slot0 is also a visible central heal mesh.
+    for (int n=0; n<kHealBubbles; ++n) {
+        if (framenum_[n]<=0 || scale_[n]<=0.0f) continue;
+        hmm_mat4 local{}; MtxClear(&local);
+        if (n) {
+            MtxRotateX(&local, -1.5707963705062866f);
+            MtxRotateY(&local, 0.0f);
+            MtxRotateZ(&local, -0.7853981852531433f);
+            const int degrees = (-int(uint8_t(GetFace())) * 360) / 256;
+            MtxRotateZ(&local, float(double(degrees) * 0.017453292519943295));
+        }
+        const hmm_vec3 scale={scale_[n],scale_[n],scale_[n]};
+        MtxScale(&local,&scale); MtxTranslate(&local,&p_[n]); submit(0,local);
     }
+    // Original CalcObjectMatrix rejects the exhausted zero-scale glow.
+    if (scale_[0] <= 0.0f) return;
+    // Source0x9c flags: authored TRS composition is decoded by the shared
+    // original-compatible CalcObjectMatrix; two distinct signed rotations.
+    for (int pass=0; pass<2; ++pass) {
+        S3DAnimObj object{}; object.objnum=glow_num_; object.flags=0x9c;
+        object.pos=p_[0]; object.rot={0,0,pass ? -rotation_ : rotation_};
+        const float scale=scale_[0]*0.75f; object.scl={scale,scale,scale};
+        if (img->CalcObjectMatrix(&object,0,0,const_cast<hmm_mat4*>(&owner),false)) submit(1,object.matrix);
+    }
+}
+
+void THealEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime()); Submit(debug_mode);
 }
 
 // =========================================================================
@@ -9472,398 +8730,142 @@ void TSymGlowEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mod
 
 // ----- M07 TPhotonEffect_Bespoke ------------------------------------------
 
-void TPhotonEffect_Bespoke::ResetLaunch_()
+void TPhotonEffect_Bespoke::Initialize()
 {
-    // --- Port of TPhotonAnimator::Initialize (missileeffect.cpp:187-234).
-    // Initialize central flare (slot 0).
-    p_[0].X = p_[0].Y = p_[0].Z = 0.0f;
-    v_[0].X = v_[0].Y = v_[0].Z = 0.0f;
-    scale_[0]    = 1.0f;
-    framenum_[0] = 0;
-
-    // Initialize the starting position of each spark, its scale and a
-    // delay before it starts (a neg. framenum). NUM_PHOTON_SPARKS=16.
-    for (int32_t n = 1; n < kPhotonBespokeNumSparks; n++)
-    {
-        p_[n].X = float(random(-kPhotonBespokeLaunchRadius, kPhotonBespokeLaunchRadius));
-        p_[n].Y = float(random(-kPhotonBespokeLaunchRadius, kPhotonBespokeLaunchRadius));
-        p_[n].Z = float(random(-kPhotonBespokeLaunchRadius, kPhotonBespokeLaunchRadius));
-
-        // Set a vector for most of the sparks to move them to the center
-        // of the effect (missileeffect.cpp:213-219).
-        if (n > kPhotonBespokeNumSparks / 3)
-        {
-            v_[n].X = -p_[n].X / float(kPhotonBespokeLaunchDuration * 3 / 4);
-            v_[n].Y = -p_[n].Y / float(kPhotonBespokeLaunchDuration * 3 / 4);
-            v_[n].Z = -p_[n].Z / float(kPhotonBespokeLaunchDuration * 3 / 4);
-        }
-        else
-        {
-            v_[n].X = v_[n].Y = v_[n].Z = 0.0f;
-        }
-
-        scale_[n] = 0.0f;
-
-        framenum_[n] = random(-kPhotonBespokeLaunchDuration / 2, 0);
-    }
-
-    // Initialize the framenums for the trailing photon sparks
-    // (missileeffect.cpp:229-230).
-    for (int32_t n = kPhotonBespokeNumSparks; n < kPhotonBespokeSlots; n++)
-        framenum_[n] = -1;
-
-    // Set how many photon sparks are active at the beginning
-    // (missileeffect.cpp:233).
-    activesparks_ = kPhotonBespokeNumSparks - 1;
+    particles_.Initialize([](int low,int high){return random(low,high);});
+    missile_=missile_state::State{};missile_.speed_fixed=16*missile_state::Rollover;
+    flags=(flags&~(OF_MOVING|OF_WEIGHTLESS))|OF_IMMOBILE|OF_PULSE;
 }
 
-void TPhotonEffect_Bespoke::EnterFly_()
+bool TPhotonEffect_Bespoke::SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination)
 {
-    // --- Port of TPhotonAnimator::Animate FLY first-time block
-    // (missileeffect.cpp:302-322). Harness has no live velocity so we
-    // use a fixed back-projection direction (Y- = "behind" in iso).
-    // dir.x / dir.y / dir.z are in ROLLOVER units (1 wu = 65536); the
-    // snapshot scales each trailing photon by `t / ROLLOVER` along
-    // -dir, so we use a tiny fake vel that produces visible spacing.
-    constexpr float kFakeVelMag = 8.0f;   // per-step wu (matches MISSILE_SPEED feel)
-    const float dirx = 0.0f;
-    const float diry = kFakeVelMag;       // sim "moving south"
-    const float dirz = 0.0f;
-
-    // Initialize the variables for the leading photon (missileeffect.cpp:308-310).
-    p_[0].X = p_[0].Y = p_[0].Z = 0.0f;
-    scale_[0]    = 3.5f;
-    framenum_[0] = 0;
-
-    // Initialize the variables for the trailing photons
-    // (missileeffect.cpp:312-321).
-    int32_t t = 1;
-    for (int32_t n = kPhotonBespokeNumSparks; n < kPhotonBespokeSlots; n++, t++)
-    {
-        framenum_[n] = -t;
-        framenum_[t] = -1;
-        // Back-projection: -dir * t (skipping the ROLLOVER division —
-        // dir is already in our local wu/step scale).
-        p_[n].X = -dirx * float(t);
-        p_[n].Y = -diry * float(t);
-        p_[n].Z = -dirz * float(t);
-        scale_[n] = 3.5f - float(t) * kPhotonBespokeScaleStep;
-    }
+    if(missile_.state!=0 || (source.x==destination.x&&source.y==destination.y&&source.z==destination.z))return false;
+    ForcePos(source);destination_=destination;has_destination_=true;return true;
 }
 
-void TPhotonEffect_Bespoke::EnterExplode_()
+void TPhotonEffect_Bespoke::PrimeLaunchForTest()
 {
-    // --- Port of TPhotonAnimator::Animate EXPLODE first-time block
-    // (missileeffect.cpp:335-353).
-    for (int32_t n = 0; n < kPhotonBespokeNumSparks; n++)
-    {
-        p_[n].X = p_[n].Y = p_[n].Z = 0.0f;
-        scale_[n] = 3.0f;
+    if(missile_.state==0)particles_.Animate(0,{0,0,0},[](int low,int high){return random(low,high);});
+}
 
-        v_[n].X = float(random(-3, 3)) * 3.0f / 2.0f;
-        v_[n].Y = float(random(-3, 3)) * 3.0f / 2.0f;
-        v_[n].Z = float(random(-3, 3)) * 3.0f / 2.0f;
-
-        framenum_[n] = 0;
+void TPhotonEffect_Bespoke::AdvanceTick()
+{
+    const auto position=Pos();missile_.position={position.x,position.y,position.z};missile_.flags=GetFlags();
+    missile_state::Inputs input;input.in_inventory=IsInInventory();input.object_class=ObjClass();
+    input.launch_ready=particles_.ready;input.animator_present=true;
+    S3DPoint next{};GetNextMove(next);input.next_move_fixed={next.x,next.y,next.z};
+    input.ground_height=[this](const missile_state::Point& p) {
+        if(preview_mode_)return int32_t(1);
+        S3DPoint query{p.x,p.y,p.z};return MapPane.GetWalkHeight(query);
+    };
+    input.aim_angle=[this]() {
+        if(spell) {
+            auto* invoker=spell->GetInvokerRef().Get();auto* target=spell->GetTargetRef(0).Get();
+            if(target&&target!=invoker)return ConvertToFacing(Pos(),target->Pos());
+            if(invoker)return invoker->GetFace();
+        }
+        return has_destination_?ConvertToFacing(Pos(),destination_):GetFace();
+    };
+    input.convert_vector=[](int facing,int32_t speed) {
+        S3DPoint v{};ConvertToVector(facing,speed,v);return missile_state::Point{v.x,v.y,v.z};
+    };
+    input.character_hit=[this](const missile_state::Point& p) {
+        if(preview_mode_) {
+            // Explicit gallery target boundary; range-only fixtures retain false.
+            if(!preview_target_collision_ || !has_destination_)return false;
+            const S3DPoint query{p.x,p.y,p.z};
+            return ::Distance(query,destination_)<=32;
+        }
+        TObjectInstance* invoker_object=spell?spell->GetInvokerRef().Get():nullptr;
+        auto* invoker=dynamic_cast<TCharacter*>(invoker_object);const S3DPoint query{p.x,p.y,p.z};
+        std::vector<TCharacter*> around;
+        if(TCharacter::nearbyCharactersSeam)around=TCharacter::nearbyCharactersSeam(query,256);
+        else {
+            SRect r{query.x-256,query.y-256,query.x+256,query.y+256};
+            for(TMapIterator it(GetLevel(),&r,CHECK_NOINVENT,OBJSET_CHARACTER);it;it++)
+                if(auto* character=dynamic_cast<TCharacter*>(it.Item()))around.push_back(character);
+        }
+        for(auto* character:around) {
+            if(character==invoker_object||character->Health()<=0||::Distance(query,character->Pos())>32)continue;
+            if(invoker&&!invoker->IsEnemy(character))continue;
+            return true;
+        }
+        return false;
+    };
+    const auto result=missile_.Advance(input);const auto p=missile_.position;const S3DPoint updated{p.x,p.y,p.z};
+    if(p.x!=position.x||p.y!=position.y||p.z!=position.z) {
+        if(preview_mode_||!GetSector())ForcePos(updated);else SetPos(updated,-1,false);
     }
-    activesparks_ = kPhotonBespokeNumSparks;
+    flags=missile_.flags;SetMoveBits(result.move_bits);
+    if(GetState()!=missile_.state)SetState(missile_.state);
+    const auto v=missile_.velocity_fixed;
+    particles_.Animate(missile_.state,{v.x,v.y,v.z},[](int low,int high){return random(low,high);});
+}
+
+void TPhotonEffect_Bespoke::Pulse()
+{
+    if(IsAlive())AdvanceTick();
+    // Keep the collapsed visual controller until every positive-scale slot drains.
+    SetCommandDone(false);if(!IsAlive())KillThisEffect();TEffect::Pulse();
+}
+
+bool TPhotonEffect_Bespoke::EnsureAsset()
+{
+    if(!texture_frames_.empty())return true;
+    auto* image=dynamic_cast<T3DImagery*>(imagery);
+    if(!image||image->NumObjects()!=1||image->NumObjVerts(0)!=4||image->NumObjFaces(0)!=2||image->NumTextures()!=1)return false;
+    S3DFace faces[2]{};image->GetObjFaces(0,faces);
+    constexpr uint16_t expected[6]={0,1,3,3,2,0};if(std::memcmp(faces,expected,sizeof(expected)))return false;
+    image->GetObjVerts(0,authored_.data(),0,0,ERender3DVertex::Vertex);
+    S3DTex texture{};image->GetTexture(0,&texture);
+    if(texture.numframes!=5||!texture.framehtexs)return false;
+    argb4444_=RetailMeshTextureLighting(texture.desc.pixelFormat)==3;
+    texture_frames_.assign(texture.framehtexs,texture.framehtexs+texture.numframes);return true;
 }
 
 TPhotonEffect_Bespoke* TPhotonEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    SLoadedImagery loaded = SparkleLoadImagery(kPhotonBespokeImageryPath, "photon");
-    if (!loaded.img3d)
-        return nullptr;
-
-    auto* photon = new TPhotonEffect_Bespoke(loaded.base);
-    photon->ForcePos(origin);
-    photon->SetMapIndex(MapPane.MakeIndex());
-    photon->ActivateComponents();
-
-    const int32_t num_obj = loaded.img3d->NumObjects();
-    const int32_t num_tex = loaded.img3d->NumTextures();
-    if (num_obj < 1 || num_tex <= 0)
-    {
-        log_error("[photon] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
-                  num_obj, num_tex);
-        delete photon;
-        return nullptr;
-    }
-
-    // Get how many frames are in the texture (missileeffect.cpp:194-195).
-    S3DTex tex = {};
-    const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, 0);
-    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
-    loaded.img3d->GetTexture(slot, &tex);
-    photon->texture_      = tex.htexture;
-    photon->numtexframes_ = tex.numframes > 0 ? tex.numframes : 1;
-    SparkleResolveSubObjUv(loaded.img3d, 0, photon->uv_rect_);
-    photon->size_wu_ = kPhotonBespokeBaseSizeWu;
-    if (photon->texture_ == kInvalidTexture)
-    {
-        log_error("[photon] SpawnForTest: sub-object 0 texture unresolved");
-        delete photon;
-        return nullptr;
-    }
-
-    // Set the beginning state of the effect (missileeffect.cpp:198).
-    photon->state_       = 0;     // MISSILE_LAUNCH
-    photon->oldstate_    = -1;    // force first-time on entry
-    photon->state_ticks_ = 0;
-    photon->ResetLaunch_();
-
-    log_info("[photon] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
-             "texture=%u numtexframes=%d uv=[%.3f,%.3f %.3fx%.3f]",
-             kPhotonBespokeImageryPath, photon->GetMapIndex(),
-             origin.x, origin.y, origin.z,
-             photon->texture_, photon->numtexframes_,
-             photon->uv_rect_[0], photon->uv_rect_[1],
-             photon->uv_rect_[2], photon->uv_rect_[3]);
-    return photon;
+    SLoadedImagery loaded=SparkleLoadImagery(kPhotonBespokeImageryPath,"photon");if(!loaded.img3d)return nullptr;
+    auto* effect=new TPhotonEffect_Bespoke(loaded.base);effect->preview_mode_=true;
+    effect->SetMapIndex(MapPane.MakeIndex());effect->ActivateComponents();
+    const S3DPoint destination{origin.x+1000,origin.y,origin.z};effect->SetProjectileEndpoints(origin,destination);
+    if(!effect->EnsureAsset()) {delete effect;return nullptr;}
+    log_info("[photon] authored moving preview source=%d,%d,%d target=%d,%d,%d frames=5",origin.x,origin.y,origin.z,destination.x,destination.y,destination.z);
+    return effect;
 }
 
 void TPhotonEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
-    if (!Renderer)
-        return;
-
-    // --- Update: port of TPhotonAnimator::Animate (missileeffect.cpp:243-399).
-    // Framerate-independent via the 24Hz sim-tick accumulator.
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kPhotonBespokeSimTickMs))
-    {
-        sim_accum_ms_ -= double(kPhotonBespokeSimTickMs);
-        state_ticks_++;
-
-        // Harness state machine: cycle LAUNCH (until activesparks<NUM/3)
-        // -> FLY (kPhotonBespokeFlyTicks) -> EXPLODE (until activesparks==0)
-        // -> IDLE (gap) -> LAUNCH again. In-game this would be driven by
-        // TMissileEffect::Pulse range/hit transitions, but the harness has
-        // no live missile machinery so we drive the cycle on a fixed cadence.
-
-        switch (state_)
-        {
-            case 0:     // MISSILE_LAUNCH
-            {
-                // missileeffect.cpp:256-259: adjust central flare.
-                framenum_[0]++;
-                if ((framenum_[0] > kPhotonBespokeLaunchDuration / 2)
-                    && (scale_[0] < 5.5f))
-                {
-                    scale_[0] += kPhotonBespokeScaleStep;
-                }
-
-                // missileeffect.cpp:262-295: adjust the other sparks.
-                for (int32_t n = 1; n < kPhotonBespokeNumSparks; n++)
-                {
-                    framenum_[n]++;
-
-                    if (framenum_[n] >= 0)
-                    {
-                        // Move the sparks (missileeffect.cpp:269-271).
-                        p_[n].X += v_[n].X;
-                        p_[n].Y += v_[n].Y;
-                        p_[n].Z += v_[n].Z;
-
-                        if (framenum_[n] > kPhotonBespokeLaunchDuration / 2)
-                        {
-                            // missileeffect.cpp:275-290: scale-down + retire.
-                            if (scale_[n] != 0.0f)
-                            {
-                                scale_[n] -= kPhotonBespokeScaleStep;
-                                if (scale_[n] <= 0.0f)
-                                {
-                                    activesparks_--;
-                                    // missileeffect.cpp:284-286: when 2/3 of
-                                    // sparks are gone, set missile status
-                                    // (= "ready to fly"). Harness analog:
-                                    // transition to FLY when the snapshot
-                                    // would set status.
-                                    scale_[n] = 0.0f;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            // missileeffect.cpp:292-293: scale-up.
-                            scale_[n] += kPhotonBespokeScaleStep;
-                        }
-                    }
-                }
-
-                // State transition: in-game this happens when TMissileEffect
-                // sees the status flag (missileeffect.cpp:286). Harness
-                // mirrors: when activesparks_ < NUM/3.
-                if (activesparks_ < kPhotonBespokeNumSparks / 3)
-                {
-                    state_       = 1;     // MISSILE_FLY
-                    state_ticks_ = 0;
-                }
-                break;
-            }
-
-            case 1:     // MISSILE_FLY
-            {
-                if (state_ != oldstate_)
-                {
-                    EnterFly_();
-                }
-                else
-                {
-                    // missileeffect.cpp:325-327: just update the frame counter
-                    // for the trailing photons.
-                    for (int32_t n = kPhotonBespokeNumSparks; n < kPhotonBespokeSlots; n++)
-                        framenum_[n]++;
-                }
-
-                if (state_ticks_ >= kPhotonBespokeFlyTicks)
-                {
-                    state_       = 2;     // MISSILE_EXPLODE
-                    state_ticks_ = 0;
-                }
-                break;
-            }
-
-            case 2:     // MISSILE_EXPLODE
-            {
-                if (state_ != oldstate_)
-                {
-                    EnterExplode_();
-                }
-                else
-                {
-                    // missileeffect.cpp:357-393: per-spark integration +
-                    // scale fall + trailing-photon drain.
-                    for (int32_t n = 0; n < kPhotonBespokeNumSparks; n++)
-                    {
-                        const int32_t t = n + kPhotonBespokeNumSparks;
-                        framenum_[n]++;
-
-                        // Move the sparks (missileeffect.cpp:363-365).
-                        p_[n].X += v_[n].X;
-                        p_[n].Y += v_[n].Y;
-                        p_[n].Z += v_[n].Z;
-
-                        if (scale_[n] > 0.0f)
-                        {
-                            scale_[n] -= kPhotonBespokeScaleStep / 2.0f;
-                            if (scale_[n] <= 0.0f)
-                            {
-                                scale_[n] = 0.0f;
-                                activesparks_--;
-                            }
-                        }
-
-                        // Trailing photon drain (missileeffect.cpp:383-389).
-                        if (scale_[t] != 0.0f)
-                        {
-                            framenum_[t]++;
-                            scale_[t] -= kPhotonBespokeScaleStep / 2.0f;
-                            if (scale_[t] <= 0.0f)
-                                scale_[t] = 0.0f;
-                        }
-                    }
-                }
-
-                if (activesparks_ <= 0 || state_ticks_ >= kPhotonBespokeExplodeTicks)
-                {
-                    state_       = 3;     // IDLE (harness gap)
-                    state_ticks_ = 0;
-                }
-                break;
-            }
-
-            default:    // 3 = IDLE (harness-only gap before next LAUNCH)
-            {
-                if (state_ticks_ >= kPhotonBespokeIdleTicks)
-                {
-                    state_       = 0;     // back to LAUNCH
-                    state_ticks_ = 0;
-                    ResetLaunch_();
-                }
-                break;
-            }
-        }
-
-        // Keep track of the state we're in (missileeffect.cpp:398).
-        oldstate_ = state_;
-    }
-
-    // --- Render: port of TPhotonAnimator::Render (missileeffect.cpp:408-441).
-    // SetBlendState = Alpha. Single sub-object drawn up to 32 times with
-    // per-spark scale and position.
-    const S3DPoint& base = Pos();
-    SParticleDrawItem item = {};
-    item.color_rgba[0] = 1.0f;
-    item.color_rgba[1] = 1.0f;
-    item.color_rgba[2] = 1.0f;
-    item.color_rgba[3] = 1.0f;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;
-    item.debug_mode      = debug_mode;
-    item.key.texture     = texture_;
-    item.rotation_rad    = 0.0f;
-    // UV: snapshot picks per-spark frame = framenum % numtexframes
-    // (missileeffect.cpp:429). The decoded photon.i3d texture's frames
-    // are laid out along U (each frame occupies 1/numtexframes_ of the
-    // U range). We compute the per-frame UV sub-rect at submission time.
-
-    for (int32_t n = 0; n < kPhotonBespokeSlots; n++)
-    {
-        // missileeffect.cpp:418: only render the spark if framenum is positive.
-        if (framenum_[n] < 0)
-            continue;
-        if (scale_[n] <= 0.0f)
-            continue;
-
-        // missileeffect.cpp:424-426: scale + position.
-        const float scl = scale_[n];
-        item.size_wu[0] = size_wu_ * scl;
-        item.size_wu[1] = size_wu_ * scl;
-        item.world_pos[0] = float(base.x) + p_[n].X;
-        item.world_pos[1] = float(base.y) + p_[n].Y;
-        item.world_pos[2] = float(base.z) + p_[n].Z;
-
-        // Per-spark frame UV. The snapshot's `frame = framenum % numtexframes`
-        // (missileeffect.cpp:429) cycles the bound texture frame; we slice
-        // the authored U range into numtexframes_ cells and pick the
-        // (framenum % numtexframes_)-th.
-        const int32_t fnum = framenum_[n] % numtexframes_;
-        if (numtexframes_ > 1)
-        {
-            const float cell_w = uv_rect_[2] / float(numtexframes_);
-            item.uv_rect[0] = uv_rect_[0] + cell_w * float(fnum);
-            item.uv_rect[1] = uv_rect_[1];
-            item.uv_rect[2] = cell_w;
-            item.uv_rect[3] = uv_rect_[3];
-        }
-        else
-        {
-            item.uv_rect[0] = uv_rect_[0];
-            item.uv_rect[1] = uv_rect_[1];
-            item.uv_rect[2] = uv_rect_[2];
-            item.uv_rect[3] = uv_rect_[3];
-        }
-
-        Renderer->SubmitFxParticle(item);
-    }
-
-    // --- LS coupling: re-add one bright blue-white point light at the
-    // effect origin per frame. Brightest at EXPLODE (per the bolt
-    // discharge); fades with the leading-spark scale during LAUNCH/FLY.
-    float light_t = 0.5f;
-    if (state_ == 2)    // EXPLODE — brightest
-        light_t = 1.0f;
-    else if (scale_[0] > 0.0f)
-        light_t = std::fmin(1.0f, scale_[0] / 5.5f);
-    Renderer->AddPointLight(float(base.x), float(base.y), float(base.z) + 24.0f,
-                            kPhotonBespokeLightRadiusWu,
-                            0.7f, 0.85f, 1.0f,
-                            kPhotonBespokeLightIntensity * light_t);
+    constexpr double step=1.0/24.0;sim_accum_+=TTime::DeltaTime();
+    while(sim_accum_+1e-9>=step) {sim_accum_-=step;if(IsAlive())AdvanceTick();}
+    Submit(debug_mode);
 }
+
+void TPhotonEffect_Bespoke::Submit(EFxDebugMode debug_mode)
+{
+    if(!Renderer||!EnsureAsset())return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) {const auto p=Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace()));}
+    std::array<hmm_vec3,4> vertices{};for(int i=0;i<4;++i)vertices[i]=authored_[i].pos;
+    for(int slot=0;slot<32;++slot) {
+        if(particles_.frame[slot]<0||particles_.scale[slot]<=0)continue;
+        const auto quad=photon_core::BuildQuad(vertices,particles_.scale[slot],particles_.position[slot],owner);
+        SQuadDrawItem item{};item.key.texture=texture_frames_[size_t(particles_.frame[slot])%texture_frames_.size()];
+        item.key.blend=uint8_t(EFxBlend::Alpha);item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
+        item.retail_argb4444=argb4444_;item.retail_software_projection=native_domain_;item.debug_mode=debug_mode;
+        // Reverse the four corners so the shared diagonal emits original
+        // triangles (0,1,3),(3,2,0), each with its original UV and winding.
+        for(int corner=0;corner<4;++corner) {
+            const int source=3-corner;const auto p=quad[source];
+            item.world_pos[corner][0]=p.X;item.world_pos[corner][1]=p.Y;item.world_pos[corner][2]=p.Z;
+            item.uv[corner][0]=authored_[source].tu;item.uv[corner][1]=authored_[source].tv;
+        }
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
+DEFINE_BUILDER("Photon",TPhotonEffect_Bespoke)
+REGISTER_BUILDER(TPhotonEffect_Bespoke)
 
 // ----- M08 TPixieEffect_Bespoke -------------------------------------------
 
@@ -11539,6 +10541,7 @@ TLiteralWaterfallAnimatorBuilder g_literal_waterfall_animator_builder;
 
 TWaterFallEffect_Bespoke::~TWaterFallEffect_Bespoke()
 {
+    if (Renderer && software_mesh_) Renderer->ReleaseMeshAssetRef(software_mesh_);
     delete[] drops_;
     drops_ = nullptr;
 }
@@ -11600,6 +10603,7 @@ void TWaterFallEffect_Bespoke::Initialize(bool attach_runtime_component)
     auto* imagery = dynamic_cast<T3DImagery*>(GetImagery());
     // Retry lazily without RNG draws until final owner imagery is uploaded.
     if (!LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    exact_water_mesh_ = literal_water_mesh::Matches(imagery);
     S3DObj object = {};
     imagery->GetObject(0, &object);
     if (object.material >= 0 && object.material < imagery->NumMaterials())
@@ -11673,7 +10677,9 @@ void TWaterFallEffect_Bespoke::Advance(double seconds)
 void TWaterFallEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
 {
     if (!Renderer || !initialized_ || (Flags() & OF_KILL)) return;
-    const hmm_mat4& world = Transform().Matrix();
+    const hmm_mat4& world = native_domain_ ? native_owner_ : Transform().Matrix();
+    const bool normal_mesh = exact_water_mesh_ && Renderer->UsesRetailSoftwareMeshLighting() && debug_mode == EFxDebugMode::Normal;
+    if (normal_mesh && !software_mesh_) software_mesh_ = literal_water_mesh::Cache(*Renderer, dynamic_cast<T3DImagery*>(GetImagery()), texture_);
     for (int32_t i = 0; i < numdrops_; ++i)
     {
         // Source Render skips delayed and reset drops before any lighting.
@@ -11686,6 +10692,10 @@ void TWaterFallEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         const int32_t face_degrees = -(GetFace() * 360) / 256;
         MtxRotateZ(&local, float(double(face_degrees) * TORADIAN));
         MtxTranslate(&local, &drops_[i].pos);
+        if (normal_mesh) {
+            if (software_mesh_) { hmm_mat4 composed={}; MtxMultiply(&composed,&local,&world); literal_water_mesh::Submit(*Renderer,software_mesh_,composed,native_domain_); }
+            continue;
+        }
         SQuadDrawItem item = {};
         for (int32_t corner = 0; corner < 4; ++corner)
         {
@@ -11712,6 +10722,13 @@ void TWaterFallEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         item.debug_mode = debug_mode;
         Renderer->SubmitFxQuad(item);
     }
+}
+
+void TWaterFallEffect_Bespoke::SetNativeDomain(bool enabled)
+{
+    native_domain_ = enabled && exact_water_mesh_ && runtime_id_ == 0;
+    if (native_domain_) { const auto p=Pos(); BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(GetFace())); }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Waterfall",int(native_domain_));
 }
 
 void TWaterFallEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
@@ -11760,6 +10777,7 @@ TLiteralWaterAnimatorBuilder g_literal_water_animator_builder;
 
 TWaterEffect_Bespoke::~TWaterEffect_Bespoke()
 {
+    if (Renderer && software_mesh_) Renderer->ReleaseMeshAssetRef(software_mesh_);
     delete[] drops_;
     drops_ = nullptr;
 }
@@ -11815,6 +10833,7 @@ void TWaterEffect_Bespoke::Initialize(bool attach_runtime_component)
     auto* imagery = dynamic_cast<T3DImagery*>(GetImagery());
     // Do not allocate or consume RNG while the final imagery is unavailable.
     if (!LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    exact_water_mesh_ = literal_water_mesh::Matches(imagery);
     S3DObj object = {};
     imagery->GetObject(0, &object);
     if (object.material >= 0 && object.material < imagery->NumMaterials())
@@ -11915,7 +10934,9 @@ void TWaterEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     if (!Renderer || !literal_geometry_ || !drops_ ||
         texture_ == kInvalidTexture || authored_vertices_.size() != 4 ||
         (Flags() & OF_KILL)) return;
-    const hmm_mat4& world = Transform().Matrix();
+    const hmm_mat4& world = native_domain_ ? native_owner_ : Transform().Matrix();
+    const bool normal_mesh = exact_water_mesh_ && Renderer->UsesRetailSoftwareMeshLighting() && debug_mode == EFxDebugMode::Normal;
+    if (normal_mesh && !software_mesh_) software_mesh_ = literal_water_mesh::Cache(*Renderer, dynamic_cast<T3DImagery*>(GetImagery()), texture_);
     const float fraction = float(std::clamp(sim_accum_seconds_ / TTime::LegacyFrameSeconds,
                                           0.0, 1.0));
     for (int32_t i = 0; i < numdrops_; ++i)
@@ -11929,6 +10950,10 @@ void TWaterEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
                                    drops_[i].pos.Y + drops_[i].vel.Y * fraction,
                                    drops_[i].pos.Z + drops_[i].vel.Z * fraction};
         MtxTranslate(&local, &position);
+        if (normal_mesh) {
+            if (software_mesh_) { hmm_mat4 composed={}; MtxMultiply(&composed,&local,&world); literal_water_mesh::Submit(*Renderer,software_mesh_,composed,native_domain_); }
+            continue;
+        }
         SQuadDrawItem item = {};
         for (int32_t corner = 0; corner < 4; ++corner)
         {
@@ -11952,6 +10977,15 @@ void TWaterEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         item.debug_mode = debug_mode;
         Renderer->SubmitFxQuad(item);
     }
+}
+
+void TWaterEffect_Bespoke::SetNativeDomain(bool enabled)
+{
+    // Only the isolated preview calls this opt-in; live map components stay
+    // in the common world domain and use the ordinary scene camera.
+    native_domain_ = enabled && exact_water_mesh_ && !GetComponent<TFlipbookBillboardComponent>();
+    if (native_domain_) { const auto p=Pos(); BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(GetFace())); }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Water",int(native_domain_));
 }
 
 void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
@@ -12042,234 +11076,85 @@ void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 // Constants are snapshot-only (no retail recon for any of W06/W04/W05).
 
 // =========================================================================
-// W06 — TFogEffect_Bespoke
+// Fog: original4e84c0/4e86f0/4e8b10 prelit animated authored grid.
 // =========================================================================
-//
-// Faithful direct port of TFogAnimator::Initialize/Animate/Render
-// (src/effect_old.cpp:6621-6750). Snapshot uses a 36-vertex grid (6x6)
-// over a scl=7.475 quad; 20 "anchored" border vertices are frozen at
-// (c=0.7, a=0.125) and the remaining 16 inner vertices random-walk both
-// brightness/alpha and position with bounded velocity envelopes.
-// SetBlendState -> Alpha (preserved AS WRITTEN; sister atmospheric
-// overlays use Alpha per W2A batch gotcha).
-//
-// First-pass bespoke collapses the 36-vertex grid into a single ground-
-// aligned (WorldXY) Alpha billboard whose color/alpha is the mean of
-// the inner-vert random walk. The per-vertex random walks (color/alpha
-// drift, velocity bounds, anchored-vs-free distinction) are preserved
-// verbatim — the visual breathes at the same cadence. Full triangulated
-// grid is a follow-up upgrade.
-
 TFogEffect_Bespoke* TFogEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    static const char* kFogCandidates[] = {
-        "Misc\\Fog.I3D",     // the only fog.i3d on disk lives here
-        "Misc\\fog.i3d",
-        "Magic\\fog.i3d",    // batch task spec; not present in the snapshot data
-    };
-
-    auto* fog = new TFogEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
-    fog->ForcePos(origin);
-    fog->SetMapIndex(MapPane.MakeIndex());
-    fog->ActivateComponents();
-
-    fog->texture_ = TryLoadMagicTexture(kFogCandidates,
-                                        int32_t(sizeof(kFogCandidates) / sizeof(*kFogCandidates)),
-                                        fog->uv_rect_, "fog");
-
-    // Fog isn't auto-loaded by Class.Def the way Mist is (Class.Def has
-    // "Fog" "Misc\Fog.I3D" but no spell calls Fog at boot in this build),
-    // so TryLoadMagicTexture's FindImagery-only path returns -1. Fall
-    // back to RegisterImagery (resource pack lookup) for each candidate,
-    // matching the TFlameEffect_Bespoke / TFireSwarm pattern.
-    if (fog->texture_ == kInvalidTexture)
-    {
-        for (size_t i = 0; i < sizeof(kFogCandidates) / sizeof(*kFogCandidates); ++i)
-        {
-            int32_t img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFogCandidates[i]));
-            if (img_id < 0)
-                continue;
-            TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
-            if (!base)
-                continue;
-            T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
-            if (!img3d)
-            {
-                TObjectImagery::FreeImagery(base);
-                continue;
-            }
-            (void)img3d->NumObjects();
-            if (img3d->NumTextures() <= 0)
-                continue;
-            S3DTex tex = {};
-            img3d->GetTexture(0, &tex);
-            if (tex.htexture == kInvalidTexture)
-                continue;
-            fog->uv_rect_[0] = 0.0f;
-            fog->uv_rect_[1] = 0.0f;
-            fog->uv_rect_[2] = 1.0f;
-            fog->uv_rect_[3] = 1.0f;
-            fog->texture_ = tex.htexture;
-            log_info("[fog] resolved imagery='%s' via RegisterImagery tex=%u",
-                     kFogCandidates[i], tex.htexture);
-            break;
-        }
-    }
-
-    // Snapshot effect_old.cpp:6628-6657 — Initialize each of FOG_VERTEX
-    // verts. The 20 "anchored" indices are frozen at (c=0.7, a=0.125,
-    // dpos=0). The remaining 16 inner verts get random c, a, dpos in
-    // their snapshot envelopes.
-    static const int32_t anchored_ids[] = {
-        0, 4, 6, 8, 10, 3, 13, 19, 25,
-        31, 30, 32, 33, 34, 35, 29, 23,
-        17, 11, 1
-    };
-    constexpr int32_t kNumAnchored = int32_t(sizeof(anchored_ids) / sizeof(*anchored_ids));
-    for (int32_t i = 0; i < kFogVertex; ++i)
-    {
-        SFogVert& v = fog->verts_[i];
-        v.anchored = false;
-        for (int32_t a = 0; a < kNumAnchored; ++a)
-        {
-            if (anchored_ids[a] == i)
-            {
-                v.anchored = true;
-                break;
-            }
-        }
-        if (v.anchored)
-        {
-            v.c        = 0.7f;
-            v.a        = 0.125f;
-            v.dpos.X   = 0.0f;
-            v.dpos.Y   = 0.0f;
-            v.dpos.Z   = 0.0f;
-        }
-        else
-        {
-            v.c        = float(random(400, 1000)) / 1000.0f;
-            v.a        = float(random(100, 400)) / 1000.0f;
-            v.dpos.X   = float(random(-50, 50)) / 100.0f;
-            v.dpos.Y   = float(random(-50, 50)) / 100.0f;
-            v.dpos.Z   = float(random(-50, 50)) / 100.0f;
-        }
-        v.velocity.X = 0.0f;
-        v.velocity.Y = 0.0f;
-        v.velocity.Z = 0.0f;
-        v.cv = 0.0f;
-        v.av = 0.0f;
-    }
-
-    log_info("[fog-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
-             "tex=%u verts=%d (anchored=%d, drifting=%d)",
-             fog->GetMapIndex(), origin.x, origin.y, origin.z,
-             fog->texture_, kFogVertex, kNumAnchored, kFogVertex - kNumAnchored);
+    auto* img=LoadWaterImagery("Misc\\Fog.I3D","Fog");
+    if (!img || img->NumObjects()!=1 || img->NumVerts()!=36 ||
+        img->NumFaces()!=50 || img->NumTextures()!=0) return nullptr;
+    auto* fog=new TFogEffect_Bespoke(img);
+    fog->ForcePos(origin); fog->SetMapIndex(MapPane.MakeIndex()); fog->ActivateComponents();
+    img->GetObjVerts(0,fog->vertices_);
+    img->GetObjFaces(0,fog->faces_);
+    const auto* indices=reinterpret_cast<const uint16_t*>(fog->faces_);
+    for(int i=0;i<150;++i) if(indices[i]>=36) {delete fog;return nullptr;}
+    fog->state_.Initialize([](int low,int high){return random(low,high);});
+    log_info("[fog-asset] objectverts=%d objectfaces=%d p0=(%.9g,%.9g,%.9g) firstface=(%u,%u,%u)",
+        img->NumObjVerts(0),img->NumObjFaces(0),fog->vertices_[0].pos.X,fog->vertices_[0].pos.Y,fog->vertices_[0].pos.Z,
+        unsigned(indices[0]),unsigned(indices[1]),unsigned(indices[2]));
+    log_info("[fog] authored36-vertex/50-triangle prelit grid, no texture; origin=(%d,%d,%d) rng_draws=%llu",
+             origin.x,origin.y,origin.z,static_cast<unsigned long long>(RandomDraws()));
     return fog;
 }
-
+void TFogEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_=enabled;
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Fog",int(enabled));
+}
+void TFogEffect_Bespoke::Advance(double seconds)
+{
+    if(!std::isfinite(seconds)||seconds<=0) return;
+    state_.Advance(seconds,[](int low,int high){return random(low,high);});
+}
+void TFogEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if(!Renderer) return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) {const auto p=Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace()));}
+    hmm_vec3 points[36];
+    float colors[36][4];
+    for(int i=0;i<36;++i) {
+        const auto& v=state_.vertices[i];
+        const auto& original=vertices_[i];
+        hmm_vec3 local{{(original.pos.X+v.offset[0])*retail_fog::Scale,
+                       (original.pos.Y+v.offset[1])*retail_fog::Scale,original.pos.Z+v.offset[2]}};
+        MtxTransform(&owner,&local,&points[i]);
+        // Original Render packs8-bit color, FVF_LVERTEX converts to RGB5/A5.
+        // The untextured alpha lookup uses (A5+1)/32 and writes depth even
+        // though Scene mode2 requests ZWRITE=false. GPU interpolation remains
+        // higher precision than the original scanline/RGB565 framebuffer.
+        const int color=int(double(v.c)*255.0)>>3;
+        const int alpha=int(double(v.a)*255.0)>>3;
+        colors[i][0]=colors[i][2]=float(color)/31.0f;
+        colors[i][1]=float(color*2)/63.0f;
+        colors[i][3]=float(alpha+1)/32.0f;
+    }
+    const auto* indices=reinterpret_cast<const uint16_t*>(faces_);
+    if(state_.ticks==2) log_info("[fog-draw] firstworld=(%.9g,%.9g,%.9g) lastworld=(%.9g,%.9g,%.9g) rgba0=(%.9g,%.9g,%.9g,%.9g)",
+        points[0].X,points[0].Y,points[0].Z,points[35].X,points[35].Y,points[35].Z,
+        colors[0][0],colors[0][1],colors[0][2],colors[0][3]);
+    for(int face=0;face<50;++face) {
+        SQuadDrawItem draw{};draw.corner_count=3;draw.per_corner_color=true;
+        draw.key.texture=Renderer->WhiteTextureHandle(); // identity carrier for untextured vertex color
+        draw.key.blend=uint8_t(EFxBlend::Alpha);draw.key.depth_mode=uint8_t(EFxDepthMode::TestWrite);
+        draw.retail_software_projection=native_domain_;draw.debug_mode=debug_mode;
+        for(int c=0;c<3;++c) {
+            const int i=indices[face*3+c];
+            std::memcpy(draw.world_pos[c],points[i].Elements,3*sizeof(float));
+            std::memcpy(draw.corner_color_rgba[c],colors[i],4*sizeof(float));
+        }
+        Renderer->SubmitFxQuad(draw);
+    }
+}
 void TFogEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
-    if (!Renderer)
-        return;
-
-    // 24Hz sim-tick gate (snapshot was ungated; modern fix per
-    // feedback_framerate_independent_anim).
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kFogSimTickMs))
-    {
-        sim_accum_ms_ -= double(kFogSimTickMs);
-
-        // Snapshot effect_old.cpp:6664-6698 — per-vert Animate. Anchored
-        // verts skip; drifting verts random-walk color/alpha/position.
-        for (int32_t i = 0; i < kFogVertex; ++i)
-        {
-            SFogVert& v = verts_[i];
-            if (v.anchored)
-                continue;
-            v.cv += float(random(-10, 10)) / 1000.0f;
-            v.av += float(random(-10, 10)) / 1000.0f;
-
-            v.c += v.cv;
-            if (v.cv > 1.0f || v.cv < 0.4f)
-                v.cv = 0.0f;
-            v.c = min(1.0f, max(0.4f, v.c));
-            v.a += v.av;
-            if (v.av > 0.4f || v.av < 0.1f)
-                v.av = 0.0f;
-            v.a = min(0.4f, max(0.1f, v.a));
-
-            v.velocity.X += float(random(-10, 10)) / 1000.0f;
-            v.velocity.Y += float(random(-10, 10)) / 1000.0f;
-            v.velocity.Z += float(random(-10, 10)) / 1000.0f;
-
-            v.dpos.X += v.velocity.X;
-            if (v.dpos.X < -0.5f || v.dpos.X > 0.5f)
-                v.velocity.X = 0.0f;
-            v.dpos.X = min(0.5f, max(-0.5f, v.dpos.X));
-            v.dpos.Y += v.velocity.Y;
-            if (v.dpos.Y < -0.5f || v.dpos.Y > 0.5f)
-                v.velocity.Y = 0.0f;
-            v.dpos.Y = min(0.5f, max(-0.5f, v.dpos.Y));
-            v.dpos.Z += v.velocity.Z;
-            if (v.dpos.Z < -0.5f || v.dpos.Z > 0.5f)
-                v.velocity.Z = 0.0f;
-            v.dpos.Z = min(0.5f, max(-0.5f, v.dpos.Z));
-        }
-    }
-
-    // --- Render port (effect_old.cpp:6701-6736). SetBlendState -> Alpha
-    // (preserved AS WRITTEN). Snapshot sets per-vert color = D3DRGBA(c,c,c,a)
-    // and renders the 36-vert grid at scl=7.475. First-pass collapses
-    // to a single billboard at the mean inner-vert color.
-    if (texture_ == kInvalidTexture)
-        return;
-
-    static const bool s_fog_logged_first_submit = []{
-        log_info("[fog-bespoke] first submit (TickAndSubmit running)");
-        return true;
-    }();
-    (void)s_fog_logged_first_submit;
-
-    // Mean of the 16 inner (drifting) verts — captures the animated
-    // brightness/alpha breathing.
-    float sum_c = 0.0f;
-    float sum_a = 0.0f;
-    int32_t n = 0;
-    for (int32_t i = 0; i < kFogVertex; ++i)
-    {
-        if (verts_[i].anchored)
-            continue;
-        sum_c += verts_[i].c;
-        sum_a += verts_[i].a;
-        ++n;
-    }
-    const float mean_c = (n > 0) ? sum_c / float(n) : 0.7f;
-    const float mean_a = (n > 0) ? sum_a / float(n) : 0.125f;
-
-    const S3DPoint& base = Pos();
-    SBillboardDrawItem item = {};
-    item.size_wu[0] = kFogBaseSizeWu;   // snapshot scl=7.475 along X/Y
-    item.size_wu[1] = kFogBaseSizeWu;
-    item.color_rgba[0] = mean_c;        // D3DRGBA(c, c, c, a) -- gray
-    item.color_rgba[1] = mean_c;
-    item.color_rgba[2] = mean_c;
-    item.color_rgba[3] = mean_a;
-    item.uv_rect[0] = uv_rect_[0];
-    item.uv_rect[1] = uv_rect_[1];
-    item.uv_rect[2] = uv_rect_[2];
-    item.uv_rect[3] = uv_rect_[3];
-    item.key.texture     = texture_;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);   // SetBlendState -> Alpha
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::WorldXY;   // ground-pinned overlay
-    item.debug_mode      = debug_mode;
-    item.world_pos[0]    = float(base.x);
-    item.world_pos[1]    = float(base.y);
-    item.world_pos[2]    = float(base.z);
-    Renderer->SubmitFxBillboard(item);
+    Advance(TTime::DeltaTime());
+    if(state_.ticks==2 || state_.ticks==30 || state_.ticks==120)
+        log_info("[fog-phase] tick=%d rng_draws=%llu c2=%.9g a2=%.9g offset2=(%.9g,%.9g,%.9g)",
+            state_.ticks,static_cast<unsigned long long>(RandomDraws()),state_.vertices[2].c,state_.vertices[2].a,
+            state_.vertices[2].offset[0],state_.vertices[2].offset[1],state_.vertices[2].offset[2]);
+    Submit(debug_mode);
 }
 
 // =========================================================================
@@ -12508,165 +11393,89 @@ constexpr const char* kFlyBespokeImageryPath = "Misc\\Flies.I3D";
 // hard-bounce-back (pos -= velocity*2) when over the cube edge. Render is
 // SetBlendState() (Alpha) with cull=NONE — billboards already no-cull.
 
+namespace {
+TWaterReferenceBuilder<TFlyEffect_Bespoke> g_flies_reference_builder("Flies");
+TWaterReferenceAnimatorBuilder<TFlyEffect_Bespoke> g_flies_reference_animator_builder("Flies");
+}
+
+void TFlyEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if(initialized_)return;
+    if(attach_runtime_component && (ObjClass()!=OBJCLASS_EFFECT || ObjId()!=retail_flies::Id || GetMapIndex()<=0 || (Flags()&OF_KILL)))return;
+    auto* imagery=dynamic_cast<T3DImagery*>(GetImagery());
+    if(!retail_flies::Matches(imagery))return;
+    S3DTex texture={};imagery->GetTexture(0,&texture);
+    if(texture.htexture==kInvalidTexture)return;
+    texture_=texture.htexture;imagery->GetObjVerts(0,vertices_,0,0);
+    // Actual4e8180: all20 records are seeded, including dormant particles.
+    for(auto&fly:flies_) {
+        fly.pos={float(random(-30,30)),float(random(-30,30)),float(random(-30,30))};
+        fly.scl={.3f,.3f,.3f};fly.rot={0,0,0};fly.used=false;
+    }
+    initialized_=true;runtime_owned_=attach_runtime_component;
+    if(attach_runtime_component) {
+        auto component=std::make_unique<TWaterReferenceComponent<TFlyEffect_Bespoke>>();
+        component->Configure(texture_,8,8,1,1,1,1.0f,1.0f,false,true);
+        AddComponent(std::move(component));
+    }
+    log_info("[flies-runtime] initialized id=%08x map_index=%d particles=20 texture=%u runtime=%d exact_profile=1",attach_runtime_component?ObjId():0u,GetMapIndex(),texture_,int(attach_runtime_component));
+}
+
 TFlyEffect_Bespoke* TFlyEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    SLoadedImagery loaded = SparkleLoadImagery(kFlyBespokeImageryPath, "fly");
-    if (!loaded.img3d)
-        return nullptr;
+    auto* imagery=LoadWaterImagery(kFlyBespokeImageryPath,"flies");
+    if(!imagery)return nullptr;
+    auto* fly=new TFlyEffect_Bespoke(imagery);fly->ForcePos(origin);fly->SetMapIndex(MapPane.MakeIndex());
+    fly->Initialize(false);if(!fly->initialized_){delete fly;return nullptr;}return fly;
+}
 
-    auto* fly = new TFlyEffect_Bespoke(loaded.base);
-    fly->ForcePos(origin);
-    fly->SetMapIndex(MapPane.MakeIndex());
-    fly->ActivateComponents();
-
-    const int32_t num_obj = loaded.img3d->NumObjects();
-    const int32_t num_tex = loaded.img3d->NumTextures();
-    if (num_obj < 1 || num_tex <= 0)
-    {
-        log_error("[fly] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
-                  num_obj, num_tex);
-        delete fly;
-        return nullptr;
+void TFlyEffect_Bespoke::Advance(double seconds)
+{
+    if(!initialized_ || (Flags()&OF_KILL) || !std::isfinite(seconds) || seconds<=0)return;
+    tick_seconds_+=seconds;
+    while(tick_seconds_+1e-12>=TTime::LegacyFrameSeconds) {
+        tick_seconds_-=TTime::LegacyFrameSeconds;SetCommandDone(false);
+        int32_t chance=random(0,1);
+        // Actual4e8280 keeps moving dormant particles and consumes all60
+        // velocity draws each tick, before or after a staged activation.
+        for(auto&fly:flies_) {
+            if(!fly.used && chance){fly.used=true;chance=0;}
+            const hmm_vec3 velocity={float(random(-2,2)),float(random(-2,2)),float(random(-2,2))};
+            fly.pos+=velocity;
+            for(int axis=0;axis<3;++axis)if(fly.pos.Elements[axis]>30.0f || fly.pos.Elements[axis]<-30.0f)fly.pos.Elements[axis]-=velocity.Elements[axis]+velocity.Elements[axis];
+        }
+        ++ticks_;
     }
+}
 
-    // Snapshot TParticleSystem uses GetObject(0) (the single fly sprite).
-    const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, 0);
-    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
-    S3DTex tex = {};
-    loaded.img3d->GetTexture(slot, &tex);
-    fly->texture_ = tex.htexture;
-    SparkleResolveSubObjUv(loaded.img3d, 0, fly->uv_rect_);
-    fly->size_wu_ = kFlyBespokeBaseSizeWu;
-    if (fly->texture_ == kInvalidTexture)
-    {
-        log_error("[fly] SpawnForTest: sub-object 0 texture unresolved");
-        delete fly;
-        return nullptr;
+void TFlyEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if(!Renderer || !initialized_ || texture_==kInvalidTexture || (Flags()&OF_KILL))return;
+    const auto&owner=native_domain_?native_owner_:Transform().Matrix();
+    SQuadDrawItem item={};item.key.texture=texture_;item.key.blend=uint8_t(EFxBlend::Alpha);item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);item.light_mode=EFxLightMode::Unlit;item.retail_argb4444=true;item.retail_software_projection=native_domain_;item.debug_mode=debug_mode;
+    for(const auto&fly:flies_) {
+        if(!fly.used)continue;
+        // Whole original TParticleSystem::Render(false,false): local rotations,
+        // fixed tip/spin, scale, raw relative translation, then real owner.
+        hmm_mat4 local={};MtxClear(&local);MtxRotateX(&local,float(fly.rot.X*TORADIAN));MtxRotateY(&local,float(fly.rot.Y*TORADIAN));MtxRotateZ(&local,float(fly.rot.Z*TORADIAN));MtxRotateX(&local,-float(M_PI/2.0));MtxRotateZ(&local,-float(M_PI/4.0));MtxScale(&local,&fly.scl);MtxTranslate(&local,&fly.pos);
+        for(int corner=0;corner<4;++corner) {
+            hmm_vec3 p={},world={};MtxTransform(&local,&vertices_[corner].pos,&p);MtxTransform(&owner,&p,&world);
+            std::memcpy(item.world_pos[corner],world.Elements,3*sizeof(float));item.uv[corner][0]=vertices_[corner].tu;item.uv[corner][1]=vertices_[corner].tv;
+        }
+        Renderer->SubmitFxQuad(item);
     }
+}
 
-    // --- Port of TFlyAnimator::Initialize (effect_old.cpp:6525-6550).
-    // size.x = size.y = 10 (fly->size_wu_ above). Then per-fly:
-    //   pos = random(-RANGE,RANGE) per axis, used=false, scl=.3, rot=0.
-    for (int32_t i = 0; i < kFlyBespokeCount; ++i)
-    {
-        fly->flies_[i].pos.X = float(random(-kFlyBespokeRangeX, kFlyBespokeRangeX));
-        fly->flies_[i].pos.Y = float(random(-kFlyBespokeRangeY, kFlyBespokeRangeY));
-        fly->flies_[i].pos.Z = float(random(-kFlyBespokeRangeZ, kFlyBespokeRangeZ));
-        fly->flies_[i].used  = false;
-        fly->flies_[i].scl.X = kFlyBespokeScale;
-        fly->flies_[i].scl.Y = kFlyBespokeScale;
-        fly->flies_[i].scl.Z = kFlyBespokeScale;
-        fly->flies_[i].rot.X = 0.0f;
-        fly->flies_[i].rot.Y = 0.0f;
-        fly->flies_[i].rot.Z = 0.0f;
-    }
-    fly->sim_accum_ms_ = 0.0;
-
-    log_info("[fly] SpawnForTest_BESPOKE: '%s' map_index=%d origin=(%d,%d,%d) "
-             "count=%d texture=%u uv=(%.3f,%.3f,%.3f,%.3f)",
-             kFlyBespokeImageryPath, fly->GetMapIndex(),
-             origin.x, origin.y, origin.z,
-             kFlyBespokeCount, fly->texture_,
-             fly->uv_rect_[0], fly->uv_rect_[1],
-             fly->uv_rect_[2], fly->uv_rect_[3]);
-    return fly;
+void TFlyEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_=enabled && initialized_ && !runtime_owned_;
+    if(native_domain_){const auto p=Pos();BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(GetFace()));}
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Flies",int(native_domain_));
 }
 
 void TFlyEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
-    if (!Renderer)
-        return;
-
-    static const bool s_logged_first_submit = []{
-        log_info("[fly] first submit (TickAndSubmit running)");
-        return true;
-    }();
-    (void)s_logged_first_submit;
-
-    // --- Port of TFlyAnimator::Animate (effect_old.cpp:6552-6585).
-    // 24 Hz sim tick — same family pattern as M08/H02/B01.
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kFlyBespokeSimTickMs))
-    {
-        sim_accum_ms_ -= double(kFlyBespokeSimTickMs);
-
-        // Stage one new fly per tick on a coin-flip (effect_old.cpp:6557).
-        // The original walks the array and consumes the 'chance' on the
-        // first dormant fly it finds — exactly one stage-on per tick.
-        int32_t chance = random(0, 1);
-
-        for (int32_t i = 0; i < kFlyBespokeCount; ++i)
-        {
-            SFlyParticleBespoke& f = flies_[i];
-
-            if (f.used == false && chance)
-            {
-                f.used  = true;
-                chance  = 0;
-            }
-
-            hmm_vec3 velocity;
-            velocity.X = float(random(-2, 2));
-            velocity.Y = float(random(-2, 2));
-            velocity.Z = float(random(-2, 2));
-
-            f.pos.X += velocity.X;
-            f.pos.Y += velocity.Y;
-            f.pos.Z += velocity.Z;
-
-            // Hard reflect-back: if out of cube, undo 2x velocity (so the
-            // net step on this tick is -velocity, pushing back into the
-            // box). Snapshot: `pos -= velocity + velocity`.
-            if (f.pos.X > float(kFlyBespokeRangeX) || f.pos.X < float(-kFlyBespokeRangeX))
-                f.pos.X -= velocity.X + velocity.X;
-            if (f.pos.Y > float(kFlyBespokeRangeY) || f.pos.Y < float(-kFlyBespokeRangeY))
-                f.pos.Y -= velocity.Y + velocity.Y;
-            if (f.pos.Z > float(kFlyBespokeRangeZ) || f.pos.Z < float(-kFlyBespokeRangeZ))
-                f.pos.Z -= velocity.Z + velocity.Z;
-        }
-    }
-
-    // --- Port of TFlyAnimator::Render (effect_old.cpp:6587-6603).
-    // SetBlendState() (no args) = Alpha (the alpha-keyed dark fly sprite,
-    // chroma-keyed black quad). Cull=NONE in snapshot — billboards are
-    // already two-sided so no extra state needed.
-    if (texture_ == kInvalidTexture)
-        return;
-
-    const S3DPoint& base = Pos();
-    for (int32_t i = 0; i < kFlyBespokeCount; ++i)
-    {
-        if (!flies_[i].used)
-            continue;   // staged-off; faithful to snapshot — TParticleSystem skips !used
-
-        const float wx = float(base.x) + flies_[i].pos.X;
-        const float wy = float(base.y) + flies_[i].pos.Y;
-        const float wz = float(base.z) + flies_[i].pos.Z;
-
-        SBillboardDrawItem item = {};
-        // size.x = size.y = 10 (FLY_SIZE), scaled per-particle by .3.
-        item.size_wu[0]      = size_wu_ * flies_[i].scl.X;
-        item.size_wu[1]      = size_wu_ * flies_[i].scl.Y;
-        item.color_rgba[0]   = 1.0f;
-        item.color_rgba[1]   = 1.0f;
-        item.color_rgba[2]   = 1.0f;
-        item.color_rgba[3]   = 1.0f;
-        item.uv_rect[0]      = uv_rect_[0];
-        item.uv_rect[1]      = uv_rect_[1];
-        item.uv_rect[2]      = uv_rect_[2];
-        item.uv_rect[3]      = uv_rect_[3];
-        item.key.texture     = texture_;
-        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-        item.key.blend       = uint8_t(EFxBlend::Alpha);
-        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        item.light_mode      = EFxLightMode::Unlit;
-        item.orientation     = EFxBillboardOrientation::ScreenAligned;
-        item.debug_mode      = debug_mode;
-        item.world_pos[0]    = wx;
-        item.world_pos[1]    = wy;
-        item.world_pos[2]    = wz;
-        Renderer->SubmitFxBillboard(item);
-    }
+    Advance(TTime::DeltaTime());Submit(debug_mode);
 }
 
 // *************************************************************************
@@ -16508,62 +15317,15 @@ void TFireBallEffect_Bespoke__YFireBall::TickAndSubmitForTest_BESPOKE(EFxDebugMo
     TickAndSubmit(debug_mode);
 }
 
-// ----- YFireWind ----------------------------------------------------------
-
+// ----- YFireWind: own authored asset and null-spell original owner ---------
 TFireWindEffect_Bespoke__YFireWind*
 TFireWindEffect_Bespoke__YFireWind::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    static const char* kYFireWindCandidates[] = {
-        "Magic\\YFirewind.I3D",
-        "Magic\\yfirewind.i3d",
-    };
-
-    auto* eff = new TFireWindEffect_Bespoke__YFireWind(static_cast<TObjectImagery*>(nullptr));
-    eff->ForcePos(origin);
-    eff->SetMapIndex(MapPane.MakeIndex());
-    eff->ActivateComponents();
-
-    eff->texture_ = TryLoadMagicTexture(
-        kYFireWindCandidates,
-        int32_t(sizeof(kYFireWindCandidates) / sizeof(*kYFireWindCandidates)),
-        eff->uv_rect_, "yfirewind");
-
-    eff->age_ms_       = 0;
-    eff->alive_        = true;
-    eff->sim_accum_ms_ = 0.0;
-
-    log_info("[yfirewind-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
-             "tex=%u (no class candidate, stubbed)",
-             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
-    return eff;
-}
-
-void TFireWindEffect_Bespoke__YFireWind::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-{
-    if (!Renderer)
-        return;
-
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kStubSimTickMs))
-    {
-        sim_accum_ms_ -= double(kStubSimTickMs);
-        age_ms_ += kStubSimTickMs;
-        if (age_ms_ >= kStubLifetimeMs)
-            alive_ = false;
-    }
-    if (!alive_)
-        return;
-
-    static const bool s_logged_first_submit = []{
-        log_info("[yfirewind-bespoke] first submit (TickAndSubmit running)");
-        return true;
-    }();
-    (void)s_logged_first_submit;
-
-    const float fade01 =
-        1.0f - float(age_ms_) / float(kStubLifetimeMs);
-    W3DStubSubmitBillboard(Pos(), texture_, uv_rect_,
-                           kStubBaseSizeWu, fade01, debug_mode);
+    auto* image=LoadWaterImagery("Magic\\YFirewind.I3D","yfirewind");if(!image)return nullptr;
+    auto* effect=new TFireWindEffect_Bespoke__YFireWind(image);
+    if(!effect->InitializeVisual(origin)){delete effect;return nullptr;}
+    log_info("[yfirewind] own original400-slot null-spell leaf, source=%d,%d,%d",origin.x,origin.y,origin.z);
+    return effect;
 }
 
 // ----- YCataclysm ---------------------------------------------------------
@@ -17233,56 +15995,89 @@ void TFireFlashEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
 }
 
 // -------------------------------------------------------------------------
-// TFireWindEffect_Bespoke — STUBBED placeholder
+// FireWind: original400-slot owner/animator leaf, two authored RGB565 quads.
 // -------------------------------------------------------------------------
-TFireWindEffect_Bespoke* TFireWindEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
-                                                                       const char* asset_override)
+TFireWindEffect_Bespoke::~TFireWindEffect_Bespoke()
 {
-    const char* asset_path = asset_override ? asset_override : kFireWindBespokeImageryPath;
-    TObjectImagery* base = nullptr;
-    TTextureHandle  tex  = Wave3a_LoadFirstTexture(asset_path, "firewind-bespoke", base);
-    if (!base)
-        return nullptr;
-
-    auto* eff = new TFireWindEffect_Bespoke(base);
-    eff->ForcePos(origin);
-    eff->SetMapIndex(MapPane.MakeIndex());
-    eff->ActivateComponents();
-    eff->texture_ = tex;
-    eff->age_ms_  = 0.0f;
-    eff->alive_   = true;
-    log_info("[firewind-bespoke] STUBBED placeholder spawned at map_index=%d origin=(%d,%d,%d)"
-             " asset='%s' — snapshot TFireWindAnimator depends on PTSpell/PTCharacter rig",
-             eff->GetMapIndex(), origin.x, origin.y, origin.z, asset_path);
-    return eff;
+    if(Renderer)for(const auto& part:parts_)if(part.mesh)Renderer->ReleaseMeshAssetRef(part.mesh);
 }
 
-void TFireWindEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+bool TFireWindEffect_Bespoke::BindMeshes()
 {
-    if (!alive_ || !Renderer || texture_ == kInvalidTexture)
-        return;
-
-    age_ms_ += float(TTime::DeltaTime() * 1000.0);
-    if (age_ms_ >= float(kFireWindLifetimeMs))
-    {
-        alive_ = false;
-        return;
+    auto* image=dynamic_cast<T3DImagery*>(imagery);
+    if(!Renderer||!image||image->NumObjects()!=2||image->NumTextures()!=2)return false;
+    for(int i=0;i<2;++i) {
+        auto& part=parts_[i];if(part.mesh)continue;
+        const int slot=i==0?1:2;
+        std::vector<SMeshVertex> vertices;std::vector<uint16_t> indices;
+        if(!ExtractSubMeshTextureSlot(image,i,slot,vertices,indices)||vertices.size()!=4||indices.size()!=6)return false;
+        S3DObj object{};image->GetObject(i,&object);image->GetMaterial(object.material,&part.material);
+        S3DTex texture{};image->GetTexture(slot-1,&texture);
+        if(texture.htexture==kInvalidTexture||texture.numframes!=1||RetailMeshTextureLighting(texture.desc.pixelFormat)!=1)return false;
+        const uint64_t key=0x4657494e00000000ull^(uint64_t(uint32_t(image->ImageryId()))<<16)^uint64_t(i);
+        part.mesh=Renderer->RegisterMeshAsset(key,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()),texture.htexture);
+        if(!part.mesh)return false;Renderer->AddMeshAssetRef(part.mesh);
     }
+    return true;
+}
 
-    static const bool s_firewind_first = []{
-        log_info("[firewind-bespoke] first submit (placeholder draw)");
-        return true;
-    }();
-    (void)s_firewind_first;
+TFireWindEffect_Bespoke* TFireWindEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,const char* asset_override)
+{
+    // YFireWind dispatches through its own factory, never an arbitrary asset
+    // override of this base registration.
+    if(asset_override)return nullptr;
+    auto* image=LoadWaterImagery(kFireWindBespokeImageryPath,"firewind");if(!image)return nullptr;
+    auto* effect=new TFireWindEffect_Bespoke(image);
+    if(!effect->InitializeVisual(origin)){delete effect;return nullptr;}
+    log_info("[firewind] original400-slot null-spell leaf, source=%d,%d,%d",origin.x,origin.y,origin.z);
+    return effect;
+}
 
-    // Wind-like elongating tongue — stretch along the asset's natural
-    // aspect, hold mid-life, fade out tail. Single-billboard collapse.
-    const float t   = age_ms_ / float(kFireWindLifetimeMs);
-    const float scl = 0.6f + 1.4f * std::sin(float(M_PI) * t);   // 0.6 → 2.0 → 0.6
-    const float alpha = (t < 0.8f) ? 1.0f : (1.0f - (t - 0.8f) / 0.2f);
-    Wave3a_SubmitBillboard(Pos(), texture_, kFireWindBaseSizeWu * scl,
-                           EFxBillboardOrientation::ScreenAligned, debug_mode,
-                           1.0f, 0.9f, 0.6f, alpha);
+bool TFireWindEffect_Bespoke::InitializeVisual(const S3DPoint& origin)
+{
+    ForcePos(origin);SetMapIndex(MapPane.MakeIndex());ActivateComponents();
+    // Both controlled null-spell native initializers produce facing0. Natural
+    // invoker/target-derived facing and damage dispatch remain separate.
+    firewind_core::State::Initialize([](int lo,int hi){return random(lo,hi);});
+    return BindMeshes();
+}
+
+void TFireWindEffect_Bespoke::Simulate()
+{
+    if(!alive_)return;
+    firewind_core::State::Pulse([](int lo,int hi){return random(lo,hi);},[](int angle,int distance) {
+        S3DPoint p;ConvertToVector(angle,distance,p);return hmm_vec3{float(p.x),float(p.y),float(p.z)};
+    });
+    // Original owner Pulse4e2290 kills after140; animator Pulse never does.
+    alive_=firewind_core::State::frame<=140;
+}
+
+void TFireWindEffect_Bespoke::Pulse()
+{
+    Simulate();SetCommandDone(false);if(!alive_)KillThisEffect();TEffect::Pulse();
+}
+
+void TFireWindEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode)
+{
+    constexpr double step=1.0/24.0;sim_accum_+=TTime::DeltaTime();
+    while(alive_&&sim_accum_+1e-9>=step){sim_accum_-=step;Simulate();}
+}
+
+void TFireWindEffect_Bespoke::SubmitWorldMeshes_BESPOKE(EFxDebugMode)
+{
+    if(!alive_||!BindMeshes())return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_){const auto p=Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace()));}
+    firewind_core::State::Render([&](int object,const hmm_mat4& local) {
+        const auto& part=parts_[object];hmm_mat4 world;MtxMultiply(&world,&local,&owner);
+        SHelperMeshSubmit submit{};submit.mesh=part.mesh;submit.additive_blend=true;submit.retail_lighting=1;
+        submit.retail_software_projection=native_domain_;submit.retail_normal_z_scale=native_domain_?1.0f:1.0f/WORLD3D_Z_SCALE;
+        for(int row=0;row<4;++row)for(int col=0;col<4;++col)submit.world[row*4+col]=world.Elements[col][row];
+        const auto& m=part.material.matdesc;std::memcpy(submit.diffuse,&m.diffuse,4*sizeof(float));
+        std::memcpy(submit.ambient,&m.ambient,4*sizeof(float));std::memcpy(submit.specular,&m.specular,4*sizeof(float));
+        std::memcpy(submit.emissive,&m.emissive,4*sizeof(float));submit.power=m.power;
+        submit.sort_depth=float(Pos().z);Renderer->SubmitHelperMesh(submit);
+    });
 }
 
 // -------------------------------------------------------------------------

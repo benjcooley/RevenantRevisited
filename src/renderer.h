@@ -523,12 +523,18 @@ struct SHelperMeshSubmit
     // five-bit vertex Gouraud modulation, nearest wrapped texture sampling.
     // 2: normalized ARGB unlit. 3: exact ARGB4444 software lookup.
     // Material specular/emissive are not implemented by the source SW path.
-    int32_t    retail_lighting = 0;
+    int32_t    retail_lighting = 0; // 4: source untextured RGB5 Gouraud, no texture sample
+    int32_t    index_offset = 0, index_count = 0; // zero count keeps the full mesh
+    bool       retail_flat_depth = false; // original untextured max(vertex Z), one triangle
+    float      retail_flat_depth_offset = 0.0f; // depth minus camera/base translation
+    bool       retail_source_alpha = false; // audited source mode2: cull-none; mode4 writes Z as the native untextured kernel
+    bool       retail_alpha_source_quantize = false; // opt-in original ARGB4444 source contribution floor; destination precision remains GPU
     // Undo an explicit geometry-only Z bridge before source normal lighting.
     float      retail_normal_z_scale = 1.0f;
     bool       retail_gold_no_depth = false; // audited authored mode80, no depth test/write
     bool       retail_positive_face_cull = false; // source positive screen-down; opt-in only
     bool       retail_software_projection = false;
+    bool       retail_software_pixel_grid = false; // Source integer raster inputs; explicit native/software only.
     float      retail_camera_z = 0.0f;
 };
 
@@ -620,6 +626,8 @@ public:
     // Exact Goldp default animator: retail draws alpha coins before its base
     // additive flare. Normal helper queue and shader modes are unchanged.
     void SubmitGoldFlareAfterFx(const SHelperMeshSubmit& m);
+    // Original mode2 ARGB layers submitted after their particle controller.
+    void SubmitRetailSourceAlphaAfterFx(const SHelperMeshSubmit& m);
     void EndTilePass();
     [[nodiscard]] SRendererTilePassStats GetLastTilePassStats() const
     {
@@ -1390,6 +1398,8 @@ private:
     sg_shader   helper_mesh_shader        = {};
     sg_pipeline helper_mesh_back_pipeline = {};
     sg_pipeline helper_mesh_front_pipeline = {};
+    sg_pipeline helper_source_alpha_pipeline = {};
+    sg_pipeline helper_untextured_software_pipeline = {};
     sg_pipeline helper_mesh_add_back_pipeline = {};
     sg_pipeline helper_mesh_add_front_pipeline = {};
     sg_pipeline helper_gold_no_depth_back_pipeline = {};

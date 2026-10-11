@@ -5,6 +5,7 @@
 #include "vfxreviewspawn.h"
 #include "vfxreviewpreview.h"
 #include "effect.h"
+#include "effects/lightstriporiginal.h"
 #include "gamemap.h"
 #include "mapmanager.h"
 #include "mappane.h"
@@ -42,7 +43,7 @@ struct Entry {
     std::string name, asset, status = "Approaching";
     S3DPoint station{};
     int map_index = -1;
-    double clearance = 240;
+    double clearance = 96;
     double review_footprint = 0;
     unsigned cycles = 0;
     int sound_tags = 0;
@@ -51,6 +52,9 @@ struct Entry {
     bool missing_visual = false;
     std::unique_ptr<VfxReviewPreview> preview;
     std::unique_ptr<TFireBallEffect> projectile;
+    std::unique_ptr<TPhotonEffect_Bespoke> photon;
+    std::unique_ptr<TIceBoltEffect_Bespoke> beam;
+    std::unique_ptr<lightstrip_original::State,void(*)(lightstrip_original::State*)> strip{nullptr,lightstrip_original::Destroy};
     int projectile_state = -1;
 };
 TMapRenderer renderer;
@@ -85,6 +89,9 @@ TObjectInstance* Resolve(Entry& e) {
 void Remove(Entry& e) {
     e.preview.reset();
     e.projectile.reset();
+    e.photon.reset();
+    e.beam.reset();
+    e.strip.reset();
     if (auto* object = Resolve(e)) MapPane.DeleteObject(object);
     e.map_index = -1;
 }
@@ -143,7 +150,7 @@ bool LayoutStations() {
         const auto support=DescribeVfxReviewSpawn(e.id);
         // An unavailable entry still has a named slot. With no drawable, it
         // needs the minimum slot rather than its asset's oversized bounds.
-        if(!support.safe_factory) continue;
+        if(!support.safe_factory && e.id!=0x98974eabu && e.id!=0x98974ea7u) continue;
         // These are padded culling/refresh bounds, not measured visible size.
         // Bound their layout contribution; explicit large-effect hints below
         // reserve space for genuinely broad trajectories.
@@ -181,7 +188,7 @@ bool LayoutStations() {
         const auto colon=item.find(':'); if(colon==std::string::npos) return false;
         const auto name=Lower(item.substr(0,colon)); const auto number=item.substr(colon+1);
         char* tail=nullptr; const double value=strtod(number.c_str(),&tail);
-        if(number.empty() || *tail || !std::isfinite(value) || value<180 || value>2400) return false;
+        if(number.empty() || *tail || !std::isfinite(value) || value<64 || value>2400) return false;
         char* id_end=nullptr; const auto id=strtoul(name.c_str(),&id_end,0); bool found=false;
         for(auto& e:entries) if(Lower(e.name)==name || (name.rfind("0x",0)==0 && !*id_end && id==e.id)) {
             e.clearance=value; found=true;
@@ -251,7 +258,18 @@ S3DPoint PathEndpoint(size_t index,bool target) {
 void Spawn(Entry& e, size_t index) {
     const auto support=DescribeVfxReviewSpawn(e.id);
     const bool authored_yfireball = e.id==0x63fd3827u;
-    if (!support.safe_factory && !authored_yfireball) {
+    const bool authored_photon = e.id==0x113803f4u;
+    const bool authored_icebolt = e.id==0xb1c4c90fu;
+    const bool authored_lightstrip = e.id==0x10da54d0u;
+    if (!support.safe_factory && !authored_yfireball && !authored_photon && !authored_icebolt && !authored_lightstrip) {
+        const auto preview_info=DescribeVfxReviewPreview(e.id);
+        if(preview_info.supported) e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(e.preview) {
+            e.missing_visual=preview_info.partial; e.status=preview_info.description; ++e.cycles;
+            log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=%d status=%s",
+                e.name.c_str(),e.id,e.preview->Id().c_str(),int(preview_info.partial),e.status.c_str());
+            return;
+        }
         e.status=support.description; e.failed=true;
         log_info("[vfx-review] unavailable name=%s type=%08x status=%s",e.name.c_str(),e.id,e.status.c_str());
         return;
@@ -260,6 +278,43 @@ void Spawn(Entry& e, size_t index) {
     if (support.projectile || support.supports_endpoints) {
         source=PathEndpoint(index,false);
         target=PathEndpoint(index,true);
+    }
+    if(authored_lightstrip) {
+        e.strip.reset(lightstrip_original::Spawn(source,target));
+        if(!e.strip) {
+            e.failed=true; e.missing_visual=true;
+            e.status="Original LightStrip initialization failed"; return;
+        }
+        e.missing_visual=false; e.status="Original moving LightStrip with terrain target fixture"; ++e.cycles;
+        log_info("[vfx-review] projectile name=%s cycle=%u source=%d,%d,%d target=%d,%d,%d terrain_target=1",
+            e.name.c_str(),e.cycles,source.x,source.y,source.z,target.x,target.y,target.z);
+        return;
+    }
+    if(authored_icebolt) {
+        e.beam.reset(TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE(source));
+        if(!e.beam || !e.beam->SetBeamEndpoints(e.beam->Pos(),target)) {
+            e.beam.reset(); e.failed=true; e.missing_visual=true;
+            e.status="Beam runtime initialization failed"; return;
+        }
+        e.missing_visual=false; e.status="Authored stationary beam and endpoint march"; ++e.cycles;
+        const auto& lifted=e.beam->Pos();
+        log_info("[vfx-review] beam name=%s cycle=%u source=%d,%d,%d target=%d,%d,%d target_fixture=1",
+            e.name.c_str(),e.cycles,lifted.x,lifted.y,lifted.z,target.x,target.y,target.z);
+        return;
+    }
+    if(authored_photon) {
+        e.photon.reset(TPhotonEffect_Bespoke::SpawnForTest_BESPOKE(source));
+        if(!e.photon || !e.photon->SetProjectileEndpoints(source,target)) {
+            e.photon.reset(); e.failed=true; e.missing_visual=true;
+            e.status="Projectile runtime initialization failed"; return;
+        }
+        e.photon->SetPreviewTargetCollision(true);
+        e.photon->PrimeLaunchForTest(); // Declared Animate-before-Pulse charge sequence.
+        e.projectile_state=-1;
+        e.missing_visual=false; e.status="Authored Photon charge, flight and target impact"; ++e.cycles;
+        log_info("[vfx-review] projectile name=%s cycle=%u source=%d,%d,%d target=%d,%d,%d target_fixture=1 charge=1",
+            e.name.c_str(),e.cycles,source.x,source.y,source.z,target.x,target.y,target.z);
+        return;
     }
     if(e.id==0x63fd382au || authored_yfireball) {
         // Map factory construction does not bind or submit the bespoke
@@ -287,7 +342,7 @@ void Spawn(Entry& e, size_t index) {
     object->OnScreen();
     object->Animate(false);
     auto result=ConfigureVfxReviewSpawn(*object,source,target);
-    if(!result.uses_effect_runtime) {
+    if(!result.uses_effect_runtime || (!result.renderer_supported && DescribeVfxReviewPreview(e.id).supported)) {
         // Bare I3D faces are not an effect implementation. Use the actual
         // registered initializer/controller/submission when one exists.
         Remove(e);
@@ -298,9 +353,11 @@ void Spawn(Entry& e, size_t index) {
             log_info("[vfx-review] unavailable name=%s type=%08x status=%s",e.name.c_str(),e.id,e.status.c_str());
             return;
         }
-        e.missing_visual=false; e.status="Registered effect runtime";
+        const auto preview_info=DescribeVfxReviewPreview(e.id);
+        e.missing_visual=preview_info.partial; e.status=preview_info.description;
         ++e.cycles;
-        log_info("[vfx-review] preview name=%s type=%08x implementation=%s",e.name.c_str(),e.id,e.preview->Id().c_str());
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=%d status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),int(preview_info.partial),e.status.c_str());
         return;
     }
     e.status=result.description;
@@ -362,6 +419,29 @@ bool Initialize() {
     renderer.SetReviewSubmissionCallbacks(
         [] { for(auto& e:entries) {
             if(e.preview) e.preview->Submit();
+            if(e.strip) {
+                if(!lightstrip_original::IsAlive(e.strip.get())) {
+                    e.strip.reset(); e.next_spawn=ticks/24.0+1.5;
+                } else lightstrip_original::Advance(e.strip.get(),TTime::DeltaTime());
+            }
+            if(e.beam) {
+                if(!e.beam->IsAlive()) {
+                    e.beam.reset(); e.next_spawn=ticks/24.0+1.5;
+                } else e.beam->TickAndSubmitForTest_BESPOKE(EFxDebugMode::Normal);
+            }
+            if(e.photon) {
+                if(!e.photon->IsAlive()) {
+                    e.photon.reset(); e.next_spawn=ticks/24.0+1.5;
+                } else {
+                    e.photon->TickAndSubmitForTest_BESPOKE(EFxDebugMode::Normal);
+                    const auto& state=e.photon->ProjectileState();
+                    if(state.state!=e.projectile_state) {
+                        e.projectile_state=state.state;
+                        log_info("[vfx-review] projectile-state name=%s cycle=%u state=%d pos=%d,%d,%d",
+                            e.name.c_str(),e.cycles,state.state,state.position.x,state.position.y,state.position.z);
+                    }
+                }
+            }
             if(e.projectile) {
                 if(!e.projectile->IsAlive()) {
                     e.projectile.reset(); e.next_spawn=ticks/24.0+1.5;
@@ -378,6 +458,8 @@ bool Initialize() {
         } },
         [] { for(auto& e:entries) {
             if(e.preview) e.preview->SubmitWorld();
+            if(e.strip) lightstrip_original::SubmitWorld(e.strip.get(),EFxDebugMode::Normal);
+            if(e.beam) e.beam->SubmitWorldMeshes_BESPOKE(EFxDebugMode::Normal);
             if(e.projectile) e.projectile->SubmitWorldRing(EFxDebugMode::Normal);
         } });
     renderer.SetDaylightCycle(false); renderer.SetSunShadowEnabled(false);
@@ -428,7 +510,7 @@ void Render() {
     for (size_t i=0;i<entries.size();++i) {
         auto& e=entries[i];
         if (std::abs(schedule.SlotDistance(i)-distance)>650) { Remove(e); continue; }
-        if (!e.preview && !e.projectile && !Resolve(e) && !e.failed && ticks/24.0>=e.next_spawn) {
+        if (!e.preview && !e.projectile && !e.photon && !e.beam && !e.strip && !Resolve(e) && !e.failed && ticks/24.0>=e.next_spawn) {
             Spawn(e,i); e.next_spawn=ticks/24.0+.35;
         }
     }

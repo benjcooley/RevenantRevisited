@@ -1716,7 +1716,7 @@ void GetParameters(int argc, char **argv)
         const ReviewArg args[] = {
             {"vfx-review-speed", &StartupVfxReviewSpeed, 0.1, 240.0},
             {"vfx-review-ratio", &StartupVfxReviewRatio, 2.0f, 3.0f},
-            {"vfx-review-spacing", &StartupVfxReviewSpacing, 180.0f, 800.0f},
+            {"vfx-review-spacing", &StartupVfxReviewSpacing, 64.0f, 800.0f},
             {"vfx-review-gap", &StartupVfxReviewGap, 640.0f, 1600.0f},
             {"vfx-review-offset", &StartupVfxReviewOffset, 0.0f, 1000000.0f},
             {"vfx-review-path-tilt", &StartupVfxReviewPathTilt, -1.0f, 1.0f},

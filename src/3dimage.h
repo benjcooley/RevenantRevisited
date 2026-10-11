@@ -239,6 +239,16 @@ class T3DImagery : public TObjectImagery
     bool fmastery_partsys_profile = false;
     bool speed_partsys_profile = false;
     bool quicksilver_partsys_profile = false;
+    bool lightstrip_partsys_profile = false;
+    bool ValidateRetailLightStripProfile();
+    bool comet_partsys_profile=false;
+    bool fgeyser_partsys_profile=false;
+    bool dust_partsys_profile=false;
+    bool poison_partsys_profile=false;
+    bool ValidateRetailCometProfile();
+    bool ValidateRetailFGeyserProfile();
+    bool ValidateRetailDustProfile();
+    bool ValidateRetailPoisonProfile();
     uint32_t static_particles_profile = 0;
     uint32_t ValidateRetailStaticParticleProfile();
     bool ValidateRetailSpeedPartSysProfile();
@@ -330,6 +340,11 @@ class T3DImagery : public TObjectImagery
     void ClearObjects();
   public:
     int32_t NumObjects();
+    bool HasRetailCometProfile() const { return comet_partsys_profile; }
+    bool HasRetailFGeyserProfile() const { return fgeyser_partsys_profile; }
+    bool HasRetailDustProfile() const { return dust_partsys_profile; }
+    bool HasRetailPoisonProfile() const { return poison_partsys_profile; }
+    bool HasRetailLightStripProfile() const { return lightstrip_partsys_profile; }
     bool HasGoldPartSysProfile() const { return gold_partsys_profile; }
     bool HasRetailMightPartSysProfile() const { return might_partsys_profile; }
     bool HasRetailImmortalmightPartSysProfile() const { return immortalmight_partsys_profile; }
@@ -338,6 +353,10 @@ class T3DImagery : public TObjectImagery
     bool HasRetailQuicksilverPartSysProfile() const { return quicksilver_partsys_profile; }
     bool HasRetailStaticParticleProfile(uint32_t type_id) const
     { return static_particles_profile!=0 && static_particles_profile==type_id; }
+    bool HasRetailAuthoredWaterProfile(uint32_t type_id) const
+    { return HasRetailStaticParticleProfile(type_id) &&
+             (type_id==0xd0c0f036u || type_id==0xd0c0f037u ||
+              type_id==0xd0c0f038u || type_id==0xd0c0f039u); }
     bool HasRetailCameraParticleProfile(uint32_t type_id) const
     { return HasRetailStaticParticleProfile(type_id) &&
              (type_id==0x42e0fcd0u || type_id==0xad92bd39u); }
@@ -356,7 +375,7 @@ class T3DImagery : public TObjectImagery
     void GetObject(int32_t objnum, S3DObj* obj);
     bool IsHidden(int32_t objnum, int32_t state);
     bool GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t frame,
-        hmm_vec3 &pos, hmm_vec3 &rot, hmm_vec3 &scl);
+        hmm_vec3 &pos, hmm_vec3 &rot, hmm_vec3 &scl, bool retail_inclusive = false);
     bool GetAniKey(int32_t objnum, int32_t state, int32_t frame,
         hmm_vec3 &pos, hmm_vec3 &rot, hmm_vec3 &scl);
     void SetPrevState(int32_t pstate, int32_t pframe)
@@ -513,6 +532,7 @@ class T3DAnimator : public TObjectAnimator
     retail_warp::State retail_warp_state;
     struct SPartSysControllers;
     std::unique_ptr<SPartSysControllers> partsys_controllers;
+    std::function<int(int,int,int)> lightstrip_ground;
     void RefreshPartSysControllers();
     void AdvancePartSysControllers();
     // Runtime animation pose buffers. These are configured once when the
@@ -574,6 +594,11 @@ class T3DAnimator : public TObjectAnimator
 
     // True for the hidden particle prototype, or every mesh when an authored
     // controller is unsupported. The caller must not submit a static substitute.
+    void SetLightStripGround(std::function<int(int,int,int)> query);
+    void SetCometGround(std::function<int(int,int,int)> query);
+    void SetFGeyserGround(std::function<int(int,int,int)> query);
+    void SetDustGround(std::function<int(int,int,int)> query);
+    void SetPoisonGround(std::function<int(int,int,int)> query);
     bool PartSysOwnsObject(int32_t object) const;
     // Narrow retail Goldp base-mesh route. Particle draws retain their own mode.
     bool TeleportationMeshBlend(int32_t object, uint32_t& blend) const;
