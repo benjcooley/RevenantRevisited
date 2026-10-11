@@ -965,6 +965,10 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float persp_scale = ((!native_projection && p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = p.vp.x + S * persp_scale;
     float spy = p.vp.y + T * persp_scale;
+    if (p.uv_shift.z > 1.5) {
+        spx = trunc(spx) + 0.5; spy = trunc(spy) + 0.5;
+        scene_z_n = (trunc(scene_z_wu) - p.camz.x) / max(p.camz.y, 1e-6);
+    }
     vs_out o;
     o.pos.x = 2.0 * spx / max(p.vp.z, 1.0) - 1.0;
     o.pos.y = 1.0 - 2.0 * spy / max(p.vp.w, 1.0);
@@ -1137,6 +1141,10 @@ void main() {
     float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
     float spy = vp.y + T * persp_scale;
+    if (uv_shift.z > 1.5) {
+        spx = trunc(spx) + 0.5; spy = trunc(spy) + 0.5;
+        scene_z_n = (trunc(scene_z_wu) - camz.x) / max(camz.y, 1e-6);
+    }
     gl_Position = vec4(2.0 * spx / max(vp.z, 1.0) - 1.0,
                        1.0 - 2.0 * spy / max(vp.w, 1.0),
                        scene_z_n, 1.0);
@@ -1303,6 +1311,10 @@ vs_out main_vs(vs_in i) {
     float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
     float spy = vp.y + T * persp_scale;
+    if (uv_shift.z > 1.5) {
+        spx = trunc(spx) + 0.5; spy = trunc(spy) + 0.5;
+        scene_z_n = (trunc(scene_z_wu) - camz.x) / max(camz.y, 1e-6);
+    }
     vs_out o;
     o.pos = float4(2.0 * spx / max(vp.z, 1.0) - 1.0,
                    1.0 - 2.0 * spy / max(vp.w, 1.0),
@@ -3155,7 +3167,8 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     vsu[vo++] = float(!UsesRetailSoftwareMeshLighting() && s.retail_lighting == 4 ? 0 : s.retail_lighting == 3 && !UsesRetailSoftwareMeshLighting() ? 2 : s.retail_lighting);
     vsu[vo++] = s.uv_offset[0];
     vsu[vo++] = s.uv_offset[1];
-    vsu[vo++] = s.retail_software_projection ? 1.0f : 0.0f;
+    vsu[vo++] = s.retail_software_projection ?
+        (s.retail_software_pixel_grid && UsesRetailSoftwareMeshLighting() ? 2.0f : 1.0f) : 0.0f;
     vsu[vo++] = s.retail_camera_z;
     vsu[vo++] = source_alpha && s.retail_lighting == 4 && s.retail_flat_depth ? 1.0f : 0.0f;
     const float depth_base = s.retail_software_projection

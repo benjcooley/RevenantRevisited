@@ -7,6 +7,7 @@
 #include "effects/yloseoriginal.h"
 #include "effects/yattackoriginal.h"
 #include "effects/mpappearoriginal.h"
+#include "effects/ceyesoriginal.h"
 #include "effects/lightstriporiginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
@@ -5390,6 +5391,16 @@ struct SVfxTestBootstrap {
             original.submit_world=[](void* c,EFxDebugMode mode){mpappear_original::SubmitWorld(static_cast<mpappear_original::State*>(c),mode);};
             original.is_alive=[](void* c){return mpappear_original::IsAlive(static_cast<mpappear_original::State*>(c));};
             original.destroy=[](void* c){mpappear_original::Destroy(static_cast<mpappear_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="CEyes_ORIGINAL";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return ceyes_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){ceyes_original::Advance(static_cast<ceyes_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){ceyes_original::SubmitWorld(static_cast<ceyes_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return ceyes_original::IsAlive(static_cast<ceyes_original::State*>(c));};
+            original.destroy=[](void* c){ceyes_original::Destroy(static_cast<ceyes_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
 

@@ -534,6 +534,7 @@ struct SHelperMeshSubmit
     bool       retail_gold_no_depth = false; // audited authored mode80, no depth test/write
     bool       retail_positive_face_cull = false; // source positive screen-down; opt-in only
     bool       retail_software_projection = false;
+    bool       retail_software_pixel_grid = false; // Source integer raster inputs; explicit native/software only.
     float      retail_camera_z = 0.0f;
 };
 

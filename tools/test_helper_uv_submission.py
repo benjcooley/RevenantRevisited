@@ -75,6 +75,10 @@ int main(){
  draw.retail_software_projection=true;draw.retail_camera_z=13;
  renderer.EmitTransparentHelper(draw);assert(vertex_uniforms[38]==1&&vertex_uniforms[39]==13);
  assert(vertex_uniforms[36]==0&&vertex_uniforms[37]==1); // projection metadata never aliases atlas UV
+ draw.retail_software_pixel_grid=true;renderer.EmitTransparentHelper(draw);assert(vertex_uniforms[38]==2);
+ renderer.software_lighting=false;renderer.EmitTransparentHelper(draw);assert(vertex_uniforms[38]==1);
+ renderer.software_lighting=true;draw.retail_software_projection=false;renderer.EmitTransparentHelper(draw);assert(vertex_uniforms[38]==0);
+ draw.retail_software_projection=true;draw.retail_software_pixel_grid=false;renderer.EmitTransparentHelper(draw);assert(vertex_uniforms[38]==1);
  draw.retail_source_alpha=true;draw.retail_lighting=4;draws=0;
  renderer.EmitTransparentHelper(draw);assert(draws==1&&pipeline==8&&vertex_uniforms[35]==4);
  draw.retail_flat_depth=true;draw.retail_flat_depth_offset=12.75f;draw.index_offset=3;draw.index_count=3;
