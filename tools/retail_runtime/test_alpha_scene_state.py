@@ -94,5 +94,29 @@ class NativeAlphaSceneState(unittest.TestCase):
         blocked,_=f.draw(quad(110),front,z_enabled=True,z_write=True)
         self.assertEqual(first,blocked)
 
+    def test_symglow_mode2_and_mist_mode8_keep_argb_kernel_semantics(self):
+        f=self.f;v=f.vm
+        expected=None
+        for mode in (2,8):
+            for address,value in ((0x5d7a28,1),(0x66818c,0),(0x5e8790,0),(0x5c61ac,1)):
+                v.put_u32(address,value)
+            states={}
+            def observe(uc,address,size,user):
+                sp=uc.reg_read(UC_X86_REG_ESP)
+                states[v.u32(sp+4)]=v.u32(sp+8)
+            h=v.uc.hook_add(UC_HOOK_CODE,observe,begin=0x417060,end=0x417060)
+            try: v.call(0x417d60,(mode,1),this=0x65a57c)
+            finally: v.uc.hook_del(h)
+            self.assertEqual((states[14],states[7],states[22]),(0,1,1))
+            f.set_texture(2,2,struct.pack('<4H',*[0x8fff]*4),format='ARGB4444')
+            for color in (0,9,31):
+                quad=[(x,y,100,color,color,color,color,0,0) for x,y in ((8,8),(24,8),(24,24),(8,24))]
+                for winding in ([0,1,2,0,2,3],[2,1,0,3,2,0]):
+                    f.clear(color=0x1234)
+                    output,_=f.draw(quad,winding,z_enabled=True,z_write=False)
+                    pixel=struct.unpack_from('<H',output,2*(16*32+16))[0]
+                    if expected is None: expected=pixel
+                    self.assertEqual(pixel,expected)
+
 
 if __name__ == '__main__': unittest.main()

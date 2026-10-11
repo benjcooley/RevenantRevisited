@@ -6005,6 +6005,11 @@ void TRenderer::SubmitFxQuad(const SQuadDrawItem& item)
         return;
     }
     SQuadDrawItem queued = item;
+    if (queued.retail_argb4444 && UsesRetailSoftwareMeshLighting()) {
+        // Original ARGB4444 kernels use alpha-over even after an additive request.
+        queued.retail_texture = 3;
+        queued.key.blend = uint8_t(EFxBlend::Alpha);
+    }
     if (queued.key.texture == kInvalidTexture && white_texture != kInvalidTexture)
         queued.key.texture = white_texture;
     queued.key.pipeline_id = uint16_t(EFxPipeline::Strip);

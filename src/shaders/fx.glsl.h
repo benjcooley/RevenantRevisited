@@ -270,12 +270,17 @@ void main() {
         ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
         texel = texelFetch(atlas, xy, 0);
     }
+    if (v_retail_texture > 2.5) {
+        vec4 nibble = floor(texel * 15.0 + 0.5);
+        texel = vec4(nibble.rgb * vec3(2.0/31.0, 4.0/63.0, 2.0/31.0),
+                       (nibble.a + 1.0) / 16.0);
+    }
     vec4 c;
     if      (mode == 1) c = v_color;
     else if (mode == 2) c = texel;
     else if (mode == 3) { c = texel; c = vec4(1.0, 1.0, 1.0, c.a); }
-    else                c = texel * v_color;
-    c.rgb *= v_lit;
+    else                c = v_retail_texture > 2.5 ? texel : texel * v_color;
+    if (v_retail_texture < 2.5) c.rgb *= v_lit;
     if (c.a < 0.002) discard;
     o_color = c;
 }
