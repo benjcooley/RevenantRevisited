@@ -24,11 +24,12 @@ struct S3DPoint {int x,y,z;};
 struct SMeshVertex {float data[8];};
 struct S3DTex {struct {int pixelFormat=1;} desc;int numframes=0;uint32_t* framehtexs=nullptr;};
 struct Image {
- uint64_t id=123; uint32_t frames[2][3]={{100,101,102},{110,111,0}};
+ uint64_t id=123; int selected=0; uint32_t frames[2][3]={{100,101,102},{110,111,0}};
  uint64_t AssetId(){return id;} int NumObjects(){return 2;} int NumTextures(){return 2;}
  int NumTags(){return 0;} struct Tag {const char* name;}; Tag* GetTag(int){return nullptr;}
  bool HasScrollTex(){return false;} bool IsHidden(int,int){return false;}
- uint32_t GetTextureHandle(int slot){return frames[slot][0];}
+ uint32_t GetTextureHandle(int slot){return frames[slot][selected];}
+ int GetTextureFrame(int){return selected;}
  void GetTexture(int slot,S3DTex* out){out->numframes=slot?2:3;out->framehtexs=frames[slot];}
 } image;
 struct SLoadedImagery {void* base;Image* img3d;};
@@ -73,6 +74,9 @@ int main(){
   auto* b=TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE({0,n,0},"test",true,false);
   assert(a&&b);assert(renderer.entries.size()==12);delete a;delete b;renderer.EmptyRefs();
  }
+ image.selected=1;
+ auto* selected=TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE({0,0,0},"test",false,false);
+ assert(selected&&renderer.entries.size()==12);delete selected;renderer.EmptyRefs();image.selected=0;
  image.id=124;
  auto* other=TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE({0,0,0},"other",true,false);
  assert(other&&renderer.entries.size()==24);delete other;renderer.EmptyRefs();

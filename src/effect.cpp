@@ -14128,7 +14128,8 @@ TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const
             }
             if(!part.mesh) {
                 part.mesh = Renderer->RegisterMeshAsset(
-                    AuthoredStaticMeshKey(img->AssetId(),object,slot,0),vertices.data(),int32_t(vertices.size()),
+                    AuthoredStaticMeshKey(img->AssetId(),object,slot,
+                        slot>0 ? img->GetTextureFrame(slot-1) : 0),vertices.data(),int32_t(vertices.size()),
                     indices.data(),int32_t(indices.size()),texture);
                 if (!part.mesh) return nullptr;
                 Renderer->AddMeshAssetRef(part.mesh);
