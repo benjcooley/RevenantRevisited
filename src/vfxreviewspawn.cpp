@@ -6,6 +6,8 @@
 
 #include <cstring>
 #include <initializer_list>
+#include <string>
+#include <cctype>
 
 namespace {
 bool ReviewProjectileType(uint32_t id)
@@ -64,6 +66,23 @@ bool ReviewGenericBuilder(const char* name)
         "BendWater2", "SewerWater", "Wave", "WaveS", "WaveM", "speaker"})
         if(stricmp(name,alias)==0)return true;
     return false;
+}
+
+bool ReviewStaticMapDrawable(T3DImagery& image,uint32_t id)
+{
+    const char* expected=nullptr;
+    switch(id) {
+        case 0xad92bc10u: expected="misc/speaker.i3d"; break;
+        case 0xad92bc37u: expected="misc/ibarrier1.i3d"; break;
+        case 0xad92bc38u: expected="misc/ibarrier2.i3d"; break;
+        default:return false;
+    }
+    if(image.NumTextures()!=0 || !image.GetResFilename())return false;
+    std::string path=image.GetResFilename();
+    for(char& c:path)c=c=='\\'?'/' : char(std::tolower(static_cast<unsigned char>(c)));
+    const size_t length=std::strlen(expected);
+    return path.size()>=length && path.compare(path.size()-length,length,expected)==0 &&
+        (path.size()==length || path[path.size()-length-1]=='/');
 }
 }
 
@@ -160,7 +179,9 @@ VfxReviewSpawnInfo ConfigureVfxReviewSpawn(TObjectInstance& effect,
     }
     const bool particle_renderer = particles && ReviewParticleRenderer(*image, effect.ObjId());
     const bool replacing_component = effect.GetComponent<TFlipbookBillboardComponent>() != nullptr;
-    info.uses_effect_runtime = particle_renderer || replacing_component;
+    const bool authored_draw = faces && (image->HasScrollTex() ||
+        image->HasRetailWarpProfile(effect.ObjId()) || ReviewStaticMapDrawable(*image,effect.ObjId()));
+    info.uses_effect_runtime = particle_renderer || replacing_component || authored_draw;
     if (particles && !particle_renderer && !replacing_component) {
         info.renderer_supported = false;
         info.description = "Unsupported authored particle controller; generic geometry may be visible";

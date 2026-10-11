@@ -434,7 +434,7 @@ void Render() {
     }
     renderer.RenderFrame();
 }
-void DrawOverlay() { if(map) Labels(); }
+void DrawOverlay() { if(map && !StartupVfxHideUi) Labels(); }
 void HandleKeyPress(int32_t key,bool down) {
     if (!down || !map) return;
     if (key==VK_SPACE) paused=!paused;

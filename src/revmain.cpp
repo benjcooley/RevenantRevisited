@@ -1710,9 +1710,9 @@ void GetParameters(int argc, char **argv)
     {
         if(arg_flag(cmd,"vfx-review-first")) StartupVfxReviewFirst=true;
         if(arg_flag(cmd,"vfx-review-source-lighting")) StartupVfxReviewSourceLighting=true;
-        struct ReviewArg { const char* name; float* value; float minimum; float maximum; };
+        struct ReviewArg { const char* name; float* value; double minimum; double maximum; };
         const ReviewArg args[] = {
-            {"vfx-review-speed", &StartupVfxReviewSpeed, 0.1f, 240.0f},
+            {"vfx-review-speed", &StartupVfxReviewSpeed, 0.1, 240.0},
             {"vfx-review-ratio", &StartupVfxReviewRatio, 2.0f, 3.0f},
             {"vfx-review-spacing", &StartupVfxReviewSpacing, 180.0f, 800.0f},
             {"vfx-review-gap", &StartupVfxReviewGap, 640.0f, 1600.0f},

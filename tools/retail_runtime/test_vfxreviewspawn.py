@@ -10,6 +10,8 @@ STUB=r'''
 #include <strings.h>
 #include <vector>
 #include <initializer_list>
+#include <string>
+#include <cctype>
 #define stricmp strcasecmp
 #include "vfxreviewspawn.h"
 struct S3DPoint{int x=0,y=0,z=0;};
@@ -18,6 +20,9 @@ struct TFlipbookBillboardComponent{};
 struct TObjectImagery{virtual ~TObjectImagery()=default;};
 struct Tag{int state=0;const char*name;};
 struct T3DImagery:TObjectImagery{bool admitted=false;std::vector<Tag>tags;std::vector<const char*>names{"mesh"};std::vector<int>faces{2};
+ bool warp=false,scroll=false;int textures=1;const char*path="unknown.i3d";
+ bool HasRetailWarpProfile(uint32_t){return warp;}bool HasScrollTex(){return scroll;}
+ int NumTextures(){return textures;}const char*GetResFilename(){return path;}
  int NumObjects(){return names.size();}const char*GetObjectName(int i){return names[i];}int NumObjFaces(int i){return faces[i];}
  void AttachAnimatorComponents(void*){}
  int NumTags(){return tags.size();}Tag*GetTag(int i){return &tags[i];}
@@ -40,7 +45,7 @@ MAIN=r'''
 int main(){
  assert(!DescribeVfxReviewSpawn(1).safe_factory);TObjectClass c;TObjectClass::catalog=&c;
  TObjectBuilder generic{"EFFECT"},fire{"FireBall"},unknown{"Unknown"},wave{"Wave"};
- c.entries={{1,&generic},{0x63fd382a,&fire},{0x63fd3827,&generic},{0x113803f4,&generic},{0xb1c4c90f,&generic},{0xad92bd1f,&generic},{2,&unknown},{3,nullptr},{4,&generic,-1},{0x10ac03de,&generic},{5,&wave}};
+ c.entries={{1,&generic},{0x63fd382a,&fire},{0x63fd3827,&generic},{0x113803f4,&generic},{0xb1c4c90f,&generic},{0xad92bd1f,&generic},{2,&unknown},{3,nullptr},{4,&generic,-1},{0x10ac03de,&generic},{5,&wave},{0xad92bc37,&generic}};
  assert(!DescribeVfxReviewSpawn(42).safe_factory);assert(DescribeVfxReviewSpawn(1).safe_factory);
  assert(DescribeVfxReviewSpawn(5).safe_factory&&!DescribeVfxReviewSpawn(5).uses_effect_runtime);
  assert(!DescribeVfxReviewSpawn(2).safe_factory);assert(!DescribeVfxReviewSpawn(3).safe_factory);assert(!DescribeVfxReviewSpawn(4).safe_factory);
@@ -56,6 +61,12 @@ int main(){
  image.admitted=false;image.tags={{0,"unknowncont"},{0,"play"},{2,"play"}};owner.id=1;d=ConfigureVfxReviewSpawn(owner,source,destination);assert(!d.renderer_supported&&d.authored_sound_tags==2);
  image.tags={{2,"unknowncont"}};assert(ConfigureVfxReviewSpawn(owner,source,destination).renderer_supported);
  image.tags.clear();image.names={"*hidden"};assert(!ConfigureVfxReviewSpawn(owner,source,destination).renderer_supported);
+ image.names={"mesh"};image.warp=true;assert(ConfigureVfxReviewSpawn(owner,source,destination).uses_effect_runtime);image.warp=false;
+ image.scroll=true;assert(ConfigureVfxReviewSpawn(owner,source,destination).uses_effect_runtime);image.scroll=false;
+ owner.id=0xad92bc37;image.textures=0;image.path="Misc\\IBarrier1.I3D";
+ assert(ConfigureVfxReviewSpawn(owner,source,destination).uses_effect_runtime);
+ image.path="Misc\\Other.I3D";assert(!ConfigureVfxReviewSpawn(owner,source,destination).uses_effect_runtime);
+ owner.id=1;image.textures=1;
  image.names={"mesh"};image.faces={0};assert(!ConfigureVfxReviewSpawn(owner,source,destination).renderer_supported);
  owner.component=true;d=ConfigureVfxReviewSpawn(owner,source,destination);assert(d.renderer_supported&&d.uses_effect_runtime);
  TFireBallEffect ball;ball.id=0x63fd382a;ball.image=&image;auto ready=DescribeVfxReviewSpawn(ball.id);assert(ready.safe_factory&&ready.projectile&&ready.supports_endpoints);
