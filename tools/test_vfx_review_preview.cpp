@@ -56,7 +56,9 @@ std::vector<SEffect> ReviewCatalogue() {
 }
 // Deliberately different value proves the bridge delegates policy instead of
 // hardcoding a second cadence. Production delegates to RetriggerInterval.
-float ReviewRestartInterval(EVfxPreviewStyle style) { return style==EVfxPreviewStyle::Combat?.5f:0; }
+float ReviewRestartInterval(EVfxPreviewStyle style) {
+    return style==EVfxPreviewStyle::Combat?.5f:style==EVfxPreviewStyle::Projectile?.001f:0;
+}
 }
 int main() {
     const S3DPoint origin{17,33,21};
@@ -124,7 +126,9 @@ int main() {
         auto queen=CreateVfxReviewPreview(0xad92bd1e,{-90,40,128},{80,-120,128});
         assert(queen && queen->Alive()==true);
         const int initial=creates;
-        queen->Submit();queen->Submit();assert(queen->Alive()==false);
+        TTime::BeginFixedFrame();queen->Submit();
+        TTime::BeginFixedFrame();queen->Submit();
+        assert(queen->Alive()==false && creates==initial);
         queen->Submit();assert(queen->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);
