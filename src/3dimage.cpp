@@ -948,10 +948,16 @@ static bool ParseScrollTexParams(const char* params, std::string& object,
         if (value.empty()) return false;
         if (!stricmp(key.c_str(), "obj"))
         {
-            if (have_obj || value.find_first_of("()\"'") != std::string::npos) return false;
-            for (unsigned char c : value)
+            if (have_obj) return false;
+            // Original 0x401820 accepts both obj=name and obj=(name).
+            // Keep this route to one literal selector; lists/wildcards remain unsupported.
+            std::string selector = value;
+            if (selector.front() == '(' && selector.back() == ')')
+                selector = trim(selector.substr(1, selector.size() - 2));
+            if (selector.empty() || selector.find_first_of("()\"'") != std::string::npos) return false;
+            for (unsigned char c : selector)
                 if (!std::isalnum(c) && c != '_' && c != '#') return false;
-            object = value; have_obj = true;
+            object = selector; have_obj = true;
         }
         else if (!stricmp(key.c_str(), "du") || !stricmp(key.c_str(), "dv"))
         {
