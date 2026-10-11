@@ -10,7 +10,8 @@ INGAME_MENU.md (IGM), DIALOG.md (DLG), INVENTORY.md (INV), MAP_INPUT.md
 OBJCLASS_IDS.md.
 
 Reads are plain memory reads, except the getters retail itself uses for
-values it computes (maximum health / fatigue / mana, weapon type, gold),
+values it computes (maximum health / fatigue / mana, weapon type, gold,
+whether a character takes Locke for an enemy),
 called through `PlayWorld.peek`, which refuses anything that is not a
 getter. Observing never changes the game.
 """
@@ -37,6 +38,7 @@ WEAPON_SKILL_BASE = 43                                # skill of the weapon in h
 SECTOR_COUNT, SECTORS = 0x00668578, 0x00668588       # sector pool (AW, recon/classes/cls_0x44ceb0.cpp)
 MAP_PANE = 0x006668d8             # TMapPane: rect +0x04..+0x10, scroll origin +0x78 / +0x7c (MI §1)
 WORLD_TO_SCREEN = 0x0046d7a0      # cdecl (const S3DPoint*, int *sx, int *sy): map-screen pixels
+IS_ENEMY = 0x004c89c0             # TCharacter::IsEnemy(TCharacter *other), thiscall (src/character.cpp)
 
 # ---- object layout (TObjectInstance / TCharacter / TPlayer) -----------------
 OBJ_CLASS, OBJ_TYPE, OBJ_FLAGS, OBJ_LEVEL = 0x04, 0x06, 0x08, 0x0e   # int16, uint16, uint32, uint16
@@ -329,6 +331,7 @@ class Observer:
                          pos=pos, screen=self.project(pos))
             if kind in (CLASS_PLAYER, CLASS_CHARACTER):
                 health = self.stat_id('health')
+                entry['enemy'] = bool(self.world.peek(IS_ENEMY, (player,), this=obj) & 0xff)
                 entry['health'] = [self.stat(obj, health), self.virtual(obj, VT_MAX['health'])]
                 self.describe_action(obj, entry)
                 target = self.target(obj)
