@@ -45,3 +45,30 @@ The1280x960 reference is a clipped diagnostic. Whole outward motion requires
 multiple fixed supported1920x1080 windows. Unsupported4480x1920 falls back to
 640x480 and was rejected by the capture collector. Tiled appearance review is
 pending; no visual acceptance is claimed by this source checkpoint.
+
+
+The completed capture fixture uses a regular3x2 grid of supported1920x1080
+windows: X centers2700/1560/420 and Y centers960/420. These immutable windows
+form a4200x1620 union with780px horizontal and540px vertical overlap. The
+retained original packet trace verifies every one of39,600 complete triangles
+at every active tick fits at least one window with2px margin. The compositor
+uses fixed ownership cuts and retains all raw overlap images and disagreement
+counts; it does not claim one exact giant framebuffer.
+
+All twelve Metal films (six native-domain and six common diagnostics) render
+at24Hz and save every eighth frame. The24 exact original record indices are
+1,9,...185, checked from capture timing rather than inferred appearance. Native
+depth is0..65535; common depth remains2238..3262. Actual Metal lighting reports
+ambient38/255 on each channel, white directional1, and zero point lights.
+The original fixture uses matching ambient38 and directional1. All six original
+traces retain identical190-tick state. A fresh independent replay additionally
+matches every state and selected native PNGs1/49/161/169 byte for byte.
+
+Reproducible coverage and review tools are `ytelekinesis_grid_coverage.py` and
+`ytelekinesis_visual_review.py`. Private final evidence is under
+`hard-alpha/ytelekinesis-review-final`; fresh replay is under
+`hard-alpha/ytelekinesis-native-repeat/repeat.json` (SHA256
+`54586ab884c7926b382b7820e62d75c4d49e859f7667187d54de2dae31a9c4f6`).
+Parent integration independently passed the native regression and confirmed six
+existing helper/prelit GPU controls remained byte-identical with the default-off
+opaque pipelines. Independent whole-appearance review remains pending.
