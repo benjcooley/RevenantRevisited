@@ -59,8 +59,9 @@
 #include "effects/dexteritypreview.h"
 #include "effects/antimagicpreview.h"
 #include "effects/skinpreview.h"
-#include "effects/argbsourcecontrol.h"
 #include "effects/pukepreview.h"
+#include "effects/shriekpreview.h"
+#include "effects/argbsourcecontrol.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -7383,6 +7384,19 @@ struct SVfxTestBootstrap {
             e.factory=[](const S3DPoint&)->void*{return argb_source_control::Spawn();};
             e.submit_world=[](void* c,EFxDebugMode){argb_source_control::SubmitWorld(static_cast<argb_source_control::State*>(c));};
             e.destroy=[](void* c){argb_source_control::Destroy(static_cast<argb_source_control::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TShriek_BESPOKE_NULLSPELL";
+            e.family        = "magic";
+            e.pipeline      = "IM";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return shriek_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){shriek_preview::Advance(static_cast<shriek_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){shriek_preview::SubmitWorld(static_cast<shriek_preview::State*>(c));};
+            e.is_alive=[](void* c){return shriek_preview::Alive(static_cast<shriek_preview::State*>(c));};
+            e.destroy=[](void* c){shriek_preview::Destroy(static_cast<shriek_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {

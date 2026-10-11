@@ -63,6 +63,7 @@
 {0xab8800ddu, "TFizzleEffect_SINGLE_BURST", false, "Implemented preview controller; map caller not certified"}, // Fizzle
 {0xab92cd01u, "TFireConeEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // FireCone
 {0xad92bc11u, "TPuke_BESPOKE_NULLSPELL", false, "Implemented preview controller; map caller not certified"}, // puke
+{0xad92bc12u, "TShriek_BESPOKE_NULLSPELL", false, "Implemented preview controller; map caller not certified"}, // shriek
 {0xad92bc15u, "TSetVortexEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // setvortex
 {0xad92bc16u, "TInvisibleEffect_Bespoke_BESPOKE", true, "Partial preview: tinted asset billboard; original invisibility controller incomplete; not complete original implementation"}, // invisible
 {0xad92bc17u, "TFunnelEffect_BESPOKE", true, "Partial preview: single asset billboard; original controller incomplete; not complete original implementation"}, // funnel
