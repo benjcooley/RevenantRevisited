@@ -28,9 +28,11 @@ from playworld import PlayWorld  # noqa: E402
 import observe  # noqa: E402
 
 SETTLE = 24                  # ticks after the start: the screen faded in, the scene quiet
+PLAY_BRANCH = 0x0044f84f     # TMapPane::MouseClick past the side tabs and the editor; button at [esp + 0xe8]
 WALK_RADIUS_CALL = 0x004c3a51   # FindClearPath's GetWalkHeightRadius call: esi the character, [esp + 8] the radius
 FIND_SECTOR = 0x00499e10     # cdecl (level, sector x, sector y)
-VK_UP = 0x26
+LEFT, RIGHT = 1, 2
+VK_UP, VK_ESCAPE = 0x26, 0x1b
 WAYPOINTS = Path.home() / 'RevenantRevisited-testsaves' / 'waypoints'   # tools/playtest/waypoints.py ROOT
 
 
@@ -69,7 +71,41 @@ class ObservationTests(unittest.TestCase):
         self.world = PlayWorld.load(BASELINE, self.image)
         self.observer = observe.Observer(self.world)
 
-    # ---- radius ---------------------------------------------------------
+    def click(self, point, button):
+        """A press and a release at `point`, a tick each, the pointer there first."""
+        for buttons in (0, button, 0):
+            self.world.step([{'mouse': list(point), 'buttons': buttons}])
+
+    # ---- pack, equipped, radius -----------------------------------------
+
+    def test_right_click_on_the_reported_cell_equips_the_sword(self):
+        player = self.observer.observe()['player']
+        sword = next(item for item in player['pack'] if item['name'] == 'Short Sword')
+        self.assertEqual((sword['class'], sword['eqslot']), ('weapon', 4))
+        self.assertIsNotNone(sword['screen'])
+        self.assertNotIn('4', player['equipped'])
+        self.assertIsNone(player['weapon']['name'])
+        talisman = next(item for item in player['pack'] if item['class'] == 'talisman')
+        self.assertEqual(talisman['eqslot'], -1)                  # no EqSlot stat
+        self.click(sword['screen'], RIGHT)
+        for _ in range(4):
+            self.world.step()
+        after = self.observer.observe()['player']
+        self.assertEqual(after['equipped'].get('4'), 'Short Sword')
+        self.assertEqual(after['weapon']['name'], 'Short Sword')
+        self.assertNotIn('Short Sword', [item['name'] for item in after['pack']])
+
+    def test_a_modal_takes_the_cells_and_the_world(self):
+        self.world.step([{'key': VK_ESCAPE, 'down': True}])
+        self.world.step([{'key': VK_ESCAPE, 'down': False}])
+        for _ in range(SETTLE):
+            self.world.step()
+        obs = self.observer.observe()
+        self.assertEqual(obs['screen'], 'menu')
+        self.assertTrue(obs['player']['pack'])
+        self.assertTrue(all(item['screen'] is None for item in obs['player']['pack']))
+        route = self.observer.mouse_route()
+        self.assertFalse(any(self.observer.world_click(x, y, route) for x, y in ((300, 200), (30, 30))))
 
     def test_radius_is_what_retail_tests_lockes_steps_over(self):
         radius = self.observer.observe()['player']['radius']
@@ -113,6 +149,26 @@ class ObservationTests(unittest.TestCase):
             known = world.peek(FIND_SECTOR, (level, gx >> 6, gy >> 6)) != 0
             self.assertEqual(known, height(gx, gy) != -1, (gx, gy))
 
+    # ---- the mouse ------------------------------------------------------
+
+    def test_world_is_where_retails_routing_takes_a_left_press(self):
+        world, observer = self.world, self.observer
+        pressed = []
+
+        def play_branch(uc, address, size, user):
+            pressed.append(world.vm.u32(uc.reg_read(UC_X86_REG_ESP) + 0xe8))
+        world.vm.uc.hook_add(UC_HOOK_CODE, play_branch, begin=PLAY_BRANCH, end=PLAY_BRANCH)
+        # open floor, the status bar over the map, a side tab, the map's corner,
+        # the side panel, the bottom bar, the bottom side tab
+        points = [(300, 200), (30, 30), (425, 200), (451, 419), (500, 100), (100, 450), (420, 400)]
+        expected = [True, True, False, True, False, False, False]
+        for point, reaches in zip(points, expected):
+            predicted = observer.world_click(*point, observer.mouse_route())
+            world.step([{'mouse': list(point), 'buttons': 0}])
+            pressed.clear()
+            world.step([{'mouse': list(point), 'buttons': LEFT}])
+            world.step([{'mouse': list(point), 'buttons': 0}])
+            self.assertEqual((predicted, LEFT in pressed), (reaches, reaches), point)
 
 
 if __name__ == '__main__':
