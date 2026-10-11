@@ -234,6 +234,10 @@ def kernel_cases(data: Path, workdir: Path) -> list[dict]:
     vec_in = [[a, s, z] for a in range(256) for s in (1, 4, 16, 100, 256, 1000, 0x40000)
               for z in (0, 16, 64, 200)]
     cases.append(dict(name='k.vector', kernel='vector', inputs=vec_in))
+    # Past 255, retail reads on from its X table into its Y table (no wrap):
+    # 256..383 is defined; the strike spell's patterns reach it.
+    wide = [[a, s, z] for a in range(256, 384) for s in (1, 16, 100, 1000, 0x40000) for z in (0, 64)]
+    cases.append(dict(name='k.vector-wide', kernel='vector', inputs=wide))
     return finish(cases)
 
 

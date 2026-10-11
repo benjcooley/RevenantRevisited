@@ -170,18 +170,24 @@ void ScreenToWorld(int32_t x, int32_t y, S3DPoint& pos, int32_t zheight)
     pos.z = zheight;
 }
 
+// REVSYNC: ConvertToVector @ 0x0046db20 -- x from the X table at the angle,
+// y from the Y table at |angle - 128|, each times the length over 256
+// (rounding toward zero). Retail doesn't wrap the angle, and its Y table
+// follows its X table (0x00634d44, 0x00634f44): an angle of 256..383 takes
+// x from Y[angle - 256], as the strike spell's circle and X patterns can
+// pass (SPELLS_MISSILES.md). Past that retail reads beyond both tables;
+// the port wraps those angles (MoveStep's shove probes mask theirs first,
+// 0x004c4477, as the port's do).
 void ConvertToVector(int32_t angle, int32_t speed, S3DPoint& vect, int32_t zangle)
 {
-    // Revenant uses an 8-bit facing system: angles are 0..255 wrapping.
-    // Several callers (e.g. TCharacter::Move's ±64 sidestep probes) pass
-    // raw `face + 64` values that exceed 255; without this mask we read
-    // past the 256-element DistX/DistY lookup tables. ASan caught it as
-    // a load2 mid-frame in TMapPane::MoveObjects.
-    angle  &= 255;
     zangle &= 255;
     if (zangle == 0)
     {
-        vect.x = (DistX[angle] * speed) / 256;
+        const bool spill = angle >= 256 && angle < 384;     // into the Y table
+        if (!spill)
+            angle &= 255;
+        const int32_t x = spill ? DistY[angle - 256] : DistX[angle];
+        vect.x = (x * speed) / 256;
         vect.y = (DistY[angle > 128 ? angle - 128 : 128 - angle] * speed) / 256;
         vect.z = 0;
     }
