@@ -129,3 +129,12 @@ Private evidence root remains `hard-astra/` under the research directory above:
 - `fog-quant-final-evidence-v2.json`: `bf886b9dcd29e39958c9aac53da97b2db03e0daab954db436262f7a8e86cb672`.
 - That record pins literal original/GPU controls, fresh native replay, gallery,
   default regressions and the unchanged common repeat by SHA256.
+
+Root independently reviewed the final nine-phase contact and detail and approved
+**scoped native-domain overall appearance**: corrected stepped brightness, grid
+and moving lobes align. The older appearance hold above is superseded only for
+this explicit configuration; common-world rendering and all listed residuals
+remain separate. `fog-quant-review-final/root-approval.json` pins each original
+and native-domain sample and the exact reviewed manifests/binary; its SHA256 is
+`d4daffbf144998a9762c9f009c3657880541063abac20b10ac62068df005a098`.
+This is neither an exact-pixel claim nor completion of natural caller/device gates.
