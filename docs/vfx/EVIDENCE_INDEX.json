@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 134,
+    "retail_rows_with_source_fixes_recorded": 135,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 119,
+    "visual_fidelity_confirmed_rows": 120,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 119,
-    "remaining_visual_review_rows": 57
+    "reviewed_visual_pass_rows": 120,
+    "remaining_visual_review_rows": 56
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1659,6 +1659,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Seven full original/actual Metal native-domain null-target phases2/6/16/20/30/60/90: blue three-tube growth, animated five-frame floor and thirty spark cycles.22,230 state/RNG fields,18 pose channels, guarded original legacy keys; translated gallery40/40 visible and2,232 owner-geometry controls. All90 origin-zero RGB frames unchanged after placement correction. Natural revive actor/target/decay/spell, sampling/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-maelstrom-authored-20261011/root-approval.json": {
+      "sha256": "0d699dee126ac687c7ed863796ba0594837247d722dad43ad413728006b12881",
+      "retail_row": "maelstrom:0xaeaeeb26",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Seventeen original/actual Metal native-domain full authored phases through245END, with three fixed supported1920x1080 views covering all whole triangles. Own51objects/4textures,45visibleobjects,7cameraobjects,3actualscrolltexcontrollers;112455keys/77504matrices/2304UV fields verified. Full260tick schedules/freshpixels repeat; ordinary gallery70/70visible with real ownerkill/restart. Raw viewportoverlap, raster/destination/device and naturalboss/spell/map/audio/exactpixels open."
     }
   }
 }
