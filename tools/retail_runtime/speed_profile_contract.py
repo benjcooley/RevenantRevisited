@@ -68,6 +68,7 @@ class T3DImagery{public:
  bool retail_punch_keys=false,retail_mpappear_start_profile=false,retail_shadowfist_profile=false,
  retail_warriorborn_profile=false,retail_teleportation_profile=false,might_partsys_profile=false,
  immortalmight_partsys_profile=false,fmastery_partsys_profile=false,speed_partsys_profile=false,quicksilver_partsys_profile=false;
+ uint32_t static_particles_profile=0;
  int version=0,flags=0,numverts=0,numfaces=0,nstates=0,frames=0,aflags=0,nobj=0,nmat=0,ntex=0,ntags=0;
  std::string path="Imagery/Magic/Speed.I3D";
  std::array<S3DObj,3>objects;std::array<S3DTex,2>textures;std::array<S3DMat,3>materials;
