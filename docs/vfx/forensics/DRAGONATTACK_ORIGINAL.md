@@ -115,3 +115,46 @@ Whole appearance remains open.
 `dragonattack-metal-first/manifest.json` SHA256: `b10150e156fd40af69ac9a2a44a917e4d5a67ba5fb7d9df4ae9de0efdaafd66c`.
 
 `dragonattack-metal-first/state-witness.json` SHA256: `ad9da483eb0a963ecc896a9eeb40b8b7fc7c031024dcba018221d2528c53c34b`.
+
+
+Whole coverage follow-up (pending independent appearance approval)
+----------------------------------------------------------------
+
+The completed immutable grid has16 supported1920×1080 views with origins
+(-256,-832*i), i=0..15, relative to the original1280 viewport. World camera,
+source, target, lighting, geometry, RGB and timing are unchanged. Every
+submitted triangle at all110 ticks fits wholly inside at least one view;
+no coverage gaps remain. At the25 selected phases, six views intersect
+triangles; the others are declared empty by conservative submitted-triangle
+bounds rather than synthetic images. The main view and five distant views
+retain raw overlap, without claiming one exact giant framebuffer.
+
+Five additional original renders restore the full pre-Render VM, host and
+CRT checkpoint. Each produces exactly the canonical post-Render owner,
+controller, pool, matrix cache and random state. Replaying the canonical
+Render resumes simulation. All110 before/after records also match the fresh
+1280 reference exactly, including allocation addresses and all raw pool bytes.
+The earlier repeated-Render failure is therefore an invalid RNG control, not
+evidence of a viewport-dependent controller.
+
+Six independent actual Metal films use every24Hz simulation/render tick and
+only sparse PNG storage. Actual image dimensions are1920×1080, native depth
+is0..65535, and the supplied source remains(3185,3185,16). All5,676 owner,
+particle-count, random-count and cache witness fields pass. The review packet
+contains19 active raw tile pairs and four actual blank lifecycle controls.
+The original full110 simulation continues beyond real kill86 through109;
+record97 is the sampled blank post-kill tail. Common-policy images remain a
+separate diagnostic. All25 actual HeadFireBall regression images are
+byte-identical to the previously frozen trap film.
+
+Private packet: `hard-alpha/dragonattack-review-final/`, with `main-life.png`,
+`distant-impact.png`, all actual raw-pair references and a frozen captured
+binary. Source checkpoint260defc3 supplies the exact real-IsAlive route.
+Natural dragon/bone attachment, resident actor/map/combat/audio integration,
+other caller inputs, device rendering, overlap/edge quantization and exact
+framebuffer equality remain open. No primary visual acceptance is recorded
+by this lane; the root reviewer owns that decision.
+
+Final review pair-manifest SHA256: `0b62f4520668b6cc9442b938cc1ccd5c2ead9ec9f3e350cf6f18e29dfb05f600`.
+
+Captured binary SHA256: `a0134abe73ca2c0a4d6636eeabc6af422e1dc58f12f5536dd43c12fec6431d23`.
