@@ -1500,6 +1500,7 @@ typedef struct sapp_desc {
     bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
     bool hidden;                        // [RevenantRevisited] if true, skip makeKeyAndOrderFront so the NSWindow never appears on screen (macOS only); paired with our --headless CLI flag for snap-only test runs
     bool no_dock_icon;                  // [RevenantRevisited] if true, set NSApplicationActivationPolicyAccessory so the app gets no Dock icon (paired with hidden=true)
+    bool timer_frames;                  // [RevenantRevisited] if true, frames come from a run-loop timer in the common modes (as for hidden), so they go on while AppKit tracks the mouse in a modal loop (a title-bar click, a window drag) (macOS only)
     const char* window_title;           // the window title as UTF-8 encoded string
     bool enable_clipboard;              // enable clipboard access, default is false
     int clipboard_size;                 // max size of clipboard content in bytes
@@ -3689,12 +3690,16 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         _sapp.macos.window.contentView = _sapp.macos.view;
         [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
         _sapp.macos.view.layer.magnificationFilter = kCAFilterNearest;
-        if (_sapp.desc.hidden) {
+        if (_sapp.desc.hidden || _sapp.desc.timer_frames) {
             /* [RevenantRevisited] A hidden (headless) run paces its own
                frames. MTKView draws from the display's refresh, which stops
                while the display sleeps, so a headless run sat at its first
                frame for as long as the Mac's display was off. A run-loop
-               timer keeps ticking; it draws explicitly (paused view). */
+               timer keeps ticking; it draws explicitly (paused view).
+               timer_frames does the same for a shown window: in the common
+               modes the timer also fires inside AppKit's modal mouse
+               tracking (a title-bar click), which MTKView's own drawing
+               doesn't, so a session driven from frames never stalls. */
             _sapp.macos.view.paused = YES;
             _sapp.macos.view.enableSetNeedsDisplay = NO;
             const NSInteger headless_fps = (max_fps > 0 ? max_fps : 60) / _sapp.swap_interval;

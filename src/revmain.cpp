@@ -2571,12 +2571,14 @@ sapp_desc sokol_main(int argc, char* argv[])
     // the input-script's auto-exit fails or the engine deadlocks before
     // the script drains, the process eventually exits on its own.
     bool cli_headless = false;
+    bool cli_lockstep = false;          // --control / --replay: the session is serviced from frames
     for (int i = 1; i < argc; ++i)
     {
         const char* a = argv[i];
         if (!a) continue;
         while (*a == '-' || *a == '/') ++a;
         if (std::strcmp(a, "headless") == 0) { cli_headless = true; }
+        else if (std::strncmp(a, "control=", 8) == 0 || std::strncmp(a, "replay=", 7) == 0) { cli_lockstep = true; }
         else if (std::strncmp(a, "max-runtime=", 12) == 0)
         {
             char* endp = nullptr;
@@ -2603,6 +2605,9 @@ sapp_desc sokol_main(int argc, char* argv[])
     // serialized object blocks can run large.
     desc.enable_clipboard = true;
     desc.clipboard_size   = 1 << 20;     // 1 MB
+    // A controlled or replayed session reads its channel each frame; frames
+    // from a common-mode timer keep it going while the window is clicked.
+    desc.timer_frames = cli_lockstep;
     if (cli_headless)
     {
         // Our sokol_app patch: skip makeKeyAndOrderFront so the NSWindow
