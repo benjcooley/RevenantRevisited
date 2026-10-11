@@ -16,7 +16,7 @@ struct VfxReviewSchedule
 
     std::size_t count = 0;
     double spacing = 420.0; // distance along the normalized screen path
-    double speed = 16.0;    // logical screen pixels per second
+    double speed = 48.0;    // logical screen pixels per second
     double ratio = 2.5;     // positive screen X / negative screen Y
     double gap = 720.0;     // path distance before first and after last station
 
