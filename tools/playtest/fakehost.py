@@ -7,9 +7,11 @@ game.
 
 The world is deterministic: held arrow keys move the player one unit per
 tick, a left click on the screen walks the player toward the point it maps
-to, and every tick draws three "random numbers". `--drift-at T` nudges the
-player at tick T on every run, so a replay through it diverges there: the
-divergence test.
+to, and every tick draws three "random numbers". The camera follows the
+player at the screen's centre, four pixels to a world unit. Floor ends at
+x = 1150 (a wall: no walking past it), and one person, Sardok, stands at
+(1000, 1980). `--drift-at T` nudges the player at tick T on every run, so a
+replay through it diverges there: the divergence test.
 """
 from __future__ import annotations
 
@@ -23,6 +25,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import rec  # noqa: E402
 
 STEPS = {'LEFT': (-1, 0), 'RIGHT': (1, 0), 'UP': (0, -1), 'DOWN': (0, 1)}
+WALL_X = 1150
+SCALE = 4                            # screen pixels per world unit
+SARDOK = {'id': 5, 'name': 'Sardok', 'type': 'Sardok', 'class': 'character', 'enemy': False,
+          'pos': [1000, 1980, 0]}
 
 
 class World:
@@ -43,16 +49,24 @@ class World:
             pressed = event['buttons'] & ~self.buttons
             self.pointer, self.buttons = list(event['mouse']), event['buttons']
             if pressed & rec.BUTTON_LEFT:
-                self.goal = [self.pos[0] + (self.pointer[0] - 320) // 4,
-                             self.pos[1] + (self.pointer[1] - 240) // 4]
+                self.goal = self.world(*self.pointer)[:2]
+
+    def screen(self, pos) -> list[int]:
+        return [320 + (pos[0] - self.pos[0]) * SCALE, 240 + (pos[1] - self.pos[1]) * SCALE]
+
+    def world(self, x: int, y: int) -> list[int]:
+        return [self.pos[0] + (x - 320) // SCALE, self.pos[1] + (y - 240) // SCALE, 0]
+
+    def _move(self, dx: int, dy: int) -> None:
+        if self.pos[0] + dx < WALL_X:
+            self.pos[0] += dx
+        self.pos[1] += dy
 
     def tick(self) -> None:
         for key in self.held & STEPS.keys():
-            self.pos[0] += STEPS[key][0]
-            self.pos[1] += STEPS[key][1]
+            self._move(*STEPS[key])
         if self.goal:
-            for axis in (0, 1):
-                self.pos[axis] += (self.goal[axis] > self.pos[axis]) - (self.goal[axis] < self.pos[axis])
+            self._move(*((self.goal[axis] > self.pos[axis]) - (self.goal[axis] < self.pos[axis]) for axis in (0, 1)))
             if self.pos[:2] == self.goal:
                 self.goal = None
         if self.t == self.drift_at:
@@ -100,7 +114,7 @@ class FakeHost:
     def hello(self, req: dict) -> dict:
         return {'game': 'port', 'build': {'sha': 'fake', 'name': 'fakehost', 'patches': []},
                 'protocol': 1, 'tick_hz': rec.TICK_HZ, 'screen': list(rec.SCREEN),
-                'capabilities': ['observe', 'mark', 'replay', 'export_slot']}
+                'capabilities': ['observe', 'mark', 'replay', 'export_slot', 'pick']}
 
     def start(self, req: dict) -> dict:
         self.world = World(req.get('seed', 1), self.drift_at)
@@ -124,9 +138,21 @@ class FakeHost:
         return {'t': self.world.t}
 
     def observe(self, req: dict) -> dict:
-        return {'t': self.world.t, 'screen': 'play', 'control': True,
-                'player': {'pos': list(self.world.pos), 'level': 0, 'health': [100, 100]},
-                'objects': [], 'messages': []}
+        w = self.world
+        obs = {'t': w.t, 'screen': 'play', 'control': True,
+               'player': {'pos': list(w.pos), 'screen': [320, 240], 'level': 0, 'health': [100, 100]},
+               'objects': [dict(SARDOK, screen=w.screen(SARDOK['pos']))], 'messages': []}
+        if 'walkgrid' in req:
+            r = req['walkgrid'] // 16
+            ox, oy = w.pos[0] // 16 - r, w.pos[1] // 16 - r
+            heights = [10 if (ox + gx) * 16 < WALL_X else 0 for gy in range(2 * r) for gx in range(2 * r)]
+            obs['walkgrid'] = {'origin': [ox, oy], 'cell': 16, 'w': 2 * r, 'h': 2 * r, 'heights': heights}
+        return obs
+
+    def pick(self, req: dict) -> dict:
+        pos = self.world.world(req['x'], req['y'])
+        near = abs(pos[0] - SARDOK['pos'][0]) <= 4 and abs(pos[1] - SARDOK['pos'][1]) <= 4
+        return {'pos': pos, 'object': SARDOK['id'] if near else None}
 
     def mark(self, req: dict) -> dict:
         extra = {k: v for k, v in req.items() if k not in ('id', 'cmd', 'kind')}
