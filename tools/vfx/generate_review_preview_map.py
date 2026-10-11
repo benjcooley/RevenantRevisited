@@ -85,6 +85,7 @@ PARTIAL = {
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
     '0xad92bd31': 'FGeyser_AUTHORED',
+    '0xb3ae0fed': 'TRestorelife_AUTHORED_TAGS',
     '0xf32bcfac': 'MeteorStorm_AUTHORED',
     '0xbabfface': 'TQuick_AUTHORED_TAGS',
     '0xadbcef13': 'TCharUtility_AUTHORED_STILL',

@@ -112,6 +112,7 @@
 {0xaeaeeb33u, "TYEnergyLose_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // YEnergyLose
 {0xb0e024dfu, "TFmastery_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Fmastery
 {0xb1c4c90fu, "TIceBoltEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // IceBolt
+{0xb3ae0fedu, "TRestorelife_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Restorelife
 {0xbabefaceu, "TQuicksandEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Quicksand
 {0xbabffaceu, "TQuick_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Quick
 {0xbecefedau, "TSandswirlEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Sandswirl
