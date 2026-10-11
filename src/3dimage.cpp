@@ -34,6 +34,7 @@
 #include "staticpartsysprofiles.h"
 #include "lightstripprofile.h"
 #include "jhagaattackprofile.h"
+#include "combatflashprofile.h"
 #include "funnelprofile.h"
 #include "cometprofile.h"
 #include "cometmatrix.h"
@@ -119,43 +120,50 @@ static bool IsCombatFlashImageryFilename(const char* filename)
            (path.size() == length || path[path.size() - length - 1] == '/');
 }
 
-bool T3DImagery::ValidateCombatFlashStart1PartSysProfile()
+bool T3DImagery::ValidateCombatFlashPartSysProfile()
 {
-    // Exact Impact inventory is checked; only start1/state0 is enabled below.
-    // Later tags/trails are not inferred from a successful first-state profile.
+    // The whole shipped Impact asset: all nine start states and their end
+    // states, every object name, the eighteen tags and the RGB565 textures.
+    // EffectCombatFlash selects any start state (COMBAT_EFFECTS.md §3).
+    namespace profile = retail_combatflash_profile;
     if (!IsCombatFlashImageryFilename(GetResFilename()) || version != 3 ||
-        (flags & I3D_ISMORPH) || NumStates() != 18 || NumObjects() != 21 ||
-        NumMaterials() != 11 || NumTextures() != 10 || NumTags() != 18 ||
-        GetAniLength(0) != 19 || GetAniFlags(0) != 0x2000)
+        (flags & I3D_ISMORPH) || NumStates() != profile::states || NumObjects() != 21 ||
+        NumMaterials() != 11 || NumTextures() != 10 || NumTags() != 18)
         return false;
-    constexpr const char* names[] = {"#particle01","impact01","#impact01","#particle02","impact02","#impact02",
-        "#particle03","impact03","#impact03","#impact06","#impact04","#impact05","impact04","impact05",
-        "impact06","impact07","impact08","impact09","#impact08","#impact07","#impact09"};
+    for (int state = 0; state < profile::states; ++state)
+        if (GetAniLength(state) != (state % 2 ? profile::end_frames : profile::start_frames) ||
+            GetAniFlags(state) != profile::state_flags)
+            return false;
     for (int object = 0; object < 21; ++object)
-        if (stricmp(GetObjectName(object), names[object])) return false;
-    if (NumObjVerts(0) != 4 || NumObjFaces(0) != 2 || NumObjVerts(1) != 0 ||
-        NumObjFaces(1) != 0 || NumObjVerts(2) != 4 || NumObjFaces(2) != 2 ||
-        IsHidden(0,0) || IsHidden(2,0)) return false;
-    const S3DTag& blend = *GetTag(0); const S3DTag& particles = *GetTag(1);
-    constexpr const char* parameters = "obj=(impact01),particle=#particle01,pps=[0:250,2:0],initialvelocity=15:30,scale=[0:2.5,100:0],lifespan=30:45,localrotation=[0:(0,0,0),100:(0,360,0)],friction=0.3,gravity=0.5,color=[0:(255,225,100),25:(255,175,50),99:(0,0,0)],spread=120";
-    if (blend.state != 0 || blend.frame != 0 || !blend.name || !blend.str ||
-        stricmp(blend.name,"blendcont") || stricmp(blend.str,"litadd") ||
-        particles.state != 0 || particles.frame != 1 || !particles.name || !particles.str ||
-        stricmp(particles.name,"partsys") || std::strcmp(particles.str,parameters)) return false;
-    for (int object : {0,2}) {
-        S3DObj obj = {}; S3DMat material = {}; GetObject(object,&obj);
-        if (obj.material != 0) return false;
-        GetMaterial(obj.material,&material); if (material.texture != 0) return false;
-        S3DFace faces[2] = {}; int starts[MAXTEXTURES+1] = {},counts[MAXTEXTURES+1] = {};
-        GetObjFaces(object,faces,starts,counts);
-        if (counts[1] != 2 || faces[0].v1 != 2 || faces[0].v2 != 3 || faces[0].v3 != 0 ||
-            faces[1].v1 != 1 || faces[1].v2 != 2 || faces[1].v3 != 0) return false;
-        for (int slot=0;slot<=NumTextures();++slot) if (slot!=1 && counts[slot]) return false;
+        if (stricmp(GetObjectName(object), profile::object_names[object])) return false;
+    for (int i = 0; i < 18; ++i)
+    {
+        const S3DTag& tag = *GetTag(i);
+        const auto& expected = profile::tags[i];
+        if (tag.state != expected.state || tag.frame != expected.frame || !tag.name || !tag.str ||
+            stricmp(tag.name, expected.name) || std::strcmp(tag.str, expected.parameters)) return false;
     }
-    S3DTex texture = {}; GetTexture(0,&texture); const auto& rgb=texture.desc.pixelFormat;
-    return texture.desc.width==64 && texture.desc.height==64 && texture.numframes==1 &&
-           rgb.dwRGBBitCount==16 && rgb.dwRBitMask==0xf800 && rgb.dwGBitMask==0x07e0 &&
-           rgb.dwBBitMask==0x001f && rgb.dwRGBAlphaBitMask==0;
+    // Particle prototypes keep the audited quad: faces (2,3,0)/(1,2,0) on
+    // one textured slot (material texture = slot - 1).
+    for (int object : {0, 3, 6})
+    {
+        if (NumObjVerts(object) != 4 || NumObjFaces(object) != 2) return false;
+        S3DFace faces[2] = {}; int starts[MAXTEXTURES+1] = {}, counts[MAXTEXTURES+1] = {};
+        GetObjFaces(object, faces, starts, counts);
+        if (faces[0].v1 != 2 || faces[0].v2 != 3 || faces[0].v3 != 0 ||
+            faces[1].v1 != 1 || faces[1].v2 != 2 || faces[1].v3 != 0) return false;
+        int textured = 0;
+        for (int slot = 1; slot <= NumTextures(); ++slot) textured += counts[slot] == 2;
+        if (textured != 1 || counts[0]) return false;
+    }
+    for (int i = 0; i < NumTextures(); ++i)
+    {
+        S3DTex texture = {}; GetTexture(i, &texture); const auto& rgb = texture.desc.pixelFormat;
+        if (texture.desc.width != 64 || texture.desc.height != 64 || texture.numframes != 1 ||
+            rgb.dwRGBBitCount != 16 || rgb.dwRBitMask != 0xf800 || rgb.dwGBitMask != 0x07e0 ||
+            rgb.dwBBitMask != 0x001f || rgb.dwRGBAlphaBitMask != 0) return false;
+    }
+    return true;
 }
 
 bool T3DImagery::ValidateRetailPunchProfile()
@@ -922,7 +930,7 @@ void T3DImagery::InitializePartSysTracks()
     fgeyser_partsys_profile = ValidateRetailFGeyserProfile();
     dust_partsys_profile = ValidateRetailDustProfile();
     poison_partsys_profile = ValidateRetailPoisonProfile();
-    combatflash_start1_partsys_profile = ValidateCombatFlashStart1PartSysProfile();
+    combatflash_partsys_profile = ValidateCombatFlashPartSysProfile();
     for (int32_t i = 0; i < NumTags(); ++i)
     {
         const S3DTag& tag = *GetTag(i);
@@ -938,8 +946,6 @@ void T3DImagery::InitializePartSysTracks()
         {
             // Atomic parser failure retains no guessed emitter or prototype.
         }
-        else if (combatflash_start1_partsys_profile && tag.state != 0)
-            unsupported("CombatFlash start1 profile supports state0 only");
         else if ((flags & I3D_ISMORPH) || tag.state < 0 || tag.state >= NumStates())
             unsupported("morph or all-state partsys rendering is not recovered");
         else
@@ -988,7 +994,7 @@ void T3DImagery::InitializePartSysTracks()
         for (int32_t j = 0; j < NumTags() && track.supported; ++j)
         {
             const char* name = GetTag(j)->name;
-            if ((gold_partsys_profile || combatflash_start1_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || static_particles_profile || jhagaattack_partsys_profile || lightstrip_partsys_profile || funnel_partsys_profile || comet_partsys_profile || fgeyser_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
+            if ((gold_partsys_profile || combatflash_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || static_particles_profile || jhagaattack_partsys_profile || lightstrip_partsys_profile || funnel_partsys_profile || comet_partsys_profile || fgeyser_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
             if (name && stricmp(name, "partsys") && stricmp(name, "scrolltex") &&
                 stricmp(name, "play") && stricmp(name, "beg") && stricmp(name, "end"))
             {
@@ -1910,7 +1916,7 @@ void T3DImagery::ClearMesh()
     retail_shadowfist_profile = false;
     retail_warriorborn_profile = false;
     retail_teleportation_profile = false;
-    combatflash_start1_partsys_profile = false;
+    combatflash_partsys_profile = false;
 
     meshinitialized = false;
 }
@@ -3437,6 +3443,7 @@ struct T3DAnimator::SPartSysControllers
         authored_partsys::State simulation;
         authored_partsys::TickInputs inputs;
         int64_t last_render_frame = -1;
+        uint64_t last_trail_pulse = 0;   // trail history shifts once a tick (see SubmitPartSys)
     };
     std::vector<Controller> controllers;
     int32_t previous_state = -1;
@@ -3467,7 +3474,7 @@ struct T3DAnimator::SPartSysControllers
             (owner.ObjId()==0xb0e024dfu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailFmasteryPartSysProfile()) ||
             (owner.GetState()==0 && animator.Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(owner.ObjId())) ||
             (owner.GetState()==0 && animator.Get3DImagery()->HasRetailStaticParticleProfile(owner.ObjId())) ||
-            (owner.ObjId() == 0xad92bd29u && owner.GetState() == 0)) ? animator.GetFrame() : owner.GetFrame();
+            (owner.ObjId() == retail_combatflash_profile::type_id && animator.Get3DImagery()->HasCombatFlashPartSysProfile())) ? animator.GetFrame() : owner.GetFrame();
         // Retail Initialize obtains object zero's origin before resolving the
         // authored emitter list. Keep that distinct from its first emitter.
         hmm_mat4 object_zero;
@@ -3547,7 +3554,9 @@ void T3DAnimator::RefreshPartSysControllers()
     // parsing does not establish the semantics of later geyser/blend tags.
     const uint32_t id = inst->ObjId();
     const bool gold = id == 0xd0c0f035u && imagery->gold_partsys_profile && current_state == 0;
-    const bool combat_start1 = id == 0xad92bd29u && imagery->combatflash_start1_partsys_profile && current_state == 0;
+    // Every Impact state: EffectCombatFlash starts any of the nine (0x004c8500).
+    const bool combat_flash = id == retail_combatflash_profile::type_id && imagery->combatflash_partsys_profile &&
+        current_state >= 0 && current_state < retail_combatflash_profile::states;
     const bool might = id==0x5be39ae0u && imagery->might_partsys_profile && current_state==0;
     const bool immortalmight = id==0x82aeb30fu && imagery->immortalmight_partsys_profile && current_state==0;
     const bool fmastery=id==0xb0e024dfu && imagery->fmastery_partsys_profile && current_state==0;
@@ -3560,7 +3569,7 @@ void T3DAnimator::RefreshPartSysControllers()
     const bool jhaga=id==0xaeaeeb32u && imagery->HasRetailJhagaAttackProfile() && current_state>=0 && current_state<3;
     const bool lightstrip=id==0x10da54d0u && imagery->HasRetailLightStripProfile() && current_state>=0 && current_state<3;
     const bool static_particles=imagery->HasRetailStaticParticleProfile(id) && current_state==0;
-    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && !speed && !static_particles && !jhaga && !lightstrip && !funnel && !comet && !fgeyser && !dust && !poison)
+    if (!gold && !combat_flash && !might && !immortalmight && !fmastery && !speed && !static_particles && !jhaga && !lightstrip && !funnel && !comet && !fgeyser && !dust && !poison)
     {
         if (!state.initialized)
             log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only exact audited particle profiles are enabled",
@@ -3588,7 +3597,9 @@ void T3DAnimator::RefreshPartSysControllers()
                 if(name && name[0]=='*')bone->flags|=OBJ3D_HIDE;
             }
     const bool static_litaddz=(static_particles && imagery->NumTags()==2) || (lightstrip && current_state==0) || comet;
-    if (gold || combat_start1 || speed || static_litaddz || fgeyser || funnel || (jhaga && current_state==0))
+    // Impact's start states carry the blendcont tag; the writes persist into
+    // the following end state, which has none.
+    if (gold || (combat_flash && current_state % 2 == 0) || speed || static_litaddz || fgeyser || funnel || (jhaga && current_state==0))
     {
         // Retail blendcont Initialize 405940: immediate state-entry writes to
         // every animator object, preserving the prior no-depth-test bit. Its
@@ -3610,9 +3621,9 @@ void T3DAnimator::RefreshPartSysControllers()
                 bone->flags |= OBJ3D_BLEND;
                 bone->blend = (bone->blend & 0x40u) | ((speed||static_litaddz)?80u:16u);
             }
-        log_info("[blendcont] init type=%s id=%08x map_index=%d state=0 tagframe=%d mode=%d objects=%d profile=%s",
-                 inst->GetTypeName(), id, inst->GetMapIndex(), gold ? 5 : speed ? 1 : comet ? 3 : static_litaddz ? 2 : 0,
-                 (speed||static_litaddz) ? 80 : 16,NumObjects(),gold ? "gold" : speed ? (id==0xad92bd35u ? "quicksilver" : "speed") : comet ? "comet" : fgeyser ? "fgeyser" : static_litaddz ? "quoted-static-particles" : "combatflash-start1");
+        log_info("[blendcont] init type=%s id=%08x map_index=%d state=%d tagframe=%d mode=%d objects=%d profile=%s",
+                 inst->GetTypeName(), id, inst->GetMapIndex(), current_state, combat_flash ? current_state * 10 : gold ? 5 : speed ? 1 : comet ? 3 : static_litaddz ? 2 : 0,
+                 (speed||static_litaddz) ? 80 : 16,NumObjects(),gold ? "gold" : speed ? (id==0xad92bd35u ? "quicksilver" : "speed") : comet ? "comet" : fgeyser ? "fgeyser" : static_litaddz ? "quoted-static-particles" : "combatflash");
     }
     for (const auto& track : imagery->partsys_tracks)
     {
@@ -3896,27 +3907,34 @@ bool T3DAnimator::GoldBaseMeshWorldMatrix(hmm_mat4& world)
     return true;
 }
 
-bool T3DAnimator::CombatFlashStart1BaseMeshBlend(int32_t object, uint32_t& blend) const
+bool T3DAnimator::CombatFlashBaseMeshBlend(int32_t object, uint32_t& blend) const
 {
-    if (!inst || inst->ObjId()!=0xad92bd29u || inst->GetState()!=0 ||
-        !Get3DImagery()->HasCombatFlashStart1PartSysProfile() || !partsys_controllers ||
-        partsys_controllers->unsupported || object!=2 || !animobjs.Used(object) ||
+    // Retail default Render draws every Impact object after the controllers;
+    // blendcont made each litadd (16). No name carries '$', so all remain
+    // depth-tested. The live particle prototype never reaches here
+    // (PartSysOwnsObject); the others have zero scale in states not theirs.
+    if (!inst || inst->ObjId()!=retail_combatflash_profile::type_id ||
+        !Get3DImagery()->HasCombatFlashPartSysProfile() || !partsys_controllers ||
+        partsys_controllers->unsupported || !animobjs.Used(object) ||
         !(animobjs[object]->flags & OBJ3D_BLEND)) return false;
     blend=animobjs[object]->blend;
-    return blend==16u; // '#impact01' has no '$': depth test remains enabled.
+    return blend==16u;
 }
 
-bool T3DAnimator::CombatFlashStart1BaseMeshWorldMatrix(hmm_mat4& world)
+bool T3DAnimator::CombatFlashBaseMeshWorldMatrix(int32_t object, hmm_mat4& world)
 {
     uint32_t blend=0;
-    if (!CombatFlashStart1BaseMeshBlend(2,blend)) return false;
+    if (!CombatFlashBaseMeshBlend(object,blend)) return false;
     auto* imagery=Get3DImagery(); hmm_vec3 position{},rotation{},scale{};
     imagery->SetPrevState(inst->GetPrevState(),inst->GetPrevFrame());
-    if (!imagery->GetAniKey(2,0,inst->GetFrame(),position,rotation,scale)) return false;
-    if (scale.X<=0 || scale.Y<=0 || scale.Z<=0) return false;
+    if (!imagery->GetAniKey(object,inst->GetState(),inst->GetFrame(),position,rotation,scale)) return false;
+    // CalcObjectMatrix's scale gate (40a591..5c1) rejects the parked flares.
+    constexpr float kRejected=9.999999747378752e-6f;
+    if (scale.X<=kRejected || scale.Y<=kRejected || scale.Z<=kRejected) return false;
     MtxClear(&world); MtxScale(&world,&scale);
     MtxRotateX(&world,rotation.X); MtxRotateY(&world,rotation.Y); MtxRotateZ(&world,rotation.Z);
-    ApplyRetailGoldCameraOrientation(world); // Recovered generic '#' branch, no new fitted matrix.
+    if (animobjs[object]->flags & OBJ3D_GOLD_CAMERA_FACING)
+        ApplyRetailGoldCameraOrientation(world); // Recovered generic '#' branch, no new fitted matrix.
     MtxTranslate(&world,&position); // Original preserves translation after fixed camera orientation.
     MtxMultiply(&world,&world,&inst->Transform().Matrix());
     return true;
@@ -4117,6 +4135,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
     const bool funnel=inst->ObjId()==0xad92bc17u && Get3DImagery()->HasRetailFunnelProfile();
     const bool jhaga=inst->ObjId()==0xaeaeeb32u && Get3DImagery()->HasRetailJhagaAttackProfile();
     const bool lightstrip=inst->ObjId()==0x10da54d0u && Get3DImagery()->HasRetailLightStripProfile();
+    const bool combat=inst->ObjId()==retail_combatflash_profile::type_id && Get3DImagery()->HasCombatFlashPartSysProfile();
     int32_t submitted = 0;
     const authored_partsys::RandomRange rng = [](int minimum, int maximum) {
         return random(minimum, maximum);
@@ -4131,6 +4150,11 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
         if (texture == kInvalidTexture) continue;
         controller.last_render_frame = TTime::FrameCount();
         ++partsys_controllers->renders;
+        // Retail rendered once a tick at most, shifting each particle's trail
+        // history per Render (402901..402a0b). Shift on the first render
+        // after a tick so the trail spans ticks at any frame rate.
+        const bool shift_trails = controller.last_trail_pulse != partsys_controllers->pulses;
+        controller.last_trail_pulse = partsys_controllers->pulses;
         const auto& particles = controller.simulation.Particles();
         for (size_t slot = 0; slot < particles.size(); ++slot)
         {
@@ -4139,20 +4163,28 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // Keep those calls here; Submit never advances simulation state.
             const auto sample = controller.simulation.SampleRender(slot, rng);
             if(jhaga && object==0)NoteJhagaAttackPrototypeSample();
+            // Original Render 402901..402a0b: after the main draw, the shifted
+            // history entries draw with the same rotation, scale and colour,
+            // the last a duplicate of the current position. The shift happens
+            // even when the scale gate below rejects the geometry.
+            std::vector<authored_partsys::Vec3> trail;
+            if (combat)
+                trail = shift_trails ? controller.simulation.SampleTrailPositions(slot)
+                                     : particles[slot].trail_positions;
             // Native Speed RenderObject40a9e7..9f3 skips geometry when its
             // CalcObjectMatrix scale gate40a591..5c1 returns0. Sampling still
             // happens first, preserving its three render-time RNG calls.
-            if((jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || (inst->GetState()==0 &&
+            if((combat || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || (inst->GetState()==0 &&
                ((Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2) ||
                 Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId())))) &&
                sample.scale<=9.999999747378752e-6f)continue;
-            hmm_mat4 matrix;
-            MtxClear(&matrix);
+            hmm_mat4 orientation;
+            MtxClear(&orientation);
             const hmm_vec3 scale = {sample.scale, sample.scale, sample.scale};
-            MtxScale(&matrix, &scale);
-            MtxRotateX(&matrix, sample.rotation[0]);
-            MtxRotateY(&matrix, sample.rotation[1]);
-            MtxRotateZ(&matrix, sample.rotation[2]);
+            MtxScale(&orientation, &scale);
+            MtxRotateX(&orientation, sample.rotation[0]);
+            MtxRotateY(&orientation, sample.rotation[1]);
+            MtxRotateZ(&orientation, sample.rotation[2]);
             const bool might = inst->ObjId()==0x5be39ae0u && inst->GetState()==0 &&
                 Get3DImagery()->HasRetailMightPartSysProfile() && track.prototype==0;
             const bool immortalmight=inst->ObjId()==0x82aeb30fu && inst->GetState()==0 &&
@@ -4163,12 +4195,9 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                 Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2;
             const bool static_particles=inst->GetState()==0 &&
                 Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId());
-            if (might || immortalmight || fmastery || speed || static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u ||
-                (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0 &&
-                 Get3DImagery()->HasCombatFlashStart1PartSysProfile() && track.prototype == 0))
-                ApplyRetailGoldCameraOrientation(matrix); // actual '#' flag retained on both audited prototypes
-            const hmm_vec3 position = {sample.position[0], sample.position[1], sample.position[2]};
-            MtxTranslate(&matrix, &position);
+            // All three Impact prototypes are '#particle0N'.
+            if (combat || might || immortalmight || fmastery || speed || static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u)
+                ApplyRetailGoldCameraOrientation(orientation); // actual '#' flag retained on the audited prototypes
 
             SQuadDrawItem item = {};
             item.retail_software_projection = native_software;
@@ -4179,8 +4208,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             item.key.blend = uint8_t(sample.blendmode == 2 ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
             // Preserve source packed prelit vertex color. Combat particles are
             // RGB565 with litadd16, not normal-lit material meshes or alpha coins.
-            item.retail_texture = (might || immortalmight || fmastery || speed || static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u ||
-                (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0)) ? 1 : 0;
+            item.retail_texture = (combat || might || immortalmight || fmastery || speed || static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u) ? 1 : 0;
             // Strict static profile admission pins RGB565 masks and literal
             // particle prototype. The queue applies this only to software
             // lighting and ONE/ONE; modern/hardware and alpha retain fallback.
@@ -4193,29 +4221,39 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // alpha in its8wordXYZ/UV/RGB packet. Keep literal alpha metadata,
             // no premultiplication/alternateblend. PixelLSB-table raster gate open.
             item.color_rgba[3] = sample.alpha;
-            // Original faces (2,3,0)/(1,2,0) are preserved by this reorder
-            // into FXquad's (2,0,3)/(1,3,0); first face differs only cyclically.
-            constexpr int corners[4] = {0, 1, 3, 2};
-            for (int c = 0; c < 4; ++c)
-            {
-                const S3DVertex& vertex = track.vertices[size_t(corners[c])];
-                hmm_vec3 world;
-                MtxTransform(&matrix, &vertex.pos, &world);
-                item.world_pos[c][0] = world.X * render_scale.X;
-                item.world_pos[c][1] = world.Y * render_scale.Y;
-                // SampleRender's centre is retail MODELZ (FIX applied), while
-                // Particle.position remains raw map/common-world simulation XYZ.
-                // Match ordinary mesh raw translation + local MODELZ stretch;
-                // ABS particles bypass the owner's transform, so bridge here once.
-                // The explicit native draw policy keeps the literal MODELZ vertex.
-                item.world_pos[c][2] = (native_software ? world.Z : particles[slot].position[2] +
-                    (world.Z - sample.position[2]) * WORLD3D_Z_SCALE) * render_scale.Z;
-                item.uv[c][0] = vertex.tu;
-                item.uv[c][1] = vertex.tv;
-            }
-            renderer.SubmitFxQuad(item);
-            ++submitted;
-            ++partsys_controllers->quads;
+            // `center` is the render-space (MODELZ) position, `source_z` its
+            // raw map z for the ordinary-world bridge below.
+            const auto emit = [&](const authored_partsys::Vec3& center, float source_z) {
+                hmm_mat4 matrix = orientation;
+                const hmm_vec3 position = {center[0], center[1], center[2]};
+                MtxTranslate(&matrix, &position);
+                // Original faces (2,3,0)/(1,2,0) are preserved by this reorder
+                // into FXquad's (2,0,3)/(1,3,0); first face differs only cyclically.
+                constexpr int corners[4] = {0, 1, 3, 2};
+                for (int c = 0; c < 4; ++c)
+                {
+                    const S3DVertex& vertex = track.vertices[size_t(corners[c])];
+                    hmm_vec3 world;
+                    MtxTransform(&matrix, &vertex.pos, &world);
+                    item.world_pos[c][0] = world.X * render_scale.X;
+                    item.world_pos[c][1] = world.Y * render_scale.Y;
+                    // SampleRender's centre is retail MODELZ (FIX applied), while
+                    // Particle.position remains raw map/common-world simulation XYZ.
+                    // Match ordinary mesh raw translation + local MODELZ stretch;
+                    // ABS particles bypass the owner's transform, so bridge here once.
+                    // The explicit native draw policy keeps the literal MODELZ vertex.
+                    item.world_pos[c][2] = (native_software ? world.Z : source_z +
+                        (world.Z - center[2]) * WORLD3D_Z_SCALE) * render_scale.Z;
+                    item.uv[c][0] = vertex.tu;
+                    item.uv[c][1] = vertex.tv;
+                }
+                renderer.SubmitFxQuad(item);
+                ++submitted;
+                ++partsys_controllers->quads;
+            };
+            emit(sample.position, particles[slot].position[2]);
+            for (const auto& entry : trail)
+                emit(entry, authored_partsys::SourceZ(entry[2]));
         }
     }
     return submitted;

@@ -7396,21 +7396,23 @@ struct SVfxTestBootstrap {
             e.destroy = [](void* c) { kinsecretdoor_still_preview::Destroy(static_cast<kinsecretdoor_still_preview::State*>(c)); };
             VfxTest::DeferredRegister(e);
         }
+        for (int start = 1; start <= 9; ++start)
         {
-            // Actual generic CombatFlash/start1 owner/default animator; later states are unsupported.
+            // Actual generic CombatFlash owner/default animator in one of the
+            // nine start states EffectCombatFlash picks (Impact state 2*(start-1)).
             VfxTest::SEffect e = {};
-            e.id = "TCombatFlashEffect_AUTHORED_START1";
+            e.id = "TCombatFlashEffect_AUTHORED_START" + std::to_string(start);
             e.family = "combat"; e.pipeline = "partsys+IM";
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
-            e.factory = [](const S3DPoint& origin) -> void* { return combatflash_start1_preview::Spawn(origin); };
+            e.factory = [start](const S3DPoint& origin) -> void* { return combatflash_preview::Spawn(origin, start); };
             e.submit = [](void* context, EFxDebugMode) {
-                combatflash_start1_preview::Advance(static_cast<combatflash_start1_preview::State*>(context),TTime::DeltaTime());
+                combatflash_preview::Advance(static_cast<combatflash_preview::State*>(context),TTime::DeltaTime());
             };
             e.submit_world = [](void* context, EFxDebugMode mode) {
-                combatflash_start1_preview::SubmitWorld(static_cast<combatflash_start1_preview::State*>(context),mode);
+                combatflash_preview::SubmitWorld(static_cast<combatflash_preview::State*>(context),mode);
             };
-            e.destroy = [](void* context) { combatflash_start1_preview::Destroy(static_cast<combatflash_start1_preview::State*>(context)); };
-            e.is_alive=[](void* c){return combatflash_start1_preview::Alive(static_cast<combatflash_start1_preview::State*>(c));};
+            e.destroy = [](void* context) { combatflash_preview::Destroy(static_cast<combatflash_preview::State*>(context)); };
+            e.is_alive=[](void* c){return combatflash_preview::Alive(static_cast<combatflash_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {

@@ -43,7 +43,7 @@ struct Definition {
     Expression scale{1, {1, 0, 0}};
     Expression scljitter{2}; // original constant per-update scale range
     Expression bounce{2, {100, 100, 0}};
-    Expression numtrails{2}; // recovered constant equal integer endpoints only
+    Expression numtrails{2}; // constant integer range 0..64; low 0 means none
     int emittertype = 0; // sphere=0,cube=1,circle=2,square=3
     int blendmode = 16; // literal retail Initialize: litadd
     int emittersize = 0;

@@ -105,9 +105,9 @@ bool State::Initialize(const Definition& definition, const TickInputs& inputs,
         return false;
     }
     const auto trails=definition.numtrails.constant;
-    if(definition.numtrails.IsCurve() || !std::isfinite(trails[0]) || trails[0]!=trails[1]
-        || trails[0]!=std::trunc(trails[0]) || trails[0]<0 || trails[0]>64) {
-        diagnostic="partsys numtrails requires bounded constant equal integer endpoints";
+    const auto bounded=[](float v){return std::isfinite(v) && v==std::trunc(v) && v>=0 && v<=64;};
+    if(definition.numtrails.IsCurve() || !bounded(trails[0]) || !bounded(trails[1])) {
+        diagnostic="partsys numtrails requires a bounded constant integer range";
         return false;
     }
     float rate = Maximum(definition.pps, 0);
@@ -218,10 +218,14 @@ void State::Spawn(Particle& particle, const TickInputs& inputs, const RandomRang
     particle.gravity = Initial(d.gravity);
     particle.bounce_min = Initial(d.bounce);
     particle.bounce_max = Initial(d.bounce,1);
-    // Original403275..4032e7 initializes every history entry to the
-    // corrected spawn position. Constant endpoints consume no RNG.
-    const int trails=static_cast<int>(d.numtrails.constant[0]);
-    if(trails)particle.trail_positions.assign(trails,RenderPosition(position));
+    // Original403265..4032e7: a nonzero low endpoint draws random(low, high)
+    // history entries (equal endpoints consume no RNG), each initialized to
+    // the corrected spawn position. This is the spawn's last draw.
+    const auto trails=d.numtrails.constant;
+    if(trails[0]!=0) {
+        const int count=Draw(random,Integer(trails[0]),Integer(trails[1]));
+        if(count>0)particle.trail_positions.assign(static_cast<std::size_t>(count),RenderPosition(position));
+    }
     particle.alive = true;
 }
 
@@ -309,6 +313,13 @@ RenderSample State::SampleRender(std::size_t slot, const RandomRange& random) co
     sample.blendmode=definition_.blendmode;
     return sample;
 }
+float SourceZ(float render_z)
+{
+    // Inverse of RenderPosition's z correction (5a351c..28).
+    return static_cast<float>(static_cast<long double>(render_z)*1.460000038146973f
+        /(1.037999987602234f+static_cast<long double>(render_z)*.0033333334140479565f*.009999999776482582f));
+}
+
 std::vector<Vec3> State::SampleTrailPositions(std::size_t slot)
 {
     auto& particle=particles_.at(slot);auto& history=particle.trail_positions;

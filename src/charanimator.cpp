@@ -139,7 +139,8 @@ bool TCharAnimator::Render()
     if (inst->ObjClass() == OBJCLASS_PLAYER)
         RenderEquipment();      // Renders equipment geometry
 
-//  RenderCombatFlashes();
+    // Retail's combat flash is a second, additive render of the character
+    // (DrawsCombatFlash), not the snapshot's RenderCombatFlashes quad.
 
     return true;
 }
@@ -420,6 +421,17 @@ float TCharAnimator::DrawAlpha() const
     if (IsHidden() || transparency < kMinDrawTransparency)
         return 0.0f;
     return transparency;
+}
+
+// REVSYNC: TCharAnimator::Render @ 0x004d7bd8..0x004d7c0c -- while the
+// combat flash ticks (TCharacter +0x224, five from a blow) run, the
+// character renders again in blend mode 16 (litadd): its lit colour added
+// over itself, the white-hot flash of a struck body. The map renderer
+// submits that second pass (SMeshSubmit::additive). The snapshot's
+// RenderCombatFlashes (a utility quad) is not what shipped.
+bool TCharAnimator::DrawsCombatFlash() const
+{
+    return static_cast<TCharacter*>(inst)->GetCombatFlashTicks() >= 1;
 }
 
 // REVSYNC: TCharAnimator::Render @ 0x004d7a50 -- steps 0.05 toward

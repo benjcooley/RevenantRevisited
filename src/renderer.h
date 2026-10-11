@@ -491,6 +491,11 @@ struct SMeshSubmit
     bool retail_positive_face_cull = false;
     float      sort_depth = 0.0f;   // translucent only: camera depth, wu (greater is farther)
     uint32_t   surface_id = 0;      // translucent only: shared by one surface's meshes; 0 = its own surface
+    // A second pass of a mesh already submitted this frame: its lit colour
+    // added on top (ONE/ONE, depth-tested against its own depth, no writes).
+    // Retail blend mode 16 (litadd) re-rendering a lit mesh: a character's
+    // combat flash (TCharAnimator::Render 0x004d7be5).
+    bool       additive = false;
 };
 
 // Tint alpha at or above which a mesh is opaque. Retail drew a character's
@@ -1404,6 +1409,9 @@ private:
     sg_pipeline mesh_depth_pipeline        = {};
     sg_shader   mesh_translucent_shader    = {};
     sg_pipeline mesh_translucent_pipeline  = {};
+    // The same lit colour added (ONE/ONE) over a mesh already drawn: no
+    // depth prepass, LESS_EQUAL against the mesh's own depth, no writes.
+    sg_pipeline mesh_additive_pipeline     = {};
     sg_shader   transparent_tile_shader   = {};
     sg_pipeline transparent_tile_pipeline = {};
     sg_shader   helper_mesh_shader        = {};

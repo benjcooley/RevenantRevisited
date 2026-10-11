@@ -30,6 +30,7 @@ def fn(source,start):
 
 PRELUDE = r'''
 #include "authoredpartsys.h"
+#include "combatflashprofile.h"
 #include "math3d.h"
 #include "goldauthoredmatrix.h"
 #include <cstdint>
@@ -62,15 +63,15 @@ struct Imagery{bool HasRetailStaticParticleProfile(uint32_t)const{return false;}
  bool speed_partsys_profile=false,quicksilver_partsys_profile=true;
  bool HasRetailSpeedPartSysProfile()const{return false;}
  SPEED_FAMILY_METHOD
- bool HasCombatFlashStart1PartSysProfile()const{return false;}
+ bool HasCombatFlashPartSysProfile()const{return false;}
  TTextureHandle GetTextureHandle(int index){if(index!=1)std::abort();return 1;}};
 struct TRenderer{std::vector<SQuadDrawItem>quads;void SubmitFxQuad(const SQuadDrawItem&q){quads.push_back(q);}};
 struct TTime{static int frame;static int FrameCount(){return frame;}};int TTime::frame=0;
 unsigned random_state=1;int random(int a,int b){random_state=random_state*214013u+2531011u;return a+((random_state>>16)&32767u)%(b-a+1);}
 struct T3DAnimator{struct SPartSysControllers{
  struct Track{int state=0,prototype=2,texture_slot=2;std::array<S3DVertex,4>vertices;};
- struct Controller{Track track;authored_partsys::State simulation;int64_t last_render_frame=-1;};
- std::vector<Controller>controllers;bool unsupported=false;uint64_t renders=0,quads=0;};
+ struct Controller{Track track;authored_partsys::State simulation;int64_t last_render_frame=-1;uint64_t last_trail_pulse=0;};
+ std::vector<Controller>controllers;bool unsupported=false;uint64_t pulses=0,renders=0,quads=0;};
  std::unique_ptr<SPartSysControllers>partsys_controllers;Owner*inst;Imagery im;
  Imagery*Get3DImagery(){return &im;}
  void NoteJhagaAttackPrototypeSample(){}

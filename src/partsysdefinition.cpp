@@ -182,10 +182,13 @@ bool ParseDefinition(std::string_view tag, Definition& output, std::string& diag
             if (success && (low != 0 || high != 0))
                 success = r.Fail("unsupported nonzero or curved posjitter");
         } else if (name == "numtrails") {
+            // Spawn 403265..4032a4 draws random(low, high) history entries
+            // when low is nonzero (a range, e.g. Impact's 2:3, draws once).
             float low=0,high=0;double exact_low=0,exact_high=0;
             success=r.Number(low,&exact_low) && r.Take(':') && r.Number(high,&exact_high);
             if(!success && r.error.empty())r.Fail("expected numtrails constant range");
-            if(success && (exact_low!=exact_high || exact_low!=std::trunc(exact_low) || exact_low<0 || exact_low>64))
+            const auto bounded=[](double v){return v==std::trunc(v) && v>=0 && v<=64;};
+            if(success && (!bounded(exact_low) || !bounded(exact_high)))
                 success=r.Fail("unsupported numtrails constant integer range");
             if(success)d.numtrails.constant={low,high,0};
         } else if (name == "localrotation" && (r.Space(),r.text.substr(r.at,sizeof("[0:(0,0,0),100(0,0,0)]")-1)=="[0:(0,0,0),100(0,0,0)]")) {
@@ -202,9 +205,10 @@ bool ParseDefinition(std::string_view tag, Definition& output, std::string& diag
             success = r.Fail("unsupported partsys field " + name);
         }
         if (success) {
+            // ParseParams 40d449..40d480: a ',' is consumed and the list then
+            // ends cleanly at end of text, so a trailing comma is accepted.
             r.Space(); if (r.at == tag.size()) break;
             if (!r.Take(',')) success = r.Fail("expected field ','");
-            else { r.Space(); if (r.at == tag.size()) success = r.Fail("trailing field ','"); }
         }
     }
     if (success && d.particle.empty()) success = r.Fail("missing particle prototype");

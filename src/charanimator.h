@@ -61,6 +61,8 @@ class TCharAnimator : public T3DAnimator
       // Hidden while OF_INVISIBLE (outside the editor); otherwise the drawn
       // alpha moves toward Transparency()/100
     [[nodiscard]] float DrawAlpha() const override;
+    [[nodiscard]] bool DrawsCombatFlash() const override;
+      // While the combat flash ticks run (retail Render 0x004d7be5)
       // The drawn alpha, or 0 while hidden or too faint to draw
 
   protected:
