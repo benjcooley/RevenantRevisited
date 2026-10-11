@@ -79,6 +79,16 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(vm.call(vm.api_address('kernel32.dll','SetFilePointer'),(handle,0xffffffff,0,2)),0xffffffff)
         self.assertEqual(vm.call(vm.api_address('kernel32.dll','GetLastError')),131)
 
+    def test_api_calls_counted_records_optional_and_checkpoints_can_be_disabled(self):
+        vm=Runtime(BASELINE);tick=vm.api_address('kernel32.dll','GetTickCount')
+        vm.call(tick);self.assertEqual((vm.api_calls,len(vm.api_trace)),(1,1))
+        vm.trace_apis=False;vm.call(tick);self.assertEqual((vm.api_calls,len(vm.api_trace)),(2,1))
+        vm.disable_checkpoints();self.assertEqual(vm._write_hooks,[])
+        with self.assertRaisesRegex(RuntimeError,'disabled'):vm.checkpoint()
+        buffer=vm.allocate(16)
+        with vm.bulk_writes([(buffer,16)]):vm.write(buffer,b'still writable')
+        self.assertEqual(bytes(vm.uc.mem_read(buffer,14)),b'still writable')
+
     def test_compiled_c_logger_uses_virtual_file_system(self):
         root=EXPERIMENTS/'winmain_skip';manifest=json.loads((root/'manifest.json').read_text())
         vm=Runtime(root/'Revenant.hooked.exe');vm.checkpoint()

@@ -63,7 +63,7 @@ reached.
 | `health`, `mana`, `fatigue` | current values |
 | `action` | the player's `doing` action number (retail numbering, PLAYER_INPUT.md §3) |
 | `target` | the player's fight target's position and health, or `null` |
-| `draws` | game `random()` calls since start: the port's `RandomDraws()`, the emulator's count of calls to `0x00483300` |
+| `draws` | draws from the game's random stream since start: the port's `RandomDraws()`; the emulator's count of calls to the CRT `rand` `0x0058c582` (`random()` `0x00483300` draws through it only when its bounds differ, as the port's does, and 32 other callers draw directly, as the port's `GameRand()` users do) |
 
 A replay compares each check line field by field and stops at the first
 tick with a difference, reporting the fields that differ. Fields a host
@@ -131,8 +131,8 @@ stderr.
 | `start` | `from`, `slot` (a bundle `start/` path when `from` is `slot`), `seed`, `record` (bundle directory, optional), `ini` (path, optional) | `t: 0` once play is reached and control can be given |
 | `step` | `ticks`, `events` (each with `t` relative to this step, `0 <= t < ticks`) | `t`: the session tick reached |
 | `observe` | `frame` (PNG path, optional), `objects` (radius in world units, default 800), `walkgrid` (radius, optional) | the observation (§7) |
-| `project` | `points`: `[[x, y, z], …]` | `screen`: `[[sx, sy] or null, …]`: game-screen pixels, `null` when off the play field; `world`: `[bool, …]`, whether a click at each reaches the world rather than the HUD or a modal (the port's `TPlayScreen::ClickRoute`). A click's map point is taken at Locke's height + 50, so project a point to click at that height |
-| `pick` | `x`, `y` | `pos`: the map point under that pixel by the game's pointer conversion (the right-button walk's: Locke's height + 50), `object`: the id under it or `null`, `world`: whether a click there reaches the world |
+| `project` | `points`: `[[x, y, z], …]` | `screen`: `[[sx, sy] or null, …]`: game-screen pixels, `null` when off the play field; `world`: `[bool, …]`, whether a click at each reaches the world rather than the HUD or a modal (the port's `TPlayScreen::ClickRoute`; a host without it omits it). A click's map point is taken at Locke's height + 50, so project a point to click at that height |
+| `pick` | `x`, `y` | `pos`: the map point under that pixel by the game's pointer conversion (the right-button walk's: Locke's height + 50), `object`: the id under it or `null`, `world`: whether a click there reaches the world. The retail host answers `pos` only: retail finds the object under the pointer with its 3D pick, which draws a whole frame and changes the game's pick cache, so asking would change the game |
 | `export_slot` | `slot` (a slot name, or `@last` for the slot the game wrote most recently: Quick Save picks its own "Quick Save N"), `to` | `path`, `slot` (the name exported) |
 | `mark` | `kind`, other fields | writes the mark and a check line to the recording |
 | `replay` | `bundle`, `verify` (bool), `until` (tick, optional) | `t`, and with `verify`: `diverged: null` or `{t, fields}`. A replay starts the way the recording did: a new game, or the bundle's own `start/<slot>` with its seed and INI |

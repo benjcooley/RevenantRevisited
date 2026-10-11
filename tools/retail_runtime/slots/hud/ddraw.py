@@ -33,12 +33,15 @@ Interfaces (vtable slot order per ddraw.h):
 - IDirectDrawSurface4: Lock/Unlock (whole surface or rect), GetSurfaceDesc,
   GetPixelFormat, GetAttachedSurface, SetColorKey/GetColorKey, Blt/BltFast
   (copy, color fill, source color key), IsLost/Restore, SetSurfaceDesc
-  (client memory), Add/DeleteAttachedSurface, SetClipper.
+  (client memory), Add/DeleteAttachedSurface, SetClipper, Flip (the
+  primary and its back buffer trade memory; counted in `flips`).
 """
 from __future__ import annotations
 
 import copy
 import struct
+import sys
+from array import array
 from dataclasses import dataclass, field
 
 from runtime import MissingAPI
@@ -65,6 +68,11 @@ RGB565 = struct.pack('<8I', 32, DDPF_RGB, 0, 16, 0xf800, 0x07e0, 0x001f, 0)
 DDBLT_ASYNC, DDBLT_COLORFILL, DDBLT_KEYSRC, DDBLT_WAIT = 0x200, 0x400, 0x8000, 0x1000000
 DDBLT_DEPTHFILL = 0x2000000           # same fill path: DDBLTFX.dwFillDepth shares dwFillColor's slot
 DDBLTFAST_SRCCOLORKEY = 0x1
+# Pixels as unsigned little-endian values of 1, 2 or 4 bytes (keyed blits).
+PIXEL_ARRAY = {1: 'B', 2: 'H', 4: 'I' if array('I').itemsize == 4 else 'L'}
+assert sys.byteorder == 'little'
+DDFLIP_WAIT, DDFLIP_NOVSYNC = 0x1, 0x8
+DDERR_SURFACEBUSY = 0x887601ae
 # SetColorKey flags
 DDCKEY_DESTBLT, DDCKEY_SRCBLT = 0x2, 0x8
 
@@ -85,6 +93,10 @@ E_NOINTERFACE = 0x80004002
 IID_IDIRECT3DTEXTURE2 = bytes.fromhex('02152893f88cd01189ab00a0c9054129')
 D3DDEVICEDESC_SIZE = 0xfc
 D3DCOLOR_RGB = 2
+# Light states retail reads back before setting them, with Direct3D's
+# documented initial values (D3DLIGHTSTATETYPE): MATERIAL no material,
+# AMBIENT black.
+D3DLIGHTSTATE_DEFAULTS = {1: 0, 2: 0}
 
 # Interfaces as (method, stdcall argument count with `this`), in vtable order.
 IDD4_METHODS = [
@@ -183,6 +195,8 @@ class DirectDraw:
         self.gdi = None                       # gdi.Gdi, for surface DCs (set by the world)
         self.width, self.height = width, height
         self.video_memory = video_memory
+        self.flips = 0                        # IDirectDrawSurface4::Flip calls (frames presented)
+        self.device_state = {}                # (object, 'LightState' | 'RenderState' | 'Background', type) -> value
         for dll_name, argc, fn in [('DirectDrawCreate', 3, self._create),
                                    ('DirectDrawEnumerateA', 2, self._enumerate)]:
             self._export(dll_name, argc, fn)
@@ -238,7 +252,7 @@ class DirectDraw:
         return obj
 
     STATE = ('surfaces', 'clippers', 'textures', 'primary', 'cooperative', 'display_mode',
-             'device_calls', '_vtables', 'dd1', 'dd4', 'd3d3')
+             'device_calls', '_vtables', 'dd1', 'dd4', 'd3d3', 'flips', 'device_state')
 
     def state(self):
         return copy.deepcopy({name: getattr(self, name) for name in self.STATE})
@@ -451,7 +465,9 @@ class DirectDraw:
 
     # Device and viewport: state-setting calls are recorded and succeed;
     # nothing is drawn through them in internal-raster mode (a Draw* call
-    # fails the run). Getters exist only where retail reads them.
+    # fails the run). Getters exist only where retail reads them: render
+    # and light states and the viewport background give back what was set
+    # (a light state never set: Direct3D's initial value, when listed).
     RECORDED = ('Add', 'Set', 'Begin', 'End', 'Clear', 'Delete', 'Initialize', 'Evict')
 
     def _device_method(self, interface, method, args):
@@ -471,6 +487,25 @@ class DirectDraw:
             return DD_OK
         if method == 'EnumTextureFormats':
             return DD_OK                             # none: textures are the fixture's RAM surfaces
+        if method in ('SetLightState', 'SetRenderState'):
+            self.device_state[args[0], method[3:], args[1]] = args[2]
+        elif method == 'SetBackground':
+            self.device_state[args[0], 'Background', 0] = args[1]
+        elif method in ('GetLightState', 'GetRenderState'):
+            key = (args[0], method[3:], args[1])
+            if key in self.device_state:
+                value = self.device_state[key]
+            elif method == 'GetLightState' and args[1] in D3DLIGHTSTATE_DEFAULTS:
+                value = D3DLIGHTSTATE_DEFAULTS[args[1]]
+            else:
+                raise MissingAPI(f'{interface}::{method}({args[1]}) of a state never set')
+            self.vm.put_u32(args[2], value)
+            return DD_OK
+        elif method == 'GetBackground':              # (material handle, valid)
+            key = (args[0], 'Background', 0)
+            self.vm.put_u32(args[1], self.device_state.get(key, 0))
+            self.vm.put_u32(args[2], int(key in self.device_state))
+            return DD_OK
         if method.startswith('Draw'):
             raise MissingAPI(f'{interface}::{method} reached in internal-raster mode')
         if method.startswith(self.RECORDED):
@@ -639,6 +674,8 @@ class DirectDraw:
             if flags & DDSD_PITCH:
                 s.pitch = struct.unpack_from('<I', raw, SD_PITCH)[0]
             return DD_OK
+        if method == 'Flip':
+            return self._flip(this, s, args[1], args[2])
         if method == 'BltFast':
             return self._blt_fast(s, *args[1:6])
         if method == 'Blt':
@@ -654,6 +691,24 @@ class DirectDraw:
                          DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT | DDSD_PITCH | DDSD_PIXELFORMAT
                          | DDSD_LPSURFACE, s.pixel_format, s.caps)
         s.locked += 1
+        return DD_OK
+
+    def _flip(self, this, s, override, flags):
+        """IDirectDrawSurface4::Flip on the primary: the memory behind the
+        front buffer and its back buffer (or the override) trade places,
+        as a flipping chain's surfaces do, so the COM pointers keep their
+        roles and the front buffer holds the frame just presented. No
+        vertical blank to wait for: DDFLIP_WAIT / NOVSYNC change nothing."""
+        if this != self.primary or not s.attached:
+            raise MissingAPI('Flip on a surface that is not the front of a flipping chain')
+        if flags & ~(DDFLIP_WAIT | DDFLIP_NOVSYNC):
+            raise MissingAPI(f'Flip flags 0x{flags:x}')
+        target = self.surface(override or s.attached[0])
+        if s.locked or target.locked:
+            return DDERR_SURFACEBUSY
+        s.memory, target.memory = target.memory, s.memory
+        s.pitch, target.pitch = target.pitch, s.pitch
+        self.flips += 1
         return DD_OK
 
     # ---- blits (DirectDraw's behavior, not retail code) ----------------
@@ -678,13 +733,12 @@ class DirectDraw:
             if key is None:
                 self.vm.write(address, bytes(row))
                 continue
-            current = bytearray(self.vm.uc.mem_read(address, width * bpp))
+            # Source pixels inside the key range leave the destination's.
             low, high = key
-            for x in range(width):
-                value = int.from_bytes(row[x * bpp:(x + 1) * bpp], 'little')
-                if not low <= value <= high:
-                    current[x * bpp:(x + 1) * bpp] = row[x * bpp:(x + 1) * bpp]
-            self.vm.write(address, bytes(current))
+            code = PIXEL_ARRAY[bpp]
+            current = array(code, bytes(self.vm.uc.mem_read(address, width * bpp)))
+            merged = array(code, [d if low <= v <= high else v for v, d in zip(array(code, row), current)])
+            self.vm.write(address, merged.tobytes())
 
     def _blt_fast(self, dst, x, y, source, rect, flags):
         src = self.surface(source)

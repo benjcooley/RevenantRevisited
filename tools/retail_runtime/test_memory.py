@@ -43,6 +43,27 @@ class MemoryTests(unittest.TestCase):
         vm.restore();self.assertEqual(vm.call(api(vm,'HeapSize'),(heap,0,address)),8)
         self.assertEqual(bytes(vm.uc.mem_read(address,8)),b'original')
 
+    def test_heap_reuse_takes_the_lowest_freed_block_that_fits_and_merges(self):
+        for reuse in (False,True):
+            vm=Runtime(BASELINE);vm.heaps.reuse=reuse;heap=vm.call(api(vm,'HeapCreate'),(0,0,0))
+            alloc=lambda size,flags=0:vm.call(api(vm,'HeapAlloc'),(heap,flags,size))
+            free=lambda address:vm.call(api(vm,'HeapFree'),(heap,0,address))
+            a,b,c=alloc(40),alloc(40),alloc(40)
+            vm.write(a,b'x'*40)
+            free(a)
+            again=alloc(24)
+            if not reuse:
+                self.assertGreater(again,c)              # monotonic: never reused
+                continue
+            self.assertEqual(again,a)                    # first fit, split
+            self.assertEqual(bytes(vm.uc.mem_read(again,4)),b'xxxx')   # not zeroed without HEAP_ZERO_MEMORY
+            self.assertEqual(vm.heaps.heaps[heap]['free'],{a+32:16})
+            free(again);free(b)                          # a, the remainder and b merge
+            self.assertEqual(vm.heaps.heaps[heap]['free'],{a:96})
+            zeroed=alloc(80,8)
+            self.assertEqual((zeroed,bytes(vm.uc.mem_read(zeroed,80))),(a,bytes(80)))
+            self.assertEqual(vm.heaps.heaps[heap]['free'],{a+80:16})
+
     def test_guest_stores_restore_with_native_or_python_tracking(self):
         # dirtypages.c tracks guest stores when it builds; the Python hook
         # otherwise. Either way: cross-page stores and a store to memory

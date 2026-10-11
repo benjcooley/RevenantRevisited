@@ -110,6 +110,10 @@ class Runtime:
         self.timers={}
         self.next_timer=1
         self.api_trace=[]
+        # Every API call is counted; `trace_apis` False skips the per-call
+        # records (a long run that never reads them, e.g. the play slot).
+        self.api_calls=0
+        self.trace_apis=True
         self.stubs={}
         self.error=None
         self.reached_return=False
@@ -161,6 +165,7 @@ class Runtime:
         self._native_dirty=dirtypages.DirtyPages(self.uc) if dirtypages.available() else None
         self._write_hooks=[self._add_write_hook()]
         self._bulk_active=False
+        self.checkpoints_enabled=True
         self.scheduler=Scheduler(self)
         self.heaps=Heaps(self)
         self.virtual_memory=VirtualMemory(self)
@@ -250,6 +255,15 @@ class Runtime:
         if self._native_dirty is not None:self._native_dirty.hook_del(hook)
         else:self.uc.hook_del(hook)
 
+    def disable_checkpoints(self):
+        """For a Runtime that never restores in place -- a game played on
+        and saved as disk images (image.py): remove the write hook, which
+        every guest store pays for checkpoint tracking (about half the run
+        time of a store-heavy frame). checkpoint() fails afterwards."""
+        if self.snapshot is not None:raise RuntimeError('A checkpoint is active')
+        for hook in self._write_hooks:self._del_write_hook(hook)
+        self._write_hooks=[];self.checkpoints_enabled=False
+
     @property
     def dirty_pages(self):
         """Pages written since the checkpoint."""
@@ -279,6 +293,8 @@ class Runtime:
         before entering makes reset correct even if rendering faults halfway.
         """
         if self._bulk_active:raise RuntimeError('Nested bulk-write scopes are not supported')
+        if not self.checkpoints_enabled:
+            yield;return
         spans=sorted((address,address+size) for address,size in ranges if size>0)
         merged=[]
         for start,end in spans:
@@ -354,6 +370,7 @@ class Runtime:
         s=self.surfaces[name];return bytes(self.uc.mem_read(s.address,s.stride*s.height))
 
     def checkpoint(self):
+        if not self.checkpoints_enabled:raise RuntimeError('Checkpoints are disabled in this Runtime')
         self.snapshot=dict(cpu=self.uc.context_save(),heap_next=self.heap_next,ticks=self.ticks,
             sleep_ms=self.sleep_ms,messages=copy.deepcopy(self.messages),windows=copy.deepcopy(self.windows),
             timers=copy.deepcopy(self.timers),next_timer=self.next_timer,
@@ -404,12 +421,13 @@ class Runtime:
         argc,implementation=handler
         sp=uc.reg_read(UC_X86_REG_ESP)
         args=struct.unpack('<'+'I'*argc,uc.mem_read(sp+4,argc*4)) if argc else ()
+        self.api_calls+=1
         try:result=implementation(args)
         except Exception as error:self.error=error;uc.emu_stop();return
         target=self.u32(sp)
         yielded=isinstance(result,Yield)
         if yielded and result.result is None:
-            self.api_trace.append(dict(dll=dll,function=name,args=list(args),blocked=True,
+            if self.trace_apis:self.api_trace.append(dict(dll=dll,function=name,args=list(args),blocked=True,
                 tid=self.scheduler.current,clock=self.milliseconds))
             uc.emu_stop();return
         if yielded:result=result.result
@@ -418,13 +436,14 @@ class Runtime:
             # cleans its own arguments and resumes the API's original caller.
             frame=sp+4+4*argc-4*(len(result.args)+1)
             self.write(frame,struct.pack('<'+'I'*(len(result.args)+1),target,*result.args))
-            self.api_trace.append(dict(dll=dll,function=name,args=list(args),delegated_to=result.address,clock=self.milliseconds))
+            if self.trace_apis:self.api_trace.append(dict(dll=dll,function=name,args=list(args),delegated_to=result.address,clock=self.milliseconds))
             uc.reg_write(UC_X86_REG_ESP,frame);uc.reg_write(UC_X86_REG_EIP,result.address);return
-        self.api_trace.append(dict(dll=dll,function=name,args=list(args),result=result,clock=self.milliseconds))
+        if self.trace_apis:self.api_trace.append(dict(dll=dll,function=name,args=list(args),result=result,clock=self.milliseconds))
         uc.reg_write(UC_X86_REG_EAX,result&0xffffffff)
         uc.reg_write(UC_X86_REG_ESP,sp+4+4*argc)
         uc.reg_write(UC_X86_REG_EIP,target)
         if yielded:uc.emu_stop()
+        else:self.scheduler.api_returned()
 
     def call(self,address,args=(),this=None,instruction_limit=1000000,stop_address=None):
         self.error=None;self.reached_return=False

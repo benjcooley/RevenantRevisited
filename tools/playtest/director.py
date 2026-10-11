@@ -374,6 +374,8 @@ class Director:
             if not (0 <= x < 640 and 0 <= y < 480):
                 continue
             picked = self.host.pick(x, y)
+            if 'object' not in picked:
+                return fx, fy - 30                  # a host that can't pick objects: the body, untested
             if picked.get('object') == obj['id'] and picked.get('world', True):
                 return x, y
         return None
