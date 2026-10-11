@@ -88,6 +88,7 @@
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
 #include "effects/restorelifepreview.h"
+#include "effects/nakrnothoriginal.h"
 #include "effects/dexteritypreview.h"
 #include "effects/antimagicpreview.h"
 #include "effects/skinpreview.h"
@@ -8094,6 +8095,15 @@ struct SVfxTestBootstrap {
                 delete c;
             };
             VfxTest::DeferredRegister(e);
+        }
+
+        {
+            VfxTest::SEffect e={};e.id="Nakrnoth_ORIGINAL";e.family="magic";e.pipeline="MS+SQ";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return nakrnoth_original::Spawn(o);};
+            e.submit=[](void* p,EFxDebugMode){nakrnoth_original::Advance(static_cast<nakrnoth_original::State*>(p),TTime::DeltaTime());};
+            e.submit_world=[](void* p,EFxDebugMode m){nakrnoth_original::SubmitWorld(static_cast<nakrnoth_original::State*>(p),m);};
+            e.is_alive=[](void* p){return nakrnoth_original::IsAlive(static_cast<nakrnoth_original::State*>(p));};
+            e.destroy=[](void* p){nakrnoth_original::Destroy(static_cast<nakrnoth_original::State*>(p));};VfxTest::DeferredRegister(e);
         }
 
         // W3-E #5 TNakrnothEffect_Bespoke — magic\Nakrnoth.I3D (boss-specific)

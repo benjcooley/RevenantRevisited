@@ -74,6 +74,13 @@ TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertEqual(admitted_candidates(row),["YTelekinesis_ORIGINAL"])
         self.assertFalse(candidate_metadata(row,"YTelekinesis_ORIGINAL")[0])
 
+    def test_nakrnoth_uses_exact_complete_owner(self):
+        row={'retail_type_id':'0xad92bd21','preview_candidates':['TNakrnothEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row),['Nakrnoth_ORIGINAL'])
+        self.assertFalse(candidate_metadata(row,'Nakrnoth_ORIGINAL')[0])
+        self.assertIn('kill775',candidate_metadata(row,'Nakrnoth_ORIGINAL')[1])
+        self.assertNotIn('Nakrnoth_ORIGINAL',admitted_candidates({'retail_type_id':'0x12345678','preview_candidates':['Nakrnoth_ORIGINAL']}))
+
     def test_essencedrain_uses_all_root_default_controller(self):
         row={"retail_type_id":"0xdefeca7e","preview_candidates":[]}
         self.assertEqual(admitted_candidates(row),["EssenceDrain_AUTHORED"])

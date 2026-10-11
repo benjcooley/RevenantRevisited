@@ -8,8 +8,24 @@ from character_native_preflight import ROOT, sha
 from fire_authentic_preflight import FireScene
 from software_probe import save_rgb565_png
 from speed_controller_preflight import read_asset
+from lit_software_probe import LitSoftwareFixture
+from unicorn.x86_const import UC_X86_REG_ESP,UC_X86_REG_EIP,UC_X86_REG_EAX
 
 class NakrnothScene(FireScene):
+    def __init__(self, executable, boot_image, width=1280, height=960, center=None, fast=False):
+        self.fast = fast
+        super().__init__(executable, boot_image)
+        if (width,height)!=(self.width,self.height):
+            self.width,self.height=width,height
+            self.software=LitSoftwareFixture(executable,width,height,camera=(3185,3185,0),vm=self.vm)
+            self.software.lighting((38,38,38),(1,1,1))
+        if center is not None:self.center=tuple(center)
+    def observe_draw(self, uc, *unused):
+        if self.fast and not self.raster_enabled:
+            sp=uc.reg_read(UC_X86_REG_ESP)
+            uc.reg_write(UC_X86_REG_EAX,0);uc.reg_write(UC_X86_REG_EIP,self.vm.u32(sp));uc.reg_write(UC_X86_REG_ESP,sp+32)
+            return
+        return super().observe_draw(uc,*unused)
     def new_object(self, name, *args, **kwargs):
         return super().new_object('Nakrnoth', *args, **kwargs)
 
@@ -27,9 +43,9 @@ class NakrnothScene(FireScene):
         return result
 
 
-def run(executable, boot_image, output, samples, frames=790):
+def run(executable, boot_image, output, samples, frames=790, width=1280, height=960, center=None, fast=False):
     output.mkdir(parents=True, exist_ok=False)
-    f = NakrnothScene(executable, boot_image)
+    f = NakrnothScene(executable, boot_image,width,height,center,fast)
     v, call = f.vm, f.world.call
     with zipfile.ZipFile(ROOT/'data/imagery.rvi') as archive:
         data = archive.read(next(n for n in archive.namelist()
@@ -42,7 +58,7 @@ def run(executable, boot_image, output, samples, frames=790):
         call(0x4de800, this=f.owner)
         f.raster_enabled = tick in samples
         pixels = f.render()
-        row = dict(tick=tick, state=f.state(), controllers=f.controller_state(),
+        row = dict(tick=tick, state=f.state(), controllers=f.controller_state() if not fast else [],
                    bounds=f.draw_bounds(), draw_count=len(f.draws),
                    draws=f.draws if f.raster_enabled else [])
         if f.raster_enabled:
@@ -74,5 +90,6 @@ if __name__ == '__main__':
     p.add_argument('--boot-image',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--frames',type=int,default=790)
+    p.add_argument('--width',type=int,default=1280);p.add_argument('--height',type=int,default=960);p.add_argument('--center',type=int,nargs=2);p.add_argument('--fast',action='store_true')
     p.add_argument('--samples',type=int,nargs='+',default=[1,17,41,80,120,160,200,240,280,320,360,400,440,480,520,560,600,640,680,700,720,740,750,760,770,775,780,790])
-    a=p.parse_args();run(a.executable,a.boot_image,a.output,a.samples,a.frames)
+    a=p.parse_args();run(a.executable,a.boot_image,a.output,a.samples,a.frames,a.width,a.height,a.center,a.fast)

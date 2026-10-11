@@ -64,7 +64,6 @@ PARTIAL = {
     '0xaeaeeb32': ('TJhagaAttackEffect_BESPOKE', 'stationary asset billboard; endpoint motion and original controller incomplete'),
     '0x0c05263b': ('TJTeleEffect_BESPOKE', 'single asset billboard; original teleport controller incomplete'),
     '0x0c052639': ('TCEyesEffect_BESPOKE', 'single asset billboard; original controller incomplete'),
-    '0xad92bd21': ('TNakrnothEffect_BESPOKE', 'single asset billboard; original controller incomplete'),
     '0xad92bc19': ('TCataclysmEffect_BESPOKE', 'single asset billboard; original controller incomplete'),
     '0xad92bc17': ('TFunnelEffect_BESPOKE', 'single asset billboard; original controller incomplete'),
     '0xaeaeeb26': ('TMaelstromEffect_BESPOKE', 'ground-flat asset billboard; original controller incomplete'),
@@ -88,6 +87,8 @@ SOURCE_MAPPINGS = {
     '0x55471bff': 'Burn_AUTHENTIC_ACOLYTE_INTEGER',
     '0xdedbdbed': 'Halo_AUTHORED_PUBLIC60',
     '0xddc4042e': 'Blood_AUTHORED',
+
+    '0xad92bd21': 'Nakrnoth_ORIGINAL',
     '0xbabeface': 'Quicksand_ORIGINAL_TARGET',
     '0x5975abde': 'TDripEffect_LINKED_NO_SPLASH',
     '0xad92bc16': 'Invisible_AUTHORED',
@@ -170,6 +171,9 @@ def admitted_candidates(row):
     row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if not n.startswith('Halo_AUTHORED_PUBLIC')])
     if row.get('retail_type_id','').lower()!='0xddc4042e':
         row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n!='Blood_AUTHORED'])
+
+    if row.get('retail_type_id','').lower()=='0xad92bd21':
+        return ['Nakrnoth_ORIGINAL']
     if row.get('retail_type_id','').lower()=='0x838cffba':
         return ['Createfood_ORIGINAL_CONTEXT']
     if row.get('retail_type_id','').lower()=='0x369a5d2e':
@@ -177,7 +181,7 @@ def admitted_candidates(row):
     if row.get('retail_type_id','').lower()=='0x5975abde':
         return ['TDripEffect_LINKED_NO_SPLASH']
     candidates = [name for name in row['preview_candidates'] if name in IMPLEMENTED
-                  and name not in ('TDripEffect_LINKED_NO_SPLASH','Teleporter_ORIGINAL_NULL','Createfood_ORIGINAL_CONTEXT')]
+                  and name not in ('Nakrnoth_ORIGINAL','TDripEffect_LINKED_NO_SPLASH','Teleporter_ORIGINAL_NULL','Createfood_ORIGINAL_CONTEXT')]
     explicit = SOURCE_MAPPINGS.get(row.get('retail_type_id', '').lower())
     if explicit: candidates.insert(0, explicit)
     candidates.sort(key=lambda name: (0 if name == explicit else 1 if '_AUTHORED_' in name else 2 if '_BESPOKE' in name.upper() else 3))
@@ -194,6 +198,9 @@ def candidate_metadata(row, name):
         return False, 'Exact Halo authored mesh/public InitParams(60,0.04), explicit test inputs; natural retail caller not certified'
     if row.get('retail_type_id','').lower()=='0xddc4042e' and name=='Blood_AUTHORED':
         return False, 'Exact Blood public SetParams(40,224,3,5,5,1) spray, live global RNG without reseed; natural actor damage/map insertion not certified'
+
+    if row.get('retail_type_id','').lower()=='0xad92bd21' and name=='Nakrnoth_ORIGINAL':
+        return False, 'Original null-spell fixed-owner Nakrnoth,63 authored objects/ten-emitter controller and real kill775; natural boss/spell/audio/device and exact pixels not certified'
     if row.get('retail_type_id','').lower()=='0x838cffba' and name=='Createfood_ORIGINAL_CONTEXT':
         return False, 'Createfood quality3 white-light0/ambient32 lookup context, failed food insertion clock0, real kill80; natural lights, food/map service and actors not certified'
     if row.get('retail_type_id','').lower()=='0x369a5d2e' and name=='Teleporter_ORIGINAL_NULL':
