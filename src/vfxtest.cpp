@@ -55,6 +55,7 @@
 #include "effects/fairypreview.h"
 #include "effects/fairy2preview.h"
 #include "effects/flamevariantspreview.h"
+#include "effects/ribbonpreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
@@ -5448,12 +5449,14 @@ struct SVfxTestBootstrap {
         ribbon_bespoke.id            = "TRibbonAnimator_BESPOKE";
         ribbon_bespoke.family        = "ribbon";
         ribbon_bespoke.pipeline      = "FB";
-        // Ribbon: revive halo — SpellGround cadence (one halo, ground-
-        // anchored, lifts then fades; harness recycles every ~kRibbonLifeTicks).
-        ribbon_bespoke.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
-        ribbon_bespoke.factory       = [](const S3DPoint& o) -> void* { return RibbonBespokeSpawn(o); };
-        ribbon_bespoke.submit        = [](void* c, EFxDebugMode d) { RibbonBespokeSubmit(c, d); };
-        ribbon_bespoke.destroy       = [](void* c) { RibbonBespokeDestroy(c); };
+        // Exact base Ribbon null-spell controller: grow20ticks, then hold;
+        // sparks continue their authored24tick cycles without forced retrigger.
+        ribbon_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        ribbon_bespoke.factory=[](const S3DPoint&o)->void*{return ribbon_preview::Spawn(o);};
+        ribbon_bespoke.submit=[](void*c,EFxDebugMode){ribbon_preview::Advance(static_cast<ribbon_preview::State*>(c),TTime::DeltaTime());};
+        ribbon_bespoke.submit_world=[](void*c,EFxDebugMode){ribbon_preview::SubmitWorld(static_cast<ribbon_preview::State*>(c));};
+        ribbon_bespoke.is_alive=[](void*c){return ribbon_preview::Alive(static_cast<ribbon_preview::State*>(c));};
+        ribbon_bespoke.destroy=[](void*c){ribbon_preview::Destroy(static_cast<ribbon_preview::State*>(c));};
         VfxTest::DeferredRegister(ribbon_bespoke);
 
         VfxTest::SEffect ripple = {};
