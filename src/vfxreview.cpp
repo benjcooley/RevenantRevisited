@@ -5,6 +5,7 @@
 #include "vfxreviewspawn.h"
 #include "vfxreviewpreview.h"
 #include "effect.h"
+#include "effects/lightstriporiginal.h"
 #include "gamemap.h"
 #include "mapmanager.h"
 #include "mappane.h"
@@ -53,6 +54,7 @@ struct Entry {
     std::unique_ptr<TFireBallEffect> projectile;
     std::unique_ptr<TPhotonEffect_Bespoke> photon;
     std::unique_ptr<TIceBoltEffect_Bespoke> beam;
+    std::unique_ptr<lightstrip_original::State,void(*)(lightstrip_original::State*)> strip{nullptr,lightstrip_original::Destroy};
     int projectile_state = -1;
 };
 TMapRenderer renderer;
@@ -89,6 +91,7 @@ void Remove(Entry& e) {
     e.projectile.reset();
     e.photon.reset();
     e.beam.reset();
+    e.strip.reset();
     if (auto* object = Resolve(e)) MapPane.DeleteObject(object);
     e.map_index = -1;
 }
@@ -257,7 +260,8 @@ void Spawn(Entry& e, size_t index) {
     const bool authored_yfireball = e.id==0x63fd3827u;
     const bool authored_photon = e.id==0x113803f4u;
     const bool authored_icebolt = e.id==0xb1c4c90fu;
-    if (!support.safe_factory && !authored_yfireball && !authored_photon && !authored_icebolt) {
+    const bool authored_lightstrip = e.id==0x10da54d0u;
+    if (!support.safe_factory && !authored_yfireball && !authored_photon && !authored_icebolt && !authored_lightstrip) {
         const auto preview_info=DescribeVfxReviewPreview(e.id);
         if(preview_info.supported) e.preview=CreateVfxReviewPreview(e.id,e.station);
         if(e.preview) {
@@ -274,6 +278,17 @@ void Spawn(Entry& e, size_t index) {
     if (support.projectile || support.supports_endpoints) {
         source=PathEndpoint(index,false);
         target=PathEndpoint(index,true);
+    }
+    if(authored_lightstrip) {
+        e.strip.reset(lightstrip_original::Spawn(source,target));
+        if(!e.strip) {
+            e.failed=true; e.missing_visual=true;
+            e.status="Original LightStrip initialization failed"; return;
+        }
+        e.missing_visual=false; e.status="Original moving LightStrip with terrain target fixture"; ++e.cycles;
+        log_info("[vfx-review] projectile name=%s cycle=%u source=%d,%d,%d target=%d,%d,%d terrain_target=1",
+            e.name.c_str(),e.cycles,source.x,source.y,source.z,target.x,target.y,target.z);
+        return;
     }
     if(authored_icebolt) {
         e.beam.reset(TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE(source));
@@ -404,6 +419,11 @@ bool Initialize() {
     renderer.SetReviewSubmissionCallbacks(
         [] { for(auto& e:entries) {
             if(e.preview) e.preview->Submit();
+            if(e.strip) {
+                if(!lightstrip_original::IsAlive(e.strip.get())) {
+                    e.strip.reset(); e.next_spawn=ticks/24.0+1.5;
+                } else lightstrip_original::Advance(e.strip.get(),TTime::DeltaTime());
+            }
             if(e.beam) {
                 if(!e.beam->IsAlive()) {
                     e.beam.reset(); e.next_spawn=ticks/24.0+1.5;
@@ -438,6 +458,7 @@ bool Initialize() {
         } },
         [] { for(auto& e:entries) {
             if(e.preview) e.preview->SubmitWorld();
+            if(e.strip) lightstrip_original::SubmitWorld(e.strip.get(),EFxDebugMode::Normal);
             if(e.beam) e.beam->SubmitWorldMeshes_BESPOKE(EFxDebugMode::Normal);
             if(e.projectile) e.projectile->SubmitWorldRing(EFxDebugMode::Normal);
         } });
@@ -489,7 +510,7 @@ void Render() {
     for (size_t i=0;i<entries.size();++i) {
         auto& e=entries[i];
         if (std::abs(schedule.SlotDistance(i)-distance)>650) { Remove(e); continue; }
-        if (!e.preview && !e.projectile && !e.photon && !e.beam && !Resolve(e) && !e.failed && ticks/24.0>=e.next_spawn) {
+        if (!e.preview && !e.projectile && !e.photon && !e.beam && !e.strip && !Resolve(e) && !e.failed && ticks/24.0>=e.next_spawn) {
             Spawn(e,i); e.next_spawn=ticks/24.0+.35;
         }
     }

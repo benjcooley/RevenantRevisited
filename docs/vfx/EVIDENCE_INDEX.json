@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 111,
+    "retail_rows_with_source_fixes_recorded": 112,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 89,
+    "visual_fidelity_confirmed_rows": 92,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 89,
-    "remaining_visual_review_rows": 87
+    "reviewed_visual_pass_rows": 92,
+    "remaining_visual_review_rows": 84
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1442,6 +1442,27 @@
       "check": "fairy_full_native_actual_metal_visual",
       "status": "pass",
       "scope": "Ten original full software/common/native-domain actual Metal phases: moving authored sprite, colored dust, persistent trail and199\u21920 wrap. Scoped state0 loop; natural caller/end-state trigger/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-lightstrip-authored-20261010/root-approval.json": {
+      "sha256": "7f2159573ae6aaee3860a394427326a2e7a97fa1d8d26519096fb190309a8a50",
+      "retail_row": "LightStrip:0x10da54d0",
+      "check": "lightstrip_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Eighteen in-viewport original full software/actual Metal native-domain phases: three-state launch/travel, explicit terrain wall impact with original20-unit overshoot, end sparks/blank tail. Some long branches and outer sparks touch the fixed viewport; off-screen/arbitrary-camera/actor appearance and natural caller/audio remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-waterfall-authored-20261010/root-approval.json": {
+      "sha256": "f91470427ebd5a874a87bb88a9b4d1fb37fe9d316b9cb8973b9d473583d59037",
+      "retail_row": "Waterfall:0xa907dabf",
+      "check": "waterfall_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Six complete original full factory/normal-lit software and actual Metal native-domain phases at corrected declared tick=capture, all bounds unclipped; exact authored normals and blue streaks. Controlled map lifecycle separate; natural context/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-water-authored-20261010/root-approval.json": {
+      "sha256": "480c4d62274deef3fc24d7fff5253c2800ad249f14e855b33ae2eaa6b3555e16",
+      "retail_row": "Water:0x1903abcd",
+      "check": "water_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Six complete original full factory/normal-lit software and actual Metal native-domain phases at corrected declared tick=capture, all bounds unclipped; blue authored moving particles. Controlled map lifecycle separate; natural context/device/exactpixels open."
     }
   }
 }

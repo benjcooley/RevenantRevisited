@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "5b5c3966d440a5844c587a4fbb96a89c3fbda2efabc2e69ff6793b7209a85ed1",
+    "harness_sha256": "d0c2b31029afe4496bff29b89d5f2c671a7bdad44e6ab2b407e1719175afd8bd",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 111,
+    "retail_rows_with_source_fixes_recorded": 112,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 89,
+    "visual_fidelity_confirmed_rows": 92,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 89,
-    "remaining_visual_review_rows": 87
+    "reviewed_visual_pass_rows": 92,
+    "remaining_visual_review_rows": 84
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -11018,27 +11018,39 @@
         "LightStrip",
         "TStripEffect"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: restored complete own original/controller/authored render and actual GPU submission; source/state/projection scope recorded in LIGHTSTRIP_NATIVE_VISUAL.md"
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved recorded configuration and actual runtime; pursue listed caller/scene/device/clipping/exactpixel gates separately.",
       "notes": [],
-      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
+      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Eighteen in-viewport original full software/actual Metal native-domain phases: three-state launch/travel, explicit terrain wall impact with original20-unit overshoot, end sparks/blank tail. Some long branches and outer sparks touch the fixed viewport; off-screen/arbitrary-camera/actor appearance and natural caller/audio remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-lightstrip-authored-20261010/root-approval.json",
+        "sha256": "7f2159573ae6aaee3860a394427326a2e7a97fa1d8d26519096fb190309a8a50",
+        "note": "docs/vfx/forensics/LIGHTSTRIP_NATIVE_VISUAL.md"
+      }
     },
     {
       "index": 35,
@@ -13792,7 +13804,8 @@
         "TWaterEffect_BESPOKE"
       ],
       "source_fixes": [
-        "Literal Water now uses its authored XY quad with native scale/translation and mode16, true24Hz state advancement and rendering-only subframe motion. Shared idempotent preview/map initializer preserves25drops/25warmup and RNG; identity-less preview logging is safe and offscreen cleanup does not kill permanent owners."
+        "Literal Water now uses its authored XY quad with native scale/translation and mode16, true24Hz state advancement and rendering-only subframe motion. Shared idempotent preview/map initializer preserves25drops/25warmup and RNG; identity-less preview logging is safe and offscreen cleanup does not kill permanent owners.",
+        "2026-10-10: restored complete own original/controller/authored render and actual GPU submission; source/state/projection scope recorded in LITERAL_WATER_VISUAL_20261010.md"
       ],
       "port_smoke_ids": [
         "TWaterEffect_BESPOKE"
@@ -13807,13 +13820,13 @@
         "port_smoke": true,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_literal_water_builder_shared_component_preview_map_producer",
-      "next_action": "Real preview and exact Water map create/move/delete now pass with one component. Verify natural environmental placement, material illumination/culling and original/Metal device parity separately.",
+      "next_action": "Preserve approved recorded configuration and actual runtime; pursue listed caller/scene/device/clipping/exactpixel gates separately.",
       "notes": [],
       "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
       "thin_emulator_checks": [
@@ -13850,6 +13863,16 @@
         "created_visible": true,
         "clean_floor_restored": true,
         "natural_trigger_verified": false
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six complete original full factory/normal-lit software and actual Metal native-domain phases at corrected declared tick=capture, all bounds unclipped; blue authored moving particles. Controlled map lifecycle separate; natural context/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-water-authored-20261010/root-approval.json",
+        "sha256": "480c4d62274deef3fc24d7fff5253c2800ad249f14e855b33ae2eaa6b3555e16",
+        "note": "docs/vfx/forensics/LITERAL_WATER_VISUAL_20261010.md"
       }
     },
     {
@@ -13866,7 +13889,8 @@
         "Exact retail Waterfall uses Misc/Water.i3d authored quad/UV, literal scale and both Z rotations and live owner transform. Retail flags0x100 clear VERTS0x2000; RenderObject selects default authored FVF0x112 vertices and actual material. Removed guessed billboard and ignored copied-LVERTEX CPU grayscale from submitted RGBA.",
         "Source 100-drop initialization, 100-tick warmup, RNG order, landing/reset branch order and true 24Hz advance restored. 24100 exact state/next-RNG cases, 125 multi-rate cases and render assertions pass. Typed stable-identity hook attaches one persistent reference component; manual preview avoids duplicate ticks.",
         "Hashed retail opcode and extracted production render checks verify default vertex/material selection, zero ignored CPU-light queries, authored RGBA/geometry/transforms and stable state/RNG. Integrated corrected binary build passed; fresh saved/command recapture passes with 121/49 distinct images; normal/device illumination remains open.",
-        "Identity-less Waterfall previews no longer read missing type-info from initializer/first-tick diagnostic logs; twelve changing nonempty actual GPU frames exit normally. Dynamics, assets and material policy unchanged."
+        "Identity-less Waterfall previews no longer read missing type-info from initializer/first-tick diagnostic logs; twelve changing nonempty actual GPU frames exit normally. Dynamics, assets and material policy unchanged.",
+        "2026-10-10: restored complete own original/controller/authored render and actual GPU submission; source/state/projection scope recorded in LITERAL_WATER_VISUAL_20261010.md"
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -13879,13 +13903,13 @@
         "port_smoke": true,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "reference_component_verified_through_actual_saved_identity_and_command_map_lifecycle",
-      "next_action": "Full100-drop state reverified; use exact native fixture. Check naturalmapbinding/ownerpose, lighting/blend, modernquadtriangulation andbackend independently.",
+      "next_action": "Preserve approved recorded configuration and actual runtime; pursue listed caller/scene/device/clipping/exactpixel gates separately.",
       "notes": [
         "Literal __Waterfall preview selects kVariantWater_I3D = misc/Water.i3d, matching the shipped Waterfall row. WFall belongs to the neighboring WaterFlft preview; other variants need independent animator/asset evidence.",
         "The prior port wrongly submitted DoLighting copied-LVERTEX grayscale, although retail flags0x100 clear VERTS0x2000 and the actual draw selects authored normals/material. Current Unlit still does not reproduce normal/material/device illumination; LitFlat is approximate. No acceptance extends to other Water variants.",
@@ -14068,6 +14092,16 @@
         "frames": 12,
         "status": "pass",
         "scope": "Actual preview lifecycle/visibility,notfullretail-versus-Metalcomparison"
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six complete original full factory/normal-lit software and actual Metal native-domain phases at corrected declared tick=capture, all bounds unclipped; exact authored normals and blue streaks. Controlled map lifecycle separate; natural context/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-waterfall-authored-20261010/root-approval.json",
+        "sha256": "f91470427ebd5a874a87bb88a9b4d1fb37fe9d316b9cb8973b9d473583d59037",
+        "note": "docs/vfx/forensics/LITERAL_WATER_VISUAL_20261010.md"
       }
     },
     {

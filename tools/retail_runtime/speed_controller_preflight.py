@@ -213,7 +213,7 @@ class NativeSpeed:
             self.animobjs.append(obj)
             if track['parent']!=-1:
                 raise ValueError('Parented authored fixture requires its actual hierarchy; no fallback')
-            if self.eager_pose and track['keys'] and v.call(0x40a420, (obj, 0, 0, 0, 0), this=self.imagery) != 1:
+            if getattr(self,'eager_pose',True) and track['keys'] and v.call(0x40a420, (obj, 0, 0, 0, 0), this=self.imagery) != 1:
                 if i in self.required_pose_indices:
                     raise AssertionError(f'Original required asset key/matrix decode failed for {i}:{o["name"]}')
                 # Record the native rejection of an unused state0 track. Do
