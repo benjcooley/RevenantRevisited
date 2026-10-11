@@ -42,7 +42,7 @@ struct Entry {
     std::string name, asset, status = "Approaching";
     S3DPoint station{};
     int map_index = -1;
-    double clearance = 240;
+    double clearance = 96;
     double review_footprint = 0;
     unsigned cycles = 0;
     int sound_tags = 0;
@@ -183,7 +183,7 @@ bool LayoutStations() {
         const auto colon=item.find(':'); if(colon==std::string::npos) return false;
         const auto name=Lower(item.substr(0,colon)); const auto number=item.substr(colon+1);
         char* tail=nullptr; const double value=strtod(number.c_str(),&tail);
-        if(number.empty() || *tail || !std::isfinite(value) || value<180 || value>2400) return false;
+        if(number.empty() || *tail || !std::isfinite(value) || value<64 || value>2400) return false;
         char* id_end=nullptr; const auto id=strtoul(name.c_str(),&id_end,0); bool found=false;
         for(auto& e:entries) if(Lower(e.name)==name || (name.rfind("0x",0)==0 && !*id_end && id==e.id)) {
             e.clearance=value; found=true;
@@ -304,7 +304,7 @@ void Spawn(Entry& e, size_t index) {
     object->OnScreen();
     object->Animate(false);
     auto result=ConfigureVfxReviewSpawn(*object,source,target);
-    if(!result.uses_effect_runtime) {
+    if(!result.uses_effect_runtime || (!result.renderer_supported && DescribeVfxReviewPreview(e.id).supported)) {
         // Bare I3D faces are not an effect implementation. Use the actual
         // registered initializer/controller/submission when one exists.
         Remove(e);

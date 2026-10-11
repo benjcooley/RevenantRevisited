@@ -186,12 +186,12 @@ VfxReviewSpawnInfo ConfigureVfxReviewSpawn(TObjectInstance& effect,
     info.uses_effect_runtime = particle_renderer || replacing_component || authored_draw;
     if (particles && !particle_renderer && !replacing_component) {
         info.renderer_supported = false;
-        info.uses_effect_runtime = false;
-        info.description = "Unsupported authored particle controller; label only";
+        info.uses_effect_runtime = authored_draw;
+        info.description = "Partial authored draw; particle controller unavailable";
     } else if (unknown_controller && !replacing_component) {
         info.renderer_supported = false;
-        info.uses_effect_runtime = false;
-        info.description = "Authored controller not implemented; label only";
+        info.uses_effect_runtime = authored_draw;
+        info.description = "Partial authored draw; controller unavailable";
     } else if (!faces && !particle_renderer && !replacing_component &&
                !dynamic_cast<TFireBallEffect*>(&effect)) {
         info.renderer_supported = false;

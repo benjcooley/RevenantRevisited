@@ -22,7 +22,7 @@ static double Length(Vec2 value) { return std::hypot(value.x, value.y); }
 
 int main()
 {
-    assert(VfxReviewSchedule{}.speed == 48.0);
+    assert(VfxReviewSchedule{}.speed == 96.0);
     for (double ratio : {2.0, 2.5, 3.0}) {
         VfxReviewSchedule schedule; schedule.count = 176; schedule.ratio = ratio; schedule.speed = 16; schedule.spacing = 420;
         assert(schedule.IsValid());
@@ -177,7 +177,7 @@ int main()
     VfxReviewSchedule single; single.count = 1;
     single.station_distances={0.0};
     assert(single.NearestSlot(50.0)==0);
-    assert(single.Duration() == 30.0); Equal(single.CameraScreenOffset(15.0), {});
+    assert(single.Duration() == 15.0); Equal(single.CameraScreenOffset(7.5), {});
     Equal(single.CameraScreenOffset(-10.0), single.CameraScreenOffset(0.0));
     for (double bad : {0.0, -1.0, std::numeric_limits<double>::infinity(),
                        std::numeric_limits<double>::quiet_NaN()}) {
