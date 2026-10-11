@@ -55,7 +55,7 @@ class Stage:
     name: str
     index: int
     start: str = ''                  # GAME:WAYPOINT it started from, 'newgame', or '' when it couldn't
-    status: str = 'pending'          # pending, running, reached, missed, broke, skipped
+    status: str = 'pending'          # pending, running, scoring, reached, missed, broke, skipped
     ticks: int | None = None
     seconds: float | None = None
     waypoint: str = ''               # the waypoint directory it made
@@ -140,7 +140,9 @@ class AutoTest:
         session.mkdir(parents=True, exist_ok=True)
         with (session / 'play.out').open('w') as log:
             subprocess.run([str(c) for c in command], stdout=log, stderr=subprocess.STDOUT, check=False)
-        self.score(stage, session)
+        stage.status = 'scoring'
+        self.save()
+        stage.status = self.score(stage, session)
         self.save()
 
     def play_through(self, stages: list[Stage]) -> None:
@@ -153,22 +155,21 @@ class AutoTest:
             self.play(stage)
         self.save()
 
-    def score(self, stage: Stage, session: Path) -> None:
+    def score(self, stage: Stage, session: Path) -> str:
+        """Fill in the stage's results from its session; its status."""
         path = session / 'summary.json'
         if not path.exists():
-            stage.status, stage.error = 'broke', f'no summary: see {session / "play.out"}'
-            return
+            stage.error = f'no summary: see {session / "play.out"}'
+            return 'broke'
         summary = json.loads(path.read_text())
         stage.ticks, stage.seconds = summary.get('tick'), summary.get('seconds')
         stage.spend, stage.replay = summary.get('spend') or {}, summary.get('replay')
         stage.incidents = incidents(Path(summary.get('bundle', session / 'bundle')))
-        if summary.get('error'):
-            stage.status, stage.error = 'broke', summary['error']
+        stage.error = summary.get('error', '')
         reached = stage.name in summary.get('reached', [])
-        if not stage.error:
-            stage.status = 'reached' if reached else 'missed'
+        status = 'broke' if stage.error else 'reached' if reached else 'missed'
         if not reached or not summary.get('waypoints'):
-            return
+            return status
         waypoint = Waypoint.load(Path(summary['waypoints'][-1]))
         stage.waypoint, stage.retired = waypoint.dir.name, waypoint.retired
         if self.args.interop and other(stage.game):
@@ -185,6 +186,7 @@ class AutoTest:
             result = out / 'crosscheck.json'
             stage.variances = (json.loads(result.read_text())['variances'] if result.exists()
                                else [dict(kind='crosscheck', what='broke', port=None, retail=None)])
+        return status
 
     def run(self) -> int:
         self.out.mkdir(parents=True, exist_ok=True)
