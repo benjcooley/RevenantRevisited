@@ -115,6 +115,7 @@ class TDisplay : public TSurface
     // framesnap.cpp can read it via Metal blit (renderer_readback). Lazily
     // allocated on the first FlipPage in snap mode; returns invalid id
     // outside snap mode. Display.IsActive() is the lifetime guard.
+    [[nodiscard]] bool     ImGuiReady() const { return imgui_initialized; }
     [[nodiscard]] sg_image SnapCaptureImage() const { return snap_capture_color; }
     [[nodiscard]] int32_t  SnapCaptureWidth()  const { return snap_capture_w; }
     [[nodiscard]] int32_t  SnapCaptureHeight() const { return snap_capture_h; }

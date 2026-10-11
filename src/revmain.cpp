@@ -3079,6 +3079,11 @@ static int32_t SappKeyToVK(sapp_keycode key)
 static void AppEvent(const sapp_event* ev)
 {
     if (!ev) return;
+    // macOS can deliver window events (focus on activation) before AppInit
+    // has stood the display up: there's no ImGui context, nor a game, to
+    // route them to yet.
+    if (!Display.ImGuiReady())
+        return;
 
     // ImGui sees every event. simgui_handle_event returns the OR of
     // WantCaptureKeyboard and WantCaptureMouse, which swallows mouse drags
