@@ -87,6 +87,7 @@ SOURCE_MAPPINGS = {
     '0xad99bd33': 'GVortex_ORIGINAL',
     '0x0c052639': 'CEyes_ORIGINAL',
     '0xad99fdf2': 'MPAppear_ORIGINAL',
+    '0xad92bc1c': 'TEnergySpray_BESPOKE_NULLSPELL',
     '0xaeaeeb31': 'YLose_AUTHORED',
     '0xaeaeeb34': 'YAttack_AUTHORED',
     '0xad92bd26': 'TFairy2_AUTHORED',
