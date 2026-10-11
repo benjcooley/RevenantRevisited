@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 132,
+    "retail_rows_with_source_fixes_recorded": 133,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 117,
+    "visual_fidelity_confirmed_rows": 118,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 117,
-    "remaining_visual_review_rows": 59
+    "reviewed_visual_pass_rows": 118,
+    "remaining_visual_review_rows": 58
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1645,6 +1645,13 @@
       "check": "independent_native_software_actual_metal_appearance",
       "status": "pass_for_recorded_configuration",
       "scope": "Twenty full original software/actual Metal native-domain greenpillar/coiledband/risingflare phases across real240-frame owner/blanktail. Two fixed1920x1080 views cover authored1920x1780 extents without scaling; native overlap0\u20132125 differing pixels remains viewport/raster limit, rawwindows retained.33 sparse/full actual pixelmatches preserve24Hz Render;25,920 keys/22,560 matrices. Naturalcaller/audio/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-energyspray-authored-20261010/root-approval.json": {
+      "sha256": "9e455d84008037c7c39757ceea0a339eb58b08f1f8fdd1f32d5bdcf943c87220",
+      "retail_row": "energyspray:0xad92bc1c",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Fifteen full original software/actual Metal native-domain null-spell composite phases through realkill136/blank140, plus three wholefan70/90/110 comparisons using four fixedsupported1920x1080 views.25radialcards/core/20prelittriangles,87,984state/RNG fields,82,096matrices/2,220colors. ExplicitRGBA5 alpha/flat-depth andsource-contribution controls, native-only textured/untextured primitiveguard. Common140frames/defaultdiagnostics unchanged. Naturalactor-hand/facing/damage/audio, viewportoverlap/destination/device/exactpixels open."
     }
   }
 }
