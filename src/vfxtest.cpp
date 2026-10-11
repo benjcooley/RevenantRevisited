@@ -1,4 +1,5 @@
 #include "effects/cometoriginal.h"
+#include "effects/fgeyseroriginal.h"
 #include "effects/lightstriporiginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
@@ -5282,7 +5283,8 @@ struct SVfxTestBootstrap {
             original.submit_world=[](void* c,EFxDebugMode mode){lightstrip_original::SubmitWorld(static_cast<lightstrip_original::State*>(c),mode);};
             original.destroy=[](void* c){lightstrip_original::Destroy(static_cast<lightstrip_original::State*>(c));};
             VfxTest::DeferredRegister(original);
-        }        {
+        }
+        {
             VfxTest::SEffect original{};original.id="MeteorStorm_AUTHORED";
             original.family="strip";original.pipeline="IM+QUAD";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
             original.factory=[](const S3DPoint& o)->void*{return comet_original::Spawn(o);};
@@ -5290,6 +5292,15 @@ struct SVfxTestBootstrap {
             original.submit_world=[](void* c,EFxDebugMode mode){comet_original::SubmitWorld(static_cast<comet_original::State*>(c),mode);};
             original.is_alive=[](void* c){return comet_original::IsAlive(static_cast<comet_original::State*>(c));};
             original.destroy=[](void* c){comet_original::Destroy(static_cast<comet_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="FGeyser_AUTHORED";
+            original.family="environment";original.pipeline="IM+QUAD";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return fgeyser_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){fgeyser_original::Advance(static_cast<fgeyser_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){fgeyser_original::SubmitWorld(static_cast<fgeyser_original::State*>(c),mode);};
+            original.destroy=[](void* c){fgeyser_original::Destroy(static_cast<fgeyser_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
 

@@ -51,6 +51,7 @@ struct Owner{uint32_t ObjId()const{return 0xad92bd35u;}int GetState()const{retur
 struct Imagery{bool HasRetailStaticParticleProfile(uint32_t)const{return false;}
  bool HasRetailLightStripProfile()const{return false;}
  bool HasRetailCometProfile()const{return false;}
+ bool HasRetailFGeyserProfile()const{return false;}
  bool HasRetailMightPartSysProfile()const{return false;}
  bool HasRetailImmortalmightPartSysProfile()const{return false;}
  bool HasRetailFmasteryPartSysProfile()const{return false;}

@@ -56,6 +56,7 @@ struct Imagery{uint32_t static_particles_profile=type_id;
  STATIC_PROFILE_METHOD
  bool HasRetailLightStripProfile()const{return false;}
  bool HasRetailCometProfile()const{return false;}
+ bool HasRetailFGeyserProfile()const{return false;}
  bool HasRetailMightPartSysProfile()const{return false;}
  bool HasRetailImmortalmightPartSysProfile()const{return false;}
  bool HasRetailFmasteryPartSysProfile()const{return false;}
