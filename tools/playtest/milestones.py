@@ -16,7 +16,7 @@ KEEP = [
     Milestone('opening',
               'Watch the opening scene in the Keep. When Locke is asked questions, ask who these people '
               'are, who Locke is and why he was brought here.',
-              lambda obs, d: bool(d.choices_taken) and control_on(obs, d),
+              lambda obs, d: bool(d.choices_taken) and control_on(obs, d), save=True,
               expect={'RAHULSTATE': 1}),                    # keep.s:660, SardokR sets Rahul on
     Milestone('rahul defeated',
               'A crazed priest, Rahul, attacks Locke in the summoning chamber. Fight him until he falls.',
