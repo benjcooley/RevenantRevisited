@@ -186,6 +186,8 @@ class TMapPane : public TPane
         // Object drag function for mouse
     void GetMouseMapPos(S3DPoint &p, int32_t zoffset = 50);
       // Gets the world position (given character's z pos) that mouse is hovering over
+    void ScreenToMapPos(int32_t x, int32_t y, S3DPoint &p, int32_t zoffset = 50);
+      // The same for any screen pixel: the point under (x, y) at Locke's height + zoffset
     int32_t GetMouseMapAngle();
       // Gets the angle of the mouse from the character's current position
     void UpdateMouseMovement(int32_t x, int32_t y);
@@ -545,6 +547,11 @@ class TMapPane : public TPane
 
     bool Clicked() { return clicked; }
         // Return whether mouse is clicked down in the mappane or not
+    void SetClickWalk(bool on) { clickwalk = on; }
+    [[nodiscard]] bool ClickWalk() const { return clickwalk; }
+        // Click to walk (docs/playtest/PLAN.md §10): a left click on open
+        // ground walks Locke to it. Not retail; off unless asked for
+        // (--clickwalk, the playtest patch "clickwalk").
 
   // Modes for editor
     void SetMode(void (*tfunc)(S3DPoint), void (*afunc)(), int32_t mode);
@@ -586,6 +593,8 @@ class TMapPane : public TPane
         // The left button's release: use, pick up, walk to, or let go of a held item
     void WalkToward(int32_t x, int32_t y, TObjectInstance* on);
         // An object out of reach: walk toward it, or "too far"
+    void ClickWalkTo(int32_t x, int32_t y);
+        // Click to walk: Locke to the point under (x, y)
     void HoldMoveKey(int32_t key);
         // The right-button walk's held direction (-1: none)
 
@@ -614,6 +623,7 @@ class TMapPane : public TPane
     int32_t mx, my;                                 // Mouse scrolling
     bool clicked = false;                           // Left press on the map, awaiting its release (retail +0x120)
     bool walking = false;                           // Right-button walk on (retail +0x11c)
+    bool clickwalk = false;                         // SetClickWalk
     int32_t hovercursor = CURSOR_NONE;              // Cursor type for what's under the pointer (retail +0x12c)
     int32_t hoverpickframe = -1;                    // Screen frame of the last pick for it
     int32_t hoverindex = -1;                        // Map index of that pick (-1: nothing), for the log
