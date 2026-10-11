@@ -41,16 +41,16 @@ class CoverageTests(unittest.TestCase):
         # An independent appearance approval can change in the live ledger.
         # Preserve frontend evidence but explicitly remove approval in a copy.
         ledger=json.loads(LEDGER.read_text())
-        fog_row=next(r for r in ledger['retail_effects'] if r['retail_type_id']=='0xc24b2a85')
-        fog_row['acceptance']['visual_fidelity']=False
-        fog_row.pop('visual_review',None)
-        with tempfile.TemporaryDirectory(prefix='coverage-gate-',dir=ROOT/'recon/retail_asm/runtime') as temp:
+        copied_row=next(r for r in ledger['retail_effects'] if r['retail_type_id']=='0x50ba373b')
+        copied_row['acceptance']['visual_fidelity']=False
+        copied_row.pop('visual_review',None)
+        with tempfile.TemporaryDirectory(prefix='coverage-gate-',dir=ROOT) as temp:
             path=Path(temp)/'ledger.json';path.write_text(json.dumps(ledger))
-            fog=generate(ledger_path=path)['types']['0xc24b2a85']
-        self.assertEqual(fog['gates']['pixel_frontend']['status'],'shared_original_raster_pass')
-        self.assertEqual(fog['gates']['gpu']['status'],'not_checked')
-        self.assertEqual(fog['gates']['full_acceptance']['status'],'open')
-        self.assertEqual(fog['gates']['visual_review']['status'],'pending')
+            copied=generate(ledger_path=path)['types']['0x50ba373b']
+        self.assertEqual(copied['gates']['pixel_frontend']['status'],'shared_original_raster_pass')
+        self.assertEqual(copied['gates']['gpu']['status'],'differences_found')
+        self.assertEqual(copied['gates']['full_acceptance']['status'],'open')
+        self.assertEqual(copied['gates']['visual_review']['status'],'pending')
 
     def test_current_report_formats_count_pixels_without_promoting_visual_reviews(self):
         self.assertEqual(self.coverage['counts']['evidence_rows_with_shared_raster_pixel_pass'],
