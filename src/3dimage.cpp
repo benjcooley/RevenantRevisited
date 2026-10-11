@@ -18,6 +18,7 @@
 #include "i3dtexturealpha.h"
 #include "3dimage.h"
 #include "legacybonecompose.h"
+#include "retailsoftwaretransform.h"
 
 #include <algorithm>
 #include <cmath>
@@ -4001,7 +4002,7 @@ bool T3DAnimator::CombatFlashStart1BaseMeshBlend(int32_t object, uint32_t& blend
     return blend==16u; // '#impact01' has no '$': depth test remains enabled.
 }
 
-bool T3DAnimator::CombatFlashStart1BaseMeshWorldMatrix(hmm_mat4& world)
+bool T3DAnimator::CombatFlashStart1BaseMeshWorldMatrix(hmm_mat4& world, bool native_software)
 {
     uint32_t blend=0;
     if (!CombatFlashStart1BaseMeshBlend(2,blend)) return false;
@@ -4013,7 +4014,9 @@ bool T3DAnimator::CombatFlashStart1BaseMeshWorldMatrix(hmm_mat4& world)
     MtxRotateX(&world,rotation.X); MtxRotateY(&world,rotation.Y); MtxRotateZ(&world,rotation.Z);
     ApplyRetailGoldCameraOrientation(world); // Recovered generic '#' branch, no new fitted matrix.
     MtxTranslate(&world,&position); // Original preserves translation after fixed camera orientation.
-    MtxMultiply(&world,&world,&inst->Transform().Matrix());
+    hmm_mat4 owner=inst->Transform().Matrix();
+    if(native_software){const auto& p=inst->Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(inst->GetFace()));}
+    MtxMultiply(&world,&world,&owner);
     return true;
 }
 

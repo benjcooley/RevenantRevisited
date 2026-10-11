@@ -129,3 +129,29 @@ other CombatFlash states. Reports remain under `full-normal-observation`,
 `normal-sweep-final`, `suppression-final` and `component-{base,particles,full-final}`.
 
 `combatflash_normal_isolation.py` now retains the all-normal-packet replay as a reusable source tool. Root rerun reproduces162isolated draws with all144 extra-object contributions blank. It remains a diagnostic; primary appearance is held for the visible base sampling residual.
+
+## Actual owner stretch and integer raster correction
+
+The earlier compiled base-matrix contract declared an identity owner. It proved
+local keys/orientation but missed the actual port owner Transform's default
+WORLD3D_Z_SCALE1.5. The real native-domain flare therefore still carried a Z stretch;
+replacing translation alone did not remove it. The production base helper now
+accepts a default-false native-owner policy and composes BuildRetailSoftwareOwner
+instead of the common Transform only for the explicit native reference. Ordinary
+rendering retains its prior owner matrix. The strengthened probe starts with the
+actual1.5-scale source root and compares the corrected native branch to original
+matrices; its retained stretched-owner negative exposes the former mismatch.
+
+Original normal-raster packet observation verifies324triangles/7776 integer fields
+across all18liveframes, including36base triangles/864fields. ProjectedXYZ and UV×64
+truncate towardzero; constantbase RGB5 remains21. The exact native mesh now owns
+those integer UV corners under a distinct cache key and selects the existing
+software integer-grid helper path. Ordinary UVs/defaultpixelgrid remain unchanged.
+No shader, texture contents, light, authored scale or time fit is introduced.
+
+Fresh20-frame base/full GPU controls exit cleanly. The corrected base closely
+matches the original, reducing tick2 RGB absolute error65641→9267 and tick3
+86603→8461; those measurements diagnose the fix and are not appearance thresholds.
+Small scanline/fixed-point/GPU destination quantization residuals remain. Reports:
+`integer-normal-observation`, `native-owner-negative-proof`, `native-owner-base`
+and `native-owner-full`. Independent full-effect review remains separate.

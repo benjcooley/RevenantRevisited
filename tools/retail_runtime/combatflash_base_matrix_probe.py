@@ -23,7 +23,7 @@ def run(trace, output):
         (render, 'struct S3DVertex\n'), (render, 'struct SRenderColor\n'),
         (body, 'struct S3DMaterial\n')))
     prelude = PRELUDE.replace('struct hmm_vec3 {float X=0,Y=0,Z=0;};',
-                              '#include "goldauthoredmatrix.h"\n#include <strings.h>\n#define stricmp strcasecmp')
+                              '#include "goldauthoredmatrix.h"\n#include "retailsoftwaretransform.h"\n#include <strings.h>\n#define stricmp strcasecmp')
     model = CLASS.replace(' bool ValidateRetailSpeedPartSysProfile();', '''
  bool HasRetailSpeedFamilyPartSysProfile(uint32_t)const{return false;}
  bool combat_profile=false;
@@ -35,12 +35,12 @@ def run(trace, output):
  bool GetAniKey(int,int,int,hmm_vec3&,hmm_vec3&,hmm_vec3&);
  bool ValidateRetailSpeedPartSysProfile();''')
     fixture = r'''
-struct Owner{int frame=0;hmm_mat4 world;Owner(){MtxClear(&world);}
+struct Owner{struct Point{int x=0,y=0,z=0;};Point pos;const Point&Pos(){return pos;}int GetFace(){return 0;}int frame=0;hmm_mat4 world;Owner(){MtxClear(&world);world.Elements[2][2]=1.5f;}
  int GetFrame(){return frame;}int GetPrevState(){return 0;}int GetPrevFrame(){return 0;}
  Owner&Transform(){return *this;}const hmm_mat4&Matrix()const{return world;}};
 struct T3DAnimator{Owner*inst;T3DImagery*im;T3DImagery*Get3DImagery(){return im;}
  bool CombatFlashStart1BaseMeshBlend(int,uint32_t& b){b=16;return true;}
- bool CombatFlashStart1BaseMeshWorldMatrix(hmm_mat4&);};
+ bool CombatFlashStart1BaseMeshWorldMatrix(hmm_mat4&,bool=false);};
 '''
     methods = '\n'.join(function(source, s) for s in (
         'static inline int32_t SkipAniKey32(', 'static inline void GetAniKey32(',
@@ -52,9 +52,9 @@ int main(int argc,char**argv){assert(argc==2);std::ifstream f(argv[1],std::ios::
  T3DImagery im;im.flags=FLAGS;im.nstates=1;im.frames=FRAMES;Owner owner;
  for(int i=0;i<3;++i){uint32_t n;f.read((char*)&n,4);im.keys[i].resize(n);f.read((char*)im.keys[i].data(),n*4);im.keycount[i]=n;im.keyptr[i]=im.keys[i].data();im.objects[i].numanikeys=&im.keycount[i];im.objects[i].anikeys=&im.keyptr[i];}
  T3DAnimator animator;animator.inst=&owner;animator.im=&im;
- for(int inclusive=0;inclusive<2;++inclusive){im.combat_profile=inclusive;
+ for(int inclusive=0;inclusive<3;++inclusive){im.combat_profile=inclusive!=0;
  for(int frame=0;frame<im.frames;++frame){owner.frame=frame;hmm_mat4 m{};
- bool alive=animator.CombatFlashStart1BaseMeshWorldMatrix(m);
+ bool alive=animator.CombatFlashStart1BaseMeshWorldMatrix(m,inclusive!=2);
  printf("%d %d %d",inclusive,frame,int(alive));for(int c=0;c<4;++c)for(int r=0;r<4;++r)printf(" %.9g",m.Elements[c][r]);puts("");}}
 }
 '''
@@ -92,7 +92,7 @@ int main(int argc,char**argv){assert(argc==2);std::ifstream f(argv[1],std::ios::
             if draw['object'] != 2 or draw['arguments'][1] != 0x112:
                 continue
             errors = {}
-            for inclusive in (0, 1):
+            for inclusive in (0, 1, 2):
                 alive, matrix = matrices[inclusive, row['frame']]
                 errors[str(inclusive)] = dict(alive=alive,
                     maximum_matrix_error=max(abs(a-b) for a,b in zip(matrix, draw['matrix'])))
@@ -100,7 +100,7 @@ int main(int argc,char**argv){assert(argc==2);std::ifstream f(argv[1],std::ios::
     assert cases
     report = dict(status='diagnostic', accepted=False, type_id='0xad92bd29',
         asset_sha256=sha(data), trace_sha256=sha(trace.read_bytes()), cases=cases,
-        scope='Actual production decoder and base-matrix body, immutable first-state own keys; owner identity/previous-state absent declared. Compare half-open/default versus explicit inclusive policy without changing native frames or source. Does not prove shader/projection/color or other states.')
+        scope='Actual production decoder and base-matrix body, immutable first-state own keys; source owner Z scale1.5 and original native owner pose0 declared; previousstate0/frame0 and fiveframe transition explicit. Compare half-open/default versus explicit inclusive policy without changing native frames or source. Does not prove shader/projection/color or other states.')
     (output / 'manifest.json').write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps(cases, indent=2))
 

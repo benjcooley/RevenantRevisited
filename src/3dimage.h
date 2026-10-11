@@ -652,7 +652,7 @@ class T3DAnimator : public TObjectAnimator
     bool GoldBaseMeshBlend(int32_t object, uint32_t& blend) const;
     bool GoldBaseMeshWorldMatrix(hmm_mat4& world);
     bool CombatFlashStart1BaseMeshBlend(int32_t object, uint32_t& blend) const;
-    bool CombatFlashStart1BaseMeshWorldMatrix(hmm_mat4& world);
+    bool CombatFlashStart1BaseMeshWorldMatrix(hmm_mat4& world, bool native_software=false);
     int32_t SubmitPartSys(TRenderer& renderer, int32_t object, int32_t texture_slot,
                          const hmm_vec3& render_scale, bool native_software = false, bool submit_geometry = true);
     uint64_t PartSysPulseCount() const;

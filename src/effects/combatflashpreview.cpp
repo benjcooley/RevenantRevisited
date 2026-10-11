@@ -64,7 +64,12 @@ State* Spawn(const S3DPoint& origin, bool show_particles, bool show_base)
         return nullptr;
     // Cache the actual authored flare, not a generated billboard. This key is
     // preview-specific; source imagery and runtime mesh ownership are unchanged.
-    constexpr uint64_t key = 0x4346533150524556ull; // CFS1PREV
+    // Original56e3e7..56e4f5 truncates UV*64 before its normal RGB565 raster.
+    // Keep ordinary geometry/UV unchanged; native reference owns a distinct mesh.
+    if (StartupVfxNativeDomain)
+        for (auto& vertex : vertices)
+            for (float& uv : vertex.uv) uv=std::trunc(uv*64.f)/64.f;
+    const uint64_t key = StartupVfxNativeDomain ? 0x4346533150524557ull : 0x4346533150524556ull; // CFS1PREV
     context->flare_mesh = Renderer->RegisterMeshAsset(key, vertices.data(), int32_t(vertices.size()),
         indices.data(), int32_t(indices.size()), texture);
     if (!context->flare_mesh) return nullptr;
@@ -123,13 +128,7 @@ void SubmitWorld(State* context, EFxDebugMode)
     SHelperMeshSubmit mesh = {};
     mesh.mesh = context->flare_mesh;
     hmm_mat4 world;
-    if (!animator->CombatFlashStart1BaseMeshWorldMatrix(world)) return;
-    if(StartupVfxNativeDomain) {
-        // The controlled generic owner has face0. Its local authored matrix
-        // is already MODELZ; replace only the owner's raw translation by the
-        // same original FIX_Z owner translation used by the native reference.
-        world.Elements[3][2] += RetailSoftwareOwnerZ(owner->Pos().z)-float(owner->Pos().z);
-    }
+    if (!animator->CombatFlashStart1BaseMeshWorldMatrix(world,StartupVfxNativeDomain)) return;
     for (int row = 0; row < 4; ++row)
         for (int column = 0; column < 4; ++column)
             mesh.world[row * 4 + column] = world.Elements[column][row];
@@ -144,6 +143,7 @@ void SubmitWorld(State* context, EFxDebugMode)
     mesh.additive_blend = true;
     mesh.retail_lighting = 1;
     mesh.retail_software_projection = StartupVfxNativeDomain;
+    mesh.retail_software_pixel_grid = StartupVfxNativeDomain;
     if(StartupVfxNativeDomain)mesh.retail_normal_z_scale=1.0f;
     mesh.retail_additive_cull_none = StartupVfxNativeDomain; // observed original SetRenderState(22,1)
     mesh.retail_gold_no_depth = false; // Mode16 keeps depth testing; no '$' flag.
