@@ -47,6 +47,12 @@ a `char`, and a `key` up, as Windows delivers it.
 ```
 
 Written by a recording host every 24 ticks, at every mark, and at the end.
+A check line at tick `t` is the state at that tick's boundary: after `t`
+ticks have run (with, in lockstep, the `t` frames that drew them) and
+before tick `t`'s events are delivered; `t = 0` is the start state. Under
+frame timing a frame can run no tick or several, so the line goes at the
+first frame boundary at or after each multiple of 24, with the tick it
+reached.
 
 | Field | Source (port / retail) |
 |---|---|
@@ -136,6 +142,11 @@ stderr.
 `start` is the only command that may run ticks of its own: loading,
 entering the world, and for `newgame` nothing else. The opening's scenes
 then run under `step` like everything else.
+
+A replay boots its own game from the bundle's start, as the recording's
+host did, so the port answers `replay` only in place of `start`, in a
+fresh host: a process that has run a game is no longer in the state the
+recording started from.
 
 ## 6. Slot hashing
 

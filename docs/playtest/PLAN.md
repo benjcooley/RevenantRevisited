@@ -180,8 +180,9 @@ In `--control`, `--record` and `--replay`:
 | Source | Fix |
 |---|---|
 | seed from `time(nullptr)` | `--seed` required; the header records it |
-| `LoadSlice`'s 30 ms wall-clock budget per tick (`gamesession.cpp`) | a fixed number of `LoadStaged` steps per tick |
-| the hover cursor from the asynchronous GPU id probe (`mappane.cpp`); it decides whether a click attacks | retail's rule: `OnObject` synchronously every 8th screen frame (MAP_INPUT.md §3). A fidelity fix too |
+| `LoadSlice`'s 30 ms wall-clock budget per tick (`gamesession.cpp`) | the whole level in one slice, as retail's synchronous load: the world holds no ticks for a level change, in either game |
+| the hover cursor from the asynchronous GPU id probe (`mappane.cpp`); it decides whether a click attacks | retail's rule: `OnObject` synchronously every 8th screen frame (MAP_INPUT.md §3), and clicks too, from the drawn frame (`EPickRead::Drawn`). A fidelity fix too |
+| `GenerateUniqueID` mixes `tickcount()` | game time (`GameTickCount()`) |
 | area music: `MusicPlaying()` (audio thread) and `tickcount()` before `random()` (`area.cpp`) | game time for the retry, and the music state answered as "not playing", as in a `NOSOUND` retail |
 | render-time game `random()` (animators created on screen, `SubmitPartSys`) | kept, as retail draws there too; lockstep fixes the frames, and `timing: "frames"` replays the recorded `dt`s |
 | effects' libc `std::rand()` | seeded with the game seed; its draws follow the frames |
