@@ -31,6 +31,10 @@ TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertIn('live global RNG without reseed',description)
         self.assertIn('SetParams(40,224,3,5,5,1)',description)
         self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Blood_AUTHORED']}),[])
+    def test_quicksand_configured_target(self):
+        row={'retail_type_id':'0xbabeface','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['Quicksand_ORIGINAL_TARGET'])
+        self.assertIn('stationary target offset(96,0,0)',candidate_metadata(row,'Quicksand_ORIGINAL_TARGET')[1])
 
     def test_drip_exact_continuous_scope_rejects_aliases(self):
         row={'retail_type_id':'0x5975abde','preview_candidates':['TDripEffect','TDripEffect_LINKED_DRAIN','TDripEffect.OnHand','TBloodEffect_BESPOKE']}

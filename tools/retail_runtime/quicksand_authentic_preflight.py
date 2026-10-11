@@ -62,16 +62,16 @@ class QuicksandScene(AuthenticCharacters):
    call(0x4edb50,this=self.animator,instruction_limit=100000000);call(0x40eb00,this=self.animator);call(0x416fb0,this=0x65a57c)
   return v.surface_bytes('screen')
 
-def run(executable,boot_image,output,null_spell=False):
+def run(executable,boot_image,output,null_spell=False,samples=(1,5,10,15,20,25,30,35,40,45,50,55,56,60)):
  output.mkdir(parents=True,exist_ok=False);f=QuicksandScene(executable,boot_image,null_spell);v,call=f.vm,f.world.call;rows=[]
  for tick in range(1,61):
   v.put_u32(0x65cb38,tick)
   if not v.u32(f.owner+8)&4096:call(0x470cc0,this=f.owner);call(0x4ed3d0,this=f.owner)
-  f.raster_enabled=tick in(1,5,10,15,20,25,30,35,40,45,50,55,56,60);pixels=f.render();row=dict(tick=tick,state=f.state(),draws=f.draws,draw_bounds=f.draw_bounds())
+  f.raster_enabled=tick in samples;pixels=f.render();row=dict(tick=tick,state=f.state(),draws=f.draws,draw_bounds=f.draw_bounds())
   if f.raster_enabled:
    name=f'native-{tick:03}.png';save_rgb565_png(output/name,pixels,f.width,f.height);row.update(image=name,sha256=sha(output/name),nonzero_pixels=sum(x!=(0,)for x in struct.iter_unpack('<H',pixels)))
   rows.append(row);print(tick,len(f.draws),row.get('nonzero_pixels'),flush=True)
  result=dict(effect='Quicksand',type_id='0xbabeface',null_spell=null_spell,records=rows,executable_sha256=sha(executable),boot_image_sha256=sha(boot_image),scope='Genuine Acolyte invoker/Fighting target offset96, actual named Quicksand SpellList/creator and inline SetSpell. Actual typed NewObject and loaded old-body resource/texture COM, default CreateAnimator, NextFrame/Pulse/Animate and BeginScene/PreRender/Render/PostRender/EndScene. Declared empty-map screen prefix and RAM target/camera3185,3185,0, source3185,3185,16, ambient38/dir1; material LightState1 boundary only. No forced atlas timing, scale, culling or synthetic resource. Natural map/device/caller remains open.')
  (output/'manifest.json').write_text(json.dumps(result,indent=2)+'\n');return result
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--executable',type=Path,default=ROOT/'recon/retail_asm/baseline/Revenant.rebuilt.exe');p.add_argument('--boot-image',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--null-spell',action='store_true');a=p.parse_args();run(a.executable,a.boot_image,a.output,a.null_spell)
+ p=argparse.ArgumentParser();p.add_argument('--executable',type=Path,default=ROOT/'recon/retail_asm/baseline/Revenant.rebuilt.exe');p.add_argument('--boot-image',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--null-spell',action='store_true');p.add_argument('--samples',default='1,5,10,15,20,25,30,35,40,45,50,55,56,60');a=p.parse_args();run(a.executable,a.boot_image,a.output,a.null_spell,tuple(map(int,a.samples.split(','))))

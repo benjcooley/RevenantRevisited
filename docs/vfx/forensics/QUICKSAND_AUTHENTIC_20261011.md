@@ -38,3 +38,31 @@ Private evidence under hard-alpha:
 `441fe82ecd0a86d5426a6689e830e7949d17cd2198585252489f6b64d4dc621a`;
 `quicksand-authentic-null/manifest.json` and
 `quicksand-source-pose4/manifest.json`. No executable/asset/images are committed.
+
+Actual Metal and replay checkpoint
+---------------------------------
+
+The private application build and60-frame24Hz actual Metal film pass. The
+configured target uses source(0,0,16), target offset(96,0,0), viewport1280×960
+and center(640,480), the same reference translated by the declared camera.
+All55 active frames are visible;56..60 are blank. Fourteen same-tick full
+pairs and identical1x detail crops retain the complete four-mesh appearance.
+Native bounds(516,360)-(825,669) versus Metal(517,360)-(825,671) retain small
+raster/edge and RGB565 quantization residuals. No geometry/color/time fitting.
+
+Fresh genuine native60-record replay matches every state, submitted draw and
+bound; actual sampled25/56 PNGs are byte-identical. Original null-spell60records
+remain zero-draw. Compiled production core additionally matches180 lifecycle
+fields (tick counter, three-frame loop, real56kill). The retained original
+caller/source unit test passes in19.179s, including3,520 matrix channels.
+
+`hard-alpha/quicksand-review-final/pair-manifest.json` SHA256:
+`c76ce74d4284c71d6dd028a184f14cff3b5bd8b6f6fad21ae5d062f8ca89373f`.
+Captured binary SHA256:
+`21ff0af89ef62c19898f1918b614ff6fcfc5ae0c67d4a09476fa3e4e4e10611a`.
+The manifest pins14raw pairs, four readable detail pages, whole contact, null
+control, source comparator and fresh replay. These are review-ready artifacts,
+not independent approval. Exact gallery mapping selects
+`Quicksand_ORIGINAL_TARGET`; its Static route reports real owner OF_KILL and
+preserves the existing bespoke preview separately. Port actor damage/reactions,
+natural actor/map scheduling and arbitrary targets remain open.

@@ -152,6 +152,7 @@
 {0xb1c4c90fu, "TIceBoltEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // IceBolt
 {0xb3ae0fedu, "TRestorelife_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Restorelife
 {0xba09feadu, "Dragonattack_ORIGINAL", false, "Declared Fighting caller: target offset(280,0), ground0, face96 muzzle(14,14,+100); arbitrary endpoints and natural dragon actors not certified"}, // dragonattack
+{0xbabefaceu, "Quicksand_ORIGINAL_TARGET", false, "Configured Quicksand stationary target offset(96,0,0), actual56-tick lifetime; natural actors, damage and other variants not certified"}, // Quicksand
 {0xbabefaceu, "TQuicksandEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Quicksand
 {0xbabffaceu, "TQuick_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Quick
 {0xbecefedau, "TSandswirlEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Sandswirl
