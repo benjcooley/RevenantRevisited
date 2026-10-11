@@ -3771,6 +3771,10 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // RGB565 with litadd16, not normal-lit material meshes or alpha coins.
             item.retail_texture = (might || immortalmight || fmastery || speed || static_particles || inst->ObjId() == 0xd0c0f035u ||
                 (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0)) ? 1 : 0;
+            // Strict static profile admission pins RGB565 masks and literal
+            // particle prototype. The queue applies this only to software
+            // lighting and ONE/ONE; modern/hardware and alpha retain fallback.
+            item.retail_rgb565_additive = static_particles && sample.blendmode == 16;
             item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
             item.light_mode = EFxLightMode::Unlit;
             for (int c = 0; c < 3; ++c)

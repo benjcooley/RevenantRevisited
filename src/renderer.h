@@ -349,7 +349,8 @@ struct SQuadDrawItem
     float color_rgba[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     SFxBatchKey key = {};
     uint8_t corner_count = 4; // 3 preserves one authored triangle; 4 uses the quad diagonal.
-    uint8_t retail_texture = 0; // 1: nearest wrapped texels; 3: software ARGB4444.
+    uint8_t retail_texture = 0; // 1: nearest; 3: software ARGB4444; 4: software RGB565 additive.
+    bool retail_rgb565_additive = false; // Exact RGB565/profile opt-in; software policy only.
     bool retail_argb4444 = false; // Exact source format opt-in; fallback policy stays above.
     bool retail_software_projection = false; // XYZ are original software MODELZ/world.
     float retail_camera_z = 0.0f; // Explicit original camera input; XY use reconstruction camera.

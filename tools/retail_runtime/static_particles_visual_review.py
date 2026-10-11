@@ -16,7 +16,7 @@ def image_error(a, b):
     return sum(ImageStat.Stat(ImageChops.difference(a, b)).sum)
 
 
-def run(native, metal, output, negative=None):
+def run(native, metal, output, negative=None, negative_label="prior_current_owner_pose"):
     output.mkdir(parents=True, exist_ok=False)
     reference = json.loads((native / 'manifest.json').read_text())
     cases = []
@@ -67,7 +67,7 @@ def run(native, metal, output, negative=None):
                     record = dict(path=str(path), sha256=sha(path), rgb_l1_error=image_error(native_image, image))
                     if negative:
                         old = next((negative / (name + '-' + policy)).glob(f'frame-{number:03d}-*.png'))
-                        record['prior_current_owner_pose'] = dict(path=str(old), sha256=sha(old),
+                        record[negative_label] = dict(path=str(old), sha256=sha(old),
                             rgb_l1_error=image_error(native_image, Image.open(old).convert('RGB')))
                     pair['modern'][policy] = record
             pairs.append(pair)
@@ -95,6 +95,7 @@ if __name__ == '__main__':
     p.add_argument('--native', type=Path, required=True)
     p.add_argument('--metal', type=Path, required=True)
     p.add_argument('--negative-control', type=Path)
+    p.add_argument('--negative-control-label', default='prior_current_owner_pose')
     p.add_argument('--output', type=Path, required=True)
     a = p.parse_args()
-    run(a.native, a.metal, a.output, a.negative_control)
+    run(a.native, a.metal, a.output, a.negative_control, a.negative_control_label)

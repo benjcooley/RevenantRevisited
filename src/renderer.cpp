@@ -6010,6 +6010,9 @@ void TRenderer::SubmitFxQuad(const SQuadDrawItem& item)
         // Original ARGB4444 kernels use alpha-over even after an additive request.
         queued.retail_texture = 3;
         queued.key.blend = uint8_t(EFxBlend::Alpha);
+    } else if (queued.retail_rgb565_additive && UsesRetailSoftwareMeshLighting() &&
+               queued.key.blend == uint8_t(EFxBlend::AdditiveStraight)) {
+        queued.retail_texture = 4;
     }
     if (queued.key.texture == kInvalidTexture && white_texture != kInvalidTexture)
         queued.key.texture = white_texture;

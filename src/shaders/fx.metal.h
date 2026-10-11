@@ -438,7 +438,7 @@ fragment float4 _main(vs_out in [[stage_in]],
         uint2 xy = min(uint2(floor(fract(in.uv) * float2(size))), size - uint2(1));
         texel = atlas.read(xy);
     }
-    if (in.retail_texture > 2.5) {
+    if (in.retail_texture > 2.5 && in.retail_texture < 3.5) {
         float4 nibble = floor(texel * 15.0 + 0.5);
         texel = float4(nibble.rgb * float3(2.0/31.0, 4.0/63.0, 2.0/31.0),
                        (nibble.a + 1.0) / 16.0);
@@ -449,6 +449,15 @@ fragment float4 _main(vs_out in [[stage_in]],
     } else if (mode == 2 || mode == 3) {
         c = texel;
         if (mode == 3) c = float4(1.0, 1.0, 1.0, c.a);
+    } else if (in.retail_texture > 3.5) {
+        // Original RGB565 litadd: RGB5 lookup, then additive source LSB mask.
+        float3 source5 = floor(texel.rgb * float3(31.0, 63.0, 31.0) + 0.5);
+        source5.g = floor(source5.g * 0.5);
+        float3 light5 = floor(clamp(in.color.rgb, 0.0, 1.0) * 31.0 + 0.5);
+        float3 modulated = floor(source5 * light5 / 31.0);
+        modulated.rb = floor(modulated.rb * 0.5) * 2.0;
+        modulated.g *= 2.0;
+        c = float4(modulated / float3(31.0, 63.0, 31.0), texel.a * in.color.a);
     } else {
         c = in.retail_texture > 2.5 ? texel : texel * in.color;
     }

@@ -22,7 +22,7 @@ struct SFxBatchKey{uint16_t pipeline_id{};uint8_t blend{},depth_mode{};uint32_t 
 struct SStripSegment{float world_a[3]{},world_b[3]{1,0,0};float width_a_wu=1,width_b_wu=1;
  float color_a[4]{1,1,1,1},color_b[4]{1,1,1,1};float u_a=0,u_b=1,v_left=0,v_right=1;bool uv_swapped=false;};
 struct Entry{std::vector<SStripSegment>segments;SFxBatchKey key{};EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
-struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{1,1,1,1};SFxBatchKey key{};
+struct SQuadDrawItem{bool retail_rgb565_additive=false;float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{1,1,1,1};SFxBatchKey key{};
  bool retail_software_projection=false;float retail_camera_z=0;int corner_count=4,retail_texture=0;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 constexpr int kFxStripVertexFloats=18,kMaxFxStripVerts=8192;
 void log_warn(const char*,...){}

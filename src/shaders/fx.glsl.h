@@ -270,7 +270,7 @@ void main() {
         ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
         texel = texelFetch(atlas, xy, 0);
     }
-    if (v_retail_texture > 2.5) {
+    if (v_retail_texture > 2.5 && v_retail_texture < 3.5) {
         vec4 nibble = floor(texel * 15.0 + 0.5);
         texel = vec4(nibble.rgb * vec3(2.0/31.0, 4.0/63.0, 2.0/31.0),
                        (nibble.a + 1.0) / 16.0);
@@ -279,7 +279,18 @@ void main() {
     if      (mode == 1) c = v_color;
     else if (mode == 2) c = texel;
     else if (mode == 3) { c = texel; c = vec4(1.0, 1.0, 1.0, c.a); }
-    else                c = v_retail_texture > 2.5 ? texel : texel * v_color;
+    else if (v_retail_texture > 3.5) {
+        // Original RGB565 litadd: RGB5 lookup, then additive source LSB mask.
+        vec3 source5 = floor(texel.rgb * vec3(31.0, 63.0, 31.0) + 0.5);
+        source5.g = floor(source5.g * 0.5);
+        vec3 light5 = floor(clamp(v_color.rgb, 0.0, 1.0) * 31.0 + 0.5);
+        vec3 modulated = floor(source5 * light5 / 31.0);
+        modulated.rb = floor(modulated.rb * 0.5) * 2.0;
+        modulated.g *= 2.0;
+        c = vec4(modulated / vec3(31.0, 63.0, 31.0), texel.a * v_color.a);
+    } else {
+        c = v_retail_texture > 2.5 ? texel : texel * v_color;
+    }
     if (v_retail_texture < 2.5) c.rgb *= v_lit;
     if (c.a < 0.002) discard;
     o_color = c;

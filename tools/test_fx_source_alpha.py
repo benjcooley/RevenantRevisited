@@ -17,7 +17,7 @@ enum class EFxBlend:uint8_t {Alpha=0,AdditiveStraight=1};
 enum class EFxPipeline:uint16_t {Strip=3};
 constexpr int kInvalidTexture=0;
 struct SQuadDrawItem {
- bool retail_argb4444=false;int retail_texture=0;
+ bool retail_argb4444=false,retail_rgb565_additive=false;int retail_texture=0;
  struct {int texture=1;uint8_t blend=1,depth_mode=2;uint16_t pipeline_id=0;} key;
 };
 struct Renderer {
@@ -27,15 +27,15 @@ struct Renderer {
  void Submit(const SQuadDrawItem&item){BODY}
 };
 int main(){
- for(bool software:{false,true})for(bool argb:{false,true})for(int fallback:{0,1}) {
+ for(bool software:{false,true})for(bool argb:{false,true})for(int fallback:{0,1})for(bool rgb565:{false,true})for(int blend:{0,1}) {
   Renderer renderer;renderer.software=software;
-  SQuadDrawItem source;source.retail_texture=fallback;source.retail_argb4444=argb;
+  SQuadDrawItem source;source.retail_texture=fallback;source.retail_argb4444=argb;source.retail_rgb565_additive=rgb565;source.key.blend=blend;
   renderer.Submit(source);
   const auto&q=renderer.fx_quad_queue.at(0);
-  assert(q.retail_texture==(software&&argb?3:fallback));
-  assert(q.key.blend==(software&&argb?0:1));
+  assert(q.retail_texture==(software&&argb?3:software&&rgb565&&blend==1?4:fallback));
+  assert(q.key.blend==(software&&argb?0:blend));
   assert(q.key.depth_mode==source.key.depth_mode&&q.key.texture==source.key.texture);
-  assert(source.retail_texture==fallback&&source.key.blend==1);
+  assert(source.retail_texture==fallback&&source.key.blend==blend);
  }
 }
 '''.replace('BODY',body)
@@ -43,4 +43,4 @@ with tempfile.TemporaryDirectory() as directory:
     path=Path(directory);(path/'test.cpp').write_text(driver)
     subprocess.run(['clang++','-std=c++17',str(path/'test.cpp'),'-o',str(path/'test')],check=True)
     subprocess.run([str(path/'test')],check=True)
-print('PASS actual quad queue source/modern alpha policy (8 cases)')
+print('PASS actual quad queue source/modern alpha policy (32 cases, RGB565 additive/alpha/modern controls)')

@@ -46,7 +46,7 @@ enum class EFxDepthMode:uint8_t{TestNoWrite=0,None=1,TestWrite=2};
 enum class EFxDebugMode:uint8_t{Normal=0};enum class EFxLightMode:uint8_t{Unlit=0};
 enum class EFxPipeline:uint16_t{Billboard=1,Particle=2,Strip=3};
 struct SFxBatchKey{TTextureHandle texture=0;uint16_t pipeline_id=1;uint8_t blend=0,depth_mode=0;};
-struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};SFxBatchKey key;
+struct SQuadDrawItem{bool retail_rgb565_additive=false;float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};SFxBatchKey key;
  bool retail_software_projection=false;
  uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
 struct S3DVertex{hmm_vec3 pos,normal;float tu,tv;};
@@ -91,7 +91,7 @@ int main(int argc,char**argv){if(argc!=4)return 2;type_id=std::strtoul(argv[1],n
  c.simulation.Advance(in,[](int a,int b){return random(a,b);});
  int n=a.SubmitPartSys(renderer,c.track.prototype,1,{1,1,1});if(n!=int(renderer.quads.size()))return 5;
  size_t q=0;for(size_t slot=0;slot<c.simulation.Capacity();++slot){const auto&p=c.simulation.Particles()[slot];if(!p.alive||p.scale<=9.999999747378752e-6f)continue;
- const auto&item=renderer.quads[q++];printf("%d %zu %.9g %d %d %d",tick,slot,p.position[2],int(item.key.blend),int(item.key.depth_mode),item.retail_texture);
+ const auto&item=renderer.quads[q++];if(item.retail_rgb565_additive!=(d.blendmode==16))return 9;printf("%d %zu %.9g %d %d %d",tick,slot,p.position[2],int(item.key.blend),int(item.key.depth_mode),item.retail_texture);
  for(float v:item.color_rgba)printf(" %.9g",v);
  for(int corner=0;corner<4;++corner){for(float v:item.world_pos[corner])printf(" %.9g",v);for(float v:item.uv[corner])printf(" %.9g",v);}puts("");}
  if(a.SubmitPartSys(renderer,c.track.prototype,1,{1,1,1})!=0)return 6;
