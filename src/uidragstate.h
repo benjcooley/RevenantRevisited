@@ -3,11 +3,11 @@
 // *  uidragstate.h - Cross-pane drag-state singleton                      *
 // *************************************************************************
 //
-// Singleton owned by TPlayScreen in retail (per the recon trail captured
-// in src/invslot.h's header banner: `cls_0x5a5320_TPlayScreen` is the
-// sole writer of `DAT_0065b878` + friends across all sidebar / barinv /
-// equip panes). In the port we keep an identical-shaped singleton in
-// its own TU so any pane / TInvSlot can read it without pulling in
+// Singleton owned by TPlayScreen in retail (per the pane specs in
+// docs/ui/forensics/: `cls_0x5a5320_TPlayScreen` is the sole writer of
+// `DAT_0065b878` + friends across all sidebar / barinv / equip panes; P4
+// measures it). In the port we keep an identical-shaped singleton in its
+// own TU so any pane / TInvSlot can read it without pulling in
 // TPlayScreen's whole header.
 //
 // State at idle: source == eSrcNone, item empty.
@@ -25,9 +25,10 @@
 //      item in the main player's inventory, if the destination takes it.
 //   5. Either way, state returns to idle.
 //
-// Retail-cited fields (per invslot.h banner):
+// Retail-cited fields (per the pane specs):
 //   DAT_0065b878 ↔ source_slot      currently-dragged EQ-slot index
-//   DAT_0065b088 ↔ source_obj       drag source character ref
+//   (DAT_0065b088 is not drag state: it is TBarInvPane +0x60, the shelf's
+//   container, which the main player sets as it becomes main.)
 //   DAT_00667fcc ↔ default_player   default Player target (unchanged here)
 //   DAT_00668518 ↔ mouse_down_flag  Win32 WndProc mouse-down latch
 //   mbr_0x180..0x194 (per-pane)    starting slot / start XY / drag-active flag
@@ -40,10 +41,13 @@
 //   Inventory  carried slot number (page + column*3 + row)
 //   BarInv     belt position n (slot 0x10b + n)
 //   Equip      EQ_* index (slot 0x100 + index)
-//   SpellPane  spell-book row
+//   SpellPane  spell-book row (the spell itself is `spell`: retail's drag
+//              payload 0x00656398, the talisman code)
+//   QuickSpell quick-spell ring 1..4 (a destination only: spells drop there)
 //
 // The manager is the one place a drop mutates the inventory and plays the
-// action sound; slots only start drags and name destinations.
+// action sound; slots only start drags and name destinations. A spell drop
+// moves nothing: the ring it lands on copies the spell, silently.
 //
 // *************************************************************************
 
@@ -54,6 +58,7 @@
 #include "saferef.h"
 
 #include <cstdint>
+#include <string>
 
 class TObjectInstance;
 
@@ -65,6 +70,7 @@ enum class EDragSource : int32_t
     Equip      = 3,   // sidebar 11-slot paperdoll
     SpellPane  = 4,   // spell book row (no item)
     Playfield  = 5,   // map/world object source or drop destination
+    QuickSpell = 6,   // bottom-bar quick-spell ring (a spell's destination)
 };
 
 struct SUIDragState
@@ -76,6 +82,7 @@ struct SUIDragState
     int32_t          start_y    = 0;
     int32_t          grab_x     = 0;    // cursor offset within source slot/icon
     int32_t          grab_y     = 0;
+    std::string      spell;             // a spell-book drag's talisman code
     PTBitmap         icon       = nullptr;
     SDragBitmapLayer layers[kMaxDragBitmapLayers] = {};
     int32_t          layer_count = 0;
@@ -102,6 +109,12 @@ bool BeginDragLayers(EDragSource src, int32_t slot_idx,
                      const SDragBitmapLayer* layers, int32_t layer_count,
                      int32_t grab_x = 0, int32_t grab_y = 0);
 
+// A spell picked up from spell-book row `row`: a drag at once, with no
+// threshold (retail 0x00546390 starts it on the first move), carrying the
+// talisman code; `icon` follows the pointer at its point (grab_x, grab_y).
+bool BeginSpellDrag(int32_t row, const char* talismans, PTBitmap icon,
+                    int32_t mouse_x, int32_t mouse_y, int32_t grab_x, int32_t grab_y);
+
 // Promote the pending grab to a real drag once the cursor moves far enough.
 // Returns true when the manager is tracking this pointer sequence.
 bool UpdateDrag(int32_t mouse_x, int32_t mouse_y);
@@ -125,6 +138,12 @@ bool EquipInOwnSlot(TObjectInstance* item);
 // Force-cancel the active drag (e.g. ESC pressed, mouse-up over empty
 // area, etc.). No-op when not dragging.
 void Cancel();
+
+// Ends what is still tracked when the button comes up and no pane took the
+// drop: a click that never became a drag completes as a click, a drag is
+// cancelled (its item stays where it was). The screen that owns the drag
+// calls it after routing the button-up.
+void ReleaseUnclaimed();
 
 // Quick predicates. IsActive() and IsTracking() include pending clicks;
 // IsDragging() is true only after promotion past the wiggle threshold.

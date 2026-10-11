@@ -63,6 +63,20 @@ extern bool StartupVfxWireframe;
 // --vfx-lighting-mode=auto|classic|modern — VFX-only render diagnostic.
 // Auto (-1) preserves explicit source ambient -> classic, otherwise modern.
 extern int32_t StartupVfxLightingMode;
+// --vfx-native-domain: exact buff/FireCone previews; native owner/projector.
+extern bool StartupVfxNativeDomain;
+// --test=vfx-review: scrolling real-map catalogue, logical screen units/sec.
+extern float StartupVfxReviewSpeed;
+extern float StartupVfxReviewRatio;
+extern float StartupVfxReviewSpacing;
+extern float StartupVfxReviewGap;
+extern float StartupVfxReviewOffset;
+extern char StartupVfxReviewEffects[2048];
+extern char StartupVfxReviewSpacingOverrides[2048];
+extern float StartupVfxReviewPathTilt;
+extern float StartupVfxReviewPathLength;
+extern bool StartupVfxReviewFirst;
+extern bool StartupVfxReviewSourceLighting;
 // --partsys-quality=0|1|2 — match retail controller quality during captures.
 // 0 preserves full emission; retail 1 uses one quarter, 2 uses one half.
 extern int32_t StartupPartSysQuality;
@@ -93,6 +107,7 @@ extern char StartupVfxBackground[16];
 // in screen pixels, and an explicit world-space effect origin (no auto-fit).
 extern char StartupVfxBackdrop[MAXPATHLEN];
 extern float StartupVfxCamera[2];
+extern bool StartupVfxCameraExplicit; // Signed screen origin supplied by --vfx-camera.
 extern int32_t StartupVfxOrigin[3];
 extern bool StartupVfxOriginSet;
 
@@ -134,3 +149,8 @@ extern bool StartupVfxOriginSet;
 //   --filmstrip=6,0 --input-script="moveto 435 161; pause 300; take_snapshot;
 //     left_down; pause 150; take_snapshot; left_up; pause 300; ..."
 extern std::string StartupInputScript;      // any length
+// --ab-case="..." --ab-out=<file> -- one case of a HUD A/B, for the --test=ab-*
+// hosts (tools/retail_ab/hud_ab.py): the case's settings, and where the host
+// writes what it showed (JSON).
+extern std::string StartupAbCase;
+extern std::string StartupAbOut;

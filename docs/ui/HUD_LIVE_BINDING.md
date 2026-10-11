@@ -36,7 +36,7 @@ of game data:
 | Stat sheet | `FIELD x` → pane resolver `FUN_00547240` (`train*`, `objdesc`, weapon type, `stmod*`) → object virtual `+0xc8` chain: TPlayer `0x0051dfb0` (`class`) → TCharacter `0x004d5260` (`armor`, `maxhealth/fatigue/mana`, `attackpct`, `defensepct`, `damage`, `stealth`) → TObjectInstance `0x00472f80` (`name`, `objtype`, `objclass`, `statmod`, `experience`, else the object stat of that name) | decompiled 2026-10-05, §6 |
 | Inventory | `player->GetInventorySlot(page + col*3 + row)`; gold = `(*player+0x84)("Gold")`, the port's `GetInventoryAmount` (the player has no Gold stat); count = `Amount()` when > 1 | InventoryPane_SPEC §5, §8 |
 | Equip | `player->GetEquip(i)` icons; the paperdoll draws the player's model with the pane's own animation counters (`mbr_0xbc/0xc4`, anim `"walk"` from `DAT_005e4060`) | EquipPane_SPEC §5, §9 |
-| Belt | items in the player's inventory with `inventnum = 0x10b + N`; a `"Pouch"` shows its first item's icon and its item count | BarInvPane_SPEC §5 step 7 |
+| Belt | items in the player's inventory with `inventnum = 0x10b + N`; a `"Pouch"` shows the item in its slot 0 at half size and its item count | `0x0052ca70`, measured (HUD_REBUILD.md §7, P2b) |
 | Quick spells | `player + 0x2cc + slot*6`: talisman code per button (port `TPlayer::GetQuickSpell`) | QuickSpellPane_SPEC §1 |
 | Spell book | `player + 0x2ec` known-spell list (talisman codes) | SpellbookPane_SPEC §1; SAVE_GAME §11.4 |
 
@@ -69,15 +69,14 @@ belt and equip slots resolve their item from the player's inventory, and a
 committed drag moves the item there: `SetInventNum` to the destination slot
 (swapping with an occupant), and `TPlayer::Equip` for equipment slots,
 following the 1998 `TEquipPane::MouseClick` algorithm the retail panes
-share (`invslot.h` banner). Icons come from the item (`InventoryImage`,
-plus the item's `invanim` stepped on the legacy 24 Hz tick).
+share (the pane specs). Icons come from the item: its `invanim` on the
+game frame when its state has one, else `InventoryImage` (`invslot.h`).
 
 **Objects answer the stat sheet.** The retail field resolver is an object
 virtual; the port gains `TObjectInstance::GetFieldText` with the
-TCharacter / TPlayer overrides, ported from the decompiles. Branches whose
-inputs the port's object model does not have yet (`statmod`,
-`attackpct`, `defensepct`, `damage`, `stealth`) return "not resolved", which is what retail does for an unknown
-field; each is listed in §6.
+TCharacter / TPlayer overrides, ported from the decompiles. `statmod`
+(the equipped-modifier list) returns "not resolved", which is what retail
+does for an unknown field; it is listed in §6.
 
 ## 4. Order of work
 
@@ -110,9 +109,11 @@ lives only in the fixture, so that move is mechanical.
 
 Also in the commit messages.
 
-- **Portrait fallback.** The status bar keeps the harness's `LockeFace`
-  portrait when the character carries no baked icon (state-0 inventory
-  image). Retail draws no face then. Unchanged by this work.
+- **Portrait fallback.** Resolved 2026-10-09 (HUD_REBUILD.md): the status
+  bar draws the character's InventoryImage as retail does. With
+  `T3DImagery::GetInvImage` answering the state-0 icon whatever the state
+  (retail `0x0040ce60`), characters have it, and the `LockeFace` fallback is
+  gone.
 - **Paperdoll pose.** Retail animates the paperdoll through its own
   counters (`mbr_0xbc/0xc4`) with an animation chosen through vtable
   `+0x131`, which is not identified. The pane holds frame 0 of the
@@ -121,10 +122,8 @@ Also in the commit messages.
   plays.
 - **Armor.** `armor` is `ArmorValue()` (the player's: ACBonus plus the
   Protection of the armor worn, `0x00519850`), plus the main player's
-  DmgResMisc (vtable `+0x260`); the armor of the effects on the character
-  (`FUN_005407d0`, a list at `+0x170` the port doesn't have) is not
-  ported. The other unported resolver branches are in §6; they draw
-  nothing, as retail does for an unknown field.
+  DmgResMisc (vtable `+0x260`) and his spells' defense (the SpellManager
+  at `+0x170`, `0x005407d0`).
 - **Spell lookup.** A talisman code is matched to its spell.def variant
   exactly. `TSpellList::GetVariantDataByTalismans` compares talisman
   counts, not order, so it maps DEB ("Advanced healing") to BED ("Restore
@@ -165,12 +164,12 @@ the panes changed:
 
 | Field | Retail | Port |
 |---|---|---|
-| `train<stat>` | `"+"` when the stat is a pending level-up choice (`player[0xd8/0xd9]`, Level < 15) | `""` — the port has no level-up choice state |
-| `objdesc`, weapon type, `stmod<stat><n>` | pane-level strings / stat modifier | not ported (Page1 does not use them) |
+| `train<stat>` | `"+"` for the first level-up pick (`player+0x360`), another for the second below level 15 (`+0x364`) | `TStatPane::Resolve`, `TPlayer::LevelUpPick` |
+| `objdesc`, weapon type, `stmod<stat><n>` | pane-level strings / stat modifier | `TStatPane::Resolve` |
 | `class` | class name | `chardata->classdata->name` |
 | `maxhealth`, `maxfatigue`, `maxmana` | `+0x1d8/+0x1e0/+0x1e8` | `MaxHealth()` / `MaxFatigue()` / `MaxMana()` |
-| `armor` | `+0x2bc` plus two player bonuses (`FUN_005407d0`, `+0x260`) | `ArmorValue()` + DmgResMisc; `FUN_005407d0` not ported |
-| `damage`, `attackpct`, `defensepct`, `stealth` | combat formulas | not ported (inputs unidentified) |
+| `armor` | `+0x2bc` plus two player bonuses (`0x005407d0`, `+0x260`) | `ArmorValue()` + DmgResMisc + `SpellManager.GetDefense()` |
+| `damage`, `attackpct`, `defensepct`, `stealth` | combat formulas (`0x004d5260`) | `TCharacter::GetFieldText` (docs/ui/forensics/StatPane_RETAIL.md §5.2) |
 | `name` | localized name (dialog tag of the name's letters/digits, else the name) | same |
 | `objtype`, `objclass` | localized class name | same |
 | `statmod` | modifier list | not ported |
@@ -183,8 +182,9 @@ Current behaviour is kept until these are answered.
 
 1. Paperdoll: does retail's paperdoll animate (an idle loop), or hold one
    pose? Which animation?
-2. Status bar: when the player has no portrait icon, does retail show an
-   empty frame? (The port shows `LockeFace`.)
+2. Answered by the emulator (2026-10-09): retail draws whatever the
+   character's +0x130 image is, which is its state-0 icon. With none, the
+   ring is empty. The port now does the same.
 3. New game: Locke starts with 0 of 105 mana (newgame.sav stores 0). Is
    that retail?
 4. Answered by the decompile (gameplay/forensics/PLAYER_STATS.md §7):

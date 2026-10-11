@@ -38,6 +38,12 @@ build/Revenant --headless --max-runtime=<s> \
 - The input clock starts with the play screen and leaves out long frames;
   `--exec` sleeps count ticks. Line the two up with generous windows, not
   exact times.
+- `key_press` sends key events only. The text-bar prompt reads characters:
+  `char enter` (or a code, `char 13`; also `backspace`, `escape`) and
+  `type <text>`. `--exec "prompt <text>"` types a whole line at the prompt
+  on the tick it runs (Enter, the text, Enter), e.g. `prompt alreadydead`
+  or `prompt @addinv "short sword"`. The prompt needs control on and Locke
+  out of combat.
 
 ## 3. Conversations
 
@@ -166,12 +172,19 @@ After them every forest and town block runs to its END in some pass, except
 Jong1: the training loops on `if player.lastattack = …`, a member not
 ported (combat track; BURNDOWN T8). A choice that jumps
 back to its own menu (Geralt1, Gus1, Rubold1) loops while the same key is
-pressed; another key leaves. Kylie1 needs a longer window (`--window 900`):
-each of her lines holds the script ~40 s, others 4–10 s (BURNDOWN T9).
+pressed; another key leaves. Kylie1 used to hold the script ~40 s a line
+(others 4–10 s); since the combat merge (2026-10-09) her block runs to END in
+about two minutes (39 lines, 117 s wall).
 
-The level-46 slave camp blocks (Shegra, Slave1, Slave2, Druhgslave2,
-Druhgslave3) stop on their first `say` or `try`: the speaker never gets back
-to its root state (likely the same cause as Kylie's, BURNDOWN T9).
+The level-46 slave camp blocks used to stop on their first `say` or `try`:
+the map saves these speakers with a `combat` root their models lack, so they
+never got back to root. The port now repairs such a root on load (DIALOG.md
+§2.5). Since 2026-10-10, Shegra (keys `2,1`), Slave1 and Slave2 run to their
+END. Druhgslave3 loops on its `Help` choice while `2` is pressed. Druhgslave1
+and 2 need Locke alive: the camp's monsters kill him during the 120-tick wait
+before `use`, and a dead speaker never finishes `player.say`. With `--god`
+(the `alreadydead` cheat typed at the text-bar prompt before the teleport,
+`--exec "prompt alreadydead"`) both run to END.
 
 ### 7.2 The run-on after a jump (2026-10-07)
 

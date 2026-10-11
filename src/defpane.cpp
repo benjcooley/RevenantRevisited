@@ -54,6 +54,19 @@ constexpr uint32_t kListHList      = 0x00020000;
 constexpr uint32_t kListNoScroll   = 0x00040000;
 constexpr uint32_t kEditSpin       = 0x00040000;
 
+// REVSYNC: the DEF engine draws its sprites with DM_USEDEFAULT (0x80000000,
+// cls_0x5b93c4.cpp:237), which takes the bitmap's own draw mode (1998
+// TSurface::ParamDrawSetup). A DM_ALPHA sprite -- the "alpha" and "tex"
+// widget packs, popupalpha's Background -- goes through the alpha blit
+// (0x004b349d), which reads only its alpha track, never the key colour: its
+// dark glass and edges are black pixels (the key, 0) with alpha. Other
+// stored modes keep the keyed decode (a mode without DM_TRANSPARENT would
+// draw the key colour too; BURNDOWN cross-track).
+EBitmapDecode DecodeFor(const TBitmap* bm)
+{
+    return (bm && (bm->drawmode & DM_ALPHA)) ? EBitmapDecode::Unkeyed : EBitmapDecode::Pixels;
+}
+
 // Retail bitmap fonts ("Med"/"Large"/"small" from font.def) are mapped to the
 // Arial-metric Arimo TTF per the UI text-rendering convention
 // (project-ui-text-rendering; InGameMenuDef_SPEC §2 maps "Med" -> Arimo-14).
@@ -690,6 +703,7 @@ bool TDefPane::Open(const char* defName, const char* panelName, uint32_t defFlag
     fadeStartTime = TTime::Time();
     fadeFromLevel = 0.0f;
     finishing     = false;
+    endRequested  = false;
     log_info("[defpane] opened '%s' panel '%s' flags 0x%x %dx%d @(%d,%d): %zu widgets, bg=%s",
              defName, targetPanel.c_str(), defflags, paneW, paneH, x, y,
              widgets.size(), background ? "OK" : "MISS");
@@ -794,7 +808,10 @@ void TDefPane::ReleaseAssets()
     open = false;
     defflags  = 0;
     finishing = false;
+    endRequested = false;
     draggingSlider = -1;
+    arrowSlider = -1;
+    arrowStep = 0;
 }
 
 TDefPane::~TDefPane() { ReleaseAssets(); }
@@ -873,6 +890,12 @@ void TDefPane::SetSliderValue(const char* name, int32_t value)
         ChangeSlider(*w, value);
 }
 
+void TDefPane::SetSliderPage(const char* name, int32_t page)
+{
+    if (SDefWidget* w = Find(name); w && w->type == EDefWidget::Scrollbar)
+        w->page = page;
+}
+
 void TDefPane::ChangeSlider(SDefWidget& w, int32_t value)
 {
     value = std::clamp(value, w.minval, (std::max)(w.minval, w.maxval));
@@ -913,11 +936,13 @@ void TDefPane::DrawNineSlice(PTBitmap bm, const SDefInsets& frame,
     if (!bm || !surface) return;
     if (frame.set && (frame.l || frame.t || frame.r || frame.b))
         Renderer->DrawNineSliceToTarget(bm, frame.l, frame.t, frame.r, frame.b,
-                                        x, y, w, h, surface->Width(), surface->Height());
+                                        x, y, w, h, surface->Width(), surface->Height(),
+                                        DecodeFor(bm));
     else
         Renderer->DrawBitmapSubrectStretchedToTarget(bm, x, y, w, h, 0, 0,
                                                      bm->width, bm->height,
-                                                     surface->Width(), surface->Height());
+                                                     surface->Width(), surface->Height(),
+                                                     DecodeFor(bm));
 }
 
 void TDefPane::DrawText(const std::string& text, int32_t x, int32_t y,
@@ -1007,7 +1032,7 @@ void TDefPane::DrawWidget(const SDefWidget& wid)
                 PTBitmap face = wid.faceUp;
                 if (wid.pressed && wid.faceDown)       face = wid.faceDown;
                 else if (wid.hovered && wid.faceHover) face = wid.faceHover;
-                Renderer->DrawBitmapToTarget(face, wid.x, wid.y, tw, th);
+                Renderer->DrawBitmapToTarget(face, wid.x, wid.y, tw, th, DecodeFor(face));
                 break;
             }
             if (wid.flags & kBtnToggle)
@@ -1017,7 +1042,7 @@ void TDefPane::DrawWidget(const SDefWidget& wid)
                 // UPLABELRECT offset (e.g. 18,-1) — NOT a stretched 9-slice.
                 const std::string& box = wid.selected ? st.down : st.up;
                 if (PTBitmap bm = LookupBitmap(box.c_str()))
-                    Renderer->DrawBitmapToTarget(bm, wid.x, wid.y, tw, th);
+                    Renderer->DrawBitmapToTarget(bm, wid.x, wid.y, tw, th, DecodeFor(bm));
                 if (!wid.text.empty())
                 {
                     const int32_t* lr = st.uplabelrect;
@@ -1170,9 +1195,9 @@ void TDefPane::DrawListScrollbar(const SDefWidget& w)
     const SListBar bar = ListBarLayout(w, up ? up->height : 0);
 
     if (up)
-        Renderer->DrawBitmapToTarget(up, bar.x + kListBarArrowX, bar.upY, tw, th);
+        Renderer->DrawBitmapToTarget(up, bar.x + kListBarArrowX, bar.upY, tw, th, DecodeFor(up));
     if (down)
-        Renderer->DrawBitmapToTarget(down, bar.x + kListBarArrowX, bar.downY, tw, th);
+        Renderer->DrawBitmapToTarget(down, bar.x + kListBarArrowX, bar.downY, tw, th, DecodeFor(down));
     if (thumb && bar.thumbH > 0)
     {
         // The thumb art is a vertical 3-slice: its end rows stay, the middle
@@ -1180,7 +1205,8 @@ void TDefPane::DrawListScrollbar(const SDefWidget& w)
         const int32_t cap = thumb->height / 2;
         Renderer->DrawNineSliceToTarget(thumb, 0, cap, 0, thumb->height - cap - 1,
                                         bar.x + kListBarArrowX + (kListBarWidth - thumb->width) / 2,
-                                        bar.thumbY, thumb->width, bar.thumbH, tw, th);
+                                        bar.thumbY, thumb->width, bar.thumbH, tw, th,
+                                        DecodeFor(thumb));
     }
 }
 
@@ -1207,7 +1233,7 @@ void TDefPane::DrawField(const SDefWidget& wid)
 {
     if (wid.fieldBitmap && surface)
         Renderer->DrawBitmapToTarget(wid.fieldBitmap, wid.x, wid.y,
-                                     surface->Width(), surface->Height());
+                                     surface->Width(), surface->Height(), DecodeFor(wid.fieldBitmap));
 }
 
 void TDefPane::DrawScrollbar(const SDefWidget& w)
@@ -1220,45 +1246,44 @@ void TDefPane::DrawScrollbar(const SDefWidget& w)
         if (PTBitmap bm = LookupBitmap(st.bgbitmap.c_str()))
             DrawNineSlice(bm, st.frame, w.x, w.y, w.w, w.h);
 
-    // SCROLLBAR arrow/thumb pieces are each a 2-state button: the .dat stores
-    // "<base>U" (unpressed) / "<base>D" (pressed) while widgets.def names the
-    // base. Use the unpressed state for a static render.
-    PTBitmap up    = LookupBitmap((st.up + "U").c_str());          // decrement arrow
-    PTBitmap down  = LookupBitmap((st.down + "U").c_str());        // increment arrow
-    PTBitmap thumb = LookupBitmap((st.scrollthumb + "U").c_str());
-
-    const bool vertical = (w.flags & kScrollVScroll) != 0;
-    auto vmid = [&](int32_t bh) { return w.y + (w.h - bh) / 2; };
-    auto hmid = [&](int32_t bw) { return w.x + (w.w - bw) / 2; };
-    const float frac = (w.maxval > w.minval)
-        ? float(w.value - w.minval) / float(w.maxval - w.minval) : 0.0f;
-
-    if (vertical)
+    // The arrows and the thumb, centred across the bar.
+    const SSliderBar bar = SliderLayout(w);
+    const auto put = [&](PTBitmap bm, int32_t along)
     {
-        if (up)    Renderer->DrawBitmapToTarget(up,   hmid(up->width),   w.y + 1, tw, th);
-        if (down)  Renderer->DrawBitmapToTarget(down, hmid(down->width), w.y + w.h - down->height - 1, tw, th);
-        if (thumb)
-        {
-            const int32_t top = w.y + 1 + (up ? up->height : 0) + 1;
-            const int32_t bot = w.y + w.h - 1 - (down ? down->height : 0) - 1;
-            const int32_t span = bot - top - thumb->height;
-            const int32_t ty = top + (span > 0 ? int32_t(frac * span) : 0);
-            Renderer->DrawBitmapToTarget(thumb, hmid(thumb->width), ty, tw, th);
-        }
-    }
-    else
-    {
-        if (up)    Renderer->DrawBitmapToTarget(up,   w.x + 1, vmid(up->height),   tw, th);
-        if (down)  Renderer->DrawBitmapToTarget(down, w.x + w.w - down->width - 1, vmid(down->height), tw, th);
-        if (thumb)
-        {
-            const int32_t left  = w.x + 1 + (up ? up->width : 0) + 1;
-            const int32_t right = w.x + w.w - 1 - (down ? down->width : 0) - 1;
-            const int32_t span  = right - left - thumb->width;
-            const int32_t tx    = left + (span > 0 ? int32_t(frac * span) : 0);
-            Renderer->DrawBitmapToTarget(thumb, tx, vmid(thumb->height), tw, th);
-        }
-    }
+        if (!bm)
+            return;
+        const int32_t x = bar.vertical ? w.x + (w.w - bm->width) / 2 : along;
+        const int32_t y = bar.vertical ? along : w.y + (w.h - bm->height) / 2;
+        Renderer->DrawBitmapToTarget(bm, x, y, tw, th, DecodeFor(bm));
+    };
+    put(bar.dec, (bar.vertical ? w.y : w.x) + 1);
+    put(bar.inc, bar.incStart);
+    put(bar.thumb, bar.thumbPos);
+}
+
+// SCROLLBAR arrow/thumb pieces are each a 2-state button: the .dat stores
+// "<base>U" (unpressed) / "<base>D" (pressed) while widgets.def names the
+// base; the layout measures the unpressed art.
+TDefPane::SSliderBar TDefPane::SliderLayout(const SDefWidget& w)
+{
+    const SDefStyle& st = w.style;
+    SSliderBar bar;
+    bar.vertical = (w.flags & kScrollVScroll) != 0;
+    bar.dec   = LookupBitmap((st.up + "U").c_str());
+    bar.inc   = LookupBitmap((st.down + "U").c_str());
+    bar.thumb = LookupBitmap((st.scrollthumb + "U").c_str());
+    const auto length = [&](PTBitmap bm) { return bm ? (bar.vertical ? bm->height : bm->width) : 0; };
+
+    const int32_t start = bar.vertical ? w.y : w.x;
+    const int32_t size  = bar.vertical ? w.h : w.w;
+    bar.decEnd      = start + 1 + length(bar.dec);
+    bar.incStart    = start + size - 1 - length(bar.inc);
+    bar.travelStart = bar.decEnd + 1;
+    bar.thumbLen    = length(bar.thumb);
+    bar.travel      = (std::max)(0, bar.incStart - 1 - bar.travelStart - bar.thumbLen);
+    const int32_t range = w.maxval - w.minval;
+    bar.thumbPos = bar.travelStart + (range > 0 ? bar.travel * (w.value - w.minval) / range : 0);
+    return bar;
 }
 
 void TDefPane::Render()
@@ -1279,7 +1304,8 @@ void TDefPane::Paint()
 void TDefPane::PaintBackground()
 {
     if (background)
-        Renderer->DrawBitmapToTarget(background, 0, 0, surface->Width(), surface->Height());
+        Renderer->DrawBitmapToTarget(background, 0, 0, surface->Width(), surface->Height(),
+                                     DecodeFor(background));
 }
 
 // REVSYNC: the button pane's draw, 0x00435de0 -- every widget in order.
@@ -1334,54 +1360,60 @@ bool TDefPane::ClickListScrollbar(SDefWidget& w, int32_t lx, int32_t ly)
     return true;
 }
 
-void TDefPane::SetSliderFromCursor(SDefWidget& w, int32_t lx, int32_t ly)
+// REVSYNC: the scrollbar's press (OPTIONS.md §8). On an arrow it waits for
+// the release, which steps by 1 (0x0042f249); on the thumb it drags
+// (0x0042f2e0); on the track it pages toward the pointer by the page size,
+// with a click (0x0042f16d-0x0042f1fa).
+void TDefPane::PressSlider(int32_t index, int32_t lx, int32_t ly)
 {
-    const SDefStyle& st = w.style;
-    PTBitmap up    = LookupBitmap((st.up + "U").c_str());
-    PTBitmap down  = LookupBitmap((st.down + "U").c_str());
-    PTBitmap thumb = LookupBitmap((st.scrollthumb + "U").c_str());
-    const bool vertical = (w.flags & kScrollVScroll) != 0;
-
-    float frac = 0.0f;
-    if (vertical)
+    SDefWidget& w = widgets[index];
+    const SSliderBar bar = SliderLayout(w);
+    const int32_t at = bar.vertical ? ly : lx;
+    if (bar.dec && at < bar.decEnd)
     {
-        const int32_t top  = w.y + 1 + (up ? up->height : 0) + 1;
-        const int32_t bot  = w.y + w.h - 1 - (down ? down->height : 0) - 1;
-        const int32_t half = thumb ? thumb->height / 2 : 0;
-        const int32_t span = bot - top - (thumb ? thumb->height : 0);
-        if (span > 0) frac = float(ly - top - half) / float(span);
+        arrowSlider = index;
+        arrowStep = -1;
+    }
+    else if (bar.inc && at >= bar.incStart)
+    {
+        arrowSlider = index;
+        arrowStep = 1;
+    }
+    else if (bar.thumb && at >= bar.thumbPos && at < bar.thumbPos + bar.thumbLen)
+    {
+        draggingSlider = index;
+        dragGrab = at - bar.thumbPos;
     }
     else
     {
-        const int32_t left  = w.x + 1 + (up ? up->width : 0) + 1;
-        const int32_t right = w.x + w.w - 1 - (down ? down->width : 0) - 1;
-        const int32_t half  = thumb ? thumb->width / 2 : 0;
-        const int32_t span  = right - left - (thumb ? thumb->width : 0);
-        if (span > 0) frac = float(lx - left - half) / float(span);
+        PlayClick();
+        ChangeSlider(w, at < bar.thumbPos ? w.value - w.page : w.value + w.page);
     }
-    frac = (frac < 0.0f) ? 0.0f : (frac > 1.0f ? 1.0f : frac);
-    ChangeSlider(w, w.minval + static_cast<int32_t>(frac * (w.maxval - w.minval) + 0.5f));
 }
 
-bool TDefPane::StepSliderArrow(SDefWidget& w, int32_t lx, int32_t ly)
+// The held thumb follows the pointer, the place it was taken staying under
+// it; the value is the nearest to where the thumb sits.
+void TDefPane::DragSlider(SDefWidget& w, int32_t lx, int32_t ly)
 {
-    const SDefStyle& st = w.style;
-    PTBitmap up   = LookupBitmap((st.up + "U").c_str());
-    PTBitmap down = LookupBitmap((st.down + "U").c_str());
-    const bool vertical = (w.flags & kScrollVScroll) != 0;
-    auto dec = [&] { ChangeSlider(w, w.value - 1); };
-    auto inc = [&] { ChangeSlider(w, w.value + 1); };
-    if (vertical)
+    const SSliderBar bar = SliderLayout(w);
+    if (bar.travel <= 0)
+        return;
+    const int32_t pos = std::clamp((bar.vertical ? ly : lx) - dragGrab - bar.travelStart, 0, bar.travel);
+    ChangeSlider(w, w.minval + (pos * (w.maxval - w.minval) + bar.travel / 2) / bar.travel);
+}
+
+void TDefPane::ReleaseSliderArrow(int32_t lx, int32_t ly)
+{
+    if (arrowSlider >= 0 && arrowSlider < static_cast<int32_t>(widgets.size()))
     {
-        if (up   && ly <  w.y + 1 + up->height)          { dec(); return true; }
-        if (down && ly >= w.y + w.h - 1 - down->height)  { inc(); return true; }
+        SDefWidget& w = widgets[arrowSlider];
+        const SSliderBar bar = SliderLayout(w);
+        const int32_t at = bar.vertical ? ly : lx;
+        if (w.Contains(lx, ly) && (arrowStep < 0 ? at < bar.decEnd : at >= bar.incStart))
+            ChangeSlider(w, w.value + arrowStep);
     }
-    else
-    {
-        if (up   && lx <  w.x + 1 + up->width)           { dec(); return true; }
-        if (down && lx >= w.x + w.w - 1 - down->width)   { inc(); return true; }
-    }
-    return false;
+    arrowSlider = -1;
+    arrowStep = 0;
 }
 
 SDefWidget* TDefPane::EditingWidget()
@@ -1395,6 +1427,7 @@ SDefWidget* TDefPane::EditingWidget()
 void TDefPane::OnMouseDown(int32_t lx, int32_t ly)
 {
     draggingSlider = -1;
+    arrowSlider = -1;
     // REVSYNC: 0x00436530 -- a press outside the EDIT being edited ends its
     // editing.
     for (SDefWidget& w : widgets)
@@ -1414,11 +1447,7 @@ void TDefPane::OnMouseDown(int32_t lx, int32_t ly)
                     ClickListRow(w, lx, ly);
                 break;
             case EDefWidget::Scrollbar:
-                if (!StepSliderArrow(w, lx, ly))     // arrow click = ±1 step
-                {
-                    draggingSlider = static_cast<int32_t>(i);
-                    SetSliderFromCursor(w, lx, ly);  // track click = jump, then drag
-                }
+                PressSlider(static_cast<int32_t>(i), lx, ly);
                 break;
             default: break;
         }
@@ -1478,6 +1507,7 @@ void TDefPane::OnKey(int32_t vk, bool down)
 const char* TDefPane::OnMouseUp(int32_t lx, int32_t ly)
 {
     draggingSlider = -1;
+    ReleaseSliderArrow(lx, ly);
     const char* activated = nullptr;
     for (SDefWidget& w : widgets)
     {
@@ -1499,7 +1529,7 @@ const char* TDefPane::OnMouseUp(int32_t lx, int32_t ly)
 void TDefPane::OnMouseMove(int32_t lx, int32_t ly)
 {
     if (draggingSlider >= 0 && draggingSlider < static_cast<int32_t>(widgets.size()))
-        SetSliderFromCursor(widgets[draggingSlider], lx, ly);   // drag
+        DragSlider(widgets[draggingSlider], lx, ly);
 
     for (SDefWidget& w : widgets)
         w.hovered = (w.type == EDefWidget::Button && !w.disabled && w.Contains(lx, ly));
@@ -1544,16 +1574,25 @@ void TDefPane::Finish(int32_t result)
         if (fadeFromLevel > 0.0f)
             return;
     }
-    EndModal(result);
+    RequestEnd();
+}
+
+// The screen removes an ended modal at the start of its next tick, so the
+// pane is drawn once more after this: it stays finishing (faded out, level
+// 0) until Close, rather than reading as a fade-in from where the fade-out
+// began, which drew it opaque for that frame.
+void TDefPane::RequestEnd()
+{
+    if (endRequested)
+        return;
+    endRequested = true;
+    EndModal(finishResult);
 }
 
 void TDefPane::Pulse()
 {
     if (finishing && FadeLevel() <= 0.0f)
-    {
-        finishing = false;
-        EndModal(finishResult);
-    }
+        RequestEnd();
 }
 
 void TDefPane::Compose()

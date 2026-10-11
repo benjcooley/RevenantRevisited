@@ -1,25 +1,33 @@
 // *************************************************************************
 // *                  Revenant Revisited (port) - 2026                     *
-// *  uimaptest.h - --test=ui-map                                          *
+// *  uimaptest.h - --test=ui-map: TAutoMap                                *
 // *************************************************************************
 //
-// Isolated harness for MapSidebarPane (cls_0x5a5658 / cand. TAutoMap): the
-// lower-sidebar minimap/automap panel. Built from MapPane_SPEC.md using the
-// real retail assets (Marker, Amap, PlusSel, MinusSel) from automap.dat.
+// Hosts the production automap (TAutoMap, automap.h) on the test screen in
+// the side panel's lower slot. The test screen routes the pointer to it, so
+// "+" and "-" zoom while held and dragging inside the ring scrolls; with no
+// level loaded the map inside is the empty, black mosaic. --test=ui-hud
+// hosts it the same way beside the HUD harness's upper panes, shown while
+// the side panel is open on the map tab.
 //
-// Scope-limited reconstruction (per task brief): the panel framing (Amap
-// chrome at screen (452,306) 188x174), the two zoom buttons (PlusSel +
-// MinusSel at the bottom corners) and a handful of synthetic Marker blips
-// at fixed body-window positions to verify chrome layout. The lit/scrolled
-// 3D heightfield mesh body (spec §6e / §14 #1, meth_0x52af00 + meth_0x52b520)
-// is OUT OF SCOPE — it belongs to the renderer 3D path, not the UI.
+// --test=ab-automap is one case of the automap's retail A/B
+// (tools/retail_ab/hud_ab.py automap), from --ab-case, fields split by ';':
+//   plus=0|1    "+" held
+//   minus=0|1   "-" held
+// The host presses them as the pointer would and, with the clock stopped on
+// a tick boundary, composes the pane once over black without pulsing it (so
+// the zoom stays at 100). --snap=<png> writes the frame (give it
+// --snapwarmup=12); --ab-out=<json> writes what the pane shows.
 //
 // *************************************************************************
 
 #pragma once
 
 bool InitializeUIMapMode();
+bool InitializeUIMapModeEmbedded();     // --test=ui-hud: shown with the side panel's map tab
 void RenderUIMapMode();
-void RenderUIMapModeEmbedded();
-void SetUIMapModeVisible(bool visible);
 void CloseUIMapMode();
+
+bool InitializeABAutoMapMode();
+void RenderABAutoMapMode();
+void CloseABAutoMapMode();

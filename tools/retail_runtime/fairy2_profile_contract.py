@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""Compile Fairy2 exact-resource helper and exhaustive payload mutations."""
+import argparse,json,subprocess,zipfile
+from pathlib import Path
+from static_particles_profile_contract import CLASS,ROOT
+from speed_profile_contract import PRELUDE,function,sha
+MAIN=r'''
+int main(int argc,char**argv){assert(argc==2);std::ifstream f(argv[1],std::ios::binary);std::vector<unsigned char>b((std::istreambuf_iterator<char>(f)),{});T3DImagery im;Load(im,b,"Misc/Fairy2.I3D");assert(ExactResources(&im));puts("accept literal");
+auto reject=[&](auto mutate){T3DImagery v;Load(v,b,"Misc/Fairy2.I3D");mutate(v);assert(!ExactResources(&v));puts("reject payload");};
+for(const char*p:{"", "misc/fairy.i3d", "misc/fairy2.i3d.bak"})reject([&](auto&v){v.path=p;});reject([](auto&v){v.null_filename=true;});
+for(int i=0;i<3;++i){reject([&](auto&v){++v.objects[i].material;});reject([&](auto&v){--v.keycount[i];});reject([&](auto&v){v.keyptr[i]=nullptr;});reject([&](auto&v){++v.objects[i].numverts;});reject([&](auto&v){++v.objects[i].numfaces;});for(int k=0;k<im.keycount[i];++k)reject([&](auto&v){reinterpret_cast<uint32_t*>(v.keys[i].data())[k]^=0x100;});for(int k=0;k<im.objects[i].numverts*8;++k)reject([&](auto&v){reinterpret_cast<float*>(v.verts[i].data())[k]+=.03125f;});for(int k=0;k<im.objects[i].numfaces*3;++k)reject([&](auto&v){reinterpret_cast<uint16_t*>(v.faces[i].data())[k]^=1;});if(i)for(int t=0;t<3;++t)reject([&](auto&v){++v.facecounts[i][t];});reject([&](auto&v){++v.materials[i].texture;});for(int k=0;k<17;++k)reject([&](auto&v){reinterpret_cast<float*>(&v.materials[i].matdesc.diffuse)[k]+=.03125f;});}
+}
+'''
+def run(output):
+ output.mkdir(parents=True,exist_ok=False);source=(ROOT/'src/effects/fairy2preview.cpp').read_text();body=(ROOT/'src/3dimagebody.h').read_text();render=(ROOT/'src/render3d_types.h').read_text();records='\n'.join(function(s,t)+';'for s,t in[(body,'struct SAniKey32\n'),(body,'struct S3DFace\n'),(render,'struct S3DVertex\n'),(render,'struct SRenderColor\n'),(body,'struct S3DMaterial\n')]);cls=CLASS.replace('#include "staticpartsysprofiles.h"','').replace('TYPED_METHOD','').replace('uint32_t ValidateRetailStaticParticleProfile();','uint32_t ValidateRetailStaticParticleProfile(){return 0;}').replace('bool null_filename=false;','bool null_filename=false;int NumObjVerts(int i){return objects[i].numverts;}int NumObjFaces(int i){return objects[i].numfaces;}void GetObject(int i,S3DObj*out){*out=objects[i];}void GetMaterial(int i,S3DMat*out){*out=materials[i];}')
+ cls=cls.replace('std::array<int,2>,40>facecounts','std::array<int,3>,40>facecounts').replace('for(int t=0;t<2;++t)','for(int t=0;t<=im.ntex;++t)').replace('void GetObjFaces(int i,S3DFace*out){memcpy(out,faces.at(i).data(),faces.at(i).size()*6);}','void GetObjFaces(int i,S3DFace*out,int*starts=nullptr,int*counts=nullptr){if(out)memcpy(out,faces.at(i).data(),faces.at(i).size()*6);for(int t=0;t<=ntex;++t){if(starts)starts[t]=0;if(counts)counts[t]=facecounts[i][t];}}')
+ driver=output/'guard.cpp';driver.write_text(PRELUDE+'\n#include <cctype>\n#define MAXTEXTURES 8\n#define log_info(...) ((void)0)\n'+records+'\n'+cls+'\n'+function(source,'static uint64_t Hash(')+'\n'+function(source,'static bool ExactResources(')+'\n'+MAIN);binary=output/'guard';q=subprocess.run(['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined',str(driver),'-o',str(binary)],capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr)
+ if q.returncode:raise RuntimeError('compile failed')
+ with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read(next(n for n in z.namelist()if n.lower()=='imagery/misc/fairy2.i3d'))
+ asset=output/'fixture';asset.write_bytes(data);q=subprocess.run([str(binary),str(asset)],capture_output=True,text=True);(output/'trace').write_text(q.stdout);(output/'run.log').write_text(q.stderr)
+ report=dict(status='pass'if q.returncode==0 and not q.stderr else'fail',asset_sha256=sha(data),source_sha256=sha(source.encode()),driver_sha256=sha(driver.read_bytes()),accept=q.stdout.count('accept literal'),reject=q.stdout.count('reject payload'),sanitizers='ASan/UBSan',accepted=False,scope='Extracted actual Fairy2 ExactResources helper checks own path/all3 state0 key tracks/materials/vertices/faces and bins. Full typed owner/header/tag/texture guard also exercised by actual engine spawn; raw texels fixture-pinned, no broad admission.');(output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],report['accept'],report['reject']);return report
+if __name__=='__main__':
+ p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.output)

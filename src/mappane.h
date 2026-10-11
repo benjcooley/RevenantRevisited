@@ -15,6 +15,7 @@
 #include "sector.h"
 
 class TMapRenderer;
+enum class EPickRead : uint8_t;
 
 // Grid snap
 #define GRIDSHIFT   4
@@ -356,6 +357,10 @@ class TMapPane : public TPane
   // World position functions
     void SetMapPos(S3DPoint& newpos);
     void GetMapPos(S3DPoint& retpos) { retpos = center; }
+    // The map-screen point at the centre of the view (retail: half the pane's
+    // size plus its scroll, MapPane +0x1c / +0x20 and +0x2c / +0x30; the
+    // port's camera keeps the centre itself).
+    void GetViewCentre(int32_t& sx, int32_t& sy) const { WorldToScreen(center, sx, sy); }
     void SetMapLevel(int32_t newlev) { newlevel = newlev; if (newlev != level) RedrawAll(); }
     int32_t GetMapLevel() { return level; }
 
@@ -394,6 +399,10 @@ class TMapPane : public TPane
       // Makes a unique id map index for an object
     int32_t NewObject(SObjectDef* def);
       // Create a new object with the given objdef
+    using NewObjectSeam = int32_t (*)(SObjectDef* def);
+    static inline NewObjectSeam newObjectSeam = nullptr;
+      // Retail A/B fixtures only: when set, it answers NewObject (retail
+      // 0x00450e40): the def recorded, the id it gives returned
     int32_t AddObject(TObjectInstance* oi);
       // Adds the given object to the map and returns unique id
     void ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32_t newflags);
@@ -428,6 +437,10 @@ class TMapPane : public TPane
         // As above, from an object's position and level (else the camera's)
     int32_t FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height = 0, int32_t objclass = -1, int32_t maxnum = MAXFOUNDOBJS, int32_t objset = OBJSET_ALL);
       // Finds objects within given range. If height not given uses width as radius
+    using FindObjectsSeam = int32_t (*)(const S3DPoint& pos, int32_t* array, int32_t width, int32_t height,
+        int32_t objclass, int32_t maxnum, int32_t objset);
+    static inline FindObjectsSeam findObjectsSeam = nullptr;
+      // Likewise for FindObjectsInRange (retail 0x00452060)
     TObjectInstance* ObjectInCube(PS3DRect cube, int32_t level, int32_t objset = OBJSET_ALL);
         // The first object on level inside the cube, faces included, from
         // the level's loaded sectors (a CUBE trigger's search)
@@ -436,6 +449,8 @@ class TMapPane : public TPane
         // a 3D mesh shown there, else the map's objects whose screen rect
         // holds the point (a visible pixel or always-on-top preferred) that
         // offer a cursor for `with` (or a pickup)
+    TObjectInstance* OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with, EPickRead read);
+        // The same, the frame's ids read as `read` says (the hover: Latest)
     TObjectInstance* GetInstance(int32_t index, int32_t objset = OBJSET_ALL);
         // Returns the instance given an object index. Backed by an
         // unordered_map keyed on mapindex (O(1) hit, falls back to a linear

@@ -1648,7 +1648,7 @@ void RegisterBuiltinCommands()
             // SetMainPlayer's UI side effects (run inside SetPos via
             // the legacy walkmap/transfer path) want CurrentScreen to
             // be set up; clear it briefly so a place in a half-init
-            // editor frame doesn't poke an unprepared HealthBar.
+            // editor frame doesn't poke unprepared panes.
             TScreen* saved_screen = CurrentScreen;
             CurrentScreen = nullptr;
             Player->SetPos(dst, cam_level, /*override=*/true);

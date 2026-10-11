@@ -51,6 +51,7 @@ struct Particle
     float friction = 0, gravity = 0;
     float bounce_min = 100, bounce_max = 100;
     float scale_delta = 0;
+    std::vector<Vec3> trail_positions; // corrected render-space positions; shifted only by Render
 };
 
 struct RenderSample
@@ -72,6 +73,9 @@ public:
     // Preserve three retail helper evaluations per rendered particle. Equal
     // endpoints return a constant without consuming the supplied RNG stream.
     RenderSample SampleRender(std::size_t slot, const RandomRange& random) const;
+    // Call once after the main SampleRender, even when its scale rejects.
+    // Returns shifted historical positions, ending with duplicate current.
+    std::vector<Vec3> SampleTrailPositions(std::size_t slot);
     const std::vector<Particle>& Particles() const { return particles_; }
     std::size_t Capacity() const { return particles_.size(); }
     float EmissionCredit() const { return emission_credit_; }

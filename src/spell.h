@@ -197,8 +197,8 @@ class TSpellList
 #define MAXSPELLTARGETS 64
 
 // The "abracadabra" text cheat (retail 0x0066810c): a cast costs no mana and
-// can't fail its skill roll, and ManaDrain leaves a player's mana alone. The
-// cheat command itself isn't ported, so nothing sets it yet.
+// can't fail its skill roll, and ManaDrain leaves a player's mana alone.
+// Toggled by the cheat word at the text-bar prompt (cheats.cpp).
 extern bool MagicCheat;
 
 class TCharacter;
@@ -386,6 +386,11 @@ class TSpellManager
     // 0x0044d080 over OBJSET_ANIMATE), instead of the map.
     using NearbySeam = std::vector<TObjectInstance*> (*)(TObjectInstance* center);
     static inline NearbySeam nearbySeam = nullptr;
+    // Likewise, when set, it answers CastByName (retail 0x0053f920).
+    using CastByNameSeam = bool (*)(TSpellManager* self, const char* name, TObjectInstance* invoker,
+                                    TObjectInstance** targets, int32_t numtargs, const S3DPoint* sourcepos,
+                                    const TSpell* master);
+    static inline CastByNameSeam castByNameSeam = nullptr;
 
   private:
     bool CanAfford(TCharacter* caster, const SSpellVariant& variant, bool byname) const;

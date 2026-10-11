@@ -170,6 +170,9 @@ class TPlayer : public TCharacter
     bool CanEquip(TObjectInstance* oi, int32_t slot);
         // Returns true if player can be equiped by the given object
     bool Equip(TObjectInstance* oi, int32_t slot);
+    using EquipSeam = bool (*)(TPlayer* self, TObjectInstance* oi, int32_t slot);
+    static inline EquipSeam equipSeam = nullptr;
+      // Retail A/B fixtures only: when set, it answers Equip (retail 0x005199b0)
         // Set up equipment pointers from objects in player's inventory
     void OnInventoryRemove(TObjectInstance* item) override;
         // An equipped item leaving the inventory is unequipped first
@@ -249,11 +252,11 @@ class TPlayer : public TCharacter
     int32_t WeaponSkill(int32_t weapontype) { return Skill(SK_WEAPONSKILLS + weapontype); }
 
     // Spell casting
-    bool HasTalismans(char *talismans);
+    [[nodiscard]] bool HasTalismans(const char *talismans) const;
       // Player has talismans for spell
-    char *GetQuickSpell(int32_t button);
+    [[nodiscard]] const char *GetQuickSpell(int32_t button) const;
       // Gets the talisman list for the given quickspell
-    void SetQuickSpell(int32_t button, char *talismans);
+    void SetQuickSpell(int32_t button, const char *talismans);
       // Sets the quickspell button
     bool InvokeQuickSpell(int32_t button);
       // Invokes the given quickspell for the player
@@ -293,13 +296,34 @@ class TPlayer : public TCharacter
     void SetTeam(const SPlayerTeamRecord& record) { team = record; }
         // The multiplayer team record, set as a whole (0x0051e4d0 compares it)
     [[nodiscard]] const SPlayerHudWords& HudWords() const { return hudwords; }
+    // The explored automap (retail +0x314), which the automap pane shows and adds to.
+    [[nodiscard]] SAutoMapRecord& AutoMapRecord() { return automap; }
     void SetHudWords(const SPlayerHudWords& words) { hudwords = words; }
         // The HUD state written into a save
     [[nodiscard]] int32_t NumKnownSpells() const { return (int32_t)knownspells.size(); }
     [[nodiscard]] const char* KnownSpell(int32_t i) const { return knownspells[i].data(); }
         // Talisman codes of the spells the player has learned (retail +0x2ec), in the order learned
+    [[nodiscard]] int32_t KnownSpellsVersion() const { return knownspellsversion; }
+        // Moves on whenever that list changes
     bool LearnSpell(const char* talismans);
         // Adds a spell's talisman code; false when it is already known
+    void ForgetSpell(int32_t i);
+        // Removes the i'th known spell, the later ones moving down (retail
+        // TPointerArray RemoveAt 0x0041cb80, as the spell book prunes codes
+        // spell.def doesn't know)
+    bool TrainStat(int32_t attribute);
+        // REVSYNC: 0x0051fe50 -- the stat pane's pick of attribute 0..5
+        // (Strn..Luck) to raise at the next level: it takes the pick not
+        // made last, unless the attribute is at 30, or is already that pick
+        // and at 29. False when nothing changed.
+    [[nodiscard]] int32_t LevelUpPick(int32_t pick) const { return levelupstats[pick]; }
+        // The attribute picked first (0) or second (1) for the next level;
+        // pick 2 is which of them was made last
+    void SetLevelUpPicks(const std::array<int32_t, 3> &picks) { levelupstats = picks; }
+        // All three, as a save holds them
+    void SetMoney(int32_t amount);
+        // REVSYNC: 0x0051e900 -- the gold carried becomes `amount`: the pile
+        // set to it, added when there is none, removed below 1
 
     // Cheat - ride that hog
     void GetOnYerHog();
@@ -459,6 +483,7 @@ class TPlayer : public TCharacter
 
   // Shipped-game player record, in retail's save order (SAVE_GAME.md §11.4)
     std::vector<TSpellCode> knownspells;            // +0x2ec: talisman codes learned
+    int32_t knownspellsversion = 0;
     SPlayerHudWords hudwords;                       // HUD state as last saved/loaded
     std::array<int32_t, 3> levelupstats{};          // +0x360: player-stat indices the level-up messages use
     SPlayerTeamRecord team;                         // +0x490: multiplayer team record
@@ -508,6 +533,8 @@ class TPlayerManager
       // Sets the main player for the game
     void SetMainPlayer(TPlayer* player);
       // Sets the main player for the game
+    void BindMainPlayerToScreen();
+      // The play screen follows the main player and shows it in its panes
     int32_t GetMainPlayerNum() { return mainplayernum; }
       // Returns the main player number
     TPlayer* GetMainPlayer() { return Player; }

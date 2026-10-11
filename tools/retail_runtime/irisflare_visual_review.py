@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""Unchanged full IrisFlare software/actual Metal cycle and reset pairs."""
+import argparse,json
+from pathlib import Path
+from PIL import Image,ImageDraw
+from speed_profile_contract import sha
+SELECTED=(1,6,19,20,25,26,49,50,100,199,200,201,202,205)
+def run(native,metal,output):
+ output.mkdir(parents=True,exist_ok=False);n=json.loads((native/'manifest.json').read_text());m=json.loads((metal/'manifest.json').read_text());assert n['status']=='native_reference_complete' and m['status']=='pass';assert len(m['frames'])==205 and m['scenario']['warmup']==0;assert m['sample_simulation_ticks']==list(range(1,206));whole=Image.new('RGB',(1280,len(SELECTED)*505));crop=Image.new('RGB',(1920,len(SELECTED)*625));w=ImageDraw.Draw(whole);c=ImageDraw.Draw(crop);pairs=[]
+ for row,tick in enumerate(SELECTED):
+  r=n['rows'][tick-1];paths=[Path(r['image']),Path(m['frames'][tick-1]['path'])];hashes=[r['image_sha256'],m['frames'][tick-1]['sha256']];assert [sha(p.read_bytes())for p in paths]==hashes;images=[Image.open(p).convert('RGB')for p in paths];blank=tick==201;assert all((im.getbbox()is None)==blank for im in images)
+  bounds=[d['geometry_bounds']for d in r['draws']];assert all(0<=b[0]<=b[2]<1280 and 0<=b[1]<=b[3]<960 for b in bounds)
+  pairs.append(dict(tick=tick,iterations=r['state']['iterations'],controller_ticks=r['state']['ticks'],draw_count=len(r['draws']),images=list(map(str,paths)),sha256=hashes,visible_bbox=[im.getbbox()for im in images],all_geometry_inside_viewport=True,draw_geometry_bounds=bounds,reset_blank=blank))
+  for col,(im,label)in enumerate(zip(images,('Original','Actual Metal'))):whole.paste(im.resize((640,480)),(col*640,row*505+25));w.text((col*640+4,row*505+5),f'{label} IrisFlare tick{tick}',fill='white');crop.paste(im.crop((160,120,1120,720)),(col*960,row*625+25));c.text((col*960+4,row*625+5),f'{label} same actual-size crop tick{tick}',fill='white')
+ whole.save(output/'whole.png');crop.save(output/'fixed-crop.png');r=dict(status='awaiting_independent_review',accepted=False,type_id='0x120054d1',asset_sha256=n['asset_sha256'],original_sha256=n['original_sha256'],binary_sha256=m['binary_sha256'],native_manifest_sha256=sha((native/'manifest.json').read_bytes()),metal_manifest_sha256=sha((metal/'manifest.json').read_bytes()),whole_sha256=sha((output/'whole.png').read_bytes()),fixed_crop_sha256=sha((output/'fixed-crop.png').read_bytes()),pairs=pairs,actual_frames=205,pixel_summary={k:v for k,v in m['pixel_summary'].items()if k!='pixel_sha256'},configuration=m['scenario'],appearance_fitted=False,scope='Exact own IrisFlare custom compound original vs actual Metal, all five flares and both cylinders plus early expanding third cylinder. Unchanged phases span growth, early cylinder cutoff20, morphology25/26/49/50, plateau100/199/200, actual blankreset201 and restarted202/205. Full authored geometry inside explicit1280x960 native-domain viewport; same actual-size crop only. Source cached horizontal flare rotation and Render-side cylinder scale retained. No camera/geometry/phase/scale/lighting/brightness/color fitting. Teleporter/caller/actor/audio/original device/natural lighting/exact pixels remain separate.');(output/'manifest.json').write_text(json.dumps(r,indent=2)+'\n');print(r['status']);return r
+if __name__=='__main__':
+ p=argparse.ArgumentParser();p.add_argument('--native',type=Path,required=True);p.add_argument('--metal',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.native,a.metal,a.output)

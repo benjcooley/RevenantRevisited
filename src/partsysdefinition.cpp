@@ -54,12 +54,25 @@ struct Reader {
         if (start == at) return Fail("expected object or field name");
         value.assign(text.substr(start, at - start)); return true;
     }
-    bool Number(float& value) {
+    bool ValueName(std::string& value) {
+        Space();
+        if (at >= text.size() || text[at] != '"') return Name(value);
+        const auto start = ++at;
+        while (at < text.size() && text[at] != '"') {
+            if (text[at]=='\\' || std::iscntrl(static_cast<unsigned char>(text[at])))
+                return Fail("unsupported quoted-name escape or control character");
+            ++at;
+        }
+        if (at == text.size() || at == start) return Fail("expected nonempty closed quoted name");
+        value.assign(text.substr(start,at-start));++at;return true;
+    }
+    bool Number(float& value, double* exact=nullptr) {
         Space(); const std::string tail(text.substr(at)); char* end = nullptr;
         const double parsed = std::strtod(tail.c_str(), &end);
         if (end == tail.c_str() || !std::isfinite(parsed) ||
             std::abs(parsed) > std::numeric_limits<float>::max()) return Fail("expected finite numeric value");
-        at += static_cast<std::size_t>(end - tail.c_str()); value = static_cast<float>(parsed); return true;
+        at += static_cast<std::size_t>(end - tail.c_str()); value = static_cast<float>(parsed);
+        if(exact)*exact=parsed;return true;
     }
     bool Tuple(Value& value, int count, bool wrapped) {
         if (wrapped && !Take('(')) return Fail("expected vector '(' ");
@@ -72,6 +85,10 @@ struct Reader {
     }
     bool Expr(Expression& expression) {
         if (!Take('[')) return Tuple(expression.constant, expression.dimensions, false);
+        // Original 4010f3 clears only the first destination before selecting
+        // literal/curve parsing. A curve preserves the remaining defaults;
+        // e.g. bounce becomes (0,100), while absent fields remain unchanged.
+        expression.constant[0] = 0;
         do {
             Key key;
             if (!Number(key.percent) || !Take(':')) return Fail("expected key time ':'");
@@ -108,6 +125,7 @@ Expression* Field(Definition& d, const std::string& name) {
     if (name == "relvel") return &d.relvel;
     if (name == "charvel") return &d.charvel;
     if (name == "scale") return &d.scale;
+    if (name == "scljitter") return &d.scljitter;
     if (name == "bounce") return &d.bounce;
     return nullptr;
 }
@@ -125,13 +143,13 @@ bool ParseDefinition(std::string_view tag, Definition& output, std::string& diag
         if (!r.Take('=')) { success = r.Fail("expected '=' after " + name); break; }
         if (name == "obj") {
             const bool list = r.Take('(');
-            do { std::string object; if (!r.Name(object)) { success = false; break; } d.objects.push_back(std::move(object)); }
+            do { std::string object; if (!r.ValueName(object)) { success = false; break; } d.objects.push_back(std::move(object)); }
             while (list && r.Take(','));
             if (success && list && !r.Take(')')) success = r.Fail("expected object-list ')'");
         } else if (name == "particle") {
-            success = r.Name(d.particle);
+            success = r.ValueName(d.particle);
         } else if (name == "emittertype" || name == "blendmode") {
-            std::string value; success = r.Name(value); value = Lower(value);
+            std::string value; success = r.ValueName(value); value = Lower(value);
             if (success && name == "emittertype") {
                 const std::array<const char*,4> types{{"sphere","cube","circle","square"}};
                 auto found = std::find(types.begin(), types.end(), value);
@@ -144,13 +162,40 @@ bool ParseDefinition(std::string_view tag, Definition& output, std::string& diag
                 else d.blendmode = found->second;
             }
         } else if (name == "emittersize") {
-            float value = 0;
-            success = r.Number(value);
-            if (success && (value != std::trunc(value) ||
-                value < static_cast<float>(std::numeric_limits<int>::min()) ||
-                value >= static_cast<float>(std::numeric_limits<int>::max())))
-                success = r.Fail("unsupported non-integer emittersize");
-            if (success) d.emittersize = static_cast<int>(value);
+            float value = 0;double exact = 0;const auto start=r.at;
+            success = r.Number(value,&exact);
+            // ParseItem404432..404443 copies numeric token8's integer view.
+            // Decimal0.25 therefore stores0; it is not a fractional radius.
+            const auto literal=tag.substr(start,r.at-start);
+            if(success && (literal.find_first_of("eEpPxX")!=std::string_view::npos ||
+                exact < std::numeric_limits<int>::min() ||
+                exact >= static_cast<double>(std::numeric_limits<int>::max())+1))
+                success = r.Fail("unsupported emittersize numeric literal");
+            if (success) d.emittersize = static_cast<int>(exact);
+        } else if (name == "posjitter") {
+            // Original Dust parser/controller differential: explicit 0:0 is
+            // byte-identical to omission. Other position jitter is unsupported.
+            float value=0;double low=0,high=0;
+            success = r.Number(value,&low);
+            if (success && !r.Take(':')) success = r.Fail("expected constant posjitter range");
+            if (success) success = r.Number(value,&high);
+            if (success && (low != 0 || high != 0))
+                success = r.Fail("unsupported nonzero or curved posjitter");
+        } else if (name == "numtrails") {
+            float low=0,high=0;double exact_low=0,exact_high=0;
+            success=r.Number(low,&exact_low) && r.Take(':') && r.Number(high,&exact_high);
+            if(!success && r.error.empty())r.Fail("expected numtrails constant range");
+            if(success && (exact_low!=exact_high || exact_low!=std::trunc(exact_low) || exact_low<0 || exact_low>64))
+                success=r.Fail("unsupported numtrails constant integer range");
+            if(success)d.numtrails.constant={low,high,0};
+        } else if (name == "localrotation" && (r.Space(),r.text.substr(r.at,sizeof("[0:(0,0,0),100(0,0,0)]")-1)=="[0:(0,0,0),100(0,0,0)]")) {
+            // Original 401273..40127e overwrites the missing-colon key's
+            // time with its first zero, retaining TWO zero-time curve keys.
+            // Exact shipped Stone/Iskin typo only; never repair time to100.
+            constexpr std::string_view literal="[0:(0,0,0),100(0,0,0)]";
+            d.localrotation.constant[0]=0;
+            d.localrotation.keys={{0,{0,0,0}},{0,{0,0,0}}};
+            r.at+=literal.size();
         } else if (Expression* expression = Field(d, name)) {
             success = r.Expr(*expression);
         } else {

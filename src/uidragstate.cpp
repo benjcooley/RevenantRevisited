@@ -8,7 +8,6 @@
 #include "audio_backend.h"
 #include "cursor.h"
 #include "dialog.h"
-#include "invslot.h"
 #include "logging.h"
 #include "player.h"
 #include "revenant.h"   // DialogList, TextBar
@@ -30,6 +29,7 @@ const char* SrcName(EDragSource s)
         case EDragSource::Equip:     return "equip";
         case EDragSource::SpellPane: return "spell";
         case EDragSource::Playfield: return "playfield";
+        case EDragSource::QuickSpell: return "quickspell";
     }
     return "?";
 }
@@ -147,13 +147,19 @@ bool BeginDrag(EDragSource src, int32_t slot_idx,
                PTBitmap icon,
                int32_t grab_x, int32_t grab_y)
 {
-    if (!icon)
-        icon = TInvSlot::ItemIcon(item);
-    SDragBitmapLayer layer = {};
+    // By default the item's inventory icon (retail 0x0052d6e0: vtable +0x130),
+    // a stack's copies as layers.
+    SDragBitmapLayer layers[kMaxDragBitmapLayers] = {};
+    int32_t count = 0;
     if (icon)
-        layer = { icon, 0, 0 };
-    return BeginDragLayers(src, slot_idx, item, mouse_x, mouse_y,
-                           icon ? &layer : nullptr, icon ? 1 : 0,
+        layers[count++] = { icon, 0, 0 };
+    else if (item)
+    {
+        const SInvIcon parts = item->InventoryIcon();
+        for (int32_t i = 0; i < parts.count && count < kMaxDragBitmapLayers; ++i)
+            layers[count++] = { parts.parts[i].image, parts.parts[i].x, parts.parts[i].y };
+    }
+    return BeginDragLayers(src, slot_idx, item, mouse_x, mouse_y, count ? layers : nullptr, count,
                            grab_x, grab_y);
 }
 
@@ -208,32 +214,48 @@ bool BeginDragLayers(EDragSource src, int32_t slot_idx,
     return true;
 }
 
+namespace {
+
+// The pending grab becomes a drag: its ghost follows the pointer.
+void Promote(int32_t mouse_x, int32_t mouse_y)
+{
+    g_state.pending = false;
+    g_state.dragging = true;
+    if (g_state.layer_count > 0)
+        SetDragBitmapLayers(g_state.layers, g_state.layer_count, g_state.grab_x, g_state.grab_y);
+    else
+        ClearDragBitmap();
+    log_info("[drag] promote %s slot=%d at (%d,%d) grab=(%d,%d)",
+             SrcName(g_state.source), g_state.source_idx,
+             mouse_x, mouse_y, g_state.grab_x, g_state.grab_y);
+}
+
+}  // namespace
+
+bool BeginSpellDrag(int32_t row, const char* talismans, PTBitmap icon,
+                    int32_t mouse_x, int32_t mouse_y, int32_t grab_x, int32_t grab_y)
+{
+    if (!talismans || !*talismans)
+        return false;
+    const SDragBitmapLayer layer = { icon, 0, 0 };
+    BeginDragLayers(EDragSource::SpellPane, row, nullptr, mouse_x, mouse_y, icon ? &layer : nullptr,
+                    icon ? 1 : 0, grab_x, grab_y);
+    g_state.spell = talismans;
+    Promote(mouse_x, mouse_y);
+    return true;
+}
+
 bool UpdateDrag(int32_t mouse_x, int32_t mouse_y)
 {
     if (g_state.source == EDragSource::None)
         return false;
-
     if (!g_state.dragging)
     {
         const int32_t dx = mouse_x - g_state.start_x;
         const int32_t dy = mouse_y - g_state.start_y;
-        if (std::abs(dx) < kDragThresholdPx && std::abs(dy) < kDragThresholdPx)
-            return true;
-
-        g_state.pending = false;
-        g_state.dragging = true;
-
-        if (g_state.layer_count > 0)
-            SetDragBitmapLayers(g_state.layers, g_state.layer_count,
-                                g_state.grab_x, g_state.grab_y);
-        else
-            ClearDragBitmap();
-
-        log_info("[drag] promote %s slot=%d at (%d,%d) grab=(%d,%d)",
-                 SrcName(g_state.source), g_state.source_idx,
-                 mouse_x, mouse_y, g_state.grab_x, g_state.grab_y);
+        if (std::abs(dx) >= kDragThresholdPx || std::abs(dy) >= kDragThresholdPx)
+            Promote(mouse_x, mouse_y);
     }
-
     return true;
 }
 
@@ -274,7 +296,8 @@ bool CompleteDrag(EDragSource dest, int32_t dest_slot, bool commit)
             ? item->InventNum() - kInvSlotEquipFirst : dest_slot;
         log_info("[drag] DROP %s slot=%d -> %s slot=%d",
                  SrcName(oldSrc), oldIdx, SrcName(dest), landed);
-        audio::PlayOneShot(kActionSound);
+        if (oldSrc != EDragSource::SpellPane)       // retail 0x00544890 drops a spell silently
+            audio::PlayOneShot(kActionSound);
     }
     else
     {
@@ -293,6 +316,14 @@ void Cancel()
     log_info("[drag] cancelled from %s slot=%d",
              SrcName(g_state.source), g_state.source_idx);
     g_state = SUIDragState{};
+}
+
+void ReleaseUnclaimed()
+{
+    if (g_state.pending)
+        CompleteClick();
+    else
+        Cancel();
 }
 
 bool IsActive()

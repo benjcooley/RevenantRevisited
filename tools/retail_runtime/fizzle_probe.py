@@ -61,11 +61,13 @@ enum class EFxDebugMode:uint8_t {Normal,SolidColor,FullTexture};
 enum class EFxLightMode:uint8_t {Lit,Unlit};
 struct SQuadDrawItem {float world_pos[4][3]{};float uv[4][2]{};float color_rgba[4]{};
  struct {TTextureHandle texture{};uint8_t blend{},depth_mode{};} key;
- EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
+ EFxDebugMode debug_mode{};EFxLightMode light_mode{};
+ bool retail_argb4444{},retail_software_projection{};float retail_camera_z{};};
 struct TRenderer {std::vector<SQuadDrawItem> draws;void SubmitFxQuad(const SQuadDrawItem& i){draws.push_back(i);}};
 TRenderer renderer;TRenderer* Renderer=&renderer;
 struct TObjectImagery {};struct SObjectDef {};
-struct TEffect {S3DPoint position{};TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};
+struct TransformStub {hmm_mat4 matrix;TransformStub(){MtxClear(&matrix);}const hmm_mat4& Matrix()const{return matrix;}};
+struct TEffect {TransformStub transform;const TransformStub& Transform()const{return transform;}S3DPoint position{};TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};
  virtual ~TEffect()=default;const S3DPoint& Pos()const{return position;}};
 struct TTime {static double dt;static double DeltaTime(){return dt;}};double TTime::dt=0;
 std::ifstream random_inputs;int random_count=0;
@@ -112,7 +114,7 @@ int main(int argc,char**argv){random_inputs.open(argv[1]);if(!random_inputs)retu
         elif tag=='D':frames[tick]['draws'].append(dict(system=int(fields[2])-1,positions=[[float(v) for v in fields[3+i*5:6+i*5]] for i in range(4)],uvs=[[float(v) for v in fields[6+i*5:8+i*5]] for i in range(4)]))
     return frames,dict(command=command,generated_source_sha256=sha(generated.read_bytes()),binary_sha256=sha(binary.read_bytes()),
         compiled_production_bodies=['TFizzleEffect::TickAndSubmitForTest','FizzleFindFreeSlot','src/math3d.cpp'],
-        boundaries=['exact asset vertices/UVs/texture handles','renderer captures production SubmitFxQuad',
+        boundaries=['identity owner Transform boundary; nonzero owner separately verified against original','exact asset vertices/UVs/texture handles','renderer captures production SubmitFxQuad',
                     'time steps exactly 1/24 seconds','RNG consumes unchanged retail outputs with strict range/order validation'])
 
 

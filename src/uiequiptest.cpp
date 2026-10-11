@@ -24,8 +24,8 @@
 // Architecture (spec §3 direct-renderer contract): compose the WHOLE pane
 // (chrome + 11 slot placeholders/icons) into ONE offscreen TSurface RT
 // 188×306 via *ToTarget primitives, then DrawSurface it once in the HUD
-// pass at screen (452, 0). Mirrors uibarinvtest / uiplyrstatusbartest /
-// uisidetabstest — the canonical compose-to-target contract.
+// pass at screen (452, 0). Mirrors uisidetabstest — the canonical
+// compose-to-target contract.
 //
 // Contents (spec §5): the main player's equipment. Each well shows
 // Player->GetEquip(i) through the shared TInvSlot (static `invitem` or
@@ -377,17 +377,7 @@ constexpr int32_t kBodyHitY = 78;
 constexpr int32_t kBodyHitW = 92;
 constexpr int32_t kBodyHitH = 166;
 
-SInvSlotStyle MakeEquipSlotStyle()
-{
-    SInvSlotStyle style;
-    style.icon_fit_to_cell = true;
-    style.icon_fit_inset   = 0;
-    style.draw_qty         = false;
-    style.draw_bag_count   = false;
-    return style;
-}
-
-SInvSlotStyle g_equipSlotStyle = MakeEquipSlotStyle();
+SInvSlotStyle g_equipSlotStyle;    // no amounts or pouches on the paperdoll
 TInvSlot* g_equipSlots[NUM_EQ_SLOTS] = {};
 
 void DestroyEquipSlots()
@@ -1149,8 +1139,8 @@ public:
             if (draggingEquip && drag.source_idx == i)
                 continue;
 
-            slot->BindItem(player ? player->GetEquip(i) : nullptr);
-            slot->Draw(g_pane, tw, th, nullptr);
+            slot->BindItem(player ? player->GetEquip(i) : nullptr, int32_t(TTime::LegacyFrameCount()));
+            slot->Draw(tw, th);
         }
 
         g_pane->EndPass();

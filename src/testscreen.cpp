@@ -10,6 +10,7 @@
 #include "testconfig.h"
 #include "testmodes.h"
 #include "time.h"
+#include "vfxreview.h"
 
 #include <cstring>
 
@@ -51,7 +52,10 @@ void TTestScreen::Pulse()
     }
 }
 
-void TTestScreen::DrawBackground() {}
+void TTestScreen::DrawBackground()
+{
+    if (strcmp(StartupTestMode,"vfx-review")==0) VfxReview::DrawOverlay();
+}
 
 void TTestScreen::Animate(bool)
 {

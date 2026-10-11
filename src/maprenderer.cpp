@@ -11,6 +11,7 @@
 #include "animimagebody.h"
 #include "area.h"
 #include "3dimage.h"
+#include "staticpartsysprofiles.h"
 #include "bitmap.h"
 #include "bitmapdata.h"
 #include "chunkcache.h"
@@ -182,6 +183,28 @@ static uint64_t RendererI3DMeshKey(AssetUid asset_id, int32_t objnum, int32_t te
     MixMapSignature(hash, uint64_t(uint32_t(objnum)));
     MixMapSignature(hash, uint64_t(uint32_t(texslot + 1)));
     return hash ? hash : 1ull;
+}
+
+// Retail RenderObject 40ad30 selects a texture per live object submission.
+// Read immutable frame handles rather than mutating shared imagery/mesh state.
+static TTextureHandle MapMeshTexture(T3DImagery& image, const S3DAnimObj* object,
+                                    int32_t texture_index, int32_t face_texture_slot,
+                                    int32_t frame, TTextureHandle untextured)
+{
+    if (object && (object->flags & OBJ3D_TEX) &&
+        face_texture_slot >= 0 && face_texture_slot < MAXTEXTURES)
+        return object->htextures[face_texture_slot] != kInvalidTexture
+            ? object->htextures[face_texture_slot] : untextured;
+    if (texture_index < 0 || texture_index >= image.NumTextures())
+        return kInvalidTexture;
+    S3DTex texture = {};
+    image.GetTexture(texture_index, &texture);
+    if (object && (object->flags & OBJ3D_TEXFRAME) &&
+        face_texture_slot >= 0 && face_texture_slot <= MAXTEXTURES)
+        frame = object->textureframe[face_texture_slot];
+    if (texture.numframes > 1 && !texture.copyframes && texture.framehtexs)
+        return frame >= 0 ? texture.framehtexs[frame % texture.numframes] : kInvalidTexture;
+    return texture.htexture;
 }
 
 static int64_t ComputeMapContentVersionSum(const TGameMap* map)
@@ -1256,10 +1279,20 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         {++stats.mesh_skipped;return;} // modified profiles do not draw a substitute flare
         if(oi->ObjId()==0x5be39ae0u && (state!=0 || !meshimg->HasRetailMightPartSysProfile()))
         {++stats.mesh_skipped;return;} // exactprofile only, no staticprototype substitute
+        if((oi->ObjId()==0xad92bd36u || oi->ObjId()==0xad92bd35u) &&
+           (state!=0 || !meshimg->HasRetailSpeedFamilyPartSysProfile(oi->ObjId())))
+        {++stats.mesh_skipped;return;}
+        if(retail_static_particles::IsType(oi->ObjId()) &&
+           (state!=0 || !meshimg->HasRetailStaticParticleProfile(oi->ObjId())))
+        {++stats.mesh_skipped;return;}
         // The animator says how opaque the object draws this frame. A
         // character that is OF_INVISIBLE, or faded below retail's threshold,
         // isn't drawn (TCharAnimator::DrawAlpha).
         T3DAnimator* d3 = dynamic_cast<T3DAnimator*>(oi->GetAnimator());
+        float warp_uv[2] = {};
+        const bool warp_atlas = d3 && d3->WarpAtlasOffset((*ctx.mesh_assets)[asset_idx].objnum,warp_uv);
+        if (retail_warp::AssetPath(oi->ObjId()) && !warp_atlas)
+        { ++stats.mesh_skipped; return; } // Unsupported Warp profile must not draw a static substitute.
         const float draw_alpha = d3 ? d3->DrawAlpha() : 1.0f;
         if (draw_alpha <= 0.0f)
             return;
@@ -1286,6 +1319,10 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             }
         }
         const SSectorMeshAsset& asset = (*ctx.mesh_assets)[asset_idx];
+        const TTextureHandle live_texture = MapMeshTexture(*meshimg,
+            d3 ? d3->GetObject(asset.objnum) : nullptr, asset.texture_index,
+            asset.texslot >= 0 ? asset.texslot : asset.texture_index + 1, oi->GetFrame(),
+            Renderer->WhiteTextureHandle());
         if (auto* animator = dynamic_cast<T3DAnimator*>(oi->GetAnimator()))
             if (animator->PartSysOwnsObject(asset.objnum))
             {
@@ -1298,6 +1335,12 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 stats.mesh_submitted += count;
                 return;
             }
+        // Exact retail NewObject '*' helpers carry OBJ3D_HIDE even when
+        // their key track and authored triangles exist. Particle prototypes
+        // were handled above; suppress only these audited camera families.
+        if(d3 && meshimg->HasRetailCameraParticleProfile(oi->ObjId()) &&
+           !d3->IsObjectEnabled(asset.objnum))
+        {++stats.mesh_skipped;return;}
         if (state < 0 || state >= meshimg->NumStates() || meshimg->IsHidden(asset.objnum, state))
         {
             ++stats.mesh_skipped;
@@ -1376,14 +1419,20 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             authored_animator->ImmortalmightBaseMeshBlend(asset.objnum,authored_blend);
         const bool fmastery_base=authored_animator &&
             authored_animator->FmasteryBaseMeshBlend(asset.objnum,authored_blend);
+        const bool speed_base=authored_animator &&
+            authored_animator->SpeedBaseMeshBlend(asset.objnum,authored_blend);
+        const bool camera_particle_base=authored_animator &&
+            authored_animator->CameraParticleBaseMeshBlend(asset.objnum,authored_blend);
         // The exact Goldp profile retains the actual #$iflare mesh and live
         // bone transform. Its blendcont mode16 is separate from coin alpha2.
         // Exact '$' mode80 selects ONE/ONE with no Z test or writes;
         // software mode1 preserves RGB565 normal lighting with authored normals.
-        if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base)
+        if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base)
         {
             hmm_mat4 gold_world;
-            const bool matrix_ok = fmastery_base ?
+            const bool matrix_ok = camera_particle_base ?
+                const_cast<T3DAnimator*>(authored_animator)->CameraParticleBaseMeshWorldMatrix(asset.objnum,gold_world) : speed_base ?
+                const_cast<T3DAnimator*>(authored_animator)->SpeedBaseMeshWorldMatrix(gold_world) : fmastery_base ?
                 const_cast<T3DAnimator*>(authored_animator)->FmasteryBaseMeshWorldMatrix(gold_world) : immortalmight_base ?
                 const_cast<T3DAnimator*>(authored_animator)->ImmortalmightBaseMeshWorldMatrix(gold_world) : teleportation ?
                 const_cast<T3DAnimator*>(authored_animator)->TeleportationMeshWorldMatrix(asset.objnum,gold_world) : warriorborn ?
@@ -1405,7 +1454,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         }
         // Audited per-object modes precede generic inferred state blend tags.
         const bool audited_profile = gold_flare || combat_start1_base || mpappear_start ||
-            shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base ||
+            shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base ||
             (oi->ObjId()==0xd0c0f035u && meshimg->HasGoldPartSysProfile()) ||
             (oi->ObjId()==0xad92bd29u && state==0) ||
             (oi->ObjId()==0xad99fdf2u && meshimg->HasRetailMPAppearStartProfile()) ||
@@ -1414,9 +1463,23 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             (oi->ObjId()==0xad92bd40u && meshimg->HasRetailTeleportationProfile()) ||
             (oi->ObjId()==0x82aeb30fu && meshimg->HasRetailImmortalmightPartSysProfile()) ||
             (oi->ObjId()==0xb0e024dfu && meshimg->HasRetailFmasteryPartSysProfile()) ||
+            meshimg->HasRetailSpeedFamilyPartSysProfile(oi->ObjId()) ||
             (oi->ObjId()==0x5be39ae0u && meshimg->HasRetailMightPartSysProfile());
         SHelperMeshSubmit blended = {};
-        if (!audited_profile && HelperDrawForBlend(meshimg->StateBlend(state), blended))
+        if (warp_atlas)
+        {
+            blended.mesh = asset.handle;
+            blended.texture_override = live_texture;
+            std::memcpy(blended.world, world_renderer, sizeof(blended.world));
+            retail_warp::State warp_state;
+            warp_state.u=warp_uv[0]; warp_state.v=warp_uv[1];
+            retail_warp::ConfigureDraw(blended,warp_state);
+            const S3DPoint mesh_world = MapRendererMeshWorld(world_pos,ctx.mesh_scale_x,ctx.mesh_scale_y,ctx.mesh_scale_z);
+            const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld,ctx.mesh_scale_x,ctx.mesh_scale_y,ctx.mesh_scale_z);
+            blended.sort_depth=CameraDepth({mesh_world.x-mesh_camera.x,mesh_world.y-mesh_camera.y,mesh_world.z},ctx.cam_forward);
+            Renderer->SubmitHelperMesh(blended);
+        }
+        else if (!audited_profile && HelperDrawForBlend(meshimg->StateBlend(state), blended))
         {
             // A blend-mode object (an effect's glow, swirl or column) draws
             // in the transparent pass over the lit scene, not into the
@@ -1424,17 +1487,19 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             blended.mesh = asset.handle;
+            blended.texture_override = live_texture;
             std::memcpy(blended.world, world_renderer, sizeof(blended.world));
             LoadObjectMaterial(meshimg, asset.objnum, blended);
             blended.sort_depth = CameraDepth({ mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z }, ctx.cam_forward);
             Renderer->SubmitHelperMesh(blended);
         }
-        else if (oi->ObjClass() == OBJCLASS_HELPER || gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || ((immortalmight_base || fmastery_base) && (authored_blend==16u || authored_blend==80u)))
+        else if (oi->ObjClass() == OBJCLASS_HELPER || gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || speed_base || camera_particle_base || ((immortalmight_base || fmastery_base || camera_particle_base) && (authored_blend==16u || authored_blend==80u)))
         {
             const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             SHelperMeshSubmit m = {};
             m.mesh = asset.handle;
+            m.texture_override = live_texture;
             std::memcpy(m.world, world_renderer, sizeof(m.world));
             m.shadow_plane = asset.helper_shadow_plane;
             std::memcpy(m.diffuse, asset.diffuse, sizeof(m.diffuse));
@@ -1442,16 +1507,16 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             std::memcpy(m.specular, asset.specular, sizeof(m.specular));
             std::memcpy(m.emissive, asset.emissive, sizeof(m.emissive));
             m.power = asset.power;
-            if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base)
+            if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base)
             {
                 m.additive_blend = true; // source inherited particle16 for exact Imight base
                 m.retail_lighting = 1;
-                m.retail_gold_no_depth = gold_flare || mpappear_start || ((immortalmight_base || fmastery_base) && authored_blend==80u); // Appear litaddz80; Combat remains depth-tested16.
-                m.retail_positive_face_cull = mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base;
+                m.retail_gold_no_depth = gold_flare || mpappear_start || speed_base || ((immortalmight_base || fmastery_base || camera_particle_base) && authored_blend==80u); // Explicit Speed80; particles retain16.
+                m.retail_positive_face_cull = mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base;
             }
             m.sort_depth = CameraDepth({ mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z }, ctx.cam_forward);
             // Retail default Render40e8ed invokes controllers before base meshes40eaa3.
-            if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base) Renderer->SubmitGoldFlareAfterFx(m);
+            if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base) Renderer->SubmitGoldFlareAfterFx(m);
             else Renderer->SubmitHelperMesh(m);
         }
         else
@@ -1463,11 +1528,28 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             SMeshSubmit m = {};
             m.mesh = asset.handle;
+            m.texture_override = live_texture;
             std::memcpy(m.world, world_renderer, sizeof(m.world));
             m.tint[0] = m.tint[1] = m.tint[2] = 1.0f;
             m.tint[3] = draw_alpha;
+            // Actual software D3DVERTEX56eb30/Illuminate56ed9d supplies normal
+            // light without material diffuse. Admit only these audited roots;
+            // the earlier diffuse-fed fixture was not that native producer.
+            const bool retail_untextured_normal = oi->ObjClass() == OBJCLASS_EFFECT &&
+                Renderer->UsesRetailSoftwareMeshLighting() && meshimg->NumTextures() == 0 && (oi->ObjId() == 0xad92bc10u ||
+                oi->ObjId() == 0xad92bc37u || oi->ObjId() == 0xad92bc38u);
+            if (retail_untextured_normal)
+                m.retail_lighting = 1;
+            else if (oi->ObjClass() == OBJCLASS_EFFECT && meshimg->NumTextures() == 0)
+            {
+                SHelperMeshSubmit material = {};
+                LoadObjectMaterial(meshimg, asset.objnum, material);
+                std::memcpy(m.tint, material.diffuse, sizeof(m.tint));
+                m.tint[3] *= draw_alpha;
+            }
             m.obj_id = obj_id;
-            if (oi->ObjClass() == OBJCLASS_EFFECT) m.retail_lighting = (immortalmight_base || fmastery_base) ? 1 : asset.retail_lighting;
+            if (oi->ObjClass() == OBJCLASS_EFFECT && !retail_untextured_normal)
+                m.retail_lighting = (immortalmight_base || fmastery_base || camera_particle_base) ? 1 : asset.retail_lighting;
             m.retail_positive_face_cull = (IsRetailKinSecretDoorStill(oi, meshimg) && asset.objnum == 0) ||
                                           IsRetailPunchAndJudy(oi, meshimg) || immortalmight_base || fmastery_base;
             // Query immutable authored tags with this live instance's state/frame.
@@ -1642,18 +1724,19 @@ void TMapRenderer::SetPickPoint(int32_t x, int32_t y)
     impl->pickY = y;
 }
 
-bool TMapRenderer::Pick(int32_t x, int32_t y, SPick& out) const
+bool TMapRenderer::Pick(int32_t x, int32_t y, SPick& out, EPickRead read) const
 {
     out = {};
     if (!impl || !Renderer) return false;
     const Impl& s = *impl;
 
-    // The probe copied back at this point, else the last drawn frame read
-    // at once; either is decoded with the list its frame was drawn under.
+    // The probe copied back at this point (any point, for Latest), else the
+    // last drawn frame read at once; either is decoded with the list its
+    // frame was drawn under.
     TRenderer::SIdProbe probe;
-    const bool cached = Renderer->LatestIdProbe(probe) && probe.x == x && probe.y == y &&
-                        s.pickTable(probe.tag);
-    if (!cached && !Renderer->ReadIdProbe(x, y, s.renderedDrawListVersion, probe))
+    const bool copied = Renderer->LatestIdProbe(probe) && s.pickTable(probe.tag);
+    const bool cached = copied && (read == EPickRead::Latest || (probe.x == x && probe.y == y));
+    if (!cached && (read == EPickRead::Latest || !Renderer->ReadIdProbe(x, y, s.renderedDrawListVersion, probe)))
         return false;
     const Impl::SPickTable* table = s.pickTable(probe.tag);
     if (!table)
@@ -1789,6 +1872,7 @@ void TMapRenderer::SetPointLightMultipliers(float intensity_mul, float range_mul
 
 void TMapRenderer::SetLightingMode(int32_t mode) { if (impl) impl->lighting_mode = mode; }
 void TMapRenderer::SetDaylightCycle(bool has_cycle) { if (impl) impl->daylight_cycle = has_cycle; }
+void TMapRenderer::SetGroundTilesVisible(bool visible) { if (impl) impl->sectorShowGroundTiles = visible; }
 
 TMapRenderer::SDrawCounts TMapRenderer::GetLastDrawCounts() const
 {
@@ -2468,6 +2552,7 @@ void TMapRenderer::RebuildForCurrentMap()
                             }
 
                             TTextureHandle albedo = kInvalidTexture;
+                            int32_t texture_index = texslot > 0 ? texslot - 1 : -1;
                             if (texslot > 0)
                                 albedo = meshimg->GetTextureHandle(texslot - 1);
                             if (albedo == kInvalidTexture && oi->ObjClass() == OBJCLASS_HELPER)
@@ -2479,7 +2564,10 @@ void TMapRenderer::RebuildForCurrentMap()
                                     S3DMat mat = {};
                                     meshimg->GetMaterial(o.material, &mat);
                                     if (mat.texture >= 0 && mat.texture < meshimg->NumTextures())
+                                    {
                                         albedo = meshimg->GetTextureHandle(mat.texture);
+                                        texture_index = mat.texture;
+                                    }
                                 }
                             }
                             if (albedo == kInvalidTexture)
@@ -2498,11 +2586,12 @@ void TMapRenderer::RebuildForCurrentMap()
                             asset.imagery_key = img;
                             asset.objnum = objnum;
                             asset.texslot = texslot;
+                            asset.texture_index = texture_index;
                             asset.handle = h;
                             if (texslot > 0) {
                                 S3DTex texture = {};
                                 meshimg->GetTexture(texslot - 1, &texture);
-                                asset.retail_lighting = texture.desc.pixelFormat.dwRGBAlphaBitMask ? 2 : 1;
+                                asset.retail_lighting = RetailMeshTextureLighting(texture.desc.pixelFormat);
                             }
                             if (oi->ObjClass() == OBJCLASS_HELPER ||
                                 (oi->ObjId() == 0xd0c0f035u && meshimg->HasGoldPartSysProfile()) ||
@@ -2575,6 +2664,7 @@ void TMapRenderer::RebuildForCurrentMap()
                             if (ExtractSubMesh(meshimg, objnum, verts, indices))
                             {
                                 TTextureHandle albedo = kInvalidTexture;
+                                int32_t texture_index = meshimg->NumTextures() > 0 ? 0 : -1;
                                 if (meshimg->NumTextures() > 0)
                                     albedo = meshimg->GetTextureHandle(0);
                                 if (albedo == kInvalidTexture && oi->ObjClass() == OBJCLASS_HELPER)
@@ -2586,7 +2676,10 @@ void TMapRenderer::RebuildForCurrentMap()
                                         S3DMat mat = {};
                                         meshimg->GetMaterial(o.material, &mat);
                                         if (mat.texture >= 0 && mat.texture < meshimg->NumTextures())
+                                        {
                                             albedo = meshimg->GetTextureHandle(mat.texture);
+                                            texture_index = mat.texture;
+                                        }
                                     }
                                 }
                                 if (albedo == kInvalidTexture)
@@ -2604,6 +2697,7 @@ void TMapRenderer::RebuildForCurrentMap()
                                     asset.imagery_key = img;
                                     asset.objnum = objnum;
                                     asset.texslot = -1;
+                                    asset.texture_index = texture_index;
                                     asset.handle = h;
                                     asset_idx = (int32_t)s.sectorMeshAsset.size();
                                     s.sectorMeshAsset.push_back(asset);
@@ -2916,6 +3010,8 @@ void TMapRenderer::RebuildForCurrentMap()
 
 void TMapRenderer::Shutdown()
 {
+    review_before_world_ = {};
+    review_inside_world_ = {};
     Impl& s = *impl;
 
   // Unregister our map listener BEFORE clearing currentMap so a later
@@ -2939,6 +3035,13 @@ void TMapRenderer::Shutdown()
     s.lightDragIdx = -1;
     s.sectorDragging = false;
     DebugUI::UnregisterContributor(this);
+}
+
+void TMapRenderer::SetReviewSubmissionCallbacks(std::function<void()> before_world,
+                                               std::function<void()> inside_world)
+{
+    review_before_world_ = std::move(before_world);
+    review_inside_world_ = std::move(inside_world);
 }
 
 void TMapRenderer::RenderFrame()
@@ -3369,6 +3472,7 @@ void TMapRenderer::RenderFrame()
     const float zspan = s.z_far - s.z_near;
     // Pixels no tile covers are black, as retail's DrawUnlitObjects clears
     // them (Box colour 0, FUN_00456cc0; docs/LIGHTING_FIDELITY.md §2.1).
+    if (review_before_world_) review_before_world_();
     Renderer->BeginTilePass(0.0f, 0.0f, 0.0f, 1.0f);
     mark_phase(timings.begin_pass_ms);
 
@@ -3421,6 +3525,10 @@ void TMapRenderer::RenderFrame()
         if (idx < 0 || idx >= int32_t(s.sectorDrawInst.size()))
             continue;
         ++stats.draw_candidates;
+        if (!s.sectorShowGroundTiles) {
+            if (TObjectInstance* owner = s.sectorDrawInst[idx].src.Get())
+                if (owner->ObjClass() == OBJCLASS_TILE) continue;
+        }
         // A late replacement can inherit several cached submesh records.
         // Submit its whole visual once per gather, including any old billboard
         // record; ordinary meshes and particle-component owners keep their path.
@@ -3478,6 +3586,7 @@ void TMapRenderer::RenderFrame()
     s.last_draw_counts.meshes_submitted = stats.mesh_submitted;
     s.last_draw_counts.offscreen_culled = stats.draw_offscreen;
 
+    if (review_inside_world_) review_inside_world_();
     Renderer->EndTilePass();
     // The id target is drawn: copy the ids around the map pane's pick point
     // back (retail picked while T3DScene::DrawScene drew, 0x00412db0).

@@ -12,6 +12,8 @@ struct Quad
 };
 Quad Build(const std::array<hmm_vec3,4>& authored,int frame,int spin_degrees,
            int owner_face,float scale,const hmm_vec3& local_position,const hmm_mat4& owner_world);
+Quad BuildBurstGlow(const std::array<hmm_vec3,4>& authored,int frame,float scale,
+                    const hmm_vec3& local_position,const hmm_mat4& owner_world);
 Quad BuildSpark(const std::array<hmm_vec3,4>& authored,
                 const std::array<std::array<float,2>,4>& uv,float scale,
                 const hmm_vec3& absolute_position);

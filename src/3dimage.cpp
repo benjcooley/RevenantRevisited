@@ -11,6 +11,9 @@
 // *  in Phase 3.                                                          *
 // *************************************************************************
 
+#include "ribbonlegacykeys.h"
+#include "vortexlegacykeys.h"
+#include "i3dtexturealpha.h"
 #include "3dimage.h"
 
 #include <algorithm>
@@ -25,6 +28,18 @@
 #include "authoredpartsys.h"
 #include "testconfig.h"
 #include "goldauthoredmatrix.h"
+#include "speedauthoredmatrix.h"
+#include "staticpartsysprofiles.h"
+#include "lightstripprofile.h"
+#include "funnelprofile.h"
+#include "cometprofile.h"
+#include "cometmatrix.h"
+#include "fgeyserprofile.h"
+#include "fgeysermatrix.h"
+#include "dustprofile.h"
+#include "dustmatrix.h"
+#include "poisonprofile.h"
+#include "poisonmatrix.h"
 #include "animation.h"
 #include "bitmap.h"
 #include "logging.h"
@@ -418,6 +433,52 @@ bool T3DImagery::ValidateRetailImmortalmightPartSysProfile()
         pf.dwBBitMask==0x001f && pf.dwRGBAlphaBitMask==0 && materials[0].texture==0;
 }
 
+bool T3DImagery::HasRetailWarpProfile(uint32_t type_id)
+{
+    const char* expected = retail_warp::AssetPath(type_id);
+    if (!expected) return false;
+    // NumObjects loads the immutable imagery before inspecting its metadata.
+    if (NumObjects()!=1 || version!=3 || flags!=0xdc || NumStates()!=1 ||
+        GetAniLength(0)!=1 || GetAniFlags(0)!=0x2001 || NumTags()!=0 ||
+        NumMaterials()!=1 || NumTextures()!=1 || numverts!=4 || numfaces!=3 ||
+        !GetResFilename()) return false;
+    auto normalized = [](const char* value) {
+        std::string result(value);
+        for (char& c:result) c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+        return result;
+    };
+    const std::string path=normalized(GetResFilename()), suffix=normalized(expected);
+    if (path.size()<suffix.size() || path.compare(path.size()-suffix.size(),suffix.size(),suffix) ||
+        (path.size()!=suffix.size() && path[path.size()-suffix.size()-1]!='/')) return false;
+    const auto& object=objects[0];
+    if (std::strcmp(object.name,"gate") || object.parent[0]!=-1 || object.material!=0 ||
+        object.numverts!=4 || object.numfaces!=3 || object.numanikeys[0]!=9 ||
+        !object.anikeys[0] || object.numtexfaces[0]!=0 || object.numtexfaces[1]!=3) return false;
+    auto fingerprint = [](const void* data,size_t length) {
+        uint64_t hash=1469598103934665603ull;
+        const auto* bytes=static_cast<const uint8_t*>(data);
+        for(size_t i=0;i<length;++i) { hash^=bytes[i]; hash*=1099511628211ull; }
+        return hash;
+    };
+    if (fingerprint(object.anikeys[0],9*sizeof(SAniKey32))!=0x99e1daf6cdfd3ca4ull) return false;
+    S3DVertex vertices[4]{}; GetObjVerts(0,vertices);
+    if (fingerprint(vertices,sizeof(vertices))!=0x9caa112ebf96f34cull) return false;
+    S3DFace faces[3]{}; GetObjFaces(0,faces);
+    constexpr uint16_t expected_faces[9]={2,0,1,3,0,2,1,0,3};
+    if (sizeof(faces)!=sizeof(expected_faces) || std::memcmp(faces,expected_faces,sizeof(faces))) return false;
+    const auto& diffuse=materials[0].matdesc.diffuse;
+    if (diffuse.r!=1 || diffuse.g!=1 || diffuse.b!=1 || diffuse.a!=1) return false;
+    const auto& material=materials[0].matdesc;
+    if (material.ambient.r!=1 || material.ambient.g!=1 || material.ambient.b!=1 || material.ambient.a!=1 ||
+        material.emissive.r!=1 || material.emissive.g!=1 || material.emissive.b!=1 || material.emissive.a!=1 ||
+        material.specular.r!=.9f || material.specular.g!=.9f || material.specular.b!=.9f || material.specular.a!=1 ||
+        material.power!=0) return false;
+    const auto& texture=textures[0]; const auto& format=texture.desc.pixelFormat;
+    return texture.desc.width==256 && texture.desc.height==256 && texture.numframes==1 &&
+        format.dwRGBBitCount==16 && format.dwRBitMask==0x0f00 && format.dwGBitMask==0x00f0 &&
+        format.dwBBitMask==0x000f && format.dwRGBAlphaBitMask==0xf000 && materials[0].texture==0;
+}
+
 bool T3DImagery::ValidateRetailFmasteryPartSysProfile()
 {
     if (!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
@@ -455,6 +516,356 @@ bool T3DImagery::ValidateRetailFmasteryPartSysProfile()
         pf.dwBBitMask==0x001f && pf.dwRGBAlphaBitMask==0 && materials[0].texture==0;
 }
 
+bool T3DImagery::ValidateRetailSpeedPartSysProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+       GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=3 ||
+       NumMaterials()!=3 || NumTextures()!=2 || NumTags()!=2 || numverts!=8 || numfaces!=4) return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    constexpr const char* suffix="magic/speed.i3d";const size_t length=std::strlen(suffix);
+    if(path.size()<length || path.compare(path.size()-length,length,suffix) ||
+       (path.size()!=length && path[path.size()-length-1]!='/'))return false;
+    const auto fingerprint=[](const void* data,size_t length){
+        uint64_t h=1469598103934665603ull;const auto* bytes=static_cast<const uint8_t*>(data);
+        for(size_t i=0;i<length;++i){h^=bytes[i];h*=1099511628211ull;}return h;
+    };
+    constexpr const char* names[3]={"speed","#speedflare","#speedo"};
+    constexpr int keycounts[3]={9,38,6};
+    constexpr uint64_t keys[3]={0x5eee8f50e1e1f5e6ull,0x0445297c176fd498ull,0xf3ca8b067ae3b3ecull};
+    for(int i=0;i<3;++i){const auto& o=objects[i];
+        if(std::strcmp(o.name,names[i]) || o.parent[0]!=-1 || o.material!=i ||
+           o.numverts!=(i?4:0) || o.numfaces!=(i?2:0) || !o.anikeys[0] ||
+           o.numanikeys[0]!=keycounts[i] || fingerprint(o.anikeys[0],keycounts[i]*sizeof(SAniKey32))!=keys[i])return false;
+        for(int slot=0;slot<3;++slot)if(o.numtexfaces[slot]!=(slot==i && i?2:0))return false;
+    }
+    const auto& blend=*GetTag(0);const auto& particles=*GetTag(1);
+    constexpr const char* parameters="obj=(#speedflare),particle=#speedo,pps=30,lifespan=20:25,scale=[0:1.5,100:0],localrotation=[0:(0,0,0),100:(0,-360,0)],color=[0:(200,255,55),25:(100,255,25),100:(1,10,1)],emittersize=2,relvel=0.1";
+    if(blend.state!=0 || blend.frame!=1 || !blend.name || !blend.str || std::strcmp(blend.name,"blendcont") || std::strcmp(blend.str,"litaddz") ||
+       particles.state!=0 || particles.frame!=5 || !particles.name || !particles.str || std::strcmp(particles.name,"partsys") || std::strcmp(particles.str,parameters))return false;
+    for(int i=0;i<2;++i){const auto& t=textures[i];const auto& p=t.desc.pixelFormat;
+        if(t.desc.width!=(i?32:64) || t.desc.height!=(i?32:64) || t.numframes!=1 ||
+           p.dwRGBBitCount!=16 || p.dwRBitMask!=0xf800 || p.dwGBitMask!=0x07e0 || p.dwBBitMask!=0x001f || p.dwRGBAlphaBitMask)return false;
+    }
+    constexpr uint64_t material_hashes[3]={0x8237bf10191e1de0ull,0xe82f1a8b1ab2978dull,0x2d6e7c4f0d54f390ull};
+    for(int i=0;i<3;++i)if(fingerprint(&materials[i].matdesc.diffuse,17*sizeof(float))!=material_hashes[i])return false;
+    constexpr uint64_t vertex_hashes[2]={0xdf878a3c89245939ull,0x7795981c8f84ffe0ull};
+    constexpr uint16_t face_indices[6]={2,3,0,1,2,0};
+    for(int i=1;i<3;++i){S3DVertex vertices[4]{};S3DFace faces[2]{};
+        GetObjVerts(i,vertices,0,0);GetObjFaces(i,faces);
+        if(fingerprint(vertices,sizeof(vertices))!=vertex_hashes[i-1] || std::memcmp(faces,face_indices,sizeof(faces)))return false;
+    }
+    return materials[0].texture==-1 && materials[1].texture==0 && materials[2].texture==1;
+}
+
+bool T3DImagery::ValidateRetailQuicksilverPartSysProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+       GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=3 ||
+       NumMaterials()!=3 || NumTextures()!=2 || NumTags()!=2 || numverts!=8 || numfaces!=4) return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    constexpr const char* suffix="magic/quicksilver.i3d";const size_t length=std::strlen(suffix);
+    if(path.size()<length || path.compare(path.size()-length,length,suffix) ||
+       (path.size()!=length && path[path.size()-length-1]!='/'))return false;
+    const auto fingerprint=[](const void* data,size_t length){
+        uint64_t h=1469598103934665603ull;const auto* bytes=static_cast<const uint8_t*>(data);
+        for(size_t i=0;i<length;++i){h^=bytes[i];h*=1099511628211ull;}return h;
+    };
+    constexpr const char* names[3]={"speed","#speedflare","#speedo"};
+    constexpr int keycounts[3]={9,38,6};
+    constexpr uint64_t keys[3]={0x5eee8f50e1e1f5e6ull,0x9d24a4c7a3977790ull,0xf3ca8b067ae3b3ecull};
+    for(int i=0;i<3;++i){const auto& o=objects[i];
+        if(std::strcmp(o.name,names[i]) || o.parent[0]!=-1 || o.material!=i ||
+           o.numverts!=(i?4:0) || o.numfaces!=(i?2:0) || !o.anikeys[0] ||
+           o.numanikeys[0]!=keycounts[i] || fingerprint(o.anikeys[0],keycounts[i]*sizeof(SAniKey32))!=keys[i])return false;
+        for(int slot=0;slot<3;++slot)if(o.numtexfaces[slot]!=(slot==i && i?2:0))return false;
+    }
+    const auto& blend=*GetTag(0);const auto& particles=*GetTag(1);
+    constexpr const char* parameters="obj=(#speedflare),particle=#speedo,pps=30,lifespan=20:25,scale=[0:1.5,100:0],localrotation=[0:(0,0,0),100:(0,-360,0)],color=[0:(5,80,230),25:(10,75,190),100:(1,25,70)],emittersize=2,relvel=0.1";
+    if(blend.state!=0 || blend.frame!=1 || !blend.name || !blend.str || std::strcmp(blend.name,"blendcont") || std::strcmp(blend.str,"litaddz") ||
+       particles.state!=0 || particles.frame!=5 || !particles.name || !particles.str || std::strcmp(particles.name,"partsys") || std::strcmp(particles.str,parameters))return false;
+    for(int i=0;i<2;++i){const auto& t=textures[i];const auto& p=t.desc.pixelFormat;
+        if(t.desc.width!=(i?32:64) || t.desc.height!=(i?32:64) || t.numframes!=1 ||
+           p.dwRGBBitCount!=16 || p.dwRBitMask!=0xf800 || p.dwGBitMask!=0x07e0 || p.dwBBitMask!=0x001f || p.dwRGBAlphaBitMask)return false;
+    }
+    constexpr uint64_t material_hashes[3]={0x8237bf10191e1de0ull,0xe82f1a8b1ab2978dull,0x2d6e7c4f0d54f390ull};
+    for(int i=0;i<3;++i)if(fingerprint(&materials[i].matdesc.diffuse,17*sizeof(float))!=material_hashes[i])return false;
+    constexpr uint64_t vertex_hashes[2]={0xbfaaf45209499646ull,0x7795981c8f84ffe0ull};
+    constexpr uint16_t face_indices[6]={2,3,0,1,2,0};
+    for(int i=1;i<3;++i){S3DVertex vertices[4]{};S3DFace faces[2]{};
+        GetObjVerts(i,vertices,0,0);GetObjFaces(i,faces);
+        if(fingerprint(vertices,sizeof(vertices))!=vertex_hashes[i-1] || std::memcmp(faces,face_indices,sizeof(faces)))return false;
+    }
+    return materials[0].texture==-1 && materials[1].texture==0 && materials[2].texture==1;
+}
+
+uint32_t T3DImagery::ValidateRetailStaticParticleProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc ||
+       NumTextures()!=1)return 0;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    const auto fingerprint=[](const void* data,size_t length){
+        uint64_t h=1469598103934665603ull;const auto* b=static_cast<const uint8_t*>(data);
+        for(size_t i=0;i<length;++i){h^=b[i];h*=1099511628211ull;}return h;
+    };
+    for(const auto& profile:retail_static_particles::profiles){
+        const size_t length=std::strlen(profile.suffix);
+        if(path.size()<length || path.compare(path.size()-length,length,profile.suffix) ||
+           (path.size()!=length && path[path.size()-length-1]!='/'))continue;
+        if(NumStates()!=profile.states || GetAniLength(0)!=profile.frames || GetAniFlags(0)!=profile.ani_flags ||
+           NumObjects()!=profile.objects || NumMaterials()!=profile.materials ||
+           NumTags()!=(profile.blend_tag<0?1:2) || numverts!=profile.total_vertices ||
+           numfaces!=profile.total_faces)return 0;
+        for(int i=0;i<profile.objects;++i){const auto& o=objects[i];const auto& p=profile.object[i];
+            if(std::strcmp(o.name,p.name) || o.parent[0]!=-1 || o.material!=p.material ||
+               o.numverts!=p.vertices || o.numfaces!=p.faces || !o.anikeys[0] ||
+               o.numanikeys[0]!=p.key_count ||
+               fingerprint(o.anikeys[0],p.key_count*sizeof(SAniKey32))!=p.keys ||
+               o.numtexfaces[0]!=0 || o.numtexfaces[1]!=p.faces)return 0;
+            if(p.mesh_vertices || p.mesh_faces){
+                std::vector<S3DVertex> vertices(size_t(p.vertices));
+                std::vector<S3DFace> faces(size_t(p.faces));
+                GetObjVerts(i,vertices.data(),0,0);GetObjFaces(i,faces.data());
+                if(fingerprint(vertices.data(),vertices.size()*sizeof(S3DVertex))!=p.mesh_vertices ||
+                   fingerprint(faces.data(),faces.size()*sizeof(S3DFace))!=p.mesh_faces)return 0;
+            }
+        }
+        const auto& tag=*GetTag(profile.partsys_tag);
+        if(tag.state!=0 || tag.frame!=profile.tag_frame || !tag.name || !tag.str ||
+           std::strcmp(tag.name,"partsys") || std::strcmp(tag.str,profile.parameters))return 0;
+        if(profile.blend_tag>=0){const auto& blend=*GetTag(profile.blend_tag);
+            if(blend.state!=0 || blend.frame!=profile.blend_frame || !blend.name || !blend.str ||
+               std::strcmp(blend.name,"blendcont") || std::strcmp(blend.str,"litaddz"))return 0;}
+        const auto& t=textures[0];const auto& pf=t.desc.pixelFormat;
+        if(t.desc.width!=profile.texture_size || t.desc.height!=profile.texture_size || t.numframes!=1 ||
+           pf.dwRGBBitCount!=16 || pf.dwRBitMask!=0xf800 || pf.dwGBitMask!=0x07e0 ||
+           pf.dwBBitMask!=0x001f || pf.dwRGBAlphaBitMask)return 0;
+        for(int i=0;i<profile.materials;++i)
+            if(materials[i].texture!=(i==profile.object[profile.prototype].material?0:-1) ||
+               fingerprint(&materials[i].matdesc.diffuse,17*sizeof(float))!=profile.material[i])return 0;
+        S3DVertex vertices[4]{};S3DFace faces[2]{};
+        GetObjVerts(profile.prototype,vertices,0,0);GetObjFaces(profile.prototype,faces);
+        constexpr uint16_t indices[6]={2,3,0,1,2,0};
+        if(fingerprint(vertices,sizeof(vertices))!=profile.vertices || std::memcmp(faces,indices,sizeof(faces)))return 0;
+        return profile.id;
+    }
+    return 0;
+}
+
+bool T3DImagery::ValidateRetailLightStripProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=3 ||
+       NumObjects()!=13 || NumTextures()!=2 || NumMaterials()!=2 ||
+       NumTags()!=4 || numverts!=48 || numfaces!=24)return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    const std::string suffix="magic/newlightstrip.i3d";
+    if(path.size()<suffix.size() || path.compare(path.size()-suffix.size(),suffix.size(),suffix) ||
+       (path.size()!=suffix.size() && path[path.size()-suffix.size()-1]!='/'))return false;
+    const auto hash=[](const void* data,size_t n){uint64_t h=1469598103934665603ull;
+        const auto* b=static_cast<const uint8_t*>(data);for(size_t i=0;i<n;++i){h^=b[i];h*=1099511628211ull;}return h;};
+    for(int state=0;state<3;++state)
+        if(GetAniLength(state)!=retail_lightstrip::frames[state] || GetAniFlags(state)!=retail_lightstrip::flags[state])return false;
+    for(int i=0;i<13;++i){const auto& o=objects[i];const auto& p=retail_lightstrip::objects[i];
+        if(std::strcmp(o.name,p.name) || o.material!=p.material || o.numverts!=p.vertices || o.numfaces!=p.faces)return false;
+        for(int state=0;state<3;++state)
+            if(o.parent[state]!=-1 || !o.anikeys[state] || o.numanikeys[state]!=p.keys[state] ||
+               hash(o.anikeys[state],p.keys[state]*sizeof(SAniKey32))!=p.key_hash[state] ||
+               o.numtexfaces[state]!=p.face_counts[state])return false;
+        std::vector<S3DVertex> vertices(size_t(p.vertices));std::vector<S3DFace> faces(size_t(p.faces));
+        if(p.vertices)GetObjVerts(i,vertices.data(),0,0);
+        if(p.faces)GetObjFaces(i,faces.data());
+        if(hash(vertices.data(),vertices.size()*sizeof(S3DVertex))!=p.vertex_hash ||
+           hash(faces.data(),faces.size()*sizeof(S3DFace))!=p.face_hash)return false;
+    }
+    for(int i=0;i<4;++i){const auto& t=*GetTag(i);const auto& p=retail_lightstrip::tags[i];
+        if(t.state!=p.state || t.frame!=p.frame || !t.name || !t.str || std::strcmp(t.name,p.name) || std::strcmp(t.str,p.parameters))return false;}
+    for(int i=0;i<2;++i){const auto& t=textures[i];const auto& f=t.desc.pixelFormat;
+        if(t.numframes!=1 || t.desc.width!=retail_lightstrip::widths[i] || t.desc.height!=retail_lightstrip::heights[i] ||
+           f.dwRGBBitCount!=16 || f.dwRBitMask!=0xf800 || f.dwGBitMask!=0x7e0 || f.dwBBitMask!=31 || f.dwRGBAlphaBitMask ||
+           materials[i].texture!=i || hash(&materials[i].matdesc.diffuse,17*sizeof(float))!=retail_lightstrip::materials[i])return false;}
+    return true;
+}
+
+bool T3DImagery::ValidateRetailFunnelProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=3 ||
+       NumObjects()!=8 || NumTextures()!=5 || NumMaterials()!=5 ||
+       NumTags()!=7 || numverts!=276 || numfaces!=412)return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    const std::string suffix="magic/funnel.i3d";
+    if(path.size()<suffix.size() || path.compare(path.size()-suffix.size(),suffix.size(),suffix) ||
+       (path.size()!=suffix.size() && path[path.size()-suffix.size()-1]!='/'))return false;
+    const auto hash=[](const void* data,size_t n){uint64_t h=1469598103934665603ull;
+        const auto* b=static_cast<const uint8_t*>(data);for(size_t i=0;i<n;++i){h^=b[i];h*=1099511628211ull;}return h;};
+    for(int state=0;state<3;++state)
+        if(GetAniLength(state)!=retail_funnel::frames[state] || GetAniFlags(state)!=retail_funnel::flags[state])return false;
+    for(int i=0;i<8;++i){const auto& o=objects[i];const auto& p=retail_funnel::objects[i];
+        if(std::strcmp(o.name,p.name) || o.material!=p.material || o.numverts!=p.vertices || o.numfaces!=p.faces)return false;
+        for(int state=0;state<3;++state)
+            if(o.parent[state]!=-1 || !o.anikeys[state] || o.numanikeys[state]!=p.keys[state] ||
+               hash(o.anikeys[state],p.keys[state]*sizeof(SAniKey32))!=p.key_hash[state])return false;
+        for(int slot=0;slot<6;++slot)if(o.numtexfaces[slot]!=p.face_counts[slot])return false;
+        std::vector<S3DVertex> vertices(size_t(p.vertices));std::vector<S3DFace> faces(size_t(p.faces));
+        if(p.vertices)GetObjVerts(i,vertices.data(),0,0);
+        if(p.faces)GetObjFaces(i,faces.data());
+        if(hash(vertices.data(),vertices.size()*sizeof(S3DVertex))!=p.vertex_hash ||
+           hash(faces.data(),faces.size()*sizeof(S3DFace))!=p.face_hash)return false;
+    }
+    for(int i=0;i<7;++i){const auto& t=*GetTag(i);const auto& p=retail_funnel::tags[i];
+        if(t.state!=p.state || t.frame!=p.frame || !t.name || !t.str || std::strcmp(t.name,p.name) || std::strcmp(t.str,p.parameters))return false;}
+    for(int i=0;i<5;++i){const auto& t=textures[i];const auto& f=t.desc.pixelFormat;
+        if(t.numframes!=1 || t.desc.width!=retail_funnel::widths[i] || t.desc.height!=retail_funnel::heights[i] ||
+           f.dwRGBBitCount!=16 || f.dwRBitMask!=0xf800 || f.dwGBitMask!=0x7e0 || f.dwBBitMask!=31 || f.dwRGBAlphaBitMask ||
+           materials[i].texture!=i || hash(&materials[i].matdesc.diffuse,17*sizeof(float))!=retail_funnel::materials[i])return false;}
+    return true;
+}
+
+bool T3DImagery::ValidateRetailCometProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+       NumObjects()!=8 || NumTextures()!=2 || NumMaterials()!=3 ||
+       NumTags()!=4 || numverts!=20 || numfaces!=10)return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    const std::string suffix="magic/comet.i3d";
+    if(path.size()<suffix.size() || path.compare(path.size()-suffix.size(),suffix.size(),suffix) ||
+       (path.size()!=suffix.size() && path[path.size()-suffix.size()-1]!='/'))return false;
+    const auto hash=[](const void* data,size_t n){uint64_t h=1469598103934665603ull;
+        const auto* b=static_cast<const uint8_t*>(data);for(size_t i=0;i<n;++i){h^=b[i];h*=1099511628211ull;}return h;};
+    for(int state=0;state<1;++state)
+        if(GetAniLength(state)!=45 || GetAniFlags(state)!=8192)return false;
+    for(int i=0;i<8;++i){const auto& o=objects[i];const auto& p=retail_comet::objects[i];
+        if(std::strcmp(o.name,p.name) || o.material!=p.material || o.numverts!=p.vertices || o.numfaces!=p.faces)return false;
+        for(int state=0;state<1;++state)
+            if(o.parent[state]!=-1 || !o.anikeys[state] || o.numanikeys[state]!=p.keys ||
+               hash(o.anikeys[state],p.keys*sizeof(SAniKey32))!=p.key_hash)return false;
+        for(int slot=0;slot<3;++slot)if(o.numtexfaces[slot]!=p.face_counts[slot])return false;
+        std::vector<S3DVertex> vertices(size_t(p.vertices));std::vector<S3DFace> faces(size_t(p.faces));
+        if(p.vertices)GetObjVerts(i,vertices.data(),0,0);
+        if(p.faces)GetObjFaces(i,faces.data());
+        if(hash(vertices.data(),vertices.size()*sizeof(S3DVertex))!=p.vertex_hash ||
+           hash(faces.data(),faces.size()*sizeof(S3DFace))!=p.face_hash)return false;
+    }
+    for(int i=0;i<4;++i){const auto& t=*GetTag(i);const auto& p=retail_comet::tags[i];
+        if(t.state!=p.state || t.frame!=p.frame || !t.name || !t.str || std::strcmp(t.name,p.name) || std::strcmp(t.str,p.parameters))return false;}
+    for(int i=0;i<2;++i){const auto& t=textures[i];const auto& f=t.desc.pixelFormat;
+        if(t.numframes!=1 || t.desc.width!=(i==0?64:128) || t.desc.height!=(i==0?64:128) ||
+           f.dwRGBBitCount!=16 || f.dwRBitMask!=0xf800 || f.dwGBitMask!=0x7e0 || f.dwBBitMask!=31 || f.dwRGBAlphaBitMask)return false;}
+    for(int i=0;i<3;++i)if(materials[i].texture!=retail_comet::material_textures[i] ||
+        hash(&materials[i].matdesc.diffuse,17*sizeof(float))!=retail_comet::materials[i])return false;
+    return true;
+}
+bool T3DImagery::ValidateRetailFGeyserProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+       NumObjects()!=5 || NumTextures()!=1 || NumMaterials()!=1 ||
+       NumTags()!=3 || numverts!=12 || numfaces!=6)return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    const std::string suffix="cave/cavfgeyser.i3d";
+    if(path.size()<suffix.size() || path.compare(path.size()-suffix.size(),suffix.size(),suffix) ||
+       (path.size()!=suffix.size() && path[path.size()-suffix.size()-1]!='/'))return false;
+    const auto hash=[](const void* data,size_t n){uint64_t h=1469598103934665603ull;
+        const auto* b=static_cast<const uint8_t*>(data);for(size_t i=0;i<n;++i){h^=b[i];h*=1099511628211ull;}return h;};
+    for(int state=0;state<1;++state)
+        if(GetAniLength(state)!=90 || GetAniFlags(state)!=8192)return false;
+    for(int i=0;i<5;++i){const auto& o=objects[i];const auto& p=retail_fgeyser::objects[i];
+        if(std::strcmp(o.name,p.name) || o.material!=p.material || o.numverts!=p.vertices || o.numfaces!=p.faces)return false;
+        for(int state=0;state<1;++state)
+            if(o.parent[state]!=-1 || !o.anikeys[state] || o.numanikeys[state]!=p.keys ||
+               hash(o.anikeys[state],p.keys*sizeof(SAniKey32))!=p.key_hash)return false;
+        for(int slot=0;slot<2;++slot)if(o.numtexfaces[slot]!=p.face_counts[slot])return false;
+        std::vector<S3DVertex> vertices(size_t(p.vertices));std::vector<S3DFace> faces(size_t(p.faces));
+        if(p.vertices)GetObjVerts(i,vertices.data(),0,0);
+        if(p.faces)GetObjFaces(i,faces.data());
+        if(hash(vertices.data(),vertices.size()*sizeof(S3DVertex))!=p.vertex_hash ||
+           hash(faces.data(),faces.size()*sizeof(S3DFace))!=p.face_hash)return false;
+    }
+    for(int i=0;i<3;++i){const auto& t=*GetTag(i);const auto& p=retail_fgeyser::tags[i];
+        if(t.state!=p.state || t.frame!=p.frame || !t.name || !t.str || std::strcmp(t.name,p.name) || std::strcmp(t.str,p.parameters))return false;}
+    for(int i=0;i<1;++i){const auto& t=textures[i];const auto& f=t.desc.pixelFormat;
+        if(t.numframes!=1 || t.desc.width!=64 || t.desc.height!=64 ||
+           f.dwRGBBitCount!=16 || f.dwRBitMask!=0xf800 || f.dwGBitMask!=0x7e0 || f.dwBBitMask!=31 || f.dwRGBAlphaBitMask)return false;}
+    for(int i=0;i<1;++i)if(materials[i].texture!=retail_fgeyser::material_textures[i] ||
+        hash(&materials[i].matdesc.diffuse,17*sizeof(float))!=retail_fgeyser::materials[i])return false;
+    return true;
+}
+bool T3DImagery::ValidateRetailDustProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+       NumObjects()!=5 || NumTextures()!=1 || NumMaterials()!=2 ||
+       NumTags()!=1 || numverts!=4 || numfaces!=2)return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    const std::string suffix="misc/dustcloud.i3d";
+    if(path.size()<suffix.size() || path.compare(path.size()-suffix.size(),suffix.size(),suffix) ||
+       (path.size()!=suffix.size() && path[path.size()-suffix.size()-1]!='/'))return false;
+    const auto hash=[](const void* data,size_t n){uint64_t h=1469598103934665603ull;
+        const auto* b=static_cast<const uint8_t*>(data);for(size_t i=0;i<n;++i){h^=b[i];h*=1099511628211ull;}return h;};
+    for(int state=0;state<1;++state)
+        if(GetAniLength(state)!=20 || GetAniFlags(state)!=8192)return false;
+    for(int i=0;i<5;++i){const auto& o=objects[i];const auto& p=retail_dust::objects[i];
+        if(std::strcmp(o.name,p.name) || o.material!=p.material || o.numverts!=p.vertices || o.numfaces!=p.faces)return false;
+        for(int state=0;state<1;++state)
+            if(o.parent[state]!=-1 || !o.anikeys[state] || o.numanikeys[state]!=p.keys ||
+               hash(o.anikeys[state],p.keys*sizeof(SAniKey32))!=p.key_hash)return false;
+        for(int slot=0;slot<2;++slot)if(o.numtexfaces[slot]!=p.face_counts[slot])return false;
+        std::vector<S3DVertex> vertices(size_t(p.vertices));std::vector<S3DFace> faces(size_t(p.faces));
+        if(p.vertices)GetObjVerts(i,vertices.data(),0,0);
+        if(p.faces)GetObjFaces(i,faces.data());
+        if(hash(vertices.data(),vertices.size()*sizeof(S3DVertex))!=p.vertex_hash ||
+           hash(faces.data(),faces.size()*sizeof(S3DFace))!=p.face_hash)return false;
+    }
+    for(int i=0;i<1;++i){const auto& t=*GetTag(i);const auto& p=retail_dust::tags[i];
+        if(t.state!=p.state || t.frame!=p.frame || !t.name || !t.str || std::strcmp(t.name,p.name) || std::strcmp(t.str,p.parameters))return false;}
+    for(int i=0;i<1;++i){const auto& t=textures[i];const auto& f=t.desc.pixelFormat;
+        if(t.numframes!=1 || t.desc.width!=32 || t.desc.height!=32 ||
+           f.dwRGBBitCount!=16 || f.dwRBitMask!=0xf800 || f.dwGBitMask!=0x7e0 || f.dwBBitMask!=31 || f.dwRGBAlphaBitMask)return false;}
+    for(int i=0;i<2;++i)if(materials[i].texture!=retail_dust::material_textures[i] ||
+        hash(&materials[i].matdesc.diffuse,17*sizeof(float))!=retail_dust::materials[i])return false;
+    return true;
+}
+
+bool T3DImagery::ValidateRetailPoisonProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+       NumObjects()!=6 || NumTextures()!=2 || NumMaterials()!=3 ||
+       NumTags()!=2 || numverts!=8 || numfaces!=4)return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    const std::string suffix="magic/poisoncloud.i3d";
+    if(path.size()<suffix.size() || path.compare(path.size()-suffix.size(),suffix.size(),suffix) ||
+       (path.size()!=suffix.size() && path[path.size()-suffix.size()-1]!='/'))return false;
+    const auto hash=[](const void* data,size_t n){uint64_t h=1469598103934665603ull;
+        const auto* b=static_cast<const uint8_t*>(data);for(size_t i=0;i<n;++i){h^=b[i];h*=1099511628211ull;}return h;};
+    for(int state=0;state<1;++state)
+        if(GetAniLength(state)!=60 || GetAniFlags(state)!=8193)return false;
+    for(int i=0;i<6;++i){const auto& o=objects[i];const auto& p=retail_poison::objects[i];
+        if(std::strcmp(o.name,p.name) || o.material!=p.material || o.numverts!=p.vertices || o.numfaces!=p.faces)return false;
+        for(int state=0;state<1;++state)
+            if(o.parent[state]!=-1 || !o.anikeys[state] || o.numanikeys[state]!=p.keys ||
+               hash(o.anikeys[state],p.keys*sizeof(SAniKey32))!=p.key_hash)return false;
+        for(int slot=0;slot<3;++slot)if(o.numtexfaces[slot]!=p.face_counts[slot])return false;
+        std::vector<S3DVertex> vertices(size_t(p.vertices));std::vector<S3DFace> faces(size_t(p.faces));
+        if(p.vertices)GetObjVerts(i,vertices.data(),0,0);
+        if(p.faces)GetObjFaces(i,faces.data());
+        if(hash(vertices.data(),vertices.size()*sizeof(S3DVertex))!=p.vertex_hash ||
+           hash(faces.data(),faces.size()*sizeof(S3DFace))!=p.face_hash)return false;
+    }
+    for(int i=0;i<2;++i){const auto& t=*GetTag(i);const auto& p=retail_poison::tags[i];
+        if(t.state!=p.state || t.frame!=p.frame || !t.name || !t.str || std::strcmp(t.name,p.name) || std::strcmp(t.str,p.parameters))return false;}
+    for(int i=0;i<2;++i){const auto& t=textures[i];const auto& f=t.desc.pixelFormat;
+        if(t.numframes!=1 || t.desc.width!=(i?32:8) || t.desc.height!=(i?32:8) ||
+           f.dwRGBBitCount!=16 || f.dwRBitMask!=0xf800 || f.dwGBitMask!=0x7e0 || f.dwBBitMask!=31 || f.dwRGBAlphaBitMask)return false;}
+    for(int i=0;i<3;++i)if(materials[i].texture!=retail_poison::material_textures[i] ||
+        hash(&materials[i].matdesc.diffuse,17*sizeof(float))!=retail_poison::materials[i])return false;
+    return true;
+}
+
 void T3DImagery::InitializePartSysTracks()
 {
     partsys_tracks.clear();
@@ -462,6 +873,15 @@ void T3DImagery::InitializePartSysTracks()
     might_partsys_profile = ValidateRetailMightPartSysProfile();
     immortalmight_partsys_profile = ValidateRetailImmortalmightPartSysProfile();
     fmastery_partsys_profile = ValidateRetailFmasteryPartSysProfile();
+    speed_partsys_profile = ValidateRetailSpeedPartSysProfile();
+    quicksilver_partsys_profile = ValidateRetailQuicksilverPartSysProfile();
+    static_particles_profile = ValidateRetailStaticParticleProfile();
+    lightstrip_partsys_profile = ValidateRetailLightStripProfile();
+    funnel_partsys_profile = ValidateRetailFunnelProfile();
+    comet_partsys_profile = ValidateRetailCometProfile();
+    fgeyser_partsys_profile = ValidateRetailFGeyserProfile();
+    dust_partsys_profile = ValidateRetailDustProfile();
+    poison_partsys_profile = ValidateRetailPoisonProfile();
     combatflash_start1_partsys_profile = ValidateCombatFlashStart1PartSysProfile();
     for (int32_t i = 0; i < NumTags(); ++i)
     {
@@ -528,7 +948,7 @@ void T3DImagery::InitializePartSysTracks()
         for (int32_t j = 0; j < NumTags() && track.supported; ++j)
         {
             const char* name = GetTag(j)->name;
-            if ((gold_partsys_profile || combatflash_start1_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
+            if ((gold_partsys_profile || combatflash_start1_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || static_particles_profile || lightstrip_partsys_profile || funnel_partsys_profile || comet_partsys_profile || fgeyser_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
             if (name && stricmp(name, "partsys") && stricmp(name, "scrolltex") &&
                 stricmp(name, "play") && stricmp(name, "beg") && stricmp(name, "end"))
             {
@@ -567,10 +987,16 @@ static bool ParseScrollTexParams(const char* params, std::string& object,
         if (value.empty()) return false;
         if (!stricmp(key.c_str(), "obj"))
         {
-            if (have_obj || value.find_first_of("()\"'") != std::string::npos) return false;
-            for (unsigned char c : value)
+            if (have_obj) return false;
+            // Original 0x401820 accepts both obj=name and obj=(name).
+            // Keep this route to one literal selector; lists/wildcards remain unsupported.
+            std::string selector = value;
+            if (selector.front() == '(' && selector.back() == ')')
+                selector = trim(selector.substr(1, selector.size() - 2));
+            if (selector.empty() || selector.find_first_of("()\"'") != std::string::npos) return false;
+            for (unsigned char c : selector)
                 if (!std::isalnum(c) && c != '_' && c != '#') return false;
-            object = value; have_obj = true;
+            object = selector; have_obj = true;
         }
         else if (!stricmp(key.c_str(), "du") || !stricmp(key.c_str(), "dv"))
         {
@@ -604,29 +1030,38 @@ void T3DImagery::InitializeScrollTexTracks(S3DImageryBody* mesh)
         SScrollTexTrack track;
         track.state = tag.state; track.tagframe = tag.frame;
         const char* params = static_cast<const char*>(tag.str.ptr());
-        if (!ParseScrollTexParams(params, object, track.du, track.dv) ||
-            (track.object = GetObjectNum(const_cast<char*>(object.c_str()))) < 0)
+        if (!ParseScrollTexParams(params, object, track.du, track.dv))
         {
             log_warn("[scrolltex] unsupported tag in %s: '%s' (requires single obj, du, dv)",
                      GetResFilename(), params ? params : "<null>");
             continue;
         }
-        // Multiple controllers on one object can capture a previous controller's
-        // modified UVs. Do not claim those semantics with a stateless offset.
-        bool overlaps = false;
-        for (const auto& prior : scrolltex_tracks)
-            if (prior.object == track.object &&
-                (prior.state == track.state || prior.state == -1 || track.state == -1))
-                overlaps = true;
-        if (overlaps)
+        const int32_t matched = GetObjectNum(const_cast<char*>(object.c_str()));
+        // Retail 0x401839..0x401866 selects every animator object if the
+        // successfully parsed selector found none. Several shipped water tags
+        // retain an old object name (water vs waterstr/waterbend, wave vs wave02).
+        const int32_t first = matched >= 0 ? matched : 0;
+        const int32_t last = matched >= 0 ? matched + 1 : NumObjects();
+        for (int32_t target = first; target < last; ++target)
         {
-            log_warn("[scrolltex] overlapping controllers unsupported in %s object=%s",
-                     GetResFilename(), object.c_str());
-            continue;
+            track.object = target;
+            // Multiple controllers on one object can capture a prior controller's
+            // modified UVs; keep those unsupported rather than approximate them.
+            bool overlaps = false;
+            for (const auto& prior : scrolltex_tracks)
+                if (prior.object == track.object &&
+                    (prior.state == track.state || prior.state == -1 || track.state == -1))
+                    overlaps = true;
+            if (overlaps)
+            {
+                log_warn("[scrolltex] overlapping controllers unsupported in %s object=%s",
+                         GetResFilename(), object.c_str());
+                continue;
+            }
+            scrolltex_tracks.push_back(track);
+            log_info("[scrolltex] authored %s object=%s index=%d state=%d tagframe=%d du=%g dv=%g",
+                     GetResFilename(), object.c_str(), target, track.state, track.tagframe, track.du, track.dv);
         }
-        scrolltex_tracks.push_back(track);
-        log_info("[scrolltex] authored %s object=%s state=%d tagframe=%d du=%g dv=%g",
-                 GetResFilename(), object.c_str(), track.state, track.tagframe, track.du, track.dv);
     }
 }
 
@@ -807,6 +1242,12 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
 
     flags = mesh->flags;
     version = 0;
+    // Independently audited one-frame Ribbon and shipped default Vortex bodies.
+    // Other old-body callers keep their existing zero-key fallback.
+    const bool ribbon_keys=ribbon_legacy::Matches(GetResFilename(),mesh,
+        GetResSize(),NumStates(),GetAniLength(0),GetAniFlags(0));
+    const bool vortex_keys=vortex_legacy::Matches(GetResFilename(),mesh,
+        GetResSize(),NumStates(),GetAniLength(0),GetAniFlags(0));
 
     // ---- morph vertex lists ----
     numverts = mesh->numverts;
@@ -901,6 +1342,16 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
                 obj.anikeys[d] = new SAniKey[GetAniLength(d)];
                 obj.numanikeys[d] = GetAniLength(d);
                 std::memset(obj.anikeys[d], 0, sizeof(SAniKey) * GetAniLength(d));
+                if (ribbon_keys && d==0) {
+                    static_assert(sizeof(SAniKey)==8);
+                    const auto* raw=static_cast<const uint8_t*>(mesh->anikeys[0].ptr());
+                    std::memcpy(obj.anikeys[d],raw+size_t(c)*8,8);
+                }
+                if (vortex_keys && d==0) {
+                    static_assert(sizeof(SAniKey)==8);
+                    const auto* raw=static_cast<const uint8_t*>(mesh->anikeys[0].ptr());
+                    std::memcpy(obj.anikeys[d],raw+size_t(c)*8,8);
+                }
             }
         }
 
@@ -1392,6 +1843,15 @@ void T3DImagery::ClearMesh()
     might_partsys_profile = false;
     immortalmight_partsys_profile = false;
     fmastery_partsys_profile = false;
+    speed_partsys_profile = false;
+    quicksilver_partsys_profile = false;
+    static_particles_profile = 0;
+    lightstrip_partsys_profile = false;
+    funnel_partsys_profile = false;
+    comet_partsys_profile = false;
+    fgeyser_partsys_profile = false;
+    dust_partsys_profile = false;
+    poison_partsys_profile = false;
     retail_punch_keys = false;
     retail_mpappear_start_profile = false;
     retail_shadowfist_profile = false;
@@ -1789,7 +2249,7 @@ static inline void GetAniKey32(int32_t /*key*/, SAniKey32* keys, int32_t numkeys
 }
 
 bool T3DImagery::GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t frame,
-    hmm_vec3& pos, hmm_vec3& rot, hmm_vec3& scl)
+    hmm_vec3& pos, hmm_vec3& rot, hmm_vec3& scl, bool retail_inclusive)
 {
     S3DObj* obj = &objects[objnum];
 
@@ -1837,8 +2297,9 @@ bool T3DImagery::GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t 
                 // frame samples the second-to-last key, and loop playback
                 // visibly goes second-last -> first -> held first.
                 // Actual retail4096bc JGE is inclusive. Opt in only the
-                // exact audited Punch, Appear, Sfist and Wborn keys; others keep their policy.
-                const bool reached = (retail_punch_keys || retail_mpappear_start_profile || retail_shadowfist_profile || retail_warriorborn_profile || retail_teleportation_profile || might_partsys_profile || immortalmight_partsys_profile || fmastery_partsys_profile) ? frame <= curframe + frames : frame < curframe + frames;
+                // admitted profiles or an explicitly audited caller (Blast). The
+                // default argument preserves the existing per-profile policy.
+                const bool reached = (retail_inclusive || retail_punch_keys || retail_mpappear_start_profile || retail_shadowfist_profile || retail_warriorborn_profile || retail_teleportation_profile || might_partsys_profile || immortalmight_partsys_profile || fmastery_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || (static_particles_profile && state==0)) ? frame <= curframe + frames : frame < curframe + frames;
                 if ((num <= 0) || reached)
                 {
                     GetAniKey32(curkey, keys, numkeys,
@@ -2482,45 +2943,10 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
         if (!DecodeTextureFrameRGBA(srcsd, frame_pixels, palette, rgba))
             continue;
 
-        // Chroma-key + premultiply pass for I3D-era sprite atlases
-        // whose transparent background is pure black (no alpha
-        // channel in the source). Without this, bilinear sampling at
-        // the splat-to-bg boundary produces dark-red transition
-        // pixels (visible fringe).
-        //
-        // Heuristic: if >20% of the texture is pure black, treat it
-        // as chroma-keyed. Set those pixels to fully transparent
-        // (a=0, rgb=0 = premultiplied form) and leave opaque pixels
-        // alone (a=255, rgb unchanged = already premultiplied since
-        // a=1.0). Bucket consumers should pair this with the
-        // PremulAlpha blend mode for correct edge blending.
-        //
-        // TODO: drive this from an explicit per-asset flag once the
-        // tile-set loader gets one, instead of the heuristic. For
-        // Phase 2 it covers Blood/Mist/Smoke/spell-disc style
-        // atlases which all use the chroma-key convention.
-        if (!rgba.empty())
-        {
-            const size_t px_count = rgba.size() / 4;
-            size_t black_count = 0;
-            for (size_t i = 0; i < px_count; ++i)
-            {
-                const uint8_t r = rgba[i * 4 + 0];
-                const uint8_t g = rgba[i * 4 + 1];
-                const uint8_t b = rgba[i * 4 + 2];
-                if (r == 0 && g == 0 && b == 0)
-                    ++black_count;
-            }
-            if (px_count > 0 && black_count * 5 > px_count) // >20%
-            {
-                for (size_t i = 0; i < px_count; ++i)
-                {
-                    uint8_t* px = &rgba[i * 4];
-                    if (px[0] == 0 && px[1] == 0 && px[2] == 0)
-                        px[3] = 0;   // fully transparent (rgb already 0 = premul'd)
-                }
-            }
-        }
+        // A declared alpha channel owns coverage, including opaque black
+        // opacity masks (Blood texture1). Apply legacy black-key inference
+        // only to formats without authored alpha.
+        ApplyI3DBlackKey(rgba, srcsd->pixelFormat.dwRGBAlphaBitMask != 0);
 
         // i3ddump tool retains the decoded RGBA bytes per frame so we can
         // write them out as PNG. Stored on T3DImagery (NOT S3DTex) because
@@ -2818,6 +3244,11 @@ void T3DImagery::SetObjectMotion(TObjectInstance* inst)
 
 // ****************** NORMAL IMAGERY STUFF **********************
 
+// REVSYNC: 0x0040ce60. An object has one icon whatever its state: once the
+// body has loaded, retail keeps a copy of state 0's -- its invitem, else the
+// first frame of its invanim (TObjectImagery::LoadBody 0x00447ac0, imagery
+// entry +0x74) -- and answers with that. Without one, the state's own
+// invitem, else state 0's (null).
 TBitmap* T3DImagery::GetInvImage(int32_t state, int32_t /*num*/)
 {
     if (!meshinitialized)
@@ -2826,15 +3257,22 @@ TBitmap* T3DImagery::GetInvImage(int32_t state, int32_t /*num*/)
 
     if (!icons)
         return nullptr;
+    if (TBitmap* icon = icons[0].invitem)
+        return icon;
+    if (TBitmap* frame = icons[0].invanim ? icons[0].invanim->GetFrame(0) : nullptr)
+        return frame;
+    if (state < 0 || state >= NumStates())
+        return nullptr;
     return icons[state].invitem;
 }
 
+// REVSYNC: 0x0040cef0 -- the state's own invanim; none for a state out of range.
 TAnimation* T3DImagery::GetInvAnimation(int32_t state)
 {
     if (!meshinitialized)
         InitializeMesh((S3DImageryBody*)GetBody());
 
-    if (!icons)
+    if (!icons || state < 0 || state >= NumStates())
         return nullptr;
     return icons[state].invanim;
 }
@@ -2957,16 +3395,24 @@ struct T3DAnimator::SPartSysControllers
     static void FillInputs(Controller& controller, T3DAnimator& animator,
                            TObjectInstance& owner)
     {
+        const bool funnel_pose=(owner.ObjId()==0xad92bc17u && animator.Get3DImagery()->HasRetailFunnelProfile());
+        const bool lightstrip_pose=(owner.ObjId()==0x10da54d0u && animator.Get3DImagery()->HasRetailLightStripProfile());
+        const bool comet_pose=(owner.ObjId()==0xf32bcfacu && animator.Get3DImagery()->HasRetailCometProfile());
+        const bool fgeyser_pose=(owner.ObjId()==0xad92bd31u && animator.Get3DImagery()->HasRetailFGeyserProfile());
+        const bool poison_pose=(owner.ObjId()==0xe0a3bc42u && animator.Get3DImagery()->HasRetailPoisonProfile());
+        const bool dust_pose=(owner.ObjId()==0x0c052637u && animator.Get3DImagery()->HasRetailDustProfile());
         auto& inputs = controller.inputs;
         const S3DPoint p = owner.Pos();
         inputs.owner_position = {float(p.x), float(p.y), float(p.z)};
         inputs.owner_face = static_cast<unsigned char>(owner.GetFace());
         // Retail 403771 reads animator+14; Animate copies owner frame later.
         // Gold's transient PPS curve must see initial cached0, not owner1.
-        inputs.animation_frame = (owner.ObjId() == 0xd0c0f035u ||
+        inputs.animation_frame = ((lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose) || owner.ObjId() == 0xd0c0f035u ||
             (owner.ObjId()==0x5be39ae0u && owner.GetState()==0 && animator.Get3DImagery()->HasRetailMightPartSysProfile()) ||
             (owner.ObjId()==0x82aeb30fu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailImmortalmightPartSysProfile()) ||
             (owner.ObjId()==0xb0e024dfu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailFmasteryPartSysProfile()) ||
+            (owner.GetState()==0 && animator.Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(owner.ObjId())) ||
+            (owner.GetState()==0 && animator.Get3DImagery()->HasRetailStaticParticleProfile(owner.ObjId())) ||
             (owner.ObjId() == 0xad92bd29u && owner.GetState() == 0)) ? animator.GetFrame() : owner.GetFrame();
         // Retail Initialize obtains object zero's origin before resolving the
         // authored emitter list. Keep that distinct from its first emitter.
@@ -2983,11 +3429,42 @@ struct T3DAnimator::SPartSysControllers
             // This is the source owner-local matrix, NOT the render bone's
             // stretched world matrix. The simulation adds live owner XYZ itself.
             if (!bone || !animator.GetObjectMatrix(object, &matrix)) continue;
+            hmm_vec3 emitter_position=bone->pos, emitter_scale=bone->scl;
+            // Original 40efc0 reads the cached emitter matrix, before Animate
+            // copies the advanced owner frame. GetObjectMatrix above refreshes
+            // modern bones at the owner frame, so exact static PartSys assets
+            // must sample their verified root-emitter keys at the cached frame.
+            if ((lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose) || (owner.GetState()==0 &&
+                animator.Get3DImagery()->HasRetailStaticParticleProfile(owner.ObjId())))
+            {
+                hmm_vec3 rotation{};
+                if (!animator.Get3DImagery()->GetUninterpolatedAniKey(object, owner.GetState(),
+                    inputs.animation_frame, emitter_position, rotation, emitter_scale, (lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose))) continue;
+                MtxClear(&matrix);
+                if(poison_pose)
+                    BuildRetailPoisonMatrix(matrix,object,emitter_position,rotation,emitter_scale);
+                else if(dust_pose)
+                    BuildRetailDustMatrix(matrix,object,emitter_position,rotation,emitter_scale);
+                else if(fgeyser_pose)
+                    BuildRetailFGeyserMatrix(matrix,object,emitter_position,rotation,emitter_scale);
+                else if(comet_pose)
+                    BuildRetailCometMatrix(matrix,object,emitter_position,rotation,emitter_scale);
+                else ::MakeMatrix(matrix, emitter_position, rotation, emitter_scale);
+            }
+            hmm_vec3 speed_position{},speed_scale{};
+            const bool speed_pose=owner.GetState()==0 &&
+                animator.Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(owner.ObjId()) && object==1;
+            if(speed_pose && !animator.SpeedEmitterLocalMatrix(matrix,&speed_position,&speed_scale))continue;
+            const bool camera_particle_pose=owner.GetState()==0 &&
+                animator.Get3DImagery()->HasRetailCameraParticleProfile(owner.ObjId());
+            if(camera_particle_pose && !animator.CameraParticleEmitterLocalMatrix(object,matrix,&speed_position,&speed_scale))continue;
             auto& pose = inputs.emitters[i];
             std::memcpy(pose.matrix.data(), matrix.Elements, sizeof(matrix));
             pose.origin = {matrix.Elements[3][0], matrix.Elements[3][1], matrix.Elements[3][2]};
-            pose.position = {bone->pos.X, bone->pos.Y, bone->pos.Z};
-            pose.scale = {bone->scl.X, bone->scl.Y, bone->scl.Z};
+            pose.position = {emitter_position.X, emitter_position.Y, emitter_position.Z};
+            pose.scale = {emitter_scale.X, emitter_scale.Y, emitter_scale.Z};
+            if(speed_pose || camera_particle_pose){pose.position={speed_position.X,speed_position.Y,speed_position.Z};
+                pose.scale={speed_scale.X,speed_scale.Y,speed_scale.Z};}
         }
     }
 };
@@ -3012,10 +3489,18 @@ void T3DAnimator::RefreshPartSysControllers()
     const bool might = id==0x5be39ae0u && imagery->might_partsys_profile && current_state==0;
     const bool immortalmight = id==0x82aeb30fu && imagery->immortalmight_partsys_profile && current_state==0;
     const bool fmastery=id==0xb0e024dfu && imagery->fmastery_partsys_profile && current_state==0;
-    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && (id < 0xd0c0f036u || id > 0xd0c0f039u))
+    const bool speed=imagery->HasRetailSpeedFamilyPartSysProfile(id) && current_state==0;
+    const bool comet=id==0xf32bcfacu && imagery->HasRetailCometProfile() && current_state==0;
+    const bool fgeyser=id==0xad92bd31u && imagery->HasRetailFGeyserProfile() && current_state==0;
+    const bool poison=id==0xe0a3bc42u && imagery->HasRetailPoisonProfile() && current_state==0;
+    const bool dust=id==0x0c052637u && imagery->HasRetailDustProfile() && current_state==0;
+    const bool funnel=id==0xad92bc17u && imagery->HasRetailFunnelProfile() && current_state>=0 && current_state<3;
+    const bool lightstrip=id==0x10da54d0u && imagery->HasRetailLightStripProfile() && current_state>=0 && current_state<3;
+    const bool static_particles=imagery->HasRetailStaticParticleProfile(id) && current_state==0;
+    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && !speed && !static_particles && !lightstrip && !funnel && !comet && !fgeyser && !dust && !poison)
     {
         if (!state.initialized)
-            log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only audited water, Goldp, CombatFlash start1 and exact Might/Immortalmight/Fmastery profiles are enabled",
+            log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only exact audited particle profiles are enabled",
                      inst->GetTypeName(), id, inst->GetMapIndex());
         state.unsupported = true;
         state.controllers.clear();
@@ -3032,7 +3517,15 @@ void T3DAnimator::RefreshPartSysControllers()
             return controller.track.state != -1 && controller.track.state != current_state;
         }), controllers.end());
     state.unsupported = false;
-    if (gold || combat_start1)
+    if(static_particles || lightstrip || funnel || comet || fgeyser || dust || poison)
+        for(int object=0;object<NumObjects();++object)
+            if(S3DAnimObj* bone=GetObject(object)){
+                const char* name=imagery->GetObjectName(object);
+                if(name && name[0]=='#')bone->flags|=OBJ3D_GOLD_CAMERA_FACING;
+                if(name && name[0]=='*')bone->flags|=OBJ3D_HIDE;
+            }
+    const bool static_litaddz=(static_particles && imagery->NumTags()==2) || (lightstrip && current_state==0) || comet;
+    if (gold || combat_start1 || speed || static_litaddz || fgeyser || funnel)
     {
         // Retail blendcont Initialize 405940: immediate state-entry writes to
         // every animator object, preserving the prior no-depth-test bit. Its
@@ -3052,11 +3545,11 @@ void T3DAnimator::RefreshPartSysControllers()
                     if (std::strchr(name, '$')) bone->blend |= 0x40u;
                 }
                 bone->flags |= OBJ3D_BLEND;
-                bone->blend = (bone->blend & 0x40u) | 16u;
+                bone->blend = (bone->blend & 0x40u) | ((speed||static_litaddz)?80u:16u);
             }
-        log_info("[blendcont] init type=%s id=%08x map_index=%d state=0 tagframe=%d mode=16 objects=%d profile=%s",
-                 inst->GetTypeName(), id, inst->GetMapIndex(), gold ? 5 : 0, NumObjects(),
-                 gold ? "gold" : "combatflash-start1");
+        log_info("[blendcont] init type=%s id=%08x map_index=%d state=0 tagframe=%d mode=%d objects=%d profile=%s",
+                 inst->GetTypeName(), id, inst->GetMapIndex(), gold ? 5 : speed ? 1 : comet ? 3 : static_litaddz ? 2 : 0,
+                 (speed||static_litaddz) ? 80 : 16,NumObjects(),gold ? "gold" : speed ? (id==0xad92bd35u ? "quicksilver" : "speed") : comet ? "comet" : fgeyser ? "fgeyser" : static_litaddz ? "quoted-static-particles" : "combatflash-start1");
     }
     for (const auto& track : imagery->partsys_tracks)
     {
@@ -3075,6 +3568,7 @@ void T3DAnimator::RefreshPartSysControllers()
             S3DPoint position = {x, y, z};
             return MapPane.GetWalkHeight(position);
         };
+        if((lightstrip || funnel || comet || fgeyser || dust || poison) && lightstrip_ground)controller.inputs.ground_height=lightstrip_ground;
         SPartSysControllers::FillInputs(controller, *this, *inst);
         std::string diagnostic;
         // Default quality0 retains full emission. Explicit capture overrides
@@ -3119,6 +3613,44 @@ void T3DAnimator::AdvancePartSysControllers()
         // The retail controller ignores tagframe and evaluates raw owner frame.
         controller.simulation.Advance(controller.inputs, rng);
     }
+}
+
+void T3DAnimator::SetLightStripGround(std::function<int(int,int,int)> query)
+{
+    if(!inst || inst->ObjId()!=0x10da54d0u || !Get3DImagery()->HasRetailLightStripProfile())return;
+    lightstrip_ground=std::move(query);
+    if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
+}
+void T3DAnimator::SetFunnelGround(std::function<int(int,int,int)> query)
+{
+    if(!inst || inst->ObjId()!=0xad92bc17u || !Get3DImagery()->HasRetailFunnelProfile())return;
+    lightstrip_ground=std::move(query);
+    if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
+}
+
+void T3DAnimator::SetCometGround(std::function<int(int,int,int)> query)
+{
+    if(!inst || inst->ObjId()!=0xf32bcfacu || !Get3DImagery()->HasRetailCometProfile())return;
+    lightstrip_ground=std::move(query);
+    if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
+}
+void T3DAnimator::SetFGeyserGround(std::function<int(int,int,int)> query)
+{
+    if(!inst || inst->ObjId()!=0xad92bd31u || !Get3DImagery()->HasRetailFGeyserProfile())return;
+    lightstrip_ground=std::move(query);
+    if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
+}
+void T3DAnimator::SetDustGround(std::function<int(int,int,int)> query)
+{
+    if(!inst || inst->ObjId()!=0x0c052637u || !Get3DImagery()->HasRetailDustProfile())return;
+    lightstrip_ground=std::move(query);
+    if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
+}
+void T3DAnimator::SetPoisonGround(std::function<int(int,int,int)> query)
+{
+    if(!inst || inst->ObjId()!=0xe0a3bc42u || !Get3DImagery()->HasRetailPoisonProfile())return;
+    lightstrip_ground=std::move(query);
+    if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
 }
 
 bool T3DAnimator::PartSysOwnsObject(int32_t object) const
@@ -3355,7 +3887,7 @@ bool T3DAnimator::FmasteryBaseMeshBlend(int32_t object,uint32_t& blend) const
     return blend==0u || blend==16u || blend==80u;
 }
 
-bool T3DAnimator::FmasteryBaseMeshWorldMatrix( hmm_mat4& world)
+bool T3DAnimator::FmasteryBaseMeshWorldMatrix(hmm_mat4& world, const hmm_mat4* owner_override)
 {
     uint32_t blend=0;
     if (!FmasteryBaseMeshBlend(2,blend) || !IsObjectEnabled(2)) return false;
@@ -3372,8 +3904,81 @@ bool T3DAnimator::FmasteryBaseMeshWorldMatrix( hmm_mat4& world)
     MtxRotateX(&world,rotation.X); MtxRotateY(&world,rotation.Y); MtxRotateZ(&world,rotation.Z);
     if (animobjs[2]->flags&OBJ3D_GOLD_CAMERA_FACING) ApplyRetailGoldCameraOrientation(world);
     MtxTranslate(&world,&position); // source preserves XYZ after fixed '#' camera matrices
-    MtxMultiply(&world,&world,&inst->Transform().Matrix());
+    MtxMultiply(&world,&world,owner_override ? owner_override : &inst->Transform().Matrix());
     return true;
+}
+
+bool T3DAnimator::SpeedEmitterLocalMatrix(hmm_mat4& matrix,hmm_vec3* output_position,hmm_vec3* output_scale)
+{
+    if(!inst || inst->GetState()!=0 ||
+       !Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) || !animobjs.Used(1))return false;
+    hmm_vec3 position{},rotation{},scale{};
+    auto* imagery=Get3DImagery();imagery->SetPrevState(-1,0);
+    // Original controller Pulse reads the animator's cached integer frame.
+    if(!imagery->GetAniKey(1,0,GetFrame(),position,rotation,scale))return false;
+    BuildRetailSpeedCameraMatrix(matrix,position,rotation,scale);
+    if(output_position)*output_position=position;
+    if(output_scale)*output_scale=scale;
+    return true;
+}
+
+bool T3DAnimator::CameraParticleEmitterLocalMatrix(int32_t object,hmm_mat4& matrix,
+        hmm_vec3* output_position,hmm_vec3* output_scale)
+{
+    if(!inst || inst->GetState()!=0 ||
+       !Get3DImagery()->HasRetailCameraParticleProfile(inst->ObjId()) || !animobjs.Used(object))return false;
+    auto* imagery=Get3DImagery();const char* name=imagery->GetObjectName(object);
+    if(!name || name[0]!='#')return false;
+    hmm_vec3 position{},rotation{},scale{};
+    if(!imagery->GetUninterpolatedAniKey(object,0,GetFrame(),position,rotation,scale))return false;
+    BuildRetailSpeedCameraMatrix(matrix,position,rotation,scale);
+    if(output_position)*output_position=position;
+    if(output_scale)*output_scale=scale;
+    return true;
+}
+
+bool T3DAnimator::CameraParticleBaseMeshBlend(int32_t object,uint32_t& blend) const
+{
+    if(!inst || inst->GetState()!=0 ||
+       !Get3DImagery()->HasRetailCameraParticleProfile(inst->ObjId()) || !partsys_controllers ||
+       partsys_controllers->unsupported || object==0 || !animobjs.Used(object) ||
+       Get3DImagery()->GetObjectName(object)[0]!='#')return false;
+    // Actual NewObject adds no blend flag to RGB565 '#' cards. Controller
+    // Render leaves its mode16 in the scene before these normal-lit bases.
+    blend=partsys_controllers->renders ? 16u : uint32_t(StartupPartSysIncomingBlend);
+    return blend==0u || blend==16u || blend==80u;
+}
+
+bool T3DAnimator::CameraParticleBaseMeshWorldMatrix(int32_t object,hmm_mat4& world,
+        const hmm_mat4* owner_override)
+{
+    uint32_t blend=0;
+    if(!CameraParticleBaseMeshBlend(object,blend) || !IsObjectEnabled(object))return false;
+    hmm_vec3 position{},rotation{},scale{};auto* imagery=Get3DImagery();
+    if(!imagery->GetUninterpolatedAniKey(object,0,inst->GetFrame(),position,rotation,scale) ||
+       scale.X<=9.999999747378752e-6f || scale.Y<=9.999999747378752e-6f || scale.Z<=9.999999747378752e-6f)return false;
+    BuildRetailSpeedCameraMatrix(world,position,rotation,scale);
+    MtxMultiply(&world,&world,owner_override ? owner_override : &inst->Transform().Matrix());return true;
+}
+
+bool T3DAnimator::SpeedBaseMeshBlend(int32_t object,uint32_t& blend) const
+{
+    if(!inst || inst->GetState()!=0 ||
+       !Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) || !partsys_controllers ||
+       partsys_controllers->unsupported || object!=1 || !animobjs.Used(1) ||
+       !(animobjs[1]->flags&OBJ3D_BLEND))return false;
+    blend=animobjs[1]->blend;return blend==80u;
+}
+
+bool T3DAnimator::SpeedBaseMeshWorldMatrix(hmm_mat4& world, const hmm_mat4* owner_override)
+{
+    uint32_t blend=0;
+    if(!SpeedBaseMeshBlend(1,blend) || !IsObjectEnabled(1))return false;
+    hmm_vec3 position{},rotation{},scale{};auto* imagery=Get3DImagery();
+    imagery->SetPrevState(inst->GetPrevState(),inst->GetPrevFrame());
+    if(!imagery->GetAniKey(1,0,inst->GetFrame(),position,rotation,scale))return false;
+    BuildRetailSpeedCameraMatrix(world,position,rotation,scale);
+    MtxMultiply(&world,&world,owner_override ? owner_override : &inst->Transform().Matrix());return true;
 }
 
 uint64_t T3DAnimator::PartSysPulseCount() const
@@ -3418,9 +4023,15 @@ T3DAnimator::SAuthoredPartSysStats T3DAnimator::PartSysStats() const
 }
 
 int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
-                                  int32_t texture_slot, const hmm_vec3& render_scale)
+                                  int32_t texture_slot, const hmm_vec3& render_scale, bool native_software)
 {
     if (!partsys_controllers || partsys_controllers->unsupported) return 0;
+    const bool comet=inst->ObjId()==0xf32bcfacu && inst->GetState()==0 && Get3DImagery()->HasRetailCometProfile();
+    const bool fgeyser=inst->ObjId()==0xad92bd31u && inst->GetState()==0 && Get3DImagery()->HasRetailFGeyserProfile();
+    const bool poison=inst->ObjId()==0xe0a3bc42u && inst->GetState()==0 && Get3DImagery()->HasRetailPoisonProfile();
+    const bool dust=inst->ObjId()==0x0c052637u && inst->GetState()==0 && Get3DImagery()->HasRetailDustProfile();
+    const bool funnel=inst->ObjId()==0xad92bc17u && Get3DImagery()->HasRetailFunnelProfile();
+    const bool lightstrip=inst->ObjId()==0x10da54d0u && Get3DImagery()->HasRetailLightStripProfile();
     int32_t submitted = 0;
     const authored_partsys::RandomRange rng = [](int minimum, int maximum) {
         return random(minimum, maximum);
@@ -3442,6 +4053,13 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // The retail helper samples three rotation ranges during Render.
             // Keep those calls here; Submit never advances simulation state.
             const auto sample = controller.simulation.SampleRender(slot, rng);
+            // Native Speed RenderObject40a9e7..9f3 skips geometry when its
+            // CalcObjectMatrix scale gate40a591..5c1 returns0. Sampling still
+            // happens first, preserving its three render-time RNG calls.
+            if((lightstrip || funnel || comet || fgeyser || dust || poison || (inst->GetState()==0 &&
+               ((Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2) ||
+                Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId())))) &&
+               sample.scale<=9.999999747378752e-6f)continue;
             hmm_mat4 matrix;
             MtxClear(&matrix);
             const hmm_vec3 scale = {sample.scale, sample.scale, sample.scale};
@@ -3455,7 +4073,11 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                 Get3DImagery()->HasRetailImmortalmightPartSysProfile() && track.prototype==0;
             const bool fmastery=inst->ObjId()==0xb0e024dfu && inst->GetState()==0 &&
                 Get3DImagery()->HasRetailFmasteryPartSysProfile() && track.prototype==0;
-            if (might || immortalmight || fmastery || inst->ObjId() == 0xd0c0f035u ||
+            const bool speed=inst->GetState()==0 &&
+                Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2;
+            const bool static_particles=inst->GetState()==0 &&
+                Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId());
+            if (might || immortalmight || fmastery || speed || static_particles || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u ||
                 (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0 &&
                  Get3DImagery()->HasCombatFlashStart1PartSysProfile() && track.prototype == 0))
                 ApplyRetailGoldCameraOrientation(matrix); // actual '#' flag retained on both audited prototypes
@@ -3463,6 +4085,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             MtxTranslate(&matrix, &position);
 
             SQuadDrawItem item = {};
+            item.retail_software_projection = native_software;
             item.key.texture = texture;
             // Retail particle Render overwrites the prototype's companion
             // blend with its own per-particle mode. Gold coins are alpha2;
@@ -3470,12 +4093,16 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             item.key.blend = uint8_t(sample.blendmode == 2 ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
             // Preserve source packed prelit vertex color. Combat particles are
             // RGB565 with litadd16, not normal-lit material meshes or alpha coins.
-            item.retail_texture = (might || immortalmight || fmastery || inst->ObjId() == 0xd0c0f035u ||
+            item.retail_texture = (might || immortalmight || fmastery || speed || static_particles || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u ||
                 (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0)) ? 1 : 0;
+            // Strict static profile admission pins RGB565 masks and literal
+            // particle prototype. The queue applies this only to software
+            // lighting and ONE/ONE; modern/hardware and alpha retain fallback.
+            item.retail_rgb565_additive = (static_particles || lightstrip || funnel || comet || fgeyser || dust || poison) && sample.blendmode == 16;
             item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
             item.light_mode = EFxLightMode::Unlit;
             for (int c = 0; c < 3; ++c)
-                item.color_rgba[c] = (might || immortalmight || fmastery) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
+                item.color_rgba[c] = (might || immortalmight || fmastery || speed || static_particles || lightstrip || funnel || comet || fgeyser || dust || poison) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
             // Actual SW LV prelit channels are5bit; canonicalDEST_ONE ignores
             // alpha in its8wordXYZ/UV/RGB packet. Keep literal alpha metadata,
             // no premultiplication/alternateblend. PixelLSB-table raster gate open.
@@ -3494,7 +4121,8 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                 // Particle.position remains raw map/common-world simulation XYZ.
                 // Match ordinary mesh raw translation + local MODELZ stretch;
                 // ABS particles bypass the owner's transform, so bridge here once.
-                item.world_pos[c][2] = (particles[slot].position[2] +
+                // The explicit native draw policy keeps the literal MODELZ vertex.
+                item.world_pos[c][2] = (native_software ? world.Z : particles[slot].position[2] +
                     (world.Z - sample.position[2]) * WORLD3D_Z_SCALE) * render_scale.Z;
                 item.uv[c][0] = vertex.tu;
                 item.uv[c][1] = vertex.tv;
@@ -3524,6 +4152,10 @@ void T3DAnimator::Initialize()
     inst->SetFlags(OF_MOVING);
 
     SetupObjects();
+    retail_warp_state.Reset();
+    retail_warp_enabled = inst->GetState()==0 && Get3DImagery()->HasRetailWarpProfile(inst->ObjId());
+    if (retail_warp_enabled)
+        log_info("[warp-atlas] init id=%08x map_index=%d mode=2 state=0",inst->ObjId(),inst->GetMapIndex());
     if(inst->ObjId()==0x82aeb30fu && inst->GetState()==0 && Get3DImagery()->HasRetailImmortalmightPartSysProfile()) {
         if(auto* prototype=GetObject(0))prototype->flags|=OBJ3D_GOLD_CAMERA_FACING;
         // Retail409e57..5c skips material-alpha detection when texture alpha
@@ -3601,6 +4233,8 @@ void T3DAnimator::Initialize()
 
 void T3DAnimator::Close()
 {
+    retail_warp_enabled = false;
+    retail_warp_state.Reset();
     partsys_controllers.reset();
     Scene3D.RemoveAnimator(animid);
 
@@ -3695,8 +4329,19 @@ void T3DAnimator::AnimateResetBoundRect()
 
 void T3DAnimator::Pulse()
 {
+    // Map Pulse is authoritative: one call per 24Hz tick, including catch-up.
+    // Each owner begins at (0,0), independently of the global animation clock.
+    if (retail_warp_enabled && inst->GetState()==0) retail_warp_state.Step();
     AdvancePartSysControllers();
     ((T3DImagery*)image)->PlaySound(inst, state, frame);
+}
+
+bool T3DAnimator::WarpAtlasOffset(int32_t object, float output[2]) const
+{
+    if (!retail_warp_enabled || object!=0 || inst->GetState()!=0) return false;
+    output[0]=retail_warp_state.u;
+    output[1]=retail_warp_state.v;
+    return true;
 }
 
 // ---------------------------------------------------------------------------

@@ -172,6 +172,8 @@ class OFFSET
       { if (p) offset = ((ptrdiff_t)p - (ptrdiff_t)this); else offset = 0; }
     void *ptr()
       { return offset ? (void *)((ptrdiff_t)this + offset) : nullptr; }
+    const void *ptr() const
+      { return offset ? (const void *)((ptrdiff_t)this + offset) : nullptr; }
     OFFSET &operator = (uint32_t l)
       { offset = l; return *this; }
     OFFSET &operator = (OFFSET &o)
@@ -1154,7 +1156,6 @@ _CLASSDEF(TFont)
 _CLASSDEF(TGenericFont)
 _CLASSDEF(TFontTable)
 _CLASSDEF(TGameState)
-_CLASSDEF(THealthBar)
 _CLASSDEF(TImageryBuilder)
 _CLASSDEF(TInputStream)
 _CLASSDEF(TInventory)
@@ -1196,7 +1197,6 @@ _CLASSDEF(TSoundPlayer)
 _CLASSDEF(TSprite)
 _CLASSDEF(TSpriteList)
 _CLASSDEF(TStatPane)
-_CLASSDEF(TStaminaBar)
 _CLASSDEF(TStream)
 _CLASSDEF(TSurface)
 _CLASSDEF(TChunkCache)

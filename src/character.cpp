@@ -16,7 +16,6 @@
 #include "gameoptions.h"
 #include "multi.h"
 #include "animation.h"
-#include "statusbar.h"
 #include "dialog.h"
 #include "effect.h"
 #include "textbar.h"
@@ -1419,24 +1418,37 @@ void TCharacter::RestoreHealth()
     SetHealth(MaxHealth());
 }
 
-// REVSYNC: TCharacter::GetFieldText = retail 0x004d5260 (vtable +0xc8).
-// "armor" is ArmorValue(), plus for the main player its DmgResMisc (vtable
-// +0x260; spells such as STATLINE DmgResMisc 4 raise it) and the armor of
-// the effects on it (0x005407d0, the +0x134 of each object in the
-// character's list at +0x170) -- that list isn't in the port yet.
-// "attackpct", "defensepct", "damage" and "stealth" are combat formulas
-// over getters not yet identified in the port; they answer "no such field".
+// REVSYNC: TCharacter::GetFieldText = retail 0x004d5260 (vtable +0xc8). The
+// stat sheet's character figures, over this character's spells
+// (SpellManager, retail +0x170: GetDefense 0x005407d0, GetOffense
+// 0x00540820):
+//   armor       ArmorValue; the main player adds his DmgResMisc and his
+//               spells' defense
+//   attackpct   the player: his spells' offense + LuckMod + Offense (Offense
+//               counts the spells again). Anyone else: his Offense + LuckMod
+//               less the player's Defense, LuckMod and DmgResMisc and --
+//               retail's slip -- his own spells' defense, not the player's
+//   defensepct  the player: his spells' defense + LuckMod + Defense +
+//               DmgResMisc. Anyone else: his Defense + LuckMod less the
+//               player's Offense, LuckMod and (the same slip) his own spells'
+//               offense
+//   damage      WeaponDamage scaled by DamageMod %, then for a player's knife,
+//               sword or axe by EdgeBonus % (retail calls the player-only slot
+//               0x3d4 on any character; the port asks only a player)
+//   stealth     StealthMod
+// Without a main player, attackpct and defensepct take the player's formula.
 bool TCharacter::GetFieldText(const char *field, char *buf, int32_t buflen)
 {
     if (!field || !buf || buflen <= 0)
         return false;
 
+    const bool versusplayer = Player && this != Player;
     int32_t value = 0;
     if (stricmp(field, "armor") == 0)
     {
         value = ArmorValue();
         if (this == Player)
-            value += GetObjStat(CHRRESIST_FIRST + CHRRESIST_MISC);
+            value += Player->DmgResMisc() + SpellManager.GetDefense();
     }
     else if (stricmp(field, "maxhealth") == 0)
         value = MaxHealth();
@@ -1444,9 +1456,22 @@ bool TCharacter::GetFieldText(const char *field, char *buf, int32_t buflen)
         value = MaxFatigue();
     else if (stricmp(field, "maxmana") == 0)
         value = MaxMana();
-    else if (stricmp(field, "attackpct") == 0 || stricmp(field, "defensepct") == 0 ||
-             stricmp(field, "damage") == 0 || stricmp(field, "stealth") == 0)
-        return false;
+    else if (stricmp(field, "attackpct") == 0)
+        value = versusplayer ? Offense() + LuckMod() - Player->Defense() - Player->LuckMod() - Player->DmgResMisc()
+                                   - SpellManager.GetDefense()
+                             : SpellManager.GetOffense() + LuckMod() + Offense();
+    else if (stricmp(field, "defensepct") == 0)
+        value = versusplayer ? Defense() + LuckMod() - Player->Offense() - Player->LuckMod() - SpellManager.GetOffense()
+                             : SpellManager.GetDefense() + LuckMod() + Defense() + DmgResMisc();
+    else if (stricmp(field, "damage") == 0)
+    {
+        value = (DamageMod() + 100) * WeaponDamage() / 100;
+        const int32_t weapon = WeaponType();
+        if (ObjClass() == OBJCLASS_PLAYER && (weapon == WT_KNIFE || weapon == WT_SWORD || weapon == WT_AXE))
+            value = (static_cast<TPlayer *>(this)->EdgeBonus() + 100) * value / 100;
+    }
+    else if (stricmp(field, "stealth") == 0)
+        value = StealthMod();
     else
         return TComplexObject::GetFieldText(field, buf, buflen);
 
@@ -2130,6 +2155,11 @@ int32_t TCharacter::ResolveAttack(TActionBlock* ab, int32_t bits)
 // frequency. The player isn't told.
 void TCharacter::SignalAttack(TObjectInstance* actor, TObjectInstance* target, int32_t flag)
 {
+    if (signalAttackSeam)
+    {
+        signalAttackSeam(this, actor, target, flag);
+        return;
+    }
     if (target != this || InteractiveLocked() || objclass == OBJCLASS_PLAYER || !actor)
         return;
     TCharacter* attacker = static_cast<TCharacter*>(actor);
@@ -2458,6 +2488,9 @@ int32_t TCharacter::ResolveCombatMove(TActionBlock* ab, int32_t bits)
     return ResolveCombat(ab, bits);
 }
 
+// REVSYNC: TCharacter::ResolveBowAim @ 0x004c80c0 -- hold still and turn to
+// the aim; done once a shot is called for and the facing is there. The
+// root's and the doing block's angles follow the aim.
 int32_t TCharacter::ResolveBowAim(TActionBlock* ab, int32_t bits)
 {
     Halt(); // Make sure there's no movement
@@ -2467,43 +2500,68 @@ int32_t TCharacter::ResolveBowAim(TActionBlock* ab, int32_t bits)
 
   // Do turning
     AdvanceAngles(ab->angle, ab->angle, ab->turnrate);
+    root->moveangle = doing->moveangle = ab->angle;
+    root->angle = doing->angle = ab->angle;
 
     return COM_EXECUTING; // Allow to loop indefinitely until cancelled
 }
 
+// REVSYNC: TCharacter::ResolveBowShoot @ 0x004c8130 -- a player's queued
+// shots, one when the last is more than BOWWAIT ticks old: facing the aim,
+// an arrow of the equipped ammo's type flies from ARROWPOS (turned with the
+// facing) at ARROWSPEED, his; when it is made, one ammo leaves the
+// inventory (the slot is emptied with the last) and "bowshoot1".."6"
+// plays. Executing while shots are queued, done after; others shoot nothing.
 int32_t TCharacter::ResolveBowShoot(TActionBlock* ab, int32_t bits)
 {
-    // generate a new arrow and fire it
-    if (ab->firsttime)
+    if (ObjClass() != OBJCLASS_PLAYER)
+        return COM_DONE;
+    auto* player = static_cast<TPlayer*>(this);
+    const bool due = PlayScreen.GameFrame() - lastbowshot > chardata->bowwait;
+    if (bowshots > 0 && due)
     {
-        Face(ab->angle);
+        // Retail leaves a multiplayer client's arrow to the server; the
+        // network game isn't ported, so this is always the one shooting.
+        if (TObjectInstance* ammo = player->GetEquip(EQ_AMMO))
+        {
+            SetRotateZ(ab->angle & 255);
+            SetMoveAngle(ab->angle);
 
-        SObjectDef def;
-        memset(&def, 0, sizeof(SObjectDef));
-        def.objclass = OBJCLASS_AMMO;
-        def.objtype = AmmoClass.FindObjType("Arrow3D");
-        def.flags = OF_WEIGHTLESS;
-        GetPos(def.pos);
+            SObjectDef def{};
+            def.objclass = OBJCLASS_AMMO;
+            def.objtype = AmmoClass.FindObjType(ammo->GetName());
+            def.flags = OF_WEIGHTLESS;
+            def.pos = pos;
+            S3DPoint offset;
+            ConvertToVector((GetFace() + ConvertToFacing(chardata->arrowpos)) & 255, ::Distance(chardata->arrowpos),
+                            offset);
+            def.pos.x += offset.x;
+            def.pos.y += offset.y;
+            def.pos.z += chardata->arrowpos.z;
+            def.level = MapPane.GetMapLevel();
+            ConvertToVector(GetFace(), chardata->arrowspeed << 16, def.vel);
+            def.facing = GetFace();
+            // No arrow made (or not an AMMO one): no ammo spent, no sound.
+            TObjectInstance* arrow = MapPane.GetInstance(MapPane.NewObject(&def));
+            if (arrow && arrow->ObjClass() == OBJCLASS_AMMO)
+            {
+                static_cast<TAmmo*>(arrow)->SetShooter(this);
+                // (Retail then adds it to the map, 0x00451090: NewObject has.)
 
-        S3DPoint shootpos;
-        ConvertToVector(GetFace(), ::Distance(chardata->arrowpos), shootpos);
-        shootpos.z = chardata->arrowpos.z;
-        def.pos += shootpos;
+                const int32_t left = ammo->Amount();
+                DeleteFromInventory(ammo->GetName(), 1);
+                if (left == 1)
+                    player->Equip(nullptr, EQ_AMMO);
 
-        def.level = MapPane.GetMapLevel();
-        ConvertToVector(GetFace(), chardata->arrowspeed * ROLLOVER, def.vel);
-        def.facing = GetFace();
-
-        MapPane.NewObject(&def);
-
-        TObjectInstance* arrow = FindObjInventory(OBJCLASS_AMMO, AT_ARROW);
-        if (arrow)
-            DeleteFromInventory(arrow->GetName(), 1);
-
-        PlayWave("arrow");
+                char sound[] = "bowshoot*";
+                sound[8] = char('1' + random(0, 5));
+                PlayAt(sound, pos);
+            }
+        }
+        lastbowshot = PlayScreen.GameFrame();
+        bowshots--;
     }
-
-    return 0;
+    return bowshots <= 0 ? COM_DONE : COM_EXECUTING;
 }
 
 int32_t TCharacter::ResolveLeap(TActionBlock* ab, int32_t bits)
@@ -3704,24 +3762,65 @@ bool TCharacter::FollowChar(TObjectInstance* inst)
     return false;
 }
 
-bool TCharacter::Pickup(TObjectInstance* inst)
+// The pickup line retail builds in 0x004cfef0 (see Pickup).
+static std::string PickupLine(TObjectInstance* inst)
 {
-    if (!inst || !inst->IsInventoryItem())
+    const std::string name = ShownName(inst->GetTypeName());
+    const char* verb = DialogList.GetLine("CONTPICKUP");
+    const int32_t objclass = inst->ObjClass();
+    char line[256];
+
+    if (objclass == OBJCLASS_MONEY || objclass == OBJCLASS_AMMO)
+    {
+        const bool money = objclass == OBJCLASS_MONEY;
+        const char* full = money ? "FULLMONEYPICKUP" : "FULLAMMOPICKUP";
+        const char* reversed = money ? "FULLMONEYPICKUPREV" : "FULLAMMOPICKUPREV";
+        const int32_t amount = inst->Amount();
+        if (DialogList.FindLine(full) >= 0)
+            snprintf(line, sizeof(line), DialogList.GetLine(full), amount, name.c_str());
+        else if (DialogList.FindLine(reversed) >= 0)
+            snprintf(line, sizeof(line), DialogList.GetLine(reversed), name.c_str(), amount);
+        else
+            snprintf(line, sizeof(line), "%i %s %s.", amount, name.c_str(), verb);
+    }
+    else if (DialogList.FindLine("FULLCONTPICKUP") >= 0)
+        snprintf(line, sizeof(line), DialogList.GetLine("FULLCONTPICKUP"), name.c_str());
+    else
+        snprintf(line, sizeof(line), "%s %s.", name.c_str(), verb);
+    return line;
+}
+
+// REVSYNC: Pickup @ 0x004cfef0 -- `to` (this character when null) takes the
+// item into its inventory (AddToInventory 0x0046f3d0, vtable 0x58);
+// "CARRYFULL2" on the text bar when it can't. The main player is told what
+// it picked up first: money (class 8) and ammo (21) with their amount
+// (FULLMONEYPICKUP / FULLAMMOPICKUP with amount and name, else their ...REV
+// form with name and amount, else "%i %s %s." with CONTPICKUP), anything
+// else by name (FULLCONTPICKUP, else "%s %s."). The shipped english.def has
+// only CONTPICKUP ("Picked up"): "Short Sword Picked up.".
+// Not ported: the multiplayer request (0x005845c0 / 0x00584500), the item's
+// class sound (0x00473a10), and the item's vtable 0x144 hook (empty in the
+// base). The port's AddToInventory doesn't take the item off the map, so it
+// leaves here and comes back if it doesn't fit (retail's stayed put).
+bool TCharacter::Pickup(TObjectInstance* inst, TObjectInstance* to)
+{
+    if (!inst || !inst->IsInventoryItem() || inst == this)
         return false;
+    if (!to)
+        to = this;
+
+    if (this == Player)
+        TextBar.Print("%s", PickupLine(inst).c_str());
 
     inst->RemoveFromMap();
-    if (!Inventory.GetContainer()->AddToInventory(inst))
-        TextBar.Print("Can't carry any more.");
-
-/*  
-    if (!inst || !inst->IsInventoryItem())
-        return;
-
-    desired = new TActionBlock("pickup");
-    desired->obj = inst;*/
-
+    if (!to->AddToInventory(inst))
+    {
+        inst->AddToMap();
+        TextBar.Print("%s", DialogList.GetLine("CARRYFULL2"));
+    }
     return true;
 }
+
 
 bool TCharacter::Pull(TObjectInstance* inst)
 {
@@ -3933,27 +4032,43 @@ void TCharacter::StopTalking()
     ForceCommandDone();
 }
 
-// Begins drawing bow or crossbow
+// REVSYNC: TCharacter::DrawBow @ 0x004d0aa0 -- start aiming, in the bow
+// root and not aiming yet, alive and not held in an interactive move. A
+// player needs ammunition: an arrow in the inventory, which is equipped when
+// the ammo slot is empty. A walk or step stops first; then "bowaim"
+// (interrupting, from frame 20) at the facing is desired. Retail's network
+// notice (0x0057d9d0) is for a multiplayer game.
 bool TCharacter::DrawBow()
 {
-    if (!IsBowMode() || IsBowDrawn() || !FindObjInventory(OBJCLASS_AMMO, AT_ARROW))
+    if (!IsBowMode() || IsBowDrawn() || Health() <= 0 || InteractiveLocked())
         return false;
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        auto* player = static_cast<TPlayer*>(this);
+        const bool hasammo = FindObjInventory(OBJCLASS_AMMO, AT_ARROW) != nullptr;
+        if (!player->GetEquip(EQ_AMMO))
+            player->Equip(FindObjInventory(OBJCLASS_AMMO, AT_ARROW), EQ_AMMO);
+        if (!hasammo)
+            return false;
+    }
 
-    if (IsMoving())
+    if (doing && (doing->action == ACTION_MOVE || doing->action == ACTION_COMBATMOVE ||
+                  doing->action == ACTION_BOWMOVE))
         Stop();
 
-    TActionBlock* ab = new TActionBlock(StName(root->name, "aim"), ACTION_BOWAIM);
+    auto* ab = new TActionBlock("bowaim", ACTION_BOWAIM);
     ab->interrupt = true;
     ab->angle = ab->moveangle = GetFace();
+    ab->frame = 20;
     SetDesired(ab);
-
     return true;
 }
 
-// Causes character to aim at given angle before shooting bow
+// REVSYNC: TCharacter::AimBow @ 0x004d0c70 -- turn the drawn bow toward
+// `angle` (nothing once the shot is on its way), the turn rate from how far.
 bool TCharacter::AimBow(int32_t angle)
 {
-    if (!IsBowMode() || !IsBowDrawn())
+    if (!IsBowMode() || !IsBowDrawn() || Health() <= 0 || InteractiveLocked())
         return false;
 
     if (doing->stop)    // No more aiming if arrow was shot
@@ -3966,24 +4081,32 @@ bool TCharacter::AimBow(int32_t angle)
     return true;
 }
 
+// REVSYNC: 0x004d0dc0
 bool TCharacter::AimBowLeft()
 {
     return AimBow((GetFace() - chardata->bowaimspeed) & 255);
 }
 
+// REVSYNC: 0x004d0de0
 bool TCharacter::AimBowRight()
 {
     return AimBow((GetFace() + chardata->bowaimspeed) & 255);
 }
 
-// Shoots bow or crossbow
+// REVSYNC: TCharacter::ShootBow @ 0x004d0e00 -- loose an arrow at `angle`:
+// the aim stops (after its pivot), "bowshoot" is desired and one more shot
+// is queued for ResolveBowShoot, which keeps the pace (BOWWAIT). An idle
+// player (state bit 2) is idle no more.
 bool TCharacter::ShootBow(int32_t angle)
 {
-    if (!IsBowMode() || !IsBowDrawn())
+    if (!IsBowMode() || !IsBowDrawn() || Health() <= 0 || InteractiveLocked())
         return false;
-
-    if (PlayScreen.GameFrame() - lastbowshot <= chardata->bowwait)
-        return false;
+    if (ObjClass() == OBJCLASS_PLAYER)
+    {
+        auto* player = static_cast<TPlayer*>(this);
+        if (player->PlayerState() & 2)
+            player->SetPlayerState(player->PlayerState() & ~2);
+    }
 
   // Inform aim animation that it should stop (will wait for pivot though)
     doing->stop = true;
@@ -3992,17 +4115,14 @@ bool TCharacter::ShootBow(int32_t angle)
     doing->turnrate = MAKETURNRATE(absdiff);
 
   // Queue the shoot action (after pivot)
-    TActionBlock* ab = new TActionBlock(StName(root->name, "shoot"), ACTION_BOWSHOOT);
+    auto* ab = new TActionBlock("bowshoot", ACTION_BOWSHOOT);
     ab->angle = ab->moveangle = angle;
     SetDesired(ab);
-
-  // Save the bow shot timestamp so we don't shoot too fast
-    lastbowshot = PlayScreen.GameFrame();   
-
+    bowshots++;
     return true;
 }
 
-// Is character aiming bow
+// REVSYNC: TCharacter::IsBowDrawn @ 0x004d1050 -- doing the bow root's "aim"
 bool TCharacter::IsBowDrawn()
 {
     if (!IsBowMode())
@@ -5030,6 +5150,9 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
 
     if (!target)
         target = FindClosestEnemy(GetFace(), 32);
+
+  // REVSYNC: 0x004d3d2d -- a fight starting commits the player's typed line.
+    TextBar.CommitInput();
 
     if (root->action == action)
         return SetFighting(target);

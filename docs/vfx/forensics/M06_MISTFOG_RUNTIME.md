@@ -246,3 +246,70 @@ call; other memory writes remain tracked. Nine before/after original color/depth
 hashes match and software raster/projection tests pass. The measured MistFog
 25-puff pixel-pair median falls from805.24ms to390.26ms. This changes memory
 tracking performance, not original rendering instructions or pixel behavior.
+
+## 2026-10-10 full native lighting and actual Metal closure candidate
+
+The new `mistfog_visual_reference.py` executes all 25 original Render packets,
+original owner/FIX and relative RenderObject matrix composition, and the original
+normal-bearing vertex Illuminate/projector/RGB565 raster. Eleven samples cover
+ticks 2 through 241 and puff resets, each with exact warm color/depth replay.
+The controlled scene uses ambient32 white, yielding source ambient38/255 and
+directional(1,1,1), no point lights. Original per-vertex RGB5 is29. A dark
+ambient8/no-directional control gives RGB5 zero and an entirely black image;
+ambient96/dir1 saturates RGB5 at31. The ordinary declared setting already gives
+visible original pixels. These do not explain or certify the historical blank
+Pit/DOSBox captures; their scene/visibility gate remains separate.
+
+Two actual-source defects were corrected without changing authored geometry,
+texture, count, gravity, growth, life, or positions:
+
+- Software-policy MistFog now submits its authored normals through the existing
+  helper mesh path, using original RGB565 lighting/modulation, source positive
+  face culling and additive/depth policy. Its material diffuse formerly drove
+  an unlit filtered quad. The common-world geometry Z stretch is removed only
+  from the normal matrix, matching the already verified shared owner contract.
+  Other rendering policies and debug controls retain the quad fallback. The
+  standalone registration supplies the mesh in its world callback; the normal
+  map replacement component already submits within that pass.
+- The four raw `rand()` calls now use existing `GameRand()` and literal32767.
+  The two `random()` calls already used the shipped MSVC generator; mixing
+  those with host libc rand split the actual stream. The old compiled proof
+  replayed native inputs and could not certify this live API binding. Previously
+  the live initialization trace counted50 game draws versus150 native draws.
+  The corrected live trace matches all six native checkpoints (150,150,156,
+  168,168,180); the native-replay state proof again passes all241 cases through
+  reset cycles. No random value or lifecycle phase is selected to fit an image.
+
+`mistfog_visual_review.py` verifies the exact240-frame actual Metal scenario,
+source-light log, six available live RNG checkpoints, and every frozen selected
+image hash. It builds11 same-phase full-effect pairs. Remaining common-projector
+and framebuffer precision differences are not exact-pixel acceptance. The
+40-frame actual map review additionally has40 nonempty/distinct raw images,
+exact ID180674ba and one normal replacement component; no standalone fallback
+is involved. Both GPU runs exit cleanly. The full build and241-state native
+probe pass; the retained state/quad-carrier probe explicitly bypasses the new
+software helper because its shim tests the existing modern fallback. Actual
+helper output is tested by the separate original/Metal pair.
+
+Private evidence root:
+`/Users/benjamincooley/RevenantRetailLab/research/vfx-wide-20261010/hard-astra/mistfog-visual/`.
+`native/manifest.json` pins the original inputs/matrices/colors and11 samples;
+`state-final/manifest.json` pins241 native-replayed production states;
+`metal-final/manifest.json` pins the actual240-frame process and scenario;
+`review/manifest.json` pins all11 pairs, six live RNG checks and source lighting;
+`review/contact.png` is the review panel. `map-runtime/MistFog/manifest.json`
+pins the actual normal-map submission movie. `metal-before` retains the old
+unlit/host-RNG control; `metal-after` isolates the lighting correction before
+fixing live RNG. These are historical controls, not the final comparison.
+Overall appearance approval is a separate root review; no full-map/natural
+caller/device or exact-pixel credit is implied here.
+
+Root independently reviewed all11 final phases and approved the scoped overall
+25-puff form/color/size and phase progression under the recorded source-light
+configuration. Frozen private `mistfog-visual/root-approval.json` SHA-256:
+`6bd421033eab2ef67c9a7753fa5dca16847a87352072a351c20407fa71cf9a9f`.
+It pins every sample pair, `review/manifest.json` SHA-256
+`bd1ce175bd52de07fb24da152f272834fa312ee178c8e437c29129dc134ba6d0`,
+and actual Metal binary SHA-256
+`1db58a485b8dc57e4638c42abfbbb8ea8f25fd4774efe30b556de3e77e4bf1cc`.
+This approval retains all exact-pixel/natural-caller/full-map/device limits above.

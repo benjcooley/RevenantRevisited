@@ -211,7 +211,7 @@ struct vs_in {
     float4 color        : TEXCOORD4;
     float  debug_mode   : TEXCOORD5;
     float  light_mode   : TEXCOORD6;
-    float  retail_texture : TEXCOORD7;
+    float3 retail_metadata : TEXCOORD7;
 };
 struct vs_out {
     float4 pos      : SV_Position;
@@ -235,11 +235,20 @@ vs_out main_vs(vs_in i) {
     float S = wx - wy;
     float T = 0.5 * sum - wz * 0.867;
     float scene_z_wu = camz.z - 0.867 * sum - 0.5 * wz;
-    float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
+    bool native_projection = i.retail_metadata.y > 0.5;
+    if (native_projection) {
+        float native_z = wz - i.retail_metadata.z;
+        S = 1.0101525783538818 * (wx - wy);
+        T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
+        scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
+    }
+    bool prelit_rgba5 = i.retail_metadata.x > 4.5;
+    float scene_z_n  = ((prelit_rgba5 ? i.uv.x : scene_z_wu) - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
-    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
     float spy = vp.y + T * persp_scale;
+    if (prelit_rgba5 && native_projection) { spx = trunc(spx) + 0.5; spy = trunc(spy) + 0.5; }
     vs_out o;
     o.pos.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
     o.pos.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
@@ -254,7 +263,7 @@ vs_out main_vs(vs_in i) {
     o.color = i.color;
     o.lit   = lit;
     o.debug = i.debug_mode;
-    o.retail_texture = i.retail_texture;
+    o.retail_texture = i.retail_metadata.x;
     return o;
 }
 )HLSL";
@@ -272,6 +281,14 @@ struct vs_out {
 };
 float4 main_ps(vs_out i) : SV_Target {
     int mode = int(i.debug + 0.5);
+    if (i.retail_texture > 4.5) {
+        // Original dynamic untextured RGBA5: interpolate, truncate, lookup.
+        float a5 = floor(clamp(i.color.a, 0.0, 31.0) + 0.00001);
+        float alpha = (a5 + 1.0) / 32.0;
+        float3 channels = floor(clamp(i.color.rgb, 0.0, 31.0) + 0.00001) * float3(1.0, 2.0, 1.0);
+        float3 source = floor(channels * alpha) / (alpha * float3(31.0, 63.0, 31.0));
+        return float4(source, alpha);
+    }
     float4 texel = atlas.Sample(smp, i.uv);
     if (i.retail_texture > 0.5) {
         uint width, height; atlas.GetDimensions(width, height);
@@ -279,12 +296,28 @@ float4 main_ps(vs_out i) : SV_Target {
         int2 xy = min(int2(floor(frac(i.uv) * float2(size))), size - int2(1,1));
         texel = atlas.Load(int3(xy,0));
     }
+    if (i.retail_texture > 2.5 && i.retail_texture < 3.5) {
+        float4 nibble = floor(texel * 15.0 + 0.5);
+        texel = float4(nibble.rgb * float3(2.0/31.0, 4.0/63.0, 2.0/31.0),
+                       (nibble.a + 1.0) / 16.0);
+    }
     float4 c;
     if      (mode == 1) c = i.color;
     else if (mode == 2) c = texel;
     else if (mode == 3) { c = texel; c = float4(1,1,1,c.a); }
-    else                c = texel * i.color;
-    c.rgb *= i.lit;
+    else if (i.retail_texture > 3.5) {
+        // Original RGB565 litadd: RGB5 lookup, then additive source LSB mask.
+        float3 source5 = floor(texel.rgb * float3(31.0, 63.0, 31.0) + 0.5);
+        source5.g = floor(source5.g * 0.5);
+        float3 light5 = floor(clamp(i.color.rgb, 0.0, 1.0) * 31.0 + 0.5);
+        float3 modulated = floor(source5 * light5 / 31.0);
+        modulated.rb = floor(modulated.rb * 0.5) * 2.0;
+        modulated.g *= 2.0;
+        c = float4(modulated / float3(31.0, 63.0, 31.0), texel.a * i.color.a);
+    } else {
+        c = i.retail_texture > 2.5 ? texel : texel * i.color;
+    }
+    if (i.retail_texture < 2.5) c.rgb *= i.lit;
     if (c.a < 0.002) discard;
     return c;
 }

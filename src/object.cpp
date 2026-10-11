@@ -1894,6 +1894,24 @@ void TObjectInstance::OffScreen()
 // (potions are the prime example; see 3dimagebody.h's invanim slot) were
 // invisible in the port until this fallback landed because the previous
 // pass-through only consulted GetInvImage.
+bool SInvIcon::operator==(const SInvIcon& other) const
+{
+    if (count != other.count)
+        return false;
+    for (int32_t i = 0; i < count; ++i)
+        if (parts[i].image != other.parts[i].image || parts[i].x != other.parts[i].x
+            || parts[i].y != other.parts[i].y)
+            return false;
+    return true;
+}
+
+SInvIcon TObjectInstance::InventoryIcon()
+{
+    SInvIcon icon;
+    icon.Add(InventoryImage(), 0, 0);
+    return icon;
+}
+
 PTBitmap TObjectInstance::InventoryImage()
 {
     if (!imagery)
@@ -1906,11 +1924,14 @@ PTBitmap TObjectInstance::InventoryImage()
     return nullptr;
 }
 
+// REVSYNC: IsInventoryItem @ 0x00477c00 (vtable +0x134) -- the OF_INVENTORY
+// flag the constructor sets for the item classes, not "has an inventory
+// image" (1998). Characters have an icon in every state since the imagery's
+// icon falls back to state 0 (0x0040ce60), so the image test made every NPC
+// an item: the hand cursor, and a click picked them up instead of talking.
 bool TObjectInstance::IsInventoryItem()
 {
-    // Cheap: reuse InventoryImage()'s eligibility (matches retail's "has a
-    // baked invitem OR an invanim" semantics).
-    return InventoryImage() != nullptr;
+    return (flags & OF_INVENTORY) != 0;
 }
 
 void TObjectInstance::GetFacingBoundBox(int32_t &nx, int32_t &ny, int32_t &nsx, int32_t &nsy)

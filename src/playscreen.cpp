@@ -36,7 +36,10 @@
 #include "3dimage.h"
 #include "area.h"
 #include "automap.h"
+#include "bottombar.h"
 #include "buysell.h"
+#include "inventory.h"
+#include "spellpane.h"
 #include "consoleexec.h"
 #include "cursor.h"
 #include "debugui.h"
@@ -61,14 +64,15 @@
 #include "runtimemode.h"
 #include "sector.h"
 #include "spell.h"
+#include "statusbar.h"
 #include "textbar.h"
 #include "time.h"
 #include "uidragstate.h"
 #include "uiequiptest.h"
 #include "uihudtest.h"
-#include "uiquickspelltest.h"
 #include "uisidebartest.h"
-#include "uispellbooktest.h"
+#include "spellbook.h"
+#include "statpane.h"
 
 #include <vector>
 
@@ -273,7 +277,12 @@ int32_t ConvertMinutesToFrames(int32_t minutes)
 // * Construction / lifetime                                               *
 // *************************************************************************
 
-TPlayScreen::TPlayScreen() : ingamemenu(std::make_unique<TInGameMenu>(*this)) {}
+TPlayScreen::TPlayScreen()
+    : ingamemenu(std::make_unique<TInGameMenu>(*this))
+    , statusbar(std::make_unique<TPlyrStatusBar>())
+    , bottombar(std::make_unique<TBottomBarPane>())
+{
+}
 TPlayScreen::~TPlayScreen() = default;
 
 bool TPlayScreen::Initialize()
@@ -313,13 +322,6 @@ bool TPlayScreen::Initialize()
 
     EditorLoadState();
 
-    // AutoMap loads automap.dat from resources.rvr and allocates the
-    // MapList / ActiveBuf state every other AutoMap method treats as
-    // required-non-null. Has to run after resources.rvr is mounted
-    // (InitGlobals step pre-condition).
-    if (!AutoMap.Initialize())
-        log_warn("[playscreen] AutoMap.Initialize failed; the automap will be empty");
-
     // Retail TPlayScreen::Initialize adds the dialog pane right after the
     // map pane; the screen's pane pass pulses it after the world each tick.
     if (!DialogPane.Initialize())
@@ -342,18 +344,95 @@ bool TPlayScreen::Initialize()
         log_warn("[playscreen] spell.def failed to load; no spells");
 
     SetUIHudCursorOverlayEnabled(false);
-    SetUIQuickSpellSyntheticStateEnabled(false);
     SetUISidebarSyntheticStateEnabled(false);
     g_playHudInitialized = InitializeUIHudMode();
     log_info("[playscreen] reconstructed HUD init = %s",
              g_playHudInitialized ? "OK" : "FAIL");
 
     // REVSYNC: 0x0047abf8 / 0x0047adab -- the text bar, added after the side
-    // tabs and before the player status bar, so it draws over the dialog
-    // entries. After the HUD so it anchors to the HUD's map view.
+    // tabs, so it draws over the dialog entries, then the player status bar.
+    // After the HUD, so they anchor to the HUD's map view.
     if (!TextBar.Initialize())
         log_error("[playscreen] Trouble initializing text bar");
     AddPane(&TextBar);
+    if (!statusbar->Initialize())
+        log_error("[playscreen] Trouble initializing the status bar");
+    AddPane(statusbar.get());
+
+    // REVSYNC: 0x0047ac72 -- the bottom bar, which opens with the HUD's
+    // lower panel along the bottom of the map view (UpdateBottomBar).
+    if (bottombar->Initialize())
+    {
+        AddPane(bottombar.get());
+        bottombar->Hide();
+        UpdateBottomBar();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the bottom bar");
+
+    // REVSYNC: 0x0047ab8f -- the inventory, in the side panel's lower slot
+    // while the side panel shows it (UpdateSidePanes). Its container is the
+    // main player's (BindMainPlayerToScreen, below).
+    if (Inventory.Initialize())
+    {
+        AddPane(&Inventory);
+        Inventory.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the inventory");
+
+    // REVSYNC: 0x0047a660 ("Trouble initializing spell pane") -- the spell
+    // pane, in the same slot while the side panel shows the spell tab.
+    if (SpellPane.Initialize())
+    {
+        AddPane(&SpellPane);
+        SpellPane.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the spell pane");
+
+    // The stats (0x00546b50, after the spell pane), in the side panel's upper
+    // slot while the side panel shows the stats tab: the main player's, or an
+    // examined object's.
+    if (StatPane.Initialize())
+    {
+        AddPane(&StatPane);
+        StatPane.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the stat pane");
+
+    // The spell book (0x005449e0, after the stats), in the side panel's
+    // upper slot while the side panel shows the book tab. Its rows are the
+    // main player's known spells.
+    if (SpellBook.Initialize())
+    {
+        AddPane(&SpellBook);
+        SpellBook.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the spell book");
+
+    // REVSYNC: 0x0047a660 -- the automap, in the same slot while the side
+    // panel shows the map tab. It loads AutoMap.dat from resources.rvr,
+    // mounted by now. The main player's explored area comes with
+    // BindMainPlayerToScreen.
+    if (AutoMap.Initialize())
+    {
+        AddPane(&AutoMap);
+        AutoMap.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the automap");
+
+    // The session made the main player under the loading screen: the panes
+    // show it now that they exist.
+    PlayerManager.BindMainPlayerToScreen();
 
     // The HUD starts as the loaded game left it (building the HUD resets it).
     if (Player)
@@ -571,7 +650,7 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
     sec->AddObject(oi);
 
     // SetMainPlayer fires UI side effects (CenterOnObj / RefreshEquip /
-    // Inventory / HealthBar / StaminaBar) when CurrentScreen == &PlayScreen.
+    // Inventory) when CurrentScreen == &PlayScreen.
     // We are inside TPlayScreen::Initialize -- CurrentScreen is already
     // set, but the UI panes those calls touch are not yet initialized,
     // and one of them hangs. Clear CurrentScreen for the duration of
@@ -656,10 +735,23 @@ void TPlayScreen::Close()
     BuySellPane.Close();
     buysellrequest = false;
     drawerclose    = false;
+    RemovePane(&SpellBook);
+    SpellBook.Close();
+    RemovePane(&StatPane);
+    StatPane.Close();
+    RemovePane(&SpellPane);
+    SpellPane.Close();
+    RemovePane(&Inventory);
+    Inventory.Close();
+    RemovePane(bottombar.get());
+    bottombar->Close();
+    RemovePane(statusbar.get());
+    statusbar->Close();
     RemovePane(&TextBar);
     TextBar.Close();                        // REVSYNC: 0x0047b30c
     RemovePane(&DialogPane);
     DialogPane.Close();
+    RemovePane(&AutoMap);
     AutoMap.Close();
     if (g_playHudInitialized)
     {
@@ -776,8 +868,11 @@ void TPlayScreen::Update()
     // world doesn't hold them (0x0047bd20).
     GameFlow.Session().ProcessRequests();
 
-    // The bottom drawer follows its requests (the shop opening or closing).
+    // The bottom drawer follows its requests (the shop opening or closing),
+    // the bottom bar the HUD's lower panel, the side panes the side panel.
     UpdateDrawer();
+    UpdateBottomBar();
+    UpdateSidePanes();
 
     // REVSYNC: 0x0048fda0 / 0x0052b9f0 / 0x0047c2c0 -- under a MODAL_PAUSE
     // modal (the single-player in-game menu and its dialogs) only the modal
@@ -1029,6 +1124,60 @@ void TPlayScreen::CloseBuySellDrawer()
     drawer         = EDrawer::Hud;
     buysellrequest = false;
     log_info("[buysell] the shop closes");
+}
+
+// REVSYNC: the drawer half of Pulse 0x0047b4d0, mode 2 -- the bottom bar
+// shows while the HUD's lower panel is open and the shop doesn't hold the
+// drawer, along the bottom of the map view and as wide as it: the display
+// less the side panel (retail's drawer pane hands its rect on in mode 2,
+// 0x0052da60 -> TBottomBarPane::SetRect 0x0052c930).
+void TPlayScreen::UpdateBottomBar()
+{
+    if (!bottombar->IsOpen())
+        return;
+    const bool open = drawer == EDrawer::Hud && GetHudState().bottomBarOpen;
+    if (open)
+    {
+        int32_t x = 0, y = 0, w = 0, h = 0;
+        GetMapViewRect(x, y, w, h);
+        bottombar->Place(x, y + h, w);
+    }
+    if (open == bottombar->IsHidden())
+        open ? bottombar->Show() : bottombar->Hide();
+}
+
+// A pane of the side panel, at the display's right edge: the upper slot at
+// the top, the lower slot under its 306 px. Placed and shown while the slot
+// is its, else hidden.
+enum class ESideSlot : int32_t { Upper = 0, Lower = 306 };
+static void PlaceSidePane(TPane& pane, ESideSlot slot, bool shown)
+{
+    if (!pane.IsOpen())
+        return;
+    if (shown)
+    {
+        const int32_t dw = Display.Width() > 0 ? Display.Width() : WIDTH;
+        pane.Resize(dw - pane.GetWidth(), static_cast<int32_t>(slot), pane.GetWidth(), pane.GetHeight());
+        if (pane.WasResized())
+            pane.PaneResized();
+    }
+    if (shown == pane.IsHidden())
+        shown ? pane.Show() : pane.Hide();
+}
+
+// The side panel's rebuilt panes while the side panel is open on theirs:
+// the stats and the spell book in the upper slot; the inventory, the spell
+// pane and the automap in the lower. (The equipment is still the HUD
+// harness's.)
+void TPlayScreen::UpdateSidePanes()
+{
+    const SHudState& hud = GetHudState();
+    const bool open = hud.sidebarState == HUD_SIDEBAR_OPEN;
+    PlaceSidePane(StatPane, ESideSlot::Upper, open && hud.topSlot == HUD_TOP_STATS);
+    PlaceSidePane(SpellBook, ESideSlot::Upper, open && hud.topSlot == HUD_TOP_BOOK);
+    PlaceSidePane(Inventory, ESideSlot::Lower, open && hud.bottomSlot == HUD_BOT_INV);
+    PlaceSidePane(SpellPane, ESideSlot::Lower, open && hud.bottomSlot == HUD_BOT_SPELL);
+    PlaceSidePane(AutoMap, ESideSlot::Lower, open && hud.bottomSlot == HUD_BOT_MAP);
 }
 
 // The shop's rect while the drawer holds it: its clicks and moves are its
@@ -1476,11 +1625,14 @@ static void DrawClosestMonsterOverlay()
 // (matching what TTestScreen does for TestModes::Render); DrawBackground
 // only consumes the redraw flag -- no BITMAP.100 backdrop on the new path.
 // REVSYNC: Pulse @ 0x0047b4d0 -- the world, then the screen's panes
-// (0x0048fda0 at its end).
+// (0x0048fda0 at its end), then what the player explored for the automap
+// (0x0047c224: not while a modal pauses the world).
 void TPlayScreen::Pulse()
 {
     Update();
     TScreen::Pulse();
+    if (!ModalHas(MODAL_PAUSE))
+        AutoMap.RecordTravels();
 }
 void TPlayScreen::Animate(bool /*draw*/)
 {
@@ -1521,6 +1673,12 @@ void TPlayScreen::DrawBackground()
 
 void TPlayScreen::KeyPress(int32_t key, bool down)
 {
+    // REVSYNC: 0x0047c63e -- while the text bar's prompt is open the play
+    // screen takes no keys at all, its panes', Escape and the editor's
+    // included: the typing arrives as characters (TTextBar::CharPress).
+    if (TextBar.IsPrompting())
+        return;
+
     // A load is under way: the panes get the key (the progress popup holds
     // it, when up), the world and the editor nothing.
     if (GameFlow.Session().Loading())
@@ -1629,16 +1787,11 @@ void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
         const SHudState& s = GetHudState();
         if (HandleMouseClickUISidebarModeConsumed(button, x, y))
             return;
-        if (s.bottomBarOpen ||
-            (UIDragState::IsActive() &&
-             UIDragState::Get().source == EDragSource::SpellPane))
-        {
-            HandleMouseClickUIQuickSpellMode(button, x, y);
-        }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseClickUISpellbookMode(button, x, y);
+        TScreen::MouseClick(button, x, y);      // the screen's panes: the bars, the side panes
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
             HandleMouseClickUIEquipMode(button, x, y);
+        if (button == MB_LEFTUP)
+            UIDragState::ReleaseUnclaimed();    // a drag no pane took ends here
         return;
     }
 
@@ -1664,18 +1817,15 @@ void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
         const SHudState& s = GetHudState();
         if (HandleMouseMoveUISidebarModeConsumed(button, x, y))
             return;
-        if (UIDragState::IsActive() &&
-            UIDragState::Get().source == EDragSource::SpellPane)
-        {
-            HandleMouseMoveUIQuickSpellMode(button, x, y);
-            return;
-        }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseMoveUISpellbookMode(button, x, y);
+        if (UIDragState::IsActive())
+            UIDragState::UpdateDrag(x, y);
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
             HandleMouseMoveUIEquipMode(button, x, y);
         if (IsReconstructedHudPoint(x, y) || UIDragState::IsActive())
+        {
+            TScreen::MouseMove(button, x, y);   // the screen's panes, as clicks: the bottom bar, the side panes
             return;
+        }
     }
 
     TScreen::MouseMove(button, x, y);
@@ -1709,8 +1859,13 @@ void TPlayScreen::Command(GAMECOMMAND command)
     case GAMECMD_COMBAT:            // 1: BeginFighting(0, ACTION_COMBAT) / EndFighting
         if (Player)
         {
-            if (Player->IsCombat()) Player->EndCombat();
-            else                    Player->BeginCombat();
+            if (Player->IsCombat())
+                Player->EndCombat();
+            else
+            {
+                TextBar.CommitInput();      // 0x0047d0d5
+                Player->BeginCombat();
+            }
         }
         break;
     case GAMECMD_SIDEPANEL:

@@ -63,7 +63,7 @@ only).
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
 | M1 | action-state core: SetRoot / SetDoing / SetDesired / TryCommand / ForceCommand / UpdateAction | `0x4db2d0` `0x4db340` `0x4db3a0` `0x4db450` (Try) `0x4db4d0` (Force) `0x4db1d0` | `TComplexObject::*` | [~] SetDesired, ForceCommand ported (exercised by M3/M5); own kata open |
-| M1u | the action tick: UpdateAction (stealth reset, sleep, ResolveAction dispatch, the done rule, the fall, TryCommand), ResolveMove, ResolvePivot, ResolveSay, ResetStealthValues, Visibility | `0x4c3260` `0x4c3490` `0x4c5e90` `0x4c8470` `0x4c8400` `0x4cdbb0` `0x4c5aa0` | `TCharacter::UpdateAction` and the resolvers | [x] 255/255 (`combat-update`; six mutations caught) |
+| M1u | the action tick: UpdateAction (stealth reset, sleep, ResolveAction dispatch, the done rule, the fall, TryCommand), ResolveMove, ResolvePivot, ResolveSay, ResetStealthValues, Visibility | `0x4c3260` `0x4c3490` `0x4c5e90` `0x4c8470` `0x4c8400` `0x4cdbb0` `0x4c5aa0` | `TCharacter::UpdateAction` and the resolvers | [x] 259/259 (`combat-update`; six mutations caught; `say.noroot.*`: a root the model lacks, 2026-10-10) |
 | M2 | angle/distance kernels: AngleDiff, ConvertToFacing, Distance, ConvertToVector, object Distance/AngleTo | `0x46ded0` `0x46dc60` `0x46de60` `0x46db20` `0x46ea20` `0x46ea90` | `AngleDiff`, `ConvertToFacing`, `Distance`, `ConvertToVector`, `TObjectInstance::Distance/AngleTo` | [x] 30 batches, every angle pair, ~28k vectors |
 | M3 | combat walking: Go(angle), empty world | `0x4ce350` | `TCharacter::Go(int)` | [x] 762/762 |
 | M4 | combat walking with retargeting (world + sight/hearing seams) | `0x4ce350`, FindCharacters `0x4cd690` | same | [ ] |
@@ -80,10 +80,11 @@ only).
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
 | C1 | CalculateDamage | `0x4c4860` | `TCharacter::CalculateDamage` | [x] 40 cases x 594 inputs (characters; the player's resist/armour slots open) |
-| C2 | Damage (impact / death choice) | `0x4c4950` | `TCharacter::Damage` | [ ] |
-| C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [x] 5143/5143 (`melee-attack-choice`); AI() as a whole is C3b |
+| C2 | Damage (impact / death choice), TObjectInstance::Damage, TPlayer Killed / Died | `0x4c4950` `0x46e970` `0x518ed0` `0x518f90` | `TCharacter::Damage` and its parts | [x] 1137/1137 (`melee-damage`); the floating damage number waits for a post-character overlay (COMBAT_HIT.md §9.2) |
+| C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [x] 5143/5143 (`melee-attack-choice`) |
 | C4 | hit resolution: ResolveAttack → ResolveHit (to-hit, tiers), OnAttacked | `0x4c6dd0` `0x4c62b0` | same | [x] 7855/7855 (`melee-hit`) |
-| C5 | block / dodge / impact / dead resolvers | `0x4d2e30` `0x4d3150` `0x4c74b0` `0x4c7810` `0x4c77a0` | same | [ ] |
+| C5 | block / dodge / impact / dead resolvers, EffectCombatFlash | `0x4d2e30` `0x4d30f0` `0x4d3150` `0x4c74b0` `0x4c7810` `0x4c77a0` `0x4c8500` | same | [x] 2100/2100 (`melee-resolvers`); the eight dodge controls (commands 0x30-0x37) are input work |
+| C3b | the AI as a whole: acquisition, the attack branch, the move branch, the waypoint, AI_PerMonster (non-boss) | `0x4c8b60` `0x4c9b70` | `TCharacter::AI`, `AIAttack`, `AIMove`, `NearestWaypoint`, `AIPerMonster` | [x] 925/925 (`melee-ai`); bosses (Baez, Solifuge, Jhaga, Yhagoro) are BURNDOWN phase H; Wander `0x4c9790` open (M9) |
 | C6 | Pulse: regen, fatigue, poison, chains, death | `0x4c1bb0`, TPlayer `0x518aa0` | `TCharacter::Pulse`, `TPlayer::Pulse` | [ ] |
 | C7 | experience and level-up | `0x51a630` | `AwardKillExp` / `AwardSkillExp` | [ ] |
 
@@ -94,7 +95,7 @@ only).
 | S1 | talismans → spell, quick spell, fizzle | `0x51b5d0` `0x51b7c0` | `TSpellList::GetSpellDataByTalismans`, `TPlayer::HasTalismans` | [x] `spell-lookup` 75, `spell-talismans` 340, `spell-quick` 49 |
 | S2 | cast gates: mana, wait, fail roll | `0x53fe80` (CastByTalismans), `0x4d5c20` | `TSpellManager::Cast*` | [x] 2071/2071 (`spell-cast`) |
 | S3 | spell damage, poison roll | `0x53f560` `0x53f090` | `TSpell::Damage`, `TSpell` ctor | [x] `spell-new` 426, `spell-damage` 1090 |
-| S4 | missiles: flight, hit, damage | `0x510220`, AreaDamage `0x4de3c0` | missile effects | [~] AreaDamage 64/64 (`missile-area`); arrows, the bow and the fireball (S4b–d) are green in the spells worktree, not yet committed |
+| S4 | missiles: flight, hit, damage | `0x510220`, AreaDamage `0x4de3c0` | missile effects | [x] `missile-area` 64 (AreaDamage `0x4de3c0`), `missile-arrow` 119 (TAmmo), `missile-bow` 114 (DrawBow ... ResolveBowShoot), `missile-fireball` 21 cases / 840 ticks; spell lifetimes, RANGEDAMAGE effects and the Iced effect open |
 
 ### D — data
 
@@ -441,6 +442,11 @@ python3 tools/retail_ab/retail_ab.py combat-sequence    # M8
 python3 tools/retail_ab/retail_ab.py combat-input       # M6
 python3 tools/retail_ab/retail_ab.py combat-steps       # M10
 python3 tools/retail_ab/retail_ab.py combat-perceive    # M9b
+python3 tools/retail_ab/retail_ab.py melee-attack-choice   # C3 (melee-hit C4, melee-damage C2,
+                                                           # melee-resolvers C5, melee-ai C3b)
+python3 tools/retail_ab/retail_ab.py spell-cast         # S2 (spell-data D1s; spell-lookup, -talismans,
+                                                        # -quick S1; spell-new, -damage S3)
+python3 tools/retail_ab/retail_ab.py missile-bow        # S4 (missile-area, -arrow, -fireball)
 tools/walktest/walktest.py "<slot dir>" [--pattern sweep|walks|both|none] [--exec "player.goto X Y; ..."]
 python3 tools/retail_ab/retail_ab.py combat-data        # D1, every record field by field
 python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2

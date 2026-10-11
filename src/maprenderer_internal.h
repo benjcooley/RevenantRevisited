@@ -78,6 +78,7 @@ struct SSectorMeshAsset {
     TObjectImagery* imagery_key = nullptr;
     int32_t         objnum = -1;
     int32_t         texslot = -1;
+    int32_t         texture_index = -1; // resolved imagery slot; -1 is untextured
     int32_t         uv_variant = 0;
     MeshHandle      handle = 0;
     int32_t         retail_lighting = 0;
@@ -365,6 +366,7 @@ struct TMapRenderer::Impl
     bool sectorShowObjectLabels = true;
     bool sectorShowGizmos = true;
     bool sectorShowTiles = true;
+    bool sectorShowGroundTiles = true;
     bool sectorShowMeshes = true;
     bool sectorShowMeshLocators = false;
     bool sectorForceMeshPreviewPose = false;

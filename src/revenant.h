@@ -97,9 +97,9 @@ extern bool UnlockImmediately;  // Causes video buffers to be unlocked immediate
 extern bool IsVooDoo;           // True if using a voodoo card
 extern bool IsMMX;              // Has MMX extensions
 extern bool CaptureVideo;       // True when system is capturing video
-extern bool NoAI;               // Turns off monster AI
-extern bool CheatNahkranoth;    // retail 0x00668108: the player's blows land and kill (console "nahkranoth")
-extern bool CheatAlreadyDead;   // retail 0x00668104: nothing hurts the player (console "alreadydead")
+extern bool NoAI;               // Turns off monster AI (retail 0x00668110, the text-bar cheat "dummies")
+extern bool CheatNahkranoth;    // retail 0x00668108: the player's blows land and kill (text-bar cheat "nahkranoth")
+extern bool CheatAlreadyDead;   // retail 0x00668104: nothing hurts the player (text-bar cheat "alreadydead")
 extern bool AutoBeginCombat;    // Automatically begins combat if enemy in range and facing him
 extern bool PlaySpeech;         // Play speech wave files
 extern bool ShowDialog;         // Show dialog text if speech wave is played
@@ -221,8 +221,6 @@ extern TDisplay     Display;            // Display object
 extern TPlayScreen  PlayScreen;         // PlayScreen Object
 extern TLogoScreen  LogoScreen;         // LogoScreen Object
 extern TMapPane     MapPane;            // Main map pane for PlayScreen
-extern THealthBar   HealthBar;          // Character's health
-extern TStaminaBar  StaminaBar;         // Character's fatigue
 extern TInventory   Inventory;          // Inventory of objects
 extern TTextBar     TextBar;            // Info line for player
 extern TMultiCtrlPane   MultiCtrl;      // Multipane control panel (buttons)

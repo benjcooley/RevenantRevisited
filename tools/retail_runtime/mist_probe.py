@@ -36,7 +36,7 @@ def build_port(output,asset,inputs,ticks):
 #undef min
 #undef max
 enum class EFxBlend:uint8_t{Alpha,AdditiveStraight};enum class EFxDepthMode:uint8_t{TestNoWrite};enum class EFxDebugMode:uint8_t{Normal};enum class EFxLightMode:uint8_t{Unlit};
-struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
+struct SQuadDrawItem{bool retail_argb4444=false;float world_pos[4][3]{},uv[4][2]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};TRenderer renderer;TRenderer*Renderer=&renderer;
 struct TObjectImagery{};struct SObjectDef{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
 struct TEffect{World world;TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;int GetFace()const{return 0;}const World&Transform()const{return world;}};
@@ -87,7 +87,11 @@ class MistFixture:
         self.boundaries={0x40dd60:0,0x40e2e0:0,0x40eef0:4,0x4178e0:0,0x417d60:8,0x417b00:0,0x40c960:0,0x40a8f0:24,0x40c9c0:4}
         for address in self.boundaries:self.vm.uc.hook_add(UC_HOOK_CODE,self.external,begin=address,end=address)
         for address in (0x483300,0x48332c):self.vm.uc.hook_add(UC_HOOK_CODE,self.observe_random,begin=address,end=address)
-        self.random=[];self.random_pending=[];self.packets=[];self.software.clear();self.software.checkpoint()
+        self.random=[];self.random_pending=[];self.packets=[]
+        for address,value in ((0x5d7a28,1),(0x66818c,0),(0x5e91c0,0),
+            (0x5e8740,0),(0x5c61ac,1),(0x5e8790,0)):
+            self.vm.put_u32(address,value)
+        self.software.clear();self.software.checkpoint()
 
     def external(self,uc,address,size,user):
         sp=uc.reg_read(UC_X86_REG_ESP)
@@ -96,6 +100,7 @@ class MistFixture:
             uc.reg_write(UC_X86_REG_EAX,self.obj)
         elif address==0x417d60:
             if(self.vm.u32(sp+4),self.vm.u32(sp+8))!=(8,1):raise AssertionError('Mist blend request changed')
+            return  # Execute actual Scene.SetBlendMode and original software state.
         elif address==0x40a8f0:
             obj=self.vm.u32(sp+4)
             if self.vm.u32(obj)!=0x100:raise AssertionError('Mist matrix poseflags changed')

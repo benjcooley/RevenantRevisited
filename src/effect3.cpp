@@ -16,7 +16,6 @@
 
 #include "mappane.h"
 #include "character.h"
-#include "statusbar.h"
 #include "missileeffect.h"
 #include "stripeffect.h"
 #include "food.h"

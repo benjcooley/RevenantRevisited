@@ -7,6 +7,9 @@
 > ring). Follow FORENSICS_PROTOCOL §0–§14 template. All coordinates name their
 > frame; every literal is cited `file:line` with hex(=dec).
 >
+> **Superseded (2026-10-10):** measured in the emulator and the disassembly;
+> see `docs/ui/HUD_REBUILD.md` §6c. Where this file differs, §6c is right.
+>
 > **STATUS:** `forensics-skeleton` — class identity + assets + envelope confirmed
 > this wave; element layout / draw algorithm / animation / input dispatch still
 > to be traced in a later forensics pass.

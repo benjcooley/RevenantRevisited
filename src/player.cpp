@@ -7,6 +7,7 @@
 #include "player.h"
 
 #include "armor.h"
+#include "automap.h"
 #include "dialog.h"
 #include "equip.h"
 #include "gameflow.h"
@@ -18,7 +19,6 @@
 #include "sound.h"
 #include "spell.h"
 #include "spellpane.h"
-#include "statusbar.h"
 #include "textbar.h"
 #include "weapon.h"
 
@@ -171,6 +171,7 @@ void TPlayer::ClearPlayer()
   // is never VIRGIN: its stats are its own.
     flags &= ~OF_VIRGIN;
     knownspells.clear();
+    ++knownspellsversion;
     hudwords = {};
     levelupstats = {};
     team = {};
@@ -918,6 +919,8 @@ void TPlayer::OnInventoryRemove(TObjectInstance* item)
 // the body-part rebuild (0x00584e00).
 bool TPlayer::Equip(TObjectInstance* oi, int32_t slot)
 {
+    if (equipSeam)
+        return equipSeam(this, oi, slot);
     if (slot < 0)
     {
         if (!oi || oi->FindStat("EqSlot") < 0)
@@ -1143,7 +1146,7 @@ void TPlayer::GetOnYerHog()
 }
 
 // Gets the talisman list for the given quickspell
-char *TPlayer::GetQuickSpell(int32_t button)
+const char *TPlayer::GetQuickSpell(int32_t button) const
 {
     if ((uint32_t)button >= QSPELL_NUM)
         return "";
@@ -1152,7 +1155,7 @@ char *TPlayer::GetQuickSpell(int32_t button)
 }
 
 // Sets the quickspell button
-void TPlayer::SetQuickSpell(int32_t button, char *talismans)
+void TPlayer::SetQuickSpell(int32_t button, const char *talismans)
 {
     if ((uint32_t)button >= QSPELL_NUM)
         return;
@@ -1215,7 +1218,7 @@ bool TPlayer::InvokeQuickSpell(int32_t button)
 // REVSYNC: TPlayer::HasTalismans @ 0x0051b7c0 -- the Spell Pouch's talismans,
 // counted by TALISMAN type name, cover the string: each code (the type's Code
 // stat, case-sensitive) takes one. Codes of no type (M-P) cost nothing.
-bool TPlayer::HasTalismans(char *talismans)
+bool TPlayer::HasTalismans(const char *talismans) const
 {
     bool has = true;
     int32_t len = strlen(talismans);
@@ -1303,9 +1306,8 @@ void SAutoMapRecord::Load(RTInputStream is)
     }
 }
 
-// REVSYNC: automap record Save @ 0x00529830. Retail first had the automap
-// pane fold the level it was showing back into the record (0x0052c5c0);
-// the port's automap pane doesn't keep one yet.
+// REVSYNC: automap record Save @ 0x00529830. The player's save first has
+// the automap fold the level it shows into the record (0x0052c5c0).
 void SAutoMapRecord::Save(RTOutputStream os) const
 {
     os << module.c_str();
@@ -1340,6 +1342,7 @@ void TPlayer::Load(RTInputStream is, int32_t version, int32_t objversion)
         knownspells.clear();
         for (int32_t i = 0; i < count && !is.Overrun(); i++)
             is.ReadBytes(knownspells.emplace_back().data(), kSpellCodeBytes);
+        ++knownspellsversion;
         if (objversion >= 6 && objversion <= 8)
             is.MovePos(count * 4);  // a per-spell int those versions had
     }
@@ -1435,6 +1438,10 @@ void TPlayer::Save(RTOutputStream os)
     for (int32_t count : frags)
         os << count;
 
+    // REVSYNC: 0x00529830 -- the level the automap shows goes into the
+    // record first.
+    if (AutoMap.IsBoundTo(automap))
+        AutoMap.FlushGrid();
     automap.Save(os);
 }
 
@@ -1469,7 +1476,48 @@ bool TPlayer::LearnSpell(const char* talismans)
     }
     TSpellCode& code = knownspells.emplace_back();
     strncpy(code.data(), talismans, kSpellCodeBytes);
+    ++knownspellsversion;
     return true;
+}
+
+void TPlayer::ForgetSpell(int32_t i)
+{
+    if (i >= 0 && i < NumKnownSpells())
+    {
+        knownspells.erase(knownspells.begin() + i);
+        ++knownspellsversion;
+    }
+}
+
+bool TPlayer::TrainStat(int32_t attribute)
+{
+    if (attribute < 0 || attribute >= NUM_PLRSTATS)
+        return false;
+    const int32_t value = GetObjStat(PLRSTAT_FIRST + attribute);
+    int32_t &last = levelupstats[2];                // the pick made last (+0x368)
+    if (value >= 30 || (attribute == levelupstats[last != 0] && value >= 29))
+        return false;
+    last = last == 0 ? 1 : 0;
+    levelupstats[last] = attribute;
+    return true;
+}
+
+void TPlayer::SetMoney(int32_t amount)
+{
+    constexpr const char* kGoldName = "gold";       // 0x005e2b44
+    TObjectInstance* gold = FindObjInventory(kGoldName);
+    if (amount < 1)
+    {
+        if (gold)
+        {
+            gold->RemoveFromInventory();
+            delete gold;
+        }
+    }
+    else if (!gold)
+        AddToInventory(kGoldName, amount);
+    else
+        gold->SetAmount(amount);
 }
 
 // REVSYNC: TPlayer::SetPlayerState @ 0x0051d680. Not ported: with bit 2 set
@@ -1529,45 +1577,32 @@ void TPlayerManager::SetMainPlayer(int32_t newplayernum)
     if ((uint32_t)mainplayernum >= (uint32_t)players.NumItems())
         mainplayernum = players.NumItems() - 1;  // The last player added
 
-    if (mainplayernum < 0)
+    Player = mainplayernum < 0 ? nullptr : GetPlayer(mainplayernum);
+    if (CurrentScreen == &PlayScreen)
+        BindMainPlayerToScreen();
+}
+
+// The play screen's hookups for the main player: the camera follows it, and
+// the equipment and inventory panes show it (none: the camera stays where it
+// is and the inventory pane shows nothing). Retail made them in
+// SetMainPlayer, which ran inside TPlayScreen::Initialize (0x0047a660). The
+// port's session loads a game under the loading screen, so the play screen
+// calls this as it starts.
+void TPlayerManager::BindMainPlayerToScreen()
+{
+    if (!Player)
     {
-        Player = nullptr;
-
-        if (CurrentScreen == &PlayScreen)
-        {
-          // Set map position
-            S3DPoint pos;
-            MapPane.GetMapPos(pos);
-            MapPane.CenterOnPos(pos, MapPane.GetMapLevel());
-
-          // Set inventory container
-            Inventory.SetContainer(nullptr);
-
-          // Setup health bars
-            HealthBar.SetLevel(0);
-            StaminaBar.SetLevel(0);
-        }
+        S3DPoint pos;
+        MapPane.GetMapPos(pos);
+        MapPane.CenterOnPos(pos, MapPane.GetMapLevel());
+        Inventory.SetContainer(nullptr);
+        AutoMap.BindPlayer(nullptr);            // REVSYNC: 0x0051ef84
+        return;
     }
-    else
-    {
-        Player = GetPlayer(mainplayernum);
-
-        if (CurrentScreen == &PlayScreen)
-        {
-          // Center on this player in map
-            MapPane.CenterOnObj(Player);
-
-          // Setup equipment pane
-            Player->RefreshEquip();
-
-          // Setup inventory pane
-            Inventory.SetContainer(Player);
-
-          // Set status bars
-            HealthBar.SetLevel(Player->Health() * 1000 / Player->MaxHealth());
-            StaminaBar.SetLevel(Player->Mana() * 1000 / Player->MaxMana());
-        }
-    }
+    MapPane.CenterOnObj(Player);
+    Player->RefreshEquip();
+    Inventory.SetContainer(Player);
+    AutoMap.BindPlayer(Player);                 // REVSYNC: 0x0051f03e
 }
 
 // Sets the main player for the game

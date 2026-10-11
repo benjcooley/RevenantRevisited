@@ -64,6 +64,7 @@ extern "C" int rand() {int range,lo,hi,value;
  if(!(random_inputs>>range>>lo>>hi>>value)||bool(range)!=in_range||
     (in_range&&(lo!=expected_low||hi!=expected_high)))std::abort();
  ++random_count;return value;}
+int GameRand(){return rand();}
 int random(int lo,int hi){in_range=true;expected_low=lo;expected_high=hi;
  int value=rand()%(hi-lo+1)+lo;in_range=false;return value;}
 '''
@@ -72,6 +73,10 @@ int random(int lo,int hi){in_range=true;expected_low=lo;expected_high=hi;
         s=format(v,'.9g');return s+'f' if '.' in s or 'e' in s else s+'.0f'
     vertices=','.join('{{'+','.join(lit(v) for v in records[i:i+3])+'},{'+','.join(lit(v) for v in records[i+3:i+6])+'},'+lit(records[i+6])+','+lit(records[i+7])+'}' for i in range(0,32,8))
     trailer=r'''
+// This state/quad-carrier proof exercises the retained modern fallback.
+// Actual software helper lighting is covered by mistfog_visual_reference.
+TFogEffect_Bespoke__MistFog::~TFogEffect_Bespoke__MistFog()=default;
+bool TFogEffect_Bespoke__MistFog::SubmitSoftware(EFxDebugMode)const{return false;}
 int main(int argc,char**argv){random_inputs.open(argv[1]);if(!random_inputs)return 2;
  TFogEffect_Bespoke__MistFog effect(nullptr);S3DVertex verts[]={VERTICES};
  effect.authored_vertices_.assign(verts,verts+4);effect.texture_=1;

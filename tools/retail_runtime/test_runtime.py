@@ -72,6 +72,13 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(vm.files['fixture'],b'original')
         self.assertEqual([vm.random_msvc() for _ in range(20)],sequence)
 
+    def test_seek_before_start_fails_with_negative_seek(self):
+        vm=Runtime(BASELINE);name=vm.allocate(16);vm.write(name,b'empty.log\0')
+        handle=vm.call(vm.api_address('kernel32.dll','CreateFileA'),(name,0xc0000000,3,0,4,0x80,0))
+        vm.call(vm.api_address('kernel32.dll','SetLastError'),(2,))
+        self.assertEqual(vm.call(vm.api_address('kernel32.dll','SetFilePointer'),(handle,0xffffffff,0,2)),0xffffffff)
+        self.assertEqual(vm.call(vm.api_address('kernel32.dll','GetLastError')),131)
+
     def test_compiled_c_logger_uses_virtual_file_system(self):
         root=EXPERIMENTS/'winmain_skip';manifest=json.loads((root/'manifest.json').read_text())
         vm=Runtime(root/'Revenant.hooked.exe');vm.checkpoint()

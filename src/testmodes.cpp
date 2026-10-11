@@ -46,7 +46,6 @@
 #include "uidragstate.h"
 #include "uidemoplayer.h"
 #include "uianchortest.h"
-#include "uibarinvtest.h"
 #include "uibottombartest.h"
 #include "uicliptest.h"
 #include "uiequiptest.h"
@@ -58,7 +57,6 @@
 #include "uimaptest.h"
 #include "uinineslicetest.h"
 #include "uiplyrstatusbartest.h"
-#include "uiquickspelltest.h"
 #include "uisidebartest.h"
 #include "uisidetabstest.h"
 #include "uiscrollpanetest.h"
@@ -68,6 +66,7 @@
 #include "uistyletest.h"
 #include "uitextbartest.h"
 #include "vfxtest.h"
+#include "vfxreview.h"
 // uihudmockuptest + uistatusbartest moved to attic/: the rects/labels they
 // encoded were derived from the pre-release src/ defines (HEALTHBARX etc)
 // and the AI-generated docs/HUD.md, neither of which match the shipped
@@ -3166,6 +3165,18 @@ void InputSimStart(const char* script)
                 t_ms += kTypeIntervalMs;
             }
         }
+        else if (op == "char")
+        {
+            // One character event: a code (13) or enter / backspace / escape,
+            // the characters those keys send besides their key events.
+            const std::string arg = (tok.size() > 1) ? tok[1] : "";
+            const int32_t ch = arg == "enter" ? 0x0d : arg == "backspace" ? 0x08 : arg == "escape" ? 0x1b
+                             : (int32_t)std::strtol(arg.c_str(), nullptr, 0);
+            if (ch > 0)
+                g_inputSimEvents.push_back({ t_ms, MS_CHAR, ch, 0, 0, "" });
+            else
+                log_warn("[input-sim] char: unknown character '%s'", arg.c_str());
+        }
         else if (op == "loop")
             g_inputSimLoop = true;
         else if (op == "take_snapshot" || op == "snapshot" || op == "snap")
@@ -3486,8 +3497,8 @@ bool DumpIconsToFolder(const char* path)
 static bool UsesDemoPlayer(const char* mode)
 {
     static constexpr const char* kModes[] = {
-        "ui-hud", "ui-plyrstatusbar", "ui-stats", "ui-equip", "ui-inventory",
-        "ui-barinv", "ui-sidebar", "ui-quickspell", "ui-spellbook",
+        "ui-hud", "ui-plyrstatusbar", "ui-bottombar", "ui-stats", "ui-equip",
+        "ui-inventory", "ui-sidebar", "ui-spellbook", "ui-spellcreate",
     };
     for (const char* m : kModes)
         if (strcmp(mode, m) == 0)
@@ -3504,6 +3515,8 @@ bool Initialize(const char* mode)
         return true;
     if (strcmp(mode, "sector") == 0)
         return g_mapRenderer.InitializeFromStartupArgs() && SceneCommandsStart();
+    if (strcmp(mode, "vfx-review") == 0)
+        return VfxReview::Initialize();
     if (strcmp(mode, "fireball-runtime") == 0)
     {
         const bool result=RunFireballRuntimeTest(g_mapRenderer);
@@ -3551,6 +3564,8 @@ bool Initialize(const char* mode)
         return InitializeUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         return InitializeUIPlyrStatusBarMode();
+    if (strcmp(mode, "ab-plyrstatusbar") == 0)
+        return InitializeABPlyrStatusBarMode();
     if (strcmp(mode, "ui-sidetabs") == 0)
         return InitializeUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)
@@ -3558,15 +3573,10 @@ bool Initialize(const char* mode)
         SetUISidebarSyntheticStateEnabled(true);
         return InitializeUISidebarMode();
     }
-    if (strcmp(mode, "ui-quickspell") == 0)
-    {
-        SetUIQuickSpellSyntheticStateEnabled(true);
-        return InitializeUIQuickSpellMode();
-    }
     if (strcmp(mode, "ui-bottombar") == 0)
         return InitializeUIBottomBarMode();
-    if (strcmp(mode, "ui-barinv") == 0)
-        return InitializeUIBarInvMode();
+    if (strcmp(mode, "ab-bottombar") == 0)
+        return InitializeABBottomBarMode();
     if (strcmp(mode, "ui-map") == 0)
         return InitializeUIMapMode();
     if (strcmp(mode, "ui-scrollpane") == 0)
@@ -3581,12 +3591,23 @@ bool Initialize(const char* mode)
         return InitializeUIEquipMode();
     if (strcmp(mode, "ui-inventory") == 0)
         return InitializeUIInventoryMode();
+    if (strcmp(mode, "ab-inventory") == 0)
+        return InitializeABInventoryMode();
+    if (strcmp(mode, "ab-spellpane") == 0)
+        return InitializeABSpellPaneMode();
+    if (strcmp(mode, "ab-automap") == 0)
+        return InitializeABAutoMapMode();
+    if (strcmp(mode, "ab-spellbook") == 0)
+        return InitializeABSpellBookMode();
+    if (strcmp(mode, "ab-statpane") == 0)
+        return InitializeABStatPaneMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         SetUISidebarSyntheticStateEnabled(true);
-        SetUIQuickSpellSyntheticStateEnabled(true);
         SetUIHudCursorOverlayEnabled(true);
-        return InitializeUIHudMode();
+        return InitializeUIHudMode() && InitializeUIBottomBarModeEmbedded() && InitializeUIInventoryModeEmbedded()
+            && InitializeUISpellCreateModeEmbedded() && InitializeUIMapModeEmbedded()
+            && InitializeUISpellbookModeEmbedded() && InitializeUIStatsModeEmbedded();
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
@@ -3630,16 +3651,16 @@ void Close(const char* mode)
         CloseUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         CloseUIPlyrStatusBarMode();
+    if (strcmp(mode, "ab-plyrstatusbar") == 0)
+        CloseABPlyrStatusBarMode();
     if (strcmp(mode, "ui-sidetabs") == 0)
         CloseUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)
         CloseUISidebarMode();
-    if (strcmp(mode, "ui-quickspell") == 0)
-        CloseUIQuickSpellMode();
     if (strcmp(mode, "ui-bottombar") == 0)
         CloseUIBottomBarMode();
-    if (strcmp(mode, "ui-barinv") == 0)
-        CloseUIBarInvMode();
+    if (strcmp(mode, "ab-bottombar") == 0)
+        CloseABBottomBarMode();
     if (strcmp(mode, "ui-map") == 0)
         CloseUIMapMode();
     if (strcmp(mode, "ui-scrollpane") == 0)
@@ -3654,8 +3675,26 @@ void Close(const char* mode)
         CloseUIEquipMode();
     if (strcmp(mode, "ui-inventory") == 0)
         CloseUIInventoryMode();
+    if (strcmp(mode, "ab-inventory") == 0)
+        CloseABInventoryMode();
+    if (strcmp(mode, "ab-spellpane") == 0)
+        CloseABSpellPaneMode();
+    if (strcmp(mode, "ab-automap") == 0)
+        CloseABAutoMapMode();
+    if (strcmp(mode, "ab-spellbook") == 0)
+        CloseABSpellBookMode();
+    if (strcmp(mode, "ab-statpane") == 0)
+        CloseABStatPaneMode();
     if (strcmp(mode, "ui-hud") == 0)
+    {
+        CloseUIStatsMode();
+        CloseUISpellbookMode();
+        CloseUIMapMode();
+        CloseUISpellCreateMode();
+        CloseUIInventoryMode();
+        CloseUIBottomBarMode();
         CloseUIHudMode();
+    }
     if (strcmp(mode, "ui-loadscreen") == 0)
         CloseUILoadScreenMode();
     if (IsUIDefScreenMode(mode))
@@ -3664,6 +3703,8 @@ void Close(const char* mode)
         CloseAudioMode();
     if (strcmp(mode, "vfx") == 0)
         VfxTest::Close();
+    if (strcmp(mode, "vfx-review") == 0)
+        VfxReview::Close();
     DestroyBitmapAtlas(&g_uiAtlas);
     if (UsesDemoPlayer(mode))
         UIDemoPlayer::Remove();
@@ -3681,6 +3722,8 @@ void Render(const char* mode)
         SceneCommandsTick();
         return g_mapRenderer.RenderFrame();
     }
+    if (strcmp(mode, "vfx-review") == 0)
+        return VfxReview::Render();
     if (strcmp(mode, "mesh") == 0)
         return RenderMeshMode();
     if (strcmp(mode, "char3d") == 0)
@@ -3711,16 +3754,16 @@ void Render(const char* mode)
         return RenderUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         return RenderUIPlyrStatusBarMode();
+    if (strcmp(mode, "ab-plyrstatusbar") == 0)
+        return RenderABPlyrStatusBarMode();
     if (strcmp(mode, "ui-sidetabs") == 0)
         return RenderUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)
         return RenderUISidebarMode();
-    if (strcmp(mode, "ui-quickspell") == 0)
-        return RenderUIQuickSpellMode();
     if (strcmp(mode, "ui-bottombar") == 0)
         return RenderUIBottomBarMode();
-    if (strcmp(mode, "ui-barinv") == 0)
-        return RenderUIBarInvMode();
+    if (strcmp(mode, "ab-bottombar") == 0)
+        return RenderABBottomBarMode();
     if (strcmp(mode, "ui-map") == 0)
         return RenderUIMapMode();
     if (strcmp(mode, "ui-scrollpane") == 0)
@@ -3735,8 +3778,27 @@ void Render(const char* mode)
         return RenderUIEquipMode();
     if (strcmp(mode, "ui-inventory") == 0)
         return RenderUIInventoryMode();
+    if (strcmp(mode, "ab-inventory") == 0)
+        return RenderABInventoryMode();
+    if (strcmp(mode, "ab-spellpane") == 0)
+        return RenderABSpellPaneMode();
+    if (strcmp(mode, "ab-automap") == 0)
+        return RenderABAutoMapMode();
+    if (strcmp(mode, "ab-spellbook") == 0)
+        return RenderABSpellBookMode();
+    if (strcmp(mode, "ab-statpane") == 0)
+        return RenderABStatPaneMode();
     if (strcmp(mode, "ui-hud") == 0)
-        return RenderUIHudMode();
+    {
+        RenderUIHudMode();
+        RenderUIBottomBarMode();
+        RenderUIInventoryMode();
+        RenderUISpellCreateMode();
+        RenderUIMapMode();
+        RenderUISpellbookMode();
+        RenderUIStatsMode();
+        return;
+    }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return RenderUILoadScreenMode();
     if (IsUIDefScreenMode(mode))
@@ -3752,29 +3814,18 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 {
     if (strcmp(mode, "ui-hud") == 0)
     {
+        // The test screen has routed the click to its panes (the bottom bar).
         const SHudState& s = GetHudState();
         if (HandleMouseClickUISidebarModeConsumed(button, x, y))
             return;
-        if (s.bottomBarOpen ||
-            (UIDragState::IsActive() &&
-             UIDragState::Get().source == EDragSource::SpellPane))
-        {
-            HandleMouseClickUIQuickSpellMode(button, x, y);
-        }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseClickUISpellbookMode(button, x, y);
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
             HandleMouseClickUIEquipMode(button, x, y);
+        if (button == MB_LEFTUP)
+            UIDragState::ReleaseUnclaimed();
         return;
     }
     if (strcmp(mode, "ui-sidebar") == 0)
         return HandleMouseClickUISidebarMode(button, x, y);
-    if (strcmp(mode, "ui-quickspell") == 0)
-        return HandleMouseClickUIQuickSpellMode(button, x, y);
-    if (strcmp(mode, "ui-spellbook") == 0)
-        return HandleMouseClickUISpellbookMode(button, x, y);
-    if (strcmp(mode, "ui-spellcreate") == 0)
-        return HandleMouseClickUISpellCreateMode(button, x, y);
     if (strcmp(mode, "ui-equip") == 0)
         return HandleMouseClickUIEquipMode(button, x, y);
     if (strcmp(mode, "ui-scrollpane") == 0)
@@ -3834,28 +3885,17 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 
 void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 {
-    // #8 iOS-style velocity drag for the spellbook scroll
-    if (strcmp(mode, "ui-spellbook") == 0)
-        return HandleMouseMoveUISpellbookMode(button, x, y);
     if (strcmp(mode, "ui-hud") == 0)
     {
         const SHudState& s = GetHudState();
         if (HandleMouseMoveUISidebarModeConsumed(button, x, y))
             return;
-        if (UIDragState::IsActive() &&
-            UIDragState::Get().source == EDragSource::SpellPane)
-        {
-            HandleMouseMoveUIQuickSpellMode(button, x, y);
-            return;
-        }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseMoveUISpellbookMode(button, x, y);
+        if (UIDragState::IsActive())
+            UIDragState::UpdateDrag(x, y);
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
             HandleMouseMoveUIEquipMode(button, x, y);
         return;
     }
-    if (strcmp(mode, "ui-quickspell") == 0)
-        return HandleMouseMoveUIQuickSpellMode(button, x, y);
     if (strcmp(mode, "ui-equip") == 0)
         return HandleMouseMoveUIEquipMode(button, x, y);
     if (strcmp(mode, "sector") != 0) return;
@@ -3864,6 +3904,10 @@ void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 
 void HandleKeyPress(const char* mode, int32_t key, bool down)
 {
+    if (strcmp(mode, "vfx-review") == 0) {
+        VfxReview::HandleKeyPress(key, down);
+        return;
+    }
     if (strcmp(mode, "vfx") == 0)
     {
         VfxTest::HandleKeyPress(key, down);

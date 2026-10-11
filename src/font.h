@@ -47,8 +47,9 @@ class TFont : public TFontData
 
 // A font's glyphs baked into one RGBA8 texture, looked up by Unicode code
 // point (docs/ui/TEXT_RENDERING.md). Two builders make one: BuildFontAtlas
-// from a retail bitmap TFont (keycolor pixels become alpha=0 so straight-alpha
-// blend composites correctly) and BuildTTFAtlas from a TrueType face. The
+// from a retail bitmap TFont (each glyph as retail draws it: keyed, with its
+// anti-aliased edge at its coverage, in straight alpha) and BuildTTFAtlas
+// from a TrueType face. The
 // bitmap atlases live in a parallel cache keyed by TFont* rather than on the
 // TFont itself, because TFont instances are raw resource-file memory
 // (malloc'd to exact on-disk size by LoadResource) — appending member fields
@@ -63,6 +64,26 @@ struct SFontAtlasRect
     // StartHeight/DrawRight) atlases, so one glyph walk renders either kind.
 };
 
+// Retail's drop shadow under text (0x004be2b0, flag 0x400): black passes
+// at (dx, dy), (dx + 1, dy) and (dx, dy + 1), then the colour; one pass at
+// (dx, dy) when `single`.
+struct STextShadow
+{
+    int8_t dx = 1, dy = 1;
+    bool single = false;
+};
+
+// The shadow 0x004be2b0 gives a font of cell height `height` (0x004be716):
+// (1, 1) up to 14 px, (2, 1) up to 25, a single pass at (2, 2) above.
+[[nodiscard]] constexpr STextShadow RetailTextShadow(float height)
+{
+    if (height <= 14.0f)
+        return { 1, 1, false };
+    if (height <= 25.0f)
+        return { 2, 1, false };
+    return { 2, 2, true };
+}
+
 struct SFontAtlas
 {
     // glyphs[kFallbackGlyph] draws every code point the atlas doesn't hold:
@@ -75,6 +96,22 @@ struct SFontAtlas
     int32_t        height = 0;
     float          ascent = 0.0f;       // line metrics: pixels above the baseline
     float          descent = 0.0f;      // and below it (TextAscent, TextLineHeight)
+    // How far below a text cell's top the baseline sits, as retail hangs a
+    // line in its cell (TextCellBaseline).
+    float          cellBaseline = 0.0f;
+    // The cell helpers draw the coloured text twice over, lifting thin
+    // anti-aliased coverage to GDI's weight (the TrueType stand-ins for
+    // retail's GDI fonts); a bitmap font's glyphs are blitted once.
+    bool           doubleStrike = false;
+    // How far apart wrapped lines sit: a GDI font's cell height (tmHeight,
+    // the TrueType stand-in's pixel height); a bitmap font's line height.
+    float          lineStep = 0.0f;
+    // Retail's text shadow for the font (RetailTextShadow of lineStep).
+    STextShadow    shadow;
+    // What the atlas stands for in the A/B's text record (STextDraw), as the
+    // emulator names retail's fonts: GDI's "Arial 12" ("<face> <height>[
+    // bold]"), a bitmap font's FONT.DEF name.
+    std::string    face;
     std::vector<SFontAtlasRect> glyphs;
 
     // The glyph that draws `cp`; the fallback for a code point the atlas
@@ -89,8 +126,9 @@ struct SFontAtlas
     std::vector<std::pair<char32_t, uint16_t>> beyond;   // the rest, by code point
 };
 
-const SFontAtlas* BuildFontAtlas(TFont* font);
-  // Returns the cached atlas for `font`, building it on first call.
+const SFontAtlas* BuildFontAtlas(TFont* font, const char* face = nullptr);
+  // Returns the cached atlas for `font`, building it on first call; `face`
+  // labels it if it has no label yet (SFontAtlas::face).
   // Null if the font is null or has no glyphs.
 const SFontAtlas* FindFontAtlas(TFont* font);
   // Cache lookup only; returns null if never built.
@@ -110,7 +148,25 @@ void LogFontGlyphHexDump(const char* fontname, unsigned char ch,
 // `pixel_height`, plus the face's .notdef as the fallback glyph. Uses a
 // separate cache (keyed by path+size) from BuildFontAtlas's TFont* cache
 // because TTF fonts have no TFont resource to key against.
-const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height);
+const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height, const char* face = nullptr);
+  // `face` labels the atlas if it has no label yet (SFontAtlas::face).
+
+// The cell GDI gives a TrueType font made with CreateFontA(+height): the em
+// size in pixels and the cell's ascent and descent above and below the
+// baseline (tmAscent / tmDescent; tmHeight is their sum, at most the height
+// asked for).
+struct SGdiFontCell
+{
+    int32_t ppem = 0;
+    int32_t ascent = 0;
+    int32_t descent = 0;
+};
+// The stand-in for a retail GDI font: rasterized at the cell's em size, its
+// lines `ascent + descent` apart with the baseline `ascent` under a cell's
+// top, as DrawTextA lays them; each glyph's advance is the face's advance
+// width at that size, rounded half to even (GDI's unhinted width -- the
+// stand-ins share the Windows faces' advance widths).
+const SFontAtlas* BuildTTFAtlas(const char* path, const SGdiFontCell& cell, const char* face);
 void DestroyAllTTFAtlases();
 
 // The path of a TrueType face the port ships, named by file
@@ -147,8 +203,12 @@ enum class ETextAlign { Left, Center, Right };
 float TextWidth(const SFontAtlas* atlas, const char* text,
                 ETextEncoding encoding = kGameTextEncoding);
 // Ascent of `atlas` (pixels above baseline), fixed when the atlas is built.
-// Use to top-align a string inside a cell: baseline = cellY + ascent.
 float TextAscent(const SFontAtlas* atlas);
+// Where a line top-aligned in a cell puts its baseline, below the cell's top.
+// A bitmap font hangs from its 'A' (retail's font table, 0x004ac990); a
+// TrueType face stands in for a GDI font, which hangs from its ascent less
+// GDI's internal leading. The cell helpers below draw at it.
+float TextCellBaseline(const SFontAtlas* atlas);
 // Line height of `atlas` (pixels) = ascent + descent. Use to stack the cells
 // of a multi-line block: line N cellY = first cellY + N * lineHeight.
 float TextLineHeight(const SFontAtlas* atlas);
@@ -166,8 +226,8 @@ void DrawTextAtBaseline(const SFontAtlas* atlas, const char* text,
                         ETextEncoding encoding = kGameTextEncoding);
 
 // Draw one line of `text` into the cell (cellX, cellY, cellW, cellH),
-// horizontally aligned per `align`, baseline top-aligned in the cell
-// (baseline = cellY + ascent). Color is straight RGB in [0,1]; the atlas
+// horizontally aligned per `align`, top-aligned in the cell (baseline =
+// cellY + TextCellBaseline). Color is straight RGB in [0,1]; the atlas
 // coverage is tinted by it. Targets the active render-target pass.
 // Multi-line: call once per line with the cell advanced by line height.
 void DrawTextToTarget(const SFontAtlas* atlas, const char* text,
@@ -189,6 +249,37 @@ void DrawTextShadowedAtBaseline(const SFontAtlas* atlas, const char* text,
                                 float r, float g, float b,
                                 int32_t target_w, int32_t target_h,
                                 ETextEncoding encoding = kGameTextEncoding);
+
+// A wrapped block as retail's DrawTextA with DT_WORDBREAK | DT_EDITCONTROL
+// lays it in its rect (x, y, w, h): `text` wrapped to w (WrapTextLines), a
+// line every SFontAtlas::lineStep from the rect's top, each aligned in w,
+// and only the lines that fit whole in h (the first always). Shadowed as
+// DrawTextShadowedToTarget when `shadowed`. Returns the height drawn, as
+// DrawTextA does.
+int32_t DrawTextWrappedToTarget(const SFontAtlas* atlas, const char* text,
+                                int32_t x, int32_t y, int32_t w, int32_t h,
+                                ETextAlign align, float r, float g, float b, bool shadowed,
+                                int32_t target_w, int32_t target_h,
+                                ETextEncoding encoding = kGameTextEncoding);
+
+// A text draw as the canonical helpers make it, for the retail A/B hosts:
+// the A/B compares it with retail's own text compose (0x004be2b0, which
+// the emulator records the same way) -- string, font, place and colour.
+struct STextDraw
+{
+    std::string text;
+    std::string face;                       // SFontAtlas::face
+    int32_t x = 0, y = 0, w = 0, h = 0;     // the cell; the pen and 0 x 0 when `baseline`
+    ETextAlign align = ETextAlign::Left;
+    uint8_t r = 0, g = 0, b = 0;
+    bool shadowed = false;
+    bool baseline = false;                  // y is the baseline, not the cell's top
+    bool wrapped = false;                   // DrawTextWrappedToTarget's rect
+    std::vector<std::string> lines;         // `wrapped`: the lines drawn, in order
+};
+// While set, every canonical text draw is appended to `recorder` (an A/B
+// host's; null stops it).
+void SetTextDrawRecorder(std::vector<STextDraw>* recorder);
 
 // Word-wraps `text` to `wrapWidth` pixels the way retail's GDI DT_WORDBREAK
 // did (FUN_004acb80): breaks at spaces and '\n', drops the spaces at a break,

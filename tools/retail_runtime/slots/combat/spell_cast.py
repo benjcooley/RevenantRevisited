@@ -76,7 +76,8 @@ class CastFixture:
         self.spells = SpellWorld(self.world)
         b = self.world.boundaries
         construct_list(vm, call)
-        load_spells(vm, call, SpellFiles(vm, b), shipped_spell_def())
+        self.spell_files = SpellFiles(vm, b)
+        load_spells(vm, call, self.spell_files, shipped_spell_def())
         stats, types = class_section(shipped_class_def(), 'TALISMAN')
         build_class(vm, TALISMAN_CLASS, stats, types)
         for init in SPELL_CLASS_INITS:

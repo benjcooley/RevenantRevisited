@@ -6,12 +6,12 @@
 // Full HUD assembly: composes all per-panel test modes into one screen so
 // the assembled in-game HUD layout can be verified end-to-end.
 //
-//   Top edge:    TPlyrStatusBar (player + target chips)
 //   Right edge:  TSideTabsPane + selected top-slot pane + selected bottom-slot pane
 //   Bottom edge: TBottomBarPane chrome + TBarInvPane shelf + TQuickSpellPane
 //
-// The text bar (TTextBar) is a production pane on TPlayScreen, not part of
-// this assembly; --test=ui-textbar hosts it alone.
+// The text bar (TTextBar) and the status bar (TPlyrStatusBar) are production
+// panes on TPlayScreen, not part of this assembly; --test=ui-textbar and
+// --test=ui-plyrstatusbar host them alone.
 //
 // Each content pane composes into its own render texture and registers a
 // THudDrawable at its screen-anchored position. The orchestrator refreshes

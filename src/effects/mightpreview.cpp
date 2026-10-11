@@ -21,5 +21,11 @@ State*Spawn(const S3DPoint&origin){
 void Advance(State*c,double seconds){if(!c || !c->owner || !std::isfinite(seconds) || seconds<=0)return;c->accumulated+=seconds;
  while(c->accumulated+1e-10>=TTime::LegacyFrameSeconds && c->owner){c->accumulated-=TTime::LegacyFrameSeconds;auto*o=c->identity.Get();if(!o || o!=c->owner.get())return;o->NextFrame();if(o->GetFlags()&OF_KILL){c->owner.reset();return;}o->Pulse();}}
 void SubmitWorld(State*c,EFxDebugMode){if(!c || !c->owner || !Renderer)return;auto*o=c->identity.Get();if(!o || o!=c->owner.get())return;o->Animate(false);auto*a=dynamic_cast<T3DAnimator*>(o->GetAnimator());if(a && !a->PartSysUnsupported())a->SubmitPartSys(*Renderer,0,1,{1,1,1});}
+bool Alive(State* context)
+{
+    if (!context || !context->owner) return false;
+    auto* owner=context->identity.Get();
+    return owner && owner==context->owner.get() && !(owner->GetFlags() & OF_KILL);
+}
 void Destroy(State*c){delete c;}
 }

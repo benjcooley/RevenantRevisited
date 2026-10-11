@@ -355,7 +355,7 @@ struct vs_in {
     float4 color        [[attribute(4)]];
     float  debug_mode   [[attribute(5)]];
     float  light_mode   [[attribute(6)]];
-    float  retail_texture [[attribute(7)]];
+    float3 retail_metadata [[attribute(7)]];
 };
 struct vs_out {
     float4 pos      [[position]];
@@ -384,11 +384,20 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * 0.867;
     float scene_z_wu = p.camz.z - 0.867 * sum - 0.5 * wz;
-    float scene_z_n  = (scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);
+    bool native_projection = in.retail_metadata.y > 0.5;
+    if (native_projection) {
+        float native_z = wz - in.retail_metadata.z;
+        S = 1.0101525783538818 * (wx - wy);
+        T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
+        scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
+    }
+    bool prelit_rgba5 = in.retail_metadata.x > 4.5;
+    float scene_z_n  = ((prelit_rgba5 ? in.uv.x : scene_z_wu) - p.camz.x) / max(p.camz.y, 1e-6);
     float zoom = max(p.camw.z, 0.0001);
-    float persp_scale = ((p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float persp_scale = ((!native_projection && p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = p.vp.x + S * persp_scale;
     float spy = p.vp.y + T * persp_scale;
+    if (prelit_rgba5 && native_projection) { spx = trunc(spx) + 0.5; spy = trunc(spy) + 0.5; }
 
     int lmode = int(in.light_mode + 0.5);
     float3 lit = float3(1.0, 1.0, 1.0);
@@ -405,7 +414,7 @@ vertex vs_out _main(vs_in in [[stage_in]],
     o.color      = in.color;
     o.lit_factor = lit;
     o.debug_mode = in.debug_mode;
-    o.retail_texture = in.retail_texture;
+    o.retail_texture = in.retail_metadata.x;
     return o;
 }
 )MSL";
@@ -425,11 +434,24 @@ fragment float4 _main(vs_out in [[stage_in]],
                       texture2d<float> atlas [[texture(0)]],
                       sampler smp [[sampler(0)]]) {
     int mode = int(in.debug_mode + 0.5);
+    if (in.retail_texture > 4.5) {
+        // Original dynamic untextured RGBA5: interpolate, truncate, lookup.
+        float a5 = floor(clamp(in.color.a, 0.0, 31.0) + 0.00001);
+        float alpha = (a5 + 1.0) / 32.0;
+        float3 channels = floor(clamp(in.color.rgb, 0.0, 31.0) + 0.00001) * float3(1.0, 2.0, 1.0);
+        float3 source = floor(channels * alpha) / (alpha * float3(31.0, 63.0, 31.0));
+        return float4(source, alpha);
+    }
     float4 texel = atlas.sample(smp, in.uv);
     if (in.retail_texture > 0.5) {
         uint2 size = uint2(atlas.get_width(), atlas.get_height());
         uint2 xy = min(uint2(floor(fract(in.uv) * float2(size))), size - uint2(1));
         texel = atlas.read(xy);
+    }
+    if (in.retail_texture > 2.5 && in.retail_texture < 3.5) {
+        float4 nibble = floor(texel * 15.0 + 0.5);
+        texel = float4(nibble.rgb * float3(2.0/31.0, 4.0/63.0, 2.0/31.0),
+                       (nibble.a + 1.0) / 16.0);
     }
     float4 c;
     if (mode == 1) {
@@ -437,10 +459,19 @@ fragment float4 _main(vs_out in [[stage_in]],
     } else if (mode == 2 || mode == 3) {
         c = texel;
         if (mode == 3) c = float4(1.0, 1.0, 1.0, c.a);
+    } else if (in.retail_texture > 3.5) {
+        // Original RGB565 litadd: RGB5 lookup, then additive source LSB mask.
+        float3 source5 = floor(texel.rgb * float3(31.0, 63.0, 31.0) + 0.5);
+        source5.g = floor(source5.g * 0.5);
+        float3 light5 = floor(clamp(in.color.rgb, 0.0, 1.0) * 31.0 + 0.5);
+        float3 modulated = floor(source5 * light5 / 31.0);
+        modulated.rb = floor(modulated.rb * 0.5) * 2.0;
+        modulated.g *= 2.0;
+        c = float4(modulated / float3(31.0, 63.0, 31.0), texel.a * in.color.a);
     } else {
-        c = texel * in.color;
+        c = in.retail_texture > 2.5 ? texel : texel * in.color;
     }
-    c.rgb *= in.lit_factor;
+    if (in.retail_texture < 2.5) c.rgb *= in.lit_factor;
     if (c.a < 0.002) discard_fragment();
     return c;
 }

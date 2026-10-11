@@ -116,6 +116,9 @@ class TCharacter : public TComplexObject
     using KnockBackSeam = void (*)(TCharacter* self, const S3DPoint& from, int32_t variant);
     static inline KnockBackSeam knockBackSeam = nullptr;
       // KnockBack (retail 0x004d3750)
+    using SignalAttackSeam = void (*)(TCharacter* self, TObjectInstance* actor, TObjectInstance* target, int32_t flag);
+    static inline SignalAttackSeam signalAttackSeam = nullptr;
+      // SignalAttack (retail OnAttacked 0x004cdce0, vtable +0x240)
     using NearbyCharactersSeam = std::vector<TCharacter*> (*)(const S3DPoint& pos, int32_t range);
     static inline NearbyCharactersSeam nearbyCharactersSeam = nullptr;
       // The characters near a point that CharBlocking and FindCharacters
@@ -209,7 +212,7 @@ class TCharacter : public TComplexObject
       // Pivots character to given direction (in 32 increments)
     bool FollowChar(TObjectInstance* inst);
       // Causes character to follow another character.
-    bool Pickup(TObjectInstance* inst);
+    bool Pickup(TObjectInstance* inst, TObjectInstance* to = nullptr);
       // Causes character to move to and pickup object.
     bool Pull(TObjectInstance* inst);
       // Causes character to pull lever
@@ -540,7 +543,8 @@ class TCharacter : public TComplexObject
 
   // Damage resistances and modifier (the shipped game's code-defined stats;
   // their values come from class.def and saves, nothing in the port reads them yet)
-    OBJSTAT(DmgResMisc)
+    OBJSTATFUNC(DmgResMisc)
+      // REVSYNC: slot 0x260, 0x004d6f90 (setter 0x264)
     OBJSTAT(DmgResHand)
     OBJSTAT(DmgResPuncture)
     OBJSTAT(DmgResCut)
@@ -800,10 +804,14 @@ public:
     int32_t  DoingTargetX() const { return doing ? doing->target.x : 0; }
     int32_t  DoingTargetY() const { return doing ? doing->target.y : 0; }
     int32_t  NextAttack()   const { return nextattack; }
+    int32_t  LastBowShot()  const { return lastbowshot; }
+    int32_t  BowShots()     const { return bowshots; }
 protected:
 
   // Last bow shot ticks (so we don't shoot bow too fast)
-    int32_t lastbowshot = 0;
+    int32_t lastbowshot = 0;    // +0x22c
+  // Shots ShootBow has queued for ResolveBowShoot
+    int32_t bowshots = 0;       // +0x230
 
   // Retail +0x23c: where the AI last saw or heard its target (the centre of
   // its waypoint search when it loses it).
