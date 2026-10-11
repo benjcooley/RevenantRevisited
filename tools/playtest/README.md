@@ -6,6 +6,9 @@ the contract the hosts implement: [docs/playtest/PROTOCOL.md](../../docs/playtes
 
 | Module | Does |
 |---|---|
+| `play.py` | the session runner: `play.py port\|retail\|fake --out DIR [--slot S] [--milestones keep] [--verify]`; records the bundle, keeps milestone saves in the library, replays to verify |
+| `director.py` | the play loop: modes (wait, dialog, combat, explore, dead, unknown) from the observation, milestones, the save library (Quick Save, then `export_slot @last` with a manifest) |
+| `milestones.py` | objective lists: the Keep chain, and a smoke list for the reference host |
 | `jev.py` | Jev on OpenRouter: typed decisions (`Jev.ask` with `Choice`/`Noul`/`Score`) and the router with screenshots and tools (`Router.ask`); every call to a `Ledger` |
 | `rec.py` | the `.rvrec` format: read, write, validate, compare check lines, slot hashes; also a command line (`show`, `validate`, `diff`, `slotsha`) |
 | `inputs.py` | a step's events from game controls, with the INI's own bindings (`Bindings.from_ini`), clicks and typing; pointer and held keys carried between steps |

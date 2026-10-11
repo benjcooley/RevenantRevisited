@@ -83,7 +83,8 @@ class WithTheReferenceHost(unittest.TestCase):
         self.assertIn("person 'Sardok'", found['obj:5'].words)
         ground = [k for k in found if k.startswith('ground:')]
         self.assertEqual(len(ground), 15)
-        self.assertNotIn('ground:2:near', ground)               # that point is on Sardok
+        self.assertNotIn('ground:0:far', ground)                # 160 right: past the wall at 1150
+        self.assertEqual(self.host.pick(*found['obj:5'].screen)['object'], 5)
         state = self.to_the_wall()
         obs = self.host.observe(walkgrid=320)
         found = {d.key for d in w.destinations(self.host, obs, WalkGrid(obs['walkgrid']))}
@@ -99,13 +100,13 @@ class WithTheReferenceHost(unittest.TestCase):
         result, obs, _ = w.walk(self.host, InputState(), dest)
         self.assertEqual(result, 'arrived')
         x, y = obs['player']['pos'][:2]
-        self.assertLessEqual(abs(x - 1001) + abs(y - 1960), 8)    # within Goto's snap
+        self.assertLessEqual(abs(x - 1001) + abs(y - 1840), 8)    # within Goto's snap
 
     def test_walk_into_the_wall_stalls(self):
         state = self.to_the_wall()
         w = walker()
         obs = self.host.observe()
-        result, obs, _ = w.walk(self.host, state, self._ground(obs, 520, 240))   # 50 units right, past the wall
+        result, obs, _ = w.walk(self.host, state, self._ground(obs, 520, 240))   # 200 units right, past the wall
         self.assertEqual(result, 'stalled')
         self.assertEqual(obs['player']['pos'][0], 1149)
 

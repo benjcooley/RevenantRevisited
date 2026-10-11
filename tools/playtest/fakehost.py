@@ -8,9 +8,9 @@ game.
 The world is deterministic: held arrow keys move the player one unit per
 tick, a left click on the screen walks the player toward the point it maps
 to, and every tick draws three "random numbers". The camera follows the
-player at the screen's centre, four pixels to a world unit. Floor ends at
+player at the screen's centre, a pixel to a world unit. Floor ends at
 x = 1150 (a wall: no walking past it), and one person, Sardok, stands at
-(1000, 1980). `--drift-at T` nudges the player at tick T on every run, so a
+(1000, 1800). `--drift-at T` nudges the player at tick T on every run, so a
 replay through it diverges there: the divergence test.
 """
 from __future__ import annotations
@@ -26,9 +26,9 @@ import rec  # noqa: E402
 
 STEPS = {'LEFT': (-1, 0), 'RIGHT': (1, 0), 'UP': (0, -1), 'DOWN': (0, 1)}
 WALL_X = 1150
-SCALE = 4                            # screen pixels per world unit
+SCALE = 1                            # screen pixels per world unit
 SARDOK = {'id': 5, 'name': 'Sardok', 'type': 'Sardok', 'class': 'character', 'enemy': False,
-          'pos': [1000, 1980, 0]}
+          'pos': [1000, 1800, 0]}
 
 
 class World:
@@ -164,7 +164,7 @@ class FakeHost:
         target = Path(req['to'])
         target.mkdir(parents=True, exist_ok=True)
         (target / 'game.sav').write_bytes(f'fake slot at tick {self.world.t}'.encode())
-        return {'path': str(target)}
+        return {'path': str(target), 'slot': 'Quick Save 1' if req['slot'] == '@last' else req['slot']}
 
     def replay(self, req: dict) -> dict:
         recorded = rec.Recording.load(Path(req['bundle']))

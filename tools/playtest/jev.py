@@ -73,7 +73,7 @@ class Ledger:
                 f.write(json.dumps(entry, separators=(',', ':')) + '\n')
 
     def summary(self) -> str:
-        return f'{self.calls} calls, ${self.cost:.4f}, {self.seconds:.1f} s'
+        return f'{self.calls} calls, ${self.cost:.5f}, {self.seconds:.1f} s'
 
 
 # ---- transport -----------------------------------------------------------

@@ -21,7 +21,7 @@ def play(host: Host, bundle: Path) -> None:
     plan = Plan()
     plan.hold(0, chord('RIGHT'))
     plan.release(30, chord('RIGHT'))
-    plan.click(31, 400, 300)
+    plan.click(31, 340, 255)                     # 20 right, 15 down
     host.step(plan.ticks(60), plan.events())
     host.mark('milestone', name='walked')
     host.step(40)

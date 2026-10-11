@@ -140,8 +140,11 @@ class Host:
     def pick(self, x: int, y: int) -> dict:
         return self.request('pick', x=x, y=y)
 
-    def export_slot(self, slot: str, to: Path) -> Path:
-        return Path(self.request('export_slot', slot=slot, to=str(to))['path'])
+    def export_slot(self, slot: str, to: Path) -> dict:
+        """`slot` by name, or '@last' for the slot the game wrote last;
+        returns {'path', 'slot'}."""
+        response = self.request('export_slot', slot=slot, to=str(to))
+        return {'path': Path(response['path']), 'slot': response.get('slot', slot)}
 
     def mark(self, kind: str, **fields: Any) -> None:
         self.request('mark', kind=kind, **fields)
@@ -151,7 +154,8 @@ class Host:
         fields: dict[str, Any] = {'bundle': str(bundle), 'verify': verify}
         if until is not None:
             fields['until'] = until
-        return self.request('replay', timeout=timeout, **fields)
+        response = self.request('replay', timeout=timeout, **fields)
+        return {k: v for k, v in response.items() if k not in ('id', 'ok')}
 
     def checkpoint(self, name: str) -> None:
         self.request('checkpoint', name=name)
