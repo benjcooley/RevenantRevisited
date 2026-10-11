@@ -179,20 +179,39 @@ a NUL byte, the file's bytes and a NUL byte.
  "player": {"pos": [6280, 4338, 33], "screen": [300, 210], "level": 2, "facing": 96, "radius": 16,
             "health": [87, 100], "mana": [40, 60], "fatigue": [70, 80],
             "mode": "combat", "action": 3, "action_name": "combat", "action_tick": 14,
-            "target": 1712, "gold": 31, "xp": [1, 140, 300],
-            "skills": {"attack": 4, "defense": 3, "invoke": 1, "weapon": 2},
-            "weapon": {"name": "Short Sword", "mask": 2},
+            "target": 1712, "gold": 31, "xp": [1, 140, 300], "attacklevel": 0,
+            "stats": {"strn": 18, "cons": 12, "agil": 14, "rflx": 14, "mind": 14, "luck": 14},
+            "skills": {"attack": [0, 0, 300], "defense": [0, 0, 300], "invoke": [0, 0, 300],
+                       "hands": [0, 140, 300], "knife": [0, 0, 300], "sword": [0, 0, 300],
+                       "bludgeon": [0, 0, 300], "axes": [0, 0, 300], "bows": [0, 0, 300],
+                       "stealth": [0, 0, 300], "lockpick": [0, 0, 300]},
+            "levelup": [0, 1, 1],
+            "combat": {"offense": 10, "defense": 10, "armor": 2, "damage": 13},
+            "effect": {"statline": "STRN 2 TIME 2880", "ticks": 2210},
+            "weapon": {"name": "Short Sword", "mask": 4, "skill": "sword"},
             "quick_spells": ["Fire Flash", null, null, null],
-            "belt": ["Healing Potion", null, null, null, null],
+            "belt": ["Lesser Healing", null, null, null, null],
             "pack": [{"slot": 5, "name": "Short Sword", "class": "weapon", "eqslot": 4, "screen": [525, 456]}],
-            "equipped": {"2": "Red Cloth Shirt"}},
+            "equipped": {"2": "Red Cloth Shirt"},
+            "items": [{"slot": 5, "name": "Short Sword", "class": "weapon", "amount": 1, "eqslot": 4,
+                       "stats": {"type": 2, "damage": 13, "minstrength": 16, "value": 195}},
+                      {"slot": 0, "name": "Lesser Healing", "class": "potion", "amount": 2, "eqslot": -1,
+                       "stats": {"health": 100, "mana": 0, "poison": 0}, "bag": [3]}]},
+ "equip_slots": [[546, 57], [479, 78], [613, 78], [613, 126], [479, 126], [479, 174],
+                 [613, 174], [496, 31], [596, 31], [479, 222], [613, 222]],
+ "belt_boxes": [[240, 450], [285, 450], [330, 450], [375, 450], [420, 450]],
  "dialog": {"speaker": "Sardok", "choices": ["Who are you people?", "Who am I?"]},
  "cursor": 1712,
  "messages": ["Locke entered The Keep"],
  "objects": [{"id": 1712, "name": "Rahul", "type": "Rahul", "class": "character",
               "pos": [6301, 4350, 33], "screen": [212, 180], "enemy": true,
-              "health": [30, 40], "action": 7, "action_name": "atkchop", "action_tick": 3,
-              "target": 0}],
+              "health": [30, 40], "value": 1, "dead": false,
+              "action": 7, "action_name": "atkchop", "action_tick": 3, "target": 0},
+             {"id": 1730, "name": "Gold", "type": "Gold", "class": "money", "pos": [6331, 4380, 33],
+              "screen": [230, 196], "amount": 29, "item": {"amount": 29, "eqslot": -1, "stats": {}}},
+             {"id": 1802, "name": "ChestE", "type": "ChestE", "class": "container", "pos": [6400, 4290, 33],
+              "screen": [262, 150], "open": false, "openable": true, "locked": false,
+              "contents": [{"slot": 0, "name": "Gold", "amount": 250}]}],
  "frame": "/abs/path.png"}
 ```
 
@@ -205,9 +224,38 @@ a NUL byte, the file's bytes and a NUL byte.
   from an impact or a recovery.
 - `target` (player and characters): the id of the character it fights, or
   `null`; the player's id in `objects` is `0`.
-- `skills`: the character stats combat gates on (attack, defense, invoke,
-  and the skill of the weapon in hand); `weapon.mask` is char.def's weapon
-  mask bit for the weapon in hand (`WM_*`), `0` bare-handed.
+- `xp`: character level, experience, experience for the next level.
+  `attacklevel`: AttackLevel (stat 20), the gate on an attack's
+  `attackskill` (IsValidAttack; Jong's lessons raise it, [GRIND.md](GRIND.md)
+  §2.3). `stats`: the six attributes, modified (equipment and stat
+  effects applied, capped at 30).
+- `skills`: every skill as `[level, experience, experience for its next
+  level]` (stats 40-50, 51-61, 62-72), the level modified as the
+  attributes are. `weapon.skill` names the skill a kill with the weapon in
+  hand raises and its to-hit adds (stat 43 + WeaponType: `hands`
+  barehanded); `weapon.mask` is char.def's weapon mask bit for the weapon
+  in hand (`WM_*`), `0` bare-handed.
+- `levelup`: the two attributes the next level-up raises (0 Strn .. 5 Luck)
+  and the cursor the Stats page's `train*` buttons write through.
+- `combat`: Offense, Defense, Armour and Damage as the game computes them
+  (the stat sheet's Atk, Def, Armour and Dmg).
+- `effect`: the stat effect in force (one at a time), its STATLINE as words
+  and the ticks till it ends (`null` for one without `TIME`); `null` with
+  none.
+- `items`: every item the player carries, wherever it is: the pack (slots
+  0-254), worn and wielded (256 + `EQ_*`), the belt (267-277), and inside
+  bags, with `bag` the slots of the bags it is in, outermost first (left out
+  at the top level). Each has `amount`, `eqslot` and `stats`, the numbers
+  for its class, read as the game reads them (`GetStat` by name, lower
+  cased): a weapon's `type`, `damage`, `minstrength`, `value`; an armour's
+  `protection`, `minstrength`, `minconstitution`, `value`; food's and a
+  potion's `health`, `mana`, `poison`; none for other classes.
+- `equip_slots`: the screen centre of each equipment slot's cell on the
+  equip pane, by `EQ_*` slot, `null` while the side panel doesn't show the
+  pane (an entry `null` where a press can't reach it). A drag from a cell
+  to the pack unequips. `belt_boxes`: in step with `belt`, the centre of the
+  box showing each belt slot, `null` where no box shows it; `null` while the
+  bottom bar is hidden.
 - `quick_spells`, `belt`: what the four quick-spell slots (F1-F4) and the
   five belt slots (F5-F9) hold, `null` when empty: a spell by its spell.def
   VARIANT name, an item by its name.
@@ -219,7 +267,6 @@ a NUL byte, the file's bytes and a NUL byte.
   the pane is hidden). A right click there equips the item in its own slot
   (PLAYER_INPUT.md §6). `equipped`: equipment slot (player.h `EQ_*`) to the
   item worn or wielded there.
-- `xp`: character level, experience, experience for the next level.
 - `cursor`: the id of the object under the pointer as the last drawn
   frame picked it, `null` for nothing (the player is `0`): what a left
   click there acts on (retail `TMapPane::OnObject`, which reuses the pick
@@ -239,7 +286,13 @@ a NUL byte, the file's bytes and a NUL byte.
   player can't see or click, an object flagged `INVISIBLE` or `EDITOR`
   (object flags bits 7 and 8), except the waypoint helpers. A script
   holder such as keep.s's `MUDOKON` is one of these, and so is a character
-  a script has hidden (`toggle invisible = 1`).
+  a script has hidden (`toggle invisible = 1`). A character has `value`,
+  its class Value (what a kill earns and its to-hit go by, GRIND §1.2), and
+  `dead` (health below 1: a corpse). Anything else has `amount` when it is
+  a pile of more than one; an item (anything that can be carried) `item`,
+  its `amount`, `eqslot` and `stats` as in `items`; a container `open`
+  (its state), `openable` (a use opens it), `locked`, and `contents`, each
+  item it holds as `{slot, name, amount}` (a use takes one).
 - `walkgrid` (when asked): `{"origin": [gx, gy], "cell": 16, "w": W,
   "h": H, "heights": [...]}`, row-major walk heights: 0 for no floor, -1 for
   a cell no loaded sector holds (unknown, not "no floor"). Cell k is centred

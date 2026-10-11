@@ -52,6 +52,10 @@ class TBarInvPane final : public TPane
     // How many boxes the shelf shows at its width.
     [[nodiscard]] int32_t NumBoxes() const;
 
+    // The screen centre of box n, the one showing belt slot 0x10b + n; false
+    // while the shelf is hidden or has no box n.
+    [[nodiscard]] bool BoxCenter(int32_t box, int32_t& x, int32_t& y);
+
   private:
     void LayOutCells();
 

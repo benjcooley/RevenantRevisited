@@ -65,6 +65,15 @@ int32_t TBarInvPane::NumBoxes() const
     return (std::max)(0, (GetWidth() - kBoxesLeft) / kBoxPitch);
 }
 
+// The shelf is the bottom bar's child: hidden with it.
+bool TBarInvPane::BoxCenter(int32_t box, int32_t& x, int32_t& y)
+{
+    if (IsHidden() || (GetParent() && GetParent()->IsHidden()) || box < 0 || box >= int32_t(cells.size()))
+        return false;
+    PaneToScreen(kBoxesLeft + box * kBoxPitch + kCellSize / 2, kBoxTop + kCellSize / 2, x, y);
+    return true;
+}
+
 void TBarInvPane::LayOutCells()
 {
     cells.clear();

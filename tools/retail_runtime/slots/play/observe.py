@@ -36,7 +36,11 @@ DIALOG_PANE = 0x00667cc8          # TDialogPane (DLG §4.1): entries +0x17c coun
 ENTRY_SPEAKER, ENTRY_MODE, ENTRY_TEXTS, ENTRY_TEXT = 0x04, 0x08, 0x5c, 0x60   # dialog entry (DLG §4.2); mode 1 NPC
 STAT_IDS = dict(health=0x0066ca4c, fatigue=0x0066ca3c, mana=0x0066ca38)  # globals holding stat ids (HIT)
 LEVEL_STAT, EXP_STAT, NEXTEXP_STAT = 17, 18, 19      # PS §1 (src/charstats.h order, retail-confirmed)
-SKILL_STATS = dict(attack=40, defense=41, invoke=42)  # PS §1
+ATTACKLEVEL_STAT = 20             # AttackLevel, the gate on an attack's attackskill (ACH §3.1 item 19, 0x004d1654)
+ATTRIBUTE_STATS = dict(strn=34, cons=35, agil=36, rflx=37, mind=38, luck=39)   # PS §1
+SKILL_NAMES = ('attack', 'defense', 'invoke', 'hands', 'knife', 'sword', 'bludgeon', 'axes', 'bows',
+               'stealth', 'lockpick')                 # stats 40-50 in order (PS §1, class.def:2904-2914)
+SKILL_STAT, SKILL_EXP_STAT, SKILL_NEXT_STAT = 40, 51, 62   # each skill, its experience, the next level's (PS §1)
 WEAPON_SKILL_BASE = 43                                # skill of the weapon in hand: 43 + WeaponType (ACH item 19)
 SECTOR_COUNT, SECTORS = 0x00668578, 0x00668588       # sector pool (AW, recon/classes/cls_0x44ceb0.cpp)
 SECTOR_LEVEL, SECTOR_X, SECTOR_Y, SECTOR_WALKMAP = 0x04, 0x08, 0x0c, 0x00   # as FindSector 0x00499e10 matches;
@@ -99,6 +103,37 @@ EQUIPMENT_HAND = EQUIPMENT + 4 * 4       # the prime hand, EQ_PRIMEHAND (ACH)
 INVENTORY_COUNT, INVENTORY = 0x68, 0x78   # TPointerArray of the items held (INV §2)
 ITEM_SLOT = 0x7c                  # int16: 0..0xfe pack, 0x100.. equipment, 0x10b.. belt (INV §2)
 BELT_FIRST, BELT_SLOTS = 0x10b, 5
+LEVELUP = 0x360                   # TPlayer: the two attributes the next level-up raises (0 Strn .. 5 Luck)
+                                  # and the cursor the train buttons write through (0x0051fe50:
+                                  # 0x0051fe6a..0x0051fea1; PS §6)
+STAT_EFFECT_COUNT, STAT_EFFECTS = 0x358, 0x35c   # TPlayer: int16 count, {char *line, int expiry} pairs
+                                  # (RemoveStatEffect 0x0051d4a0: 0x0051d4b3..0x0051d4c2; PS §4)
+PLAY_CLOCK = 0x370                # TPlayer: the play clock effects expire by, 1/100 s (vtable +0x314
+                                  # 0x0051d800; PS §5)
+VT_OFFENSE, VT_DEFENSE = 0x2c4, 0x2c0      # TPlayer vtable 0x005b4f30: Offense 0x0051a520, Defense 0x0051a550
+VT_ARMOR, VT_WEAPON_DAMAGE = 0x2bc, 0x2d0  # ArmorValue 0x00519850, WeaponDamage 0x00520830 (GRIND §8)
+VT_AMOUNT = 0x198                 # Amount(): 1, or the Amount stat of money, food, potions, ammo (INV §1;
+                                  # TFood's 0x0050ed70)
+OBJ_STATE = 0x0c                  # uint16 state (EXITS.md §1.2): TContainer::Use 0x004dc180 opens a
+                                  # container in state 0 (0x004dc22a) with SetState(1) (0x004dc2f5)
+VT_OPENABLE, VT_LOCKED = 0x1f0, 0x208      # TContainer::Use asks them (0x004dc21c, 0x004dc1d5)
+CLASS_CONTAINER = 5
+VALUE = 0x005e2874                # "Value": the kill formula asks a victim GetStat("Value") (0x0051a783)
+ITEM_NUMBERS = {1: ('Type', 'Damage', 'MinStrength', 'Value'),           # weapon
+                2: ('Protection', 'MinStrength', 'MinConstitution', 'Value'),   # armor (EqSlot: `eqslot`)
+                4: ('Health', 'Mana', 'Poison'),                         # food
+                18: ('Health', 'Mana', 'Poison')}                        # potion (GRIND §8)
+NAME_SCRATCH = 0x40               # where get_stat puts the name it asks, past project()'s point
+EQUIP_PANE = 0x0065b7e0           # TEquipPane, the side panel's upper slot (EquipPane_SPEC §0)
+EQUIP_CELLS, EQUIP_CELL = 0x005e3f60, 0x28   # 11 {x, y} pane-local cell corners by EQ_* slot, 40 x 40:
+                                  # MouseClick 0x005363e0 tests a press against them (0x005363fc..0x00536437)
+                                  # and takes equipment[i] (0x0053644d)
+BAR_INV_PANE = 0x0065b028         # TBarInvPane, the belt's boxes on the bottom bar (BarInvPane_SPEC §3)
+BAR_FIRST, BAR_COUNT = 0x88, 0x8c # the first belt slot shown (Init 0x0052c970 sets 0), the boxes shown
+                                  # ((w - 0xdc) / 0x2d)
+BAR_LEFT, BAR_PITCH, BAR_TOP = 0xdc, 0x2d, 0x0a   # box n at pane (0xdc + 0x2d n, 0xa), 40 tall: the
+                                  # hover's hit test in Animate 0x0052cd80 (0x0052cda6..0x0052ce02) and the
+                                  # click's in 0x0052cfb0 (0x0052d007..0x0052d051)
 OBJ_CLASS_DEF = 0x48              # TObjectClass*: its stat definitions, the object stats then the type
 CLASS_OBJ_STATS, CLASS_TYPE_STATS = 0x1c, 0x14  # stats, each an int16 count and (+4) entries of 0x50 bytes,
 STAT_DEF_SIZE = 0x50              # the name first, as GetStat(name) 0x00473600 searches them (0 for a name
@@ -125,12 +160,19 @@ NOT_LISTED = {9, 14, 25}          # tiles, shadows, effects
 FLAG_NAMES = 0x005d4770           # char *[32]: object flag bit n's name, as `toggle <name>` looks it up
 OF_INVISIBLE, OF_EDITOR = 0x80, 0x100   # bits 7 "INVISIBLE", 8 "EDITOR": outside the editor the 3D pick
                                   # (MI §2.1) and TCharAnimator::Render 0x004d7a50 skip them
-OF_INVENTORY = 0x40000000
+OF_INVENTORY = 0x40000000        # an item, carried or not: the flag the item classes' constructors set,
+                                  # all IsInventoryItem 0x00477c00 tests (an item dropped on the map keeps it)
 MISSING = object()                # a value retail can't give without changing the game: left out
 
 
 def signed(value):
     return value - (1 << 32) if value & 0x80000000 else value
+
+
+def c_div(a, b):
+    """Integer division as C's: toward zero."""
+    q = abs(a) // abs(b)
+    return q if (a >= 0) == (b >= 0) else -q
 
 
 class Memory:
@@ -454,6 +496,8 @@ class Observer:
         if player:
             result['player'] = self.describe_player(player)
             result['objects'] = self.nearby(player, objects)
+        result['equip_slots'] = self.equip_slots()
+        result['belt_boxes'] = self.belt_boxes()
         on = self.cursor()
         if on is not MISSING:
             result['cursor'] = None if on is None else self.object_id(on)
@@ -480,19 +524,122 @@ class Observer:
         target = self.target(player)
         info['target'] = None if target is None else self.object_id(target)
         info['xp'] = [self.stat(player, s) for s in (LEVEL_STAT, EXP_STAT, NEXTEXP_STAT)]
+        info['attacklevel'] = self.stat(player, ATTACKLEVEL_STAT)
+        info['stats'] = {name: self.stat(player, stat) for name, stat in ATTRIBUTE_STATS.items()}
+        info['skills'] = {name: [self.stat(player, base + skill)
+                                 for base in (SKILL_STAT, SKILL_EXP_STAT, SKILL_NEXT_STAT)]
+                          for skill, name in enumerate(SKILL_NAMES)}
+        info['levelup'] = [m.i32(player + LEVELUP + 4 * k) for k in range(3)]
+        info['combat'] = {name: signed(self.virtual(player, slot)) for name, slot in
+                          (('offense', VT_OFFENSE), ('defense', VT_DEFENSE), ('armor', VT_ARMOR),
+                           ('damage', VT_WEAPON_DAMAGE))}
+        info['effect'] = self.effect(player)
         weapon_type = self.virtual(player, VT_WEAPON_TYPE)
-        info['skills'] = {**{k: self.stat(player, s) for k, s in SKILL_STATS.items()},
-                          'weapon': self.stat(player, WEAPON_SKILL_BASE + weapon_type)}
+        skill = WEAPON_SKILL_BASE - SKILL_STAT + weapon_type     # the skill a kill raises (GRIND §2.1)
         hand = m.u32(player + EQUIPMENT_HAND)
         info['weapon'] = (dict(name=m.text(m.u32(hand + OBJ_NAME)), mask=1 << weapon_type)
                           if hand else dict(name=None, mask=0))
+        info['weapon']['skill'] = SKILL_NAMES[skill] if 0 <= skill < len(SKILL_NAMES) else None
         info['belt'] = self.belt(player)
         info['quick_spells'] = self.quick_spells(player)
         info['gold'] = self.virtual(player, VT_INVENTORY_AMOUNT, GOLD)
         info['pack'] = self.pack(player)
         worn = m.pointers(player + EQUIPMENT, EQUIPMENT_SLOTS)
         info['equipped'] = {str(slot): m.text(m.u32(item + OBJ_NAME)) for slot, item in enumerate(worn) if item}
+        info['items'] = self.items(player)
         return info
+
+    def effect(self, player):
+        """The stat effect in force -- one at a time: AddStatEffect 0x0051c2c0
+        ends the others (PS §4) -- as its STATLINE's words and the ticks till
+        its expiry by the play clock (1/100 s; None for one without TIME);
+        None with none."""
+        m = self.m
+        count = m.i16(player + STAT_EFFECT_COUNT)
+        if count <= 0:
+            return None
+        line, expires = struct.unpack('<Ii', m.vm.uc.mem_read(m.u32(player + STAT_EFFECTS) + 8 * (count - 1), 8))
+        ticks = None if expires < 0 else c_div((expires - m.i32(player + PLAY_CLOCK)) * 24, 100)
+        return dict(statline=' '.join((m.text(line, 1024) or '').split()), ticks=ticks)
+
+    def held(self, holder):
+        """The items in `holder`'s inventory (INV §1: +0x68 / +0x78), by slot."""
+        m = self.m
+        items = [item for item in m.pointers(m.u32(holder + INVENTORY), m.i32(holder + INVENTORY_COUNT)) if item]
+        return sorted(items, key=lambda item: m.i16(item + ITEM_SLOT))
+
+    def items(self, holder, bag=()):
+        """Every item `holder` carries -- the pack (0..0xfe), the equipment
+        (0x100..), the belt (0x10b..; INV §2) -- and what the bags among them
+        hold, each with `bag`, the slots of the bags it is in, outermost
+        first."""
+        m, found = self.m, []
+        for item in self.held(holder):
+            slot, kind = m.i16(item + ITEM_SLOT), m.i16(item + OBJ_CLASS)
+            entry = dict(slot=slot, name=m.text(m.u32(item + OBJ_NAME)),
+                         **{'class': CLASS_NAMES[kind] if 0 <= kind < len(CLASS_NAMES) else None},
+                         **self.item_numbers(item))
+            if bag:
+                entry['bag'] = list(bag)
+            found.append(entry)
+            if m.i32(item + INVENTORY_COUNT) > 0:
+                found += self.items(item, bag + (slot,))
+        return found
+
+    def item_numbers(self, item):
+        """An item's amount, its own equipment slot and its numbers (GRIND
+        §8), each asked as the game asks an item: GetStat(name) 0x00473600,
+        whose class stats are the type's after BindTypes 0x0048cab0 bound
+        weapon.def and armor.def over class.def (GRIND §5.1)."""
+        kind = self.m.i16(item + OBJ_CLASS)
+        return dict(amount=signed(self.virtual(item, VT_AMOUNT)), eqslot=self.eqslot(item),
+                    stats={name.lower(): self.get_stat(item, name) for name in ITEM_NUMBERS.get(kind, ())})
+
+    def get_stat(self, obj, name):
+        """GetStat(name) through the object's vtable (+0xd4), the name in the
+        host's scratch buffer; 0 for a name its class lacks (0x004736df)."""
+        address = self.world.scratch + NAME_SCRATCH
+        self.world.vm.write(address, name.encode('cp1252') + b'\0')
+        return signed(self.virtual(obj, VT_GET_STAT, address))
+
+    def eqslot(self, item):
+        """The item's EqSlot stat, -1 for an item whose class has none."""
+        if not self.has_stat(item, self.m.text(EQSLOT)):
+            return -1
+        return signed(self.virtual(item, VT_GET_STAT, EQSLOT))
+
+    def equip_slots(self):
+        """The screen centre of each equipment slot's cell on the equip pane,
+        by EQ_* slot, while the pane shows (else None); a cell is None where a
+        press there doesn't reach the pane (a modal holds the mouse)."""
+        m = self.m
+        if m.u32(CURRENT_SCREEN) != PLAY_SCREEN or self.virtual(EQUIP_PANE, VT_PANE_HIDDEN):
+            return None
+        route, cells = self.mouse_route(), []
+        for slot in range(EQUIPMENT_SLOTS):
+            x, y = struct.unpack('<2i', m.vm.uc.mem_read(EQUIP_CELLS + 8 * slot, 8))
+            x += m.i32(EQUIP_PANE + PANE_X) + EQUIP_CELL // 2
+            y += m.i32(EQUIP_PANE + PANE_Y) + EQUIP_CELL // 2
+            cells.append([x, y] if self.press_reaches(EQUIP_PANE, x, y, route) else None)
+        return cells
+
+    def belt_boxes(self):
+        """The belt's boxes on the bottom bar, in step with `belt`: entry n
+        the centre of the box showing belt slot n (box n - first), None where
+        no box shows it or a press there doesn't reach the pane; None while
+        the shelf is hidden."""
+        m = self.m
+        if m.u32(CURRENT_SCREEN) != PLAY_SCREEN or self.virtual(BAR_INV_PANE, VT_PANE_HIDDEN):
+            return None
+        route, first, count = self.mouse_route(), m.i32(BAR_INV_PANE + BAR_FIRST), m.i32(BAR_INV_PANE + BAR_COUNT)
+        boxes = []
+        for slot in range(BELT_SLOTS):
+            box = slot - first
+            x = m.i32(BAR_INV_PANE + PANE_X) + BAR_LEFT + BAR_PITCH * box + INV_CELL // 2
+            y = m.i32(BAR_INV_PANE + PANE_Y) + BAR_TOP + INV_CELL // 2
+            reaches = 0 <= box < count and self.press_reaches(BAR_INV_PANE, x, y, route)
+            boxes.append([x, y] if reaches else None)
+        return boxes
 
     def pack(self, player):
         """The player's items in the inventory pane's twelve cells in view
@@ -506,7 +653,6 @@ class Observer:
         if m.u32(pane + INV_CONTAINER) != player:
             return []
         first, route = m.i32(pane + INV_FIRST), self.mouse_route()
-        eqslot = m.text(EQSLOT)
         cells = []
         for item in m.pointers(m.u32(player + INVENTORY), m.i32(player + INVENTORY_COUNT)):
             slot = m.i16(item + ITEM_SLOT) if item else -1
@@ -518,8 +664,7 @@ class Observer:
             kind = m.i16(item + OBJ_CLASS)
             cells.append(dict(slot=slot, name=m.text(m.u32(item + OBJ_NAME)),
                               **{'class': CLASS_NAMES[kind] if 0 <= kind < len(CLASS_NAMES) else None},
-                              eqslot=(signed(self.virtual(item, VT_GET_STAT, EQSLOT))
-                                      if self.has_stat(item, eqslot) else -1),
+                              eqslot=self.eqslot(item),
                               screen=[x, y] if self.press_reaches(pane, x, y, route) else None))
         return sorted(cells, key=lambda cell: cell['slot'])
 
@@ -578,10 +723,12 @@ class Observer:
         """Whether `objects` lists `obj` (PROTOCOL.md §7, the port's
         observation's Listed): not a tile, shadow or effect, not carried,
         and nothing the player can't see or click -- an object flagged
-        invisible or editor-only -- except the waypoint helpers."""
+        invisible or editor-only -- except the waypoint helpers. Carried is
+        an inventory slot (+0x7c, INV §1; -1 on the map), as the port's
+        IsInInventory: the item flag marks items on the ground too."""
         m = self.m
         kind, flags = m.i16(obj + OBJ_CLASS), m.u32(obj + OBJ_FLAGS)
-        if kind in NOT_LISTED or flags & OF_INVENTORY:
+        if kind in NOT_LISTED or m.i16(obj + ITEM_SLOT) >= 0:
             return False
         return kind == CLASS_HELPER or not flags & (OF_INVISIBLE | OF_EDITOR)
 
@@ -605,11 +752,35 @@ class Observer:
                 health = self.stat_id('health')
                 entry['enemy'] = bool(self.world.peek(IS_ENEMY, (player,), this=obj) & 0xff)
                 entry['health'] = [self.stat(obj, health), self.virtual(obj, VT_MAX['health'])]
+                # its class Value, as the kill formula asks a victim (GRIND §1.2); a
+                # corpse: health below 1 (GRIND §3.1)
+                entry['value'] = signed(self.virtual(obj, VT_GET_STAT, VALUE))
+                entry['dead'] = entry['health'][0] < 1
                 self.describe_action(obj, entry)
                 target = self.target(obj)
                 entry['target'] = None if target is None else self.object_id(target)
+            else:
+                self.describe_thing(obj, kind, entry)
             found.append((distance, entry['id'], entry))
         return [entry for _, _, entry in sorted(found, key=lambda f: f[:2])]
+
+    def describe_thing(self, obj, kind, entry):
+        """What isn't a character: a pile's amount; an item's numbers
+        (IsInventoryItem 0x00477c00: the item flag); a container's state,
+        whether a use opens it, its lock and what it holds (a use takes one
+        item; TContainer::Use 0x004dc180)."""
+        m = self.m
+        amount = signed(self.virtual(obj, VT_AMOUNT))
+        if amount > 1:
+            entry['amount'] = amount
+        if m.u32(obj + OBJ_FLAGS) & OF_INVENTORY:
+            entry['item'] = self.item_numbers(obj)
+        if kind == CLASS_CONTAINER:
+            entry.update(open=m.u16(obj + OBJ_STATE) != 0, openable=bool(self.virtual(obj, VT_OPENABLE)),
+                         locked=bool(self.virtual(obj, VT_LOCKED)),
+                         contents=[dict(slot=m.i16(item + ITEM_SLOT), name=m.text(m.u32(item + OBJ_NAME)),
+                                        amount=signed(self.virtual(item, VT_AMOUNT)))
+                                   for item in self.held(obj)])
 
     def dialog(self):
         """The dialog pane while it shows choices (DLG §4): the texts of the

@@ -194,6 +194,20 @@ class TPlayer : public TCharacter
     void AddStatEffect(const char *statline);
       // Starts a stat effect, a STATLINE that may last a TIME (retail 0x0051c2c0)
 
+    // A STATLINE in force (retail +0x358 count, +0x35c {line, expiry} pairs).
+    struct SStatEffect
+    {
+        std::string statline;                       // ends "INITIALIZE" until first applied
+        int32_t expires = -1;                       // play-clock time it ends; -1 never
+    };
+    [[nodiscard]] const std::vector<SStatEffect>& StatEffects() const { return stateffects; }
+    [[nodiscard]] int32_t PlayClock() const { return statetime; }
+      // The play clock the effects expire by (retail +0x370, vtable +0x314; 1/100 s)
+    [[nodiscard]] const std::array<int32_t, 3>& LevelUpStats() const { return levelupstats; }
+      // The two attributes the next level-up raises (0 Strn .. 5 Luck) and the
+      // cursor the Stats page's train buttons write through (retail +0x360,
+      // +0x364, +0x368; 0x0051fe50)
+
     // Experience
     [[nodiscard]] int32_t KillExp(int32_t value);
       // What overcoming something worth 'value' earns at this level (retail 0x0051a5b0)
@@ -443,13 +457,6 @@ class TPlayer : public TCharacter
       // Returns bow root given the bow 'oi' or current bow if oi is nullptr
 
   private:
-    // A STATLINE in force (retail +0x358 count, +0x35c {line, expiry} pairs).
-    struct SStatEffect
-    {
-        std::string statline;                       // ends "INITIALIZE" until first applied
-        int32_t expires = -1;                       // play-clock time it ends; -1 never
-    };
-
     void ApplyStatLine(const char *statline, int32_t effect);
       // Applies a STATLINE to the modified stats; 'effect' is its stat effect, or -1 (retail 0x0051cc40)
     void RemoveStatEffect(int32_t effect);
