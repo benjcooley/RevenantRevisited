@@ -21,6 +21,7 @@
 #include "sound.h"
 #include "textbar.h"
 
+#include <algorithm>
 #include <vector>
 
 extern TObjectClass EffectClass;
@@ -449,7 +450,6 @@ TSpell::TSpell(TObjectInstance* invoke,
 {
     invoker = invoke;
     invoker_ref = invoke;
-    effect.Clear();
     for (auto& target : targets) target = nullptr;
     frame = 0;
     magic_offense = magic_defense = 0;
@@ -497,37 +497,21 @@ TSpell::TSpell(TObjectInstance* invoke,
         source.x = source.y = source.z = -1;    // Means not used
 }
 
+// REVSYNC-DIVERGENCE: retail's destructor (0x00540b20) only frees the effect
+// list, so an effect the spell never let go of (no Kill first) keeps a
+// dangling spell; the port's let go of it here.
 TSpell::~TSpell()
 {
-    // The manager owns this spell. The effect can outlive its invoker or
-    // finish first; resolve its generation-checked identity before use.
-    if (auto* live_effect = dynamic_cast<TEffect*>(effect.Get()))
-        if (live_effect->GetSpell() == this)
-            live_effect->SetSpell(nullptr);
-    effect.Clear();
+    for (const TSafeRef<TObjectInstance>& ref : effects)
+        if (auto* fx = dynamic_cast<TEffect*>(ref.Get()); fx && fx->GetSpell() == this)
+            fx->SetSpell(nullptr);
 }
 
-// Returns source pos, or right hand pos if 'source' is (-1,-1,-1).
-bool TSpell::GetSourcePos(S3DPoint& sourcepos)
+S3DPoint TSpell::SourceOffset() const
 {
-    if (source.x != -1 || source.y != -1 || source.z != -1) // If source used...
-    {
-        sourcepos = source;
-        return true;
-    }
-
-  // If no source, use character's hand as the source
-    sourcepos.x = sourcepos.y = sourcepos.z = 0;
-    if (invoker->GetAnimator() && (invoker->GetImagery()->GetHeader()->imageryid != OBJIMAGE_MESH3D))
-    {
-        if (!((PT3DAnimator)invoker->GetAnimator())->GetObjectMapPos("rhand", sourcepos))
-            return false;
-        int32_t z = sourcepos.z;
-        ConvertToVector(invoker->GetFace(), Distance(sourcepos), sourcepos);
-        sourcepos.z = z;
-    }
-
-    return true;
+    if (source.x == -1 && source.y == -1 && source.z == -1)
+        return S3DPoint(0, 0, 0);
+    return source;
 }
 
 // get by name
@@ -544,44 +528,109 @@ void TSpell::SetByTalismans(char* talismans)
     variant = SpellList.GetVariantDataByTalismans(talismans);
 }
 
+TEffect* TSpell::NewEffect(SObjectDef& def, int32_t imagery)
+{
+    TObjectInstance* made = MapPane.GetInstance(MapPane.NewObject(&def, imagery));
+    lasteffect = made;
+    auto* fx = dynamic_cast<TEffect*>(made);
+    if (!fx)
+        return nullptr;
+    fx->SetSpell(this);
+    effects.emplace_back(made);
+    return fx;
+}
+
+// The DELAY counts down; at its end the variant's EFFECT is made at the
+// invoker plus the source, facing his way with FACING. Nothing ends the
+// spell here but a Kill (timer 0): retail has no "no effect, no spell"
+// rule (the 1998 code ended it then), and no right-hand source or HEIGHT
+// fallback.
+// REVSYNC-DIVERGENCE: retail reads the invoker through null when he is gone
+// by then (ObjectRemoved cleared him); the port makes no effect.
 bool TSpell::Timer()
 {
-    if (timer > 0) 
-        --timer; 
-    
-    if (!effect && wait < 0) 
-        timer = 0;
-
+    if (timer > 0)
+        --timer;
     if (wait > 0)
-        --wait;
-    else if (wait == 0)
     {
         --wait;
-
-        // create the effect id
-        SObjectDef def;
-        memset(&def, 0, sizeof(SObjectDef));
-        def.objclass = OBJCLASS_EFFECT;
-        def.level = MapPane.GetMapLevel();
-        invoker->GetPos(def.pos);
-        S3DPoint spos;
-        if (GetSourcePos(spos))
-            def.pos += spos;
-        else
-            def.pos.z += variant->height;  // Height is only used as a last resort
-        if (variant->facing)
-            def.facing = invoker->GetFace();
-        else
-            def.facing = 0;
-        def.objtype = EffectClass.FindObjType(variant->effect);
-
-        effect = MapPane.GetInstance(MapPane.NewObject(&def));
-
-        if (effect)
-            ((PTEffect)effect.Get())->SetSpell(this);
+        return timer == 0;
     }
+    if (wait == 0)
+    {
+        wait = -1;
+        if (TObjectInstance* caster = invoker_ref.Get())
+        {
+            SObjectDef def{};
+            def.objclass = OBJCLASS_EFFECT;
+            def.level = (uint16_t)MapPane.GetMapLevel();
+            def.pos = caster->Pos() + SourceOffset();
+            def.facing = variant->facing ? (uint8_t)caster->GetFace() : 0;
+            def.objtype = (short)EffectClass.FindObjType(variant->effect);
+            NewEffect(def);
+        }
+    }
+    return timer == 0;
+}
 
-    return timer == 0; 
+// Retail skips it while the game is paused ([0x0065d0c4]), as it skips the
+// caster's whole Pulse; that flag isn't identified in the port yet.
+void TSpell::Pulse()
+{
+    for (size_t i = 0; i < effects.size(); i++)
+    {
+        const TSafeRef<TObjectInstance> ref = effects[i];
+        TObjectInstance* fx = ref.Get();
+        if (!fx || fx->GetSector())
+            continue;
+        fx->Pulse();
+        if (ref.Get())
+            MapPane.AddObject(fx);          // slot 0x8c: into the map if it fits now
+    }
+}
+
+// REVSYNC-DIVERGENCE: retail removes slot 0 of the list once per effect
+// (0x00540af0 takes its index from a zero argument), so the others stay
+// listed, spell-less and killed, until the spell is deleted; a second Kill
+// meanwhile (an ObjectRemoved for one of them) runs the loop again. The
+// port lets go of all of them; the effects end the same way.
+void TSpell::Kill()
+{
+    timer = 0;
+    for (const TSafeRef<TObjectInstance>& ref : effects)
+    {
+        TObjectInstance* fx = ref.Get();
+        if (!fx)
+            continue;
+        if (TObjectInstance* poisoned = PoisonTarget())
+            poisoned->SetPoisoned(0);
+        fx->SetFlags(OF_KILL);
+        if (auto* effect = dynamic_cast<TEffect*>(fx))
+            effect->SetSpell(nullptr);
+    }
+    effects.clear();
+}
+
+void TSpell::ObjectRemoved(int32_t notify, void* ptr)
+{
+    auto gone = [notify, ptr](TObjectInstance* obj) {
+        if (!obj)
+            return false;
+        if (notify == N_DELETINGOBJECT)
+            return obj == ptr;
+        return notify == N_DELETINGSECTOR && (void*)obj->GetSector() == ptr && !(obj->GetFlags() & OF_NONMAP);
+    };
+    if (gone(invoker_ref.Get()))
+    {
+        Kill();
+        invoker = nullptr;
+        invoker_ref.Clear();
+    }
+    if (std::any_of(effects.begin(), effects.end(), [&](const TSafeRef<TObjectInstance>& ref) { return gone(ref.Get()); }))
+        Kill();
+    for (int32_t i = 0; i < targetnum; i++)
+        if (gone(target_refs[i].Get()))
+            SetTarget(i, nullptr);
 }
 
 // REVSYNC: TSpell::Damage @ 0x0053f560 -- the variant's damage range, each
@@ -642,6 +691,23 @@ void TSpell::ManaDrain()
         caster->SetMana(caster->MaxMana());
 }
 
+namespace
+{
+// The characters the map has round `pos` (retail's iterator 0x0044ceb0 with
+// flags 0xe0: no inventories, the map square `radius` round it, the loaded
+// sectors) on `level` (-1: every loaded level).
+std::vector<TCharacter*> CharactersAround(int32_t level, const S3DPoint& pos, int32_t radius)
+{
+    if (TCharacter::nearbyCharactersSeam)
+        return TCharacter::nearbyCharactersSeam(pos, radius);
+    std::vector<TCharacter*> around;
+    SRect r{pos.x - radius, pos.y - radius, pos.x + radius, pos.y + radius};
+    for (TMapIterator i(level, &r, CHECK_NOINVENT, OBJSET_CHARACTER); i; i++)
+        around.push_back(static_cast<TCharacter*>(i.Item()));
+    return around;
+}
+}  // namespace
+
 // No attacker, no damage. A target is the attacker's enemy when the attacker
 // is a character (anyone else hits every character).
 // REVSYNC-DIVERGENCE: retail hands Damage the attacker object whatever it is;
@@ -657,19 +723,7 @@ void AreaDamage(TObjectInstance* attacker, const S3DPoint& pos, int32_t radius, 
                              : nullptr;
     TPlayer* player = (caster && caster->ObjClass() == OBJCLASS_PLAYER) ? static_cast<TPlayer*>(caster) : nullptr;
 
-    // Retail's iterator (0x0044ceb0): the attacker's level, flags 0xe0 -- no
-    // inventories, the map rectangle, the loaded sectors.
-    std::vector<TCharacter*> around;
-    if (TCharacter::nearbyCharactersSeam)
-        around = TCharacter::nearbyCharactersSeam(pos, radius);
-    else
-    {
-        SRect r{pos.x - radius, pos.y - radius, pos.x + radius, pos.y + radius};
-        for (TMapIterator i(attacker->GetLevel(), &r, CHECK_NOINVENT, OBJSET_CHARACTER); i; i++)
-            around.push_back(static_cast<TCharacter*>(i.Item()));
-    }
-
-    for (TCharacter* target : around)
+    for (TCharacter* target : CharactersAround(attacker->GetLevel(), pos, radius))
     {
         if (target == caster)
             continue;
@@ -692,6 +746,277 @@ void AreaDamage(TObjectInstance* attacker, const S3DPoint& pos, int32_t radius, 
         if (player)
             player->AwardKillExp(target);
     }
+}
+
+// *******************
+// *** TStrikeSpell ***
+// *******************
+
+namespace
+{
+// The character `who` fights: his root block's object while that block is
+// combat or bow (retail: root action 3 or 0x19, the object at root +0x44).
+TObjectInstance* FightingTarget(TObjectInstance* who)
+{
+    auto* chr = dynamic_cast<TCharacter*>(who);
+    return chr ? chr->Fighting() : nullptr;
+}
+
+// The CONTROLDATA sound at `at`: PLAY loops it, PLAYONCE plays it once
+// (retail's 0x0049b990 with a loop count of 0 / 1), at full volume.
+void PlayControlSound(const SSpellControlData& control, S3DPoint at)
+{
+    const bool loop = control.flags & SCF_PLAY;
+    if (!loop && !(control.flags & SCF_PLAYONCE))
+        return;
+    const int32_t id = SoundPlayer.FindSound(control.sound);
+    if (id < 0 || !SoundPlayer.Mount(id))
+        return;
+    if (TSound* sound = SoundPlayer.GetSound(id))
+        sound->SetLooping(loop);
+    SoundPlayer.Play(id, 0, 0, &at);
+}
+}  // namespace
+
+void TStrikeSpell::Pulse()
+{
+    TSpell::Pulse();
+    ++frame;
+    const SSpellControlData& control = *variant->controldata;
+    if (control.repeatset && frame % 24 == 0 && invoker_ref.Get())
+    {
+        TObjectInstance* foe = FightingTarget(invoker_ref.Get());
+        if (TObjectInstance* struck = striketarget.Get())
+        {
+            if (foe != struck || struck->Health() <= 0)
+            {
+                Kill();
+                return;
+            }
+            if (foe)
+                Damage(foe);
+        }
+    }
+    if (control.duration != -1 && frame >= control.duration)
+    {
+        Kill();
+        TObjectInstance* caster = invoker_ref.Get();
+        TObjectInstance* foe = FightingTarget(caster);
+        if (foe && spell->poisonchance && foe != caster)
+            foe->SetPoisoned(0);
+    }
+}
+
+SObjectDef TStrikeSpell::EffectDef(TObjectInstance* target) const
+{
+    const SSpellControlData& control = *variant->controldata;
+    SObjectDef def{};
+    def.objclass = OBJCLASS_EFFECT;
+    def.level = (uint16_t)MapPane.GetMapLevel();
+    def.pos = target->Pos();
+    if (control.posset)
+        def.pos += S3DPoint(control.pos[0], control.pos[1], control.pos[2]);
+    else
+    {
+        if (!control.attachset)
+            def.pos += S3DPoint(50, 50, 50);
+        else if (S3DPoint offset; ObjectMapOffset(target, control.attach, offset))
+            def.pos += offset;
+        def.pos += SourceOffset();
+    }
+    TObjectInstance* caster = invoker_ref.Get();
+    def.facing = (variant->facing && caster) ? (uint8_t)caster->GetFace() : 0;
+    def.objtype = (short)EffectClass.FindObjType(variant->effect);
+    return def;
+}
+
+TEffect* TStrikeSpell::NewStrikeEffect(SObjectDef& def, TObjectInstance* anchor, int32_t angle, int32_t dist, bool orbit)
+{
+    const SSpellControlData& control = *variant->controldata;
+    TEffect* fx = NewEffect(def, control.imagery);
+    if (fx && control.follow)
+    {
+        fx->Follow(anchor, angle, dist, orbit);
+        fx->SetFollowTime(control.duration);
+    }
+    return fx;
+}
+
+void TStrikeSpell::Time(TEffect* fx) const
+{
+    const SSpellControlData& control = *variant->controldata;
+    fx->SetLife(control.duration, control.duration2);
+    fx->SetStartWait(random(0, control.wait));
+}
+
+// The countdowns as TSpell's. At the end of DELAY:
+//  1. the anchor: with HITTARGET (and not ONCASTER) the one the caster
+//     fights -- none, and the spell is over -- or, with no caster, its
+//     first target; otherwise the caster;
+//  2. the effect def on the anchor; the struck target (the one the caster
+//     fights, or with no caster the anchor) becomes its first target;
+//  3. PLAY / PLAYONCE at the def;
+//  4. the effects (an anchor out of the map keeps those that follow or
+//     attach out of it too):
+//     - ATTACHMULTIPLE: HITS of them, each on its attach point (with
+//       FOLLOW), timed;
+//     - MULTIPLETARGETS: one on each living character within RADIUS but the
+//       caster (or with ONCASTER one on the anchor, untimed), then the
+//       blast (AreaDamage) around the caster;
+//     - else HITS in the PATTERN around the def, timed: at it (none), at a
+//       random angle and distance, round a circle, along a line ahead,
+//       round a cluster moving outward, in an X, along a spiral.
+// REVSYNC-DIVERGENCE: with no caster and no first target retail reads an
+// uninitialized anchor, and with neither caster nor HITTARGET it builds on
+// none (a crash); the port's spell then ends as with no one to strike.
+bool TStrikeSpell::Timer()
+{
+    if (timer > 0)
+        --timer;
+    if (wait > 0)
+    {
+        --wait;
+        return timer == 0;
+    }
+    if (wait < 0)
+        return timer == 0;
+    wait = -1;
+
+    const SSpellControlData& control = *variant->controldata;
+    TObjectInstance* caster = invoker_ref.Get();
+    TObjectInstance* anchor = caster;
+    if (control.hittarget && !control.oncaster)
+        anchor = caster ? FightingTarget(caster) : GetTargetRef(0).Get();
+    if (!anchor)
+        return true;
+
+    SObjectDef def = EffectDef(anchor);
+    striketarget = caster ? FightingTarget(caster) : anchor;
+    SetTarget(0, striketarget.Get());
+    PlayControlSound(control, def.pos);
+    if ((control.follow || control.attachset) && (anchor->GetFlags() & OF_NONMAP))
+        def.flags |= OF_NONMAP;
+
+    const S3DPoint base = def.pos;
+    const int32_t hits = control.hits;
+    const int32_t radius = control.radius;
+    // Retail's x87 steps, each kept as a float: 255 / HITS, 2R / HITS,
+    // 4R / HITS (R the RADIUS, a float too).
+    const float r = (float)radius;
+    const float turn = (float)(255.0 / hits);
+    const float span = (float)(2.0 * r / hits);
+    const float span4 = (float)(4.0 * r / hits);
+    auto around = [&](int32_t angle, int32_t dist) {
+        S3DPoint v;
+        ConvertToVector(angle, dist, v);
+        def.pos = base + v;
+    };
+    auto pattern = [&](int32_t angle, int32_t dist) {
+        if (TEffect* fx = NewStrikeEffect(def, anchor, angle, dist, true))
+            Time(fx);
+    };
+
+    if (control.attachset && control.attachmultiple)
+    {
+        for (int32_t i = 0; i < hits; i++)
+            if (TEffect* fx = NewStrikeEffect(def, anchor, 0, 0, false))
+            {
+                if (control.follow)
+                    fx->SetAttachName(control.attachmultiple + i * RESNAMELEN);
+                Time(fx);
+            }
+        return timer == 0;
+    }
+
+    if (control.multipletargets && caster)
+    {
+        const S3DPoint center = caster->Pos();
+        if (!control.oncaster)
+        {
+            for (TCharacter* c : CharactersAround(-1, center, radius))
+                if (c != caster && c->Health() > 0)
+                {
+                    SObjectDef at = EffectDef(c);
+                    if (TEffect* fx = NewStrikeEffect(at, anchor, 0, 0, false))
+                        Time(fx);
+                }
+        }
+        else
+            NewStrikeEffect(def, anchor, 0, 0, false);
+        AreaDamage(caster, center, radius, variant->mindamage, variant->maxdamage, spell->damagetype, 0);
+        return timer == 0;
+    }
+
+    switch (control.pattern)
+    {
+        case SPAT_NONE:
+            for (int32_t i = 0; i < hits; i++)
+                if (TEffect* fx = NewStrikeEffect(def, anchor, 0, 0, false))
+                    Time(fx);
+            break;
+        case SPAT_RANDOM:
+            for (int32_t i = 0; i < hits; i++)
+            {
+                const int32_t angle = random(0, 255);
+                const int32_t dist = random(0, radius);
+                around(angle, dist);
+                pattern(angle, dist);
+            }
+            break;
+        case SPAT_CIRCLE:
+            for (int32_t i = 0; i < hits; i++)
+            {
+                const int32_t angle = (int32_t)(i * (double)turn) + 64;
+                around(angle, radius);
+                pattern(angle, radius);
+            }
+            break;
+        case SPAT_LINE:
+            for (int32_t i = 0; i < hits; i++)
+            {
+                const int32_t dist = (int32_t)(r - i * (double)span);
+                around(def.facing, dist);
+                pattern(def.facing, dist);
+            }
+            break;
+        case SPAT_CLUSTER:
+            for (int32_t i = 0; i < hits; i++)
+            {
+                const int32_t angle = (int32_t)(i * (double)turn);
+                ConvertToVector(angle, (int32_t)((double)(radius - 10) / hits), def.vel);
+                around(angle, radius - 10);
+                pattern(angle, radius - 10);
+            }
+            break;
+        case SPAT_X:
+            for (int32_t side = 0; side < 2; side++)
+                for (int32_t i = 0; i < hits / 2; i++)
+                {
+                    const int32_t angle = def.facing + side * 64;
+                    const int32_t dist = (int32_t)(r - i * (double)span4 + span4 * 0.5);
+                    around(angle, dist);
+                    pattern(angle, dist);
+                }
+            break;
+        case SPAT_SPIRAL:
+            for (int32_t i = 0; i < hits; i++)
+            {
+                const int32_t angle = (int32_t)(i * (double)turn);
+                const int32_t dist = (int32_t)(i * (double)span);
+                around(angle, dist);
+                pattern(angle, dist);
+            }
+            break;
+        default:
+            break;
+    }
+    return timer == 0;
+}
+
+void TStrikeSpell::Kill()
+{
+    TSpell::Kill();
+    SoundPlayer.Stop(SoundPlayer.FindSound(variant->controldata->sound));
 }
 
 // *********************
@@ -815,6 +1140,17 @@ void TSpellManager::Commit(TSpell* spell, TCharacter* caster, TObjectInstance** 
         caster->SetCast(spelldata->invoke, targets ? targets[0] : nullptr, variant->ani_delay);
     wait = variant->nextspellwait;
     spell->ManaDrain();
+    Add(spell);
+}
+
+void TSpellManager::Add(TSpell* spell)
+{
+    for (int32_t i = 0; i < spells.NumItems(); i++)
+        if (!spells.Used(i))
+        {
+            spells.Set(spell, i);
+            return;
+        }
     spells.Add(spell);
 }
 
@@ -906,22 +1242,44 @@ bool TSpellManager::CastByName(char* name, TObjectInstance* invoker,
     return true;
 }
 
+// REVSYNC: TSpellManager::Pulse @ 0x00540750 -- the cooldown; then each
+// spell's Pulse and Timer, and one over is killed and deleted (its slot
+// left vacant; the next index is not skipped).
 void TSpellManager::Pulse()
 {
     if (wait > 0)
         --wait;
 
-    int32_t size = spells.NumItems();
-    
-    for(int32_t i = 0; i < size; ++i) 
+    const int32_t size = spells.NumItems();
+    for (int32_t i = 0; i < size; ++i)
     {
         if (!spells.Used(i))
             continue;
+        TSpell* spell = spells[i];
+        spell->Pulse();
+        // Its effects' pulses can remove objects, and a removal can delete a
+        // spell (ObjectRemoved): this one is carried on only if still here.
+        if (!spells.Used(i) || spells[i] != spell)
+            continue;
+        if (spell->Timer())
+        {
+            spell->Kill();
+            spells.Delete(i);
+        }
+    }
+}
 
-        spells[i]->Pulse(); 
-        
-        if (spells[i]->Timer())
-            spells.Delete(i); // leaves a vacant slot; the next index is not skipped
+void TSpellManager::ObjectRemoved(int32_t notify, void* ptr)
+{
+    const int32_t size = spells.NumItems();
+    for (int32_t i = 0; i < size; ++i)
+    {
+        if (!spells.Used(i))
+            continue;
+        TSpell* spell = spells[i];
+        spell->ObjectRemoved(notify, ptr);
+        if (spell->Timer())
+            spells.Delete(i);
     }
 }
 

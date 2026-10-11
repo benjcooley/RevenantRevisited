@@ -397,14 +397,20 @@ class TMapPane : public TPane
   // Add/Remove objects
     int32_t MakeIndex();
       // Makes a unique id map index for an object
-    int32_t NewObject(SObjectDef* def);
-      // Create a new object with the given objdef
-    using NewObjectSeam = int32_t (*)(SObjectDef* def);
+    int32_t NewObject(SObjectDef* def, int32_t imagery = -1);
+      // REVSYNC: TMapPane::NewObject @ 0x00450e40 -- a new object from `def`
+      // with that registered imagery (-1: its type's), put in the map; its
+      // map index, or -1
+    using NewObjectSeam = int32_t (*)(SObjectDef* def, int32_t imagery);
     static inline NewObjectSeam newObjectSeam = nullptr;
-      // Retail A/B fixtures only: when set, it answers NewObject (retail
-      // 0x00450e40): the def recorded, the id it gives returned
+      // Retail A/B fixtures only: when set, it answers NewObject: the def
+      // recorded, the id it gives returned
     int32_t AddObject(TObjectInstance* oi);
       // Adds the given object to the map and returns unique id
+    using AddObjectSeam = int32_t (*)(TObjectInstance* oi);
+    static inline AddObjectSeam addObjectSeam = nullptr;
+      // Retail A/B fixtures only: when set, it answers AddObject (retail
+      // 0x00451090)
     void ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32_t newflags);
       // Allows map to update lists, etc. when an objects flags change (mainly
       // for OF_LIGHT, OF_PULSE, and OF_ANIMATE changing objects location on 

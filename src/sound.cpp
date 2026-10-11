@@ -94,6 +94,13 @@ bool TSound::IsPlaying()
     return paused || (source && audio::IsPlaying(source));
 }
 
+void TSound::SetLooping(bool state)
+{
+    looping = state;
+    if (source)
+        audio::SetLooping(source, state);
+}
+
 bool TSound::IsLooping()
 {
     if (source) return audio::IsLooping(source);

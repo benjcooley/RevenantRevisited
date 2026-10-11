@@ -389,8 +389,9 @@ class TObjectClass
         // Removes an object type
 
   // Object functions
-    TObjectInstance* NewObject(SObjectDef* objectdef);
-        // Create a new object based on the given object definition
+    TObjectInstance* NewObject(SObjectDef* objectdef, int32_t imageryid = -1);
+        // REVSYNC: 0x00474bb0 -- a new object of the def's type, with that
+        // registered imagery (-1: the type's, kept as the type's)
 
   // Type functions
     int32_t NumTypes() const { return objinfo.NumItems(); }

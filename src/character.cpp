@@ -696,6 +696,11 @@ void TCharacter::Notify(int32_t notify, void *ptr)
             SetFighting(nullptr);
     }
 
+  // REVSYNC: TCharacter::Notify @ 0x004c36c0 -- every notice reaches the
+  // spells (0x004c3965: TSpellManager::ObjectRemoved, which also runs each
+  // spell's Timer).
+    SpellManager.ObjectRemoved(notify, ptr);
+
   // Check hasseen list for deleted objects
     for (int32_t c = 0; c < MAXHASSEEN; c++)
     {
