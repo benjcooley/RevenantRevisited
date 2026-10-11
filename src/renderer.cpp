@@ -982,7 +982,16 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float3 source_light = p.retail_ambient.xyz + p.retail_directional.xyz *
         max(dot(source_normal, float3(0.0, 0.78125, 0.625)), 0.0);
     o.retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
-    if (p.retail_directional.w > 4.5) o.retail_color = clamp(in.normal, 0.0, 31.0) / 31.0;
+    if (p.retail_directional.w > 4.5) {
+        o.retail_color = clamp(in.normal, 0.0, 31.0) / 31.0;
+        if (p.retail_raster.w > 0.5) {
+            // Exact packed20-bit prelit color; no per-color GPU mesh allocation.
+            uint color = uint(p.retail_raster.z);
+            float3 rgb = float3(float((color >> 10) & 31u), float((color >> 5) & 31u), float(color & 31u));
+            o.retail_color = (rgb * in.uv.y) / 31.0;
+            o.uv.x = float((color >> 15) & 31u) * in.uv.y + p.uv_shift.x;
+        }
+    }
     o.retail_mode = p.retail_directional.w;
     return o;
 }
@@ -1164,7 +1173,16 @@ void main() {
     vec3 source_light = retail_ambient.xyz + retail_directional.xyz *
         max(dot(source_normal, vec3(0.0, 0.78125, 0.625)), 0.0);
     v_retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
-    if (retail_directional.w > 4.5) v_retail_color = clamp(normal, 0.0, 31.0) / 31.0;
+    if (retail_directional.w > 4.5) {
+        v_retail_color = clamp(normal, 0.0, 31.0) / 31.0;
+        if (retail_raster.w > 0.5) {
+            // Exact packed20-bit prelit color; no per-color GPU mesh allocation.
+            uint color = uint(retail_raster.z);
+            vec3 rgb = vec3(float((color >> 10) & 31u), float((color >> 5) & 31u), float(color & 31u));
+            v_retail_color = (rgb * uv.y) / 31.0;
+            v_uv.x = float((color >> 15) & 31u) * uv.y + uv_shift.x;
+        }
+    }
     v_retail_mode = retail_directional.w;
 }
 )GLSL";
@@ -1344,7 +1362,16 @@ vs_out main_vs(vs_in i) {
     float3 source_light = retail_ambient.xyz + retail_directional.xyz *
         max(dot(source_normal, float3(0.0, 0.78125, 0.625)), 0.0);
     o.retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
-    if (retail_directional.w > 4.5) o.retail_color = clamp(i.normal, 0.0, 31.0) / 31.0;
+    if (retail_directional.w > 4.5) {
+        o.retail_color = clamp(i.normal, 0.0, 31.0) / 31.0;
+        if (retail_raster.w > 0.5) {
+            // Exact packed20-bit prelit color; no per-color GPU mesh allocation.
+            uint color = uint(retail_raster.z);
+            float3 rgb = float3(float((color >> 10) & 31u), float((color >> 5) & 31u), float(color & 31u));
+            o.retail_color = (rgb * i.uv.y) / 31.0;
+            o.uv.x = float((color >> 15) & 31u) * i.uv.y + uv_shift.x;
+        }
+    }
     o.retail_mode = retail_directional.w;
     return o;
 }
@@ -3206,7 +3233,9 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
         ? 2750.0f + 0.8748177289962769f * (recon.center_wx + recon.center_wy) + 0.7142857909202576f * s.retail_camera_z
         : recon.kcam_forward + 0.8660254037844386f * (recon.center_wx + recon.center_wy);
     vsu[vo++] = std::floor(depth_base + s.retail_flat_depth_offset);
-    vsu[vo++] = 0.0f; vsu[vo++] = 0.0f;
+    const bool prelit_color_uniform = prelit_rgba5 && s.retail_prelit_color_uniform;
+    vsu[vo++] = prelit_color_uniform ? float(s.retail_prelit_color & 0xfffffu) : 0.0f;
+    vsu[vo++] = prelit_color_uniform ? 1.0f : 0.0f;
     const sg_range vsr = { vsu, sizeof(vsu) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vsr);
 

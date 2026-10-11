@@ -88,8 +88,15 @@ int main(){
  renderer.software_lighting=false;draws=0;renderer.EmitTransparentHelper(draw);
  assert(draws==1&&vertex_uniforms[35]==5&&pipeline==8&&vertex_uniforms[40]==1);
  renderer.software_lighting=true;
+ assert(vertex_uniforms[42]==0 && vertex_uniforms[43]==0);
+ draw.retail_prelit_color_uniform=true;draw.retail_prelit_color=0xfffffu;
+ renderer.EmitTransparentHelper(draw);assert(vertex_uniforms[42]==1048575.f&&vertex_uniforms[43]==1);
+ renderer.software_lighting=false;renderer.EmitTransparentHelper(draw);assert(vertex_uniforms[42]==1048575.f&&vertex_uniforms[43]==1);
+ renderer.software_lighting=true;draw.retail_prelit_color_uniform=false;
+ renderer.EmitTransparentHelper(draw);assert(vertex_uniforms[42]==0&&vertex_uniforms[43]==0);
+ draw.retail_prelit_color_uniform=true;
  draw.retail_prelit_rgba5=false;
- draw.retail_lighting=3;draws=0;renderer.EmitTransparentHelper(draw);assert(draws==1&&pipeline==7&&vertex_uniforms[35]==3&&vertex_uniforms[40]==0);
+ draw.retail_lighting=3;draws=0;renderer.EmitTransparentHelper(draw);assert(draws==1&&pipeline==7&&vertex_uniforms[35]==3&&vertex_uniforms[40]==0&&vertex_uniforms[42]==0&&vertex_uniforms[43]==0);
  draw.retail_lighting=4;renderer.software_lighting=false;draws=0;
  renderer.EmitTransparentHelper(draw);assert(draws==2&&pipeline==2&&vertex_uniforms[35]==0&&vertex_uniforms[40]==0);
  renderer.software_lighting=true;draw.retail_source_alpha=false;draw.retail_lighting=0;draws=0;

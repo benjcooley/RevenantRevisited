@@ -532,6 +532,10 @@ struct SHelperMeshSubmit
     bool       retail_flat_depth = false; // original untextured max(vertex Z), one triangle
     float      retail_flat_depth_offset = 0.0f; // depth minus camera/base translation
     bool       retail_prelit_rgba5 = false; // explicit mode4 vertex format: normal=RGB5, uv.x=alpha5; no normal lighting
+    // Optional immutable weighted prelit mesh: uv.y is the vertex weight.
+    // Color layout is A5:R5:G5:B5 in bits15:10:5:0; exact in a float uniform.
+    bool       retail_prelit_color_uniform = false;
+    uint32_t   retail_prelit_color = 0;
     bool       retail_source_alpha = false; // audited source mode2: cull-none; mode4 writes Z as the native untextured kernel
     bool       retail_alpha_source_quantize = false; // opt-in original ARGB4444 source contribution floor; destination precision remains GPU
     // Undo an explicit geometry-only Z bridge before source normal lighting.
