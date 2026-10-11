@@ -27,3 +27,5 @@ python -m unittest tools/retail_runtime/test_invisible.py
 python tools/retail_runtime/invisible_native_preflight.py --ticks 501 --output NEW_NATIVE_DIRECTORY
 python tools/retail_runtime/port_capture.py --scenario /Users/benjamincooley/RevenantRetailLab/research/vfx-next-invisible-20261011/scenario.json --output NEW_METAL_DIRECTORY
 ```
+
+Root inspected the complete sixteen-phase whole/detail comparison and verified all 32 paired image hashes. Integrated build and three tests pass; 51 same-phase Metal PNGs through tick501 are byte-identical to the full lane movie. A longer 602-tick gallery records the actual second factory creation after the500-tick lifetime. Scoped origin-zero appearance is approved; translated null-invoker map placement and the other stated limits remain open. Root approval SHA256: `c8203463753496b88ccb0ae30da3d7bd1f7ba6eea494d22852c496364ea49c28`.

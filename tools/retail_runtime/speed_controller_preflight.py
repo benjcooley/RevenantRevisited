@@ -81,7 +81,9 @@ class NativeSpeed:
         self.eager_pose=eager_pose
         particles = [t for t in asset['tags'] if t['name']=='partsys' and t['state']==0]
         if not particle_required:
-            if particles:raise ValueError('Generic resource adapter requires no particle tags')
+            # Explicit None allows the whole original multiple-controller initializer.
+            # Existing True/False callers keep their prototype contracts.
+            if particles and particle_required is not None:raise ValueError('Generic resource adapter requires no particle tags')
             self.prototype_index=-1
             self.required_pose_indices={o['index']for o in asset['objects']}
         else:

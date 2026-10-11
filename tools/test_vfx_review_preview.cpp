@@ -41,7 +41,10 @@ std::vector<SEffect> ReviewCatalogue() {
     };
     queen.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
     queen.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
-    return {queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    auto head=Row("HeadFireBall_ORIGINAL",EVfxPreviewStyle::Static);
+    head.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
+    head.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
+    return {head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -130,6 +133,18 @@ int main() {
         TTime::BeginFixedFrame();queen->Submit();
         assert(queen->Alive()==false && creates==initial);
         queen->Submit();assert(queen->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0xd000f005u);
+        assert(info.supported && !info.requires_endpoints && info.lifetime_known);
+        assert(!CreateVfxReviewPreview(0xd000f005u,{-90,40,128},{80,-120,128}));
+        auto head=CreateVfxReviewPreview(0xd000f005u,origin);
+        assert(head && head->Id()=="HeadFireBall_ORIGINAL" && head->Alive()==true);
+        const int initial=creates;
+        head->Submit();head->Submit();
+        assert(head->Alive()==false && creates==initial);
+        head->Submit();assert(head->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";

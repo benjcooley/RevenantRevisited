@@ -19,6 +19,16 @@ bool NeedsEndpoints(uint32_t id)
     }
 }
 
+bool IsSelfMovingTrap(uint32_t id,const VfxTest::SEffect& effect)
+{
+    // This exact source-backed route executes RunFireHeadN movement and its
+    // target-plane collision internally. Other headfireball aliases still
+    // require endpoints; this does not certify arbitrary trap directions.
+    return id==0xd000f005u && effect.id=="HeadFireBall_ORIGINAL" &&
+        effect.preview_style==VfxTest::EVfxPreviewStyle::Static &&
+        bool(effect.is_alive) && bool(effect.submit_world);
+}
+
 const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nullptr)
 {
     // Lazy snapshot occurs after static registration, when review requests it.
@@ -30,7 +40,7 @@ const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nu
             return e.id == mapping.preview_id;
         });
         if (it == catalogue.end() || !it->factory || !it->destroy) continue;
-        if (NeedsEndpoints(id) && !it->factory_endpoints) continue;
+        if (NeedsEndpoints(id) && !it->factory_endpoints && !IsSelfMovingTrap(id,*it)) continue;
         if (!it->submit) {
             if (it->submit_attached && unavailable)
                 *unavailable={false,it->id.c_str(),"Preview attachment API unavailable; label only",false,true};
@@ -105,7 +115,7 @@ std::optional<bool> VfxReviewPreview::Alive() const
 std::unique_ptr<VfxReviewPreview> CreateVfxReviewPreview(uint32_t type_id, const S3DPoint& origin)
 {
     const auto* effect = Find(type_id);
-    if (!effect || NeedsEndpoints(type_id)) return {};
+    if (!effect || (NeedsEndpoints(type_id) && !IsSelfMovingTrap(type_id,*effect))) return {};
     void* context = effect->factory(origin);
     if (!context) return {};
     return std::make_unique<VfxReviewPreview>(*effect,context,origin);

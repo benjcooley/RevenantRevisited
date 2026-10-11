@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-11)
 
-**143 / 176 effects have reviewed visual passes for their recorded test configuration; 33 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
+**145 / 176 effects have reviewed visual passes for their recorded test configuration; 31 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
 **YTelekinesis (2026-10-11):** four moving/rotating chunks match through actual owner completion across six fixed supported capture views; all 39,600 triangles covered and 24 root-repeated Metal frames identical. Corrected exact-ID mapping displays and restarts it in the gallery. Natural actor/spell/audio and raster overlap limits remain open. [Evidence and scope](forensics/YTELEKINESIS_ORIGINAL.md).
 

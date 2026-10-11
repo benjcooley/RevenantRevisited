@@ -69,3 +69,5 @@ The root reviewer independently decides scoped appearance acceptance.
 - Pair manifest SHA256: `432fae291cca0eeae65b4d92ea9df5bc457a40b744dcfc13ac49ea5172ccbba8`.
 - Captured binary SHA256: `31169faeebb3ae705a44c93592491814bc6b22dd00f655ddd75333ce7a55d321`.
 - Fresh replay report SHA256: `d19682dfe499e1964213966858b0c0d487c0d16b44c41314665e2244a6675ee0`.
+
+Root independently reviewed all five detail pages, verified86 frozenfiles, and passed the integrated native tests and exactself-moving viewer bridge control. All25 sampled GPU PNGs are byte-identical to the lane movie; translatedgallery68/100visible/69distinct withrealcollision/kill/restart andcleanexit. Scoped appearance approved; arbitraryendpoints/facings andallstatednatural/device limits remain open. Root approval SHA256: `f74c1e73c3c41cbe72e78f53ad788eb1eb4e9001445abb4fce7544fd78054f60`.

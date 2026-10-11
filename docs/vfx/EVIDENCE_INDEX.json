@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 155,
+    "retail_rows_with_source_fixes_recorded": 156,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 143,
+    "visual_fidelity_confirmed_rows": 145,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 143,
-    "remaining_visual_review_rows": 33
+    "reviewed_visual_pass_rows": 145,
+    "remaining_visual_review_rows": 31
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1827,6 +1827,20 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Twenty-five complete original/actual Metal native-domain phases through100ticks: nullspell timed charge20/flight15/teardown55, self-movement from(0,60,78)to(0,-60,78), purple head/trail/sparks/decay and realkill87/blanktail. Allsubmitted100tick bounds fit supported1920x1080 atfixed960,485.847268normal/848298stride3poolfields, exactRNG796,315cached-origin controls and strictpose/profile checks; original100state/5PNG replay exact. Root25samephase PNGs identical; translatedgallery84/100visible withrealrestart/cleanexit. Nullinvoker equals emptyquery, so collision/damage isnotclaimed. Naturalboss/invoker/audio, genericEffect/script/resource/COM/map boundaries, sampling/RGB565destinationrounding/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-headfireball-original-20261011/root-approval.json": {
+      "sha256": "f74c1e73c3c41cbe72e78f53ad788eb1eb4e9001445abb4fce7544fd78054f60",
+      "retail_row": "headfireball:0xd000f005",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Twenty-five complete original/actual Metal native-domain phases of exactRunFireHeadN single-child trap: source(0,60,78), fixedfacing0/8-unit movement,targetplaneY=-60, launch18/impact32/kill86, goldenhead/orangetrail/sparks/decay/blanktail. All110tick bounds fit1280x960.1100caller fields,517990normal/521320stride3particlefields, exactRNG892 and306cached-origin controls;4050keys/5568matrixchannels andstrict170mutations/450defaultcontrols pass. Fresh110states/6PNGs exact; root25samephase PNGs identical/gallery68of100visible/69distinct withrealrestart. Exactself-moving routeexception preservesendpoint/alias guards elsewhere. Naturaltrap scheduling/otherfacings/targetquery/damage/audio, resource/COM/map boundaries, sampling/RGB565destinationrounding/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-invisible-null-20261011/root-approval.json": {
+      "sha256": "c8203463753496b88ccb0ae30da3d7bd1f7ba6eea494d22852c496364ea49c28",
+      "retail_row": "invisible:0xad92bc16",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Sixteen complete original/actual Metal phases of the null-invoker Invisible configuration at owner origin zero: 70 particles, six rings, hide/wait/show after430 and real kill500/blank501. Full501 native records and5112 draw packets; 221884 source state/cache fields and81792 emitted matrix fields agree below5e-8. Strict4positive/271negative profile and6112 translated vertices/21120 original world fields pass. Root51 same-phase PNGs identical through501; fixed24Hz gallery602ticks witnesses real owner recreation. Translated null-invoker rings double owner translation while particles useABSPOS, so ordinary map gallery is partial; preserve this original behavior. One-pixel edge, natural invoker/fade/map/audio/device/exactpixels remain open."
     }
   }
 }

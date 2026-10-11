@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "a081aa27d31e329c20d3d5067c438cce4cfeda36e509d3408e9d9c28af5756f1",
+    "harness_sha256": "932f632b88a83b40ce288400a4ec63b5fad45fab84159bb7bbcbd13c21afa4b9",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 155,
+    "retail_rows_with_source_fixes_recorded": 156,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 143,
+    "visual_fidelity_confirmed_rows": 145,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 143,
-    "remaining_visual_review_rows": 33
+    "reviewed_visual_pass_rows": 145,
+    "remaining_visual_review_rows": 31
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -16196,27 +16196,39 @@
       "preview_candidates": [
         "TInvisibleEffect_Bespoke_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact70-particle/six-ring null-invoker controller,500tick lifetime/OF_NONMAP and original translated ring/ABSPOS distinction. Complete originzero appearance independently reviewed, integrated51PNG repeat exact."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve scoped originzero lifecycle; verify natural invoker/characterfade and translated map context without changing the original double-translation branch.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole/detail review and integrated repeat",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Sixteen complete original/actual Metal phases of the null-invoker Invisible configuration at owner origin zero: 70 particles, six rings, hide/wait/show after430 and real kill500/blank501. Full501 native records and5112 draw packets; 221884 source state/cache fields and81792 emitted matrix fields agree below5e-8. Strict4positive/271negative profile and6112 translated vertices/21120 original world fields pass. Root51 same-phase PNGs identical through501; fixed24Hz gallery602ticks witnesses real owner recreation. Translated null-invoker rings double owner translation while particles useABSPOS, so ordinary map gallery is partial; preserve this original behavior. One-pixel edge, natural invoker/fade/map/audio/device/exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-invisible-null-20261011/root-approval.json",
+        "sha256": "c8203463753496b88ccb0ae30da3d7bd1f7ba6eea494d22852c496364ea49c28",
+        "note": "docs/vfx/forensics/INVISIBLE_NULL_INVOKER_RENDER_20261011.md"
+      }
     },
     {
       "index": 93,
@@ -21119,7 +21131,8 @@
         "TFireSwarmEffect_BESPOKE__headfireball"
       ],
       "source_fixes": [
-        "Unsupported-path correction: removed fabricated FireSwarm controller reuse for a different shipped asset/animator; this proxy now fails explicitly unsupported, not an implementation."
+        "Unsupported-path correction: removed fabricated FireSwarm controller reuse for a different shipped asset/animator; this proxy now fails explicitly unsupported, not an implementation.",
+        "2026-10-11: Exact original RunFireHeadN moving caller/Hfire asset/particle lifecycle, cachedorigin andrealimpact/kill; full appearance independently reviewed. Exact named self-moving gallery route preserves other endpoint guards."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -21127,18 +21140,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Identify actual typed animator/caller and implement this shipped asset; unsupported FireSwarm proxy is not runtime/render/fidelity coverage.",
+      "next_action": "Preserve scoped moving northtrap appearance; verify natural trap scheduling, otherfacings/target/damage/audio anddocumenteddevice boundaries.",
       "notes": [
         "FireSwarm proxy rejected explicitly;12 ground-only frames verify unsupported behavior. Other candidates remain independent and unaccepted."
       ],
@@ -21150,6 +21163,16 @@
         "binary_sha256": "c1f1c512770c933f9af1c1744f4e5393cbf5d5eff0227156d8a6fe2e290be244",
         "scope": "Unsupported FireSwarm asset substitution must report unavailable and never submit an invented proxy; not an implementation or fidelity pass.",
         "all_frames_equal_ground": true
+      },
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent five-page phase review and integrated repeat",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Twenty-five complete original/actual Metal native-domain phases of exactRunFireHeadN single-child trap: source(0,60,78), fixedfacing0/8-unit movement,targetplaneY=-60, launch18/impact32/kill86, goldenhead/orangetrail/sparks/decay/blanktail. All110tick bounds fit1280x960.1100caller fields,517990normal/521320stride3particlefields, exactRNG892 and306cached-origin controls;4050keys/5568matrixchannels andstrict170mutations/450defaultcontrols pass. Fresh110states/6PNGs exact; root25samephase PNGs identical/gallery68of100visible/69distinct withrealrestart. Exactself-moving routeexception preservesendpoint/alias guards elsewhere. Naturaltrap scheduling/otherfacings/targetquery/damage/audio, resource/COM/map boundaries, sampling/RGB565destinationrounding/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-headfireball-original-20261011/root-approval.json",
+        "sha256": "f74c1e73c3c41cbe72e78f53ad788eb1eb4e9001445abb4fce7544fd78054f60",
+        "note": "docs/vfx/forensics/HEADFIREBALL_ORIGINAL.md"
       }
     },
     {

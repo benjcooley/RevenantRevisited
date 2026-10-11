@@ -45,6 +45,15 @@ TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertNotIn('TParalize1_NAMED_NO_TARGET', admitted_candidates({
             'retail_type_id': '0xad92bc15', 'preview_candidates': []}))
 
+    def test_headfireball_uses_exact_self_moving_trap(self):
+        row={'retail_type_id':'0xd000f005','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['HeadFireBall_ORIGINAL'])
+        self.assertFalse(candidate_metadata(row,'HeadFireBall_ORIGINAL')[0])
+
+    def test_invisible_uses_exact_null_invoker_controller(self):
+        row={'retail_type_id':'0xad92bc16','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['Invisible_AUTHORED'])
+
     def test_smoke_exact_quality_controller(self):
         row={"retail_type_id":"0x224a5ccc","preview_candidates":[]}
         self.assertEqual(admitted_candidates(row),["Smoke_ORIGINAL_QUALITY"])
