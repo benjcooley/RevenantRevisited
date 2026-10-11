@@ -5364,6 +5364,7 @@ struct SVfxTestBootstrap {
             original.factory=[](const S3DPoint& o)->void*{return ylose_original::Spawn(o);};
             original.submit=[](void* c,EFxDebugMode){ylose_original::Advance(static_cast<ylose_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){ylose_original::SubmitWorld(static_cast<ylose_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return ylose_original::IsAlive(static_cast<ylose_original::State*>(c));};
             original.destroy=[](void* c){ylose_original::Destroy(static_cast<ylose_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
@@ -5373,6 +5374,7 @@ struct SVfxTestBootstrap {
             original.factory=[](const S3DPoint& o)->void*{return yattack_original::Spawn(o);};
             original.submit=[](void* c,EFxDebugMode){yattack_original::Advance(static_cast<yattack_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){yattack_original::SubmitWorld(static_cast<yattack_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return yattack_original::IsAlive(static_cast<yattack_original::State*>(c));};
             original.destroy=[](void* c){yattack_original::Destroy(static_cast<yattack_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }

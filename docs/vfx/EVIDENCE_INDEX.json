@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 127,
+    "retail_rows_with_source_fixes_recorded": 130,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 108,
+    "visual_fidelity_confirmed_rows": 111,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 108,
-    "remaining_visual_review_rows": 68
+    "reviewed_visual_pass_rows": 111,
+    "remaining_visual_review_rows": 65
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1582,6 +1582,27 @@
       "check": "independent_native_software_actual_metal_appearance",
       "status": "pass_for_recorded_configuration",
       "scope": "Nine unchanged whole original software/actual Metal native-domain moving multicolor star/dust phases through finite399-frame owner completion and blank399/400. RNG/lifecycle/alive/count/credit pass; strict state proof retains800 numerical residuals/max0.0003658 without equality claim. Natural map renderer unsupported; caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-ylose-authored-20261010/root-approval.json": {
+      "sha256": "5d4ac39b6c4351db3e98d2ef2d244c1915dd908767fd7f54bcff7e066d290b8a",
+      "retail_row": "YLose:0xaeaeeb31",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Fifteen complete original software/actual Metal native-domain phases in supported1280x960 through real14-frame fade/owner completion. Correct ONE/ONE AdditiveStraight selects proven RGB565 integer path;15,522 carrier fields and4,200 Render-cached color fields checked. Whole final expansion unclipped. Old normalized/clipped references rejected; common full geometry/natural caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-puke-authored-20261010/root-approval.json": {
+      "sha256": "845b0444f045482cd034d7d8204febba5521ce7a153fe0f1bc05806eff0e351b",
+      "retail_row": "puke:0xad92bc11",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Fifteen full original factory/owner/software versus actual Metal native-domain null-spell zero-height spray phases.25 moving slots/three ARGB meshes, startup16 and realkill26/blank30;5,940 state/RNG fields match. Late native1/0 versus Metal15/7 pixels at24/25 remain explicit sampling/quantization mismatch. Actor-mouth/caller/audio/device/exactpixel behavior remains open."
+    },
+    "recon/retail_asm/runtime/effects/current-yattack-authored-20261010/root-approval.json": {
+      "sha256": "cbeeaf834fb6def5b23a1e375222b0ed192c4b75097d673a5358509312179383",
+      "retail_row": "YAttack:0xaeaeeb34",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Fifteen complete original software/actual Metal native-domain green starburst phases through real45-frame owner/blanktail.15,795 keys/28,080 matrices, strict own profile and fresh complete replay. Proven software-only640/480 primitive guard retains short native rays; commonlongray13edgeframes diagnostic, natural caller/audio/device/exactpixels remain open."
     }
   }
 }
