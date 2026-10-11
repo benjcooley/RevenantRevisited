@@ -68,6 +68,7 @@
 #include "multi.h"
 #include "multictrl.h"
 #include "spell.h"
+#include "spellbook.h"
 #include "spellpane.h"
 #include "statpane.h"
 #include "retailab.h"
@@ -148,6 +149,7 @@ TMultiCtrlPane  MultiCtrl;          // Multipane control panel (buttons)
 TEquipPane      EquipPane;          // Equipment pane
 TAutoMap        AutoMap;            // Automapper
 TSpellPane      SpellPane;          // Talisman stuff
+TSpellBookPane  SpellBook;          // The spells the main player knows
 TQuickSpellPane QuickSpells;        // Quick spell buttons
 TStatPane       StatPane;           // Display of char's abilities
 TScriptManager  ScriptManager;      // Manages all scripts in the game

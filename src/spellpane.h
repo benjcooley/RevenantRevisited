@@ -16,11 +16,26 @@
 
 class TMulti;
 struct SFontAtlas;
+struct SSpellData;
 
 // The talismans, in TalismanClass type order, as retail's spell panes draw
 // them: each one's code and art (the name tables at 0x005e4f80 and
 // 0x005e4fb4). A modded class with more types shows only these.
 inline constexpr int32_t kNumTalismanTypes = 12;
+// REVSYNC: 0x005e4f80 -- the talismans' art names, in type order: GameData's
+// "<name>" icon and "<name>candy" plate, the spell panes' "S<name>" glyph
+// (0x005e4fb4).
+inline constexpr const char *kTalismanArtNames[kNumTalismanTypes] = {
+    "Sun", "Life", "Ocean", "Law", "Soul", "Stars", "Death", "Chaos", "Sky", "Earth", "Ward", "Moon",
+};
+
+// SpellIcons.dat (retail DAT_0065bc3c, which TPlayScreen loads once): the
+// spells' circles and the rings, shared by the panes that draw them for as
+// long as any holds it. Null if the file is missing.
+[[nodiscard]] std::shared_ptr<TMulti> AcquireSpellIcons();
+// A spell's circle in SpellIcons.dat: its ICONNAME, else "Aura"
+// (0x005e50bc / 0x005e52ec).
+[[nodiscard]] TBitmap *SpellCircle(TMulti &icons, const SSpellData &spell);
 struct STalismanArt
 {
     char code = 0;                  // its character in a spell (the type's Code stat)
@@ -66,8 +81,6 @@ class TTalismanButton final : public TButton
 // the "spell" button, which casts it, and buttons to drop its last
 // talisman, page the list and toggle the names.
 //
-// Not yet ported: casting has the spellbook find the spell (0x00544fb0); it
-// arrives with the spellbook pane (P4).
 class TSpellPane final : public TButtonPane
 {
   public:
@@ -86,7 +99,7 @@ class TSpellPane final : public TButtonPane
     void MouseMove(int32_t button, int32_t x, int32_t y) override;     // 0x00543c40
 
     // The buttons' functions.
-    void Invoke();                  // "spell" (0x00542d50): cast the construct spell
+    void Invoke();                  // "spell" (0x00542d50): cast the construct spell; the book learns it
     void RemoveTalisman();          // "back" (0x00542e30): drop its last talisman
     void Scroll(int32_t lines);     // "up" / "down" (0x00542f00 / 0x00542ed0): two talismans a line
     void ToggleNames();             // "min" (0x00542f30)
@@ -170,10 +183,7 @@ class TQuickSpellButton final : public TButton
 // bar: rings 1..4 show the player's quick spells (TPlayer::GetQuickSpell),
 // and a click casts one. It shares the bottom bar's rect and draws over it
 // (TBottomBarPane, its parent).
-//
-// Not yet ported: dropping a spell dragged from the spellbook onto a ring
-// (MouseClick 0x00544890 sets that quick spell). It arrives with the
-// spellbook pane, which owns the drag (HUD_REBUILD P4).
+// A spell dragged from the spell book and let go on a ring goes on it.
 _CLASSDEF(TQuickSpellPane)
 class TQuickSpellPane final : public TButtonPane
 {
@@ -197,5 +207,5 @@ class TQuickSpellPane final : public TButtonPane
     [[nodiscard]] TQuickSpellButton *Ring(int32_t ring);
     [[nodiscard]] int32_t RingAt(int32_t x, int32_t y);    // 1..4, or 0 off the rings
 
-    std::unique_ptr<TMulti> icons;                  // SpellIcons.dat (retail DAT_0065bc3c)
+    std::shared_ptr<TMulti> icons;                  // SpellIcons.dat (AcquireSpellIcons)
 };

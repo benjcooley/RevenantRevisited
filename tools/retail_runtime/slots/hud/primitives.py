@@ -93,7 +93,7 @@ class PrimitiveTap:
                         tint=a[7], src=[s32(v) for v in a[8:12]], mode=a[13])
         if name == 'Text':
             return dict(dst=dst, rect=[s32(v) for v in a[:4]], text=self.vm.string(a[4]), font=a[6],
-                        format=a[8])
+                        color=a[7], format=a[8], mode=a[9])      # color 0x00rrggbb
         if name == 'SurfaceFromBitmap':
             return dict(bitmap=self.bitmap(a[0]), flags=a[1])
         return dict(args=list(a))
