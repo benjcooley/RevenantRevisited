@@ -55,9 +55,9 @@ run in the emulator, **[I]** inferred, **[U]** unknown.
   situations run identically on both builds; booted to game init on the HUD
   slot's machine, the two builds' whole machines differ only in the patched
   bytes; over game ticks on flat ground Locke turns to the point and stops
-  on it (§8). **In a loaded level** (the play slot's first sample) the
-  click walks Locke, but that sample slid along +y and stopped 99 short,
-  most likely the map near a ledge; not yet settled (§8.4).
+  on it (§8). **In a loaded level** (the play slot, 2026-10-11) a click
+  into the room walks Locke onto the point exactly; a goal past the room's
+  ledge ends in retail's blocked slide (§8.4).
 
 ## 1. The left button in `TMapPane::MouseClick` (`0x0044f140`)
 
@@ -412,45 +412,47 @@ are still the fixture's.
 About 2 to 4.5 minutes per executable to boot on a loaded Mac (95 s
 unloaded); the boot images are cached in `slots/hud/__pycache__`.
 
-### 8.4 First run in a loaded level (play slot, 2026-10-11)
+### 8.4 In a loaded level (play slot, 2026-10-11)
 
-Reported by the play slot's agent (`slots/play/server.py --build`, the
-software machine, Software3D = Yes), not run by this track: from a quick
-save just after the opening, Locke at (1383, 488, 17) with Rahul hostile
-nearby, a left press and release at screen (150, 300). Their own
-`ScreenToWorld` of `posx + x, posy + y` at z + 50 gives (1477, 659).
+Run by the play slot's agent (`slots/play`, in-process, the software
+machine with Software3D = Yes; their script
+`scratchpad/retail/proto/clickprobe.py`), not by this track. The start is a
+quick save taken just after the opening ("Quick Save 1"), with Locke at
+(1383, 488, 17) and Rahul hostile nearby. That save was made after Locke
+walked east until the room's east ledge stopped him, so he stands against
+it at x ≈ 1383, and any goal with a larger x is past the edge.
 
-- Baseline: Locke stays at (1383, 488) for 150 ticks.
-- clickwalk: Locke walks (`walkf`): (1383, 502), (1381, 551), (1383, 603),
-  then about 1 unit a tick to (1380, 639), and stands there in `walk`, 99
-  from the point, x unchanged throughout.
+- **Baseline**: a click on the floor leaves Locke where he is (150 ticks).
+- **Into the room**, screen (160, 180): the goal is (1362, 534) (z + 50 =
+  67 for the conversion). After the release the doing block is `walk`
+  with target (1362, 534, 17) and flag `0x1000`. His facing turns 64 →
+  112 → 145, then `walkf` at angle 146–147: (1379, 498) at t = 36, (1371,
+  514) at t = 39, (1364, 529) at t = 42. At t = 45 **he stands exactly on
+  (1362, 534)** and the doing block returns to the root.
+- **Toward the ledge**, screen (260, 250): the goal is (1482, 554), past
+  the edge. The target is set as above (flags `0x1600`: walkto, noroot,
+  waitpivot). He faces 88 → 75 but only slides along +y at about 1 unit a
+  tick, (1383, 488) → (1383, 527), and gives up at t = 63 at (1380, 532),
+  at his root.
+- Their first sample, screen (150, 300) → (1477, 659), is the same case:
+  past the ledge, a slide along +y, stopped 99 short.
 
-So the click reached `Goto` in a real level and Locke walked; the build
-does what the patch adds. The path is not the straight, arriving walk of
-§8.2: the point's angle from Locke is about 108, but he moved along 128
-(straight +y), slowed, and stopped. On flat ground the same code steers
-to the angle and stops on the point (§8.2), so the difference is most
-likely the map: the point is near the room's lower-left ledge, and a
-blocked step slides along the obstacle (`MoveStep`/`FindClearPath`) and a
-walk that stays blocked ends at the root (`ResolveMove`'s blocked branch).
-[I] To settle it from that run: the doing block's target right after the
-release (`+0x38/+0x3c`, expected (1477, 659)); per tick Locke's facing
-`+0x36`, the doing block's angle `+0x2c` and the Move bits (1 moved, 2
-blocked, 8 not moving); the walk grid along the line; and a click toward
-open floor in the room's middle as the control. Retail's own far-object
-walk goes through the same `Goto` and would slide the same way.
+So in a real level the patched click reaches `Goto` with the rule's point,
+Locke turns to it and stands on it, and a goal past an edge ends in
+retail's own blocked slide, as a far-object walk would. Not logged in
+those runs: the Move bits per tick and the walk-grid heights along the
+blocked line.
 
 Note on the point itself (the rule's, not the patch's): at z + 50 the
 screen point lands 43 units further in +x and +y (one screen row of 43:
 `50 * 867 / 1000`) than the floor point under the pointer at Locke's own
-height; near a ledge that can put the goal past it.
+height; near an edge that can put the goal past it. The director's
+`walk.py` should treat such a stop as "blocked" and pick a nearer point.
 
 ### 8.5 Still to verify in real play
 
-- An arriving walk in a loaded level: a click toward open floor, Locke
-  standing on the point; with the run key held, running; a re-click
-  mid-walk retargeting. The play slot runs this build.
-- Why the §8.4 sample stopped short (the checks listed there).
+- In a loaded level: with the run key held, running; a re-click mid-walk
+  retargeting. The play slot runs this build.
 - Mid-walk run key changes (§5, [I]).
 - The DOSBox lab has not run the build.
 
