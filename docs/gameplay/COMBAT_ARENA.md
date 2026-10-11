@@ -65,6 +65,10 @@ game:
 2. `retail.py start`, then `load --row N` (the Load Game list's row; check
    it with `capture`);
 3. `key` presses Locke's side of the test; `record` captures the AVI.
+4. `save --row N` saves in game over the slot on that row (Esc, Save Game,
+   the row, Save Game: the list starts on its last slot, not the loaded
+   one); `download <slot> <file>` fetches a slot's game.sav (its header
+   holds the game time).
 
 Check that `start` took the lab before sending anything: another session
 may hold it.
@@ -87,13 +91,33 @@ The lab has no memory reads: retail's side is its video and its game log
 | Test | Retail | Port | |
 |---|---|---|---|
 | A1 (an Araknid 450 east, Locke idle, a minute) | it never comes: no blow | the same | match: out of its notice (it finds him by ear, M9b) |
-| A1b (the Araknid 150 east) | it closes and bites: hit 7, glance 3, hit 10, glance 1, hit 9, hit 10, glance 4 = 44, Locke dead after ~38 s of lab time | hit 12, glance 5, glance 2, hit 11, glance 2, hit 10, double 19 = 61, dead at tick 382 (13.5 s after the first bite) | same blows (seven, hits and glances); port damage maybe higher (more runs); pace not yet comparable: retail's ticks a second in the lab unmeasured |
+| A1b (the Araknid 150 east) | run 1: hit 7, glance 3, hit 10, glance 1, hit 9, hit 10, glance 4; run 2: hit 9, glance 3, 2, 3, 2, hit 8, glance 2, hit 7, the kill (≥ 7), 66 ticks a blow | before the fix: glance 1, hits 9, 13, 15, glance 3, hit 19 (47 ticks a blow); after: 1, 6, 10, 11, 2, double 15 | **fixed**: the port's Locke had no armour (below); hits now in retail's range. Cadence: two retail runs against one port seed, not yet a measure |
+
+**The lab's clock (2026-10-11).** Retail runs at 0.91 of real time in
+the lab: 21.8 ticks a second. Measured from four in-game saves of ArenaA1
+(header game time = ticks × 100 / 24) at known wall times, the in-game
+menu pausing the clock (a model with the clock stopped from each Esc to
+about 1.9 s after its save fits all three intervals to 0.3 s). Retail's
+blow times from the lab are wall seconds × 21.8.
+
+**Locke's armour (found by A1b).** Retail's hits were 7-10, the port's
+9-19. The trace's damage roll (event `damage-roll`: the attacker's weapon,
+the target's armour and resistance, what it takes) showed Locke's armour
+0: class.def gives cloth Protection 0, and retail writes WEAPON.DEF /
+ARMOR.DEF numbers over class.def's at load (BindTypeData `0x48c7f0`,
+COMBAT_DATA.md §8), which the port skipped. ARMOR.DEF's cloth is 1 a
+piece: Locke's shirt and pants are armour 2, an Araknid's 8 is taken as 6,
+and a hit lands 6-12 (doubles to 24), as in retail. Ported as
+`TRules::ApplyItemData`; kata D1 checks every weapon and armor type.
+
+**Reading retail's blows.** The lab captures at ~35 frames a second
+(`Control.capture`, 29 ms); each drop of Locke's health bar (y 22, x 68 +
+health × 116 / 100) is a blow, and the combat log (the last five lines)
+gives its amount.
 
 Open from A1b:
-- **Retail's tick rate in the lab.** Two saves a known wall time apart give
-  it (the save header's game time is frames × 100 / 24).
-- **Damage.** Seven blows a side is too few: repeat A1b and compare the
-  distributions (hit and glance amounts, doubles).
+- **Cadence.** Retail 66 ticks a blow (run 2), the port 47 (seed 1): more
+  runs a side before calling it.
 - **The port's combat results print raw tags** ("[BASEHIT] Locke [BASEDMG]:12
   [BASEDEF]:10 [BASEOFF]:12") where retail prints "Hit vs. Locke Dmg:7
   Def:10 Off:12": the text lookup for those lines fails.

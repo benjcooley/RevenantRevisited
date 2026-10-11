@@ -39,6 +39,9 @@ LOAD_GAME_BUTTON = (430, 212)       # title screen
 LOAD_ROW0_Y, LOAD_ROW_H = 100, 16   # the Load Game list's first row, its pitch
 LOAD_LIST_X = 400
 LOAD_CONFIRM = (226, 421)           # the Load Game dialog's Load Game button
+MENU_SAVE_BUTTON = (408, 175)       # the in-game menu's (Esc) Save Game button
+SAVE_ROW0_Y = 132                   # the Save Game list's first row (pitch LOAD_ROW_H)
+SAVE_CONFIRM = (226, 421)           # the Save Game dialog's Save Game button
 SAVES = 'C:\\REVENANT\\Save\\Single'
 # The combat arena's sectors (docs/gameplay/COMBAT_ARENA.md): level 2's empty
 # block, sector x 22..31. An arena slot's other CurMap sectors are retail's
@@ -231,6 +234,12 @@ def main():
     s.add_argument('slot', type=Path)
     s = sub.add_parser('load', help='title screen -> Load Game -> the slot on --row -> load')
     s.add_argument('--row', type=int, default=0)
+    s = sub.add_parser('save', help='in game: Esc -> Save Game -> the slot on --row -> Save Game; prints the time')
+    s.add_argument('--row', type=int, required=True,
+                   help="the slot's row in the Save Game list (it starts on the last slot, not the loaded one)")
+    s = sub.add_parser('download', help="a slot's game.sav from the guest saves")
+    s.add_argument('slot', help='the slot name (Save\\Single\\<slot>)')
+    s.add_argument('out', type=Path, help='the file to write')
     s = sub.add_parser('click', help='left-click guest pixels (640x480), in order: X,Y ...')
     s.add_argument('points', nargs='+', help='X,Y')
     s = sub.add_parser('key', help='press keys one at a time (keyboard-map.json names)')
@@ -260,6 +269,19 @@ def main():
         run_lua(LUA_CLICK, {'x': LOAD_LIST_X, 'y': LOAD_ROW0_Y + a.row * LOAD_ROW_H}, 'gf_click')
         time.sleep(1)
         run_lua(LUA_CLICK, {'x': LOAD_CONFIRM[0], 'y': LOAD_CONFIRM[1]}, 'gf_click')
+    elif a.cmd == 'save':
+        with Control() as c:
+            press(c, 'esc')
+        time.sleep(1)
+        run_lua(LUA_CLICK, {'x': MENU_SAVE_BUTTON[0], 'y': MENU_SAVE_BUTTON[1]}, 'gf_click')
+        time.sleep(1.5)
+        run_lua(LUA_CLICK, {'x': LOAD_LIST_X, 'y': SAVE_ROW0_Y + a.row * LOAD_ROW_H}, 'gf_click')
+        time.sleep(0.8)
+        run_lua(LUA_CLICK, {'x': SAVE_CONFIRM[0], 'y': SAVE_CONFIRM[1]}, 'gf_click')
+        print(f'saved at {time.time():.3f}')
+    elif a.cmd == 'download':
+        with Guest() as g:
+            print(g.download(SAVES + '\\' + a.slot + '\\game.sav', str(a.out)), 'bytes')
     elif a.cmd == 'newgame':
         x, y = NEW_GAME_BUTTON
         run_lua(LUA_CLICK, {'x': x, 'y': y}, 'gf_click')

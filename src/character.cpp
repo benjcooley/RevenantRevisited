@@ -4575,6 +4575,13 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
             const int32_t weapon = WeaponDamage();
             const int32_t d = targ->CalculateDamage(weapon, type, ad->damagemod);
             damage = d * (DamageMod() + dmgpcnt + 100) / 100;
+            if (CombatTrace::Enabled())
+                CombatTrace::Event(this, "damage-roll", "attack=%s\ttarget=%s\tweapon=%d\ttype=%d\tmod=%d\t"
+                                   "armor=%d\tresist=%d\ttaken=%d\tdmgmod=%d\tdmgpcnt=%d\tdamage=%d",
+                                   ad->attackname, targ->GetName() ? targ->GetName() : "-", weapon, type,
+                                   ad->damagemod, targ->ArmorValue(), type >= 0 && type < NUMDAMAGETYPES ? targ->DamageModifier(type) : 0,
+                                   d, DamageMod(),
+                                   dmgpcnt, damage);
             if (objclass == OBJCLASS_PLAYER)
             {
                 const int32_t wt = WeaponType();

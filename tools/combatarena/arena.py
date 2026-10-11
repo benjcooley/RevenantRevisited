@@ -146,11 +146,20 @@ def run_once(scn: dict, port: Path, out: Path, watch: bool = False, extra: list[
     with open(out / 'stdout.txt', 'wb') as so:
         proc = subprocess.Popen(args, cwd=out, env=env, stdout=so, stderr=subprocess.STDOUT)
         wall_limit = scn.get('wall_limit_s', 600)
+        # Play stops ticking when Locke dies (the death screen takes over
+        # after its hold, as retail's does): no new tick this long ends it.
+        stall_limit = scn.get('stall_s', 8)
+        seen, seen_at = -1, begin
         while proc.poll() is None:
             time.sleep(0.25)
-            done = last_tick(trace) >= ticks
-            if done or time.time() - begin > wall_limit:
-                stop = 'ticks reached' if done else f'wall limit {wall_limit} s'
+            now = last_tick(trace)
+            if now != seen:
+                seen, seen_at = now, time.time()
+            done = now >= ticks
+            stalled = now >= 0 and time.time() - seen_at > stall_limit
+            if done or stalled or time.time() - begin > wall_limit:
+                stop = ('ticks reached' if done else f'play stopped at tick {now} (death screen?)' if stalled
+                        else f'wall limit {wall_limit} s')
                 proc.send_signal(signal.SIGTERM)
                 try:
                     proc.wait(10)
