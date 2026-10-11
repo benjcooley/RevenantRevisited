@@ -40,6 +40,11 @@ Targets:
              the emulator draws, so it is compared like any pixel), stacks,
              pouches, animated items, pages, an opened bag (its icon at
              half size). Compared as the bottom bar is.
+  automap    TAutoMap (0x0065b4f0) in the same slot: its frame, with "+"
+             and "-" released and held. Retail draws it with overlay quads
+             (the D3D device's way, overlayraster.py): pixels a quad's alpha
+             mixed are the `screen` class. The map inside needs a level in
+             the fixture; not compared yet.
   spellpane  TSpellPane (0x006661b0) in the same slot: no pouch, an empty
              one, a few talismans and all twelve with names (the arrows)
              and without, first lines, spells of 1..5 talismans (lower
@@ -407,12 +412,14 @@ def gdi_text_cells(text_calls):
     return mask, band & ~mask, cells
 
 
-def pane_target(args, workdir, cases, fixture, run_port, retail_case, report):
-    """A 2D pane's A/B over `cases`: run_port(case) -> (shown, frame);
+def pane_target(args, workdir, cases, fixture, run_port, retail_case, report,
+                masks=(('alpha', ALPHA_TOLERANCE),)):
+    """A pane's A/B over `cases`: run_port(case) -> (shown, frame);
     retail_case(case, shown) -> the fixture's case; report(shown) -> what the
-    case's result records of it. Retail draws these panes in 2D straight onto
-    the screen: every pixel outside its GDI text must match exactly, but for
-    the `alpha` ones (ALPHA_TOLERANCE)."""
+    case's result records of it. Every pixel outside its GDI text must match
+    exactly, but for the ones the fixture's blend `masks` mark: the 2D panes'
+    `alpha` (ALPHA_TOLERANCE), the overlay panes' `screen`
+    (SCREEN_TOLERANCE)."""
     cases = [c for c in cases if not args.only or c['name'] in args.only]
     retail = Fixture(SLOT / fixture, '--serve')
     results, timing = [], dict(port_seconds=0.0, retail_seconds=0.0)
@@ -435,7 +442,9 @@ def pane_target(args, workdir, cases, fixture, run_port, retail_case, report):
             mask, band, cells = gdi_text_cells(result['text_calls'])
             retail_rgb = retail_frame(workdir / 'retail' / f'{name}.rgb565')
             port_rgb = port_frame(port_png)
-            tolerance = np.where(screen_mask(result['blend']['alpha']), ALPHA_TOLERANCE, 0)
+            tolerance = np.zeros((SCREEN[1], SCREEN[0]), dtype=np.int32)
+            for key, value in masks:
+                tolerance = np.maximum(tolerance, np.where(screen_mask(result['blend'][key]), value, 0))
             diff, delta = compare(retail_rgb, port_rgb, mask, band, tolerance)
             rows = slice(max(0, pane[1] - 16), min(SCREEN[1], pane[1] + pane[3] + 16))
             triptych(workdir / f'{name}.triptych.png', retail_rgb, port_rgb, delta, mask, band, tolerance, rows)
@@ -444,7 +453,7 @@ def pane_target(args, workdir, cases, fixture, run_port, retail_case, report):
             entry['error'] = f'{type(error).__name__}: {error}'
         results.append(entry)
     retail.close()
-    return dict(retail_sha256=retail.hello.get('retail_sha256'), tolerance=dict(alpha=ALPHA_TOLERANCE),
+    return dict(retail_sha256=retail.hello.get('retail_sha256'), tolerance=dict(masks),
                 case_set=cases, timing={k: round(v, 2) for k, v in timing.items()}, results=results)
 
 
@@ -564,8 +573,33 @@ def target_spellpane(args, workdir):
                                           pressed=shown['pressed'], invoke=shown['invoke']))
 
 
+# =====================================================================
+# automap
+# =====================================================================
+
+AUTOMAP_CASES = [
+    dict(name='released'),
+    dict(name='plus-held', plus=1),
+    dict(name='minus-held', minus=1),
+    dict(name='both-held', plus=1, minus=1),
+]
+
+
+def target_automap(args, workdir):
+    def run_port(case):
+        spec = f'plus={case.get("plus", 0)};minus={case.get("minus", 0)}'
+        return run_port_pane(args.port, 'ab-automap', spec, case['name'], workdir)
+
+    def retail_case(case, shown):
+        return dict(plus=bool(shown['plus']), minus=bool(shown['minus']))
+
+    return pane_target(args, workdir, AUTOMAP_CASES, 'automap.py', run_port, retail_case,
+                       lambda shown: dict(zoom=shown['zoom'], plus=shown['plus'], minus=shown['minus']),
+                       masks=(('screen', SCREEN_TOLERANCE),))
+
+
 TARGETS = {'statusbar': target_statusbar, 'bottombar': target_bottombar, 'inventory': target_inventory,
-           'spellpane': target_spellpane}
+           'spellpane': target_spellpane, 'automap': target_automap}
 
 
 def main():
