@@ -10,8 +10,8 @@
 // editor overlays, etc.) can react to Loaded / Updated / Unloaded.
 //
 // Owned by TMapManager (the cache of currently-loaded levels). The map is
-// the only owner of its sectors: they are created in Load and freed in
-// Unload / Discard, nowhere else. Borrowers of a sector pointer (TMapPane's
+// the only owner of its sectors: Load / InitializeTransient create them;
+// Unload / Discard free them. Borrowers of a sector pointer (TMapPane's
 // window, the renderer's draw records) drop it on Unloaded. Renderer holds
 // a TSafeRef<TGameMap> against the current map -- generation check guards
 // against silently rebinding after a level swap freed the map.
@@ -56,7 +56,7 @@ class TGameMap : public TSafeObjectBase<TGameMap>
 
     // Load every sector at the given level. Idempotent: if already
     // loaded, a same-level Load is a no-op; a different-level Load
-    // unloads first.
+    // unloads first. A transient map rejects a different-level load.
     bool Load(int32_t level);
 
     // Load in stages, so a loading screen can show it filling (retail filled
@@ -72,7 +72,14 @@ class TGameMap : public TSafeObjectBase<TGameMap>
     // A sector's place on its level.
     struct SSectorCoord { int32_t sx = 0; int32_t sy = 0; };
 
-    // Free all sectors, writing each to the working set first. Fires
+    // Create empty disposable sectors directly in memory, without consulting
+    // sector files. Bounds are inclusive, 0..255 on each axis, at most 8192
+    // sectors; level must fit 0..255. Fails without changing a loaded map.
+    // Fires Loaded after creation. Transient maps never save their sectors.
+    bool InitializeTransient(int32_t level, int32_t min_sx, int32_t min_sy,
+                             int32_t max_sx, int32_t max_sy);
+
+    // Free all sectors, writing persistent sectors to the working set. Fires
     // Unloaded BEFORE the sectors are deleted so subscribers can drop refs
     // while the pointers are still dereferenceable (for last-frame cleanup).
     void Unload();
@@ -81,9 +88,10 @@ class TGameMap : public TSafeObjectBase<TGameMap>
     // about to be replaced (new or loaded game). Fires Unloaded like Unload.
     void Discard();
 
-    // Write every sector to the working set, keeping them loaded.
+    // Write persistent sectors to the working set. Transient maps are skipped.
     void Flush() const;
 
+    [[nodiscard]] bool    IsTransient() const { return transient; }
     [[nodiscard]] bool    IsLoaded() const { return level >= 0; }
     [[nodiscard]] int32_t Level()    const { return level;       }
 
@@ -142,4 +150,5 @@ class TGameMap : public TSafeObjectBase<TGameMap>
     size_t                nextpending = 0;  // the next one to read
     int32_t               loadedobjs  = 0;
     bool                  loading     = false;
+    bool                  transient   = false;
 };

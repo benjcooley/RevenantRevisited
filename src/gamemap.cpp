@@ -141,7 +141,7 @@ bool TGameMap::Load(int32_t lvl)
 
 bool TGameMap::BeginLoad(int32_t lvl)
 {
-    if (lvl < 0)
+    if (lvl < 0 || (transient && lvl != level))
         return false;
     if (level == lvl && (loading || !sectors.empty()))
         return true;          // already loaded (or loading) at this level
@@ -155,6 +155,28 @@ bool TGameMap::BeginLoad(int32_t lvl)
     loadedobjs  = 0;
     loading     = true;
     sectors.reserve(pending.size());
+    return true;
+}
+
+bool TGameMap::InitializeTransient(int32_t lvl, int32_t min_sx, int32_t min_sy,
+                                   int32_t max_sx, int32_t max_sy)
+{
+    // Transient sectors can extend beyond the retail map grid, but retain a
+    // bounded allocation. No LoadSector / SectorStore path is involved.
+    if (IsLoaded() || lvl < 0 || lvl > 255 || min_sx < 0 || min_sy < 0 ||
+        max_sx < min_sx || max_sy < min_sy || max_sx > 255 || max_sy > 255)
+        return false;
+    const size_t count = size_t(max_sx - min_sx + 1) * size_t(max_sy - min_sy + 1);
+    if (count > 8192)
+        return false;
+
+    sectors.reserve(count);
+    level = lvl;
+    transient = true;       // set before allocation: even failed construction discards
+    for (int32_t sy = min_sy; sy <= max_sy; ++sy)
+        for (int32_t sx = min_sx; sx <= max_sx; ++sx)
+            sectors.push_back(new TSector(level, sx, sy));
+    FinishLoad();
     return true;
 }
 
@@ -240,7 +262,7 @@ void TGameMap::Release(ESectorRelease how)
     for (TSector* sec : sectors)
     {
         if (!sec) continue;
-        if (how == ESectorRelease::Save)
+        if (how == ESectorRelease::Save && !transient)
             TSector::CloseSector(sec);
         else
             TSector::DiscardSector(sec);
@@ -248,6 +270,8 @@ void TGameMap::Release(ESectorRelease how)
 
     sectors.clear();
     level = -1;
+    transient = false;
+    loadedobjs = 0;
     loading = false;
     pending.clear();
     nextpending = 0;
@@ -255,6 +279,7 @@ void TGameMap::Release(ESectorRelease how)
 
 void TGameMap::Flush() const
 {
+    if (transient) return;
     for (TSector* sec : sectors)
         if (sec) sec->Save();
 }

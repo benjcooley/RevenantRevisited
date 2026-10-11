@@ -83,6 +83,13 @@ class TMapManager
     // the level can't be loaded.
     TGameMap* LoadStaged(int32_t level, int32_t count);
 
+    // Create and select an empty disposable map, without reading or replacing
+    // any sector files. Rejects an already cached level. Inclusive bounds
+    // are 0..255 on each axis, at most 8192 sectors; level is 0..255.
+    // Returns nullptr on invalid input, leaving the cache/current map intact.
+    TGameMap* CreateTransient(int32_t level, int32_t min_sx, int32_t min_sy,
+                               int32_t max_sx, int32_t max_sy);
+
     // Lookup-only: returns the cached map for `level` or nullptr.
     // Doesn't trigger a disk load.
     [[nodiscard]] TGameMap* GetCached(int32_t level) const;
@@ -155,7 +162,8 @@ class TMapManager
     // level again if it was loaded. Objects the map doesn't own (OF_NONMAP:
     // the players) stay in the world and go back into the sector under
     // them, as retail's sector update re-added them. A level that isn't
-    // loaded just runs `editFiles`.
+    // loaded just runs `editFiles`. Transient maps skip the entire operation,
+    // including editFiles, because they have no authoritative sector files.
     void ReloadLevel(int32_t level, const std::function<void()>& editFiles = {});
 
     // REVSYNC: TMapPane::ReloadSectors @ 0x004590e0 — ReloadLevel for every
