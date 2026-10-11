@@ -14,7 +14,10 @@ names). This layer adds what WinMain and the CRT reach:
   handle inheritance means nothing in one emulated process) and delegates
   to the core with the canonical name.
 - CreateDirectoryA / RemoveDirectoryA: directories are implicit in the
-  file tree; created ones are kept in `directories`.
+  file tree; created ones are kept in `directories` (and listed by finds).
+- Names keep the case they were created with (`names`), as FAT32 does:
+  FindFirstFileA / FindNextFileA return it. The install's names are its
+  canonical lower case.
 - GetModuleFileNameA, GetCurrentDirectoryA, GetFullPathNameA,
   GetFileAttributesA, SetFileAttributesA, DeleteFileA,
   FindFirstFileA/FindNextFileA/FindClose over the virtual tree.
@@ -60,6 +63,7 @@ class WinFileSystem:
         self.vm = vm
         self.root = root
         self.module_path = root + '\\' + module
+        self.names = {}                       # key -> its last component as created
         if state is not None:
             self.set_state(state)
         else:
@@ -108,11 +112,21 @@ class WinFileSystem:
     # ---- APIs ----------------------------------------------------------
 
     def _create(self, args):
-        name = self.key(self.vm.string(args[0])).encode('cp1252') + b'\0'
+        given = self.vm.string(args[0])
+        key = self.key(given)
+        name = key.encode('cp1252') + b'\0'
         if len(name) > 1024:
             raise ValueError('CreateFileA path longer than the scratch buffer')
+        existed = key in self.vm.files
         self.vm.write(self._path_scratch, name)
-        return self._core_create((self._path_scratch, args[1], args[2], 0) + tuple(args[4:]))
+        handle = self._core_create((self._path_scratch, args[1], args[2], 0) + tuple(args[4:]))
+        if handle != INVALID and not existed:
+            self.names[key] = self.last_component(given)
+        return handle
+
+    @staticmethod
+    def last_component(path):
+        return path.replace('/', '\\').rstrip('\\').split('\\')[-1]
 
     def _copy_out(self, text, buffer, size):
         data = text.encode('cp1252')
@@ -170,6 +184,7 @@ class WinFileSystem:
         if self.vm.files.pop(key, None) is None:
             self.vm.scheduler.set_error((ERROR_FILE_NOT_FOUND,))
             return 0
+        self.names.pop(key, None)
         return 1
 
     def _create_directory(self, args):
@@ -178,6 +193,7 @@ class WinFileSystem:
             self.vm.scheduler.set_error((183,))       # ERROR_ALREADY_EXISTS
             return 0
         self.directories.add(key)
+        self.names[key] = self.last_component(self.vm.string(args[0]))
         return 1
 
     def _remove_directory(self, args):
@@ -186,6 +202,7 @@ class WinFileSystem:
             self.vm.scheduler.set_error((ERROR_FILE_NOT_FOUND,))
             return 0
         self.directories.discard(key)
+        self.names.pop(key, None)
         return 1
 
     def _find_data(self, out, key):
@@ -194,7 +211,7 @@ class WinFileSystem:
         is_file = key in self.vm.files
         struct.pack_into('<I', block, 0, FILE_ATTRIBUTE_ARCHIVE if is_file else FILE_ATTRIBUTE_DIRECTORY)
         struct.pack_into('<I', block, 32, len(self.vm.files[key]) if is_file else 0)
-        name = posixpath.basename(key).encode('cp1252')[:259]
+        name = self.names.get(key, posixpath.basename(key)).encode('cp1252')[:259]
         block[44:44 + len(name)] = name
         self.vm.write(out, bytes(block))
 
@@ -203,7 +220,8 @@ class WinFileSystem:
         key = self.key(self.vm.string(pattern))
         directory, mask = posixpath.split(key)
         names = sorted({directory + '/' + name[len(directory) + 1:].split('/')[0]
-                        for name in self.vm.files if name.startswith(directory + '/')})
+                        for name in (*self.vm.files, *self.directories)
+                        if name.startswith(directory + '/')})
         matches = [n for n in names if fnmatch.fnmatchcase(posixpath.basename(n), mask)]
         if not matches:
             self.vm.scheduler.set_error((ERROR_FILE_NOT_FOUND,))
@@ -226,7 +244,7 @@ class WinFileSystem:
     def _find_close(self, args):
         return int(self.finds.pop(args[0], None) is not None)
 
-    STATE = ('cwd', 'finds', 'directories', 'next_find', '_path_scratch')
+    STATE = ('cwd', 'finds', 'directories', 'next_find', '_path_scratch', 'names')
 
     def state(self):
         return copy.deepcopy({name: getattr(self, name) for name in self.STATE})

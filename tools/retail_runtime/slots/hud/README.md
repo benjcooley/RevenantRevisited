@@ -58,6 +58,24 @@ choices.
   a manual-reset event, the first on an auto-reset one), then resets the
   event (`test_threads.py`). Item construction reaches it.
 
+## Additions for the play slot (playtest/retail)
+
+`slots/play` runs this machine on into play; it needed (each documented in
+its module, each tested in `test_ddraw.py` or the play slot's tests):
+
+- `HudWorld(..., build=build.json)`: a named build (build_contract.py,
+  retail's fixed addresses kept) boots like the baseline, with its own
+  image; `ini=bytes`: another Revenant.ini in place of the install's (the
+  play slot's `Software3D = Yes` machine), part of the image key; `save(...,
+  more=)` stores a slot's state beside the machine's (`image_extra`).
+- `ddraw.py`: `IDirectDrawSurface4::Flip` (front and back trade memory,
+  counted in `flips`); render / light states and the viewport background
+  read back what was set (MATERIAL / AMBIENT light states start at
+  Direct3D's 0); colour-keyed blits merge whole rows (`array`), not pixel
+  by pixel in Python -- same result, two orders of magnitude faster.
+- `winfs.py`: created names keep their case for FindFirstFileA (save slot
+  directories such as "Quick Save 1"), and created directories are listed.
+
 ## Fixtures
 
 Each fixture checkpoints the booted world and restores it per case; with
