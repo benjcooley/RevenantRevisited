@@ -90,3 +90,11 @@ appearance, not exact pixels or natural actor/caller completion. Frozen
 `energy-review-final-v2/root-approval.json` SHA256:
 `9e455d84008037c7c39757ceea0a339eb58b08f1f8fdd1f32d5bdcf943c87220`. Overlapping-viewport dependence, destination rounding and
 the natural caller/device limits above remain open.
+
+Integrated debug gallery check on20261011 runs the exact type at its translated
+review station for40 captures:39 visible frames, full growth/fan/shrink and
+subsequent repetition, clean exit. Its first integration exposed an empty
+untextured shader image binding; the identity white carrier correction is
+documented in `PRELIT_RGBA5_SOURCE_20261010.md`. Gallery evidence is private at
+`research/vfx-review-survey-20261010/energy-binding-fixed`; it confirms viewer
+execution and repetition rather than adding a natural gameplay acceptance gate.
