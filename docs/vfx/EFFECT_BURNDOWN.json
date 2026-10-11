@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "3e0437979f1c8dc8d45fc073fe1ab7ff8ce83c582035d31ae1e2111e56748491",
+    "harness_sha256": "83b320a0811af8f489ef36a644f6838d17ab79911b302f20b49c493dfad7a698",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 156,
+    "retail_rows_with_source_fixes_recorded": 157,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 145,
+    "visual_fidelity_confirmed_rows": 146,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 145,
-    "remaining_visual_review_rows": 31
+    "reviewed_visual_pass_rows": 146,
+    "remaining_visual_review_rows": 30
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -16063,30 +16063,46 @@
       "retail_name": "paralize1",
       "retail_type_id": "0xad92bc14",
       "asset": "Magic\\Paralize.I3D",
-      "preview_candidates": [],
-      "source_fixes": [],
+      "preview_candidates": [
+        "TParalize1_CONFIGURED_TARGET",
+        "TParalize1_AUTHENTIC_TARGET_FIXTURE",
+        "TParalize1_NAMED_NO_TARGET"
+      ],
+      "source_fixes": [
+        "2026-10-11: Actual target Physical Paralysis variant1, original targetXYZ+40 egg placement, sprite/egg draw order and UV cadence, genuine Acolyte target context and260tick kill/cleanup. Configured gallery route preserves shared RNG; old no-target route explicitly partial."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve approved configured target appearance; verify natural spell/map selection, animated attachment, othervariants and audio/device boundaries.",
       "notes": [
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "Configured genuine Acolyte target offset96/radius16 is the approved variant. Arbitrary targets and natural gameplay dispatch remain open; named no-target preview remains partial."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole/detail review, integrated repeat and configured gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Sixteen whole original/actual Metal phases of Physical Paralysis variant1 with genuine stationary Acolyte invoker/target, offset96 and radius16: sprites converge/orbit, three purple egg passes, shrink/kill260 and blanktail280. Original280tick owner/RNG and complete custom Render/RenderObject/software execute; sampled submitted geometry fits fixed1280x960. Exact integer/RNG/draw counts,13392 authoredXYZ/17388 indices; retained22 float diagnostics max0.006254world/0.003663matrix and UV9.35e-5. Integrated70 same-phase PNGs repeat byte-identically at24Hz through278 with clean exit. Actual configured gallery completes260twice, recreates without reseeding shared RNG, restores target flags/Health102/position and cleans early shutdown. Null-invoker branch stayspartial. Natural spell/map selection, animated attachment, othervariants/radii/endpoints, audio/device/framebuffer precision and exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-paralize-target-20261011/root-approval.json",
+        "sha256": "117c9c6abbe685fb26a08c04e90989b452f6fd1d9842c8dcb9538b624c900d39",
+        "note": "docs/vfx/forensics/PARALIZE1_AUTHENTIC_TARGET_RENDER_20261011.md"
+      }
     },
     {
       "index": 91,

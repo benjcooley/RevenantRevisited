@@ -36,3 +36,11 @@ Both reports deliberately set `accepted=false`. These diagnostics establish
 loaded-resource/render execution, not port appearance acceptance. Generic
 map/owner Pulse, device accuracy and the software texture-format discrepancy
 remain separate questions. No watcher visual pass is added by this checkpoint.
+
+Independent inspection of all three qualified first-frame renders confirms
+that the original software output still has noisy rainbow colors rather than
+the authored figure colors. The discrepancy therefore survives genuine texture
+loading; the earlier fabricated texture-residency boundary was not its cause.
+Keep the correct authored ARGB1555 decoder and all three visual rows open while
+investigating the original software/device format handling. Do not retag the
+loaded surface or tune port colors to this corrupted reference.

@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 156,
+    "retail_rows_with_source_fixes_recorded": 157,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 145,
+    "visual_fidelity_confirmed_rows": 146,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 145,
-    "remaining_visual_review_rows": 31
+    "reviewed_visual_pass_rows": 146,
+    "remaining_visual_review_rows": 30
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1841,6 +1841,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Sixteen complete original/actual Metal phases of the null-invoker Invisible configuration at owner origin zero: 70 particles, six rings, hide/wait/show after430 and real kill500/blank501. Full501 native records and5112 draw packets; 221884 source state/cache fields and81792 emitted matrix fields agree below5e-8. Strict4positive/271negative profile and6112 translated vertices/21120 original world fields pass. Root51 same-phase PNGs identical through501; fixed24Hz gallery602ticks witnesses real owner recreation. Translated null-invoker rings double owner translation while particles useABSPOS, so ordinary map gallery is partial; preserve this original behavior. One-pixel edge, natural invoker/fade/map/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-paralize-target-20261011/root-approval.json": {
+      "sha256": "117c9c6abbe685fb26a08c04e90989b452f6fd1d9842c8dcb9538b624c900d39",
+      "retail_row": "paralize1:0xad92bc14",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Sixteen whole original/actual Metal phases of Physical Paralysis variant1 with genuine stationary Acolyte invoker/target, offset96 and radius16: sprites converge/orbit, three purple egg passes, shrink/kill260 and blanktail280. Original280tick owner/RNG and complete custom Render/RenderObject/software execute; sampled submitted geometry fits fixed1280x960. Exact integer/RNG/draw counts,13392 authoredXYZ/17388 indices; retained22 float diagnostics max0.006254world/0.003663matrix and UV9.35e-5. Integrated70 same-phase PNGs repeat byte-identically at24Hz through278 with clean exit. Actual configured gallery completes260twice, recreates without reseeding shared RNG, restores target flags/Health102/position and cleans early shutdown. Null-invoker branch stayspartial. Natural spell/map selection, animated attachment, othervariants/radii/endpoints, audio/device/framebuffer precision and exactpixels remain open."
     }
   }
 }

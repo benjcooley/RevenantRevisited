@@ -110,3 +110,22 @@ paralysis/disabled bits on natural kill or early destruction and logs the
 actual resulting flags, health and position. Sixteen mapping tests and the
 compiled bridge callback/liveness/recreation test cover the new admission and
 reject arbitrary endpoint use. Actual gallery validation is recorded separately.
+
+## Independent appearance approval
+
+Root independently inspected all16 whole-frame pairs and four full-resolution
+fixed-crop pages, verifying32 original/Metal image hashes. The configured
+variant receives a scoped appearance pass: motion, purple egg animation,
+shrink and kill match. Root's rebuilt integrated source repeats70 same-phase
+PNGs byte-identically with24Hz simulation/render through278 and clean exit.
+The actual scrolling gallery completes260ticks twice, recreates the effect
+without RNG reseeding and restores target flags, Health102 and position on
+both natural kill and early shutdown. All32 gallery samples show effect pixels.
+
+The independent approval manifest is
+`recon/retail_asm/runtime/effects/current-paralize-target-20261011/root-approval.json`,
+SHA256 `117c9c6abbe685fb26a08c04e90989b452f6fd1d9842c8dcb9538b624c900d39`.
+Root repeat and gallery manifests remain under the local evidence directory
+`/Users/benjamincooley/RevenantRetailLab/research/vfx-paralize-root-20261011/`.
+This advances the reviewed count to146/176; the numerical residuals and natural
+gameplay, attachment, audio/device and other-configuration gates above stay open.
