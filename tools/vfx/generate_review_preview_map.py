@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Freeze exact retail ID -> existing preview candidates from the source ledger."""
+import argparse
+import hashlib
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+
+# Source-body audit, 2026-10-10. This certifies an implemented preview, NOT
+# original-renderer fidelity or a natural map caller. Unknown registrations fail
+# closed even when their name contains BESPOKE. Old group STUB banners can be
+# stale: FireFlash/FireCone/MeteorStorm/Sparks have real replacement bodies.
+# See each named Spawn/TickAndSubmit in effect.cpp and its vfxtest.cpp factory.
+IMPLEMENTED = {
+    **dict.fromkeys("""
+TAuraEffect_BESPOKE TBloodEffect_BESPOKE TBloodEffect
+TSparksEffect_BESPOKE TSparkEffect TFireEffect_BESPOKE TFireEffect
+TFountainAnimator_BESPOKE TCyanFountainAnimator_BESPOKE
+TRedFountainAnimator_BESPOKE TGreenFountainAnimator_BESPOKE TBlueFountainAnimator_BESPOKE
+TRibbonAnimator_BESPOKE TFlameEffect_BESPOKE TFlameEffect
+TFlameEffect_BESPOKE__FlameB TFlameEffect_BESPOKE__FlameG
+TFireBallEffect LightStrip TStripEffect TIceBoltEffect_BESPOKE TPhotonEffect_BESPOKE
+TSymGlowAnimator_BESPOKE TMeteorStormEffect_BESPOKE TFlyEffect_BESPOKE TFogEffect_BESPOKE
+TCureEffect_BESPOKE TFireFlashEffect_BESPOKE TFireConeEffect_BESPOKE TBurnEffect_BESPOKE
+TIcedEffect_BESPOKE TStreamerEffect_BESPOKE TFireSwarmEffect_BESPOKE TFaultFireEffect_BESPOKE
+TQuicksandEffect_BESPOKE TSandswirlEffect_BESPOKE TWindStripAnimator_BESPOKE THaloEffect
+TDripEffect TRippleEffect TMistEffect_BESPOKE TMistEffect TWaterEffect_BESPOKE
+TWaterFallEffect_BESPOKE TWaterFallEffect_BESPOKE__Waterfall
+TFogEffect_Bespoke__MistFog_BESPOKE TPixieEffect_BESPOKE TFizzleEffect TFizzleEffect_SINGLE_BURST
+TSetVortexEffect_BESPOKE THealEffect_BESPOKE TRockStormEffect_Bespoke_BESPOKE
+""".split(), 'effect.cpp: active controller Spawn/Advance/Submit body'),
+    **dict.fromkeys("""
+TGlobeEffect_BESPOKE TKinSecretDoor_AUTHORED_STILL TMight_AUTHORED_TAGS
+TImmortalmight_AUTHORED_TAGS TFmastery_AUTHORED_TAGS TShadowfist_AUTHORED_OWNER
+TWarriorborn_AUTHORED_OWNER TTeleportation_AUTHORED_OWNER TMPAppear_AUTHORED_START
+TCombatFlashEffect_AUTHORED_START1 TGoldEffect_AUTHORED_TAGS TPunchAndJudy_AUTHORED_OWNER
+TWaterEffect_BESPOKE__StillWater TWaterEffect_BESPOKE__FlowWater TWaterEffect_BESPOKE__SewerWater
+""".split(), 'vfxtest.cpp: exact authored mesh/tag/owner factory'),
+    **{f'TRibbonAnimator_BESPOKE__Ribbon{color}':
+       'vfxtest.cpp: AuthoredStaticMeshVariantSpawn, not historical ribbon alias'
+       for color in 'BGOPRWY'},
+    **{f'TFountainAnimator_BESPOKE__{name}Sign':
+       'vfxtest.cpp: AuthoredStaticMeshVariantSpawn, not historical fountain alias'
+       for name in ('Olihoot', 'Ogrok', 'Camp', 'Tower', 'Druhg', 'Ruins', 'Bone',
+                    'Yard', 'Ancient', 'Village', 'Mist', 'Haven')},
+    **{f'TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher{i}':
+       'vfxtest.cpp: AuthoredTextureMeshVariantSpawn' for i in (1, 2, 3)},
+}
+
+# Deliberately absent: Blast/FireWind/Fairy and W3D/E/H single-billboard stubs;
+# old buff/Gold/PunchAndJudy/CombatFlash placeholders (authored replacements
+# above remain); Tornado/Vortex/Pulp/Dust/geyser/cfire null factories; Strike
+# dummy marker; FireSwarm dragon/head and FireCone dragon rejected overrides.
+# Icedsparks/Snow are only unaudited Iced aliases. IrisFlare/Teleporter and
+# WFall/WCap/RiverFall have different native controllers: a shared asset never
+# establishes an animator binding. Their actual map implementations, if any,
+# are selected independently by the gallery before this fallback.
+
+
+# Exact identities declared by the registered factories in vfxtest.cpp and
+# their owner constructors. These newer implementations predate their ledger
+# preview_candidates updates; they never authorize asset/name association.
+SOURCE_MAPPINGS = {
+    '0x42e0fcd0': 'TOgrestrength_AUTHORED_TAGS',
+    '0xad92bd39': 'TTrollblood_AUTHORED_TAGS',
+    '0x10ac03de': 'TRegeneration_AUTHORED_TAGS',
+    '0xe0a3bc43': 'TSwiftStrike_AUTHORED_TAGS',
+    '0x0c052638': 'Tfspray_AUTHORED_TAGS',
+    '0xaeaeeb30': 'TYEnergy_AUTHORED_TAGS',
+    '0xaeaeeb33': 'TYEnergyLose_AUTHORED_TAGS',
+    '0xaeaeeb29': 'TYAbsorb_AUTHORED_TAGS',
+    '0xad92bd38': 'Tnullifier_AUTHORED_TAGS',
+    '0xad92bd36': 'TSpeed_AUTHORED_TAGS',
+    '0xad92bd35': 'TQuicksilver_AUTHORED_TAGS',
+}
+IMPLEMENTED.update(dict.fromkeys(SOURCE_MAPPINGS.values(),
+    'vfxtest.cpp: explicit retail ID passed to exact owner/profile factory'))
+
+
+def admitted_candidates(row):
+    candidates = [name for name in row['preview_candidates'] if name in IMPLEMENTED]
+    explicit = SOURCE_MAPPINGS.get(row.get('retail_type_id', '').lower())
+    if explicit: candidates.insert(0, explicit)
+    candidates.sort(key=lambda name: (0 if '_AUTHORED_' in name else 1 if '_BESPOKE' in name.upper() else 2))
+    return list(dict.fromkeys(candidates))
+
+
+
+def generate(ledger):
+    raw = ledger.read_bytes()
+    rows = json.loads(raw)['retail_effects']
+    lines = ['// Generated by tools/vfx/generate_review_preview_map.py; do not infer aliases.',
+             '// Ledger SHA-256: ' + hashlib.sha256(raw).hexdigest(),
+             '// Admission: explicit IMPLEMENTED source-body audit; unknown/stub/invalid aliases excluded.']
+    for row in sorted(rows, key=lambda r: int(r['retail_type_id'], 16)):
+        for name in admitted_candidates(row):
+            lines.append('{' + row['retail_type_id'] + 'u, ' + json.dumps(name) + '}, // ' + row['retail_name'])
+    return '\n'.join(lines) + '\n'
+
+
+if __name__ == '__main__':
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--ledger', type=Path, default=ROOT/'docs/vfx/EFFECT_BURNDOWN.json')
+    p.add_argument('--output', type=Path, default=ROOT/'src/vfxreviewpreviewmap.inc')
+    p.add_argument('--check', action='store_true')
+    a = p.parse_args(); result = generate(a.ledger)
+    if a.check:
+        if a.output.read_text() != result:
+            raise SystemExit('Review preview mapping differs from source ledger')
+    else:
+        a.output.write_text(result)

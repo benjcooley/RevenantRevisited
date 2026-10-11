@@ -63,22 +63,29 @@ def read_asset(data):
 
 
 class NativeSpeed:
-    def __init__(self, executable, asset):
-        self.software = SoftwareFixture(executable, 512, 512)
+    def __init__(self, executable, asset, width=512, height=512, software_factory=SoftwareFixture, particle_required=True):
+        self.software = software_factory(executable, width, height)
         self.vm = self.software.vm
         v = self.vm
         if sha(v.image) != RETAIL_SHA:
             raise ValueError('Requires pinned original retail executable')
         self.asset = asset
         particles = [t for t in asset['tags'] if t['name']=='partsys' and t['state']==0]
-        if len(particles)!=1:
-            raise ValueError('Requires exactly one explicit state0 particle tag')
-        import re
-        particle_name = re.search(r'\bparticle=([^,]+)',particles[0]['parameters'])[1]
-        self.prototype_index = next(o['index']for o in asset['objects']if o['name']==particle_name)
-        emitter_names = re.search(r'\bobj=\(([^)]+)\)',particles[0]['parameters'])[1].split(',')
-        self.required_pose_indices = {0,self.prototype_index}
-        self.required_pose_indices.update(o['index']for o in asset['objects']if o['name']in emitter_names)
+        if not particle_required:
+            if particles:raise ValueError('Generic resource adapter requires no particle tags')
+            self.prototype_index=-1
+            self.required_pose_indices={o['index']for o in asset['objects']}
+        else:
+            if len(particles)!=1:
+                raise ValueError('Requires exactly one explicit state0 particle tag')
+            import re
+            particle_name = re.search(r'\bparticle=([^,]+)',particles[0]['parameters'])[1].strip().strip('"')
+            self.prototype_index = next(o['index']for o in asset['objects']if o['name']==particle_name)
+            emitter_text = re.search(r'\bobj=(\([^)]*\)|"[^"]*"|[^,]+)',particles[0]['parameters'])[1]
+            if emitter_text.startswith('('):emitter_text=emitter_text[1:-1]
+            emitter_names = [name.strip().strip('"') for name in emitter_text.split(',')]
+            self.required_pose_indices = {0,self.prototype_index}
+            self.required_pose_indices.update(o['index']for o in asset['objects']if o['name']in emitter_names)
         self.unused_rejected_pose_indices = set()
         self.calls = {}
         self.boundaries = {}
@@ -224,7 +231,7 @@ class NativeSpeed:
             object_blend_modes=[v.u32(p+0x348) for p in self.animobjs],
             original_call_counts=self.calls, resource_boundaries=self.boundaries)
 
-    def state_trace(self, ticks=90):
+    def state_trace(self, ticks=90, frame_offset=0, move_tick=60, clamp_frames=False):
         """Full initialized controller Pulse and actual live RenderSample path.
 
         Emitters use the original asset decoder/matrix; no emitter-transform
@@ -248,9 +255,9 @@ class NativeSpeed:
         rf = lambda address: struct.unpack('<f',v.uc.mem_read(address,4))[0]
         initialized_origin = [rf(c+0x170+i*4)for i in range(3)]
         for tick in range(ticks):
-            frame = tick % self.asset['state0_frames']
+            frame = min(tick+frame_offset,self.asset['state0_frames']-1)if clamp_frames else (tick+frame_offset)%self.asset['state0_frames']
             v.put_u32(self.animator+0x14, frame)
-            if tick == 60:
+            if tick == move_tick:
                 for off,value in zip((16,20,24),(16,-8,4)):
                     v.put_u32(self.owner+off,value&0xffffffff)
             for obj in self.animobjs:
@@ -300,7 +307,7 @@ class NativeSpeed:
             unused_state0_pose_rejections=sorted(self.unused_rejected_pose_indices),
             original_emitter_matrix_executed=True,full_parser_initialize_executed=True,
             render_stop='0x4028e2 before owner virtual/device geometry handoff',
-            explicit_external_inputs=['MSVC RNG seed1','ground height0','owner initially0; MOVE(16,-8,4) at tick60'])
+            explicit_external_inputs=['MSVC RNG seed1','ground height0',f'owner initially0; MOVE(16,-8,4) at tick{move_tick}', f'animation frame offset{frame_offset}'])
 
 
 def main():

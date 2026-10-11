@@ -66,6 +66,7 @@
 #include "uistyletest.h"
 #include "uitextbartest.h"
 #include "vfxtest.h"
+#include "vfxreview.h"
 // uihudmockuptest + uistatusbartest moved to attic/: the rects/labels they
 // encoded were derived from the pre-release src/ defines (HEALTHBARX etc)
 // and the AI-generated docs/HUD.md, neither of which match the shipped
@@ -3164,6 +3165,18 @@ void InputSimStart(const char* script)
                 t_ms += kTypeIntervalMs;
             }
         }
+        else if (op == "char")
+        {
+            // One character event: a code (13) or enter / backspace / escape,
+            // the characters those keys send besides their key events.
+            const std::string arg = (tok.size() > 1) ? tok[1] : "";
+            const int32_t ch = arg == "enter" ? 0x0d : arg == "backspace" ? 0x08 : arg == "escape" ? 0x1b
+                             : (int32_t)std::strtol(arg.c_str(), nullptr, 0);
+            if (ch > 0)
+                g_inputSimEvents.push_back({ t_ms, MS_CHAR, ch, 0, 0, "" });
+            else
+                log_warn("[input-sim] char: unknown character '%s'", arg.c_str());
+        }
         else if (op == "loop")
             g_inputSimLoop = true;
         else if (op == "take_snapshot" || op == "snapshot" || op == "snap")
@@ -3502,6 +3515,8 @@ bool Initialize(const char* mode)
         return true;
     if (strcmp(mode, "sector") == 0)
         return g_mapRenderer.InitializeFromStartupArgs() && SceneCommandsStart();
+    if (strcmp(mode, "vfx-review") == 0)
+        return VfxReview::Initialize();
     if (strcmp(mode, "fireball-runtime") == 0)
     {
         const bool result=RunFireballRuntimeTest(g_mapRenderer);
@@ -3677,6 +3692,8 @@ void Close(const char* mode)
         CloseAudioMode();
     if (strcmp(mode, "vfx") == 0)
         VfxTest::Close();
+    if (strcmp(mode, "vfx-review") == 0)
+        VfxReview::Close();
     DestroyBitmapAtlas(&g_uiAtlas);
     if (UsesDemoPlayer(mode))
         UIDemoPlayer::Remove();
@@ -3694,6 +3711,8 @@ void Render(const char* mode)
         SceneCommandsTick();
         return g_mapRenderer.RenderFrame();
     }
+    if (strcmp(mode, "vfx-review") == 0)
+        return VfxReview::Render();
     if (strcmp(mode, "mesh") == 0)
         return RenderMeshMode();
     if (strcmp(mode, "char3d") == 0)
@@ -3881,6 +3900,10 @@ void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 
 void HandleKeyPress(const char* mode, int32_t key, bool down)
 {
+    if (strcmp(mode, "vfx-review") == 0) {
+        VfxReview::HandleKeyPress(key, down);
+        return;
+    }
     if (strcmp(mode, "vfx") == 0)
     {
         VfxTest::HandleKeyPress(key, down);

@@ -55,9 +55,11 @@
 //   REGISTER_3DANIMATOR("Vortex", TVortexAnimator)
 //   REGISTER_3DANIMATOR("Speaker", TAmbSoundAnimator)
 
+#include "retailmeshlighting.h"
 #include "revenant.h"
 #include "effect.h"
 #include "fireballquad.h"
+#include "fireballring.h"
 #include "fireballcore.h"
 #include "fireballspark.h"
 
@@ -66,6 +68,7 @@
 #include "defdoc.h"
 #include "mappane.h"
 #include "math3d.h"
+#include "retailsoftwaretransform.h"
 #include "meshextract.h"   // M09b: ExtractSubMesh for I3D cylinder mesh
 #include "revutils.h"
 #include "logging.h"
@@ -2047,21 +2050,10 @@ void TBloodEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         }
     }
 
-    // --- Render: port of TBloodSystem::Render (effectcomp.cpp:1415-1483).
-    // Resettled forensics (B01_TBloodEffect_RENDER_RESETTLED.md §6): the
-    // snapshot SetBlendState writes SRC_ALPHA/INV_SRC_ALPHA factors but
-    // D3DRENDERSTATE_ALPHABLENDENABLE is NEVER turned on along the blood
-    // path, so on shipped DX6/7 the blend is DORMANT. The texture loader
-    // (legacy/3dimage.cpp:2079) bakes the keycolor as 1-bit alpha and the
-    // shipped read is CHROMA-KEYED OPAQUE, single-pass. The old k=1
-    // AdditiveStraight overlay pass has been DROPPED per §6.4 — it was
-    // a re-derivation of the wrong (dormant-blend) snapshot read and
-    // produced washed-out pink droplets in the harness. Single Alpha
-    // pass below uses the box05..box08 cells (indices 4..7) and lets the
-    // FB shader's chroma-key discard cut out the black background.
-    // Size 2 (big) and the splat sub-objects are commented out in the
-    // original — a size-2 droplet renders with the small sprite
-    // (forensics §7 / §13.3).
+    // Snapshot TBloodSystem::Render draws two passes per particle:
+    // box05/06 are an ARGB4444 black opacity mask; box01/02 contain
+    // the RGB565 red color. Neither pass is a substitute for the other.
+    // Preserve their source order through the billboard batching queue.
     const S3DPoint& base = Pos();
     for (int32_t i = 0; i < kBloodMaxParticles; ++i)
     {
@@ -2112,25 +2104,14 @@ void TBloodEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         item.world_pos[1] = wy;
         item.world_pos[2] = wz;
 
-        // Single Alpha pass — sub-objects box05..box08 (indices 4..7). The
-        // texture's keycolor was baked to 1-bit alpha by the .I3D loader
-        // (legacy/3dimage.cpp:2079) so the FB shader's chroma-key discard
-        // cuts out the black background and the dark-red droplet reads
-        // as a chroma-keyed OPAQUE sprite — same as shipped DX6/7.
-        // The pre-resettled k=1 AdditiveStraight overlay pass on
-        // box01..box04 was DROPPED per resettled doc §6.4: it was a
-        // re-derivation of the dormant-blend snapshot read and produced
-        // light-pink washed-out droplets via additive accumulation on top
-        // of the dark-red base.
-        const SBloodSubObject& so = subobjs_[4 + cell];
-        if (so.texture != kInvalidTexture)
+        item.preserve_submission_order = true;
+        for (int32_t pass = 0; pass < 2; ++pass)
         {
+            const SBloodSubObject& so = subobjs_[(pass == 0 ? 4 : 0) + cell];
+            if (so.texture == kInvalidTexture) continue;
             item.key.texture = so.texture;
-            item.key.blend   = uint8_t(EFxBlend::Alpha);
-            item.uv_rect[0] = so.uv_rect[0];
-            item.uv_rect[1] = so.uv_rect[1];
-            item.uv_rect[2] = so.uv_rect[2];
-            item.uv_rect[3] = so.uv_rect[3];
+            item.key.blend = uint8_t(pass == 0 ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
+            std::copy_n(so.uv_rect, 4, item.uv_rect);
             Renderer->SubmitFxBillboard(item);
         }
     }
@@ -3347,6 +3328,18 @@ TFizzleEffect* TFizzleEffect::SpawnForTest(const S3DPoint& origin)
     return fizzle;
 }
 
+void TFizzleEffect::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled;
+    if (native_domain_) {
+        const auto position = Pos();
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z,
+                                 uint8_t(GetFace()));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT particle=relative Fizzle",
+             int(native_domain_));
+}
+
 void TFizzleEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
 {
     if (!Renderer)
@@ -3494,11 +3487,14 @@ void TFizzleEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
 
     // Source TParticleSystem::Render: spin, tip, static rotation, scale,
     // then particle translation. Preserve the asset's four raw corners/UVs.
-    const S3DPoint& base = Pos();
+    const auto& owner_world = native_domain_ ? native_owner_ : Transform().Matrix();
     SQuadDrawItem item = {};
     item.key.blend = uint8_t(EFxBlend::Alpha);
     item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
     item.light_mode = EFxLightMode::Unlit;
+    item.retail_argb4444 = true; // Shipped Fizzle texture format; original ignores vertex color.
+    item.retail_software_projection = native_domain_;
+    item.retail_camera_z = 0.0f;
     item.debug_mode = debug_mode;
 
     for (int32_t i = 0; i < kFizzleMaxParticles; ++i)
@@ -3518,17 +3514,19 @@ void TFizzleEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         const float boost = p.flicker ? kFizzleFlickerScale : 1.0f;
         const hmm_vec3 scale = p.scl * boost;
         MtxScale(&local, &scale);
-        // Submit in the renderer's world domain, retaining the existing
-        // particle anchor. Legacy FIX_Z_VALUE belongs to its D3D domain;
-        // do not apply that conversion again before the shared projection.
+        // Original particle Render(flicker=1, abs_pos=0) keeps raw local Z,
+        // then RenderObject composes the owner matrix. Only the owner owns
+        // the coordinate-domain bridge; never FIX_Z the particle translation.
         MtxTranslate(&local, &p.pos);
         for (int32_t corner = 0; corner < 4; ++corner)
         {
             hmm_vec3 point = {};
             MtxTransform(&local, &so.vertices[corner].pos, &point);
-            item.world_pos[corner][0] = float(base.x) + point.X;
-            item.world_pos[corner][1] = float(base.y) + point.Y;
-            item.world_pos[corner][2] = float(base.z) + point.Z;
+            hmm_vec3 world = {};
+            MtxTransform(&owner_world, &point, &world);
+            item.world_pos[corner][0] = world.X;
+            item.world_pos[corner][1] = world.Y;
+            item.world_pos[corner][2] = world.Z;
             item.uv[corner][0] = so.vertices[corner].tu;
             item.uv[corner][1] = so.vertices[corner].tv;
         }
@@ -6580,7 +6578,11 @@ void TFireBallEffect::StepMissilePulse()
     // within 32 and the caster's enemy (anyone, with no caster) explodes it.
     input.character_hit=[this](const missile_state::Point& point)
     {
-        if(preview_mode_)return false;
+        if(preview_mode_) {
+            if(!preview_target_collision_ || !has_projectile_destination_)return false;
+            const S3DPoint query{point.x,point.y,point.z};
+            return ::Distance(query,projectile_destination_)<=32;
+        }
         TObjectInstance* invoker_object=spell?spell->GetInvokerRef().Get():nullptr;
         TCharacter* invoker=dynamic_cast<TCharacter*>(invoker_object);
         const S3DPoint query{point.x,point.y,point.z};
@@ -6737,22 +6739,20 @@ void TFireBallEffect::StepAnimate()
                 if (ring_active_ && !ring_done_)
                 {
                     ring_scale_ *= kFireBallRingFactor;
+                    // Original shock Animate retains the first overshoot;
+                    // the done flag suppresses subsequent growth/drawing.
                     if (ring_scale_ > kFireBallRingMaxSize)
-                    {
-                        ring_scale_ = kFireBallRingMaxSize;
-                        ring_done_  = true;
-                    }
+                        ring_done_ = true;
                 }
                 for (auto& bq : burst_)
                 {
                     if (!bq.used) continue;
                     ++live_burst_count;
                     bq.scale *= 0.90f;
+                    // Retail511421 clears used but still consumes this
+                    // slot's final glow RNG and advances its atlas frame.
                     if (bq.scale < 0.50f)
-                    {
                         bq.used = false;
-                        continue;
-                    }
                     bq.glow = 1.0f + 0.05f * float(random(0, 15));
                     bq.frame += 1.0f;
                     if (int32_t(bq.frame) == glow_frame_)
@@ -6870,49 +6870,6 @@ TFireBallEffect* TFireBallEffect::SpawnForTestWithAsset(const S3DPoint& origin,
     if (fb->asset_.box02_tex == kInvalidTexture)
         fb->asset_.box02_tex = fb->asset_.box01_tex;   // safe fallback (atlas has warm cells)
 
-    // Register the cylinder01 sub-mesh for additive-blend helper-mesh
-    // submission (the shockwave ring). Same path TTeleporterEffect uses
-    // for its glow column. We pull texslot 0 if there's no resolvable
-    // material binding; the ring's geometry doesn't carry the warm
-    // gradient (that comes from our per-frame vertex tint).
-    {
-        const int32_t cyl = kFireBallObjCylinder01;
-        const int32_t texslots = num_tex + 1;
-        for (int32_t texslot = 0; texslot < texslots; ++texslot)
-        {
-            std::vector<SMeshVertex> verts;
-            std::vector<uint16_t>    indices;
-            if (!ExtractSubMeshTextureSlot(img3d, cyl, texslot, verts, indices))
-                continue;
-            if (verts.empty() || indices.empty()) continue;
-            TTextureHandle albedo = Renderer->WhiteTextureHandle();
-            if (texslot > 0 && texslot - 1 < num_tex)
-            {
-                S3DTex t = {};
-                img3d->GetTexture(texslot - 1, &t);
-                if (t.htexture != kInvalidTexture) albedo = t.htexture;
-            }
-            const MeshHandle h = Renderer->RegisterMesh(
-                verts.data(), int32_t(verts.size()),
-                indices.data(), int32_t(indices.size()),
-                albedo);
-            if (h)
-            {
-                fb->asset_.ring_mesh = h;
-                BuildStaticObjectMatrix(img3d, cyl, 0, 0, fb->asset_.ring_mat);
-                log_info("[fireball]   cylinder01 sub-obj=%d texslot=%d "
-                         "verts=%zu indices=%zu mesh_handle=%u",
-                         cyl, texslot, verts.size(), indices.size(), h);
-                break;
-            }
-        }
-        if (fb->asset_.ring_mesh == 0)
-        {
-            log_warn("[fireball] SpawnForTest: cylinder01 mesh extract failed — "
-                     "ring won't draw (impact will still produce burst+sparks)");
-        }
-    }
-
     // Harness aim: random horizontal byte-angle (in-game caller would
     // supply via TSpell::Timer + GetAngle()).
     fb->aim_angle_ = random(0, 255);
@@ -6927,12 +6884,12 @@ TFireBallEffect* TFireBallEffect::SpawnForTestWithAsset(const S3DPoint& origin,
     fb->SetProjectileEndpoints(p,destination);
 
     log_info("[fireball] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
-             "aim=%d box01_tex=%u box02_tex=%u ring_mesh=%u "
+             "aim=%d box01_tex=%u box02_tex=%u "
              "fly_range_ticks=%d",
              asset_path, fb->GetMapIndex(),
              origin.x, origin.y, origin.z,
              fb->aim_angle_,
-             fb->asset_.box01_tex, fb->asset_.box02_tex, fb->asset_.ring_mesh,
+             fb->asset_.box01_tex, fb->asset_.box02_tex,
              kFireBallFlyRangeTicks);
     return fb;
 }
@@ -6996,6 +6953,7 @@ bool TFireBallEffect::EnsureAuthoredQuad() const
     const int32_t slot=FireBallSubObjTextureSlot(mesh,0);
     if(slot<0||slot>=mesh->NumTextures())return false;
     S3DTex texture{};mesh->GetTexture(slot,&texture);
+    asset_.box01_argb4444=RetailMeshTextureLighting(texture.desc.pixelFormat)==3;
     asset_.box01_tex=texture.htexture;asset_.has_box01_quad=texture.htexture!=kInvalidTexture;
     return asset_.has_box01_quad;
 }
@@ -7012,6 +6970,7 @@ bool TFireBallEffect::EnsureAuthoredSpark() const
     const int32_t slot=FireBallSubObjTextureSlot(mesh,1);
     if(slot<0||slot>=mesh->NumTextures())return false;
     S3DTex texture{};mesh->GetTexture(slot,&texture);
+    asset_.box02_argb4444=RetailMeshTextureLighting(texture.desc.pixelFormat)==3;
     asset_.box02_tex=texture.htexture;asset_.has_box02_quad=texture.htexture!=kInvalidTexture;
     return asset_.has_box02_quad;
 }
@@ -7026,7 +6985,8 @@ void TFireBallEffect::SubmitAuthoredSpark(const SFireBallSpark& spark,EFxDebugMo
         uv[size_t(i)]={asset_.box02_vertices[i].tu,asset_.box02_vertices[i].tv};
     }
     const float scale=spark.scale*(spark.flicker_status?kFireBallSparkFlicker:1.0f);
-    const auto quad=fireball_quad::BuildSpark(authored,uv,scale,spark.pos);
+    const auto quad=native_domain_ ? fireball_quad::BuildSparkNativeD3D(authored,uv,scale,spark.pos) :
+        fireball_quad::BuildSpark(authored,uv,scale,spark.pos);
     SQuadDrawItem item{};
     for(int i=0;i<4;++i)
     {
@@ -7035,6 +6995,7 @@ void TFireBallEffect::SubmitAuthoredSpark(const SFireBallSpark& spark,EFxDebugMo
         item.world_pos[i][2]=quad.position[size_t(i)].Z;
         item.uv[i][0]=quad.uv[size_t(i)][0];item.uv[i][1]=quad.uv[size_t(i)][1];
     }
+    item.retail_argb4444=asset_.box02_argb4444;item.retail_software_projection=native_domain_;
     item.key.texture=asset_.box02_tex;item.key.blend=uint8_t(EFxBlend::Alpha);
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);item.light_mode=EFxLightMode::Unlit;
     item.debug_mode=debug_mode;Renderer->SubmitFxQuad(item);
@@ -7046,8 +7007,9 @@ void TFireBallEffect::SubmitAuthoredCard(const SFireBallData& pose,int32_t frame
     std::array<hmm_vec3,4> authored{};
     for(int i=0;i<4;++i)authored[size_t(i)]=asset_.box01_vertices[i].pos;
     const float scale=glow?pose.scale*pose.glow:pose.scale;
-    const auto quad=fireball_quad::Build(authored,frame,glow?0:int(pose.rotation),GetFace(),scale,
-        pose.pos,Transform().Matrix());
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) { const auto p=Pos(); BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace())); }
+    const auto quad=fireball_quad::Build(authored,frame,glow?0:int(pose.rotation),GetFace(),scale,pose.pos,owner);
     SQuadDrawItem item{};
     for(int i=0;i<4;++i)
     {
@@ -7056,6 +7018,7 @@ void TFireBallEffect::SubmitAuthoredCard(const SFireBallData& pose,int32_t frame
         item.world_pos[i][2]=quad.position[size_t(i)].Z;
         item.uv[i][0]=quad.uv[size_t(i)][0];item.uv[i][1]=quad.uv[size_t(i)][1];
     }
+    item.retail_argb4444=asset_.box01_argb4444;item.retail_software_projection=native_domain_;
     item.key.texture=asset_.box01_tex;item.key.blend=uint8_t(EFxBlend::Alpha);
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);item.debug_mode=debug_mode;
     item.light_mode=EFxLightMode::Unlit;
@@ -7084,68 +7047,36 @@ void TFireBallEffect::SubmitAuthoredTrail(EFxDebugMode debug_mode) const
         }
 }
 
+void TFireBallEffect::SubmitAuthoredBurst(EFxDebugMode debug_mode) const
+{
+    if(!Renderer||!EnsureAuthoredQuad())return;
+    std::array<hmm_vec3,4> authored{};
+    for(int i=0;i<4;++i)authored[size_t(i)]=asset_.box01_vertices[i].pos;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) { const auto p=Pos(); BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace())); }
+    for(const auto& burst:burst_) {
+        if(!burst.used)continue;
+        const auto glow=fireball_quad::BuildBurstGlow(authored,glow_frame_,burst.scale*burst.glow,burst.pos,owner);
+        SQuadDrawItem item{};
+        for(int i=0;i<4;++i) {
+            const auto& p=glow.position[size_t(i)];
+            item.world_pos[i][0]=p.X;item.world_pos[i][1]=p.Y;item.world_pos[i][2]=p.Z;
+            item.uv[i][0]=glow.uv[size_t(i)][0];item.uv[i][1]=glow.uv[size_t(i)][1];
+        }
+        item.key.texture=asset_.box01_tex;item.key.blend=uint8_t(EFxBlend::Alpha);
+        item.retail_argb4444=asset_.box01_argb4444;item.retail_software_projection=native_domain_;
+        item.debug_mode=debug_mode;Renderer->SubmitFxQuad(item);
+        SubmitAuthoredCard(burst,int(burst.frame),false,debug_mode);
+    }
+}
+
 void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
 {
     if (!Renderer || asset_.box01_tex == kInvalidTexture)
         return;
 
-    const S3DPoint base = Pos();
-
-    // Per-instance facing rotation. Snapshot draw matrices apply
-    // `RotateZ(-(GetFace(...)/256) * TORADIAN)` as the last spin
-    // (missileeffect.cpp:846/906/953/1002/1041), composed under the
-    // fixed -30°/+60° XY tilt + per-slot rotation. We collapse those
-    // into one in-plane rotation per WorldXY-tipped quad:
-    //   rotation_rad = -slot.rotation * (π/180)  +  facing_rad
-    // facing comes from aim_angle_ (the byte-angle 0..255 we stored at
-    // launch) — same source the snapshot used via GetFace.
-    const float facing_rad = -(float(aim_angle_) / 256.0f) * 2.0f * float(M_PI);
-
-    // Intended retail order (full cross-pipeline ordering remains open):
-    // 1060-1085): spark first; then per state — LAUNCH/FLY: glow, trail,
-    // ball; EXPLODE: trail, burst, ring (ring drawn in SubmitWorldRing).
-    //
-    // The remaining burst adapter is a legacy FB particle. Spark, head,
-    // glow and trail submit original authored corners/UVs on the quad queue.
-    // Prior particle adapter comments apply only to the pending burst.
-    // Pipeline = FB particle (SubmitFxParticle / SParticleDrawItem) —
-    // billboards don't plumb per-instance rotation_rad, but particles do
-    // (renderer.h:248-263). Sister effects (Fizzle, B01 FLY droplets)
-    // use the particle pipeline for the same reason: keep the snapshot's
-    // matrix-tilt + per-instance spin without re-implementing matrices.
-    // Orientation = WorldXY so each quad lies in the world plane the
-    // snapshot's RotateX(-30°)/RotateY(+60°) defined; the per-instance
-    // rotation_rad then spins it in that plane.
-    SParticleDrawItem ball_item = {};
-    ball_item.key.texture     = asset_.box01_tex;
-    ball_item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
-    // Blend = Alpha — pre-release calls SetBlendState() = MODULATE/
-    // SRCALPHA/INVSRCALPHA (missileeffect.cpp:1062-1063 + forensics §7).
-    // The black-keyed atlas supplies transparency; the modulate stage
-    // lets the warm-orange texel tint dominate.
-    ball_item.key.blend       = uint8_t(EFxBlend::Alpha);
-    ball_item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    ball_item.light_mode      = EFxLightMode::Unlit;
-    ball_item.orientation     = EFxBillboardOrientation::WorldXY;
-    ball_item.debug_mode      = debug_mode;
-    // White tint — color lives in the warm-orange atlas texels per §10.
-    ball_item.color_rgba[0] = 1.0f;
-    ball_item.color_rgba[1] = 1.0f;
-    ball_item.color_rgba[2] = 1.0f;
-    ball_item.color_rgba[3] = 1.0f;
-
-    // --- Spark trail (TSubParticleAnimator::Render — effectcomp.cpp:
-    // 526-570 in spirit). Drawn first so the ball + glow layer on top.
-    // Sparks have no per-instance rotation in the snapshot (the original
-    // `TSubParticleAnimator::Render` uses a fixed rotZ-60°/rotX-45° face
-    // rotation, not a per-particle accumulator), so rotation_rad stays
-    // 0 — but they still ride the WorldXY tip so they read as embers in
-    // the world plane, not camera-pasted dots.
-    // Original spark Render uses authored box02, absolute coordinates and
-    // its native fixed tilt. Submit into the same quad order as glow/trail.
+    // Original512150 dispatches sparks before the state-specific cards.
     for(const auto& spark:sparks_)SubmitAuthoredSpark(spark,debug_mode);
-
-    constexpr float kDegToRad = float(M_PI) / 180.0f;
 
     if (state_ == 0 /*LAUNCH*/ || state_ == 1 /*FLY*/)
     {
@@ -7173,90 +7104,47 @@ void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
     {
         // EXPLODE branch (:1075-1079): trail, burst, ring. The trail
         // keeps draining at the frozen stale-spin angles; ring is drawn
-        // via SubmitHelperMesh.
+        // after the burst through the same ordered quad queue.
         SubmitAuthoredTrail(debug_mode);
 
-        // Burst quads (RenderFireBallBurst — :793-869). Snapshot seeds
-        // `burst[i].rotation = 0` (:694), so the per-slot rotation_rad
-        // collapses to just the facing_rad term — the matrix tilt at
-        // :846-851 reduces to the WorldXY plane + facing rotation.
-        SParticleDrawItem burst = ball_item;
-        for (const auto& bq : burst_)
-        {
-            if (!bq.used) continue;
-            FillAtlasUv(int32_t(bq.frame), burst.uv_rect);
-            const float bsize = kFireBallBaseQuadWu * bq.scale * bq.glow;
-            burst.size_wu[0] = bsize;
-            burst.size_wu[1] = bsize;
-            burst.world_pos[0] = float(base.x) + bq.pos.X;
-            burst.world_pos[1] = float(base.y) + bq.pos.Y;
-            burst.world_pos[2] = float(base.z) + bq.pos.Z;
-            burst.rotation_rad = -bq.rotation * kDegToRad + facing_rad;
-            Renderer->SubmitFxParticle(burst);
-        }
+        SubmitAuthoredBurst(debug_mode);
     }
 }
 
-void TFireBallEffect::SubmitWorldRing(EFxDebugMode /*debug_mode*/)
+void TFireBallEffect::SubmitWorldRing(EFxDebugMode debug_mode)
 {
-    // Shockwave ring (cylinder01 via SubmitHelperMesh, additive blend).
-    // Same primitive M09b TTeleporterEffect uses (forensics §7).
-    if (!Renderer || asset_.ring_mesh == 0 || !ring_active_)
-        return;
-
-    // Compose the world matrix: T(ring_pos) * S(ring_scale,*,*) applied
-    // to the cylinder's authored parent matrix. The ring grows isotropic
-    // (all 3 axes scale together), matching ring.scale_factor = 1.085 on
-    // x/y/z (missileeffect.cpp:715-717).
-    float t[16] = {
-        ring_scale_, 0.0f,        0.0f,        ring_pos_.X,
-        0.0f,        ring_scale_, 0.0f,        ring_pos_.Y,
-        0.0f,        0.0f,        ring_scale_, ring_pos_.Z,
-        0.0f,        0.0f,        0.0f,        1.0f
-    };
-    float world[16];
-    // world = t * parent_matrix (row-major). Reuse the renderer-side
-    // helper structure of TTeleporterEffect — but the helper is local
-    // there. Compose inline.
-    for (int32_t r = 0; r < 4; ++r)
-        for (int32_t c = 0; c < 4; ++c)
-        {
-            float s = 0.0f;
-            for (int32_t k = 0; k < 4; ++k)
-                s += t[r * 4 + k] * asset_.ring_mat[k * 4 + c];
-            world[r * 4 + c] = s;
+    if(!Renderer || !ring_active_ || ring_done_)return;
+    if(asset_.ring_vertices.empty()) {
+        auto* image=dynamic_cast<T3DImagery*>(imagery);
+        if(!image || image->NumObjects()<3 || image->NumObjVerts(2)!=96 || image->NumObjFaces(2)!=144)return;
+        asset_.ring_vertices.resize(96);asset_.ring_faces.resize(144);
+        image->GetObjVerts(2,asset_.ring_vertices.data(),0,0,ERender3DVertex::Vertex);
+        int32_t starts[9]{},counts[9]{};
+        image->GetObjFaces(2,asset_.ring_faces.data(),starts,counts);
+        // Original ring is untextured and draws every authored cylinder face.
+        if(counts[0]!=144) { asset_.ring_vertices.clear();asset_.ring_faces.clear();return; }
+    }
+    const float native_z=RetailSoftwareOwnerZ(int32_t(ring_pos_.Z));
+    for(const auto& face:asset_.ring_faces) {
+        SQuadDrawItem item{};item.corner_count=3;item.per_corner_color=true;
+        item.key.texture=Renderer->WhiteTextureHandle();item.key.blend=uint8_t(EFxBlend::Alpha);
+        item.retail_software_projection=native_domain_;item.debug_mode=debug_mode;
+        const int indices[3]={face.v1,face.v2,face.v3};
+        for(int corner=0;corner<3;++corner) {
+            const int index=indices[corner];if(index<0||index>=96)return;
+            const auto& p=asset_.ring_vertices[size_t(index)].pos;
+            item.world_pos[corner][0]=p.X*ring_scale_+ring_pos_.X;
+            item.world_pos[corner][1]=p.Y*ring_scale_+ring_pos_.Y;
+            const float z=p.Z*ring_scale_+native_z;
+            item.world_pos[corner][2]=native_domain_?z:z*1.4600000381469727f;
+            const uint32_t color=fireball_ring::PackedColor(index/24,ring_scale_,y_ring_palette_);
+            item.corner_color_rgba[corner][0]=float((color>>16)&255)/255.0f;
+            item.corner_color_rgba[corner][1]=float((color>>8)&255)/255.0f;
+            item.corner_color_rgba[corner][2]=float(color&255)/255.0f;
+            item.corner_color_rgba[corner][3]=float(color>>24)/255.0f;
         }
-
-    // Alpha-fade per SHOCKWAVE_FLAG_FADE (effectcomp.cpp:732-748):
-    // alpha = (max_size - scale) / (max_size - init_scale).
-    const float fade_num = kFireBallRingMaxSize - ring_scale_;
-    const float fade_den = kFireBallRingMaxSize - kFireBallRingScale;
-    const float fade     = fade_den > 0.0f
-                               ? std::fmax(0.0f, std::fmin(1.0f, fade_num / fade_den))
-                               : 1.0f;
-
-    SHelperMeshSubmit m = {};
-    m.mesh           = asset_.ring_mesh;
-    m.additive_blend = true;
-    m.shadow_plane   = false;
-    std::memcpy(m.world, world, sizeof(world));
-
-    // Warm-orange ring tint — the 4 ring color stops (forensics §10):
-    // mid stop = (0.78,0.24,0.06) red-orange / (0.97,0.61,0.06) orange.
-    // Helper-mesh shader emissive carries the color directly (additive
-    // pass = self-luminant), modulated by `fade` so the ring fades out
-    // as it grows past max_size.
-    m.diffuse[0]  = 1.0f; m.diffuse[1]  = 1.0f; m.diffuse[2]  = 1.0f; m.diffuse[3]  = 1.0f;
-    m.ambient[0]  = 0.0f; m.ambient[1]  = 0.0f; m.ambient[2]  = 0.0f; m.ambient[3]  = 1.0f;
-    m.specular[0] = 0.0f; m.specular[1] = 0.0f; m.specular[2] = 0.0f; m.specular[3] = 0.0f;
-    m.emissive[0] = 0.97f * fade;   // bright orange
-    m.emissive[1] = 0.45f * fade;
-    m.emissive[2] = 0.06f * fade;
-    m.emissive[3] = 1.0f;
-    m.power       = 1.0f;
-    m.sort_depth  = float(Pos().z);
-
-    Renderer->SubmitHelperMesh(m);
+        Renderer->SubmitFxQuad(item);
+    }
 }
 
 #if 0
@@ -8952,6 +8840,9 @@ void TMistEffect_Bespoke::Initialize(bool attach_runtime_component)
     // consume random draws until the actual owner asset can be submitted.
     if (!imagery || GetMapIndex() < 0 ||
         !LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    S3DTex source_texture = {};
+    imagery->GetTexture(0, &source_texture);
+    retail_argb4444_ = RetailMeshTextureLighting(source_texture.desc.pixelFormat) == 3;
     // Snapshot effect_old.cpp:11383-11392 — seed all 50 drops up-front.
     for (int32_t i = 0; i < kMistMaxDrops; ++i)
     {
@@ -9050,10 +8941,11 @@ void TMistEffect_Bespoke::Submit(EFxDebugMode debug_mode, bool software_alpha_di
         return;
 
     SQuadDrawItem item = {};
+    item.retail_argb4444 = retail_argb4444_;
     item.key.texture     = texture_;
-    // The software-reference diagnostic changes only compositing. It
-    // approximates the source software device's fixed ARGB alpha-over,
-    // without claiming its RGB565 table quantization or nearest sampling.
+    // Preserve the canonical additive request outside the software policy.
+    // Exact4444 source metadata lets SubmitFxQuad select the native kernel;
+    // the optional diagnostic can still request alpha under modern policy.
     item.key.blend       = uint8_t(software_alpha_diagnostic
                                   ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
     item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
@@ -9481,6 +9373,7 @@ void TSymGlowEffect_Bespoke::Initialize(bool attach_runtime_component)
     img->GetTexture(0, &tex);
     if (tex.htexture == kInvalidTexture ||
         !ExtractSubMeshTextureSlot(img, 0, 1, vertices_, indices_) || indices_.empty()) return;
+    retail_argb4444_ = RetailMeshTextureLighting(tex.desc.pixelFormat) == 3;
     // SetupObjects changes V once; Render advances U by the Animate random step.
     for (auto& v : vertices_) v.uv[1] -= 0.01f;
     texture_ = tex.htexture;
@@ -9541,6 +9434,7 @@ void TSymGlowEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     SQuadDrawItem item = {};
     item.corner_count = 3;
     item.retail_texture = 1;
+    item.retail_argb4444 = retail_argb4444_;
     item.key.texture = texture_;
     item.key.blend = uint8_t(EFxBlend::Alpha);
     item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
@@ -9555,7 +9449,8 @@ void TSymGlowEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
             item.world_pos[corner][0] = p.X; item.world_pos[corner][1] = p.Y; item.world_pos[corner][2] = p.Z;
             item.uv[corner][0] = v.uv[0]; item.uv[corner][1] = v.uv[1];
         }
-        // blue/swscene.cpp culls this projected winding even for ARGB. Classic
+        // Original SymGlow requests mode2, which selects CULL_NONE. Retain
+        // the earlier face filter only outside the audited software policy. Classic
         // isometric projection has constant positive zoom, so translation and
         // zoom cancel from the determinant. Blue tests Y-up before negating Y,
         // so the screen-down determinant has the opposite sign.
@@ -9563,7 +9458,8 @@ void TSymGlowEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         for (int k=0;k<3;++k) {
             const auto* p = item.world_pos[k]; sx[k]=p[0]-p[1]; sy[k]=.5f*(p[0]+p[1])-.867f*p[2];
         }
-        if ((sx[1]-sx[0])*(sy[2]-sy[0]) < (sx[2]-sx[0])*(sy[1]-sy[0])) continue;
+        if (!(retail_argb4444_ && Renderer->UsesRetailSoftwareMeshLighting()) &&
+            (sx[1]-sx[0])*(sy[2]-sy[0]) < (sx[2]-sx[0])*(sy[1]-sy[0])) continue;
         Renderer->SubmitFxQuad(item);
     }
 }
@@ -15382,7 +15278,7 @@ TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const
             if (slot > 0) {
                 S3DTex desc = {};
                 img->GetTexture(slot - 1, &desc);
-                part.retail_lighting = desc.desc.pixelFormat.dwRGBAlphaBitMask ? 2 : 1;
+                part.retail_lighting = RetailMeshTextureLighting(desc.desc.pixelFormat);
             }
             if(animate_textures && slot>0) {
                 S3DTex desc{};img->GetTexture(slot-1,&desc);
@@ -17314,6 +17210,10 @@ void TFireFlashEffect_Bespoke::Submit(EFxDebugMode debug_mode)
         SHelperMeshSubmit submit = {};
         submit.mesh = meshes_[j]; submit.additive_blend = true;
         submit.retail_lighting = 1; // Audited RGB565 Blue SW normal-light modulation.
+        // Owner1.5Z / ABSPOS1.46Z above bridge geometry into common world.
+        // Native RenderObject/Illuminate uses the pre-bridge normal matrix.
+        submit.retail_normal_z_scale = target ? 1.0f / REV_FIX_Z_VALUE(1.0f)
+                                              : 1.0f / WORLD3D_Z_SCALE;
         for (int row = 0; row < 4; ++row) for (int col = 0; col < 4; ++col)
             submit.world[row * 4 + col] = mesh_world.Elements[col][row];
         const auto& material = materials_[j].matdesc;
@@ -17846,9 +17746,23 @@ void TFireConeEffect_Bespoke::Advance(double elapsed_seconds)
     }
 }
 
+void TFireConeEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    // Only the isolated preview calls this adapter. Runtime owners retain
+    // their common-world transform and ordinary scene projector.
+    native_domain_ = enabled && !runtime_owned_;
+    if (native_domain_) {
+        const auto position = Pos();
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z,
+                                 uint8_t(GetFace()));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT particle=relative FireCone",
+             int(native_domain_));
+}
+
 void TFireConeEffect_Bespoke::SubmitPool(const Pool& pool, int object, EFxDebugMode debug_mode) const
 {
-    const auto& owner_world = Transform().Matrix();
+    const auto& owner_world = native_domain_ ? native_owner_ : Transform().Matrix();
     for (const auto& particle : pool.particles) {
         if (!particle.used) continue;
         // Source renders used particles even with zero/negative scale. Do not
@@ -17863,12 +17777,10 @@ void TFireConeEffect_Bespoke::SubmitPool(const Pool& pool, int object, EFxDebugM
         // fire.Render()/smoke.Render()/burst.Render() all use default
         // flicker=false; the per-particle flicker flag does not enlarge this draw.
         MtxScale(&local, &particle.scl);
-        // Literal source translation is FIX_Z_VALUE(local particle Z). Convert
-        // that procedural offset back to common world before the owner's raw
-        // mesh Z stretch; authored geometry remains under that existing stretch.
-        const float local_z = REV_FIX_Z_VALUE(FIX_Z_VALUE(particle.pos.Z)) / WORLD3D_Z_SCALE;
-        const hmm_vec3 pos = {particle.pos.X, particle.pos.Y, local_z};
-        MtxTranslate(&local, &pos);
+        // Retail 50c374..50c3bc only applies FIX_Z_VALUE when abs_pos is true.
+        // FireCone passes false: particle translation and authored vertices
+        // share the same local domain before RenderObject applies the owner.
+        MtxTranslate(&local, &particle.pos);
         bool source_faces_visible = true;
         for (size_t face = 0; face + 2 < indices_[object].size(); face += 3) {
             hmm_vec3 face_points[3] = {};
@@ -17882,7 +17794,10 @@ void TFireConeEffect_Bespoke::SubmitPool(const Pool& pool, int object, EFxDebugM
             float sx[3], sy[3];
             for (int k = 0; k < 3; ++k) {
                 const auto& v = face_points[k];
-                sx[k] = v.X - v.Y; sy[k] = 0.5f * (v.X + v.Y) - 0.867f * v.Z;
+                sx[k] = v.X - v.Y;
+                sy[k] = native_domain_
+                    ? 0.5050762891769409f * (v.X + v.Y) - 1.237179160118103f * v.Z
+                    : 0.5f * (v.X + v.Y) - 0.867f * v.Z;
             }
             if ((sx[1]-sx[0])*(sy[2]-sy[0]) < (sx[2]-sx[0])*(sy[1]-sy[0])) {
                 source_faces_visible = false; break;
@@ -17893,6 +17808,7 @@ void TFireConeEffect_Bespoke::SubmitPool(const Pool& pool, int object, EFxDebugM
         SHelperMeshSubmit submit = {};
         submit.mesh = meshes_[object]; submit.additive_blend = true;
         submit.retail_lighting = 1;
+        submit.retail_software_projection = native_domain_;
         for (int row = 0; row < 4; ++row) for (int col = 0; col < 4; ++col)
             submit.world[row * 4 + col] = mesh_world.Elements[col][row];
         const auto& material = materials_[object].matdesc;
@@ -17940,6 +17856,37 @@ class TStreamerReferenceComponent final : public TFlipbookBillboardComponent
 };
 TWaterReferenceBuilder<TStreamerEffect_Bespoke> g_streamer_reference_builder("Streamer");
 TWaterReferenceAnimatorBuilder<TStreamerEffect_Bespoke> g_streamer_reference_animator_builder("Streamer");
+}
+
+TStreamerEffect_Bespoke::~TStreamerEffect_Bespoke()
+{
+    if (Renderer) for (const auto& part : authored_)
+        if (part.mesh) Renderer->ReleaseMeshAssetRef(part.mesh);
+}
+
+bool TStreamerEffect_Bespoke::BindMeshes() const
+{
+    if (!Renderer || !initialized_ || !GetImagery()) return false;
+    for (int object=0; object<kStreamerMaxStreams; ++object) {
+        const auto& part=authored_[object];
+        if (part.mesh) continue;
+        const uint64_t key=0x5354524d00000000ull ^ (uint64_t(uint32_t(GetImagery()->ImageryId()))<<16) ^ uint64_t(object);
+        part.mesh=Renderer->RegisterMeshAsset(key, part.vertices.data(), int32_t(part.vertices.size()),
+            part.indices.data(), int32_t(part.indices.size()), part.texture);
+        if (!part.mesh) return false;
+        Renderer->AddMeshAssetRef(part.mesh);
+    }
+    return true;
+}
+
+void TStreamerEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled && !runtime_owned_;
+    if (native_domain_) {
+        const auto position=Pos();
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z, uint8_t(GetFace()));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT TStreamerEffect_Bespoke", int(native_domain_));
 }
 
 void TStreamerEffect_Bespoke::Initialize(bool attach_runtime_component)
@@ -18006,12 +17953,12 @@ void TStreamerEffect_Bespoke::Advance(double elapsed_seconds)
 
 void TStreamerEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
 {
-    if (!Renderer || !initialized_ || !alive_) return;
+    if (!Renderer || !initialized_ || !alive_ || !BindMeshes()) return;
     SQuadDrawItem item={}; item.corner_count=3; item.retail_texture=1;
     item.key.blend=uint8_t(EFxBlend::AdditiveStraight);
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
     item.debug_mode=debug_mode;
-    const auto& world=Transform().Matrix();
+    const auto& world=native_domain_ ? native_owner_ : Transform().Matrix();
     for (int j=0;j<kStreamerMaxStreams;++j) {
         const auto& mesh=authored_[j]; item.key.texture=mesh.texture;
         for (const auto& particle:stream_[j]) {
@@ -18025,6 +17972,21 @@ void TStreamerEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
             // Original face conversion truncates integer degrees before radians.
             MtxRotateZ(&local,-float((GetFace()*360)/256)*float(M_PI/180.0));
             MtxTranslate(&local,&particle.pos);
+            if (debug_mode == EFxDebugMode::Normal) {
+                hmm_mat4 mesh_world={}; MtxMultiply(&mesh_world,&local,&world);
+                SHelperMeshSubmit submit={};
+                submit.mesh=mesh.mesh; submit.additive_blend=true;
+                submit.retail_lighting=1; submit.retail_positive_face_cull=true;
+                submit.retail_software_projection=native_domain_;
+                // Common world stretches geometry Z by 1.5; native normal
+                // transformation has no such owner-axis stretch.
+                submit.retail_normal_z_scale=native_domain_ ? 1.0f : 1.0f/WORLD3D_Z_SCALE;
+                for (int row=0;row<4;++row) for (int col=0;col<4;++col)
+                    submit.world[row*4+col]=mesh_world.Elements[col][row];
+                submit.sort_depth=mesh_world.Elements[3][2];
+                Renderer->SubmitHelperMesh(submit);
+                continue;
+            }
             for (size_t face=0;face+2<mesh.indices.size();face+=3) {
                 for (int k=0;k<3;++k) {
                     const auto& v=mesh.vertices[mesh.indices[face+k]];
@@ -18122,6 +18084,18 @@ TFireSwarmEffect_Bespoke* TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(
     return effect;
 }
 
+void TFireSwarmEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled && !runtime_owned_;
+    if (native_domain_) {
+        const auto position = Pos();
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z,
+                                 uint8_t(GetFace()));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT TFireSwarmEffect_Bespoke",
+             int(native_domain_));
+}
+
 void TFireSwarmEffect_Bespoke::Advance(double elapsed_seconds)
 {
     if (!initialized_ || !alive_ || !std::isfinite(elapsed_seconds) || elapsed_seconds<=0.0) return;
@@ -18149,8 +18123,10 @@ void TFireSwarmEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     hmm_mat4 local={}; MtxClear(&local);
     const hmm_vec3 scale={cylhscl_,cylhscl_,cylvscl_};
     MtxScale(&local,&scale); MtxRotateZ(&local,cylth_);
-    const auto& world=Transform().Matrix();
+    const auto& world=native_domain_ ? native_owner_ : Transform().Matrix();
     SQuadDrawItem item={}; item.corner_count=3; item.retail_texture=1;
+    item.retail_argb4444=true;
+    item.retail_software_projection=native_domain_;
     item.key.texture=texture_; item.key.blend=uint8_t(EFxBlend::Alpha);
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
     item.debug_mode=debug_mode;
@@ -18167,7 +18143,7 @@ void TFireSwarmEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         // negates Y for rasterization. Screen-down winding therefore culls negative.
         float sx[3],sy[3];
         for (int k=0;k<3;++k) {
-            const auto* p=item.world_pos[k]; sx[k]=p[0]-p[1]; sy[k]=.5f*(p[0]+p[1])-.867f*p[2];
+            const auto* p=item.world_pos[k]; sx[k]=p[0]-p[1]; sy[k]=native_domain_ ? .5050762891769409f*(p[0]+p[1])-1.237179160118103f*p[2] : .5f*(p[0]+p[1])-.867f*p[2];
         }
         if ((sx[1]-sx[0])*(sy[2]-sy[0])<(sx[2]-sx[0])*(sy[1]-sy[0])) continue;
         Renderer->SubmitFxQuad(item);
@@ -18215,7 +18191,7 @@ void TFaultFireEffect_Bespoke::Initialize(bool attach_runtime_component)
     // SetupObjects preserves each authored V after a one-time -0.01 shift.
     for (auto& v : vertices_) v.uv[1] -= 0.01f;
     texture_=tex.htexture; th_=0.0f; u_offset_=0.0f; sim_accum_ms_=0.0;
-    initialized_=true;
+    initialized_=true; runtime_owned_=attach_runtime_component;
     if (attach_runtime_component) {
         auto c=std::make_unique<TFaultFireReferenceComponent>();
         c->Configure(texture_, int32_t(tex.desc.width), int32_t(tex.desc.height),
@@ -18239,6 +18215,18 @@ TFaultFireEffect_Bespoke* TFaultFireEffect_Bespoke::SpawnForTest_BESPOKE(const S
     effect->Initialize(false);
     if (!effect->initialized_) { delete effect; return nullptr; }
     return effect;
+}
+
+void TFaultFireEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled && !runtime_owned_;
+    if (native_domain_) {
+        const auto position = Pos();
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z,
+                                 uint8_t(GetFace()));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT TFaultFireEffect_Bespoke",
+             int(native_domain_));
 }
 
 void TFaultFireEffect_Bespoke::Advance(double elapsed_seconds)
@@ -18272,10 +18260,12 @@ void TFaultFireEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     MtxScale(&local,&scale);
     MtxRotateZ(&local,float(M_PI/2.0));
     MtxTranslate(&local,&offset);
-    const auto& world=Transform().Matrix();
+    const auto& world=native_domain_ ? native_owner_ : Transform().Matrix();
     SQuadDrawItem item={};
     item.corner_count=3;
     item.retail_texture=1;
+    item.retail_argb4444=true;
+    item.retail_software_projection=native_domain_;
     item.key.texture=texture_;
     item.key.blend=uint8_t(EFxBlend::Alpha);
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
@@ -18797,6 +18787,50 @@ TWaterReferenceBuilder<TFogEffect_Bespoke__MistFog> g_mistfog_reference_builder(
 TWaterReferenceAnimatorBuilder<TFogEffect_Bespoke__MistFog> g_mistfog_reference_animator_builder("MistFog");
 } // namespace
 
+TFogEffect_Bespoke__MistFog::~TFogEffect_Bespoke__MistFog()
+{
+    if (Renderer && software_mesh_) Renderer->ReleaseMeshAssetRef(software_mesh_);
+}
+
+bool TFogEffect_Bespoke__MistFog::SubmitSoftware(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !Renderer->UsesRetailSoftwareMeshLighting() ||
+        debug_mode != EFxDebugMode::Normal) return false;
+    if (!software_mesh_) {
+        if (!GetImagery() || authored_vertices_.size()!=4) return true;
+        SMeshVertex vertices[4] = {};
+        for (int i=0;i<4;++i) {
+            const auto& v=authored_vertices_[i];
+            std::memcpy(vertices[i].pos,&v.pos,3*sizeof(float));
+            std::memcpy(vertices[i].normal,&v.normal,3*sizeof(float));
+            vertices[i].uv[0]=v.tu; vertices[i].uv[1]=v.tv;
+        }
+        const uint16_t indices[]={0,1,3,3,2,0};
+        const uint64_t key=0x4d464f4700000000ull ^ uint32_t(GetImagery()->ImageryId());
+        software_mesh_=Renderer->RegisterMeshAsset(key,vertices,4,indices,6,texture_);
+        if (!software_mesh_) return true;
+        Renderer->AddMeshAssetRef(software_mesh_);
+    }
+    for (const auto& puff:smoke_) {
+        hmm_mat4 local={},world={}; MtxClear(&local);
+        const hmm_vec3 scale={puff.size,puff.size,puff.size};
+        const hmm_vec3 position={puff.x,puff.y,puff.z};
+        MtxScale(&local,&scale); MtxTranslate(&local,&position);
+        MtxMultiply(&world,&local,&Transform().Matrix());
+        SHelperMeshSubmit submit={};
+        submit.mesh=software_mesh_; submit.additive_blend=true;
+        submit.retail_lighting=1; submit.retail_positive_face_cull=true;
+        // Common-world Z stretch bridges geometry; original Illuminate's
+        // owner normal matrix has no corresponding axis stretch.
+        submit.retail_normal_z_scale=1.0f/WORLD3D_Z_SCALE;
+        for(int row=0;row<4;++row) for(int col=0;col<4;++col)
+            submit.world[row*4+col]=world.Elements[col][row];
+        submit.sort_depth=world.Elements[3][2];
+        Renderer->SubmitHelperMesh(submit);
+    }
+    return true;
+}
+
 void TFogEffect_Bespoke__MistFog::ResetBall_(int32_t b)
 {
     // Keep exact draw order: random X, rand VX/VY/VZ, random life, rand size.
@@ -18808,12 +18842,14 @@ void TFogEffect_Bespoke__MistFog::ResetBall_(int32_t b)
     // Retail 4f28a7..4f2932 multiplies a float reciprocal and keeps the
     // x87 intermediate until the final float store. Preserve that rounding
     // on hosts whose float expressions otherwise round at each operation.
-    const double inverse_rand_max = double(1.0f / float(RAND_MAX));
-    s.vx = float(double(rand()) * inverse_rand_max * 0.5 - 0.25);
-    s.vy = float(double(rand()) * inverse_rand_max * 0.5 - 0.25);
-    s.vz = float(double(rand()) * inverse_rand_max * 0.5);
+    // All six original draws share the MSVC CRT stream, including raw rand.
+    // Host libc rand/RAND_MAX would split that stream and change live resets.
+    const double inverse_rand_max = double(1.0f / 32767.0f);
+    s.vx = float(double(GameRand()) * inverse_rand_max * 0.5 - 0.25);
+    s.vy = float(double(GameRand()) * inverse_rand_max * 0.5 - 0.25);
+    s.vz = float(double(GameRand()) * inverse_rand_max * 0.5);
     s.life = random(0, 200);
-    s.size = float(double(rand()) * inverse_rand_max * double(2.7f) + double(0.1f));
+    s.size = float(double(GameRand()) * inverse_rand_max * double(2.7f) + double(0.1f));
 }
 
 void TFogEffect_Bespoke__MistFog::Initialize(bool attach_runtime_component)
@@ -18904,6 +18940,7 @@ void TFogEffect_Bespoke__MistFog::Advance(double elapsed_seconds)
 void TFogEffect_Bespoke__MistFog::Submit(EFxDebugMode debug_mode) const
 {
     if (!Renderer || !initialized_ || texture_ == kInvalidTexture) return;
+    if (SubmitSoftware(debug_mode)) return;
     SQuadDrawItem item = {};
     item.key.texture = texture_;
     // SetAddBlendState: DECALALPHA + ONE/ONE, depth test without writes.

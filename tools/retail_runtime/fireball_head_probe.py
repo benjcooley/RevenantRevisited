@@ -46,6 +46,7 @@ def port_driver(output,asset):
     helper=function(effect,'void TFireBallEffect::SubmitAuthoredCard(') if 'void TFireBallEffect::SubmitAuthoredCard(' in effect else ''
     trail_helper=function(effect,'void TFireBallEffect::SubmitAuthoredTrail(') if 'void TFireBallEffect::SubmitAuthoredTrail(' in effect else ''
     spark_helper=function(effect,'void TFireBallEffect::SubmitAuthoredSpark(') if 'void TFireBallEffect::SubmitAuthoredSpark(' in effect else ''
+    burst_helper=function(effect,'void TFireBallEffect::SubmitAuthoredBurst(') if 'void TFireBallEffect::SubmitAuthoredBurst(' in effect else ''
     constants='\n'.join(line for line in header.splitlines() if line.startswith('inline constexpr') and 'kFireBall' in line)
     data=header[header.index('struct SFireBallData'):header.index('_CLASSDEF(TFireBallEffect)',header.index('struct SFireBallData'))]
     prelude=r'''
@@ -56,6 +57,7 @@ def port_driver(output,asset):
 #include <vector>
 #include <cstring>
 #include "math3d.h"
+#include "retailsoftwaretransform.h"
 #include "render3d_types.h"
 #if __has_include("fireballquad.h")
 #include "fireballquad.h"
@@ -71,7 +73,7 @@ struct Key {TTextureHandle texture{};uint16_t pipeline_id{};uint8_t blend{},dept
 struct SParticleDrawItem {float world_pos[3]{},size_wu[2]{},uv_rect[4]{},color_rgba[4]{};
     float rotation_rad{};Key key;EFxLightMode light_mode{};EFxBillboardOrientation orientation{};EFxDebugMode debug_mode{};};
 struct SQuadDrawItem {float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{1,1,1,1};
-    Key key;uint8_t corner_count{4},retail_texture{};EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
+    bool retail_argb4444{},retail_software_projection{};Key key;uint8_t corner_count{4},retail_texture{};EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 struct TRenderer {std::vector<SParticleDrawItem> particles;std::vector<SQuadDrawItem> quads;
     void SubmitFxParticle(const SParticleDrawItem&p){particles.push_back(p);}
     void SubmitFxQuad(const SQuadDrawItem&q){quads.push_back(q);}};
@@ -80,17 +82,18 @@ struct World{hmm_mat4 matrix;const hmm_mat4& Matrix()const{return matrix;}};
 '''
     class_body=r'''
 struct TFireBallEffect {
-    S3DPoint position{};World world;
+    S3DPoint position{};World world;bool native_domain_{};
     int state_{1},aim_angle_{64},frame_count_{16},glow_frame_{3},face{};
     SFireBallData fireball_;SFireBallData trail_[kFireBallTrailSize],burst_[kFireBallMaxBurst];
     SFireBallSpark sparks_[kFireBallMaxSpark];
-    struct Asset {TTextureHandle box01_tex{1},box02_tex{2};S3DVertex box01_vertices[4]{},box02_vertices[4]{};bool has_box01_quad{true},has_box02_quad{true};float atlas_cell_w{.25f},atlas_cell_h{.25f};} asset_;
+    struct Asset {TTextureHandle box01_tex{1},box02_tex{2};S3DVertex box01_vertices[4]{},box02_vertices[4]{};bool has_box01_quad{true},has_box02_quad{true},box01_argb4444{},box02_argb4444{};float atlas_cell_w{.25f},atlas_cell_h{.25f};} asset_;
     const S3DPoint& Pos()const{return position;}int GetFace()const{return face;}
     const World& Transform()const{return world;}
     void FillAtlasUv(int32_t,float*)const;
     void SubmitBillboards(EFxDebugMode)const;
     void SubmitAuthoredCard(const SFireBallData&,int32_t,bool,EFxDebugMode)const;
     void SubmitAuthoredTrail(EFxDebugMode)const;
+    void SubmitAuthoredBurst(EFxDebugMode)const;
     void SubmitAuthoredSpark(const SFireBallSpark&,EFxDebugMode)const;
     bool EnsureAuthoredSpark()const{return asset_.has_box02_quad;}
     bool EnsureAuthoredQuad()const{return asset_.has_box01_quad;}
@@ -135,7 +138,7 @@ int main(int argc,char**argv){
     std::puts("]}");
 }
 '''
-    source=output/'port-submit.cpp';source.write_text(prelude+'\n'+constants+'\n'+data+'\n'+class_body+'\n'+uv+'\n'+helper+'\n'+trail_helper+'\n'+spark_helper+'\n'+body+'\n'+trailer)
+    source=output/'port-submit.cpp';source.write_text(prelude+'\n'+constants+'\n'+data+'\n'+class_body+'\n'+uv+'\n'+helper+'\n'+trail_helper+'\n'+spark_helper+'\n'+burst_helper+'\n'+body+'\n'+trailer)
     vertices=output/'authored-box01.bin';vertices.write_bytes(asset[VERTEX_OFFSET:VERTEX_OFFSET+128])
     binary=output/'port-submit'
     command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/math3d.cpp')]

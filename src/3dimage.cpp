@@ -11,6 +11,7 @@
 // *  in Phase 3.                                                          *
 // *************************************************************************
 
+#include "i3dtexturealpha.h"
 #include "3dimage.h"
 
 #include <algorithm>
@@ -26,6 +27,7 @@
 #include "testconfig.h"
 #include "goldauthoredmatrix.h"
 #include "speedauthoredmatrix.h"
+#include "staticpartsysprofiles.h"
 #include "animation.h"
 #include "bitmap.h"
 #include "logging.h"
@@ -586,6 +588,60 @@ bool T3DImagery::ValidateRetailQuicksilverPartSysProfile()
     return materials[0].texture==-1 && materials[1].texture==0 && materials[2].texture==1;
 }
 
+uint32_t T3DImagery::ValidateRetailStaticParticleProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc ||
+       NumTextures()!=1)return 0;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    const auto fingerprint=[](const void* data,size_t length){
+        uint64_t h=1469598103934665603ull;const auto* b=static_cast<const uint8_t*>(data);
+        for(size_t i=0;i<length;++i){h^=b[i];h*=1099511628211ull;}return h;
+    };
+    for(const auto& profile:retail_static_particles::profiles){
+        const size_t length=std::strlen(profile.suffix);
+        if(path.size()<length || path.compare(path.size()-length,length,profile.suffix) ||
+           (path.size()!=length && path[path.size()-length-1]!='/'))continue;
+        if(NumStates()!=profile.states || GetAniLength(0)!=profile.frames || GetAniFlags(0)!=profile.ani_flags ||
+           NumObjects()!=profile.objects || NumMaterials()!=profile.materials ||
+           NumTags()!=(profile.blend_tag<0?1:2) || numverts!=profile.total_vertices ||
+           numfaces!=profile.total_faces)return 0;
+        for(int i=0;i<profile.objects;++i){const auto& o=objects[i];const auto& p=profile.object[i];
+            if(std::strcmp(o.name,p.name) || o.parent[0]!=-1 || o.material!=p.material ||
+               o.numverts!=p.vertices || o.numfaces!=p.faces || !o.anikeys[0] ||
+               o.numanikeys[0]!=p.key_count ||
+               fingerprint(o.anikeys[0],p.key_count*sizeof(SAniKey32))!=p.keys ||
+               o.numtexfaces[0]!=0 || o.numtexfaces[1]!=p.faces)return 0;
+            if(p.mesh_vertices || p.mesh_faces){
+                std::vector<S3DVertex> vertices(size_t(p.vertices));
+                std::vector<S3DFace> faces(size_t(p.faces));
+                GetObjVerts(i,vertices.data(),0,0);GetObjFaces(i,faces.data());
+                if(fingerprint(vertices.data(),vertices.size()*sizeof(S3DVertex))!=p.mesh_vertices ||
+                   fingerprint(faces.data(),faces.size()*sizeof(S3DFace))!=p.mesh_faces)return 0;
+            }
+        }
+        const auto& tag=*GetTag(profile.partsys_tag);
+        if(tag.state!=0 || tag.frame!=profile.tag_frame || !tag.name || !tag.str ||
+           std::strcmp(tag.name,"partsys") || std::strcmp(tag.str,profile.parameters))return 0;
+        if(profile.blend_tag>=0){const auto& blend=*GetTag(profile.blend_tag);
+            if(blend.state!=0 || blend.frame!=profile.blend_frame || !blend.name || !blend.str ||
+               std::strcmp(blend.name,"blendcont") || std::strcmp(blend.str,"litaddz"))return 0;}
+        const auto& t=textures[0];const auto& pf=t.desc.pixelFormat;
+        if(t.desc.width!=profile.texture_size || t.desc.height!=profile.texture_size || t.numframes!=1 ||
+           pf.dwRGBBitCount!=16 || pf.dwRBitMask!=0xf800 || pf.dwGBitMask!=0x07e0 ||
+           pf.dwBBitMask!=0x001f || pf.dwRGBAlphaBitMask)return 0;
+        for(int i=0;i<profile.materials;++i)
+            if(materials[i].texture!=(i==profile.object[profile.prototype].material?0:-1) ||
+               fingerprint(&materials[i].matdesc.diffuse,17*sizeof(float))!=profile.material[i])return 0;
+        S3DVertex vertices[4]{};S3DFace faces[2]{};
+        GetObjVerts(profile.prototype,vertices,0,0);GetObjFaces(profile.prototype,faces);
+        constexpr uint16_t indices[6]={2,3,0,1,2,0};
+        if(fingerprint(vertices,sizeof(vertices))!=profile.vertices || std::memcmp(faces,indices,sizeof(faces)))return 0;
+        return profile.id;
+    }
+    return 0;
+}
+
 void T3DImagery::InitializePartSysTracks()
 {
     partsys_tracks.clear();
@@ -595,6 +651,7 @@ void T3DImagery::InitializePartSysTracks()
     fmastery_partsys_profile = ValidateRetailFmasteryPartSysProfile();
     speed_partsys_profile = ValidateRetailSpeedPartSysProfile();
     quicksilver_partsys_profile = ValidateRetailQuicksilverPartSysProfile();
+    static_particles_profile = ValidateRetailStaticParticleProfile();
     combatflash_start1_partsys_profile = ValidateCombatFlashStart1PartSysProfile();
     for (int32_t i = 0; i < NumTags(); ++i)
     {
@@ -661,7 +718,7 @@ void T3DImagery::InitializePartSysTracks()
         for (int32_t j = 0; j < NumTags() && track.supported; ++j)
         {
             const char* name = GetTag(j)->name;
-            if ((gold_partsys_profile || combatflash_start1_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
+            if ((gold_partsys_profile || combatflash_start1_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || static_particles_profile) && name && !stricmp(name, "blendcont")) continue;
             if (name && stricmp(name, "partsys") && stricmp(name, "scrolltex") &&
                 stricmp(name, "play") && stricmp(name, "beg") && stricmp(name, "end"))
             {
@@ -1536,6 +1593,7 @@ void T3DImagery::ClearMesh()
     fmastery_partsys_profile = false;
     speed_partsys_profile = false;
     quicksilver_partsys_profile = false;
+    static_particles_profile = 0;
     retail_punch_keys = false;
     retail_mpappear_start_profile = false;
     retail_shadowfist_profile = false;
@@ -1982,7 +2040,7 @@ bool T3DImagery::GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t 
                 // visibly goes second-last -> first -> held first.
                 // Actual retail4096bc JGE is inclusive. Opt in only the
                 // exact audited Punch, Appear, Sfist and Wborn keys; others keep their policy.
-                const bool reached = (retail_punch_keys || retail_mpappear_start_profile || retail_shadowfist_profile || retail_warriorborn_profile || retail_teleportation_profile || might_partsys_profile || immortalmight_partsys_profile || fmastery_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile) ? frame <= curframe + frames : frame < curframe + frames;
+                const bool reached = (retail_punch_keys || retail_mpappear_start_profile || retail_shadowfist_profile || retail_warriorborn_profile || retail_teleportation_profile || might_partsys_profile || immortalmight_partsys_profile || fmastery_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || (static_particles_profile && state==0)) ? frame <= curframe + frames : frame < curframe + frames;
                 if ((num <= 0) || reached)
                 {
                     GetAniKey32(curkey, keys, numkeys,
@@ -2626,45 +2684,10 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
         if (!DecodeTextureFrameRGBA(srcsd, frame_pixels, palette, rgba))
             continue;
 
-        // Chroma-key + premultiply pass for I3D-era sprite atlases
-        // whose transparent background is pure black (no alpha
-        // channel in the source). Without this, bilinear sampling at
-        // the splat-to-bg boundary produces dark-red transition
-        // pixels (visible fringe).
-        //
-        // Heuristic: if >20% of the texture is pure black, treat it
-        // as chroma-keyed. Set those pixels to fully transparent
-        // (a=0, rgb=0 = premultiplied form) and leave opaque pixels
-        // alone (a=255, rgb unchanged = already premultiplied since
-        // a=1.0). Bucket consumers should pair this with the
-        // PremulAlpha blend mode for correct edge blending.
-        //
-        // TODO: drive this from an explicit per-asset flag once the
-        // tile-set loader gets one, instead of the heuristic. For
-        // Phase 2 it covers Blood/Mist/Smoke/spell-disc style
-        // atlases which all use the chroma-key convention.
-        if (!rgba.empty())
-        {
-            const size_t px_count = rgba.size() / 4;
-            size_t black_count = 0;
-            for (size_t i = 0; i < px_count; ++i)
-            {
-                const uint8_t r = rgba[i * 4 + 0];
-                const uint8_t g = rgba[i * 4 + 1];
-                const uint8_t b = rgba[i * 4 + 2];
-                if (r == 0 && g == 0 && b == 0)
-                    ++black_count;
-            }
-            if (px_count > 0 && black_count * 5 > px_count) // >20%
-            {
-                for (size_t i = 0; i < px_count; ++i)
-                {
-                    uint8_t* px = &rgba[i * 4];
-                    if (px[0] == 0 && px[1] == 0 && px[2] == 0)
-                        px[3] = 0;   // fully transparent (rgb already 0 = premul'd)
-                }
-            }
-        }
+        // A declared alpha channel owns coverage, including opaque black
+        // opacity masks (Blood texture1). Apply legacy black-key inference
+        // only to formats without authored alpha.
+        ApplyI3DBlackKey(rgba, srcsd->pixelFormat.dwRGBAlphaBitMask != 0);
 
         // i3ddump tool retains the decoded RGBA bytes per frame so we can
         // write them out as PNG. Stored on T3DImagery (NOT S3DTex) because
@@ -3124,6 +3147,7 @@ struct T3DAnimator::SPartSysControllers
             (owner.ObjId()==0x82aeb30fu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailImmortalmightPartSysProfile()) ||
             (owner.ObjId()==0xb0e024dfu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailFmasteryPartSysProfile()) ||
             (owner.GetState()==0 && animator.Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(owner.ObjId())) ||
+            (owner.GetState()==0 && animator.Get3DImagery()->HasRetailStaticParticleProfile(owner.ObjId())) ||
             (owner.ObjId() == 0xad92bd29u && owner.GetState() == 0)) ? animator.GetFrame() : owner.GetFrame();
         // Retail Initialize obtains object zero's origin before resolving the
         // authored emitter list. Keep that distinct from its first emitter.
@@ -3140,16 +3164,33 @@ struct T3DAnimator::SPartSysControllers
             // This is the source owner-local matrix, NOT the render bone's
             // stretched world matrix. The simulation adds live owner XYZ itself.
             if (!bone || !animator.GetObjectMatrix(object, &matrix)) continue;
+            hmm_vec3 emitter_position=bone->pos, emitter_scale=bone->scl;
+            // Original 40efc0 reads the cached emitter matrix, before Animate
+            // copies the advanced owner frame. GetObjectMatrix above refreshes
+            // modern bones at the owner frame, so exact static PartSys assets
+            // must sample their verified root-emitter keys at the cached frame.
+            if (owner.GetState()==0 &&
+                animator.Get3DImagery()->HasRetailStaticParticleProfile(owner.ObjId()))
+            {
+                hmm_vec3 rotation{};
+                if (!animator.Get3DImagery()->GetUninterpolatedAniKey(object, 0,
+                    inputs.animation_frame, emitter_position, rotation, emitter_scale)) continue;
+                MtxClear(&matrix);
+                ::MakeMatrix(matrix, emitter_position, rotation, emitter_scale);
+            }
             hmm_vec3 speed_position{},speed_scale{};
             const bool speed_pose=owner.GetState()==0 &&
                 animator.Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(owner.ObjId()) && object==1;
             if(speed_pose && !animator.SpeedEmitterLocalMatrix(matrix,&speed_position,&speed_scale))continue;
+            const bool camera_particle_pose=owner.GetState()==0 &&
+                animator.Get3DImagery()->HasRetailCameraParticleProfile(owner.ObjId());
+            if(camera_particle_pose && !animator.CameraParticleEmitterLocalMatrix(object,matrix,&speed_position,&speed_scale))continue;
             auto& pose = inputs.emitters[i];
             std::memcpy(pose.matrix.data(), matrix.Elements, sizeof(matrix));
             pose.origin = {matrix.Elements[3][0], matrix.Elements[3][1], matrix.Elements[3][2]};
-            pose.position = {bone->pos.X, bone->pos.Y, bone->pos.Z};
-            pose.scale = {bone->scl.X, bone->scl.Y, bone->scl.Z};
-            if(speed_pose){pose.position={speed_position.X,speed_position.Y,speed_position.Z};
+            pose.position = {emitter_position.X, emitter_position.Y, emitter_position.Z};
+            pose.scale = {emitter_scale.X, emitter_scale.Y, emitter_scale.Z};
+            if(speed_pose || camera_particle_pose){pose.position={speed_position.X,speed_position.Y,speed_position.Z};
                 pose.scale={speed_scale.X,speed_scale.Y,speed_scale.Z};}
         }
     }
@@ -3176,10 +3217,11 @@ void T3DAnimator::RefreshPartSysControllers()
     const bool immortalmight = id==0x82aeb30fu && imagery->immortalmight_partsys_profile && current_state==0;
     const bool fmastery=id==0xb0e024dfu && imagery->fmastery_partsys_profile && current_state==0;
     const bool speed=imagery->HasRetailSpeedFamilyPartSysProfile(id) && current_state==0;
-    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && !speed && (id < 0xd0c0f036u || id > 0xd0c0f039u))
+    const bool static_particles=imagery->HasRetailStaticParticleProfile(id) && current_state==0;
+    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && !speed && !static_particles && (id < 0xd0c0f036u || id > 0xd0c0f039u))
     {
         if (!state.initialized)
-            log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only audited water, Goldp, CombatFlash start1 and exact Might/Immortalmight/Fmastery/Speed/Quicksilver profiles are enabled",
+            log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only exact audited particle profiles are enabled",
                      inst->GetTypeName(), id, inst->GetMapIndex());
         state.unsupported = true;
         state.controllers.clear();
@@ -3196,7 +3238,15 @@ void T3DAnimator::RefreshPartSysControllers()
             return controller.track.state != -1 && controller.track.state != current_state;
         }), controllers.end());
     state.unsupported = false;
-    if (gold || combat_start1 || speed)
+    if(static_particles)
+        for(int object=0;object<NumObjects();++object)
+            if(S3DAnimObj* bone=GetObject(object)){
+                const char* name=imagery->GetObjectName(object);
+                if(name && name[0]=='#')bone->flags|=OBJ3D_GOLD_CAMERA_FACING;
+                if(name && name[0]=='*')bone->flags|=OBJ3D_HIDE;
+            }
+    const bool static_litaddz=static_particles && imagery->NumTags()==2;
+    if (gold || combat_start1 || speed || static_litaddz)
     {
         // Retail blendcont Initialize 405940: immediate state-entry writes to
         // every animator object, preserving the prior no-depth-test bit. Its
@@ -3216,11 +3266,11 @@ void T3DAnimator::RefreshPartSysControllers()
                     if (std::strchr(name, '$')) bone->blend |= 0x40u;
                 }
                 bone->flags |= OBJ3D_BLEND;
-                bone->blend = (bone->blend & 0x40u) | (speed?80u:16u);
+                bone->blend = (bone->blend & 0x40u) | ((speed||static_litaddz)?80u:16u);
             }
         log_info("[blendcont] init type=%s id=%08x map_index=%d state=0 tagframe=%d mode=%d objects=%d profile=%s",
-                 inst->GetTypeName(), id, inst->GetMapIndex(), gold ? 5 : speed ? 1 : 0,
-                 speed ? 80 : 16,NumObjects(),gold ? "gold" : speed ? (id==0xad92bd35u ? "quicksilver" : "speed") : "combatflash-start1");
+                 inst->GetTypeName(), id, inst->GetMapIndex(), gold ? 5 : speed ? 1 : static_litaddz ? 2 : 0,
+                 (speed||static_litaddz) ? 80 : 16,NumObjects(),gold ? "gold" : speed ? (id==0xad92bd35u ? "quicksilver" : "speed") : static_litaddz ? "quoted-static-particles" : "combatflash-start1");
     }
     for (const auto& track : imagery->partsys_tracks)
     {
@@ -3519,7 +3569,7 @@ bool T3DAnimator::FmasteryBaseMeshBlend(int32_t object,uint32_t& blend) const
     return blend==0u || blend==16u || blend==80u;
 }
 
-bool T3DAnimator::FmasteryBaseMeshWorldMatrix( hmm_mat4& world)
+bool T3DAnimator::FmasteryBaseMeshWorldMatrix(hmm_mat4& world, const hmm_mat4* owner_override)
 {
     uint32_t blend=0;
     if (!FmasteryBaseMeshBlend(2,blend) || !IsObjectEnabled(2)) return false;
@@ -3536,7 +3586,7 @@ bool T3DAnimator::FmasteryBaseMeshWorldMatrix( hmm_mat4& world)
     MtxRotateX(&world,rotation.X); MtxRotateY(&world,rotation.Y); MtxRotateZ(&world,rotation.Z);
     if (animobjs[2]->flags&OBJ3D_GOLD_CAMERA_FACING) ApplyRetailGoldCameraOrientation(world);
     MtxTranslate(&world,&position); // source preserves XYZ after fixed '#' camera matrices
-    MtxMultiply(&world,&world,&inst->Transform().Matrix());
+    MtxMultiply(&world,&world,owner_override ? owner_override : &inst->Transform().Matrix());
     return true;
 }
 
@@ -3554,6 +3604,45 @@ bool T3DAnimator::SpeedEmitterLocalMatrix(hmm_mat4& matrix,hmm_vec3* output_posi
     return true;
 }
 
+bool T3DAnimator::CameraParticleEmitterLocalMatrix(int32_t object,hmm_mat4& matrix,
+        hmm_vec3* output_position,hmm_vec3* output_scale)
+{
+    if(!inst || inst->GetState()!=0 ||
+       !Get3DImagery()->HasRetailCameraParticleProfile(inst->ObjId()) || !animobjs.Used(object))return false;
+    auto* imagery=Get3DImagery();const char* name=imagery->GetObjectName(object);
+    if(!name || name[0]!='#')return false;
+    hmm_vec3 position{},rotation{},scale{};
+    if(!imagery->GetUninterpolatedAniKey(object,0,GetFrame(),position,rotation,scale))return false;
+    BuildRetailSpeedCameraMatrix(matrix,position,rotation,scale);
+    if(output_position)*output_position=position;
+    if(output_scale)*output_scale=scale;
+    return true;
+}
+
+bool T3DAnimator::CameraParticleBaseMeshBlend(int32_t object,uint32_t& blend) const
+{
+    if(!inst || inst->GetState()!=0 ||
+       !Get3DImagery()->HasRetailCameraParticleProfile(inst->ObjId()) || !partsys_controllers ||
+       partsys_controllers->unsupported || object==0 || !animobjs.Used(object) ||
+       Get3DImagery()->GetObjectName(object)[0]!='#')return false;
+    // Actual NewObject adds no blend flag to RGB565 '#' cards. Controller
+    // Render leaves its mode16 in the scene before these normal-lit bases.
+    blend=partsys_controllers->renders ? 16u : uint32_t(StartupPartSysIncomingBlend);
+    return blend==0u || blend==16u || blend==80u;
+}
+
+bool T3DAnimator::CameraParticleBaseMeshWorldMatrix(int32_t object,hmm_mat4& world,
+        const hmm_mat4* owner_override)
+{
+    uint32_t blend=0;
+    if(!CameraParticleBaseMeshBlend(object,blend) || !IsObjectEnabled(object))return false;
+    hmm_vec3 position{},rotation{},scale{};auto* imagery=Get3DImagery();
+    if(!imagery->GetUninterpolatedAniKey(object,0,inst->GetFrame(),position,rotation,scale) ||
+       scale.X<=9.999999747378752e-6f || scale.Y<=9.999999747378752e-6f || scale.Z<=9.999999747378752e-6f)return false;
+    BuildRetailSpeedCameraMatrix(world,position,rotation,scale);
+    MtxMultiply(&world,&world,owner_override ? owner_override : &inst->Transform().Matrix());return true;
+}
+
 bool T3DAnimator::SpeedBaseMeshBlend(int32_t object,uint32_t& blend) const
 {
     if(!inst || inst->GetState()!=0 ||
@@ -3563,7 +3652,7 @@ bool T3DAnimator::SpeedBaseMeshBlend(int32_t object,uint32_t& blend) const
     blend=animobjs[1]->blend;return blend==80u;
 }
 
-bool T3DAnimator::SpeedBaseMeshWorldMatrix(hmm_mat4& world)
+bool T3DAnimator::SpeedBaseMeshWorldMatrix(hmm_mat4& world, const hmm_mat4* owner_override)
 {
     uint32_t blend=0;
     if(!SpeedBaseMeshBlend(1,blend) || !IsObjectEnabled(1))return false;
@@ -3571,7 +3660,7 @@ bool T3DAnimator::SpeedBaseMeshWorldMatrix(hmm_mat4& world)
     imagery->SetPrevState(inst->GetPrevState(),inst->GetPrevFrame());
     if(!imagery->GetAniKey(1,0,inst->GetFrame(),position,rotation,scale))return false;
     BuildRetailSpeedCameraMatrix(world,position,rotation,scale);
-    MtxMultiply(&world,&world,&inst->Transform().Matrix());return true;
+    MtxMultiply(&world,&world,owner_override ? owner_override : &inst->Transform().Matrix());return true;
 }
 
 uint64_t T3DAnimator::PartSysPulseCount() const
@@ -3616,7 +3705,7 @@ T3DAnimator::SAuthoredPartSysStats T3DAnimator::PartSysStats() const
 }
 
 int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
-                                  int32_t texture_slot, const hmm_vec3& render_scale)
+                                  int32_t texture_slot, const hmm_vec3& render_scale, bool native_software)
 {
     if (!partsys_controllers || partsys_controllers->unsupported) return 0;
     int32_t submitted = 0;
@@ -3644,7 +3733,8 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // CalcObjectMatrix scale gate40a591..5c1 returns0. Sampling still
             // happens first, preserving its three render-time RNG calls.
             if(inst->GetState()==0 &&
-               Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2 &&
+               ((Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2) ||
+                Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId())) &&
                sample.scale<=9.999999747378752e-6f)continue;
             hmm_mat4 matrix;
             MtxClear(&matrix);
@@ -3661,7 +3751,9 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                 Get3DImagery()->HasRetailFmasteryPartSysProfile() && track.prototype==0;
             const bool speed=inst->GetState()==0 &&
                 Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2;
-            if (might || immortalmight || fmastery || speed || inst->ObjId() == 0xd0c0f035u ||
+            const bool static_particles=inst->GetState()==0 &&
+                Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId());
+            if (might || immortalmight || fmastery || speed || static_particles || inst->ObjId() == 0xd0c0f035u ||
                 (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0 &&
                  Get3DImagery()->HasCombatFlashStart1PartSysProfile() && track.prototype == 0))
                 ApplyRetailGoldCameraOrientation(matrix); // actual '#' flag retained on both audited prototypes
@@ -3669,6 +3761,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             MtxTranslate(&matrix, &position);
 
             SQuadDrawItem item = {};
+            item.retail_software_projection = native_software;
             item.key.texture = texture;
             // Retail particle Render overwrites the prototype's companion
             // blend with its own per-particle mode. Gold coins are alpha2;
@@ -3676,12 +3769,16 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             item.key.blend = uint8_t(sample.blendmode == 2 ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
             // Preserve source packed prelit vertex color. Combat particles are
             // RGB565 with litadd16, not normal-lit material meshes or alpha coins.
-            item.retail_texture = (might || immortalmight || fmastery || speed || inst->ObjId() == 0xd0c0f035u ||
+            item.retail_texture = (might || immortalmight || fmastery || speed || static_particles || inst->ObjId() == 0xd0c0f035u ||
                 (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0)) ? 1 : 0;
+            // Strict static profile admission pins RGB565 masks and literal
+            // particle prototype. The queue applies this only to software
+            // lighting and ONE/ONE; modern/hardware and alpha retain fallback.
+            item.retail_rgb565_additive = static_particles && sample.blendmode == 16;
             item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
             item.light_mode = EFxLightMode::Unlit;
             for (int c = 0; c < 3; ++c)
-                item.color_rgba[c] = (might || immortalmight || fmastery || speed) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
+                item.color_rgba[c] = (might || immortalmight || fmastery || speed || static_particles) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
             // Actual SW LV prelit channels are5bit; canonicalDEST_ONE ignores
             // alpha in its8wordXYZ/UV/RGB packet. Keep literal alpha metadata,
             // no premultiplication/alternateblend. PixelLSB-table raster gate open.
@@ -3700,7 +3797,8 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                 // Particle.position remains raw map/common-world simulation XYZ.
                 // Match ordinary mesh raw translation + local MODELZ stretch;
                 // ABS particles bypass the owner's transform, so bridge here once.
-                item.world_pos[c][2] = (particles[slot].position[2] +
+                // The explicit native draw policy keeps the literal MODELZ vertex.
+                item.world_pos[c][2] = (native_software ? world.Z : particles[slot].position[2] +
                     (world.Z - sample.position[2]) * WORLD3D_Z_SCALE) * render_scale.Z;
                 item.uv[c][0] = vertex.tu;
                 item.uv[c][1] = vertex.tv;

@@ -26,6 +26,8 @@
 // *************************************************************************
 
 #include "renderer.h"
+#include "retailmeshlighting.h"
+#include "fxsubmissionorder.h"
 
 #include <sokol_gfx.h>
 #include <sokol_app.h>
@@ -949,9 +951,17 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * ISO_COS30;
     float scene_z_wu = p.camz.z - ISO_COS30 * sum - 0.5 * wz;
+    // Opt-in native MODELZ owner domain; coefficients execute56cdc0 then56d5f0.
+    bool native_projection = p.uv_shift.z > 0.5;
+    if (native_projection) {
+        float native_z = wz - p.uv_shift.w;
+        S = 1.0101525783538818 * (wx - wy);
+        T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
+        scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
+    }
     float scene_z_n  = (scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);
     float zoom = max(p.camw.z, 0.0001);
-    float persp_scale = ((p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float persp_scale = ((!native_projection && p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = p.vp.x + S * persp_scale;
     float spy = p.vp.y + T * persp_scale;
     vs_out o;
@@ -963,8 +973,9 @@ vertex vs_out _main(vs_in in [[stage_in]],
     o.wnormal = wn;
     o.uv = in.uv + p.uv_shift.xy;
     // blue/swscene.cpp::Illuminate quantizes each vertex before interpolation.
+    float3 source_normal = normalize(float3(wn.x, wn.y, wn.z * p.retail_ambient.w));
     float3 source_light = p.retail_ambient.xyz + p.retail_directional.xyz *
-        max(dot(wn, float3(0.0, 0.78125, 0.625)), 0.0);
+        max(dot(source_normal, float3(0.0, 0.78125, 0.625)), 0.0);
     o.retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
     o.retail_mode = p.retail_directional.w;
     return o;
@@ -989,7 +1000,7 @@ struct helper_params {
     float4 light_dir_i;
     float4 light_col_a;
     float4 view_dir_power;
-    float4 shade;           // x: EHelperMeshShade, y: 1 = premultiply alpha
+    float4 shade;           // x: shade, y: premultiply alpha, z: additive
 };
 fragment float4 _main(vs_out in [[stage_in]],
                       constant helper_params& hp [[buffer(0)]],
@@ -1001,8 +1012,25 @@ fragment float4 _main(vs_out in [[stage_in]],
         uint2 size = uint2(albedo_tex.get_width(), albedo_tex.get_height());
         uint2 xy = min(uint2(floor(fract(in.uv) * float2(size))), size - uint2(1));
         float4 tex = albedo_tex.read(xy);
-        if (in.retail_mode > 1.5) return tex; // ARGB4444: wrapped nearest, unlit alpha
-        return float4(tex.rgb * in.retail_color, tex.a);
+        if (in.retail_mode > 2.5) {
+            // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
+            float4 nibble = floor(tex * 15.0 + 0.5);
+            return float4(nibble.rgb * float3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
+                           (nibble.a + 1.0) / 16.0);
+        }
+        if (in.retail_mode > 1.5) return tex;
+        // Blue modulation indexes five-bit texture/light channels, including
+        // the high five green bits. Additive kernels clear source channel LSBs.
+        float3 source565 = floor(tex.rgb * float3(31.0, 63.0, 31.0) + 0.5);
+        source565.g = floor(source565.g * 0.5);
+        float3 modulated = floor(source565 * in.retail_color);
+        if (hp.shade.z > 0.5) {
+            modulated.rb = floor(modulated.rb * 0.5) * 2.0;
+            modulated.g *= 2.0;
+        } else {
+            modulated.g = modulated.g * 2.0 + floor(modulated.g / 16.0);
+        }
+        return float4(modulated / float3(31.0, 63.0, 31.0), tex.a);
     }
     float4 tex = albedo_tex.sample(smp, in.uv);
     if (hp.shade.x > 0.5) {
@@ -1087,9 +1115,17 @@ void main() {
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * ISO_COS30;
     float scene_z_wu = camz.z - ISO_COS30 * sum - 0.5 * wz;
+    // Opt-in native MODELZ owner domain; coefficients execute56cdc0 then56d5f0.
+    bool native_projection = uv_shift.z > 0.5;
+    if (native_projection) {
+        float native_z = wz - uv_shift.w;
+        S = 1.0101525783538818 * (wx - wy);
+        T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
+        scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
+    }
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
-    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
     float spy = vp.y + T * persp_scale;
     gl_Position = vec4(2.0 * spx / max(vp.z, 1.0) - 1.0,
@@ -1098,8 +1134,9 @@ void main() {
     v_wpos = wp;
     v_wnormal = wn;
     v_uv = uv + uv_shift.xy;
+    vec3 source_normal = normalize(vec3(wn.x, wn.y, wn.z * retail_ambient.w));
     vec3 source_light = retail_ambient.xyz + retail_directional.xyz *
-        max(dot(wn, vec3(0.0, 0.78125, 0.625)), 0.0);
+        max(dot(source_normal, vec3(0.0, 0.78125, 0.625)), 0.0);
     v_retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
     v_retail_mode = retail_directional.w;
 }
@@ -1119,7 +1156,7 @@ layout(std140) uniform helper_params {
     vec4 light_dir_i;
     vec4 light_col_a;
     vec4 view_dir_power;
-    vec4 shade;             // x: EHelperMeshShade, y: 1 = premultiply alpha
+    vec4 shade;             // x: shade, y: premultiply alpha, z: additive
 };
 uniform sampler2D albedo_tex;
 out vec4 fragColor;
@@ -1128,8 +1165,26 @@ void main() {
         ivec2 size = textureSize(albedo_tex, 0);
         ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
         vec4 tex = texelFetch(albedo_tex, xy, 0);
+        if (v_retail_mode > 2.5) {
+            // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
+            vec4 nibble = floor(tex * 15.0 + 0.5);
+            fragColor = vec4(nibble.rgb * vec3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
+                           (nibble.a + 1.0) / 16.0);
+            return;
+        }
         if (v_retail_mode > 1.5) { fragColor = tex; return; }
-        fragColor = vec4(tex.rgb * v_retail_color, tex.a);
+        // Blue modulation indexes five-bit texture/light channels, including
+        // the high five green bits. Additive kernels clear source channel LSBs.
+        vec3 source565 = floor(tex.rgb * vec3(31.0, 63.0, 31.0) + 0.5);
+        source565.g = floor(source565.g * 0.5);
+        vec3 modulated = floor(source565 * v_retail_color);
+        if (shade.z > 0.5) {
+            modulated.rb = floor(modulated.rb * 0.5) * 2.0;
+            modulated.g *= 2.0;
+        } else {
+            modulated.g = modulated.g * 2.0 + floor(modulated.g / 16.0);
+        }
+        fragColor = vec4(modulated / vec3(31.0, 63.0, 31.0), tex.a);
         return;
     }
     vec4 tex = texture(albedo_tex, v_uv);
@@ -1220,9 +1275,17 @@ vs_out main_vs(vs_in i) {
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * ISO_COS30;
     float scene_z_wu = camz.z - ISO_COS30 * sum - 0.5 * wz;
+    // Opt-in native MODELZ owner domain; coefficients execute56cdc0 then56d5f0.
+    bool native_projection = uv_shift.z > 0.5;
+    if (native_projection) {
+        float native_z = wz - uv_shift.w;
+        S = 1.0101525783538818 * (wx - wy);
+        T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
+        scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
+    }
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
-    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
     float spy = vp.y + T * persp_scale;
     vs_out o;
@@ -1232,8 +1295,9 @@ vs_out main_vs(vs_in i) {
     o.wpos = wp;
     o.wnormal = wn;
     o.uv = i.uv + uv_shift.xy;
+    float3 source_normal = normalize(float3(wn.x, wn.y, wn.z * retail_ambient.w));
     float3 source_light = retail_ambient.xyz + retail_directional.xyz *
-        max(dot(wn, float3(0.0, 0.78125, 0.625)), 0.0);
+        max(dot(source_normal, float3(0.0, 0.78125, 0.625)), 0.0);
     o.retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
     o.retail_mode = retail_directional.w;
     return o;
@@ -1248,7 +1312,7 @@ cbuffer helper_params : register(b0) {
     float4 light_dir_i;
     float4 light_col_a;
     float4 view_dir_power;
-    float4 shade;           // x: EHelperMeshShade, y: 1 = premultiply alpha
+    float4 shade;           // x: shade, y: premultiply alpha, z: additive
 };
 Texture2D albedo_tex : register(t0);
 SamplerState smp : register(s0);
@@ -1266,8 +1330,25 @@ float4 main_ps(ps_in input) : SV_Target0 {
         uint2 size = uint2(width, height);
         uint2 xy = min(uint2(floor(frac(input.uv) * float2(size))), size - uint2(1,1));
         float4 tex = albedo_tex.Load(int3(xy,0));
+        if (input.retail_mode > 2.5) {
+            // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
+            float4 nibble = floor(tex * 15.0 + 0.5);
+            return float4(nibble.rgb * float3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
+                           (nibble.a + 1.0) / 16.0);
+        }
         if (input.retail_mode > 1.5) return tex;
-        return float4(tex.rgb * input.retail_color, tex.a);
+        // Blue modulation indexes five-bit texture/light channels, including
+        // the high five green bits. Additive kernels clear source channel LSBs.
+        float3 source565 = floor(tex.rgb * float3(31.0, 63.0, 31.0) + 0.5);
+        source565.g = floor(source565.g * 0.5);
+        float3 modulated = floor(source565 * input.retail_color);
+        if (shade.z > 0.5) {
+            modulated.rb = floor(modulated.rb * 0.5) * 2.0;
+            modulated.g *= 2.0;
+        } else {
+            modulated.g = modulated.g * 2.0 + floor(modulated.g / 16.0);
+        }
+        return float4(modulated / float3(31.0, 63.0, 31.0), tex.a);
     }
     float4 tex = albedo_tex.Sample(smp, input.uv);
     if (shade.x > 0.5) {
@@ -1953,6 +2034,14 @@ void TRenderer::InitMeshPipeline()
     tpip.depth.write_enabled = false;
     tpip.label = "renderer.mesh.translucent.pipeline";
     mesh_translucent_pipeline = sg_make_pipeline(&tpip);
+    // Blue ARGB4444 blends with the already-lit framebuffer in face order,
+    // Native NewObject/RenderObject selects blend mode 4 for alpha textures:
+    // test scene depth, but blend both face directions without depth writes.
+    tpip.depth.write_enabled = false;
+    tpip.face_winding = SG_FACEWINDING_CW;
+    tpip.cull_mode = SG_CULLMODE_NONE;
+    tpip.label = "renderer.mesh.source-alpha.pipeline";
+    mesh_source_alpha_pipeline = sg_make_pipeline(&tpip);
 
     sg_shader_desc hsh = {};
     hsh.attrs[0].name = "pos";       hsh.attrs[0].sem_name = "POSITION"; hsh.attrs[0].sem_index = 0;
@@ -2098,6 +2187,7 @@ void TRenderer::ShutdownMeshPipeline()
     if (mesh_depth_shader.id)   { sg_destroy_shader(mesh_depth_shader);     mesh_depth_shader   = {}; }
     if (mesh_pipeline.id)    { sg_destroy_pipeline(mesh_pipeline);  mesh_pipeline    = {}; }
     if (mesh_source_cull_pipeline.id) { sg_destroy_pipeline(mesh_source_cull_pipeline); mesh_source_cull_pipeline = {}; }
+    if (mesh_source_alpha_pipeline.id) { sg_destroy_pipeline(mesh_source_alpha_pipeline); mesh_source_alpha_pipeline = {}; }
     if (mesh_shader.id)      { sg_destroy_shader(mesh_shader);      mesh_shader      = {}; }
 }
 
@@ -2697,7 +2787,8 @@ SRendererAssetStats TRenderer::GetAssetStats() const
 void TRenderer::SubmitMesh(const SMeshSubmit& m)
 {
     if (m.mesh == 0 || m.mesh > meshes.size()) return;
-    if (m.tint[3] >= kOpaqueMeshAlpha)
+    const bool source_alpha = m.retail_lighting == 3 && retail_mesh_rgb_enabled && light.mode == 0;
+    if (m.tint[3] >= kOpaqueMeshAlpha && !source_alpha)
     {
         mesh_queue.push_back(m);
         return;
@@ -2760,7 +2851,7 @@ void TRenderer::DrainMeshQueue()
     for (size_t i = 0; i < mesh_queue.size(); ++i)
     {
         const auto& m = mesh_queue[i];
-        const int mode = m.retail_lighting == 1 && !retail_mesh_rgb_enabled ? 0 : m.retail_lighting;
+        const int mode = RetailMeshLightingMode(m.retail_lighting, retail_mesh_rgb_enabled);
         PackMeshInstanceRow(m, &mesh_instance_scratch[i * kMeshInstanceFloats],
                             light.mode == 0 ? float(mode) : 0.0f);
     }
@@ -3012,12 +3103,13 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     // Its ambient/directional inputs still come from the existing retail
     // environment; no helper-specific brightness or sun replacement.
     for (int c = 0; c < 3; ++c) vsu[vo++] = retail_mesh_ambient[c];
-    vsu[vo++] = 0.0f;
+    vsu[vo++] = s.retail_normal_z_scale;
     for (int c = 0; c < 3; ++c) vsu[vo++] = retail_mesh_directional[c];
-    vsu[vo++] = float(s.retail_lighting);
+    vsu[vo++] = float(s.retail_lighting == 3 && !UsesRetailSoftwareMeshLighting() ? 2 : s.retail_lighting);
     vsu[vo++] = s.uv_offset[0];
     vsu[vo++] = s.uv_offset[1];
-    vsu[vo++] = 0.0f; vsu[vo++] = 0.0f;
+    vsu[vo++] = s.retail_software_projection ? 1.0f : 0.0f;
+    vsu[vo++] = s.retail_camera_z;
     const sg_range vsr = { vsu, sizeof(vsu) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vsr);
 
@@ -3030,7 +3122,7 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     fsu[o++] = light.dir[0]; fsu[o++] = light.dir[1]; fsu[o++] = light.dir[2]; fsu[o++] = light.intensity;
     fsu[o++] = light.color[0]; fsu[o++] = light.color[1]; fsu[o++] = light.color[2]; fsu[o++] = light.ambient;
     fsu[o++] = view_dir[0]; fsu[o++] = view_dir[1]; fsu[o++] = view_dir[2]; fsu[o++] = s.power;
-    fsu[o++] = float(s.shade); fsu[o++] = s.premultiply_alpha ? 1.0f : 0.0f; fsu[o++] = 0.0f; fsu[o++] = 0.0f;
+    fsu[o++] = float(s.shade); fsu[o++] = s.premultiply_alpha ? 1.0f : 0.0f; fsu[o++] = s.additive_blend ? 1.0f : 0.0f; fsu[o++] = 0.0f;
     const sg_range fsr = { fsu, sizeof(fsu) };
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fsr);
 
@@ -3058,7 +3150,7 @@ sg_buffer TRenderer::UploadTranslucentMeshInstances()
         }
         s.mesh_instance = rows++;
         mesh_instance_scratch.resize(size_t(rows) * kMeshInstanceFloats);
-        const int mode = s.mesh.retail_lighting == 1 && !retail_mesh_rgb_enabled ? 0 : s.mesh.retail_lighting;
+        const int mode = RetailMeshLightingMode(s.mesh.retail_lighting, retail_mesh_rgb_enabled);
         PackMeshInstanceRow(s.mesh, &mesh_instance_scratch[size_t(s.mesh_instance) * kMeshInstanceFloats],
                             light.mode == 0 ? float(mode) : 0.0f);
     }
@@ -3106,6 +3198,17 @@ void TRenderer::EmitTranslucentMeshSurface(const STransparentWorldSubmit* first,
         }
     };
 
+    if (first->mesh.retail_lighting == 3 && retail_mesh_rgb_enabled && light.mode == 0)
+    {
+        // One sourced draw, without the character nearest-surface prepass:
+        // every native triangle blends and writes depth in authored order.
+        if (!mesh_source_alpha_pipeline.id) return;
+        sg_apply_pipeline(mesh_source_alpha_pipeline);
+        sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_range);
+        sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fs_range);
+        draw_members();
+        return;
+    }
     sg_apply_pipeline(mesh_depth_pipeline);
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_range);
     draw_members();
@@ -3148,7 +3251,8 @@ void TRenderer::DrainTransparentWorldQueue()
         if (s.kind == ETransparentWorldKind::Mesh)
         {
             size_t j = i + 1;
-            while (s.mesh.surface_id != 0 && j < n &&
+            const bool source_alpha = s.mesh.retail_lighting == 3 && retail_mesh_rgb_enabled && light.mode == 0;
+            while (!source_alpha && s.mesh.surface_id != 0 && j < n &&
                    transparent_world_queue[j].kind == ETransparentWorldKind::Mesh &&
                    transparent_world_queue[j].mesh.surface_id == s.mesh.surface_id)
                 ++j;
@@ -5478,7 +5582,7 @@ namespace {
 //   strip     : wp(3) + wt(3) + hw(1) + uv(2) + col(4) + dbg(1) + light(1) + pad(1) = 16 floats (stays 64B)
 constexpr int32_t kFxBillboardInstanceFloats = 16;
 constexpr int32_t kFxParticleInstanceFloats  = 20;
-constexpr int32_t kFxStripVertexFloats       = 16;
+constexpr int32_t kFxStripVertexFloats       = 18;
 
 // Static corner quad for billboards / particles. CCW with z=0.
 constexpr float kFxCorners[] = {
@@ -5737,7 +5841,7 @@ void TRenderer::InitFxPipeline()
         sh.attrs[4].name = "color";       sh.attrs[4].sem_name = "TEXCOORD"; sh.attrs[4].sem_index = 4;
         sh.attrs[5].name = "debug_mode";  sh.attrs[5].sem_name = "TEXCOORD"; sh.attrs[5].sem_index = 5;
         sh.attrs[6].name = "light_mode";  sh.attrs[6].sem_name = "TEXCOORD"; sh.attrs[6].sem_index = 6;
-        sh.attrs[7].name = "retail_texture"; sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 7;
+        sh.attrs[7].name = "retail_metadata"; sh.attrs[7].sem_name = "TEXCOORD"; sh.attrs[7].sem_index = 7;
         sh.vs.source = kFxStripVs;
         sh.vs.entry  = kShaderVsEntry;
         FillFxSharedVsUbo(sh.vs.uniform_blocks[0]);
@@ -5763,7 +5867,7 @@ void TRenderer::InitFxPipeline()
         pip.layout.attrs[4].buffer_index = 0; pip.layout.attrs[4].offset = 9  * sizeof(float); pip.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT4;
         pip.layout.attrs[5].buffer_index = 0; pip.layout.attrs[5].offset = 13 * sizeof(float); pip.layout.attrs[5].format = SG_VERTEXFORMAT_FLOAT;
         pip.layout.attrs[6].buffer_index = 0; pip.layout.attrs[6].offset = 14 * sizeof(float); pip.layout.attrs[6].format = SG_VERTEXFORMAT_FLOAT;
-        pip.layout.attrs[7].buffer_index = 0; pip.layout.attrs[7].offset = 15 * sizeof(float); pip.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT;
+        pip.layout.attrs[7].buffer_index = 0; pip.layout.attrs[7].offset = 15 * sizeof(float); pip.layout.attrs[7].format = SG_VERTEXFORMAT_FLOAT3;
         pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
         pip.cull_mode      = SG_CULLMODE_NONE;
         for (int32_t b = 0; b < kFxBlendCount; ++b)
@@ -6028,6 +6132,14 @@ void TRenderer::SubmitFxQuad(const SQuadDrawItem& item)
         return;
     }
     SQuadDrawItem queued = item;
+    if (queued.retail_argb4444 && UsesRetailSoftwareMeshLighting()) {
+        // Original ARGB4444 kernels use alpha-over even after an additive request.
+        queued.retail_texture = 3;
+        queued.key.blend = uint8_t(EFxBlend::Alpha);
+    } else if (queued.retail_rgb565_additive && UsesRetailSoftwareMeshLighting() &&
+               queued.key.blend == uint8_t(EFxBlend::AdditiveStraight)) {
+        queued.retail_texture = 4;
+    }
     if (queued.key.texture == kInvalidTexture && white_texture != kInvalidTexture)
         queued.key.texture = white_texture;
     queued.key.pipeline_id = uint16_t(EFxPipeline::Strip);
@@ -6105,10 +6217,11 @@ void TRenderer::DrainFxQueue()
     // ---- Billboards: per-bucket sort, then coalesce by key --------------
     if (!fx_billboard_queue.empty() && fx_billboard_pip[0][0].id)
     {
-        // Group adjacent submissions with equal keys; sort within each
-        // group back-to-front. (Per-bucket sort granularity per
-        // PHASE1_SPINE.md §9.)
-        std::sort(fx_billboard_queue.begin(), fx_billboard_queue.end(),
+        // Material-sort ordinary runs. Explicit ordered multipass sprites
+        // remain barriers, preserving each mask/color pair at its source
+        // position instead of reversing it by texture handle.
+        SortFxUnorderedRuns(fx_billboard_queue.begin(), fx_billboard_queue.end(),
+                  [](const SFxBillboardQueueEntry& e) { return e.item.preserve_submission_order; },
                   [](const SFxBillboardQueueEntry& a, const SFxBillboardQueueEntry& b) {
                       const SFxBatchKey& ka = a.item.key;
                       const SFxBatchKey& kb = b.item.key;
@@ -6350,7 +6463,8 @@ void TRenderer::DrainFxQueue()
                     scratch.push_back(color[0]); scratch.push_back(color[1]); scratch.push_back(color[2]); scratch.push_back(color[3]);
                     scratch.push_back(dbg);
                     scratch.push_back(lit);
-                    scratch.push_back(0.0f);  // pad to kFxStripVertexFloats (16)
+                    scratch.push_back(0.0f); // ordinary strip: texture policy, native projection, cameraZ
+                    scratch.push_back(0.0f); scratch.push_back(0.0f);
                 };
                 // V sub-range support: left edge samples seg.v_left, right
                 // edge samples seg.v_right (default 0/1 = full V span,
@@ -6400,10 +6514,13 @@ void TRenderer::DrainFxQueue()
                 scratch.push_back(1.0f); scratch.push_back(0.0f); scratch.push_back(0.0f);
                 scratch.push_back(0.0f);  // no strip extrusion
                 scratch.push_back(quad.uv[corner][0]); scratch.push_back(quad.uv[corner][1]);
-                for (float channel : quad.color_rgba) scratch.push_back(channel);
+                const float* color = quad.per_corner_color ? quad.corner_color_rgba[corner] : quad.color_rgba;
+                for (int channel=0; channel<4; ++channel) scratch.push_back(color[channel]);
                 scratch.push_back(float(uint8_t(quad.debug_mode)));
                 scratch.push_back(float(uint8_t(quad.light_mode)));
                 scratch.push_back(float(quad.retail_texture));
+                scratch.push_back(quad.retail_software_projection ? 1.0f : 0.0f);
+                scratch.push_back(quad.retail_camera_z);
             }
             spans.push_back(ds);
         }

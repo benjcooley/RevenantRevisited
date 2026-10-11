@@ -2764,10 +2764,13 @@ class TFireSwarmEffect_Bespoke : public TEffect
         const S3DPoint& origin,const char* asset_override=nullptr);
     void Initialize(bool attach_runtime_component=true);
     void Advance(double elapsed_seconds);
+    void SetNativeDomainForTest(bool enabled);
     void Submit(EFxDebugMode debug_mode) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return alive_; }
   private:
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
     int32_t frameon_=0;
     float cylhscl_=0.4f,cylvscl_=30.0f,cylth_=0.0f;
     TTextureHandle texture_=kInvalidTexture;
@@ -3065,18 +3068,22 @@ class TStreamerEffect_Bespoke : public TEffect
   public:
     TStreamerEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
     TStreamerEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
-    ~TStreamerEffect_Bespoke() override = default;
+    ~TStreamerEffect_Bespoke() override;
 
     void OffScreen() override { KillThisEffect(); }
 
     [[nodiscard]] static TStreamerEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
     void Initialize(bool attach_runtime_component=true);
     void Advance(double elapsed_seconds);
+    void SetNativeDomainForTest(bool enabled);
     void Submit(EFxDebugMode debug_mode=EFxDebugMode::Normal) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return alive_; }
 
   private:
+    bool BindMeshes() const;
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
     // Retail constants (preserved names; values from effect_old.cpp:10252-10256).
     static constexpr int32_t kStreamerMaxParticles = 50;   // STREAMER_MAXPARTICLES
     static constexpr int32_t kStreamerMaxStreams   = 4;    // STREAMER_MAXSTREAMS (from effect.h:1960)
@@ -3108,6 +3115,7 @@ class TStreamerEffect_Bespoke : public TEffect
         std::vector<SMeshVertex> vertices;
         std::vector<uint16_t> indices;
         TTextureHandle texture = kInvalidTexture;
+        mutable MeshHandle mesh = 0;
     };
     SAuthoredStream authored_[kStreamerMaxStreams];
     double   sim_accum_ms_ = 0.0;
@@ -3440,6 +3448,8 @@ class TFizzleEffect : public TEffect
     // accumulator (same pattern as sparks/blood). SubmitFxQuad preserves
     // authored corners/UVs and the source's full rotation order.
     void TickAndSubmitForTest(EFxDebugMode debug_mode);
+    // Explicit isolated-preview owner/projector; ordinary runtime stays common-world.
+    void SetNativeDomainForTest(bool enabled);
 
     // True until the last particle's scale cycle has finished (mirrors
     // TFizzleAnimator self-destruct via KillThisEffect when frame_count
@@ -3462,7 +3472,10 @@ class TFizzleEffect : public TEffect
     int32_t frame_count_    = 0;
     // 24Hz sim-tick accumulator (ms) — same as sparks/blood.
     double  sim_accum_ms_   = 0.0;
-    bool    alive_          = true;};
+    bool    alive_          = true;
+    bool    native_domain_  = false;
+    hmm_mat4 native_owner_  = {};
+};
 
 // ********************
 // * TFireBallEffect *
@@ -3603,12 +3616,12 @@ struct SFireBallAssetBind
     TTextureHandle box02_tex     = 0;     // spark quad sprite
     S3DVertex box01_vertices[4] = {};     // Original authored geometry, not damage-rect dimensions.
     bool has_box01_quad = false;
+    bool box01_argb4444 = false;
     S3DVertex box02_vertices[4] = {};
     bool has_box02_quad = false;
-    // The cylinder01 ring is drawn via SubmitHelperMesh — its MeshHandle
-    // is kept here so the effect doesn't need to re-extract per draw.
-    MeshHandle     ring_mesh     = 0;
-    float          ring_mat[16]  = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    bool box02_argb4444 = false;
+    std::vector<S3DVertex> ring_vertices;
+    std::vector<S3DFace> ring_faces;
     // Authoring scale of the box01 quad (atlas-cell size in normalized
     // texture coords). The original uses a 4×4 grid (0.25 × 0.25).
     float          atlas_cell_w  = 0.25f;
@@ -3639,6 +3652,8 @@ class TFireBallEffect : public TEffect
     // reads its last result instead of moving the same projectile twice.
     uint32_t Move() override { return GetMoveBits(); }
     bool SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination);
+    // Standalone fixtures can supply a target collision without a character.
+    void SetPreviewTargetCollision(bool enabled) { preview_target_collision_=enabled; }
     const missile_state::State& ProjectileState() const { return missile_motion_; }
     [[nodiscard]] bool DamageArmed() const { return damage_armed_; }
 
@@ -3662,11 +3677,13 @@ class TFireBallEffect : public TEffect
     void TickAndSubmit(EFxDebugMode debug_mode);
     void SubmitWorldRing(EFxDebugMode debug_mode);
 
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
     [[nodiscard]] bool IsAlive() const { return alive_; }
 
   protected:
     static TFireBallEffect* SpawnForTestWithAsset(const S3DPoint& origin,
         const char* asset_path,TFireBallEffect* (*factory)(TObjectImagery*));
+    void SetYFireBallRingPalette() { y_ring_palette_=true; }
     void SetPreviewLightColor(float r,float g,float b) { light_color_={r,g,b}; }
 
   private:
@@ -3684,6 +3701,9 @@ class TFireBallEffect : public TEffect
     S3DPoint projectile_destination_{};
     bool has_projectile_destination_=false;
     bool preview_mode_=false;
+    bool native_domain_=false;
+    bool y_ring_palette_=false;
+    bool preview_target_collision_=false;
 
     // Per-tick velocity in world wu/tick (set on LAUNCH→FLY transition).
     hmm_vec3 vel_       = {0.0f, 0.0f, 0.0f};
@@ -3719,6 +3739,7 @@ class TFireBallEffect : public TEffect
     void SubmitBillboards(EFxDebugMode debug_mode) const;
     bool EnsureAuthoredQuad() const;
     void SubmitAuthoredCard(const SFireBallData& pose,int32_t frame,bool glow,EFxDebugMode debug_mode) const;
+    void SubmitAuthoredBurst(EFxDebugMode debug_mode) const;
     void SubmitAuthoredTrail(EFxDebugMode debug_mode) const;
     bool EnsureAuthoredSpark() const;
     void SubmitAuthoredSpark(const SFireBallSpark& spark,EFxDebugMode debug_mode) const;
@@ -4494,9 +4515,9 @@ class TMistEffect_Bespoke : public TEffect
     void Submit(EFxDebugMode debug_mode, bool software_alpha_diagnostic = false) const;
 
     [[nodiscard]] static TMistEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
-    // Diagnostic alpha-over approximates the original software device's
-    // fixed ARGB path; it does not reproduce RGB565 tables or sampling.
-    // Default submission preserves the canonical additive request.
+    // Explicit alpha diagnostic for the modern renderer policy. The normal
+    // additive request is also decoded as original4444 alpha-over when the
+    // renderer's audited software policy is active.
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode,
                                     bool software_alpha_diagnostic = false);
 
@@ -4524,6 +4545,7 @@ class TMistEffect_Bespoke : public TEffect
     bool           alive_         = true;
     bool           initialized_   = false;
     TTextureHandle texture_       = kInvalidTexture;
+    bool retail_argb4444_ = false;
     std::vector<S3DVertex> authored_vertices_;
 };
 
@@ -4689,6 +4711,7 @@ class TSymGlowEffect_Bespoke : public TEffect
 
   private:
     TTextureHandle texture_      = kInvalidTexture;
+    bool retail_argb4444_ = false;
     mutable std::vector<SMeshVertex> vertices_;
     std::vector<uint16_t> indices_;
     bool initialized_ = false;
@@ -6263,9 +6286,9 @@ class TFireBallEffect_Bespoke__YFireBall : public TFireBallEffect
 {
   public:
     TFireBallEffect_Bespoke__YFireBall(TObjectImagery* newim) : TFireBallEffect(newim)
-        { SetPreviewLightColor(180.0f/255.0f,1.0f,80.0f/255.0f); }
+        { SetPreviewLightColor(180.0f/255.0f,1.0f,80.0f/255.0f); SetYFireBallRingPalette(); }
     TFireBallEffect_Bespoke__YFireBall(SObjectDef* def,TObjectImagery* newim) : TFireBallEffect(def,newim)
-        { SetPreviewLightColor(180.0f/255.0f,1.0f,80.0f/255.0f); }
+        { SetPreviewLightColor(180.0f/255.0f,1.0f,80.0f/255.0f); SetYFireBallRingPalette(); }
     ~TFireBallEffect_Bespoke__YFireBall() override = default;
     [[nodiscard]] static TFireBallEffect_Bespoke__YFireBall* SpawnForTest_BESPOKE(const S3DPoint& origin);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
@@ -6523,6 +6546,7 @@ class TFireConeEffect_Bespoke : public TEffect
     [[nodiscard]] static TFireConeEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
                                                                        const char*     asset_override = nullptr);
     void Initialize(bool attach_runtime_component = true);
+    void SetNativeDomainForTest(bool enabled);
     void Pulse() override;
     void Advance(double elapsed_seconds);
     void Submit(EFxDebugMode debug_mode) const;
@@ -6556,6 +6580,8 @@ class TFireConeEffect_Bespoke : public TEffect
     S3DMat materials_[2] = {};
     float diffuse_[2][4] = {{1,1,1,1}, {1,1,1,1}};
     float facing_ = 0.0f;
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
     int frame_count_ = 0, state_ = FLAME_STATE_START, sim_ticks_ = 0;
     double sim_accum_ms_ = 0.0;
     bool done_ = false, firsttime_ = true;
@@ -6576,14 +6602,18 @@ class TFaultFireEffect_Bespoke : public TEffect
     [[nodiscard]] static TFaultFireEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
     void Initialize(bool attach_runtime_component = true);
     void Advance(double elapsed_seconds);
+    void SetNativeDomainForTest(bool enabled);
     void Submit(EFxDebugMode debug_mode) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return true; }
   private:
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
     TTextureHandle texture_ = kInvalidTexture;
     std::vector<SMeshVertex> vertices_;
     std::vector<uint16_t> indices_;
     bool initialized_ = false;
+    bool runtime_owned_ = false;
     float th_ = 0.0f;
     float u_offset_ = 0.0f;
     double sim_accum_ms_ = 0.0;
@@ -6853,7 +6883,7 @@ class TFogEffect_Bespoke__MistFog : public TEffect
     TFogEffect_Bespoke__MistFog(TObjectImagery* newim) : TEffect(newim) {}
     TFogEffect_Bespoke__MistFog(SObjectDef* def, TObjectImagery* newim)
         : TEffect(def, newim) {}
-    ~TFogEffect_Bespoke__MistFog() override = default;
+    ~TFogEffect_Bespoke__MistFog() override;
 
     void OffScreen() override { /* persistent ambient map effect */ }
     void Initialize(bool attach_runtime_component = true);
@@ -6883,6 +6913,8 @@ class TFogEffect_Bespoke__MistFog : public TEffect
     TTextureHandle texture_ = kInvalidTexture;
     std::vector<S3DVertex> authored_vertices_;
     float diffuse_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    mutable uint32_t software_mesh_ = 0;
+    bool SubmitSoftware(EFxDebugMode debug_mode) const;
     void ResetBall_(int32_t b);
 };
 

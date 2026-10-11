@@ -37,7 +37,8 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(row['gates']['full_acceptance']['status'],'open')
         self.assertFalse(row['gates']['runtime']['natural_context_verified'])
         self.assertEqual(row['gates']['visual_review']['status'],'pass_for_tested_configuration')
-        fog=self.coverage['types']['0x180674ba']
+        # Fog remains unreviewed; MistFog now has an explicit current Metal review.
+        fog=self.coverage['types']['0xc24b2a85']
         self.assertEqual(fog['gates']['gpu']['status'],'not_checked')
         self.assertEqual(fog['gates']['full_acceptance']['status'],'open')
         self.assertEqual(fog['gates']['visual_review']['status'],'pending')

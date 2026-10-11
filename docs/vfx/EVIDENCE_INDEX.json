@@ -9,19 +9,19 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 91,
+    "retail_rows_with_source_fixes_recorded": 101,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
-    "actual_runtime_verified_rows": 81,
-    "visual_fidelity_confirmed_rows": 17,
+    "actual_runtime_verified_rows": 90,
+    "visual_fidelity_confirmed_rows": 75,
     "repeatable_ab_rows": 7,
-    "thin_bounded_render_frontend_rows": 67,
-    "reviewed_visual_pass_rows": 17,
-    "remaining_visual_review_rows": 159
+    "thin_bounded_render_frontend_rows": 77,
+    "reviewed_visual_pass_rows": 75,
+    "remaining_visual_review_rows": 101
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -693,6 +693,629 @@
       "check": "merged_main_actual_map_regression",
       "status": "pass",
       "scope": "Optimized merged main:48frames/8typedlifecyclechecks/31distinctactive/floorrestored/cleanexit. No additional visual/full acceptance."
+    },
+    "docs/vfx/forensics/SMALL_FAMILY_VISUAL_BATCH_20261010.json": {
+      "sha256": "e9db4bf59468b45a25b50a3f223a2a69eda26366398e77e067b5a68583f9bf4b",
+      "retail_row": "nine_types_see_record_cases",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current Metal map output versus original software full authored-normal lighting/transform/raster56eb30 with actual source ambient38/directional1; no injected vertex/material color. Synthetic floor, recorded stationary state and move/delete lifecycle only. Natural context/device and known projection/quantization remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbonb-20261010/visual-review.json": {
+      "sha256": "53bb48efae7862ad50edf826cb2b0a6461ec6a72d034a325b6268db6e7c9cf74",
+      "retail_row": "RibbonB:0x562c743a",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbong-20261010/visual-review.json": {
+      "sha256": "5bca400b29c81e75152b4a6e76416502771efa94420e1e9275c70214cab7eb37",
+      "retail_row": "RibbonG:0x562c743b",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbono-20261010/visual-review.json": {
+      "sha256": "ac894b909f80ff683760f9bb6a0adc4ecb71f68af22e7acae3df7b40f061dee4",
+      "retail_row": "RibbonO:0x562c743c",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbonp-20261010/visual-review.json": {
+      "sha256": "4c034217e08824877e7a9542e1cbdbd22161b4e43457ce4506281a4bb2120aec",
+      "retail_row": "RibbonP:0x562c743d",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbonr-20261010/visual-review.json": {
+      "sha256": "c7d6d34a89f5fb880c704a90ffaa8043a39c2175c2b85ab173d3a7d2f9249a00",
+      "retail_row": "RibbonR:0x562c743e",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbonw-20261010/visual-review.json": {
+      "sha256": "91f919c3129b9582219f036d673d879d12ea3b751487d18de93d1dc36ec08069",
+      "retail_row": "RibbonW:0x562c743f",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ribbony-20261010/visual-review.json": {
+      "sha256": "68ef6e9c15e3de5c148902aad6a0d7a95660195c09869d53e92a578aecad565e",
+      "retail_row": "RibbonY:0x562c7440",
+      "check": "current_actual_port_visual_review",
+      "status": "pending_shared_glow_difference",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-olihootsign-20261010/visual-review.json": {
+      "sha256": "01db814c76d26a6cf32c808a48058302e8ffaae111cd9318309ec7fc619cc765",
+      "retail_row": "OlihootSign:0xad92bc1e",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ogroksign-20261010/visual-review.json": {
+      "sha256": "9502f5dc43c01b314813c0c99ab6527171b22b69d8d7ff622bebd34f57bf7312",
+      "retail_row": "OgrokSign:0xad92bc1f",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-campsign-20261010/visual-review.json": {
+      "sha256": "2db9cc623c5b36bc2e1e2353f0884a5046d01bbf2cc956b198f0a56ad9922b1a",
+      "retail_row": "CampSign:0xad92bc20",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-towersign-20261010/visual-review.json": {
+      "sha256": "03406d42291272d33fa641ac1514b6ca9303064768dc1df35b07f941fcc208b6",
+      "retail_row": "TowerSign:0xad92bc21",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-druhgsign-20261010/visual-review.json": {
+      "sha256": "6519f70c21c4477ff70248a6532285f5c62eebbc450f86fb66a6dec3634c9a5a",
+      "retail_row": "DruhgSign:0xad92bc22",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ruinssign-20261010/visual-review.json": {
+      "sha256": "ee084f5693ba022ab4926ef30d0843e6adb68f2155192b0070d67783380e47f6",
+      "retail_row": "RuinsSign:0xad92bc23",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-bonesign-20261010/visual-review.json": {
+      "sha256": "a5179f43ddfe64680044eb92741d09f329a56708d3b5102254d35cd45d927bc3",
+      "retail_row": "BoneSign:0xad92bc24",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-yardsign-20261010/visual-review.json": {
+      "sha256": "844ca73307e19b8621c2beda0e3b41aeabe154b1904f3ecbe81b5dfea701ce10",
+      "retail_row": "YardSign:0xad92bc26",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-ancientsign-20261010/visual-review.json": {
+      "sha256": "d0ed4d78cb162abf3ebbd80cb4d48623ea7b523ee3bf68965609cf154d76b1f5",
+      "retail_row": "AncientSign:0xad92bc25",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-villagesign-20261010/visual-review.json": {
+      "sha256": "d293783010815775a1f0b4969ad634d9da543c44ba6a64eb524dca4a09920b86",
+      "retail_row": "VillageSign:0xad92bc27",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-mistsign-20261010/visual-review.json": {
+      "sha256": "d6b83e0dcc918a6f841ba1c8df30bbe4f5a05eda2082efaf52e562a6f48cdb2b",
+      "retail_row": "MistSign:0xad92bc35",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/current-static-havensign-20261010/visual-review.json": {
+      "sha256": "2cb052581f7a296cc1ea4581f69272c4b048224ebe096f84965234fcd88f82ad",
+      "retail_row": "HavenSign:0xad92bc36",
+      "check": "current_actual_port_visual_review",
+      "status": "pass",
+      "scope": "Actual current map Metal versus retained actual retail software recording, static state0 configuration, camera/placement/ambient matched. Original backgrounds retained; no appearance fitting. Natural map placement and exact backend raster/projection remain separate."
+    },
+    "recon/retail_asm/runtime/effects/firecone-owner-lit-20261010/manifest.json": {
+      "sha256": "b1412f7272923fa2bc88994f5ee0f36d51f91b1e0cbbe1e230fc1ac666482a68",
+      "retail_row": "FireCone:0xab92cd01",
+      "check": "firecone_relative_owner_normal_lit_frontend",
+      "status": "pass",
+      "scope": "Compiled actual SubmitPool receives independently executed native owner matrices. Exact authored normals, UVs and RGB565 textures; original mode8, CCW culling, normal illumination and software projection/raster. Scene ambient/directional descriptors are explicit inputs. Production common-world owner conversion, complete scene lighting selection, point lights, GPU, live spell/caster/audio and actual map appearance remain separate. No inverse-Z/pixel adapter or matrix fit."
+    },
+    "recon/retail_asm/runtime/effects/static-particles-regeneration-render-20261010/manifest.json": {
+      "sha256": "f21bca6b67b67e03ae5d1d66dc8f2fca0b259b1403f78780094a7234f74052ff",
+      "retail_row": "Regeneration:0x10ac03de",
+      "check": "static_particles_render",
+      "status": "pass",
+      "scope": "Actual compiled parser/State/SubmitPartSys against native whole parser/Initialize/Pulse/liveSample/#CalcObjectMatrix/x87transform; exact native-authored emitter poses common inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; raw-world portZ compared via declared MODELZ bridge using actual native sample centre. Shared original software projector/raster used at fixed512white/color fixture; no actual map/Metal projector, base material lighting/caster/full acceptance."
+    },
+    "recon/retail_asm/runtime/effects/static-particles-regeneration-map-20261010/manifest.json": {
+      "sha256": "931ff68d2d26851f6fa45288f1c797dfc6c87eae635ecb99cddd8678f447d845",
+      "retail_row": "Regeneration:0x10ac03de",
+      "check": "static_particles_map",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/static-particles-swiftstrike-render-20261010/manifest.json": {
+      "sha256": "7548dd31a106dcb7b9c47cd3bba74bae8f69e30a3202f56be79696f8b175068e",
+      "retail_row": "SwiftStrike:0xe0a3bc43",
+      "check": "static_particles_render",
+      "status": "pass",
+      "scope": "Actual compiled parser/State/SubmitPartSys against native whole parser/Initialize/Pulse/liveSample/#CalcObjectMatrix/x87transform; exact native-authored emitter poses common inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; raw-world portZ compared via declared MODELZ bridge using actual native sample centre. Shared original software projector/raster used at fixed512white/color fixture; no actual map/Metal projector, base material lighting/caster/full acceptance."
+    },
+    "recon/retail_asm/runtime/effects/static-particles-swiftstrike-map-20261010/manifest.json": {
+      "sha256": "f9c88fd28ff022fbbe4b3f35065f088412992f260df14f743616370d7e3e5c16",
+      "retail_row": "SwiftStrike:0xe0a3bc43",
+      "check": "static_particles_map",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/static-particles-fspray-render-20261010/manifest.json": {
+      "sha256": "74b83beeb5bb289cf548b5a35bb5065849f45bf1216d8cfec17b1c9bdae6c0c1",
+      "retail_row": "fspray:0x0c052638",
+      "check": "static_particles_render",
+      "status": "pass",
+      "scope": "Actual compiled parser/State/SubmitPartSys against native whole parser/Initialize/Pulse/liveSample/#CalcObjectMatrix/x87transform; exact native-authored emitter poses common inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; raw-world portZ compared via declared MODELZ bridge using actual native sample centre. Shared original software projector/raster used at fixed512white/color fixture; no actual map/Metal projector, base material lighting/caster/full acceptance."
+    },
+    "recon/retail_asm/runtime/effects/static-particles-fspray-map-20261010/manifest.json": {
+      "sha256": "409053e8048443424ee83544e7aa76aea4b494350eb64fe3c673f579b34c91f3",
+      "retail_row": "fspray:0x0c052638",
+      "check": "static_particles_map",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbonb-20261010/pair.json": {
+      "sha256": "714849f93121d1bef2424cda7bded444162578c4ecc5b0ae68fd665a244ee2bc",
+      "retail_row": "RibbonB:0x562c743a",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbong-20261010/pair.json": {
+      "sha256": "a90de228611301ca8a5597a40e4d3b5c52f5bd2e7fe0d020e7af9667d043fcc7",
+      "retail_row": "RibbonG:0x562c743b",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbono-20261010/pair.json": {
+      "sha256": "910711980d05f170996161740603fdf5e92c02b73921e7b07892f3d8ccc8ecb9",
+      "retail_row": "RibbonO:0x562c743c",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbonp-20261010/pair.json": {
+      "sha256": "14c9f8265ea2836d0f8263fdbd00301ed56830a47096a9dcbe522ab487fc9214",
+      "retail_row": "RibbonP:0x562c743d",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbonr-20261010/pair.json": {
+      "sha256": "f43df0e59dc020cdade78bb23e89579ae9687516d99a2e2c37c8d28b95a02b31",
+      "retail_row": "RibbonR:0x562c743e",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbonw-20261010/pair.json": {
+      "sha256": "d216f60c66529d79d39dfb43afb9745a112d3f9a4fb229f0129b32bf2240fbf4",
+      "retail_row": "RibbonW:0x562c743f",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/ribbon-mode4-ribbony-20261010/pair.json": {
+      "sha256": "fff529518601324d98abdd99a074c4969fd8f5c0e434d8375285c6775975c8de",
+      "retail_row": "RibbonY:0x562c7440",
+      "check": "ribbon_corrected_mode4_actual_visual_review",
+      "status": "pass",
+      "scope": "Whole coil including lower loop, colored halo and white core on retained synthetic map/native recording pair."
+    },
+    "recon/retail_asm/runtime/effects/accepted-helper-immortalmight-20261010/review.json": {
+      "sha256": "5d39ba1a6524d1269dc6e9d1e3d82ce826e7a5d3eef2b15792033d314be6a694",
+      "retail_row": "Immortalmight:0x82aeb30f",
+      "check": "current_renderer_visual_regression",
+      "status": "pass_for_existing_isolated_scope",
+      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+    },
+    "recon/retail_asm/runtime/effects/accepted-helper-shadowfist-20261010/review.json": {
+      "sha256": "678068386ecb9a3857548ef77f89eb215d1ebf0822c9b10f509ba5b152fdfbdd",
+      "retail_row": "Shadowfist:0x550decaf",
+      "check": "current_renderer_visual_regression",
+      "status": "pass_for_existing_isolated_scope",
+      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+    },
+    "recon/retail_asm/runtime/effects/accepted-helper-warriorborn-20261010/review.json": {
+      "sha256": "2c888ff432cea49da3410b24b1f2342cb1e1ede9a0558602e5eb5e1ee2bc188d",
+      "retail_row": "Warriorborn:0x9de2a0fe",
+      "check": "current_renderer_visual_regression",
+      "status": "pass_for_existing_isolated_scope",
+      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+    },
+    "recon/retail_asm/runtime/effects/accepted-helper-teleportation-20261010/review.json": {
+      "sha256": "0454dbad0c7b5f10ccdec609d1e954b4cf6285def84da667eda156438e0ee120",
+      "retail_row": "teleportation:0xad92bd40",
+      "check": "current_renderer_visual_regression",
+      "status": "pass_for_existing_isolated_scope",
+      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+    },
+    "recon/retail_asm/runtime/effects/accepted-helper-goldeffect-20261010/review.json": {
+      "sha256": "5c9dee8a692fcf9842d94c9b71146e9e0852d65ea8f332c6708c731434eab52d",
+      "retail_row": "goldeffect:0xd0c0f035",
+      "check": "current_renderer_visual_regression",
+      "status": "pass_for_existing_isolated_scope",
+      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+    },
+    "recon/retail_asm/runtime/effects/fireflash-current-visual-20261010/review-approved.json": {
+      "sha256": "b51a6244eae867b3b636e44f532d1e87bda31441601fc93bb632dad9a5ab30ad",
+      "retail_row": "FireFlash:0x37780ae2",
+      "check": "fireflash_current_whole_lifecycle_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Null-spell isolated source-light full sampled rise/annulus/collapse/greenfade. Original Init/Animate/RenderObject/normalIlluminate/raster versus actual512squareMetal, fixed24Hz phase mapping verified6CRT callcounts, nofit. Pixel equality/naturalcaller/ABSPOS/device remain separate."
+    },
+    "recon/retail_asm/runtime/effects/buff-current-visual-speed-20261010/review-approved.json": {
+      "sha256": "3e9c29f0be08cfa13a07c00c3f0d684aa6bf6623f4d09a3aea63987e7d516c9d",
+      "retail_row": "speed:0xad92bd36",
+      "check": "native_domain_buff_actual_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Explicit native-domain isolated preview: original software versus actual Metal; six fixed sampled frames, matching RNG counts and source lighting. Overall form, color family and size pass. Exact framebuffer parity, ordinary map projection, natural attachment and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/buff-current-visual-quicksilver-20261010/review-approved.json": {
+      "sha256": "837788e86ab8e36af2fb63896c62a5cb01aaf345d7451ab5bb1db9f61bd6a8b2",
+      "retail_row": "quicksilver:0xad92bd35",
+      "check": "native_domain_buff_actual_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Explicit native-domain isolated preview: original software versus actual Metal; six fixed sampled frames, matching RNG counts and source lighting. Overall form, color family and size pass. Exact framebuffer parity, ordinary map projection, natural attachment and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/buff-current-visual-fmastery-20261010/review-approved.json": {
+      "sha256": "119ef337dccafb9d5e8cd52859fc38b5cbc0200ce7b346d5a5755a77b1eb1bf6",
+      "retail_row": "Fmastery:0xb0e024df",
+      "check": "native_domain_buff_actual_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Explicit native-domain isolated preview: original software versus actual Metal; six fixed sampled frames, matching RNG counts and source lighting. Overall form, color family and size pass. Exact framebuffer parity, ordinary map projection, natural attachment and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-mist-visual-20261010/review-approved.json": {
+      "sha256": "67f9b9fb3ac62272c3c5dfe3b244e5fc65f3f9f81e588b0083a787076682dceb",
+      "retail_row": "Mist:0x2093487a",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Six fixed elapsed original software/actual Metal pairs, matched native RNG cadence and source light inputs. Overall white-drop form, distribution and continuous lifecycle pass. Original ARGB4444/caller blend/cull policy verified; common projection, framebuffer rounding and natural scenes remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-symglow-visual-20261010/review-approved.json": {
+      "sha256": "22c08e675ffcd70bc95be9dec75cad1c5714cb873daa42a764d1de495a653dff",
+      "retail_row": "SymGlow:0x27df45be",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Six fixed elapsed original software/actual Metal pairs, matched native RNG cadence and source light inputs. Overall complete red/white cylinder, U scrolling and Z breathing pass. Original ARGB4444/caller blend/cull policy verified; common projection, framebuffer rounding and natural scenes remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-firecone-visual-20261010/review-approved.json": {
+      "sha256": "038ebd89b25221bec3a077178d64a83f433f19c245839808c56d6da1a497f4d5",
+      "retail_row": "FireCone:0xab92cd01",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Fixed null-spell/source-light native-domain preview, 14 sampled original full-normal-lit/Metal pairs. Overall fire/smoke form, color, expansion and visible drain pass; exact framebuffer parity, ordinary map projection and natural caster/device scenes remain open."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-yenergy-render-20261010/manifest.json": {
+      "sha256": "3ea40199b42f2efe7cc26ce074a930706c59d8f343cb8940b60d37362a652483",
+      "retail_row": "YEnergy:0xaeaeeb30",
+      "check": "quoted_particle_independent_emitter_frontend",
+      "status": "pass",
+      "scope": "Original whole parser/Initialize/Pulse/RenderSample against actual compiled State/SubmitPartSys and independently compiled integer-key/root emitter matrices. Five nonempty pixel/depth pairs replay twice; shared original software raster at stated1024 viewport, no actual Metal appearance credit. Declared geometry bounds and source pose/clock limits remain."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-yenergy-map-20261010/manifest.json": {
+      "sha256": "68f8cb043c37e18d5c71d3cfee4ee2fed8b5281dbdec070f5b0fb4703c8cca1e",
+      "retail_row": "YEnergy:0xaeaeeb30",
+      "check": "quoted_particle_actual_map_lifecycle",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-yenergylose-render-20261010/manifest.json": {
+      "sha256": "a1c4526bccbfc76cea93204c3b21b6206246206ee9ccc928575f6762a6c51b05",
+      "retail_row": "YEnergyLose:0xaeaeeb33",
+      "check": "quoted_particle_independent_emitter_frontend",
+      "status": "pass",
+      "scope": "Original whole parser/Initialize/Pulse/RenderSample against actual compiled State/SubmitPartSys and independently compiled integer-key/root emitter matrices. Five nonempty pixel/depth pairs replay twice; shared original software raster at stated1024 viewport, no actual Metal appearance credit. Declared geometry bounds and source pose/clock limits remain."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-yenergylose-map-20261010/manifest.json": {
+      "sha256": "8fdca23bcf8d6ccd2fc9b84ce9c868d29bc9dabe55c4cdf496637dc6a1f046c7",
+      "retail_row": "YEnergyLose:0xaeaeeb33",
+      "check": "quoted_particle_actual_map_lifecycle",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-yabsorb-render-20261010/manifest.json": {
+      "sha256": "f57b2dd25eb9325cc75cb91ccfa7a859d5bca8b4923e67b9794032301fa5dfcc",
+      "retail_row": "YAbsorb:0xaeaeeb29",
+      "check": "quoted_particle_independent_emitter_frontend",
+      "status": "pass",
+      "scope": "Original whole parser/Initialize/Pulse/RenderSample against actual compiled State/SubmitPartSys and independently compiled integer-key/root emitter matrices. Five nonempty pixel/depth pairs replay twice; shared original software raster at stated1024 viewport, no actual Metal appearance credit. Declared geometry bounds and source pose/clock limits remain."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-yabsorb-map-20261010/manifest.json": {
+      "sha256": "87e4b3b7fd9979f06560a36078a534f2c97cc11c1633b27bad5973f834cdd77b",
+      "retail_row": "YAbsorb:0xaeaeeb29",
+      "check": "quoted_particle_actual_map_lifecycle",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-nullifier-render-20261010/manifest.json": {
+      "sha256": "85d8b79b0e99c85e4851be41dc5acd742224f28e0fd28f4aab8c9d0120500991",
+      "retail_row": "nullifier:0xad92bd38",
+      "check": "quoted_particle_independent_emitter_frontend",
+      "status": "pass",
+      "scope": "Original whole parser/Initialize/Pulse/RenderSample against actual compiled State/SubmitPartSys and independently compiled integer-key/root emitter matrices. Five nonempty pixel/depth pairs replay twice; shared original software raster at stated1024 viewport, no actual Metal appearance credit. Declared geometry bounds and source pose/clock limits remain."
+    },
+    "recon/retail_asm/runtime/effects/quoted-particles-nullifier-map-20261010/manifest.json": {
+      "sha256": "d9de39b1d71519fac50412204d036d7bd1687f2bd9ff9588086dd9fab11ba938",
+      "retail_row": "nullifier:0xad92bd38",
+      "check": "quoted_particle_actual_map_lifecycle",
+      "status": "pass",
+      "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
+    },
+    "recon/retail_asm/runtime/effects/current-faultfire-visual-20261010/review-approved.json": {
+      "sha256": "be91857b20eb919ba4fda619f2d3b498e1208f34c9550b3eea881eefe87c93e1",
+      "retail_row": "Faultfire:0x51753bce",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Fixed source-light/native-domain isolated preview against complete original owner/normal/projector/raster. Overall two-layer red/white gradient and UV-phase evolution pass. Thirteen retained pairs support six fixed root-reviewed phases; exact raster and natural scenes/caller/audio remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-streamer-visual-20261010/review-approved.json": {
+      "sha256": "0dc59a8fbfbee026a2171e7fd59a20e7520429181a20255ca05b89543f2a8a57",
+      "retail_row": "Streamer:0x482dfe82",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Fixed source-light/native-domain isolated preview against complete original owner/normal/projector/raster. Overall purple/blue/red spiral form, expansion and late fading pass. Thirteen retained pairs support six fixed root-reviewed phases; exact raster and natural scenes/caller/audio remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-yenergy-visual-20261010/review-approved.json": {
+      "sha256": "b2db1d8bd9b3f609b5375b7f5a68d60d6bd4ff7c6d6d623eefe0c7f359384dea",
+      "retail_row": "YEnergy:0xaeaeeb30",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall particle form/color and sampled emission/decay pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-yenergylose-visual-20261010/review-approved.json": {
+      "sha256": "2aa309f4029fcec133d70104794e59c3e0426b8661a98dc5c0b554c7987b4d1d",
+      "retail_row": "YEnergyLose:0xaeaeeb33",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall particle form/color and sampled emission/decay pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-yabsorb-visual-20261010/review-approved.json": {
+      "sha256": "92f1860e518ce57af9aca3f2e842fa755186c500d67b03122cc0b82a228fb1af",
+      "retail_row": "YAbsorb:0xaeaeeb29",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall particle form/color and sampled emission/decay pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-nullifier-visual-20261010/review-approved.json": {
+      "sha256": "ed7b000cb26878eecef8af9095dab85cfdef803c5b3971a487e613ae45ea3533",
+      "retail_row": "nullifier:0xad92bd38",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall animated ring/fan emitter phase pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-regeneration-visual-20261010/review-approved.json": {
+      "sha256": "8bbac0850f3e6ccf9e52fda3624ad4114026a134af2a60dabeae316bc48cebf6",
+      "retail_row": "Regeneration:0x10ac03de",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Twelve fixed samples of original complete particle controller/RenderObject/FVF1e2/software raster versus independent normal-factory Metal runtime: sampled emission, color, form and continuing animation pass in the recorded native-domain configuration. All logged RNG checkpoints match. Minor software/Metal raster differences remain; exact pixels, natural caster/caller and other scenes are open."
+    },
+    "recon/retail_asm/runtime/effects/current-swiftstrike-visual-20261010/review-approved.json": {
+      "sha256": "3a4df0ad26ddf0fb409174b37b13b8653521a8cee3f6cdaaefa3e47de08f9850",
+      "retail_row": "SwiftStrike:0xe0a3bc43",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Twelve fixed samples of original complete particle controller/RenderObject/FVF1e2/software raster versus independent normal-factory Metal runtime: sampled emission, color, form and continuing animation pass in the recorded native-domain configuration. All logged RNG checkpoints match. Minor software/Metal raster differences remain; exact pixels, natural caster/caller and other scenes are open."
+    },
+    "recon/retail_asm/runtime/effects/camera-particles-ogrestrength-render-20261010/manifest.json": {
+      "sha256": "360c4f5aa2618d60717da7ff7a30dbfea6652cf985d72750f0b72f51e48d986a",
+      "retail_row": "Ogrestrength:0x42e0fcd0",
+      "check": "camera_particle_independent_emitter_frontend",
+      "status": "pass",
+      "scope": "Original parser/Initialize/Pulse/sample with independently compiled production integer-camera emitter matrices and exact base geometry; five nonempty pixel/depth pairs replay twice using shared original raster. Actual Metal appearance tracked separately."
+    },
+    "recon/retail_asm/runtime/effects/camera-particles-ogrestrength-map-20261010/manifest.json": {
+      "sha256": "1ecbfe2075377be9024236ca146896903858f7856cecda45089b9ee22c3e7bbf",
+      "retail_row": "Ogrestrength:0x42e0fcd0",
+      "check": "camera_particle_map_lifecycle",
+      "status": "pass",
+      "scope": "Real typed create/controller/three bases/particles/MOVE/DELETE/absence with exact restored floor; hidden helper paths rejected. Controlled map fixture, natural spell/caster not verified."
+    },
+    "recon/retail_asm/runtime/effects/current-ogrestrength-visual-20261010/review-approved.json": {
+      "sha256": "57c7331a6479aabb60a02346c00e83e6001fe5d4af44be72e5b3f167320c1d47",
+      "retail_row": "Ogrestrength:0x42e0fcd0",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Recorded nullspell state0, fixed origin/facing0, native-domain actual Metal vs independently executed whole native software particles and all three bases; samples1/5/15/29/45/59, quality0 seed1, source lighting38+white directional, incoming16, warmup1. No crops, registration, fitting or invented geometry. Root reviewed overall form/color and three-base/trail evolution."
+    },
+    "recon/retail_asm/runtime/effects/camera-particles-trollblood-render-20261010/manifest.json": {
+      "sha256": "6c3a947c20e26f037987d17ba84b01026cfb2169a857639af0482f22975adc99",
+      "retail_row": "trollblood:0xad92bd39",
+      "check": "camera_particle_independent_emitter_frontend",
+      "status": "pass",
+      "scope": "Original parser/Initialize/Pulse/sample with independently compiled production integer-camera emitter matrices and exact base geometry; five nonempty pixel/depth pairs replay twice using shared original raster. Actual Metal appearance tracked separately."
+    },
+    "recon/retail_asm/runtime/effects/camera-particles-trollblood-map-20261010/manifest.json": {
+      "sha256": "c26437a8d3e6dbd3721ab72155a725c15fc1945a38572ce38df810dc536bdf53",
+      "retail_row": "trollblood:0xad92bd39",
+      "check": "camera_particle_map_lifecycle",
+      "status": "pass",
+      "scope": "Real typed create/controller/three bases/particles/MOVE/DELETE/absence with exact restored floor; hidden helper paths rejected. Controlled map fixture, natural spell/caster not verified."
+    },
+    "recon/retail_asm/runtime/effects/current-trollblood-visual-20261010/review-approved.json": {
+      "sha256": "bd03dc0c91b979ca96e7249a7ec2f8c7a50a649e2b2e88df98a4ba74c345ac70",
+      "retail_row": "trollblood:0xad92bd39",
+      "check": "current_actual_metal_native_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Recorded nullspell state0, fixed origin/facing0, native-domain actual Metal vs independently executed whole native software particles and all three bases; samples1/5/15/29/45/59, quality0 seed1, source lighting38+white directional, incoming16, warmup1. No crops, registration, fitting or invented geometry. Root reviewed overall form/color and three-base/trail evolution."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-regeneration-visual-20261010/review-approved.json": {
+      "sha256": "7c86451838b336be5e6b6f250178a03090f0b8d950696185e6b71da14a4db106",
+      "retail_row": "Regeneration:0x10ac03de",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-swiftstrike-visual-20261010/review-approved.json": {
+      "sha256": "f6ff802aab11950a641afc1bdde3ca5293c3ec76f2f8ff4775b53480e095b3ce",
+      "retail_row": "SwiftStrike:0xe0a3bc43",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-fspray-visual-20261010/review-approved.json": {
+      "sha256": "dab78140b139e4f47022c55e7e331aa6bc2b192e4859f2c6ce5f68592b864041",
+      "retail_row": "fspray:0x0c052638",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-yenergy-visual-20261010/review-approved.json": {
+      "sha256": "24390a5e0d6c737f266e2a76ae559815cc769fb06856f07c062cd627a0440dbf",
+      "retail_row": "YEnergy:0xaeaeeb30",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-yenergylose-visual-20261010/review-approved.json": {
+      "sha256": "d6cea8a9b6a2bdf26e5609fe2cb9279cc524dd62af0623c436834df19256c45f",
+      "retail_row": "YEnergyLose:0xaeaeeb33",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-yabsorb-visual-20261010/review-approved.json": {
+      "sha256": "bb1932dd709fa9c0c131df331a58a21e1e67bdeb6d818938e9854718d17fe2d1",
+      "retail_row": "YAbsorb:0xaeaeeb29",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-nullifier-visual-20261010/review-approved.json": {
+      "sha256": "fc5eef8b2fceae38cbd7d58050c342e53830a8d0f4c09a1c4e0dcdc638b988b1",
+      "retail_row": "nullifier:0xad92bd38",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-ogrestrength-visual-20261010/review-approved.json": {
+      "sha256": "b0ba94086ee97f787a24401a6de29109c704446673768421015cfe15c01de642",
+      "retail_row": "Ogrestrength:0x42e0fcd0",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-trollblood-visual-20261010/review-approved.json": {
+      "sha256": "4074c0fa87378c4164cfd2330bb13e0f00a2db7f8bda180eeedcfca8f468c76e",
+      "retail_row": "trollblood:0xad92bd39",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/mistfog-current-visual-20261010/root-approval.json": {
+      "sha256": "6bd421033eab2ef67c9a7753fa5dca16847a87352072a351c20407fa71cf9a9f",
+      "retail_row": "MistFog:0x180674ba",
+      "check": "mistfog_current_actual_metal_native_visual_review",
+      "status": "root_approved_scoped_appearance",
+      "scope": "Eleven original whole25-puff Render/owner/normal-light/software raster versus actual current Metal phases through241ticks; source38/dir1 lighting and live retail RNG match. Scoped form/color/growth/reset progression passes; natural setting/caller/device and exact framebuffer parity remain open."
+    },
+    "recon/retail_asm/runtime/effects/scroll-flowwater-visual-20261010/root-approval.json": {
+      "sha256": "9a32672e6d5ae30fd9cc59229d2e2777288f36f33304fcabc74156997511c14a",
+      "retail_row": "FlowWater:0xadbcef15",
+      "check": "scroll_water_current_actual_metal_native_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Six fixed whole original factory/RenderObject/software-raster versus actual-owner Metal samples. Recorded water form, texture, color and authored scrolling pass; StillWater correctly stays constant. No image/phase fitting; precision, depth interaction and natural-map/device contexts remain open."
+    },
+    "recon/retail_asm/runtime/effects/scroll-bendwater1-visual-20261010/root-approval.json": {
+      "sha256": "bd945371d20f81241264692314dca86838007384f3675928f6c76578d56de470",
+      "retail_row": "BendWater1:0xadbcef16",
+      "check": "scroll_water_current_actual_metal_native_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Six fixed whole original factory/RenderObject/software-raster versus actual-owner Metal samples. Recorded water form, texture, color and authored scrolling pass; StillWater correctly stays constant. No image/phase fitting; precision, depth interaction and natural-map/device contexts remain open."
+    },
+    "recon/retail_asm/runtime/effects/scroll-bendwater2-visual-20261010/root-approval.json": {
+      "sha256": "0a6c69cf01666ac0c74f0e95fde21ec2a1ea101285206316da544c5202207e29",
+      "retail_row": "BendWater2:0xadbcef17",
+      "check": "scroll_water_current_actual_metal_native_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Six fixed whole original factory/RenderObject/software-raster versus actual-owner Metal samples. Recorded water form, texture, color and authored scrolling pass; StillWater correctly stays constant. No image/phase fitting; precision, depth interaction and natural-map/device contexts remain open."
+    },
+    "recon/retail_asm/runtime/effects/scroll-stillwater-visual-20261010/root-approval.json": {
+      "sha256": "2b6928cfa6cea3479b76b9f35d57661172ebc8f54a192f8e72dfd4bb90b77f0a",
+      "retail_row": "StillWater:0xadbcef14",
+      "check": "scroll_water_current_actual_metal_native_visual_review",
+      "status": "root_approved_scoped_appearance",
+      "scope": "Six fixed whole original factory/RenderObject/software-raster versus actual-owner Metal samples. Recorded water form, texture, color and authored scrolling pass; StillWater correctly stays constant. No image/phase fitting; precision, depth interaction and natural-map/device contexts remain open."
+    },
+    "recon/retail_asm/runtime/effects/fireball-full-current-visual-20261010/root-approval.json": {
+      "sha256": "a792313d4237ebf2db755a546c733d9da804e7635fb105afd951da28d8258807",
+      "retail_row": "FireBall:0x63fd382a",
+      "check": "fireball_full_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Eleven original full leaf Init/Pulse/Animate/RenderObject/software-raster versus actual Metal phases: moving flight/trail/sparks, paired burst/authored colored ring, decay and blank tail pass in declared native-domain scenario. Full state/RNG and impact geometry/color controls pass; exact pixels and natural spell/character/map/device contexts remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-yfireball-full-visual-20261010/root-approval.json": {
+      "sha256": "e5f0f45fea1cb5dbe7f5d2667d0d8dfb3a1984ef789d427259ffd80f153a4322",
+      "retail_row": "YFireBall:0x63fd3827",
+      "check": "current_own_original_actual_metal_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Independent root review of original full own leaf renderer and actual Metal: moving green flight/impact/decay/blank tail passes in ordinary-invoker native-domain condition. Yhagoro conditional height and natural combat, other device/exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-fizzle-full-visual-20261010/root-approval.json": {
+      "sha256": "ff72f20ca93f1ec8c7d61f105c99cff66d16568844308dad4a9599f7b2c2da75",
+      "retail_row": "Fizzle:0xab8800dd",
+      "check": "current_own_original_actual_metal_visual_review",
+      "status": "root_approved_scoped_appearance",
+      "scope": "Independent root review of original lifecycle/owner/software raster and actual Metal: birth/growth/spin/flicker/decay/blank tail passes in explicit native-domain condition. Correct map RNG/texture policy and smoke retained separately; natural player/quickspell/light/audio and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-sewerwater-full-visual-20261010/root-approval.json": {
+      "sha256": "c505111b39350de9ae28fb37007c4f12da2f2435d4c419907988ffa95e184c7b",
+      "retail_row": "SewerWater:0xadbcef19",
+      "check": "current_own_original_actual_metal_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Independent root review of six original whole-renderer/actual-Metal water phases: entire authored plane/strip, texture/color and source scrolling pass. Waves use1280x960 and allvertices/imagebounds remain inside; Sewer staysconstant. No scale/phase fitting; natural map/device/depth interactions and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-wave-full-visual-20261010/root-approval.json": {
+      "sha256": "944fc74678f79f1fa90f41e893d3c82e65e6541f0189e1d55afae05cef4d598d",
+      "retail_row": "Wave:0x9d92bc1d",
+      "check": "current_own_original_actual_metal_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Independent root review of six original whole-renderer/actual-Metal water phases: entire authored plane/strip, texture/color and source scrolling pass. Waves use1280x960 and allvertices/imagebounds remain inside; Sewer staysconstant. No scale/phase fitting; natural map/device/depth interactions and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-waves-full-visual-20261010/root-approval.json": {
+      "sha256": "4447396e616aba3bfe9751a522543b7eb77fd4b002fa646d810610caaeb55992",
+      "retail_row": "WaveS:0x9d92bc1e",
+      "check": "current_own_original_actual_metal_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Independent root review of six original whole-renderer/actual-Metal water phases: entire authored plane/strip, texture/color and source scrolling pass. Waves use1280x960 and allvertices/imagebounds remain inside; Sewer staysconstant. No scale/phase fitting; natural map/device/depth interactions and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-wavem-full-visual-20261010/root-approval.json": {
+      "sha256": "8a5c113952c1a60cc93a3b4c994c7e0e20ef379dc381f9d12c0da37ceee58024",
+      "retail_row": "WaveM:0x9d92bc1f",
+      "check": "current_own_original_actual_metal_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Independent root review of six original whole-renderer/actual-Metal water phases: entire authored plane/strip, texture/color and source scrolling pass. Waves use1280x960 and allvertices/imagebounds remain inside; Sewer staysconstant. No scale/phase fitting; natural map/device/depth interactions and exact pixels remain open."
     }
   }
 }

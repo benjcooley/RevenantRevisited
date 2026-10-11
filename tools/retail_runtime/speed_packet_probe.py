@@ -43,11 +43,12 @@ enum class EFxDepthMode:uint8_t{TestNoWrite=0,None=1,TestWrite=2};
 enum class EFxDebugMode:uint8_t{Normal=0};enum class EFxLightMode:uint8_t{Unlit=0};
 enum class EFxPipeline:uint16_t{Billboard=1,Particle=2,Strip=3};
 struct SFxBatchKey{TTextureHandle texture=0;uint16_t pipeline_id=1;uint8_t blend=0,depth_mode=0;};
-struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};SFxBatchKey key;
- uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
+struct SQuadDrawItem{bool retail_rgb565_additive=false;float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};SFxBatchKey key;
+ bool retail_software_projection=false;uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
 struct S3DVertex{hmm_vec3 pos,normal;float tu,tv;};
 struct Owner{uint32_t ObjId()const{return 0xad92bd36u;}int GetState()const{return 0;}};
-struct Imagery{bool HasRetailMightPartSysProfile()const{return false;}
+struct Imagery{bool HasRetailStaticParticleProfile(uint32_t)const{return false;}
+ bool HasRetailMightPartSysProfile()const{return false;}
  bool HasRetailImmortalmightPartSysProfile()const{return false;}
  bool HasRetailFmasteryPartSysProfile()const{return false;}
  bool speed_partsys_profile=true,quicksilver_partsys_profile=false;
@@ -64,7 +65,7 @@ struct T3DAnimator{struct SPartSysControllers{
  std::vector<Controller>controllers;bool unsupported=false;uint64_t renders=0,quads=0;};
  std::unique_ptr<SPartSysControllers>partsys_controllers;Owner*inst;Imagery im;
  Imagery*Get3DImagery(){return &im;}
- int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&);};
+ int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&,bool=false);};
 constexpr float WORLD3D_Z_SCALE=1.5f;
 '''
 MAIN = r'''
@@ -96,7 +97,7 @@ int main(int argc,char**argv){if(argc!=3)return 2;
 def sha(data):return hashlib.sha256(data).hexdigest()
 
 
-def run(executable,archive,output):
+def run(executable,archive,output,retain_draws=False,native_mode=False):
     output.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(archive)as z:data=z.read('Imagery/Magic/speed.I3D')
     asset=read_asset(data);asset['name']='speed';f=NativeSpeed(executable,asset);punctuation(f);f.initialize(0)
@@ -104,6 +105,7 @@ def run(executable,archive,output):
     production=(ROOT/'src/3dimage.cpp').read_text();body=fn(production,'int32_t T3DAnimator::SubmitPartSys(')
     family=fn((ROOT/'src/3dimage.h').read_text(),'bool HasRetailSpeedFamilyPartSysProfile(')
     cpp=PRELUDE.replace('SPEED_FAMILY_METHOD',family)+'\n'+body+'\n'+MAIN
+    if native_mode:cpp=cpp.replace('a.SubmitPartSys(renderer,2,2,{1,1,1})','a.SubmitPartSys(renderer,2,2,{1,1,1},true)')
     source=output/'packet_driver.cpp';source.write_text(cpp);binary=output/'packet_driver'
     command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer',
         '-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(source),
@@ -111,7 +113,12 @@ def run(executable,archive,output):
     q=subprocess.run(command,capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr)
     if q.returncode:raise RuntimeError('Actual SubmitPartSys compile failed; see compile.log')
     inputs=struct.pack('<i',90)+bytes.fromhex(asset['objects'][2]['vertex_hex'])
-    for p in native['poses']:inputs+=struct.pack('<i22f',p['frame'],*p['position'],*p['scale'],*p['matrix'])
+    from buff_base_lighting_probe import compile_matrices
+    emitter_output=output/'independent-emitter';emitter_output.mkdir()
+    emitter_matrices,emitter_compiled=compile_matrices(emitter_output,asset,'speed')
+    for tick in range(90):
+        frame=tick%asset['state0_frames'];pose=emitter_matrices[frame]
+        inputs+=struct.pack('<i22f',frame,*pose['position'],*pose['scale'],*pose['emitter'])
     (output/'inputs.bin').write_bytes(inputs)
     tag=next(t['parameters']for t in asset['tags']if t['name']=='partsys')
     q=subprocess.run([str(binary),tag,str(output/'inputs.bin')],capture_output=True,text=True)
@@ -171,7 +178,8 @@ def run(executable,archive,output):
         uvs=[packet[13+i*5:15+i*5]for i in range(4)]
         # Source packet centre is raw-world Z. Its mesh-local Z is stretched
         # 1.5 exactly once. Compare in the original sampled MODELZ domain.
-        modern=[[p[0],p[1],sample[2]+(p[2]-packet[2])/1.5]for p in modern]
+        if not native_mode:
+            modern=[[p[0],p[1],sample[2]+(p[2]-packet[2])/1.5]for p in modern]
         order=(0,1,3,2)
         error=max(abs(a-b)for index,i in enumerate(order)for a,b in zip(original[i],modern[index]))
         uv_error=max(abs(a-b)for index,i in enumerate(order)for a,b in zip(rawvertices[i][6:],uvs[index]))
@@ -216,7 +224,7 @@ def run(executable,archive,output):
         visible=sum(p!=0 for p in struct.unpack('<262144H',images[0]))
         if differences or depths[0]!=depths[1] or not visible:pixel_errors.append(dict(tick=tick,differing_pixels=differences,visible=visible))
         pairs.append(dict(tick=tick,differing_rgb565_pixels=differences,visible_native_pixels=visible,depth_equal=depths[0]==depths[1],image_sha256=[sha(p)for p in images]))
-    report=dict(status='pass'if not geometry_errors and not pixel_errors and not centre_errors else'fail',geometry_errors=geometry_errors,
+    report=dict(native_geometry_domain=native_mode,status='pass'if not geometry_errors and not pixel_errors and not centre_errors else'fail',geometry_errors=geometry_errors,
         pixel_errors=pixel_errors,sampled_live_packets=all_packets,actual_native_draw_packets=sum(len(x)for x in draws.values()),
         native_zero_scale_rejections=zero_scale_rejections,max_corner_error=max_corner,max_uv_error=max_uv,
         independent_centre_checks=centre_checks,max_raw_centre_error=max_raw_centre_error,
@@ -224,13 +232,19 @@ def run(executable,archive,output):
         centre_oracle='Compiled rawZ vsactualnative particle rawZ; original4027e8..40281f x87FIX/store '
             'executes withcompiledrawZ input and is comparedtoseparatelyretained nativeRenderSample MODELZ. No PythonFIX formula.',
         pairs=pairs,compiled_SubmitPartSys_sha256=sha(body.encode()),asset_sha256=asset['sha256'],
+        independent_production_emitter=emitter_compiled,
         generated_source_sha256=sha(cpp.encode()),binary_sha256=sha(binary.read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),
         accepted=False,full_game_integration=False,metal_backend_compared=False,
         scope='Actual compiled parser/State/SubmitPartSys against native whole parser/Initialize/Pulse/liveSample/#CalcObjectMatrix/x87transform; '
-            'exact native-authored emitter poses common inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; '
+            'independent production integer decoder/SpeedEmitterLocalMatrix from shipped keys, without native pose inputs. Full quad positions/UV/ownRGB5/texture16/depth checked; '
             'raw-world portZ compared via declared MODELZ bridge using actual native sample centre. Shared original software '
             'projector/raster used at fixed512white/color fixture; no actual map/Metal projector, base material lighting/caster/full acceptance.')
+    if native_mode:
+        report['scope']=report['scope'].replace('raw-world portZ compared via declared MODELZ bridge using actual native sample centre.', 'Native MODELZ vertices submitted directly; no geometry or centre comparison adapter.')
     (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n')
+    if retain_draws:
+        report['selected_frontend_draws']={tick:draws[tick] for tick in (5,15,29)}
+        report['independent_base_matrices']={frame:pose['base'] for frame,pose in emitter_matrices.items()}
     return report
 
 

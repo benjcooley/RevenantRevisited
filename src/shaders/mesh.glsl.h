@@ -119,6 +119,12 @@ void main() {
         ivec2 size = textureSize(albedo_tex, 0);
         ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
         texel = texelFetch(albedo_tex, xy, 0);
+        if (v_retail_mode > 2.5) {
+            // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
+            vec4 nibble = floor(texel * 15.0 + 0.5);
+            texel = vec4(nibble.rgb * vec3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
+                           (nibble.a + 1.0) / 16.0);
+        }
     }
     vec4 c = texel * v_tint;
     if (v_retail_mode > 0.5 && v_retail_mode < 1.5) c.rgb *= v_retail_color;
@@ -149,6 +155,12 @@ void main() {
         ivec2 size = textureSize(albedo_tex, 0);
         ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
         texel = texelFetch(albedo_tex, xy, 0);
+        if (v_retail_mode > 2.5) {
+            // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
+            vec4 nibble = floor(texel * 15.0 + 0.5);
+            texel = vec4(nibble.rgb * vec3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
+                           (nibble.a + 1.0) / 16.0);
+        }
     }
     if (texel.a * v_tint.a < 0.01) discard;
 }
@@ -173,6 +185,12 @@ void main() {
         ivec2 size = textureSize(albedo_tex, 0);
         ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
         texel = texelFetch(albedo_tex, xy, 0);
+        if (v_retail_mode > 2.5) {
+            // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
+            vec4 nibble = floor(texel * 15.0 + 0.5);
+            texel = vec4(nibble.rgb * vec3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
+                           (nibble.a + 1.0) / 16.0);
+        }
     }
     vec4 c = texel * v_tint;
     if (v_retail_mode > 0.5 && v_retail_mode < 1.5) c.rgb *= v_retail_color;

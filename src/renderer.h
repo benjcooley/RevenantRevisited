@@ -264,6 +264,8 @@ struct SBillboardDrawItem
     float        size_wu[2]     = {1.0f, 1.0f};
     float        color_rgba[4]  = {1.0f, 1.0f, 1.0f, 1.0f};
     float        uv_rect[4]     = {0.0f, 0.0f, 1.0f, 1.0f};   // x,y,w,h normalized
+    // Ordered multipass sprites are barriers to material-based reordering.
+    bool preserve_submission_order = false;
     SFxBatchKey  key            = {};
     EFxDebugMode debug_mode     = EFxDebugMode::Normal;
     // Per-instance per PHASE1_SPINE.md §6: lighting is a runtime
@@ -345,9 +347,16 @@ struct SQuadDrawItem
     float uv[4][2] = {{0.0f, 0.0f}, {1.0f, 0.0f},
                        {0.0f, 1.0f}, {1.0f, 1.0f}};
     float color_rgba[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    // Optional authored vertex colors; default remains the uniform tint.
+    bool per_corner_color = false;
+    float corner_color_rgba[4][4] = {};
     SFxBatchKey key = {};
     uint8_t corner_count = 4; // 3 preserves one authored triangle; 4 uses the quad diagonal.
-    uint8_t retail_texture = 0; // 1: Blue software nearest texels with wrapped UVs.
+    uint8_t retail_texture = 0; // 1: nearest; 3: software ARGB4444; 4: software RGB565 additive.
+    bool retail_rgb565_additive = false; // Exact RGB565/profile opt-in; software policy only.
+    bool retail_argb4444 = false; // Exact source format opt-in; fallback policy stays above.
+    bool retail_software_projection = false; // XYZ are original software MODELZ/world.
+    float retail_camera_z = 0.0f; // Explicit original camera input; XY use reconstruction camera.
     EFxDebugMode debug_mode = EFxDebugMode::Normal;
     EFxLightMode light_mode = EFxLightMode::Unlit;
 };
@@ -470,7 +479,8 @@ struct SMeshSubmit
     float      tint[4] = { 1.0f, 1.0f, 1.0f, 1.0f };   // rgba multiplier; alpha < kOpaqueMeshAlpha = translucent
     uint32_t   obj_id = 0;    // packed into id_target (RGBA8) for picking
     float      uv_offset[2] = {0.0f, 0.0f}; // authored scrolltex, per instance
-    // Classic software I3D: 0 deferred, 1 RGB565 vertex-lit, 2 ARGB unlit.
+    // Classic software I3D: 0 deferred, 1 RGB565 vertex-lit, 2 ARGB unlit,
+    // 3 exact ARGB4444 lookup (RGB565 channels and alpha nibble plus one).
     int32_t    retail_lighting = 0;
     // Opt-in source positive screen-down faces. Ordinary opaque depth/write
     // policy is retained; default meshes keep their existing two-sided path.
@@ -511,10 +521,15 @@ struct SHelperMeshSubmit
     float      sort_depth = 0.0f;
     // 0: existing helper material shader. 1: Blue SW RGB565 normal lighting,
     // five-bit vertex Gouraud modulation, nearest wrapped texture sampling.
+    // 2: normalized ARGB unlit. 3: exact ARGB4444 software lookup.
     // Material specular/emissive are not implemented by the source SW path.
     int32_t    retail_lighting = 0;
+    // Undo an explicit geometry-only Z bridge before source normal lighting.
+    float      retail_normal_z_scale = 1.0f;
     bool       retail_gold_no_depth = false; // audited authored mode80, no depth test/write
     bool       retail_positive_face_cull = false; // source positive screen-down; opt-in only
+    bool       retail_software_projection = false;
+    float      retail_camera_z = 0.0f;
 };
 
 enum class ETransparentWorldKind : uint8_t
@@ -699,6 +714,8 @@ public:
     // stacked point-light blow-out. Range typical [0.5..4.0].
     void SetLightCeiling(float ceiling);
     void SetRetailMeshLighting(const float ambient[3], const float directional[3], bool rgb_enabled);
+    [[nodiscard]] bool UsesRetailSoftwareMeshLighting() const
+    { return light.mode == 0 && retail_mesh_rgb_enabled; }
     // Z-buffer-based screen-space ambient occlusion.
     void SetAmbientOcclusion(bool enable, float radius_px, float strength,
                              float bias, float max_dist_wu);
@@ -1361,6 +1378,7 @@ private:
     sg_shader   mesh_shader      = {};
     sg_pipeline mesh_pipeline    = {};
     sg_pipeline mesh_source_cull_pipeline = {};
+    sg_pipeline mesh_source_alpha_pipeline = {};
     // Translucent meshes, in the transparent-world pass: a depth-only pass
     // per surface, then its lit colour where that left the nearest depth.
     sg_shader   mesh_depth_shader          = {};

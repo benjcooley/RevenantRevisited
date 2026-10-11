@@ -119,7 +119,8 @@ struct State
 static int32_t snap_random(int32_t lo, int32_t hi)
 {
     if (hi <= lo) return lo;
-    return lo + (std::rand() % (hi - lo + 1));
+    // Original 0x483300 uses the game's MSVC RNG, not the host C library.
+    return random(lo, hi);
 }
 
 // =========================================================================
@@ -317,6 +318,7 @@ static void Render(State* st, const TObjectInstance* owner = nullptr,
     item.key.blend = uint8_t(EFxBlend::Alpha);
     item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
     item.light_mode = EFxLightMode::Unlit;
+    item.retail_argb4444 = true; // Same authored format as the full Fizzle preview.
     item.debug_mode = debug_mode;
     for (int32_t s = 0; s < kNumSystems; ++s)
     {

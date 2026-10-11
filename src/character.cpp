@@ -5125,6 +5125,9 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
     if (!target)
         target = FindClosestEnemy(GetFace(), 32);
 
+  // REVSYNC: 0x004d3d2d -- a fight starting commits the player's typed line.
+    TextBar.CommitInput();
+
     if (root->action == action)
         return SetFighting(target);
 

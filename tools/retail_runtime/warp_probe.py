@@ -125,7 +125,7 @@ int main(int argc,char**argv){float original[8];std::ifstream f(argv[1],std::ios
             else:rows.append(dict(tick=int(values[1]),offset=list(map(float,values[2:4])),flags=list(map(int,values[4:8])),
                 uvs=[list(map(float,values[8+i*2:10+i*2]))for i in range(4)],material=list(map(float,values[16:]))))
         if paths!=[[p['id'][2:],p['asset'].replace('/','\\')]for p in PROFILES]:raise AssertionError('Production exact ID/asset mapping changed')
-        if any(row['flags']!=[0,0,1,2]or row['material']!=[1.]*8+[0.]*9 for row in rows):raise AssertionError('Actual ConfigureDraw contract changed')
+        if any(row['flags']!=[0,0,1,3]or row['material']!=[1.]*8+[0.]*9 for row in rows):raise AssertionError('Actual ConfigureDraw contract changed')
         traces[p['name']]=rows
     return traces,dict(command=command,driver_sha256=sha(source.read_bytes()),binary_sha256=sha(binary.read_bytes()),
         header_sha256=sha((ROOT/'src/effects/warp_atlas.h').read_bytes()),bodies=['retail_warp::State::Step','Advance','Reset','ConfigureDraw','AssetPath'],

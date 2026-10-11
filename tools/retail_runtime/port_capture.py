@@ -34,7 +34,21 @@ def capture(scenario,output):
         f'--filmstrip={count},{1/fps:.16f}',f'--snapstep={1/fps:.16f}',
         '--snapseed='+str(scenario.get('seed',1)),'--snapwarmup='+str(scenario.get('warmup',1)),
         '--snaprect='+','.join(map(str,rectangle)),'--snapprefix='+str(output/'frame-')]
+    if 'resolution' in scenario:
+        width,height=map(int,scenario['resolution'])
+        if width<1 or height<1:raise ValueError('Positive resolution required')
+        command += [f'--resolution={width}x{height}']
+    if scenario.get('native_domain',False):
+        command += ['--vfx-native-domain']
+    if 'ambient' in scenario:
+        command += ['--scene-ambient='+','.join(map(str,scenario['ambient']))]
+    if 'partsys_quality' in scenario:
+        command += ['--partsys-quality='+str(scenario['partsys_quality'])]
+    if 'partsys_incoming_blend' in scenario:
+        command += ['--partsys-incoming-blend='+str(scenario['partsys_incoming_blend'])]
     env=os.environ.copy();env['REVENANT_DATA_PATH']=str(data)
+    if 'save_root' in scenario:
+        env['REVENANT_SAVE_PATH']=str(Path(scenario['save_root']).resolve())
     assets=Path(scenario.get('assets_root',env.get('REVENANT_ASSETS_PATH',ROOT/'assets'))).resolve()
     env['REVENANT_ASSETS_PATH']=str(assets)
     binary_sha=sha(binary)
@@ -83,6 +97,8 @@ def capture(scenario,output):
         if "--vfx='"+scenario['effect']+"' matched" not in log.read_text(errors='replace'):
             report['status']='fail';report['error']='Requested effect did not match the actual catalogue'
         log_text=log.read_text(errors='replace')
+        if scenario.get('native_domain',False) and '[native-domain] enabled=1 camera_z=0' not in log_text:
+            report['status']='fail';report['error']='Requested native-domain preview did not confirm its owner/particle coordinate policy'
         if '[authored-static] missing objects or unsupported controller tags' in log_text:
             report['status']='fail';report['error']='Requested preview rejected its asset/controller contract'
         try:

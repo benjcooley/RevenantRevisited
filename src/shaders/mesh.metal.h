@@ -165,6 +165,12 @@ fragment fs_out _main(vs_out in [[stage_in]],
         uint2 size = uint2(albedo_tex.get_width(), albedo_tex.get_height());
         uint2 xy = min(uint2(floor(fract(in.uv) * float2(size))), size - uint2(1));
         texel = albedo_tex.read(xy);
+        if (in.retail_mode > 2.5) {
+            // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
+            float4 nibble = floor(texel * 15.0 + 0.5);
+            texel = float4(nibble.rgb * float3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
+                           (nibble.a + 1.0) / 16.0);
+        }
     }
     float4 c = texel * in.tint;
     if (in.retail_mode > 0.5 && in.retail_mode < 1.5) c.rgb *= in.retail_color;
@@ -203,6 +209,12 @@ fragment void _main(vs_out in [[stage_in]],
         uint2 size = uint2(albedo_tex.get_width(), albedo_tex.get_height());
         uint2 xy = min(uint2(floor(fract(in.uv) * float2(size))), size - uint2(1));
         texel = albedo_tex.read(xy);
+        if (in.retail_mode > 2.5) {
+            // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
+            float4 nibble = floor(texel * 15.0 + 0.5);
+            texel = float4(nibble.rgb * float3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
+                           (nibble.a + 1.0) / 16.0);
+        }
     }
     if (texel.a * in.tint.a < 0.01) discard_fragment();
 }
@@ -232,6 +244,12 @@ fragment float4 _main(vs_out in [[stage_in]],
         uint2 size = uint2(albedo_tex.get_width(), albedo_tex.get_height());
         uint2 xy = min(uint2(floor(fract(in.uv) * float2(size))), size - uint2(1));
         texel = albedo_tex.read(xy);
+        if (in.retail_mode > 2.5) {
+            // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
+            float4 nibble = floor(texel * 15.0 + 0.5);
+            texel = float4(nibble.rgb * float3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
+                           (nibble.a + 1.0) / 16.0);
+        }
     }
     float4 c = texel * in.tint;
     if (in.retail_mode > 0.5 && in.retail_mode < 1.5) c.rgb *= in.retail_color;

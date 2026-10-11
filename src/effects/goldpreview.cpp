@@ -135,5 +135,11 @@ void SubmitWorld(State* context, EFxDebugMode)
     Renderer->SubmitGoldFlareAfterFx(mesh);
 }
 
+bool Alive(State* context)
+{
+    if (!context || !context->owner) return false;
+    auto* owner=context->identity.Get();
+    return owner && owner==context->owner.get() && !(owner->GetFlags() & OF_KILL);
+}
 void Destroy(State* context) { delete context; }
 }

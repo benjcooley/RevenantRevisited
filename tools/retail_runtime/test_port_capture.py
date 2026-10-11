@@ -42,6 +42,26 @@ print('assets='+os.environ['REVENANT_ASSETS_PATH'],flush=True)
         self.assertEqual((output/'effects.def').read_bytes(),(assets/'effects.def').read_bytes())
         self.assertEqual(report['pixel_summary']['nonblack_frames'],1)
 
+    def test_explicit_viewport_resolution_reaches_capture_command(self):
+        scenario,output,_=self.exercise()
+        scenario['resolution']=[1024,768]
+        report=capture(scenario,output)
+        self.assertIn('--resolution=1024x768',report['command'])
+
+    def test_nonpositive_resolution_rejects_before_process_launch(self):
+        scenario,output,_=self.exercise()
+        scenario['resolution']=[1024,0]
+        with self.assertRaisesRegex(ValueError,'Positive resolution'):
+            capture(scenario,output)
+
+    def test_native_domain_requires_adapter_confirmation(self):
+        scenario,output,_=self.exercise()
+        scenario['native_domain']=True
+        with self.assertRaises(RuntimeError):capture(scenario,output)
+        report=json.loads((output/'manifest.json').read_text())
+        self.assertEqual(report['status'],'fail')
+        self.assertIn('coordinate policy',report['error'])
+
     def test_empty_black_preview_cannot_pass_as_visible_effect(self):
         scenario,output,_=self.exercise(visible=False)
         with self.assertRaises(RuntimeError):capture(scenario,output)

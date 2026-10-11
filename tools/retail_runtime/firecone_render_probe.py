@@ -131,7 +131,7 @@ def compile_submit(output, parts):
 enum class EFxDebugMode{Normal};
 struct SMeshVertex{float pos[3]{},normal[3]{},uv[2]{};};
 struct Material{float diffuse[4]{},ambient[4]{},specular[4]{},emissive[4]{},power=0;};struct S3DMat{Material matdesc;};
-struct SHelperMeshSubmit{unsigned mesh=1;bool additive_blend=false;int retail_lighting=0;float world[16]{},diffuse[4]{},ambient[4]{},specular[4]{},emissive[4]{},power=0,sort_depth=0;};
+struct SHelperMeshSubmit{unsigned mesh=1;bool additive_blend=false,retail_software_projection=false;int retail_lighting=0;float world[16]{},diffuse[4]{},ambient[4]{},specular[4]{},emissive[4]{},power=0,sort_depth=0;};
 struct RendererType{int slot=0;const char*pool="";std::vector<SMeshVertex>*vertices=nullptr;void SubmitHelperMesh(const SHelperMeshSubmit&s){
 printf("D %s %d %u %d %d",pool,slot,s.mesh-1,int(s.additive_blend),s.retail_lighting);
 hmm_mat4 m={};for(int r=0;r<4;++r)for(int c=0;c<4;++c){m.Elements[r][c]=s.world[c*4+r];printf(" %.9g",m.Elements[r][c]);}
@@ -140,11 +140,12 @@ RendererType renderer;RendererType*Renderer=&renderer;
 struct World{hmm_mat4 m;World(){MtxClear(&m);m.Elements[2][2]=WORLD3D_Z_SCALE;}const hmm_mat4&Matrix()const{return m;}};
 PARTICLE
 struct TFireConeEffect_Bespoke{FIELDS
-Pool fire_{80},smoke_{80},burst_{100};std::vector<SMeshVertex>vertices_[2];std::vector<uint16_t>indices_[2];S3DMat materials_[2];unsigned meshes_[2]{1,2};World world;float facing_=0;
+Pool fire_{80},smoke_{80},burst_{100};std::vector<SMeshVertex>vertices_[2];std::vector<uint16_t>indices_[2];S3DMat materials_[2];unsigned meshes_[2]{1,2};World world;float facing_=0;bool native_domain_=false;hmm_mat4 native_owner_={};
 const World&Transform()const{return world;}void SubmitPool(const Pool&,int,EFxDebugMode)const;};
 '''.replace('PARTICLE', particle).replace('FIELDS', fields)
     trailer = r'''
-int main(int argc,char**argv){if(argc!=4)return 2;TFireConeEffect_Bespoke e;e.facing_=std::atof(argv[3]);
+int main(int argc,char**argv){if(argc!=4&&argc!=5)return 2;TFireConeEffect_Bespoke e;e.facing_=std::atof(argv[3]);
+if(argc==5){FILE*w=fopen(argv[4],"rb");if(!w||fread(&e.world.m,1,64,w)!=64)return 8;fclose(w);}
 FILE*a=fopen(argv[1],"rb");if(!a)return 3;for(int j=0;j<2;++j){e.vertices_[j].resize(4);e.indices_[j].resize(6);
 if(fread(e.vertices_[j].data(),1,128,a)!=128||fread(e.indices_[j].data(),1,12,a)!=12||fread(&e.materials_[j].matdesc,1,68,a)!=68)return 4;}fclose(a);
 FILE*f=fopen(argv[2],"rb");if(!f)return 5;
@@ -170,10 +171,15 @@ renderer.pool="burst";e.SubmitPool(e.burst_,0,EFxDebugMode::Normal);}
                                driver_sha256=sha(cpp.read_bytes()), binary_sha256=sha(binary.read_bytes()))
 
 
-def candidate_packets(binary, assets, output, state, facing, parts):
+def candidate_packets(binary, assets, output, state, facing, parts, owner_matrix=None):
     inputs = output / 'candidate-slots.bin'
     inputs.write_bytes(b''.join(struct.pack('<18f4I', *p['values'], p['flicker'], p['life'], p['span'], p['used']) for name, _, _ in POOL_SPECS for p in state['pools'][name]))
-    text = subprocess.check_output([str(binary), str(assets), str(inputs), str(facing)], text=True)
+    command = [str(binary), str(assets), str(inputs), str(facing)]
+    if owner_matrix is not None:
+        owner = output / 'candidate-owner.bin'
+        owner.write_bytes(struct.pack('<16f', *owner_matrix))
+        command.append(str(owner))
+    text = subprocess.check_output(command, text=True)
     packets = []
     for line in text.splitlines():
         p = line.split()

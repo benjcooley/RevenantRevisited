@@ -29,10 +29,10 @@ struct SFontAtlas;
 // Locke was fighting. Retail replaced both: the feed above, and the target's
 // health went to TPlyrStatusBar.
 //
-// Not ported: the typed-message line (Enter opens a "Message: " prompt that
-// sends chat in multiplayer, runs "@" script lines on the player or cheat
-// words in single player: CharPress 0x0054d4a0, 0x0054d2f0, 0x0054d390,
-// 0x0054d700), and the multiplayer chat feed in Pulse.
+// Enter opens a "Message: " prompt on the newest line (TTextBar_SPEC §10):
+// the typed line runs as a script line on the player when it starts with
+// "@", else as a cheat word. Not ported: the multiplayer chat it sends and
+// the chat feed in Pulse.
 class TTextBar : public TPane
 {
   public:
@@ -64,6 +64,7 @@ class TTextBar : public TPane
     static constexpr int32_t kLineTicks   = 0x78;  // a new line's life, 5 s
     static constexpr int32_t kFadeTicks   = 0x18;  // the last second fades out
     static constexpr int32_t kTextChars   = 0x4f;  // AddLine's strncpy
+    static constexpr int32_t kInputChars  = 0x50;  // the typed line, prefix included (+0xa4)
 
     TTextBar() = default;
     ~TTextBar() override;
@@ -76,6 +77,14 @@ class TTextBar : public TPane
     void Pulse() override;          // 0x0054c460 (slot 19)
     void Compose() override;        // 0x0054c440 (slot 20) -> Composite 0x0054cd40
     void Draw() override;           // 0x0054c600 (slot 7)
+    void CharPress(int32_t key, bool down) override;    // 0x0054d4a0 (slot 28)
+
+    // REVSYNC: 0x0054d390 -- the typed line becomes "<player>: <text>" in the
+    // chat colour and runs (SubmitInput). Nothing while the prompt is closed.
+    // Starting a fight commits it too.
+    void CommitInput();
+    // The prompt is open (+0xa0): the play screen takes no keys meanwhile.
+    [[nodiscard]] bool IsPrompting() const { return prompting; }
 
     // REVSYNC: 0x0054d170 / 0x0054d190 -> 0x0054d1b0. printf-style; each
     // '\n'-separated piece becomes a line. Logged as "[textbar] <text>".
@@ -84,7 +93,8 @@ class TTextBar : public TPane
     // REVSYNC: 0x0054d0c0 -- push a line (dropped if empty or if it starts
     // with a space). `color` is read for Chat only.
     void AddLine(ELineType type, uint32_t color, const char *text);
-    // Empties the feed and drops the loading bar (the state Initialize leaves).
+    // Empties the feed and drops the loading bar and an open prompt, unrun
+    // (the state Initialize leaves).
     // Port addition: retail has no such call.
     void Clear();
 
@@ -104,6 +114,9 @@ class TTextBar : public TPane
 
   private:
     void VPrint(ELineType type, const char *fmt, va_list args);
+    void BeginInput();
+    void ShowInput();
+    void SubmitInput(const std::string& text);
     void LayOut();
     void RecomposeAll();
     void RecomposeFirst();
@@ -125,6 +138,9 @@ class TTextBar : public TPane
     int32_t level = 0;                             // +0x98
     int32_t targetlevel = 0;                       // +0x9c
     bool barshown = false;                         // the newest line was last composed over the bar
+    bool prompting = false;                        // +0xa0
+    int32_t inputroom = 0;                         // +0xa4: kInputChars less the prefix
+    std::string input;                             // +0xd0: the typed text
     uint32_t composerequest = 1;                   // bumped by each Composite retail would run
     uint32_t composed = 0;                         // the request the surface shows
 };

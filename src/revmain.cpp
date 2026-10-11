@@ -14,6 +14,7 @@
 #include <chrono>
 #include <fcntl.h>
 #include <math.h>
+#include <cmath>
 #include <sstream>
 #include <stdarg.h>
 #include <stdio.h>
@@ -220,8 +221,8 @@ bool UseClearZBuffer = false;       // Use a clear z buffer for z restores (i.e.
 bool IsVooDoo        = false;       // True if using a voodoo card
 bool IsMMX           = false;       // Has MMX extensions
 bool NoAI            = false;       // Turns off monster AI
-bool CheatNahkranoth = false;       // retail 0x00668108 (IsValidAttack, Damage); no console toggle yet
-bool CheatAlreadyDead = false;      // retail 0x00668104 (Damage; also 0x004c2a20, 0x004d3590); no console toggle yet
+bool CheatNahkranoth = false;       // retail 0x00668108 (IsValidAttack, Damage); text-bar cheat "nahkranoth"
+bool CheatAlreadyDead = false;      // retail 0x00668104 (Damage; also 0x004c2a20, 0x004d3590); text-bar cheat "alreadydead"
 bool AutoBeginCombat = true;        // Automatically begins combat if enemy in range and facing him
 bool PlaySpeech      = true;        // Play speech wave files
 bool ShowDialog      = false;       // Show dialog lines (always shows if no speech file found)
@@ -1558,6 +1559,10 @@ void GetParameters(int argc, char **argv)
         "loadmap", "lang", "test", "level", "resolution", "res",
         "cinematic", "menu", "exec", "vfx-lighting-mode", "partsys-quality", "partsys-incoming-blend",
         "seed", "combattrace", "combattrace-rng",
+        "vfx-review-speed", "vfx-review-ratio", "vfx-review-spacing",
+        "vfx-review-gap", "vfx-review-offset", "vfx-review-effects",
+        "vfx-review-spacing-overrides",
+        "vfx-review-path-tilt", "vfx-review-path-length",
     });
     cmd.parse(argc, argv);
 
@@ -1701,6 +1706,44 @@ void GetParameters(int argc, char **argv)
             strncpyz(StartupTestMode, p.c_str(), sizeof(StartupTestMode));
     }
 
+  // Scrolling real-map VFX review configuration.
+    {
+        if(arg_flag(cmd,"vfx-review-first")) StartupVfxReviewFirst=true;
+        if(arg_flag(cmd,"vfx-review-source-lighting")) StartupVfxReviewSourceLighting=true;
+        struct ReviewArg { const char* name; float* value; double minimum; double maximum; };
+        const ReviewArg args[] = {
+            {"vfx-review-speed", &StartupVfxReviewSpeed, 0.1, 240.0},
+            {"vfx-review-ratio", &StartupVfxReviewRatio, 2.0f, 3.0f},
+            {"vfx-review-spacing", &StartupVfxReviewSpacing, 180.0f, 800.0f},
+            {"vfx-review-gap", &StartupVfxReviewGap, 640.0f, 1600.0f},
+            {"vfx-review-offset", &StartupVfxReviewOffset, 0.0f, 1000000.0f},
+            {"vfx-review-path-tilt", &StartupVfxReviewPathTilt, -1.0f, 1.0f},
+            {"vfx-review-path-length", &StartupVfxReviewPathLength, 80.0f, 640.0f},
+        };
+        for (const auto& arg : args) {
+            std::string p;
+            if (arg_param(cmd, arg.name, p)) {
+                char* end = nullptr; const double value = strtod(p.c_str(), &end);
+                if (p.empty() || *end || !std::isfinite(value) || value < arg.minimum || value > arg.maximum)
+                    FatalError("Invalid VFX review numeric argument", nullptr);
+                *arg.value = float(value);
+            } else if (arg_flag(cmd, arg.name)) {
+                FatalError("Missing VFX review argument value", nullptr);
+            }
+        }
+        std::string p;
+        if (arg_param(cmd, "vfx-review-effects", p)) {
+            if (p.empty() || p.size() >= sizeof(StartupVfxReviewEffects))
+                FatalError("Invalid --vfx-review-effects list", nullptr);
+            strncpyz(StartupVfxReviewEffects, p.c_str(), sizeof(StartupVfxReviewEffects));
+        }
+        if (arg_param(cmd, "vfx-review-spacing-overrides", p)) {
+            if(p.empty() || p.size()>=sizeof(StartupVfxReviewSpacingOverrides))
+                FatalError("Invalid --vfx-review-spacing-overrides",nullptr);
+            strncpyz(StartupVfxReviewSpacingOverrides,p.c_str(),sizeof(StartupVfxReviewSpacingOverrides));
+        }
+    }
+
   // VFX=<effect_id> — pre-select an effect in --test=vfx (e.g.
   // --vfx=TStripEffect). Empty = default (first alphabetically).
     {
@@ -1751,6 +1794,8 @@ void GetParameters(int argc, char **argv)
 
   // VFX-NO-UI — suppress the ImGui VFX Browser panel (for clean
   // effect-only screencaps). Flag-style: --vfx-no-ui (no value).
+    if (arg_flag(cmd, "vfx-native-domain"))
+        StartupVfxNativeDomain = true;
     if (arg_flag(cmd, "vfx-no-ui"))
         StartupVfxHideUi = true;
 
@@ -3014,8 +3059,10 @@ static void AppEvent(const sapp_event* ev)
         if (!AppActive) break;
         if (imgui_kbd) break;
         if (CtrlDown && ShiftDown) break;
+        // The game reads WM_CHAR codes; macOS reports Backspace as DEL.
+        const int32_t ch = ev->char_code == 0x7f ? 0x08 : (int32_t)ev->char_code;
         if (CurrentScreen)
-            CurrentScreen->CharPress((int32_t)ev->char_code, true);
+            CurrentScreen->CharPress(ch, true);
         break;
       }
 

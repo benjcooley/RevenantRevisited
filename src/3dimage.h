@@ -239,6 +239,8 @@ class T3DImagery : public TObjectImagery
     bool fmastery_partsys_profile = false;
     bool speed_partsys_profile = false;
     bool quicksilver_partsys_profile = false;
+    uint32_t static_particles_profile = 0;
+    uint32_t ValidateRetailStaticParticleProfile();
     bool ValidateRetailSpeedPartSysProfile();
     bool ValidateRetailQuicksilverPartSysProfile();
     bool ValidateRetailFmasteryPartSysProfile();
@@ -334,6 +336,11 @@ class T3DImagery : public TObjectImagery
     bool HasRetailFmasteryPartSysProfile() const { return fmastery_partsys_profile; }
     bool HasRetailSpeedPartSysProfile() const { return speed_partsys_profile; }
     bool HasRetailQuicksilverPartSysProfile() const { return quicksilver_partsys_profile; }
+    bool HasRetailStaticParticleProfile(uint32_t type_id) const
+    { return static_particles_profile!=0 && static_particles_profile==type_id; }
+    bool HasRetailCameraParticleProfile(uint32_t type_id) const
+    { return HasRetailStaticParticleProfile(type_id) &&
+             (type_id==0x42e0fcd0u || type_id==0xad92bd39u); }
     bool HasRetailSpeedFamilyPartSysProfile(uint32_t type_id) const
     { return (type_id==0xad92bd36u && speed_partsys_profile) ||
              (type_id==0xad92bd35u && quicksilver_partsys_profile); }
@@ -578,11 +585,16 @@ class T3DAnimator : public TObjectAnimator
     bool MPAppearStartMeshBlend(int32_t object, uint32_t& blend) const;
     bool MPAppearStartMeshWorldMatrix(int32_t object, hmm_mat4& world);
     bool FmasteryBaseMeshBlend(int32_t object, uint32_t& blend) const;
-    bool FmasteryBaseMeshWorldMatrix(hmm_mat4& world);
+    bool FmasteryBaseMeshWorldMatrix(hmm_mat4& world, const hmm_mat4* owner_override = nullptr);
     bool SpeedEmitterLocalMatrix(hmm_mat4& matrix, hmm_vec3* position = nullptr,
                                  hmm_vec3* scale = nullptr);
+    bool CameraParticleEmitterLocalMatrix(int32_t object, hmm_mat4& matrix,
+                                         hmm_vec3* position=nullptr, hmm_vec3* scale=nullptr);
+    bool CameraParticleBaseMeshBlend(int32_t object, uint32_t& blend) const;
+    bool CameraParticleBaseMeshWorldMatrix(int32_t object, hmm_mat4& world,
+                                          const hmm_mat4* owner_override=nullptr);
     bool SpeedBaseMeshBlend(int32_t object, uint32_t& blend) const;
-    bool SpeedBaseMeshWorldMatrix(hmm_mat4& world);
+    bool SpeedBaseMeshWorldMatrix(hmm_mat4& world, const hmm_mat4* owner_override = nullptr);
     bool ImmortalmightBaseMeshBlend(int32_t object, uint32_t& blend) const;
     bool ImmortalmightBaseMeshWorldMatrix(hmm_mat4& world);
     bool GoldBaseMeshBlend(int32_t object, uint32_t& blend) const;
@@ -590,7 +602,7 @@ class T3DAnimator : public TObjectAnimator
     bool CombatFlashStart1BaseMeshBlend(int32_t object, uint32_t& blend) const;
     bool CombatFlashStart1BaseMeshWorldMatrix(hmm_mat4& world);
     int32_t SubmitPartSys(TRenderer& renderer, int32_t object, int32_t texture_slot,
-                         const hmm_vec3& render_scale);
+                         const hmm_vec3& render_scale, bool native_software = false);
     uint64_t PartSysPulseCount() const;
     size_t PartSysLiveParticles() const;
     size_t PartSysControllerCount() const;

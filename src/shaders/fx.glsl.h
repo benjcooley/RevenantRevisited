@@ -193,7 +193,7 @@ layout(location = 3) in vec2 uv;
 layout(location = 4) in vec4 color;
 layout(location = 5) in float debug_mode;
 layout(location = 6) in float light_mode;
-layout(location = 7) in float retail_texture;
+layout(location = 7) in vec3 retail_metadata;
 layout(std140) uniform fx_params {
     vec4 vp;
     vec4 camz;
@@ -224,9 +224,16 @@ void main() {
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * 0.867;
     float scene_z_wu = camz.z - 0.867 * sum - 0.5 * wz;
+    bool native_projection = retail_metadata.y > 0.5;
+    if (native_projection) {
+        float native_z = wz - retail_metadata.z;
+        S = 1.0101525783538818 * (wx - wy);
+        T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
+        scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
+    }
     float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
-    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
     float spy = vp.y + T * persp_scale;
     gl_Position.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
@@ -242,7 +249,7 @@ void main() {
     v_color = color;
     v_lit   = lit;
     v_debug = debug_mode;
-    v_retail_texture = retail_texture;
+    v_retail_texture = retail_metadata.x;
 }
 )GLSL";
 
@@ -263,12 +270,28 @@ void main() {
         ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
         texel = texelFetch(atlas, xy, 0);
     }
+    if (v_retail_texture > 2.5 && v_retail_texture < 3.5) {
+        vec4 nibble = floor(texel * 15.0 + 0.5);
+        texel = vec4(nibble.rgb * vec3(2.0/31.0, 4.0/63.0, 2.0/31.0),
+                       (nibble.a + 1.0) / 16.0);
+    }
     vec4 c;
     if      (mode == 1) c = v_color;
     else if (mode == 2) c = texel;
     else if (mode == 3) { c = texel; c = vec4(1.0, 1.0, 1.0, c.a); }
-    else                c = texel * v_color;
-    c.rgb *= v_lit;
+    else if (v_retail_texture > 3.5) {
+        // Original RGB565 litadd: RGB5 lookup, then additive source LSB mask.
+        vec3 source5 = floor(texel.rgb * vec3(31.0, 63.0, 31.0) + 0.5);
+        source5.g = floor(source5.g * 0.5);
+        vec3 light5 = floor(clamp(v_color.rgb, 0.0, 1.0) * 31.0 + 0.5);
+        vec3 modulated = floor(source5 * light5 / 31.0);
+        modulated.rb = floor(modulated.rb * 0.5) * 2.0;
+        modulated.g *= 2.0;
+        c = vec4(modulated / vec3(31.0, 63.0, 31.0), texel.a * v_color.a);
+    } else {
+        c = v_retail_texture > 2.5 ? texel : texel * v_color;
+    }
+    if (v_retail_texture < 2.5) c.rgb *= v_lit;
     if (c.a < 0.002) discard;
     o_color = c;
 }

@@ -8,14 +8,20 @@
 
 #include "bitmap.h"
 #include "bitmapdecode.h"
+#include "cheats.h"
+#include "command.h"
+#include "ctrlmap.h"
 #include "dialog.h"
 #include "display.h"
 #include "font.h"
 #include "fonttable.h"
 #include "logging.h"
 #include "multi.h"
+#include "parse.h"
+#include "player.h"
 #include "playscreen.h"
 #include "renderer.h"
+#include "sound.h"
 #include "surface.h"
 #include "textencoding.h"
 #include "time.h"
@@ -71,6 +77,10 @@ constexpr int32_t kSlotPad = 4;
 // Print's buffer: retail's is 256 bytes on the stack, filled by an unbounded
 // vsprintf; the port bounds it.
 constexpr size_t kPrintChars = 256;
+
+// The prompt's keys, as WM_CHAR delivers them (CharPress 0x0054d4a0).
+constexpr int32_t kCharBackspace = 0x08;
+constexpr int32_t kCharEnter     = 0x0d;
 
 uint32_t LineColor(const TTextBar::SLine& line)
 {
@@ -131,6 +141,8 @@ bool TTextBar::Initialize()
     numlines = 0;
     healthshown = false;
     level = targetlevel = 0;
+    prompting = false;
+    input.clear();
     RecomposeAll();
     return true;
 }
@@ -150,14 +162,23 @@ void TTextBar::Close()
     lines = {};
     numlines = 0;
     healthshown = barshown = false;
+    prompting = false;
+    input.clear();
     TPane::Close();
 }
 
-// REVSYNC: 0x0054c9c0 (slot 13). Retail first hands an unfinished typed
-// message on (not ported), then drops the loading bar and makes the newest
-// line an ordinary message again.
+// REVSYNC: 0x0054c9c0 (slot 13). An open prompt runs what was typed, then the
+// loading bar goes and the newest line is an ordinary message again.
+// Deviation: retail submits the typed text with the prompt closed too, and
+// after a commit that text is still the last line, so every Hide ran the last
+// cheat word again (TTextBar_SPEC §11.3).
 void TTextBar::Hide()
 {
+    if (prompting)
+    {
+        prompting = false;
+        SubmitInput(input);
+    }
     healthshown = false;
     level = targetlevel = 0;
     lines[0].type = ELineType::Message;
@@ -231,15 +252,16 @@ void TTextBar::VPrint(ELineType type, const char *fmt, va_list args)
         AddLine(type, 0, line);
 }
 
-// REVSYNC: 0x0054d0c0. The new line goes first (retail puts it second while
-// the typed-message line is up); the oldest falls off a full feed.
+// REVSYNC: 0x0054d0c0. The new line goes first, second under an open
+// prompt; the oldest falls off a full feed.
 void TTextBar::AddLine(ELineType type, uint32_t color, const char *text)
 {
     if (!text || text[0] == '\0' || text[0] == ' ')
         return;
-    std::move_backward(lines.begin(), lines.end() - 1, lines.end());
+    const int32_t slot = prompting ? 1 : 0;
+    std::move_backward(lines.begin() + slot, lines.end() - 1, lines.end());
     numlines = (std::min)(numlines + 1, kMaxLines);
-    SLine& line = lines[0];
+    SLine& line = lines[slot];
     line.type = type;
     line.color = color;
     line.ticks = kLineTicks;
@@ -247,10 +269,119 @@ void TTextBar::AddLine(ELineType type, uint32_t color, const char *text)
     RecomposeAll();
 }
 
+// REVSYNC: CharPress @ 0x0054d4a0 (slot 28), a WM_CHAR code: Enter opens the
+// prompt and commits it, Backspace deletes, 32..255 type. With control off or
+// Locke in a fight (root COMBAT or BOW) any character commits an open prompt
+// and does nothing else. Not ported: DBCS input (two-byte characters, and
+// Backspace dropping two bytes after a high one).
+void TTextBar::CharPress(int32_t key, bool down)
+{
+    const bool fighting = Player && (Player->IsRoot(ACTION_COMBAT) || Player->IsRoot(ACTION_BOW));
+    if (!PlayScreen.IsControlOn() || fighting)
+    {
+        CommitInput();
+        return;
+    }
+    if (!down)
+        return;
+    if (!prompting)
+    {
+        if (key == kCharEnter)
+            BeginInput();
+        return;
+    }
+
+    if (key == kCharEnter)
+    {
+        CommitInput();
+        return;
+    }
+    if (key == kCharBackspace)
+    {
+        if (!input.empty())
+            input.pop_back();
+    }
+    else if (key >= 0x20 && key < 0x100 && int32_t(input.size()) < inputroom - 1)
+        input.push_back(char(key));
+    ShowInput();
+}
+
+// REVSYNC: 0x0054d2f0 (inlined in CharPress). The held controls are let go
+// and Locke stops in walk mode; "Message: " becomes the newest line.
+void TTextBar::BeginInput()
+{
+    if (prompting)
+        return;
+    ControlMap.ReleaseAll();
+    if (Player)
+    {
+        Player->Stop();
+        Player->SetWalkMode();
+    }
+    const char *prefix = DialogList.GetLine("msgprefix");
+    inputroom = kInputChars - int32_t(strlen(prefix));
+    input.clear();
+    AddLine(ELineType::Prompt, 0, prefix);
+    prompting = true;
+}
+
+// REVSYNC: 0x0054d4a0's tail -- the prompt line shows the prefix and the text.
+void TTextBar::ShowInput()
+{
+    lines[0].text = (std::string(DialogList.GetLine("msgprefix")) + input).substr(0, kTextChars);
+    RecomposeFirst();
+}
+
+// REVSYNC: 0x0054d390. In single player the line takes the chat green (retail
+// picks a multiplayer slot's colour from Player +0x494 / +0x4d8).
+void TTextBar::CommitInput()
+{
+    if (!prompting)
+        return;
+    prompting = false;
+    SLine& line = lines[0];
+    line.type = ELineType::Chat;
+    line.color = 0;
+    line.text = (std::string(Player ? Player->GetName() : "") + ": " + input).substr(0, kTextChars);
+    RecomposeFirst();
+    SubmitInput(input);
+}
+
+// REVSYNC: 0x0054d700, single player. "@<line>" runs the line through the
+// command interpreter with Locke as its context; anything else may be a
+// cheat word (cheats.cpp), answered "Cheat Enabled" / "Cheat Disabled" with
+// the potionmix sound. Multiplayer sent the text as chat.
+void TTextBar::SubmitInput(const std::string& text)
+{
+    if (!text.empty() && text[0] == '@' && Player)
+    {
+        // The interpreter tokenizes in place and wants the line ended.
+        std::string line = text.substr(1) + "\n";
+        TStringParseStream stream(line.data(), int32_t(line.size()));
+        TToken t(stream);
+        t.WhiteGet();
+        CommandInterpreter(Player, t, 1);           // commands abbreviate, as at the console
+        return;
+    }
+
+    const ECheatResult result = ApplyCheatWord(text.c_str());
+    if (result == ECheatResult::Unknown)
+        return;
+    log_info("[textbar] cheat '%s' %s", text.c_str(), result == ECheatResult::Enabled ? "on" : "off");
+    const char *tag = result == ECheatResult::Enabled ? "cheatenabled" : "cheatdisabled";
+    if (DialogList.FindLine(tag) >= 0)
+        Print("%s", DialogList.GetLine(tag));
+    const int32_t sound = SoundPlayer.FindSound("potionmix");
+    if (sound >= 0 && SoundPlayer.Mount(sound))
+        SoundPlayer.Play(sound);
+}
+
 void TTextBar::Clear()
 {
     lines = {};
     numlines = 0;
+    prompting = false;
+    input.clear();
     healthshown = false;
     level = targetlevel = 0;
     RecomposeAll();

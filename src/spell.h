@@ -197,8 +197,8 @@ class TSpellList
 #define MAXSPELLTARGETS 64
 
 // The "abracadabra" text cheat (retail 0x0066810c): a cast costs no mana and
-// can't fail its skill roll, and ManaDrain leaves a player's mana alone. The
-// cheat command itself isn't ported, so nothing sets it yet.
+// can't fail its skill roll, and ManaDrain leaves a player's mana alone.
+// Toggled by the cheat word at the text-bar prompt (cheats.cpp).
 extern bool MagicCheat;
 
 class TCharacter;

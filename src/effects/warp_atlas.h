@@ -56,7 +56,7 @@ inline void ConfigureDraw(Draw& draw, const State& state) {
     draw.additive_blend = false;
     draw.premultiply_alpha = false;
     draw.shade = decltype(draw.shade)::Texture;
-    draw.retail_lighting = 2;
+    draw.retail_lighting = 3; // Exact validated ARGB4444 source lookup.
     for (int i = 0; i < 4; ++i) {
         draw.diffuse[i] = draw.ambient[i] = 1.0f;
         draw.specular[i] = draw.emissive[i] = 0.0f;

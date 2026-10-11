@@ -1470,8 +1470,11 @@ int32_t TMapPane::AddObject(TObjectInstance* oi)
     int32_t sx = (pos.x >> SECTORWSHIFT);
     int32_t sy = (pos.y >> SECTORHSHIFT);
 
-    if ((uint32_t)sx >= MAXSECTORX || sx < sectorx || sx >= sectorx + SECTORWINDOWX ||
-        (uint32_t)sy >= MAXSECTORY || sy < sectory || sy >= sectory + SECTORWINDOWY)
+    const TGameMap* active = MapManager.CurrentMap();
+    const bool transient = active && active->IsTransient();
+    if ((!transient && ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY)) ||
+        sx < sectorx || sx >= sectorx + SECTORWINDOWX ||
+        sy < sectory || sy >= sectory + SECTORWINDOWY)
     {
         fprintf(stderr, "MAPPANE: Object not in current map area in AddObject");
         return -1;
@@ -1847,11 +1850,16 @@ TObjectInstance* TMapPane::ObjectInCube(PS3DRect cube, int32_t lvl, int32_t objs
 // position replaces retail's (x + posx, y + posy).
 TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with)
 {
+    return OnObject(screenx, screeny, with, EPickRead::Exact);
+}
+
+TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with, EPickRead read)
+{
     if (!mapview)
         return nullptr;
 
     TMapRenderer::SPick pick;
-    if (mapview->Pick(screenx, screeny, pick) && pick.mesh)
+    if (mapview->Pick(screenx, screeny, pick, read) && pick.mesh)
         return pick.mesh;
 
     SPoint p;
@@ -1950,7 +1958,8 @@ void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
     TSector* const own = oi ? oi->GetSector() : nullptr;
     const TGameMap* const map = oi ? MapManager.GetCached(oi->GetLevel()) : nullptr;
     auto find_sector = [own, map](int32_t sx, int32_t sy) -> TSector* {
-        if ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY)
+        if ((!map || !map->IsTransient()) &&
+            ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY))
             return nullptr;
         if (own && own->SectorX() == sx && own->SectorY() == sy)
             return own;
@@ -3984,8 +3993,9 @@ void TMapPane::Animate(bool draw)
     if (!PaneToMapScreen(x, y, mapx, mapy))
         return;
 
-    // The next frame copies back the ids around the pointer, so the pick
-    // below finds them without waiting on the GPU.
+    // Each frame copies back the ids around the pointer; the hover reads the
+    // latest copy, taken where the pointer was a frame or two ago, rather
+    // than wait on the GPU for this frame's (a click reads it exactly).
     mapview->SetPickPoint(x, y);
 
     const int32_t frame = CurrentScreen ? CurrentScreen->FrameCount() : 0;
@@ -3993,7 +4003,7 @@ void TMapPane::Animate(bool draw)
     {
         hoverpickframe = frame;
         hovercursor = CURSOR_NONE;
-        TObjectInstance* on = OnObject(x, y);
+        TObjectInstance* on = OnObject(x, y, nullptr, EPickRead::Latest);
         if (on)
         {
             if (!GetDragObj() && on->IsInventoryItem() && !(on->GetFlags() & OF_INVISIBLE))
@@ -4098,8 +4108,11 @@ int32_t TMapPane::CheckPos(TObjectInstance* inst, S3DPoint& newpos, int32_t newl
     if (newlevel == -1 || !(inst->Flags() & OF_NONMAP))
         newlevel = inst->GetLevel();
 
-    newpos.x = std::clamp(newpos.x, 0, MAXMAPWIDTH);
-    newpos.y = std::clamp(newpos.y, 0, MAXMAPHEIGHT);
+    const TGameMap* movement_map = MapManager.GetCached(newlevel);
+    if (!movement_map || !movement_map->IsTransient()) {
+        newpos.x = std::clamp(newpos.x, 0, MAXMAPWIDTH);
+        newpos.y = std::clamp(newpos.y, 0, MAXMAPHEIGHT);
+    }
 
     if (!LoadedSector(newlevel, newpos.x >> SECTORWSHIFT, newpos.y >> SECTORHSHIFT))
     {

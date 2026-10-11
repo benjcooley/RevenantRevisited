@@ -205,7 +205,9 @@ Answer inline (or in chat) and the owning doc gets updated.
     cheats. Was that meant to ship, and should the port keep it? (Also,
     hiding the bar runs whatever was half-typed.) Retail 2026-10-06: it
     works in a single-player New Game, "Locke: alreadydead" then "Cheat
-    Enabled" (RETAIL_CAPTURE §2).
+    Enabled" (RETAIL_CAPTURE §2). The port has it as retail since
+    2026-10-10, except that hiding the bar no longer re-runs the last line
+    (TTextBar_SPEC §11.3).
 56. Line types 2 (violet) and 4 (pink) have colours but no callers. What
     were they for?
 
