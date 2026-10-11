@@ -118,6 +118,7 @@
 {0xad92bd26u, "TFairy2_AUTHORED", false, "Implemented preview controller; map caller not certified"}, // Fairy2
 {0xad92bd29u, "TCombatFlashEffect_AUTHORED_START1", false, "Implemented preview controller; map caller not certified"}, // combatflash
 {0xad92bd31u, "FGeyser_AUTHORED", false, "Implemented preview controller; map caller not certified"}, // fgeyser
+{0xad92bd32u, "StrikeEffect_METEOR_CONFIGURED", false, "Named Meteor Storm caller: four delayed Comet-image strikes, duration93 and genuine configured Acolytes; live RNG plus original index reseeds, empty ground0, natural scheduling/damage and other variants not certified"}, // StrikeEffect
 {0xad92bd33u, "Tstoneskin_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // stoneskin
 {0xad92bd33u, "TBuffEffect_Bespoke__Stoneskin_BESPOKE", true, "Partial preview: tinted asset billboard; original buff controller incomplete; not complete original implementation"}, // stoneskin
 {0xad92bd34u, "Tironskin_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // ironskin

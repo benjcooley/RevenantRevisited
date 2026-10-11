@@ -1,3 +1,4 @@
+#include "effects/strikemeteorpreview.h"
 #include "effects/dragonfirepreview.h"
 #include "effects/cometoriginal.h"
 #include "effects/fgeyseroriginal.h"
@@ -1704,7 +1705,8 @@ void Render()
     // the declared source XY as this isolated fixture's actual camera XY.
     const bool dragon_world_camera = StartupVfxOriginSet && g_state.active_idx >= 0 &&
         g_state.active_idx < int32_t(g_state.catalogue.size()) &&
-        g_state.catalogue[g_state.active_idx].id == "Dragonattack_ORIGINAL";
+        (g_state.catalogue[g_state.active_idx].id == "Dragonattack_ORIGINAL" ||
+         g_state.catalogue[g_state.active_idx].id == "StrikeEffect_METEOR_CALLER");
     const float world_camera_x = dragon_world_camera ? float(StartupVfxOrigin[0]) : 0.0f;
     const float world_camera_y = dragon_world_camera ? float(StartupVfxOrigin[1]) : 0.0f;
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy),
@@ -5460,6 +5462,15 @@ struct SVfxTestBootstrap {
             original.is_alive=[](void* c){return funnel_original::IsAlive(static_cast<funnel_original::State*>(c));};
             original.destroy=[](void* c){funnel_original::Destroy(static_cast<funnel_original::State*>(c));};
             VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect e{};e.id="StrikeEffect_METEOR_CALLER";e.family="spell";e.pipeline="IM+QUAD";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return strike_meteor_preview::SpawnFixture(o);};
+            e.submit=[](void*c,EFxDebugMode){strike_meteor_preview::Advance(static_cast<strike_meteor_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode){strike_meteor_preview::SubmitWorld(static_cast<strike_meteor_preview::State*>(c));};
+            e.is_alive=[](void*c){return strike_meteor_preview::Alive(static_cast<strike_meteor_preview::State*>(c));};
+            e.destroy=[](void*c){strike_meteor_preview::Destroy(static_cast<strike_meteor_preview::State*>(c));};VfxTest::DeferredRegister(e);
+            e.id="StrikeEffect_METEOR_CONFIGURED";e.factory=[](const S3DPoint&o)->void*{return strike_meteor_preview::SpawnConfigured(o);};VfxTest::DeferredRegister(e);
         }
         {
             VfxTest::SEffect original{};original.id="MeteorStorm_AUTHORED";

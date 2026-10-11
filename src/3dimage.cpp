@@ -2438,6 +2438,25 @@ static void NormalizeRot(hmm_vec3& v1, hmm_vec3& v2)
         v2 = v1;
 }
 
+bool T3DImagery::GetRetailStrikeAniKey(int32_t object,int32_t frame,
+    hmm_vec3& pos,hmm_vec3& rot,hmm_vec3& scale)
+{
+    if(!HasRetailCometProfile() || !GetUninterpolatedAniKey(object,0,frame,pos,rot,scale,true))return false;
+    // Whole loaded PreRender40e84b stores previous0/frame0. GetAniKey409950
+    // uses the original five-frame initial transition with Interpolate enabled.
+    if(frame<5){
+        hmm_vec3 p{},r{},s{};if(!GetUninterpolatedAniKey(object,0,0,p,r,s,true))return false;
+        float weight=float(frame+1)/5.0f;NormalizeRot(rot,r);
+        // Original x87 retains1-weight and both products until the float store.
+        const auto blend=[weight](hmm_vec3& dst,const hmm_vec3& old){
+            for(int i=0;i<3;++i)dst.Elements[i]=float(static_cast<long double>(dst.Elements[i])*weight+
+                static_cast<long double>(old.Elements[i])*(1.0L-static_cast<long double>(weight)));
+        };
+        blend(pos,p);blend(rot,r);blend(scale,s);
+    }
+    return true;
+}
+
 bool T3DImagery::GetAniKey(int32_t objnum, int32_t state, int32_t frame,
     hmm_vec3& pos, hmm_vec3& rot, hmm_vec3& scl)
 {
@@ -3502,7 +3521,7 @@ struct T3DAnimator::SPartSysControllers
         const bool head_pose=((owner.ObjId()==0xd000f005u || dragon_pose) && animator.Get3DImagery()->HasRetailHeadFireBallProfile());
         const bool jhaga_pose=(owner.ObjId()==0xaeaeeb32u && animator.Get3DImagery()->HasRetailJhagaAttackProfile());
         const bool lightstrip_pose=(owner.ObjId()==0x10da54d0u && animator.Get3DImagery()->HasRetailLightStripProfile());
-        const bool comet_pose=(owner.ObjId()==0xf32bcfacu && animator.Get3DImagery()->HasRetailCometProfile());
+        const bool comet_pose=((owner.ObjId()==0xf32bcfacu || owner.ObjId()==0xad92bd32u) && animator.Get3DImagery()->HasRetailCometProfile());
         const bool fgeyser_pose=(owner.ObjId()==0xad92bd31u && animator.Get3DImagery()->HasRetailFGeyserProfile());
         const bool poison_pose=(owner.ObjId()==0xe0a3bc42u && animator.Get3DImagery()->HasRetailPoisonProfile());
         const bool dust_pose=(owner.ObjId()==0x0c052637u && animator.Get3DImagery()->HasRetailDustProfile());
@@ -3526,6 +3545,14 @@ struct T3DAnimator::SPartSysControllers
         if (inputs.has_object_zero_origin)
             inputs.object_zero_origin = {object_zero.Elements[3][0],
                                          object_zero.Elements[3][1], object_zero.Elements[3][2]};
+        if(owner.ObjId()==0xad92bd32u && comet_pose){
+            // Original Strike/Meteor Storm403320 initializes from object0's
+            // untouched identity matrix, before the first delayed Render.
+            // Eager GetObjectMatrix would insert its authored134.117 key and
+            // alter the first relative-velocity particles. Pulse ignores this
+            // initialization-only input after State::Initialize.
+            inputs.has_object_zero_origin=true;inputs.object_zero_origin={0,0,0};
+        }
         if(jhaga_pose){
             // Original4033db/40efc0 reads the cached prototype matrix. Outgoing
             // flight Render leaves its origin zero; eager authored-key resampling here
@@ -3565,6 +3592,9 @@ struct T3DAnimator::SPartSysControllers
                 hmm_vec3 rotation{};
                 if (!animator.Get3DImagery()->GetUninterpolatedAniKey(object, owner.GetState(),
                     inputs.animation_frame, emitter_position, rotation, emitter_scale, (head_pose || jhaga_pose || lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose))) continue;
+                if(owner.ObjId()==0xad92bd32u && comet_pose &&
+                   !animator.Get3DImagery()->GetRetailStrikeAniKey(object,inputs.animation_frame,
+                       emitter_position,rotation,emitter_scale))continue;
                 MtxClear(&matrix);
                 if(poison_pose)
                     BuildRetailPoisonMatrix(matrix,object,emitter_position,rotation,emitter_scale);
@@ -3615,7 +3645,7 @@ void T3DAnimator::RefreshPartSysControllers()
     const bool immortalmight = id==0x82aeb30fu && imagery->immortalmight_partsys_profile && current_state==0;
     const bool fmastery=id==0xb0e024dfu && imagery->fmastery_partsys_profile && current_state==0;
     const bool speed=imagery->HasRetailSpeedFamilyPartSysProfile(id) && current_state==0;
-    const bool comet=id==0xf32bcfacu && imagery->HasRetailCometProfile() && current_state==0;
+    const bool comet=(id==0xf32bcfacu || id==0xad92bd32u) && imagery->HasRetailCometProfile() && current_state==0;
     const bool fgeyser=id==0xad92bd31u && imagery->HasRetailFGeyserProfile() && current_state==0;
     const bool poison=id==0xe0a3bc42u && imagery->HasRetailPoisonProfile() && current_state==0;
     const bool dust=id==0x0c052637u && imagery->HasRetailDustProfile() && current_state==0;
@@ -3810,7 +3840,7 @@ void T3DAnimator::SetFunnelGround(std::function<int(int,int,int)> query)
 
 void T3DAnimator::SetCometGround(std::function<int(int,int,int)> query)
 {
-    if(!inst || inst->ObjId()!=0xf32bcfacu || !Get3DImagery()->HasRetailCometProfile())return;
+    if(!inst || (inst->ObjId()!=0xf32bcfacu && inst->ObjId()!=0xad92bd32u) || !Get3DImagery()->HasRetailCometProfile())return;
     lightstrip_ground=std::move(query);
     if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
 }
@@ -4208,7 +4238,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                                   int32_t texture_slot, const hmm_vec3& render_scale, bool native_software, bool submit_geometry)
 {
     if (!partsys_controllers || partsys_controllers->unsupported) return 0;
-    const bool comet=inst->ObjId()==0xf32bcfacu && inst->GetState()==0 && Get3DImagery()->HasRetailCometProfile();
+    const bool comet=(inst->ObjId()==0xf32bcfacu || inst->ObjId()==0xad92bd32u) && inst->GetState()==0 && Get3DImagery()->HasRetailCometProfile();
     const bool fgeyser=inst->ObjId()==0xad92bd31u && inst->GetState()==0 && Get3DImagery()->HasRetailFGeyserProfile();
     const bool poison=inst->ObjId()==0xe0a3bc42u && inst->GetState()==0 && Get3DImagery()->HasRetailPoisonProfile();
     const bool dust=inst->ObjId()==0x0c052637u && inst->GetState()==0 && Get3DImagery()->HasRetailDustProfile();
@@ -4240,6 +4270,8 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // The retail helper samples three rotation ranges during Render.
             // Keep those calls here; Submit never advances simulation state.
             const auto sample = controller.simulation.SampleRender(slot, rng);
+            if(inst->ObjId()==0xad92bd32u && std::getenv("REV_STRIKE_PARTICLE_TRACE")){const auto&p=particles[slot];const auto pos=inst->Pos();log_info("[strike-particle] owner=%d,%d,%d frame=%d prototype=%d slot=%zu pos=%.9g,%.9g,%.9g vel=%.9g,%.9g,%.9g",pos.x,pos.y,pos.z,inst->GetFrame(),track.prototype,slot,p.position[0],p.position[1],p.position[2],p.velocity[0],p.velocity[1],p.velocity[2]);}
+
             if(jhaga && object==0)NoteJhagaAttackPrototypeSample();
             if(head && object==0)NoteHeadFireBallPrototypeSample();
             if(dragon && object==0)dragonattack_object_zero.Sample(sample.scale,sample.position);

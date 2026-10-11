@@ -11,7 +11,7 @@
 #include <cstring>
 
 namespace {
-int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0, dragon_negative=0, drip_negative=0, blood_negative=0,halo_negative=0,burn_negative=0;
+int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0, dragon_negative=0, drip_negative=0, blood_negative=0,halo_negative=0,burn_negative=0,strike_negative=0;
 void* Spawn(const S3DPoint& p) {
     assert(p.x==17 && p.y==33 && p.z==21); ++creates; return new int(0);
 }
@@ -96,7 +96,12 @@ std::vector<SEffect> ReviewCatalogue() {
     auto food=Row("Createfood_ORIGINAL_CONTEXT",EVfxPreviewStyle::Static);
     food.is_alive=[](void*c){return *static_cast<int*>(c)<2;};
     food.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
-    return {aura,burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    auto strike=food;strike.id="StrikeEffect_METEOR_CONFIGURED";
+    if(strike_negative==1)strike.is_alive={};
+    if(strike_negative==2)strike.submit_world={};
+    if(strike_negative==3)strike.preview_style=EVfxPreviewStyle::Combat;
+    if(strike_negative==4)strike.id="TStrikeEffect_BESPOKE";
+    return {strike,aura,burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -121,6 +126,12 @@ int main(int argc,char** argv) {
         burn_negative=argv[1][1]-'0';assert(burn_negative>=1 && burn_negative<=4);
         assert(!DescribeVfxReviewPreview(0x55471bffu).supported);assert(!CreateVfxReviewPreview(0x55471bffu,origin));assert(creates==0 && destroys==0);return 0;
     }
+    if(argc==2 && std::strlen(argv[1])==2 && argv[1][0]=='s'){
+        strike_negative=argv[1][1]-'0';assert(strike_negative>=1 && strike_negative<=4);
+        assert(!DescribeVfxReviewPreview(0xad92bd32u).supported);
+        assert(!CreateVfxReviewPreview(0xad92bd32u,origin));assert(creates==0);return 0;
+    }
+
     if(argc==2 && std::strlen(argv[1])==2 && argv[1][0]=='h'){
         halo_negative=argv[1][1]-'0';assert(halo_negative>=1 && halo_negative<=4);
         assert(!DescribeVfxReviewPreview(0xdedbdbedu).supported);
@@ -367,6 +378,15 @@ int main(int argc,char** argv) {
         const auto info=DescribeVfxReviewPreview(0x55471bffu);assert(info.supported && !info.partial && info.lifetime_known);assert(std::strstr(info.description,"real Acolyte"));
         auto burn=CreateVfxReviewPreview(0x55471bffu,origin);assert(burn && burn->Id()=="Burn_AUTHENTIC_ACOLYTE_INTEGER" && burn->RestartInterval()==0);
         const int initial=creates;burn->Submit();burn->Submit();assert(burn->Alive()==false);burn->Submit();assert(burn->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0xad92bd32u);
+        assert(info.supported && !info.partial && info.lifetime_known && !info.requires_endpoints);
+        assert(std::strstr(info.description,"Named Meteor Storm"));
+        auto strike=CreateVfxReviewPreview(0xad92bd32u,origin);assert(strike && strike->RestartInterval()==0);
+        const int initial=creates;strike->Submit();strike->Submit();assert(strike->Alive()==false);
+        strike->Submit();assert(strike->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";

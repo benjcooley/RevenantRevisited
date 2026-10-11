@@ -21,3 +21,42 @@ Private evidence under `/Users/benjamincooley/RevenantRetailLab/research/vfx-wid
 - `strike-manager-sampled/contact.png`: native-only diagnostic, not an A/B approval.
 
 Root independently reran the compiled launch/manager/owner comparison: all3,638fields agree and the three wrong-index-RNG/double-Pulse/omitted-delay controls fail. This remains source/caller proof, with rendering/appearance approval pending.
+## Actual source adapter and wider original reference
+
+The configured source adapter now constructs genuine Acolytes and the loaded
+Strike spell, creates four exact StrikeEffect owners with the spell's strict
+Comet imagery override, and advances the independently proven manager core.
+The isolated seed is explicit; gallery factories retain the live RNG and only
+perform the eight original map-index reseeds. Owner completion clears all spell
+bindings, kills the manager, and releases all actor/image/mesh references.
+Other Strike variants and populated-map damage remain outside this adapter.
+
+Two genuine startup behaviors matter. Original controller Init sees an identity
+prototype matrix before first Render; eager key sampling would introduce the
+134.117 authored offset into initial relative velocity. Also, loaded original
+PreRender40e84b writes previous state0/frame0, and GetAniKey409950 interpolates
+the first five frames. The new exact Strike sampler preserves that operation
+and its extended intermediate arithmetic. Neither correction changes the
+existing Comet/default sampler. The standalone pose probe checks3,240 key and
+4,400 matrix channels; the unchanged Comet control also passes. Original cached
+inputs independently drive production State for1,523,846 field checks, with all
+RNG states exact and maximum float difference5.35e-5. Actual compiled-engine
+logging then checks all5,220 live particle position/velocity rows and owner/RNG
+observations(33,127 fields), rather than relying solely on supplied native poses.
+The eager-origin and unblended source runs are retained failing controls.
+
+World coordinates cannot be subtracted before simulation: initial relative
+velocity uses the genuine absolute owner position. The isolated source uses
+(3185,3185,16) and the already-established explicit source-world camera path.
+Seven fixed1920×1080 views at pixel centers(960,700+960k), k=0..6, preserve the
+real fast particles as well as the central comets. Supplemental phases11/21/31/
+41/51/61 restore the same original pre-Render state for each view. All100 phase
+states/pools/RNG/ordered packets equal the authoritative reference; no geometry,
+clock, scale, or original640/480 primitive-span limit is changed. The wider
+source movies and independent appearance review remain pending at this checkpoint.
+
+The bridge selects only `StrikeEffect_METEOR_CONFIGURED` for exact0xad92bd32,
+requires a real liveness callback and world submission, and repeats after the
+source manager's completion. Four missing-callback/style/alias controls reject;
+existing Blood and Halo admission controls remain passing. No shader, renderer,
+ordinary Comet, generic spell manager, or global RNG policy changes are included.

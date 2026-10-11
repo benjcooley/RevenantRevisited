@@ -149,6 +149,7 @@ SOURCE_MAPPINGS = {
     '0xae92bc14': 'TYManaDrain_CONFIGURED_TARGET',
     '0x2784abde': 'TTornado_CONFIGURED_TARGET',
     '0x152dafdd': 'TPulp_CONFIGURED_ACTOR',
+    '0xad92bd32': 'StrikeEffect_METEOR_CONFIGURED',
     '0x42e0fcd0': 'TOgrestrength_AUTHORED_TAGS',
     '0xad92bd39': 'TTrollblood_AUTHORED_TAGS',
     '0x10ac03de': 'TRegeneration_AUTHORED_TAGS',
@@ -169,6 +170,8 @@ IMPLEMENTED.update(dict.fromkeys(
 
 def admitted_candidates(row):
     row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n not in ('Burn_AUTHENTIC_ACOLYTE_INTEGER','Aura_AUTHENTIC_ACOLYTE_INTEGER')])
+    if row.get('retail_type_id','').lower()=='0xad92bd32':
+        return ['StrikeEffect_METEOR_CONFIGURED']
     row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if not n.startswith('Halo_AUTHORED_PUBLIC')])
     if row.get('retail_type_id','').lower()!='0xddc4042e':
         row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n!='Blood_AUTHORED'])
@@ -197,6 +200,8 @@ def candidate_metadata(row, name):
         return False, 'Exact Aura public SetSpell(real Acolyte/named Aura), integer pose14/0/facing96 and original zero selector; natural bone initialization, attachment/interpolation/audio not certified'
     if row.get('retail_type_id','').lower()=='0x55471bff' and name=='Burn_AUTHENTIC_ACOLYTE_INTEGER':
         return False, 'Exact Burn public Set(real Acolyte), declared integer pose14/0/facing96, real damage/fire/smoke; natural attachment/interpolation not certified'
+    if row.get('retail_type_id','').lower()=='0xad92bd32' and name=='StrikeEffect_METEOR_CONFIGURED':
+        return False, 'Named Meteor Storm caller: four delayed Comet-image strikes, duration93 and genuine configured Acolytes; live RNG plus original index reseeds, empty ground0, natural scheduling/damage and other variants not certified'
     if row.get('retail_type_id','').lower()=='0xdedbdbed' and name=='Halo_AUTHORED_PUBLIC60':
         return False, 'Exact Halo authored mesh/public InitParams(60,0.04), explicit test inputs; natural retail caller not certified'
     if row.get('retail_type_id','').lower()=='0xddc4042e' and name=='Blood_AUTHORED':

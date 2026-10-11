@@ -388,6 +388,8 @@ class T3DImagery : public TObjectImagery
         hmm_vec3 &pos, hmm_vec3 &rot, hmm_vec3 &scl, bool retail_inclusive = false);
     bool GetAniKey(int32_t objnum, int32_t state, int32_t frame,
         hmm_vec3 &pos, hmm_vec3 &rot, hmm_vec3 &scl);
+    // Exact loaded Meteor Storm/Strike initial previous-state0/frame0 pose.
+    bool GetRetailStrikeAniKey(int32_t object,int32_t frame,hmm_vec3& pos,hmm_vec3& rot,hmm_vec3& scale);
     void SetPrevState(int32_t pstate, int32_t pframe)
       { prevstate = pstate; prevframe = pframe; }
     int32_t GetObjectParent(int32_t objnum, int32_t state) const { return objects[objnum].parent[state]; }

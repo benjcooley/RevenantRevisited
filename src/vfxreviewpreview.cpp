@@ -46,6 +46,9 @@ const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nu
         if (id==0x55471bffu && (it->id!="Burn_AUTHENTIC_ACOLYTE_INTEGER" ||
             it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
             !it->is_alive || !it->submit_world)) continue;
+        if (id==0xad92bd32u && (it->id!="StrikeEffect_METEOR_CONFIGURED" ||
+            it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
+            !it->is_alive || !it->submit_world)) continue;
         // Exact public-parameter Halo controller; old procedural alias is not a fallback.
         if (id==0xdedbdbedu && (it->id!="Halo_AUTHORED_PUBLIC60" ||
             it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
