@@ -38,7 +38,7 @@ def parse_asset(data):
 def production_spans():
     source = (ROOT/'src/effect.cpp').read_text()
     header = (ROOT/'src/effect.h').read_text()
-    return dict(types=span(header, 'inline constexpr double  kSymGlowBespokeSimTickMs', '// ----- M07 TPhotonEffect (Bespoke)'),
+    return dict(types=span(header, 'inline constexpr double  kSymGlowBespokeSimTickMs', '_CLASSDEF(TPhotonEffect_Bespoke)'),
                 initialize=span(source, '    // SetupObjects changes V once;', '    if (attach_runtime_component) {'),
                 advance_submit=span(source, 'void TSymGlowEffect_Bespoke::Advance(', 'void TSymGlowEffect_Bespoke::TickAndSubmitForTest_BESPOKE('),
                 math=(ROOT/'src/math3d.cpp').read_text(), math_header=(ROOT/'src/math3d.h').read_text())
@@ -88,7 +88,7 @@ int main(int argc,char**argv){inputs.open(argv[1]);TSymGlowEffect_Bespoke effect
 }
 '''.replace('VERTICES', vertices).replace('INDICES', ','.join(map(str, mesh['indices']))).replace('TICKS', str(ticks)).replace('STRIDE', str(render_stride))
     source = output/'symglow-port-components.cpp'
-    source.write_text(prelude+pieces['types'].replace('  private:', '  public:')+initialize+pieces['advance_submit']+trailer)
+    source.write_text(prelude+pieces['types'].replace('  private:', '  public:')+'\n'+initialize+pieces['advance_submit']+trailer)
     binary = output/'symglow-port-components'
     command = ['clang++', '-std=c++17', '-I', str(ROOT/'thirdparty/handmademath'), '-iquote', str(ROOT/'src'), str(source), str(ROOT/'src/math3d.cpp'), '-o', str(binary)]
     result = subprocess.run(command, capture_output=True, text=True)
