@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "253e42a3674a9e8b797c4b566502bb4b36347e45c5f5f9e9df6263a2d2adeddc",
+    "harness_sha256": "1e46371ff1fb7ddc5eace00b99a5e2da49504394f93ee5e79ae18d98da5c0014",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 169,
+    "retail_rows_with_source_fixes_recorded": 170,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 170,
+    "visual_fidelity_confirmed_rows": 171,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 170,
-    "remaining_visual_review_rows": 6,
+    "reviewed_visual_pass_rows": 171,
+    "remaining_visual_review_rows": 5,
     "qualified_modified_reference_visual_rows": 3
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
@@ -16604,29 +16604,42 @@
       "retail_type_id": "0xad92bc1b",
       "asset": "Magic\\Mshield.I3D",
       "preview_candidates": [
+        "MagicShield_PUBLIC_AURA",
         "TMagicShieldEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact existingAura/FireFlash/publicSetSpell tier0/storage0 control full170appearance/stat/state approved;340rootrepeatframes and unseededviewercompletion/recreation pass. Natural missingnames/higher tiers remainopen."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Actual loaded74-spell table has no MagicShield/2/3 variants required by animator; null owner is killed. Recover real variant/caller data before visible reference; do not fabricate spell.",
+      "next_action": "Verify natural MagicShield/2/3 registration, higher tiers, allocator selector and movingactor/scheduler/map/audio/device; preserve approved existing-variant basicbranch control.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole/detail lifecycle inspection, actual repeat and source review",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Exact magicshield 0xad92bc1b own448228-byte Mshield resource, real Acolyte and licensed Aura/Fire Flash TSpell/publicSetSpell, explicitly unmatched names/constructor-storage0 basic branch only. Whole sphere402vertices/690faces and10dotquads use actual ARGB4444 textures/materials; no synthetic actor/variant or recorded pose. Two genuine170tick references versus currentproduction:9010 state/stat/RNG and21376 drawmatrix fields pervariant pass,max9.87e-7;59074 authoredvertex transformations/1336draws pervariant; strictprofile4accepts/884rejects. Actual2400 phase/countdown/angle/scale/resistance/draw fields passmax4.94e-8;300logged RNGincrements agree with original random-range counts (inherited globalcounteroffset1 explicit). Root340GPUframes repeat frozenport pixel-identically;36whole phasepairs and18detail strips/fixedcrops independentlyinspected, rootpanels byte-identical. RealFireFlash minimum50 yields resistance0.5 at26..125, clears126; original masked sphere scale rejection136, zeroXYdot MATRIX submissions preserved; realkill151 before animator/Render, blanktail170. Rootgallery100samples82visible83distinct,two unreseeded creations, onecompleted151cycle then42tickpartial, cleanexit. No natural MagicShield namedtiers/allocator initialization/movingactor/spellscheduler/map/audio/hardware/damage mitigation/fulltiers/exactpixel claim;1\u20133pixel sampling/fringe/color differences retained.",
+        "report": "recon/retail_asm/runtime/effects/current-magicshield-public-20261011/root-approval.json",
+        "sha256": "a1ce4803b00db379c8419db2054a6915a264e2f409e052c65817148760db9b01",
+        "note": "docs/vfx/forensics/MAGICSHIELD_GENUINE_VARIANT_RENDER_20261011.md"
+      }
     },
     {
       "index": 98,
