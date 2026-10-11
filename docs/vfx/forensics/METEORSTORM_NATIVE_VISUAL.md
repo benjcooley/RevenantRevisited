@@ -103,3 +103,11 @@ hardware ring; that column is diagnostic. The older
 `meteorstorm-review-final/diagnostic-status.json` explicitly rejects its
 near-plane-clipped launch and must not receive appearance credit.
 Independent root appearance review remains a separate external approval record.
+
+Root independently reviewed and approved all 17 original-software/native-domain
+whole/detail phases: restored launch, descending trail, ring acceptance and
+exact oversized rejection, sparks, decay and blank tail. The frozen external
+`root-approval.json` SHA256 is
+`98c068ad2b5b4940d57a711ec64f024bc08450bb3531ccf127578f008f0fcaf2`.
+This is scoped appearance approval only, preserving all caller/device limits
+and the ordinary/common full-ring and narrower-depth diagnostics above.
