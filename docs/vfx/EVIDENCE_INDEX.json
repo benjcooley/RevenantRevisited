@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 150,
+    "retail_rows_with_source_fixes_recorded": 151,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 138,
+    "visual_fidelity_confirmed_rows": 139,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 138,
-    "remaining_visual_review_rows": 38
+    "reviewed_visual_pass_rows": 139,
+    "remaining_visual_review_rows": 37
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1792,6 +1792,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Ten whole original/actual Metal native-domain quality3 phases through600ticks: exact50puffs, expansion/shrink/reset and center bounce. Literal512 original ARGB4444 texel controls restore green edges via existing source-floor policy.917727statefields, exactRNG,601native repeat states/30050draws/11PNGs; root24same-phase PNGs over600ticks identical and translatedgallery300/300 visible/distinct. Quality below3 legitimately kills. Destination overlap brightness/edge quantization, ordinary common output, natural caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-essencedrain-default-20261011/root-approval.json": {
+      "sha256": "a50aee4ff546d37a0b99b8e2838d5c56a0c99dc5b265e37f4f9258ea250eed8e",
+      "retail_row": "Essencedrain:0xdefeca7e",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Twelve complete original/actual Metal native-domain exact default-owner phases through201ticks, all29authored roots. Three keyed cylinders scale-reject after first phase;26zero-key identity auxiliaries stay visible until realkill200/blank200\u2013201.5400key channels/83296accepted matrixfields/5200identity matrices/594scale rejects;57312liveUV fields and3768translated vertices checked. Full201native replay and12rasters exact. Root21same-phase PNGs identical through201 andgallery100/100visible/restarts. Not a source/destination gameplay proof; generic unused zero-key API/cache discrepancy,5pxfirst-tick thin-cylinder bounds, tinyUV/edge/lightquantization, natural caller/audio/device/exactpixels remain open."
     }
   }
 }

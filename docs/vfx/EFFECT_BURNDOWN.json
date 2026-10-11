@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 150,
+    "retail_rows_with_source_fixes_recorded": 151,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 138,
+    "visual_fidelity_confirmed_rows": 139,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 138,
-    "remaining_visual_review_rows": 38
+    "reviewed_visual_pass_rows": 139,
+    "remaining_visual_review_rows": 37
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -9212,29 +9212,41 @@
       "retail_type_id": "0xdefeca7e",
       "asset": "magic\\Worm.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact default29-root authored controller/poses/UV and finite lifetime, visible26zero-key auxiliaries, strict own profile; full appearance independently reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve exact default owner appearance; verify source/destination gameplay and recorded genericAPI/UV/device limits.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect/crop review and integrated repeats",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Twelve complete original/actual Metal native-domain exact default-owner phases through201ticks, all29authored roots. Three keyed cylinders scale-reject after first phase;26zero-key identity auxiliaries stay visible until realkill200/blank200\u2013201.5400key channels/83296accepted matrixfields/5200identity matrices/594scale rejects;57312liveUV fields and3768translated vertices checked. Full201native replay and12rasters exact. Root21same-phase PNGs identical through201 andgallery100/100visible/restarts. Not a source/destination gameplay proof; generic unused zero-key API/cache discrepancy,5pxfirst-tick thin-cylinder bounds, tinyUV/edge/lightquantization, natural caller/audio/device/exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-essencedrain-default-20261011/root-approval.json",
+        "sha256": "a50aee4ff546d37a0b99b8e2838d5c56a0c99dc5b265e37f4f9258ea250eed8e",
+        "note": "docs/vfx/forensics/ESSENCEDRAIN_DEFAULT_RENDER_20261011.md"
+      }
     },
     {
       "index": 15,
