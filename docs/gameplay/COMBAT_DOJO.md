@@ -95,7 +95,9 @@ only).
 | S1 | talismans → spell, quick spell, fizzle | `0x51b5d0` `0x51b7c0` | `TSpellList::GetSpellDataByTalismans`, `TPlayer::HasTalismans` | [x] `spell-lookup` 75, `spell-talismans` 340, `spell-quick` 49 |
 | S2 | cast gates: mana, wait, fail roll | `0x53fe80` (CastByTalismans), `0x4d5c20` | `TSpellManager::Cast*` | [x] 2071/2071 (`spell-cast`) |
 | S3 | spell damage, poison roll | `0x53f560` `0x53f090` | `TSpell::Damage`, `TSpell` ctor | [x] `spell-new` 426, `spell-damage` 1090 |
-| S4 | missiles: flight, hit, damage | `0x510220`, AreaDamage `0x4de3c0` | missile effects | [x] `missile-area` 64 (AreaDamage `0x4de3c0`), `missile-arrow` 119 (TAmmo), `missile-bow` 114 (DrawBow ... ResolveBowShoot), `missile-fireball` 21 cases / 840 ticks; spell lifetimes, RANGEDAMAGE effects and the Iced effect open |
+| S4 | missiles: flight, hit, damage | `0x510220`, AreaDamage `0x4de3c0` | missile effects | [x] `missile-area` 64 (AreaDamage `0x4de3c0`), `missile-arrow` 119 (TAmmo), `missile-bow` 114 (DrawBow ... ResolveBowShoot), `missile-fireball` 21 cases / 840 ticks |
+| S5 | spell lifetimes and effects: TSpell Timer / Pulse / Kill / ObjectRemoved, TStrikeSpell, TEffect Pulse / KillThisEffect / Follow, the Iced effect | `0x53f410` `0x53f800` `0x53f860` `0x540d70` `0x540eb0` `0x542340` `0x4de800` `0x4ec930` | `TSpell`, `TStrikeSpell`, `TEffect`, `TIcedEffect` | [x] `spell-life` 229, `spell-strike` 413, `effect-pulse` 53, `effect-iced` 5 (22 mutations caught); the Iced shatter and the LIGHT fade-out are the VFX track's |
+| S5 | spell lifetimes and effects | TSpell `0x53f410` `0x53f800` `0x53f860`, Strike `0x540eb0` `0x540d70` `0x542340`, TEffect::Pulse `0x4de800`, Iced `0x4ec890` | `TSpell`, `TStrikeSpell`, `TEffect`, `TIcedEffect` | [x] `spell-life` 229, `spell-strike` 413, `effect-pulse` 53, `effect-iced` 5 |
 
 ### D — data
 
@@ -447,6 +449,7 @@ python3 tools/retail_ab/retail_ab.py melee-attack-choice   # C3 (melee-hit C4, m
 python3 tools/retail_ab/retail_ab.py spell-cast         # S2 (spell-data D1s; spell-lookup, -talismans,
                                                         # -quick S1; spell-new, -damage S3)
 python3 tools/retail_ab/retail_ab.py missile-bow        # S4 (missile-area, -arrow, -fireball)
+python3 tools/retail_ab/retail_ab.py spell-strike       # S5 (spell-life, effect-pulse, effect-iced)
 tools/walktest/walktest.py "<slot dir>" [--pattern sweep|walks|both|none] [--exec "player.goto X Y; ..."]
 python3 tools/retail_ab/retail_ab.py combat-data        # D1, every record field by field
 python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2

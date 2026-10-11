@@ -10,6 +10,7 @@
 #include "character.h"
 #include "dialog.h"
 #include "editorstub.h"
+#include "effect.h"
 #include "imagery.h"
 #include "mappane.h"
 #include "player.h"
@@ -373,9 +374,8 @@ void TAmmo::IceAround()
             continue;
         if (!iced->HasAnimator())
             iced->CreateAnimator();
-        // Retail then gives the Iced effect its target (0x004ec930: the
-        // target paralysed and iced, "FREEZECUBE" played at it). The port
-        // has no Iced effect yet (effects), so nobody is frozen.
+        if (auto* freeze = dynamic_cast<TIcedEffect*>(iced))
+            freeze->Set(c);
     }
 }
 

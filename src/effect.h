@@ -47,29 +47,76 @@ _CLASSDEF(TSpellBlock)
 // * TEffect *
 // ***********
 
+// The object-map point `name` of `target`, as an offset from its position,
+// when it has a 3D animator that knows the point.
+bool ObjectMapOffset(TObjectInstance* target, const char* name, S3DPoint& offset);
+
 // The effect class - individual effects from spells
+// REVSYNC: TEffect::TEffect @ 0x004de770 -- immobile and pulsed (the map
+// pulses it; its spell pulses it only while it is in no sector); retail's
+// OF_NOTIFY comes with every object built from a def.
 class TEffect : public TObjectInstance
 {
   public:
     TEffect(TObjectImagery* newim) : TObjectInstance(newim) { flags |= OF_IMMOBILE | OF_PULSE; spell = nullptr; subspell = 0; angle = 0; }
     TEffect(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { flags |= OF_IMMOBILE | OF_PULSE; spell = nullptr; subspell = 0; angle = 0; }
 
-    virtual void Pulse();
+    void Pulse() override;
 
-    void SetSpell(PTSpell sp) { spell = sp; }    
+    void SetSpell(PTSpell sp) { spell = sp; }
+      // REVSYNC: 0x004de7d0 (retail also zeroes its light's fade counters)
     PTSpell GetSpell() { return spell; }
 
-    void SetSubSpell(int32_t sp) { subspell = sp; }    
+    void SetSubSpell(int32_t sp) { subspell = sp; }
     int32_t GetSubSpell() { return subspell; }
 
-    void KillThisEffect();  // Call when effect is finished
+    void KillThisEffect();
+      // REVSYNC: TEffect::KillThisEffect @ 0x004defe0 -- a poison spell's
+      // first target is cured, the effect is removed, and its spell ends
 
     int32_t GetAngle();         // Returns aiming angle
+
+    // The Strike spells' effects (retail +0xe4..+0x138): what it follows,
+    // where around it, how long it lives.
+    void Follow(TObjectInstance* target, int32_t angle, int32_t dist, bool orbit);
+      // REVSYNC: 0x004def90 -- follow `target` (orbiting at angle and dist when
+      // `orbit`); the attach name is cleared
+    void SetFollowTime(int32_t ticks) { followtime = ticks; }
+    void SetAttachName(const char* name);
+    void SetVisibleWhen(const char* name);
+      // Shown only while the followed character's root state matches `name`
+    void SetLife(int32_t ticks, int32_t blink) { duration = ticks; blinktime = blink; timed = true; }
+      // A timed life of `ticks`, blinking out over the last `blink`
+    void SetStartWait(int32_t ticks) { startwait = ticks; }
+      // Held hidden for `ticks` before it starts
+
+    [[nodiscard]] TObjectInstance* Following() const { return follow.Get(); }
+    [[nodiscard]] int32_t FollowTime() const { return followtime; }
+    [[nodiscard]] const char* AttachName() const { return attachname; }
+    [[nodiscard]] bool Orbits() const { return orbit; }
+    [[nodiscard]] int32_t OrbitAngle() const { return orbitangle; }
+    [[nodiscard]] int32_t OrbitDist() const { return orbitdist; }
+    [[nodiscard]] bool Timed() const { return timed; }
+    [[nodiscard]] int32_t Duration() const { return duration; }
+    [[nodiscard]] int32_t BlinkTime() const { return blinktime; }
+    [[nodiscard]] int32_t StartWait() const { return startwait; }
 
   protected:
     PTSpell spell;      // Spellblock which spawned this effect
     int32_t subspell;           // TEMP TEMP TEMP subspell (psuedo-talisman)
     int32_t angle;              // The direction we are cast
+
+    TSafeRef<TObjectInstance> follow;   // +0xe4 the object it follows
+    int32_t followtime = 0;             // +0xe8 ticks left following (at 0 it ends)
+    char attachname[0x32] = {};         // +0xec the followed object's object-map point it sits on
+    bool orbit = false;                 // +0x120 placed around it by angle and dist
+    int32_t orbitangle = 0;             // +0x124
+    int32_t orbitdist = 0;              // +0x128
+    int32_t duration = 0;               // +0x12c ticks left when timed
+    bool timed = false;                 // +0x130
+    int32_t blinktime = 0;              // +0x134 the last ticks it blinks out over
+    int32_t startwait = 0;              // +0x138 ticks held hidden before it starts
+    char visiblewhen[RESNAMELEN] = {};  // +0x15c shown only while the followed one's root matches
 };
 
 // Runtime visual component for effects rendered as animated billboard
@@ -1695,18 +1742,33 @@ class TIceBoltAnimator : public T3DAnimator
 // * TIcedEffect *
 // ***************
 
+// The ice arrow's freeze (builder "Iced"): its target held paralysed and
+// iced, and stopped every pulse, until it thaws.
 _CLASSDEF(TIcedEffect)
-
 class TIcedEffect : public TEffect
 {
-  private:
   public:
-    TIcedEffect(TObjectImagery* newim) : TEffect(newim) { }
-    TIcedEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
-    virtual ~TIcedEffect() {}
+    TIcedEffect(TObjectImagery* newim) : TEffect(newim) {}
+    TIcedEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
 
-    virtual void Initialize();
-    virtual void Pulse();
+    void Set(TObjectInstance* victim);
+      // REVSYNC: 0x004ec930 -- freeze `victim`: paralysed and iced,
+      // "FREEZECUBE" played at it (the ice arrow's burst calls it)
+    void Pulse() override;
+      // REVSYNC: 0x004ec890 -- the effect's pulse, a tick more; the target
+      // stopped; one no longer iced, or dead, thaws now; at tick 240 its
+      // paralysis and ice come off
+    void Animate(bool draw) override;
+      // What retail's Iced animator does for the effect's life
+
+    [[nodiscard]] TObjectInstance* Target() const { return target.Get(); }
+    [[nodiscard]] int32_t Ticks() const { return ticks; }
+
+    static constexpr int32_t kThawTicks = 240;  // retail 0xf0: ten seconds of ice
+
+  private:
+    TSafeRef<TObjectInstance> target;           // +0x184 the one frozen
+    int32_t ticks = 0;                          // +0x188 pulses since made
 };
 
 // *****************

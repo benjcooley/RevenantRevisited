@@ -26,8 +26,9 @@ Seams beyond spell_damage.py's (each recorded):
   height, objclass, maxnum, objset), ret 0x20): the case's `iced` (names;
   their ids go in the array); GetInstance `0x452690` (id -> object, not
   recorded); FindObjType `0x475210` (a name's index here, not recorded);
-  NewObject `0x450e40`: the def {class, type (by name), flags, state,
-  level, pos, vel, facing}, answered with the case's `newobject` (-1);
+  NewObject `0x450e40`: the def {class, type (the name asked, without
+  case), flags, state, level, pos, vel, facing} and the imagery asked for,
+  answered with the case's `newobject` (-1);
 - the sound lookup `0x49c430`: {name}, -1 (no sound);
 - AwardSkillExp (TPlayer slot 0x41c, `0x51abe0`): {skill, victim};
 - TSpellManager::CastByName `0x53f920`: {who (the manager's owner), name,
@@ -60,6 +61,7 @@ sys.path[:0] = [str(HERE), str(HERE.parents[1])]
 from guest import call, s32, serve  # noqa: E402
 from spell_cast import G_EDITOR, POINTER_ARRAY_CTOR, SCHEMA  # noqa: E402
 from spell_damage import DamageFixture  # noqa: E402
+from spell_guest import IMAGERY_HANDLE  # noqa: E402
 
 AMMO_VTABLE, AMMO_SIZE = 0x5a6b68, 0xe0
 AMMO_MOVE, AMMO_PULSE = 0x4c01f0, 0x4c0880
@@ -176,13 +178,22 @@ class ArrowFixture(DamageFixture):
         objclass, objtype = struct.unpack('<hh', vm.uc.mem_read(d, 4))
         state, level = struct.unpack('<HH', vm.uc.mem_read(d + 8, 4))
         record = dict(seam='NewObject', **{'class': objclass},
-                      type=self.types[objtype][1] if 0 <= objtype < len(self.types) else objtype,
+                      type=self.types[objtype][1].lower() if 0 <= objtype < len(self.types) else objtype,
                       flags=vm.u32(d + 4), state=state, level=level,
                       pos=list(struct.unpack('<3i', vm.uc.mem_read(d + 0x0c, 12))),
                       vel=list(struct.unpack('<3i', vm.uc.mem_read(d + 0x18, 12))),
-                      facing=vm.uc.mem_read(d + 0x32, 1)[0])
+                      facing=vm.uc.mem_read(d + 0x32, 1)[0], imagery=self._imagery_name(s32(args[1])))
         self.world.seams.append(record)
         return self.case.get('newobject', -1)
+
+    def _imagery_name(self, handle):
+        """An imagery as both sides name it: the base name, without case, of
+        the file the spell list's IMAGERY looked up (spell_guest's handles),
+        else the id."""
+        names = self.spell_files.imagery
+        if 0 <= handle - IMAGERY_HANDLE < len(names):
+            return names[handle - IMAGERY_HANDLE].replace('/', '\\').rsplit('\\', 1)[-1].lower()
+        return handle
 
     def _find_sound(self, args, ecx):
         self.world.seams.append(dict(seam='FindSound', name=self.vm.string(args[0])))

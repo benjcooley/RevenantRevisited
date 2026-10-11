@@ -1413,17 +1413,17 @@ void TMapPane::SetMapPos(S3DPoint& newpos)
 // ********************
 
 // Create object
-int32_t TMapPane::NewObject(SObjectDef* def)
+int32_t TMapPane::NewObject(SObjectDef* def, int32_t imagery)
 {
     if (newObjectSeam)
-        return newObjectSeam(def);
+        return newObjectSeam(def, imagery);
     TObjectClass* oc = TObjectClass::GetClass(def->objclass);
     if (!oc)
     {
         fprintf(stderr, "MAPPANE: Bad class in NewObject");
         return -1;
     }
-    TObjectInstance* oi = oc->NewObject(def);
+    TObjectInstance* oi = oc->NewObject(def, imagery);
     if (!oi)
     {
         fprintf(stderr, "MAPPANE: Unable to create obj in NewObject");
@@ -1452,6 +1452,8 @@ int32_t TMapPane::NewObject(SObjectDef* def)
 // Add object
 int32_t TMapPane::AddObject(TObjectInstance* oi)
 {
+    if (addObjectSeam)
+        return addObjectSeam(oi);
     if (oi->GetSector() != nullptr)    // Object is already in the map
     {
         fprintf(stderr, "MAPPANE: Object already in a sector in AddObject");

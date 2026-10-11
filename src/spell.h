@@ -212,7 +212,7 @@ class TSpell
     // REVSYNC: TSpell::TSpell @ 0x0053f090
     TSpell(TObjectInstance* invoke, TObjectInstance* *targ, int32_t numtargs, S3DPoint* sourcepos, PSSpellData dat, PSSpellVariant var, PTSpell mtr = nullptr);
     TSpell()
-    { invoker = nullptr; effect.Clear();
+    { invoker = nullptr;
       for (auto& target : targets) target = nullptr;
       targetnum = 0; wait = -1;
       timer = 0; master = nullptr; spell = nullptr; variant = nullptr; frame = 0;
@@ -230,15 +230,21 @@ class TSpell
     TObjectInstance* GetTarget(int32_t numtarg = 0)
         { if (numtarg >= targetnum) return nullptr; else return targets[numtarg]; }
       // Returns the target for the spell
+    void SetTarget(int32_t numtarg, TObjectInstance* target)
+        { targets[numtarg] = target; target_refs[numtarg] = target; }
     int32_t GetTargetNum() { return targetnum; }
     TSafeRef<TObjectInstance> GetTargetRef(int32_t numtarg = 0) const
         { return numtarg >= 0 && numtarg < targetnum ? target_refs[numtarg] : TSafeRef<TObjectInstance>{}; }
     int32_t PoisonChance() const { return spell ? spell->poisonchance : 0; }
-      // Returns the number of targets
-    bool GetSourcePos(S3DPoint &pos);
-      // Gets the source position of the spell.  Either the position passed by 'sourcepos'
-      // in the contstructor, or the current 'right hand' position of the character if
-      // 'sourcepos' was set to -1,-1,-1.
+    [[nodiscard]] TObjectInstance* PoisonTarget() const
+        { return PoisonChance() && targetnum > 0 ? target_refs[0].Get() : nullptr; }
+      // A POISONCHANCE spell's first target: kept poisoned by its effects,
+      // cured when they end (retail's test of spelldata +0xc8, targetnum
+      // and targets[0])
+    [[nodiscard]] S3DPoint SourceOffset() const;
+      // REVSYNC: 0x0053f1f0 -- where the effect starts from the invoker: the
+      // source the cast gave, or nothing when it gave (-1, -1, -1). Retail's
+      // always reports success, so its callers' HEIGHT fallback never runs.
 
     PSSpellData SpellData() { return spell; }
       // The spell data structure from the SPELL.DEF file
@@ -260,14 +266,27 @@ class TSpell
 
     void Damage(TObjectInstance* ch);
 
-    virtual void Pulse() {}
-      // pulse through the spell, this is standard
+    virtual void Pulse();
+      // REVSYNC: TSpell::Pulse @ 0x0053f800 -- its effects that are in no
+      // sector: each pulsed, then put into the map
 
     virtual bool Timer();
-      // returns true if spell is done
+      // REVSYNC: TSpell::Timer @ 0x0053f410 -- the countdowns; at the end of
+      // DELAY its effect is made; true once the spell is over
 
-    virtual void Kill() { timer = 0; }
-      // Kills this spell
+    virtual void Kill();
+      // REVSYNC: TSpell::Kill @ 0x0053f860 -- over: each effect is removed
+      // and let go (a poison spell's first target cured for each)
+
+    void ObjectRemoved(int32_t notify, void* ptr);
+      // REVSYNC: 0x0053f730 -- an object (N_DELETINGOBJECT) or a sector
+      // (N_DELETINGSECTOR) going away: its invoker or an effect among them
+      // ends the spell; a target among them is dropped
+
+    [[nodiscard]] int32_t NumEffects() const { return int32_t(effects.size()); }
+    [[nodiscard]] TObjectInstance* GetEffect(int32_t i) const
+        { return i >= 0 && i < NumEffects() ? effects[size_t(i)].Get() : nullptr; }
+    [[nodiscard]] TObjectInstance* LastEffect() const { return lasteffect.Get(); }
 
     int32_t GetDefense()        { return magic_defense; }
     void SetDefense(int32_t i)  { magic_defense = i; }
@@ -281,10 +300,16 @@ class TSpell
     void ManaDrain();
 
   protected:
+    TEffect* NewEffect(SObjectDef& def, int32_t imagery = -1);
+      // An effect from `def` (with that imagery, -1 the type's) made in the
+      // map: the last one made; when there is one, its spell is this and it
+      // joins the list
+
     TObjectInstance* invoker;               // +0x04 Object that invoked the spell
     TSafeRef<TObjectInstance> invoker_ref;
     TSafeRef<TObjectInstance> target_refs[MAXSPELLTARGETS];
-    TSafeRef<TObjectInstance> effect;       // +0x08 the last effect made; weak identity, reaping/reuse cannot dangle
+    TSafeRef<TObjectInstance> lasteffect;   // +0x08 the last effect made
+    std::vector<TSafeRef<TObjectInstance>> effects;  // +0x13c the spell's effects
 
     int32_t targetnum;                      // +0x0c Number of targets in target list
     TObjectInstance* targets[MAXSPELLTARGETS]; // +0x10 Spell's target list
@@ -303,9 +328,8 @@ class TSpell
 };
 
 // The CONTROLDATA "Strike" class (retail 0x154 bytes, vtable 0x005b9bdc,
-// built by 0x00542290): a TSpell plus the target it strikes (+0x150).
-// REVSYNC: its Timer 0x00540eb0, Pulse 0x00540d70 and Kill 0x00542340 are
-// not ported yet; TSpell's run.
+// built by 0x00542290): a TSpell plus the target it strikes (+0x150), whose
+// effects follow, orbit, attach and time out as its CONTROLDATA says.
 class TStrikeSpell : public TSpell
 {
   public:
@@ -314,10 +338,33 @@ class TStrikeSpell : public TSpell
         : TSpell(invoke, targ, numtargs, sourcepos, dat, var, mtr) {}
 
     [[nodiscard]] const char* ClassName() const override { return "Strike"; }
-    [[nodiscard]] TObjectInstance* StrikeTarget() const { return striketarget; }
+    [[nodiscard]] TObjectInstance* StrikeTarget() const { return striketarget.Get(); }
+
+    void Pulse() override;
+      // REVSYNC: TStrikeSpell::Pulse @ 0x00540d70 -- the base pulse, a frame
+      // more; REPEATDAMAGE every 24 frames on the caster's combat target;
+      // over at DURATION frames (curing a poison spell's struck target)
+    bool Timer() override;
+      // REVSYNC: TStrikeSpell::Timer @ 0x00540eb0 -- at the end of DELAY, its
+      // effects: on attach points, around each target in RADIUS (with the
+      // blast), or HITS of them in its PATTERN
+    void Kill() override;
+      // REVSYNC: TStrikeSpell::Kill @ 0x00542340 -- the base Kill, then its
+      // PLAY sound stops
 
   protected:
-    TObjectInstance* striketarget = nullptr;    // +0x150 the target struck
+    // REVSYNC: 0x00540bc0 -- the def of an effect on `target`: at it, plus
+    // POS, or its ATTACH point (or 50, 50, 50) and the source
+    [[nodiscard]] SObjectDef EffectDef(TObjectInstance* target) const;
+    // The CONTROLDATA IMAGERY effect from `def`, following `anchor` with
+    // FOLLOW (orbiting at angle and dist when `orbit`) for DURATION. Retail
+    // repeats this block in every branch of its Timer.
+    TEffect* NewStrikeEffect(SObjectDef& def, TObjectInstance* anchor, int32_t angle, int32_t dist, bool orbit);
+    // An effect's timed life: DURATION, blinking out over DURATION2, held
+    // for random(0, WAIT) first
+    void Time(TEffect* fx) const;
+
+    TSafeRef<TObjectInstance> striketarget;    // +0x150 the target struck
 };
 
 // The spell classes, by the name CONTROLDATA gives (retail's registry
@@ -380,6 +427,13 @@ class TSpellManager
     void SetWait(int32_t w) { wait = w; }
     [[nodiscard]] int32_t NumSpells() const { return spells.NumItems(); }
     [[nodiscard]] TSpell* GetSpell(int32_t i) { return spells.Used(i) ? spells[i] : nullptr; }
+    void Add(TSpell* spell);
+      // The manager takes `spell`, into its first vacant slot (retail's array
+      // Add 0x0041c840; the port's array would append)
+
+    void ObjectRemoved(int32_t notify, void* ptr);
+      // REVSYNC: 0x005408d0 -- each spell told (TSpell::ObjectRemoved), then
+      // its Timer run: one over is deleted
 
     // Retail A/B fixtures only: when set, the objects around a caster that
     // a buff cast looks through (retail's map iterator 0x0044cf10 /

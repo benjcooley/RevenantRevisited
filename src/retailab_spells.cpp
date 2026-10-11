@@ -32,6 +32,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -512,8 +513,10 @@ std::string SpellTalismans(const Case& c, std::string& error)
 
 // ---- S2: the cast (slots/combat/spell_cast.py) -------------------------------
 
-// A spell as the retail fixture dumps it (TSpell's layout by name).
-void WriteSpellState(JsonOut& j, const TFixtureWorld& world, TSpell* sp)
+// A spell as the retail fixture dumps it (TSpell's layout by name); a
+// target's `extra` fields last.
+void WriteSpellState(JsonOut& j, const TFixtureWorld& world, TSpell* sp,
+                     const std::function<void(JsonOut&, TSpell*)>& extra = {})
 {
     auto name = [&](TObjectInstance* o) {
         if (o)
@@ -547,6 +550,8 @@ void WriteSpellState(JsonOut& j, const TFixtureWorld& world, TSpell* sp)
         j.Key("striketarget");
         name(strike->StrikeTarget());
     }
+    if (extra)
+        extra(j, sp);
     j.End('}');
 }
 
@@ -958,21 +963,48 @@ int32_t CaseFindObjects(const S3DPoint& pos, int32_t* array, int32_t width, int3
     return n;
 }
 
-int32_t CaseNewObject(SObjectDef* def)
+// An imagery file as both sides name it: its base name without case
+// (retail's registry ids differ from the port's).
+std::string ImageryName(const char* path)
+{
+    std::string name = path;
+    const size_t slash = name.find_last_of("\\/");
+    if (slash != std::string::npos)
+        name.erase(0, slash + 1);
+    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char ch) { return std::tolower(ch); });
+    return name;
+}
+
+// NewObject's record: the def and the imagery asked for (-1, or its file).
+void WriteNewObject(const SObjectDef* def, int32_t imagery)
 {
     TObjectClass* cl = TObjectClass::GetClass(def->objclass);
     SObjectInfo* info = cl ? cl->GetObjType(def->objtype) : nullptr;
     JsonOut j;
     j.Begin('{').FieldString("seam", "NewObject").Field("class", def->objclass).Key("type");
     if (info)
-        j.String(info->name);
+    {
+        std::string type = info->name;      // as asked, without case (retail records the name asked)
+        std::transform(type.begin(), type.end(), type.begin(), [](unsigned char ch) { return std::tolower(ch); });
+        j.String(type);
+    }
     else
         j.Value(def->objtype);
     j.Field("flags", (int64_t)def->flags).Field("state", def->state).Field("level", def->level);
     j.Key("pos").Begin('[').Value(def->pos.x).Value(def->pos.y).Value(def->pos.z).End(']');
     j.Key("vel").Begin('[').Value(def->vel.x).Value(def->vel.y).Value(def->vel.z).End(']');
-    j.Field("facing", def->facing).End('}');
+    j.Field("facing", def->facing).Key("imagery");
+    if (SImageryEntry* entry = imagery >= 0 ? TObjectImagery::GetImageryEntry(imagery) : nullptr)
+        j.String(ImageryName(entry->filename));
+    else
+        j.Value(imagery);
+    j.End('}');
     Seam(j.str());
+}
+
+int32_t CaseNewObject(SObjectDef* def, int32_t imagery)
+{
+    WriteNewObject(def, imagery);
     return (int32_t)(*g_arrowCase)["newobject"].Int(-1);
 }
 
@@ -1512,9 +1544,510 @@ std::string MissileFireball(const Case& c, std::string& error)
             j.Key(spec["name"].Str().c_str());
             WriteCaster(j, world, world.Get(spec["name"].Str()));
         }
-        j.End('}');
+        j.End('}').Key("spell");
+        WriteSpellState(j, world, spell.get());
         j.End('}');
         fb.SetSpell(nullptr);
+        return j.str();
+    }
+    catch (const std::exception& e)
+    {
+        error = e.what();
+        return {};
+    }
+}
+
+
+// ---- S5: spell lifetimes and effects (slots/combat/spell_life.py) -----------
+
+// An effect the case makes: named in the dumps, its moves recorded and
+// stored (retail's SetPos seam).
+template <class Base>
+class TCaseEffect : public Base
+{
+  public:
+    TCaseEffect(SObjectDef* def, TObjectImagery* imagery, std::string name)
+        : Base(def, imagery), who(std::move(name)) {}
+
+    int32_t SetPos(const S3DPoint& p, int32_t newlevel = -1, bool override = false) override
+    {
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "SetPos").FieldString("who", who);
+        j.Key("pos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']').End('}');
+        Seam(j.str());
+        this->ForcePos(p);
+        return 1;
+    }
+
+    const std::string who;
+};
+
+// The case's effects: made by NewObject (or the case), in one sector of
+// their own unless the case keeps one out of the map, registered by id.
+class SLifeCase
+{
+  public:
+    SLifeCase(const JsonValue& cs, const TFixtureWorld& world) : cs(cs), world(world)
+    {
+        for (const JsonValue& n : cs["fail"].Items())
+            fail.push_back((int32_t)n.Int());
+        for (const JsonValue& n : cs["sectorless"].Items())
+            sectorless.push_back((int32_t)n.Int());
+    }
+    ~SLifeCase()
+    {
+        for (const auto& fx : effects)
+            if (fx->GetSector())
+                sector.RemoveObject(fx.get());
+    }
+    SLifeCase(const SLifeCase&) = delete;
+    SLifeCase& operator=(const SLifeCase&) = delete;
+
+    // The n-th effect (from 1): "fx<n>", id 100 + n - 1.
+    template <class Effect>
+    Effect* Make(SObjectDef* def)
+    {
+        const int32_t n = ++made;
+        const std::string name = "fx" + std::to_string(n);
+        auto fx = std::make_unique<TCaseEffect<Effect>>(
+            def, new TQuietImagery(TFixtureImagery::Register({}), name, {}, false), name);
+        TCaseEffect<Effect>* raw = fx.get();
+        raw->SetMapIndex(99 + n);
+        MapPane.RegisterInstance(raw, 99 + n);
+        if (std::find(sectorless.begin(), sectorless.end(), n) == sectorless.end())
+            sector.AddObject(raw);
+        names[raw] = name;
+        effects.push_back(std::move(fx));
+        return raw;
+    }
+
+    bool Fails() const { return std::find(fail.begin(), fail.end(), made + 1) != fail.end(); }
+    void Skip() { ++made; }
+
+    std::string NameOf(const TObjectInstance* o) const
+    {
+        auto it = names.find(o);
+        return it != names.end() ? it->second : world.NameOf(o);
+    }
+    TObjectInstance* Find(const std::string& name) const
+    {
+        for (const auto& fx : effects)
+            if (names.at(fx.get()) == name)
+                return fx.get();
+        return world.Get(name);
+    }
+    const std::vector<std::unique_ptr<TObjectInstance>>& Effects() const { return effects; }
+
+  private:
+    const JsonValue& cs;
+    const TFixtureWorld& world;
+    TSector sector{0, 0, 0};
+    std::vector<std::unique_ptr<TObjectInstance>> effects;
+    std::map<const TObjectInstance*, std::string> names;
+    std::vector<int32_t> fail, sectorless;
+    int32_t made = 0;
+};
+
+SLifeCase* g_life = nullptr;
+
+// NewObject as the spells call it: the def recorded; the case's `fail`
+// (1-based) makes none, else a fresh effect.
+int32_t LifeNewObject(SObjectDef* def, int32_t imagery)
+{
+    WriteNewObject(def, imagery);
+    if (g_life->Fails())
+    {
+        g_life->Skip();
+        return -1;
+    }
+    return g_life->Make<TEffect>(def)->GetMapIndex();
+}
+
+// AddObject (retail 0x00451090), as TSpell::Pulse asks it of an effect in no
+// sector: recorded, granted, and the effect left where it is.
+int32_t LifeAddObject(TObjectInstance* oi)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "AddObject").FieldString("who", g_life->NameOf(oi)).End('}');
+    Seam(j.str());
+    return 0;
+}
+
+void WriteEffect(JsonOut& j, TObjectInstance* o)
+{
+    static const std::pair<uint32_t, const char*> names[] = {
+        {OF_ANIMATE, "animate"}, {OF_IMMOBILE, "immobile"}, {OF_INVISIBLE, "invisible"},
+        {OF_KILL, "kill"}, {OF_NONMAP, "nonmap"}, {OF_PULSE, "pulse"}};
+    std::vector<std::string> set;
+    for (const auto& [bit, name] : names)
+        if (o->GetFlags() & bit)
+            set.emplace_back(name);
+    std::sort(set.begin(), set.end());
+    const S3DPoint p = o->Pos();
+    j.Begin('{').FieldString("name", g_life->NameOf(o));
+    j.Key("pos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']');
+    j.Key("flags").Begin('[');
+    for (const std::string& s : set)
+        j.String(s);
+    j.End(']');
+    auto* fx = dynamic_cast<TEffect*>(o);
+    WriteVariantRef(j, "spell", fx->GetSpell() ? fx->GetSpell()->VariantData() : nullptr);
+    j.Key("follow");
+    if (fx->Following())
+        j.String(g_life->NameOf(fx->Following()));
+    else
+        j.Null();
+    j.Field("followtime", fx->FollowTime()).FieldString("attach", fx->AttachName());
+    j.Field("orbit", fx->Orbits() ? 1 : 0).Field("angle", fx->OrbitAngle()).Field("dist", fx->OrbitDist());
+    j.Field("duration", fx->Duration()).Field("timed", fx->Timed() ? 1 : 0).Field("blink", fx->BlinkTime());
+    j.Field("startwait", fx->StartWait());
+    if (auto* iced = dynamic_cast<TIcedEffect*>(o))
+    {
+        j.Key("target");
+        if (iced->Target())
+            j.String(g_life->NameOf(iced->Target()));
+        else
+            j.Null();
+        j.Field("ticks", iced->Ticks());
+    }
+    j.End('}');
+}
+
+// A character's freeze, as the case reads it.
+void WriteFrozen(JsonOut& j, TCharacter* c)
+{
+    j.Begin('{').Field("paralize", (c->GetFlags() & OF_PARALIZE) ? 1 : 0);
+    j.Field("iced", (c->GetFlags() & OF_ICED) ? 1 : 0).End('}');
+}
+
+// The CONTROLDATA and variant fields a case changes (`control`, `variant`),
+// put back when it ends.
+class SControlScope
+{
+  public:
+    SControlScope(const JsonValue& cs, SSpellVariant* v) : variant(v)
+    {
+        if (!v)
+            return;
+        savedFacing = v->facing;
+        if (cs["variantfields"].Has("facing"))
+            v->facing = (int32_t)cs["variantfields"]["facing"].Int();
+        SSpellControlData* cd = v->controldata;
+        if (!cd)
+            return;
+        saved = *cd;
+        const JsonValue& c = cs["control"];
+        auto set = [&](const char* key, int32_t& field) {
+            if (c.Has(key))
+                field = (int32_t)c[key].Int();
+        };
+        set("flags", cd->flags);
+        set("radius", cd->radius);
+        set("hits", cd->hits);
+        set("duration", cd->duration);
+        set("wait", cd->wait);
+        set("duration2", cd->duration2);
+        set("pattern", cd->pattern);
+        set("hittarget", cd->hittarget);
+        set("oncaster", cd->oncaster);
+        set("attachset", cd->attachset);
+        set("follow", cd->follow);
+        set("posset", cd->posset);
+        set("repeatset", cd->repeatset);
+        set("multipletargets", cd->multipletargets);
+        set("imagery", cd->imagery);
+        if (c.Has("rangedamage"))
+            for (int32_t i = 0; i < 2; i++)
+                cd->rangedamage[i] = (int32_t)c["rangedamage"][i].Int();
+        if (c.Has("pos"))
+            for (int32_t i = 0; i < 3; i++)
+                cd->pos[i] = (int32_t)c["pos"][i].Int();
+        if (c.Has("attach"))
+            strncpy(cd->attach, c["attach"].Str().c_str(), sizeof(cd->attach) - 1);
+        if (c.Has("sound"))
+            strncpy(cd->sound, c["sound"].Str().c_str(), sizeof(cd->sound) - 1);
+        changed = true;
+    }
+    ~SControlScope()
+    {
+        if (!variant)
+            return;
+        variant->facing = savedFacing;
+        if (changed)
+            *variant->controldata = saved;
+    }
+    SControlScope(const SControlScope&) = delete;
+    SControlScope& operator=(const SControlScope&) = delete;
+
+  private:
+    SSpellVariant* variant = nullptr;
+    SSpellControlData saved;
+    int32_t savedFacing = 0;
+    bool changed = false;
+};
+
+// A spell from its case spec: {class, variant, invoker, targets, numtargs,
+// sourcepos}, as spell-new builds it.
+TSpell* BuildSpell(const JsonValue& s, const TFixtureWorld& world)
+{
+    std::vector<TObjectInstance*> targets;
+    const bool hasTargets = s.Has("targets") && !s["targets"].IsNull();
+    if (hasTargets)
+        for (const JsonValue& t : s["targets"].Items())
+            targets.push_back(t.IsNull() ? nullptr : world.Get(t.Str()));
+    if (hasTargets && targets.empty())
+        targets.push_back(nullptr);
+    const int32_t numtargs = (int32_t)s["numtargs"].Int(hasTargets ? (int64_t)s["targets"].Items().size() : 0);
+    S3DPoint source;
+    S3DPoint* sourcepos = nullptr;
+    if (s.Has("sourcepos") && !s["sourcepos"].IsNull())
+    {
+        const JsonValue& p = s["sourcepos"];
+        source = S3DPoint((int32_t)p[0].Int(), (int32_t)p[1].Int(), (int32_t)p[2].Int());
+        sourcepos = &source;
+    }
+    auto [sd, variant] = FindVariant(s["variant"]);
+    TObjectInstance* invoker = s["invoker"].IsNull() ? nullptr : world.Get(s["invoker"].Str());
+    const SSpellClass* cls = FindSpellClass(s.Has("class") ? s["class"].Str().c_str() : "Spell");
+    if (!cls)
+        throw std::runtime_error("no spell class " + s["class"].Str());
+    return cls->create(invoker, hasTargets ? targets.data() : nullptr, numtargs, sourcepos, sd, variant, nullptr);
+}
+
+// The managers' spells as the retail fixture dumps them, with their effects.
+void WriteLifeCasters(JsonOut& j, const JsonValue& cs, const TFixtureWorld& world)
+{
+    j.Key("casters").Begin('{');
+    for (const JsonValue& spec : cs["chars"].Items())
+    {
+        TCharacter* c = world.Get(spec["name"].Str());
+        TSpellManager* m = c->GetSpellManager();
+        j.Key(spec["name"].Str().c_str()).Begin('{').Field("wait", m->Wait()).Key("spells").Begin('[');
+        for (int32_t i = 0; i < m->NumSpells(); i++)
+            if (TSpell* sp = m->GetSpell(i))
+            {
+                WriteSpellState(j, world, sp, [](JsonOut& out, TSpell* spell) {
+                    out.Key("effects").Begin('[');
+                    for (int32_t e = 0; e < spell->NumEffects(); e++)
+                        if (TObjectInstance* fx = spell->GetEffect(e))
+                            out.String(g_life->NameOf(fx));
+                    out.End(']').Key("last");
+                    if (spell->LastEffect())
+                        out.String(g_life->NameOf(spell->LastEffect()));
+                    else
+                        out.Null();
+                });
+            }
+        j.End(']').End('}');
+    }
+    j.End('}');
+}
+
+void WriteLifeTick(JsonOut& j, int32_t tick, const JsonValue& cs, const TFixtureWorld& world)
+{
+    j.Begin('{').Field("tick", tick);
+    WriteLifeCasters(j, cs, world);
+    j.Key("effects").Begin('[');
+    for (const auto& fx : g_life->Effects())
+        WriteEffect(j, fx.get());
+    j.End(']');
+    j.Key("frozen").Begin('{');
+    for (const JsonValue& spec : cs["chars"].Items())
+    {
+        j.Key(spec["name"].Str().c_str());
+        WriteFrozen(j, world.Get(spec["name"].Str()));
+    }
+    j.End('}');
+    WriteSeams(j);
+    WriteDraws(j);
+    j.End('}');
+}
+
+// An event at the start of a tick: {"tick", "do": "kill" (KillThisEffect on
+// "effect") | "removed" (each of "who" -- every character by default --
+// told by its manager's ObjectRemoved of "mode" and "what": an object by
+// name, or with mode 2 the sector that object is in)}.
+void RunEvent(const JsonValue& e, const JsonValue& cs, const TFixtureWorld& world)
+{
+    const std::string what = e["do"].Str();
+    if (what == "kill")
+    {
+        dynamic_cast<TEffect*>(g_life->Find(e["effect"].Str()))->KillThisEffect();
+        return;
+    }
+    if (what != "removed")
+        throw std::runtime_error("unknown event '" + what + "'");
+    const int32_t mode = (int32_t)e["mode"].Int();
+    TObjectInstance* obj = e["what"].IsNull() ? nullptr : g_life->Find(e["what"].Str());
+    void* ptr = mode == N_DELETINGSECTOR ? (obj ? (void*)obj->GetSector() : nullptr) : (void*)obj;
+    std::vector<std::string> who;
+    if (e.Has("who"))
+        for (const JsonValue& n : e["who"].Items())
+            who.push_back(n.Str());
+    else
+        for (const JsonValue& spec : cs["chars"].Items())
+            who.push_back(spec["name"].Str());
+    for (const std::string& n : who)
+        world.Get(n)->GetSpellManager()->ObjectRemoved(mode, ptr);
+}
+
+// Case (field 0, JSON): {"call": "spell-ticks" | "effect-pulse" |
+// "effect-iced", "ticks", "spells" / "effect" / "iced", "events", "control",
+// "variantfields", "fail", "sectorless", "chars", ...}; see spell_life.py.
+std::string SpellLife(const Case& c, std::string& error)
+{
+    try
+    {
+        if (!LoadSpells(error))
+            return {};
+        const JsonValue cs = JsonValue::Parse(c.Field(0));
+        TFixtureWorld world(cs);
+        BuildSpellPieces(cs, world);
+        SRegistered registered(world);
+        SCaseScope scope(cs, world);
+        SSpellScope spells(cs, world, false);
+        for (const JsonValue& spec : cs["chars"].Items())
+            world.Get(spec["name"].Str())->GetSpellManager()->SetWait((int32_t)spec["spellwait"].Int(0));
+        SLifeCase life(cs, world);
+        g_life = &life;
+        auto [sd, variant] = cs.Has("control") || cs.Has("variantfields") ? FindVariant(cs["controlvariant"])
+                                                                          : std::pair<SSpellData*, SSpellVariant*>{};
+        SControlScope control(cs, variant);
+        TCharacter::damageSeam = CaseDamage;
+        TPlayer::killExpSeam = CaseKillExp;
+        TCharacter::isEnemySeam = CaseIsEnemy;
+        TCharacter::knockBackSeam = CaseKnockBack;
+        TMapPane::newObjectSeam = LifeNewObject;
+        TMapPane::addObjectSeam = LifeAddObject;
+        TSoundPlayer::findSeam = CaseFindSound;
+        g_friends.clear();
+        for (const JsonValue& f : cs["friends"].Items())
+            g_friends.emplace_back(f[0].Str(), f[1].Str());
+        struct SLifeSeamsOff
+        {
+            ~SLifeSeamsOff()
+            {
+                TCharacter::damageSeam = nullptr;
+                TPlayer::killExpSeam = nullptr;
+                TCharacter::isEnemySeam = nullptr;
+                TCharacter::knockBackSeam = nullptr;
+                TMapPane::newObjectSeam = nullptr;
+                TMapPane::addObjectSeam = nullptr;
+                TSoundPlayer::findSeam = nullptr;
+                g_life = nullptr;
+            }
+        } off;
+
+        const std::string call = cs["call"].Str();
+        const int32_t ticks = (int32_t)cs["ticks"].Int(1);
+        JsonOut j;
+        j.Begin('{').FieldString("schema", "combat.spell.v1").FieldString("side", "port");
+
+        if (call == "spell-ticks")
+        {
+            for (const JsonValue& s : cs["spells"].Items())
+            {
+                TSpell* spell = BuildSpell(s, world);
+                const std::string owner = s.Has("owner") ? s["owner"].Str() : s["invoker"].Str();
+                world.Get(owner)->GetSpellManager()->Add(spell);
+            }
+            ClearSeams();
+            ClearDraws();
+            j.Key("ticks").Begin('[');
+            for (int32_t t = 0; t < ticks; t++)
+            {
+                ClearSeams();
+                ClearDraws();
+                for (const JsonValue& e : cs["events"].Items())
+                    if (e["tick"].Int() == t)
+                        RunEvent(e, cs, world);
+                for (const JsonValue& spec : cs["chars"].Items())
+                    world.Get(spec["name"].Str())->GetSpellManager()->Pulse();
+                WriteLifeTick(j, t, cs, world);
+            }
+            j.End(']');
+        }
+        else if (call == "effect-pulse" || call == "effect-iced")
+        {
+            // The effect, as the case sets it up; with "spell", that spell's.
+            const JsonValue& f = call == "effect-iced" ? cs["iced"] : cs["effect"];
+            SObjectDef def = ItemDef(OBJCLASS_EFFECT, f.Has("type") ? f["type"].Str() : "StrikeEffect");
+            def.flags = (uint32_t)f["flags"].Int(0);
+            def.level = (uint16_t)f["level"].Int(0);
+            const JsonValue& p = f["pos"];
+            def.pos = S3DPoint((int32_t)p[0].Int(), (int32_t)p[1].Int(), (int32_t)p[2].Int());
+            ClearSeams();
+            ClearDraws();
+            std::unique_ptr<TSpell> spell;
+            if (cs.Has("spell"))
+                spell.reset(BuildSpell(cs["spell"], world));
+            TEffect* fx = call == "effect-iced" ? static_cast<TEffect*>(life.Make<TIcedEffect>(&def))
+                                                : life.Make<TEffect>(&def);
+            fx->SetFrame((int32_t)f["frame"].Int(0));
+            if (spell)
+                fx->SetSpell(spell.get());
+            if (f.Has("follow"))
+            {
+                fx->Follow(world.Get(f["follow"].Str()), (int32_t)f["angle"].Int(0), (int32_t)f["dist"].Int(0),
+                           f["orbit"].Bool(false));
+                fx->SetFollowTime((int32_t)f["followtime"].Int(0));
+            }
+            if (f.Has("attach"))
+                fx->SetAttachName(f["attach"].Str().c_str());
+            if (f.Has("visiblewhen"))
+                fx->SetVisibleWhen(f["visiblewhen"].Str().c_str());
+            if (f["timed"].Bool(false))
+                fx->SetLife((int32_t)f["duration"].Int(0), (int32_t)f["blink"].Int(0));
+            fx->SetStartWait((int32_t)f["startwait"].Int(0));
+            if (call == "effect-iced" && cs.Has("target"))
+                static_cast<TIcedEffect*>(fx)->Set(cs["target"].IsNull() ? nullptr : world.Get(cs["target"].Str()));
+            j.Key("set").Begin('{');
+            WriteSeams(j);
+            j.Key("frozen").Begin('{');
+            for (const JsonValue& spec : cs["chars"].Items())
+            {
+                j.Key(spec["name"].Str().c_str());
+                WriteFrozen(j, world.Get(spec["name"].Str()));
+            }
+            j.End('}').End('}');
+            j.Key("ticks").Begin('[');
+            for (int32_t t = 0; t < ticks; t++)
+            {
+                ClearSeams();
+                ClearDraws();
+                for (const JsonValue& e : cs["events"].Items())
+                    if (e["tick"].Int() == t)
+                        RunEvent(e, cs, world);
+                fx->Pulse();
+                j.Begin('{').Field("tick", t).Key("effect");
+                WriteEffect(j, fx);
+                j.Key("spell");
+                if (spell)
+                    WriteSpellState(j, world, spell.get());
+                else
+                    j.Null();
+                j.Key("frozen").Begin('{');
+                for (const JsonValue& spec : cs["chars"].Items())
+                {
+                    j.Key(spec["name"].Str().c_str());
+                    WriteFrozen(j, world.Get(spec["name"].Str()));
+                }
+                j.End('}');
+                j.Key("chars").Begin('{');
+                for (const JsonValue& spec : cs["chars"].Items())
+                    world.WriteCharacter(j, spec["name"].Str().c_str(), world.Get(spec["name"].Str()));
+                j.End('}');
+                WriteSeams(j);
+                WriteDraws(j);
+                j.End('}');
+            }
+            j.End(']');
+            if (spell)
+                fx->SetSpell(nullptr);
+        }
+        else
+            throw std::runtime_error("unknown call '" + call + "'");
+        j.End('}');
         return j.str();
     }
     catch (const std::exception& e)
@@ -1537,6 +2070,10 @@ static const bool registered = RegisterTarget("spell-data", SpellData) &&
                                RegisterTarget("missile-area", SpellDamage) &&
                                RegisterTarget("missile-arrow", MissileArrow) &&
                                RegisterTarget("missile-bow", MissileBow) &&
-                               RegisterTarget("missile-fireball", MissileFireball);
+                               RegisterTarget("missile-fireball", MissileFireball) &&
+                               RegisterTarget("spell-life", SpellLife) &&
+                               RegisterTarget("spell-strike", SpellLife) &&
+                               RegisterTarget("effect-pulse", SpellLife) &&
+                               RegisterTarget("effect-iced", SpellLife);
 
 }  // namespace RetailAB

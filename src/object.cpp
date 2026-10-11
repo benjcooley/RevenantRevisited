@@ -3230,7 +3230,7 @@ bool TObjectClass::RemoveType(int32_t objtype)
     return true;
 }
 
-TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef)
+TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef, int32_t imageryid)
 {
     if (objectdef->pos.x < 0)
         objectdef->pos.x = 0;
@@ -3245,13 +3245,16 @@ TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef)
     if (!objinfo[objectdef->objtype].objbuilder)
         return nullptr;
 
-    objinfo[objectdef->objtype].imagery = TObjectImagery::LoadImagery(objinfo[objectdef->objtype].imageryid);
-
-    if (!objinfo[objectdef->objtype].imagery)
+    SObjectInfo& info = objinfo[objectdef->objtype];
+    TObjectImagery* imagery = nullptr;
+    if (imageryid < 0)
+        imagery = info.imagery = TObjectImagery::LoadImagery(info.imageryid);
+    else
+        imagery = TObjectImagery::LoadImagery(imageryid);
+    if (!imagery)
         return nullptr;
 
-    TObjectInstance* inst = objinfo[objectdef->objtype].objbuilder->Build(objectdef,
-        objinfo[objectdef->objtype].imagery);
+    TObjectInstance* inst = info.objbuilder->Build(objectdef, imagery);
 
     if (objectdef->objclass == OBJCLASS_TILE || objectdef->objclass == OBJCLASS_EXIT)
         inst->SetFlags(OF_IMMOBILE);
