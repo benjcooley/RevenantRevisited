@@ -48,6 +48,12 @@ TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
                          ['Maelstrom_ORIGINAL', 'TMaelstromEffect_BESPOKE'])
         self.assertFalse(candidate_metadata(row, 'Maelstrom_ORIGINAL')[0])
         self.assertTrue(candidate_metadata(row, 'TMaelstromEffect_BESPOKE')[0])
+    def test_windstrip_exact_retail_replacement_precedes_three_strip_preview(self):
+        names = admitted_candidates({'retail_type_id':'0xded3dbed',
+            'preview_candidates':['TWindStripAnimator_BESPOKE']})
+        self.assertEqual(names[0], 'TWindStrip_BESPOKE_NULLSPELL')
+        self.assertNotIn('TWindStrip_BESPOKE_NULLSPELL', admitted_candidates({
+            'retail_type_id':'0xdedbdbed', 'preview_candidates':[]}))
 
     def test_partial_requires_exact_identity_and_explicit_warning(self):
         self.assertTrue(PARTIAL)
