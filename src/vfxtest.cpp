@@ -2416,6 +2416,7 @@ void* FizzleSpawn(const S3DPoint& origin, bool auto_retrigger = true)
     c->origin = origin;
     c->auto_retrigger = auto_retrigger;
     c->fizzle = TFizzleEffect::SpawnForTest(origin);
+    if (c->fizzle) c->fizzle->SetNativeDomainForTest(StartupVfxNativeDomain);
     if (!c->fizzle)
         log_warn("[vfx] TFizzleEffect::SpawnForTest returned null; X21 entry will draw nothing");
     return c;
@@ -2448,6 +2449,7 @@ void FizzleSubmit(void* cp, EFxDebugMode dbg)
         {
             delete c->fizzle;
             c->fizzle = TFizzleEffect::SpawnForTest(c->origin);
+            if (c->fizzle) c->fizzle->SetNativeDomainForTest(StartupVfxNativeDomain);
             c->gap    = kFizzleRetriggerGap;
         }
     }

@@ -3448,6 +3448,8 @@ class TFizzleEffect : public TEffect
     // accumulator (same pattern as sparks/blood). SubmitFxQuad preserves
     // authored corners/UVs and the source's full rotation order.
     void TickAndSubmitForTest(EFxDebugMode debug_mode);
+    // Explicit isolated-preview owner/projector; ordinary runtime stays common-world.
+    void SetNativeDomainForTest(bool enabled);
 
     // True until the last particle's scale cycle has finished (mirrors
     // TFizzleAnimator self-destruct via KillThisEffect when frame_count
@@ -3470,7 +3472,10 @@ class TFizzleEffect : public TEffect
     int32_t frame_count_    = 0;
     // 24Hz sim-tick accumulator (ms) — same as sparks/blood.
     double  sim_accum_ms_   = 0.0;
-    bool    alive_          = true;};
+    bool    alive_          = true;
+    bool    native_domain_  = false;
+    hmm_mat4 native_owner_  = {};
+};
 
 // ********************
 // * TFireBallEffect *

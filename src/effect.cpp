@@ -3328,6 +3328,18 @@ TFizzleEffect* TFizzleEffect::SpawnForTest(const S3DPoint& origin)
     return fizzle;
 }
 
+void TFizzleEffect::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled;
+    if (native_domain_) {
+        const auto position = Pos();
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z,
+                                 uint8_t(GetFace()));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT particle=relative Fizzle",
+             int(native_domain_));
+}
+
 void TFizzleEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
 {
     if (!Renderer)
@@ -3475,11 +3487,14 @@ void TFizzleEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
 
     // Source TParticleSystem::Render: spin, tip, static rotation, scale,
     // then particle translation. Preserve the asset's four raw corners/UVs.
-    const S3DPoint& base = Pos();
+    const auto& owner_world = native_domain_ ? native_owner_ : Transform().Matrix();
     SQuadDrawItem item = {};
     item.key.blend = uint8_t(EFxBlend::Alpha);
     item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
     item.light_mode = EFxLightMode::Unlit;
+    item.retail_argb4444 = true; // Shipped Fizzle texture format; original ignores vertex color.
+    item.retail_software_projection = native_domain_;
+    item.retail_camera_z = 0.0f;
     item.debug_mode = debug_mode;
 
     for (int32_t i = 0; i < kFizzleMaxParticles; ++i)
@@ -3499,17 +3514,19 @@ void TFizzleEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
         const float boost = p.flicker ? kFizzleFlickerScale : 1.0f;
         const hmm_vec3 scale = p.scl * boost;
         MtxScale(&local, &scale);
-        // Submit in the renderer's world domain, retaining the existing
-        // particle anchor. Legacy FIX_Z_VALUE belongs to its D3D domain;
-        // do not apply that conversion again before the shared projection.
+        // Original particle Render(flicker=1, abs_pos=0) keeps raw local Z,
+        // then RenderObject composes the owner matrix. Only the owner owns
+        // the coordinate-domain bridge; never FIX_Z the particle translation.
         MtxTranslate(&local, &p.pos);
         for (int32_t corner = 0; corner < 4; ++corner)
         {
             hmm_vec3 point = {};
             MtxTransform(&local, &so.vertices[corner].pos, &point);
-            item.world_pos[corner][0] = float(base.x) + point.X;
-            item.world_pos[corner][1] = float(base.y) + point.Y;
-            item.world_pos[corner][2] = float(base.z) + point.Z;
+            hmm_vec3 world = {};
+            MtxTransform(&owner_world, &point, &world);
+            item.world_pos[corner][0] = world.X;
+            item.world_pos[corner][1] = world.Y;
+            item.world_pos[corner][2] = world.Z;
             item.uv[corner][0] = so.vertices[corner].tu;
             item.uv[corner][1] = so.vertices[corner].tv;
         }
