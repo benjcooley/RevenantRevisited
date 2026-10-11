@@ -61,6 +61,7 @@
 #include "effects/flamevariantspreview.h"
 #include "effects/ribbonpreview.h"
 #include "effects/vortexpreview.h"
+#include "effects/jtelepreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
@@ -6033,6 +6034,11 @@ struct SVfxTestBootstrap {
         tornado_bespoke.submit        = [](void* c, EFxDebugMode d) { TornadoBespokeSubmit(c, d); };
         tornado_bespoke.destroy       = [](void* c) { TornadoBespokeDestroy(c); };
         VfxTest::DeferredRegister(tornado_bespoke);
+
+        for(const auto&typed: {std::pair<const char*,uint32_t>{"Jtele_AUTHORED",0x0c05263bu},{"Jteled_AUTHORED",0x0c05263cu}}){
+            VfxTest::SEffect e={};e.id=typed.first;e.family="teleport";e.pipeline="PE+Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            const auto id=typed.second;e.factory=[id](const S3DPoint&o)->void*{return jtele_preview::Spawn(o,id);};e.submit=[](void*c,EFxDebugMode){jtele_preview::Advance(static_cast<jtele_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){jtele_preview::SubmitWorld(static_cast<jtele_preview::State*>(c));};e.is_alive=[](void*c){return jtele_preview::Alive(static_cast<jtele_preview::State*>(c));};e.destroy=[](void*c){jtele_preview::Destroy(static_cast<jtele_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
 
         // Shipped literal Vortex resolves the default animator and three legacy roots.
         // The unrelated snapshot procedural TVortexAnimator is not this binding.
