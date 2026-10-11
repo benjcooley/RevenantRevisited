@@ -44,3 +44,28 @@ loading; the earlier fabricated texture-residency boundary was not its cause.
 Keep the correct authored ARGB1555 decoder and all three visual rows open while
 investigating the original software/device format handling. Do not retag the
 loaded surface or tune port colors to this corrupted reference.
+
+## Complete unchanged descriptor/upload/raster chain
+
+`watcher_surface_flow_probe.py` now observes original GetClosestTextureFormat
+4164c0, ConvertTexture416790, SetTexture56d3a0 and actual leaf raster entry.
+All14 uploaded frames match exact authored ARGB1555 bytes. All source, closest
+and realized Lock/GetPixelFormat masks remain7c00/03e0/001f/8000.
+Scene initialized=1 and software=1 cause4164d6 to bypass hardware format
+negotiation; the fixture's zero hardware-format enumeration is not involved.
+
+Original SetTexture56d3ea tests only whether the alpha mask is nonzero. Every
+one of24 draws selects54e050→54ff60. Actual texel instructions550497 and55049d
+use word&0xfff and word>>12, decoding ARGB4444 regardless of the1555 masks.
+A sampled authored34916(0x8864), opaque RGB5(2,3,4), is consequently read as
+alpha4=8,RGB4(8,6,4). This directly explains the neon colors without tint fitting.
+
+Actual BeginScene before NewObject/CreateAnimator does not repair the format:
+all24 resulting PNGs are byte-identical to resource-first initialization.
+All operations above are read-only observations of unmodified original code;
+no format/texel/state substitution is used. Private evidence:
+`hard-alpha/watcher-surface-flow-{first,scene-first,final}`. The final report
+includes48 nonzero texel observations, exact asset/frame hashes, and assertions
+for every upload and selected surface. Original software ARGB1555 handling is
+therefore unsupported by this demonstrated dispatch. Correct portable1555
+colors remain intact, and no primary appearance acceptance is claimed.
