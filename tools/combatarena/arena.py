@@ -22,6 +22,9 @@ Scenario keys:
             interop slots, docs/gameflow/SAVE_INTEROP_SLOTS.zip)
   seed      random seed
   ticks     game ticks to run after the play screen starts
+  arena     {} or {"origin": [sx, sy], "size": n, "lights": n}: the flat test
+            arena (make_arena.py) written into the slot; `pos` and `addat`
+            in `exec` put Locke and the monsters on it
   exec      console commands in order; `sleep N` waits N ticks
   ini       optional Revenant.ini overrides {"Section": {"Key": "Value"}}
   playerai  true: Locke runs the character AI and fights on his own
@@ -50,6 +53,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 DATA = Path(os.environ.get('REVENANT_DATA_PATH', Path.home() / 'RevenantRetailLab' / 'retail-cd' / 'REVENANT'))
 DEFAULT_ZIP = REPO / 'docs' / 'gameflow' / 'SAVE_INTEROP_SLOTS.zip'
+sys.path.insert(0, str(HERE))
+from make_arena import add_arena  # noqa: E402
 
 # The INI a run starts from: the shipped game's options, and paths that
 # resolve every rules file through the install's archives (the retail lab's
@@ -109,6 +114,9 @@ def run_once(scn: dict, port: Path, out: Path, watch: bool = False, extra: list[
     (save / 'Save' / 'Single').mkdir(parents=True)
     write_ini(save / 'Revenant.ini', scn.get('ini'))
     extract_slot(Path(scn.get('slotzip', DEFAULT_ZIP)), scn['slot'], save / 'Save' / 'Single')
+    if 'arena' in scn:              # the flat test arena, in the slot's CurMap (make_arena.py)
+        add_arena(save / 'Save' / 'Single' / scn['slot'], module=DATA / 'Modules' / 'Ahkuilon.rvm',
+                  **{k: tuple(v) if k == 'origin' else v for k, v in scn['arena'].items()})
     # The engine finds its own assets beside the binary: run a copy from there.
     exe = port.parent / f'{port.name}.arena_{out.name}_{os.getpid()}'
     shutil.copy2(port, exe)
