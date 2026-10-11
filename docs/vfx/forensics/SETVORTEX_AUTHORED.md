@@ -138,3 +138,9 @@ no death tail by design. Real OF_KILL is reported through the gallery callback,
 and world submission is separated from advancement. The existing default/map
 factory remains available. Independent root approval/integrated gallery are
 separate from this source evidence submission.
+
+## Independent root review
+
+Exact persistent nullspell SetVortex genuine loaded owner/customAnimate/fullRender, original nonlinear FIX(+30) cachedheight, complete12authored triangles/CULL_NONE and strictARGB4444 decode. Full10524Hzupdates/render; source315bobfields max4.89e-8,1260triangles/18900XYZUVchannels checked, oldlinearZnegative differs0.79544. Rootnative/sourceunitPASS35.165s;27exacttick original/actualMetal wholepairs and nine4x detailpages independentlyreviewed,96pinsverified. Integrated27PNGsatstride4/all105renders byte-identical/cleanexit. Realruntime map gallery100/100visible52distinct/onepersistentfactory/cleanexit is liveness only, not standaloneappearance certification; initialcopiedvalidator incorrectly expectedpreviewruntime0/log retained and corrected againstactualruntime1 route. Initialcapture duringbuild rejectedchangedbinary, finalstablebinaryrepeatused. Spellteleportmarking/previousmarkerremoval,naturalmapcaller/skippedrenders/ordinaryprojection/audio/device/exactpixels andnearest/alphaRGB565overlap residualsremainopen.
+
+Root approval SHA256 `be346f066bcb25f35b461998cca9fc9c6a74b661124e0196d89c636910e8d16d`. Full acceptance remains open.

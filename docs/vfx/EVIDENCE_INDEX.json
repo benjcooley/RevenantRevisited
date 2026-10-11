@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 164,
+    "retail_rows_with_source_fixes_recorded": 165,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 156,
+    "visual_fidelity_confirmed_rows": 158,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 156,
-    "remaining_visual_review_rows": 20
+    "reviewed_visual_pass_rows": 158,
+    "remaining_visual_review_rows": 18
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1918,6 +1918,20 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Exact Createfood quality3 150-slot controller and own two RGB565 meshes, genuine loaded original owner/Pulse/defaultAnimate/full render packets with selected native software raster. Declared white light0 multiplier28/ambient32 generated1024-word adjacent lookup context; failed FOOD60 service observes original clock0/epoch946598400/prefix0 intrinsic RNG reseed, no item insertion credit. Full85ticks:255000 pool fields and1024lookupwords exact,61168 matrix channels max3.428e-7, RNG counts/seeds exact. Twenty-one same-tick whole original/Metal pairs and six actual-size detail pages independently reviewed;63 paired image hashes and12 other pins verified. Integrated85PNG repeat byte-identical,79visible,cleanexit; native/source unitPASS15.554s,26 mapping tests and compiled gallery lifecycle pass. Actual mapped gallery100frames99visible/99distinct/two real finite creations/cleanexit. Smoother stronger low-intensity Metal haze, edge/RGB565 quantization retained. Natural lighting/spells/actors, food/map insertion, audio/device/exact pixels remain open; no fitted geometry/color or shared renderer changes."
+    },
+    "recon/retail_asm/runtime/effects/current-pulp-public-20261011/root-approval.json": {
+      "sha256": "9666ad39e0110b32f049f82af47a3cb19ec0858f8eac6205f8606d7022dc67e2",
+      "retail_row": "Pulp:0x152dafdd",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Genuine loaded Acolyte/animator and Pulp public Set velocity(0,0,8),counts5/5/5 at declared unresident source(10000,10000,16); full original80ticks plus cold0. Scene1 opaque cull/depth mode and complete own chunk/blood meshes, no procedural body. Source11340poolfields/81RNGrows exact,7120matrixchannels max5.96e-8,386144vertexbytes/22110indices exact. All86 consumed XY terrain queries/result0 and10 real Blood/BloodS allocation failures checked; nine unused native stackZ words retained as differences. Clock0 intrinsic MakeIndex rand/srand/rand reseeds preserved. Wrongclock/missingreseed/doublePulse negatives reject. Ten original/actualMetal whole/detail phases independently reviewed,27pins verified; root81active plus1cold PNGs byte-identical/cleanexit. Roottranslatedgallery20/20visible through458updates, one unreseeded persistent factory,10 intrinsic reseeds, restoredactorflags406c028/health102/cleanexit. Natural death caller/mapped tile success/liveclock/audio/device/light context and1-2pixel coverage/surface quantization remainopen; settledchunks persist, no inventedkill."
+    },
+    "recon/retail_asm/runtime/effects/current-setvortex-loaded-20261011/root-approval.json": {
+      "sha256": "be346f066bcb25f35b461998cca9fc9c6a74b661124e0196d89c636910e8d16d",
+      "retail_row": "setvortex:0xad92bc15",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact persistent nullspell SetVortex genuine loaded owner/customAnimate/fullRender, original nonlinear FIX(+30) cachedheight, complete12authored triangles/CULL_NONE and strictARGB4444 decode. Full10524Hzupdates/render; source315bobfields max4.89e-8,1260triangles/18900XYZUVchannels checked, oldlinearZnegative differs0.79544. Rootnative/sourceunitPASS35.165s;27exacttick original/actualMetal wholepairs and nine4x detailpages independentlyreviewed,96pinsverified. Integrated27PNGsatstride4/all105renders byte-identical/cleanexit. Realruntime map gallery100/100visible52distinct/onepersistentfactory/cleanexit is liveness only, not standaloneappearance certification; initialcopiedvalidator incorrectly expectedpreviewruntime0/log retained and corrected againstactualruntime1 route. Initialcapture duringbuild rejectedchangedbinary, finalstablebinaryrepeatused. Spellteleportmarking/previousmarkerremoval,naturalmapcaller/skippedrenders/ordinaryprojection/audio/device/exactpixels andnearest/alphaRGB565overlap residualsremainopen."
     }
   }
 }

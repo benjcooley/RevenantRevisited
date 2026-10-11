@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "65b983ae9fbb92c67129f0deada2d5940212a56048877098733ad233636e8dd5",
+    "harness_sha256": "4727ecd19e26b73108eed454259d9d370145fa64332b26d82e308c1a32bb0229",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 164,
+    "retail_rows_with_source_fixes_recorded": 165,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 156,
+    "visual_fidelity_confirmed_rows": 158,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 156,
-    "remaining_visual_review_rows": 20
+    "reviewed_visual_pass_rows": 158,
+    "remaining_visual_review_rows": 18
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -12693,31 +12693,44 @@
       "retail_type_id": "0x152dafdd",
       "asset": "Misc\\Pulp.I3D",
       "preview_candidates": [
+        "TPulp_CONFIGURED_ACTOR",
         "TPulpEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact original controller/resource/render conversion independently reviewed and integrated-repeat/gallery checked within the declared configuration; natural caller/device limits retained."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved declared-context appearance; verify natural caller/map/gameplay/audio/device and retained framebuffer residuals.",
       "notes": [
         "Registered preview is explicitly stubbed and returns null: implement live character/body-part mesh fixture."
       ],
-      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
+      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole/detail inspection and integratedrepeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Genuine loaded Acolyte/animator and Pulp public Set velocity(0,0,8),counts5/5/5 at declared unresident source(10000,10000,16); full original80ticks plus cold0. Scene1 opaque cull/depth mode and complete own chunk/blood meshes, no procedural body. Source11340poolfields/81RNGrows exact,7120matrixchannels max5.96e-8,386144vertexbytes/22110indices exact. All86 consumed XY terrain queries/result0 and10 real Blood/BloodS allocation failures checked; nine unused native stackZ words retained as differences. Clock0 intrinsic MakeIndex rand/srand/rand reseeds preserved. Wrongclock/missingreseed/doublePulse negatives reject. Ten original/actualMetal whole/detail phases independently reviewed,27pins verified; root81active plus1cold PNGs byte-identical/cleanexit. Roottranslatedgallery20/20visible through458updates, one unreseeded persistent factory,10 intrinsic reseeds, restoredactorflags406c028/health102/cleanexit. Natural death caller/mapped tile success/liveclock/audio/device/light context and1-2pixel coverage/surface quantization remainopen; settledchunks persist, no inventedkill.",
+        "report": "recon/retail_asm/runtime/effects/current-pulp-public-20261011/root-approval.json",
+        "sha256": "9666ad39e0110b32f049f82af47a3cb19ec0858f8eac6205f8606d7022dc67e2",
+        "note": "docs/vfx/forensics/PULP_AUTHENTIC_RENDER_20261011.md"
+      }
     },
     {
       "index": 52,
@@ -16235,7 +16248,8 @@
         "TSetVortexEffect_BESPOKE"
       ],
       "source_fixes": [
-        "Restored shipped twelve-vertex/twelve-triangle head, authored UV/material/ARGB4444, cached absolute legacy translation, scale0.5, literal float bob thresholds/steps and true24Hz. Persistent exact-type component and isolated preview; owner MOVE does not move cached visual origin."
+        "Restored shipped twelve-vertex/twelve-triangle head, authored UV/material/ARGB4444, cached absolute legacy translation, scale0.5, literal float bob thresholds/steps and true24Hz. Persistent exact-type component and isolated preview; owner MOVE does not move cached visual origin.",
+        "2026-10-11: Exact original controller/resource/render conversion independently reviewed and integrated-repeat/gallery checked within the declared configuration; natural caller/device limits retained."
       ],
       "port_smoke_ids": [
         "TSetVortexEffect_BESPOKE"
@@ -16249,18 +16263,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_setvortex_builder_authored_cached_origin_component_verified",
-      "next_action": "Preserve source implementation and seven command checks. Defer triangle/UV raster diagnosis; do not rotate/mirror to fit. Natural teleport invoker and original context remain unverified. Advance already implemented Streamer/Pixie with FPS-enabled native references.",
+      "next_action": "Preserve approved declared-context appearance; verify natural caller/map/gameplay/audio/device and retained framebuffer residuals.",
       "notes": [
         "New exact preview/runtime implementation replaces mapping gap. Seven actual timeline checks and17 exact-ground tail frames pass; persistent bob and cached visual X despite owner MOVE observed. Native/port outside-ROI drift0. No visual sign-off. See SETVORTEX_AUTHORED.md for bounded orientation audit."
       ],
@@ -16316,11 +16330,14 @@
         "scope": "Authored persistent SetVortex against actual retail software reference, with eight-second warmup. No position, scale, color or phase fitting; native projection/fidelity review pending."
       },
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "deferred",
-        "finding": "Head orientation/surface appearance differs from retail. Read-only source, raw asset and retail camera audit finds no justified rotation/mirror correction; coincident front/back quads have mirrored U. Trace actual retail SW triangle/UV selection later; do not fit the effect.",
-        "scope": "Actual persistent software reference; geometry/raster projection and natural teleport caller remain open."
+        "date": "2026-10-11",
+        "reviewer": "root independent whole/detail inspection and integratedrepeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Exact persistent nullspell SetVortex genuine loaded owner/customAnimate/fullRender, original nonlinear FIX(+30) cachedheight, complete12authored triangles/CULL_NONE and strictARGB4444 decode. Full10524Hzupdates/render; source315bobfields max4.89e-8,1260triangles/18900XYZUVchannels checked, oldlinearZnegative differs0.79544. Rootnative/sourceunitPASS35.165s;27exacttick original/actualMetal wholepairs and nine4x detailpages independentlyreviewed,96pinsverified. Integrated27PNGsatstride4/all105renders byte-identical/cleanexit. Realruntime map gallery100/100visible52distinct/onepersistentfactory/cleanexit is liveness only, not standaloneappearance certification; initialcopiedvalidator incorrectly expectedpreviewruntime0/log retained and corrected againstactualruntime1 route. Initialcapture duringbuild rejectedchangedbinary, finalstablebinaryrepeatused. Spellteleportmarking/previousmarkerremoval,naturalmapcaller/skippedrenders/ordinaryprojection/audio/device/exactpixels andnearest/alphaRGB565overlap residualsremainopen.",
+        "report": "recon/retail_asm/runtime/effects/current-setvortex-loaded-20261011/root-approval.json",
+        "sha256": "be346f066bcb25f35b461998cca9fc9c6a74b661124e0196d89c636910e8d16d",
+        "note": "docs/vfx/forensics/SETVORTEX_AUTHORED.md"
       },
       "work_queue_status": "deferred_authored_surface_orientation_raster_difference"
     },

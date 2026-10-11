@@ -120,3 +120,9 @@ $PY tools/retail_runtime/pulp_gallery_smoke.py --binary "$BINARY" --data-root "$
 
 The gallery route is `TPulp_CONFIGURED_ACTOR`, exact retail ID only. Its static
 style plus actual alive callback prevents a fabricated retrigger period.
+
+## Independent root review
+
+Genuine loaded Acolyte/animator and Pulp public Set velocity(0,0,8),counts5/5/5 at declared unresident source(10000,10000,16); full original80ticks plus cold0. Scene1 opaque cull/depth mode and complete own chunk/blood meshes, no procedural body. Source11340poolfields/81RNGrows exact,7120matrixchannels max5.96e-8,386144vertexbytes/22110indices exact. All86 consumed XY terrain queries/result0 and10 real Blood/BloodS allocation failures checked; nine unused native stackZ words retained as differences. Clock0 intrinsic MakeIndex rand/srand/rand reseeds preserved. Wrongclock/missingreseed/doublePulse negatives reject. Ten original/actualMetal whole/detail phases independently reviewed,27pins verified; root81active plus1cold PNGs byte-identical/cleanexit. Roottranslatedgallery20/20visible through458updates, one unreseeded persistent factory,10 intrinsic reseeds, restoredactorflags406c028/health102/cleanexit. Natural death caller/mapped tile success/liveclock/audio/device/light context and1-2pixel coverage/surface quantization remainopen; settledchunks persist, no inventedkill.
+
+Root approval SHA256 `9666ad39e0110b32f049f82af47a3cb19ec0858f8eac6205f8606d7022dc67e2`. Full acceptance remains open.
