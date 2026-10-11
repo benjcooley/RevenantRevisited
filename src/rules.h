@@ -362,7 +362,8 @@ class TRules
     bool Load();
       // Loads the six rules files (retail 0x0048b990)
     void BindTypes();
-      // Binds every CHARACTER to the object type of its name (retail 0x0048cab0)
+      // Binds every CHARACTER to the object type of its name, and gives every
+      // weapon and armor type its WEAPON.DEF / ARMOR.DEF numbers (retail 0x0048cab0)
     bool LoadFile(const char* fname);
       // Internal: parses one .def through the shared tag loop
 
@@ -411,6 +412,9 @@ class TRules
   private:
     void BindType(const char *name, int32_t objtype);
       // One type of BindTypes: the CHARACTER of that name (retail 0x0048c930)
+    void ApplyItemData(const char *name, int32_t objtype);
+      // One type of BindTypes: its WEAPON.DEF / ARMOR.DEF BASICMODS into its
+      // class stats (retail 0x0048c7f0)
 
     PlayerStats::TStatLevels statlevels;    // STATLEVEL tables (rules.def)
     std::vector<SItemData> weapons;         // WEAPON.DEF entries

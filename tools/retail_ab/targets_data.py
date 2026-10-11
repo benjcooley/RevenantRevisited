@@ -45,32 +45,47 @@ CLASS_IDS = dict(ITEM=0, WEAPON=1, ARMOR=2, TALISMAN=3, FOOD=4, CONTAINER=5, LIG
                  MAPSCROLL=26)
 
 
+# The classes whose type stats the item binding writes (WEAPON.DEF /
+# ARMOR.DEF BASICMODS, 0x48af30 / 0x48b4a0): their STATS names and each
+# type's values go in the case, and both sides dump them after binding.
+ITEM_CLASSES = (CLASS_IDS['WEAPON'], CLASS_IDS['ARMOR'])
+
+
 def class_table(text: bytes) -> list[dict]:
-    """class.def's type names per class, in file order (the type index)."""
-    classes, current, in_types, depth = [], None, False, 0
+    """class.def's type names per class, in file order (the type index);
+    for the item classes also the STATS names and each type's values."""
+    classes, current, section, depth = [], None, None, 0
     for raw in text.decode('cp1252').splitlines():
         line = raw.split('//', 1)[0].strip()
         if not line:
             continue
         m = re.match(r'CLASS\s+"([^"]+)"', line)
-        if m and not in_types:
+        if m and not section:
             current = dict(id=CLASS_IDS[m.group(1).upper()], types=[])
+            if current['id'] in ITEM_CLASSES:
+                current.update(stats=[], typestats=[])
             classes.append(current)
             continue
-        if line.upper() == 'TYPES':
-            in_types, depth = True, 0
+        if line.upper() in ('TYPES', 'STATS') and not section:
+            section, depth = line.upper(), 0
             continue
-        if in_types:
+        if section:
             if line.upper() == 'BEGIN':
                 depth += 1
             elif line.upper() == 'END':
                 depth -= 1
                 if depth == 0:
-                    in_types = False
+                    section = None
+            elif depth == 1 and section == 'STATS':
+                if 'stats' in current:
+                    current['stats'].append(line.split()[0])
             elif depth == 1:
-                name = re.match(r'"([^"]*)"', line)
+                name = re.match(r'"([^"]*)"\s+"[^"]*"\s+\S+\s*\{([^}]*)\}', line) or re.match(r'"([^"]*)"', line)
                 if name:
                     current['types'].append(name.group(1))
+                    if 'typestats' in current:
+                        values = [int(v, 0) for v in name.group(2).split(',')] if name.lastindex == 2 else []
+                        current['typestats'].append((values + [0] * len(current['stats']))[:len(current['stats'])])
     return classes
 
 
@@ -118,6 +133,7 @@ def data_cases(data: Path, workdir: Path) -> list[dict]:
 
 def port_fields(case: dict) -> list[str]:
     body = {k: case[k] for k in ('dir', 'gamespeed')}
+    body['items'] = [c for c in case['classes'] if 'stats' in c]
     return [json.dumps(body, separators=(',', ':'), ensure_ascii=True)]
 
 
@@ -188,6 +204,9 @@ def compare(case: dict, retail: dict, port: dict) -> list[dict]:
     _records('char', retail['chars'], port['chars'], out, _char)
     _records('weapon', retail['weapons'], port['weapons'], out, _fields)
     _records('armor', retail['armor'], port['armor'], out, _fields)
+    pclasses = {c['id']: c for c in port.get('itemstats', [])}
+    for rc in retail.get('itemstats', []):
+        _records(f"class {rc['id']} type", rc['types'], pclasses.get(rc['id'], {}).get('types', []), out, _fields)
     return out
 
 

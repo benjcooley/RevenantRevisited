@@ -28,8 +28,8 @@ Seams (answered from the case, recorded in `seams`):
 - FatalError `0x481c10` / `0x481d10` (fmt, arg): the message, and the case
   stops there (`fatal` in the result).
 - The weapon / armor halves of BindTypeData (`0x48af30` / `0x48b4a0`, which
-  copy an item's numbers into its object class's stats): recorded, not run;
-  the stand-in classes have no stats.
+  copy an item's BASICMODS into its object class's stats): recorded, then
+  run as original code over the stand-in WEAPON and ARMOR classes' stats.
 - FindObjType `0x475210` (name, partial) on a stand-in class: the first type
   of that name, case-blind (`_stricmp`; partial is never set here), else -1.
   The original is a linear `_stricmp` scan; BindTypes asks it for every type
@@ -39,11 +39,17 @@ Seams (answered from the case, recorded in `seams`):
 The stand-in class table (`classes` in the case: class.def's classes by id,
 each with its type names in file order) fills the class registry
 `0x65a148` / count `0x65a258` with objects laid out as BindTypes reads them:
-id `+0x08`, type array `+0x24` (count) / `+0x34` (data), each type a record
-whose `+0x00` is its name.
+id `+0x08`, type array `+0x24` (count) / `+0x34` (data, `+0x38` the entry
+for an empty slot), each type a record whose `+0x00` is its name. A class
+given its `stats` (class.def's STATS names) and `typestats` (each type's
+values) has them as the item binding reads them: the stat definitions at
+`+0x14` (in the class: `+0x14` count, `+0x18` 0x50-byte records named at
+`+0x00`; FindStat `0x474210`), each type's values at its record's `+0x10`. Those classes'
+stats are dumped after BindTypes (`itemstats`).
 
 A case: {"files": {"Resources/rules.def": path, ...}, "gamespeed": 3,
-"classes": [{"id": 12, "types": [...]}, ...]}.
+"classes": [{"id": 12, "types": [...]}, {"id": 2, "types": [...],
+"stats": [...], "typestats": [[...], ...]}, ...]}.
 """
 from __future__ import annotations
 
@@ -183,6 +189,7 @@ class DataFixture:
         b.add(FATAL_ERROR2, 'FatalError', 0, self._fatal)
         b.add(WEAPON_CLASSDATA, 'WeaponClassData', 4, lambda a, c: self._classdata('weapon', c))
         b.add(ARMOR_CLASSDATA, 'ArmorClassData', 4, lambda a, c: self._classdata('armor', c))
+        self.statclasses = []
         b.add(FIND_OBJTYPE, 'FindObjType', 8, self._find_objtype)
         self.types = {}
         vm.checkpoint()
@@ -191,7 +198,7 @@ class DataFixture:
     # -- seams ------------------------------------------------------------
     def _classdata(self, kind, record):
         self.seams.append(['classdata', kind, self.cstr(record, 32)])
-        return 0
+        return Boundaries.ORIGINAL
 
     def _open(self, args, ecx):
         path = self.vm.string(args[0])
@@ -251,12 +258,28 @@ class DataFixture:
                 raise ValueError(f'class id {cid} out of range')
             cls = vm.allocate(0x40)
             data = vm.allocate(4 * max(1, len(types)))
+            stats, typestats = spec.get('stats', []), spec.get('typestats', [])
+            records = []
             for i, name in enumerate(types):
-                record = vm.allocate(8)
+                record = vm.allocate(0x18)
                 text = vm.allocate(len(name) + 1)
                 vm.write(text, name.encode(TEXT) + b'\0')
                 vm.put_u32(record, text)
+                if stats:
+                    values = vm.allocate(4 * len(stats))
+                    vm.write(values, struct.pack(f'<{len(stats)}i', *typestats[i]))
+                    vm.put_u32(record + 0x10, values)
                 vm.put_u32(data + 4 * i, record)
+                records.append(record)
+            if stats:
+                table = vm.allocate(0x50 * len(stats))
+                for k, stat in enumerate(stats):
+                    vm.write(table + 0x50 * k, stat.encode(TEXT) + b'\0')
+                vm.write(cls + 0x14, struct.pack('<hxxI', len(stats), table))
+                empty = vm.allocate(0x18)
+                vm.put_u32(empty + 0x10, vm.allocate(4 * len(stats)))
+                vm.put_u32(cls + 0x38, empty)
+                self.statclasses.append((cid, types, len(stats), records))
             vm.put_u32(cls + 0x08, cid)
             vm.put_u32(cls + 0x24, len(types))
             vm.put_u32(cls + 0x34, data)
@@ -271,7 +294,7 @@ class DataFixture:
     def run(self, case):
         vm = self.vm
         vm.restore()
-        self.seams, self.handles = [], {}
+        self.seams, self.handles, self.statclasses = [], {}, []
         self.case_files = {normal_path(name): Path(path).read_bytes() for name, path in case['files'].items()}
         vm.put_u32(GAME_SPEED, case.get('gamespeed', 3))
         self._classes(case.get('classes', []))
@@ -376,10 +399,14 @@ class DataFixture:
                      skillmods=[self.i32(p + 0x38 + 4 * i) for i in range(11)])
             c.update(self.fields(p, CLASS_FIELDS))
             classes.append(c)
+        itemstats = [dict(id=cid, types=[dict(name=name, stats=[self.i32(vm.u32(r + 0x10) + 4 * k) for k in range(n)])
+                                         for name, r in zip(types, records)])
+                     for cid, types, n, records in self.statclasses]
         return dict(rules=rules, classes=classes,
                     chars=[self.character(p) for p in self.items(RULES + R_CHARS)],
                     weapons=[self.item(p, 'weapon') for p in self.items(RULES + R_WEAPONS)],
-                    armor=[self.item(p, 'armor') for p in self.items(RULES + R_ARMOR)])
+                    armor=[self.item(p, 'armor') for p in self.items(RULES + R_ARMOR)],
+                    itemstats=itemstats)
 
 
 def main():

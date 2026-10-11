@@ -496,8 +496,29 @@ or value ≥ 31; it does not check for negatives.
 `%i`×8 → `+0xa0..+0xbc` in file order, STATLINE → malloc'd string at
 `+0xcc`. Defaults: `+0xb8`, `+0xc4` and `+0xc8` are −1 (type and class
 filled by BindType). Any other tag is fatal ("Invalid character tag %s").
-ARMOR `0x48b1a0` has the same tags (record 0xcc). Not re-verified field by
-field.
+ARMOR `0x48b1a0` has the same tags (record 0xcc); its BASICMODS fields 5
+and 6 (stealth, value) go to `+0xb4` / `+0xb0`.
+
+**The numbers go into the class (2026-10-11).** BindTypes calls
+BindTypeData `0x48c7f0` (name, class) for every type of every class after
+BindType: when the first class with a type of that name is WEAPON or
+ARMOR, the entry of that name (`_stricmp`) has its BASICMODS written into
+that class's stats for the bound type (`objinfo[type]->stats[FindStat(name)]`,
+only the stats the class defines):
+
+| | BASICMODS 1..8 → class stat |
+|---|---|
+| weapon `0x48af30` | EqSlot, Type, Damage, Combining, Poison, Value, DamageType, MinStrength |
+| armor `0x48b4a0` | EqSlot, Protection, Combining, ResistPoison, Stealth, Value, MinStrength, MinConstitution |
+
+So WEAPON.DEF / ARMOR.DEF override class.def. It matters: class.def gives
+every cloth piece Protection 0, ARMOR.DEF gives it 1, so Locke's starting
+shirt and pants are armour 2 (an Araknid's bite of 8 is taken as 6), and
+prices come from the .DEF files (a Short Sword: class.def 100, WEAPON.DEF
+195). The port skipped this step until 2026-10-11 (found by arena A1b:
+Locke took the full bite); it is `TRules::ApplyItemData`, and kata D1
+dumps every weapon and armor type's stats after binding (`itemstats`, the
+original `0x48af30` / `0x48b4a0` running over stand-in class tables).
 
 ## 9. RNG draws
 

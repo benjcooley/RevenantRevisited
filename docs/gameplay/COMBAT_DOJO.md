@@ -104,7 +104,7 @@ only).
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
 | D0 | which rules files retail reads (loose `Resources/` against `resources.rvr`) | `0x4a13f0` -> `0x4a1240` | `rev_fopen` | [x] packs first (§5.6) |
-| D1 | rules.def / stats.def / char.def / weapon.def / armor.def parse (`combat-data`): TRules::Initialize + Load, every CLASS, CHARACTER, ATTACK, IMPACT, WEAPON, ARMOR, STATLEVEL, then BindTypes | `0x48b690` `0x48b990` `0x4891c0` `0x489850` `0x48cab0` | `TRules::Initialize`, `Load`, `SClassData::Load`, `SCharData::Load`, `BindTypes` | [x] 4 cases (shipped, GameSpeed 5, GOG loose, every-tag edge), all fields (~39,700 per shipped case) |
+| D1 | rules.def / stats.def / char.def / weapon.def / armor.def parse (`combat-data`): TRules::Initialize + Load, every CLASS, CHARACTER, ATTACK, IMPACT, WEAPON, ARMOR, STATLEVEL, then BindTypes, with the WEAPON.DEF / ARMOR.DEF numbers it writes into the item classes | `0x48b690` `0x48b990` `0x4891c0` `0x489850` `0x48cab0` `0x48c7f0` `0x48af30` `0x48b4a0` | `TRules::Initialize`, `Load`, `SClassData::Load`, `SCharData::Load`, `BindTypes`, `ApplyItemData` | [x] 4 cases (shipped, GameSpeed 5, GOG loose, every-tag edge), all fields (~39,700 per shipped case) and 275 weapon / armor types' stats; without ApplyItemData 263 differences a case |
 | D1s | spell.def parse: every SPELL | `0x53ead0` | `SSpellData::Load` | [x] 3/3 (`spell-data`) |
 
 ## 3. Determinism

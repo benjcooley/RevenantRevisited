@@ -10,14 +10,18 @@
 // (docs/gameplay/forensics/COMBAT_DATA.md §3-§8), schema `combat.data.v1`.
 //
 // A case (field 0, JSON): {"dir": <a folder laid out as an install, with
-// Resources/ and Imagery/>, "gamespeed": 3}. The rules loader's search paths
-// point there for the case; TRules::Initialize then reads its files the way
-// it reads the install's.
+// Resources/ and Imagery/>, "gamespeed": 3, "items": [{"id", "types",
+// "stats", "typestats"}, ...]}. The rules loader's search paths point there
+// for the case; TRules::Initialize then reads its files the way it reads
+// the install's. The item classes' type stats are set to the case's
+// class.def values first (BindTypes writes WEAPON.DEF / ARMOR.DEF numbers
+// over them), dumped after, and put back.
 
 #include "retailab.h"
 #include "retailab_fixture.h"
 #include "retailab_json.h"
 
+#include "object.h"
 #include "revenant.h"
 #include "revutils.h"
 #include "rules.h"
@@ -25,6 +29,7 @@
 
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace RetailAB
 {
@@ -58,6 +63,57 @@ class TCaseInstall
     char savedClassDefPath[MAXPATHLEN] = {};
     char savedImageryPath[MAXPATHLEN] = {};
     int32_t savedGameSpeed = 0;
+};
+
+// The item classes' type stats for one case: set to the case's class.def
+// values, put back after. Types are found by name (the first of it, as
+// retail's FindObjType); stats by name.
+class TCaseItemStats
+{
+  public:
+    explicit TCaseItemStats(const JsonValue& items)
+    {
+        for (const JsonValue& spec : items.Items())
+        {
+            TObjectClass* cl = TObjectClass::GetClass((int32_t)spec["id"].Int());
+            if (!cl)
+                throw std::runtime_error("no object class " + std::to_string(spec["id"].Int()));
+            const auto& types = spec["types"].Items();
+            const auto& names = spec["stats"].Items();
+            const auto& values = spec["typestats"].Items();
+            for (size_t t = 0; t < types.size(); t++)
+            {
+                const int32_t objtype = cl->FindObjType(types[t].Str().c_str());
+                if (objtype < 0)
+                    continue;
+                for (size_t k = 0; k < names.size(); k++)
+                {
+                    const int32_t statid = cl->FindStat(names[k].Str().c_str());
+                    if (statid < 0)
+                        continue;
+                    saved.push_back({cl, objtype, statid, cl->GetStat(objtype, statid)});
+                    cl->SetStat(objtype, statid, (int32_t)values[t][k].Int());
+                }
+            }
+        }
+    }
+    ~TCaseItemStats()
+    {
+        for (auto it = saved.rbegin(); it != saved.rend(); ++it)
+            it->cl->SetStat(it->objtype, it->statid, it->value);
+    }
+    TCaseItemStats(const TCaseItemStats&) = delete;
+    TCaseItemStats& operator=(const TCaseItemStats&) = delete;
+
+  private:
+    struct SSaved
+    {
+        TObjectClass* cl = nullptr;
+        int32_t objtype = 0;
+        int32_t statid = 0;
+        int32_t value = 0;
+    };
+    std::vector<SSaved> saved;
 };
 
 // ---- The dump, by retail's field names --------------------------------------
@@ -255,6 +311,7 @@ std::string CombatData(const Case& c, std::string& error)
             return {};
         const JsonValue cs = JsonValue::Parse(c.Field(0));
         const TCaseInstall install(cs["dir"].Str(), (int32_t)cs["gamespeed"].Int(3));
+        const TCaseItemStats itemstats(cs["items"]);
 
         Rules.Close();
         const bool initialized = Rules.Initialize();
@@ -282,6 +339,25 @@ std::string CombatData(const Case& c, std::string& error)
         j.End(']');
         WriteItems(j, "weapons", Rules.Weapons());
         WriteItems(j, "armor", Rules.Armors());
+        j.Key("itemstats").Begin('[');
+        for (const JsonValue& spec : cs["items"].Items())
+        {
+            const TObjectClass* cl = TObjectClass::GetClass((int32_t)spec["id"].Int());
+            j.Begin('{').Field("id", spec["id"].Int()).Key("types").Begin('[');
+            for (const JsonValue& type : spec["types"].Items())
+            {
+                const int32_t objtype = cl->FindObjType(type.Str().c_str());
+                j.Begin('{').FieldString("name", type.Str()).Key("stats").Begin('[');
+                for (const JsonValue& stat : spec["stats"].Items())
+                {
+                    const int32_t statid = cl->FindStat(stat.Str().c_str());
+                    j.Value(objtype >= 0 && statid >= 0 ? cl->GetStat(objtype, statid) : 0);
+                }
+                j.End(']').End('}');
+            }
+            j.End(']').End('}');
+        }
+        j.End(']');
         j.End('}');
 
         Rules.Close();
