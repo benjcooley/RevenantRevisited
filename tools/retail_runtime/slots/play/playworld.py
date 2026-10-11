@@ -62,9 +62,10 @@ The game's own text, read where retail makes it (code hooks that only
 read): text-bar lines at TTextBar::AddLine 0x0054d0c0 once its empty /
 leading-space test passed (0x0054d0e3, the line in EBP), speech at
 TCharacter::Say 0x004d0610 (thiscall: the speaker, its name at +0x38; the
-text is the first argument), and the choices of a response entry at the
-dialog entry constructor 0x00533f10 (thiscall: mode 3 is the third
-argument, the count the tenth, the texts the eleventh; DIALOG.md §4.2).
+text is the first argument), and the choices of a response entry: the
+dialog entry constructor 0x00533f10 (thiscall, mode the third argument;
+DIALOG.md §4.2) marks a response entry, whose texts (+0x5c count, +0x60,
+the lines the player reads) are read once the tick is over.
 They collect in `game_text` as (tick, kind, text); the server logs them
 and the observation reports the text bar's.
 Frames: `front_buffer` / `write_frame` (frames.py). The HUD machine's GDI
@@ -109,6 +110,7 @@ TEXTBAR_LINE = 0x0054d0e3                   # TTextBar::AddLine past its empty-l
 SAY = 0x004d0610                            # TCharacter::Say(text, frames, anim, sound), thiscall
 DIALOG_ENTRY = 0x00533f10                   # TDialogEntry ctor(pane, chr, mode, ..., count, texts, labels, duration)
 RESPONSES = 3                               # entry mode: the player's choices
+ENTRY_TEXTS, ENTRY_TEXT = 0x5c, 0x60        # dialog entry: text count, char *texts[8]
 OBJ_NAME = 0x38                             # TObjectInstance: char *name
 STEP_BUDGET = 4_000_000_000                 # instructions; a frame is far below this
 START_BUDGET = 20_000_000_000
@@ -196,7 +198,8 @@ class PlayWorld:
             self.tick = state['tick']
             self.start_info = state['start_info']
         self.tick_event = vm.u32(TICK_EVENT)
-        self.game_text = list(state['game_text']) if state else []   # (tick, 'textbar' | 'say', text)
+        self.game_text = list(state['game_text']) if state else []   # (tick, kind, text)
+        self._responses = []                  # response entries built this tick
         vm.uc.hook_add(UC_HOOK_CODE, self._draw, begin=RAND, end=RAND)
         vm.uc.hook_add(UC_HOOK_CODE, self._textbar, begin=TEXTBAR_LINE, end=TEXTBAR_LINE)
         vm.uc.hook_add(UC_HOOK_CODE, self._say, begin=SAY, end=SAY)
@@ -215,11 +218,17 @@ class PlayWorld:
         self.game_text.append((self.tick or 0, 'textbar', self._text(uc.reg_read(UC_X86_REG_EBP))))
 
     def _entry(self, uc, address, size, user):
-        args = struct.unpack('<13I', uc.mem_read(uc.reg_read(UC_X86_REG_ESP) + 4, 52))
-        if args[2] == RESPONSES:
-            texts = struct.unpack(f'<{min(args[9], 8)}I', uc.mem_read(args[10], 4 * min(args[9], 8)))
+        mode = self.vm.u32(uc.reg_read(UC_X86_REG_ESP) + 12)
+        if mode == RESPONSES:
+            self._responses.append(uc.reg_read(UC_X86_REG_ECX))
+
+    def _note_responses(self):
+        for entry in self._responses:
+            count = min(self.vm.u32(entry + ENTRY_TEXTS), 8)
+            texts = struct.unpack(f'<{count}I', self.vm.uc.mem_read(entry + ENTRY_TEXT, 4 * count))
             self.game_text.append((self.tick or 0, 'choices',
                                    ' | '.join(f'{i + 1}. {self._text(t)}' for i, t in enumerate(texts))))
+        self._responses.clear()
 
     def _say(self, uc, address, size, user):
         text = self.vm.u32(uc.reg_read(UC_X86_REG_ESP) + 4)
@@ -263,6 +272,7 @@ class PlayWorld:
         vm.post_message(self.hwnd, WM_ACTIVATEAPP, 1, 0, *self.input.cursor)
         self.timer = TimerThread(vm, self.hud.system.timers)
         self._run(START_BUDGET)
+        self._note_responses()
         if vm.u32(CURRENT_SCREEN) != PLAY_SCREEN:
             raise RuntimeError(f'Start reached screen 0x{vm.u32(CURRENT_SCREEN):08x}, not the play screen')
         self.tick = 0
@@ -291,6 +301,7 @@ class PlayWorld:
         self.vm.advance(1)
         self.timer.fire()
         self._run(STEP_BUDGET)
+        self._note_responses()
         self.tick += 1
 
     def _quiet(self):
