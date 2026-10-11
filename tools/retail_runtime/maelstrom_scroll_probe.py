@@ -5,10 +5,10 @@ from maelstrom_visual_reference import MaelstromScene
 from speed_profile_contract import ROOT,sha
 import scrolltex_water_probe as source
 
-def run(exe,out):
+def run(exe,out,variant="maelstrom"):
  out.mkdir(parents=True,exist_ok=True)
- with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read('Imagery/Magic/maelstrom.I3D')
- f=MaelstromScene(exe,data);f.step();f.raster_enabled=False
+ with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read('Imagery/Magic/'+variant+'.I3D')
+ f=MaelstromScene(exe,data,registry_name=variant);f.step();f.raster_enabled=False
  ticks=(0,1,2,7,31,130,244,1024);source.TICKS=ticks
  metadata={str(i):dict(object_name=f.asset['objects'][i]['name'],tag_params=t['parameters'],frames=245)for i,t in zip((4,2,3),f.asset['tags'][:3])}
  compiled,build=source.build_controller(out,metadata)
@@ -26,4 +26,4 @@ def run(exe,out):
  r=dict(status='pass',uv_fields=fields,max_uv_error=maximum,cases=cases,controllers=f.controller_state(),compiled_source=build,asset_sha256=sha(data),fixture_source_sha256=sha((ROOT/'tools/retail_runtime/maelstrom_visual_reference.py').read_bytes()),source_sha256=sha(Path(__file__).read_bytes()),scope='Original default Render executes all three registered scrolltex controllers on independently selected global ticks while owner frame remains1. Production parser and ScrollTexOffset are compiled verbatim. GPU vertex addition uses the same float offset; original x87 final-store precision differences are bounded, not claimed identical.')
  (out/'proof.json').write_text(json.dumps(r,indent=2)+'\n');print('pass',fields,maximum);return r
 if __name__=='__main__':
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.executable,a.output)
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--output',type=Path,required=True);p.add_argument('--variant',choices=['maelstrom','ymaelstrom'],default='maelstrom');a=p.parse_args();run(a.executable,a.output,a.variant)

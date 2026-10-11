@@ -4,7 +4,7 @@ enum class EFxDebugMode : unsigned char;
 namespace maelstrom_original {
 struct State;
 // Shipped maelstrom leaf, null spell and declared flat walk-height1.
-State* Spawn(const S3DPoint& source);
+State* Spawn(const S3DPoint& source,bool y_variant=false);
 void Advance(State*, double seconds);
 void SubmitWorld(State*, EFxDebugMode);
 bool IsAlive(const State*);

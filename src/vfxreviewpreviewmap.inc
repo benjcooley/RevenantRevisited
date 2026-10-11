@@ -111,7 +111,7 @@
 {0xadbcef14u, "TWaterEffect_BESPOKE__StillWater", false, "Implemented preview controller; map caller not certified"}, // StillWater
 {0xadbcef15u, "TWaterEffect_BESPOKE__FlowWater", false, "Implemented preview controller; map caller not certified"}, // FlowWater
 {0xadbcef19u, "TWaterEffect_BESPOKE__SewerWater", false, "Implemented preview controller; map caller not certified"}, // SewerWater
-{0xae5eeb26u, "TMaelstromEffect_Bespoke__ymaelstrom_BESPOKE", true, "Partial preview: own ymaelstrom asset billboard; original controller incomplete; not complete original implementation"}, // ymaelstrom
+{0xae5eeb26u, "YMaelstrom_ORIGINAL", false, "Implemented original authored Y leaf; natural boss/spell caller not certified"}, // ymaelstrom
 {0xae92bc14u, "TManadrainEffect_Bespoke__YManadrain_BESPOKE", true, "Partial preview: own YManadrain asset billboard; original controller incomplete; not complete original implementation"}, // Ymanadrain
 {0xaeaeeb23u, "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1", false, "Implemented preview controller; map caller not certified"}, // ogrokwatcher1
 {0xaeaeeb24u, "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher2", false, "Implemented preview controller; map caller not certified"}, // ogrokwatcher2

@@ -4,13 +4,13 @@ from pathlib import Path
 from speed_profile_contract import ROOT,sha
 from unicorn import UC_HOOK_CODE
 from unicorn.x86_const import UC_X86_REG_EFLAGS
-def run_visual(exe,output):
+def run_visual(exe,output,variant="maelstrom"):
  import zipfile
  from maelstrom_visual_reference import MaelstromScene
  from software_probe import save_rgb565_png
  output.mkdir(parents=True,exist_ok=True)
- with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read('Imagery/Magic/maelstrom.I3D')
- f=MaelstromScene(exe,data)
+ with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read('Imagery/Magic/'+variant+'.I3D')
+ f=MaelstromScene(exe,data,registry_name=variant)
  for tick in range(131):
   f.step();f.animate();f.raster_enabled=False
   if tick<130:f.render()
@@ -33,4 +33,4 @@ def run_visual(exe,output):
  (output/'proof.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],rows[0]['pixels'],rows[1]['pixels']);return report
 
 if __name__=='__main__':
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('exe',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run_visual(a.exe,a.output)
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('exe',type=Path);p.add_argument('--output',type=Path,required=True);p.add_argument('--variant',choices=['maelstrom','ymaelstrom'],default='maelstrom');a=p.parse_args();run_visual(a.exe,a.output,a.variant)

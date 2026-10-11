@@ -2,8 +2,8 @@ import sys,zipfile,struct,argparse,json,hashlib
 from pathlib import Path
 sys.path.insert(0,'tools/retail_runtime')
 from speed_controller_preflight import read_asset
-parser=argparse.ArgumentParser(description='Bound every native-verified Maelstrom triangle in fixed supported camera windows');parser.add_argument('--pose',type=Path,required=True);parser.add_argument('--output',type=Path,required=True);args=parser.parse_args();p=args.pose
-with zipfile.ZipFile('data/imagery.rvi')as z:a=read_asset(z.read('Imagery/Magic/maelstrom.I3D'))
+parser=argparse.ArgumentParser(description='Bound every native-verified Maelstrom triangle in fixed supported camera windows');parser.add_argument('--pose',type=Path,required=True);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--variant',choices=['maelstrom','ymaelstrom'],default='maelstrom');args=parser.parse_args();p=args.pose
+with zipfile.ZipFile('data/imagery.rvi')as z:a=read_asset(z.read('Imagery/Magic/'+args.variant+'.I3D'))
 vertices=[list(struct.iter_unpack('<8f',bytes.fromhex(o['vertex_hex'])))for o in a['objects']];faceall=list(struct.iter_unpack('<3H',bytes.fromhex(a['face_hex'])));faces=[]
 for o in a['objects']:
  runs=o['texture_runs'];faces.append([f for start,count in zip(runs[::2],runs[1::2])for f in faceall[start:start+count]])

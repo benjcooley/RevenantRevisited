@@ -6,6 +6,7 @@
 #include "../renderer.h"
 #include "../retailsoftwaretransform.h"
 #include "../maelstromprofile.h"
+#include "../ymaelstromprofile.h"
 #include "../maelstrommatrix.h"
 #include "../cometsoftwarebounds.h"
 #include <array>
@@ -25,13 +26,13 @@ struct State {
     ~State(){if(Renderer)for(auto& p:parts)if(p.mesh)Renderer->ReleaseMeshAssetRef(p.mesh);}
 
 };
-static bool ValidateMaelstrom(T3DImagery& image)
+static bool ValidateMaelstrom(T3DImagery& image,bool y_variant=false)
 {
     if(image.NumStates()!=1 || image.NumObjects()!=51 || image.NumTextures()!=4 ||
        image.NumMaterials()!=4 || image.NumTags()!=5 || image.GetAniLength(0)!=245 || image.GetAniFlags(0)!=8192)return false;
     const auto hash=[](const void* data,size_t n){uint64_t h=1469598103934665603ull;
         const auto* b=static_cast<const uint8_t*>(data);for(size_t i=0;i<n;++i){h^=b[i];h*=1099511628211ull;}return h;};
-    for(int i=0;i<51;++i){S3DObj o{};image.GetObject(i,&o);const auto& p=retail_maelstrom::objects[i];
+    for(int i=0;i<51;++i){S3DObj o{};image.GetObject(i,&o);const auto& p=(y_variant?retail_maelstrom::y_objects:retail_maelstrom::objects)[i];
         if(std::strcmp(o.name,p.name) || o.material!=p.material || o.numverts!=p.vertices || o.numfaces!=p.faces)return false;
         for(int st=0;st<1;++st)if(o.parent[st]!=-1 || !o.anikeys[st] || o.numanikeys[st]!=p.keys[st] || hash(o.anikeys[st],p.keys[st]*sizeof(SAniKey32))!=p.key_hash[st])return false;
         for(int slot=0;slot<5;++slot)if(o.numtexfaces[slot]!=p.face_counts[slot])return false;
@@ -42,26 +43,27 @@ static bool ValidateMaelstrom(T3DImagery& image)
     const char* parameters[]={"obj=(cylinder01),du=-0.03,dv=0","obj=(cylinder02),du=-0.06,dv=0","obj=(cylinder07),du=-0.09,dv=0","maelstrom","litadd"};
     const int frames[]={0,0,0,3,40};
     for(int i=0;i<5;++i){const auto* tag=image.GetTag(i);if(!tag || tag->state!=0 || tag->frame!=frames[i] || !tag->name || !tag->str || std::strcmp(tag->name,names[i]) || std::strcmp(tag->str,parameters[i]))return false;}
-    for(int i=0;i<4;++i){S3DMat m{};image.GetMaterial(i,&m);if(m.texture!=retail_maelstrom::material_textures[i] || hash(&m.matdesc.diffuse,17*sizeof(float))!=retail_maelstrom::materials[i])return false;
+    for(int i=0;i<4;++i){S3DMat m{};image.GetMaterial(i,&m);if(m.texture!=(y_variant?retail_maelstrom::y_material_textures:retail_maelstrom::material_textures)[i] || hash(&m.matdesc.diffuse,17*sizeof(float))!=(y_variant?retail_maelstrom::y_materials:retail_maelstrom::materials)[i])return false;
         S3DTex t{};image.GetTexture(i,&t);const auto& f=t.desc.pixelFormat;const int size=i==1?128:64;
         if(t.numframes!=1 || t.desc.width!=size || t.desc.height!=size || f.dwRGBBitCount!=16 || f.dwRBitMask!=0xf800 || f.dwGBitMask!=0x7e0 || f.dwBBitMask!=31 || f.dwRGBAlphaBitMask)return false;
     }
     return true;
 }
-State* Spawn(const S3DPoint& source)
+State* Spawn(const S3DPoint& source,bool y_variant)
 {
     if(!Renderer)return nullptr;
     auto c=std::make_unique<State>();c->source=source;
-    auto* cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(0xaeaeeb26u):-1;
+    const uint32_t type_id=y_variant?0xae5eeb26u:0xaeaeeb26u;
+    auto* cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(type_id):-1;
     if(type<0)return nullptr;
     SObjectDef def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;
     c->owner.reset(cls->NewObject(&def));auto* owner=c->owner.get();
-    if(!owner || owner->ObjId()!=0xaeaeeb26u || !dynamic_cast<TEffect*>(owner))return nullptr;
+    if(!owner || owner->ObjId()!=type_id || !dynamic_cast<TEffect*>(owner))return nullptr;
     // Controlled coordinates can lie outside loaded map sectors. Establish
     // the explicit fixture transform before creating the animator/controllers.
     owner->ForcePos(source);owner->Face(0);owner->OnScreen();
     auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());auto* animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());
-    if(!image || !animator || !ValidateMaelstrom(*image))return nullptr;
+    if(!image || !animator || !ValidateMaelstrom(*image,y_variant))return nullptr;
     // Original 40e8d0 renders controllers first, then texture-major objects.
     for(int slot=1;slot<=4;++slot)for(int object=0;object<51;++object){
         // Original NewObject punctuation409f61 sets flag1 for these six *circles;
@@ -83,7 +85,7 @@ State* Spawn(const S3DPoint& source)
     }
     if(c->parts.size()!=45)return nullptr;
     owner->Animate(false);
-    log_info("[maelstrom-original] id=aeaeeb26 frames=245 objects=51 source=%d,%d,%d native=%d",source.x,source.y,source.z,int(StartupVfxNativeDomain));
+    log_info("[maelstrom-original] id=%08x frames=245 objects=51 source=%d,%d,%d native=%d",type_id,source.x,source.y,source.z,int(StartupVfxNativeDomain));
     log_info("[native-domain] enabled=%d camera_z=0",int(StartupVfxNativeDomain));
     return c.release();
 }

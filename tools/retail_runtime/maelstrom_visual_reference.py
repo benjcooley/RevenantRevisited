@@ -23,7 +23,7 @@ class MaelstromWorld(MissileProbe):
 
 class MaelstromScene(FireBallScene):
  owner_pulse,anim_factory,anim_vtable,anim_init,anim_pulse,anim_render,builder=(0x4de800,0x40dc00,0x5a370c,0x40dd60,0x40e2e0,0x40e8d0,0x5e8508)
- def __init__(self,exe,data,width=1280,height=960,center=(640,640)):
+ def __init__(self,exe,data,width=1280,height=960,center=(640,640),registry_name="maelstrom"):
   self.put_string=lambda s:self.bytes(s.encode('latin1')+b'\0');self.data=data;self.asset=read_fireball(data);
   self.rng_draws=0;self.software=LitSoftwareFixture(exe,width,height,camera=(0,0,0));self.vm=self.software.vm;v=self.vm;self.software.lighting((38,38,38),(1,1,1));v.put_u32(0x675fc0,center[0]);v.put_u32(0x675fc4,center[1])
   self.missile=MaelstromWorld(exe,vm=v);self.missile.configure([0,0,78],[0,-500,78],target_hp=0,animator_present=True);self.owner=self.missile.obj;self.imagery=v.allocate(0x200)
@@ -49,7 +49,7 @@ class MaelstromScene(FireBallScene):
   v.put_u32(0x5d79e4,0)
   self.prototype_index=0
   from default_static_probe import original_registry
-  self.dispatch=original_registry(v,("maelstrom",))
+  self.dispatch=original_registry(v,(registry_name,))
   for o in self.asset['objects']:
    resource=v.u32(v.u32(self.imagery+0x74)+o['index']*4)
    v.put_u32(resource+0x20,self.bytes(struct.pack('<'+'i'*len(o['states']),*[t['parent']for t in o['states']])))
@@ -106,11 +106,11 @@ class MaelstromScene(FireBallScene):
   return self.vm.surface_bytes('screen')
 
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--output',type=Path,required=True);p.add_argument('--frames',type=int,default=260);p.add_argument('--render-stride',type=int,default=1);p.add_argument('--width',type=int,default=1280);p.add_argument('--height',type=int,default=960);p.add_argument('--center',type=int,nargs=2,default=(640,640));p.add_argument('--samples',type=int,nargs='+');p.add_argument('--sample-stride',type=int,default=0);p.add_argument('--state-only',action='store_true');args=p.parse_args();args.output.mkdir(parents=True,exist_ok=True)
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--output',type=Path,required=True);p.add_argument('--frames',type=int,default=260);p.add_argument('--render-stride',type=int,default=1);p.add_argument('--width',type=int,default=1280);p.add_argument('--height',type=int,default=960);p.add_argument('--center',type=int,nargs=2,default=(640,640));p.add_argument('--samples',type=int,nargs='+');p.add_argument('--sample-stride',type=int,default=0);p.add_argument('--state-only',action='store_true');p.add_argument('--variant',choices=['maelstrom','ymaelstrom'],default='maelstrom');args=p.parse_args();args.output.mkdir(parents=True,exist_ok=True)
  assert sha(args.executable.read_bytes())=='28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5'
- with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read('Imagery/Magic/maelstrom.I3D')
- assert sha(data)=='a1f26ebf580b04122451e9d0f5f2b5d46f05fa19111736cc16643d620eeefb3f'
- f=MaelstromScene(args.executable,data,args.width,args.height,args.center);initial=f.state();records=[]
+ with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read('Imagery/Magic/'+args.variant+'.I3D')
+ assert sha(data)=={'maelstrom':'a1f26ebf580b04122451e9d0f5f2b5d46f05fa19111736cc16643d620eeefb3f','ymaelstrom':'513260c6254726d8c8afecce835218a74efd31410f12f319812a8a81eaaf016e'}[args.variant]
+ f=MaelstromScene(args.executable,data,args.width,args.height,args.center,args.variant);initial=f.state();records=[]
  selected=(0,1,4,9,19,29,39,59,79,99,119,139,159,179,199,219,238,239,249,259)
  if args.sample_stride>0:selected=tuple(range(1,args.frames,args.sample_stride))
  if args.samples is not None:selected=tuple(args.samples)
@@ -121,7 +121,7 @@ def main():
   else:f.draws=[];f.software.clear();pixels=f.vm.surface_bytes('screen')
   if f.raster_enabled:save_rgb565_png(args.output/f'native-{tick:03}.png',pixels,args.width,args.height)
   records.append(dict(tick=tick,before=before,after=f.state(),rendered=draw,draws=f.draws if tick in selected else []));print(tick,before['state'],before['frame'],before['position'],len(f.draws),flush=True)
- report=dict(dispatch=f.dispatch,effect='Maelstrom',type_id='0xaeaeeb26',initial=initial,records=records,render_stride=args.render_stride,sampled_captures=list(selected),
+ report=dict(dispatch=f.dispatch,effect=args.variant,type_id='0xaeaeeb26'if args.variant=='maelstrom'else'0xae5eeb26',initial=initial,records=records,render_stride=args.render_stride,sampled_captures=list(selected),
   executable_sha256=sha(args.executable.read_bytes()),asset_sha256=sha(data),source_sha256=sha(Path(__file__).read_bytes()),
   policy=dict(null_spell=True,source=[0,0,0],facing=0,ground_height=1,camera=[0,0,0],viewport=[args.width,args.height],screen_center=list(args.center),ambient=[38,38,38],directional=[1,1,1],seed=1,
    executed=['470cc0','4de800','40df90','40e2e0','40e460','40e8d0','40a8f0','56eb30'],

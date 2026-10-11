@@ -6,12 +6,12 @@ from static_particles_profile_contract import CLASS
 from speed_profile_contract import PRELUDE,function,sha,ROOT
 from maelstrom_visual_reference import MaelstromScene
 
-def run(executable,output):
+def run(executable,output,variant="maelstrom"):
  output.mkdir(parents=True,exist_ok=True);source=(ROOT/'src/3dimage.cpp').read_text();body=(ROOT/'src/3dimagebody.h').read_text();render=(ROOT/'src/render3d_types.h').read_text()
  signatures=('static inline int32_t SkipAniKey32(','static inline void GetAniKey32(','bool T3DImagery::GetUninterpolatedAniKey(','static void MakeMatrix(');methods={s:function(source,s)for s in signatures};methods["static bool ValidateMaelstrom("]=function((ROOT/"src/effects/maelstromoriginal.cpp").read_text(),"static bool ValidateMaelstrom(")
  prefixes=('SMALLKEY','ANIKEY32_','ANIFLAG32_','ANICODE32_','ANIKEY_POSSCALE','ANIKEY_ANGSCALE','I3D_ANIKEY32');constants='\n'.join(l for l in body.splitlines()if l.startswith('#define ')and any(l.startswith('#define '+p)for p in prefixes))
  records='\n'.join(function(t,s)+';'for t,s in((body,'struct SAniKey32\n'),(body,'struct S3DFace\n'),(render,'struct S3DVertex\n'),(render,'struct SRenderColor\n'),(body,'struct S3DMaterial\n')))
- cls=CLASS.replace('#include "staticpartsysprofiles.h"','#include "maelstromprofile.h"\n#include "maelstrommatrix.h"')
+ cls=CLASS.replace('#include "staticpartsysprofiles.h"','#include "ymaelstromprofile.h"\n#include "maelstrommatrix.h"')
  cls=cls.replace('std::array<int,40>parent{},keycount{};std::array<void*,40>keyptr{};', 'std::array<std::array<int,3>,40>parent{},keycount{};std::array<std::array<void*,3>,40>keyptr{};int lengths[3]{},af[3]{};')
  cls=cls.replace('std::array<std::vector<SAniKey32>,40>keys;', 'std::array<std::array<std::vector<SAniKey32>,3>,40>keys;')
  cls=cls.replace('int GetAniLength(int){return frames;}int GetAniFlags(int){return aflags;}', 'int GetAniLength(int s){return lengths[s];}int GetAniFlags(int s){return af[s];}')
@@ -48,15 +48,17 @@ hmm_mat4 m;BuildRetailMaelstromMatrix(m,o,p,r,s);
 printf("%d %d %d",st,o,t);for(float v:{p.X,p.Y,p.Z,r.X,r.Y,r.Z,s.X,s.Y,s.Z})printf(" %.9g",v);for(int i=0;i<16;++i)printf(" %.9g",(&m.Elements[0][0])[i]);puts("");}
 fprintf(stderr,"profile_mutations=%d default_unchanged=%d inclusive_changed=%d\n",controls,defaults,changed);}
 '''
+ if variant=='ymaelstrom':main=main.replace('ValidateMaelstrom(im)','ValidateMaelstrom(im,true)').replace('ValidateMaelstrom(bad)','ValidateMaelstrom(bad,true)')
+ main=main.replace('int controls=0;', 'assert(!ValidateMaelstrom(im,'+('false'if variant=='ymaelstrom'else'true')+'));\nint controls=0;')
  driver=output/'pose.cpp';driver.write_text(prelude+'\n'+constants+'\n'+records+'\n'+cls+'\n'+'\n'.join(methods.values())+'\n'+main);binary=output/'pose'
  command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(driver),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
  q=subprocess.run(command,capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr)
  if q.returncode:raise RuntimeError('Source compile failed; see compile.log')
- with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read('Imagery/Magic/maelstrom.I3D')
+ with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read('Imagery/Magic/'+variant+'.I3D')
  path=output/'asset-input';path.write_bytes(data);q=subprocess.run([str(binary),str(path)],capture_output=True,text=True);(output/'source.trace').write_text(q.stdout);(output/'controls.log').write_text(q.stderr)
  if q.returncode:raise RuntimeError('Source controls failed; see controls.log')
  port={(int(p[0]),int(p[1]),int(p[2])):[struct.unpack('<f',struct.pack('<f',float(x)))[0]for x in p[3:]]for l in q.stdout.splitlines()if(p:=l.split())}
- f=MaelstromScene(executable,data);v=f.vm;vectors=v.allocate(36);key_max=matrix_max=0;key_fields=matrix_fields=0;errors=[]
+ f=MaelstromScene(executable,data,registry_name=variant);v=f.vm;vectors=v.allocate(36);key_max=matrix_max=0;key_fields=matrix_fields=0;errors=[]
  for(st,o,t),current in port.items():
   assert v.call(0x409430,(o,st,t,vectors,vectors+12,vectors+24),this=f.imagery)==1
   original=struct.unpack('<9f',v.uc.mem_read(vectors,36));delta=max(abs(a-b)for a,b in zip(original,current[:9]));key_max=max(key_max,delta);key_fields+=9
@@ -66,7 +68,7 @@ fprintf(stderr,"profile_mutations=%d default_unchanged=%d inclusive_changed=%d\n
   if not accepted:continue
   original=struct.unpack('<16f',v.uc.mem_read(f.animobjs[o]+0x58,64));delta=max(abs(a-b)for a,b in zip(original,current[9:]));matrix_max=max(matrix_max,delta);matrix_fields+=16
   if delta>2e-4:errors.append(dict(state=st,object=o,tick=t,matrix_error=delta))
- report=dict(status='fail'if errors else'pass',key_fields=key_fields,matrix_fields=matrix_fields,max_key_error=key_max,max_matrix_error=matrix_max,errors=errors,controls=q.stderr,asset_sha256=sha(data),source_spans={s:sha(b.encode())for s,b in methods.items()},driver_sha256=sha(driver.read_bytes()),production_sha256={p:sha((ROOT/p).read_bytes())for p in('src/3dimage.cpp','src/maelstromprofile.h','src/maelstrommatrix.h','src/effects/maelstromoriginal.cpp','src/goldauthoredmatrix.h','src/speedauthoredmatrix.h','src/math3d.cpp')},sanitizers='ASan/UBSan',accepted=False)
+ report=dict(status='fail'if errors else'pass',variant=variant,opposite_profile_rejected=True,key_fields=key_fields,matrix_fields=matrix_fields,max_key_error=key_max,max_matrix_error=matrix_max,errors=errors,controls=q.stderr,asset_sha256=sha(data),source_spans={s:sha(b.encode())for s,b in methods.items()},driver_sha256=sha(driver.read_bytes()),production_sha256={p:sha((ROOT/p).read_bytes())for p in('src/3dimage.cpp','src/maelstromprofile.h','src/ymaelstromprofile.h','src/maelstrommatrix.h','src/effects/maelstromoriginal.cpp','src/goldauthoredmatrix.h','src/speedauthoredmatrix.h','src/math3d.cpp')},sanitizers='ASan/UBSan',accepted=False)
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],key_fields,matrix_fields,len(errors));return report
 if __name__=='__main__':
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.executable,a.output)
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--output',type=Path,required=True);p.add_argument('--variant',choices=['maelstrom','ymaelstrom'],default='maelstrom');a=p.parse_args();run(a.executable,a.output,a.variant)
