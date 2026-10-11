@@ -131,8 +131,8 @@ stderr.
 | `start` | `from`, `slot` (a bundle `start/` path when `from` is `slot`), `seed`, `record` (bundle directory, optional), `ini` (path, optional) | `t: 0` once play is reached and control can be given |
 | `step` | `ticks`, `events` (each with `t` relative to this step, `0 <= t < ticks`) | `t`: the session tick reached |
 | `observe` | `frame` (PNG path, optional), `objects` (radius in world units, default 800), `walkgrid` (radius, optional) | the observation (§7) |
-| `project` | `points`: `[[x, y, z], …]` | `screen`: `[[sx, sy] or null, …]`: game-screen pixels, `null` when off the play field; `world`: `[bool, …]`, whether a click at each reaches the world rather than the HUD or a modal (the port's `TPlayScreen::ClickRoute`; a host without it omits it). A click's map point is taken at Locke's height + 50, so project a point to click at that height |
-| `pick` | `x`, `y` | `pos`: the map point under that pixel by the game's pointer conversion (the right-button walk's: Locke's height + 50), `object`: the id under it or `null`, `world`: whether a click there reaches the world. The retail host answers `pos` only: retail finds the object under the pointer with its 3D pick, which draws a whole frame and changes the game's pick cache, so asking would change the game |
+| `project` | `points`: `[[x, y, z], …]` | `screen`: `[[sx, sy] or null, …]`: game-screen pixels, `null` when off the play field; `world`: `[bool, …]`, whether a click at each reaches the world rather than the HUD or a modal (the port's `TPlayScreen::ClickRoute`; the retail host's is retail's own routing, which also gives the map pane a press over the status and text bars; a host without it omits it). A click's map point is taken at Locke's height + 50, so project a point to click at that height |
+| `pick` | `x`, `y` | `pos`: the map point under that pixel by the game's pointer conversion (the right-button walk's: Locke's height + 50), `object`: the id under it or `null`, `world`: whether a click there reaches the world. The retail host answers `pos` and `world`, not `object`: retail finds the object under a point with its 3D pick, which draws a whole frame and changes the game's pick cache, so asking would change the game. Every drawn frame picks under the pointer, though, so the object under the pointer is the observation's `cursor` (§7): move the pointer there, step a tick, observe |
 | `export_slot` | `slot` (a slot name, or `@last` for the slot the game wrote most recently: Quick Save picks its own "Quick Save N"), `to` | `path`, `slot` (the name exported) |
 | `mark` | `kind`, other fields | writes the mark and a check line to the recording |
 | `replay` | `bundle`, `verify` (bool), `until` (tick, optional) | `t`, and with `verify`: `diverged: null` or `{t, fields}`. A replay starts the way the recording did: a new game, or the bundle's own `start/<slot>` with its seed and INI |
@@ -175,7 +175,7 @@ a NUL byte, the file's bytes and a NUL byte.
 
 ```json
 {"t": 912, "screen": "play", "control": true,
- "player": {"pos": [6280, 4338, 33], "screen": [300, 210], "level": 2, "facing": 96,
+ "player": {"pos": [6280, 4338, 33], "screen": [300, 210], "level": 2, "facing": 96, "radius": 16,
             "health": [87, 100], "mana": [40, 60], "fatigue": [70, 80],
             "mode": "combat", "action": 3, "action_name": "combat", "action_tick": 14,
             "target": 1712, "gold": 31, "xp": [1, 140, 300],
@@ -183,9 +183,10 @@ a NUL byte, the file's bytes and a NUL byte.
             "weapon": {"name": "Short Sword", "mask": 2},
             "quick_spells": ["Fire Flash", null, null, null],
             "belt": ["Healing Potion", null, null, null, null],
-            "pack": [{"slot": 5, "name": "Short Sword", "class": "weapon", "eqslot": 4, "screen": [505, 392]}],
+            "pack": [{"slot": 5, "name": "Short Sword", "class": "weapon", "eqslot": 4, "screen": [525, 456]}],
             "equipped": {"2": "Red Cloth Shirt"}},
  "dialog": {"speaker": "Sardok", "choices": ["Who are you people?", "Who am I?"]},
+ "cursor": 1712,
  "messages": ["Locke entered The Keep"],
  "objects": [{"id": 1712, "name": "Rahul", "type": "Rahul", "class": "character",
               "pos": [6301, 4350, 33], "screen": [212, 180], "enemy": true,
@@ -215,6 +216,15 @@ a NUL byte, the file's bytes and a NUL byte.
   (PLAYER_INPUT.md §6). `equipped`: equipment slot (player.h `EQ_*`) to the
   item worn or wielded there.
 - `xp`: character level, experience, experience for the next level.
+- `cursor`: the id of the object under the pointer as the last drawn
+  frame picked it, `null` for nothing (the player is `0`): what a left
+  click there acts on (retail `TMapPane::OnObject`, which reuses the pick
+  every frame makes at the pointer; the port's hover pick, the same
+  function). `null` too while the pointer is off the map (the retail
+  host: outside the map pane; the port: on its HUD). A host leaves it out
+  when it can't say without changing the game (retail: no frame has drawn
+  since the pointer moved). To act on an object, a director moves the
+  pointer onto it, steps a tick, checks `cursor`, then clicks.
 - `messages`: text-bar lines added since the previous `observe`.
 - `objects`: within the radius, nearest first: characters, items,
   containers, exits and doors, waypoint helpers. `name` is the instance
@@ -225,7 +235,10 @@ a NUL byte, the file's bytes and a NUL byte.
 - `walkgrid` (when asked): `{"origin": [gx, gy], "cell": 16, "w": W,
   "h": H, "heights": [...]}`, row-major walk heights: 0 for no floor, -1 for
   a cell no loaded sector holds (unknown, not "no floor"). Cell k is centred
-  on world k*16, as `GetWalkHeight` reads it (`(x + 8) >> 4`).
+  on world k*16, as `GetWalkHeight` reads it (`(x + 8) >> 4`). The hosts
+  agree on every cell both know; the port knows the whole loaded map (a
+  cell no sector of it covers is 0), the retail host only the sectors in
+  retail's pool.
 - `player.radius`: the radius the game tests Locke's steps over
   (`GetWalkHeightRadius`).
 

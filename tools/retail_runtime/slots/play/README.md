@@ -119,9 +119,13 @@ joystick) stays absent, as in the HUD machine.
   "Quick Save 1".
 - Observation and check lines (`observe.py`): memory reads at the
   documented layouts, each cited in the module, plus getters retail itself
-  uses for computed values (maximum health / fatigue / mana, WeaponType)
+  uses for computed values (maximum health / fatigue / mana, WeaponType,
+  Radius, an item's GetStat, IsEnemy, OnObject, the panes' click tests)
   called through `PlayWorld.peek`, which refuses any call that makes an API
-  call or draws a random number. Text-bar lines and speech are read where
+  call or draws a random number, and puts back every byte of game memory
+  the call wrote (IsEnemy lowercases names into a static buffer at
+  `0x00666648`; OnObject narrows a surface's clip rect and widens it
+  again): observing leaves the machine as it was. Text-bar lines and speech are read where
   retail makes them (`TTextBar::AddLine` past its empty-line test
   `0x0054d0e3`, `TCharacter::Say` `0x004d0610`).
 - `draws`: every call of the CRT rand `0x0058c582`, the game's random
@@ -135,7 +139,13 @@ joystick) stays absent, as in the HUD machine.
 | player | Player `0x00667fcc`: pos `+0x10/14/18`, level `+0x0e`, facing `+0x36`; mode from `root` `+0xe0`; stats from the player's copy (`+0x34c` count, `+0x350` {id, value}), ids from `0x0066ca4c` / `0x0066ca3c` / `0x0066ca38`; maxima through vtable `+0x1d8/+0x1e0/+0x1e8`; `doing` `+0xd8` (action `+0`, name `+4`); target = `root` `+0xe0` -> obj `+0x44` while root is combat (3) or bow (0x19); xp stats 17-19; skills stats 40-42 and 43 + WeaponType (vtable `+0x2cc`); weapon = equipment hand `+0x2b0`, mask `1 << WeaponType`; belt = inventory items (`+0x68` count, `+0x78` data) in slots `0x10b..` |
 | `objects` | the loaded sectors (`0x00668578` count, `0x00668588` array; `+0x98` loaded, `+0xb8` count, `+0xc8` objects) on the player's level: id `+0x40`, name `+0x38`, type name `*(+0x4c)`, class `+0x04` (OBJCLASS_IDS.md), health and action as the player's |
 | `screen` (player, objects), `project` | retail's WorldToScreen `0x0046d7a0` less the map pane's scroll origin `0x006668d8+0x78/+0x7c`; null off the pane |
-| `pick` | retail's ScreenToWorld `0x0046dad0` at Locke's z + 50, as UpdateMouseMovement `0x0044ee00`; the object under the pointer needs the 3D pick, which draws a frame: not answered |
+| `pick` | `pos`: retail's ScreenToWorld `0x0046dad0` at Locke's z + 50, as UpdateMouseMovement `0x0044ee00`. The object under an arbitrary point needs the 3D pick, which draws a frame: not answered (the pointer's is `cursor`) |
+| `world` (`project`, `pick`) | retail's routing of a button message, read without clicking: the dispatcher `0x0048f870` (`0x006682bc`; a fade whose flags hold the mouse), TPlayScreen::MouseClick `0x0047ce80` (paused `+0x5d4`; demo mode's restart), TScreen::MouseClick `0x004903b0` (the top exclusive pane alone while it holds the mouse; else every pane that takes clicks -- slots `+0x3c`/`+0x44` and `+0x44` clear -- with the point in its rect); then the map pane `0x006668d8` must get the press, not over a side tab's button (`0x004364d0` on `0x0065be50`, `0x0044f17b`), the editor off, a player. A press over the status or text bar reaches the map pane too, as in retail |
+| `cursor` | TMapPane::OnObject `0x00452520` at the polled pointer (`0x00668510`/`14`) less the map pane's origin, through `peek`: it reuses the 3D pick each DrawScene makes at the pointer (`0x005e91cc`/`d0` point, `0x005e91d4` object), then walks the map's 2D objects; null off the pane, left out while the pick isn't at the pointer |
+| `player.pack` | TInventory `0x0065d4f8` while it shows the player (`+0x17c`): his items in slots first (`+0x188`) .. first + 11, cell (column, row) = slot - first as column * 3 + row, centred at pane (8 + 45 column + 20, 42 + 44 row + 20) (DrawGrid `0x00537a70`, the right click's hit test `0x0053835e`); `eqslot` GetStat("EqSlot") (vtable `+0xd4`, `0x00473600`; -1 when neither of the class's stat lists `+0x48`→`+0x1c`/`+0x14` names it); `screen` null while a press there wouldn't reach the pane |
+| `player.equipped` | TPlayer equipment `+0x2a0`, 11 slots (`EQ_*`) |
+| `player.radius` | Radius() (vtable `+0x258`, `0x004d6e40`), what FindClearPath passes GetWalkHeightRadius (`0x004c3a3f`, `0x004c3a51`) |
+| `walkgrid` | per cell, GetWalkHeight `0x00452e10`'s read: FindSector `0x00499e10` (the pool's first sector with the level, x, y: `+0x04/+0x08/+0x0c`), its walkmap `+0x00` (64 x 64 uint16, low 10 bits, `0x00499720`), 0 without one; -1 where FindSector finds none. Read a sector at a time in Python: the 2400 grid in about 2 ms |
 | `dialog` | the response entry's texts (`+0x5c` count, `+0x60` texts), the latest NPC entry's speaker and text |
 | `messages` | text-bar lines since the previous `observe` |
 
@@ -144,9 +154,23 @@ joystick) stays absent, as in the HUD machine.
 slots 1-4) exactly against the spell list's variants (`0x00667c38`), first
 in file order, as retail casts by talismans; `gold` is retail's
 GetInventoryAmount("Gold") (vtable `+0x84`, `0x0046fde0`, nested), called
-through `peek`. Not read (not verified): `walkgrid`; `action_tick` only
-for an attack (the one retail keeps as `lastattack` `+0x160`, started at
-GameFrame `+0x164`).
+through `peek`. Not read (not verified): `action_tick` only for an attack
+(the one retail keeps as `lastattack` `+0x160`, started at GameFrame
+`+0x164`). Names in `pack`, `equipped` and `weapon` are the instance names
+(`+0x38`); the port shows its pack, equipped and weapon names through
+DisplayName (retail `0x0046e7f0`), which differs for an item with a dialog
+line of its name (MGCSCRL1 is the scroll's text there).
+
+Checked in `test_observe.py`, from the port's `opening` waypoint: a right
+click on the Short Sword's reported cell equips it; with the in-game menu
+up no cell and no point takes a click; at seven points `world` is exactly
+where TMapPane::MouseClick's play branch (`0x0044f84f`) received the
+press; `cursor` names Tendrick over his reported point and Locke (0) over
+his, and the next press finds the same object (`+0xf8`); `walkgrid` cells
+equal retail's own GetWalkHeight (-1 exactly where FindSector finds none);
+`radius` is what FindClearPath passes for Locke. From the same slot the
+port gives the same pack, radius, walk grid (every cell both know) and
+cursor answers.
 
 ## Server (`server.py`)
 
@@ -186,7 +210,7 @@ at other times, which slows everything proportionally):
 | Stepping, no watch (through server.py) | 8.0 ticks/s (7.0 over a whole recorded opening, 7.1 replaying it) |
 | Stepping with `--watch` / `--watch --pace 24` | 7.45 / 7.0 ticks/s |
 | `checkpoint` / `restore` (8.6-10 MB image) | 0.34-0.5 s / 0.8-1.1 s |
-| `observe` / a check line | about 5 ms / under 0.1 ms |
+| `observe` / with `walkgrid` 2400 / a check line | about 10 ms / about 20 ms through server.py (2026-10-11, load about 30) / under 0.1 ms |
 
 Where a tick goes (a dialog scene, 76 ms): the guest's own work in Unicorn
 about 40-50 ms; the Python side of API boundaries about 25-35 ms (1360
@@ -209,7 +233,7 @@ HP 100/100, 9 items.
 ## Gaps
 
 - Text glyphs are approximate (gditext.py): FreeType, not Win98 GDI.
-- `pick` without the object; `walkgrid` not read; `action_tick` for
+- `pick` without the object (`cursor` has the pointer's); `action_tick` for
   attacks only; `quick_spells` checked only empty (no spell bound in the
   states tested).
 - The guest heap is 64 MB (`Runtime.HEAP_SIZE`); with block reuse a long
