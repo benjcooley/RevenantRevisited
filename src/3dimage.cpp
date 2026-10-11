@@ -354,7 +354,7 @@ bool T3DImagery::ValidateRetailTeleportationProfile()
 
 bool T3DImagery::ValidateRetailMightPartSysProfile()
 {
-    if (!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+    if (!GetResFilename() || version!=3 || flags!=0xdc ||
         GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=2 || NumMaterials()!=2 ||
         NumTextures()!=1 || NumTags()!=1 || numverts!=4 || numfaces!=2) return false;
     std::string path(GetResFilename());
@@ -385,7 +385,7 @@ bool T3DImagery::ValidateRetailMightPartSysProfile()
 
 bool T3DImagery::ValidateRetailImmortalmightPartSysProfile()
 {
-    if (!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+    if (!GetResFilename() || version!=3 || flags!=0xdc ||
         GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=3 || NumMaterials()!=2 ||
         NumTextures()!=1 || NumTags()!=1 || numverts!=8 || numfaces!=4) return false;
     std::string path(GetResFilename());
@@ -425,7 +425,7 @@ bool T3DImagery::HasRetailWarpProfile(uint32_t type_id)
     const char* expected = retail_warp::AssetPath(type_id);
     if (!expected) return false;
     // NumObjects loads the immutable imagery before inspecting its metadata.
-    if (NumObjects()!=1 || version!=3 || flags!=0xdc || NumStates()!=1 ||
+    if (NumObjects()!=1 || version!=3 || flags!=0xdc ||
         GetAniLength(0)!=1 || GetAniFlags(0)!=0x2001 || NumTags()!=0 ||
         NumMaterials()!=1 || NumTextures()!=1 || numverts!=4 || numfaces!=3 ||
         !GetResFilename()) return false;
@@ -468,7 +468,7 @@ bool T3DImagery::HasRetailWarpProfile(uint32_t type_id)
 
 bool T3DImagery::ValidateRetailFmasteryPartSysProfile()
 {
-    if (!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+    if (!GetResFilename() || version!=3 || flags!=0xdc ||
         GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=3 || NumMaterials()!=2 ||
         NumTextures()!=1 || NumTags()!=1 || numverts!=8 || numfaces!=4) return false;
     std::string path(GetResFilename());
@@ -505,7 +505,7 @@ bool T3DImagery::ValidateRetailFmasteryPartSysProfile()
 
 bool T3DImagery::ValidateRetailSpeedPartSysProfile()
 {
-    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+    if(!GetResFilename() || version!=3 || flags!=0xdc ||
        GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=3 ||
        NumMaterials()!=3 || NumTextures()!=2 || NumTags()!=2 || numverts!=8 || numfaces!=4) return false;
     std::string path(GetResFilename());
@@ -547,7 +547,7 @@ bool T3DImagery::ValidateRetailSpeedPartSysProfile()
 
 bool T3DImagery::ValidateRetailQuicksilverPartSysProfile()
 {
-    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+    if(!GetResFilename() || version!=3 || flags!=0xdc ||
        GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=3 ||
        NumMaterials()!=3 || NumTextures()!=2 || NumTags()!=2 || numverts!=8 || numfaces!=4) return false;
     std::string path(GetResFilename());
@@ -589,7 +589,7 @@ bool T3DImagery::ValidateRetailQuicksilverPartSysProfile()
 
 uint32_t T3DImagery::ValidateRetailStaticParticleProfile()
 {
-    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+    if(!GetResFilename() || version!=3 || flags!=0xdc ||
        NumTextures()!=1)return 0;
     std::string path(GetResFilename());
     for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
@@ -601,7 +601,7 @@ uint32_t T3DImagery::ValidateRetailStaticParticleProfile()
         const size_t length=std::strlen(profile.suffix);
         if(path.size()<length || path.compare(path.size()-length,length,profile.suffix) ||
            (path.size()!=length && path[path.size()-length-1]!='/'))continue;
-        if(GetAniLength(0)!=profile.frames || GetAniFlags(0)!=profile.ani_flags ||
+        if(NumStates()!=profile.states || GetAniLength(0)!=profile.frames || GetAniFlags(0)!=profile.ani_flags ||
            NumObjects()!=profile.objects || NumMaterials()!=profile.materials ||
            NumTags()!=(profile.blend_tag<0?1:2) || numverts!=profile.total_vertices ||
            numfaces!=profile.total_faces)return 0;
@@ -611,6 +611,13 @@ uint32_t T3DImagery::ValidateRetailStaticParticleProfile()
                o.numanikeys[0]!=p.key_count ||
                fingerprint(o.anikeys[0],p.key_count*sizeof(SAniKey32))!=p.keys ||
                o.numtexfaces[0]!=0 || o.numtexfaces[1]!=p.faces)return 0;
+            if(p.mesh_vertices || p.mesh_faces){
+                std::vector<S3DVertex> vertices(size_t(p.vertices));
+                std::vector<S3DFace> faces(size_t(p.faces));
+                GetObjVerts(i,vertices.data(),0,0);GetObjFaces(i,faces.data());
+                if(fingerprint(vertices.data(),vertices.size()*sizeof(S3DVertex))!=p.mesh_vertices ||
+                   fingerprint(faces.data(),faces.size()*sizeof(S3DFace))!=p.mesh_faces)return 0;
+            }
         }
         const auto& tag=*GetTag(profile.partsys_tag);
         if(tag.state!=0 || tag.frame!=profile.tag_frame || !tag.name || !tag.str ||
@@ -2032,7 +2039,7 @@ bool T3DImagery::GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t 
                 // visibly goes second-last -> first -> held first.
                 // Actual retail4096bc JGE is inclusive. Opt in only the
                 // exact audited Punch, Appear, Sfist and Wborn keys; others keep their policy.
-                const bool reached = (retail_punch_keys || retail_mpappear_start_profile || retail_shadowfist_profile || retail_warriorborn_profile || retail_teleportation_profile || might_partsys_profile || immortalmight_partsys_profile || fmastery_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || static_particles_profile) ? frame <= curframe + frames : frame < curframe + frames;
+                const bool reached = (retail_punch_keys || retail_mpappear_start_profile || retail_shadowfist_profile || retail_warriorborn_profile || retail_teleportation_profile || might_partsys_profile || immortalmight_partsys_profile || fmastery_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || (static_particles_profile && state==0)) ? frame <= curframe + frames : frame < curframe + frames;
                 if ((num <= 0) || reached)
                 {
                     GetAniKey32(curkey, keys, numkeys,
@@ -3209,12 +3216,15 @@ struct T3DAnimator::SPartSysControllers
             const bool speed_pose=owner.GetState()==0 &&
                 animator.Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(owner.ObjId()) && object==1;
             if(speed_pose && !animator.SpeedEmitterLocalMatrix(matrix,&speed_position,&speed_scale))continue;
+            const bool camera_particle_pose=owner.GetState()==0 &&
+                animator.Get3DImagery()->HasRetailCameraParticleProfile(owner.ObjId());
+            if(camera_particle_pose && !animator.CameraParticleEmitterLocalMatrix(object,matrix,&speed_position,&speed_scale))continue;
             auto& pose = inputs.emitters[i];
             std::memcpy(pose.matrix.data(), matrix.Elements, sizeof(matrix));
             pose.origin = {matrix.Elements[3][0], matrix.Elements[3][1], matrix.Elements[3][2]};
             pose.position = {emitter_position.X, emitter_position.Y, emitter_position.Z};
             pose.scale = {emitter_scale.X, emitter_scale.Y, emitter_scale.Z};
-            if(speed_pose){pose.position={speed_position.X,speed_position.Y,speed_position.Z};
+            if(speed_pose || camera_particle_pose){pose.position={speed_position.X,speed_position.Y,speed_position.Z};
                 pose.scale={speed_scale.X,speed_scale.Y,speed_scale.Z};}
         }
     }
@@ -3626,6 +3636,45 @@ bool T3DAnimator::SpeedEmitterLocalMatrix(hmm_mat4& matrix,hmm_vec3* output_posi
     if(output_position)*output_position=position;
     if(output_scale)*output_scale=scale;
     return true;
+}
+
+bool T3DAnimator::CameraParticleEmitterLocalMatrix(int32_t object,hmm_mat4& matrix,
+        hmm_vec3* output_position,hmm_vec3* output_scale)
+{
+    if(!inst || inst->GetState()!=0 ||
+       !Get3DImagery()->HasRetailCameraParticleProfile(inst->ObjId()) || !animobjs.Used(object))return false;
+    auto* imagery=Get3DImagery();const char* name=imagery->GetObjectName(object);
+    if(!name || name[0]!='#')return false;
+    hmm_vec3 position{},rotation{},scale{};
+    if(!imagery->GetUninterpolatedAniKey(object,0,GetFrame(),position,rotation,scale))return false;
+    BuildRetailSpeedCameraMatrix(matrix,position,rotation,scale);
+    if(output_position)*output_position=position;
+    if(output_scale)*output_scale=scale;
+    return true;
+}
+
+bool T3DAnimator::CameraParticleBaseMeshBlend(int32_t object,uint32_t& blend) const
+{
+    if(!inst || inst->GetState()!=0 ||
+       !Get3DImagery()->HasRetailCameraParticleProfile(inst->ObjId()) || !partsys_controllers ||
+       partsys_controllers->unsupported || object==0 || !animobjs.Used(object) ||
+       Get3DImagery()->GetObjectName(object)[0]!='#')return false;
+    // Actual NewObject adds no blend flag to RGB565 '#' cards. Controller
+    // Render leaves its mode16 in the scene before these normal-lit bases.
+    blend=partsys_controllers->renders ? 16u : uint32_t(StartupPartSysIncomingBlend);
+    return blend==0u || blend==16u || blend==80u;
+}
+
+bool T3DAnimator::CameraParticleBaseMeshWorldMatrix(int32_t object,hmm_mat4& world,
+        const hmm_mat4* owner_override)
+{
+    uint32_t blend=0;
+    if(!CameraParticleBaseMeshBlend(object,blend) || !IsObjectEnabled(object))return false;
+    hmm_vec3 position{},rotation{},scale{};auto* imagery=Get3DImagery();
+    if(!imagery->GetUninterpolatedAniKey(object,0,inst->GetFrame(),position,rotation,scale) ||
+       scale.X<=9.999999747378752e-6f || scale.Y<=9.999999747378752e-6f || scale.Z<=9.999999747378752e-6f)return false;
+    BuildRetailSpeedCameraMatrix(world,position,rotation,scale);
+    MtxMultiply(&world,&world,owner_override ? owner_override : &inst->Transform().Matrix());return true;
 }
 
 bool T3DAnimator::SpeedBaseMeshBlend(int32_t object,uint32_t& blend) const

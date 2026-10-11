@@ -338,6 +338,9 @@ class T3DImagery : public TObjectImagery
     bool HasRetailQuicksilverPartSysProfile() const { return quicksilver_partsys_profile; }
     bool HasRetailStaticParticleProfile(uint32_t type_id) const
     { return static_particles_profile!=0 && static_particles_profile==type_id; }
+    bool HasRetailCameraParticleProfile(uint32_t type_id) const
+    { return HasRetailStaticParticleProfile(type_id) &&
+             (type_id==0x42e0fcd0u || type_id==0xad92bd39u); }
     bool HasRetailSpeedFamilyPartSysProfile(uint32_t type_id) const
     { return (type_id==0xad92bd36u && speed_partsys_profile) ||
              (type_id==0xad92bd35u && quicksilver_partsys_profile); }
@@ -585,6 +588,11 @@ class T3DAnimator : public TObjectAnimator
     bool FmasteryBaseMeshWorldMatrix(hmm_mat4& world, const hmm_mat4* owner_override = nullptr);
     bool SpeedEmitterLocalMatrix(hmm_mat4& matrix, hmm_vec3* position = nullptr,
                                  hmm_vec3* scale = nullptr);
+    bool CameraParticleEmitterLocalMatrix(int32_t object, hmm_mat4& matrix,
+                                         hmm_vec3* position=nullptr, hmm_vec3* scale=nullptr);
+    bool CameraParticleBaseMeshBlend(int32_t object, uint32_t& blend) const;
+    bool CameraParticleBaseMeshWorldMatrix(int32_t object, hmm_mat4& world,
+                                          const hmm_mat4* owner_override=nullptr);
     bool SpeedBaseMeshBlend(int32_t object, uint32_t& blend) const;
     bool SpeedBaseMeshWorldMatrix(hmm_mat4& world, const hmm_mat4* owner_override = nullptr);
     bool ImmortalmightBaseMeshBlend(int32_t object, uint32_t& blend) const;

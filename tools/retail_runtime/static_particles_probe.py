@@ -15,7 +15,7 @@ import subprocess
 import zipfile
 
 from speed_controller_preflight import NativeSpeed, ROOT, read_asset
-from static_particles_profile_contract import PROFILES,Y_PROFILES
+from static_particles_profile_contract import PROFILES,Y_PROFILES,CAMERA_PROFILES
 from unicorn.x86_const import UC_X86_REG_ECX
 
 from speed_state_compare import compare as compare_state
@@ -309,7 +309,7 @@ def run(executable,archive,output,profile,independent_poses=None):
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path)
     p.add_argument('--archive',type=Path,default=ROOT/'data/imagery.rvi');p.add_argument('--output',type=Path,required=True)
-    p.add_argument('--independent-poses',type=Path);p.add_argument('--y-family',action='store_true');p.add_argument('--profiles',nargs='+');a=p.parse_args();selected=Y_PROFILES if a.y_family else PROFILES
+    p.add_argument('--independent-poses',type=Path);p.add_argument('--y-family',action='store_true');p.add_argument('--camera-particles',action='store_true');p.add_argument('--profiles',nargs='+');a=p.parse_args();selected=CAMERA_PROFILES if a.camera_particles else Y_PROFILES if a.y_family else PROFILES
     if a.profiles is None:a.profiles=[p['name']for p in selected]
     cases=[]
     for profile in selected:

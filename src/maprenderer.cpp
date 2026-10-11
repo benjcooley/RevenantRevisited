@@ -1335,6 +1335,12 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 stats.mesh_submitted += count;
                 return;
             }
+        // Exact retail NewObject '*' helpers carry OBJ3D_HIDE even when
+        // their key track and authored triangles exist. Particle prototypes
+        // were handled above; suppress only these audited camera families.
+        if(d3 && meshimg->HasRetailCameraParticleProfile(oi->ObjId()) &&
+           !d3->IsObjectEnabled(asset.objnum))
+        {++stats.mesh_skipped;return;}
         if (state < 0 || state >= meshimg->NumStates() || meshimg->IsHidden(asset.objnum, state))
         {
             ++stats.mesh_skipped;
@@ -1415,14 +1421,17 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             authored_animator->FmasteryBaseMeshBlend(asset.objnum,authored_blend);
         const bool speed_base=authored_animator &&
             authored_animator->SpeedBaseMeshBlend(asset.objnum,authored_blend);
+        const bool camera_particle_base=authored_animator &&
+            authored_animator->CameraParticleBaseMeshBlend(asset.objnum,authored_blend);
         // The exact Goldp profile retains the actual #$iflare mesh and live
         // bone transform. Its blendcont mode16 is separate from coin alpha2.
         // Exact '$' mode80 selects ONE/ONE with no Z test or writes;
         // software mode1 preserves RGB565 normal lighting with authored normals.
-        if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base)
+        if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base)
         {
             hmm_mat4 gold_world;
-            const bool matrix_ok = speed_base ?
+            const bool matrix_ok = camera_particle_base ?
+                const_cast<T3DAnimator*>(authored_animator)->CameraParticleBaseMeshWorldMatrix(asset.objnum,gold_world) : speed_base ?
                 const_cast<T3DAnimator*>(authored_animator)->SpeedBaseMeshWorldMatrix(gold_world) : fmastery_base ?
                 const_cast<T3DAnimator*>(authored_animator)->FmasteryBaseMeshWorldMatrix(gold_world) : immortalmight_base ?
                 const_cast<T3DAnimator*>(authored_animator)->ImmortalmightBaseMeshWorldMatrix(gold_world) : teleportation ?
@@ -1445,7 +1454,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         }
         // Audited per-object modes precede generic inferred state blend tags.
         const bool audited_profile = gold_flare || combat_start1_base || mpappear_start ||
-            shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base ||
+            shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base ||
             (oi->ObjId()==0xd0c0f035u && meshimg->HasGoldPartSysProfile()) ||
             (oi->ObjId()==0xad92bd29u && state==0) ||
             (oi->ObjId()==0xad99fdf2u && meshimg->HasRetailMPAppearStartProfile()) ||
@@ -1484,7 +1493,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             blended.sort_depth = CameraDepth({ mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z }, ctx.cam_forward);
             Renderer->SubmitHelperMesh(blended);
         }
-        else if (oi->ObjClass() == OBJCLASS_HELPER || gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || speed_base || ((immortalmight_base || fmastery_base) && (authored_blend==16u || authored_blend==80u)))
+        else if (oi->ObjClass() == OBJCLASS_HELPER || gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || speed_base || camera_particle_base || ((immortalmight_base || fmastery_base || camera_particle_base) && (authored_blend==16u || authored_blend==80u)))
         {
             const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
@@ -1498,16 +1507,16 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             std::memcpy(m.specular, asset.specular, sizeof(m.specular));
             std::memcpy(m.emissive, asset.emissive, sizeof(m.emissive));
             m.power = asset.power;
-            if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base)
+            if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base)
             {
                 m.additive_blend = true; // source inherited particle16 for exact Imight base
                 m.retail_lighting = 1;
-                m.retail_gold_no_depth = gold_flare || mpappear_start || speed_base || ((immortalmight_base || fmastery_base) && authored_blend==80u); // Explicit Speed80; particles retain16.
-                m.retail_positive_face_cull = mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base;
+                m.retail_gold_no_depth = gold_flare || mpappear_start || speed_base || ((immortalmight_base || fmastery_base || camera_particle_base) && authored_blend==80u); // Explicit Speed80; particles retain16.
+                m.retail_positive_face_cull = mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base;
             }
             m.sort_depth = CameraDepth({ mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z }, ctx.cam_forward);
             // Retail default Render40e8ed invokes controllers before base meshes40eaa3.
-            if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base) Renderer->SubmitGoldFlareAfterFx(m);
+            if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base) Renderer->SubmitGoldFlareAfterFx(m);
             else Renderer->SubmitHelperMesh(m);
         }
         else
@@ -1540,7 +1549,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             }
             m.obj_id = obj_id;
             if (oi->ObjClass() == OBJCLASS_EFFECT && !retail_untextured_normal)
-                m.retail_lighting = (immortalmight_base || fmastery_base) ? 1 : asset.retail_lighting;
+                m.retail_lighting = (immortalmight_base || fmastery_base || camera_particle_base) ? 1 : asset.retail_lighting;
             m.retail_positive_face_cull = (IsRetailKinSecretDoorStill(oi, meshimg) && asset.objnum == 0) ||
                                           IsRetailPunchAndJudy(oi, meshimg) || immortalmight_base || fmastery_base;
             // Query immutable authored tags with this live instance's state/frame.

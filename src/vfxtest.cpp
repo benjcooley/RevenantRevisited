@@ -36,6 +36,7 @@
 #include "effects/fmasterypreview.h"
 #include "effects/speedpreview.h"
 #include "effects/staticparticlespreview.h"
+#include "effects/cameraparticlespreview.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -6665,6 +6666,19 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){immortalmight_authored_preview::Advance(static_cast<immortalmight_authored_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){immortalmight_authored_preview::SubmitWorld(static_cast<immortalmight_authored_preview::State*>(c),d);};
             e.destroy=[](void*c){immortalmight_authored_preview::Destroy(static_cast<immortalmight_authored_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+
+        for(const auto& entry:std::array<std::pair<const char*,uint32_t>,2>{{
+            {"TOgrestrength_AUTHORED_TAGS",0x42e0fcd0u},{"TTrollblood_AUTHORED_TAGS",0xad92bd39u}}})
+        {
+            VfxTest::SEffect e={};e.id=entry.first;e.family="spell";e.pipeline="partsys+IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            const uint32_t type=entry.second;
+            e.factory=[type](const S3DPoint& o)->void*{return camera_particles_preview::Spawn(o,type);};
+            e.submit=[](void* c,EFxDebugMode){camera_particles_preview::Advance(static_cast<camera_particles_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){camera_particles_preview::SubmitWorld(static_cast<camera_particles_preview::State*>(c));};
+            e.destroy=[](void* c){camera_particles_preview::Destroy(static_cast<camera_particles_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
 

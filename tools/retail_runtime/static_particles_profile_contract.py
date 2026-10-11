@@ -17,6 +17,11 @@ Y_PROFILES=(
  dict(name='nullifier',id='0xad92bd38',asset='magic/Nullifier.i3d',sha256='7d834a927570771d479d5955902f6ff7fff85fc98442098a0d6eb96d8b74286c',prototype=1,width=1024,samples=(5,15,29,60,89)),
 )
 
+CAMERA_PROFILES=(
+ dict(name='Ogrestrength',id='0x42e0fcd0',asset='magic/Ogre.i3d',sha256='df40ba633e9db0f0cfbcf8fa819d5a7e8105317707890e0293c5786532755072',prototype=0,width=1024,samples=(5,15,29,45,59),numeric_tolerance=0.0003),
+ dict(name='trollblood',id='0xad92bd39',asset='magic/Trollblood.i3d',sha256='8b6bc7b9a2c67fea510fa03bb8107a1661ed9a30194b4cd6f8d2e7fcc1fda95a',prototype=0,width=1024,samples=(5,15,29,45,59),numeric_tolerance=0.0003),
+)
+
 CLASS=r'''
 #include "staticpartsysprofiles.h"
 struct S3DMat{S3DMaterial matdesc{};int texture=-1;};
@@ -68,6 +73,10 @@ int main(int argc,char**argv){assert(argc==4);static_assert(sizeof(S3DVertex)==3
  for(int i=0;i<im.ntags;++i){reject("tag",[&](auto&v){v.tags[i].state=1;});reject("tag",[&](auto&v){--v.tags[i].frame;});reject("tag",[&](auto&v){v.tags[i].name=nullptr;});reject("tag",[&](auto&v){v.tags[i].str=nullptr;});reject("tag",[&](auto&v){v.tags[i].name="unknown";});reject("tag",[&](auto&v){v.tags[i].str="obj=(unknown),particle=#particle";});}
  reject("texture",[](auto&v){++v.textures[0].numframes;});reject("texture",[](auto&v){--v.textures[0].desc.width;});reject("texture",[](auto&v){--v.textures[0].desc.height;});for(int j=0;j<5;++j)reject("texture",[&](auto&v){auto*p=reinterpret_cast<unsigned char*>(&v.textures[0].desc.pixelFormat)+j*4;uint32_t x;memcpy(&x,p,4);x^=1;memcpy(p,&x,4);});
  for(int j=0;j<32;++j)reject("vertex_float",[&](auto&v){auto*p=reinterpret_cast<unsigned char*>(v.verts[proto].data())+j*4;float x;memcpy(&x,p,4);x+=.03125f;memcpy(p,&x,4);});for(int j=0;j<6;++j)reject("face_index",[&](auto&v){auto*p=reinterpret_cast<unsigned char*>(v.faces[proto].data())+j*2;uint16_t x;memcpy(&x,p,2);x^=1;memcpy(p,&x,2);});
+ for(const auto&profile:retail_static_particles::profiles)if(profile.id==id)for(int object=0;object<im.nobj;++object)if(profile.object[object].mesh_vertices){
+ for(int j=0;j<im.objects[object].numverts*8;++j)reject("base_vertex_float",[&](auto&v){auto*p=reinterpret_cast<unsigned char*>(v.verts[object].data())+j*4;float x;memcpy(&x,p,4);x+=.03125f;memcpy(p,&x,4);});
+ for(int j=0;j<im.objects[object].numfaces*3;++j)reject("base_face_index",[&](auto&v){auto*p=reinterpret_cast<unsigned char*>(v.faces[object].data())+j*2;uint16_t x;memcpy(&x,p,2);x^=1;memcpy(p,&x,2);});}
+
 }
 '''
 
@@ -90,4 +99,4 @@ def run(archive,output,profiles=PROFILES):
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');return report
 
 if __name__=='__main__':
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--archive',type=Path,default=ROOT/'data/imagery.rvi');p.add_argument('--output',type=Path,required=True);p.add_argument('--y-family',action='store_true');a=p.parse_args();print(json.dumps(run(a.archive,a.output,Y_PROFILES if a.y_family else PROFILES),indent=2))
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--archive',type=Path,default=ROOT/'data/imagery.rvi');p.add_argument('--output',type=Path,required=True);p.add_argument('--y-family',action='store_true');p.add_argument('--camera-particles',action='store_true');a=p.parse_args();print(json.dumps(run(a.archive,a.output,CAMERA_PROFILES if a.camera_particles else Y_PROFILES if a.y_family else PROFILES),indent=2))
