@@ -5,6 +5,7 @@
 #include "effects/poweruporiginal.h"
 #include "effects/ypoweruporiginal.h"
 #include "effects/yloseoriginal.h"
+#include "effects/yattackoriginal.h"
 #include "effects/lightstriporiginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
@@ -5364,6 +5365,15 @@ struct SVfxTestBootstrap {
             original.submit=[](void* c,EFxDebugMode){ylose_original::Advance(static_cast<ylose_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){ylose_original::SubmitWorld(static_cast<ylose_original::State*>(c),mode);};
             original.destroy=[](void* c){ylose_original::Destroy(static_cast<ylose_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="YAttack_AUTHORED";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return yattack_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){yattack_original::Advance(static_cast<yattack_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){yattack_original::SubmitWorld(static_cast<yattack_original::State*>(c),mode);};
+            original.destroy=[](void* c){yattack_original::Destroy(static_cast<yattack_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
 
