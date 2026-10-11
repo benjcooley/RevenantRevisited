@@ -11,6 +11,7 @@ loads (about a second).
     "$PY" -m unittest discover -s tools/retail_runtime/slots/play -p 'test_observe.py'
 """
 import json
+import math
 import random
 import struct
 import sys
@@ -28,6 +29,7 @@ from playworld import PlayWorld  # noqa: E402
 import observe  # noqa: E402
 
 SETTLE = 24                  # ticks after the start: the screen faded in, the scene quiet
+RADIUS = 800                 # observe()'s object radius
 PLAY_BRANCH = 0x0044f84f     # TMapPane::MouseClick past the side tabs and the editor; button at [esp + 0xe8]
 WALK_RADIUS_CALL = 0x004c3a51   # FindClearPath's GetWalkHeightRadius call: esi the character, [esp + 8] the radius
 FIND_SECTOR = 0x00499e10     # cdecl (level, sector x, sector y)
@@ -126,6 +128,28 @@ class ObservationTests(unittest.TestCase):
         self.world.step([{'key': VK_UP, 'down': False}])
         self.assertTrue(passed)
         self.assertEqual(set(passed), {radius})
+
+    # ---- objects --------------------------------------------------------
+
+    def test_objects_leave_out_what_the_player_cannot_see(self):
+        """keep.s's MUDOKON, the script holder that turns Sardok and Tendrick
+        toward Locke while Rahul fights, stands in reach but invisible:
+        retail's own flag lookup says so, and it isn't listed. Sardok and
+        Tendrick, in view, are."""
+        observer, m = self.observer, self.observer.m
+
+        def flag_name(bit):          # retail's name for a flag bit, as a guest string
+            return m.u32(observe.FLAG_NAMES + 4 * (bit.bit_length() - 1))
+        self.assertEqual(m.text(flag_name(observe.OF_INVISIBLE)), 'INVISIBLE')
+        self.assertEqual(m.text(flag_name(observe.OF_EDITOR)), 'EDITOR')
+        player = observer.player()
+        mudokon = next(o for o in observer.objects_on_level(m.u16(player + observe.OBJ_LEVEL))
+                       if m.text(m.u32(o + observe.OBJ_NAME)) == 'MUDOKON')
+        self.assertTrue(self.world.peek(observe.FLAG_NAMED, (flag_name(observe.OF_INVISIBLE),), this=mudokon))
+        self.assertLess(math.dist(observer.pos(player)[:2], observer.pos(mudokon)[:2]), RADIUS)
+        names = [o['name'] for o in observer.observe(objects=RADIUS)['objects']]
+        self.assertNotIn('MUDOKON', names)
+        self.assertLessEqual({'SardokR', 'TendrickR'}, set(names))
 
     # ---- walk grid ------------------------------------------------------
 
