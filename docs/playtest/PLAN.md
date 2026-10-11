@@ -370,13 +370,41 @@ disengage and heal, and whether to switch targets.
 ## 12. Save games
 
 - Both games: Quick Save (`Ctrl+Backspace`) through input, then
-  `export_slot` copies "Quick Save N" out under the milestone's name. The
-  in-game menu's Save works too, and is a later test of the director.
-- The library is `~/RevenantRevisited-testsaves/jev/<game>/<milestone>/`:
-  one slot per directory, with `manifest.json` (game, build, milestone,
-  tick, location, player summary) and the `.rvrec` that produced it from
-  New Game. Every save can be regenerated, and every save is a start point
-  for replays.
+  `export_slot @last` copies the slot the game just wrote.
+- The catalogue is `~/RevenantRevisited-testsaves/waypoints/<game>/<name>--<created>/`
+  (`waypoints.py`): the slot, a manifest (story, position in it, parent
+  waypoint, build, tick, player summary) and the recording from the parent.
+  Sessions start `--from` a waypoint and add the next; nothing is
+  overwritten.
+- A save is good when it holds what its milestone says. Each milestone
+  names the story variables its save must hold (`Milestone.expect`, from
+  the module's scripts); the director decodes the save it just made and
+  retires one that doesn't hold them (kept as evidence, never played
+  from). Saves wait for the scene a milestone sets off (`after_scene`):
+  saving in the moment after a death loses the dead (FINDINGS.md F1).
+- `waypoints.py check [--load port retail]` re-checks the catalogue:
+  story variables, and each save loaded in a game and played two seconds
+  (in play, Locke alive, where he was saved). Loading in the other game is
+  the save-interop test.
+
+### 12.1 Auto-test
+
+`autotest.py` plays a story in both games stage by stage (a stage per
+milestone), each from the newest good waypoint before it, or in order with
+`--chain` (a whole playthrough). It scores each stage: the milestone
+reached and in how long, the save's story variables, the save loaded in
+the other game, the recording replayed (`--verify`), the variances
+`crosscheck.py` finds at the new save (`--crosscheck`), and the incidents
+in the director's log (deaths, suspect saves, dead ends, router calls, a
+session that broke off). `report.html` lays the matrix out with each
+session's timeline.
+
+`crosscheck.py` loads one save in both games, plays a moment, and compares
+everything the two observations share: the player, the still objects and
+where they're drawn, where a click reaches the world and the point it
+picks, the walk grid. A difference is a variance: a port bug, a host bug or
+a known design difference (its `EXPECTED`). Variances found go in
+FINDINGS.md and get fixed.
 
 ## 13. Phases
 
@@ -388,6 +416,12 @@ disengage and heal, and whether to switch targets.
 | P3 | Director: walking, conversations, combat | Jev plays the Keep chain (opening, Rahul, Rand, the exit) in the port and saves at each milestone |
 | P4 | Cross replay | A retail recording replays in the port and reports its first divergent tick |
 | P5 | Save library | Milestone saves in both games through the forest and Misthaven |
+| P6 | Auto-test: `autotest.py`, `crosscheck.py`, waypoint checks | The Keep chain stage by stage in both games, every save checked and loaded in the other game, variances listed |
+| P7 | Grinding: hunting, loot, gear, healing, shops; hand-to-hand as a first-class style | Locke gains levels, gold and better equipment in both games on his own |
+| P8 | The main quest past the Keep ([STORY.md](STORY.md)): milestones per stage, script moves in routing | Waypoints for every stage in both games |
+
+Status (2026-10-11): P0-P3 done (the Keep chain in the port, Rahul in
+retail); P4 open; P6 in progress.
 
 P1 and P2 run in parallel; P0 comes first because both hosts write its
 format.

@@ -12,8 +12,13 @@
 --watch          watch it live: the port plays in its window at real speed
                  with captions; either game's frames, captions and Jev's
                  decisions show on a page (watch.py) opened in the browser.
+--until NAME     stop once the story's milestone NAME is reached.
 --verify         replay the recording in a fresh host afterwards; report the
                  first tick where it differs.
+
+The session's outcome is SESSION_DIR/summary.json (also printed): the
+milestones reached, the waypoints made, Jev's spend, the replay check, and
+`error` when the session broke off (the traceback in bundle/error.txt).
 
 The session directory holds the run (host logs, the game's save path) and
 the bundle: the recording (session.rvrec, the INI, the start slot), the
@@ -33,6 +38,7 @@ import shutil
 import subprocess
 import sys
 import time
+import traceback
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -81,6 +87,7 @@ def main() -> int:
     parser.add_argument('--story', default=None, choices=sorted(LISTS), help='the milestone list (default keep)')
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--minutes', type=float, default=20.0, help='game minutes to play at most')
+    parser.add_argument('--until', help='stop once this milestone is reached')
     parser.add_argument('--waypoints', type=Path, default=ROOT)
     parser.add_argument('--verify', action='store_true')
     parser.add_argument('--watch', action='store_true', help='watch live (window and browser page)')
@@ -100,6 +107,13 @@ def main() -> int:
         start = names.index(point.name) + 1 if point.name in names else point.index
     elif args.slot:
         parent = f'slot:{args.slot.name}'
+
+    milestones = list(LISTS[story])
+    if args.until:
+        names = [m.name for m in milestones]
+        if args.until not in names:
+            parser.error(f'--until: the {story} story has no milestone {args.until!r}')
+        milestones = milestones[:names.index(args.until) + 1]
 
     run = args.out.resolve()
     bundle = run / 'bundle'
@@ -123,11 +137,14 @@ def main() -> int:
         info = host.hello()
         host.start('slot' if slot else 'newgame', seed=args.seed, slot=slot, record=bundle,
                    ini=args.ini if args.game == 'port' else None, timeout=1800)
-        director = Director(host, jev, router, Knowledge.load(args.data), bindings, bundle, list(LISTS[story]),
+        director = Director(host, jev, router, Knowledge.load(args.data), bindings, bundle, milestones,
                             waypoints=catalogue, story=story, start=start, parent=parent, game=args.game,
                             watch=run / 'watch' if args.watch else None,
                             world=World(args.data, slot) if args.game != 'fake' else None)
         summary = director.run(max_ticks=round(args.minutes * 60 * 24))
+    except Exception as error:                       # recorded, so a batch of sessions carries on
+        summary = dict(error=f'{type(error).__name__}: {error}', tick=host.tick)
+        (bundle / 'error.txt').write_text(traceback.format_exc())
     finally:
         host.close()
         logs = bundle / 'logs'
@@ -140,15 +157,15 @@ def main() -> int:
                    seconds=round(time.time() - started, 1), bundle=str(bundle),
                    timeline=str(bundle / timeline.REPORT))
 
-    for waypoint, until in director.created:
+    for waypoint, until in director.created if director else ():
         catalogue.attach_recording(waypoint, bundle, until)
-    if args.verify:
+    if args.verify and 'error' not in summary:
         with launch(args, run, 'replay') as replay:
             replay.hello()
             summary['replay'] = replay.replay(bundle, verify=True, timeout=3600)
     (run / 'summary.json').write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))
-    return 1 if (summary.get('replay') or {}).get('diverged') else 0
+    return 1 if 'error' in summary or (summary.get('replay') or {}).get('diverged') else 0
 
 
 if __name__ == '__main__':
