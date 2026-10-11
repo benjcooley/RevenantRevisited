@@ -82,3 +82,13 @@ Decoded resource/COM construction, base animator initialization, silent audio,
 map/script notifications and damage are explicit boundaries. Natural callers,
 arbitrary actor/terrain inputs, device behavior, texture sampling, destination
 blend quantization and exact framebuffer equality remain open.
+
+Root independently approved the scoped native-domain appearance after reviewing
+all 19 matched phases and actual-size phases21/65/101/133: moving coil, wisps,
+sparks, declared terrain transition, shrink and the real pulse140 kill/blank
+tail agree. This approval uses source(-180,0,78), target void-plane180 and the
+explicit spell/ground1→0 fixture; it does not extend the caller/device/pixel
+claims above. Correct CSV pairing and the rejected early phase panel remain
+explicit controls. The private `funnel-review-matched/root-approval.json` pins
+the cases, pair manifest, reviewed panels and captured binary. Approval SHA-256:
+`38ab6a80ecdc8387fbd2da7fdec8ed10a59248eb8a0e3bbfceb0e585b9c3a60c`. Source `d678cfe8` was integrated by root as `134b72fb`.
