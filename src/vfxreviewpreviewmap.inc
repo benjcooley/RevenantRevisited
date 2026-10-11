@@ -89,7 +89,7 @@
 {0xad92bd33u, "TBuffEffect_Bespoke__Stoneskin_BESPOKE", true, "Partial preview: tinted asset billboard; original buff controller incomplete; not complete original implementation"}, // stoneskin
 {0xad92bd35u, "TQuicksilver_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // quicksilver
 {0xad92bd36u, "TSpeed_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // speed
-{0xad92bd37u, "TBuffEffect_Bespoke__charm_BESPOKE", true, "Partial preview: tinted asset billboard; original buff controller incomplete; not complete original implementation"}, // charm
+{0xad92bd37u, "TBuffEffect_Bespoke__charm_BESPOKE", true, "Partial preview: authored moving star and clover loop; natural buff caller unverified; not complete original implementation"}, // charm
 {0xad92bd38u, "Tnullifier_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // nullifier
 {0xad92bd39u, "TTrollblood_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // trollblood
 {0xad92bd40u, "TTeleportation_AUTHORED_OWNER", false, "Implemented preview controller; map caller not certified"}, // teleportation

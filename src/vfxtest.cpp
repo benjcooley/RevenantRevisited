@@ -43,6 +43,7 @@
 #include "effects/blastpreview.h"
 #include "effects/fairypreview.h"
 #include "effects/labbackpreview.h"
+#include "effects/charmpreview.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -7187,18 +7188,13 @@ struct SVfxTestBootstrap {
             VfxTest::SEffect e = {};
             e.id            = "TBuffEffect_Bespoke__charm_BESPOKE";
             e.family        = "magic";
-            e.pipeline      = "FB";
-            e.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
-            e.factory       = [](const S3DPoint& o) -> void* {
-                return TBuffEffect_Bespoke__charm::SpawnForTest_BESPOKE(o);
-            };
-            e.submit        = [](void* c, EFxDebugMode d) {
-                auto* eff = static_cast<TBuffEffect_Bespoke__charm*>(c);
-                if (eff) eff->TickAndSubmitForTest_BESPOKE(d);
-            };
-            e.destroy       = [](void* c) {
-                delete static_cast<TBuffEffect_Bespoke__charm*>(c);
-            };
+            e.pipeline      = "IM";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return charm_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){charm_preview::Advance(static_cast<charm_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){charm_preview::SubmitWorld(static_cast<charm_preview::State*>(c));};
+            e.is_alive=[](void* c){return charm_preview::Alive(static_cast<charm_preview::State*>(c));};
+            e.destroy=[](void* c){charm_preview::Destroy(static_cast<charm_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
