@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "0b0936733697842a86d1e38ac1a72775c70fc193ab7ffe75a03420de230fde35",
+    "harness_sha256": "dcf1d0c155d378583dd7e291a9c97c8c17128e4bde5c0fdd53e522a625e6868e",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 136,
+    "retail_rows_with_source_fixes_recorded": 138,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 121,
+    "visual_fidelity_confirmed_rows": 124,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 121,
-    "remaining_visual_review_rows": 55
+    "reviewed_visual_pass_rows": 124,
+    "remaining_visual_review_rows": 52
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -11651,27 +11651,39 @@
       "preview_candidates": [
         "TVortexEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact shipped default Vortex own legacy keys and all mesh groups replace stale procedural preview; original pertrianglecull/flatmaxdepth/write matches interior/rim. Six unclipped retail phases independently reviewed and translatedgallery verified."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved exact shipped default leaf; verify natural map/other context/lighting and retained raster/device residuals.",
       "notes": [],
-      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
+      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six full original/actual Metal native-domain static default-leaf phases2/6/16/30/46/60. Own205vertices/304triangles/3roots/24legacykeybytes and fullARGBglow; exactfactorydefault binding,27posechannels,148positivefaces/cull/depthcontrols,2460ownergeometrychecks. Actualtranslatedgallery70/70visible. SnapshotproceduralVortex is a different binding;2pxedge/color/floatdepth/device/naturalmap/otherlighting/exactpixels remainopen.",
+        "report": "recon/retail_asm/runtime/effects/current-vortex-default-20261011/Vortex-root-approval.json",
+        "sha256": "5742ac72cf255807ced76b25dbeb13fc258a622a2ea03e120fec37d2fe004608",
+        "note": "docs/vfx/forensics/VORTEX_SHIPPED_DEFAULT_RENDER_20261011.md"
+      }
     },
     {
       "index": 43,
@@ -11741,7 +11753,8 @@
         "TFogEffect_BESPOKE"
       ],
       "source_fixes": [
-        "2026-10-10: replaced collapsed Fog card with authored36-vertex/50-triangle animated grid, exact native state/RNG and neutral white texture binding. Current gallery40/40 visible. Post-alpha RGB565 truncation brightness residual holds appearance credit."
+        "2026-10-10: replaced collapsed Fog card with authored36-vertex/50-triangle animated grid, exact native state/RNG and neutral white texture binding. Current gallery40/40 visible. Post-alpha RGB565 truncation brightness residual holds appearance credit.",
+        "2026-10-11: Native-domain/software-only explicit dynamicRGBA5 format fixes steppedbrightness and pertriangleflatdepth; original fixed8 slope residual disclosed rather than fittedbrightness."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -11749,18 +11762,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
+        "animator_and_asset_mapping": true,
         "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "candidate_billboard_mismatches_source_untextured_grid",
-      "next_action": "Visible grid/controller now runs; retain held low-brightness alpha-to-RGB565 truncation difference, without fitted multiplier. Natural setting/exactpixels remain open.",
+      "next_action": "Preserve scoped reviewed appearance; verify the remaining natural caller/device and raster limits recorded in its evidence.",
       "notes": [
         "2026-10-05: standalone software Fog invisible, final150 samples exactly ground; deletion and camera cleanup exact. Legacy body word36 is vertex count, not format version; no raw-controller absence claim."
       ],
@@ -11797,6 +11810,16 @@
         "source_animator": "TFogAnimator in original effect.cpp:6415",
         "port_gap": "Single textured WorldXY billboard instead of source untextured vertex-colored36-vertex grid.",
         "forensics": "docs/vfx/forensics/DUST_FOG.md"
+      },
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Nine whole original/actual Metal native-domain corrected36vertex50triangle moving grid phases2..120. Literal dynamicRGBA5 sourcequantization/flatmaxdepth/integerlattice controls;22/24varyingGPU samples exact,2fixed8-vs-affine residuals causally explained,3depth controls pass. Defaultcommon andsiblings retained, actualtranslatedgallery70/70visible. Common fractionalbrightness, destinationrounding/interpolation/naturalmap/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-fog-quantized-20261011/root-approval.json",
+        "sha256": "d4daffbf144998a9762c9f009c3657880541063abac20b10ac62068df005a098",
+        "note": "docs/vfx/forensics/FOG_NATIVE_GRID_20261010.md"
       }
     },
     {
@@ -23520,27 +23543,39 @@
       "preview_candidates": [
         "TMaelstromEffect_Bespoke__ymaelstrom_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Complete own YMaelstrom asset/profile, inclusive keys/camera matrices/visibility/scrolltex/draw order; full native/Metal lifecycle reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve scoped reviewed appearance; verify the remaining natural caller/device and raster limits recorded in its evidence.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Seventeen full original/actual Metal native-domain own green pillar, flares, expanding rings and blanktail phases through245END, three supported fixedviews covering whole geometry. Own asset/keys/matrices/three scrollcontrollers, sixfreshpixel replays, all260schedules; ordinarygallery70/70distinct with actualownerrestart. Rawoverlap/raster/device/naturalboss/spell/map/audio/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-ymaelstrom-authored-20261011/root-approval.json",
+        "sha256": "2be2f4388611fa3541f68b9f01b444fa7a0806947673fe0b662a3b70daa976b8",
+        "note": "docs/vfx/forensics/YMAELSTROM_NATIVE_VISUAL.md"
+      }
     },
     {
       "index": 168,

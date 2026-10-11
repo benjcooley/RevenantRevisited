@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 136,
+    "retail_rows_with_source_fixes_recorded": 138,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 121,
+    "visual_fidelity_confirmed_rows": 124,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 121,
-    "remaining_visual_review_rows": 55
+    "reviewed_visual_pass_rows": 124,
+    "remaining_visual_review_rows": 52
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1673,6 +1673,27 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Sixteen full original/actual Metal native-domain null-spell phases2..255: twenty moving strips, falling drops, own normal-lit halo growth/shrink and realkill252.2,030,592 state/RNG fields plus505,168 strip/UV/halo matrix fields; actual Pulse-before-NextFrame ordering and incoming-stack-width boundary proven. All510 final common/native images unchanged; translated gallery60frames53visible54distinct. Natural live-spell orbit/damage/audio, raster/depth/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-ymaelstrom-authored-20261011/root-approval.json": {
+      "sha256": "2be2f4388611fa3541f68b9f01b444fa7a0806947673fe0b662a3b70daa976b8",
+      "retail_row": "ymaelstrom:0xae5eeb26",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Seventeen full original/actual Metal native-domain own green pillar, flares, expanding rings and blanktail phases through245END, three supported fixedviews covering whole geometry. Own asset/keys/matrices/three scrollcontrollers, sixfreshpixel replays, all260schedules; ordinarygallery70/70distinct with actualownerrestart. Rawoverlap/raster/device/naturalboss/spell/map/audio/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-fog-quantized-20261011/root-approval.json": {
+      "sha256": "d4daffbf144998a9762c9f009c3657880541063abac20b10ac62068df005a098",
+      "retail_row": "Fog:0xc24b2a85",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Nine whole original/actual Metal native-domain corrected36vertex50triangle moving grid phases2..120. Literal dynamicRGBA5 sourcequantization/flatmaxdepth/integerlattice controls;22/24varyingGPU samples exact,2fixed8-vs-affine residuals causally explained,3depth controls pass. Defaultcommon andsiblings retained, actualtranslatedgallery70/70visible. Common fractionalbrightness, destinationrounding/interpolation/naturalmap/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-vortex-default-20261011/Vortex-root-approval.json": {
+      "sha256": "5742ac72cf255807ced76b25dbeb13fc258a622a2ea03e120fec37d2fe004608",
+      "retail_row": "Vortex:0x452dade0",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Six full original/actual Metal native-domain static default-leaf phases2/6/16/30/46/60. Own205vertices/304triangles/3roots/24legacykeybytes and fullARGBglow; exactfactorydefault binding,27posechannels,148positivefaces/cull/depthcontrols,2460ownergeometrychecks. Actualtranslatedgallery70/70visible. SnapshotproceduralVortex is a different binding;2pxedge/color/floatdepth/device/naturalmap/otherlighting/exactpixels remainopen."
     }
   }
 }
