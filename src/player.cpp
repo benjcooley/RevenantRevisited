@@ -1530,37 +1530,30 @@ void TPlayerManager::SetMainPlayer(int32_t newplayernum)
     if ((uint32_t)mainplayernum >= (uint32_t)players.NumItems())
         mainplayernum = players.NumItems() - 1;  // The last player added
 
-    if (mainplayernum < 0)
+    Player = mainplayernum < 0 ? nullptr : GetPlayer(mainplayernum);
+    if (CurrentScreen == &PlayScreen)
+        BindMainPlayerToScreen();
+}
+
+// The play screen's hookups for the main player: the camera follows it, and
+// the equipment and inventory panes show it (none: the camera stays where it
+// is and the inventory pane shows nothing). Retail made them in
+// SetMainPlayer, which ran inside TPlayScreen::Initialize (0x0047a660). The
+// port's session loads a game under the loading screen, so the play screen
+// calls this as it starts.
+void TPlayerManager::BindMainPlayerToScreen()
+{
+    if (!Player)
     {
-        Player = nullptr;
-
-        if (CurrentScreen == &PlayScreen)
-        {
-          // Set map position
-            S3DPoint pos;
-            MapPane.GetMapPos(pos);
-            MapPane.CenterOnPos(pos, MapPane.GetMapLevel());
-
-          // Set inventory container
-            Inventory.SetContainer(nullptr);
-        }
+        S3DPoint pos;
+        MapPane.GetMapPos(pos);
+        MapPane.CenterOnPos(pos, MapPane.GetMapLevel());
+        Inventory.SetContainer(nullptr);
+        return;
     }
-    else
-    {
-        Player = GetPlayer(mainplayernum);
-
-        if (CurrentScreen == &PlayScreen)
-        {
-          // Center on this player in map
-            MapPane.CenterOnObj(Player);
-
-          // Setup equipment pane
-            Player->RefreshEquip();
-
-          // Setup inventory pane
-            Inventory.SetContainer(Player);
-        }
-    }
+    MapPane.CenterOnObj(Player);
+    Player->RefreshEquip();
+    Inventory.SetContainer(Player);
 }
 
 // Sets the main player for the game

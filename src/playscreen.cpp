@@ -377,18 +377,19 @@ bool TPlayScreen::Initialize()
 
     // REVSYNC: 0x0047ab8f -- the inventory, in the side panel's lower slot
     // while the side panel shows it (UpdateSidePanes). Its container is the
-    // main player's, set as a player becomes main on this screen
-    // (TPlayerManager::SetMainPlayer, 0x0051eef0); a game loaded before the
-    // screen opened made its player main already.
+    // main player's (BindMainPlayerToScreen, below).
     if (Inventory.Initialize())
     {
         AddPane(&Inventory);
-        Inventory.SetContainer(Player);
         Inventory.Hide();
         UpdateSidePanes();
     }
     else
         log_error("[playscreen] Trouble initializing the inventory");
+
+    // The session made the main player under the loading screen: the panes
+    // show it now that they exist.
+    PlayerManager.BindMainPlayerToScreen();
 
     // The HUD starts as the loaded game left it (building the HUD resets it).
     if (Player)

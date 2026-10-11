@@ -1959,14 +1959,14 @@ void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
 
     // EXTRACT mode also wants to redraw the walkmap rect as part of the
     // clear. Wrap the resolver to capture the sector for the redraw
-    // call, since TGameMap::StampTileWalkmap doesn't know about the
+    // call, since TGameMap::StampWalkmap doesn't know about the
     // pane redraw chrome.
     if (mode == WALK_EXTRACT)
     {
         // Stamp the clear, then walk the affected sectors a second time
         // to redraw the rect. The redraw needs imagery bbox / pos in
         // walkmap-local coords; recompute here once after the stamp.
-        TGameMap::StampTileWalkmap(oi, mode, find_sector);
+        TGameMap::StampWalkmap(oi, mode, find_sector);
 
         // RedrawWalkmapRect re-stamps the neighbours from the sector window,
         // which holds the current map's sectors only; redrawing them into
@@ -1999,7 +1999,7 @@ void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
         return;
     }
 
-    TGameMap::StampTileWalkmap(oi, mode, find_sector);
+    TGameMap::StampWalkmap(oi, mode, find_sector);
 }
 
 void TMapPane::RedrawWalkmapRect(TObjectInstance* oi, int32_t x, int32_t y, int32_t w, int32_t l, TSector* dsect)
@@ -2368,8 +2368,19 @@ void TMapPane::SetAmbientColor(SColor &color, bool stopfade)
 }
 
 // Fades to the given ambient light in 'frame' frames in 'steps' discreet steps
+// REVSYNC: FadeAmbient @ 0x00453720 -- the cross-fade between nearby areas
+// (TArea::Enter 0x0041ba00: same level, within 0x400) and a load into the
+// same room.
+// REVSYNC-DIVERGENCE: retail stores the target as given, without the
+// GammaLevel offset every other ambient setter adds (SetAmbientLight
+// 0x00453640), so each such fade dropped the room's ambient by the offset
+// (+10 at the default level 3: the Keep went from 14 to 4, an orange wash)
+// until a day/night area set it again. Not reproduced: the target gets the
+// offset too (LIGHTING_FIDELITY.md §2.5).
 void TMapPane::FadeAmbient(int32_t light, SColor &color, int32_t frames, int32_t steps)
 {
+    light = (std::max)(0, light + GammaAmbientOffset(GammaLevel));
+
     if (GameSpeed == 5)
         steps = frames; // Do smooth ambient fading for fast computers
 

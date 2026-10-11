@@ -509,8 +509,9 @@ pouches, animated items, pages, an opened bag.
       belt's 11 slots at wide widths. A layout question for P7.
 - 2026-10-10: **P4: the inventory done (still frames).**
   - `TInventory` is retail's pane (§6b), hosted by `TPlayScreen` in the side
-    panel's lower slot and bound to the main player there (a game loaded
-    before the screen opened made its player main without it).
+    panel's lower slot and bound to the main player as the screen starts
+    (`TPlayerManager::BindMainPlayerToScreen`: the session loads the game,
+    and makes its player main, under the loading screen).
     `--test=ui-inventory` and `--test=ab-inventory` are thin hosts over
     `uipanehost.*`, which the bottom bar's hosts share.
   - `hud_ab.py inventory`: 14/14 cases with no defects (gold 0 / 1 / 64 /

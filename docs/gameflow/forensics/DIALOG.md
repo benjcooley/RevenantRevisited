@@ -260,6 +260,23 @@ So the script resumes when the speaker is idle in its root state, not
 when the say action merely ends. The 1998 equivalent used
 `CommandDone`/`IsTalking`.
 
+**A root the model can't play (port deviation, 2026-10-10).** The shipped
+level-46 map saves Shegra and the druhg slaves with the root `combat` (action
+3) and animation state −1. Their models have `walk`, `say`, `give`, `kiss`
+and the `walk to say` / `say to walk` transitions, but no `combat`. When the
+say ends, ResolveSay `0x004c8400` forces the root: no transition, no state,
+no root-to-root transition, so ForceCommand `0x004db4d0` returns 3. The
+speaker stays in `say` (desired `say`) and the speech wait never ends.
+Retail does the same on that input: `combat-update` cases `say.noroot.*`
+match 4/4. No retail code found re-roots a character before its first line;
+EndFighting `0x4d3fd0`, SetWalkMode `0x4cf000` and the other SetRoot callers
+act on the player, the dead or the bosses. The slaves' own blocks start with
+`try walk`, which re-roots them (`walk` is AF_ROOT); Shegra's has no such
+line. The port repairs the root on load (`TComplexObject::Load`): a saved
+root that names no state of the model becomes the default root, else
+`walk`, as a fresh ANIMATE block. Whether the shipped game hangs at Shegra
+is still to check in the dosbox-x lab (AUTHOR_QUESTIONS 142).
+
 Deferred busy line (`Continue` `0x004933d0`, after the wait gate):
 ```
 if +0xe4 && +0xd8:

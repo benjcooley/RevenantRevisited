@@ -3736,24 +3736,65 @@ bool TCharacter::FollowChar(TObjectInstance* inst)
     return false;
 }
 
-bool TCharacter::Pickup(TObjectInstance* inst)
+// The pickup line retail builds in 0x004cfef0 (see Pickup).
+static std::string PickupLine(TObjectInstance* inst)
 {
-    if (!inst || !inst->IsInventoryItem())
+    const std::string name = ShownName(inst->GetTypeName());
+    const char* verb = DialogList.GetLine("CONTPICKUP");
+    const int32_t objclass = inst->ObjClass();
+    char line[256];
+
+    if (objclass == OBJCLASS_MONEY || objclass == OBJCLASS_AMMO)
+    {
+        const bool money = objclass == OBJCLASS_MONEY;
+        const char* full = money ? "FULLMONEYPICKUP" : "FULLAMMOPICKUP";
+        const char* reversed = money ? "FULLMONEYPICKUPREV" : "FULLAMMOPICKUPREV";
+        const int32_t amount = inst->Amount();
+        if (DialogList.FindLine(full) >= 0)
+            snprintf(line, sizeof(line), DialogList.GetLine(full), amount, name.c_str());
+        else if (DialogList.FindLine(reversed) >= 0)
+            snprintf(line, sizeof(line), DialogList.GetLine(reversed), name.c_str(), amount);
+        else
+            snprintf(line, sizeof(line), "%i %s %s.", amount, name.c_str(), verb);
+    }
+    else if (DialogList.FindLine("FULLCONTPICKUP") >= 0)
+        snprintf(line, sizeof(line), DialogList.GetLine("FULLCONTPICKUP"), name.c_str());
+    else
+        snprintf(line, sizeof(line), "%s %s.", name.c_str(), verb);
+    return line;
+}
+
+// REVSYNC: Pickup @ 0x004cfef0 -- `to` (this character when null) takes the
+// item into its inventory (AddToInventory 0x0046f3d0, vtable 0x58);
+// "CARRYFULL2" on the text bar when it can't. The main player is told what
+// it picked up first: money (class 8) and ammo (21) with their amount
+// (FULLMONEYPICKUP / FULLAMMOPICKUP with amount and name, else their ...REV
+// form with name and amount, else "%i %s %s." with CONTPICKUP), anything
+// else by name (FULLCONTPICKUP, else "%s %s."). The shipped english.def has
+// only CONTPICKUP ("Picked up"): "Short Sword Picked up.".
+// Not ported: the multiplayer request (0x005845c0 / 0x00584500), the item's
+// class sound (0x00473a10), and the item's vtable 0x144 hook (empty in the
+// base). The port's AddToInventory doesn't take the item off the map, so it
+// leaves here and comes back if it doesn't fit (retail's stayed put).
+bool TCharacter::Pickup(TObjectInstance* inst, TObjectInstance* to)
+{
+    if (!inst || !inst->IsInventoryItem() || inst == this)
         return false;
+    if (!to)
+        to = this;
+
+    if (this == Player)
+        TextBar.Print("%s", PickupLine(inst).c_str());
 
     inst->RemoveFromMap();
-    if (!Inventory.GetContainer()->AddToInventory(inst))
-        TextBar.Print("Can't carry any more.");
-
-/*  
-    if (!inst || !inst->IsInventoryItem())
-        return;
-
-    desired = new TActionBlock("pickup");
-    desired->obj = inst;*/
-
+    if (!to->AddToInventory(inst))
+    {
+        inst->AddToMap();
+        TextBar.Print("%s", DialogList.GetLine("CARRYFULL2"));
+    }
     return true;
 }
+
 
 bool TCharacter::Pull(TObjectInstance* inst)
 {

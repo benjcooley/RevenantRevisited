@@ -511,6 +511,8 @@ class TPlayerManager
       // Sets the main player for the game
     void SetMainPlayer(TPlayer* player);
       // Sets the main player for the game
+    void BindMainPlayerToScreen();
+      // The play screen follows the main player and shows it in its panes
     int32_t GetMainPlayerNum() { return mainplayernum; }
       // Returns the main player number
     TPlayer* GetMainPlayer() { return Player; }
