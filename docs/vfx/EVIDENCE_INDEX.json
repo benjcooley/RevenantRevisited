@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 159,
+    "retail_rows_with_source_fixes_recorded": 161,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 151,
+    "visual_fidelity_confirmed_rows": 153,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 151,
-    "remaining_visual_review_rows": 25
+    "reviewed_visual_pass_rows": 153,
+    "remaining_visual_review_rows": 23
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1883,6 +1883,20 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Distinct YManaDrain ae92bc14/genuine stationaryAcolyte Fighting targetoffset96/loadedYManaDrain160..260, own greencone/glow/15movingstreams. OriginalcustomanimatorPulse precedes ownerphase; coldblank1, real201 transfer21(caster252\u2192453/victim252\u219251), shrink/kill91/blank100. Native100ticks/source10490definedfields and19680matrices pass;704640ownvertexbytes/97560indices exact, wrongdoublePulse/cadence/castercap negativesreject. Fourteen whole original/actualMetal pairsindependently reviewed in4fullresolutiondetailpages,28pairedimagehashesverified; actualGPU90render RNGcounts/positions exact/maxphase4.56e-8. Root100samephasePNGs byte-identical/cleanexit. Rootgallery24Hz four91completions, realuncappedcastermana>252, health102/102,targetflags/position/spelltimer0 retained;4+unreseededfactories/31of32visible/cleanexit. Standaloneowner/spelllist association/basepre matrices/camera/materialCOM aredeclaredboundaries. Naturalmap/cast scheduling,movingactors/attachment,healthvariants,audio/device/quantization/exactpixels remainopen; invaliddoublePulse datasetsretained."
+    },
+    "recon/retail_asm/runtime/effects/current-quicksand-target-20261011/root-approval.json": {
+      "sha256": "1acefeb1241db19fa3050d3b44030afe56a4816d4567ecf8a173a5976912f81a",
+      "retail_row": "Quicksand:0xbabeface",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Declared stationary Quicksand targetoffset96/own4root meshes/3frame staticposes; genuine originalAcolytes/namedspell/owner/target/fulloriginalraster1..55, realkill56/blank60 andnullspell60zero-draw control. Native damage/reaction health102\u219216 observed butportactor damage NOTimplemented. Source3520matrixchannels<=5e-8/180lifecyclefields andfresh60state/draw/bound replay pass. Fourteen original/Metal whole/detailphases independently reviewed,42imagehashes verified; root60samephasePNGs byteidentical/cleanexit andretained native/sourceunit PASS23.633s. Rootmappedgallery40/40visible/3creations/cleanexit. Staticnative appearance isintentional;1\u20132pxedges/framebufferquantization, arbitrarytargets/variants, portdamage/naturalmap/actor/audio/device/exactpixels remainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-tornado-target-20261011/root-approval.json": {
+      "sha256": "dfee3066737a7604ff7dc765c1c72b20cff433d638d3cae025bec8ba01d93f96",
+      "retail_row": "Tornado:0x2784abde",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "ExactTornado ownerexplicitlyassociatedwith genuineAcolytes/loadedTornado variant(naturalvariantcreatesFunnel, notclaimingnaturalTornado cast). Full100swirls/30ice/15flame controller/Render packets through380; seed1kill360/blanktail. Native/source660207definedpoolfields/RNG bitexact,664688matrixchannels<=5e-6,6493728ownvertexbytes/301062indices exact. Original20selectedcompletepixelphases; unselectedlighting/raster skippedonlyunderfirst10fullcontrols preservingpools/RNG/orderedpackets. Nineteen wholeoriginal/Metal pairs reviewed,38imagehashes verified/allgeometrycontained. Root38samephasePNGsexactatstride10/all24Hzupdates/render through372/cleanexit; independentfull380stateproofpass. Rootgallery3unseededcycles301/301/306/15realemptyqueries/actorhealth102+flagsunchanged/completedtimer0/cleanexit. Sourcefailsclosedonnonemptyloadedsectorqueries. No successfuldamage/naturalcast/map/otheractors/audio/device/exactpixels claim; destinationquantization/sampling residualsopen."
     }
   }
 }

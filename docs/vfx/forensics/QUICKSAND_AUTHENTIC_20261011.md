@@ -73,3 +73,15 @@ three creations with two observed phase55 completions and clean exit. This
 exercises real owner liveness/recreation; it is not a substitute for the fixed
 native comparison. Evidence:
 `hard-alpha/quicksand-gallery/0xbabeface-Quicksand/manifest.json`.
+
+Root independently reviewed all14 whole/detail phases and verified42 paired
+image hashes. The integrated build repeats all60 PNGs byte-identically with
+clean exit; the actual source/native unit passes in23.633seconds. Root gallery
+selects the exact target route, shows40/40 samples, creates three instances and
+exits cleanly. Scoped appearance is approved; the actor damage/reaction and
+other natural gameplay gates above remain open.
+
+Approval:
+`recon/retail_asm/runtime/effects/current-quicksand-target-20261011/root-approval.json`,
+SHA256 `1acefeb1241db19fa3050d3b44030afe56a4816d4567ecf8a173a5976912f81a`.
+Root evidence: `/Users/benjamincooley/RevenantRetailLab/research/vfx-quicksand-root-20261011/`.

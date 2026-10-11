@@ -92,3 +92,19 @@ Sources: `tornado_target_visual_reference.py`, `tornado_sampled_visual_reference
 `tornado_gallery_validation.py` under `tools/retail_runtime`.
 Private scenarios retain exact port CLI/environment. Build,19 mapping tests,
 and compiled bridge factory/liveness/endpoint-rejection tests pass.
+
+Root independently inspected19 whole original/Metal phases and verified38
+paired image hashes. The integrated stride10 movie preserves every24Hz update
+and render through372, matches38 retained same-phase PNGs byte-identically,
+and exits cleanly. Root's independent380-tick source comparator passes660,207
+defined fields and664,688 matrix channels. Its gallery completes301/301/306,
+preserves actor health/flags, records15 empty queries and exits cleanly.
+An initial root validator used an invalid chained membership assertion; the
+completed process/images/log were retained and correctly validated without
+rerunning. No damage success or natural Tornado cast is inferred.
+
+Approval:
+`recon/retail_asm/runtime/effects/current-tornado-target-20261011/root-approval.json`,
+SHA256 `dfee3066737a7604ff7dc765c1c72b20cff433d638d3cae025bec8ba01d93f96`.
+Root evidence: `/Users/benjamincooley/RevenantRetailLab/research/vfx-tornado-root-20261011/`.
+Together with Quicksand the reviewed total advances to153/176;23 remain.

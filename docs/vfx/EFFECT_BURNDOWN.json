@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "e1fec2451bb1a8e1b9e98edb25e4ebefdbb2dd85b4b6b8cc111a5c70df9dc4d7",
+    "harness_sha256": "9ad296ef66443a0f71e3f571162c7ba1b977ea1e54c2a737a8251446ccedfa51",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 159,
+    "retail_rows_with_source_fixes_recorded": 161,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 151,
+    "visual_fidelity_confirmed_rows": 153,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 151,
-    "remaining_visual_review_rows": 25
+    "reviewed_visual_pass_rows": 153,
+    "remaining_visual_review_rows": 23
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -12845,29 +12845,42 @@
       "retail_type_id": "0x2784abde",
       "asset": "Magic\\Tornado.i3d",
       "preview_candidates": [
+        "TTornado_CONFIGURED_TARGET",
         "TTornadoEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact configured original controller/own authored geometry andreal finitecompletion; native/source andwholeMetal phase review, integratedrepeat/gallery pass. See scopedreview foractor/caller/renderer boundaries."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved configured appearance; verify recorded naturalactor/caller/map/damage/audio/device boundaries.",
       "notes": [],
-      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
+      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole/detail review and integrated repeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "ExactTornado ownerexplicitlyassociatedwith genuineAcolytes/loadedTornado variant(naturalvariantcreatesFunnel, notclaimingnaturalTornado cast). Full100swirls/30ice/15flame controller/Render packets through380; seed1kill360/blanktail. Native/source660207definedpoolfields/RNG bitexact,664688matrixchannels<=5e-6,6493728ownvertexbytes/301062indices exact. Original20selectedcompletepixelphases; unselectedlighting/raster skippedonlyunderfirst10fullcontrols preservingpools/RNG/orderedpackets. Nineteen wholeoriginal/Metal pairs reviewed,38imagehashes verified/allgeometrycontained. Root38samephasePNGsexactatstride10/all24Hzupdates/render through372/cleanexit; independentfull380stateproofpass. Rootgallery3unseededcycles301/301/306/15realemptyqueries/actorhealth102+flagsunchanged/completedtimer0/cleanexit. Sourcefailsclosedonnonemptyloadedsectorqueries. No successfuldamage/naturalcast/map/otheractors/audio/device/exactpixels claim; destinationquantization/sampling residualsopen.",
+        "report": "recon/retail_asm/runtime/effects/current-tornado-target-20261011/root-approval.json",
+        "sha256": "dfee3066737a7604ff7dc765c1c72b20cff433d638d3cae025bec8ba01d93f96",
+        "note": "docs/vfx/forensics/TORNADO_AUTHENTIC_RENDER_20261011.md"
+      }
     },
     {
       "index": 56,
@@ -13433,29 +13446,42 @@
       "retail_type_id": "0xbabeface",
       "asset": "Magic\\Quicksand.i3d",
       "preview_candidates": [
+        "Quicksand_ORIGINAL_TARGET",
         "TQuicksandEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact configured original controller/own authored geometry andreal finitecompletion; native/source andwholeMetal phase review, integratedrepeat/gallery pass. See scopedreview foractor/caller/renderer boundaries."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved configured appearance; verify recorded naturalactor/caller/map/damage/audio/device boundaries.",
       "notes": [],
-      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
+      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole/detail review and integrated repeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Declared stationary Quicksand targetoffset96/own4root meshes/3frame staticposes; genuine originalAcolytes/namedspell/owner/target/fulloriginalraster1..55, realkill56/blank60 andnullspell60zero-draw control. Native damage/reaction health102\u219216 observed butportactor damage NOTimplemented. Source3520matrixchannels<=5e-8/180lifecyclefields andfresh60state/draw/bound replay pass. Fourteen original/Metal whole/detailphases independently reviewed,42imagehashes verified; root60samephasePNGs byteidentical/cleanexit andretained native/sourceunit PASS23.633s. Rootmappedgallery40/40visible/3creations/cleanexit. Staticnative appearance isintentional;1\u20132pxedges/framebufferquantization, arbitrarytargets/variants, portdamage/naturalmap/actor/audio/device/exactpixels remainopen.",
+        "report": "recon/retail_asm/runtime/effects/current-quicksand-target-20261011/root-approval.json",
+        "sha256": "1acefeb1241db19fa3050d3b44030afe56a4816d4567ecf8a173a5976912f81a",
+        "note": "docs/vfx/forensics/QUICKSAND_AUTHENTIC_20261011.md"
+      }
     },
     {
       "index": 60,
