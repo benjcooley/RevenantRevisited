@@ -46,6 +46,7 @@
 #include "effects/fairypreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/charmpreview.h"
+#include "effects/quickpreview.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -7221,6 +7222,19 @@ struct SVfxTestBootstrap {
             e.submit_world=[](void* c,EFxDebugMode){charm_preview::SubmitWorld(static_cast<charm_preview::State*>(c));};
             e.is_alive=[](void* c){return charm_preview::Alive(static_cast<charm_preview::State*>(c));};
             e.destroy=[](void* c){charm_preview::Destroy(static_cast<charm_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TQuick_AUTHORED_TAGS";
+            e.family        = "magic";
+            e.pipeline      = "IM";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return quick_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){quick_preview::Advance(static_cast<quick_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){quick_preview::SubmitWorld(static_cast<quick_preview::State*>(c));};
+            e.is_alive=[](void* c){return quick_preview::Alive(static_cast<quick_preview::State*>(c));};
+            e.destroy=[](void* c){quick_preview::Destroy(static_cast<quick_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {

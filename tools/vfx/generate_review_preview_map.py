@@ -86,6 +86,7 @@ PARTIAL = {
 SOURCE_MAPPINGS = {
     '0xad92bd31': 'FGeyser_AUTHORED',
     '0xf32bcfac': 'MeteorStorm_AUTHORED',
+    '0xbabfface': 'TQuick_AUTHORED_TAGS',
     '0xadbcef13': 'TCharUtility_AUTHORED_STILL',
     '0xad92bd23': 'TKinSecretDoor_NATIVE_STILL',
     '0xdcc4011d': 'TLabback_AUTHORED_TAGS',

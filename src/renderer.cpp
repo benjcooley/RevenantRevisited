@@ -2851,6 +2851,14 @@ void TRenderer::SubmitGoldFlareAfterFx(const SHelperMeshSubmit& m)
     gold_flare_after_fx_queue.push_back(m);
 }
 
+void TRenderer::SubmitRetailSourceAlphaAfterFx(const SHelperMeshSubmit& m)
+{
+    if (m.mesh == 0 || m.mesh > meshes.size() || m.additive_blend ||
+        m.retail_lighting != 3 || !m.retail_source_alpha) return;
+    // Preserve the caller's authored order in the existing post-particle pass.
+    gold_flare_after_fx_queue.push_back(m);
+}
+
 void TRenderer::DrainMeshQueue()
 {
     if (mesh_queue.empty() || !mesh_pipeline.id) return;

@@ -624,6 +624,8 @@ public:
     // Exact Goldp default animator: retail draws alpha coins before its base
     // additive flare. Normal helper queue and shader modes are unchanged.
     void SubmitGoldFlareAfterFx(const SHelperMeshSubmit& m);
+    // Original mode2 ARGB layers submitted after their particle controller.
+    void SubmitRetailSourceAlphaAfterFx(const SHelperMeshSubmit& m);
     void EndTilePass();
     [[nodiscard]] SRendererTilePassStats GetLastTilePassStats() const
     {
