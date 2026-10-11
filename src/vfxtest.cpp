@@ -52,6 +52,7 @@
 #include "effects/blastpreview.h"
 #include "effects/fairypreview.h"
 #include "effects/fairy2preview.h"
+#include "effects/flamevariantspreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
@@ -6295,9 +6296,9 @@ struct SVfxTestBootstrap {
             e.family        = "fire";
             e.pipeline      = "FB";
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
-            e.factory       = [](const S3DPoint& o) -> void* { return FlameBespokeVariantSpawn<kVariantFlameB_I3D>(o); };
-            e.submit        = [](void* c, EFxDebugMode d) { FlameBespokeSubmit(c, d); };
-            e.destroy       = [](void* c) { FlameBespokeDestroy(c); };
+            e.factory       = [](const S3DPoint& o) -> void* { return flame_variants_preview::Spawn(0x50ba373cu,o); };
+            e.submit        = [](void* c, EFxDebugMode d) { flame_variants_preview::Submit(static_cast<flame_variants_preview::State*>(c),d); };
+            e.destroy       = [](void* c) { flame_variants_preview::Destroy(static_cast<flame_variants_preview::State*>(c)); };
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6306,9 +6307,9 @@ struct SVfxTestBootstrap {
             e.family        = "fire";
             e.pipeline      = "FB";
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
-            e.factory       = [](const S3DPoint& o) -> void* { return FlameBespokeVariantSpawn<kVariantFlameG_I3D>(o); };
-            e.submit        = [](void* c, EFxDebugMode d) { FlameBespokeSubmit(c, d); };
-            e.destroy       = [](void* c) { FlameBespokeDestroy(c); };
+            e.factory       = [](const S3DPoint& o) -> void* { return flame_variants_preview::Spawn(0x50ba373du,o); };
+            e.submit        = [](void* c, EFxDebugMode d) { flame_variants_preview::Submit(static_cast<flame_variants_preview::State*>(c),d); };
+            e.destroy       = [](void* c) { flame_variants_preview::Destroy(static_cast<flame_variants_preview::State*>(c)); };
             VfxTest::DeferredRegister(e);
         }
 

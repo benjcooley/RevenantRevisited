@@ -71,6 +71,8 @@
 #include "mappane.h"
 #include "math3d.h"
 #include "retailsoftwaretransform.h"
+#include "testconfig.h"
+#include "effects/flamevariantspreview.h"
 #include "meshextract.h"   // M09b: ExtractSubMesh for I3D cylinder mesh
 #include "revutils.h"
 #include "logging.h"
@@ -1268,9 +1270,17 @@ class TFlameQuadComponent final : public TFlipbookBillboardComponent
         if (Texture() == kInvalidTexture)
             return;
         SQuadDrawItem item = {};
-        const hmm_mat4& world = inst.Transform().Matrix();
+        const bool variant = inst.ObjClass()==OBJCLASS_EFFECT && (inst.ObjId()==0x50ba373cu || inst.ObjId()==0x50ba373du);
+        const bool native = StartupVfxNativeDomain && variant;
+        item.retail_texture=variant?1:0;
+        item.retail_argb4444=variant;
+        hmm_mat4 native_owner;
+        if(native){const auto& p=inst.Pos();BuildRetailSoftwareOwner(native_owner,p.x,p.y,p.z,uint8_t(inst.GetFace()));}
+        const hmm_mat4& world = native?native_owner:inst.Transform().Matrix();
+        item.retail_software_projection=native;
         float rect[4] = {};
         UvRect(rect);
+        if(native && TTime::FrameCount()<=40)log_info("[flame-phase] tick=%lld uv=%.9g,%.9g,%.9g,%.9g",(long long)TTime::FrameCount(),rect[0],rect[1],rect[2],rect[3]);
         if (DebugMode() == EFxDebugMode::FullTexture)
         {
             rect[0] = rect[1] = 0.0f;
@@ -1332,6 +1342,13 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
     {
         // Constructors can run before T3DImagery has initialized texture
         // slots. The animator-builder hook calls us again after mesh init.
+        return;
+    }
+
+    const uint32_t flame_id=inst->ObjId();
+    if ((flame_id==0x50ba373cu || flame_id==0x50ba373du) &&
+        !flame_variants_preview::Matches(inst,img3d)) {
+        log_warn("[flame] rejected exact colored variant resource id=%08x",flame_id);
         return;
     }
 
