@@ -2049,21 +2049,10 @@ void TBloodEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         }
     }
 
-    // --- Render: port of TBloodSystem::Render (effectcomp.cpp:1415-1483).
-    // Resettled forensics (B01_TBloodEffect_RENDER_RESETTLED.md §6): the
-    // snapshot SetBlendState writes SRC_ALPHA/INV_SRC_ALPHA factors but
-    // D3DRENDERSTATE_ALPHABLENDENABLE is NEVER turned on along the blood
-    // path, so on shipped DX6/7 the blend is DORMANT. The texture loader
-    // (legacy/3dimage.cpp:2079) bakes the keycolor as 1-bit alpha and the
-    // shipped read is CHROMA-KEYED OPAQUE, single-pass. The old k=1
-    // AdditiveStraight overlay pass has been DROPPED per §6.4 — it was
-    // a re-derivation of the wrong (dormant-blend) snapshot read and
-    // produced washed-out pink droplets in the harness. Single Alpha
-    // pass below uses the box05..box08 cells (indices 4..7) and lets the
-    // FB shader's chroma-key discard cut out the black background.
-    // Size 2 (big) and the splat sub-objects are commented out in the
-    // original — a size-2 droplet renders with the small sprite
-    // (forensics §7 / §13.3).
+    // Snapshot TBloodSystem::Render draws two passes per particle:
+    // box05/06 are an ARGB4444 black opacity mask; box01/02 contain
+    // the RGB565 red color. Neither pass is a substitute for the other.
+    // Preserve their source order through the billboard batching queue.
     const S3DPoint& base = Pos();
     for (int32_t i = 0; i < kBloodMaxParticles; ++i)
     {
@@ -2114,25 +2103,14 @@ void TBloodEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         item.world_pos[1] = wy;
         item.world_pos[2] = wz;
 
-        // Single Alpha pass — sub-objects box05..box08 (indices 4..7). The
-        // texture's keycolor was baked to 1-bit alpha by the .I3D loader
-        // (legacy/3dimage.cpp:2079) so the FB shader's chroma-key discard
-        // cuts out the black background and the dark-red droplet reads
-        // as a chroma-keyed OPAQUE sprite — same as shipped DX6/7.
-        // The pre-resettled k=1 AdditiveStraight overlay pass on
-        // box01..box04 was DROPPED per resettled doc §6.4: it was a
-        // re-derivation of the dormant-blend snapshot read and produced
-        // light-pink washed-out droplets via additive accumulation on top
-        // of the dark-red base.
-        const SBloodSubObject& so = subobjs_[4 + cell];
-        if (so.texture != kInvalidTexture)
+        item.preserve_submission_order = true;
+        for (int32_t pass = 0; pass < 2; ++pass)
         {
+            const SBloodSubObject& so = subobjs_[(pass == 0 ? 4 : 0) + cell];
+            if (so.texture == kInvalidTexture) continue;
             item.key.texture = so.texture;
-            item.key.blend   = uint8_t(EFxBlend::Alpha);
-            item.uv_rect[0] = so.uv_rect[0];
-            item.uv_rect[1] = so.uv_rect[1];
-            item.uv_rect[2] = so.uv_rect[2];
-            item.uv_rect[3] = so.uv_rect[3];
+            item.key.blend = uint8_t(pass == 0 ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
+            std::copy_n(so.uv_rect, 4, item.uv_rect);
             Renderer->SubmitFxBillboard(item);
         }
     }

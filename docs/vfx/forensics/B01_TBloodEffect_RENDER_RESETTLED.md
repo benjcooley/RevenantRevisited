@@ -1,3 +1,7 @@
+> Superseded rendering conclusion (2026-10-10): the two texture formats differ;
+> box05/06 use a black ARGB4444 opacity mask, while box01/02 supply red RGB565.
+> Dropping the color pass makes Blood invisible. See [the runtime correction](BLOOD_REVIEW_ALPHA_20261010.md).
+
 # B01 TBloodEffect — Render-state re-examination (clean-slate)
 
 | field | value |

@@ -27,6 +27,7 @@
 
 #include "renderer.h"
 #include "retailmeshlighting.h"
+#include "fxsubmissionorder.h"
 
 #include <sokol_gfx.h>
 #include <sokol_app.h>
@@ -6087,10 +6088,11 @@ void TRenderer::DrainFxQueue()
     // ---- Billboards: per-bucket sort, then coalesce by key --------------
     if (!fx_billboard_queue.empty() && fx_billboard_pip[0][0].id)
     {
-        // Group adjacent submissions with equal keys; sort within each
-        // group back-to-front. (Per-bucket sort granularity per
-        // PHASE1_SPINE.md §9.)
-        std::sort(fx_billboard_queue.begin(), fx_billboard_queue.end(),
+        // Material-sort ordinary runs. Explicit ordered multipass sprites
+        // remain barriers, preserving each mask/color pair at its source
+        // position instead of reversing it by texture handle.
+        SortFxUnorderedRuns(fx_billboard_queue.begin(), fx_billboard_queue.end(),
+                  [](const SFxBillboardQueueEntry& e) { return e.item.preserve_submission_order; },
                   [](const SFxBillboardQueueEntry& a, const SFxBillboardQueueEntry& b) {
                       const SFxBatchKey& ka = a.item.key;
                       const SFxBatchKey& kb = b.item.key;
