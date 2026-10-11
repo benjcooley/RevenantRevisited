@@ -118,3 +118,53 @@ Lighting, culling, ownership/attachment variations, natural original caller
 cadence, texture-copy/device paths and independent modern GPU image parity
 remain open. A successful preview or normal-map create/frame/delete test does
 not mark any of these rows fully accepted.
+
+## 2026-10-10 StillWater whole-renderer visual review
+
+`stillwater_visual_reference.py` reuses `NativeScrollScene` from
+`scroll_water_visual_reference.py`. For StillWater the original full animator
+registry/default factory selects vtable0x5a370c; whole RefreshControllers produces
+zero controllers and ordinary object flags0. The original owner, key/matrix and
+complete RenderObject0x40a8f0 execute into FVF_VERTEX and the ARGB4444 software
+raster. Exact decoded-resource/COM material/one-frame residency interfaces remain
+explicit fixture boundaries. No scroll controller, UV change, vertex color,
+host mesh transform or procedural water motion is inserted.
+
+Six native samples at ticks2,6,16,30,46,60 each produce16674 nonblack pixels and
+exact repeated color/depth bytes. All six image states are identical, as required
+by StillWater's one-frame STILL header. A fresh actual60-frame Metal capture of
+`TWaterEffect_BESPOKE__StillWater` has60 visible frames and one distinct image.
+Both use origin0, viewport640x340, camera centered on0, ambient32 white (source
+ambient38/255, directional1), no point lights, seed1 and24Hz with one warmup frame.
+The existing source already draws the complete authored static asset with its
+source-format color policy; no production change was needed.
+
+The actual640x480 label-free review additionally has40 visible frames, one distinct
+raw image and exit0. Its log identifies exact ID0xadbcef14 and the registered
+`TWaterEffect_BESPOKE__StillWater` preview fallback. This verifies gallery
+submission, not a native map caller or new scrolling behavior.
+
+Root independently reviewed native/current images and approved overall plane
+form, texture and color in this recorded configuration. Shared projector and
+framebuffer precision differences remain; this is not exact-pixel, original
+full-map, natural caller, or independent-device acceptance. Other watcher rows
+receive no credit from this StillWater comparison.
+
+Evidence root:
+`/Users/benjamincooley/RevenantRetailLab/research/vfx-wide-20261010/hard-astra/stillwater-visual/`.
+`review/manifest.json` pins all six original/actual sample pairs, exact asset,
+shared fixture, source-light log and binary; SHA-256:
+`c80d1c337370d0c373aaa9ee3312732f5d370b03d992233824a42d808759e1dc`.
+`root-approval.json` additionally pins the clean-exit actual gallery manifest;
+SHA-256 `2b6928cfa6cea3479b76b9f35d57661172ebc8f54a192f8e72dfd4bb90b77f0a`.
+Actual binary SHA-256:
+`1db58a485b8dc57e4638c42abfbbb8ea8f25fd4774efe30b556de3e77e4bf1cc`.
+The source wrapper depends on the separately integrated shared scroll-water
+fixture/optional no-particle NativeSpeed adapter; it does not duplicate them.
+
+Shared fixture dependency: `07c3df7` (the separate Flow/Bend water batch).
+A clean same-checkout replay after merging that dependency passes all six pairs
+in `review-integrated/manifest.json`; the shared fixture hash, every native/Metal
+sample hash, and the complete panel hash exactly match the approved frozen
+review. The dependent StillWater wrapper/doc commit contains neither the shared
+fixture nor any of the three separate water source implementations.
