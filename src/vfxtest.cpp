@@ -1443,6 +1443,21 @@ void DeferredRegister(const SEffect& effect)
     g_state.deferred.push_back(effect);
 }
 
+std::vector<SEffect> ReviewCatalogue()
+{
+    auto result = g_state.deferred;
+    for (const auto& effect : g_state.catalogue) {
+        auto it = std::find_if(result.begin(), result.end(), [&](const SEffect& row) {
+            return row.id == effect.id;
+        });
+        if (it == result.end()) result.push_back(effect);
+        else *it = effect;
+    }
+    return result;
+}
+
+float ReviewRestartInterval(EVfxPreviewStyle style) { return RetriggerInterval(style); }
+
 void Register(const SEffect& effect)
 {
     g_state.catalogue.push_back(effect);

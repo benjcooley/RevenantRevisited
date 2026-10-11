@@ -3000,6 +3000,8 @@ void TMapRenderer::RebuildForCurrentMap()
 
 void TMapRenderer::Shutdown()
 {
+    review_before_world_ = {};
+    review_inside_world_ = {};
     Impl& s = *impl;
 
   // Unregister our map listener BEFORE clearing currentMap so a later
@@ -3023,6 +3025,13 @@ void TMapRenderer::Shutdown()
     s.lightDragIdx = -1;
     s.sectorDragging = false;
     DebugUI::UnregisterContributor(this);
+}
+
+void TMapRenderer::SetReviewSubmissionCallbacks(std::function<void()> before_world,
+                                               std::function<void()> inside_world)
+{
+    review_before_world_ = std::move(before_world);
+    review_inside_world_ = std::move(inside_world);
 }
 
 void TMapRenderer::RenderFrame()
@@ -3453,6 +3462,7 @@ void TMapRenderer::RenderFrame()
     const float zspan = s.z_far - s.z_near;
     // Pixels no tile covers are black, as retail's DrawUnlitObjects clears
     // them (Box colour 0, FUN_00456cc0; docs/LIGHTING_FIDELITY.md §2.1).
+    if (review_before_world_) review_before_world_();
     Renderer->BeginTilePass(0.0f, 0.0f, 0.0f, 1.0f);
     mark_phase(timings.begin_pass_ms);
 
@@ -3566,6 +3576,7 @@ void TMapRenderer::RenderFrame()
     s.last_draw_counts.meshes_submitted = stats.mesh_submitted;
     s.last_draw_counts.offscreen_culled = stats.draw_offscreen;
 
+    if (review_inside_world_) review_inside_world_();
     Renderer->EndTilePass();
     // The id target is drawn: copy the ids around the map pane's pick point
     // back (retail picked while T3DScene::DrawScene drew, 0x00412db0).
