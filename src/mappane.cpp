@@ -1470,8 +1470,11 @@ int32_t TMapPane::AddObject(TObjectInstance* oi)
     int32_t sx = (pos.x >> SECTORWSHIFT);
     int32_t sy = (pos.y >> SECTORHSHIFT);
 
-    if ((uint32_t)sx >= MAXSECTORX || sx < sectorx || sx >= sectorx + SECTORWINDOWX ||
-        (uint32_t)sy >= MAXSECTORY || sy < sectory || sy >= sectory + SECTORWINDOWY)
+    const TGameMap* active = MapManager.CurrentMap();
+    const bool transient = active && active->IsTransient();
+    if ((!transient && ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY)) ||
+        sx < sectorx || sx >= sectorx + SECTORWINDOWX ||
+        sy < sectory || sy >= sectory + SECTORWINDOWY)
     {
         fprintf(stderr, "MAPPANE: Object not in current map area in AddObject");
         return -1;
@@ -1950,7 +1953,8 @@ void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
     TSector* const own = oi ? oi->GetSector() : nullptr;
     const TGameMap* const map = oi ? MapManager.GetCached(oi->GetLevel()) : nullptr;
     auto find_sector = [own, map](int32_t sx, int32_t sy) -> TSector* {
-        if ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY)
+        if ((!map || !map->IsTransient()) &&
+            ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY))
             return nullptr;
         if (own && own->SectorX() == sx && own->SectorY() == sy)
             return own;
@@ -4087,8 +4091,11 @@ int32_t TMapPane::CheckPos(TObjectInstance* inst, S3DPoint& newpos, int32_t newl
     if (newlevel == -1 || !(inst->Flags() & OF_NONMAP))
         newlevel = inst->GetLevel();
 
-    newpos.x = std::clamp(newpos.x, 0, MAXMAPWIDTH);
-    newpos.y = std::clamp(newpos.y, 0, MAXMAPHEIGHT);
+    const TGameMap* movement_map = MapManager.GetCached(newlevel);
+    if (!movement_map || !movement_map->IsTransient()) {
+        newpos.x = std::clamp(newpos.x, 0, MAXMAPWIDTH);
+        newpos.y = std::clamp(newpos.y, 0, MAXMAPHEIGHT);
+    }
 
     if (!LoadedSector(newlevel, newpos.x >> SECTORWSHIFT, newpos.y >> SECTORHSHIFT))
     {

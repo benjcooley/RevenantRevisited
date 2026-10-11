@@ -161,6 +161,8 @@ VfxReviewSpawnInfo ConfigureVfxReviewSpawn(TObjectInstance& effect,
                            "No current visual drawable";
     } else {
         info.renderer_supported = true;
+        if (stricmp(info.builder_name,"EFFECT")==0)
+            info.description = "Authored mesh/controller; normal map lifecycle";
     }
     return info;
 }

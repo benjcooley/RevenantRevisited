@@ -175,6 +175,7 @@ target_include_directories(Revenant PRIVATE
 )
 
 add_executable(test_defdoc tools/test_defdoc.cpp)
+add_executable(test_vfx_review_schedule tools/test_vfx_review_schedule.cpp)
 
 add_executable(test_render_metadata
   tools/test_render_metadata.cpp

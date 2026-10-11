@@ -65,6 +65,16 @@ extern bool StartupVfxWireframe;
 extern int32_t StartupVfxLightingMode;
 // --vfx-native-domain: exact buff/FireCone previews; native owner/projector.
 extern bool StartupVfxNativeDomain;
+// --test=vfx-review: scrolling real-map catalogue, logical screen units/sec.
+extern float StartupVfxReviewSpeed;
+extern float StartupVfxReviewRatio;
+extern float StartupVfxReviewSpacing;
+extern float StartupVfxReviewGap;
+extern float StartupVfxReviewOffset;
+extern char StartupVfxReviewEffects[2048];
+extern char StartupVfxReviewSpacingOverrides[2048];
+extern float StartupVfxReviewPathTilt;
+extern float StartupVfxReviewPathLength;
 // --partsys-quality=0|1|2 — match retail controller quality during captures.
 // 0 preserves full emission; retail 1 uses one quarter, 2 uses one half.
 extern int32_t StartupPartSysQuality;
