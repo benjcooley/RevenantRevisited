@@ -85,6 +85,7 @@ VfxReviewSpawnInfo DescribeVfxReviewSpawn(uint32_t type_id)
     info.supports_endpoints = type_id == 0x63fd382au &&
                              stricmp(info.builder_name, "FireBall") == 0;
     info.renderer_supported = stricmp(info.builder_name, "EFFECT") != 0;
+    info.uses_effect_runtime = info.renderer_supported;
     if (info.projectile && !info.supports_endpoints) {
         info.safe_factory = false;
         info.description = "Projectile endpoint launch unavailable; label only";
@@ -148,6 +149,7 @@ VfxReviewSpawnInfo ConfigureVfxReviewSpawn(TObjectInstance& effect,
     }
     const bool particle_renderer = particles && ReviewParticleRenderer(*image, effect.ObjId());
     const bool replacing_component = effect.GetComponent<TFlipbookBillboardComponent>() != nullptr;
+    info.uses_effect_runtime = info.uses_effect_runtime || particle_renderer || replacing_component;
     if (particles && !particle_renderer && !replacing_component) {
         info.renderer_supported = false;
         info.description = "Unsupported authored particle controller; generic geometry may be visible";

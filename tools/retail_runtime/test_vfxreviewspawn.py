@@ -44,17 +44,17 @@ int main(){
  for(uint32_t id:{0x63fd3827u,0x113803f4u,0xb1c4c90fu,0xad92bd1fu}){auto d=DescribeVfxReviewSpawn(id);assert(d.projectile&&!d.safe_factory&&!d.supports_endpoints);}
  c.present=false;assert(!DescribeVfxReviewSpawn(1).safe_factory);c.present=true;
  TObjectInstance owner;owner.id=1;owner.position={100,200,16};S3DPoint source{80,180,60},destination{180,280,60};
- auto d=ConfigureVfxReviewSpawn(owner,source,destination);assert(d.safe_factory&&!d.renderer_supported);assert(owner.position.x==100);
+ auto d=ConfigureVfxReviewSpawn(owner,source,destination);assert(d.safe_factory&&!d.renderer_supported&&!d.uses_effect_runtime);assert(owner.position.x==100);
  owner.cls=3;assert(!ConfigureVfxReviewSpawn(owner,source,destination).safe_factory);owner.cls=25;
  owner.id=0x63fd382a;assert(!ConfigureVfxReviewSpawn(owner,source,destination).safe_factory);owner.id=1;
- T3DImagery image;owner.image=&image;assert(ConfigureVfxReviewSpawn(owner,source,destination).renderer_supported);
+ T3DImagery image;owner.image=&image;d=ConfigureVfxReviewSpawn(owner,source,destination);assert(d.renderer_supported&&!d.uses_effect_runtime);
  image.tags={{0,"partsys"}};assert(!ConfigureVfxReviewSpawn(owner,source,destination).renderer_supported);
- owner.id=0x10ac03de;image.admitted=true;assert(ConfigureVfxReviewSpawn(owner,source,destination).renderer_supported);
+ owner.id=0x10ac03de;image.admitted=true;d=ConfigureVfxReviewSpawn(owner,source,destination);assert(d.renderer_supported&&d.uses_effect_runtime);
  image.admitted=false;image.tags={{0,"unknowncont"},{0,"play"},{2,"play"}};owner.id=1;d=ConfigureVfxReviewSpawn(owner,source,destination);assert(!d.renderer_supported&&d.authored_sound_tags==2);
  image.tags={{2,"unknowncont"}};assert(ConfigureVfxReviewSpawn(owner,source,destination).renderer_supported);
  image.tags.clear();image.names={"*hidden"};assert(!ConfigureVfxReviewSpawn(owner,source,destination).renderer_supported);
  image.names={"mesh"};image.faces={0};assert(!ConfigureVfxReviewSpawn(owner,source,destination).renderer_supported);
- owner.component=true;assert(ConfigureVfxReviewSpawn(owner,source,destination).renderer_supported);
+ owner.component=true;d=ConfigureVfxReviewSpawn(owner,source,destination);assert(d.renderer_supported&&d.uses_effect_runtime);
  TFireBallEffect ball;ball.id=0x63fd382a;ball.image=&image;auto ready=DescribeVfxReviewSpawn(ball.id);assert(ready.safe_factory&&ready.projectile&&ready.supports_endpoints);
  d=ConfigureVfxReviewSpawn(ball,source,destination);assert(d.supports_endpoints&&ball.has_projectile_destination_&&ball.position.x==source.x&&ball.projectile_destination_.x==destination.x);
  ball.state_=1;assert(!ConfigureVfxReviewSpawn(ball,source,destination).supports_endpoints);
