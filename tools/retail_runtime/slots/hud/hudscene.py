@@ -119,6 +119,16 @@ class HudScene:
         self.archives[name] = blob
         return blob
 
+    def adopt_archive(self, name, global_address):
+        """An archive the boot image already loaded, at the global it is kept
+        in (GameData, `0x0065abc0`: playscrn.dat), so its bitmaps are named
+        too."""
+        blob = self.vm.u32(global_address)
+        if not blob:
+            raise RuntimeError(f'no {name} at 0x{global_address:08x}')
+        self.archives[name] = blob
+        return blob
+
     def bitmap_names(self):
         """{pointer: 'Archive:Name'} over every archive loaded. An archive
         blob is `{count; nameOff[256]; dataOff[256]}`, each offset relative

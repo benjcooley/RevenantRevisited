@@ -40,6 +40,11 @@ Targets:
              the emulator draws, so it is compared like any pixel), stacks,
              pouches, animated items, pages, an opened bag (its icon at
              half size). Compared as the bottom bar is.
+  spellpane  TSpellPane (0x006661b0) in the same slot: no pouch, an empty
+             one, a few talismans and all twelve with names (the arrows)
+             and without, first lines, spells of 1..5 talismans (lower
+             case too), a pressed talisman and the held "spell" button.
+             Compared as the bottom bar is; the names are GDI text.
 
 Both frames are quantised to the 16-bit screen retail draws (RGB565). A
 pixel must match exactly, unless the fixture marks it (the masks of
@@ -362,15 +367,38 @@ def run_port_pane(port, mode, spec, name, workdir):
     return json.loads(shown.read_text()), frame
 
 
+DT_CENTER, DT_RIGHT, DT_VCENTER, DT_BOTTOM = 0x1, 0x2, 0x4, 0x8
+
+
+def text_cell(call):
+    """The rect a GDI text call's glyphs can reach. A left- and top-aligned
+    call laid out in an open-ended rect (the spell pane's names: (x, y, x +
+    10000, y + 10000)) reaches no further than a cell height a character
+    across and a cell height a line down (the font's height, "Arial 12")."""
+    left, top, right, bottom = call['rect']
+    font = call.get('font') or ''
+    size = font.rsplit(' ', 1)[-1]
+    if not size.isdigit():
+        return [left, top, right, bottom]
+    cell = int(size)
+    lines = call['text'].split('\n')
+    if right - left > SCREEN[0] and not call['format'] & (DT_CENTER | DT_RIGHT):
+        right = left + cell * max(len(line) for line in lines)
+    if bottom - top > SCREEN[1] and not call['format'] & (DT_VCENTER | DT_BOTTOM):
+        bottom = top + cell * len(lines)
+    return [left, top, right, bottom]
+
+
 def gdi_text_cells(text_calls):
     """The screen rects retail's GDI text calls lay text in (each shadow pass
-    has its own) -> (mask, band: the TEXT_BAND around the mask, cells). Its
-    bitmap fonts the emulator draws, so they are compared like any pixel."""
+    has its own; text_cell) -> (mask, band: the TEXT_BAND around the mask,
+    cells). Its bitmap fonts the emulator draws, so they are compared like
+    any pixel."""
     mask = np.zeros((SCREEN[1], SCREEN[0]), dtype=bool)
     band = np.zeros_like(mask)
     cells = []
     for call in text_calls:
-        left, top, right, bottom = call['rect']
+        left, top, right, bottom = text_cell(call)
         if [left, top, right, bottom] in cells:
             continue
         cells.append([left, top, right, bottom])
@@ -486,7 +514,58 @@ def target_inventory(args, workdir):
                        lambda shown: dict(gold=shown['gold'], cells=shown['cells']))
 
 
-TARGETS = {'statusbar': target_statusbar, 'bottombar': target_bottombar, 'inventory': target_inventory}
+# =====================================================================
+# spellpane
+# =====================================================================
+
+# Talismans by code: A Sun, B Life, C Ocean, D Law, E Soul, F Stars, G Death,
+# H Chaos, I Sky, J Earth, K Ward, L Moon. One of each type in a pouch
+# (retail stacks a second).
+TALISMANS = ['Sun', 'Life', 'Ocean', 'Law', 'Soul', 'Stars', 'Death', 'Chaos', 'Sky', 'Earth', 'Ward', 'Moon']
+
+
+def pouch(*names):
+    return (0, ('Spell Pouch', None, [(name, None, None) for name in names]))
+
+
+SPELLPANE_CASES = [
+    dict(name='no-pouch'),
+    dict(name='empty-pouch', items=[pouch()], spell='A'),
+    dict(name='sample', items=[pouch('Sun', 'Life', 'Moon')], spell='AL'),
+    dict(name='spell-1', items=[pouch('Moon')], spell='L'),
+    dict(name='spell-3', items=[pouch('Death', 'Chaos', 'Sky')], spell='GHI'),
+    dict(name='spell-lower', items=[pouch('Sun', 'Moon')], spell='aL'),
+    dict(name='all', items=[pouch(*TALISMANS)], spell='ABCDE'),
+    dict(name='all-first-2', items=[pouch(*TALISMANS)], first=2),
+    dict(name='all-first-6', items=[pouch(*TALISMANS)], first=6),
+    dict(name='all-packed', items=[pouch(*TALISMANS)], names=0, spell='JKL'),
+    dict(name='packed-first-4', items=[pouch(*TALISMANS)], names=0, first=4),
+    dict(name='pressed', items=[pouch('Sun', 'Life', 'Moon')], pressed=1),
+    dict(name='pressed-packed', items=[pouch(*TALISMANS)], names=0, pressed=11),
+    dict(name='invoke', items=[pouch('Sun', 'Life', 'Moon')], spell='ABL', invoke=1),
+    dict(name='pouch-slot-9', items=[(9, ('Spell Pouch', None, [('Ward', None, None), ('Stars', None, None)]))]),
+]
+
+
+def target_spellpane(args, workdir):
+    def run_port(case):
+        items = '|'.join(f'{port_item(item)}@{slot}' for slot, item in case.get('items', []))
+        spec = (f'items={items};spell={case.get("spell", "")};names={case.get("names", 1)};'
+                f'first={case.get("first", 0)};pressed={case.get("pressed", -1)};invoke={case.get("invoke", 0)}')
+        return run_port_pane(args.port, 'ab-spellpane', spec, case['name'], workdir)
+
+    def retail_case(case, shown):
+        items = [dict(retail_item(item), slot=slot) for slot, item in case.get('items', [])]
+        return dict(items=items, spell=shown['spell'], names=bool(shown['names']), first=shown['first'],
+                    pressed=shown['pressed'], invoke=bool(shown['invoke']))
+
+    return pane_target(args, workdir, SPELLPANE_CASES, 'spellpane.py', run_port, retail_case,
+                       lambda shown: dict(spell=shown['spell'], names=shown['names'], first=shown['first'],
+                                          pressed=shown['pressed'], invoke=shown['invoke']))
+
+
+TARGETS = {'statusbar': target_statusbar, 'bottombar': target_bottombar, 'inventory': target_inventory,
+           'spellpane': target_spellpane}
 
 
 def main():
