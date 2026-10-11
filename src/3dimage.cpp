@@ -2442,7 +2442,8 @@ bool T3DImagery::GetAniKey(int32_t objnum, int32_t state, int32_t frame,
     if (!meshinitialized)
         InitializeMesh((S3DImageryBody*)GetBody());
 
-    if (!GetUninterpolatedAniKey(objnum, state, frame, pos, rot, scl))
+    const bool combat_base = state==0 && objnum==2 && HasCombatFlashStart1PartSysProfile();
+    if (!GetUninterpolatedAniKey(objnum, state, frame, pos, rot, scl, combat_base))
         return false;
 
     if (!Interpolate) return true;
@@ -2465,7 +2466,8 @@ bool T3DImagery::GetAniKey(int32_t objnum, int32_t state, int32_t frame,
     if (prevstate >= 0 && frame < iframes)
     {
         i = (float)(frame + 1) / (float)iframes;
-        GetUninterpolatedAniKey(objnum, prevstate, prevframe, ipos, irot, iscl);
+        GetUninterpolatedAniKey(objnum, prevstate, prevframe, ipos, irot, iscl,
+            combat_base && prevstate==0);
         NormalizeRot(rot, irot);
         InterpolatePoints(pos, ipos, i);
         InterpolatePoints(rot, irot, i);

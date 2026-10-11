@@ -60,3 +60,35 @@ are byte-identical to the pre-change ignored-flag control, with clean exit0.
 The application rebuilt after water integration; no frozen copy of the earlier
 CombatFlash executable was created. Its captured manifest still records the
 actual binary hash and files. Base-matrix/extra-object diagnosis remains open.
+
+## Original key/matrix diagnosis and scoped correction
+
+The native probe now records actual object IDs, scene states, original
+GetAniKey return values, CalcObjectMatrix results and transformed lighting
+channels. Read-only hooks preserve every original call. Its sampled-output
+option reduces PNG encoding only; all requested ticks still render.
+
+`combatflash_base_matrix_probe.py` compiles the actual production decoder,
+GetAniKey interpolation and CombatFlash base-matrix body against immutable
+first-state Impact keys. Original owner previous-state/frame0 and five-frame
+transition inputs are declared. Across18 live matrices/288 channels, the
+inclusive branch matches within2.412e-7; the unadmitted half-open control
+differs by more than1 matrix unit. Early frames2/3 also agree once the actual
+five-frame transition is included, without a frame shift or fitted scale.
+
+Production GetAniKey now requests inclusive decode only for admitted
+CombatFlash/state0/object2, including its previous-state0 sample. Other
+objects/profiles retain their prior policy. The application rebuild and
+independent matrix check pass. The existing default static native/source/
+shared-raster regression passes in23.960seconds after its extraction stub
+gains the unchanged false CombatFlash-profile predicate.
+
+`inclusive-key-fix/manifest.json` records a fresh64-frame real GPU run with
+clean exit. This fixes authored flare timing but leaves a separate visible
+shape/brightness/sampling residual. The original tick2 lighting observation
+and independently evaluated source normal produce identical RGB5(21,21,21).
+Replaying each observed normal draw through the original software raster
+shows object2 contributes1070 pixels and the other eight contributezero at
+tick2. This is a bounded isolation result, not proof of all extra-object
+frames or complete color/raster equality. All these reports remain private
+under `vfx-combatflash-loaded-20261011/`; no appearance approval is added.
