@@ -1,0 +1,49 @@
+{
+  "scope": "Exact SewerWater and Wave/WaveS/WaveM state0 generic draw configurations.",
+  "profiles": [
+    {
+      "name": "SewerWater",
+      "id": "0xadbcef19",
+      "asset": "Misc/SewerW.I3D",
+      "asset_sha256": "bd51a4024f39f21fdd6d7a2342dd9c7cd02c59ce0f77d379e3aa43729260b983",
+      "frames": 1,
+      "objects": 1,
+      "vertices": 4,
+      "faces": 2,
+      "textures": 1
+    },
+    {
+      "name": "Wave",
+      "id": "0x9d92bc1d",
+      "asset": "Misc/Wave.I3D",
+      "asset_sha256": "1236cadd77ac9db37f5f73e55b9ae9b28816527a381894f8b74cbfe70da9ee85",
+      "frames": 1,
+      "objects": 1,
+      "vertices": 38,
+      "faces": 47,
+      "textures": 1
+    },
+    {
+      "name": "WaveS",
+      "id": "0x9d92bc1e",
+      "asset": "Misc/WaveS.I3D",
+      "asset_sha256": "fcbc9e1aaeb84e6e4f86912f5594f97ab08cb22a8c7b4400dddfb7c093778642",
+      "frames": 1,
+      "objects": 1,
+      "vertices": 38,
+      "faces": 47,
+      "textures": 1
+    },
+    {
+      "name": "WaveM",
+      "id": "0x9d92bc1f",
+      "asset": "Misc/WaveM.I3D",
+      "asset_sha256": "f62d1aa60610af3a320a467fd78e717aa57165ee7c7b93d67e7d96a1c61c8016",
+      "frames": 1,
+      "objects": 1,
+      "vertices": 38,
+      "faces": 47,
+      "textures": 1
+    }
+  ]
+}

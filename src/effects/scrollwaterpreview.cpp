@@ -31,7 +31,7 @@ State* Spawn(const S3DPoint& origin,uint32_t type_id)
  state->mesh=Renderer->RegisterMeshAsset(key,vertices.data(),int32_t(vertices.size()),indices.data(),int32_t(indices.size()),imagery->GetTextureHandle(0));
  if(!state->mesh)return nullptr;Renderer->AddMeshAssetRef(state->mesh);
  log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT vertex=MODELZ",int(StartupVfxNativeDomain));
- log_info("[scroll-water-preview] actual owner id=%08x map_index=%d vertices=%zu triangles=%zu tags=1",type_id,owner->GetMapIndex(),vertices.size(),indices.size()/3);
+ log_info("[scroll-water-preview] actual owner id=%08x map_index=%d vertices=%zu triangles=%zu tags=%d",type_id,owner->GetMapIndex(),vertices.size(),indices.size()/3,imagery->NumTags());
  return state.release();
 }
 void Advance(State* state,double seconds)
@@ -52,7 +52,7 @@ void SubmitWorld(State* state)
  hmm_mat4 source_local;for(int row=0;row<4;++row)for(int column=0;column<4;++column)source_local.Elements[column][row]=local[row*4+column];
  MtxMultiply(&world,&source_local,&root);
  for(int row=0;row<4;++row)for(int column=0;column<4;++column)mesh.world[row*4+column]=world.Elements[column][row];
- imagery->ScrollTexOffset(0,0,owner->GetFrame(),TTime::LegacyFrameCount(),mesh.uv_offset);
+ if(imagery->HasScrollTex())imagery->ScrollTexOffset(0,0,owner->GetFrame(),TTime::LegacyFrameCount(),mesh.uv_offset);
  if(state->ticks==1 || state->ticks==2 || state->ticks==6 || state->ticks==16 || state->ticks==30 || state->ticks==46 || state->ticks==60)
   log_info("[scroll-water-clock] tick=%llu global=%lld owner_frame=%d du=%.9g dv=%.9g",static_cast<unsigned long long>(state->ticks),static_cast<long long>(TTime::LegacyFrameCount()),owner->GetFrame(),mesh.uv_offset[0],mesh.uv_offset[1]);
  Renderer->SubmitHelperMesh(mesh);

@@ -6706,8 +6706,9 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(e);
         }
 
-        for(const auto& entry:std::array<std::pair<const char*,uint32_t>,3>{{
-            {"TFlowWater_AUTHORED_SCROLL",0xadbcef15u},{"TBendWater1_AUTHORED_SCROLL",0xadbcef16u},{"TBendWater2_AUTHORED_SCROLL",0xadbcef17u}}})
+        for(const auto& entry:std::array<std::pair<const char*,uint32_t>,7>{{
+            {"TFlowWater_AUTHORED_SCROLL",0xadbcef15u},{"TBendWater1_AUTHORED_SCROLL",0xadbcef16u},{"TBendWater2_AUTHORED_SCROLL",0xadbcef17u},
+            {"TSewerWater_AUTHORED_ROOT",0xadbcef19u},{"TWave_AUTHORED_SCROLL",0x9d92bc1du},{"TWaveS_AUTHORED_SCROLL",0x9d92bc1eu},{"TWaveM_AUTHORED_SCROLL",0x9d92bc1fu}}})
         {
             VfxTest::SEffect e={};e.id=entry.first;e.family="water";e.pipeline="IM+scrolltex";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
             const uint32_t type=entry.second;

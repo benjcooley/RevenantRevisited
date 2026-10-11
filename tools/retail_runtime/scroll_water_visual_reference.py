@@ -63,8 +63,8 @@ class NativeScrollScene(NativeParticleScene):
   return v.surface_bytes('screen'),v.surface_bytes('depth'),dict(owner=owner,draws=self.draws)
 
 
-def run(executable,archive,output,names=('FlowWater','BendWater1','BendWater2')):
- output.mkdir(parents=True,exist_ok=False);profiles=json.load(open(ROOT/'tools/retail_runtime/scrolltex_water_profiles.json'))['profiles'];profiles=[p for p in profiles if p['name']in names];cases=[]
+def run(executable,archive,output,names=('FlowWater','BendWater1','BendWater2'),profiles=None):
+ output.mkdir(parents=True,exist_ok=False);profiles=json.loads((ROOT/'tools/retail_runtime/scrolltex_water_profiles.json').read_text())['profiles']if profiles is None else profiles;profiles=[p for p in profiles if names is None or p['name']in names];cases=[]
  with zipfile.ZipFile(archive)as z:
   ns={n.lower():n for n in z.namelist()}
   for p in profiles:
@@ -78,4 +78,4 @@ def run(executable,archive,output,names=('FlowWater','BendWater1','BendWater2'))
  report=dict(status='reference_complete',cases=cases,profiles=profiles,original_executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),probe_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),viewport=[640,340],camera=[0,0,0],owner=[0,0,0],ambient=[38]*3,directional=[1]*3,initial_mode=0,cull=2,depth_test=True,depth_write=True,accepted=False,scope='Actual default factory/all full animator registration constructors, original scrolltex registration/whole RefreshControllers/parser/Initialize/Render/CopyVertices, original owner40e470/40e740, original key/matrix, complete RenderObject40a8f0/FVF_VERTEX/Illuminate/ARGB4444/software-raster. Exact immutable decoded resource/COM material handle and one-frame residency boundaries; no host geometry/UV/color inputs. Fixed nullspell plane and declared source scene state; actual Metal/map/caller acceptance separate.');(output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');return report
 
 if __name__=='__main__':
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--archive',type=Path,default=ROOT/'data/imagery.rvi');p.add_argument('--output',type=Path,required=True);a=p.parse_args();r=run(a.executable,a.archive,a.output);print(r['status'],len(r['cases']))
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--archive',type=Path,default=ROOT/'data/imagery.rvi');p.add_argument('--output',type=Path,required=True);p.add_argument('--other-water',action='store_true');a=p.parse_args();selected=json.loads((ROOT/'tools/retail_runtime/other_water_profiles.json').read_text())['profiles']if a.other_water else None;r=run(a.executable,a.archive,a.output,None if a.other_water else ('FlowWater','BendWater1','BendWater2'),selected);print(r['status'],len(r['cases']))
