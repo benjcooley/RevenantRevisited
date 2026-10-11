@@ -295,17 +295,24 @@ bool TAnimImagery::SaveBitmap(char *path, int32_t state, bool zbuffer)
     return true;
 }
 
+// REVSYNC: TAnimImagery::NeedsAnimator @ 0x00418fc0 -- for a state the
+// imagery has (the object's state read as an unsigned short): every item,
+// carried or on the map, and anything whose state animates. The 1998 test
+// gave a still item on the map none, so a dead monster's bread never flew to
+// the floor (TObjectAnimator::Toss) as retail's does.
 bool TAnimImagery::NeedsAnimator(const TObjectInstance* oi) const
 {
-    if (!oi) return false;
-    const int32_t state = oi->GetState();
-    // GetAnimation / GetInvAnimation are legacy non-const getters that
-    // don't actually mutate; const_cast preserves correct semantics here
-    // until those getters can be made const themselves.
-    auto* self = const_cast<TAnimImagery*>(this);
-    return state < NumStates() &&
-           (self->GetAnimation(state) != nullptr ||
-            (oi->IsInInventory() && self->GetInvAnimation(state) != nullptr));
+    if (!oi)
+        return false;
+    const int32_t state = static_cast<uint16_t>(oi->GetState());
+    if (state >= NumStates())
+        return false;
+    if (oi->IsInventoryItem())
+        return true;
+    // GetAnimation is a legacy non-const getter that doesn't actually
+    // mutate; const_cast preserves correct semantics here until it can be
+    // made const itself.
+    return const_cast<TAnimImagery*>(this)->GetAnimation(state) != nullptr;
 }
 
 PTObjectAnimator TAnimImagery::NewObjectAnimator(TObjectInstance* oi)

@@ -1981,7 +1981,7 @@ PTBitmap TObjectInstance::InventoryImage()
 // image" (1998). Characters have an icon in every state since the imagery's
 // icon falls back to state 0 (0x0040ce60), so the image test made every NPC
 // an item: the hand cursor, and a click picked them up instead of talking.
-bool TObjectInstance::IsInventoryItem()
+bool TObjectInstance::IsInventoryItem() const
 {
     return (flags & OF_INVENTORY) != 0;
 }
