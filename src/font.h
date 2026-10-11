@@ -47,8 +47,9 @@ class TFont : public TFontData
 
 // A font's glyphs baked into one RGBA8 texture, looked up by Unicode code
 // point (docs/ui/TEXT_RENDERING.md). Two builders make one: BuildFontAtlas
-// from a retail bitmap TFont (keycolor pixels become alpha=0 so straight-alpha
-// blend composites correctly) and BuildTTFAtlas from a TrueType face. The
+// from a retail bitmap TFont (each glyph as retail draws it: keyed, with its
+// anti-aliased edge at its coverage, in straight alpha) and BuildTTFAtlas
+// from a TrueType face. The
 // bitmap atlases live in a parallel cache keyed by TFont* rather than on the
 // TFont itself, because TFont instances are raw resource-file memory
 // (malloc'd to exact on-disk size by LoadResource) — appending member fields
@@ -75,6 +76,13 @@ struct SFontAtlas
     int32_t        height = 0;
     float          ascent = 0.0f;       // line metrics: pixels above the baseline
     float          descent = 0.0f;      // and below it (TextAscent, TextLineHeight)
+    // How far below a text cell's top the baseline sits, as retail hangs a
+    // line in its cell (TextCellBaseline).
+    float          cellBaseline = 0.0f;
+    // The cell helpers draw the coloured text twice over, lifting thin
+    // anti-aliased coverage to GDI's weight (the TrueType stand-ins for
+    // retail's GDI fonts); a bitmap font's glyphs are blitted once.
+    bool           doubleStrike = false;
     std::vector<SFontAtlasRect> glyphs;
 
     // The glyph that draws `cp`; the fallback for a code point the atlas
@@ -147,8 +155,12 @@ enum class ETextAlign { Left, Center, Right };
 float TextWidth(const SFontAtlas* atlas, const char* text,
                 ETextEncoding encoding = kGameTextEncoding);
 // Ascent of `atlas` (pixels above baseline), fixed when the atlas is built.
-// Use to top-align a string inside a cell: baseline = cellY + ascent.
 float TextAscent(const SFontAtlas* atlas);
+// Where a line top-aligned in a cell puts its baseline, below the cell's top.
+// A bitmap font hangs from its 'A' (retail's font table, 0x004ac990); a
+// TrueType face stands in for a GDI font, which hangs from its ascent less
+// GDI's internal leading. The cell helpers below draw at it.
+float TextCellBaseline(const SFontAtlas* atlas);
 // Line height of `atlas` (pixels) = ascent + descent. Use to stack the cells
 // of a multi-line block: line N cellY = first cellY + N * lineHeight.
 float TextLineHeight(const SFontAtlas* atlas);
@@ -166,8 +178,8 @@ void DrawTextAtBaseline(const SFontAtlas* atlas, const char* text,
                         ETextEncoding encoding = kGameTextEncoding);
 
 // Draw one line of `text` into the cell (cellX, cellY, cellW, cellH),
-// horizontally aligned per `align`, baseline top-aligned in the cell
-// (baseline = cellY + ascent). Color is straight RGB in [0,1]; the atlas
+// horizontally aligned per `align`, top-aligned in the cell (baseline =
+// cellY + TextCellBaseline). Color is straight RGB in [0,1]; the atlas
 // coverage is tinted by it. Targets the active render-target pass.
 // Multi-line: call once per line with the cell advanced by line height.
 void DrawTextToTarget(const SFontAtlas* atlas, const char* text,

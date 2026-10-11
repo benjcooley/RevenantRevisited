@@ -4659,11 +4659,11 @@ void TRenderer::DrawBitmapSubrectStretchedToTarget(PTBitmap bm,
               bm->width, bm->height);
 }
 
-// REVSYNC: 0x004a31a0 (the 2:1 reduction retail runs in software; here the
-// reduce pipeline does it as it draws). An odd last row or column is dropped,
-// as retail's halving loop drops it.
+// REVSYNC: 0x004a31a0, 0x00538e40 (the 2:1 reductions retail runs in
+// software; here the reduce pipeline does them as it draws). An odd last row
+// or column is dropped, as retail's halving loops drop it.
 void TRenderer::DrawBitmapHalvedToTarget(PTBitmap bm, int32_t x, int32_t y,
-                                         int32_t target_w, int32_t target_h)
+                                         int32_t target_w, int32_t target_h, EHalving halving)
 {
     if (!bm || bm->width < 2 || bm->height < 2) return;
     const int32_t w = bm->width / 2;
@@ -4672,27 +4672,28 @@ void TRenderer::DrawBitmapHalvedToTarget(PTBitmap bm, int32_t x, int32_t y,
     if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
         CompositeHalved(TextureImage(slice.texture), x, y, w, h, target_w, target_h,
-                        slice.src_x, slice.src_y, slice.tex_width, slice.tex_height);
+                        slice.src_x, slice.src_y, slice.tex_width, slice.tex_height, halving);
         return;
     }
     const TTextureHandle tex = BitmapAsTexture(bm);
     if (tex == kInvalidTexture) return;
-    CompositeHalved(TextureImage(tex), x, y, w, h, target_w, target_h, 0, 0, bm->width, bm->height);
+    CompositeHalved(TextureImage(tex), x, y, w, h, target_w, target_h, 0, 0, bm->width, bm->height, halving);
 }
 
 void TRenderer::DrawSurfaceHalvedToTarget(TSurface* surf, int32_t x, int32_t y,
-                                          int32_t target_w, int32_t target_h)
+                                          int32_t target_w, int32_t target_h, EHalving halving)
 {
     if (!surf || surf->Width() < 2 || surf->Height() < 2) return;
     CompositeHalved(surf->GetSGImage(), x, y, surf->Width() / 2, surf->Height() / 2, target_w, target_h,
-                    0, 0, surf->Width(), surf->Height());
+                    0, 0, surf->Width(), surf->Height(), halving);
 }
 
 void TRenderer::CompositeHalved(sg_image img,
                                 int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                 int32_t target_w, int32_t target_h,
                                 int32_t src_x, int32_t src_y,
-                                int32_t src_tex_w, int32_t src_tex_h)
+                                int32_t src_tex_w, int32_t src_tex_h,
+                                EHalving halving)
 {
     if (!img.id || !composite_pip_reduce_rt.id) return;
     if (target_w <= 0 || target_h <= 0 || src_tex_w <= 0 || src_tex_h <= 0) return;
@@ -4712,7 +4713,7 @@ void TRenderer::CompositeHalved(sg_image img,
         (2.0f * dst_h) / target_h,
         float(src_x) * texel_u, float(src_y) * texel_v,  // uv_rect: twice the destination
         float(2 * dst_w) * texel_u, float(2 * dst_h) * texel_v,
-        texel_u, texel_v, 0.0f, 0.0f,                    // texel
+        texel_u, texel_v, float(halving), 0.0f,          // texel, reduction
         1.0f, 1.0f, 1.0f, 1.0f,                          // color_tint
     };
     const sg_range u_range = { uniforms, sizeof(uniforms) };

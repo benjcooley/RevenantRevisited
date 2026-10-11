@@ -430,6 +430,19 @@ enum class ERendererTextureFilter : uint8_t
     Nearest,
 };
 
+// Retail's two 2:1 reductions, done as the reduce pipeline draws
+// (TRenderer::DrawBitmapHalvedToTarget; kCompositeReduceFs has the
+// arithmetic).
+enum class EHalving : uint8_t
+{
+    // 0x004a31a0: the mean of the opaque texels of a block, empty where fewer
+    // than three are opaque (a pouch's thumbnail of the first item in it).
+    OpaqueMean,
+    // 0x00538e40: all four texels, the empty ones black, and empty where
+    // that comes out black (the inventory's icon of the bag it shows).
+    BoxOverBlack,
+};
+
 // Per-vertex layout for rigid meshes (mesh slot 0). Tight-packed, 32 bytes.
 struct SMeshVertex
 {
@@ -957,16 +970,15 @@ public:
                                             int32_t src_w, int32_t src_h,
                                             int32_t target_w, int32_t target_h,
                                             EBitmapDecode decode = EBitmapDecode::Pixels);
-    // The bitmap at half its size: each pixel the mean of the opaque texels
-    // in its 2x2 block (each RGB565 channel the floor of the mean, as retail
-    // takes it), empty where fewer than three of the four are opaque.
-    // Retail's 2:1 reduction (0x004a31a0); a pouch shows the first item inside
-    // it this way.
+    // The bitmap at half its size, each pixel averaged from its 2x2 block of
+    // texels as retail averages it (see EHalving).
     void DrawBitmapHalvedToTarget(PTBitmap bm, int32_t x, int32_t y,
-                                  int32_t target_w, int32_t target_h);
+                                  int32_t target_w, int32_t target_h,
+                                  EHalving halving = EHalving::OpaqueMean);
     // The same of a composed layer (a stacked icon put together first).
     void DrawSurfaceHalvedToTarget(TSurface* surf, int32_t x, int32_t y,
-                                   int32_t target_w, int32_t target_h);
+                                   int32_t target_w, int32_t target_h,
+                                   EHalving halving = EHalving::OpaqueMean);
     void DrawBitmapTintedToTarget(PTBitmap bm, int32_t x, int32_t y,
                                   int32_t target_w, int32_t target_h,
                                   float tr, float tg, float tb, float ta);
@@ -1233,7 +1245,8 @@ private:
                          int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                          int32_t target_w, int32_t target_h,
                          int32_t src_x, int32_t src_y,
-                         int32_t src_tex_w, int32_t src_tex_h);
+                         int32_t src_tex_w, int32_t src_tex_h,
+                         EHalving halving);
     void CompositeTinted(sg_image img,
                          int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                          int32_t target_w, int32_t target_h,

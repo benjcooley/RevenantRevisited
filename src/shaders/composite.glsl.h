@@ -40,7 +40,7 @@ void main() {
 }
 )GLSL";
 
-// The 2:1 reduction; see kCompositeReduceFsMetal.
+// The 2:1 reductions; see kCompositeReduceFsMetal.
 inline constexpr const char* kCompositeReduceFsGlsl = R"GLSL(
 #version 330 core
 layout(std140) uniform params {
@@ -59,18 +59,34 @@ void main() {
                             texture(tex, v_uv + vec2(-h.x,  h.y)),
                             texture(tex, v_uv + vec2( h.x,  h.y)));
     const vec3 steps = vec3(8.0, 4.0, 8.0);
-    vec3 sum = vec3(0.0);
-    float opaque = 0.0;
-    for (int i = 0; i < 4; ++i)
-        if (block[i].a > 0.5)
+    vec3 mean;
+    if (texel.z > 0.5)
+    {
+        vec3 sum = vec3(0.0);
+        for (int i = 0; i < 4; ++i)
         {
-            vec3 c = floor(round(block[i].rgb * 255.0) / steps);
-            sum += vec3(c.r * 8.0 + floor(c.g / 8.0), c.g, c.b);
-            opaque += 1.0;
+            vec3 c = block[i].a > 0.5 ? floor(round(block[i].rgb * 255.0) / steps) : vec3(0.0);
+            sum += vec3(c.r, floor(c.g / 2.0), c.b);
         }
-    if (opaque < 3.0)
-        discard;
-    vec3 mean = floor(sum / (opaque * vec3(8.0, 1.0, 1.0)));
+        mean = floor(sum / vec3(4.0, 2.0, 4.0));
+        if (mean == vec3(0.0))
+            discard;
+    }
+    else
+    {
+        vec3 sum = vec3(0.0);
+        float opaque = 0.0;
+        for (int i = 0; i < 4; ++i)
+            if (block[i].a > 0.5)
+            {
+                vec3 c = floor(round(block[i].rgb * 255.0) / steps);
+                sum += vec3(c.r * 8.0 + floor(c.g / 8.0), c.g, c.b);
+                opaque += 1.0;
+            }
+        if (opaque < 3.0)
+            discard;
+        mean = floor(sum / (opaque * vec3(8.0, 1.0, 1.0)));
+    }
     const vec3 levels = vec3(32.0, 64.0, 32.0);
     frag_color = vec4((mean * steps + floor(mean / (levels / steps))) / 255.0, 1.0) * color_tint;
 }

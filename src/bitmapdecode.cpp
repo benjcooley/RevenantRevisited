@@ -73,6 +73,58 @@ uint16_t HueChangePixel(uint16_t px, int32_t hue, bool rgb565)
     return rgb565 ? uint16_t((r << 11) | (g << 6) | b) : uint16_t((r << 10) | (g << 5) | b);
 }
 
+bool HasAliasStream(const TBitmap* bm)
+{
+    return (bm->flags & BM_ALIAS) && bm->alias.ptr();
+}
+
+// Writes the alias buffer's pixels over `dst`, leaving the pixels it skips
+// as they are. The buffer stores anti-aliased pixels as an RLE coverage
+// stream: per scanline, alternating (skip-count, run-count,
+// [color16, alpha5]*) groups; AL_EOL ends a line, AL_EOD ends the stream;
+// alpha5 is 0..31 coverage (31 = opaque). C port of the legacy MMX PutAlias*
+// blit (graphics.cpp, now #if 0).
+void OverlayAliasStream(const TBitmap* bm, uint8_t* dst, int32_t dst_pitch, int32_t ox, int32_t oy)
+{
+    const int32_t w = bm->width, h = bm->height;
+    const bool rgb565 = (bm->flags & BM_16BIT) != 0;
+    const uint8_t* a   = (const uint8_t*)bm->alias.ptr();
+    const uint8_t* aend = a + bm->aliassize;
+    int32_t y = 0;
+    while (y < h && a < aend)
+    {
+        uint8_t code = *a++;                 // first code of the line
+        if (code == AL_EOD) break;
+        if (code == AL_EOL) { y++; continue; } // blank line
+
+        int32_t x = 0;
+        for (;;)
+        {
+            x += code;                       // `code` is a skip count
+            if (a >= aend) break;
+            const uint8_t run = *a++;
+            for (uint8_t i = 0; i < run && a + 3 <= aend; i++)
+            {
+                const uint16_t px  = (uint16_t)(a[0] | (a[1] << 8));
+                const uint8_t  cov = a[2];   // 0..31 coverage
+                a += 3;
+                if (x >= 0 && x < w)
+                {
+                    uint8_t* row = dst + (oy + y) * dst_pitch + (ox + x) * 4;
+                    if (rgb565) Decode565(px, row);           // RGB (sets A=255)
+                    else        Decode555(px, row);
+                    row[3] = (uint8_t)((cov * 255) / 31);     // override A = coverage
+                }
+                x++;
+            }
+            if (a >= aend) break;
+            code = *a++;                      // next skip count OR AL_EOL
+            if (code == AL_EOL) break;
+        }
+        y++;
+    }
+}
+
 }  // namespace
 
 bool DecodeBitmapHueChangedToRGBA(const TBitmap* bm, int32_t hue,
@@ -107,6 +159,7 @@ bool DecodeBitmapHueChangedToRGBA(const TBitmap* bm, int32_t hue,
     return true;
 }
 
+
 bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
                         int32_t ox, int32_t oy, EBitmapDecode decode)
 {
@@ -114,61 +167,25 @@ bool DecodeBitmapToRGBA(PTBitmap bm, uint8_t* dst, int32_t dst_pitch,
     if (bm->flags & BM_COMPRESSED) return false;  // TODO decompressor
     const int32_t w = bm->width, h = bm->height;
 
-    // Alias path: only when the draw asked for it (a shadow / glow draw).
-    // BM_ALIAS alone is NOT sufficient -- the cursor sprite carries both a
-    // real data array AND an alias buffer, and must decode from the data
-    // array. Retail keyed this off the DM_ALIAS draw mode, not the BM_ALIAS
-    // bitmap flag; EBitmapDecode::Alias is our equivalent.
-    //
-    // The alias buffer stores anti-aliased pixels as an RLE coverage
-    // stream: per scanline, alternating (skip-count, run-count,
-    // [color16, alpha5]*) groups; AL_EOL ends a line, AL_EOD ends the
-    // stream; alpha5 is 0..31 coverage (31 = opaque). C port of the
-    // legacy MMX PutAlias* blit (graphics.cpp, now #if 0).
-    if (decode == EBitmapDecode::Alias && (bm->flags & BM_ALIAS) && bm->alias.ptr())
+    // The alias buffer only when the draw asks for it. BM_ALIAS alone is
+    // NOT sufficient -- the cursor sprite carries both a real data array AND
+    // an alias buffer, and must decode from the data array. Retail keyed
+    // this off the DM_ALIAS draw mode, not the BM_ALIAS bitmap flag.
+    if (decode == EBitmapDecode::Alias && HasAliasStream(bm))
     {
-        const bool rgb565 = (bm->flags & BM_16BIT) != 0;
-        const uint8_t* a   = (const uint8_t*)bm->alias.ptr();
-        const uint8_t* aend = a + bm->aliassize;
-
         // Skipped pixels stay transparent; zero the target region first
         // so the function is self-contained regardless of caller state.
         for (int32_t y = 0; y < h; y++)
             memset(dst + (oy + y) * dst_pitch + ox * 4, 0, (size_t)w * 4);
-
-        int32_t y = 0;
-        while (y < h && a < aend)
-        {
-            uint8_t code = *a++;                 // first code of the line
-            if (code == AL_EOD) break;
-            if (code == AL_EOL) { y++; continue; } // blank line
-
-            int32_t x = 0;
-            for (;;)
-            {
-                x += code;                       // `code` is a skip count
-                if (a >= aend) break;
-                const uint8_t run = *a++;
-                for (uint8_t i = 0; i < run && a + 3 <= aend; i++)
-                {
-                    const uint16_t px  = (uint16_t)(a[0] | (a[1] << 8));
-                    const uint8_t  cov = a[2];   // 0..31 coverage
-                    a += 3;
-                    if (x >= 0 && x < w)
-                    {
-                        uint8_t* row = dst + (oy + y) * dst_pitch + (ox + x) * 4;
-                        if (rgb565) Decode565(px, row);           // RGB (sets A=255)
-                        else        Decode555(px, row);
-                        row[3] = (uint8_t)((cov * 255) / 31);     // override A = coverage
-                    }
-                    x++;
-                }
-                if (a >= aend) break;
-                code = *a++;                      // next skip count OR AL_EOL
-                if (code == AL_EOL) break;
-            }
-            y++;
-        }
+        OverlayAliasStream(bm, dst, dst_pitch, ox, oy);
+        return true;
+    }
+    if (decode == EBitmapDecode::PixelsAndAlias)
+    {
+        if (!DecodeBitmapToRGBA(bm, dst, dst_pitch, ox, oy, EBitmapDecode::Pixels))
+            return false;
+        if (HasAliasStream(bm))
+            OverlayAliasStream(bm, dst, dst_pitch, ox, oy);
         return true;
     }
 
