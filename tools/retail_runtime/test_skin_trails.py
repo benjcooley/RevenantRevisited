@@ -12,7 +12,7 @@ int main(){
  Definition d;std::string error;assert(ParseDefinition(tag+",numtrails=3:3",d,error));
  assert(d.localrotation.IsCurve()&&d.localrotation.keys.size()==2);
  for(auto& k:d.localrotation.keys)assert(k.percent==0&&k.value==Value{});
- for(auto bad:{"1e-100:1e-100","3:4","-1:-1","3.1:3.1","65:65","[0:3,100:3]"}){
+ for(auto bad:{"1e-100:1e-100","-1:-1","3.1:3.1","65:65","3:65","[0:3,100:3]"}){
   Definition out=d;assert(!ParseDefinition(tag+",numtrails="+bad,out,error));assert(out.numtrails.constant[0]==3);
  }
  for(auto malformed:{"[0:(0,0,0),100(1,0,0)]","[0:(0,0,0),100(1e-100,0,0)]","[0:(0,0,0),99(0,0,0)]"}){
@@ -26,6 +26,17 @@ int main(){
  assert(trail.size()==3&&trail[0]==initial[1]&&trail[1]==initial[2]&&trail[2]==current.position&&seed==before);
  auto repeated=sim.SampleTrailPositions(0);assert(repeated[0]==trail[1]&&repeated[1]==trail[2]&&repeated[2]==current.position&&seed==before);
  Definition zero;assert(ParseDefinition(tag,zero,error)&&zero.numtrails.constant[0]==0);State no_trail;assert(no_trail.Initialize(zero,in,0,error));no_trail.Advance(in,rng);assert(no_trail.SampleTrailPositions(0).empty());
+ // Spawn 403265..4032a4: a range draws random(low, high) once, last in the
+ // spawn (Impact's 2:3); a zero low endpoint draws nothing (Impact's 0:0).
+ // A trailing ',' ends the list (ParseParams 40d449..40d480).
+ Definition range,low_zero,fixed;assert(ParseDefinition(tag+",numtrails=2:3,",range,error));
+ assert(range.numtrails.constant[0]==2&&range.numtrails.constant[1]==3);
+ assert(ParseDefinition(tag+",numtrails=0:3",low_zero,error)&&ParseDefinition(tag+",numtrails=3:3",fixed,error));
+ auto first_spawn=[&](const Definition& def,uint32_t start,uint32_t& end){State s;assert(s.Initialize(def,in,0,error));seed=start;s.Advance(in,rng);end=seed;return s.Particles()[0].trail_positions.size();};
+ uint32_t after_fixed=0,after_range=0,after_zero=0;
+ assert(first_spawn(fixed,77,after_fixed)==3);const size_t drawn=first_spawn(range,77,after_range);assert(drawn==2||drawn==3);
+ assert(after_range==after_fixed*214013u+2531011u);
+ assert(first_spawn(low_zero,77,after_zero)==0&&after_zero==after_fixed);
 }
 '''
 TRACE=r'''

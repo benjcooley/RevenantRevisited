@@ -1860,6 +1860,8 @@ void GetParameters(int argc, char **argv)
         std::string p;
         if (arg_param(cmd, "vfx-bg", p))
             strncpyz(StartupVfxBackground, p.c_str(), sizeof(StartupVfxBackground));
+        if (arg_param(cmd, "vfx-rig", p))
+            strncpyz(StartupVfxRig, p.c_str(), sizeof(StartupVfxRig));
     }
 
   // Explicit retail VFX comparison framing (does not scale effect geometry).

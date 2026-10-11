@@ -26,7 +26,7 @@ struct T3DImagery:TObjectImagery{bool admitted=false;std::vector<Tag>tags;std::v
  int NumObjects(){return names.size();}const char*GetObjectName(int i){return names[i];}int NumObjFaces(int i){return faces[i];}
  void AttachAnimatorComponents(void*){}
  int NumTags(){return tags.size();}Tag*GetTag(int i){return &tags[i];}
- bool HasGoldPartSysProfile(){return admitted;}bool HasCombatFlashStart1PartSysProfile(){return admitted;}
+ bool HasGoldPartSysProfile(){return admitted;}bool HasCombatFlashPartSysProfile(){return admitted;}
  bool HasRetailMightPartSysProfile(){return admitted;}bool HasRetailImmortalmightPartSysProfile(){return admitted;}
  bool HasRetailFmasteryPartSysProfile(){return admitted;}bool HasRetailSpeedFamilyPartSysProfile(uint32_t){return admitted;}
  bool HasRetailStaticParticleProfile(uint32_t){return admitted;}};

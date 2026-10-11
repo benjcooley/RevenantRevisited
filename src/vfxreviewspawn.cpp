@@ -50,7 +50,7 @@ bool ReviewParticleRenderer(T3DImagery& image, uint32_t id)
     // Match RefreshPartSysControllers' exact runtime admissions. Grammar
     // success alone does not enable arbitrary emitter/controller identities.
     return (id == 0xd0c0f035u && image.HasGoldPartSysProfile()) ||
-           (id == 0xad92bd29u && image.HasCombatFlashStart1PartSysProfile()) ||
+           (id == 0xad92bd29u && image.HasCombatFlashPartSysProfile()) ||
            (id == 0x5be39ae0u && image.HasRetailMightPartSysProfile()) ||
            (id == 0x82aeb30fu && image.HasRetailImmortalmightPartSysProfile()) ||
            (id == 0xb0e024dfu && image.HasRetailFmasteryPartSysProfile()) ||

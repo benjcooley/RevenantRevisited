@@ -3372,7 +3372,11 @@ class TMissileEffect_Bespoke : public TEffect
 // *******************
 // * Blood Animator *
 // *******************
-
+//
+// The 1998 snapshot's animator around TBloodSystem (bodies archived in
+// effect_old.cpp). The shipped TBloodAnimator differs and is ported in
+// effects/blood.{h,cpp}; this declaration is kept for reference only.
+#ifdef UNUSED
 _CLASSDEF(TBloodAnimator)
 
 class TBloodAnimator : public T3DAnimator
@@ -3396,6 +3400,7 @@ class TBloodAnimator : public T3DAnimator
       // Called to render a frame
     virtual void RefreshZBuffer();
 };
+#endif // UNUSED: snapshot TBloodAnimator
 
 // ******************
 // * TFizzleEffect *

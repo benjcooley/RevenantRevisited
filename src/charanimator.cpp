@@ -5,13 +5,17 @@
 // *************************************************************************
 
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 
 #include "character.h"
 #include "player.h"
 #include "charanimator.h"
 #include "effect.h"
+#include "logging.h"
 #include "math3d.h"
 #include "render3d_types.h"
+#include "renderer.h"
 #include "time.h"
 
 namespace
@@ -70,6 +74,7 @@ void TCharAnimator::Animate(bool draw)
 void TCharAnimator::Pulse()
 {
     T3DAnimator::Pulse();
+    ++swipe_ticks;
     for (SRisingNumber& n : numbers)
     {
         if (n.ticks <= 0)
@@ -125,7 +130,8 @@ bool TCharAnimator::Render()
 
     RenderEquipment();      // Renders equipment geometry
 
-//  RenderCombatFlashes();
+    // Retail's combat flash is a second, additive render of the character
+    // (DrawsCombatFlash), not the snapshot's RenderCombatFlashes quad.
 
     return true;
 }
@@ -374,6 +380,7 @@ void TCharAnimator::UpdateDrawState(double dt_seconds)
     else
         UpdateTransparency(dt_seconds);
     UpdateEquipment();
+    UpdateWeaponSwipe();
 }
 
 float TCharAnimator::DrawAlpha() const
@@ -381,6 +388,262 @@ float TCharAnimator::DrawAlpha() const
     if (IsHidden() || transparency < kMinDrawTransparency)
         return 0.0f;
     return transparency;
+}
+
+// REVSYNC: TCharAnimator::Render @ 0x004d7bd8..0x004d7c0c -- while the
+// combat flash ticks (TCharacter +0x224, five from a blow) run, the
+// character renders again in blend mode 16 (litadd): its lit colour added
+// over itself, the white-hot flash of a struck body. The map renderer
+// submits that second pass (SMeshSubmit::additive). The snapshot's
+// RenderCombatFlashes (a utility quad) is not what shipped.
+bool TCharAnimator::DrawsCombatFlash() const
+{
+    return static_cast<TCharacter*>(inst)->GetCombatFlashTicks() >= 1;
+}
+
+// *****************
+// * Weapon swipe  *
+// *****************
+
+// REVSYNC: TCharAnimator::Animate @ 0x004d7a20 starts the swipe whenever it
+// isn't running; Render @ 0x004d7c47 updates it each drawn frame, after the
+// character (so not while hidden, nor below the drawn-alpha floor). Retail
+// drew at most once a tick: the port updates once a tick, on the first
+// drawn frame after it, at that tick's key -- and keeps the history the
+// next key's update leads to, to draw the frames between toward it.
+void TCharAnimator::UpdateWeaponSwipe()
+{
+    if (!swipe.Initialized())
+        SetupWeaponSwipe();
+    if (!swipe.Initialized() || swipe_ticks_seen == swipe_ticks || DrawAlpha() <= 0.0f)
+        return;
+    swipe_ticks_seen = swipe_ticks;
+    TWeaponSwipe::SMatrix weapon{};
+    swipe.Update(WeaponSwipeFrame(false, weapon));
+    TWeaponSwipe next = swipe;
+    next.Update(WeaponSwipeFrame(true, weapon));
+    swipe_next = next.Initialized() ? next.Ring() : swipe.Ring();
+}
+
+// REVSYNC: TCharAnimator::SetupWeaponSwipe @ 0x004d8f10 -- nothing without a
+// SWIPECOLOR. The colour bytes / 255 (0x005a3830), not normalised; SWIPEFULL
+// for a character, the SwipeFull stat of a player's weapon in hand (vtable
+// +0xd4), whose name the swipe keeps to notice a change. Retail measures
+// the weapon first; nothing reads the bounds without a colour.
+void TCharAnimator::SetupWeaponSwipe()
+{
+    auto* character = static_cast<TCharacter*>(inst);
+    const SCharData* data = character ? character->GetCharData() : nullptr;
+    if (!data)
+        return;
+    const SColor& color = data->swipecolor;
+    if (!color.red && !color.green && !color.blue)
+        return;
+
+    TWeaponSwipe::SParams params;
+    WeaponExtents(params.extent_min, params.extent_max);
+    if (inst->ObjClass() == OBJCLASS_PLAYER)
+    {
+        if (TObjectInstance* in_hand = static_cast<TPlayer*>(inst)->PrimeHand())
+        {
+            if (const char* name = in_hand->GetName())
+                params.weapon = name;
+            params.full = in_hand->GetStat("SwipeFull") != 0;
+        }
+    }
+    else
+        params.full = data->swipefull != 0;
+    params.color = TWeaponSwipe::ColorOf(color.red, color.green, color.blue);
+    TWeaponSwipe::SMatrix weapon{};
+    swipe.Init(params, WeaponSwipeFrame(false, weapon));
+    swipe_next = swipe.Ring();
+    const int32_t object = SwipeObjectNum();
+    log_info("[weapon-swipe] %s: object %d '%s', colour %u,%u,%u, full %d, bounds (%.1f,%.1f,%.1f)-(%.1f,%.1f,%.1f)",
+             inst->GetTypeName(), object,
+             object >= 0 ? Get3DImagery()->GetObjectName(GetObject(object)->objnum) : "-",
+             color.red, color.green, color.blue, int(params.full),
+             double(params.extent_min[0]), double(params.extent_min[1]), double(params.extent_min[2]),
+             double(params.extent_max[0]), double(params.extent_max[1]), double(params.extent_max[2]));
+}
+
+// REVSYNC: TWeaponSwipe::Update @ 0x004d95b0 reads the owner: doing
+// ACTION_ATTACK (a player only with a weapon in hand, +0x2b0), the frame
+// (+0x5c), the attack's swipeframeon/off (+0xec/+0xf0); AddPoint 0x004d96c0
+// and Reset 0x004d9c60 the weapon object's matrix (+0x58).
+TWeaponSwipe::SFrame TCharAnimator::WeaponSwipeFrame(bool next, TWeaponSwipe::SMatrix& weapon)
+{
+    TWeaponSwipe::SFrame frame;
+    auto* character = static_cast<TCharacter*>(inst);
+    TObjectInstance* in_hand = nullptr;
+    if (inst->ObjClass() == OBJCLASS_PLAYER)
+    {
+        frame.player = true;
+        in_hand = static_cast<TPlayer*>(inst)->PrimeHand();
+        frame.in_hand = in_hand ? in_hand->GetName() : nullptr;
+    }
+    const TActionBlock* doing = character->DoingBlock();
+    frame.attacking = doing && doing->action == ACTION_ATTACK && (!frame.player || in_hand);
+    frame.frame = inst->GetFrame();
+    if (next)
+    {
+        // The next key, while the state holds; past it the window is shut.
+        const SLegacyRenderKey key = NextKey();
+        frame.frame = key.state == inst->GetState() ? key.frame : INT32_MIN;
+    }
+    if (frame.attacking && doing->attack)
+    {
+        frame.frame_on = doing->attack->swipeframeon;
+        frame.frame_off = doing->attack->swipeframeoff;
+    }
+    hmm_mat4 model;
+    const int32_t object = SwipeObjectNum();
+    if (object >= 0 && ObjectModelMatrix(object, next ? 1.0f : 0.0f, model))
+    {
+        static_assert(sizeof(model) == sizeof(weapon), "a D3D matrix");
+        std::memcpy(weapon.data(), &model, sizeof(weapon));
+        frame.weapon = &weapon;
+    }
+    return frame;
+}
+
+int32_t TCharAnimator::SwipeObjectNum()
+{
+    for (const char* name : {"weapon", "sword", "ogrokaxe"})
+        if (const int32_t object = GetObjectNum(name); object >= 0)
+            return object;
+    return -1;
+}
+
+// REVSYNC: TCharAnimator::GetWeaponNum @ 0x004d8bd0 -- the weapon's state for
+// this body ("still" or "all" for every body, else the body type, a prefix
+// on its object names), then its first shown object this body has a place
+// for ("weapon" falls back to "sword").
+int32_t TCharAnimator::WeaponObjectNum()
+{
+    if (inst->ObjClass() != OBJCLASS_PLAYER)
+        return -1;
+    auto* player = static_cast<TPlayer*>(inst);
+    TObjectInstance* in_hand = player->PrimeHand();
+    auto* imagery = in_hand ? dynamic_cast<T3DImagery*>(in_hand->GetImagery()) : nullptr;
+    const SImageryHeader* header = imagery ? imagery->GetHeader() : nullptr;
+    if (!header)
+        return -1;
+    const char* body = player->BodyType();
+    size_t prefix = 0;
+    int32_t state = 0;
+    for (; state < header->numstates; ++state)
+    {
+        const char* name = header->states[state].animname;
+        if (!stricmp(name, "still") || !stricmp(name, "all"))
+            break;
+        if (!stricmp(name, body))
+        {
+            prefix = strlen(body);
+            break;
+        }
+    }
+    if (state >= header->numstates)
+        return -1;
+    for (int32_t object = 0; object < imagery->NumObjects(); ++object)
+    {
+        if (imagery->IsHidden(object, state))
+            continue;
+        const char* name = imagery->GetObjectName(object);
+        if (prefix > 0 && !strnicmp(name, body, prefix))
+            name += prefix;
+        int32_t own = GetObjectNum(name);
+        if (own < 0 && !stricmp(name, "weapon"))
+            own = GetObjectNum("sword");
+        if (own >= 0)
+            return object;
+    }
+    return -1;
+}
+
+// REVSYNC: TCharAnimator::GetWeaponExtents @ 0x004d8e60 -- a player's weapon
+// object on the weapon's own imagery, else this character's weapon object,
+// at state 0, frame 0. Zero without an object.
+void TCharAnimator::WeaponExtents(TWeaponSwipe::SVec3& low, TWeaponSwipe::SVec3& high)
+{
+    low = {};
+    high = {};
+    T3DImagery* imagery = nullptr;
+    int32_t object = WeaponObjectNum();
+    if (object >= 0)
+        if (TObjectInstance* in_hand = static_cast<TPlayer*>(inst)->PrimeHand())
+            imagery = dynamic_cast<T3DImagery*>(in_hand->GetImagery());
+    if (!imagery)
+    {
+        imagery = Get3DImagery();
+        const int32_t own = SwipeObjectNum();
+        object = own >= 0 ? GetObject(own)->objnum : -1;
+    }
+    if (!imagery || object < 0)
+        return;
+    hmm_vec3 bound_low, bound_high;
+    imagery->GetObjectBounds(object, bound_low, bound_high);
+    low = {bound_low.X, bound_low.Y, bound_low.Z};
+    high = {bound_high.X, bound_high.Y, bound_high.Z};
+}
+
+// REVSYNC: TCharAnimator::Render @ 0x004d7c6f..0x004d7cc3 -- the strip
+// (BuildStrip 0x004d9380) in blend mode 2: SRCALPHA/INVSRCALPHA, depth
+// tested without writes, no culling (0x00417f46), prelit, in the model
+// space of the character under its animator matrix (RenderObject
+// 0x0040a8f0). Its alpha is its own: the character's fade doesn't reach it.
+//
+// REVSYNC-DIVERGENCE: retail's 80 faces run two past the 80 vertices
+// BuildStrip writes; the last two index the zero-filled vertices 80 and 81
+// (the model origin), a thin line in the swipe's colour from the strip's
+// tail to the character's feet in the lab recording. The port draws the 78
+// strip triangles. Between ticks it draws the history eased toward the
+// next tick's (UpdateWeaponSwipe).
+void TCharAnimator::SubmitFx(TRenderer& renderer) const
+{
+    if (!inst || !swipe.Initialized() || DrawAlpha() <= 0.0f)
+        return;
+    const TWeaponSwipe::SRing ring =
+        TWeaponSwipe::Blend(swipe.Ring(), swipe_next, float(TTime::LegacyFrameFraction()));
+    if (!TWeaponSwipe::HasWidth(ring))
+        return;
+    TWeaponSwipe::SStrip strip;
+    TWeaponSwipe::BuildStrip(ring, swipe.Color(), strip);
+    SubmitSwipeStrip(renderer, strip, inst->Transform().Matrix());
+}
+
+void TCharAnimator::SubmitSwipeStrip(TRenderer& renderer, const TWeaponSwipe::SStrip& strip,
+                                     const hmm_mat4& model_to_world)
+{
+    std::array<hmm_vec3, TWeaponSwipe::kStripVertices> world;
+    for (size_t i = 0; i < strip.size(); ++i)
+    {
+        const hmm_vec3 model = {strip[i].pos[0], strip[i].pos[1], strip[i].pos[2]};
+        MtxTransform(&model_to_world, &model, &world[i]);
+    }
+    // Triangles (2j, 2j+1, 2j+2) and (2j+1, 2j+2, 2j+3) as one quad: the
+    // quad splits on corners 0-3, which carry their shared edge.
+    constexpr int32_t kCornerVertex[4] = {1, 3, 0, 2};
+    for (int32_t first = 0; first + 3 < TWeaponSwipe::kStripVertices; first += 2)
+    {
+        SQuadDrawItem quad;
+        quad.key.blend = uint8_t(EFxBlend::Alpha);
+        quad.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
+        quad.light_mode = EFxLightMode::Unlit;
+        quad.per_corner_color = true;
+        for (int32_t corner = 0; corner < 4; ++corner)
+        {
+            const size_t vertex = size_t(first + kCornerVertex[corner]);
+            quad.world_pos[corner][0] = world[vertex].X;
+            quad.world_pos[corner][1] = world[vertex].Y;
+            quad.world_pos[corner][2] = world[vertex].Z;
+            const uint32_t argb = strip[vertex].argb;
+            quad.corner_color_rgba[corner][0] = float((argb >> 16) & 0xff) / 255.0f;
+            quad.corner_color_rgba[corner][1] = float((argb >> 8) & 0xff) / 255.0f;
+            quad.corner_color_rgba[corner][2] = float(argb & 0xff) / 255.0f;
+            quad.corner_color_rgba[corner][3] = float(argb >> 24) / 255.0f;
+        }
+        renderer.SubmitFxQuad(quad);
+    }
 }
 
 // REVSYNC: TCharAnimator::Render @ 0x004d7a50 -- steps 0.05 toward

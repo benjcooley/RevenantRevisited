@@ -7,15 +7,12 @@
 #pragma once
 
 #include "3dimage.h"
+#include "weaponswipe.h"
 
 #include <array>
 #include <vector>
 
 _CLASSDEF(TCharAnimator)
-
-// TWeaponSwipe was the legacy strip-mesh trail renderer that drew the
-// weapon arc during attacks. The drawable system will own that effect
-// when it is reintroduced; for now the swipe is fully retired.
 
 // *****************
 // * TCharAnimator *
@@ -63,6 +60,13 @@ class TCharAnimator : public T3DAnimator
       // alpha moves toward Transparency()/100
     [[nodiscard]] float DrawAlpha() const override;
       // The drawn alpha, or 0 while hidden or too faint to draw
+    [[nodiscard]] bool DrawsCombatFlash() const override;
+      // While the combat flash ticks run (retail Render 0x004d7be5)
+    void SubmitFx(TRenderer& renderer) const override;
+      // The weapon swipe, drawn after the character (Render 0x004d7c6f)
+    static void SubmitSwipeStrip(TRenderer& renderer, const TWeaponSwipe::SStrip& strip,
+                                 const hmm_mat4& model_to_world);
+      // A swipe strip's triangles, alpha-blended and depth-tested
 
   // What a player's equipment draws this frame (retail +0x594, rebuilt for
   // each object it draws). Retail draws an equipped item's mesh object with
@@ -110,6 +114,23 @@ class TCharAnimator : public T3DAnimator
     void ResetMaterialTransparency(T3DImagery* img);
       // Resets all imagery transparency back to 1.0
 
+  // Weapon swipe (retail TWeaponSwipe at +0x1a8; weaponswipe.h)
+    void SetupWeaponSwipe();
+      // 0x004d8f10: starts the swipe of a character with a SWIPECOLOR
+    void UpdateWeaponSwipe();
+      // Starts it while it isn't running (Animate 0x004d7a20); updates it on
+      // the first drawn frame after each tick (Render 0x004d7c47)
+    TWeaponSwipe::SFrame WeaponSwipeFrame(bool next, TWeaponSwipe::SMatrix& weapon);
+      // The owner as the swipe sees it at this tick's key, or the next
+      // one's; `weapon` holds the sampled weapon matrix
+    int32_t SwipeObjectNum();
+      // This character's "weapon", "sword" or "ogrokaxe" object, or -1
+    int32_t WeaponObjectNum();
+      // 0x004d8bd0: the object of a player's weapon in hand that sits on
+      // this body, or -1
+    void WeaponExtents(TWeaponSwipe::SVec3& low, TWeaponSwipe::SVec3& high);
+      // 0x004d8e60: the weapon object's vertex bounds
+
   // Utility Imagery stuff (shadow, combat flashes, bloody chunks, etc.)
     void InitUtilityImagery();
     void CloseUtilityImagery();
@@ -133,6 +154,11 @@ class TCharAnimator : public T3DAnimator
 
     std::array<SRisingNumber, kRisingNumberSlots> numbers{};
     std::vector<SEquipAttachment> equipment;    // this frame's (UpdateEquipment)
+
+    TWeaponSwipe swipe;
+    TWeaponSwipe::SRing swipe_next{};   // where the next tick's update takes the history
+    uint32_t swipe_ticks = 0;           // ticks pulsed
+    uint32_t swipe_ticks_seen = 0;      // ticks the swipe has caught up with
 };
 
 _CLASSDEF(TPlayerAnimator)

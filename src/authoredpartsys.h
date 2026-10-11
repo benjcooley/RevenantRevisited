@@ -63,6 +63,10 @@ struct RenderSample
     int blendmode = 16;
 };
 
+// Map z of a render-space (corrected) position such as a trail history
+// entry: the inverse of the original z perspective correction.
+float SourceZ(float render_z);
+
 class State
 {
 public:

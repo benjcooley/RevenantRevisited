@@ -2169,6 +2169,15 @@ void TRenderer::InitMeshPipeline()
     tpip.depth.write_enabled = false;
     tpip.label = "renderer.mesh.translucent.pipeline";
     mesh_translucent_pipeline = sg_make_pipeline(&tpip);
+    {
+        sg_pipeline_desc apip = tpip;
+        apip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_ONE;
+        apip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE;
+        apip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ZERO;
+        apip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+        apip.label = "renderer.mesh.additive.pipeline";
+        mesh_additive_pipeline = sg_make_pipeline(&apip);
+    }
     // Blue ARGB4444 blends with the already-lit framebuffer in face order,
     // Native NewObject/RenderObject selects blend mode 4 for alpha textures:
     // test scene depth, but blend both face directions without depth writes.
@@ -2347,6 +2356,7 @@ void TRenderer::ShutdownMeshPipeline()
     if (helper_gold_no_depth_front_pipeline.id) { sg_destroy_pipeline(helper_gold_no_depth_front_pipeline); helper_gold_no_depth_front_pipeline = {}; }
     if (helper_mesh_shader.id)   { sg_destroy_shader(helper_mesh_shader); helper_mesh_shader = {}; }
     if (mesh_translucent_pipeline.id) { sg_destroy_pipeline(mesh_translucent_pipeline); mesh_translucent_pipeline = {}; }
+    if (mesh_additive_pipeline.id) { sg_destroy_pipeline(mesh_additive_pipeline); mesh_additive_pipeline = {}; }
     if (mesh_translucent_shader.id)   { sg_destroy_shader(mesh_translucent_shader);     mesh_translucent_shader   = {}; }
     if (mesh_depth_pipeline.id) { sg_destroy_pipeline(mesh_depth_pipeline); mesh_depth_pipeline = {}; }
     if (mesh_depth_shader.id)   { sg_destroy_shader(mesh_depth_shader);     mesh_depth_shader   = {}; }
@@ -2957,7 +2967,7 @@ void TRenderer::SubmitMesh(const SMeshSubmit& m)
 {
     if (m.mesh == 0 || m.mesh > meshes.size()) return;
     const bool source_alpha = m.retail_lighting == 3 && retail_mesh_rgb_enabled && light.mode == 0;
-    if (m.tint[3] >= kOpaqueMeshAlpha && !source_alpha)
+    if (m.tint[3] >= kOpaqueMeshAlpha && !source_alpha && !m.additive)
     {
         mesh_queue.push_back(m);
         return;
@@ -3396,6 +3406,16 @@ void TRenderer::EmitTranslucentMeshSurface(const STransparentWorldSubmit* first,
         }
     };
 
+    if (first->mesh.additive)
+    {
+        // Over the surface already in the scene: its own depth is the test.
+        if (!mesh_additive_pipeline.id) return;
+        sg_apply_pipeline(mesh_additive_pipeline);
+        sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vs_range);
+        sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fs_range);
+        draw_members();
+        return;
+    }
     if (first->mesh.retail_lighting == 3 && retail_mesh_rgb_enabled && light.mode == 0)
     {
         // One sourced draw, without the character nearest-surface prepass:
@@ -3452,7 +3472,8 @@ void TRenderer::DrainTransparentWorldQueue()
             const bool source_alpha = s.mesh.retail_lighting == 3 && retail_mesh_rgb_enabled && light.mode == 0;
             while (!source_alpha && s.mesh.surface_id != 0 && j < n &&
                    transparent_world_queue[j].kind == ETransparentWorldKind::Mesh &&
-                   transparent_world_queue[j].mesh.surface_id == s.mesh.surface_id)
+                   transparent_world_queue[j].mesh.surface_id == s.mesh.surface_id &&
+                   transparent_world_queue[j].mesh.additive == s.mesh.additive)
                 ++j;
             EmitTranslucentMeshSurface(&s, j - i, mesh_instances, light_uniforms);
             i = j;

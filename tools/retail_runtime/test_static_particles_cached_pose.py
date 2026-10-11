@@ -24,6 +24,7 @@ class CachedParticlePoseTests(unittest.TestCase):
 #include "fgeysermatrix.h"
 #include "dustmatrix.h"
 #include "poisonmatrix.h"
+#include "combatflashprofile.h"
 struct S3DPoint { int x=0,y=0,z=0; };
 struct V { float x=0,y=0,z=0; };
 struct Pose { std::array<float,16> matrix{}; V origin,position,scale; };
@@ -31,7 +32,8 @@ struct Inputs { V owner_position,object_zero_origin; int owner_face=0,animation_
 struct Controller { Inputs inputs; struct {std::vector<int> emitters{1};} track; };
 struct S3DAnimObj { hmm_vec3 pos{},scl{}; };
 struct Imagery {
- int sampled=-1,expected_state=0;bool jhaga=false,funnel=false,lightstrip=false,comet=false,fgeyser=false,dust=false,poison=false;
+ int sampled=-1,expected_state=0;bool jhaga=false,funnel=false,lightstrip=false,comet=false,fgeyser=false,dust=false,poison=false,combatflash=false;
+ bool HasCombatFlashPartSysProfile(){return combatflash;}
  bool HasRetailJhagaAttackProfile(){return jhaga;}
  bool HasRetailLightStripProfile(){return lightstrip;}
  bool HasRetailFunnelProfile(){return funnel;}
@@ -104,6 +106,11 @@ int main(){
  {TObjectInstance owner;owner.id=0xe0a3bc42u;T3DAnimator animator;animator.imagery.poison=true;Controller c;
   for(owner.frame=8;owner.frame<=10;++owner.frame){Extracted::FillInputs(c,animator,owner);
    assert(c.inputs.animation_frame==7 && c.inputs.emitters[0].position.x==7);}}
+ // The combat flash's PPS reads the cached frame (403771); its emitters
+ // keep the live bone matrix, not a resampled key.
+ {TObjectInstance owner;owner.id=retail_combatflash_profile::type_id;T3DAnimator animator;animator.imagery.combatflash=true;Controller c;
+  for(owner.frame=8;owner.frame<=10;++owner.frame){Extracted::FillInputs(c,animator,owner);
+   assert(c.inputs.animation_frame==7 && c.inputs.emitters[0].position.x==8 && animator.imagery.sampled==-1);}}
  // Three authoritative Pulses before Animate retain its cached pose.
  TObjectInstance owner;T3DAnimator animator;Controller c;
  for(owner.frame=8;owner.frame<=10;++owner.frame){

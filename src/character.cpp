@@ -225,8 +225,8 @@ void SprayBlood(const S3DPoint& feet, int32_t height, int32_t hangle, int32_t va
     def.level = MapPane.GetMapLevel();
     def.pos = feet;
     def.pos.z += height;
-    if (TObjectInstance* blood = MapPane.GetInstance(MapPane.NewObject(&def)))
-        static_cast<TBloodEffect*>(blood)->SetParams(height, hangle & 0xff, vangle, hspread, 5, 1);
+    if (auto* blood = dynamic_cast<TBloodEffect*>(MapPane.GetInstance(MapPane.NewObject(&def))))
+        blood->SetParams(height, hangle & 0xff, vangle, hspread, 5, 1);
 }
 
 // The whole points an accumulator holds: 10000 comes off while more than
@@ -2908,6 +2908,11 @@ void TCharacter::EffectBurst(const char *name, int32_t height)
 
     if (!stricmp(name, "blood"))
     {
+      // REVSYNC: 0x004c862e..0x004c8682 -- the spray starts `height` above
+      // the bleeder and heads away from its facing (facing + 128, unmasked;
+      // the animator wraps it), elevation 3, both spreads 5. The count,
+      // random(1, 5), is drawn once the object exists; retail's animator
+      // never reads it (effects/retailblood.cpp).
         def.pos = pos;
         def.pos.z += height;
 
@@ -2917,14 +2922,10 @@ void TCharacter::EffectBurst(const char *name, int32_t height)
         TObjectInstance* inst = MapPane.GetInstance(index);
         if (!inst)
             return;
-
-      // TODO retail: the imagery factory currently returns a generic
-      // TEffect for "blood" instead of a TBloodEffect (typeinfo for
-      // TBloodEffect isn't even emitted — no key function). Calling
-      // the virtual SetParams via the wrong vtable crashes. Skip the
-      // splatter-params call until the effect-class registration is
-      // ported. Combat still kills the target; blood is cosmetic.
-        // ((TBloodEffect*)inst)->SetParams(height, (GetFace() + 128) & 255, 0, 80, 20, random(1, 5));
+        const int32_t heading = GetFace() + 0x80;
+        const int32_t count = random(1, 5);
+        if (auto* blood = dynamic_cast<TBloodEffect*>(inst))
+            blood->SetParams(height, heading, 3, 5, 5, count);
     }
     else if (!stricmp(name, "sparks"))
     {

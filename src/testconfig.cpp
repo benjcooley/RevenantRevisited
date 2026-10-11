@@ -50,6 +50,7 @@ char  StartupQuickstartSave[MAXPATHLEN] = "";
 bool  StartupNoIntro                    = false;
 char  StartupMenuButton[32]             = "";
 char  StartupVfxBackground[16] = "";
+char  StartupVfxRig[64] = "";
 char  StartupVfxBackdrop[MAXPATHLEN] = "";
 float StartupVfxCamera[2] = {-1.0f, -1.0f};
 bool StartupVfxCameraExplicit = false;

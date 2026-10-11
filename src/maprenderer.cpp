@@ -1486,8 +1486,13 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         const auto* authored_animator = dynamic_cast<T3DAnimator*>(oi->GetAnimator());
         const bool gold_flare = authored_animator &&
             authored_animator->GoldBaseMeshBlend(asset.objnum, authored_blend);
-        const bool combat_start1_base = authored_animator &&
-            authored_animator->CombatFlashStart1BaseMeshBlend(asset.objnum, authored_blend);
+        const bool combat_flash_base = authored_animator &&
+            authored_animator->CombatFlashBaseMeshBlend(asset.objnum, authored_blend);
+        // An Impact object outside the audited litadd route (no controllers
+        // yet, an unadmitted asset) has no opaque substitute: its RGB565
+        // flare art is black-keyed for ONE/ONE only.
+        if (oi->ObjId()==0xad92bd29u && !combat_flash_base)
+        { ++stats.mesh_skipped; return; }
         const bool mpappear_start = authored_animator &&
             authored_animator->MPAppearStartMeshBlend(asset.objnum, authored_blend);
         const bool shadowfist = authored_animator &&
@@ -1508,7 +1513,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         // bone transform. Its blendcont mode16 is separate from coin alpha2.
         // Exact '$' mode80 selects ONE/ONE with no Z test or writes;
         // software mode1 preserves RGB565 normal lighting with authored normals.
-        if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base)
+        if (gold_flare || combat_flash_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base)
         {
             hmm_mat4 gold_world;
             const bool matrix_ok = camera_particle_base ?
@@ -1521,7 +1526,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 const_cast<T3DAnimator*>(authored_animator)->ShadowfistMeshWorldMatrix(asset.objnum,gold_world) : mpappear_start ?
                 const_cast<T3DAnimator*>(authored_animator)->MPAppearStartMeshWorldMatrix(asset.objnum,gold_world) : gold_flare ?
                 (authored_blend == 80u && const_cast<T3DAnimator*>(authored_animator)->GoldBaseMeshWorldMatrix(gold_world)) :
-                (authored_blend == 16u && const_cast<T3DAnimator*>(authored_animator)->CombatFlashStart1BaseMeshWorldMatrix(gold_world));
+                (authored_blend == 16u && const_cast<T3DAnimator*>(authored_animator)->CombatFlashBaseMeshWorldMatrix(asset.objnum, gold_world));
             if (!matrix_ok)
             { ++stats.mesh_skipped; return; }
             TransposeSourceToRenderer(gold_world, world_renderer);
@@ -1534,10 +1539,10 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             }
         }
         // Audited per-object modes precede generic inferred state blend tags.
-        const bool audited_profile = gold_flare || combat_start1_base || mpappear_start ||
+        const bool audited_profile = gold_flare || combat_flash_base || mpappear_start ||
             shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base ||
             (oi->ObjId()==0xd0c0f035u && meshimg->HasGoldPartSysProfile()) ||
-            (oi->ObjId()==0xad92bd29u && state==0) ||
+            (oi->ObjId()==0xad92bd29u && meshimg->HasCombatFlashPartSysProfile()) ||
             (oi->ObjId()==0xad99fdf2u && meshimg->HasRetailMPAppearStartProfile()) ||
             (oi->ObjId()==0x550decafu && meshimg->HasRetailShadowfistProfile()) ||
             (oi->ObjId()==0x9de2a0feu && meshimg->HasRetailWarriorbornProfile()) ||
@@ -1574,7 +1579,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             blended.sort_depth = CameraDepth({ mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z }, ctx.cam_forward);
             Renderer->SubmitHelperMesh(blended);
         }
-        else if (oi->ObjClass() == OBJCLASS_HELPER || gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || speed_base || camera_particle_base || ((immortalmight_base || fmastery_base || camera_particle_base) && (authored_blend==16u || authored_blend==80u)))
+        else if (oi->ObjClass() == OBJCLASS_HELPER || gold_flare || combat_flash_base || mpappear_start || shadowfist || warriorborn || teleportation || speed_base || camera_particle_base || ((immortalmight_base || fmastery_base || camera_particle_base) && (authored_blend==16u || authored_blend==80u)))
         {
             const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
@@ -1588,7 +1593,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             std::memcpy(m.specular, asset.specular, sizeof(m.specular));
             std::memcpy(m.emissive, asset.emissive, sizeof(m.emissive));
             m.power = asset.power;
-            if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base)
+            if (gold_flare || combat_flash_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base)
             {
                 m.additive_blend = true; // source inherited particle16 for exact Imight base
                 m.retail_lighting = 1;
@@ -1597,7 +1602,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             }
             m.sort_depth = CameraDepth({ mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z }, ctx.cam_forward);
             // Retail default Render40e8ed invokes controllers before base meshes40eaa3.
-            if (gold_flare || combat_start1_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base) Renderer->SubmitGoldFlareAfterFx(m);
+            if (gold_flare || combat_flash_base || mpappear_start || shadowfist || warriorborn || teleportation || immortalmight_base || fmastery_base || speed_base || camera_particle_base) Renderer->SubmitGoldFlareAfterFx(m);
             else Renderer->SubmitHelperMesh(m);
         }
         else
@@ -1638,6 +1643,12 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             m.sort_depth = CameraDepth(MeshCameraRel(ctx, world_pos), ctx.cam_forward);
             m.surface_id = uint32_t(oi->GetMapIndex() + 1);
             Renderer->SubmitMesh(m);
+            if (d3 && d3->DrawsCombatFlash())
+            {
+                SMeshSubmit flash = m;
+                flash.additive = true;
+                Renderer->SubmitMesh(flash);
+            }
         }
         ++stats.mesh_submitted;
     }
@@ -1700,6 +1711,15 @@ void TMapRenderer::Impl::submitEquipment(const SMapRenderContext& ctx, SMapRende
             m.sort_depth = sort_depth;
             m.surface_id = uint32_t(oi.GetMapIndex() + 1);
             Renderer->SubmitMesh(m);
+            // REVSYNC: ProcessEquipment @ 0x004d8148..0x004d8173 -- while the
+            // combat flash ticks run (TCharacter +0x224) each item object
+            // draws again in blend mode 8 (add), as the body does in mode 16.
+            if (animator->DrawsCombatFlash())
+            {
+                SMeshSubmit flash = m;
+                flash.additive = true;
+                Renderer->SubmitMesh(flash);
+            }
             ++stats.mesh_submitted;
         }
     }
@@ -3619,6 +3639,7 @@ void TMapRenderer::RenderFrame()
     ParticleManager().BeginDrawPulsePass();
     std::unordered_set<TObjectInstance*> submitted_replacement_owners;
     s.frameEquipOwners.clear();
+    std::unordered_set<const TObjectInstance*> submitted_fx_owners;
     for (int32_t idx : s.frameDrawIndices)
     {
         if (idx < 0 || idx >= int32_t(s.sectorDrawInst.size()))
@@ -3665,6 +3686,12 @@ void TMapRenderer::RenderFrame()
                 s.frameEquipOwners.push_back(owner);
                 s.submitEquipment(drawctx, stats, *owner, obj_id);
             }
+        // What the animator draws besides the meshes (a character's weapon
+        // swipe), once an object.
+        if (const TObjectInstance* owner = s.sectorDrawInst[idx].src.Get())
+            if (const auto* animator = dynamic_cast<const T3DAnimator*>(owner->GetAnimator()))
+                if (submitted_fx_owners.insert(owner).second)
+                    animator->SubmitFx(*Renderer);
     }
     // Effect-component buckets are drained through the FX submission API
     // (see docs/vfx/PHASE1_SPINE.md). The renderer's DrainFxQueue runs
