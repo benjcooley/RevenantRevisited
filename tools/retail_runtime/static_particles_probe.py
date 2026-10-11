@@ -34,6 +34,7 @@ PRELUDE = r'''
 #include "authoredpartsys.h"
 #include "math3d.h"
 #include "goldauthoredmatrix.h"
+#include "dragonattackcache.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -78,6 +79,7 @@ struct T3DAnimator{struct SPartSysControllers{
  struct Controller{Track track;authored_partsys::State simulation;int64_t last_render_frame=-1;};
  std::vector<Controller>controllers;bool unsupported=false;uint64_t renders=0,quads=0;};
  std::unique_ptr<SPartSysControllers>partsys_controllers;Owner*inst;Imagery im;
+ retail_dragonattack::PrototypeOrigin dragonattack_object_zero;
  Imagery*Get3DImagery(){return &im;}
  void NoteJhagaAttackPrototypeSample(){}
  void NoteHeadFireBallPrototypeSample(){}
