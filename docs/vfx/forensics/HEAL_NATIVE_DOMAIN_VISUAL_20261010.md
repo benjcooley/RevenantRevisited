@@ -76,3 +76,9 @@ A separate Metal recording (`metal-frozen-domain`) repeated the preceding
 readback once at capture29 and is excluded as a capture diagnostic. The full
 `metal-domain-repeat` recording has no live duplicate and matches all90
 earlier complete domain image pixels; no frame-by-frame splicing was used.
+
+Root independently reviewed the final contact/detail and approved the scoped
+native-domain level1/facing0 cylinder, rising points, phase progression and
+empty tail. Approval record `root-approval.json`: SHA256 `903daefb82e29696d6383408b943acc0fa82e691f4cd8a2af0fd3d264f9c5d1d`.
+It pins all90 phase triples, the final binary, RNG/light logs and separate
+state/gallery proofs. This grants one scoped appearance pass only.
