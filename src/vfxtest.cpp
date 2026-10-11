@@ -2873,6 +2873,31 @@ void DripSubmit(void* cp, EFxDebugMode dbg)
     c->drip->TickAndSubmitForTest(dbg);
 }
 
+// Explicit original public SetParams(20,128,1) fixture. The drain variant
+// changes only the public period at tick121; ordinary gallery loops continue.
+struct SDripLinkedCtx {
+    TDripEffect* drip=nullptr;
+    double elapsed=0;
+    bool drain=false,stopped=false;
+};
+void* DripLinkedSpawn(const S3DPoint& origin,bool drain) {
+    auto c=std::make_unique<SDripLinkedCtx>();
+    c->drip=TDripEffect::SpawnForTest(origin);
+    if(!c->drip)return nullptr;
+    c->drip->SetParams(20,128,1);c->drain=drain;
+    log_info("[drip-linked] parameters=20,128,1 managed_children=1 drain=%d",int(drain));
+    return c.release();
+}
+void DripLinkedAdvance(void* context,EFxDebugMode) {
+    auto* c=static_cast<SDripLinkedCtx*>(context);double seconds=TTime::DeltaTime();
+    if(c->drain && !c->stopped && c->elapsed+seconds>=120.0/24.0) {
+        const double before=(std::max)(0.0,120.0/24.0-c->elapsed);
+        c->drip->Advance(before);seconds-=before;c->elapsed+=before;
+        c->drip->SetParams(20,128,1000000);c->stopped=true;
+    }
+    c->drip->Advance(seconds);c->elapsed+=seconds;
+}
+
 // --- FB: TWaterFallEffect_Bespoke (H02 first-pass faithful port) --------
 // Persistent vertical waterfall — direct port of the snapshot
 // TWaterFallAnimator (effect_old.cpp:11685-11873). Static preview style:
@@ -5665,6 +5690,19 @@ struct SVfxTestBootstrap {
         drip_ab.id = "TDripEffect_AB";
         drip_ab.factory = [](const S3DPoint& o) -> void* { return DripAbSpawn(o); };
         VfxTest::DeferredRegister(drip_ab);
+
+        for(bool drain : {false,true}) {
+            VfxTest::SEffect linked{};
+            linked.id=drain?"TDripEffect_LINKED_DRAIN":"TDripEffect_LINKED_NO_SPLASH";
+            linked.family="water";linked.pipeline="QUAD";
+            linked.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            linked.factory=[drain](const S3DPoint& o)->void*{return DripLinkedSpawn(o,drain);};
+            linked.submit=DripLinkedAdvance;
+            linked.submit_world=[](void* c,EFxDebugMode d){static_cast<SDripLinkedCtx*>(c)->drip->Submit(d);};
+            linked.is_alive=[](void* c){return !(static_cast<SDripLinkedCtx*>(c)->drip->GetFlags()&OF_KILL);};
+            linked.destroy=[](void* c){auto* p=static_cast<SDripLinkedCtx*>(c);delete p->drip;delete p;};
+            VfxTest::DeferredRegister(linked);
+        }
 
         // F12 `add Sparks` initializes different parameters from the combat
         // caller. This one-shot entry supplies that exact comparison profile;
