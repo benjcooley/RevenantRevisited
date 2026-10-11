@@ -71,6 +71,7 @@
 #include "mappane.h"
 #include "math3d.h"
 #include "retailsoftwaretransform.h"
+#include "cometsoftwarebounds.h"
 #include "testconfig.h"
 #include "effects/flamevariantspreview.h"
 #include "meshextract.h"   // M09b: ExtractSubMesh for I3D cylinder mesh
@@ -16921,6 +16922,9 @@ void TFireSwarmEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     const hmm_vec3 scale={cylhscl_,cylhscl_,cylvscl_};
     MtxScale(&local,&scale); MtxRotateZ(&local,cylth_);
     const auto& world=native_domain_ ? native_owner_ : Transform().Matrix();
+    const bool software_bounds = native_domain_ && Renderer->UsesRetailSoftwareMeshLighting();
+    hmm_mat4 native_world={};
+    if (software_bounds) MtxMultiply(&native_world,&local,&world);
     SQuadDrawItem item={}; item.corner_count=3; item.retail_texture=1;
     item.retail_argb4444=true;
     item.retail_software_projection=native_domain_;
@@ -16928,6 +16932,16 @@ void TFireSwarmEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
     item.debug_mode=debug_mode;
     for (size_t face=0;face+2<indices_.size();face+=3) {
+        if (software_bounds) {
+            hmm_vec3 authored[3];
+            for (int c=0;c<3;++c) {
+                const auto& v=vertices_[indices_[face+c]];
+                authored[c]={v.pos[0],v.pos[1],v.pos[2]};
+            }
+            // Actual ARGB branch56e006/36/5c/82 uses the same literal
+            // edge0->1/2 span guard. Ordinary geometry remains complete.
+            if (!RetailCometTriangleAllowed(authored,native_world)) continue;
+        }
         for (int corner=0;corner<3;++corner) {
             const auto& v=vertices_[indices_[face+corner]];
             const hmm_vec3 authored={v.pos[0],v.pos[1],v.pos[2]};
