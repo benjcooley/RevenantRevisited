@@ -172,6 +172,15 @@ bool ParseDefinition(std::string_view tag, Definition& output, std::string& diag
                 exact >= static_cast<double>(std::numeric_limits<int>::max())+1))
                 success = r.Fail("unsupported emittersize numeric literal");
             if (success) d.emittersize = static_cast<int>(exact);
+        } else if (name == "posjitter") {
+            // Original Dust parser/controller differential: explicit 0:0 is
+            // byte-identical to omission. Other position jitter is unsupported.
+            float value=0;double low=0,high=0;
+            success = r.Number(value,&low);
+            if (success && !r.Take(':')) success = r.Fail("expected constant posjitter range");
+            if (success) success = r.Number(value,&high);
+            if (success && (low != 0 || high != 0))
+                success = r.Fail("unsupported nonzero or curved posjitter");
         } else if (Expression* expression = Field(d, name)) {
             success = r.Expr(*expression);
         } else {
