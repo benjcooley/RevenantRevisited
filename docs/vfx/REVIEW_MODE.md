@@ -13,9 +13,9 @@ station centers per view, with partial neighbors at the edges. An absolute
 Authored screen bounds and broad-emitter footprint hints increase clearance
 automatically. Large effects get their footprint plus a viewport of clearance,
 so they pass alone, with fewer than one center per view on average.
-Scrolling runs at 16 pixels/sec.
+Scrolling runs at 48 pixels/sec.
 There are 720 pixels of empty lead-in and tail before the view loops.
-Effects stay in view for roughly 40 seconds at the default viewport. A full
+Effects stay in view for roughly 14 seconds at the default viewport. A full
 176-entry pass takes over an hour; select a smaller group while fixing it.
 
 ```sh
@@ -32,7 +32,7 @@ Unknown entries are rejected so typos cannot silently change the review.
 
 Options:
 
-- `--vfx-review-speed=16`: logical pixels/sec, range 0.1–240.
+- `--vfx-review-speed=48`: logical pixels/sec, range 0.1–240.
 - `--vfx-review-ratio=2.5`: horizontal/vertical slope, range 2–3.
 - `--vfx-review-spacing=420`: requested minimum, range 180–800; effective
   clearance respects the 320-pixel floor and viewport density limit.
@@ -50,12 +50,17 @@ Options:
 - `--vfx-review-effects=Flame,0x63fd382a`: restrict the catalogue.
 - `--scene-ambient=32,255,255,255`: override scene lighting.
 - `--vfx-lighting-mode=classic|modern`: use the existing lighting diagnostic.
+- `--vfx-review-source-lighting`: retain original scene directional/ambient
+  balance instead of the default bright ambient fill and soft directional light.
 
 Space pauses **scrolling** while effects continue cycling. Left/Right jump to
 the previous/next station. Home returns to the lead-in. Escape exits.
 
-Labels below each station show its name, retail type ID, asset, cycle and
-runtime support, plus its spacing. Adjacent stations use the larger of their
+Labels show only a large, centered name beneath each station. Missing drawables
+remain in the catalogue, with an amber name marking their empty slot.
+Factory/type/asset diagnostics remain in the log. Endpoint-unavailable entries
+use minimum spacing rather than reserving large invisible bounds.
+Adjacent stations use the larger of their
 two clearances. End padding grows enough to clear the first/last footprint,
 without inheriting the entire large-effect isolation gap.
 Spacing changes layout only, never effect geometry or physics.
@@ -65,8 +70,8 @@ after cleanup; a looping effect continues its authored animation. The mode
 does not shorten a live effect to force a retrigger.
 
 Endpoint-enabled effects launch mostly vertically from a lower-left source
-toward an upper-right target, independently of the review row. The labels identify entries still
-missing endpoint/runtime support. A target marker is an aim point; normal
+toward an upper-right target, independently of the review row. Unavailable
+endpoint/runtime entries retain their names. The destination is an aim point; normal
 projectile physics and collision determine where the projectile ends.
 
 Authored animation sound tags use the normal sound system and the listener
@@ -99,3 +104,12 @@ captures verify a 180-pixel spacing request is held at 320, FireCone receives
 are exactly RGB(0,0,0); normal collision tiles remain hidden. The full 176-row
 catalogue initializes with automatic footprint spacing. Local hashed evidence:
 `/Users/benjamincooley/RevenantRetailLab/research/vfx-review-black-20261010/verification.json`.
+
+Readable-review update: default speed is now 48 logical pixels/sec (three times
+faster). The screen shows only the 26-pixel centered effect name below each
+station, with amber names for unavailable visuals. All 176 entries remain.
+Known endpoint-unavailable entries use minimum spacing to avoid long invisible
+slots. Bright lighting records ambient 0.745/directional 0.372; the optional
+source-lighting flag retains ambient 0.149/directional 1.0. Three captured runs
+verify both lighting presets and an empty, labeled arroweffect slot.
+Local results: `/Users/benjamincooley/RevenantRetailLab/research/vfx-review-readable-20261010/verification.json`.

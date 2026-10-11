@@ -46,6 +46,7 @@ struct Entry {
     int sound_tags = 0;
     double next_spawn = 0;
     bool failed = false;
+    bool missing_visual = false;
 };
 TMapRenderer renderer;
 TGameMap* map = nullptr;
@@ -59,6 +60,9 @@ double elapsed = 0, ticks = 0;
 int64_t pulsed_tick = -1;
 uint64_t loop = 0;
 bool paused = false;
+bool lighting_override = false;
+bool previous_directional = false;
+int previous_directional_percent = 0;
 
 std::string Lower(std::string s) {
     for (char& c : s) c = char(std::tolower(static_cast<unsigned char>(c)));
@@ -129,6 +133,10 @@ bool LayoutStations() {
     const auto direction=schedule.StepDirection();
     for(auto& e:entries) {
         e.clearance=schedule.spacing;
+        const auto support=DescribeVfxReviewSpawn(e.id);
+        // An unavailable entry still has a named slot. With no drawable, it
+        // needs the minimum slot rather than its asset's oversized bounds.
+        if(!support.safe_factory) continue;
         // Header bounds cover authored poses; broad emitter hints below cover
         // known trajectories extending beyond those bounds. Layout only.
         const auto* info=EffectClass.GetObjType(e.type);
@@ -150,7 +158,6 @@ bool LayoutStations() {
             case 0xad92bc15u: case 0xad92bc17u: case 0xad99bd33u:
                 e.review_footprint=(std::max)(e.review_footprint,720.0); break;
         }
-        const auto support=DescribeVfxReviewSpawn(e.id);
         if(support.projectile || support.supports_endpoints) {
             const double path_projection=StartupVfxReviewPathLength*
                 std::abs(direction.x*StartupVfxReviewPathTilt-direction.y)/
@@ -251,6 +258,7 @@ void Spawn(Entry& e, size_t index) {
     if (!object) { e.status="Factory failed"; e.failed=true; return; }
     auto result=ConfigureVfxReviewSpawn(*object,source,target);
     e.status=result.description;
+    e.missing_visual=!result.renderer_supported;
     e.sound_tags=result.authored_sound_tags;
     ++e.cycles;
     log_info("[vfx-review] spawn name=%s type=%08x cycle=%u source=%d,%d,%d target=%d,%d,%d status=%s",
@@ -268,7 +276,8 @@ void TextBox(const SFontAtlas* font,const std::vector<std::string>& lines,float 
             ETextAlign::Left,warning?1.0f:.92f,warning?.73f:.95f,warning?.43f:.97f,width,height);
 }
 void Labels() {
-    const auto* font=BuildTTFAtlas(TTFFilePath("Arimo-Regular.ttf").c_str(),13);
+    const auto* font=BuildTTFAtlas(TTFFilePath("Arimo-Regular.ttf").c_str(),26);
+    const auto* controls=BuildTTFAtlas(TTFFilePath("Arimo-Regular.ttf").c_str(),13);
     if(!font) return;
     const int width=Display.Width(),height=Display.Height();
     float m[16]; renderer.GetWorldToPixel(0,0,width,height,m);
@@ -277,24 +286,11 @@ void Labels() {
         const float x=m[0]*p.x+m[4]*p.y+m[8]*p.z+m[12];
         const float y=m[1]*p.x+m[5]*p.y+m[9]*p.z+m[13]+48;
         if (x< -170 || x>width+170 || y< -100 || y>height+100) continue;
-        char info[256]; snprintf(info,sizeof(info),"0x%08x  |  cycle %u  |  sound tags %d",e.id,e.cycles,e.sound_tags);
-        char room[80]; snprintf(room,sizeof(room),"Spacing %.0f px",e.clearance);
-        TextBox(font,{e.name,info,room,e.asset,e.status},x,y,true,e.failed);
-        const auto support=DescribeVfxReviewSpawn(e.id);
-        if (support.projectile || support.supports_endpoints) {
-            const size_t index=size_t(&e-entries.data());
-            const S3DPoint ends[]={PathEndpoint(index,false),PathEndpoint(index,true)};
-            for (int i=0;i<2;++i) {
-                const auto p=ends[i];
-                const float px=m[0]*p.x+m[4]*p.y+m[8]*p.z+m[12],py=m[1]*p.x+m[5]*p.y+m[9]*p.z+m[13];
-                Renderer->DrawSolidRectToTarget(int(px)-2,int(py)-2,5,5,width,height,135,165,175,210);
-                TextBox(font,{i?"Target":"Source"},px+7,py+4,false);
-            }
-        }
+        TextBox(font,{e.name},x,y,true,e.failed || e.missing_visual);
     }
     char title[256]; snprintf(title,sizeof(title),"VFX review | %zu types | pass %llu | %.0f px/s | %.1f:1 | %s",
         entries.size(),static_cast<unsigned long long>(loop+1),schedule.speed,schedule.ratio,paused?"scroll paused":"scrolling");
-    TextBox(font,{title,"Space pause scroll | Left/Right previous/next | Home restart | Esc exit"},12,8,false);
+    if(controls) TextBox(controls,{title,"Space pause scroll | Left/Right previous/next | Home restart | Esc exit"},12,8,false);
 }
 }
 
@@ -320,6 +316,13 @@ bool Initialize() {
     renderer.SetDaylightCycle(false); renderer.SetSunShadowEnabled(false);
     renderer.SetGroundTilesVisible(false);
     renderer.SetLightingMode(StartupVfxLightingMode>=0?StartupVfxLightingMode:0);
+    if(!StartupVfxReviewSourceLighting) {
+        previous_directional=UseDirLight;
+        previous_directional_percent=DirLightPercent;
+        lighting_override=true;
+        UseDirLight=true;
+        DirLightPercent=25; // Soft directional shading over a bright ambient fill.
+    }
     MapPane.SetAmbientLight(StartupSceneAmbientSet?StartupSceneAmbient[0]:32);
     SColor color{255,255,255};
     if (StartupSceneAmbientSet) color={uint8_t(StartupSceneAmbient[1]),uint8_t(StartupSceneAmbient[2]),uint8_t(StartupSceneAmbient[3])};
@@ -333,6 +336,11 @@ void Close() {
     if (map) {
         ResetObjects(); MapPane.ReleaseCommandMapWindow(); renderer.Shutdown();
         MapManager.SetCurrentMap(previous_map); MapManager.Evict(kLevel);
+    }
+    if(lighting_override) {
+        UseDirLight=previous_directional;
+        DirLightPercent=previous_directional_percent;
+        lighting_override=false;
     }
     entries.clear(); ground_objects.clear(); map=nullptr; previous_map=nullptr;
 }
