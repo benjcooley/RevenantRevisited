@@ -116,17 +116,19 @@ class TGameMap : public TSafeObjectBase<TGameMap>
     // objects array via the editor or scripts.
     void NotifyUpdated() { listeners.Notify(EGameMapEvent::Updated, this); }
 
-    // Stamp `oi`'s tile walkmap footprint into whatever sectors
+    // Stamp `oi`'s walkmap footprint (any object whose imagery has one:
+    // tiles, exits such as elevators, ...) into whatever sectors
     // `find_sector(sx, sy)` resolves to. Static so both TGameMap::Load
     // (initial stamp with self-FindSector resolver) and TMapPane's
-    // runtime path (tile moves with its own window-aware resolver)
+    // runtime path (object moves with its own window-aware resolver)
     // can share the bbox / facing-rotation math.
     //
     // `mode` is one of WALK_TRANSFER / WALK_CAPTURE / WALK_CLEAR /
     // WALK_EXTRACT (defined in mappane.h).
     using FindSectorFn = std::function<TSector*(int32_t sx, int32_t sy)>;
-    static void StampTileWalkmap(TObjectInstance* oi, int32_t mode,
-                                 const FindSectorFn& find_sector);
+    static bool StampWalkmap(TObjectInstance* oi, int32_t mode, const FindSectorFn& find_sector);
+      // False when there was nothing to stamp (no map index, NOWALK on a
+      // transfer, no walkmap for the object's state)
 
   private:
     enum class ESectorRelease : uint8_t { Save, Discard };
