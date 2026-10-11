@@ -1,5 +1,6 @@
 """Named VFX images must pin real bytes and preserve fixed-address contracts."""
 import hashlib
+import shutil
 from pathlib import Path
 import struct
 import tempfile
@@ -34,6 +35,22 @@ class BuildContractTests(unittest.TestCase):
         for field,value in [('executable_sha256','wrong'),('executable',str(BASELINE)),('baseline_sha256','wrong')]:
             bad=dict(record);bad[field]=value
             with self.subTest(field=field),self.assertRaises(ValueError):verify_build(self.path,bad)
+
+    def test_assembled_build_carries_its_declared_spans(self):
+        # A build assembled by a workspace keeps the manifest's spans where
+        # the contract reads them (here the payload is the image itself).
+        from variants import Workspace
+        workspace = Workspace.create(Path(self.temp.name)/'workspace', BASELINE)
+        source = workspace.path/'source';source.mkdir()
+        self.data[-1] ^= 1;(source/'payload.exe').write_bytes(self.data)
+        (source/'retail.asm').write_text('BITS 32\nincbin "payload.exe"\n')
+        nasm = shutil.which('nasm') or '/opt/homebrew/bin/nasm'
+        last = [len(self.data)-1, len(self.data)]
+        record = workspace.build_variant('declared', dict(purpose='spans', allowed_modified_spans=[last]), nasm=nasm)
+        self.assertEqual(record['patch_manifest']['allowed_modified_spans'], [last])
+        self.assertTrue(verify_build(record['executable'], record)['experimental'])
+        record = workspace.build_variant('undeclared', dict(purpose='spans', allowed_modified_spans=[]), nasm=nasm)
+        with self.assertRaisesRegex(ValueError, 'Undeclared'):verify_build(record['executable'], record)
 
     def test_fixed_address_layout_and_undeclared_changes_are_rejected(self):
         layout=pe_layout(self.data)
