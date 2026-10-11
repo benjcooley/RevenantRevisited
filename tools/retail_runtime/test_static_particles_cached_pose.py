@@ -45,7 +45,6 @@ struct T3DAnimator { Imagery imagery; S3DAnimObj bone;int cached=7;
  bool GetObjectMatrix(int,hmm_mat4* m){MtxClear(m);m->Elements[3][0]=8;bone.pos={8,0,0};bone.scl={9,1,1};return true;}
  bool CameraParticleEmitterLocalMatrix(int,hmm_mat4&,hmm_vec3*,hmm_vec3*){assert(false);return false;}
  bool SpeedEmitterLocalMatrix(hmm_mat4&,hmm_vec3*,hmm_vec3*){assert(false);return false;}
- bool CameraParticleEmitterLocalMatrix(int,hmm_mat4&,hmm_vec3*,hmm_vec3*){assert(false);return false;}
 };
 MAKE
 struct Extracted {
