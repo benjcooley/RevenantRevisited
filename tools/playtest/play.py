@@ -6,8 +6,9 @@
     play.py fake   --out SESSION_DIR [--story smoke]       the reference host (a smoke run)
 
 --from WAYPOINT  start from a waypoint (waypoints.py list): its save slot, and
-                 its story from the milestone after it. Without it a session
-                 starts a new game at the story's beginning.
+                 its story from the milestone after it. GAME:NAME plays one
+                 the other game made (port and retail saves are the same
+                 format). Without it a session starts a new game.
 --watch          watch it live: the port plays in its window at real speed
                  with captions; either game's frames, captions and Jev's
                  decisions show on a page (watch.py) opened in the browser.
@@ -90,7 +91,9 @@ def main() -> int:
     catalogue = Catalogue(args.waypoints)
     story, start, parent, slot = args.story or 'keep', 0, 'newgame', args.slot
     if args.waypoint:
-        point = catalogue.get(args.game, args.waypoint)
+        # 'port:opening' plays a waypoint the other game made: the saves are the same format
+        source, _, name = args.waypoint.rpartition(':')
+        point = catalogue.get(source or args.game, name)
         story, parent, slot = args.story or point.story, point.name, point.slot_dir
         names = [m.name for m in LISTS[story]]
         # resume after the waypoint's milestone by name; a story edited since keeps its place
