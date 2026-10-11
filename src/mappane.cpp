@@ -1858,6 +1858,11 @@ TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectIns
     if (!mapview)
         return nullptr;
 
+    // A deterministic run picks from the drawn frame, as retail did: what the
+    // hover and a click see then follows the frames, not the GPU's timing.
+    if (DeterministicRun())
+        read = EPickRead::Drawn;
+
     TMapRenderer::SPick pick;
     if (mapview->Pick(screenx, screeny, pick, read) && pick.mesh)
         return pick.mesh;
@@ -3995,7 +4000,9 @@ void TMapPane::Animate(bool draw)
 
     // Each frame copies back the ids around the pointer; the hover reads the
     // latest copy, taken where the pointer was a frame or two ago, rather
-    // than wait on the GPU for this frame's (a click reads it exactly).
+    // than wait on the GPU for this frame's (a click reads it exactly). A
+    // deterministic run reads the drawn frame at once (OnObject), retail's
+    // synchronous pick.
     mapview->SetPickPoint(x, y);
 
     const int32_t frame = CurrentScreen ? CurrentScreen->FrameCount() : 0;

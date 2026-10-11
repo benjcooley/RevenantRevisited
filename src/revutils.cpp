@@ -12,10 +12,12 @@
 #include "mainwnd.h"
 #include "mappane.h"
 #include "parse.h"
+#include "time.h"
 #include "timer.h"
 #include "vfspathindex.h"
 
 #include <chrono>
+#include <cmath>
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -294,6 +296,28 @@ uint32_t tickcount()
     static const auto epoch = steady_clock::now();
     return static_cast<uint32_t>(
         duration_cast<milliseconds>(steady_clock::now() - epoch).count());
+}
+
+namespace
+{
+bool g_deterministicRun = false;
+}
+
+void SetDeterministicRun(bool on)
+{
+    g_deterministicRun = on;
+}
+
+bool DeterministicRun()
+{
+    return g_deterministicRun;
+}
+
+uint32_t GameTickCount()
+{
+    if (!g_deterministicRun)
+        return tickcount();
+    return static_cast<uint32_t>(std::llround(TTime::Time() * 1000.0));
 }
 
 // *************** Error Functions *****************

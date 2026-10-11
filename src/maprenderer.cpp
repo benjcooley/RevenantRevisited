@@ -1734,7 +1734,8 @@ bool TMapRenderer::Pick(int32_t x, int32_t y, SPick& out, EPickRead read) const
     // last drawn frame read at once; either is decoded with the list its
     // frame was drawn under.
     TRenderer::SIdProbe probe;
-    const bool copied = Renderer->LatestIdProbe(probe) && s.pickTable(probe.tag);
+    const bool copied = read != EPickRead::Drawn && Renderer->LatestIdProbe(probe) &&
+                        s.pickTable(probe.tag);
     const bool cached = copied && (read == EPickRead::Latest || (probe.x == x && probe.y == y));
     if (!cached && (read == EPickRead::Latest || !Renderer->ReadIdProbe(x, y, s.renderedDrawListVersion, probe)))
         return false;

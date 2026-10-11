@@ -4166,7 +4166,7 @@ uint32_t GenerateUniqueID()
 {
     uint32_t UniqueID;
     uint32_t r = (uint32_t)random(0, 255);
-    uint32_t t = tickcount() & 255;
+    uint32_t t = GameTickCount() & 255;
 
     UniqueID = (r << 24) | (t << 16) | UniqueTypeID;
 

@@ -19,8 +19,10 @@ class TGameMap;
 // How a pick reads the frame's ids (TMapRenderer::Pick). Exact: at the point,
 // waiting on the GPU when the last copy was taken elsewhere (a click).
 // Latest: the last copy wherever it was taken -- the pointer a frame or two
-// ago -- never waiting (the hover cursor).
-enum class EPickRead : uint8_t { Exact, Latest };
+// ago -- never waiting (the hover cursor). Drawn: the last drawn frame, read
+// at once, never a copy: which frame a copy holds depends on when the GPU
+// finished it, which a deterministic run can't depend on.
+enum class EPickRead : uint8_t { Exact, Latest, Drawn };
 
 class TMapRenderer
     : public IDebugTabContributor
@@ -230,7 +232,8 @@ class TMapRenderer
     void SetPickPoint(int32_t x, int32_t y);
     // The pick at (x, y): that copy when it was taken at (x, y) under the
     // current draw list, else a direct read of the last drawn frame. With
-    // EPickRead::Latest, the copy wherever it was taken, and false with none.
+    // EPickRead::Latest, the copy wherever it was taken, and false with none;
+    // with EPickRead::Drawn, always the direct read.
     [[nodiscard]] bool Pick(int32_t x, int32_t y, SPick& out, EPickRead read = EPickRead::Exact) const;
     // The map-screen point (WorldToScreen's space, TObjectInstance::
     // GetScreenPos's) under a viewport pixel, as the last frame drew it:
