@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 120,
+    "retail_rows_with_source_fixes_recorded": 121,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 101,
+    "visual_fidelity_confirmed_rows": 102,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 101,
-    "remaining_visual_review_rows": 75
+    "reviewed_visual_pass_rows": 102,
+    "remaining_visual_review_rows": 74
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1533,6 +1533,13 @@
       "check": "independent_native_software_actual_metal_appearance",
       "status": "pass_for_recorded_configuration",
       "scope": "Nineteen whole original software/actual Metal native-domain green cloud and bubble phases across130ticks/two60-frame loops.86,700 state fields/RNG,360 poses and fresh native replay exact within bounded float residual. Natural caller/map/audio/device and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-flies-authored-20261010/Flies-root-approval.json": {
+      "sha256": "1b95c0fc63f39c95d23e8a0ea7be838559bb87437dd735052646cb132d9c7a92",
+      "retail_row": "Flies:0xa21d9d00",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Six original full software/actual Metal active swarm phases on declared gray background. Positions/motion and overall tiny authored-plane appearance pass;0/1px extent, sparse darker/warm pixels and background123vs128 quantization residual remain open.91 native states/RNG, real map and five clockrates checked. Black visibility/natural caller/device/exact pixels remain open."
     }
   }
 }
