@@ -147,26 +147,45 @@ a NUL byte, the file's bytes and a NUL byte.
 
 ```json
 {"t": 912, "screen": "play", "control": true,
- "player": {"pos": [6280, 4338, 33], "level": 2, "facing": 96,
+ "player": {"pos": [6280, 4338, 33], "screen": [300, 210], "level": 2, "facing": 96,
             "health": [87, 100], "mana": [40, 60], "fatigue": [70, 80],
-            "mode": "combat", "action": 2, "action_name": "walk",
-            "target": 1712, "gold": 31, "xp": [1, 140, 300]},
+            "mode": "combat", "action": 3, "action_name": "combat", "action_tick": 14,
+            "target": 1712, "gold": 31, "xp": [1, 140, 300],
+            "skills": {"attack": 4, "defense": 3, "invoke": 1, "weapon": 2},
+            "weapon": {"name": "Short Sword", "mask": 2},
+            "quick_spells": ["Fire Flash", null, null, null],
+            "belt": ["Healing Potion", null, null, null, null]},
  "dialog": {"speaker": "Sardok", "choices": ["Who are you people?", "Who am I?"]},
  "messages": ["Locke entered The Keep"],
- "objects": [{"id": 1712, "name": "Rahul", "class": "character",
+ "objects": [{"id": 1712, "name": "Rahul", "type": "Rahul", "class": "character",
               "pos": [6301, 4350, 33], "screen": [212, 180], "enemy": true,
-              "health": [30, 40], "action": 7, "action_name": "attack"}],
+              "health": [30, 40], "action": 7, "action_name": "atkchop", "action_tick": 3,
+              "target": 0}],
  "frame": "/abs/path.png"}
 ```
 
 - `control`: the player has control (scripts and scenes turn it off).
 - `player.mode`: `normal`, `combat`, `bow`, `sneak`.
+- `action_name`: the name on the character's `doing` action block (an
+  animation or attack name, e.g. `atkchop`, the names char.def's ATTACK
+  lines use); `action_tick`: ticks since that block started. With
+  char.def's `impacttime` and `blocktime`, the director tells a wind-up
+  from an impact or a recovery.
+- `target` (player and characters): the id of the character it fights, or
+  `null`; the player's id in `objects` is `0`.
+- `skills`: the character stats combat gates on (attack, defense, invoke,
+  and the skill of the weapon in hand); `weapon.mask` is char.def's weapon
+  mask bit for the weapon in hand (`WM_*`), `0` bare-handed.
+- `quick_spells`, `belt`: what the four quick-spell slots (F1-F4) and the
+  five belt slots (F5-F9) hold, by name, `null` when empty.
 - `xp`: character level, experience, experience for the next level.
 - `messages`: text-bar lines added since the previous `observe`.
 - `objects`: within the radius, nearest first: characters, items,
-  containers, exits and doors, waypoint helpers. `class` is the object
-  class name in lower case (`character`, `item`, `container`, `exit`,
-  `helper`, …), and `screen` is `null` off screen.
+  containers, exits and doors, waypoint helpers. `name` is the instance
+  name, `type` the object type name (char.def's CHARACTER names for
+  characters), `class` the object class name in lower case (`character`,
+  `item`, `container`, `exit`, `helper`, …), and `screen` is `null` off
+  screen.
 - `walkgrid` (when asked): `{"origin": [gx, gy], "cell": 16, "w": W,
   "h": H, "heights": [...]}`, row-major walk heights, 0 for no floor.
 
