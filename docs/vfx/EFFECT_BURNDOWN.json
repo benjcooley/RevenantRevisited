@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "59941f905a4dcb7cc0215d2608c9f60af6fddd9aa369dc1a42810e881b024e9e",
+    "harness_sha256": "3fc640da42d8173341b97000e125c35863b79d4d48882c526cbbf85dc243a589",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 105,
+    "retail_rows_with_source_fixes_recorded": 108,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 84,
+    "visual_fidelity_confirmed_rows": 87,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 84,
-    "remaining_visual_review_rows": 92
+    "reviewed_visual_pass_rows": 87,
+    "remaining_visual_review_rows": 89
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -11622,7 +11622,9 @@
       "preview_candidates": [
         "TFogEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: replaced collapsed Fog card with authored36-vertex/50-triangle animated grid, exact native state/RNG and neutral white texture binding. Current gallery40/40 visible. Post-alpha RGB565 truncation brightness residual holds appearance credit."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
@@ -11630,7 +11632,7 @@
       "acceptance": {
         "catalogued": true,
         "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -11640,7 +11642,7 @@
         "accepted": false
       },
       "runtime_dispatch": "candidate_billboard_mismatches_source_untextured_grid",
-      "next_action": "Defer invisible standalone reference. Restore source36-vertex untextured animated grid and obtain a visible real trigger/context before visual acceptance.",
+      "next_action": "Visible grid/controller now runs; retain held low-brightness alpha-to-RGB565 truncation difference, without fitted multiplier. Natural setting/exactpixels remain open.",
       "notes": [
         "2026-10-05: standalone software Fog invisible, final150 samples exactly ground; deletion and camera cleanup exact. Legacy body word36 is vertex count, not format version; no raw-controller absence claim."
       ],
@@ -12253,7 +12255,9 @@
       "preview_candidates": [
         "TFireWindEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: complete authored native/controller/render path and actual Metal comparison restored; see FIREWIND_NATIVE_VISUAL.md"
+      ],
       "port_smoke_ids": [],
       "reference_runs": [
         "captures/runs/sw-quick-firewind-20261005",
@@ -12263,18 +12267,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "placeholder_unverified_source_controller_pending",
-      "next_action": "Defer full FireWind controller reconstruction behind easier effects. Native null-spell fixture runs400slots/100ticks with motion; port currently has a2second single-billboard placeholder. Implement literal pool, authored rendering and target/owner boundaries before granting any parity.",
+      "next_action": "Preserve approved recorded configuration; pursue listed natural caller/scene/device and exactpixel limitations separately.",
       "notes": [
         "2026-10-05: one bounded30.583sec native probe has84 distinct viewport images; last change17.4sec, then left-edge frozen trails. FireWind.delete finds no context; nudge/return restores exact floor. No reference/visual/source-fix credit.",
         "FPS-enabled28.111seconds/76 distinct images; post-expiry/deletion mean error1.35331, camera-nudge return restores canonical floor exactly. Unlike FireSwarm/Streamer/Pixie/FireFlash/FireCone/MeteorStorm, FPS alone does not resolve this edge residue."
@@ -12354,6 +12358,16 @@
         "final_active_slots": 387,
         "rendered_ab_cases": 0,
         "scope": "Actual native Init/Animate and full-pool hashes with explicit base/audio/owner-completion boundaries. Moving particles verified; current billboard placeholder has no literal comparable pool, source and rendered parity remain open."
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Base null-spell original full software and actual Metal native-domain18 phases: plume/sphere/annulus/expanding rings/decay/empty tail. All bounds unclipped. Natural caller/audio/device and separate Y variant remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-firewind-full-visual-20261010/root-approval.json",
+        "sha256": "66746b71116589814f6524cc2d54f37c013b157cf4bcbb542ba2e708534ccfe1",
+        "note": "docs/vfx/forensics/FIREWIND_NATIVE_VISUAL.md"
       }
     },
     {
@@ -14830,7 +14844,9 @@
       "retail_type_id": "0xadbcef13",
       "asset": "Misc\\CharUtility.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: complete authored native/controller/render path and actual Metal comparison restored; see CHARUTILITY_DOOR_VISUAL_20261010.md"
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
@@ -14842,13 +14858,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "retail_default_animator_lookup_verified_generic_mesh_bounded_frontend_only",
-      "next_action": "Verify natural caller/map or character context, lighting/culling and full backend parity; retain bounded original-raster proof and normal map texture lifecycle independently.",
+      "next_action": "Preserve approved recorded configuration; pursue listed natural caller/scene/device and exactpixel limitations separately.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "2026-10-07: fresh merged-source bounded retail proof retained; no full acceptance. No production change needed. Helper white-input fixture does not claim live character/map dispatch."
@@ -14869,7 +14885,17 @@
           ]
         }
       ],
-      "work_queue_status": "thin_bounded_pass_natural_context_open"
+      "work_queue_status": "thin_bounded_pass_natural_context_open",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Complete five authored parts/textures, black and light-gray scenes, all whole1280x960 bounds fit. Scoped static native-domain appearance including shadow. Internal depth/face edges, natural context and exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-charutility-full-visual-20261010/root-approval.json",
+        "sha256": "f42a39a254f9322ad787c884a584d9bc9008479c61179d8f435123d6cd887308",
+        "note": "docs/vfx/forensics/CHARUTILITY_DOOR_VISUAL_20261010.md"
+      }
     },
     {
       "index": 76,
@@ -18433,7 +18459,8 @@
       ],
       "source_fixes": [
         "Exact generic KinSecretDoor still/state0 adapter and typed source-cull policy integrated: all231 authored vertices/260faces and both texture bins preserved;18 source contracts and1300 triangle-sign cases retained, opaque LESS_EQUAL/depth writes unchanged, default mesh uncull policy preserved. Single quoted-backslash literal corrected after first build failure; actual owner/default animator6 MOVE/DELETE rows pass. No opening/visual/natural-door acceptance.",
-        "Concrete opaque source-lighting handoff corrected with one SetLightingMode(0) in explicit source-ambient VFX branch; default modern1 remains otherwise. No normals/materials/geometry/cadence/brightness coefficients changed. Final150-frame still pair fixes grossbrightness but retains texture/contrast/raster mismatch; no visual credit. Actual six-row map runtime used unchanged mode0 path before this preview-only handoff correction."
+        "Concrete opaque source-lighting handoff corrected with one SetLightingMode(0) in explicit source-ambient VFX branch; default modern1 remains otherwise. No normals/materials/geometry/cadence/brightness coefficients changed. Final150-frame still pair fixes grossbrightness but retains texture/contrast/raster mismatch; no visual credit. Actual six-row map runtime used unchanged mode0 path before this preview-only handoff correction.",
+        "2026-10-10: complete authored native/controller/render path and actual Metal comparison restored; see CHARUTILITY_DOOR_VISUAL_20261010.md"
       ],
       "port_smoke_ids": [
         "TKinSecretDoor_AUTHORED_STILL"
@@ -18449,17 +18476,17 @@
       "acceptance": {
         "catalogued": true,
         "animator_and_asset_mapping": true,
-        "source_behavior_audited": false,
+        "source_behavior_audited": true,
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_generic_default_animator_still_state0_verified_create_move_delete",
-      "next_action": "Preserve exact still owner/culling and explicit source-ambient classicmode0 selection: grossbrightness fixed and geometry/placement/culling agree. Remaining texture/contrast/raster mismatch needs shared software sampling/lighting review, no per-effect color/scale/timing fitting. Opening177frames/open state, actual map/door interaction and full appearance remain mandatory separate gates.",
+      "next_action": "Preserve approved recorded configuration; pursue listed natural caller/scene/device and exactpixel limitations separately.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "Clean five-second native state0/still derivative hasone visible fixed image, ROIerror1.302354, background0 and exact delete/restore. This static reference is legitimate; no code/runtime/visual credit. Explicit checker minimum1 is scoped to auditedstatic behavior; default11 and empty-derivative rejection remain unchanged.",
@@ -18630,11 +18657,14 @@
         }
       },
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "mismatch",
-        "scope": "Default still/state0 only, actual opaque owner, authored mesh/materials, source-positive culling and sourceambient32",
-        "basis": "Classic handoff fixes gross brightness and retains geometry/placement/culling. Enlarged static comparison still shows texture/contrast/raster differences; no appearance pass or per-effect colour fitting. Shared SW sampling/lighting verification remains open; opening/open and natural context separate."
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Closed still/state0 complete231vertices/260triangles and both texture slots, six whole original/software versus actual Metal native-domain samples. Opening states, depth/internal face edges, natural context and exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-kinsecretdoor-full-visual-20261010/root-approval.json",
+        "sha256": "5af3166202a9a8a6f043d3be0821cf282272e0805599cf608bad918569f9ea6d",
+        "note": "docs/vfx/forensics/CHARUTILITY_DOOR_VISUAL_20261010.md"
       },
       "historical_fixture_failures": [
         {

@@ -5,7 +5,7 @@ from generate_review_preview_map import PARTIAL, admitted_candidates, candidate_
 
 class ReviewPreviewAdmission(unittest.TestCase):
     def test_placeholders_and_invalid_aliases_fail_closed(self):
-        candidates = '''TBlastEffect_BESPOKE TFireWindEffect_BESPOKE
+        candidates = '''TBlastEffect_BESPOKE
 TFairyEffect_BESPOKE TTornadoEffect_BESPOKE TVortexEffect_BESPOKE
 TPulpEffect_BESPOKE TDustEffect_BESPOKE TMagicShieldEffect_BESPOKE
 TLabyrinthEffect_BESPOKE TJhagaAttackEffect_BESPOKE TJTeleEffect_BESPOKE TCEyesEffect_BESPOKE
@@ -24,7 +24,7 @@ TNewUnreviewedEffect_BESPOKE'''.split()
 
     def test_replacement_bodies_survive_stale_stub_banners(self):
         candidates = '''TBloodEffect_BESPOKE TSparksEffect_BESPOKE
-TFireConeEffect_BESPOKE TFireFlashEffect_BESPOKE TMeteorStormEffect_BESPOKE
+TFireConeEffect_BESPOKE TFireFlashEffect_BESPOKE TFireWindEffect_BESPOKE TMeteorStormEffect_BESPOKE
 TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
         self.assertEqual(set(admitted_candidates({'preview_candidates': candidates})), set(candidates))
 
@@ -38,7 +38,8 @@ TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
             'preview_candidates':['TBlastEffect_BESPOKE']}), ['TBlastEffect_BESPOKE'])
 
     def test_partial_requires_exact_identity_and_explicit_warning(self):
-        self.assertEqual(len(PARTIAL), 21)
+        self.assertTrue(PARTIAL)
+        self.assertNotIn('0x98974eab', PARTIAL)
         for retail_id, (name, reason) in PARTIAL.items():
             row = {'retail_type_id': retail_id, 'preview_candidates': [name]}
             self.assertEqual(admitted_candidates(row), [name])

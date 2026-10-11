@@ -19,7 +19,7 @@ TSparksEffect_BESPOKE TSparkEffect TFireEffect_BESPOKE TFireEffect
 TFountainAnimator_BESPOKE TCyanFountainAnimator_BESPOKE
 TRedFountainAnimator_BESPOKE TGreenFountainAnimator_BESPOKE TBlueFountainAnimator_BESPOKE
 TRibbonAnimator_BESPOKE TFlameEffect_BESPOKE TFlameEffect
-TFlameEffect_BESPOKE__FlameB TFlameEffect_BESPOKE__FlameG
+TFlameEffect_BESPOKE__FlameB TFlameEffect_BESPOKE__FlameG TFireWindEffect_BESPOKE
 TFireBallEffect LightStrip TStripEffect TIceBoltEffect_BESPOKE TPhotonEffect_BESPOKE
 TSymGlowAnimator_BESPOKE TMeteorStormEffect_BESPOKE TFlyEffect_BESPOKE
 TCureEffect_BESPOKE TFireFlashEffect_BESPOKE TFireConeEffect_BESPOKE TBurnEffect_BESPOKE
@@ -58,7 +58,6 @@ PARTIAL = {
     '0xc24b2a85': ('TFogEffect_BESPOKE', 'authored animated grid; original post-blend RGB565 quantization incomplete'),
     '0x00ab1d1d': ('TAuraEffect_BESPOKE', 'billboard preview; original character bones and attachment missing'),
     '0x0ea34fa3': ('TBlastEffect_BESPOKE', 'placeholder expanding and fading asset billboard'),
-    '0x98974eab': ('TFireWindEffect_BESPOKE', 'placeholder asset billboard; original controller incomplete'),
     '0xad92bd25': ('TFairyEffect_BESPOKE', 'placeholder bobbing and tinted asset billboard'),
     '0xad92bd20': ('TLabyrinthEffect_BESPOKE', 'single asset billboard; original controller incomplete'),
     '0xaeaeeb32': ('TJhagaAttackEffect_BESPOKE', 'stationary asset billboard; endpoint motion and original controller incomplete'),
@@ -87,6 +86,8 @@ PARTIAL = {
 # their owner constructors. These newer implementations predate their ledger
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
+    '0xadbcef13': 'TCharUtility_AUTHORED_STILL',
+    '0xad92bd23': 'TKinSecretDoor_NATIVE_STILL',
     '0x42e0fcd0': 'TOgrestrength_AUTHORED_TAGS',
     '0xad92bd39': 'TTrollblood_AUTHORED_TAGS',
     '0x10ac03de': 'TRegeneration_AUTHORED_TAGS',
