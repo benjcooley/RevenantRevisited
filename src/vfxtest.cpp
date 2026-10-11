@@ -4685,6 +4685,7 @@ void* AuthoredTextureMeshVariantSpawn(const S3DPoint& origin)
 {
     auto* c=new SGlobeBespokeCtx();
     c->eff=TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(origin,kAsset,true);
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT watcher=1", int(StartupVfxNativeDomain));
     return c;
 }
 
@@ -7028,7 +7029,7 @@ struct SVfxTestBootstrap {
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory = [](const S3DPoint& o)->void* { return AuthoredTextureMeshVariantSpawn<kVariantOgrokWatcher1_I3D>(o); };
             e.submit = [](void* c, EFxDebugMode d) { GlobeBespokeSubmit(c,d); };
-            e.submit_world = [](void* c, EFxDebugMode d) { GlobeBespokeSubmitWorld(c,d); };
+            e.submit_world = [](void* c, EFxDebugMode d) { auto* state=static_cast<SGlobeBespokeCtx*>(c); if(StartupVfxNativeDomain && state && state->eff) state->eff->SubmitNativeWorldMeshForTest_BESPOKE(d); else GlobeBespokeSubmitWorld(c,d); };
             e.destroy = [](void* c) { GlobeBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
@@ -7039,7 +7040,7 @@ struct SVfxTestBootstrap {
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory = [](const S3DPoint& o)->void* { return AuthoredTextureMeshVariantSpawn<kVariantOgrokWatcher2_I3D>(o); };
             e.submit = [](void* c, EFxDebugMode d) { GlobeBespokeSubmit(c,d); };
-            e.submit_world = [](void* c, EFxDebugMode d) { GlobeBespokeSubmitWorld(c,d); };
+            e.submit_world = [](void* c, EFxDebugMode d) { auto* state=static_cast<SGlobeBespokeCtx*>(c); if(StartupVfxNativeDomain && state && state->eff) state->eff->SubmitNativeWorldMeshForTest_BESPOKE(d); else GlobeBespokeSubmitWorld(c,d); };
             e.destroy = [](void* c) { GlobeBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
@@ -7050,7 +7051,7 @@ struct SVfxTestBootstrap {
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory = [](const S3DPoint& o)->void* { return AuthoredTextureMeshVariantSpawn<kVariantOgrokWatcher3_I3D>(o); };
             e.submit = [](void* c, EFxDebugMode d) { GlobeBespokeSubmit(c,d); };
-            e.submit_world = [](void* c, EFxDebugMode d) { GlobeBespokeSubmitWorld(c,d); };
+            e.submit_world = [](void* c, EFxDebugMode d) { auto* state=static_cast<SGlobeBespokeCtx*>(c); if(StartupVfxNativeDomain && state && state->eff) state->eff->SubmitNativeWorldMeshForTest_BESPOKE(d); else GlobeBespokeSubmitWorld(c,d); };
             e.destroy = [](void* c) { GlobeBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }

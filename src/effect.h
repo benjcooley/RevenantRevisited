@@ -5679,6 +5679,7 @@ class TAuthoredStaticMeshEffect : public TEffect
                                                                   bool scroll_textures = false);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     void SubmitWorldMeshForTest_BESPOKE(EFxDebugMode debug_mode);
+    void SubmitNativeWorldMeshForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return true; }
 
   private:

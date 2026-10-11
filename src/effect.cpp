@@ -14175,6 +14175,35 @@ void TAuthoredStaticMeshEffect::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debu
     }
 }
 
+// Explicit watcher comparison route only. Original loaded RenderObject draws
+// FVF112 with SRCALPHA/INVSRCALPHA, CULL_NONE and no depth writes.
+void TAuthoredStaticMeshEffect::SubmitNativeWorldMeshForTest_BESPOKE(EFxDebugMode /*debug_mode*/)
+{
+    if (!Renderer) return;
+    hmm_mat4 root;
+    const auto& position = Pos();
+    BuildRetailSoftwareOwner(root, position.x, position.y, position.z, uint8_t(GetFace()));
+    for (const auto& part : parts_)
+    {
+        SHelperMeshSubmit item = {};
+        item.mesh = part.mesh;
+        if (!part.frame_meshes.empty())
+        {
+            const int32_t frame = GetFrame();
+            if (frame < 0) continue;
+            item.mesh = part.frame_meshes[size_t(frame) % part.frame_meshes.size()];
+        }
+        item.retail_lighting = part.retail_lighting;
+        item.retail_software_projection = true;
+        item.retail_source_alpha = true;
+        for (int32_t r = 0; r < 4; ++r)
+            for (int32_t c = 0; c < 4; ++c)
+                for (int32_t k = 0; k < 4; ++k)
+                    item.world[r*4+c] += root.Elements[k][r] * part.local_matrix[k*4+c];
+        Renderer->SubmitHelperMesh(item);
+    }
+}
+
 void TAuthoredStaticMeshEffect::SubmitWorldMeshForTest_BESPOKE(EFxDebugMode /*debug_mode*/)
 {
     if (!Renderer) return;

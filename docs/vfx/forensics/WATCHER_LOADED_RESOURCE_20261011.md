@@ -139,3 +139,34 @@ pixels taller/higher and has brighter fine detail. Common-world projection,
 RGB5 versus adaptedRGB4 precision, sampling and framebuffer arithmetic remain
 explicit differences. `metal-diagnostic.json` does not grant acceptance or
 claim an unchanged original device, natural world placement or exact pixels.
+
+## Audited native owner/projector preview
+
+The three exact watcher preview registrations now select
+`SubmitNativeWorldMeshForTest_BESPOKE` only with `--vfx-native-domain`.
+The existing common-world submission remains unchanged. The new path uses the
+shared original owner matrix/projector, existing source-alpha helper with no
+culling/depth writes, and correct1555 lighting policy2. It does not convert port
+textures to4444, change the portable decoder or modify any renderer/shader.
+
+`watcher_loaded_pose_probe.py` observes actual loaded fullRender FVF112 streams,
+world matrices and render states. `watcher_pose_contract.py` compiles actual
+production key decoding, mesh extraction and the new native submission with
+ASan/UBSan. All24 draws match1,920 matrix/XYZ/normal/UV values with maximum error
+3.3544922e-8; topology and texture-frame selection are exact. Original states are
+CULL_NONE1, ZWRITE0, ZTEST1, SRCALPHA5, INVSRCALPHA6. This is explicit origin0,
+facing0, eight-tick frame selection; generic owner Pulse/natural placement remain
+outside the fixture.
+
+Fresh native-projector Metal captures again pass8/8 visible/four distinct phases
+per watcher and clean exit. The common watcher1 eight-frame regression is
+byte-identical at pixel level to its pre-change film. Whole/detail panels and
+all input hashes are frozen in `hard-alpha/watcher-native-review-final/`.
+Its `pair-manifest.json` SHA256 is
+`8ea17d1b9153bad91cd3d2fba504b5c4099e5da4526179ec57611dd0b2980225`.
+The common projection height discrepancy is resolved. RGB5 versus adaptedRGB4
+precision and raster-edge differences remain visible; the reference still
+explicitly uses the qualified semantic-alpha device adaptation. Decoder, original
+fullRender pose/state, and actual Metal evidence are distinct supporting proofs,
+not a claim that the original software device renders1555 correctly. No approval
+or primary acceptance is written by these tools.
