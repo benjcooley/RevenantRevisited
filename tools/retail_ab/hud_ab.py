@@ -35,6 +35,11 @@ Targets:
              straight onto the screen; every pixel outside its text cells
              (the GDI glyphs again, P6) must match exactly, but for the ones
              the fixture marks `alpha` (below).
+  inventory  TInventory (0x0065d4f8) in the side panel's lower slot: the
+             gold readout (0, 1, 64, large; the "Gold" bitmap font, which
+             the emulator draws, so it is compared like any pixel), stacks,
+             pouches, animated items, pages, an opened bag (its icon at
+             half size). Compared as the bottom bar is.
 
 Both frames are quantised to the 16-bit screen retail draws (RGB565). A
 pixel must match exactly, unless the fixture marks it (the masks of
@@ -48,8 +53,8 @@ tools/retail_runtime/slots/hud/plyrstatusbar.py):
   float (HUD_REBUILD.md section 5). They match within COMPOSED_TOLERANCE:
   two nested 4-bit truncations (17 each: the Ring over the portrait over
   the BackPanel) and the RGB565 step.
-- `alpha` (bottombar.py): a 2D DM_ALPHA Put mixed it, coverage strictly
-  between 0 and 31. Retail mixes through 5-bit scale tables (0x004b3694):
+- `alpha` (itempanes.py): a 2D DM_ALPHA Put mixed it, or a bitmap glyph's
+  anti-aliased edge (DM_ALIAS), coverage strictly between 0 and 31. Retail mixes through 5-bit scale tables (0x004b3694):
   d * (31 - a) // 31 + s * a // 31 per field, green in two 3-bit halves --
   two truncations a field, four on green. The port blends in float. Over
   every source, destination and coverage the two are at most ALPHA_TOLERANCE
@@ -342,18 +347,14 @@ def retail_item(item):
     return entry
 
 
-def run_port_bottombar(port, case, workdir):
-    """The production bar in --test=ab-bottombar -> (shown, frame path)."""
-    name = case['name']
+def run_port_pane(port, mode, spec, name, workdir):
+    """A production pane in --test=<mode> on one case -> (shown, frame path)."""
     shown, frame, log = (workdir / f'{name}.port.json', workdir / f'{name}.port.png',
                          workdir / f'{name}.port.log')
     for stale in (shown, frame):
         stale.unlink(missing_ok=True)
-    spells = (case.get('spells', []) + [''] * 4)[:4]
-    spec = (f'width={case["width"]};spells={",".join(spells)};castable={",".join(case.get("castable", []))};'
-            f'belt={"|".join(port_item(i) for i in case.get("belt", []))};frame={case.get("frame", 0)}')
     with log.open('wb') as handle:
-        subprocess.run([str(port), '--headless', '--test=ab-bottombar', f'--ab-case={spec}', f'--ab-out={shown}',
+        subprocess.run([str(port), '--headless', f'--test={mode}', f'--ab-case={spec}', f'--ab-out={shown}',
                         f'--snap={frame}', '--snapstep=0.03125', '--snapwarmup=12', '--max-runtime=60'],
                        cwd=REPO, stdout=handle, stderr=handle, timeout=120, check=False)
     if not shown.is_file() or not frame.is_file():
@@ -361,43 +362,41 @@ def run_port_bottombar(port, case, workdir):
     return json.loads(shown.read_text()), frame
 
 
-def drawn_text_cells(primitives, origin):
-    """The rects retail's 2D text calls lay text in (pane-local, the pane at
-    `origin`) -> (mask: the cells widened by the shadow, band: the TEXT_BAND
-    around the mask, cells on the screen)."""
+def gdi_text_cells(text_calls):
+    """The screen rects retail's GDI text calls lay text in (each shadow pass
+    has its own) -> (mask, band: the TEXT_BAND around the mask, cells). Its
+    bitmap fonts the emulator draws, so they are compared like any pixel."""
     mask = np.zeros((SCREEN[1], SCREEN[0]), dtype=bool)
     band = np.zeros_like(mask)
     cells = []
-    for p in primitives:
-        if p['primitive'] != 'Text' or p['dst'] != 'display':
+    for call in text_calls:
+        left, top, right, bottom = call['rect']
+        if [left, top, right, bottom] in cells:
             continue
-        x, y, w, h = p['rect']
-        x, y = x + origin[0], y + origin[1]
-        cells.append([x, y, w, h])
-        mask[max(0, y):y + h + TEXT_SHADOW, max(0, x):x + w + TEXT_SHADOW] = True
-        band[max(0, y - TEXT_BAND):y + h + TEXT_SHADOW + TEXT_BAND,
-             max(0, x - TEXT_BAND):x + w + TEXT_SHADOW + TEXT_BAND] = True
+        cells.append([left, top, right, bottom])
+        mask[max(0, top):bottom, max(0, left):right] = True
+        band[max(0, top - TEXT_BAND):bottom + TEXT_BAND, max(0, left - TEXT_BAND):right + TEXT_BAND] = True
     return mask, band & ~mask, cells
 
 
-def target_bottombar(args, workdir):
-    cases = [c for c in BOTTOMBAR_CASES if not args.only or c['name'] in args.only]
-    retail = Fixture(SLOT / 'bottombar.py', '--serve')
+def pane_target(args, workdir, cases, fixture, run_port, retail_case, report):
+    """A 2D pane's A/B over `cases`: run_port(case) -> (shown, frame);
+    retail_case(case, shown) -> the fixture's case; report(shown) -> what the
+    case's result records of it. Retail draws these panes in 2D straight onto
+    the screen: every pixel outside its GDI text must match exactly, but for
+    the `alpha` ones (ALPHA_TOLERANCE)."""
+    cases = [c for c in cases if not args.only or c['name'] in args.only]
+    retail = Fixture(SLOT / fixture, '--serve')
     results, timing = [], dict(port_seconds=0.0, retail_seconds=0.0)
     for case in cases:
         name = case['name']
         entry = dict(case=name)
         try:
             started = time.perf_counter()
-            shown, port_png = run_port_bottombar(args.port, case, workdir)
+            shown, port_png = run_port(case)
             timing['port_seconds'] += time.perf_counter() - started
-            rings = shown['rings']
-            retail_case = dict(name=name, pane_width=shown['pane'][2], tick=shown['frame'],
-                               player=dict(quickspells=[r['talismans'] for r in rings],
-                                           castable=[r['talismans'] for r in rings if r['castable']]),
-                               belt=[retail_item(i) for i in case.get('belt', [])])
             started = time.perf_counter()
-            r = retail.run(name, retail_case, out=str(workdir / 'retail'))
+            r = retail.run(name, dict(retail_case(case, shown), name=name), out=str(workdir / 'retail'))
             timing['retail_seconds'] += time.perf_counter() - started
             if not r.get('ok'):
                 raise RuntimeError(f'retail: {r.get("error")}')
@@ -405,14 +404,14 @@ def target_bottombar(args, workdir):
             pane = result['pane']
             if pane != shown['pane']:
                 raise RuntimeError(f'pane {shown["pane"]} in the port, {pane} in retail')
-            mask, band, cells = drawn_text_cells(result['primitives'], pane[:2])
+            mask, band, cells = gdi_text_cells(result['text_calls'])
             retail_rgb = retail_frame(workdir / 'retail' / f'{name}.rgb565')
             port_rgb = port_frame(port_png)
             tolerance = np.where(screen_mask(result['blend']['alpha']), ALPHA_TOLERANCE, 0)
             diff, delta = compare(retail_rgb, port_rgb, mask, band, tolerance)
-            rows = slice(max(0, pane[1] - 16), SCREEN[1])
+            rows = slice(max(0, pane[1] - 16), min(SCREEN[1], pane[1] + pane[3] + 16))
             triptych(workdir / f'{name}.triptych.png', retail_rgb, port_rgb, delta, mask, band, tolerance, rows)
-            entry.update(diff, text_cells=cells, rings=rings, boxes=shown['boxes'])
+            entry.update(diff, text_cells=cells, **report(shown))
         except Exception as error:      # one case's failure is reported, not fatal
             entry['error'] = f'{type(error).__name__}: {error}'
         results.append(entry)
@@ -421,7 +420,73 @@ def target_bottombar(args, workdir):
                 case_set=cases, timing={k: round(v, 2) for k, v in timing.items()}, results=results)
 
 
-TARGETS = {'statusbar': target_statusbar, 'bottombar': target_bottombar}
+def target_bottombar(args, workdir):
+    def run_port(case):
+        spells = (case.get('spells', []) + [''] * 4)[:4]
+        spec = (f'width={case["width"]};spells={",".join(spells)};castable={",".join(case.get("castable", []))};'
+                f'belt={"|".join(port_item(i) for i in case.get("belt", []))};frame={case.get("frame", 0)}')
+        return run_port_pane(args.port, 'ab-bottombar', spec, case['name'], workdir)
+
+    def retail_case(case, shown):
+        rings = shown['rings']
+        return dict(pane_width=shown['pane'][2], tick=shown['frame'],
+                    player=dict(quickspells=[r['talismans'] for r in rings],
+                                castable=[r['talismans'] for r in rings if r['castable']]),
+                    belt=[retail_item(i) for i in case.get('belt', [])])
+
+    return pane_target(args, workdir, BOTTOMBAR_CASES, 'bottombar.py', run_port, retail_case,
+                       lambda shown: dict(rings=shown['rings'], boxes=shown['boxes']))
+
+
+# =====================================================================
+# inventory
+# =====================================================================
+
+# Items: (slot, item) with items as for the bottom bar. No two items of a
+# type in one inventory, a pouch's included, except gold, which piles.
+INVENTORY_SAMPLE = [(0, ('Lesser Healing', None, None)), (1, ('Ale Mug', None, None)),
+                    (2, ('Gold', 14475, None)), (3, ('Short Sword', None, None)), (4, ('Arrow', 12, None)),
+                    (5, ('Pouch', None, [('Golden Sun Key', None, None), ('Brown Leather Helmet', None, None)]))]
+INVENTORY_FULL = [(slot, item) for slot, item in enumerate([
+    ('Lesser Healing', None, None), ('Ale Mug', None, None), ('Gold', 42, None), ('Short Sword', None, None),
+    ('Arrow', 31, None), ('Pouch', None, [('Golden Sun Key', None, None)]), ('Brown Leather Helmet', None, None),
+    ('Brown Cloth Pants', None, None), ('Red Cloth Shirt', None, None), ('Brown Leather Boots', None, None),
+    ('Brown Leather Gloves', None, None), ('Brown Leather Chest Plate', None, None)])]
+INVENTORY_CASES = [
+    dict(name='empty'),
+    dict(name='sample', items=INVENTORY_SAMPLE, frame=3),
+    dict(name='full', items=INVENTORY_FULL, frame=7),
+    dict(name='gold-one', items=[(0, ('Gold', 1, None))]),
+    dict(name='gold-pile', items=[(0, ('Gold', 64, None)), (4, ('Arrow', 45, None))]),
+    dict(name='gold-large', items=[(11, ('Gold', 9999, None))]),
+    *[dict(name=f'animated-{frame:02d}', items=[(4, ('Lesser Healing', None, None))], frame=frame)
+      for frame in (0, 5, 11)],
+    dict(name='pouches', items=[(0, ('Pouch', None, [('Gold', 42, None)])), (3, ('Pouch', None, [('Arrow', 9, None)])),
+                                (6, ('Pouch', None, [('Ale Mug', None, None)]))]),
+    dict(name='page-3', items=[(3, ('Ale Mug', None, None)), (14, ('Golden Sun Key', None, None))], first=3),
+    dict(name='page-12', items=[(12, ('Short Sword', None, None)), (23, ('Ale Mug', None, None))], first=12),
+    dict(name='page-last', items=[(243, ('Ale Mug', None, None)), (254, ('Golden Sun Key', None, None))], first=243),
+    dict(name='bag', items=[(2, ('Pouch', None, [('Golden Sun Key', None, None), ('Arrow', 7, None)]))], bag=2),
+]
+
+
+def target_inventory(args, workdir):
+    def run_port(case):
+        items = '|'.join(f'{port_item(item)}@{slot}' for slot, item in case.get('items', []))
+        spec = f'items={items};first={case.get("first", 0)};frame={case.get("frame", 0)}'
+        if case.get('bag') is not None:
+            spec += f';bag={case["bag"]}'
+        return run_port_pane(args.port, 'ab-inventory', spec, case['name'], workdir)
+
+    def retail_case(case, shown):
+        items = [dict(retail_item(item), slot=slot) for slot, item in case.get('items', [])]
+        return dict(items=items, bag=case.get('bag'), first=shown['first'], tick=shown['frame'])
+
+    return pane_target(args, workdir, INVENTORY_CASES, 'inventory.py', run_port, retail_case,
+                       lambda shown: dict(gold=shown['gold'], cells=shown['cells']))
+
+
+TARGETS = {'statusbar': target_statusbar, 'bottombar': target_bottombar, 'inventory': target_inventory}
 
 
 def main():

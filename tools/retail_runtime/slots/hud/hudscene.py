@@ -37,6 +37,13 @@ PLAYER_SIZE, CHARACTER_SIZE = 0x674, 0x2a0
 CLASS_PLAYER, CLASS_CHARACTER = 0x0b, 0x0c
 VTABLE_COPY = 0x400                          # bytes of the real vtable copied (256 slots)
 O_CLASS, O_NAME, O_ACTION = 0x04, 0x38, 0xe0
+# A fixture character's own inventory, as the object constructor leaves it
+# (measured on an object retail's NewObject built): the inventory array
+# grows 4 at a time, and the character sits in no inventory slot (slot and
+# index -1). Without the grow step every add overwrites the array's first
+# entry.
+O_INVENTORY_GROWBY, O_INVENTORY_SLOT = 0x74, 0x7c
+INVENTORY_GROWBY, NO_INVENTORY_SLOT = 4, 0xffffffff
 BM_RGB565 = 0x4
 ARCHIVE_DATA = 0x404                         # an archive blob's dataOff table
 G_TYPE_COUNT, G_TYPE_TABLE, G_CLASS_TABLE = 0x00659d30, 0x00659d40, 0x0065a148
@@ -178,6 +185,8 @@ class HudScene:
         self.vm.put_u32(address, vtable)
         self.vm.write(address + O_CLASS, struct.pack('<H', CLASS_PLAYER if player else CLASS_CHARACTER))
         self.vm.put_u32(address + O_NAME, self.string(name))
+        self.vm.put_u32(address + O_INVENTORY_GROWBY, INVENTORY_GROWBY)
+        self.vm.put_u32(address + O_INVENTORY_SLOT, NO_INVENTORY_SLOT)
         self.characters[address] = Character(address, name, stats or Stats(), portrait)
         return self.characters[address]
 
