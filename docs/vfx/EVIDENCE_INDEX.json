@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 112,
+    "retail_rows_with_source_fixes_recorded": 113,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 92,
+    "visual_fidelity_confirmed_rows": 93,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 92,
-    "remaining_visual_review_rows": 84
+    "reviewed_visual_pass_rows": 93,
+    "remaining_visual_review_rows": 83
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1463,6 +1463,13 @@
       "check": "water_full_native_actual_metal_visual",
       "status": "pass",
       "scope": "Six complete original full factory/normal-lit software and actual Metal native-domain phases at corrected declared tick=capture, all bounds unclipped; blue authored moving particles. Controlled map lifecycle separate; natural context/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-labback-authored-20261010/root-approval.json": {
+      "sha256": "b6baf91637cef7dcd2af557bf1b3bdda6df24064787feb7ffbb94d761121cb1b",
+      "retail_row": "Labback:0xdcc4011d",
+      "check": "labback_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Nine original full software/actual Metal native-domain sphere/spark phases through399\u21920 loop. Common projection, bounded accumulatedfloat residual,camera/caller/audio/device/exactpixel limits retained."
     }
   }
 }
