@@ -92,3 +92,12 @@ shows object2 contributes1070 pixels and the other eight contributezero at
 tick2. This is a bounded isolation result, not proof of all extra-object
 frames or complete color/raster equality. All these reports remain private
 under `vfx-combatflash-loaded-20261011/`; no appearance approval is added.
+
+The independent `combatflash_projection_probe.py` bounds the production helper
+projection coefficients using the original observed local vertices and matrices.
+For ticks1..3/object2, all12 vertices/36 XYZ channels agree with original
+post-transform output to maximum0.000105629 after normalizing native invertedY.
+The explicit camera0/center320240/owner0 policy is retained. This is a shader
+formula contract, not actual GPU vertex readback or a raster/UV/color pass.
+Private `projection-contract/manifest.json` pins the trace, renderer and probe.
+No geometry/projection fit or new visual credit follows from this result.
