@@ -115,6 +115,7 @@
 {0xbecefedau, "TSandswirlEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Sandswirl
 {0xc24b2a85u, "TFogEffect_BESPOKE", true, "Partial preview: authored animated grid; original post-blend RGB565 quantization incomplete; not complete original implementation"}, // Fog
 {0xd0c0f035u, "TGoldEffect_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // goldeffect
+{0xdcc4011du, "TLabback_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Labback
 {0xddc4042eu, "TBloodEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Blood
 {0xddc4042eu, "TBloodEffect", false, "Implemented preview controller; map caller not certified"}, // Blood
 {0xded3dbedu, "TWindStripAnimator_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // WindStrip

@@ -42,6 +42,7 @@
 #include "effects/genericstaticpreview.h"
 #include "effects/blastpreview.h"
 #include "effects/fairypreview.h"
+#include "effects/labbackpreview.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -6754,6 +6755,17 @@ struct SVfxTestBootstrap {
         // *   load the I3D asset and draw sub-object 0 as a billboard.         *
         // *   Awaiting user video A/B for forensics + kinematic tuning.        *
         // =====================================================================
+        {
+            VfxTest::SEffect e = {};
+            e.id = "TLabback_AUTHORED_TAGS";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return labback_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){labback_preview::Advance(static_cast<labback_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){labback_preview::SubmitWorld(static_cast<labback_preview::State*>(c));};
+            e.is_alive=[](void* c){return labback_preview::Alive(static_cast<labback_preview::State*>(c));};
+            e.destroy=[](void* c){labback_preview::Destroy(static_cast<labback_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
         {
             VfxTest::SEffect e = {};
             e.id            = "TFairyEffect_BESPOKE";
