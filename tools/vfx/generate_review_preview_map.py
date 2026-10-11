@@ -99,6 +99,7 @@ SOURCE_MAPPINGS = {
     '0x224a5ccc': 'Smoke_ORIGINAL_QUALITY',
     '0xad92bd1f': 'ArrowEffect_ORIGINAL',
     '0x120054d1': 'IrisFlare_AUTHORED',
+    '0x369a5d2e': 'Teleporter_ORIGINAL_NULL',
     '0xad92bd1e': 'QueenArrow_ORIGINAL',
     '0xacabfada': 'TIcedsparks_AUTHORED_STILL',
     '0xad92bc17': 'Funnel_ORIGINAL',
@@ -162,10 +163,12 @@ IMPLEMENTED.update(dict.fromkeys(
 def admitted_candidates(row):
     if row.get('retail_type_id','').lower()!='0xddc4042e':
         row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n!='Blood_AUTHORED'])
+    if row.get('retail_type_id','').lower()=='0x369a5d2e':
+        return ['Teleporter_ORIGINAL_NULL']
     if row.get('retail_type_id','').lower()=='0x5975abde':
         return ['TDripEffect_LINKED_NO_SPLASH']
     candidates = [name for name in row['preview_candidates'] if name in IMPLEMENTED
-                  and name!='TDripEffect_LINKED_NO_SPLASH']
+                  and name not in ('TDripEffect_LINKED_NO_SPLASH','Teleporter_ORIGINAL_NULL')]
     explicit = SOURCE_MAPPINGS.get(row.get('retail_type_id', '').lower())
     if explicit: candidates.insert(0, explicit)
     candidates.sort(key=lambda name: (0 if name == explicit else 1 if '_AUTHORED_' in name else 2 if '_BESPOKE' in name.upper() else 3))
@@ -178,6 +181,8 @@ def admitted_candidates(row):
 def candidate_metadata(row, name):
     if row.get('retail_type_id','').lower()=='0xddc4042e' and name=='Blood_AUTHORED':
         return False, 'Exact Blood public SetParams(40,224,3,5,5,1) spray, live global RNG without reseed; natural actor damage/map insertion not certified'
+    if row.get('retail_type_id','').lower()=='0x369a5d2e' and name=='Teleporter_ORIGINAL_NULL':
+        return False, 'Original null-spell Teleporter portal, five cylinders and real kill51; successful teleport, actors and other spell variants not certified'
     if row.get('retail_type_id','').lower()=='0xbabeface' and name=='Quicksand_ORIGINAL_TARGET':
         return False, 'Configured Quicksand stationary target offset(96,0,0), actual56-tick lifetime; natural actors, damage and other variants not certified'
     if row.get('retail_type_id','').lower()=='0x5975abde' and name=='TDripEffect_LINKED_NO_SPLASH':

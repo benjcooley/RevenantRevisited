@@ -73,7 +73,10 @@ std::vector<SEffect> ReviewCatalogue() {
     auto manadrain=paralize;manadrain.id="TManaDrain_CONFIGURED_TARGET";
     auto ymanadrain=manadrain;ymanadrain.id="TYManaDrain_CONFIGURED_TARGET";
     auto tornado=ymanadrain;tornado.id="TTornado_CONFIGURED_TARGET";
-    return {authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    auto teleporter=Row("Teleporter_ORIGINAL_NULL",EVfxPreviewStyle::Static);
+    teleporter.is_alive=[](void*c){return *static_cast<int*>(c)<2;};
+    teleporter.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
+    return {teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -278,6 +281,17 @@ int main(int argc,char** argv) {
         assert(target && target->Id()=="TTornado_CONFIGURED_TARGET" && target->RestartInterval()==0);
         const int initial=creates;target->Submit();target->Submit();assert(target->Alive()==false && creates==initial);
         target->Submit();assert(target->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0x369a5d2eu);
+        assert(info.supported && !info.partial && info.lifetime_known && !info.requires_endpoints);
+        assert(std::strstr(info.description,"null-spell Teleporter"));
+        auto portal=CreateVfxReviewPreview(0x369a5d2eu,origin);
+        assert(portal && portal->Id()=="Teleporter_ORIGINAL_NULL" && portal->RestartInterval()==0);
+        const int initial=creates;
+        portal->Submit();portal->Submit();assert(portal->Alive()==false && creates==initial);
+        portal->Submit();assert(portal->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";

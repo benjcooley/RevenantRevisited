@@ -60,3 +60,26 @@ static fallback was used. It grants no appearance credit.
 `b9e06a9abbe5328b5b16afa933eba5bf5181d689233f90d3559705e880368901`;
 the earlier independent `rift-loaded-first` has identical fault and call stack.
 All private evidence lives under the existing lab hard-alpha directory.
+
+## Complete comparison checkpoint
+
+The final60-tick original trace is `teleporter-native-final/manifest.json`, SHA256
+`17491011c7bf64b1cd2aa6caf6c0d5d3d8be203c4d7532855f5cd501fdcf60d9`.
+Source comparison passes all3,984 matrix channels (maximum2.4324e-7) and360
+lifecycle fields. A fresh60-tick original repeat has identical state/draw/bounds
+at every tick and identical sampled pixels at1/25/50/51. Its manifest SHA256 is
+`b1e462c173578b2f3673341c1c4a7d2b868c7437ddb0204c4622aa2613040c27`.
+
+Actual60-frame Metal capture has50 nonempty frames and blank51..60, with exact
+24Hz simulation ticks1..60 and clean exit. Captured binary SHA256 is
+`69ec35ff9f224424daca74fc538d8cffaa157f2694d31c876c89cefbfbd1efd1`,
+physically preserved as `teleporter-review-final/Revenant-captured`. Source
+checkpoint is `fc3a8277`. The frozen18-phase whole-life, actual-size identical
+crop pages and full1280x960 pairs are pinned by `pair-manifest.json` SHA256
+`5284336ddd9a59c14edaa309b767917dc903d88eafc36034a6e6db7cfb27ae2f`.
+This records readiness for independent review, not an approval written by this lane.
+
+Exact gallery admission maps only `0x369a5d2e` to `Teleporter_ORIGINAL_NULL`;
+IrisFlare/hybrid aliases and this preview supplied for a foreign ID are rejected.
+Twenty map admission tests and the compiled lifecycle bridge pass, including
+actual callback-based completion/recreation without a repeat timer.

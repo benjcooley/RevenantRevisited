@@ -34,6 +34,7 @@
 {0x2784abdeu, "TTornado_CONFIGURED_TARGET", false, "Exact Tornado owner with explicit genuine Acolytes and loaded Tornado variant; natural variant selects Funnel, so no natural-cast or successful-damage claim"}, // Tornado
 {0x27df45beu, "TSymGlowAnimator_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // SymGlow
 {0x335a2516u, "TRedFountainAnimator_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // RedFont
+{0x369a5d2eu, "Teleporter_ORIGINAL_NULL", false, "Original null-spell Teleporter portal, five cylinders and real kill51; successful teleport, actors and other spell variants not certified"}, // Teleporter
 {0x37780ae2u, "TFireFlashEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // FireFlash
 {0x42e0fcd0u, "TOgrestrength_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Ogrestrength
 {0x446b3627u, "TGreenFountainAnimator_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // GreenFont

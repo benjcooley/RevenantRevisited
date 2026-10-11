@@ -31,6 +31,12 @@ TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertIn('live global RNG without reseed',description)
         self.assertIn('SetParams(40,224,3,5,5,1)',description)
         self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Blood_AUTHORED']}),[])
+    def test_teleporter_is_exact_null_spell_not_irisflare_alias(self):
+        row={'retail_type_id':'0x369a5d2e','preview_candidates':['IrisFlare_AUTHORED','TFlareAnimator_BESPOKE__Teleporter']}
+        self.assertEqual(admitted_candidates(row),['Teleporter_ORIGINAL_NULL'])
+        self.assertIn('real kill51',candidate_metadata(row,'Teleporter_ORIGINAL_NULL')[1])
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Teleporter_ORIGINAL_NULL']}),[])
+
     def test_quicksand_configured_target(self):
         row={'retail_type_id':'0xbabeface','preview_candidates':[]}
         self.assertEqual(admitted_candidates(row),['Quicksand_ORIGINAL_TARGET'])
