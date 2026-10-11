@@ -25,7 +25,7 @@ State* Spawn(const S3DPoint& origin,uint32_t id){
   std::vector<SMeshVertex>vertices;std::vector<uint16_t>indices;if(!ExtractSubMeshTextureSlot(im,object,slot,vertices,indices)||indices.empty())continue;S3DTex texture={};im->GetTexture(slot-1,&texture);if(texture.htexture==kInvalidTexture)return nullptr;
   const uint64_t key=0x4753540000000000ull^(uint64_t(id)<<8)^(uint64_t(object)<<4)^uint64_t(slot);auto mesh=Renderer->RegisterMeshAsset(key,vertices.data(),int32_t(vertices.size()),indices.data(),int32_t(indices.size()),texture.htexture);if(!mesh)return nullptr;Renderer->AddMeshAssetRef(mesh);state->parts.push_back({object,mesh,RetailMeshTextureLighting(texture.desc.pixelFormat)});
  }
- if(state->parts.size()!=size_t(id==0xadbcef13u?5:2))return nullptr;
+ if(state->parts.size()!=size_t(generic_static_profile::Find(id)->objects))return nullptr;
  log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT vertex=MODELZ",int(StartupVfxNativeDomain));
  log_info("[generic-static-preview] actual owner id=%08x state=0 map_index=%d meshes=%zu exact_profile=1 native_helper_depth_write=0",id,owner->GetMapIndex(),state->parts.size());return state.release();
 }

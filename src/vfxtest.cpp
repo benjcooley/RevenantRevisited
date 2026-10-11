@@ -6340,11 +6340,12 @@ struct SVfxTestBootstrap {
             VfxTest::SEffect e = {};
             e.id            = "TIcedEffect_BESPOKE__Snow";
             e.family        = "magic";
-            e.pipeline      = "FB";
+            e.pipeline      = "IM";
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
-            e.factory       = [](const S3DPoint& o) -> void* { return IcedBespokeVariantSpawn<kVariantIced_I3D>(o); };
-            e.submit        = [](void* c, EFxDebugMode d) { IcedBespokeVariantSubmit(c, d); };
-            e.destroy       = [](void* c) { IcedBespokeVariantDestroy(c); };
+            e.factory       = [](const S3DPoint& o) -> void* { return generic_static_preview::Spawn(o,0xfacedbedu); };
+            e.submit        = [](void* c, EFxDebugMode) { generic_static_preview::Advance(static_cast<generic_static_preview::State*>(c),TTime::DeltaTime()); };
+            e.submit_world = [](void* c, EFxDebugMode d) { generic_static_preview::SubmitWorld(static_cast<generic_static_preview::State*>(c),d); };
+            e.destroy       = [](void* c) { generic_static_preview::Destroy(static_cast<generic_static_preview::State*>(c)); };
             VfxTest::DeferredRegister(e);
         }
 
