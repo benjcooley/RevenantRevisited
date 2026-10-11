@@ -65,7 +65,15 @@ float VfxReviewPreview::RestartInterval() const { return VfxTest::ReviewRestartI
 void VfxReviewPreview::Submit()
 {
     // Use the existing browser cadence explicitly; this is not a claim about
-    // natural lifetime. Static controllers and their internal repeats stay as-is.
+    // natural lifetime. Live Static controllers and internal repeats stay as-is.
+    // A Static preview may still be a finite source-owned effect. Recreate
+    // only after its real owner reports completion; unknown liveness remains
+    // governed solely by the existing browser cadence below.
+    if (context_ && effect_.is_alive && !effect_.is_alive(context_)) {
+        effect_.destroy(context_);
+        context_=effect_.factory(origin_);
+        restart_remaining_=RestartInterval();
+    }
     const float interval=RestartInterval();
     if (interval>0) {
         restart_remaining_-=float(TTime::DeltaTime());

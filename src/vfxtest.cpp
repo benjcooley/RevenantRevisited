@@ -4997,6 +4997,7 @@ struct SVfxTestBootstrap {
         fireswarm_bespoke.factory       = [](const S3DPoint& o) -> void* { return FireSwarmBespokeSpawn(o); };
         fireswarm_bespoke.submit        = [](void* c, EFxDebugMode d) { FireSwarmBespokeSubmit(c, d); };
         fireswarm_bespoke.destroy       = [](void* c) { FireSwarmBespokeDestroy(c); };
+        fireswarm_bespoke.is_alive = [](void* p) { auto* c=static_cast<SFireSwarmBespokeCtx*>(p); return c && c->swarm && c->swarm->IsAlive(); };
         VfxTest::DeferredRegister(fireswarm_bespoke);
 
         // M04 bespoke: faithful direct port of snapshot TBurnAnimator
@@ -5183,6 +5184,7 @@ struct SVfxTestBootstrap {
         streamer_bespoke.submit        = [](void* c, EFxDebugMode d) { StreamerBespokeSubmit(c, d); };
         streamer_bespoke.submit_world  = [](void* c, EFxDebugMode d) { StreamerBespokeSubmitWorld(c, d); };
         streamer_bespoke.destroy       = [](void* c) { StreamerBespokeDestroy(c); };
+        streamer_bespoke.is_alive = [](void* p) { auto* c=static_cast<SStreamerBespokeCtx*>(p); return c && c->eff && c->eff->IsAlive(); };
         VfxTest::DeferredRegister(streamer_bespoke);
 
         VfxTest::SEffect ribbon_bespoke = {};
@@ -5670,6 +5672,7 @@ struct SVfxTestBootstrap {
         meteorstorm_bespoke.submit        = [](void* c, EFxDebugMode d) { MeteorStormBespokeSubmit(c, d); };
         meteorstorm_bespoke.submit_world  = [](void* c, EFxDebugMode d) { MeteorStormBespokeSubmitWorld(c, d); };
         meteorstorm_bespoke.destroy       = [](void* c) { MeteorStormBespokeDestroy(c); };
+        meteorstorm_bespoke.is_alive = [](void* p) { auto* c=static_cast<SMeteorStormBespokeCtx*>(p); return c && c->eff && c->eff->IsAlive(); };
         VfxTest::DeferredRegister(meteorstorm_bespoke);
 
         // W02 TTornadoAnimator: composite PE+SR. Three particle families
@@ -6656,6 +6659,7 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){might_authored_preview::Advance(static_cast<might_authored_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){might_authored_preview::SubmitWorld(static_cast<might_authored_preview::State*>(c),d);};
             e.destroy=[](void*c){might_authored_preview::Destroy(static_cast<might_authored_preview::State*>(c));};
+            e.is_alive=[](void* c){return might_authored_preview::Alive(static_cast<might_authored_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
 
@@ -6666,6 +6670,7 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){immortalmight_authored_preview::Advance(static_cast<immortalmight_authored_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){immortalmight_authored_preview::SubmitWorld(static_cast<immortalmight_authored_preview::State*>(c),d);};
             e.destroy=[](void*c){immortalmight_authored_preview::Destroy(static_cast<immortalmight_authored_preview::State*>(c));};
+            e.is_alive=[](void* c){return immortalmight_authored_preview::Alive(static_cast<immortalmight_authored_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
 
@@ -6679,6 +6684,7 @@ struct SVfxTestBootstrap {
             e.submit=[](void* c,EFxDebugMode){camera_particles_preview::Advance(static_cast<camera_particles_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void* c,EFxDebugMode){camera_particles_preview::SubmitWorld(static_cast<camera_particles_preview::State*>(c));};
             e.destroy=[](void* c){camera_particles_preview::Destroy(static_cast<camera_particles_preview::State*>(c));};
+            e.is_alive=[](void* c){return camera_particles_preview::Alive(static_cast<camera_particles_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
 
@@ -6689,6 +6695,7 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
             e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            e.is_alive=[](void* c){return static_particles_preview::Alive(static_cast<static_particles_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6698,6 +6705,7 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
             e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            e.is_alive=[](void* c){return static_particles_preview::Alive(static_cast<static_particles_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6707,6 +6715,7 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
             e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            e.is_alive=[](void* c){return static_particles_preview::Alive(static_cast<static_particles_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6716,6 +6725,7 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
             e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            e.is_alive=[](void* c){return static_particles_preview::Alive(static_cast<static_particles_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6725,6 +6735,7 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
             e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            e.is_alive=[](void* c){return static_particles_preview::Alive(static_cast<static_particles_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6734,6 +6745,7 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
             e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            e.is_alive=[](void* c){return static_particles_preview::Alive(static_cast<static_particles_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6743,6 +6755,7 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
             e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            e.is_alive=[](void* c){return static_particles_preview::Alive(static_cast<static_particles_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
 
@@ -6753,6 +6766,7 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){speed_authored_preview::Advance(static_cast<speed_authored_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){speed_authored_preview::SubmitWorld(static_cast<speed_authored_preview::State*>(c),d);};
             e.destroy=[](void*c){speed_authored_preview::Destroy(static_cast<speed_authored_preview::State*>(c));};
+            e.is_alive=[](void* c){return speed_authored_preview::Alive(static_cast<speed_authored_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6762,6 +6776,7 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){speed_authored_preview::Advance(static_cast<speed_authored_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){speed_authored_preview::SubmitWorld(static_cast<speed_authored_preview::State*>(c),d);};
             e.destroy=[](void*c){speed_authored_preview::Destroy(static_cast<speed_authored_preview::State*>(c));};
+            e.is_alive=[](void* c){return speed_authored_preview::Alive(static_cast<speed_authored_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6771,6 +6786,7 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){fmastery_authored_preview::Advance(static_cast<fmastery_authored_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){fmastery_authored_preview::SubmitWorld(static_cast<fmastery_authored_preview::State*>(c),d);};
             e.destroy=[](void*c){fmastery_authored_preview::Destroy(static_cast<fmastery_authored_preview::State*>(c));};
+            e.is_alive=[](void* c){return fmastery_authored_preview::Alive(static_cast<fmastery_authored_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6781,6 +6797,7 @@ struct SVfxTestBootstrap {
             e.submit = [](void* context, EFxDebugMode) { shadowfist_authored_preview::Advance(static_cast<shadowfist_authored_preview::State*>(context),TTime::DeltaTime()); };
             e.submit_world = [](void* context, EFxDebugMode mode) { shadowfist_authored_preview::SubmitWorld(static_cast<shadowfist_authored_preview::State*>(context),mode); };
             e.destroy = [](void* context) { shadowfist_authored_preview::Destroy(static_cast<shadowfist_authored_preview::State*>(context)); };
+            e.is_alive=[](void* c){return shadowfist_authored_preview::Alive(static_cast<shadowfist_authored_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6791,6 +6808,7 @@ struct SVfxTestBootstrap {
             e.submit = [](void* context, EFxDebugMode) { teleportation_authored_preview::Advance(static_cast<teleportation_authored_preview::State*>(context),TTime::DeltaTime()); };
             e.submit_world = [](void* context, EFxDebugMode mode) { teleportation_authored_preview::SubmitWorld(static_cast<teleportation_authored_preview::State*>(context),mode); };
             e.destroy = [](void* context) { teleportation_authored_preview::Destroy(static_cast<teleportation_authored_preview::State*>(context)); };
+            e.is_alive=[](void* c){return teleportation_authored_preview::Alive(static_cast<teleportation_authored_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6801,6 +6819,7 @@ struct SVfxTestBootstrap {
             e.submit = [](void* context, EFxDebugMode) { warriorborn_authored_preview::Advance(static_cast<warriorborn_authored_preview::State*>(context),TTime::DeltaTime()); };
             e.submit_world = [](void* context, EFxDebugMode mode) { warriorborn_authored_preview::SubmitWorld(static_cast<warriorborn_authored_preview::State*>(context),mode); };
             e.destroy = [](void* context) { warriorborn_authored_preview::Destroy(static_cast<warriorborn_authored_preview::State*>(context)); };
+            e.is_alive=[](void* c){return warriorborn_authored_preview::Alive(static_cast<warriorborn_authored_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6811,6 +6830,7 @@ struct SVfxTestBootstrap {
             e.submit = [](void* context, EFxDebugMode) { mpappear_authored_preview::Advance(static_cast<mpappear_authored_preview::State*>(context),TTime::DeltaTime()); };
             e.submit_world = [](void* context, EFxDebugMode mode) { mpappear_authored_preview::SubmitWorld(static_cast<mpappear_authored_preview::State*>(context),mode); };
             e.destroy = [](void* context) { mpappear_authored_preview::Destroy(static_cast<mpappear_authored_preview::State*>(context)); };
+            e.is_alive=[](void* c){return mpappear_authored_preview::Alive(static_cast<mpappear_authored_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6822,6 +6842,7 @@ struct SVfxTestBootstrap {
             e.submit = [](void* context, EFxDebugMode) { punch_authored_preview::Advance(static_cast<punch_authored_preview::State*>(context), TTime::DeltaTime()); };
             e.submit_world = [](void* context, EFxDebugMode mode) { punch_authored_preview::SubmitWorld(static_cast<punch_authored_preview::State*>(context), mode); };
             e.destroy = [](void* context) { punch_authored_preview::Destroy(static_cast<punch_authored_preview::State*>(context)); };
+            e.is_alive=[](void* c){return punch_authored_preview::Alive(static_cast<punch_authored_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6856,6 +6877,7 @@ struct SVfxTestBootstrap {
             e.destroy = [](void* context) {
                 gold_authored_preview::Destroy(static_cast<gold_authored_preview::State*>(context));
             };
+            e.is_alive=[](void* c){return gold_authored_preview::Alive(static_cast<gold_authored_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -6887,6 +6909,7 @@ struct SVfxTestBootstrap {
                 combatflash_start1_preview::SubmitWorld(static_cast<combatflash_start1_preview::State*>(context),mode);
             };
             e.destroy = [](void* context) { combatflash_start1_preview::Destroy(static_cast<combatflash_start1_preview::State*>(context)); };
+            e.is_alive=[](void* c){return combatflash_start1_preview::Alive(static_cast<combatflash_start1_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {

@@ -58,8 +58,30 @@ TWaterEffect_BESPOKE__StillWater TWaterEffect_BESPOKE__FlowWater TWaterEffect_BE
 # are selected independently by the gallery before this fallback.
 
 
+# Exact identities declared by the registered factories in vfxtest.cpp and
+# their owner constructors. These newer implementations predate their ledger
+# preview_candidates updates; they never authorize asset/name association.
+SOURCE_MAPPINGS = {
+    '0x42e0fcd0': 'TOgrestrength_AUTHORED_TAGS',
+    '0xad92bd39': 'TTrollblood_AUTHORED_TAGS',
+    '0x10ac03de': 'TRegeneration_AUTHORED_TAGS',
+    '0xe0a3bc43': 'TSwiftStrike_AUTHORED_TAGS',
+    '0x0c052638': 'Tfspray_AUTHORED_TAGS',
+    '0xaeaeeb30': 'TYEnergy_AUTHORED_TAGS',
+    '0xaeaeeb33': 'TYEnergyLose_AUTHORED_TAGS',
+    '0xaeaeeb29': 'TYAbsorb_AUTHORED_TAGS',
+    '0xad92bd38': 'Tnullifier_AUTHORED_TAGS',
+    '0xad92bd36': 'TSpeed_AUTHORED_TAGS',
+    '0xad92bd35': 'TQuicksilver_AUTHORED_TAGS',
+}
+IMPLEMENTED.update(dict.fromkeys(SOURCE_MAPPINGS.values(),
+    'vfxtest.cpp: explicit retail ID passed to exact owner/profile factory'))
+
+
 def admitted_candidates(row):
     candidates = [name for name in row['preview_candidates'] if name in IMPLEMENTED]
+    explicit = SOURCE_MAPPINGS.get(row.get('retail_type_id', '').lower())
+    if explicit: candidates.insert(0, explicit)
     candidates.sort(key=lambda name: (0 if '_AUTHORED_' in name else 1 if '_BESPOKE' in name.upper() else 2))
     return list(dict.fromkeys(candidates))
 

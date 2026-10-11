@@ -7,5 +7,6 @@ struct State;
 State* Spawn(const S3DPoint&, uint32_t type_id);
 void Advance(State*, double);
 void SubmitWorld(State*, EFxDebugMode);
+bool Alive(State*);
 void Destroy(State*);
 }

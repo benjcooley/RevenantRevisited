@@ -29,7 +29,10 @@ std::vector<SEffect> ReviewCatalogue() {
     auto flare=Row("TCureEffect_BESPOKE",EVfxPreviewStyle::CharacterCast);
     flare.submit={};flare.submit_attached=[](void*,EFxDebugMode,const SVfxAttachment&){};
     auto ripple=Row("TRippleEffect",EVfxPreviewStyle::Static);ripple.factory=[](const S3DPoint&)->void*{return nullptr;};
-    return {Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    auto finite=Row("TMPAppear_AUTHORED_START",EVfxPreviewStyle::Static);
+    finite.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
+    finite.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
+    return {finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -75,5 +78,14 @@ int main() {
         assert(creates==3 && destroys==1);
     }
     assert(destroys==3 && catalogue_reads==1);
+    {
+        auto finite=CreateVfxReviewPreview(0xad99fdf2,origin);
+        assert(finite && finite->RestartInterval()==0 && finite->Alive()==true);
+        finite->Submit(); finite->Submit();
+        assert(finite->Alive()==false && creates==4 && destroys==3);
+        finite->Submit();
+        assert(finite->Alive()==true && creates==5 && destroys==4);
+    }
+    assert(creates==destroys); // Natural completion recreates without a timer.
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";
 }

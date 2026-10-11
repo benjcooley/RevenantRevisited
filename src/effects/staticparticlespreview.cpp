@@ -76,5 +76,11 @@ void SubmitWorld(State* context, EFxDebugMode)
     // objects have zero faces; there is no base mesh to synthesize or light.
     animator->SubmitPartSys(*Renderer, context->prototype, 1, {1, 1, 1}, StartupVfxNativeDomain);
 }
+bool Alive(State* context)
+{
+    if (!context || !context->owner) return false;
+    auto* owner=context->identity.Get();
+    return owner && owner==context->owner.get() && !(owner->GetFlags() & OF_KILL);
+}
 void Destroy(State* context) { delete context; }
 }

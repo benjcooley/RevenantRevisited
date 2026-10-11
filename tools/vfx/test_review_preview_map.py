@@ -28,6 +28,15 @@ TFireConeEffect_BESPOKE TFireFlashEffect_BESPOKE TMeteorStormEffect_BESPOKE
 TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
         self.assertEqual(set(admitted_candidates({'preview_candidates': candidates})), set(candidates))
 
+    def test_new_exact_source_registration_overrides_stale_ledger(self):
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xad92bd36',
+            'preview_candidates':['TBuffEffect_Bespoke__speed_BESPOKE']}),
+            ['TSpeed_AUTHORED_TAGS'])
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xad92bd35',
+            'preview_candidates':[]}), ['TQuicksilver_AUTHORED_TAGS'])
+        self.assertEqual(admitted_candidates({'retail_type_id':'0x0ea34fa3',
+            'preview_candidates':['TBlastEffect_BESPOKE']}), [])
+
     def test_exact_authored_replacement_preferred_without_old_stub_fallback(self):
         self.assertEqual(admitted_candidates({'preview_candidates': [
             'TGoldEffect_BESPOKE', 'TGoldEffect_AUTHORED_TAGS', 'TGoldEffect_AUTHORED_TAGS']}),
