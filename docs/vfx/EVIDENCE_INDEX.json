@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 82,
+    "visual_fidelity_confirmed_rows": 83,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 82,
-    "remaining_visual_review_rows": 94
+    "reviewed_visual_pass_rows": 83,
+    "remaining_visual_review_rows": 93
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1386,6 +1386,13 @@
       "check": "iced_native_domain_actual_metal_visual",
       "status": "pass",
       "scope": "Original software versus actual Metal native-domain crystal reveal/hold, shatter at240,30chunk tumble/bounce, decay and blank322/421. Explicit living stationary victim handshake; natural caller/attachment/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-riverfall-full-visual-20261010/root-approval.json": {
+      "sha256": "fb189c98d508b0da1d7aa8cae789b63eb672a7d9183bf86919e8659608627a0e",
+      "retail_row": "RiverFall:0xd0c0f03a",
+      "check": "riverfall_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Six full original software and actual Metal native-domain whole1280x960 UV phases, blue water texture/mesh/scroll; original bounds unclipped. Normal map lifecycle separate; natural scene/device/exactpixels remain open."
     }
   }
 }

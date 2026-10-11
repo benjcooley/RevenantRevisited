@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "9330b772fdcf5543073ad2ffe1b2a0a52f7642e7e588fa3434a2741198be56bf",
+    "harness_sha256": "bebd711c6d5bccdb79e60e1caa5b210619c723730eb0600b0085f12e6bdd2b92",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 82,
+    "visual_fidelity_confirmed_rows": 83,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 82,
-    "remaining_visual_review_rows": 94
+    "reviewed_visual_pass_rows": 83,
+    "remaining_visual_review_rows": 93
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -22067,7 +22067,8 @@
       ],
       "source_fixes": [
         "Exact-ID TEffect::Pulse skips obsolete snapshot frame0 reset, matching retail default-animator path. Post-build actual frame observations prove progression/wrap; this is a prerequisite, not partsys render coverage.",
-        "Source scrolltex obj=water,du=0,dv=.01 restored as per-instance original UV plus float(global24Hz frame)*du/dv, without shared mesh mutation. Instance-buffer/backend offset plumbing and explicit Repeat texture policy verified; live Metal mesh path produces 96 distinct images/120 versus 2 pre-fix MOVE-only images. Device sampler/filter/phase fidelity remains open."
+        "Source scrolltex obj=water,du=0,dv=.01 restored as per-instance original UV plus float(global24Hz frame)*du/dv, without shared mesh mutation. Instance-buffer/backend offset plumbing and explicit Repeat texture policy verified; live Metal mesh path produces 96 distinct images/120 versus 2 pre-fix MOVE-only images. Device sampler/filter/phase fidelity remains open.",
+        "2026-10-10: exact RiverFall profile and typed authored scroll preview preserve all14vertices/12triangles, original ARGB4444 texture and +0.01 UV rate. Full original default/controller/RenderObject and complete actual Metal comparisons pass."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -22080,13 +22081,13 @@
         "port_smoke": true,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "default_mesh_scrolltex_verified_through_actual_create_move_persistence_delete",
-      "next_action": "Recover visible native RiverFall output and compare source global-clock phase, Repeat/filter/material lighting in an authored map or natural trigger context. No shipped saved RiverFall placement found; full context and fidelity remain open.",
+      "next_action": "Preserve current RiverFall scroll appearance; natural map setting/device/exactpixel gates remain open.",
       "notes": [
         "Exact retail type uses generic EFFECT/default T3DAnimator; no named Waterfall animator registration. Literal Waterfall implementation is not valid for this profile. Preserve catalogue association as an invalid candidate, not proven runtime mapping.",
         "Authored state loops 100 frames; frame0 scrolltex tag obj=water,du=0,dv=0.01. Per-instance UV/Repeat implementation and actual command validation pass; source global-clock/sampler/device/material fidelity remains open.",
@@ -22225,7 +22226,17 @@
         }
       ],
       "work_queue_status": "deferred_reference_or_controller_complexity",
-      "deferred_reason": "User requests easy-to-reproduce retail A/B first; visible native/device/controller investigation postponed. Existing port fixes and evidence retained."
+      "deferred_reason": "User requests easy-to-reproduce retail A/B first; visible native/device/controller investigation postponed. Existing port fixes and evidence retained.",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six full original software and actual Metal native-domain whole1280x960 UV phases, blue water texture/mesh/scroll; original bounds unclipped. Normal map lifecycle separate; natural scene/device/exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-riverfall-full-visual-20261010/root-approval.json",
+        "sha256": "fb189c98d508b0da1d7aa8cae789b63eb672a7d9183bf86919e8659608627a0e",
+        "note": "docs/vfx/forensics/RIVERFALL_VISUAL_20261010.md"
+      }
     },
     {
       "index": 155,

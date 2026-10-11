@@ -35,3 +35,18 @@ actual binary, data root and a new private output directory. Use 40 frames for
 slow births or finite effects. Review full animation and an original retail
 comparison before granting visual credit. Images, assets and binaries stay
 outside the source repository.
+
+## Updated viewer presentation
+
+At the user’s request, partial implementations are visible wherever a safe,
+exact-identity factory exists. Partial previews retain amber names and explicit
+limitations in runtime logs; they gain no visual-verification credit. Unknown
+controllers may show their available authored geometry. Fog’s incomplete
+preview is restored under this partial policy. Null factories remain named
+slots. The initial audit above remains the frozen pre-change diagnostic.
+
+Default minimum spacing is now 96 logical pixels, down from 240. Automatic
+footprint gaps scale by 0.4; explicit wider overrides stay absolute. Default
+continuous scrolling is 96 pixels per second, up from 48. Effect simulation
+remains at its existing cadence. The full 176-entry loop is approximately
+263 seconds with the recorded layout.

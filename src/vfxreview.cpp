@@ -255,6 +255,14 @@ void Spawn(Entry& e, size_t index) {
     const bool authored_yfireball = e.id==0x63fd3827u;
     const bool authored_photon = e.id==0x113803f4u;
     if (!support.safe_factory && !authored_yfireball && !authored_photon) {
+        const auto preview_info=DescribeVfxReviewPreview(e.id);
+        if(preview_info.supported) e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(e.preview) {
+            e.missing_visual=preview_info.partial; e.status=preview_info.description; ++e.cycles;
+            log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=%d status=%s",
+                e.name.c_str(),e.id,e.preview->Id().c_str(),int(preview_info.partial),e.status.c_str());
+            return;
+        }
         e.status=support.description; e.failed=true;
         log_info("[vfx-review] unavailable name=%s type=%08x status=%s",e.name.c_str(),e.id,e.status.c_str());
         return;
@@ -315,9 +323,11 @@ void Spawn(Entry& e, size_t index) {
             log_info("[vfx-review] unavailable name=%s type=%08x status=%s",e.name.c_str(),e.id,e.status.c_str());
             return;
         }
-        e.missing_visual=false; e.status="Registered effect runtime";
+        const auto preview_info=DescribeVfxReviewPreview(e.id);
+        e.missing_visual=preview_info.partial; e.status=preview_info.description;
         ++e.cycles;
-        log_info("[vfx-review] preview name=%s type=%08x implementation=%s",e.name.c_str(),e.id,e.preview->Id().c_str());
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=%d status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),int(preview_info.partial),e.status.c_str());
         return;
     }
     e.status=result.description;
