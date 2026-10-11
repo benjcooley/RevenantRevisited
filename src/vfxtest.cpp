@@ -2115,6 +2115,7 @@ struct SIceBoltBespokeCtx {
     TIceBoltEffect_Bespoke* bolt   = nullptr;
     S3DPoint                origin = {0, 0, 0};
     float                   gap    = 0.0f;
+    bool single_life=false;
 };
 
 // Short gap (0.25 s) so the filmstrip rarely catches a fully-dead frame —
@@ -2145,7 +2146,7 @@ void IceBoltBespokeSubmit(void* cp, EFxDebugMode dbg)
     auto* c = static_cast<SIceBoltBespokeCtx*>(cp);
     if (!c)
         return;
-    if (!c->bolt || !c->bolt->IsAlive())
+    if (!c->single_life && (!c->bolt || !c->bolt->IsAlive()))
     {
         c->gap -= float(TTime::DeltaTime());
         if (c->gap <= 0.0f)
@@ -2159,11 +2160,8 @@ void IceBoltBespokeSubmit(void* cp, EFxDebugMode dbg)
         c->bolt->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
-// Submit_world callback: drives the helper-mesh draws (cyl04/01/02/03 +
-// cylinder05 ring + cylinder06 spiral). Called by the harness inside
-// BeginTilePass scope (vfxtest.cpp:1521-1528), AFTER that call clears
-// the transparent_world_queue. Mirrors F07 fireball's FireBallSubmitWorld
-// pattern (vfxtest.cpp:2899+).
+// Submit all seven authored submeshes after BeginTilePass clears the queue.
+// The simulation callback above advances the original animator Pulse first.
 void IceBoltBespokeSubmitWorld(void* cp, EFxDebugMode dbg)
 {
     auto* c = static_cast<SIceBoltBespokeCtx*>(cp);
@@ -5092,15 +5090,24 @@ struct SVfxTestBootstrap {
         VfxTest::SEffect icebolt_bespoke = {};
         icebolt_bespoke.id            = "TIceBoltEffect_BESPOKE";
         icebolt_bespoke.family        = "ice";
-        // Pipeline tag: FB (billboards for box01 glow/frost/snow) + IM
-        // (cyl04/01/02/03 + ring + spiral as real I3D sub-meshes via
-        // SubmitHelperMesh from submit_world).
+        // All authored geometry, including particle cards, uses submit_world.
+        // Preserve the existing entry's advertised pipeline tag for callers.
         icebolt_bespoke.pipeline      = "FB+IM";
         icebolt_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
         icebolt_bespoke.factory       = [](const S3DPoint& o) -> void* { return IceBoltBespokeSpawn(o); };
         icebolt_bespoke.submit        = [](void* c, EFxDebugMode d) { IceBoltBespokeSubmit(c, d); };
         icebolt_bespoke.submit_world  = [](void* c, EFxDebugMode d) { IceBoltBespokeSubmitWorld(c, d); };
         icebolt_bespoke.destroy       = [](void* c) { IceBoltBespokeDestroy(c); };
+        VfxTest::DeferredRegister(icebolt_bespoke);
+        icebolt_bespoke.id="TIceBoltEffect_AUTHORED_BEAM";
+        icebolt_bespoke.pipeline="IM";
+        icebolt_bespoke.factory=[](const S3DPoint& o)->void* {
+            auto* context=static_cast<SIceBoltBespokeCtx*>(IceBoltBespokeSpawn(o));
+            context->single_life=true;
+            if(context->bolt)context->bolt->SetNativeDomain(StartupVfxNativeDomain);
+            log_info("[native-domain] enabled=%d camera_z=0",int(StartupVfxNativeDomain));
+            return context;
+        };
         VfxTest::DeferredRegister(icebolt_bespoke);
 
         VfxTest::SEffect iced_bespoke = {};

@@ -523,7 +523,11 @@ struct SHelperMeshSubmit
     // five-bit vertex Gouraud modulation, nearest wrapped texture sampling.
     // 2: normalized ARGB unlit. 3: exact ARGB4444 software lookup.
     // Material specular/emissive are not implemented by the source SW path.
-    int32_t    retail_lighting = 0;
+    int32_t    retail_lighting = 0; // 4: source untextured RGB5 Gouraud, no texture sample
+    int32_t    index_offset = 0, index_count = 0; // zero count keeps the full mesh
+    bool       retail_flat_depth = false; // original untextured max(vertex Z), one triangle
+    float      retail_flat_depth_offset = 0.0f; // depth minus camera/base translation
+    bool       retail_source_alpha = false; // audited source mode2: cull-none; mode4 writes Z as the native untextured kernel
     // Undo an explicit geometry-only Z bridge before source normal lighting.
     float      retail_normal_z_scale = 1.0f;
     bool       retail_gold_no_depth = false; // audited authored mode80, no depth test/write
@@ -1390,6 +1394,8 @@ private:
     sg_shader   helper_mesh_shader        = {};
     sg_pipeline helper_mesh_back_pipeline = {};
     sg_pipeline helper_mesh_front_pipeline = {};
+    sg_pipeline helper_source_alpha_pipeline = {};
+    sg_pipeline helper_untextured_software_pipeline = {};
     sg_pipeline helper_mesh_add_back_pipeline = {};
     sg_pipeline helper_mesh_add_front_pipeline = {};
     sg_pipeline helper_gold_no_depth_back_pipeline = {};

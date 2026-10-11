@@ -37,6 +37,7 @@ _CLASSDEF(TSpellBlock)
 
 #include "particlefx.h"
 #include "photoncore.h"
+#include "iceboltcore.h"
 #include "missilestate.h"
 #include "renderer.h"   // EFxDebugMode, SBillboardDrawItem, TRenderer
 
@@ -4180,128 +4181,32 @@ class TIceEffect_Bespoke : public TEffect
 };
 
 // --- I21 TIceBoltEffect bespoke ---------------------------------------
-// FAITHFUL DIRECT PORT of TIceBoltAnimator::Initialize/Animate/Render
-// (src/effect_old.cpp:8015-8688). Per forensics §3 constants and §6
-// state machine. Stationary freeze beam (NOT a missile — base is
-// TEffect; the TMissileEffect::Initialize/Pulse calls in the snapshot
-// are commented out). Composite draw: 4 nested core cylinders
-// (cyl04/01/02/03), counter-rotating spirals (cyl06), sliding rings
-// (cyl05), 2 end glow spheres (box01), 50 frost particles (box01), 50
-// snow particles (box01). Blend = Alpha, Lit-mode = Unlit (asset color
-// carries blue), Depth = TestNoWrite. spell.def LIGHT(100,100,255) is
-// retail-only — pre-release parser discards it; no light added here.
-inline constexpr int32_t kIceBoltMaxFrost = 50;   // MAX_FROST_PARTICLES (effect.h:1651)
-inline constexpr int32_t kIceBoltMaxSnow  = 50;   // MAX_SNOW_PARTICLES  (effect.h:1652)
-
-// 24 Hz sim-tick gate (family pattern: blood/spark/fireball/iced).
-inline constexpr int32_t kIceBoltSimTickMs = 1000 / 24;
-
-// One frost particle (snapshot: p[],v[],s[],t[] member arrays in the
-// animator). Re-flattened onto a per-particle struct on the effect class
-// — mirrors SBloodParticleEx convention.
-struct SIceBoltFrostParticle
-{
-    hmm_vec3 pos = {0.0f, 0.0f, 0.0f};   // p[i] (wu, object-local)
-    hmm_vec3 vel = {0.0f, 0.0f, 0.0f};   // v[i] (wu/tick)
-    float    s   = 0.0f;                  // size (FROST_INIT_SIZE → 0)
-    float    t   = 0.0f;                  // spawn delay (ticks)
-};
-
-// One snow particle (snapshot: h[],th[],r[],rs[],sz[] member arrays).
-struct SIceBoltSnowParticle
-{
-    float h  = 0.0f;   // height (z, ±50 wu)
-    float th = 0.0f;   // orbit angle (rad)
-    float r  = 0.0f;   // orbit radius (wu)
-    float rs = 0.0f;   // angular velocity (rad/tick)
-    float sz = 0.0f;   // particle scale
-};
-
+// Original Initialize4eb570/Pulse4eba00/Render4ebea0: stationary beam,
+// four normal-lit untextured cylinders, authored spirals/rings/glows,
+// 50 frost and 50 snow particles. Controlled endpoint/world boundary;
+// natural spell damage and posted Iced victim caller remain external.
 _CLASSDEF(TIceBoltEffect_Bespoke)
-
-class TIceBoltEffect_Bespoke : public TEffect
+class TIceBoltEffect_Bespoke : public TEffect, private icebolt_core::State
 {
   public:
-    TIceBoltEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TIceBoltEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
-    ~TIceBoltEffect_Bespoke() override = default;
-
-    void OffScreen() override { KillThisEffect(); }
-
-    [[nodiscard]] static TIceBoltEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
-    // Drives the per-tick simulation and submits the box01 billboards
-    // (end-glow spheres, frost particles, snow particles). Called from
-    // the harness's regular `submit` callback (outside BeginTilePass).
-    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
-    // Submits the cyl04/01/02/03 + cylinder05 (ring) + cylinder06
-    // (spiral) I3D sub-meshes via SubmitHelperMesh. Called from the
-    // harness's `submit_world` callback (inside BeginTilePass, after the
-    // pass clears the transparent_world_queue). Mirrors F07 fireball's
-    // SubmitWorldRing split.
-    void SubmitWorldMeshes_BESPOKE(EFxDebugMode debug_mode);
-    [[nodiscard]] bool IsAlive() const { return alive_; }
-
+    TIceBoltEffect_Bespoke(TObjectImagery* image):TEffect(image){}
+    TIceBoltEffect_Bespoke(SObjectDef* def,TObjectImagery* image):TEffect(def,image){}
+    ~TIceBoltEffect_Bespoke() override;
+    void OffScreen() override {}
+    void Pulse() override;
+    static TIceBoltEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode mode);
+    void SubmitWorldMeshes_BESPOKE(EFxDebugMode mode);
+    bool SetBeamEndpoints(const S3DPoint& source,const S3DPoint& destination);
+    void SetNativeDomain(bool enabled){native_domain_=enabled;}
+    bool IsAlive()const{return alive_;}
   private:
-    // Per-particle arrays (50+50 = 100 quads max), forensics §3.
-    SIceBoltFrostParticle frost_[kIceBoltMaxFrost] {};
-    SIceBoltSnowParticle  snow_[kIceBoltMaxSnow] {};
-
-    // Beam-body transform animation envelopes (snapshot member fields:
-    // length, spherescale[2], cylscale, ringout, spiralang, spiralscale, cy).
-    // Same names as snapshot for line-by-line fidelity.
-    float length_       = 0.0f;          // beam length (wu); harness-fixed
-    float spherescale_[2] = {0.0f, 0.0f};// glow-sphere scales (snapshot spherescale[0/1])
-    float cylscale_     = 0.0f;          // core-cylinder x/y scale (snapshot cylscale)
-    float ringout_      = 0.0f;          // ring slide offset (snapshot ringout)
-    float spiralang_    = 0.0f;          // spiral rotation angle (rad)
-    float spiralscale_  = 0.0f;          // spiral xy scale
-    float cy_           = 0.0f;          // snow cluster axial sweep
-    int32_t angle_      = 0;             // byte facing (0..255) toward target
-    int32_t frameon_    = 0;             // simulation tick counter
-    int32_t subspell_   = 3;             // ::SetSubSpell(3) force (snapshot :8049)
-
-    // Resolved texture handles for the 7 sub-objects of icebolt.I3D.
-    // §4 mapping: [0..3] = cylinder04/01/02/03 (core beam),
-    //             [4]    = box01 (glow sphere / frost / snow billboard),
-    //             [5]    = cylinder05 (rings),
-    //             [6]    = cylinder06 (spirals).
-    // box01 retains its texture/UV for the end-glow and particle
-    // billboard pass (sub-obj 4 is a flat quad-mesh in the I3D — a
-    // billboard is exactly equivalent visually). The cyl/ring/spiral
-    // sub-objects are drawn via SubmitHelperMesh and don't need a billboard
-    // texture handle, but we keep them for the spawn-time diagnostic log.
-    TTextureHandle subobj_tex_[7] {kInvalidTexture, kInvalidTexture, kInvalidTexture,
-                                   kInvalidTexture, kInvalidTexture, kInvalidTexture,
-                                   kInvalidTexture};
-    float          subobj_uv_[7][4] {};
-
-    // Mesh handles extracted from icebolt.I3D for the SubmitHelperMesh
-    // draw pass. Per snapshot effect_old.cpp:8475-8504 the 4 nested core
-    // cylinders are each a separate sub-object (cyl04/01/02/03) drawn as
-    // its own stretched mesh; cyl05 is the ring; cyl06 is the spiral.
-    // Each handle is registered once at SpawnForTest via
-    // RegisterMesh(ExtractSubMeshTextureSlot(...)) and held for the bolt's
-    // lifetime. A value of 0 means extraction failed (logged at spawn).
-    MeshHandle cyl_meshes_[4] {0, 0, 0, 0};
-    MeshHandle ring_mesh_    = 0;
-    MeshHandle spiral_mesh_  = 0;
-
-    // Per-sub-object diffuse RGBA read from the I3D's material at spawn.
-    // The icebolt.I3D cylinder bodies sample a degenerate texel (UV(0,0))
-    // so all visible color comes from the authored material (S3DMaterial
-    // .diffuse / .emissive). We bind the renderer's white texture to the
-    // mesh handle so the helper-mesh shader's `base = tex * diffuse`
-    // reduces to `base = diffuse` — letting the I3D-authored material
-    // colour carry the look.
-    float cyl_diffuse_[4][4]    {};
-    float cyl_emissive_[4][4]   {};
-    float ring_diffuse_[4]      {};
-    float ring_emissive_[4]     {};
-    float spiral_diffuse_[4]    {};
-    float spiral_emissive_[4]   {};
-
-    bool   alive_         = true;
-    double sim_accum_ms_  = 0.0;
+    bool BindMeshes();
+    struct Part {MeshHandle mesh=0;S3DMat material{};int lighting=0;
+        std::vector<SMeshVertex> vertices;std::vector<uint16_t> indices;};
+    std::array<Part,7> parts_{};
+    bool alive_=true,native_domain_=false;
+    double sim_accum_=0;
 };
 
 // --- I22 TIcedEffect bespoke -------------------------------------------

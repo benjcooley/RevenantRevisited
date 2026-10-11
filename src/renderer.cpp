@@ -923,6 +923,7 @@ struct helper_vs_params {
     float4 vp; float4 camz; float4 camw;
     float4 retail_ambient; float4 retail_directional; // directional.w: mode
     float4 uv_shift;
+    float4 retail_raster;
 };
 struct vs_in {
     float3 pos    [[attribute(0)]];
@@ -959,7 +960,7 @@ vertex vs_out _main(vs_in in [[stage_in]],
         T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
         scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
     }
-    float scene_z_n  = (scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);
+    float scene_z_n  = ((p.retail_raster.x > 0.5 ? p.retail_raster.y : scene_z_wu) - p.camz.x) / max(p.camz.y, 1e-6);
     float zoom = max(p.camw.z, 0.0001);
     float persp_scale = ((!native_projection && p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = p.vp.x + S * persp_scale;
@@ -1006,6 +1007,8 @@ fragment float4 _main(vs_out in [[stage_in]],
                       constant helper_params& hp [[buffer(0)]],
                       texture2d<float> albedo_tex [[texture(0)]],
                       sampler smp [[sampler(0)]]) {
+    // Original untextured Gouraud stores RGB5 as R5/G6-even/B5; no material or texture.
+    if (in.retail_mode > 3.5) return float4(floor(in.retail_color * 31.0 + 0.00001) * float3(1.0/31.0, 2.0/63.0, 1.0/31.0), 1.0);
     if (in.retail_mode > 0.5) {
         // RGB565 source raster: texture times Gouraud light; no material
         // specular/emissive term can create color in a black texel.
@@ -1098,6 +1101,7 @@ layout(std140) uniform helper_vs_params {
     vec4 vp; vec4 camz; vec4 camw;
     vec4 retail_ambient; vec4 retail_directional;
     vec4 uv_shift;
+    vec4 retail_raster;
 };
 out vec3  v_wpos;
 out vec3  v_wnormal;
@@ -1123,7 +1127,7 @@ void main() {
         T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
         scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
     }
-    float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
+    float scene_z_n  = ((retail_raster.x > 0.5 ? retail_raster.y : scene_z_wu) - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
     float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
@@ -1161,6 +1165,8 @@ layout(std140) uniform helper_params {
 uniform sampler2D albedo_tex;
 out vec4 fragColor;
 void main() {
+    // Original untextured Gouraud stores RGB5 as R5/G6-even/B5; no material or texture.
+    if (v_retail_mode > 3.5) { fragColor = vec4(floor(v_retail_color * 31.0 + 0.00001) * vec3(1.0/31.0, 2.0/63.0, 1.0/31.0), 1.0); return; }
     if (v_retail_mode > 0.5) {
         ivec2 size = textureSize(albedo_tex, 0);
         ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
@@ -1250,6 +1256,7 @@ cbuffer helper_vs_params : register(b0) {
     float4 vp; float4 camz; float4 camw;
     float4 retail_ambient; float4 retail_directional;
     float4 uv_shift;
+    float4 retail_raster;
 };
 struct vs_in {
     float3 pos    : POSITION;
@@ -1283,7 +1290,7 @@ vs_out main_vs(vs_in i) {
         T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
         scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
     }
-    float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
+    float scene_z_n  = ((retail_raster.x > 0.5 ? retail_raster.y : scene_z_wu) - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
     float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
@@ -1325,6 +1332,8 @@ struct ps_in {
     float retail_mode : TEXCOORD4;
 };
 float4 main_ps(ps_in input) : SV_Target0 {
+    // Original untextured Gouraud stores RGB5 as R5/G6-even/B5; no material or texture.
+    if (input.retail_mode > 3.5) return float4(floor(input.retail_color * 31.0 + 0.00001) * float3(1.0/31.0, 2.0/63.0, 1.0/31.0), 1.0);
     if (input.retail_mode > 0.5) {
         uint width, height; albedo_tex.GetDimensions(width, height);
         uint2 size = uint2(width, height);
@@ -2049,7 +2058,7 @@ void TRenderer::InitMeshPipeline()
     hsh.attrs[2].name = "uv";        hsh.attrs[2].sem_name = "TEXCOORD"; hsh.attrs[2].sem_index = 0;
     hsh.vs.source = kHelperMeshVs;
     hsh.vs.entry  = kShaderVsEntry;
-    hsh.vs.uniform_blocks[0].size = 10 * sizeof(float) * 4;
+    hsh.vs.uniform_blocks[0].size = 11 * sizeof(float) * 4;
     hsh.vs.uniform_blocks[0].uniforms[0].name = "w0";
     hsh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
     hsh.vs.uniform_blocks[0].uniforms[1].name = "w1";
@@ -2070,6 +2079,8 @@ void TRenderer::InitMeshPipeline()
     hsh.vs.uniform_blocks[0].uniforms[8].type = SG_UNIFORMTYPE_FLOAT4;
     hsh.vs.uniform_blocks[0].uniforms[9].name = "uv_shift";
     hsh.vs.uniform_blocks[0].uniforms[9].type = SG_UNIFORMTYPE_FLOAT4;
+    hsh.vs.uniform_blocks[0].uniforms[10].name = "retail_raster";
+    hsh.vs.uniform_blocks[0].uniforms[10].type = SG_UNIFORMTYPE_FLOAT4;
     hsh.fs.source = kHelperMeshFs;
     hsh.fs.entry  = kShaderFsEntry;
     hsh.fs.uniform_blocks[0].size = 8 * sizeof(float) * 4;
@@ -2128,6 +2139,16 @@ void TRenderer::InitMeshPipeline()
     hpip.label = "renderer.helper.front.pipeline";
     helper_mesh_front_pipeline = sg_make_pipeline(&hpip);
 
+    hpip.cull_mode = SG_CULLMODE_NONE;
+    hpip.label = "renderer.helper.source-alpha.pipeline";
+    helper_source_alpha_pipeline = sg_make_pipeline(&hpip);
+
+    // Original untextured Gouraud kernel writes Z regardless of scene ZWRITE.
+    hpip.depth.write_enabled = true;
+    hpip.label = "renderer.helper.untextured-software.pipeline";
+    helper_untextured_software_pipeline = sg_make_pipeline(&hpip);
+    hpip.depth.write_enabled = false;
+
     hpip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_ONE;
     hpip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE;
     hpip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
@@ -2174,6 +2195,8 @@ void TRenderer::ShutdownMeshPipeline()
         if (vb.id) { sg_destroy_buffer(vb); vb = {}; }
     }
     mesh_instance_vb_cursor = 0;
+    if (helper_untextured_software_pipeline.id) { sg_destroy_pipeline(helper_untextured_software_pipeline); helper_untextured_software_pipeline = {}; }
+    if (helper_source_alpha_pipeline.id) { sg_destroy_pipeline(helper_source_alpha_pipeline); helper_source_alpha_pipeline = {}; }
     if (helper_mesh_back_pipeline.id) { sg_destroy_pipeline(helper_mesh_back_pipeline); helper_mesh_back_pipeline = {}; }
     if (helper_mesh_front_pipeline.id) { sg_destroy_pipeline(helper_mesh_front_pipeline); helper_mesh_front_pipeline = {}; }
     if (helper_mesh_add_back_pipeline.id) { sg_destroy_pipeline(helper_mesh_add_back_pipeline); helper_mesh_add_back_pipeline = {}; }
@@ -3061,6 +3084,7 @@ void TRenderer::EmitTransparentTile(const STileSubmit& t)
 
 void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
 {
+    const bool source_alpha = s.retail_source_alpha && !s.additive_blend && UsesRetailSoftwareMeshLighting();
     sg_pipeline back_pipeline = s.additive_blend ? helper_mesh_add_back_pipeline : helper_mesh_back_pipeline;
     sg_pipeline front_pipeline = s.additive_blend ? helper_mesh_add_front_pipeline : helper_mesh_front_pipeline;
     if (s.retail_gold_no_depth && s.additive_blend && s.retail_lighting == 1)
@@ -3068,6 +3092,8 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
         back_pipeline = helper_gold_no_depth_back_pipeline;
         front_pipeline = helper_gold_no_depth_front_pipeline;
     }
+    if (source_alpha) back_pipeline = front_pipeline = s.retail_lighting == 4
+        ? helper_untextured_software_pipeline : helper_source_alpha_pipeline;
     if (!back_pipeline.id || !front_pipeline.id) return;
 
     const float view_dir[4] = { -0.5f, -0.5f, 1.0f, 1.0f };
@@ -3080,7 +3106,7 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     bind.fs_images[0] = TextureImage(s.texture_override != kInvalidTexture ? s.texture_override : me.albedo);
     sg_apply_bindings(&bind);
 
-    float vsu[40] = {};
+    float vsu[44] = {};
     int vo = 0;
     std::memcpy(&vsu[vo], s.world + 0,  sizeof(float) * 4); vo += 4;
     std::memcpy(&vsu[vo], s.world + 4,  sizeof(float) * 4); vo += 4;
@@ -3105,11 +3131,17 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     for (int c = 0; c < 3; ++c) vsu[vo++] = retail_mesh_ambient[c];
     vsu[vo++] = s.retail_normal_z_scale;
     for (int c = 0; c < 3; ++c) vsu[vo++] = retail_mesh_directional[c];
-    vsu[vo++] = float(s.retail_lighting == 3 && !UsesRetailSoftwareMeshLighting() ? 2 : s.retail_lighting);
+    vsu[vo++] = float(!UsesRetailSoftwareMeshLighting() && s.retail_lighting == 4 ? 0 : s.retail_lighting == 3 && !UsesRetailSoftwareMeshLighting() ? 2 : s.retail_lighting);
     vsu[vo++] = s.uv_offset[0];
     vsu[vo++] = s.uv_offset[1];
     vsu[vo++] = s.retail_software_projection ? 1.0f : 0.0f;
     vsu[vo++] = s.retail_camera_z;
+    vsu[vo++] = source_alpha && s.retail_lighting == 4 && s.retail_flat_depth ? 1.0f : 0.0f;
+    const float depth_base = s.retail_software_projection
+        ? 2750.0f + 0.8748177289962769f * (recon.center_wx + recon.center_wy) + 0.7142857909202576f * s.retail_camera_z
+        : recon.kcam_forward + 0.8660254037844386f * (recon.center_wx + recon.center_wy);
+    vsu[vo++] = std::floor(depth_base + s.retail_flat_depth_offset);
+    vsu[vo++] = 0.0f; vsu[vo++] = 0.0f;
     const sg_range vsr = { vsu, sizeof(vsu) };
     sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &vsr);
 
@@ -3126,13 +3158,13 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     const sg_range fsr = { fsu, sizeof(fsu) };
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fsr);
 
-    sg_draw(0, me.num_indices, 1);
+    sg_draw(s.index_offset, s.index_count > 0 ? s.index_count : me.num_indices, 1);
     // Existing front pipeline uses BACK cull with default CW winding: it keeps
     // clockwise NDC / positive screen-down source faces. Defaults draw both.
-    if (s.retail_positive_face_cull) return;
+    if (source_alpha || s.retail_positive_face_cull) return;
     sg_apply_pipeline(front_pipeline);
     sg_apply_bindings(&bind);
-    sg_draw(0, me.num_indices, 1);
+    sg_draw(s.index_offset, s.index_count > 0 ? s.index_count : me.num_indices, 1);
 }
 
 sg_buffer TRenderer::UploadTranslucentMeshInstances()

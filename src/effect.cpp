@@ -7219,833 +7219,119 @@ void TIceEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debug_mode*
     // No-op (paired with the nullptr SpawnForTest above).
 }
 
-// --- I21 TIceBoltEffect bespoke -----------------------------------------
-//
-// FAITHFUL DIRECT PORT of TIceBoltAnimator (snapshot effect_old.cpp:
-// 8015-8688). Stationary freeze beam from caster outward — NOT a flying
-// missile (TIceBoltEffect base is TEffect; the TMissileEffect calls in
-// the snapshot Initialize/Pulse are commented out, retail-confirmed via
-// cls_0x5aaf28 inheritance, forensics §6.0).
-//
-// Engine adaptations:
-//   - Render path swaps RenderObject(obj) for SubmitFxBillboard. The
-//     7 sub-objects of icebolt.I3D collapse to billboard quads in the
-//     bespoke first-pass — the cylinder stretch / spiral twist / ring
-//     slide become spatial billboard placement, faithful in count and
-//     position but not in mesh geometry. This is the "compiles + boots
-//     + renders something" first pass per the brief; a future pass can
-//     swap the cylinders to SubmitHelperMesh (cf. F07 ring) for proper
-//     mesh draws once the cylinder UVs are extracted.
-//   - 24 Hz sim-tick gate (family pattern blood/spark/fireball/iced)
-//     replaces the snapshot's per-render-frame integration. Per-tick
-//     math (FROST_STEP=0.03, SPIRAL_STEP=1.0, etc.) runs once per
-//     accumulated 1/24 s of wall-clock time.
-//   - Length march (snapshot :8152-8233) is replaced with a fixed
-//     harness `length_` since --test=vfx has no caster/targets/MapPane.
-//   - Gameplay beats (DamageCharactersInRange @beat10,
-//     "Iced"-posting @beat20) are GUARDED OUT for the standalone
-//     harness (no spell/invoker/MapPane). They're preserved as comments
-//     citing the snapshot lines so the in-game wire-up is one paste away.
-//   - SetSubSpell(3) forced (snapshot :8049), all visual tiers active.
+// --- IceBolt: original stationary beam, animator Pulse4eba00/Render4ebea0 ---
 
-namespace {
+TIceBoltEffect_Bespoke::~TIceBoltEffect_Bespoke()
+{
+    if(Renderer)for(const auto& part:parts_)if(part.mesh)Renderer->ReleaseMeshAssetRef(part.mesh);
+}
 
-constexpr const char* kIceBoltImageryPath = "Magic\\icebolt.I3D";
-
-// Snapshot constants (forensics §3). Same names + values as
-// effect_old.cpp:7972-7982 — line-for-line preserved.
-constexpr int32_t kIceBoltGrowDuration     = 10;        // GROW_DURATION
-constexpr float   kIceBoltSphereStep       = 0.5f;      // SPHERE_STEP
-constexpr float   kIceBoltRingSpeed        = 20.0f;     // RING_SPEED
-constexpr float   kIceBoltSpiralStep       = 1.0f;      // SPIRAL_STEP
-constexpr float   kIceBoltSpiralScaleStep  = 0.1f;      // SPIRAL_SCALE_STEP
-constexpr float   kIceBoltFrostInitSize    = 0.5f;      // FROST_INIT_SIZE
-constexpr float   kIceBoltFrostStep        = 0.03f;     // FROST_STEP
-
-// Harness: --test=vfx has no caster facing / no target march. Beam runs
-// along local −y for a fixed length (snapshot length = ticks*10, ≤1000).
-// 500 wu sits between snapshot's plausible 300-800 sample range.
-constexpr float   kIceBoltHarnessLength    = 500.0f;
-constexpr int32_t kIceBoltHarnessAngle     = 0;         // byte facing (0..255); +Y
-
-// 7 sub-objects of icebolt.I3D (forensics §4). Names match the .I3D
-// file order; the snapshot animator addresses them via GetObject(idx).
-constexpr int32_t kIceBoltSubObjCount      = 7;
-constexpr int32_t kIceBoltCylBase          = 0;   // cylinder04 (and 01/02/03 at 1..3)
-constexpr int32_t kIceBoltBox01            = 4;   // glow sphere / frost / snow billboard
-constexpr int32_t kIceBoltCylRing          = 5;   // cylinder05 — rings
-constexpr int32_t kIceBoltCylSpiral        = 6;   // cylinder06 — spirals
-
-// In-plane billboard size (snapshot scales sub-object meshes; here we
-// approximate as a billboard quad). Tuned against the asset's bbox.
-constexpr float   kIceBoltCylSizeWu        = 24.0f;     // core beam quad
-constexpr float   kIceBoltGlowSizeWu       = 64.0f;     // end glow sphere — box01 native ~64wu (bbox)
-// Frost / snow billboard scale base: box01 is a flat quad ~64wu wide in
-// the I3D (matches the cyl04..03 z=[0..64] convention). Snapshot
-// `obj->scl = s[i]` (frost, :8612) and `sz[i]` (snow, :8639) multiply
-// the mesh-native size by per-particle scale. frost s[i] ∈ [0, 0.5];
-// snow sz[i] ∈ [0.03, 0.30]. Using 64wu × scale matches retail; using
-// 12wu (the prior iter4 value) gave particles 5× too small to read.
-constexpr float   kIceBoltFrostSizeWu      = 64.0f;     // frost particle (mesh-native)
-constexpr float   kIceBoltSnowSizeWu       = 64.0f;     // snow particle (mesh-native)
-constexpr float   kIceBoltRingSizeWu       = 32.0f;     // ring quad
-constexpr float   kIceBoltSpiralSizeWu     = 18.0f;     // spiral quad
-
-}   // namespace
+bool TIceBoltEffect_Bespoke::BindMeshes()
+{
+    auto* image=dynamic_cast<T3DImagery*>(imagery);
+    if(!Renderer||!image||image->NumObjects()!=7||image->NumTextures()!=3)return false;
+    constexpr int slots[7]={0,0,0,0,1,2,3};
+    constexpr int vertex_counts[7]={24,24,24,24,4,26,26};
+    constexpr int index_counts[7]={72,72,72,72,6,72,72};
+    for(int i=0;i<7;++i) {
+        auto& part=parts_[i];if(part.mesh)continue;
+        std::vector<SMeshVertex> vertices;std::vector<uint16_t> indices;
+        if(!ExtractSubMeshTextureSlot(image,i,slots[i],vertices,indices)||
+           int(vertices.size())!=vertex_counts[i]||int(indices.size())!=index_counts[i])return false;
+        S3DObj object{};image->GetObject(i,&object);image->GetMaterial(object.material,&part.material);
+        TTextureHandle texture=Renderer->WhiteTextureHandle();part.lighting=4;
+        if(slots[i]) {
+            S3DTex tex{};image->GetTexture(slots[i]-1,&tex);
+            if(tex.htexture==kInvalidTexture||tex.numframes!=1||RetailMeshTextureLighting(tex.desc.pixelFormat)!=3)return false;
+            texture=tex.htexture;part.lighting=3;
+        }
+        const uint64_t key=0x4943454200000000ull^(uint64_t(uint32_t(image->ImageryId()))<<16)^uint64_t(i);
+        part.mesh=Renderer->RegisterMeshAsset(key,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()),texture);
+        if(!part.mesh)return false;Renderer->AddMeshAssetRef(part.mesh);
+        if(part.lighting==4){part.vertices=std::move(vertices);part.indices=std::move(indices);}
+    }
+    return true;
+}
 
 TIceBoltEffect_Bespoke* TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    // --- Load Magic\icebolt.I3D (forensics §4 — byte-identical between
-    // snapshot and shipped retail, MD5 confirmed).
-    const int32_t img_id = TObjectImagery::FindImagery(kIceBoltImageryPath);
-    if (img_id < 0)
-    {
-        log_error("[icebolt] SpawnForTest: FindImagery('%s') failed",
-                  kIceBoltImageryPath);
-        return nullptr;
-    }
-    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
-    if (!base)
-    {
-        log_error("[icebolt] SpawnForTest: LoadImagery(id=%d '%s') failed",
-                  img_id, kIceBoltImageryPath);
-        return nullptr;
-    }
-    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
-    if (!img3d)
-    {
-        log_error("[icebolt] SpawnForTest: imagery for '%s' is not a T3DImagery",
-                  kIceBoltImageryPath);
-        TObjectImagery::FreeImagery(base);
-        return nullptr;
-    }
-
-    auto* bolt = new TIceBoltEffect_Bespoke(base);
-    // Mirror TIceBoltAnimator::Initialize :8022-8026 — z-lift +50 wu
-    // (caster pos → hand height for the beam origin).
-    S3DPoint anchored = origin;
-    anchored.z += 50;
-    bolt->ForcePos(anchored);
-    bolt->SetMapIndex(MapPane.MakeIndex());
-    bolt->ActivateComponents();
-
-    // Lazy-mesh-init poke (B01 / F07 / X22 pattern). NumObjects triggers
-    // the mesh load that fills in textures.
-    const int32_t num_obj = img3d->NumObjects();
-    const int32_t num_tex = img3d->NumTextures();
-    if (num_obj < kIceBoltSubObjCount || num_tex <= 0)
-    {
-        log_error("[icebolt] SpawnForTest: imagery underspec'd "
-                  "(objects=%d, textures=%d) — expected >=%d sub-objects",
-                  num_obj, num_tex, kIceBoltSubObjCount);
-        delete bolt;
-        return nullptr;
-    }
-
-    // Resolve each of the 7 sub-objects to (texture, UV sub-rect).
-    // Forensics §4: all 7 share the .I3D's inline texture pool. Index 4
-    // (box01) carries the glow sphere / frost / snow billboard; it's the
-    // critical one — if it fails to resolve the entire particle cloud
-    // draws nothing.
-    for (int32_t i = 0; i < kIceBoltSubObjCount; ++i)
-    {
-        const int32_t tex_slot = SubObjTextureSlot(img3d, i);
-        const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
-        S3DTex tex = {};
-        img3d->GetTexture(slot, &tex);
-        bolt->subobj_tex_[i] = tex.htexture;
-        ResolveSubObjUv(img3d, i, bolt->subobj_uv_[i]);
-    }
-    if (bolt->subobj_tex_[kIceBoltBox01] == kInvalidTexture)
-    {
-        log_error("[icebolt] SpawnForTest: box01 (sub-obj 4) texture "
-                  "unresolved — glow sphere / frost / snow particles "
-                  "will draw nothing");
-    }
-
-    // --- Register cyl04/01/02/03 + ring + spiral as real I3D meshes for
-    // the SubmitHelperMesh draw pass (snapshot effect_old.cpp:8475-8504
-    // calls RenderObject(obj) — that's a mesh draw, not a billboard).
-    //
-    // Cylinder sub-objects in icebolt.I3D have all-zero vertex UVs (the
-    // cylinder body is a single-color SOLID-FILL surface — the prior iter3
-    // diagnostic confirmed UV=(0,0,0,0) for sub-objs 0..3). Retail reads
-    // material colour for these; we mirror that by binding the renderer's
-    // white texture and routing the I3D material's diffuse / emissive
-    // through SHelperMeshSubmit (helper-mesh shader: base = tex.rgb *
-    // diffuse, so white * material.diffuse → pure material colour).
-    //
-    // Pattern follows F07 fireball ring (effect.cpp:7261-7302) and M09b
-    // teleporter loader (effect.cpp:5862-5945).
-    auto load_material = [img3d, num_tex](int32_t objnum,
-                                          float diff_out[4],
-                                          float emit_out[4])
-    {
-        diff_out[0] = diff_out[1] = diff_out[2] = diff_out[3] = 1.0f;
-        emit_out[0] = emit_out[1] = emit_out[2] = 0.0f;
-        emit_out[3] = 1.0f;
-        if (!img3d || objnum < 0) return;
-        S3DObj o = {};
-        img3d->GetObject(objnum, &o);
-        if (o.material < 0 || o.material >= img3d->NumMaterials()) return;
-        S3DMat m = {};
-        img3d->GetMaterial(o.material, &m);
-        diff_out[0] = m.matdesc.diffuse.r;
-        diff_out[1] = m.matdesc.diffuse.g;
-        diff_out[2] = m.matdesc.diffuse.b;
-        diff_out[3] = m.matdesc.diffuse.a > 0.001f ? m.matdesc.diffuse.a : 1.0f;
-        emit_out[0] = m.matdesc.emissive.r;
-        emit_out[1] = m.matdesc.emissive.g;
-        emit_out[2] = m.matdesc.emissive.b;
-        emit_out[3] = 1.0f;
-        (void)num_tex;
-    };
-    auto register_submesh = [img3d, num_tex](int32_t objnum) -> MeshHandle
-    {
-        if (!img3d || objnum < 0) return 0;
-        const int32_t texslots = num_tex + 1;  // +1 for slot 0 (untextured)
-        for (int32_t texslot = 0; texslot < texslots; ++texslot)
-        {
-            std::vector<SMeshVertex> verts;
-            std::vector<uint16_t>    indices;
-            if (!ExtractSubMeshTextureSlot(img3d, objnum, texslot, verts, indices))
-                continue;
-            if (verts.empty() || indices.empty()) continue;
-            // Log the mesh's native bounding box so we can sanity-check
-            // the snapshot's scale divisors (cyl: scl.z = length/64
-            // implies mesh-Z spans ~64 wu natively; cylscale/2 on x/y
-            // implies mesh radius is in the cylscale-unit frame).
-            float minx = verts[0].pos[0], maxx = minx;
-            float miny = verts[0].pos[1], maxy = miny;
-            float minz = verts[0].pos[2], maxz = minz;
-            for (const auto& v : verts)
-            {
-                minx = std::fmin(minx, v.pos[0]); maxx = std::fmax(maxx, v.pos[0]);
-                miny = std::fmin(miny, v.pos[1]); maxy = std::fmax(maxy, v.pos[1]);
-                minz = std::fmin(minz, v.pos[2]); maxz = std::fmax(maxz, v.pos[2]);
-            }
-            log_info("[icebolt]   sub-obj %d texslot %d bbox: "
-                     "x=[%.1f..%.1f] y=[%.1f..%.1f] z=[%.1f..%.1f] verts=%zu",
-                     objnum, texslot, minx, maxx, miny, maxy, minz, maxz,
-                     verts.size());
-            // Cyl bodies have degenerate UVs and sample (0,0) which is
-            // typically chroma-key black → transparent. Binding the
-            // renderer's white texture keeps `base = white * diffuse`
-            // = material colour, with no texture sampling for the cyl
-            // surfaces. For sub-objs whose verts ARE textured (rings /
-            // spirals carry full UVs per iter3 diag), the authored
-            // texture wins via the standard texslot binding.
-            TTextureHandle albedo = Renderer->WhiteTextureHandle();
-            if (texslot > 0 && texslot - 1 < num_tex)
-            {
-                S3DTex t = {};
-                img3d->GetTexture(texslot - 1, &t);
-                if (t.htexture != kInvalidTexture) albedo = t.htexture;
-            }
-            return Renderer->RegisterMesh(
-                verts.data(), int32_t(verts.size()),
-                indices.data(), int32_t(indices.size()),
-                albedo);
-        }
-        return 0;
-    };
-    for (int32_t cyl = 0; cyl < 4; ++cyl)
-    {
-        bolt->cyl_meshes_[cyl] = register_submesh(cyl);
-        load_material(cyl, bolt->cyl_diffuse_[cyl], bolt->cyl_emissive_[cyl]);
-    }
-    bolt->ring_mesh_   = register_submesh(kIceBoltCylRing);
-    load_material(kIceBoltCylRing, bolt->ring_diffuse_, bolt->ring_emissive_);
-    bolt->spiral_mesh_ = register_submesh(kIceBoltCylSpiral);
-    load_material(kIceBoltCylSpiral, bolt->spiral_diffuse_, bolt->spiral_emissive_);
-    log_info("[icebolt] meshes: cyl04=%u cyl01=%u cyl02=%u cyl03=%u "
-             "ring(cyl05)=%u spiral(cyl06)=%u",
-             bolt->cyl_meshes_[0], bolt->cyl_meshes_[1],
-             bolt->cyl_meshes_[2], bolt->cyl_meshes_[3],
-             bolt->ring_mesh_, bolt->spiral_mesh_);
-    log_info("[icebolt] cyl04 material diff=(%.2f,%.2f,%.2f,%.2f) "
-             "emit=(%.2f,%.2f,%.2f); ring diff=(%.2f,%.2f,%.2f) "
-             "spiral diff=(%.2f,%.2f,%.2f)",
-             bolt->cyl_diffuse_[0][0], bolt->cyl_diffuse_[0][1],
-             bolt->cyl_diffuse_[0][2], bolt->cyl_diffuse_[0][3],
-             bolt->cyl_emissive_[0][0], bolt->cyl_emissive_[0][1],
-             bolt->cyl_emissive_[0][2],
-             bolt->ring_diffuse_[0], bolt->ring_diffuse_[1],
-             bolt->ring_diffuse_[2],
-             bolt->spiral_diffuse_[0], bolt->spiral_diffuse_[1],
-             bolt->spiral_diffuse_[2]);
-
-    // Port of TIceBoltAnimator::Initialize (effect_old.cpp:8015-8135).
-    // Same variable names, same per-line assignment, same constants.
-    bolt->frameon_       = 0;
-    bolt->spherescale_[0] = kIceBoltSphereStep;          // :8029
-    bolt->spherescale_[1] = 1.0f;                         // :8030
-    bolt->cylscale_      = kIceBoltSphereStep;            // :8031
-    bolt->ringout_       = 0.0f;                          // :8032
-    bolt->spiralang_     = 0.0f;                          // :8033
-    bolt->spiralscale_   = kIceBoltSpiralScaleStep;       // :8034
-    bolt->cy_            = 0.0f;                          // :8129
-    bolt->angle_         = kIceBoltHarnessAngle;          // :8047 GetAngle — harness fixed
-    bolt->subspell_      = 3;                              // :8049 SetSubSpell(3) force
-    bolt->length_        = kIceBoltHarnessLength;         // length march replaced
-
-    // Frost particle seed (snapshot :8035-8045). Per-particle p[i],v[i]
-    // jitter ±10 / ±3 wu, s[i]=FROST_INIT_SIZE, staggered delay
-    // t[i] = random(0, FROST_INIT_SIZE*2/FROST_STEP) = random(0,33).
-    for (int32_t i = 0; i < kIceBoltMaxFrost; ++i)
-    {
-        SIceBoltFrostParticle& f = bolt->frost_[i];
-        f.pos.X = float(random(-10, 10));    // :8037
-        f.pos.Y = float(random(-10, 10));    // :8038
-        f.pos.Z = float(random(-10, 10));    // :8039
-        f.vel.X = float(random(-3, 3));      // :8040
-        f.vel.Y = float(random(-3, 3));      // :8041
-        f.vel.Z = float(random(-3, 3));      // :8042
-        f.s     = kIceBoltFrostInitSize;     // :8043
-        f.t     = float(random(0,
-            int32_t(kIceBoltFrostInitSize * 2.0f / kIceBoltFrostStep))); // :8044
-    }
-
-    // Snow particle seed (snapshot :8119-8133, subspell>2 branch — always
-    // true here since subspell forced to 3 at :8049).
-    for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)
-    {
-        SIceBoltSnowParticle& sn = bolt->snow_[i];
-        sn.h  = float(random(-50, 50));                                       // :8123
-        sn.th = float(random(0, 359)) * float(TORADIAN);                      // :8124
-        sn.rs = float(random(5, 15)) / 100.0f;                                // :8125
-        sn.sz = float(random(int32_t(kIceBoltFrostStep * 100.0f),
-                            int32_t(kIceBoltFrostStep
-                                    * float(kIceBoltGrowDuration) * 100.0f))) / 100.0f; // :8126
-        sn.r  = float(random(25, 50));                                        // :8127
-    }
-
-    log_info("[icebolt] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
-             "length=%.0f angle=%d subspell=%d subobj_tex={%u,%u,%u,%u,%u,%u,%u}",
-             kIceBoltImageryPath, bolt->GetMapIndex(),
-             anchored.x, anchored.y, anchored.z,
-             bolt->length_, bolt->angle_, bolt->subspell_,
-             bolt->subobj_tex_[0], bolt->subobj_tex_[1], bolt->subobj_tex_[2],
-             bolt->subobj_tex_[3], bolt->subobj_tex_[4], bolt->subobj_tex_[5],
-             bolt->subobj_tex_[6]);
-    for (int32_t i = 0; i < kIceBoltSubObjCount; ++i)
-    {
-        log_info("[icebolt] sub-obj %d uv=(%.3f,%.3f,%.3f,%.3f) area=%.4f",
-                 i, bolt->subobj_uv_[i][0], bolt->subobj_uv_[i][1],
-                 bolt->subobj_uv_[i][2], bolt->subobj_uv_[i][3],
-                 bolt->subobj_uv_[i][2] * bolt->subobj_uv_[i][3]);
-    }
+    auto* image=LoadWaterImagery("Magic\\icebolt.I3D","icebolt");if(!image)return nullptr;
+    auto* bolt=new TIceBoltEffect_Bespoke(image);
+    S3DPoint anchor=origin;anchor.z+=50;bolt->ForcePos(anchor);
+    bolt->SetMapIndex(MapPane.MakeIndex());bolt->ActivateComponents();
+    bolt->icebolt_core::State::Initialize([](int low,int high){return random(low,high);});
+    if(!bolt->BindMeshes()) {delete bolt;return nullptr;}
+    log_info("[icebolt] original stationary beam source=%d,%d,%d length=500 face=0",anchor.x,anchor.y,anchor.z);
     return bolt;
 }
 
-void TIceBoltEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+bool TIceBoltEffect_Bespoke::SetBeamEndpoints(const S3DPoint& source,const S3DPoint& destination)
 {
-    if (!Renderer)
-        return;
+    if(frameon_!=0)return false;
+    const double dx=double(destination.x)-source.x,dy=double(destination.y)-source.y;
+    const double distance=std::sqrt(dx*dx+dy*dy);if(distance<=0)return false;
+    // Explicit preview world boundary at the requested planar endpoint. Original
+    // Initialize tests one ten-unit step at a time and caps the march at50 steps.
+    angle_=ConvertToFacing(source,destination);
+    length_=icebolt_core::MarchLength(source.x,source.y,uint8_t(angle_),[&](int32_t x,int32_t y) {
+        const double qx=double(x)-source.x,qy=double(y)-source.y;
+        return qx*qx+qy*qy>=distance*distance;
+    });
+    FaceOnly(angle_);ForcePos(source);return true;
+}
 
-    // --- Update: port of TIceBoltAnimator::Animate (effect_old.cpp:
-    // 8144-8455), framerate-independent via the 24 Hz sim-tick
-    // accumulator. Each accumulated tick runs the original per-tick
-    // integration exactly once.
-    if (alive_)
-    {
-        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-        while (sim_accum_ms_ >= double(kIceBoltSimTickMs))
-        {
-            sim_accum_ms_ -= double(kIceBoltSimTickMs);
+void TIceBoltEffect_Bespoke::Pulse()
+{
+    if(alive_) {icebolt_core::State::Pulse([](int low,int high){return random(low,high);});alive_=frameon_<120;}
+    SetCommandDone(false);if(!alive_)KillThisEffect();TEffect::Pulse();
+}
 
-            // Snapshot :8152-8232 — length march. Harness skips
-            // (no caster/targets/MapPane); length_ pinned at spawn.
-
-            frameon_++;  // :8234
-
-            // Snow tick (snapshot :8236-8273). subspell>2 branch always
-            // true (force-3 at :8049).
-            if (subspell_ > 2)
-            {
-                for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)   // :8238
-                {
-                    SIceBoltSnowParticle& sn = snow_[i];
-                    sn.th += sn.rs;                              // :8240
-                    if (sn.th > float(M_2PI))
-                        sn.th -= float(M_2PI);                   // :8242
-                    sn.rs += 0.01f;                              // :8243
-                }
-                if (frameon_ > kIceBoltGrowDuration * 2)         // :8245
-                {
-                    cy_ += length_ / float(kIceBoltGrowDuration * 2);  // :8247
-                    if (cy_ >= length_)
-                        cy_ = length_;                           // :8249
-                }
-                if (frameon_ > kIceBoltGrowDuration * 5)         // :8251
-                {
-                    for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)
-                    {
-                        SIceBoltSnowParticle& sn = snow_[i];
-                        sn.h += 5.0f;                            // :8266
-                        sn.r -= 1.0f;                            // :8267
-                        if (sn.r < 1.0f)
-                            sn.r = 1.0f;                         // :8269
-                        sn.rs += 0.05f;                          // :8270
-                    }
-                }
-            }
-
-            // Frost tick (snapshot :8331-8355).
-            for (int32_t i = 0; i < kIceBoltMaxFrost; ++i)
-            {
-                SIceBoltFrostParticle& f = frost_[i];
-                f.t -= 1.0f;                                     // :8333
-                if (f.t > 0)
-                    continue;                                    // :8334
-                f.t = 0;                                          // :8337
-                f.pos.X += f.vel.X;                              // :8338
-                f.pos.Y += f.vel.Y;                              // :8339
-                f.pos.Z += f.vel.Z;                              // :8340
-                f.s -= kIceBoltFrostStep;                        // :8341
-                if (f.s < 0)                                      // :8342
-                {
-                    // Respawn (:8344-8353).
-                    f.pos.X = float(random(-10, 10));
-                    f.pos.Y = float(random(-10, 10));
-                    f.pos.Z = float(random(-10, 10));
-                    f.vel.X = float(random(-3, 3));
-                    f.vel.Y = float(random(-3, 3));
-                    f.vel.Z = float(random(-3, 3));
-                    f.s     = kIceBoltFrostInitSize;
-                    f.t     = float(random(0,
-                        int32_t(kIceBoltFrostInitSize / kIceBoltFrostStep)));
-                    if (frameon_ > kIceBoltGrowDuration * 3)
-                        f.t = 100.0f;                            // :8353
-                }
-            }
-
-            // Beam-body transform envelope (snapshot :8356-8392).
-            if (frameon_ < kIceBoltGrowDuration)                 // :8356
-            {
-                spherescale_[0] += kIceBoltSphereStep;
-                spherescale_[1] += kIceBoltSphereStep * 2.0f;
-                cylscale_       += kIceBoltSphereStep;
-                spiralscale_    += kIceBoltSpiralScaleStep;
-                spiralang_      += kIceBoltSpiralStep;
-                if (spiralang_ > float(M_2PI))
-                    spiralang_ -= float(M_2PI);
-            }
-            if (frameon_ >= kIceBoltGrowDuration
-                && frameon_ < kIceBoltGrowDuration * 2)          // :8366
-            {
-                cylscale_       -= kIceBoltSphereStep * 0.5f;
-                spherescale_[0] += kIceBoltSphereStep;
-                spherescale_[1] += kIceBoltSphereStep;
-                spiralang_      += kIceBoltSpiralStep;
-                if (spiralang_ > float(M_2PI))
-                    spiralang_ -= float(M_2PI);
-            }
-            if (frameon_ >= kIceBoltGrowDuration * 2
-                && frameon_ < kIceBoltGrowDuration * 3)          // :8375
-            {
-                cylscale_       -= kIceBoltSphereStep * 0.5f;
-                spherescale_[0] -= kIceBoltSphereStep;
-                spherescale_[1] -= kIceBoltSphereStep;
-                spiralang_      += kIceBoltSpiralStep;
-                if (spiralang_ > float(M_2PI))
-                    spiralang_ -= float(M_2PI);
-            }
-            if (frameon_ >= kIceBoltGrowDuration * 3
-                && frameon_ < kIceBoltGrowDuration * 4)          // :8384
-            {
-                spherescale_[0] -= kIceBoltSphereStep;
-                spherescale_[1] -= kIceBoltSphereStep * 2.0f;
-                spiralscale_    -= kIceBoltSpiralScaleStep;
-            }
-            ringout_ += kIceBoltRingSpeed;                       // :8390
-            if (ringout_ > length_)
-                ringout_ -= length_;                             // :8392
-
-            // Gameplay beats — guarded out in harness (no spell/invoker/
-            // MapPane). Snapshot :8393-8454 references for the gameflow
-            // wire-up:
-            //   frameon == GD       → DamageCharactersInRange(... DAMAGE_ICE)
-            //   frameon == 2*GD     → spawn "Iced" (I22) on each enemy
-            //   frameon == 12*GD    → KillThisEffect()
-            if (frameon_ >= kIceBoltGrowDuration * 12)           // :8451
-            {
-                alive_ = false;
-                break;
-            }
-        }
-    }
-
-    if (!alive_)
-        return;
-
-    // --- Render: 1:1 port of TIceBoltAnimator::Render (effect_old.cpp
-    // :8464-8688). The mesh draws (cyl04/01/02/03 + cylinder05 ring +
-    // cylinder06 spiral) live in SubmitWorldMeshes_BESPOKE — they need
-    // to be submitted from the harness's `submit_world` callback (after
-    // BeginTilePass clears the transparent_world_queue, mirroring F07
-    // fireball's SubmitWorldRing split). This method handles the box01
-    // billboard pass (end-glow / frost / snow) which goes through
-    // SubmitFxBillboard and runs from the regular `submit` callback.
-    //
-    // Per-sub-object call mapping (1:1 with snapshot effect_old.cpp):
-    //   :8475-8504  RenderObject(cyl04/01/02/03)  → SubmitHelperMesh   (SubmitWorldMeshes_BESPOKE)
-    //   :8510-8545  RenderObject(cyl06 spiral)    → SubmitHelperMesh   (SubmitWorldMeshes_BESPOKE)
-    //   :8547-8570  RenderObject(cyl05 ring)      → SubmitHelperMesh   (SubmitWorldMeshes_BESPOKE)
-    //   :8573-8600  RenderObject(box01 glow)      → SubmitFxBillboard  (below)
-    //   :8602-8628  RenderObject(box01 frost)     → SubmitFxBillboard  (below)
-    //   :8632-8657  RenderObject(box01 snow)      → SubmitFxBillboard  (below)
-    //
-    // Blend = Alpha (snapshot SetBlendState :8467, MODULATE,
-    // SRC_ALPHA/INV_SRC_ALPHA — NOT additive — forensics §7).
-
-    const S3DPoint& base_pos = Pos();
-    // Beam facing yaw. Snapshot :8155: (angle*360/256)*TORADIAN = the
-    // equivalent of byte-angle * (2π/256). The marching length-finder
-    // steps (10·sinθ, -10·cosθ) → at angle=0 the beam runs world -Y.
-    const float face_rad =
-        float(angle_) * (2.0f * float(M_PI)) / 256.0f;
-    const float dx = std::sin(face_rad);    // beam +X step direction
-    const float dy = -std::cos(face_rad);   // beam −Y step direction
-
-    // --- Box01 billboard template (used by the glow / frost / snow
-    // blocks below). Snapshot draws each via RenderObject(box01) with a
-    // per-instance screen-facing matrix (RotateX(-π/2); RotateX(-π/6);
-    // RotateZ(-π/4); RotateZ(-(face*360/256)*TORADIAN)) — that's the
-    // camera-facing convention. SubmitFxBillboard with ScreenAligned
-    // orientation is the exact-equivalent primitive (box01 IS a flat
-    // quad-mesh in the I3D — a screen-aligned billboard is the same
-    // geometry plus the same screen-facing rotation).
-    SBillboardDrawItem item = {};
-    item.color_rgba[0] = 1.0f;
-    item.color_rgba[1] = 1.0f;
-    item.color_rgba[2] = 1.0f;
-    item.color_rgba[3] = 1.0f;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;
-    item.debug_mode      = debug_mode;
-
-    // --- End glow spheres (snapshot :8573-8600). 2x box01, one at
-    // y=0 (caster end), one at y=−length (target end). subspell>0.
-    if (subspell_ > 0
-        && subobj_tex_[kIceBoltBox01] != kInvalidTexture)
-    {
-        for (int32_t i = 0; i < 2; ++i)
-        {
-            const float ypos = -length_ * float(i);   // :8595
-            item.world_pos[0] = float(base_pos.x) + dx * (-ypos);
-            item.world_pos[1] = float(base_pos.y) + dy * (-ypos);
-            item.world_pos[2] = float(base_pos.z);
-            item.size_wu[0] = item.size_wu[1] =
-                kIceBoltGlowSizeWu * (spherescale_[i] * 0.5f);
-            item.key.texture = subobj_tex_[kIceBoltBox01];
-            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
-                        sizeof(item.uv_rect));
-            Renderer->SubmitFxBillboard(item);
-        }
-    }
-
-    // --- Frost particles (snapshot :8602-8628). 50 box01 quads at
-    // p[i] offset −length in y (clustered at target end).
-    if (subobj_tex_[kIceBoltBox01] != kInvalidTexture)
-    {
-        for (int32_t i = 0; i < kIceBoltMaxFrost; ++i)
-        {
-            const SIceBoltFrostParticle& f = frost_[i];
-            if (f.t > 0)
-                continue;                                        // :8605
-            // Snapshot :8622-8624: pos = (p.x, p.y − length, p.z).
-            const float lx = f.pos.X;
-            const float ly = f.pos.Y - length_;
-            const float lz = f.pos.Z;
-            // Rotate local (lx,ly) into world by beam facing (dx,dy).
-            item.world_pos[0] =
-                float(base_pos.x) + dx * (-ly) + lx;
-            item.world_pos[1] =
-                float(base_pos.y) + dy * (-ly);
-            item.world_pos[2] = float(base_pos.z) + lz;
-            item.size_wu[0] = item.size_wu[1] =
-                kIceBoltFrostSizeWu * f.s;
-            item.key.texture = subobj_tex_[kIceBoltBox01];
-            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
-                        sizeof(item.uv_rect));
-            Renderer->SubmitFxBillboard(item);
-        }
-    }
-
-    // --- Snow flurry (snapshot :8630-8657). subspell>2; orbits the
-    // beam axis, sweeps along beam after beat 2*GD, blows up after 5*GD.
-    if (subspell_ > 2
-        && subobj_tex_[kIceBoltBox01] != kInvalidTexture)
-    {
-        for (int32_t i = 0; i < kIceBoltMaxSnow; ++i)
-        {
-            const SIceBoltSnowParticle& sn = snow_[i];
-            // Snapshot :8649-8653: pos = (r·cos th, r·sin th − cy?, h).
-            const float lx = sn.r * std::cos(sn.th);
-            float       ly = sn.r * std::sin(sn.th);
-            if (frameon_ > kIceBoltGrowDuration * 2)
-                ly -= cy_;                                       // :8652
-            const float lz = sn.h;
-            item.world_pos[0] =
-                float(base_pos.x) + dx * (-ly) + lx;
-            item.world_pos[1] =
-                float(base_pos.y) + dy * (-ly);
-            item.world_pos[2] = float(base_pos.z) + lz;
-            item.size_wu[0] = item.size_wu[1] =
-                kIceBoltSnowSizeWu * sn.sz;
-            item.key.texture = subobj_tex_[kIceBoltBox01];
-            std::memcpy(item.uv_rect, subobj_uv_[kIceBoltBox01],
-                        sizeof(item.uv_rect));
-            Renderer->SubmitFxBillboard(item);
-        }
+void TIceBoltEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode)
+{
+    constexpr double step=1.0/24.0;sim_accum_+=TTime::DeltaTime();
+    while(alive_&&sim_accum_+1e-9>=step) {
+        sim_accum_-=step;icebolt_core::State::Pulse([](int low,int high){return random(low,high);});alive_=frameon_<120;
     }
 }
 
-// --- I21 SubmitWorldMeshes_BESPOKE -------------------------------------
-//
-// Cylinder/ring/spiral mesh submissions for IceBolt. Called from the
-// harness `submit_world` callback (vfxtest.cpp), which fires AFTER
-// TRenderer::BeginTilePass clears the transparent_world_queue but BEFORE
-// EndTilePass drains it (see vfxtest.cpp:1515-1529 + M09_FORENSICS §M09b
-// SubmitHelperMesh pipeline). Mirrors F07 fireball's SubmitWorldRing
-// pattern (effect.cpp:7542+).
-//
-// 1:1 port of TIceBoltAnimator::Render mesh blocks (effect_old.cpp:
-// 8472-8571). Each `RenderObject(obj)` → `SubmitHelperMesh(...)` with the
-// SAME matrix composition the snapshot builds via D3DMATRIXScale/RotateX/
-// RotateY/RotateZ/Translate. D3D row-vector convention = post-multiply
-// accumulation: M = I; M *= Scale; M *= RotateX; M *= RotateY; M *= RotateZ;
-// M *= Translate; → final M_local = S * Rx * Ry * Rz * T.
-//
-// Blend = Alpha (snapshot SetBlendState :8467, MODULATE,
-// SRC_ALPHA/INV_SRC_ALPHA — NOT additive — forensics §7).
-// SHelperMeshSubmit { additive_blend = false } selects the
-// helper_mesh_back/front pipeline = alpha-blended path
-// (renderer.cpp:2381-2384). Per-material colour from the cyl/ring/spiral
-// sub-object's authored S3DMaterial (loaded at SpawnForTest).
-void TIceBoltEffect_Bespoke::SubmitWorldMeshes_BESPOKE(EFxDebugMode /*debug_mode*/)
+void TIceBoltEffect_Bespoke::SubmitWorldMeshes_BESPOKE(EFxDebugMode)
 {
-    if (!Renderer || !alive_)
-        return;
-
-    const S3DPoint& base_pos = Pos();
-    const float face_rad =
-        float(angle_) * (2.0f * float(M_PI)) / 256.0f;
-    constexpr float kHalfPi = float(M_PI) * 0.5f;
-
-    // --- Inline matrix helpers (row-major 4×4; translation in [3]/[7]/
-    // [11]). Mirrors the F07 fireball ring path (effect.cpp:7553-7570)
-    // and teleporter ComposeFlareMatrix (effect.cpp:6007-6035).
-    auto mat_identity = [](float m[16])
-    {
-        for (int32_t i = 0; i < 16; ++i) m[i] = (i % 5 == 0) ? 1.0f : 0.0f;
-    };
-    auto mat_mul = [](const float a[16], const float b[16], float out[16])
-    {
-        for (int32_t r = 0; r < 4; ++r)
-            for (int32_t c = 0; c < 4; ++c)
-            {
-                float s = 0.0f;
-                for (int32_t k = 0; k < 4; ++k)
-                    s += a[r * 4 + k] * b[k * 4 + c];
-                out[r * 4 + c] = s;
-            }
-    };
-    // Bolt instance world matrix: T(base_pos) * Rz(face_rad).
-    float inst_world[16];
-    {
-        const float c = std::cos(face_rad);
-        const float s = std::sin(face_rad);
-        inst_world[0]  = c;    inst_world[1]  = -s;   inst_world[2]  = 0.0f; inst_world[3]  = float(base_pos.x);
-        inst_world[4]  = s;    inst_world[5]  =  c;   inst_world[6]  = 0.0f; inst_world[7]  = float(base_pos.y);
-        inst_world[8]  = 0.0f; inst_world[9]  = 0.0f; inst_world[10] = 1.0f; inst_world[11] = float(base_pos.z);
-        inst_world[12] = 0.0f; inst_world[13] = 0.0f; inst_world[14] = 0.0f; inst_world[15] = 1.0f;
-    }
-
-    // Compose M_local = T * Rz * Ry * Rx * S (snapshot intent: scale
-    // first, then rotate, then translate; applied to a vertex column
-    // vector).
-    //
-    // CONVENTION: the helper-mesh vertex shader
-    // (src/shaders/mesh.glsl.h:36-41) reads w0..w3 as ROWS of a 4×4
-    // matrix and computes
-    //   wp = vec3(dot(w0, ph), dot(w1, ph), dot(w2, ph))
-    // — that's the standard ROW-MAJOR COLUMN-VECTOR convention
-    // wp = M * ph. To get "scale first, then rotate, then translate"
-    // on the vertex, the matrix product order must be T * R * S (so
-    // that M * v = T * R * (S * v) applies S first, then R, then T).
-    //
-    // The D3D snapshot writes `M = I; M *= S; M *= Rx; … M *= T;` —
-    // that's D3D's ROW-VECTOR convention (v' = v * M):
-    //   v * M = v * (S * Rx * … * T) = ((v * S) * Rx) * … * T
-    // — same intent (scale first), just spelled with the operations on
-    // the right. Translating to column-vector convention reverses the
-    // chain: T * … * Rx * S.
-    //
-    // SIGN: snapshot writes RotateX(+π/2) and that's correct as-is. The
-    // bbox diag (cyl mesh z=[0..64]) plus the snapshot's -length
-    // target-end convention (snapshot :8595 `obj->pos.y = -length*i`)
-    // imply mesh +Z → local -Y after the tilt, which is what
-    // Rx(+π/2) produces under right-hand math.
-    auto compose_local = [&mat_identity, &mat_mul](float sx, float sy, float sz,
-                                                   float rx, float ry, float rz,
-                                                   float tx, float ty, float tz,
-                                                   float out[16])
-    {
-        float S[16];  mat_identity(S);  S[0]=sx; S[5]=sy; S[10]=sz;
-        float Rx[16]; mat_identity(Rx);
-        {
-            const float c = std::cos(rx), s = std::sin(rx);
-            Rx[5]=c; Rx[6]=-s; Rx[9]=s; Rx[10]=c;
-        }
-        float Ry[16]; mat_identity(Ry);
-        {
-            const float c = std::cos(ry), s = std::sin(ry);
-            Ry[0]=c; Ry[2]=s; Ry[8]=-s; Ry[10]=c;
-        }
-        float Rz[16]; mat_identity(Rz);
-        {
-            const float c = std::cos(rz), s = std::sin(rz);
-            Rz[0]=c; Rz[1]=-s; Rz[4]=s; Rz[5]=c;
-        }
-        float T[16]; mat_identity(T); T[3]=tx; T[7]=ty; T[11]=tz;
-        // out = T * Rz * Ry * Rx * S (column-vector: M * v applies S first).
-        float TRz[16], TRzRy[16], TRzRyRx[16];
-        mat_mul(T,       Rz, TRz);
-        mat_mul(TRz,     Ry, TRzRy);
-        mat_mul(TRzRy,   Rx, TRzRyRx);
-        mat_mul(TRzRyRx, S,  out);
-    };
-    auto submit_mesh = [this, &inst_world, &mat_mul](MeshHandle mesh,
-                                                     const float local[16],
-                                                     const float diffuse[4],
-                                                     const float emissive[4],
-                                                     float sort_z)
-    {
-        if (mesh == 0) return;
-        float world[16];
-        mat_mul(inst_world, local, world);
-        SHelperMeshSubmit m = {};
-        m.mesh           = mesh;
-        m.additive_blend = false;          // snapshot Alpha modulate
-        m.shadow_plane   = false;
-        std::memcpy(m.world, world, sizeof(world));
-        // Cyl bodies have UV(0,0) — we bound the renderer's white
-        // texture at SpawnForTest so helper-mesh FS `base = tex.rgb *
-        // diffuse` reduces to `base = diffuse` = the I3D material
-        // colour. Ambient = diffuse keeps the colour visible under
-        // scene ambient with no point-light hits.
-        std::memcpy(m.diffuse,  diffuse,  4 * sizeof(float));
-        std::memcpy(m.ambient,  diffuse,  4 * sizeof(float));
-        m.specular[0] = m.specular[1] = m.specular[2] = m.specular[3] = 0.0f;
-        std::memcpy(m.emissive, emissive, 4 * sizeof(float));
-        m.power      = 1.0f;
-        m.sort_depth = sort_z;
-        Renderer->SubmitHelperMesh(m);
-    };
-
-    // --- Core beam cylinders (snapshot :8472-8505). 1:1 port:
-    //   if (subspell > 1):
-    //     for i = 0..3:
-    //       obj = GetObject(i)          // cyl04/01/02/03
-    //       D3DMATRIXClear(obj->matrix)
-    //       obj->scl = (cylscale/2, cylscale/2, length/64)
-    //       D3DMATRIXScale(obj->matrix, obj->scl)        // M *= S
-    //       D3DMATRIXRotateX(obj->matrix, π/2)           // M *= Rx
-    //       D3DMATRIXRotateY(obj->matrix, 0)             // M *= I
-    //       D3DMATRIXRotateZ(obj->matrix, 0)             // M *= I
-    //       obj->pos = (0,0,0)
-    //       D3DMATRIXTranslate(obj->matrix, obj->pos)    // M *= I
-    //       RenderObject(obj)                            // → SubmitHelperMesh
-    if (subspell_ > 1)
-    {
-        const float scl_xy = cylscale_ * 0.5f;
-        const float scl_z  = length_ / 64.0f;
-        float local[16];
-        compose_local(scl_xy, scl_xy, scl_z,
-                      +kHalfPi, 0.0f, 0.0f,
-                      0.0f,     0.0f, 0.0f,
-                      local);
-        for (int32_t i = 0; i < 4; ++i)
-            submit_mesh(cyl_meshes_[i], local,
-                        cyl_diffuse_[i], cyl_emissive_[i],
-                        float(base_pos.z));
-    }
-
-    // --- Spirals + rings (snapshot :8507-8571). Outer gate:
-    //   if (frameon < GROW_DURATION * 3) { ... }
-    if (frameon_ < kIceBoltGrowDuration * 3)
-    {
-        // Spirals (snapshot :8509-8545, obj = GetObject(6) = cylinder06).
-        //   if (subspell > 0):
-        //     numrevs = (int)length / 100
-        //     zscale  = length / numrevs
-        //     for j = 0..numrevs-1: ypos = -j * zscale
-        //       for i = 0..1:
-        //         obj->scl = (spiralscale, spiralscale, zscale/64)
-        //         M *= Scale(scl); M *= RotateX(π/2)
-        //         M *= RotateY( i ? π - spiralang : spiralang )
-        //         M *= RotateZ(0)
-        //         obj->pos = (0, ypos, 0); M *= Translate(pos)
-        //         RenderObject(obj6)                       // → SubmitHelperMesh
-        if (subspell_ > 0 && spiral_mesh_ != 0)
-        {
-            const int32_t numrevs_raw = int32_t(length_) / 100;
-            const int32_t numrevs = numrevs_raw > 1 ? numrevs_raw : 1;
-            const float zscale = length_ / float(numrevs);
-            const float scl_z  = zscale / 64.0f;
-            for (int32_t j = 0; j < numrevs; ++j)
-            {
-                const float ypos = -float(j) * zscale;
-                for (int32_t i = 0; i < 2; ++i)
-                {
-                    const float ry =
-                        i ? float(M_PI) - spiralang_ : spiralang_;
-                    float local[16];
-                    compose_local(spiralscale_, spiralscale_, scl_z,
-                                  +kHalfPi, ry, 0.0f,
-                                  0.0f,     ypos, 0.0f,
-                                  local);
-                    submit_mesh(spiral_mesh_, local,
-                                spiral_diffuse_, spiral_emissive_,
-                                float(base_pos.z) + 0.5f);
+    if(!alive_||!BindMeshes())return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) {const auto p=Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace()));}
+    icebolt_core::Render(*this,uint8_t(GetFace()),[&](const icebolt_core::Packet& packet) {
+        const auto& part=parts_[packet.object];hmm_mat4 world;MtxMultiply(&world,&packet.local,&owner);
+        SHelperMeshSubmit submit{};submit.mesh=part.mesh;submit.retail_source_alpha=true;
+        submit.retail_lighting=part.lighting;submit.retail_software_projection=native_domain_;
+        submit.retail_normal_z_scale=native_domain_?1.0f:1.0f/WORLD3D_Z_SCALE;
+        for(int row=0;row<4;++row)for(int col=0;col<4;++col)submit.world[row*4+col]=world.Elements[col][row];
+        const auto& material=part.material.matdesc;
+        std::memcpy(submit.diffuse,&material.diffuse,4*sizeof(float));
+        std::memcpy(submit.ambient,&material.ambient,4*sizeof(float));
+        std::memcpy(submit.specular,&material.specular,4*sizeof(float));
+        std::memcpy(submit.emissive,&material.emissive,4*sizeof(float));submit.power=material.power;
+        // Identical sort depth preserves the original RenderObject sequence.
+        submit.sort_depth=float(Pos().z);
+        if(part.lighting==4 && Renderer->UsesRetailSoftwareMeshLighting()) {
+            // Actual untextured raster uses trunc(max of the triangle's three
+            // projected depths) for every covered pixel, even with ZWRITE=0.
+            // Keep source triangle order; textured packets remain whole draws.
+            submit.retail_flat_depth=true;submit.index_count=3;
+            for(size_t face=0;face<part.indices.size();face+=3) {
+                float farthest=-1.0e30f;
+                for(int corner=0;corner<3;++corner) {
+                    const auto& v=part.vertices[part.indices[face+corner]];
+                    hmm_vec3 local={v.pos[0],v.pos[1],v.pos[2]},point;MtxTransform(&world,&local,&point);
+                    const float offset=native_domain_
+                        ? -.8748177289962769f*(point.X+point.Y)-.7142857909202576f*point.Z
+                        : -.8660254037844386f*(point.X+point.Y)-.5f*point.Z;
+                    if(offset>farthest)farthest=offset;
                 }
+                submit.index_offset=int(face);submit.retail_flat_depth_offset=farthest;
+                Renderer->SubmitHelperMesh(submit);
             }
-        }
-        // Rings (snapshot :8547-8570, obj = GetObject(5) = cylinder05).
-        //   for i = 0..(int)(length/100) - 1:
-        //     obj->scl = (cylscale/2, cylscale/2, 1.0)
-        //     M *= Scale(scl); M *= RotateX(π/2)
-        //     M *= RotateY(spiralang); M *= RotateZ(0)
-        //     obj->pos.y = -((int)(ringout + 100*i) % (int)length)
-        //     M *= Translate(0, pos.y, 0)
-        //     RenderObject(obj5)                           // → SubmitHelperMesh
-        if (ring_mesh_ != 0)
-        {
-            const int32_t num_rings_raw = int32_t(length_) / 100;
-            const int32_t num_rings = num_rings_raw > 1 ? num_rings_raw : 1;
-            const float scl_xy = cylscale_ * 0.5f;
-            for (int32_t i = 0; i < num_rings; ++i)
-            {
-                const int32_t length_raw = int32_t(length_);
-                const int32_t lengthi = length_raw > 1 ? length_raw : 1;
-                const float ypos = float(
-                    -((int32_t(ringout_) + 100 * i) % lengthi));
-                float local[16];
-                compose_local(scl_xy, scl_xy, 1.0f,
-                              +kHalfPi, spiralang_, 0.0f,
-                              0.0f,     ypos,       0.0f,
-                              local);
-                submit_mesh(ring_mesh_, local,
-                            ring_diffuse_, ring_emissive_,
-                            float(base_pos.z) + 1.0f);
-            }
-        }
-    }
+        } else Renderer->SubmitHelperMesh(submit);
+    });
 }
 
 // --- I22 TIcedEffect bespoke -------------------------------------------
