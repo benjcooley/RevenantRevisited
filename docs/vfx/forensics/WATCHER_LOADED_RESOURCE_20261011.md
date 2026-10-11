@@ -69,3 +69,45 @@ includes48 nonzero texel observations, exact asset/frame hashes, and assertions
 for every upload and selected surface. Original software ARGB1555 handling is
 therefore unsupported by this demonstrated dispatch. Correct portable1555
 colors remain intact, and no primary appearance acceptance is claimed.
+
+## Explicit adapted-device controls (not unchanged retail)
+
+`watcher_qualified_device_probe.py` leaves the portable decoder and original
+software raster untouched. Its declared COM texture allocation realizes only
+exact ARGB1555 textures as ARGB4444. `--realization-only` demonstrates that this
+alone does not fix the image: the original uploader uses its requested descriptor
+and still copies the1555 words unchanged. That failed control is retained.
+
+The default qualified control adds an explicit call to original ConvertTexture
+416790 for every resident frame after loading, using separately declared1555
+source and4444 destination descriptors. All229,376 texels across14 frames exactly
+match RGB5>>1 and alpha1<<3. Thus the original converter reduces RGB to4 bits but
+maps opaque alpha to8, not15. The recovered figure colors are darker and partly
+transparent. All24 output PNGs match a fresh independent replay. This added
+conversion is not performed by the unchanged retail software device.
+
+`--semantic-alpha` is a second, explicitly adapted device boundary: it preserves
+the RGB4 produced by that original conversion, but maps authored binary alpha
+zero/one to nibble zero/15. This is a host device-format conversion rule, not an
+original-native claim. All229,376 resulting words are checked against the exact
+bit formula. The complete original frame selection, normal lighting, geometry,
+SetTexture and software raster run afterward. The rainbow corruption disappears
+and the authored figure hues return. No port color/opacity is fitted to either
+qualified reference, and no watcher primary appearance pass is granted.
+
+Frozen private reports under `hard-alpha/`:
+
+- `watcher-qualified-device-native-final/qualified-device.json`:
+  `b6b8e9c8d3ffd6be6dd345e7b5f8e52b33cda0e4333fe84e92c16aca6185474c`.
+- `watcher-qualified-device-semantic-final/qualified-device.json`:
+  `55e3f937c5f6ab8c0d5222f2e39d51dd1ffe7ae371e6032ff732fb2d2d174c6e`.
+- `watcher-qualified-review/` retains identical fixed crops of unchanged,
+  original-converted alpha8, and adapted semantic-alpha15 output for all four
+  active texture phases of each watcher. Full640x480 images remain available.
+
+The original converter and semantic-device controls both assert every stored
+frame (including watcher3's two inactive frames), while the unchanged four-frame
+owner animation selects only its authored active frames. Device equivalence,
+RGB5-to-RGB4 quantization, modern sampling/projection/blending, generic owner
+Pulse and natural map placement remain open. Reports explicitly retain
+`accepted=false`, `primary_visual_pass=false`, and `device_identical=false`.
