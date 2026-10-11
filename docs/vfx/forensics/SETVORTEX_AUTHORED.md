@@ -118,3 +118,23 @@ vertex/UV channels. The old linear-height negative control differs0.79544 at
 first draw. Evidence: hard-alpha/setvortex-submit-proof/manifest.json and
 setvortex-loaded-first/manifest.json. Fixed24Hz updates/render are certified by
 this comparison; arbitrary skipped-render scheduling remains unverified.
+
+Final build and retained full native/source unittest PASS (36.5s). Fresh105-tick
+native state/full-draw replay is exact. `setvortex-review-final/pair-manifest.json`
+SHA256 f28b40db2eef19719173a70439e0bd1be1c0964655a6d76276c7022df397af4e
+pins27 full-frame original/Metal pairs and nine identical4x nearest detail pages.
+Final captured binary SHA256
+4ab18b5620806b6b555c23235838a2168279df8c372aa9b09c14d03590a6e620.
+`setvortex-metal-final` records27/27 nonblank snapshots across105 render ticks,
+clean shutdown, actual1280x960, explicit native policy. All27 images are byte
+identical to the earlier corrected film whose collector rejected a missing
+policy-confirmation log; that negative collection result is preserved.
+`setvortex-metal-common` separately records27 ordinary-projection snapshots.
+
+Head orientation and persistent bob now agree in the matched images. Tiny
+scanline/nearest sampling and overlap/RGB565 quantization differences remain
+visible at4x; exact pixels are not claimed. The fixed null-spell preview has
+no death tail by design. Real OF_KILL is reported through the gallery callback,
+and world submission is separated from advancement. The existing default/map
+factory remains available. Independent root approval/integrated gallery are
+separate from this source evidence submission.

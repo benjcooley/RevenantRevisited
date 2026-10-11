@@ -22,7 +22,7 @@ def run(p):
  for i in range(0,27,3):
   path=out/f'detail-{i//3+1}.png';detail.crop((0,i*376,640,min(27,i+3)*376)).save(path);panels.append(pin(path))
  report=dict(status='ready-for-independent-review',type_id='0xad92bc15',effect='SetVortex',native=pin(np),metal=pin(mp),binary_sha256=m['binary_sha256'],pairs=pairs,panels=panels,
-  proofs=[pin(p/'setvortex-submit-proof/manifest.json')],
+  proofs=[pin(p/'setvortex-source-final2/manifest.json'),pin(p/'setvortex-native-final/replay.json')],
   configuration=dict(native_source=[0,0,0],native_camera=[0,0,0],port_source=[0,0,0],viewport=[1280,960],center=[640,480],ambient=[38,38,38],directional=[1,1,1],frames=105,simulation_hz=24),
   scope='Genuine loaded persistent null-spell SetVortex owner with custom Animate/full Render versus existing exact source class. Original nonlinear cached height, CULL_NONE complete authored geometry and strict ARGB4444 source decode. All105 ticks render at24Hz;27 PNG snapshots every4ticks. No fitted camera/geometry/color.',
   limits=['Spell teleport marking/previous marker removal and natural map caller remain separate.', 'Ordinary projection/hardware, audio/device/exact pixels remain open.', 'Residual nearest sampling and RGB565 framebuffer/overlap quantization remain.', 'Fixed24Hz Animate/render cadence; arbitrary skipped-render scheduling not certified.'])
