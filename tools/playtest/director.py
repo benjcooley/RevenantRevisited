@@ -142,6 +142,7 @@ class Director:
         return self.milestones[self.current] if self.current < len(self.milestones) else None
 
     def run(self, max_ticks: int) -> dict:
+        self.survey()
         while self.host.tick < max_ticks and self.milestone:
             obs = self.observe()
             self.jev.ledger.context['t'] = self.router.ledger.context['t'] = self.host.tick
@@ -307,6 +308,18 @@ class Director:
                       distance=round(s.d))
 
     # -- grinding (PLAN.md §14) --
+    def survey(self) -> None:
+        """Before play, when the story grinds: the hunting sites of Locke's
+        level (decoding every sector of a level takes seconds, which
+        mid-session would look like the game had stopped)."""
+        if not self.world or not any(m.activity == 'grind' for m in self.milestones[self.start:]):
+            return
+        level = self.host.observe(objects=0).get('player', {}).get('level')
+        if level is not None and level not in self.grounds:
+            self.caption('grind', 'surveying the hunting grounds')
+            self.grounds[level] = Grounds.survey(self.world, self.kb, level)
+            self.note('survey', level=level, sites=len(self.grounds[level].sites))
+
     def loose_items(self, obs: dict) -> list[dict]:
         """Items lying near Locke, nearest first, that a click might still
         pick up: a dead monster's drop, gold, anything left on the floor."""
@@ -354,6 +367,7 @@ class Director:
             return
         level = player.get('level', 0)
         if level not in self.grounds and self.world:
+            self.caption('grind', 'surveying the hunting grounds')
             self.grounds[level] = Grounds.survey(self.world, self.kb, level)
         grounds = self.grounds.get(level)
         locke_level = (player.get('xp') or [1])[0]
