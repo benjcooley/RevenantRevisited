@@ -4,6 +4,13 @@ from generate_review_preview_map import PARTIAL, SOURCE_MAPPINGS, admitted_candi
 
 
 class ReviewPreviewAdmission(unittest.TestCase):
+    def test_aura_exact_identity(self):
+        row={'retail_type_id':'0x00ab1d1d','preview_candidates':['TAuraEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row)[0],'Aura_AUTHENTIC_ACOLYTE_INTEGER')
+        partial,reason=candidate_metadata(row,'Aura_AUTHENTIC_ACOLYTE_INTEGER')
+        self.assertFalse(partial);self.assertIn('zero selector',reason)
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Aura_AUTHENTIC_ACOLYTE_INTEGER']}),[])
+
     def test_placeholders_and_invalid_aliases_fail_closed(self):
         candidates = '''TBlastEffect_BESPOKE
 TTornadoEffect_BESPOKE

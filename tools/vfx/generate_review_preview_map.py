@@ -84,6 +84,7 @@ PARTIAL = {
 # their owner constructors. These newer implementations predate their ledger
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
+    '0x00ab1d1d': 'Aura_AUTHENTIC_ACOLYTE_INTEGER',
     '0x55471bff': 'Burn_AUTHENTIC_ACOLYTE_INTEGER',
     '0xdedbdbed': 'Halo_AUTHORED_PUBLIC60',
     '0xddc4042e': 'Blood_AUTHORED',
@@ -167,7 +168,7 @@ IMPLEMENTED.update(dict.fromkeys(
 
 
 def admitted_candidates(row):
-    row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n!='Burn_AUTHENTIC_ACOLYTE_INTEGER'])
+    row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n not in ('Burn_AUTHENTIC_ACOLYTE_INTEGER','Aura_AUTHENTIC_ACOLYTE_INTEGER')])
     row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if not n.startswith('Halo_AUTHORED_PUBLIC')])
     if row.get('retail_type_id','').lower()!='0xddc4042e':
         row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n!='Blood_AUTHORED'])
@@ -192,6 +193,8 @@ def admitted_candidates(row):
 
 
 def candidate_metadata(row, name):
+    if row.get('retail_type_id','').lower()=='0x00ab1d1d' and name=='Aura_AUTHENTIC_ACOLYTE_INTEGER':
+        return False, 'Exact Aura public SetSpell(real Acolyte/named Aura), integer pose14/0/facing96 and original zero selector; natural bone initialization, attachment/interpolation/audio not certified'
     if row.get('retail_type_id','').lower()=='0x55471bff' and name=='Burn_AUTHENTIC_ACOLYTE_INTEGER':
         return False, 'Exact Burn public Set(real Acolyte), declared integer pose14/0/facing96, real damage/fire/smoke; natural attachment/interpolation not certified'
     if row.get('retail_type_id','').lower()=='0xdedbdbed' and name=='Halo_AUTHORED_PUBLIC60':

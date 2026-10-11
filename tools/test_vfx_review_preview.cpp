@@ -39,6 +39,8 @@ std::vector<SEffect> ReviewCatalogue() {
     if(halo_negative==2)halo.submit_world={};
     if(halo_negative==3)halo.preview_style=EVfxPreviewStyle::Combat;
     if(halo_negative==4)halo.id="Halo_AUTHORED_PUBLIC20";
+    auto aura=Row("Aura_AUTHENTIC_ACOLYTE_INTEGER",EVfxPreviewStyle::Static);
+    aura.is_alive=[](void*c){return *static_cast<int*>(c)<2;};aura.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
     auto burn=Row("Burn_AUTHENTIC_ACOLYTE_INTEGER",EVfxPreviewStyle::Static);
     burn.is_alive=[](void*c){return *static_cast<int*>(c)<2;};burn.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
     if(burn_negative==1)burn.is_alive={};if(burn_negative==2)burn.submit_world={};
@@ -94,7 +96,7 @@ std::vector<SEffect> ReviewCatalogue() {
     auto food=Row("Createfood_ORIGINAL_CONTEXT",EVfxPreviewStyle::Static);
     food.is_alive=[](void*c){return *static_cast<int*>(c)<2;};
     food.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
-    return {burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    return {aura,burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -160,7 +162,7 @@ int main(int argc,char** argv) {
         assert(!DescribeVfxReviewPreview(id).supported);
         assert(!CreateVfxReviewPreview(id,origin));
     }
-    for (uint32_t id : {0x0ea34fa3u,0xad92bd33u,0x00ab1d1du,0xc24b2a85u}) {
+    for (uint32_t id : {0x0ea34fa3u,0xad92bd33u,0xc24b2a85u}) {
         const auto info=DescribeVfxReviewPreview(id);
         assert(info.supported && info.partial);
         assert(std::strstr(info.description,"Partial preview:"));
@@ -353,6 +355,12 @@ int main(int argc,char** argv) {
         auto actor=CreateVfxReviewPreview(0x152dafddu,origin);
         assert(actor && actor->Id()=="TPulp_CONFIGURED_ACTOR" && actor->RestartInterval()==0);
         const int initial=creates;for(int i=0;i<500;++i)actor->Submit();assert(actor->Alive() && creates==initial);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0x00ab1d1du);assert(info.supported && !info.partial && info.lifetime_known);assert(std::strstr(info.description,"real Acolyte"));
+        auto burn=CreateVfxReviewPreview(0x00ab1d1du,origin);assert(burn && burn->Id()=="Aura_AUTHENTIC_ACOLYTE_INTEGER" && burn->RestartInterval()==0);
+        const int initial=creates;burn->Submit();burn->Submit();assert(burn->Alive()==false);burn->Submit();assert(burn->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);
     {

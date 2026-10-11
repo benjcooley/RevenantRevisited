@@ -78,6 +78,7 @@
 #include "effects/halopreview.h"
 #include "effects/burnactorprobe.h"
 #include "effects/burnpublicpreview.h"
+#include "effects/aurapublicpreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/swamppreview.h"
 #include "effects/paralizepreview.h"
@@ -6230,6 +6231,10 @@ struct SVfxTestBootstrap {
         {
             VfxTest::SEffect e={};e.id="Burn_AUTHENTIC_ACOLYTE_INTEGER";e.family="blood";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
             e.factory=[](const S3DPoint&o)->void*{return burn_public_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){burn_public_preview::Advance(static_cast<burn_public_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){burn_public_preview::SubmitWorld(static_cast<burn_public_preview::State*>(c));};e.is_alive=[](void*c){return burn_public_preview::Alive(static_cast<burn_public_preview::State*>(c));};e.destroy=[](void*c){burn_public_preview::Destroy(static_cast<burn_public_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Aura_AUTHENTIC_ACOLYTE_INTEGER";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return aura_public_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){aura_public_preview::Advance(static_cast<aura_public_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){aura_public_preview::SubmitWorld(static_cast<aura_public_preview::State*>(c));};e.is_alive=[](void*c){return aura_public_preview::Alive(static_cast<aura_public_preview::State*>(c));};e.destroy=[](void*c){aura_public_preview::Destroy(static_cast<aura_public_preview::State*>(c));};VfxTest::DeferredRegister(e);
         }
         // Exact Halo public API inputs; no natural retail caller is claimed.
         for(int variant=0;variant<2;++variant) {
