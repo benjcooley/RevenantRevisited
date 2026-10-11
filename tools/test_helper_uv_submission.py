@@ -44,7 +44,7 @@ void sg_draw(int offset,int count,int instances){assert((count==9||count==3)&&in
 context=r'''
 struct TRenderer{
  sg_pipeline helper_mesh_back_pipeline{1},helper_mesh_front_pipeline{2},
- helper_mesh_add_back_pipeline{3},helper_mesh_add_front_pipeline{4},
+ helper_additive_cull_none_pipeline{9},helper_mesh_add_back_pipeline{3},helper_mesh_add_front_pipeline{4},
  helper_gold_no_depth_back_pipeline{5},helper_gold_no_depth_front_pipeline{6},helper_source_alpha_pipeline{7},helper_untextured_software_pipeline{8};
  struct SMeshEntry{Resource vbuf,ibuf;uint32_t albedo=77;int num_indices=9;};
  std::vector<SMeshEntry>meshes{SMeshEntry{}};
@@ -101,6 +101,12 @@ int main(){
  renderer.EmitTransparentHelper(draw);assert(draws==2&&pipeline==2&&vertex_uniforms[35]==0&&vertex_uniforms[40]==0);
  renderer.software_lighting=true;draw.retail_source_alpha=false;draw.retail_lighting=0;draws=0;
  renderer.EmitTransparentHelper(draw);assert(draws==2&&pipeline==2&&vertex_uniforms[35]==0&&vertex_uniforms[40]==0);
+ draw.retail_lighting=6;draw.retail_source_alpha=true;draws=0;
+ renderer.EmitTransparentHelper(draw);assert(draws==1&&pipeline==7&&vertex_uniforms[35]==6);
+ renderer.software_lighting=false;draws=0;renderer.EmitTransparentHelper(draw);assert(draws==1&&pipeline==7&&vertex_uniforms[35]==6);
+ draw.retail_lighting=1;draw.retail_source_alpha=false;draw.additive_blend=true;draw.retail_additive_cull_none=true;draws=0;
+ renderer.EmitTransparentHelper(draw);assert(draws==1&&pipeline==9);
+ draw.retail_additive_cull_none=false;draws=0;renderer.EmitTransparentHelper(draw);assert(draws==2&&pipeline==4);
  std::puts("PASS: actual helper UV uniform ABI, alpha path, all9 indices and immutable albedo");
 }
 '''

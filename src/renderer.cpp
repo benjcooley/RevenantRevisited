@@ -983,7 +983,7 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float3 source_light = p.retail_ambient.xyz + p.retail_directional.xyz *
         max(dot(source_normal, float3(0.0, 0.78125, 0.625)), 0.0);
     o.retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
-    if (p.retail_directional.w > 4.5) {
+    if (p.retail_directional.w > 4.5 && p.retail_directional.w < 5.5) {
         o.retail_color = clamp(in.normal, 0.0, 31.0) / 31.0;
         if (p.retail_raster.w > 0.5) {
             // Exact packed20-bit prelit color; no per-color GPU mesh allocation.
@@ -1024,6 +1024,21 @@ fragment float4 _main(vs_out in [[stage_in]],
                       sampler smp [[sampler(0)]]) {
     // Original untextured Gouraud stores RGB5 as R5/G6-even/B5; no material or texture.
     // Explicit prelit RGBA5 format, original untextured alpha kernel.
+    // Explicit RGB565 + constant prelit RGBA5 (actual FVF_LVERTEX).
+    if (in.retail_mode > 5.5) {
+        float a5 = floor(clamp(hp.diffuse.a, 0.0, 31.0));
+        if (a5 < 0.5) discard_fragment();
+        uint2 size = uint2(albedo_tex.get_width(), albedo_tex.get_height());
+        uint2 xy = min(uint2(floor(fract(in.uv) * float2(size))), size - uint2(1));
+        float3 tex = albedo_tex.read(xy).rgb;
+        float3 texture5 = floor(tex * float3(31.0, 63.0, 31.0) + 0.5);
+        texture5.g = floor(texture5.g * 0.5);
+        float3 channels = floor(texture5 * clamp(hp.diffuse.rgb, 0.0, 31.0) / 31.0 + 0.00001);
+        channels.g = channels.g * 2.0 + floor((channels.g + 15.0) / 32.0);
+        float alpha = (a5 + 1.0) / 32.0;
+        float3 source = floor(channels * alpha) / (alpha * float3(31.0, 63.0, 31.0));
+        return float4(source, alpha);
+    }
     if (in.retail_mode > 4.5) {
         float a5 = floor(clamp(in.uv.x, 0.0, 31.0) + 0.00001);
         float alpha = (a5 + 1.0) / 32.0;
@@ -1174,7 +1189,7 @@ void main() {
     vec3 source_light = retail_ambient.xyz + retail_directional.xyz *
         max(dot(source_normal, vec3(0.0, 0.78125, 0.625)), 0.0);
     v_retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
-    if (retail_directional.w > 4.5) {
+    if (retail_directional.w > 4.5 && retail_directional.w < 5.5) {
         v_retail_color = clamp(normal, 0.0, 31.0) / 31.0;
         if (retail_raster.w > 0.5) {
             // Exact packed20-bit prelit color; no per-color GPU mesh allocation.
@@ -1209,6 +1224,21 @@ out vec4 fragColor;
 void main() {
     // Original untextured Gouraud stores RGB5 as R5/G6-even/B5; no material or texture.
     // Explicit prelit RGBA5 format, original untextured alpha kernel.
+    // Explicit RGB565 + constant prelit RGBA5 (actual FVF_LVERTEX).
+    if (v_retail_mode > 5.5) {
+        float a5 = floor(clamp(diffuse.a, 0.0, 31.0));
+        if (a5 < 0.5) discard;
+        ivec2 size = textureSize(albedo_tex, 0);
+        ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
+        vec3 tex = texelFetch(albedo_tex, xy, 0).rgb;
+        vec3 texture5 = floor(tex * vec3(31.0, 63.0, 31.0) + 0.5);
+        texture5.g = floor(texture5.g * 0.5);
+        vec3 channels = floor(texture5 * clamp(diffuse.rgb, 0.0, 31.0) / 31.0 + 0.00001);
+        channels.g = channels.g * 2.0 + floor((channels.g + 15.0) / 32.0);
+        float alpha = (a5 + 1.0) / 32.0;
+        vec3 source = floor(channels * alpha) / (alpha * vec3(31.0, 63.0, 31.0));
+        fragColor = vec4(source, alpha); return;
+    }
     if (v_retail_mode > 4.5) {
         float a5 = floor(clamp(v_uv.x, 0.0, 31.0) + 0.00001);
         float alpha = (a5 + 1.0) / 32.0;
@@ -1363,7 +1393,7 @@ vs_out main_vs(vs_in i) {
     float3 source_light = retail_ambient.xyz + retail_directional.xyz *
         max(dot(source_normal, float3(0.0, 0.78125, 0.625)), 0.0);
     o.retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
-    if (retail_directional.w > 4.5) {
+    if (retail_directional.w > 4.5 && retail_directional.w < 5.5) {
         o.retail_color = clamp(i.normal, 0.0, 31.0) / 31.0;
         if (retail_raster.w > 0.5) {
             // Exact packed20-bit prelit color; no per-color GPU mesh allocation.
@@ -1401,6 +1431,22 @@ struct ps_in {
 float4 main_ps(ps_in input) : SV_Target0 {
     // Original untextured Gouraud stores RGB5 as R5/G6-even/B5; no material or texture.
     // Explicit prelit RGBA5 format, original untextured alpha kernel.
+    // Explicit RGB565 + constant prelit RGBA5 (actual FVF_LVERTEX).
+    if (input.retail_mode > 5.5) {
+        float a5 = floor(clamp(diffuse.a, 0.0, 31.0));
+        if (a5 < 0.5) discard;
+        uint width, height; albedo_tex.GetDimensions(width, height);
+        uint2 size = uint2(width, height);
+        uint2 xy = min(uint2(floor(frac(input.uv) * float2(size))), size - uint2(1,1));
+        float3 tex = albedo_tex.Load(int3(xy,0)).rgb;
+        float3 texture5 = floor(tex * float3(31.0, 63.0, 31.0) + 0.5);
+        texture5.g = floor(texture5.g * 0.5);
+        float3 channels = floor(texture5 * clamp(diffuse.rgb, 0.0, 31.0) / 31.0 + 0.00001);
+        channels.g = channels.g * 2.0 + floor((channels.g + 15.0) / 32.0);
+        float alpha = (a5 + 1.0) / 32.0;
+        float3 source = floor(channels * alpha) / (alpha * float3(31.0, 63.0, 31.0));
+        return float4(source, alpha);
+    }
     if (input.retail_mode > 4.5) {
         float a5 = floor(clamp(input.uv.x, 0.0, 31.0) + 0.00001);
         float alpha = (a5 + 1.0) / 32.0;
@@ -2237,6 +2283,10 @@ void TRenderer::InitMeshPipeline()
     hpip.label = "renderer.helper.add.back.pipeline";
     helper_mesh_add_back_pipeline = sg_make_pipeline(&hpip);
 
+    hpip.cull_mode = SG_CULLMODE_NONE;
+    hpip.label = "renderer.helper.add.source-cull-none.pipeline";
+    helper_additive_cull_none_pipeline = sg_make_pipeline(&hpip);
+
     hpip.cull_mode = SG_CULLMODE_BACK;
     hpip.label = "renderer.helper.add.front.pipeline";
     helper_mesh_add_front_pipeline = sg_make_pipeline(&hpip);
@@ -2279,6 +2329,7 @@ void TRenderer::ShutdownMeshPipeline()
     if (helper_source_alpha_pipeline.id) { sg_destroy_pipeline(helper_source_alpha_pipeline); helper_source_alpha_pipeline = {}; }
     if (helper_mesh_back_pipeline.id) { sg_destroy_pipeline(helper_mesh_back_pipeline); helper_mesh_back_pipeline = {}; }
     if (helper_mesh_front_pipeline.id) { sg_destroy_pipeline(helper_mesh_front_pipeline); helper_mesh_front_pipeline = {}; }
+    if (helper_additive_cull_none_pipeline.id) { sg_destroy_pipeline(helper_additive_cull_none_pipeline); helper_additive_cull_none_pipeline = {}; }
     if (helper_mesh_add_back_pipeline.id) { sg_destroy_pipeline(helper_mesh_add_back_pipeline); helper_mesh_add_back_pipeline = {}; }
     if (helper_mesh_add_front_pipeline.id) { sg_destroy_pipeline(helper_mesh_add_front_pipeline); helper_mesh_add_front_pipeline = {}; }
     if (helper_gold_no_depth_back_pipeline.id) { sg_destroy_pipeline(helper_gold_no_depth_back_pipeline); helper_gold_no_depth_back_pipeline = {}; }
@@ -3180,7 +3231,7 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     // and blend policy remain valid when the surrounding scene is modern-lit.
     const bool prelit_rgba5 = s.retail_lighting == 4 && s.retail_prelit_rgba5;
     const bool source_alpha = s.retail_source_alpha && !s.additive_blend &&
-        (UsesRetailSoftwareMeshLighting() || prelit_rgba5);
+        (UsesRetailSoftwareMeshLighting() || prelit_rgba5 || s.retail_lighting == 6);
     sg_pipeline back_pipeline = s.additive_blend ? helper_mesh_add_back_pipeline : helper_mesh_back_pipeline;
     sg_pipeline front_pipeline = s.additive_blend ? helper_mesh_add_front_pipeline : helper_mesh_front_pipeline;
     if (s.retail_gold_no_depth && s.additive_blend && s.retail_lighting == 1)
@@ -3188,6 +3239,7 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
         back_pipeline = helper_gold_no_depth_back_pipeline;
         front_pipeline = helper_gold_no_depth_front_pipeline;
     }
+    if (s.additive_blend && s.retail_additive_cull_none) back_pipeline = front_pipeline = helper_additive_cull_none_pipeline;
     if (source_alpha) back_pipeline = front_pipeline = s.retail_lighting == 4
         ? helper_untextured_software_pipeline : helper_source_alpha_pipeline;
     if (!back_pipeline.id || !front_pipeline.id) return;
@@ -3260,7 +3312,7 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     sg_draw(s.index_offset, s.index_count > 0 ? s.index_count : me.num_indices, 1);
     // Existing front pipeline uses BACK cull with default CW winding: it keeps
     // clockwise NDC / positive screen-down source faces. Defaults draw both.
-    if (source_alpha || s.retail_positive_face_cull) return;
+    if (source_alpha || s.retail_positive_face_cull || (s.additive_blend && s.retail_additive_cull_none)) return;
     sg_apply_pipeline(front_pipeline);
     sg_apply_bindings(&bind);
     sg_draw(s.index_offset, s.index_count > 0 ? s.index_count : me.num_indices, 1);
