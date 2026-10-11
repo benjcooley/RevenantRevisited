@@ -142,6 +142,7 @@ void SubmitWorld(State* context, EFxDebugMode)
     mesh.retail_lighting = 1;
     mesh.retail_software_projection = StartupVfxNativeDomain;
     if(StartupVfxNativeDomain)mesh.retail_normal_z_scale=1.0f;
+    mesh.retail_additive_cull_none = StartupVfxNativeDomain; // observed original SetRenderState(22,1)
     mesh.retail_gold_no_depth = false; // Mode16 keeps depth testing; no '$' flag.
     Renderer->SubmitGoldFlareAfterFx(mesh); // Existing after-FX queue; depth remains enabled.
 }

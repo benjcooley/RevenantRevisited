@@ -101,3 +101,9 @@ The explicit camera0/center320240/owner0 policy is retained. This is a shader
 formula contract, not actual GPU vertex readback or a raster/UV/color pass.
 Private `projection-contract/manifest.json` pins the trace, renderer and probe.
 No geometry/projection fit or new visual credit follows from this result.
+
+The admitted native-domain flare now forwards observed original CULL_NONE
+through the existing additive no-cull helper flag. A20-frame real GPU control
+(`cull-none-control/manifest.json`) exits cleanly and all20 PNGs are byte-identical
+to the inclusive-key capture. This corrects the declared draw state but does not
+explain or improve the visible residual; it grants no new appearance credit.
