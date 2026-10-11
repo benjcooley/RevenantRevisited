@@ -21,7 +21,7 @@ TRedFountainAnimator_BESPOKE TGreenFountainAnimator_BESPOKE TBlueFountainAnimato
 TRibbonAnimator_BESPOKE TFlameEffect_BESPOKE TFlameEffect
 TFlameEffect_BESPOKE__FlameB TFlameEffect_BESPOKE__FlameG TFireWindEffect_BESPOKE TFireWindEffect_Bespoke__YFireWind_BESPOKE
 TFireBallEffect LightStrip TStripEffect TIceBoltEffect_BESPOKE TPhotonEffect_BESPOKE
-TSymGlowAnimator_BESPOKE TMeteorStormEffect_BESPOKE TFlyEffect_BESPOKE TFairyEffect_BESPOKE
+TSymGlowAnimator_BESPOKE TFlyEffect_BESPOKE TFairyEffect_BESPOKE
 TCureEffect_BESPOKE TFireFlashEffect_BESPOKE TFireConeEffect_BESPOKE TBurnEffect_BESPOKE
 TIcedEffect_BESPOKE TStreamerEffect_BESPOKE TFireSwarmEffect_BESPOKE TFaultFireEffect_BESPOKE
 TQuicksandEffect_BESPOKE TSandswirlEffect_BESPOKE TWindStripAnimator_BESPOKE THaloEffect
@@ -29,6 +29,7 @@ TDripEffect TRippleEffect TMistEffect_BESPOKE TMistEffect TWaterEffect_BESPOKE
 TWaterFallEffect_BESPOKE TWaterFallEffect_BESPOKE__Waterfall
 TFogEffect_Bespoke__MistFog_BESPOKE TPixieEffect_BESPOKE TFizzleEffect TFizzleEffect_SINGLE_BURST
 TSetVortexEffect_BESPOKE THealEffect_BESPOKE TRockStormEffect_Bespoke_BESPOKE
+TBuffEffect_Bespoke__charm_BESPOKE
 """.split(), 'effect.cpp: active controller Spawn/Advance/Submit body'),
     **dict.fromkeys("""
 TGlobeEffect_BESPOKE TKinSecretDoor_AUTHORED_STILL TMight_AUTHORED_TAGS
@@ -69,7 +70,6 @@ PARTIAL = {
     '0xad92bc1b': ('TMagicShieldEffect_BESPOKE', 'tinted asset billboard; original shield geometry incomplete'),
     '0xad92bd33': ('TBuffEffect_Bespoke__Stoneskin_BESPOKE', 'tinted asset billboard; original buff controller incomplete'),
     '0xad92bc16': ('TInvisibleEffect_Bespoke_BESPOKE', 'tinted asset billboard; original invisibility controller incomplete'),
-    '0xad92bd37': ('TBuffEffect_Bespoke__charm_BESPOKE', 'authored moving star and clover loop; natural buff caller unverified'),
     '0xad92fc13': ('TCataclysmEffect_Bespoke__YCataclysm_BESPOKE', 'own YCataclysm asset billboard; original controller incomplete'),
     '0xae92bc14': ('TManadrainEffect_Bespoke__YManadrain_BESPOKE', 'own YManadrain asset billboard; original controller incomplete'),
     '0xae5eeb26': ('TMaelstromEffect_Bespoke__ymaelstrom_BESPOKE', 'own ymaelstrom asset billboard; original controller incomplete'),
@@ -84,6 +84,7 @@ PARTIAL = {
 # their owner constructors. These newer implementations predate their ledger
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
+    '0xf32bcfac': 'MeteorStorm_AUTHORED',
     '0xadbcef13': 'TCharUtility_AUTHORED_STILL',
     '0xad92bd23': 'TKinSecretDoor_NATIVE_STILL',
     '0xdcc4011d': 'TLabback_AUTHORED_TAGS',
@@ -107,7 +108,7 @@ def admitted_candidates(row):
     candidates = [name for name in row['preview_candidates'] if name in IMPLEMENTED]
     explicit = SOURCE_MAPPINGS.get(row.get('retail_type_id', '').lower())
     if explicit: candidates.insert(0, explicit)
-    candidates.sort(key=lambda name: (0 if '_AUTHORED_' in name else 1 if '_BESPOKE' in name.upper() else 2))
+    candidates.sort(key=lambda name: (0 if name == explicit else 1 if '_AUTHORED_' in name else 2 if '_BESPOKE' in name.upper() else 3))
     partial = PARTIAL.get(row.get('retail_type_id', '').lower())
     if partial and partial[0] in row['preview_candidates']:
         candidates.append(partial[0])

@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 113,
+    "retail_rows_with_source_fixes_recorded": 115,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 93,
+    "visual_fidelity_confirmed_rows": 95,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 93,
-    "remaining_visual_review_rows": 83
+    "reviewed_visual_pass_rows": 95,
+    "remaining_visual_review_rows": 81
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1470,6 +1470,20 @@
       "check": "labback_full_native_actual_metal_visual",
       "status": "pass",
       "scope": "Nine original full software/actual Metal native-domain sphere/spark phases through399\u21920 loop. Common projection, bounded accumulatedfloat residual,camera/caller/audio/device/exactpixel limits retained."
+    },
+    "recon/retail_asm/runtime/effects/current-charm-authored-20261010/root-approval.json": {
+      "sha256": "c97fe361a74af1464133adf9cbbd9ca6ec7a4f10e843eddb67b3c0dbfd7b0615",
+      "retail_row": "charm:0xad92bd37",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Eleven original full-software/actual Metal native-domain moving star and clover phases, both loop boundaries and corrected cold normal-star pair. Natural buff caller, cold shared depth, audio and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-meteorstorm-authored-20261010/root-approval.json": {
+      "sha256": "98c068ad2b5b4940d57a711ec64f024bc08450bb3531ccf127578f008f0fcaf2",
+      "retail_row": "MeteorStorm:0xf32bcfac",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Seventeen whole-effect original software/actual Metal native-domain launch, descent, impact and decay phases. Explicit native software primitive-span policy and16-bit depth range; common full impact ring remains diagnostic. Natural Strike caller, audio/device and exact pixels remain open."
     }
   }
 }

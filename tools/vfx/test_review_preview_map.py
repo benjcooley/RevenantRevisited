@@ -7,11 +7,12 @@ class ReviewPreviewAdmission(unittest.TestCase):
     def test_placeholders_and_invalid_aliases_fail_closed(self):
         candidates = '''TBlastEffect_BESPOKE
 TTornadoEffect_BESPOKE TVortexEffect_BESPOKE
+TMeteorStormEffect_BESPOKE
 TPulpEffect_BESPOKE TDustEffect_BESPOKE TMagicShieldEffect_BESPOKE
 TLabyrinthEffect_BESPOKE TJhagaAttackEffect_BESPOKE TJTeleEffect_BESPOKE TCEyesEffect_BESPOKE
 TCataclysmEffect_BESPOKE TFunnelEffect_BESPOKE TMaelstromEffect_BESPOKE TNakrnothEffect_BESPOKE
 TBuffEffect_Bespoke__Might_BESPOKE TBuffEffect_Bespoke__Stoneskin_BESPOKE
-TInvisibleEffect_Bespoke_BESPOKE TBuffEffect_Bespoke__charm_BESPOKE
+TInvisibleEffect_Bespoke_BESPOKE
 TBuffEffect_Bespoke__speed_BESPOKE TGoldEffect_BESPOKE TPunchAndJudyEffect_BESPOKE
 TCombatFlashEffect_BESPOKE TStrikeEffect_BESPOKE
 TFlareAnimator_BESPOKE TFlareAnimator_BESPOKE__Teleporter
@@ -24,11 +25,14 @@ TNewUnreviewedEffect_BESPOKE'''.split()
 
     def test_replacement_bodies_survive_stale_stub_banners(self):
         candidates = '''TBloodEffect_BESPOKE TSparksEffect_BESPOKE
-TFireConeEffect_BESPOKE TFireFlashEffect_BESPOKE TFireWindEffect_BESPOKE TFairyEffect_BESPOKE TMeteorStormEffect_BESPOKE
+TFireConeEffect_BESPOKE TFireFlashEffect_BESPOKE TFireWindEffect_BESPOKE TFairyEffect_BESPOKE
 TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
         self.assertEqual(set(admitted_candidates({'preview_candidates': candidates})), set(candidates))
 
     def test_new_exact_source_registration_overrides_stale_ledger(self):
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xf32bcfac',
+            'preview_candidates':['TMeteorStormEffect_BESPOKE']}),
+            ['MeteorStorm_AUTHORED'])
         self.assertEqual(admitted_candidates({'retail_type_id':'0xad92bd36',
             'preview_candidates':['TBuffEffect_Bespoke__speed_BESPOKE']}),
             ['TSpeed_AUTHORED_TAGS'])

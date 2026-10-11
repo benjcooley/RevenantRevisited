@@ -64,12 +64,14 @@ int main() {
         assert(!DescribeVfxReviewPreview(id).supported);
         assert(!CreateVfxReviewPreview(id,origin));
     }
-    for (uint32_t id : {0x0ea34fa3u,0xad92bd25u,0xad92bd33u,0x00ab1d1du,0xc24b2a85u}) {
+    for (uint32_t id : {0x0ea34fa3u,0xad92bd33u,0x00ab1d1du,0xc24b2a85u}) {
         const auto info=DescribeVfxReviewPreview(id);
         assert(info.supported && info.partial);
         assert(std::strstr(info.description,"Partial preview:"));
         assert(std::strstr(info.description,"not complete original implementation"));
     }
+    const auto fairy=DescribeVfxReviewPreview(0xad92bd25u);
+    assert(fairy.supported && !fairy.partial);
     const auto stationary=DescribeVfxReviewPreview(0xaeaeeb32u);
     assert(stationary.supported && stationary.partial && stationary.requires_endpoints);
     assert(std::strstr(stationary.description,"stationary"));

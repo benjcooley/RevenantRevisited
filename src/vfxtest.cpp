@@ -5288,6 +5288,7 @@ struct SVfxTestBootstrap {
             original.factory=[](const S3DPoint& o)->void*{return comet_original::Spawn(o);};
             original.submit=[](void* c,EFxDebugMode){comet_original::Advance(static_cast<comet_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){comet_original::SubmitWorld(static_cast<comet_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return comet_original::IsAlive(static_cast<comet_original::State*>(c));};
             original.destroy=[](void* c){comet_original::Destroy(static_cast<comet_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
