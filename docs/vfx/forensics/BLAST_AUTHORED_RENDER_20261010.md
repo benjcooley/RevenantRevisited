@@ -98,3 +98,43 @@ records the constants-only differential; `common-before`,
 fresh captures and phase checks. `native-wide-budget400m` records the expanded
 original replay; failed attempts remain separate. Natural callers, other
 lighting/device behavior and precise framebuffer equality remain open.
+
+## Whole-view coverage and explicit camera control (2026-10-11)
+
+`blast_whole_view.py` supplements the eight lifecycle phases with full phase60
+and90 coverage. Six supported1920x1080 views use screen origins
+(1280,1300), (640,1300), (1280,540), (640,540), (1280,-220) and (640,-220).
+Their union covers relative[-1280,1280]x[-1300,1300], including every submitted
+vertex of all56 authored root objects, even software-rejected geometry. Original
+mode80 and literal640/480 primitive-span limits remain fixed. Each original
+sample runs twice; complete draw inputs and active root decisions agree across
+views. The port renders every24Hz tick and records60/90 using stride30. The
+whole2560x2600 images use integer tile placement, with no geometry, worldcamera,
+lighting, scale or phase adjustment.
+
+The first tiled diagnostic exposed a test-camera bug: a signed explicit origin
+was interpreted as the automatic-framing sentinel. Commit05644b67 separates
+explicit presence from the default sentinel and logs actual screen origin and
+viewport. Capture validation consumes the new marker while preserving historical
+binaries without it. The compiled actual parser/framing controls and17 capture
+process tests pass. In the corrected actual GPU capture, all12 original tiles
+remain byte-identical; all8 positive-origin Metal frames remain byte-identical;
+only the4 previously misframed negative-origin frames change. Every actual
+viewport/origin and60/90 timing record now matches its declared input. All six
+processes exit cleanly.
+
+Final private evidence under
+`research/vfx-wide-20261010/hard-astra/blast-whole-final3`:
+
+- Whole manifest: `68f79ef8a26394ed3bb0ef7d2c0dafdb9867a7484ca47955a0bf0fd7553f804d`
+- Contact: `14f3b9a697c93cf0960b65fa5fbf2ccfbf5958ba1031709c172f2d713c26ee26`
+- Camera regression: `7963e72dd0f543b2188529614a8e82f9a33c02b664e9425fd1df39295386dfdb`
+- Binary: `7e095b838a7e545ee38d66f0f234669bccd05870f601871defa0f7ce22f69a5d`
+
+The earlier `blast-whole-final2` is a retained framing-failure diagnostic, not
+an accepted comparison. Original tile overlaps differ by up to1245pixels from
+viewport-dependent raster arithmetic; Metal overlaps differ by at most5pixels.
+Raw tile pairs and all overlap counts remain in the manifest. These results
+establish whole coverage, not exact framebuffer equality. The root reviewer has
+the complete panel; appearance approval is recorded separately. Natural caller,
+other lighting/device behavior and common full-geometry policy remain separate.
