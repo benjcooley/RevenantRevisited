@@ -14,5 +14,5 @@ for name,fix in [('shipped',False),('closed_final_vector',True)]:
   for t in(0,1,24,25,26,50,99,100):v.call(0x401390,(t,dest,dest+4,dest+8),this=e);samples.append(list(struct.unpack('<3f',v.uc.mem_read(dest,12))))
   expressions.append(dict(dimensions=v.u32(e+8),keys=keys,samples=samples))
  row=dict(name=name,initialization=init,expressions=expressions,parameters=a['tags'][1]['parameters'],controller_constants=bytes(v.uc.mem_read(c+0x4c,0x118)).hex());cases.append(row);print(json.dumps(row),flush=True)
-assert cases[0]['expressions']==cases[1]['expressions']; print('EXPR_EQUAL True',flush=True)
+assert cases[0]['expressions']==cases[1]['expressions']; assert cases[0]['controller_constants']==cases[1]['controller_constants']; print('EXPR_EQUAL True',flush=True)
 args.output.write_text(json.dumps(cases,indent=2)+'\n')

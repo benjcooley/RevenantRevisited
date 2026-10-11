@@ -7,3 +7,5 @@ The shipped color expression ends `100:(180,180,255]`. `nakrnoth_parser_probe.py
 Native evidence is private under `research/vfx-wide-20261010/hard-alpha/nakrnoth-parser-{first,repeat}.json`. `nakrnoth_visual_reference.py` runs actual NewObject/CreateAnimator, NextFrame/whole owner Pulse, Animate and BeginScene/PreRender/Render/PostRender/EndScene. It uses the declared fixed owner `(3185,3185,16)`, camera `(3185,3185,0)`, RAM framebuffer and ambient 38/directional 1. Terminal raster dispatch may be omitted only on unsampled ticks; renderer-side controller calls and RNG still execute every tick. The original shipped parameters are unchanged.
 
 This is a source/parser checkpoint, not visual acceptance. Complete lifetime, source-controller comparison and actual Metal appearance remain in progress. Natural boss/spell/map/audio/device behavior is not claimed.
+
+Root integrated build and ASan/UBSan terminal-vector controls pass. The fresh original differential now explicitly asserts controller constants as well as expression keys/evaluations; shipped and closed-vector results match. This is parser compatibility evidence only, not Nakrnoth appearance credit.
