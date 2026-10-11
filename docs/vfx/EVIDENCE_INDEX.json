@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 62,
+    "visual_fidelity_confirmed_rows": 63,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 62,
-    "remaining_visual_review_rows": 114
+    "reviewed_visual_pass_rows": 63,
+    "remaining_visual_review_rows": 113
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1169,6 +1169,69 @@
       "check": "current_actual_metal_native_visual_review",
       "status": "scoped_primary_visual_pass",
       "scope": "Recorded nullspell state0, fixed origin/facing0, native-domain actual Metal vs independently executed whole native software particles and all three bases; samples1/5/15/29/45/59, quality0 seed1, source lighting38+white directional, incoming16, warmup1. No crops, registration, fitting or invented geometry. Root reviewed overall form/color and three-base/trail evolution."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-regeneration-visual-20261010/review-approved.json": {
+      "sha256": "7c86451838b336be5e6b6f250178a03090f0b8d950696185e6b71da14a4db106",
+      "retail_row": "Regeneration:0x10ac03de",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-swiftstrike-visual-20261010/review-approved.json": {
+      "sha256": "f6ff802aab11950a641afc1bdde3ca5293c3ec76f2f8ff4775b53480e095b3ce",
+      "retail_row": "SwiftStrike:0xe0a3bc43",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-fspray-visual-20261010/review-approved.json": {
+      "sha256": "dab78140b139e4f47022c55e7e331aa6bc2b192e4859f2c6ce5f68592b864041",
+      "retail_row": "fspray:0x0c052638",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-yenergy-visual-20261010/review-approved.json": {
+      "sha256": "24390a5e0d6c737f266e2a76ae559815cc769fb06856f07c062cd627a0440dbf",
+      "retail_row": "YEnergy:0xaeaeeb30",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-yenergylose-visual-20261010/review-approved.json": {
+      "sha256": "d6cea8a9b6a2bdf26e5609fe2cb9279cc524dd62af0623c436834df19256c45f",
+      "retail_row": "YEnergyLose:0xaeaeeb33",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-yabsorb-visual-20261010/review-approved.json": {
+      "sha256": "bb1932dd709fa9c0c131df331a58a21e1e67bdeb6d818938e9854718d17fe2d1",
+      "retail_row": "YAbsorb:0xaeaeeb29",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-nullifier-visual-20261010/review-approved.json": {
+      "sha256": "fc5eef8b2fceae38cbd7d58050c342e53830a8d0f4c09a1c4e0dcdc638b988b1",
+      "retail_row": "nullifier:0xad92bd38",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-ogrestrength-visual-20261010/review-approved.json": {
+      "sha256": "b0ba94086ee97f787a24401a6de29109c704446673768421015cfe15c01de642",
+      "retail_row": "Ogrestrength:0x42e0fcd0",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/rgb565-trollblood-visual-20261010/review-approved.json": {
+      "sha256": "4074c0fa87378c4164cfd2330bb13e0f00a2db7f8bda180eeedcfca8f468c76e",
+      "retail_row": "trollblood:0xad92bd39",
+      "check": "rgb565_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
     }
   }
 }

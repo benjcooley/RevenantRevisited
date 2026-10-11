@@ -143,3 +143,12 @@ natural caster/map invocation remain open.
 fspray has the same complete measured captures but remains unapproved: its Metal
 sprites look whiter/cyan than the original green-tinted software output. Its
 source/clock/frontend proofs remain valid; a color diagnosis is pending.
+
+## fspray color closure
+
+The source-derived RGB565 modulation correction now restores the original green
+spray. Root independently reviewed twelve fresh matched phases and retains
+Regeneration/SwiftStrike and the four Y/nullifier passes with current hashes.
+fspray gains its own scoped pass; exact pixels and natural caller/scene remain
+open. See [the correction and frozen evidence](RGB565_PARTICLE_MODULATION.md).
+The earlier white/cyan mismatch above is retained as a dated diagnostic.

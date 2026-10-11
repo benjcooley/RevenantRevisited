@@ -103,7 +103,7 @@ Local recordings and hashed results:
 `/Users/benjamincooley/RevenantRetailLab/research/vfx-review-mode-20261010/verification.json`.
 These checks grant no additional retail appearance passes.
 
-Black-background update: footprint/density and schedule tests pass. Fresh Metal
+Historical black-background checkpoint: footprint/density and schedule tests passed. Metal
 captures verify a 180-pixel spacing request is held at 320, FireCone receives
 1785 pixels of isolation clearance and only 941 pixels of end padding, and
 `--vfx-review-first` opens on the selected first station. Blank background pixels
@@ -121,3 +121,30 @@ verify both lighting presets and an empty, labeled arroweffect slot.
 Local results: `/Users/benjamincooley/RevenantRetailLab/research/vfx-review-readable-20261010/verification.json`.
 
 Small-effect spacing is now 240px (previously 420). Stored culling bounds are capped for layout so inflated rectangles cannot create multi-minute empty gaps. All unavailable entries remain named slots.
+
+Current runtime audit restores the seven strict Warp controllers, parsed
+scrolltex controllers, and the three verified untextured utility meshes. Exact
+registered preview mappings cover newly admitted profiles even when the older
+ledger candidate list is empty. Finite preview owners with real liveness hooks
+restart after completion, including when their first cycle finishes offscreen.
+Unknown liveness retains its recorded browser policy. See the
+[lifetime controls](forensics/REVIEW_PREVIEW_LIVENESS_20261010.md).
+
+For automated draw diagnostics, `--vfx-no-ui` suppresses names and controls.
+The survey tool captures private, independent gallery sessions and reports
+visible pixels, unavailable routes, empty renderings and capture failures:
+
+```sh
+python3 tools/vfx/review_capture_survey.py \
+  --data-root /Users/benjamincooley/RevenantRetailLab/captures/runtime-fixtures/fountain-command-20261004/data \
+  --output /tmp/vfx-gallery-survey-new --reviewed --workers 4
+```
+
+Use `--effects MeteorStorm,MPAppear --approach` for normal scroll-in lifetime
+checks, or omit `--reviewed` to survey the complete catalogue. Each run has its
+own SAVE folder, typed selector, binary hash, raw frame hashes and log. A visible
+frame is a route/presence diagnostic; static effects may correctly stay constant,
+and this check grants no retail fidelity credit. Longer effects need additional
+samples. The first root survey confirms all 62 previously reviewed types produce
+label-free pixels in the centered configuration. Frozen evidence:
+`/Users/benjamincooley/RevenantRetailLab/research/vfx-review-survey-20261010/reviewed-centered-current/manifest.json`.

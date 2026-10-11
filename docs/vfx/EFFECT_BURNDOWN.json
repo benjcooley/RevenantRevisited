@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 62,
+    "visual_fidelity_confirmed_rows": 63,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 62,
-    "remaining_visual_review_rows": 114
+    "reviewed_visual_pass_rows": 63,
+    "remaining_visual_review_rows": 113
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -8113,7 +8113,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Preserve scoped original/actual Metal appearance and controlled map proofs; natural caster/alternate state/scene and strict framebuffer parity remain open.",
+      "next_action": "Preserve scoped source RGB565/current Metal appearance pass; natural caster/scene/other states and exact framebuffer/device parity remain separate.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -8145,13 +8145,13 @@
       },
       "visual_review": {
         "date": "2026-10-10",
-        "reviewer": "root independent six-phase full-frame inspection",
+        "reviewer": "root independent integration review",
         "result": "pass",
         "visual_pass": true,
-        "report": "recon/retail_asm/runtime/effects/current-ogrestrength-visual-20261010/review-approved.json",
-        "sha256": "57c7331a6479aabb60a02346c00e83e6001fe5d4af44be72e5b3f167320c1d47",
-        "scope": "Recorded nullspell state0, fixed origin/facing0, native-domain actual Metal vs independently executed whole native software particles and all three bases; samples1/5/15/29/45/59, quality0 seed1, source lighting38+white directional, incoming16, warmup1. No crops, registration, fitting or invented geometry. Root reviewed overall form/color and three-base/trail evolution.",
-        "note": "docs/vfx/forensics/CAMERA_PARTICLE_BATCH_20261010.md"
+        "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open.",
+        "report": "recon/retail_asm/runtime/effects/rgb565-ogrestrength-visual-20261010/review-approved.json",
+        "sha256": "b0ba94086ee97f787a24401a6de29109c704446673768421015cfe15c01de642",
+        "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
       }
     },
     {
@@ -8181,7 +8181,7 @@
         "accepted": false
       },
       "runtime_dispatch": "exact_static_particle_profile_controller_and_map_verified",
-      "next_action": "Retain recorded native/Metal appearance pass; natural spell/caster/scene and exact device/framebuffer parity remain separate.",
+      "next_action": "Preserve scoped source RGB565/current Metal appearance pass; natural caster/scene/other states and exact framebuffer/device parity remain separate.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -8226,13 +8226,13 @@
       },
       "visual_review": {
         "date": "2026-10-10",
-        "reviewer": "root independent fixed-sample inspection",
+        "reviewer": "root independent integration review",
         "result": "pass",
         "visual_pass": true,
-        "scope": "Twelve fixed samples of original complete particle controller/RenderObject/FVF1e2/software raster versus independent normal-factory Metal runtime: sampled emission, color, form and continuing animation pass in the recorded native-domain configuration. All logged RNG checkpoints match. Minor software/Metal raster differences remain; exact pixels, natural caster/caller and other scenes are open.",
-        "report": "recon/retail_asm/runtime/effects/current-regeneration-visual-20261010/review-approved.json",
-        "sha256": "8bbac0850f3e6ccf9e52fda3624ad4114026a134af2a60dabeae316bc48cebf6",
-        "note": "docs/vfx/forensics/STATIC_PARTICLES_FULL_VISUAL.md"
+        "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open.",
+        "report": "recon/retail_asm/runtime/effects/rgb565-regeneration-visual-20261010/review-approved.json",
+        "sha256": "7c86451838b336be5e6b6f250178a03090f0b8d950696185e6b71da14a4db106",
+        "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
       }
     },
     {
@@ -19428,7 +19428,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Retain scoped actual native/Metal appearance pass; natural caller/other scenes and exact framebuffer parity remain separate.",
+      "next_action": "Preserve scoped source RGB565/current Metal appearance pass; natural caster/scene/other states and exact framebuffer/device parity remain separate.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -19461,13 +19461,13 @@
       },
       "visual_review": {
         "date": "2026-10-10",
-        "reviewer": "root independent fixed-sample inspection",
+        "reviewer": "root independent integration review",
         "result": "pass",
         "visual_pass": true,
-        "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall animated ring/fan emitter phase pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open.",
-        "report": "recon/retail_asm/runtime/effects/current-nullifier-visual-20261010/review-approved.json",
-        "sha256": "ed7b000cb26878eecef8af9095dab85cfdef803c5b3971a487e613ae45ea3533",
-        "note": "docs/vfx/forensics/STATIC_PARTICLES_FULL_VISUAL.md"
+        "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open.",
+        "report": "recon/retail_asm/runtime/effects/rgb565-nullifier-visual-20261010/review-approved.json",
+        "sha256": "fc5eef8b2fceae38cbd7d58050c342e53830a8d0f4c09a1c4e0dcdc638b988b1",
+        "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
       }
     },
     {
@@ -19497,7 +19497,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Preserve scoped original/actual Metal appearance and controlled map proofs; natural caster/alternate state/scene and strict framebuffer parity remain open.",
+      "next_action": "Preserve scoped source RGB565/current Metal appearance pass; natural caster/scene/other states and exact framebuffer/device parity remain separate.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -19529,13 +19529,13 @@
       },
       "visual_review": {
         "date": "2026-10-10",
-        "reviewer": "root independent six-phase full-frame inspection",
+        "reviewer": "root independent integration review",
         "result": "pass",
         "visual_pass": true,
-        "report": "recon/retail_asm/runtime/effects/current-trollblood-visual-20261010/review-approved.json",
-        "sha256": "bd03dc0c91b979ca96e7249a7ec2f8c7a50a649e2b2e88df98a4ba74c345ac70",
-        "scope": "Recorded nullspell state0, fixed origin/facing0, native-domain actual Metal vs independently executed whole native software particles and all three bases; samples1/5/15/29/45/59, quality0 seed1, source lighting38+white directional, incoming16, warmup1. No crops, registration, fitting or invented geometry. Root reviewed overall form/color and three-base/trail evolution.",
-        "note": "docs/vfx/forensics/CAMERA_PARTICLE_BATCH_20261010.md"
+        "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open.",
+        "report": "recon/retail_asm/runtime/effects/rgb565-trollblood-visual-20261010/review-approved.json",
+        "sha256": "4074c0fa87378c4164cfd2330bb13e0f00a2db7f8bda180eeedcfca8f468c76e",
+        "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
       }
     },
     {
@@ -22110,13 +22110,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_static_particle_profile_controller_and_map_verified",
-      "next_action": "Preserve bounded render and controlled map proofs; independent production emitter matrices, actual whole native/Metal appearance, natural caller/character/scene context remain open.",
+      "next_action": "Preserve scoped source RGB565/current Metal appearance pass; natural caster/scene/other states and exact framebuffer/device parity remain separate.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -22158,6 +22158,16 @@
         "clean_floor_restored": true,
         "natural_trigger_verified": false,
         "binary_sha256": "d95e9e476304f9d3c24c3bd14d80115a18c570b960f69cb5f627ba416e44b576"
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent integration review",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open.",
+        "report": "recon/retail_asm/runtime/effects/rgb565-fspray-visual-20261010/review-approved.json",
+        "sha256": "dab78140b139e4f47022c55e7e331aa6bc2b192e4859f2c6ce5f68592b864041",
+        "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
       }
     },
     {
@@ -22559,7 +22569,7 @@
         "accepted": false
       },
       "runtime_dispatch": "exact_static_particle_profile_controller_and_map_verified",
-      "next_action": "Retain recorded native/Metal appearance pass; natural spell/caster/scene and exact device/framebuffer parity remain separate.",
+      "next_action": "Preserve scoped source RGB565/current Metal appearance pass; natural caster/scene/other states and exact framebuffer/device parity remain separate.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -22604,13 +22614,13 @@
       },
       "visual_review": {
         "date": "2026-10-10",
-        "reviewer": "root independent fixed-sample inspection",
+        "reviewer": "root independent integration review",
         "result": "pass",
         "visual_pass": true,
-        "scope": "Twelve fixed samples of original complete particle controller/RenderObject/FVF1e2/software raster versus independent normal-factory Metal runtime: sampled emission, color, form and continuing animation pass in the recorded native-domain configuration. All logged RNG checkpoints match. Minor software/Metal raster differences remain; exact pixels, natural caster/caller and other scenes are open.",
-        "report": "recon/retail_asm/runtime/effects/current-swiftstrike-visual-20261010/review-approved.json",
-        "sha256": "3a4df0ad26ddf0fb409174b37b13b8653521a8cee3f6cdaaefa3e47de08f9850",
-        "note": "docs/vfx/forensics/STATIC_PARTICLES_FULL_VISUAL.md"
+        "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open.",
+        "report": "recon/retail_asm/runtime/effects/rgb565-swiftstrike-visual-20261010/review-approved.json",
+        "sha256": "f6ff802aab11950a641afc1bdde3ca5293c3ec76f2f8ff4775b53480e095b3ce",
+        "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
       }
     },
     {
@@ -22969,7 +22979,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Retain scoped actual native/Metal appearance pass; natural caller/other scenes and exact framebuffer parity remain separate.",
+      "next_action": "Preserve scoped source RGB565/current Metal appearance pass; natural caster/scene/other states and exact framebuffer/device parity remain separate.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -23002,13 +23012,13 @@
       },
       "visual_review": {
         "date": "2026-10-10",
-        "reviewer": "root independent fixed-sample inspection",
+        "reviewer": "root independent integration review",
         "result": "pass",
         "visual_pass": true,
-        "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall particle form/color and sampled emission/decay pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open.",
-        "report": "recon/retail_asm/runtime/effects/current-yabsorb-visual-20261010/review-approved.json",
-        "sha256": "92f1860e518ce57af9aca3f2e842fa755186c500d67b03122cc0b82a228fb1af",
-        "note": "docs/vfx/forensics/STATIC_PARTICLES_FULL_VISUAL.md"
+        "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open.",
+        "report": "recon/retail_asm/runtime/effects/rgb565-yabsorb-visual-20261010/review-approved.json",
+        "sha256": "bb1932dd709fa9c0c131df331a58a21e1e67bdeb6d818938e9854718d17fe2d1",
+        "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
       }
     },
     {
@@ -23070,7 +23080,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Retain scoped actual native/Metal appearance pass; natural caller/other scenes and exact framebuffer parity remain separate.",
+      "next_action": "Preserve scoped source RGB565/current Metal appearance pass; natural caster/scene/other states and exact framebuffer/device parity remain separate.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -23103,13 +23113,13 @@
       },
       "visual_review": {
         "date": "2026-10-10",
-        "reviewer": "root independent fixed-sample inspection",
+        "reviewer": "root independent integration review",
         "result": "pass",
         "visual_pass": true,
-        "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall particle form/color and sampled emission/decay pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open.",
-        "report": "recon/retail_asm/runtime/effects/current-yenergy-visual-20261010/review-approved.json",
-        "sha256": "b2db1d8bd9b3f609b5375b7f5a68d60d6bd4ff7c6d6d623eefe0c7f359384dea",
-        "note": "docs/vfx/forensics/STATIC_PARTICLES_FULL_VISUAL.md"
+        "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open.",
+        "report": "recon/retail_asm/runtime/effects/rgb565-yenergy-visual-20261010/review-approved.json",
+        "sha256": "24390a5e0d6c737f266e2a76ae559815cc769fb06856f07c062cd627a0440dbf",
+        "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
       }
     },
     {
@@ -23140,7 +23150,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Retain scoped actual native/Metal appearance pass; natural caller/other scenes and exact framebuffer parity remain separate.",
+      "next_action": "Preserve scoped source RGB565/current Metal appearance pass; natural caster/scene/other states and exact framebuffer/device parity remain separate.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -23173,13 +23183,13 @@
       },
       "visual_review": {
         "date": "2026-10-10",
-        "reviewer": "root independent fixed-sample inspection",
+        "reviewer": "root independent integration review",
         "result": "pass",
         "visual_pass": true,
-        "scope": "Twelve fixed original full controller RenderObject/FVF1e2/software-raster versus actual normal-factory Metal samples, declared native-domain projector. Overall particle form/color and sampled emission/decay pass. Cached animator frame/matrix cadence and all logged RNG counts verified; source-light inputs declared, no fitting. Exact framebuffer parity, natural caller/scene and other configurations remain open.",
-        "report": "recon/retail_asm/runtime/effects/current-yenergylose-visual-20261010/review-approved.json",
-        "sha256": "2aa309f4029fcec133d70104794e59c3e0426b8661a98dc5c0b554c7987b4d1d",
-        "note": "docs/vfx/forensics/STATIC_PARTICLES_FULL_VISUAL.md"
+        "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open.",
+        "report": "recon/retail_asm/runtime/effects/rgb565-yenergylose-visual-20261010/review-approved.json",
+        "sha256": "d6cea8a9b6a2bdf26e5609fe2cb9279cc524dd62af0623c436834df19256c45f",
+        "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
       }
     },
     {
