@@ -483,6 +483,33 @@ ObjVersion is 0 for every class except `TComplexObject` 1, `TCharacter`
 
 Retail never saves a MAPSCROLL (§11.1).
 
+**A character loaded dead** is removed. `TCharacter::Load` sets KILL
+(`0x1000`, through vtable `0x40`) when health (vtable `0x1c0`) is below 1.
+The next `TMapPane::PulseObjects` (`0x004580f0`) deletes it (`0x00451840`)
+instead of pulsing it. The iterator uses flags `0xa0` and objset 4, and an
+object is deleted when it has KILL, its vtable slot `0x3c` answers true, and
+its class is not PLAYER (11). Slot `0x3c` is `0x00477930`, which returns 1.
+It is the same entry in the vtables of TObjectInstance (`0x5a50e8`),
+TComplexObject, TCharacter, TPlayer, TExit and TWeapon. A second loop, gated
+on `0x0066829c`, removes a KILL player through the player manager, never the
+main player (`0x00667fcc`).
+
+So a corpse lasts only while its sector stays in memory. After a load, or
+after its sector streams out and back in, it is gone. A script that names
+it then fails. `<name>.` resolves to nothing, the evaluator (`0x0041f230`)
+skips the line with no value and returns 0, and `if` returns `0x84`
+(COMMAND_SYSTEM.md §2.4).
+
+This was confirmed in retail on 2026-10-10. The emulator's play slot loaded
+a port quick save made in the ~25 ticks between Rahul's death and
+TendrickR's `If Rahul.stat health = 0`. Rahul came in as `0x0006d028` and
+was deleted on the second tick. The `if` returned `0x84` on every pass, so
+Tendrick's scene never ran and `ressexit` stayed locked
+([../../playtest/FINDINGS.md](../../playtest/FINDINGS.md) F1). The port
+matches retail (`TCharacter::Load`, `TMapPane::PulseObjects`) except for
+the delete test. The port's loop tests KILL alone: it doesn't skip players
+and has no slot `0x3c` (open).
+
 ### 11.4 TPlayer, objversion 15
 
 After `uint8 4` (TCharacter's version) and the character body:
