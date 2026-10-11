@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 116,
+    "retail_rows_with_source_fixes_recorded": 117,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 97,
+    "visual_fidelity_confirmed_rows": 98,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 97,
-    "remaining_visual_review_rows": 79
+    "reviewed_visual_pass_rows": 98,
+    "remaining_visual_review_rows": 78
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1498,6 +1498,20 @@
       "check": "independent_native_software_actual_metal_appearance",
       "status": "pass_for_recorded_configuration",
       "scope": "Ten original full-software/actual Metal native-domain six-layer swirl/sparks phases including shrink55 and blank56/60. Common projection tick56 stale prior image explicitly open; natural caller, audio, device and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-restorelife-authored-20261010/root-approval.json": {
+      "sha256": "000793f60a5bfc3107de116511e5f23939ae1478688686b2cb5ae8ea4ea0d297",
+      "retail_row": "Restorelife:0xb3ae0fed",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Ten full original software/actual Metal native-domain eight-emitter blue burst phases through real tick60 owner completion. Exact RNG and75,400 live fields within declared0.0002 accumulated float tolerance. Natural caller/attachment/audio, other states, device and exact pixels remain open."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/research/vfx-wide-20261010/hard-alpha/dust-freeze.json": {
+      "sha256": "99fecb485a4da3479f9ba3fed11cff96342cdf20648cf426a0a363bf657ca80f",
+      "retail_row": "Dust:0x0c052637",
+      "check": "dust_exact_controller_blank_software_modulation",
+      "status": "diagnostic_no_visual_credit",
+      "scope": "Exact state/RNG and whole blank software quantization; visible modern policy is diagnostic only."
     }
   }
 }

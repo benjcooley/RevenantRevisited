@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "ee6a61b93dbbd5069b4a91d6eb4311e04c872c0d9d21609b79ea3820a6e2c3e9",
+    "harness_sha256": "663b1a12219731a5edf0ebdb08fafabadf09c4b7c05427f14dc35167699d48df",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 116,
+    "retail_rows_with_source_fixes_recorded": 117,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 97,
+    "visual_fidelity_confirmed_rows": 98,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 97,
-    "remaining_visual_review_rows": 79
+    "reviewed_visual_pass_rows": 98,
+    "remaining_visual_review_rows": 78
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -9219,29 +9219,41 @@
       "retail_type_id": "0xb3ae0fed",
       "asset": "magic\\Restorelife.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: Actual eight moving emitters, authored twinkle and native key-zero matrix rejections replace absent Restorelife preview.1,020 poses/state/RNG, native owner kill and whole GPU appearance verified."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve approved isolated blue burst; verify natural Restorelife caller/audio/context and other states.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Ten full original software/actual Metal native-domain eight-emitter blue burst phases through real tick60 owner completion. Exact RNG and75,400 live fields within declared0.0002 accumulated float tolerance. Natural caller/attachment/audio, other states, device and exact pixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-restorelife-authored-20261010/root-approval.json",
+        "sha256": "000793f60a5bfc3107de116511e5f23939ae1478688686b2cb5ae8ea4ea0d297",
+        "note": "docs/vfx/forensics/RESTORELIFE_AUTHORED_RENDER_20261010.md"
+      }
     },
     {
       "index": 16,
@@ -22420,7 +22432,8 @@
         "TDustEffect_BESPOKE"
       ],
       "source_fixes": [
-        "Removed invented600ms warm-brown puff; authored Dustcloud partsys reports unsupported until posjitter/scljitter and exact-type binding are implemented."
+        "Removed invented600ms warm-brown puff; authored Dustcloud partsys reports unsupported until posjitter/scljitter and exact-type binding are implemented.",
+        "2026-10-10: Actual20-frame Dust controller with four cached emitters and real OF_KILL replaces null preview.87,350 state fields/100 poses and exact zero-posjitter equivalence. Native software and matched software policy quantize to blank; modern-policy visible diagnostic gives no visual credit."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -22428,8 +22441,8 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -22439,7 +22452,7 @@
         "accepted": false
       },
       "runtime_dispatch": "unsupported_authored_partsys_requires_jitter_and_exact_type_binding",
-      "next_action": "Defer difficult native software residue/controller investigation. Implement the actual Dustcloud partsys jitter and exact-type binding before a new retail A/B; no substitute puff.",
+      "next_action": "Use modern Dust preview; obtain targeted device reference before visual acceptance because software modulation quantizes literal texture to blank.",
       "notes": [
         "2026-10-05: bounded recording-before-spawn software diagnostic retained. Final five seconds are static residue, also present after delete; camera nudge restores exact ground. Unsupported preview verified with12 empty-floor frames; no accurate-reference credit."
       ],
