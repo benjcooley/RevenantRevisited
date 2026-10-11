@@ -61,3 +61,5 @@ Configuration: quality0, seed1, source ambient38/directional1, owner/camera0,
 Independent appearance review is pending at this checkpoint. Natural spell
 caller, terrain/actor context, audio, device behavior, destination rounding and
 exact pixel equality remain open. Approval records are owned by the root reviewer.
+
+Root independently inspected whole and actual-size detail phases, verified39 frozen inputs/pairs, and passed source poses/pool/lifecycle controls. The integrated60-frame native-domain movie is byte-identical at every sampled phase. Root gallery repeats118/120visible/114distinct and clean exit. Scoped appearance is approved; remaining stated gates stay open. Root approval SHA256: `ed8e4d40dac131c1c9510634153bfdf5e1a4b980fcd711ca28677849688ff2ea`.

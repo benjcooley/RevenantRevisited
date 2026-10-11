@@ -32,6 +32,10 @@ TNewUnreviewedEffect_BESPOKE'''.split()
         row={"retail_type_id":"0xdefeca7e","preview_candidates":[]}
         self.assertEqual(admitted_candidates(row),["EssenceDrain_AUTHORED"])
 
+    def test_barriers_and_jhaga_exact_controllers(self):
+        for type_id,name in [('0x224a5adf','BarrierEW_ORIGINAL'),('0x224b5adc','BarrierNS_ORIGINAL'),('0xaeaeeb32','JhagaAttack_ORIGINAL')]:
+            self.assertEqual(admitted_candidates({'retail_type_id':type_id,'preview_candidates':[]}),[name])
+
     def test_smoke_exact_quality_controller(self):
         row={"retail_type_id":"0x224a5ccc","preview_candidates":[]}
         self.assertEqual(admitted_candidates(row),["Smoke_ORIGINAL_QUALITY"])

@@ -82,3 +82,5 @@ surface allocation delta; every other state byte remains identical. This
 relocation control is explicit in the manifest, separate from the completely
 byte-identical same-size replay. No accepted appearance verdict is inferred
 from numeric controls alone.
+
+Root independently inspected all five detail pages and whole contact, verified86 frozen files, and passed the two native/core tests, default cached-pose control and full Quicksilver regression. Integrated25sampled Metal PNGs are byte-identical across full charge/flight/teardown; translatedgallery84/100visible withcorrectroute/restart/cleanexit. Scoped appearance approved; nullinvoker collision and all other stated boundaries remain open. Root approval SHA256: `c4cecea20e4ce5deea6ae1de189f4239c548c67c029d5489d82e27fec1004ae9`.

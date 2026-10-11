@@ -55,3 +55,5 @@ must be checked in the complete comparison.
 
 This checkpoint adds no visual pass. Whole appearance, UV rounding, natural
 caller/audio/device and exact framebuffer equality remain open.
+
+Root independently reviewed all31 paired phases of both walls and complete native geometry bounds. Fresh original replays match every91state row and three selected PNGs per resource; exact translated gallery routes are80/80visible/80distinct. Scoped appearance is approved for both resources. All documented rounding/context/device limits remain open. Approval hashes: BarrierEW `5a2612eb6d4c6129132f5bc52d064742a0e14d591a9bc236b1fa74235af029a1`, BarrierNS `67f4b4157174a01ba808edc7b5a9fbcaaf470c66435c984215d9fa9adeaf82fd`.
