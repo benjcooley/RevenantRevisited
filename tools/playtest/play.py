@@ -91,7 +91,10 @@ def main() -> int:
     story, start, parent, slot = args.story or 'keep', 0, 'newgame', args.slot
     if args.waypoint:
         point = catalogue.get(args.game, args.waypoint)
-        story, start, parent, slot = args.story or point.story, point.index, point.name, point.slot_dir
+        story, parent, slot = args.story or point.story, point.name, point.slot_dir
+        names = [m.name for m in LISTS[story]]
+        # resume after the waypoint's milestone by name; a story edited since keeps its place
+        start = names.index(point.name) + 1 if point.name in names else point.index
     elif args.slot:
         parent = f'slot:{args.slot.name}'
 

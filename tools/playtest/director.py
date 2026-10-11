@@ -293,14 +293,22 @@ class Director:
         words = f"'{stop_name}'" + (f", on the way to '{goal}'" if route else '')
         if stop and stop.get('screen') and distance(stop['pos'], pos) <= USE_REACH:
             person = stop.get('class') == 'character'
+            spot = self.clickable(stop)
+            if not spot:
+                # nothing of it to click from here (Locke stands in front): step to its side
+                return self.step_aside(obs, stop)
             self.caption('travel', ('talking to ' if person else 'using ') + words)
-            dest = Destination(f"use:{stop['id']}", words, tuple(stop['screen']), None, stop['id'], use=True,
+            dest = Destination(f"use:{stop['id']}", words, spot, None, stop['id'], use=True,
                                name=stop_name, person=person)
             result, after, self.state = self.walker.walk(self.host, self.state, dest, observe=self.observe)
+            if person:
+                result = 'talked' if self.conversation_follows() else 'no answer'
+                if result == 'talked':
+                    self.talked.add(stop_name)
             self.note('travel', to=stop_name, goal=goal, result=result)
             if person:
-                self.talked.add(stop_name)
-            elif distance(after['player']['pos'], pos) < 2 and after['player'].get('level') == level:
+                return True
+            if distance(after['player']['pos'], pos) < 2 and after['player'].get('level') == level:
                 tries = self.exit_tries[stop_name.lower()] = self.exit_tries.get(stop_name.lower(), 0) + 1
                 if tries >= 3:
                     self.blocked_exits.add(stop_name.lower())        # locked, or a script's turn first
@@ -354,6 +362,49 @@ class Director:
         else:
             self.stuck = 0
         return result != 'refused'
+
+    def clickable(self, obj: dict) -> tuple[int, int] | None:
+        """A screen point that the game's own pick resolves to `obj` and
+        that reaches the world: its feet, body and head first. The object's
+        screen position is where its feet are; Locke, a wall or bars may
+        cover that, and a click then lands on whatever is on top."""
+        fx, fy = obj['screen']
+        for dx, dy in ((0, -30), (0, -45), (0, -15), (-12, -30), (12, -30), (0, -60), (-20, -45), (20, -45), (0, 0)):
+            x, y = fx + dx, fy + dy
+            if not (0 <= x < 640 and 0 <= y < 480):
+                continue
+            picked = self.host.pick(x, y)
+            if picked.get('object') == obj['id'] and picked.get('world', True):
+                return x, y
+        return None
+
+    def step_aside(self, obs: dict, obj: dict) -> bool:
+        """Walk a few steps to the side of `obj`, so it isn't behind Locke."""
+        pos, at = obs['player']['pos'], obj['pos']
+        d = max(1.0, distance(pos, at))
+        side = (at[0] + (at[1] - pos[1]) / d * 70, at[1] - (at[0] - pos[0]) / d * 70)
+        (shown, reaches), = self.host.project([[side[0], side[1], pos[2] + CLICK_HEIGHT]])
+        if not shown or not reaches:
+            return False
+        self.caption('travel', f"stepping aside to reach '{obj.get('name')}'")
+        dest = Destination('aside', 'aside', tuple(shown), (round(side[0]), round(side[1]), pos[2]))
+        result, _, self.state = self.walker.walk(self.host, self.state, dest, observe=self.observe)
+        self.note('step aside', of=obj.get('name'), result=result)
+        return result != 'refused'
+
+    def conversation_follows(self, within: int = 72) -> bool:
+        """After a click on a person: does a conversation start (a dialog up,
+        a line of speech, or a scene that takes control) within `within` ticks?"""
+        waited = 0
+        while waited < within:
+            obs = self.observe()
+            self.messages += obs.get('messages', [])
+            if obs.get('screen') == 'dialog' or (obs.get('dialog') or {}).get('choices') \
+                    or (obs.get('dialog') or {}).get('text') or not obs.get('control', True):
+                return True
+            self.host.step(12)
+            waited += 12
+        return False
 
     def dead(self, obs: dict) -> None:
         self.observe(frame=True)

@@ -8,6 +8,8 @@ show what each moment looks like.
 """
 from __future__ import annotations
 
+import math
+
 from director import Milestone, after_scene, character_dead, control_on, near, talked_to
 
 KEEP = [
@@ -18,6 +20,13 @@ KEEP = [
     Milestone('rahul defeated',
               'A crazed priest, Rahul, attacks Locke in the summoning chamber. Fight him until he falls.',
               after_scene(character_dead('Rahul')), save=True),
+    Milestone('at rand',
+              'Explore the Keep and find the guard Rand, held in the dungeon below.',
+              lambda obs, d: any((o.get('name') or '').lower() == 'randk'
+                                 and math.hypot(o['pos'][0] - obs['player']['pos'][0],
+                                                o['pos'][1] - obs['player']['pos'][1]) <= 120
+                                 for o in obs.get('objects', [])),
+              save=True, goal='RandK'),
     Milestone('rand questioned',
               'Explore the Keep. Talk to the people there, and find the guard Rand in the dungeon below '
               'to question him about the cult.',
