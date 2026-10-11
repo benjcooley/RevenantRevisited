@@ -6,14 +6,15 @@ is left out, never guessed. Sources (docs/gameplay/forensics, gameflow/
 forensics, ui/forensics, recon/discovered): COMBAT_ATTACK_CHOICE.md §2.4
 (ACH), COMBAT_HIT.md (HIT), PLAYER_STATS.md (PS), SCREEN_SYSTEM.md (SCR),
 INGAME_MENU.md (IGM), DIALOG.md (DLG), INVENTORY.md (INV), MAP_INPUT.md
-(MI), TTextBar_SPEC.md (TB), COMBAT_DOJO.md (DOJO), recon/docs/
-OBJCLASS_IDS.md.
+(MI), TTextBar_SPEC.md (TB), COMBAT_DOJO.md (DOJO), COMBAT_MOTION.md
+(CM), recon/docs/OBJCLASS_IDS.md; addresses without a source were read in
+the disassembly of the baseline.
 
 Reads are plain memory reads, except the getters retail itself uses for
-values it computes (maximum health / fatigue / mana, weapon type, gold,
-whether a character takes Locke for an enemy),
-called through `PlayWorld.peek`, which refuses anything that is not a
-getter. Observing never changes the game.
+values it computes (maximum health / fatigue / mana, weapon type, radius,
+gold, whether a character takes Locke for an enemy), called through
+`PlayWorld.peek`, which refuses anything that is not a getter. Observing
+never changes the game.
 """
 from __future__ import annotations
 
@@ -36,9 +37,14 @@ LEVEL_STAT, EXP_STAT, NEXTEXP_STAT = 17, 18, 19      # PS §1 (src/charstats.h o
 SKILL_STATS = dict(attack=40, defense=41, invoke=42)  # PS §1
 WEAPON_SKILL_BASE = 43                                # skill of the weapon in hand: 43 + WeaponType (ACH item 19)
 SECTOR_COUNT, SECTORS = 0x00668578, 0x00668588       # sector pool (AW, recon/classes/cls_0x44ceb0.cpp)
+SECTOR_LEVEL, SECTOR_X, SECTOR_Y, SECTOR_WALKMAP = 0x04, 0x08, 0x0c, 0x00   # as FindSector 0x00499e10 matches;
+                                  # the walkmap: 64 x 64 uint16, height in the low 10 bits (0x00499720)
+WALK_SHIFT, SECTOR_SHIFT = 4, 6   # a walk cell is 16 units, a sector 64 cells (GetWalkHeight 0x00452e10)
+SECTOR_MASK, SECTOR_CELLS, WALK_HEIGHT_MASK = (1 << SECTOR_SHIFT) - 1, 1 << 2 * SECTOR_SHIFT, 0x3ff
 MAP_PANE = 0x006668d8             # TMapPane: rect +0x04..+0x10, scroll origin +0x78 / +0x7c (MI §1)
 WORLD_TO_SCREEN = 0x0046d7a0      # cdecl (const S3DPoint*, int *sx, int *sy): map-screen pixels
 IS_ENEMY = 0x004c89c0             # TCharacter::IsEnemy(TCharacter *other), thiscall (src/character.cpp)
+WALK_HEIGHT = 0x00452e10          # GetWalkHeight(const S3DPoint*, level, int *flags) (test cross-checks)
 
 # ---- object layout (TObjectInstance / TCharacter / TPlayer) -----------------
 OBJ_CLASS, OBJ_TYPE, OBJ_FLAGS, OBJ_LEVEL = 0x04, 0x06, 0x08, 0x0e   # int16, uint16, uint32, uint16
@@ -55,6 +61,8 @@ EQUIPMENT_HAND = 0x2b0            # TPlayer equipment[11] at +0x2a0: the prime h
 INVENTORY_COUNT, INVENTORY = 0x68, 0x78   # TPointerArray of the items held (INV §2)
 ITEM_SLOT = 0x7c                  # int16: 0..0xfe pack, 0x100.. equipment, 0x10b.. belt (INV §2)
 BELT_FIRST, BELT_SLOTS = 0x10b, 5
+VT_RADIUS = 0x258                 # Radius() 0x004d6e40: what FindClearPath tests a step over (CM §3.9:
+                                  # 0x004c3a3f, then GetWalkHeightRadius 0x004c3a51)
 VT_MAX = dict(health=0x1d8, fatigue=0x1e0, mana=0x1e8)   # MaxHealth / MaxFatigue / MaxMana (HIT, HUD)
 VT_WEAPON_TYPE = 0x2cc            # WeaponType (ACH: player 0x00520810)
 VT_INVENTORY_AMOUNT = 0x84        # GetInventoryAmount(name) 0x0046fde0, nested (INVENTORY.md §2)
@@ -70,6 +78,10 @@ CLASS_NAMES = ['item', 'weapon', 'armor', 'talisman', 'food', 'container', 'ligh
 CLASS_PLAYER, CLASS_CHARACTER = 11, 12
 NOT_LISTED = {9, 14, 25}          # tiles, shadows, effects
 OF_INVENTORY = 0x40000000
+
+
+def signed(value):
+    return value - (1 << 32) if value & 0x80000000 else value
 
 
 class Memory:
@@ -212,6 +224,56 @@ class Observer:
             return [x + m.i32(MAP_PANE + 0x04), y + m.i32(MAP_PANE + 0x08)]
         return None
 
+    # ---- the walk map ---------------------------------------------------
+
+    def walk_sectors(self, level, first, last):
+        """(sector x, sector y) -> the sector's walkmap (64 rows of 64
+        cells) or None without one, for the sectors on `level` from `first`
+        to `last` (inclusive (x, y) corners) as FindSector 0x00499e10 finds
+        them: the pool's first with that level and place."""
+        m = self.m
+        found = {}
+        for sector in m.pointers(m.u32(SECTORS), m.i32(SECTOR_COUNT)):
+            if not sector or m.i32(sector + SECTOR_LEVEL) != level:
+                continue
+            key = (m.i32(sector + SECTOR_X), m.i32(sector + SECTOR_Y))
+            if key in found or not all(a <= k <= b for a, k, b in zip(first, key, last)):
+                continue
+            walkmap = m.u32(sector + SECTOR_WALKMAP)
+            found[key] = (struct.unpack(f'<{SECTOR_CELLS}H', m.vm.uc.mem_read(walkmap, 2 * SECTOR_CELLS))
+                          if walkmap else None)
+        return found
+
+    def walkgrid(self, player, radius):
+        """PROTOCOL.md §7's walk grid around the player, each cell as
+        GetWalkHeight 0x00452e10 reads it on his level: cell k holds world
+        k * 16 ((x + 8) >> 4), its sector (k >> 6) found by FindSector, the
+        height the walkmap's low 10 bits at cell (k & 63) (0x00499720), 0 in
+        a sector without a walkmap. Where retail finds no sector (and would
+        answer 0), -1: unknown, not "no floor". The square is the port's
+        (src/observation.cpp WriteWalkGrid)."""
+        x, y, _ = self.pos(player)
+        gx, gy = (x - radius) >> WALK_SHIFT, (y - radius) >> WALK_SHIFT
+        cells = ((2 * radius) >> WALK_SHIFT) + 1
+        sectors = self.walk_sectors(self.m.u16(player + OBJ_LEVEL), (gx >> SECTOR_SHIFT, gy >> SECTOR_SHIFT),
+                                    ((gx + cells - 1) >> SECTOR_SHIFT, (gy + cells - 1) >> SECTOR_SHIFT))
+        heights = []
+        for row in range(gy, gy + cells):
+            column, end = gx, gx + cells
+            while column < end:
+                key = (column >> SECTOR_SHIFT, row >> SECTOR_SHIFT)
+                stop = min(end, (key[0] + 1) << SECTOR_SHIFT)
+                if key not in sectors:
+                    heights += [-1] * (stop - column)
+                elif sectors[key] is None:
+                    heights += [0] * (stop - column)
+                else:
+                    line = (row & SECTOR_MASK) << SECTOR_SHIFT
+                    run = sectors[key][line + (column & SECTOR_MASK):line + ((stop - 1) & SECTOR_MASK) + 1]
+                    heights += [h & WALK_HEIGHT_MASK for h in run]
+                column = stop
+        return dict(origin=[gx, gy], cell=1 << WALK_SHIFT, w=cells, h=cells, heights=heights)
+
     # ---- check line -----------------------------------------------------
 
     def check(self):
@@ -236,8 +298,6 @@ class Observer:
     # ---- observation ----------------------------------------------------
 
     def observe(self, objects=800, frame=None, walkgrid=None):
-        if walkgrid is not None:
-            raise ValueError('walkgrid is not offered by the retail host yet')
         world, m = self.world, self.m
         result = dict(t=world.tick, screen=self.screen(), control=bool(m.u32(CONTROL)))
         player = self.player()
@@ -248,6 +308,8 @@ class Observer:
         if dialog:
             result['dialog'] = dialog
         result['messages'] = self.messages()
+        if player and walkgrid is not None and walkgrid >= 0:
+            result['walkgrid'] = self.walkgrid(player, int(walkgrid))
         if frame:
             world.write_frame(frame)
             result['frame'] = str(frame)
@@ -256,7 +318,7 @@ class Observer:
     def describe_player(self, player):
         m = self.m
         info = dict(pos=self.pos(player), level=m.u16(player + OBJ_LEVEL),
-                    facing=m.u8(player + OBJ_FACING))
+                    facing=m.u8(player + OBJ_FACING), radius=signed(self.virtual(player, VT_RADIUS)))
         info['screen'] = self.project(info['pos'])
         for name in ('health', 'mana', 'fatigue'):
             info[name] = [self.stat(player, self.stat_id(name)), self.virtual(player, VT_MAX[name])]
