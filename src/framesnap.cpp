@@ -19,6 +19,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
 
+#include <miniz.h>
 #include <sokol_app.h>
 
 #include <cstdio>
@@ -237,12 +238,32 @@ void SetConfig(const SConfig& cfg) { g_cfg = cfg; }
 const SConfig& GetConfig()         { return g_cfg; }
 bool Active()                      { return g_cfg.active && !g_done; }
 
-bool WritePngRGBA(const char* path, int32_t w, int32_t h, const uint8_t* pixels)
+bool WritePngRGBA(const char* path, int32_t w, int32_t h, const uint8_t* pixels, int32_t compression)
 {
     if (!path || !pixels || w <= 0 || h <= 0) return false;
     EnsureParentDir(path);
     const int stride = w * 4;
-    const int ok = stbi_write_png(path, w, h, 4, pixels, stride);
+    int ok = 0;
+    if (compression <= 1)
+    {
+        // Fast: miniz's deflate at its fastest level, about ten times
+        // stb's (whose compressor is slow at every level).
+        size_t size = 0;
+        void* png = tdefl_write_image_to_png_file_in_memory_ex(pixels, w, h, 4, &size, 1, MZ_FALSE);
+        if (FILE* f = png ? std::fopen(path, "wb") : nullptr)
+        {
+            ok = std::fwrite(png, 1, size, f) == size;
+            ok = (std::fclose(f) == 0) && ok;
+        }
+        mz_free(png);
+    }
+    else
+    {
+        const int level = stbi_write_png_compression_level;
+        stbi_write_png_compression_level = compression;
+        ok = stbi_write_png(path, w, h, 4, pixels, stride);
+        stbi_write_png_compression_level = level;
+    }
     if (!ok)
     {
         log_warn("[framesnap] PNG write failed: %s", path);

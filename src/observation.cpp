@@ -290,9 +290,11 @@ void WriteWalkGrid(JsonOut& out, int32_t radius)
 
 const char* Observation::ScreenName()
 {
+    // Between a quick start's load and the first frame no screen is up yet;
+    // the game in the session is what the play screen shows next.
     const TScreen* screen = CurrentScreen;
     if (!screen)
-        return "loading";
+        return GameFlow.Session().Ready() ? "play" : "loading";
     if (screen == &PlayScreen)
     {
         if (GameFlow.Session().Loading() || GameFlow.Session().LevelLoading())

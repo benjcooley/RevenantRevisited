@@ -47,10 +47,9 @@ constexpr const char* kClickWalk  = "clickwalk";
 std::string NowUtc()
 {
     const std::time_t now = std::time(nullptr);
-    std::tm utc{};
-    gmtime_r(&now, &utc);
-    char buf[32];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &utc);
+    char buf[32] = {};
+    if (const std::tm* utc = std::gmtime(&now))
+        std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", utc);
     return buf;
 }
 
@@ -71,13 +70,13 @@ bool CopyFile(const fs::path& from, const fs::path& to, std::string& error)
     return !ec;
 }
 
-bool WritePng(const fs::path& file, const uint8_t* rgba, int32_t w, int32_t h)
+bool WritePng(const fs::path& file, const uint8_t* rgba, int32_t w, int32_t h, int32_t compression = 8)
 {
     if (!rgba || w <= 0 || h <= 0)
         return false;
     std::error_code ec;
     fs::create_directories(file.parent_path(), ec);
-    return FrameSnap::WritePngRGBA(file.string().c_str(), w, h, rgba);
+    return FrameSnap::WritePngRGBA(file.string().c_str(), w, h, rgba, compression);
 }
 
 } // namespace
@@ -162,7 +161,11 @@ bool TPlaytest::Initialize(int argc, char** argv, TBoot bootGame)
     }
 
     // --record: a session at the command line's start (--quickstart[=slot]).
-    if (!(cmd("seed") >> value))
+    char* end = nullptr;
+    const bool seeded = static_cast<bool>(cmd("seed") >> value);
+    if (seeded)
+        seed = uint32_t(std::strtoul(value.c_str(), &end, 10));
+    if (!seeded || value.empty() || !end || *end)
     {
         log_error("[playtest] --record needs --seed=N (the recording replays from it)");
         return false;
@@ -174,7 +177,6 @@ bool TPlaytest::Initialize(int argc, char** argv, TBoot bootGame)
         return false;
     }
     mode      = EMode::Record;
-    seed      = uint32_t(std::stoul(value));
     seedSet   = true;
     timing    = cmd["fixedstep"] ? ETiming::Lockstep : ETiming::Frames;
     bundleDir = record;
@@ -545,8 +547,9 @@ void TPlaytest::WriteWatchFrame()
 {
     const fs::path dir = watchDir;
     Display.RequestCapture([dir](const uint8_t* rgba, int32_t w, int32_t h) {
+        // Every tick: fast compression keeps up with a watched pace.
         const fs::path tmp = dir / "frame.tmp.png";
-        if (!WritePng(tmp, rgba, w, h))
+        if (!WritePng(tmp, rgba, w, h, 1))
             return;
         std::error_code ec;
         fs::rename(tmp, dir / "frame.png", ec);
