@@ -150,6 +150,14 @@ class Retail_rules(unittest.TestCase):
         obs['objects'].append(dict(obs['objects'][0], id=8, health=[30, 50], pos=[1100, 1000, 0]))
         self.assertEqual(t.target_of(obs)['id'], 8)
 
+    def test_a_tired_locke_isnt_offered_blows_he_cant_pay_for(self):
+        t = tactician()
+        obs = observation()
+        obs['player']['fatigue'] = [5, 80]                                 # the fixture's blows cost 10
+        s = t.assess(obs)
+        self.assertNotIn('attack', t.options(obs, s))
+        self.assertEqual(t.rule(obs, s, t.options(obs, s)).name, 'back_off')
+
     def test_a_grapple_needs_contact(self):
         t = tactician()
         obs = observation(d=60)

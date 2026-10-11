@@ -25,7 +25,10 @@ worst hit roll and risks an instant counter (ButtonAttack 0x4d2480), so a
 button pressed twice running isn't offered a third time; and barehanded
 Locke has grapples (throws on Ctrl+A, Ctrl+S) that only some monsters can
 be thrown with, so a grapple the game refuses against a kind of monster
-isn't offered against that kind again.
+isn't offered against that kind again. An attack costs fatigue at its
+impact; short of the cost the game throws a fatigued blow for -80%, so an
+attack Locke can't pay for isn't offered (he backs off and gets his
+breath, about 13 a second).
 """
 from __future__ import annotations
 
@@ -239,10 +242,13 @@ class Tactician:
         player = obs['player']
         attacks = {}
         worn = self.worn_out(s.target)
+        fatigue = (player.get('fatigue') or [0, 0])[0]
         if s.reach != 'far':
             for button in sorted({a.button for a in s.attacks}):
                 v = s.variant(button)
                 if not v or v.control not in self.bindings or (button > 3 and s.reach != 'close') or button == worn:
+                    continue
+                if v.fatigue > fatigue:          # paid at impact; short of it, the game throws a fatigued blow (-80%)
                     continue
                 key = str(self.bindings[v.control])
                 if button > 3:
@@ -314,6 +320,8 @@ class Tactician:
         if 'attack' in options:
             name = 'attack:2' if 'attack:2' in options['attack'] else next(iter(options['attack']))
             return Tactic(name, 'rule: strike when in reach')
+        if s.reach != 'far':                     # in reach but too tired to strike: get clear and get breath back
+            return Tactic('back_off', 'rule: recover fatigue out of reach')
         return Tactic('close_in', 'rule: close the distance')
 
     def learn(self, obs: dict) -> None:
