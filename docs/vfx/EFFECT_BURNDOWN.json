@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "c8c9f60bd6d5ce3ba5b41d836711b417bc0cd662899a41c4e5cfe5527a945717",
+    "harness_sha256": "488c9bf6d1f8760563743c1439d9852eef902db5acd2312b5b93abb8505aa056",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 118,
+    "retail_rows_with_source_fixes_recorded": 120,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 99,
+    "visual_fidelity_confirmed_rows": 101,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 99,
-    "remaining_visual_review_rows": 77
+    "reviewed_visual_pass_rows": 101,
+    "remaining_visual_review_rows": 75
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -7431,29 +7431,41 @@
       "retail_type_id": "0x8cd3ea0f",
       "asset": "magic\\Dexterity.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: Exact four moving stars and randomized particle trails replace absent preview.360 authored poses and native Render RNG consumption verified through123ticks and two60-frame wraps."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve approved star/trail loops; verify natural buff/endstate/audio and shared-depth behavior.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Twelve full original software/actual Metal native-domain four moving star/trail phases through two60-frame wraps plus corrected cold tick1 pair.57,785 state fields/RNG exact within float tolerance. Cold depth, natural buff/endstate/audio/device and exact pixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-dexterity-authored-20261010/root-approval.json",
+        "sha256": "7e3aa095ae364471f765670661c92eb87b3970c8a8734a49711be014d2e5ecdf",
+        "note": "docs/vfx/forensics/DEXTERITY_AUTHORED_RENDER_20261010.md"
+      }
     },
     {
       "index": 7,
@@ -22942,29 +22954,41 @@
       "retail_type_id": "0xe0a3bc42",
       "asset": "magic\\PoisonCloud.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: Actual looping green cloud/bubble controllers and16/31-slot pools replace unverified preview. Full original caller/state/RNG and real GPU dual-loop appearance; actual owner OF_KILL bridge preserved."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve approved green cloud/bubble loop; verify natural caller and map/audio/device context.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Nineteen whole original software/actual Metal native-domain green cloud and bubble phases across130ticks/two60-frame loops.86,700 state fields/RNG,360 poses and fresh native replay exact within bounded float residual. Natural caller/map/audio/device and exact pixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-poison-authored-20261010/root-approval.json",
+        "sha256": "c84ca757727ce73d872cf1fc94949e924ebd71acb99a104cdec3bc85fa0f88e5",
+        "note": "docs/vfx/forensics/POISON_NATIVE_VISUAL.md"
+      }
     },
     {
       "index": 162,

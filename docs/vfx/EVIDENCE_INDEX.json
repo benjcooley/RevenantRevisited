@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 118,
+    "retail_rows_with_source_fixes_recorded": 120,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 99,
+    "visual_fidelity_confirmed_rows": 101,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 99,
-    "remaining_visual_review_rows": 77
+    "reviewed_visual_pass_rows": 101,
+    "remaining_visual_review_rows": 75
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1519,6 +1519,20 @@
       "check": "independent_native_software_actual_metal_appearance",
       "status": "pass_for_recorded_configuration",
       "scope": "Six original default-render50-root/actual Metal static ice-geometry phases,60-frame unchanged film and actual map presence/cleanup.45,000 native legacy key channels exact; original Snow static leaf, not Iced victim/shatter. Natural caller, other states, device/depth and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-dexterity-authored-20261010/root-approval.json": {
+      "sha256": "7e3aa095ae364471f765670661c92eb87b3970c8a8734a49711be014d2e5ecdf",
+      "retail_row": "Dexterity:0x8cd3ea0f",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Twelve full original software/actual Metal native-domain four moving star/trail phases through two60-frame wraps plus corrected cold tick1 pair.57,785 state fields/RNG exact within float tolerance. Cold depth, natural buff/endstate/audio/device and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-poison-authored-20261010/root-approval.json": {
+      "sha256": "c84ca757727ce73d872cf1fc94949e924ebd71acb99a104cdec3bc85fa0f88e5",
+      "retail_row": "poison:0xe0a3bc42",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Nineteen whole original software/actual Metal native-domain green cloud and bubble phases across130ticks/two60-frame loops.86,700 state fields/RNG,360 poses and fresh native replay exact within bounded float residual. Natural caller/map/audio/device and exact pixels remain open."
     }
   }
 }

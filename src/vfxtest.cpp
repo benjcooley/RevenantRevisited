@@ -5325,6 +5325,7 @@ struct SVfxTestBootstrap {
             original.factory=[](const S3DPoint& o)->void*{return poison_original::Spawn(o);};
             original.submit=[](void* c,EFxDebugMode){poison_original::Advance(static_cast<poison_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){poison_original::SubmitWorld(static_cast<poison_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return poison_original::IsAlive(static_cast<poison_original::State*>(c));};
             original.destroy=[](void* c){poison_original::Destroy(static_cast<poison_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
