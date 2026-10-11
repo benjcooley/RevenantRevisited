@@ -1,6 +1,6 @@
 """Admission tests: source implementation audit is independent of ledger status."""
 import unittest
-from generate_review_preview_map import admitted_candidates
+from generate_review_preview_map import PARTIAL, admitted_candidates, candidate_metadata
 
 
 class ReviewPreviewAdmission(unittest.TestCase):
@@ -23,7 +23,7 @@ TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertEqual(admitted_candidates({'preview_candidates': candidates}), [])
 
     def test_replacement_bodies_survive_stale_stub_banners(self):
-        candidates = '''TBloodEffect_BESPOKE TAuraEffect_BESPOKE TSparksEffect_BESPOKE
+        candidates = '''TBloodEffect_BESPOKE TSparksEffect_BESPOKE
 TFireConeEffect_BESPOKE TFireFlashEffect_BESPOKE TMeteorStormEffect_BESPOKE
 TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
         self.assertEqual(set(admitted_candidates({'preview_candidates': candidates})), set(candidates))
@@ -35,7 +35,29 @@ TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
         self.assertEqual(admitted_candidates({'retail_type_id':'0xad92bd35',
             'preview_candidates':[]}), ['TQuicksilver_AUTHORED_TAGS'])
         self.assertEqual(admitted_candidates({'retail_type_id':'0x0ea34fa3',
-            'preview_candidates':['TBlastEffect_BESPOKE']}), [])
+            'preview_candidates':['TBlastEffect_BESPOKE']}), ['TBlastEffect_BESPOKE'])
+
+    def test_partial_requires_exact_identity_and_explicit_warning(self):
+        self.assertEqual(len(PARTIAL), 21)
+        for retail_id, (name, reason) in PARTIAL.items():
+            row = {'retail_type_id': retail_id, 'preview_candidates': [name]}
+            self.assertEqual(admitted_candidates(row), [name])
+            partial, description = candidate_metadata(row, name)
+            self.assertTrue(partial)
+            self.assertIn(reason, description)
+            self.assertIn('not complete original implementation', description)
+            self.assertEqual(admitted_candidates({'retail_type_id': '0xffffffff',
+                                                 'preview_candidates': [name]}), [])
+            self.assertEqual(admitted_candidates({'retail_type_id': retail_id,
+                                                 'preview_candidates': []}), [])
+        self.assertEqual(PARTIAL['0xc24b2a85'][0], 'TFogEffect_BESPOKE')
+
+    def test_implemented_precedes_partial_and_keeps_separate_metadata(self):
+        row = {'retail_type_id': '0x0ea34fa3', 'preview_candidates': [
+            'TBlastEffect_BESPOKE', 'TGoldEffect_AUTHORED_TAGS']}
+        self.assertEqual(admitted_candidates(row), [
+            'TGoldEffect_AUTHORED_TAGS', 'TBlastEffect_BESPOKE'])
+        self.assertFalse(candidate_metadata(row, 'TGoldEffect_AUTHORED_TAGS')[0])
 
     def test_exact_authored_replacement_preferred_without_old_stub_fallback(self):
         self.assertEqual(admitted_candidates({'preview_candidates': [

@@ -7,6 +7,7 @@
 #endif
 #include <cassert>
 #include <iostream>
+#include <cstring>
 
 namespace {
 int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0;
@@ -36,6 +37,8 @@ std::vector<SEffect> ReviewCatalogue() {
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
+            Row("TFogEffect_BESPOKE",EVfxPreviewStyle::Static),
+            Row("TJhagaAttackEffect_BESPOKE",EVfxPreviewStyle::Projectile),
             Row("TSparksEffect_BESPOKE",EVfxPreviewStyle::Combat),
             Row("TBlastEffect_BESPOKE",EVfxPreviewStyle::Combat),
             Row("TFairyEffect_BESPOKE",EVfxPreviewStyle::Static),
@@ -56,12 +59,21 @@ int main() {
     assert(!CreateVfxReviewPreview(0x152dafef,origin));
     assert(!CreateVfxReviewPreview(0x12309867,origin));
     // A registered, callable factory is insufficient: the implementation audit
-    // must reject placeholders and invalid animator aliases before spawning.
-    for (uint32_t id : {0x0ea34fa3u,0xad92bd25u,0x2784abdeu,0xad92bd33u,0xd0c0f03au}) {
+    // must reject null bodies and invalid animator aliases before spawning.
+    for (uint32_t id : {0x2784abdeu,0xd0c0f03au}) {
         assert(!DescribeVfxReviewPreview(id).supported);
         assert(!CreateVfxReviewPreview(id,origin));
     }
-    assert(DescribeVfxReviewPreview(0x00ab1d1d).supported); // real Aura
+    for (uint32_t id : {0x0ea34fa3u,0xad92bd25u,0xad92bd33u,0x00ab1d1du,0xc24b2a85u}) {
+        const auto info=DescribeVfxReviewPreview(id);
+        assert(info.supported && info.partial);
+        assert(std::strstr(info.description,"Partial preview:"));
+        assert(std::strstr(info.description,"not complete original implementation"));
+    }
+    const auto stationary=DescribeVfxReviewPreview(0xaeaeeb32u);
+    assert(stationary.supported && stationary.partial && stationary.requires_endpoints);
+    assert(std::strstr(stationary.description,"stationary"));
+    assert(!DescribeVfxReviewPreview(0x14db0f2e).partial);
     assert(DescribeVfxReviewPreview(0x14db0f2e).supported); // replaced Sparks stub
     assert(creates==0);
     {
@@ -87,5 +99,13 @@ int main() {
         assert(finite->Alive()==true && creates==5 && destroys==4);
     }
     assert(creates==destroys); // Natural completion recreates without a timer.
+    {
+        auto partial=CreateVfxReviewPreview(0x0ea34fa3u,origin);
+        assert(partial && partial->Id()=="TBlastEffect_BESPOKE");
+        const int before=ticks;
+        partial->Submit(); partial->SubmitWorld();
+        assert(ticks==before+1);
+    }
+    assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";
 }

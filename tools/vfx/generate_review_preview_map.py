@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # See each named Spawn/TickAndSubmit in effect.cpp and its vfxtest.cpp factory.
 IMPLEMENTED = {
     **dict.fromkeys("""
-TAuraEffect_BESPOKE TBloodEffect_BESPOKE TBloodEffect
+TBloodEffect_BESPOKE TBloodEffect
 TSparksEffect_BESPOKE TSparkEffect TFireEffect_BESPOKE TFireEffect
 TFountainAnimator_BESPOKE TCyanFountainAnimator_BESPOKE
 TRedFountainAnimator_BESPOKE TGreenFountainAnimator_BESPOKE TBlueFountainAnimator_BESPOKE
@@ -48,17 +48,39 @@ TWaterEffect_BESPOKE__StillWater TWaterEffect_BESPOKE__FlowWater TWaterEffect_BE
        'vfxtest.cpp: AuthoredTextureMeshVariantSpawn' for i in (1, 2, 3)},
 }
 
-# Fog is also absent: its current body averages a36-vertex animated grid into
-# one billboard, and the gallery40-frame probe resolves no texture. It is an
-# approximation awaiting conversion, not an implemented original mesh path.
-# Deliberately absent: Blast/FireWind/Fairy and W3D/E/H single-billboard stubs;
-# old buff/Gold/PunchAndJudy/CombatFlash placeholders (authored replacements
-# above remain); Tornado/Vortex/Pulp/Dust/geyser/cfire null factories; Strike
-# dummy marker; FireSwarm dragon/head and FireCone dragon rejected overrides.
-# Icedsparks/Snow are only unaudited Iced aliases. IrisFlare/Teleporter and
-# WFall/WCap/RiverFall have different native controllers: a shared asset never
-# establishes an animator binding. Their actual map implementations, if any,
-# are selected independently by the gallery before this fallback.
+# Partial display is explicitly requested by the gallery user. These exact
+# retail identities have audited non-null source bodies that submit geometry,
+# but do NOT implement the complete original effect. The ID key is essential:
+# neither a shared asset nor a similarly named registration authorizes aliases.
+# Spawn/TickAndSubmit and each factory's own asset binding were audited in
+# effect.cpp/vfxtest.cpp against the shipped class identity, 2026-10-10.
+PARTIAL = {
+    '0xc24b2a85': ('TFogEffect_BESPOKE', '36-point fog grid collapsed to mean billboard; texture path may fail'),
+    '0x00ab1d1d': ('TAuraEffect_BESPOKE', 'billboard preview; original character bones and attachment missing'),
+    '0x0ea34fa3': ('TBlastEffect_BESPOKE', 'placeholder expanding and fading asset billboard'),
+    '0x98974eab': ('TFireWindEffect_BESPOKE', 'placeholder asset billboard; original controller incomplete'),
+    '0xad92bd25': ('TFairyEffect_BESPOKE', 'placeholder bobbing and tinted asset billboard'),
+    '0xad92bd20': ('TLabyrinthEffect_BESPOKE', 'single asset billboard; original controller incomplete'),
+    '0xaeaeeb32': ('TJhagaAttackEffect_BESPOKE', 'stationary asset billboard; endpoint motion and original controller incomplete'),
+    '0x0c05263b': ('TJTeleEffect_BESPOKE', 'single asset billboard; original teleport controller incomplete'),
+    '0x0c052639': ('TCEyesEffect_BESPOKE', 'single asset billboard; original controller incomplete'),
+    '0xad92bd21': ('TNakrnothEffect_BESPOKE', 'single asset billboard; original controller incomplete'),
+    '0xad92bc19': ('TCataclysmEffect_BESPOKE', 'single asset billboard; original controller incomplete'),
+    '0xad92bc17': ('TFunnelEffect_BESPOKE', 'single asset billboard; original controller incomplete'),
+    '0xaeaeeb26': ('TMaelstromEffect_BESPOKE', 'ground-flat asset billboard; original controller incomplete'),
+    '0xad92bc1b': ('TMagicShieldEffect_BESPOKE', 'tinted asset billboard; original shield geometry incomplete'),
+    '0xad92bd33': ('TBuffEffect_Bespoke__Stoneskin_BESPOKE', 'tinted asset billboard; original buff controller incomplete'),
+    '0xad92bc16': ('TInvisibleEffect_Bespoke_BESPOKE', 'tinted asset billboard; original invisibility controller incomplete'),
+    '0xad92bd37': ('TBuffEffect_Bespoke__charm_BESPOKE', 'tinted asset billboard; original buff controller incomplete'),
+    '0x98974ea7': ('TFireWindEffect_Bespoke__YFireWind_BESPOKE', 'own YFireWind asset billboard; original controller incomplete'),
+    '0xad92fc13': ('TCataclysmEffect_Bespoke__YCataclysm_BESPOKE', 'own YCataclysm asset billboard; original controller incomplete'),
+    '0xae92bc14': ('TManadrainEffect_Bespoke__YManadrain_BESPOKE', 'own YManadrain asset billboard; original controller incomplete'),
+    '0xae5eeb26': ('TMaelstromEffect_Bespoke__ymaelstrom_BESPOKE', 'own ymaelstrom asset billboard; original controller incomplete'),
+}
+# Still absent: Tornado/Vortex/Pulp/Dust/geyser/cfire null bodies; Strike has no
+# draw submission. Icedsparks/Snow, IrisFlare/Teleporter, WFall/WCap/RiverFall
+# and rejected dragon overrides do not establish the correct animator binding.
+# Better authored replacements retain preference over old placeholder bodies.
 
 
 # Exact identities declared by the registered factories in vfxtest.cpp and
@@ -86,7 +108,17 @@ def admitted_candidates(row):
     explicit = SOURCE_MAPPINGS.get(row.get('retail_type_id', '').lower())
     if explicit: candidates.insert(0, explicit)
     candidates.sort(key=lambda name: (0 if '_AUTHORED_' in name else 1 if '_BESPOKE' in name.upper() else 2))
+    partial = PARTIAL.get(row.get('retail_type_id', '').lower())
+    if partial and partial[0] in row['preview_candidates']:
+        candidates.append(partial[0])
     return list(dict.fromkeys(candidates))
+
+
+def candidate_metadata(row, name):
+    partial = PARTIAL.get(row.get('retail_type_id', '').lower())
+    if partial and name == partial[0]:
+        return True, 'Partial preview: ' + partial[1] + '; not complete original implementation'
+    return False, 'Implemented preview controller; map caller not certified'
 
 
 
@@ -95,10 +127,12 @@ def generate(ledger):
     rows = json.loads(raw)['retail_effects']
     lines = ['// Generated by tools/vfx/generate_review_preview_map.py; do not infer aliases.',
              '// Ledger SHA-256: ' + hashlib.sha256(raw).hexdigest(),
-             '// Admission: explicit IMPLEMENTED source-body audit; unknown/stub/invalid aliases excluded.']
+             '// Admission: IMPLEMENTED source audit or exact-ID PARTIAL display; null/invalid aliases excluded.']
     for row in sorted(rows, key=lambda r: int(r['retail_type_id'], 16)):
         for name in admitted_candidates(row):
-            lines.append('{' + row['retail_type_id'] + 'u, ' + json.dumps(name) + '}, // ' + row['retail_name'])
+            partial, description = candidate_metadata(row, name)
+            lines.append('{' + row['retail_type_id'] + 'u, ' + json.dumps(name) + ', ' +
+                         str(partial).lower() + ', ' + json.dumps(description) + '}, // ' + row['retail_name'])
     return '\n'.join(lines) + '\n'
 
 

@@ -11,6 +11,8 @@ struct VfxReviewPreviewInfo
     bool requires_endpoints = false;
     bool requires_attachment = false;
     bool lifetime_known = false;
+    // Partial display is permitted; this never grants original-fidelity credit.
+    bool partial = false;
 };
 
 // Exact retail-type mappings come from the source ledger; no runtime JSON.
