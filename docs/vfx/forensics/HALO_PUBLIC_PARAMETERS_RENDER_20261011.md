@@ -15,3 +15,15 @@ Final native references are `native-public60-final`, `native-public20-final`, pl
 `gallery-final` verifies100 actual translated-owner gallery frames,96 nonblack/30 distinct, two finite-cycle factory logs and clean shutdown. It selects exact `Halo_AUTHORED_PUBLIC60` before a generic drawable factory; missing liveness/world submission/wrong style/parameter alias reject without procedural fallback. `Halo_AUTHORED_PUBLIC20` stays a separate standalone API control. Gallery inputs remain explicitly labeled, not inferred gameplay inputs. Source texture sampling, subpixel coverage, destination precision, natural caller/spell/audio/map animator, hardware blend/lighting and exact pixel equality remain open.
 
 Retained negative evidence: `metal-public60-first`/`metal-public20-first` were blank because the source builder was absent and typed `NewObject` returned a generic owner. `metal-diagnostic` logs correct asset/body admission followed by that owner mismatch. `profile-first` is a superseded test-driver copy error, not a native/resource failure. The initial test flag-literal failure is retained; the final contract tests the real `OF_KILL` bit rather than unrelated inherited flags. No brightness, camera, geometry, phase or color fitting was performed.
+
+Root independently reviewed both declared parameter cases:24 whole phases,
+48 paired image hashes and seven fixed4x nearest detail pages. The integrated
+build repeats all70+30 PNGs byte-identically with clean exits. Its three native
+units pass in12.500seconds; mapped gallery selects the authored public60 route,
+shows96/100 samples with30 distinct images, recreates the real finite owner and
+exits cleanly. Scoped appearance is approved with the stated pixel/caller limits.
+
+Approval:
+`recon/retail_asm/runtime/effects/current-halo-public-20261011/root-approval.json`,
+SHA256 `00ad18c2eb3a89ecdd48b22f76775b14e836e15ff0fce3dc94b7656d014ce0a3`.
+Root evidence: `/Users/benjamincooley/RevenantRetailLab/research/vfx-halo-root-20261011/`.

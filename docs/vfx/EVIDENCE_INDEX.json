@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 161,
+    "retail_rows_with_source_fixes_recorded": 163,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 153,
+    "visual_fidelity_confirmed_rows": 155,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 153,
-    "remaining_visual_review_rows": 23
+    "reviewed_visual_pass_rows": 155,
+    "remaining_visual_review_rows": 21
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1897,6 +1897,20 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "ExactTornado ownerexplicitlyassociatedwith genuineAcolytes/loadedTornado variant(naturalvariantcreatesFunnel, notclaimingnaturalTornado cast). Full100swirls/30ice/15flame controller/Render packets through380; seed1kill360/blanktail. Native/source660207definedpoolfields/RNG bitexact,664688matrixchannels<=5e-6,6493728ownvertexbytes/301062indices exact. Original20selectedcompletepixelphases; unselectedlighting/raster skippedonlyunderfirst10fullcontrols preservingpools/RNG/orderedpackets. Nineteen wholeoriginal/Metal pairs reviewed,38imagehashes verified/allgeometrycontained. Root38samephasePNGsexactatstride10/all24Hzupdates/render through372/cleanexit; independentfull380stateproofpass. Rootgallery3unseededcycles301/301/306/15realemptyqueries/actorhealth102+flagsunchanged/completedtimer0/cleanexit. Sourcefailsclosedonnonemptyloadedsectorqueries. No successfuldamage/naturalcast/map/otheractors/audio/device/exactpixels claim; destinationquantization/sampling residualsopen."
+    },
+    "recon/retail_asm/runtime/effects/current-halo-public-20261011/root-approval.json": {
+      "sha256": "00ad18c2eb3a89ecdd48b22f76775b14e836e15ff0fce3dc94b7656d014ce0a3",
+      "retail_row": "Halo:0xdedbdbed",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "ExactHalo ownMagic/Halo.I3D12authoredvertices/12faces, genuineowner/publicInitParams/animator/fullselectedoriginalraster; explicittestinputs(60,.04)and(20,.08), notdiscoverednaturalcallerconstants. Grow/shrink/actualkill61/21/blanktails; genuine0/0defaultblanknegative. Source412state/1248matrices<=4.77e-9,4resourcepositive/1058mutationrejects,1872submittedvertex/156drawchecks pass. Fifteen+ninewhole original/actualMetal phasepairs independentlyreviewed,48pairedimagehashes verified and7fixed4x detailpages inspected. Integrated70+30samephasePNGs byte-identical/cleanexit,3nativeunitsPASS12.5s. Actualmappedgallery100frames96visible/30distinct,2finitefactorylogs exactHalo_AUTHORED_PUBLIC60/cleanexit. Genericoriginalmap/worldPulse boundary andsilentdevicehandoff retained. Onepixelcoverage/nearzero/destinationprecision, naturalcaller/spell/mapanimator/audio/hardwareblend/lighting/exactpixels remainopen; no proceduraltexture orfit."
+    },
+    "recon/retail_asm/runtime/effects/current-teleporter-null-20261011/root-approval.json": {
+      "sha256": "0ae9756f777b8b7097ed97fbeb924048e4c3992981fbf06bb0a95ae9fe2410f3",
+      "retail_row": "Teleporter:0x369a5d2e",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "ExactTeleporter nullspellportal/distinctfromIrisFlare; genuine cachedoriginalowner/oldbodyresources/customPulse+2c/baseAnimate/fullscene/raster. Five rotating/scaledcylinders, phase2\u21924 at25,symmetricreturn, fourdraws50, actualkill51/blank60; fresh60state/draw/bounds replay exact. Source249draws/3984matrices<=2.4324e-7/360lifecyclefields pass; batched3sec stops51 underASan. Eighteen original/actualMetal whole/detailphases reviewed,54imagehashes verified; root60samephasePNGs byteidentical/cleanexit andretained native/sourceunitPASS4.925s. Rootexactgallery59/60visible,5creations/realfiniterecreation/cleanexit. NamedTeleportgenuineactor/emptymapfailurekill21 isseparatecontrol, NOT successfulteleport/motion/actorfade. Edge/overlapbrightness,destinationprecision,naturalmap/actor/spellvariants/audio/device/exactpixels remainopen; nofittedgeometry/phase/color."
     }
   }
 }

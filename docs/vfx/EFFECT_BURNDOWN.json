@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "9ad296ef66443a0f71e3f571162c7ba1b977ea1e54c2a737a8251446ccedfa51",
+    "harness_sha256": "7f93016c081f007c0ab0b9a24e02c9e7b6c813e57fcf641d5c1ed99453878ba3",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 161,
+    "retail_rows_with_source_fixes_recorded": 163,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 153,
+    "visual_fidelity_confirmed_rows": 155,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 153,
-    "remaining_visual_review_rows": 23
+    "reviewed_visual_pass_rows": 155,
+    "remaining_visual_review_rows": 21
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -11517,33 +11517,46 @@
       "retail_type_id": "0x369a5d2e",
       "asset": "Misc\\IrisFlare.I3D",
       "preview_candidates": [
+        "Teleporter_ORIGINAL_NULL",
         "TFlareAnimator_BESPOKE__Teleporter"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: ExactTeleporter typednullspellportal legacyresource/full5cylinder lifecycle, actualPulse ABI andkill51; sourcematrices/replay/18phase appearance reviewed, integrated60PNG repeat/gallery match. Successfulnamedteleport branch remainsopen."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Implement exact legacyasset/controllerfixturelater; currentFlare-basedTeleporter previewunsupportedforretailA/B. IrisFlareandTeleporter requireseparatecontrollers; Teleporter naturaltransition needscaster/source/destination.",
+      "next_action": "Preserve approved nullspellportal; verify successfulnamedTeleport destination/actorfade/movement, map/spellvariants/audio/device andedge/brightnessresiduals.",
       "notes": [
         "Retail Teleporter uses IrisFlare; M09 teleporter preview uses composite teleportation/gvortex. These names must not be conflated.",
         "2026-10-09 exactregistry/legacyheader preflight: IrisFlare andTeleporter shareassetbutdistinctnativecontrollers. The Flare-basedTeleporter previewisnotretailcomparison;body2parser cannotreadflags4legacybody. No newstate/rendercredit."
       ],
       "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
-      "work_queue_status": "deferred_exact_legacy_asset_controller_adapter"
+      "work_queue_status": "deferred_exact_legacy_asset_controller_adapter",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent eighteenphase whole/detail review and integratedrepeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "ExactTeleporter nullspellportal/distinctfromIrisFlare; genuine cachedoriginalowner/oldbodyresources/customPulse+2c/baseAnimate/fullscene/raster. Five rotating/scaledcylinders, phase2\u21924 at25,symmetricreturn, fourdraws50, actualkill51/blank60; fresh60state/draw/bounds replay exact. Source249draws/3984matrices<=2.4324e-7/360lifecyclefields pass; batched3sec stops51 underASan. Eighteen original/actualMetal whole/detailphases reviewed,54imagehashes verified; root60samephasePNGs byteidentical/cleanexit andretained native/sourceunitPASS4.925s. Rootexactgallery59/60visible,5creations/realfiniterecreation/cleanexit. NamedTeleportgenuineactor/emptymapfailurekill21 isseparatecontrol, NOT successfulteleport/motion/actorfade. Edge/overlapbrightness,destinationprecision,naturalmap/actor/spellvariants/audio/device/exactpixels remainopen; nofittedgeometry/phase/color.",
+        "report": "recon/retail_asm/runtime/effects/current-teleporter-null-20261011/root-approval.json",
+        "sha256": "0ae9756f777b8b7097ed97fbeb924048e4c3992981fbf06bb0a95ae9fe2410f3",
+        "note": "docs/vfx/forensics/TELEPORTER_LOADED_NULL_PORTAL_20261011.md"
+      }
     },
     {
       "index": 40,
@@ -13650,27 +13663,31 @@
       "retail_type_id": "0xdedbdbed",
       "asset": "Magic\\Halo.I3D",
       "preview_candidates": [
+        "Halo_AUTHORED_PUBLIC60",
+        "Halo_AUTHORED_PUBLIC20",
         "THaloEffect"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: ExactTHaloEffect builder/publicInitParams envelope/authoredmesh replacesproceduralpreview fordeclared60/.04and20/.08 controls. Originalstate/pose/bodyadmission/submission and24phase appearance pass; integrated100PNG repeat/gallery match. Naturalcaller remainsopen."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Defer caller/device investigation: bounded standalone probe is invisible. Retain diagnostic and correct asset dump; advance other retail comparisons.",
+      "next_action": "Preserve approved publicparameter Halo controls; verify actualnaturalcaller, mapanimator, lighting/audio/hardwareblend andpixelresiduals.",
       "notes": [
         "2026-10-05: five-second exact-name software probe produced one unchanged floor image and exact cleanup. Halo context was absent after spawn; Barrier contexts retained. Actual assets dumped: Halo12verts/36indices, Barriers5objects/2textures. No accurate-reference credit."
       ],
@@ -13686,7 +13703,17 @@
         "distinct_roi_frames": 1,
         "restored_ground_mean_error": 0
       },
-      "work_queue_status": "deferred_no_useful_visible_reference"
+      "work_queue_status": "deferred_no_useful_visible_reference",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent two-parameter whole/detail review and integratedrepeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "ExactHalo ownMagic/Halo.I3D12authoredvertices/12faces, genuineowner/publicInitParams/animator/fullselectedoriginalraster; explicittestinputs(60,.04)and(20,.08), notdiscoverednaturalcallerconstants. Grow/shrink/actualkill61/21/blanktails; genuine0/0defaultblanknegative. Source412state/1248matrices<=4.77e-9,4resourcepositive/1058mutationrejects,1872submittedvertex/156drawchecks pass. Fifteen+ninewhole original/actualMetal phasepairs independentlyreviewed,48pairedimagehashes verified and7fixed4x detailpages inspected. Integrated70+30samephasePNGs byte-identical/cleanexit,3nativeunitsPASS12.5s. Actualmappedgallery100frames96visible/30distinct,2finitefactorylogs exactHalo_AUTHORED_PUBLIC60/cleanexit. Genericoriginalmap/worldPulse boundary andsilentdevicehandoff retained. Onepixelcoverage/nearzero/destinationprecision, naturalcaller/spell/mapanimator/audio/hardwareblend/lighting/exactpixels remainopen; no proceduraltexture orfit.",
+        "report": "recon/retail_asm/runtime/effects/current-halo-public-20261011/root-approval.json",
+        "sha256": "00ad18c2eb3a89ecdd48b22f76775b14e836e15ff0fce3dc94b7656d014ce0a3",
+        "note": "docs/vfx/forensics/HALO_PUBLIC_PARAMETERS_RENDER_20261011.md"
+      }
     },
     {
       "index": 65,

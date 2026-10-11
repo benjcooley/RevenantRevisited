@@ -97,3 +97,16 @@ none, and later updates perform none after death. This closes a batching edge
 case without changing the captured24Hz path. Full native matrix/lifecycle
 comparison and production build still pass; retained proof is
 `teleporter-terminal-source/manifest.json`.
+
+Root independently reviewed18 whole/detail phases and verified54 paired image
+hashes. The integrated executable repeats all60 PNGs byte-identically and exits
+cleanly; native/source unit passes in4.925seconds. Its exact mapped gallery
+shows59/60 samples, five creations and real completion/recreation with clean
+shutdown. Null-spell portal appearance is approved. Successful teleport,
+movement/actor fading and the other recorded gameplay/device limits stay open.
+
+Approval:
+`recon/retail_asm/runtime/effects/current-teleporter-null-20261011/root-approval.json`,
+SHA256 `0ae9756f777b8b7097ed97fbeb924048e4c3992981fbf06bb0a95ae9fe2410f3`.
+Root evidence: `/Users/benjamincooley/RevenantRetailLab/research/vfx-teleporter-root-20261011/`.
+Together with Halo the reviewed count advances to155/176;21 remain.
