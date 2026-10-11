@@ -120,8 +120,11 @@ CLASS_NAMES = ['item', 'weapon', 'armor', 'talisman', 'food', 'container', 'ligh
                'money', 'tile', 'exit', 'player', 'character', 'trap', 'shadow', 'helper', 'key',
                'invcontainer', 'potion', None, None, 'ammo', 'scroll', 'rangedweapon', None,
                'effect', 'mapscroll']     # recon/docs/OBJCLASS_IDS.md (retail 0x00483850)
-CLASS_PLAYER, CLASS_CHARACTER = 11, 12
+CLASS_PLAYER, CLASS_CHARACTER, CLASS_HELPER = 11, 12, 15
 NOT_LISTED = {9, 14, 25}          # tiles, shadows, effects
+FLAG_NAMES = 0x005d4770           # char *[32]: object flag bit n's name, as `toggle <name>` looks it up
+OF_INVISIBLE, OF_EDITOR = 0x80, 0x100   # bits 7 "INVISIBLE", 8 "EDITOR": outside the editor the 3D pick
+                                  # (MI §2.1) and TCharAnimator::Render 0x004d7a50 skip them
 OF_INVENTORY = 0x40000000
 MISSING = object()                # a value retail can't give without changing the game: left out
 
@@ -571,14 +574,25 @@ class Observer:
                 continue
             yield from (o for o in m.pointers(m.u32(sector + 0xc8), m.i32(sector + 0xb8)) if o)
 
+    def listed(self, obj):
+        """Whether `objects` lists `obj` (PROTOCOL.md §7, the port's
+        observation's Listed): not a tile, shadow or effect, not carried,
+        and nothing the player can't see or click -- an object flagged
+        invisible or editor-only -- except the waypoint helpers."""
+        m = self.m
+        kind, flags = m.i16(obj + OBJ_CLASS), m.u32(obj + OBJ_FLAGS)
+        if kind in NOT_LISTED or flags & OF_INVENTORY:
+            return False
+        return kind == CLASS_HELPER or not flags & (OF_INVISIBLE | OF_EDITOR)
+
     def nearby(self, player, radius):
         m = self.m
         origin = self.pos(player)
         found = []
         for obj in self.objects_on_level(m.u16(player + OBJ_LEVEL)):
-            kind = m.i16(obj + OBJ_CLASS)
-            if obj == player or kind in NOT_LISTED or m.u32(obj + OBJ_FLAGS) & OF_INVENTORY:
+            if obj == player or not self.listed(obj):
                 continue
+            kind = m.i16(obj + OBJ_CLASS)
             pos = self.pos(obj)
             distance = math.dist(origin[:2], pos[:2])
             if distance > radius:

@@ -234,7 +234,11 @@ a NUL byte, the file's bytes and a NUL byte.
   name, `type` the object type name (char.def's CHARACTER names for
   characters), `class` the object class name in lower case (`character`,
   `item`, `container`, `exit`, `helper`, …), and `screen` is `null` off
-  screen.
+  screen. Left out: tiles, shadows, effects, carried items, and what the
+  player can't see or click, an object flagged `INVISIBLE` or `EDITOR`
+  (object flags bits 7 and 8), except the waypoint helpers. A script
+  holder such as keep.s's `MUDOKON` is one of these, and so is a character
+  a script has hidden (`toggle invisible = 1`).
 - `walkgrid` (when asked): `{"origin": [gx, gy], "cell": 16, "w": W,
   "h": H, "heights": [...]}`, row-major walk heights: 0 for no floor, -1 for
   a cell no loaded sector holds (unknown, not "no floor"). Cell k is centred
