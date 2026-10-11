@@ -457,9 +457,12 @@ class Director:
         """Measure where each direction control steps Locke in the world:
         a short step with each, opposites in turn, so he ends near where he
         began. The tactician then steers by world vectors, which works as
-        well for an enemy off the screen."""
+        well for an enemy off the screen. A control that didn't move him
+        (the first press can go to turning him) is tried again at the end."""
         steps: dict[str, tuple[float, float]] = {}
-        for name in CALIBRATION_ORDER:
+        for name in [*CALIBRATION_ORDER, *CALIBRATION_ORDER]:
+            if name in steps:
+                continue
             before = self.observe()['player']['pos']
             self.press(self.bindings[name], then=hold)
             after = self.observe()['player']['pos']
