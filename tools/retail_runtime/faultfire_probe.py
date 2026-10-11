@@ -48,7 +48,7 @@ def build_port(output,mesh,ticks,rng):
 std::ifstream rng;int random(int lo,int hi){int a,b,v;if(!(rng>>a>>b>>v)||a!=lo||b!=hi)throw std::runtime_error("RNG contract mismatch");return v;}
 enum class EFxBlend:uint8_t{Alpha};enum class EFxDepthMode:uint8_t{TestNoWrite};enum class EFxDebugMode:uint8_t{Normal};
 struct SMeshVertex{float pos[3]{},normal[3]{},uv[2]{};};
-struct SQuadDrawItem{int corner_count=4,retail_texture=0;float world_pos[4][3]{},uv[4][2]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};};
+struct SQuadDrawItem{bool retail_argb4444=false,retail_software_projection=false;int corner_count=4,retail_texture=0;float world_pos[4][3]{},uv[4][2]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};};
 struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};TRenderer renderer;TRenderer*Renderer=&renderer;
 struct TObjectImagery{};struct SObjectDef{};struct S3DTex{TTextureHandle htexture=1;};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
 struct TEffect{World world;TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;virtual void OffScreen(){};void KillThisEffect(){};void SetCommandDone(bool){};const World&Transform()const{return world;}};

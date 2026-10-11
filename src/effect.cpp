@@ -17972,6 +17972,37 @@ TWaterReferenceBuilder<TStreamerEffect_Bespoke> g_streamer_reference_builder("St
 TWaterReferenceAnimatorBuilder<TStreamerEffect_Bespoke> g_streamer_reference_animator_builder("Streamer");
 }
 
+TStreamerEffect_Bespoke::~TStreamerEffect_Bespoke()
+{
+    if (Renderer) for (const auto& part : authored_)
+        if (part.mesh) Renderer->ReleaseMeshAssetRef(part.mesh);
+}
+
+bool TStreamerEffect_Bespoke::BindMeshes() const
+{
+    if (!Renderer || !initialized_ || !GetImagery()) return false;
+    for (int object=0; object<kStreamerMaxStreams; ++object) {
+        const auto& part=authored_[object];
+        if (part.mesh) continue;
+        const uint64_t key=0x5354524d00000000ull ^ (uint64_t(uint32_t(GetImagery()->ImageryId()))<<16) ^ uint64_t(object);
+        part.mesh=Renderer->RegisterMeshAsset(key, part.vertices.data(), int32_t(part.vertices.size()),
+            part.indices.data(), int32_t(part.indices.size()), part.texture);
+        if (!part.mesh) return false;
+        Renderer->AddMeshAssetRef(part.mesh);
+    }
+    return true;
+}
+
+void TStreamerEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled && !runtime_owned_;
+    if (native_domain_) {
+        const auto position=Pos();
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z, uint8_t(GetFace()));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT TStreamerEffect_Bespoke", int(native_domain_));
+}
+
 void TStreamerEffect_Bespoke::Initialize(bool attach_runtime_component)
 {
     if (initialized_ || GetMapIndex()<0 || GetComponent<TStreamerReferenceComponent>()) return;
@@ -18036,12 +18067,12 @@ void TStreamerEffect_Bespoke::Advance(double elapsed_seconds)
 
 void TStreamerEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
 {
-    if (!Renderer || !initialized_ || !alive_) return;
+    if (!Renderer || !initialized_ || !alive_ || !BindMeshes()) return;
     SQuadDrawItem item={}; item.corner_count=3; item.retail_texture=1;
     item.key.blend=uint8_t(EFxBlend::AdditiveStraight);
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
     item.debug_mode=debug_mode;
-    const auto& world=Transform().Matrix();
+    const auto& world=native_domain_ ? native_owner_ : Transform().Matrix();
     for (int j=0;j<kStreamerMaxStreams;++j) {
         const auto& mesh=authored_[j]; item.key.texture=mesh.texture;
         for (const auto& particle:stream_[j]) {
@@ -18055,6 +18086,21 @@ void TStreamerEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
             // Original face conversion truncates integer degrees before radians.
             MtxRotateZ(&local,-float((GetFace()*360)/256)*float(M_PI/180.0));
             MtxTranslate(&local,&particle.pos);
+            if (debug_mode == EFxDebugMode::Normal) {
+                hmm_mat4 mesh_world={}; MtxMultiply(&mesh_world,&local,&world);
+                SHelperMeshSubmit submit={};
+                submit.mesh=mesh.mesh; submit.additive_blend=true;
+                submit.retail_lighting=1; submit.retail_positive_face_cull=true;
+                submit.retail_software_projection=native_domain_;
+                // Common world stretches geometry Z by 1.5; native normal
+                // transformation has no such owner-axis stretch.
+                submit.retail_normal_z_scale=native_domain_ ? 1.0f : 1.0f/WORLD3D_Z_SCALE;
+                for (int row=0;row<4;++row) for (int col=0;col<4;++col)
+                    submit.world[row*4+col]=mesh_world.Elements[col][row];
+                submit.sort_depth=mesh_world.Elements[3][2];
+                Renderer->SubmitHelperMesh(submit);
+                continue;
+            }
             for (size_t face=0;face+2<mesh.indices.size();face+=3) {
                 for (int k=0;k<3;++k) {
                     const auto& v=mesh.vertices[mesh.indices[face+k]];
@@ -18152,6 +18198,18 @@ TFireSwarmEffect_Bespoke* TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(
     return effect;
 }
 
+void TFireSwarmEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled && !runtime_owned_;
+    if (native_domain_) {
+        const auto position = Pos();
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z,
+                                 uint8_t(GetFace()));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT TFireSwarmEffect_Bespoke",
+             int(native_domain_));
+}
+
 void TFireSwarmEffect_Bespoke::Advance(double elapsed_seconds)
 {
     if (!initialized_ || !alive_ || !std::isfinite(elapsed_seconds) || elapsed_seconds<=0.0) return;
@@ -18179,8 +18237,10 @@ void TFireSwarmEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     hmm_mat4 local={}; MtxClear(&local);
     const hmm_vec3 scale={cylhscl_,cylhscl_,cylvscl_};
     MtxScale(&local,&scale); MtxRotateZ(&local,cylth_);
-    const auto& world=Transform().Matrix();
+    const auto& world=native_domain_ ? native_owner_ : Transform().Matrix();
     SQuadDrawItem item={}; item.corner_count=3; item.retail_texture=1;
+    item.retail_argb4444=true;
+    item.retail_software_projection=native_domain_;
     item.key.texture=texture_; item.key.blend=uint8_t(EFxBlend::Alpha);
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
     item.debug_mode=debug_mode;
@@ -18197,7 +18257,7 @@ void TFireSwarmEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         // negates Y for rasterization. Screen-down winding therefore culls negative.
         float sx[3],sy[3];
         for (int k=0;k<3;++k) {
-            const auto* p=item.world_pos[k]; sx[k]=p[0]-p[1]; sy[k]=.5f*(p[0]+p[1])-.867f*p[2];
+            const auto* p=item.world_pos[k]; sx[k]=p[0]-p[1]; sy[k]=native_domain_ ? .5050762891769409f*(p[0]+p[1])-1.237179160118103f*p[2] : .5f*(p[0]+p[1])-.867f*p[2];
         }
         if ((sx[1]-sx[0])*(sy[2]-sy[0])<(sx[2]-sx[0])*(sy[1]-sy[0])) continue;
         Renderer->SubmitFxQuad(item);
@@ -18245,7 +18305,7 @@ void TFaultFireEffect_Bespoke::Initialize(bool attach_runtime_component)
     // SetupObjects preserves each authored V after a one-time -0.01 shift.
     for (auto& v : vertices_) v.uv[1] -= 0.01f;
     texture_=tex.htexture; th_=0.0f; u_offset_=0.0f; sim_accum_ms_=0.0;
-    initialized_=true;
+    initialized_=true; runtime_owned_=attach_runtime_component;
     if (attach_runtime_component) {
         auto c=std::make_unique<TFaultFireReferenceComponent>();
         c->Configure(texture_, int32_t(tex.desc.width), int32_t(tex.desc.height),
@@ -18269,6 +18329,18 @@ TFaultFireEffect_Bespoke* TFaultFireEffect_Bespoke::SpawnForTest_BESPOKE(const S
     effect->Initialize(false);
     if (!effect->initialized_) { delete effect; return nullptr; }
     return effect;
+}
+
+void TFaultFireEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled && !runtime_owned_;
+    if (native_domain_) {
+        const auto position = Pos();
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z,
+                                 uint8_t(GetFace()));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT TFaultFireEffect_Bespoke",
+             int(native_domain_));
 }
 
 void TFaultFireEffect_Bespoke::Advance(double elapsed_seconds)
@@ -18302,10 +18374,12 @@ void TFaultFireEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     MtxScale(&local,&scale);
     MtxRotateZ(&local,float(M_PI/2.0));
     MtxTranslate(&local,&offset);
-    const auto& world=Transform().Matrix();
+    const auto& world=native_domain_ ? native_owner_ : Transform().Matrix();
     SQuadDrawItem item={};
     item.corner_count=3;
     item.retail_texture=1;
+    item.retail_argb4444=true;
+    item.retail_software_projection=native_domain_;
     item.key.texture=texture_;
     item.key.blend=uint8_t(EFxBlend::Alpha);
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);

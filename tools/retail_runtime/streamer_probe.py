@@ -56,10 +56,18 @@ def build_port(output,meshes,ticks):
 #undef min
 #undef max
 enum class EFxBlend:uint8_t{AdditiveStraight};enum class EFxDepthMode:uint8_t{TestNoWrite};enum class EFxDebugMode:uint8_t{Normal};
+using MeshHandle=uint32_t;
 struct SMeshVertex{float pos[3]{},normal[3]{},uv[2]{};};
 struct SQuadDrawItem{int corner_count=4,retail_texture=0;float world_pos[4][3]{},uv[4][2]{};
  struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};};
-struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};
+struct SHelperMeshSubmit{MeshHandle mesh=0;bool additive_blend=false,retail_positive_face_cull=false,retail_software_projection=false;int retail_lighting=0;float retail_normal_z_scale=1,world[16]{},sort_depth=0;};
+struct TRenderer{std::vector<SQuadDrawItem>draws;std::vector<SMeshVertex>vertices[4];std::vector<uint16_t>indices[4];void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}
+ void SubmitHelperMesh(const SHelperMeshSubmit&s){if(!s.additive_blend||s.retail_lighting!=1||!s.retail_positive_face_cull||s.mesh<1||s.mesh>4)throw std::runtime_error("Source helper policy mismatch");
+ int j=s.mesh-1;hmm_mat4 matrix={};for(int row=0;row<4;++row)for(int col=0;col<4;++col)matrix.Elements[col][row]=s.world[row*4+col];
+ for(size_t f=0;f<indices[j].size();f+=3){SQuadDrawItem d={};d.corner_count=3;d.key.texture=s.mesh;float sx[3],sy[3];
+ for(int k=0;k<3;++k){const auto&v=vertices[j][indices[j][f+k]];hmm_vec3 a={v.pos[0],v.pos[1],v.pos[2]},p={};MtxTransform(&matrix,&a,&p);d.world_pos[k][0]=p.X;d.world_pos[k][1]=p.Y;d.world_pos[k][2]=p.Z;d.uv[k][0]=v.uv[0];d.uv[k][1]=v.uv[1];sx[k]=p.X-p.Y;sy[k]=.5f*(p.X+p.Y)-.867f*p.Z;}
+ if((sx[1]-sx[0])*(sy[2]-sy[0])<(sx[2]-sx[0])*(sy[1]-sy[0]))continue;draws.push_back(d);}}
+};
 TRenderer renderer;TRenderer*Renderer=&renderer;
 struct TObjectImagery{};struct SObjectDef{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
 struct TEffect{World world;int kill_count=0;TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;
@@ -75,7 +83,7 @@ struct TEffect{World world;int kill_count=0;TEffect(TObjectImagery*){};TEffect(S
     trailer=r'''
 int main(){SMeshVertex vertices[4][4]={VERTICES};uint16_t indices[4][6]=INDICES;
  for(int runtime:{0,1}){TStreamerEffect_Bespoke effect(nullptr);
-  for(int j=0;j<4;++j){effect.authored_[j].vertices.assign(vertices[j],vertices[j]+4);effect.authored_[j].indices.assign(indices[j],indices[j]+6);effect.authored_[j].texture=j+1;
+  for(int j=0;j<4;++j){effect.authored_[j].vertices.assign(vertices[j],vertices[j]+4);effect.authored_[j].indices.assign(indices[j],indices[j]+6);effect.authored_[j].texture=j+1;effect.authored_[j].mesh=j+1;renderer.vertices[j]=effect.authored_[j].vertices;renderer.indices[j]=effect.authored_[j].indices;
   }
   effect.Initialize(bool(runtime));
   for(int tick=0;tick<=TICKS;++tick){if(tick)effect.Advance(1.0/24.0);renderer.draws.clear();effect.Submit(EFxDebugMode::Normal);
@@ -89,7 +97,7 @@ int main(){SMeshVertex vertices[4][4]={VERTICES};uint16_t indices[4][6]=INDICES;
 '''.replace('VERTICES',','.join(initializers)).replace('INDICES',topology).replace('TICKS',str(ticks))
     # Asset/component providers are explicit boundaries; the initialization
     # state loop below is extracted unchanged from the actual map producer.
-    initialize='void TStreamerEffect_Bespoke::Initialize(bool attach_runtime_component) {\nfor(int j=0;j<kStreamerMaxStreams;++j) {\n'+pieces['initialize_state']+'\n}\n'
+    initialize='TStreamerEffect_Bespoke::~TStreamerEffect_Bespoke()=default;\nbool TStreamerEffect_Bespoke::BindMeshes()const{return true;}\nvoid TStreamerEffect_Bespoke::Initialize(bool attach_runtime_component) {\nfor(int j=0;j<kStreamerMaxStreams;++j) {\n'+pieces['initialize_state']+'\n}\n'
     source=output/'streamer-port-components.cpp';source.write_text(prelude+'\n'+types+'\n'+initialize+'\n'+pieces['helpers']+'\n'+pieces['advance_submit']+'\n'+trailer)
     binary=output/'streamer-port-components';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(result.stdout+result.stderr)
