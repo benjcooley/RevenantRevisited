@@ -1,0 +1,8 @@
+{
+  "name": "arena_a1b_araknid_close",
+  "about": "Arena test A1b: as A1 with the Araknid 150 east of the idle Locke, inside its notice: its way in and its blows.",
+  "slotdir": "build/arena_slots/ArenaA1b",
+  "seed": 1,
+  "ticks": 1440,
+  "exec": []
+}

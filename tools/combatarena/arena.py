@@ -22,6 +22,8 @@ Scenario keys:
             interop slots, docs/gameflow/SAVE_INTEROP_SLOTS.zip)
   seed      random seed
   ticks     game ticks to run after the play screen starts
+  slotdir   a slot directory (relative to the repo) in place of `slot`: an
+            arena slot from make_arena_slot.py, the same one retail loads
   arena     {} or {"origin": [sx, sy], "size": n, "lights": n}: the flat test
             arena (make_arena.py) written into the slot; `pos` and `addat`
             in `exec` put Locke and the monsters on it
@@ -113,7 +115,12 @@ def run_once(scn: dict, port: Path, out: Path, watch: bool = False, extra: list[
     save = out / 'save'
     (save / 'Save' / 'Single').mkdir(parents=True)
     write_ini(save / 'Revenant.ini', scn.get('ini'))
-    extract_slot(Path(scn.get('slotzip', DEFAULT_ZIP)), scn['slot'], save / 'Save' / 'Single')
+    if 'slotdir' in scn:            # a ready slot (make_arena_slot.py): the one retail loads too
+        source = (REPO / scn['slotdir']).resolve()
+        scn = dict(scn, slot=source.name)
+        shutil.copytree(source, save / 'Save' / 'Single' / source.name)
+    else:
+        extract_slot(Path(scn.get('slotzip', DEFAULT_ZIP)), scn['slot'], save / 'Save' / 'Single')
     if 'arena' in scn:              # the flat test arena, in the slot's CurMap (make_arena.py)
         add_arena(save / 'Save' / 'Single' / scn['slot'], module=DATA / 'Modules' / 'Ahkuilon.rvm',
                   **{k: tuple(v) if k == 'origin' else v for k, v in scn['arena'].items()})

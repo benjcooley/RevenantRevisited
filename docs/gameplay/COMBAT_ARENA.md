@@ -21,17 +21,22 @@ Retail loads a slot's `CurMap` sectors by name, and the port's load stamps
 every map object's walkmap as retail's does: the floor walks the same in
 both.
 
-On the arena, a test runs script lines both games take: the port's
-`--exec`, retail's Enter prompt with `@` (RETAIL_CAPTURE.md §2):
+A test's set-up lives in its slot, not in typed lines (retail's prompt is
+too fragile to type into reliably). `tools/combatarena/make_arena_slot.py` builds one:
+the port loads the arena slot, puts Locke there (`pos`), adds the monsters
+(`addat`) and saves through its in-game menu half a second later, before
+any monster has noticed him. The slot holds Locke's place in `game.sav`
+and the monsters in the arena sectors, written by the port's own save code,
+which retail reads (checked with revsave: Locke's place, the state hashes):
 
 ```
-pos 25375 3072 17 2          # Locke to the west side
-addat 25825 3072 Araknid     # an Araknid 450 east
+make_arena_slot.py ArenaA1 --locke 25375,3072 --monster Araknid@25825,3072
 ```
 
-In the port the arena is a scenario key (`"arena": {}`) of
-`tools/combatarena/arena.py`; `arena_bot_vs_araknid.json` runs the player
-bot against an Araknid there.
+The port runs a slot with `arena.py` (scenario key `"slotdir"`); the
+arena alone, for the port only, is the key `"arena": {}` (with `pos` and
+`addat` in `exec`), as `arena_bot_vs_araknid.json` does for the player
+bot.
 
 ## 2. Behaviours, one at a time
 
@@ -55,11 +60,14 @@ the same key presses at the same times.
 The lab (`tools/retaillab/retail.py`, RETAIL_CAPTURE.md) drives the shipped
 game:
 
-1. the arena slot is uploaded into the guest's `Save\Single` (the guest
-   agent's `copy_tree`);
-2. Load Game loads it;
-3. `prompt` types the set-up lines (`@pos ...`, `@addat ...`) and cheats;
-4. `key` presses Locke's side of the test; `record` captures the AVI.
+1. `retail.py upload <slot dir>`: game.sav, the thumbnail and the arena's
+   sectors into the guest's `Save\Single`;
+2. `retail.py start`, then `load --row N` (the Load Game list's row; check
+   it with `capture`);
+3. `key` presses Locke's side of the test; `record` captures the AVI.
+
+Check that `start` took the lab before sending anything: another session
+may hold it.
 
 The lab has no memory reads: retail's side is its video and its game log
 (the combat results it prints, `NoCombatResults=No`).
@@ -73,3 +81,10 @@ The lab has no memory reads: retail's side is its video and its game log
 - Retail's random stream can't be fixed, so a comparison is of patterns and
   measures (cadence, distances, outcome rates over a minute or more), not
   of single frames.
+
+## 5. Results
+
+| Test | Retail | Port | |
+|---|---|---|---|
+| A1 (an Araknid 450 east, Locke idle, a minute) | it never comes: no blow | the same | match: out of its notice (it finds him by ear, M9b) |
+| A1b (the Araknid 150 east) | pending (the lab was in use) | it closes and bites; Locke (44 hp) dies at 16 s: 24 attacks, 4 hits | |
