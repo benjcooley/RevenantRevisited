@@ -131,11 +131,28 @@ stderr.
 | `mark` | `kind`, other fields | writes the mark and a check line to the recording |
 | `replay` | `bundle`, `verify` (bool), `until` (tick, optional) | `t`, and with `verify`: `diverged: null` or `{t, fields}` |
 | `checkpoint`, `restore` | `name` | retail only |
+| `caption` | `text` (one or two short lines; empty clears) | shown to a person watching (§8); never part of the game, the frame `observe` captures or the recording |
 | `quit` | | ends the recording with its end line and exits |
 
 `start` is the only command that may run ticks of its own: loading,
 entering the world, and for `newgame` nothing else. The opening's scenes
 then run under `step` like everything else.
+
+## 5a. Watching
+
+A person can watch either game while the director plays. Watching never
+changes what the game does: it only adds waiting between ticks and pixels
+outside the game's own frame.
+
+| | Port | Emulator |
+|---|---|---|
+| see the game | `--control=stdio` without `--headless`: the game window | `server.py --watch DIR`: after every tick, the front buffer as `DIR/frame.png` (written to a temporary name, then renamed), and `DIR/caption.txt` |
+| real speed | `--control-pace=24`: stepped ticks no faster than 24 a second | `--pace 24`: the same |
+| captions | drawn over the window | in `caption.txt`, for the viewer |
+| the viewer | optional `--watch-frames=DIR`: the same `frame.png` per tick, for the viewer page | `tools/playtest/watch.py DIR` |
+
+`tools/playtest/watch.py` serves a page with the live frame, the caption,
+and the director's decisions as they happen.
 
 ## 6. Slot hashing
 
