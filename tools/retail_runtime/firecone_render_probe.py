@@ -131,7 +131,7 @@ def compile_submit(output, parts):
 enum class EFxDebugMode{Normal};
 struct SMeshVertex{float pos[3]{},normal[3]{},uv[2]{};};
 struct Material{float diffuse[4]{},ambient[4]{},specular[4]{},emissive[4]{},power=0;};struct S3DMat{Material matdesc;};
-struct SHelperMeshSubmit{unsigned mesh=1;bool additive_blend=false;int retail_lighting=0;float world[16]{},diffuse[4]{},ambient[4]{},specular[4]{},emissive[4]{},power=0,sort_depth=0;};
+struct SHelperMeshSubmit{unsigned mesh=1;bool additive_blend=false,retail_software_projection=false;int retail_lighting=0;float world[16]{},diffuse[4]{},ambient[4]{},specular[4]{},emissive[4]{},power=0,sort_depth=0;};
 struct RendererType{int slot=0;const char*pool="";std::vector<SMeshVertex>*vertices=nullptr;void SubmitHelperMesh(const SHelperMeshSubmit&s){
 printf("D %s %d %u %d %d",pool,slot,s.mesh-1,int(s.additive_blend),s.retail_lighting);
 hmm_mat4 m={};for(int r=0;r<4;++r)for(int c=0;c<4;++c){m.Elements[r][c]=s.world[c*4+r];printf(" %.9g",m.Elements[r][c]);}
@@ -140,7 +140,7 @@ RendererType renderer;RendererType*Renderer=&renderer;
 struct World{hmm_mat4 m;World(){MtxClear(&m);m.Elements[2][2]=WORLD3D_Z_SCALE;}const hmm_mat4&Matrix()const{return m;}};
 PARTICLE
 struct TFireConeEffect_Bespoke{FIELDS
-Pool fire_{80},smoke_{80},burst_{100};std::vector<SMeshVertex>vertices_[2];std::vector<uint16_t>indices_[2];S3DMat materials_[2];unsigned meshes_[2]{1,2};World world;float facing_=0;
+Pool fire_{80},smoke_{80},burst_{100};std::vector<SMeshVertex>vertices_[2];std::vector<uint16_t>indices_[2];S3DMat materials_[2];unsigned meshes_[2]{1,2};World world;float facing_=0;bool native_domain_=false;hmm_mat4 native_owner_={};
 const World&Transform()const{return world;}void SubmitPool(const Pool&,int,EFxDebugMode)const;};
 '''.replace('PARTICLE', particle).replace('FIELDS', fields)
     trailer = r'''

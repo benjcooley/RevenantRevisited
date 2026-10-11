@@ -6525,6 +6525,7 @@ class TFireConeEffect_Bespoke : public TEffect
     [[nodiscard]] static TFireConeEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
                                                                        const char*     asset_override = nullptr);
     void Initialize(bool attach_runtime_component = true);
+    void SetNativeDomainForTest(bool enabled);
     void Pulse() override;
     void Advance(double elapsed_seconds);
     void Submit(EFxDebugMode debug_mode) const;
@@ -6558,6 +6559,8 @@ class TFireConeEffect_Bespoke : public TEffect
     S3DMat materials_[2] = {};
     float diffuse_[2][4] = {{1,1,1,1}, {1,1,1,1}};
     float facing_ = 0.0f;
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
     int frame_count_ = 0, state_ = FLAME_STATE_START, sim_ticks_ = 0;
     double sim_accum_ms_ = 0.0;
     bool done_ = false, firsttime_ = true;
