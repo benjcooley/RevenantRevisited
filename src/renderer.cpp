@@ -1018,8 +1018,13 @@ fragment float4 _main(vs_out in [[stage_in]],
         if (in.retail_mode > 2.5) {
             // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
             float4 nibble = floor(tex * 15.0 + 0.5);
-            return float4(nibble.rgb * float3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
-                           (nibble.a + 1.0) / 16.0);
+            float alpha = (nibble.a + 1.0) / 16.0;
+            float3 channels = nibble.rgb * float3(2.0, 4.0, 2.0);
+            // Native source contribution truncates in RGB565 before addition.
+            // Undo straight-alpha multiplication only for this exact term;
+            // destination rounding remains the existing GPU blend policy.
+            if (hp.shade.w > 0.5) return float4(floor(channels * alpha) / (alpha * float3(31.0, 63.0, 31.0)), alpha);
+            return float4(nibble.rgb * float3(2.0/31.0, 4.0/63.0, 2.0/31.0), (nibble.a + 1.0) / 16.0);
         }
         if (in.retail_mode > 1.5) return tex;
         // Blue modulation indexes five-bit texture/light channels, including
@@ -1174,8 +1179,11 @@ void main() {
         if (v_retail_mode > 2.5) {
             // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
             vec4 nibble = floor(tex * 15.0 + 0.5);
-            fragColor = vec4(nibble.rgb * vec3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
-                           (nibble.a + 1.0) / 16.0);
+            float alpha = (nibble.a + 1.0) / 16.0;
+            vec3 channels = nibble.rgb * vec3(2.0, 4.0, 2.0);
+            // Opt-in original source-term RGB565 floor; destination stays GPU.
+            if (shade.w > 0.5) fragColor = vec4(floor(channels * alpha) / (alpha * vec3(31.0, 63.0, 31.0)), alpha);
+            else fragColor = vec4(nibble.rgb * vec3(2.0/31.0, 4.0/63.0, 2.0/31.0), (nibble.a + 1.0) / 16.0);
             return;
         }
         if (v_retail_mode > 1.5) { fragColor = tex; return; }
@@ -1342,8 +1350,13 @@ float4 main_ps(ps_in input) : SV_Target0 {
         if (input.retail_mode > 2.5) {
             // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
             float4 nibble = floor(tex * 15.0 + 0.5);
-            return float4(nibble.rgb * float3(2.0 / 31.0, 4.0 / 63.0, 2.0 / 31.0),
-                           (nibble.a + 1.0) / 16.0);
+            float alpha = (nibble.a + 1.0) / 16.0;
+            float3 channels = nibble.rgb * float3(2.0, 4.0, 2.0);
+            // Native source contribution truncates in RGB565 before addition.
+            // Undo straight-alpha multiplication only for this exact term;
+            // destination rounding remains the existing GPU blend policy.
+            if (shade.w > 0.5) return float4(floor(channels * alpha) / (alpha * float3(31.0, 63.0, 31.0)), alpha);
+            return float4(nibble.rgb * float3(2.0/31.0, 4.0/63.0, 2.0/31.0), (nibble.a + 1.0) / 16.0);
         }
         if (input.retail_mode > 1.5) return tex;
         // Blue modulation indexes five-bit texture/light channels, including
@@ -3162,7 +3175,7 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     fsu[o++] = light.dir[0]; fsu[o++] = light.dir[1]; fsu[o++] = light.dir[2]; fsu[o++] = light.intensity;
     fsu[o++] = light.color[0]; fsu[o++] = light.color[1]; fsu[o++] = light.color[2]; fsu[o++] = light.ambient;
     fsu[o++] = view_dir[0]; fsu[o++] = view_dir[1]; fsu[o++] = view_dir[2]; fsu[o++] = s.power;
-    fsu[o++] = float(s.shade); fsu[o++] = s.premultiply_alpha ? 1.0f : 0.0f; fsu[o++] = s.additive_blend ? 1.0f : 0.0f; fsu[o++] = 0.0f;
+    fsu[o++] = float(s.shade); fsu[o++] = s.premultiply_alpha ? 1.0f : 0.0f; fsu[o++] = s.additive_blend ? 1.0f : 0.0f; fsu[o++] = source_alpha && s.retail_lighting == 3 && s.retail_alpha_source_quantize ? 1.0f : 0.0f;
     const sg_range fsr = { fsu, sizeof(fsu) };
     sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &fsr);
 

@@ -528,6 +528,7 @@ struct SHelperMeshSubmit
     bool       retail_flat_depth = false; // original untextured max(vertex Z), one triangle
     float      retail_flat_depth_offset = 0.0f; // depth minus camera/base translation
     bool       retail_source_alpha = false; // audited source mode2: cull-none; mode4 writes Z as the native untextured kernel
+    bool       retail_alpha_source_quantize = false; // opt-in original ARGB4444 source contribution floor; destination precision remains GPU
     // Undo an explicit geometry-only Z bridge before source normal lighting.
     float      retail_normal_z_scale = 1.0f;
     bool       retail_gold_no_depth = false; // audited authored mode80, no depth test/write
