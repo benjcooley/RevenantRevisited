@@ -88,8 +88,8 @@ bool State::Initialize(const Definition& definition, const TickInputs& inputs,
         diagnostic = "partsys requires resolved prototype and ordered emitter poses";
         return false;
     }
-    if (definition.relvel.IsCurve() || definition.charvel.IsCurve()) {
-        diagnostic = "partsys relvel/charvel curves are outside the recovered constant subset";
+    if (definition.relvel.IsCurve() || definition.charvel.IsCurve() || definition.scljitter.IsCurve()) {
+        diagnostic = "partsys relvel/charvel/scljitter curves are outside the recovered constant subset";
         return false;
     }
     if (definition.relvel.constant[0] != 0 && !inputs.has_object_zero_origin) {
@@ -228,8 +228,13 @@ void State::Update(Particle& particle, const TickInputs& inputs, const RandomRan
     // Zero-width random alpha, scale and XYZ positional jitters are calls in
     // retail but do not consume rand(); unsupported fields remain absent.
     (void)Draw(random,0,0);
-    particle.scale = static_cast<float>(static_cast<long double>(particle.scale)+particle.scale_delta);
-    (void)Draw(random,0,0);
+    // Original 402c6b..402ca8: integer tenths, sampled before adding
+    // the spawn delta and current scale. Zero endpoints preserve old RNG.
+    const auto jitter=d.scljitter.constant;
+    const int scale_jitter=Draw(random,Integer(static_cast<long double>(jitter[0])*10.0f),
+        Integer(static_cast<long double>(jitter[1])*10.0f));
+    particle.scale = static_cast<float>(static_cast<long double>(scale_jitter)*.10000000149011612f
+        +particle.scale_delta+particle.scale);
     for(int i=0;i<3;++i) (void)Draw(random,0,0);
     Vec3 rotation{};
     for(int i=0;i<3;++i) rotation[i] = static_cast<float>(

@@ -125,6 +125,7 @@ Expression* Field(Definition& d, const std::string& name) {
     if (name == "relvel") return &d.relvel;
     if (name == "charvel") return &d.charvel;
     if (name == "scale") return &d.scale;
+    if (name == "scljitter") return &d.scljitter;
     if (name == "bounce") return &d.bounce;
     return nullptr;
 }

@@ -41,6 +41,7 @@ struct Definition {
     Expression relvel;
     Expression charvel{1, {-1000, 0, 0}};
     Expression scale{1, {1, 0, 0}};
+    Expression scljitter{2}; // original constant per-update scale range
     Expression bounce{2, {100, 100, 0}};
     int emittertype = 0; // sphere=0,cube=1,circle=2,square=3
     int blendmode = 16; // literal retail Initialize: litadd
