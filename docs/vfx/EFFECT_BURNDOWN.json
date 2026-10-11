@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "6273b91f15f7a8f4f0545824b78c193bb19782c3fc9a6ac506c7496ba5467efc",
+    "harness_sha256": "be6d67b37d6b75f17b0a9865ab75519a7e520f0e7a5ad4b9273bfef8a35a5fd6",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 109,
+    "retail_rows_with_source_fixes_recorded": 110,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -16115,15 +16115,17 @@
       "preview_candidates": [
         "TBlastEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: replaced Blast card with56 authored parts/three RGB565 textures, inclusive original key decoding opt-in, actual owner NextFrame/Pulse and complete world render hooks. 60480 key fields/25680 matrix fields pass; default6720 decoder cases unchanged. Appearance held for proven original software oversized-triangle rejection."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -16133,9 +16135,19 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve complete authored Blast animation and controlled lifetime. Original software rejects large outer shock/flare triangles; appearance remains held pending renderer/device reference, without fitting geometry.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "held_renderer_residual",
+        "visual_pass": false,
+        "scope": "Authored rotating lobes align early; actual Metal displays correct oversized outer geometry rejected by original software at60/90. Complete animation/state/geometry proven; literal whole-frame appearance remains held.",
+        "report": "recon/retail_asm/runtime/effects/current-blast-authored-20261010/manifest.json",
+        "sha256": "3b5a97fa994d9b9096c8dfb3a06ca69feea715b7dab82b5e09a7a69ba76d061e",
+        "note": "docs/vfx/forensics/BLAST_AUTHORED_RENDER_20261010.md"
+      }
     },
     {
       "index": 100,

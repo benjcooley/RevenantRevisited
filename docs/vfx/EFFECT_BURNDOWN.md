@@ -33,6 +33,8 @@ historical evidence; this migration alone grants no additional acceptance.
 
 **Six further passes (2026-10-10):** Faultfire, Streamer, YEnergy, YEnergyLose, YAbsorb and nullifier pass actual native/Metal appearance for their declared configurations. Original cached-emitter sampling fixes nullifier's phase. FireSwarm late phases improve, but its early software rejection remains held for a device reference.
 
+**Blast conversion (2026-10-10):** all 56 authored animated parts and three textures replace the placeholder card. Original keys and active matrices pass, with default decoding preserved. Appearance credit remains held for the original software renderer’s oversized-triangle rejection; the port keeps full geometry. [Evidence](forensics/BLAST_AUTHORED_RENDER_20261010.md).
+
 **YFireWind closed (2026-10-10):** its own original renderer, asset and controller verify the shared visual implementation. Root reviewed 18 complete green/yellow phases through both rings and blank tail. Natural Y damage, radius, facing and audio remain open. [Evidence](forensics/YFIREWIND_NATIVE_VISUAL.md).
 
 **FireWind closed (2026-10-10):** the original 400-slot controller and authored renderer replace the card approximation. Root reviewed 18 complete plume, sphere, annulus, fire-ring and decay phases against original software. The largest ring fits the viewport. YFireWind remains separate. [Evidence](forensics/FIREWIND_NATIVE_VISUAL.md).

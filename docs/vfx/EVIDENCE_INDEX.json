@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 109,
+    "retail_rows_with_source_fixes_recorded": 110,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -1428,6 +1428,13 @@
       "check": "yfirewind_full_native_actual_metal_visual",
       "status": "pass",
       "scope": "Eighteen own Y leaf original software and actual Metal native-domain green/yellow plume/sphere/annulus/rings/decay/empty tail, null-spell facing0. All native/image bounds fit. Natural Y radius/damage/facing/audio and exactpixels/device remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-blast-authored-20261010/manifest.json": {
+      "sha256": "3b5a97fa994d9b9096c8dfb3a06ca69feea715b7dab82b5e09a7a69ba76d061e",
+      "retail_row": "Blast:0x0ea34fa3",
+      "check": "blast_authored_whole_visual",
+      "status": "held_renderer_residual",
+      "scope": "Authored rotating lobes align early; actual Metal displays correct oversized outer geometry rejected by original software at60/90. Complete animation/state/geometry proven; literal whole-frame appearance remains held."
     }
   }
 }
