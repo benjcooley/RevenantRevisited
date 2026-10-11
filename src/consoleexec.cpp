@@ -82,6 +82,11 @@ void PulseStartupExec()
         return;
     }
 
+    RunConsoleCommand(cmd);
+}
+
+int32_t RunConsoleCommand(const std::string& cmd)
+{
     // CommandInterpreter expects a line-terminated buffer it may tokenize in
     // place; keep a private copy with a trailing newline.
     std::string line = cmd + "\n";
@@ -90,4 +95,5 @@ void PulseStartupExec()
     t.WhiteGet();
     const int32_t result = CommandInterpreter(Player, t, MINCMDABREV, nullptr);
     log_info("[exec] > %s  (result=0x%x)", cmd.c_str(), result);
+    return result;
 }

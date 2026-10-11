@@ -163,6 +163,10 @@ class Host:
     def pick(self, x: int, y: int) -> dict:
         return self.request('pick', x=x, y=y)
 
+    def exec(self, command: str) -> int:
+        """A console command, now (port only; not in a recorded session)."""
+        return self.request('exec', command=command)['result']
+
     def export_slot(self, slot: str, to: Path) -> dict:
         """`slot` by name, or '@last' for the slot the game wrote last;
         returns {'path', 'slot'}."""

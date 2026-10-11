@@ -74,6 +74,13 @@ def launch(args: argparse.Namespace, run: Path, purpose: str, watching: bool = F
     return Host([sys.executable, HERE / 'fakehost.py', *args.host_arg], where)
 
 
+def split_waypoint(text: str, game: str) -> tuple[str, str]:
+    """'port:opening' -> ('port', 'opening'); a name alone is the session's
+    game's. Waypoint names may hold colons ('grind: level 3')."""
+    prefix, sep, rest = text.partition(':')
+    return (prefix, rest) if sep and prefix in ('port', 'retail', 'fake') else (game, text)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('game', choices=('port', 'retail', 'fake'))
@@ -101,8 +108,8 @@ def main() -> int:
     story, start, parent, slot = args.story or 'keep', 0, 'newgame', args.slot
     if args.waypoint:
         # 'port:opening' plays a waypoint the other game made: the saves are the same format
-        source, _, name = args.waypoint.rpartition(':')
-        point = catalogue.get(source or args.game, name)
+        source, name = split_waypoint(args.waypoint, args.game)
+        point = catalogue.get(source, name)
         story, parent, slot = args.story or point.story, point.name, point.slot_dir
         names = [m.name for m in LISTS[story]]
         # resume after the waypoint's milestone by name; a story edited since keeps its place;

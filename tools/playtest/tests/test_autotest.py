@@ -7,6 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from autotest import AutoTest, Stage, incidents, report  # noqa: E402
+from play import split_waypoint  # noqa: E402
 from test_waypoints import slot  # noqa: E402
 
 
@@ -32,6 +33,13 @@ class Scoring(unittest.TestCase):
                        'stages': [dict(Stage('port', 'opening', 0, status='broke', error='<b>boom</b>').__dict__,
                                        ok=False)]})
         self.assertIn('&lt;b&gt;boom', page)
+
+
+class Naming(unittest.TestCase):
+    def test_waypoint_names_may_hold_colons(self):
+        self.assertEqual(split_waypoint('port:grind: level 3', 'retail'), ('port', 'grind: level 3'))
+        self.assertEqual(split_waypoint('site L1: 6 Araknid', 'retail'), ('retail', 'site L1: 6 Araknid'))
+        self.assertEqual(split_waypoint('opening', 'port'), ('port', 'opening'))
 
 
 class Starting(unittest.TestCase):

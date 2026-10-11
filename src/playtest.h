@@ -111,6 +111,7 @@ class TPlaytest
     bool CmdMark(const JsonValue& req, JsonOut& out, std::string& error);
     bool CmdReplay(const JsonValue& req, std::string& error);
     bool CmdCaption(const JsonValue& req, std::string& error);
+    bool CmdExec(const JsonValue& req, JsonOut& out, std::string& error);
     void CmdQuit();
 
     // ---- sessions ----

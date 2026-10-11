@@ -7,6 +7,7 @@
 
 #include "argh.h"
 #include "buildinfo.h"
+#include "consoleexec.h"
 #include "display.h"
 #include "framesnap.h"
 #include "inputqueue.h"
@@ -681,6 +682,8 @@ void TPlaytest::Request(const std::string& line)
     }
     else if (cmd == "caption")
         ok = CmdCaption(req, error);
+    else if (cmd == "exec")
+        ok = CmdExec(req, out, error);
     else if (cmd == "quit")
     {
         Send(out);
@@ -713,7 +716,7 @@ bool TPlaytest::CmdHello(JsonOut& out)
     out.Field("tick_hz", 24);
     out.Key("screen").Begin('[').Value(640).Value(480).End(']');
     out.Key("capabilities").Begin('[');
-    for (const char* c : {"observe", "project", "pick", "export_slot", "mark", "replay", "caption"})
+    for (const char* c : {"observe", "project", "pick", "export_slot", "mark", "replay", "caption", "exec"})
         out.String(c);
     out.End(']');
     return true;
@@ -953,6 +956,31 @@ bool TPlaytest::CmdReplay(const JsonValue& req, std::string& error)
         return false;
     replayAnswer = true;
     return Boot(error);
+}
+
+// A console command run now, between ticks (consoleexec.h): test setup --
+// put Locke somewhere, set a story variable. It changes the game outside its
+// input, so a recorded session can't replay it: refused while recording.
+bool TPlaytest::CmdExec(const JsonValue& req, JsonOut& out, std::string& error)
+{
+    if (!started || !Player)
+    {
+        error = "no game: start first";
+        return false;
+    }
+    if (writer.IsOpen())
+    {
+        error = "exec changes the game outside its input; a recorded session can't replay it";
+        return false;
+    }
+    const std::string line = req["command"].Str();
+    if (line.empty())
+    {
+        error = "exec needs a command";
+        return false;
+    }
+    out.Field("result", RunConsoleCommand(line));
+    return true;
 }
 
 bool TPlaytest::CmdCaption(const JsonValue& req, std::string& error)

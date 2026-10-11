@@ -136,6 +136,7 @@ stderr.
 | `export_slot` | `slot` (a slot name, or `@last` for the slot the game wrote most recently: Quick Save picks its own "Quick Save N"), `to` | `path`, `slot` (the name exported) |
 | `mark` | `kind`, other fields | writes the mark and a check line to the recording |
 | `replay` | `bundle`, `verify` (bool), `until` (tick, optional) | `t`, and with `verify`: `diverged: null` or `{t, fields}`. A replay starts the way the recording did: a new game, or the bundle's own `start/<slot>` with its seed and INI |
+| `exec` | `command`: a console command (the game's CommandInterpreter, player as context: `player.pos x y z level`, `set STATE 1`) | `result`: its result code. Port only; refused while recording (it changes the game outside its input). For test setup: placing Locke, story states |
 | `checkpoint`, `restore` | `name` | retail only |
 | `caption` | `text` (one or two short lines; empty clears) | shown to a person watching (§5a); never part of the game, the frame `observe` captures or the recording |
 | `quit` | | ends the recording with its end line and exits |
