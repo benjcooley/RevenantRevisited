@@ -57,7 +57,7 @@ Written by a recording host every 24 ticks, at every mark, and at the end.
 | `health`, `mana`, `fatigue` | current values |
 | `action` | the player's `doing` action number (retail numbering, PLAYER_INPUT.md §3) |
 | `target` | the player's fight target's position and health, or `null` |
-| `draws` | game `random()` calls since start: the port's `RandomDraws()`, the emulator's count of calls to `0x00483300` |
+| `draws` | draws from the game's random stream since start: the port's `RandomDraws()`; the emulator's count of calls to the CRT `rand` `0x0058c582` (`random()` `0x00483300` draws through it only when its bounds differ, as the port's does, and 32 other callers draw directly, as the port's `GameRand()` users do) |
 
 A replay compares each check line field by field and stops at the first
 tick with a difference, reporting the fields that differ. Fields a host
