@@ -66,6 +66,11 @@ class TMapRenderer
 
     void Shutdown();
     void RenderFrame();
+    // Opt-in gallery providers. Tick/FX runs after camera/light setup, before
+    // BeginTilePass; mesh submission runs inside that pass before EndTilePass.
+    // Ordinary renderers leave both callbacks empty. Shutdown clears them.
+    void SetReviewSubmissionCallbacks(std::function<void()> before_world,
+                                      std::function<void()> inside_world);
     void HandleMouseClick(int32_t button, int32_t x, int32_t y);
     void HandleMouseMove(int32_t button, int32_t x, int32_t y);
     void HandleKeyPress(int32_t key, bool down);
@@ -240,6 +245,8 @@ class TMapRenderer
                                                   int32_t sector_y) const;
 
   private:
+    std::function<void()> review_before_world_;
+    std::function<void()> review_inside_world_;
     struct Impl;
     std::unique_ptr<Impl> impl;
 };
