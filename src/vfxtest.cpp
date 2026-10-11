@@ -76,6 +76,7 @@
 #include "effects/invisiblepreview.h"
 #include "effects/bloodpreview.h"
 #include "effects/halopreview.h"
+#include "effects/burnactorprobe.h"
 #include "effects/labbackpreview.h"
 #include "effects/swamppreview.h"
 #include "effects/paralizepreview.h"
@@ -6219,6 +6220,10 @@ struct SVfxTestBootstrap {
             e.factory=[](const S3DPoint&o)->void*{return blood_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){blood_preview::Advance(static_cast<blood_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){blood_preview::SubmitWorld(static_cast<blood_preview::State*>(c));};e.is_alive=[](void*c){return blood_preview::Alive(static_cast<blood_preview::State*>(c));};e.destroy=[](void*c){blood_preview::Destroy(static_cast<blood_preview::State*>(c));};VfxTest::DeferredRegister(e);
         }
 
+        {
+            VfxTest::SEffect e={};e.id="Burn_ACTOR_POSE_PROBE";e.family="diagnostic";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return burn_actor_probe::Spawn(o);};e.submit=[](void*,EFxDebugMode){};e.destroy=[](void*c){burn_actor_probe::Destroy(static_cast<burn_actor_probe::State*>(c));};VfxTest::DeferredRegister(e);
+        }
         // Exact Halo public API inputs; no natural retail caller is claimed.
         for(int variant=0;variant<2;++variant) {
             VfxTest::SEffect e={};e.id=variant?"Halo_AUTHORED_PUBLIC20":"Halo_AUTHORED_PUBLIC60";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;

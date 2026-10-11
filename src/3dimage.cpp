@@ -17,6 +17,7 @@
 #include "barrierlegacykeys.h"
 #include "i3dtexturealpha.h"
 #include "3dimage.h"
+#include "legacybonecompose.h"
 
 #include <algorithm>
 #include <cmath>
@@ -4757,6 +4758,8 @@ void T3DAnimator::UpdateBoneTransforms()
             pose_current.Count(), &pose) || !pose)
         return;
 
+    if (animobjs.NumItems()>MAX3DANIMOBJECTS)return;
+    std::array<bool,MAX3DANIMOBJECTS> compose_parent{};
     for (int32_t c = 0; c < animobjs.NumItems(); c++)
     {
         S3DAnimObj* obj = animobjs[c];
@@ -4805,9 +4808,15 @@ void T3DAnimator::UpdateBoneTransforms()
         // paths that have not moved to TTransform yet. This is composition of
         // already-written local transforms, not another legacy key sample.
         obj->matrix = obj->transform.LocalMatrix();
-        if (obj->parent)
-            MtxMultiply(&obj->matrix, &obj->matrix, &obj->parent->matrix);
+        compose_parent[c]=true;
     }
+
+    // Serialized object order need not be parent-first (Acolyte root17 follows
+    // children0–16). Every local must exist before legacy mirrors compose.
+    if (!legacy_bone_compose::Compose<MAX3DANIMOBJECTS>(animobjs.NumItems(),
+            [&](int i) { return animobjs[i]; },
+            [&](int i) { return compose_parent[i]; }))
+        return;
 
     // Single top-down sweep on the instance's transform resolves all
     // bone globals in dependency order. Cheap because by here every
