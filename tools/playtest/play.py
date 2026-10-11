@@ -88,6 +88,8 @@ def main() -> int:
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--minutes', type=float, default=20.0, help='game minutes to play at most')
     parser.add_argument('--until', help='stop once this milestone is reached')
+    parser.add_argument('--style', default='mixed', choices=('hands', 'weapon', 'mixed'),
+                        help='grinding: fight barehanded, with the best weapon, or both (PLAN.md §14)')
     parser.add_argument('--waypoints', type=Path, default=ROOT)
     parser.add_argument('--verify', action='store_true')
     parser.add_argument('--watch', action='store_true', help='watch live (window and browser page)')
@@ -103,8 +105,10 @@ def main() -> int:
         point = catalogue.get(source or args.game, name)
         story, parent, slot = args.story or point.story, point.name, point.slot_dir
         names = [m.name for m in LISTS[story]]
-        # resume after the waypoint's milestone by name; a story edited since keeps its place
-        start = names.index(point.name) + 1 if point.name in names else point.index
+        # resume after the waypoint's milestone by name; a story edited since keeps its place;
+        # another story (grinding from a story point) starts at its beginning
+        start = (names.index(point.name) + 1 if point.name in names
+                 else point.index if story == point.story else 0)
     elif args.slot:
         parent = f'slot:{args.slot.name}'
 
@@ -139,6 +143,7 @@ def main() -> int:
                    ini=args.ini if args.game == 'port' else None, timeout=1800)
         director = Director(host, jev, router, Knowledge.load(args.data), bindings, bundle, milestones,
                             waypoints=catalogue, story=story, start=start, parent=parent, game=args.game,
+                            style=args.style,
                             watch=run / 'watch' if args.watch else None,
                             world=World(args.data, slot) if args.game != 'fake' else None)
         summary = director.run(max_ticks=round(args.minutes * 60 * 24))

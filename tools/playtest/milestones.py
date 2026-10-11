@@ -45,6 +45,18 @@ KEEP = [
               after_scene(level_is(0)), save=True, goal='KeepExit', expect={'TENDRICKSTATE': 2}),
 ]
 
+# Grinding outside the Keep (PLAN.md §14, GRIND.md §9): levels, each a save
+# to debug from. Played from 'left the keep' (play.py --story grind --from
+# 'left the keep'); the director hunts the level's sites between fights.
+def locke_level(at_least: int):
+    return lambda obs, d: (obs.get('player', {}).get('xp') or [0])[0] >= at_least and control_on(obs, d)
+
+
+GRIND = [Milestone(f'grind: level {n}',
+                   f'Grow stronger: hunt the monsters near the Keep, pick up what they drop, and reach level {n}.',
+                   locke_level(n), save=True, activity='grind')
+         for n in range(2, 6)]
+
 # The reference host's toy world (fakehost.py): one person to reach.
 SMOKE = [
     Milestone('met sardok', 'Find Sardok and go to him.', near((1000, 1800), 110), save=True),
@@ -52,4 +64,4 @@ SMOKE = [
               lambda obs, d: not near((1000, 1800), 200)(obs, d), save=True),
 ]
 
-LISTS = {'keep': KEEP, 'smoke': SMOKE}
+LISTS = {'keep': KEEP, 'grind': GRIND, 'smoke': SMOKE}

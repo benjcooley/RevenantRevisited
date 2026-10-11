@@ -3,6 +3,7 @@
     world = World(data_dir, slot_dir)        # the module's base map, or the slot's working set
     world.find('RandK')                      # [Place(level, pos, name, typename, objclass)]
     world.route(level, pos, goal)            # the exits to take, in order, to reach goal
+    world.generators(level)                  # the level's monster generators and what they spawn
 
 Two sources, both the game's own data:
 
@@ -22,8 +23,9 @@ from __future__ import annotations
 import heapq
 import math
 import re
+import struct
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
@@ -40,6 +42,38 @@ class Place:
     name: str                        # instance name, '' when it goes by its type's
     typename: str
     objclass: str
+    tail: str = field(default='', compare=False)   # the class's own record (hex): a generator's slots
+
+
+@dataclass(frozen=True)
+class Generator:
+    """A MonsterGen helper (GRIND.md §3.1): up to five slots, each a monster
+    type spawned every `frequency` hundredths of a second while the
+    generator is off screen, and a cap on the characters within 300 units."""
+    place: Place
+    slots: tuple[tuple[str, int], ...]   # (monster type, frequency)
+    cap: int
+
+
+def read_generator(place: Place) -> Generator | None:
+    """A MonsterGen's record as MonsterGen::Load (0x00516e00) reads it: a
+    slot count, each slot a type name (NUL-terminated) then its treasure
+    type, frequency and start time (int32 each), then the cap."""
+    data = bytes.fromhex(place.tail)
+    if not data:
+        return None
+    slots, at = [], 1
+    try:
+        for _ in range(data[0]):
+            end = data.index(0, at)
+            name = data[at:end].decode('cp1252').strip()
+            _, frequency, _ = struct.unpack_from('<iii', data, end + 1)
+            slots.append((name, frequency))
+            at = end + 13
+        (cap,) = struct.unpack_from('<i', data, at)
+    except (ValueError, struct.error):
+        return None
+    return Generator(place, tuple(slots), cap)
 
 
 @dataclass(frozen=True)
@@ -75,8 +109,13 @@ class World:
 
     @lru_cache(maxsize=None)
     def objects(self, level: int) -> tuple[Place, ...]:
-        return tuple(Place(o.level, (o.x, o.y, o.z), o.name, o.typename, o.objclass)
+        return tuple(Place(o.level, (o.x, o.y, o.z), o.name, o.typename, o.objclass, o.tail)
                      for o in storytest.scan_level(self.module, level, self.slot))
+
+    @lru_cache(maxsize=None)
+    def generators(self, level: int) -> tuple[Generator, ...]:
+        return tuple(g for p in self.objects(level) if p.typename.lower() == 'monstergen'
+                     for g in [read_generator(p)] if g)
 
     def find(self, name: str, levels: list[int] | None = None) -> list[Place]:
         """Objects answering to `name` (instance name, else type name; case

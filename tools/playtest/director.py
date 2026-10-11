@@ -47,6 +47,7 @@ from knowledge import Knowledge
 from nav import DEFAULT_RADIUS, LevelMaps, farthest_clear
 from walk import CLICK_HEIGHT, USE_REACH, Destination, Walker, WalkGrid, game_distance, in_rect
 from waypoints import Catalogue, Waypoint, story_states, wrong_states
+from grind import Grounds, Site
 from world import Place, World
 
 ENGAGE_RADIUS = 500                  # a living enemy this close means a fight
@@ -54,6 +55,13 @@ WALKGRID_RADIUS = 480
 STUCK_LEGS = 3                       # stalls on one spot that make it a dead end
 IDLE_LEGS = 8                        # legs walked without getting 100 nearer that make it one too
 DEAD_ENDS_BEFORE_LOOKING = 5         # dead ends with no progress before the router looks at the screen
+LOOT_CLASSES = {'item', 'weapon', 'armor', 'food', 'potion', 'money', 'scroll', 'talisman', 'key', 'ammo',
+                'rangedweapon', 'tool', 'lightsource', 'invcontainer', 'mapscroll'}
+LOOT_RADIUS = 250                    # loose items this near are picked up before hunting on (a drop lands within ~48)
+LOOT_TRIES = 2                       # clicks on one item before it's left lying
+LOOT_WAIT = 24 * 6                   # ticks a pickup may take: the walk to it, then the pickup
+SITE_REACH = 300                     # this near a site's centre is at it
+ROAM_LEGS = 6                        # walks round a quiet site before moving on to the next
 WIDE_WALKGRID_RADIUS = 2400          # once per stop, when the way to it isn't in the map yet
 DIGITS = '123456'
 # Each direction straight after its opposite, so calibrating ends where it began.
@@ -71,6 +79,7 @@ class Milestone:
     save: bool = False
     goal: str | None = None          # an object to travel to (instance name): code finds the way
     expect: dict[str, int] = field(default_factory=dict)   # story variables its save must hold
+    activity: str = 'story'          # 'grind': with no enemy near, hunt (PLAN.md §14) rather than explore
 
 
 @dataclass
@@ -106,6 +115,11 @@ class Director:
     best_gap: float = math.inf                                 # the nearest he has been to the next stop
     idle_legs: int = 0                                         # travel legs since he last got nearer
     travel_stop: str = ''                                      # the stop those are measured against
+    style: str = 'mixed'                                       # grinding: 'hands', 'weapon' or 'mixed' (PLAN.md §14)
+    grounds: dict = field(default_factory=dict)                # level -> Grounds, surveyed when first hunted on
+    site: Site | None = None                                   # the hunting site now being worked
+    site_legs: int = 0                                         # quiet walks at it
+    loot_tries: dict = field(default_factory=dict)             # object id -> clicks on it
 
     def __post_init__(self) -> None:
         self.walker = Walker(self.jev, self.bindings, under=self.object_under)
@@ -181,6 +195,8 @@ class Director:
             return 'wait'
         if self.threats(obs):
             return 'combat'
+        if self.milestone.activity == 'grind':
+            return 'loot' if self.loose_items(obs) else 'hunt'
         return 'explore'
 
     def threats(self, obs: dict) -> list[dict]:
@@ -205,6 +221,8 @@ class Director:
             return False
         worn = {int(k) for k in (player.get('equipped') or {})}
         for item in player.get('pack') or []:
+            if self.style == 'hands' and item.get('class') in ('weapon', 'rangedweapon'):
+                continue                                     # barehanded: Hands grows only from fists
             if (item.get('eqslot', -1) >= 0 and item['eqslot'] not in worn and item.get('screen')
                     and item['slot'] not in self.equip_tried):
                 self.equip_tried.add(item['slot'])
@@ -265,6 +283,79 @@ class Director:
         self.host.step(plan.ticks(ticks), plan.events())
         self.state = plan.state
 
+    # -- grinding (PLAN.md §14) --
+    def loose_items(self, obs: dict) -> list[dict]:
+        """Items lying near Locke, nearest first, that a click might still
+        pick up: a dead monster's drop, gold, anything left on the floor."""
+        pos = obs['player']['pos']
+        return sorted((o for o in obs.get('objects', [])
+                       if o.get('class') in LOOT_CLASSES and o.get('screen')
+                       and self.loot_tries.get(o['id'], 0) < LOOT_TRIES
+                       and game_distance(o['pos'], pos) <= LOOT_RADIUS),
+                      key=lambda o: game_distance(o['pos'], pos))
+
+    def loot(self, obs: dict) -> None:
+        """Pick up the nearest loose item: a click on it walks Locke to it
+        and takes it (TMapPane::MouseClick: Goto with the object, then
+        Pickup 0x004cfef0), done when it's gone from the floor."""
+        if obs['player'].get('mode') == 'combat':
+            self.press(self.bindings['CombatMode'], then=6)
+            return
+        item = self.loose_items(obs)[0]
+        self.loot_tries[item['id']] = self.loot_tries.get(item['id'], 0) + 1
+        spot = self.clickable(item)
+        if not spot:
+            self.note('loot', item=item.get('name') or item.get('type'), result='not clickable')
+            return
+        self.caption('loot', f"picking up {item.get('name') or item.get('type')}")
+        plan = Plan(self.state)
+        end = plan.click(0, *spot)
+        self.host.step(plan.ticks(end), plan.events())
+        self.state = plan.state
+        waited, taken = 0, False
+        while waited < LOOT_WAIT and not taken:
+            self.host.step(6)
+            waited += 6
+            after = self.observe()
+            taken = all(o['id'] != item['id'] for o in after.get('objects', []))
+        self.note('loot', item=item.get('name') or item.get('type'), result='taken' if taken else 'left')
+
+    def hunt(self, obs: dict) -> None:
+        """No enemy near: go to the best hunting site for Locke's level and
+        style, and roam it until something hostile shows (the fight is the
+        combat mode's); a site quiet for ROAM_LEGS walks is left for its
+        generators to restock while the next is worked."""
+        player = obs['player']
+        if player.get('mode') == 'combat':
+            self.press(self.bindings['CombatMode'], then=6)
+            return
+        level = player.get('level', 0)
+        if level not in self.grounds and self.world:
+            self.grounds[level] = Grounds.survey(self.world, self.kb, level)
+        grounds = self.grounds.get(level)
+        locke_level = (player.get('xp') or [1])[0]
+        if self.site is None or self.site.level != level:
+            self.site = grounds.next(player['pos'], locke_level, self.style, self.host.tick) if grounds else None
+            self.site_legs = 0
+            if self.site:
+                self.note('site', centre=list(self.site.centre), monsters=self.site.words(),
+                          score=round(grounds.score(self.site, locke_level, self.style), 2))
+        if self.site is None:
+            self.explore(obs)                                   # nowhere known to hunt on this level
+            return
+        place = Place(level, self.site.centre, 'hunting ground', '', 'SITE')
+        if game_distance(player['pos'], self.site.centre) > SITE_REACH:
+            if not self.travel(obs, place):
+                self.explore(obs)
+            return
+        self.site_legs += 1
+        if self.site_legs > ROAM_LEGS:
+            grounds.visited(self.site, self.host.tick)
+            self.note('site done', centre=list(self.site.centre))
+            self.site = None
+            return
+        self.explore(obs)                                       # roam round it
+
     def explore(self, obs: dict) -> None:
         if obs['player'].get('mode') == 'combat':                    # a click in combat attacks
             self.press(self.bindings['CombatMode'], then=6)
@@ -286,16 +377,18 @@ class Director:
         if result != 'arrived':
             self.observe(frame=True)
 
-    def travel(self, obs: dict, goal: str) -> bool:
-        """One leg toward `goal`: find it (in view, else in the map data),
-        route through the exits that get there, then use or talk to the
-        next stop once in reach, or walk the path toward it. False when
-        there is no way to tell where to go, so exploring takes over."""
+    def travel(self, obs: dict, goal: str | Place) -> bool:
+        """One leg toward `goal`, an object's name or a place: find it (in
+        view, else in the map data), route through the exits that get
+        there, then use or talk to the next stop once in reach, or walk the
+        path toward it. False when there is no way to tell where to go, so
+        exploring takes over."""
         player = obs['player']
         level, pos = player.get('level'), player['pos']
         named = {(o.get('name') or '').lower(): o for o in obs.get('objects', [])}
-        live = named.get(goal.lower())
-        if live:
+        if isinstance(goal, Place):
+            place, goal = goal, goal.name
+        elif live := named.get(goal.lower()):
             place = Place(level, tuple(live['pos']), goal, live.get('type', ''), live.get('class', ''))
         else:
             places = self.world.find(goal)

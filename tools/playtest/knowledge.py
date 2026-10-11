@@ -201,18 +201,56 @@ def parse_spells(text: str) -> dict[str, Spell]:
     return spells
 
 
+# ---- character types (class.def) ------------------------------------------------
+
+@dataclass(frozen=True)
+class CharType:
+    """A CHARACTER type's class.def TYPES line: its Value (Exp, to-hit and
+    defence all follow from it, GRIND.md §1.2, §2.4; townsfolk -1) and
+    whether it attacks on sight by default (OBJSTATS Aggressive)."""
+    name: str
+    radius: int
+    value: int
+    aggressive: bool
+
+
+TYPE_LINE = re.compile(r'^\s*"([^"]+)"\s+"[^"]*"\s+(0x[0-9a-fA-F]+|\d+)\s+\{([^}]*)\}\s+\{([^}]*)\}')
+
+
+def parse_character_types(text: str) -> dict[str, CharType]:
+    """class.def's CHARACTER class: STATS {Radius, Value}, OBJSTATS
+    {Aggressive, ...} per type; by name, lower case and stripped."""
+    types: dict[str, CharType] = {}
+    inside = False
+    for line in text.splitlines():
+        if re.match(r'\s*CLASS\s+"', line):
+            inside = bool(re.match(r'\s*CLASS\s+"CHARACTER"', line))
+            continue
+        m = TYPE_LINE.match(line) if inside else None
+        if m:
+            stats = [int(v) for v in m.group(3).split(',')]
+            objstats = [int(v) for v in m.group(4).split(',')]
+            types[m.group(1).strip().lower()] = CharType(m.group(1).strip(), stats[0], stats[1], bool(objstats[0]))
+    return types
+
+
 # ---- the knowledge base ------------------------------------------------------
 
 @dataclass
 class Knowledge:
     characters: dict[str, Character]
     spells: dict[str, Spell]
+    types: dict[str, CharType] = field(default_factory=dict)
 
     @classmethod
     def load(cls, data: Path) -> Knowledge:
         data = Path(data)
         return cls(parse_characters(_archive_member(data / 'imagery.rvi', 'char.def')),
-                   parse_spells(_archive_member(data / 'resources.rvr', 'spell.def')))
+                   parse_spells(_archive_member(data / 'resources.rvr', 'spell.def')),
+                   parse_character_types(_archive_member(data / 'imagery.rvi', 'class.def')))
+
+    def char_type(self, name: str) -> CharType | None:
+        return self.types.get(name.strip().lower())
 
     def character(self, name: str) -> Character | None:
         """By type name; char.def has variants with trailing spaces."""

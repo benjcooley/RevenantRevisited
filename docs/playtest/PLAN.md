@@ -417,7 +417,7 @@ FINDINGS.md and get fixed.
 | P4 | Cross replay | A retail recording replays in the port and reports its first divergent tick |
 | P5 | Save library | Milestone saves in both games through the forest and Misthaven |
 | P6 | Auto-test: `autotest.py`, `crosscheck.py`, waypoint checks | The Keep chain stage by stage in both games, every save checked and loaded in the other game, variances listed |
-| P7 | Grinding: hunting, loot, gear, healing, shops; hand-to-hand as a first-class style | Locke gains levels, gold and better equipment in both games on his own |
+| P7 | Grinding (§14): hunting, loot, gear, healing, shops; hand-to-hand as a first-class style | Locke gains levels, gold and better equipment in both games on his own |
 | P8 | The main quest past the Keep ([STORY.md](STORY.md)): milestones per stage, script moves in routing | Waypoints for every stage in both games |
 
 Status (2026-10-11): P0-P3 done (the Keep chain in the port, Rahul in
@@ -426,7 +426,52 @@ retail); P4 open; P6 in progress.
 P1 and P2 run in parallel; P0 comes first because both hosts write its
 format.
 
-## 14. Ownership and rules
+## 14. Grinding
+
+Locke has to grind: experience and levels, skills (Hands as much as any
+weapon), gold and better gear, in both games and on his own. What grinding
+is in retail is [GRIND.md](GRIND.md) (kills are the only experience; skills
+rise on kills, in the weapon in hand or Hands; generators respawn monsters
+off screen; drops land on the floor; health hardly regenerates). The
+director's side:
+
+- **Milestones are targets**, not story points: `level 3`, `hands 5`,
+  `500 gold`, `leather armour on`. A grind milestone carries
+  `activity='grind'`, so when no enemy is near the director hunts instead
+  of exploring. The `grind` story list holds them; `play.py --story grind
+  --from left the keep` grinds outside the Keep.
+- **Grounds** (`grind.py`) come from the game's data: the level's placed
+  hostiles and MonsterGen helpers (world.py, from the sectors) grouped into
+  sites, each scored by its monsters' class.def Value against Locke's level
+  (hunt Value from Level − 1 to Level + 1, §9 step 2) and, barehanded, by
+  their `hand` resistance. Sites are visited in turn; a site's generators
+  restock while it is off screen, so the director leaves a cleared site and
+  comes back (step 3). In the port (no generators yet, FINDINGS) the
+  placed monsters run out.
+- **Hunting** at a site: walk to it (travel to a point), fight whatever is
+  hostile within reach (§11, with the rotation and grapples), roam the site
+  while nothing is.
+- **Looting**: after a kill, every item and gold pile within reach of the
+  corpse is picked up (a click on it, within the game's use reach) before
+  moving on, and before saving.
+- **Healing**: the tactician drinks belt potions below a health floor; out
+  of potions, the director disengages (walks out of sight) and the
+  milestone's budget decides whether to go on.
+- **Gear** (once the observation has item numbers, PROTOCOL §7): after a
+  pickup, a better weapon (by Damage, under the style rule) or armour (by
+  Protection, within MinStrength/MinConstitution) is equipped by its pack
+  cell.
+- **Style**: `--style hands|weapon|mixed`. Hands keeps the weapon off
+  (Hands only grows from barehanded kills; the Baez arena needs fists);
+  weapon equips the best; mixed fights barehanded below a share of kills
+  and against monsters whose `hand` resistance is negative.
+- **Saves** at safe moments (control on, health high, nothing hostile in
+  sight, nothing left on the floor), as waypoints named for what was
+  reached (`grind: level 3`): good saves to debug from at every stage of
+  Locke's growth. Death ends the session (the autotest scores it); the
+  last waypoint is the retry.
+
+## 15. Ownership and rules
 
 - Port changes: input dispatch, the command channel and screen state
   (the gameflow track's area), the recorder, and click to walk. Each lands
