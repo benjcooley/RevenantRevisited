@@ -29,6 +29,8 @@
 #include "speedauthoredmatrix.h"
 #include "staticpartsysprofiles.h"
 #include "lightstripprofile.h"
+#include "cometprofile.h"
+#include "cometmatrix.h"
 #include "animation.h"
 #include "bitmap.h"
 #include "logging.h"
@@ -678,6 +680,42 @@ bool T3DImagery::ValidateRetailLightStripProfile()
     return true;
 }
 
+bool T3DImagery::ValidateRetailCometProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
+       NumObjects()!=8 || NumTextures()!=2 || NumMaterials()!=3 ||
+       NumTags()!=4 || numverts!=20 || numfaces!=10)return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    const std::string suffix="magic/comet.i3d";
+    if(path.size()<suffix.size() || path.compare(path.size()-suffix.size(),suffix.size(),suffix) ||
+       (path.size()!=suffix.size() && path[path.size()-suffix.size()-1]!='/'))return false;
+    const auto hash=[](const void* data,size_t n){uint64_t h=1469598103934665603ull;
+        const auto* b=static_cast<const uint8_t*>(data);for(size_t i=0;i<n;++i){h^=b[i];h*=1099511628211ull;}return h;};
+    for(int state=0;state<1;++state)
+        if(GetAniLength(state)!=45 || GetAniFlags(state)!=8192)return false;
+    for(int i=0;i<8;++i){const auto& o=objects[i];const auto& p=retail_comet::objects[i];
+        if(std::strcmp(o.name,p.name) || o.material!=p.material || o.numverts!=p.vertices || o.numfaces!=p.faces)return false;
+        for(int state=0;state<1;++state)
+            if(o.parent[state]!=-1 || !o.anikeys[state] || o.numanikeys[state]!=p.keys ||
+               hash(o.anikeys[state],p.keys*sizeof(SAniKey32))!=p.key_hash)return false;
+        for(int slot=0;slot<3;++slot)if(o.numtexfaces[slot]!=p.face_counts[slot])return false;
+        std::vector<S3DVertex> vertices(size_t(p.vertices));std::vector<S3DFace> faces(size_t(p.faces));
+        if(p.vertices)GetObjVerts(i,vertices.data(),0,0);
+        if(p.faces)GetObjFaces(i,faces.data());
+        if(hash(vertices.data(),vertices.size()*sizeof(S3DVertex))!=p.vertex_hash ||
+           hash(faces.data(),faces.size()*sizeof(S3DFace))!=p.face_hash)return false;
+    }
+    for(int i=0;i<4;++i){const auto& t=*GetTag(i);const auto& p=retail_comet::tags[i];
+        if(t.state!=p.state || t.frame!=p.frame || !t.name || !t.str || std::strcmp(t.name,p.name) || std::strcmp(t.str,p.parameters))return false;}
+    for(int i=0;i<2;++i){const auto& t=textures[i];const auto& f=t.desc.pixelFormat;
+        if(t.numframes!=1 || t.desc.width!=(i==0?64:128) || t.desc.height!=(i==0?64:128) ||
+           f.dwRGBBitCount!=16 || f.dwRBitMask!=0xf800 || f.dwGBitMask!=0x7e0 || f.dwBBitMask!=31 || f.dwRGBAlphaBitMask)return false;}
+    for(int i=0;i<3;++i)if(materials[i].texture!=retail_comet::material_textures[i] ||
+        hash(&materials[i].matdesc.diffuse,17*sizeof(float))!=retail_comet::materials[i])return false;
+    return true;
+}
+
 void T3DImagery::InitializePartSysTracks()
 {
     partsys_tracks.clear();
@@ -689,6 +727,7 @@ void T3DImagery::InitializePartSysTracks()
     quicksilver_partsys_profile = ValidateRetailQuicksilverPartSysProfile();
     static_particles_profile = ValidateRetailStaticParticleProfile();
     lightstrip_partsys_profile = ValidateRetailLightStripProfile();
+    comet_partsys_profile = ValidateRetailCometProfile();
     combatflash_start1_partsys_profile = ValidateCombatFlashStart1PartSysProfile();
     for (int32_t i = 0; i < NumTags(); ++i)
     {
@@ -755,7 +794,7 @@ void T3DImagery::InitializePartSysTracks()
         for (int32_t j = 0; j < NumTags() && track.supported; ++j)
         {
             const char* name = GetTag(j)->name;
-            if ((gold_partsys_profile || combatflash_start1_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || static_particles_profile || lightstrip_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
+            if ((gold_partsys_profile || combatflash_start1_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || static_particles_profile || lightstrip_partsys_profile || comet_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
             if (name && stricmp(name, "partsys") && stricmp(name, "scrolltex") &&
                 stricmp(name, "play") && stricmp(name, "beg") && stricmp(name, "end"))
             {
@@ -1632,6 +1671,7 @@ void T3DImagery::ClearMesh()
     quicksilver_partsys_profile = false;
     static_particles_profile = 0;
     lightstrip_partsys_profile = false;
+    comet_partsys_profile = false;
     retail_punch_keys = false;
     retail_mpappear_start_profile = false;
     retail_shadowfist_profile = false;
@@ -3175,13 +3215,15 @@ struct T3DAnimator::SPartSysControllers
     static void FillInputs(Controller& controller, T3DAnimator& animator,
                            TObjectInstance& owner)
     {
+        const bool lightstrip_pose=(owner.ObjId()==0x10da54d0u && animator.Get3DImagery()->HasRetailLightStripProfile());
+        const bool comet_pose=(owner.ObjId()==0xf32bcfacu && animator.Get3DImagery()->HasRetailCometProfile());
         auto& inputs = controller.inputs;
         const S3DPoint p = owner.Pos();
         inputs.owner_position = {float(p.x), float(p.y), float(p.z)};
         inputs.owner_face = static_cast<unsigned char>(owner.GetFace());
         // Retail 403771 reads animator+14; Animate copies owner frame later.
         // Gold's transient PPS curve must see initial cached0, not owner1.
-        inputs.animation_frame = ((owner.ObjId()==0x10da54d0u && animator.Get3DImagery()->HasRetailLightStripProfile()) || owner.ObjId() == 0xd0c0f035u ||
+        inputs.animation_frame = ((lightstrip_pose || comet_pose) || owner.ObjId() == 0xd0c0f035u ||
             (owner.ObjId()==0x5be39ae0u && owner.GetState()==0 && animator.Get3DImagery()->HasRetailMightPartSysProfile()) ||
             (owner.ObjId()==0x82aeb30fu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailImmortalmightPartSysProfile()) ||
             (owner.ObjId()==0xb0e024dfu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailFmasteryPartSysProfile()) ||
@@ -3208,14 +3250,16 @@ struct T3DAnimator::SPartSysControllers
             // copies the advanced owner frame. GetObjectMatrix above refreshes
             // modern bones at the owner frame, so exact static PartSys assets
             // must sample their verified root-emitter keys at the cached frame.
-            if ((owner.ObjId()==0x10da54d0u && animator.Get3DImagery()->HasRetailLightStripProfile()) || (owner.GetState()==0 &&
+            if ((lightstrip_pose || comet_pose) || (owner.GetState()==0 &&
                 animator.Get3DImagery()->HasRetailStaticParticleProfile(owner.ObjId())))
             {
                 hmm_vec3 rotation{};
                 if (!animator.Get3DImagery()->GetUninterpolatedAniKey(object, owner.GetState(),
-                    inputs.animation_frame, emitter_position, rotation, emitter_scale, (owner.ObjId()==0x10da54d0u && animator.Get3DImagery()->HasRetailLightStripProfile()))) continue;
+                    inputs.animation_frame, emitter_position, rotation, emitter_scale, (lightstrip_pose || comet_pose))) continue;
                 MtxClear(&matrix);
-                ::MakeMatrix(matrix, emitter_position, rotation, emitter_scale);
+                if(comet_pose)
+                    BuildRetailCometMatrix(matrix,object,emitter_position,rotation,emitter_scale);
+                else ::MakeMatrix(matrix, emitter_position, rotation, emitter_scale);
             }
             hmm_vec3 speed_position{},speed_scale{};
             const bool speed_pose=owner.GetState()==0 &&
@@ -3256,9 +3300,10 @@ void T3DAnimator::RefreshPartSysControllers()
     const bool immortalmight = id==0x82aeb30fu && imagery->immortalmight_partsys_profile && current_state==0;
     const bool fmastery=id==0xb0e024dfu && imagery->fmastery_partsys_profile && current_state==0;
     const bool speed=imagery->HasRetailSpeedFamilyPartSysProfile(id) && current_state==0;
+    const bool comet=id==0xf32bcfacu && imagery->HasRetailCometProfile() && current_state==0;
     const bool lightstrip=id==0x10da54d0u && imagery->HasRetailLightStripProfile() && current_state>=0 && current_state<3;
     const bool static_particles=imagery->HasRetailStaticParticleProfile(id) && current_state==0;
-    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && !speed && !static_particles && !lightstrip)
+    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && !speed && !static_particles && !lightstrip && !comet)
     {
         if (!state.initialized)
             log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only exact audited particle profiles are enabled",
@@ -3278,14 +3323,14 @@ void T3DAnimator::RefreshPartSysControllers()
             return controller.track.state != -1 && controller.track.state != current_state;
         }), controllers.end());
     state.unsupported = false;
-    if(static_particles || lightstrip)
+    if(static_particles || lightstrip || comet)
         for(int object=0;object<NumObjects();++object)
             if(S3DAnimObj* bone=GetObject(object)){
                 const char* name=imagery->GetObjectName(object);
                 if(name && name[0]=='#')bone->flags|=OBJ3D_GOLD_CAMERA_FACING;
                 if(name && name[0]=='*')bone->flags|=OBJ3D_HIDE;
             }
-    const bool static_litaddz=(static_particles && imagery->NumTags()==2) || (lightstrip && current_state==0);
+    const bool static_litaddz=(static_particles && imagery->NumTags()==2) || (lightstrip && current_state==0) || comet;
     if (gold || combat_start1 || speed || static_litaddz)
     {
         // Retail blendcont Initialize 405940: immediate state-entry writes to
@@ -3309,8 +3354,8 @@ void T3DAnimator::RefreshPartSysControllers()
                 bone->blend = (bone->blend & 0x40u) | ((speed||static_litaddz)?80u:16u);
             }
         log_info("[blendcont] init type=%s id=%08x map_index=%d state=0 tagframe=%d mode=%d objects=%d profile=%s",
-                 inst->GetTypeName(), id, inst->GetMapIndex(), gold ? 5 : speed ? 1 : static_litaddz ? 2 : 0,
-                 (speed||static_litaddz) ? 80 : 16,NumObjects(),gold ? "gold" : speed ? (id==0xad92bd35u ? "quicksilver" : "speed") : static_litaddz ? "quoted-static-particles" : "combatflash-start1");
+                 inst->GetTypeName(), id, inst->GetMapIndex(), gold ? 5 : speed ? 1 : comet ? 3 : static_litaddz ? 2 : 0,
+                 (speed||static_litaddz) ? 80 : 16,NumObjects(),gold ? "gold" : speed ? (id==0xad92bd35u ? "quicksilver" : "speed") : comet ? "comet" : static_litaddz ? "quoted-static-particles" : "combatflash-start1");
     }
     for (const auto& track : imagery->partsys_tracks)
     {
@@ -3329,7 +3374,7 @@ void T3DAnimator::RefreshPartSysControllers()
             S3DPoint position = {x, y, z};
             return MapPane.GetWalkHeight(position);
         };
-        if(lightstrip && lightstrip_ground)controller.inputs.ground_height=lightstrip_ground;
+        if((lightstrip || comet) && lightstrip_ground)controller.inputs.ground_height=lightstrip_ground;
         SPartSysControllers::FillInputs(controller, *this, *inst);
         std::string diagnostic;
         // Default quality0 retains full emission. Explicit capture overrides
@@ -3379,6 +3424,13 @@ void T3DAnimator::AdvancePartSysControllers()
 void T3DAnimator::SetLightStripGround(std::function<int(int,int,int)> query)
 {
     if(!inst || inst->ObjId()!=0x10da54d0u || !Get3DImagery()->HasRetailLightStripProfile())return;
+    lightstrip_ground=std::move(query);
+    if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
+}
+
+void T3DAnimator::SetCometGround(std::function<int(int,int,int)> query)
+{
+    if(!inst || inst->ObjId()!=0xf32bcfacu || !Get3DImagery()->HasRetailCometProfile())return;
     lightstrip_ground=std::move(query);
     if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
 }
@@ -3756,6 +3808,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                                   int32_t texture_slot, const hmm_vec3& render_scale, bool native_software)
 {
     if (!partsys_controllers || partsys_controllers->unsupported) return 0;
+    const bool comet=inst->ObjId()==0xf32bcfacu && inst->GetState()==0 && Get3DImagery()->HasRetailCometProfile();
     const bool lightstrip=inst->ObjId()==0x10da54d0u && Get3DImagery()->HasRetailLightStripProfile();
     int32_t submitted = 0;
     const authored_partsys::RandomRange rng = [](int minimum, int maximum) {
@@ -3781,7 +3834,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // Native Speed RenderObject40a9e7..9f3 skips geometry when its
             // CalcObjectMatrix scale gate40a591..5c1 returns0. Sampling still
             // happens first, preserving its three render-time RNG calls.
-            if((lightstrip || (inst->GetState()==0 &&
+            if((lightstrip || comet || (inst->GetState()==0 &&
                ((Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2) ||
                 Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId())))) &&
                sample.scale<=9.999999747378752e-6f)continue;
@@ -3802,7 +3855,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                 Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2;
             const bool static_particles=inst->GetState()==0 &&
                 Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId());
-            if (might || immortalmight || fmastery || speed || static_particles || lightstrip || inst->ObjId() == 0xd0c0f035u ||
+            if (might || immortalmight || fmastery || speed || static_particles || lightstrip || comet || inst->ObjId() == 0xd0c0f035u ||
                 (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0 &&
                  Get3DImagery()->HasCombatFlashStart1PartSysProfile() && track.prototype == 0))
                 ApplyRetailGoldCameraOrientation(matrix); // actual '#' flag retained on both audited prototypes
@@ -3818,16 +3871,16 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             item.key.blend = uint8_t(sample.blendmode == 2 ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
             // Preserve source packed prelit vertex color. Combat particles are
             // RGB565 with litadd16, not normal-lit material meshes or alpha coins.
-            item.retail_texture = (might || immortalmight || fmastery || speed || static_particles || lightstrip || inst->ObjId() == 0xd0c0f035u ||
+            item.retail_texture = (might || immortalmight || fmastery || speed || static_particles || lightstrip || comet || inst->ObjId() == 0xd0c0f035u ||
                 (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0)) ? 1 : 0;
             // Strict static profile admission pins RGB565 masks and literal
             // particle prototype. The queue applies this only to software
             // lighting and ONE/ONE; modern/hardware and alpha retain fallback.
-            item.retail_rgb565_additive = (static_particles || lightstrip) && sample.blendmode == 16;
+            item.retail_rgb565_additive = (static_particles || lightstrip || comet) && sample.blendmode == 16;
             item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
             item.light_mode = EFxLightMode::Unlit;
             for (int c = 0; c < 3; ++c)
-                item.color_rgba[c] = (might || immortalmight || fmastery || speed || static_particles || lightstrip) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
+                item.color_rgba[c] = (might || immortalmight || fmastery || speed || static_particles || lightstrip || comet) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
             // Actual SW LV prelit channels are5bit; canonicalDEST_ONE ignores
             // alpha in its8wordXYZ/UV/RGB packet. Keep literal alpha metadata,
             // no premultiplication/alternateblend. PixelLSB-table raster gate open.

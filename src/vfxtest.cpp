@@ -1,3 +1,4 @@
+#include "effects/cometoriginal.h"
 #include "effects/lightstriporiginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
@@ -1631,8 +1632,12 @@ void Render()
 
     constexpr float kCam  = 2750.0f;
     constexpr float zHalf =  512.0f;
-    const float znear = kCam - zHalf;
-    const float zfar  = kCam + zHalf;
+    // Original software stores positive16-bit depth. The common preview's
+    // +/-512 frustum clips valid high authored geometry (Comet launch).
+    const float znear = StartupVfxNativeDomain ? 0.0f : kCam - zHalf;
+    const float zfar  = StartupVfxNativeDomain ? 65535.0f : kCam + zHalf;
+    if(g_state.frames_rendered==1)
+        log_info("[vfx-source-depth] native=%d near=%.9g far=%.9g",int(StartupVfxNativeDomain),znear,zfar);
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy),
                                       znear, zfar, 0.0f, 0.0f, kCam, 0.0f);
     Renderer->ClearPointLights();
@@ -5276,6 +5281,14 @@ struct SVfxTestBootstrap {
             original.submit=[](void* c,EFxDebugMode){lightstrip_original::Advance(static_cast<lightstrip_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){lightstrip_original::SubmitWorld(static_cast<lightstrip_original::State*>(c),mode);};
             original.destroy=[](void* c){lightstrip_original::Destroy(static_cast<lightstrip_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }        {
+            VfxTest::SEffect original{};original.id="MeteorStorm_AUTHORED";
+            original.family="strip";original.pipeline="IM+QUAD";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return comet_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){comet_original::Advance(static_cast<comet_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){comet_original::SubmitWorld(static_cast<comet_original::State*>(c),mode);};
+            original.destroy=[](void* c){comet_original::Destroy(static_cast<comet_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
 

@@ -9,6 +9,7 @@ import csv
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import time
@@ -68,7 +69,10 @@ def capture(scenario,output):
                 if process.poll() is not None:break
                 time.sleep(.1)
         finally:
-            try:process.wait(timeout=2)
+            # Filmstrip is opened before its PNG encoder finishes. Give a
+            # completed frame batch the remaining declared capture budget to
+            # flush and exit, rather than killing large captures after 2s.
+            try:process.wait(timeout=max(2.0,deadline-time.monotonic()))
             except subprocess.TimeoutExpired:
                 terminated=True;process.terminate()
                 try:process.wait(timeout=2)
@@ -97,6 +101,12 @@ def capture(scenario,output):
         if "--vfx='"+scenario['effect']+"' matched" not in log.read_text(errors='replace'):
             report['status']='fail';report['error']='Requested effect did not match the actual catalogue'
         log_text=log.read_text(errors='replace')
+        depth=re.search(r'\[vfx-source-depth\] native=(\d+) near=([0-9.eE+-]+) far=([0-9.eE+-]+)',log_text)
+        if depth:
+            report['depth_range']=[float(depth[2]),float(depth[3])]
+            report['depth_range_native_domain']=bool(int(depth[1]))
+        if 'depth_range' in scenario and report.get('depth_range')!=scenario['depth_range']:
+            report['status']='fail';report['error']='Actual viewer depth range differs from explicit capture policy'
         if scenario.get('native_domain',False) and '[native-domain] enabled=1 camera_z=0' not in log_text:
             report['status']='fail';report['error']='Requested native-domain preview did not confirm its owner/particle coordinate policy'
         if '[authored-static] missing objects or unsupported controller tags' in log_text:

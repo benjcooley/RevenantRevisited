@@ -20,6 +20,7 @@ class CachedParticlePoseTests(unittest.TestCase):
 #include <cstring>
 #include <vector>
 #include "math3d.h"
+#include "cometmatrix.h"
 struct S3DPoint { int x=0,y=0,z=0; };
 struct V { float x=0,y=0,z=0; };
 struct Pose { std::array<float,16> matrix{}; V origin,position,scale; };
@@ -27,8 +28,9 @@ struct Inputs { V owner_position,object_zero_origin; int owner_face=0,animation_
 struct Controller { Inputs inputs; struct {std::vector<int> emitters{1};} track; };
 struct S3DAnimObj { hmm_vec3 pos{},scl{}; };
 struct Imagery {
- int sampled=-1,expected_state=0;bool lightstrip=false;
+ int sampled=-1,expected_state=0;bool lightstrip=false,comet=false;
  bool HasRetailLightStripProfile(){return lightstrip;}
+ bool HasRetailCometProfile(){return comet;}
  bool HasRetailMightPartSysProfile(){return false;}
  bool HasRetailImmortalmightPartSysProfile(){return false;}
  bool HasRetailFmasteryPartSysProfile(){return false;}
@@ -36,7 +38,7 @@ struct Imagery {
  bool HasRetailCameraParticleProfile(uint32_t){return false;}
  bool HasRetailStaticParticleProfile(uint32_t id){return id==0xad92bd38u;}
  bool GetUninterpolatedAniKey(int object,int state,int frame,hmm_vec3& p,hmm_vec3& r,hmm_vec3& s,bool inclusive=false){
-  assert(object==1 && state==expected_state && inclusive==lightstrip);sampled=frame;p={float(frame),0,0};r={0,0,0};s={float(frame+1),1,1};return true;
+  assert(object==1 && state==expected_state && inclusive==(lightstrip||comet));sampled=frame;p={float(frame),0,0};r={0,0,0};s={float(frame+1),1,1};return true;
  }
 };
 struct TObjectInstance { uint32_t id=0xad92bd38u;int state=0,frame=8;S3DPoint Pos(){return {};};int GetFace(){return 0;}uint32_t ObjId(){return id;}int GetState(){return state;}int GetFrame(){return frame;} };
@@ -67,6 +69,10 @@ int main(){
  // Exact LightStrip uses the same cached pose in all three authored states.
  for(int state=0;state<3;++state){TObjectInstance owner;owner.id=0x10da54d0u;owner.state=state;
   T3DAnimator animator;animator.imagery.lightstrip=true;animator.imagery.expected_state=state;Controller c;
+  for(owner.frame=8;owner.frame<=10;++owner.frame){Extracted::FillInputs(c,animator,owner);
+   assert(c.inputs.animation_frame==7 && c.inputs.emitters[0].position.x==7);}}
+ // Comet's three emitters obey the same render-cached frame despite skipped draws.
+ {TObjectInstance owner;owner.id=0xf32bcfacu;T3DAnimator animator;animator.imagery.comet=true;Controller c;
   for(owner.frame=8;owner.frame<=10;++owner.frame){Extracted::FillInputs(c,animator,owner);
    assert(c.inputs.animation_frame==7 && c.inputs.emitters[0].position.x==7);}}
  // Three authoritative Pulses before Animate retain its cached pose.

@@ -241,6 +241,8 @@ class T3DImagery : public TObjectImagery
     bool quicksilver_partsys_profile = false;
     bool lightstrip_partsys_profile = false;
     bool ValidateRetailLightStripProfile();
+    bool comet_partsys_profile=false;
+    bool ValidateRetailCometProfile();
     uint32_t static_particles_profile = 0;
     uint32_t ValidateRetailStaticParticleProfile();
     bool ValidateRetailSpeedPartSysProfile();
@@ -332,6 +334,7 @@ class T3DImagery : public TObjectImagery
     void ClearObjects();
   public:
     int32_t NumObjects();
+    bool HasRetailCometProfile() const { return comet_partsys_profile; }
     bool HasRetailLightStripProfile() const { return lightstrip_partsys_profile; }
     bool HasGoldPartSysProfile() const { return gold_partsys_profile; }
     bool HasRetailMightPartSysProfile() const { return might_partsys_profile; }
@@ -583,6 +586,7 @@ class T3DAnimator : public TObjectAnimator
     // True for the hidden particle prototype, or every mesh when an authored
     // controller is unsupported. The caller must not submit a static substitute.
     void SetLightStripGround(std::function<int(int,int,int)> query);
+    void SetCometGround(std::function<int(int,int,int)> query);
     bool PartSysOwnsObject(int32_t object) const;
     // Narrow retail Goldp base-mesh route. Particle draws retain their own mode.
     bool TeleportationMeshBlend(int32_t object, uint32_t& blend) const;
