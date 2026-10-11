@@ -50,7 +50,7 @@ def run(boot, output):
     try:
         for tick in range(1, 97):
             world.call(0x470cc0, this=owner)
-            world.call(0x4f11e0, (1,), this=animator)
+            world.call(0x4f11e0, this=animator)
             rows.append(dict(tick=tick, dead=bool(vm.u32(animator + 0x114)),
                 time=vm.u32(animator + 0x118),
                 values=list(struct.unpack('<6f', vm.uc.mem_read(animator + 0xfc, 24))),
