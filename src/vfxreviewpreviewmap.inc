@@ -47,6 +47,7 @@
 {0x50ba373du, "TFlameEffect_BESPOKE__FlameG", false, "Implemented preview controller; map caller not certified"}, // Flame
 {0x51753bceu, "TFaultFireEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Faultfire
 {0x550decafu, "TShadowfist_AUTHORED_OWNER", false, "Implemented preview controller; map caller not certified"}, // Shadowfist
+{0x55471bffu, "Burn_AUTHENTIC_ACOLYTE_INTEGER", false, "Exact Burn public Set(real Acolyte), declared integer pose14/0/facing96, real damage/fire/smoke; natural attachment/interpolation not certified"}, // Burn
 {0x55471bffu, "TBurnEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Burn
 {0x557c4738u, "TBlueFountainAnimator_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // BlueFont
 {0x562c7439u, "TRibbonAnimator_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Ribbon

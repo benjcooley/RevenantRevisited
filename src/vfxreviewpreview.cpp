@@ -42,6 +42,10 @@ const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nu
             return e.id == mapping.preview_id;
         });
         if (it == catalogue.end() || !it->factory || !it->destroy) continue;
+        // Exact genuine-actor Burn control needs full finite/world callbacks.
+        if (id==0x55471bffu && (it->id!="Burn_AUTHENTIC_ACOLYTE_INTEGER" ||
+            it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
+            !it->is_alive || !it->submit_world)) continue;
         // Exact public-parameter Halo controller; old procedural alias is not a fallback.
         if (id==0xdedbdbedu && (it->id!="Halo_AUTHORED_PUBLIC60" ||
             it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||

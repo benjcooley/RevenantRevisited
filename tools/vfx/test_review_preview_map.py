@@ -23,6 +23,13 @@ TWaterFallEffect_BESPOKE__WaterFlft TWaterFallEffect_BESPOKE__RiverFall
 TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertEqual(admitted_candidates({'preview_candidates': candidates}), [])
 
+    def test_burn_genuine_actor_integer_control(self):
+        row={'retail_type_id':'0x55471bff','preview_candidates':['TBurnEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row)[0],'Burn_AUTHENTIC_ACOLYTE_INTEGER')
+        partial,reason=candidate_metadata(row,'Burn_AUTHENTIC_ACOLYTE_INTEGER')
+        self.assertFalse(partial);self.assertIn('real Acolyte',reason)
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Burn_AUTHENTIC_ACOLYTE_INTEGER']}),[])
+
     def test_halo_exact_public_case_has_no_parameter_alias(self):
         row={'retail_type_id':'0xdedbdbed','preview_candidates':['THaloEffect']}
         self.assertEqual(admitted_candidates(row),['Halo_AUTHORED_PUBLIC60','THaloEffect'])

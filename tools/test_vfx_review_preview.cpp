@@ -11,7 +11,7 @@
 #include <cstring>
 
 namespace {
-int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0, dragon_negative=0, drip_negative=0, blood_negative=0,halo_negative=0;
+int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0, dragon_negative=0, drip_negative=0, blood_negative=0,halo_negative=0,burn_negative=0;
 void* Spawn(const S3DPoint& p) {
     assert(p.x==17 && p.y==33 && p.z==21); ++creates; return new int(0);
 }
@@ -39,6 +39,11 @@ std::vector<SEffect> ReviewCatalogue() {
     if(halo_negative==2)halo.submit_world={};
     if(halo_negative==3)halo.preview_style=EVfxPreviewStyle::Combat;
     if(halo_negative==4)halo.id="Halo_AUTHORED_PUBLIC20";
+    auto burn=Row("Burn_AUTHENTIC_ACOLYTE_INTEGER",EVfxPreviewStyle::Static);
+    burn.is_alive=[](void*c){return *static_cast<int*>(c)<2;};burn.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
+    if(burn_negative==1)burn.is_alive={};if(burn_negative==2)burn.submit_world={};
+    if(burn_negative==3)burn.preview_style=EVfxPreviewStyle::Combat;
+    if(burn_negative==4)burn.id="TBurnEffect_BESPOKE";
     auto authored_blood=Row("Blood_AUTHORED",EVfxPreviewStyle::Static);
     authored_blood.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
     authored_blood.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
@@ -89,7 +94,7 @@ std::vector<SEffect> ReviewCatalogue() {
     auto food=Row("Createfood_ORIGINAL_CONTEXT",EVfxPreviewStyle::Static);
     food.is_alive=[](void*c){return *static_cast<int*>(c)<2;};
     food.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
-    return {dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    return {burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -110,6 +115,10 @@ float ReviewRestartInterval(EVfxPreviewStyle style) {
 }
 int main(int argc,char** argv) {
     const S3DPoint origin{17,33,21};
+    if(argc==2 && std::strlen(argv[1])==2 && argv[1][0]=='u'){
+        burn_negative=argv[1][1]-'0';assert(burn_negative>=1 && burn_negative<=4);
+        assert(!DescribeVfxReviewPreview(0x55471bffu).supported);assert(!CreateVfxReviewPreview(0x55471bffu,origin));assert(creates==0 && destroys==0);return 0;
+    }
     if(argc==2 && std::strlen(argv[1])==2 && argv[1][0]=='h'){
         halo_negative=argv[1][1]-'0';assert(halo_negative>=1 && halo_negative<=4);
         assert(!DescribeVfxReviewPreview(0xdedbdbedu).supported);
@@ -344,6 +353,12 @@ int main(int argc,char** argv) {
         auto actor=CreateVfxReviewPreview(0x152dafddu,origin);
         assert(actor && actor->Id()=="TPulp_CONFIGURED_ACTOR" && actor->RestartInterval()==0);
         const int initial=creates;for(int i=0;i<500;++i)actor->Submit();assert(actor->Alive() && creates==initial);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0x55471bffu);assert(info.supported && !info.partial && info.lifetime_known);assert(std::strstr(info.description,"real Acolyte"));
+        auto burn=CreateVfxReviewPreview(0x55471bffu,origin);assert(burn && burn->Id()=="Burn_AUTHENTIC_ACOLYTE_INTEGER" && burn->RestartInterval()==0);
+        const int initial=creates;burn->Submit();burn->Submit();assert(burn->Alive()==false);burn->Submit();assert(burn->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";
