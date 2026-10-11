@@ -39,6 +39,7 @@ _CLASSDEF(TSpellBlock)
 #include "particlefx.h"
 #include "photoncore.h"
 #include "iceboltcore.h"
+#include "firewindcore.h"
 #include "missilestate.h"
 #include "renderer.h"   // EFxDebugMode, SBillboardDrawItem, TRenderer
 
@@ -6358,29 +6359,25 @@ class TFireFlashEffect_Bespoke : public TEffect
 
 _CLASSDEF(TFireWindEffect_Bespoke)
 
-class TFireWindEffect_Bespoke : public TEffect
+class TFireWindEffect_Bespoke : public TEffect, private firewind_core::State
 {
   public:
-    TFireWindEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFireWindEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
-    ~TFireWindEffect_Bespoke() override = default;
-
-    void OffScreen() override { KillThisEffect(); }
-
-    // asset_override supports the YFireWind sibling variant (Magic\YFirewind.I3D)
-    // — Y-prefix in the snapshot is the "yellow" tint variant; same animator.
-    [[nodiscard]] static TFireWindEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
-                                                                       const char*     asset_override = nullptr);
-    void                                          TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
-    [[nodiscard]] bool IsAlive() const { return alive_; }
-
+    TFireWindEffect_Bespoke(TObjectImagery* image):TEffect(image){}
+    TFireWindEffect_Bespoke(SObjectDef* def,TObjectImagery* image):TEffect(def,image){}
+    ~TFireWindEffect_Bespoke() override;
+    void OffScreen() override {}
+    void Pulse() override;
+    static TFireWindEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,const char* asset_override=nullptr);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode mode);
+    void SubmitWorldMeshes_BESPOKE(EFxDebugMode mode);
+    void SetNativeDomain(bool enabled){native_domain_=enabled;}
+    bool IsAlive()const{return alive_;}
   private:
-    static constexpr float   kFireWindBaseSizeWu = 40.0f;
-    static constexpr int32_t kFireWindLifetimeMs = 2000;
-
-    TTextureHandle texture_      = kInvalidTexture;
-    float          age_ms_       = 0.0f;
-    bool           alive_        = true;
+    bool BindMeshes();void Simulate();
+    struct Part {MeshHandle mesh=0;S3DMat material{};};
+    std::array<Part,2> parts_{};
+    bool alive_=true,native_domain_=false;
+    double sim_accum_=0;
 };
 
 _CLASSDEF(TFireConeEffect_Bespoke)

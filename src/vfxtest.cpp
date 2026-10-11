@@ -4862,7 +4862,7 @@ void FireFlashBespokeSubmitWorld(void* cp, EFxDebugMode dbg)
     if (c && c->eff) c->eff->Submit(dbg);
 }
 
-// --- FireWind (templated for base + YFireWind variant) ---
+// --- FireWind; legacy Y override remains rejected pending its own controller. ---
 enum class EFireWindVariant { Base, YFireWind };
 
 constexpr const char* FireWindVariantPath(EFireWindVariant v)
@@ -4875,6 +4875,7 @@ struct SFireWindBespokeCtx {
     S3DPoint                 origin = {0, 0, 0};
     const char*              path   = nullptr;  // nullptr = base
     float                    gap    = 0.0f;
+    bool single_life=false;
 };
 
 template <EFireWindVariant V>
@@ -4902,7 +4903,7 @@ void FireWindBespokeSubmit(void* cp, EFxDebugMode dbg)
 {
     auto* c = static_cast<SFireWindBespokeCtx*>(cp);
     if (!c) return;
-    if (!c->eff || !c->eff->IsAlive())
+    if (!c->single_life && (!c->eff || !c->eff->IsAlive()))
     {
         c->gap -= float(TTime::DeltaTime());
         if (c->gap <= 0.0f)
@@ -4915,6 +4916,12 @@ void FireWindBespokeSubmit(void* cp, EFxDebugMode dbg)
     if (c->eff)
         c->eff->TickAndSubmitForTest_BESPOKE(dbg);
 }
+void FireWindBespokeSubmitWorld(void* cp,EFxDebugMode mode)
+{
+    auto* c=static_cast<SFireWindBespokeCtx*>(cp);
+    if(c&&c->eff)c->eff->SubmitWorldMeshes_BESPOKE(mode);
+}
+
 
 // --- FireCone (templated for base + dragonfire variant) ---
 enum class EFireConeVariant { Base, DragonFire };
@@ -7470,12 +7477,21 @@ struct SVfxTestBootstrap {
             VfxTest::SEffect e = {};
             e.id            = "TFireWindEffect_BESPOKE";
             e.family        = "fire";
-            e.pipeline      = "FB";
+            e.pipeline      = "IM";
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory       = [](const S3DPoint& o) -> void* { return FireWindBespokeVariantSpawn<EFireWindVariant::Base>(o); };
             e.submit        = [](void* c, EFxDebugMode d) { FireWindBespokeSubmit(c, d); };
             e.destroy       = [](void* c) { FireWindBespokeDestroy(c); };
+            e.submit_world=[](void* c,EFxDebugMode d){FireWindBespokeSubmitWorld(c,d);};
             VfxTest::DeferredRegister(e);
+            e.id="TFireWindEffect_AUTHORED_NULLSPELL";e.pipeline="IM";
+            e.factory=[](const S3DPoint& o)->void* {
+                auto* c=static_cast<SFireWindBespokeCtx*>(FireWindBespokeVariantSpawn<EFireWindVariant::Base>(o));
+                c->single_life=true;if(c->eff)c->eff->SetNativeDomain(StartupVfxNativeDomain);
+                log_info("[native-domain] enabled=%d camera_z=0",int(StartupVfxNativeDomain));return c;
+            };
+            VfxTest::DeferredRegister(e);
+
         }
         {
             VfxTest::SEffect e = {};

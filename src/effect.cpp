@@ -16067,56 +16067,82 @@ void TFireFlashEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
 }
 
 // -------------------------------------------------------------------------
-// TFireWindEffect_Bespoke — STUBBED placeholder
+// FireWind: original400-slot owner/animator leaf, two authored RGB565 quads.
 // -------------------------------------------------------------------------
-TFireWindEffect_Bespoke* TFireWindEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
-                                                                       const char* asset_override)
+TFireWindEffect_Bespoke::~TFireWindEffect_Bespoke()
 {
-    const char* asset_path = asset_override ? asset_override : kFireWindBespokeImageryPath;
-    TObjectImagery* base = nullptr;
-    TTextureHandle  tex  = Wave3a_LoadFirstTexture(asset_path, "firewind-bespoke", base);
-    if (!base)
-        return nullptr;
-
-    auto* eff = new TFireWindEffect_Bespoke(base);
-    eff->ForcePos(origin);
-    eff->SetMapIndex(MapPane.MakeIndex());
-    eff->ActivateComponents();
-    eff->texture_ = tex;
-    eff->age_ms_  = 0.0f;
-    eff->alive_   = true;
-    log_info("[firewind-bespoke] STUBBED placeholder spawned at map_index=%d origin=(%d,%d,%d)"
-             " asset='%s' — snapshot TFireWindAnimator depends on PTSpell/PTCharacter rig",
-             eff->GetMapIndex(), origin.x, origin.y, origin.z, asset_path);
-    return eff;
+    if(Renderer)for(const auto& part:parts_)if(part.mesh)Renderer->ReleaseMeshAssetRef(part.mesh);
 }
 
-void TFireWindEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+bool TFireWindEffect_Bespoke::BindMeshes()
 {
-    if (!alive_ || !Renderer || texture_ == kInvalidTexture)
-        return;
-
-    age_ms_ += float(TTime::DeltaTime() * 1000.0);
-    if (age_ms_ >= float(kFireWindLifetimeMs))
-    {
-        alive_ = false;
-        return;
+    auto* image=dynamic_cast<T3DImagery*>(imagery);
+    if(!Renderer||!image||image->NumObjects()!=2||image->NumTextures()!=2)return false;
+    for(int i=0;i<2;++i) {
+        auto& part=parts_[i];if(part.mesh)continue;
+        const int slot=i==0?1:2;
+        std::vector<SMeshVertex> vertices;std::vector<uint16_t> indices;
+        if(!ExtractSubMeshTextureSlot(image,i,slot,vertices,indices)||vertices.size()!=4||indices.size()!=6)return false;
+        S3DObj object{};image->GetObject(i,&object);image->GetMaterial(object.material,&part.material);
+        S3DTex texture{};image->GetTexture(slot-1,&texture);
+        if(texture.htexture==kInvalidTexture||texture.numframes!=1||RetailMeshTextureLighting(texture.desc.pixelFormat)!=1)return false;
+        const uint64_t key=0x4657494e00000000ull^(uint64_t(uint32_t(image->ImageryId()))<<16)^uint64_t(i);
+        part.mesh=Renderer->RegisterMeshAsset(key,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()),texture.htexture);
+        if(!part.mesh)return false;Renderer->AddMeshAssetRef(part.mesh);
     }
+    return true;
+}
 
-    static const bool s_firewind_first = []{
-        log_info("[firewind-bespoke] first submit (placeholder draw)");
-        return true;
-    }();
-    (void)s_firewind_first;
+TFireWindEffect_Bespoke* TFireWindEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,const char* asset_override)
+{
+    // YFireWind has its own original registration and controller. An asset
+    // override is insufficient evidence to dispatch it through this leaf.
+    if(asset_override)return nullptr;
+    auto* image=LoadWaterImagery(kFireWindBespokeImageryPath,"firewind");if(!image)return nullptr;
+    auto* effect=new TFireWindEffect_Bespoke(image);effect->ForcePos(origin);
+    effect->SetMapIndex(MapPane.MakeIndex());effect->ActivateComponents();
+    effect->firewind_core::State::Initialize([](int lo,int hi){return random(lo,hi);});
+    if(!effect->BindMeshes()){delete effect;return nullptr;}
+    log_info("[firewind] original400-slot null-spell leaf, source=%d,%d,%d",origin.x,origin.y,origin.z);
+    return effect;
+}
 
-    // Wind-like elongating tongue — stretch along the asset's natural
-    // aspect, hold mid-life, fade out tail. Single-billboard collapse.
-    const float t   = age_ms_ / float(kFireWindLifetimeMs);
-    const float scl = 0.6f + 1.4f * std::sin(float(M_PI) * t);   // 0.6 → 2.0 → 0.6
-    const float alpha = (t < 0.8f) ? 1.0f : (1.0f - (t - 0.8f) / 0.2f);
-    Wave3a_SubmitBillboard(Pos(), texture_, kFireWindBaseSizeWu * scl,
-                           EFxBillboardOrientation::ScreenAligned, debug_mode,
-                           1.0f, 0.9f, 0.6f, alpha);
+void TFireWindEffect_Bespoke::Simulate()
+{
+    if(!alive_)return;
+    firewind_core::State::Pulse([](int lo,int hi){return random(lo,hi);},[](int angle,int distance) {
+        S3DPoint p;ConvertToVector(angle,distance,p);return hmm_vec3{float(p.x),float(p.y),float(p.z)};
+    });
+    // Original owner Pulse4e2290 kills after140; animator Pulse never does.
+    alive_=firewind_core::State::frame<=140;
+}
+
+void TFireWindEffect_Bespoke::Pulse()
+{
+    Simulate();SetCommandDone(false);if(!alive_)KillThisEffect();TEffect::Pulse();
+}
+
+void TFireWindEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode)
+{
+    constexpr double step=1.0/24.0;sim_accum_+=TTime::DeltaTime();
+    while(alive_&&sim_accum_+1e-9>=step){sim_accum_-=step;Simulate();}
+}
+
+void TFireWindEffect_Bespoke::SubmitWorldMeshes_BESPOKE(EFxDebugMode)
+{
+    if(!alive_||!BindMeshes())return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_){const auto p=Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace()));}
+    firewind_core::State::Render([&](int object,const hmm_mat4& local) {
+        const auto& part=parts_[object];hmm_mat4 world;MtxMultiply(&world,&local,&owner);
+        SHelperMeshSubmit submit{};submit.mesh=part.mesh;submit.additive_blend=true;submit.retail_lighting=1;
+        submit.retail_software_projection=native_domain_;submit.retail_normal_z_scale=native_domain_?1.0f:1.0f/WORLD3D_Z_SCALE;
+        for(int row=0;row<4;++row)for(int col=0;col<4;++col)submit.world[row*4+col]=world.Elements[col][row];
+        const auto& m=part.material.matdesc;std::memcpy(submit.diffuse,&m.diffuse,4*sizeof(float));
+        std::memcpy(submit.ambient,&m.ambient,4*sizeof(float));std::memcpy(submit.specular,&m.specular,4*sizeof(float));
+        std::memcpy(submit.emissive,&m.emissive,4*sizeof(float));submit.power=m.power;
+        submit.sort_depth=float(Pos().z);Renderer->SubmitHelperMesh(submit);
+    });
 }
 
 // -------------------------------------------------------------------------
