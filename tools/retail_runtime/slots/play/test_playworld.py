@@ -14,7 +14,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[1]))
-from unicorn import UC_HOOK_CODE  # noqa: E402
+from unicorn import UC_HOOK_CODE, UC_HOOK_MEM_WRITE  # noqa: E402
 from build_contract import BASELINE  # noqa: E402
 from playworld import PlayWorld  # noqa: E402
 import observe  # noqa: E402
@@ -22,6 +22,8 @@ import observe  # noqa: E402
 DRAWN = 0x00491766           # TimerLoop: the drawing pass (clears TickOccurred, then TimerTick(1))
 SKIPPED = 0x00491447         # TimerLoop: after a skipped frame's TimerTick(0)
 TICKS = 30
+IS_ENEMY_BUFFER = 0x00666648  # the static buffer TCharacter::IsEnemy lowercases names into
+SET_DIRTY, PANE_DIRTY = 0x00444fc0, 0x50   # TPane slot 11: +0x50 = its argument
 
 
 def started(seed=1):
@@ -67,6 +69,30 @@ class TickTests(unittest.TestCase):
         self.assertEqual([c[:2] for c in first], [c[:2] for c in second])
         self.assertEqual([c[2] for c in first], [c[2] for c in second])      # frames, byte for byte
         self.assertGreater(first[-1][1]['draws'], 0)
+
+
+class PeekTests(unittest.TestCase):
+    def test_peek_puts_back_what_a_getter_writes(self):
+        world = started()
+        for _ in range(TICKS):                                  # the opening's people come in
+            world.step()
+        observer = observe.Observer(world)
+        player, m = observer.player(), observer.m
+        others = [o for o in observer.objects_on_level(m.u16(player + observe.OBJ_LEVEL))
+                  if o != player and m.i16(o + observe.OBJ_CLASS) == observe.CLASS_CHARACTER]
+        self.assertTrue(others)
+        before = bytes(world.vm.uc.mem_read(IS_ENEMY_BUFFER, 16))
+        writes = []
+        hook = world.vm.uc.hook_add(UC_HOOK_MEM_WRITE, lambda uc, access, address, size, value, user:
+                                    writes.append(address), begin=IS_ENEMY_BUFFER, end=IS_ENEMY_BUFFER + 15)
+        world.peek(observe.IS_ENEMY, (player,), this=others[0])
+        world.vm.uc.hook_del(hook)
+        self.assertTrue(writes)                                   # IsEnemy writes its static buffer ...
+        self.assertEqual(bytes(world.vm.uc.mem_read(IS_ENEMY_BUFFER, 16)), before)   # ... and it is put back
+        pane = observe.MAP_PANE
+        dirty = world.vm.u32(pane + PANE_DIRTY)
+        world.peek(SET_DIRTY, (dirty ^ 1,), this=pane)           # a setter, called as a getter, changes nothing
+        self.assertEqual(world.vm.u32(pane + PANE_DIRTY), dirty)
 
 
 if __name__ == '__main__':

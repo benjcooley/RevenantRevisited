@@ -96,7 +96,7 @@ class Director:
     stuck_at: list | None = None
     dead_ends: int = 0                                         # dead ends since Locke last got nearer
     wide_looks: set = field(default_factory=set)               # (level, stop) a wide walk grid was fetched for
-    no_walkgrid: bool = False                                  # the host offers no walk grid (the emulator, so far)
+    no_walkgrid: bool = False                                  # the host offers no walk grid (an older emulator host)
     best_gap: float = math.inf                                 # the nearest he has been to the next stop
 
     def __post_init__(self) -> None:

@@ -31,9 +31,13 @@ back, so a session that returns to a checkpoint records what was played
 from there.
 
 Commands: hello, start, step, observe, project, pick, export_slot, mark,
-replay, checkpoint, restore, caption, quit. `pick` answers `pos` (retail's
-pointer-to-map conversion); the object under the pointer needs retail's 3D
-pick, which draws a frame, so it is not answered.
+replay, checkpoint, restore, caption, quit. `project` and `pick` say
+whether a click reaches the world by retail's own routing
+(observe.Observer.world_click); `pick` answers `pos` (retail's
+pointer-to-map conversion) but not the object under an arbitrary point,
+which needs retail's 3D pick, and that draws a frame. The object under
+the pointer itself, which every drawn frame picks, is the observation's
+`cursor`.
 """
 from __future__ import annotations
 
@@ -239,22 +243,27 @@ class Host:
 
     def project(self, req):
         self._require()
-        return dict(screen=[self.observer.project([int(v) for v in point]) for point in req['points']])
+        observer = self.observer
+        screen = [observer.project([int(v) for v in point]) for point in req['points']]
+        route = observer.mouse_route()
+        return dict(screen=screen, world=[s is not None and observer.world_click(*s, route) for s in screen])
 
     def pick(self, req):
         world = self._require()
-        player = self.observer.player()
+        observer = self.observer
+        player = observer.player()
         if not player:
             raise RuntimeError('no player')
-        m = self.observer.m
+        m = observer.m
         x, y = int(req['x']), int(req['y'])
         pane = observe.MAP_PANE
-        sx = m.i32(pane + 0x78) - m.i32(pane + 0x04) + x
-        sy = m.i32(pane + 0x7c) - m.i32(pane + 0x08) + y
+        sx = m.i32(pane + observe.MAP_SCROLL_X) - m.i32(pane + observe.PANE_X) + x
+        sy = m.i32(pane + observe.MAP_SCROLL_Y) - m.i32(pane + observe.PANE_Y) + y
         out = world.scratch
         world.peek(SCREEN_TO_WORLD, (sx & 0xffffffff, sy & 0xffffffff, out,
-                                     (self.observer.pos(player)[2] + PICK_HEIGHT) & 0xffffffff))
-        return dict(pos=list(struct.unpack('<3i', world.vm.uc.mem_read(out, 12))))
+                                     (observer.pos(player)[2] + PICK_HEIGHT) & 0xffffffff))
+        return dict(pos=list(struct.unpack('<3i', world.vm.uc.mem_read(out, 12))),
+                    world=observer.world_click(x, y, observer.mouse_route()))
 
     def export_slot(self, req):
         self._require()
