@@ -478,7 +478,7 @@ std::string LowerName(const char* name)
     return s;
 }
 
-int32_t CaseNewObject(SObjectDef* def)
+int32_t CaseNewObject(SObjectDef* def, int32_t imagery)
 {
     TObjectClass* cl = TObjectClass::GetClass(def->objclass);
     SObjectInfo* info = cl ? cl->GetObjType(def->objtype) : nullptr;
@@ -491,7 +491,7 @@ int32_t CaseNewObject(SObjectDef* def)
     j.Field("flags", (int64_t)def->flags).Field("state", def->state).Field("level", def->level);
     j.Key("pos").Begin('[').Value(def->pos.x).Value(def->pos.y).Value(def->pos.z).End(']');
     j.Key("vel").Begin('[').Value(def->vel.x).Value(def->vel.y).Value(def->vel.z).End(']');
-    j.Field("facing", def->facing).End('}');
+    j.Field("facing", def->facing).Field("imagery", imagery).End('}');
     Seam(j.str());
     if (g_madeUsed == g_made.size())
         throw std::runtime_error("more objects made than the fixture holds");

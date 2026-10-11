@@ -45,6 +45,15 @@ uint32_t DirectionFlag(int32_t angle)
     return angle < 0 ? 0u : 1u << (((angle & 0xff) + 16) / 32 % 8);
 }
 
+// The dodge command rolling toward a move angle: retail's eight are left,
+// right, up, down, up-left, up-right, down-left, down-right (Dodge 0..7);
+// the angle's direction key is up-right, right, ... up (DirectionFlag).
+int32_t DodgeCommand(int32_t angle)
+{
+    constexpr int32_t kDodgeByKey[8] = {5, 1, 7, 3, 6, 0, 4, 2};
+    return GAMECMD_DODGELEFT + kDodgeByKey[((angle & 0xff) + 16) / 32 % 8];
+}
+
 // A command's (or a held control's) keys in the control map: the first
 // binding's keys, modifiers first.
 bool BindingKeys(int32_t downcmd, uint32_t flag, std::vector<int32_t>& keys)
@@ -490,7 +499,7 @@ void TPlayerBot::Decide()
         {
             SetState(EState::Evade, "blow coming: dodge");
             Hold(0);
-            Tap(GAMECMD_DODGE);
+            Tap(DodgeCommand(bearing + 64 * side_with_room(bearing)));
             return;
         }
     }

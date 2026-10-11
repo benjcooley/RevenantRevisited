@@ -40,7 +40,9 @@ Every tick, in order:
      speed (measured from his own last moves): **evade** (the direction
      that leaves the reach soonest, sideways preferred, toward open ground);
    - else **block** (held until the impact passes) with the profile's
-     chance, else **dodge** with its chance, else take it.
+     chance, else **dodge** with its chance (one of retail's eight
+     directional rolls, Dodge 0..7, sideways to the side with room), else
+     take it.
 4. **A missile is coming** (closest approach within Locke's radius plus a
    margin, inside a horizon): strafe across its path.
 5. **Tight spot** (Locke's cell clearance under the profile's minimum, or

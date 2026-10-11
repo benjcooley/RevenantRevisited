@@ -490,7 +490,8 @@ class MeleeFixture:
                                      flags=vm.u32(d + 4), state=state, level=level,
                                      pos=list(struct.unpack('<3i', vm.uc.mem_read(d + 0x0c, 12))),
                                      vel=list(struct.unpack('<3i', vm.uc.mem_read(d + 0x18, 12))),
-                                     facing=vm.uc.mem_read(d + 0x32, 1)[0]))
+                                     facing=vm.uc.mem_read(d + 0x32, 1)[0],
+                                     imagery=struct.unpack('<i', struct.pack('<I', args[1]))[0]))
         made = vm.allocate(0x100)
         vm.put_u32(made, self.made_vtable)
         self.made.append(made)
