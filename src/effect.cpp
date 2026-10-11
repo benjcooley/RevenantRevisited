@@ -15342,62 +15342,15 @@ void TFireBallEffect_Bespoke__YFireBall::TickAndSubmitForTest_BESPOKE(EFxDebugMo
     TickAndSubmit(debug_mode);
 }
 
-// ----- YFireWind ----------------------------------------------------------
-
+// ----- YFireWind: own authored asset and null-spell original owner ---------
 TFireWindEffect_Bespoke__YFireWind*
 TFireWindEffect_Bespoke__YFireWind::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    static const char* kYFireWindCandidates[] = {
-        "Magic\\YFirewind.I3D",
-        "Magic\\yfirewind.i3d",
-    };
-
-    auto* eff = new TFireWindEffect_Bespoke__YFireWind(static_cast<TObjectImagery*>(nullptr));
-    eff->ForcePos(origin);
-    eff->SetMapIndex(MapPane.MakeIndex());
-    eff->ActivateComponents();
-
-    eff->texture_ = TryLoadMagicTexture(
-        kYFireWindCandidates,
-        int32_t(sizeof(kYFireWindCandidates) / sizeof(*kYFireWindCandidates)),
-        eff->uv_rect_, "yfirewind");
-
-    eff->age_ms_       = 0;
-    eff->alive_        = true;
-    eff->sim_accum_ms_ = 0.0;
-
-    log_info("[yfirewind-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
-             "tex=%u (no class candidate, stubbed)",
-             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
-    return eff;
-}
-
-void TFireWindEffect_Bespoke__YFireWind::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-{
-    if (!Renderer)
-        return;
-
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kStubSimTickMs))
-    {
-        sim_accum_ms_ -= double(kStubSimTickMs);
-        age_ms_ += kStubSimTickMs;
-        if (age_ms_ >= kStubLifetimeMs)
-            alive_ = false;
-    }
-    if (!alive_)
-        return;
-
-    static const bool s_logged_first_submit = []{
-        log_info("[yfirewind-bespoke] first submit (TickAndSubmit running)");
-        return true;
-    }();
-    (void)s_logged_first_submit;
-
-    const float fade01 =
-        1.0f - float(age_ms_) / float(kStubLifetimeMs);
-    W3DStubSubmitBillboard(Pos(), texture_, uv_rect_,
-                           kStubBaseSizeWu, fade01, debug_mode);
+    auto* image=LoadWaterImagery("Magic\\YFirewind.I3D","yfirewind");if(!image)return nullptr;
+    auto* effect=new TFireWindEffect_Bespoke__YFireWind(image);
+    if(!effect->InitializeVisual(origin)){delete effect;return nullptr;}
+    log_info("[yfirewind] own original400-slot null-spell leaf, source=%d,%d,%d",origin.x,origin.y,origin.z);
+    return effect;
 }
 
 // ----- YCataclysm ---------------------------------------------------------
@@ -16095,16 +16048,23 @@ bool TFireWindEffect_Bespoke::BindMeshes()
 
 TFireWindEffect_Bespoke* TFireWindEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,const char* asset_override)
 {
-    // YFireWind has its own original registration and controller. An asset
-    // override is insufficient evidence to dispatch it through this leaf.
+    // YFireWind dispatches through its own factory, never an arbitrary asset
+    // override of this base registration.
     if(asset_override)return nullptr;
     auto* image=LoadWaterImagery(kFireWindBespokeImageryPath,"firewind");if(!image)return nullptr;
-    auto* effect=new TFireWindEffect_Bespoke(image);effect->ForcePos(origin);
-    effect->SetMapIndex(MapPane.MakeIndex());effect->ActivateComponents();
-    effect->firewind_core::State::Initialize([](int lo,int hi){return random(lo,hi);});
-    if(!effect->BindMeshes()){delete effect;return nullptr;}
+    auto* effect=new TFireWindEffect_Bespoke(image);
+    if(!effect->InitializeVisual(origin)){delete effect;return nullptr;}
     log_info("[firewind] original400-slot null-spell leaf, source=%d,%d,%d",origin.x,origin.y,origin.z);
     return effect;
+}
+
+bool TFireWindEffect_Bespoke::InitializeVisual(const S3DPoint& origin)
+{
+    ForcePos(origin);SetMapIndex(MapPane.MakeIndex());ActivateComponents();
+    // Both controlled null-spell native initializers produce facing0. Natural
+    // invoker/target-derived facing and damage dispatch remain separate.
+    firewind_core::State::Initialize([](int lo,int hi){return random(lo,hi);});
+    return BindMeshes();
 }
 
 void TFireWindEffect_Bespoke::Simulate()

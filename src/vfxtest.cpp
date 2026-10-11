@@ -7408,11 +7408,22 @@ struct SVfxTestBootstrap {
             VfxTest::SEffect e = {};
             e.id            = "TFireWindEffect_Bespoke__YFireWind_BESPOKE";
             e.family        = "fire";
-            e.pipeline      = "FB";
+            e.pipeline      = "IM";
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory       = [](const S3DPoint& o) -> void* { return W3DYFireWindSpawn(o); };
             e.submit        = [](void* c, EFxDebugMode d) { W3DYFireWindSubmit(c, d); };
             e.destroy       = [](void* c) { W3DYFireWindDestroy(c); };
+            e.submit_world=[](void* cp,EFxDebugMode mode) {
+                auto* c=static_cast<SW3DYFireWindCtx*>(cp);
+                if(c&&c->eff)c->eff->SubmitWorldMeshes_BESPOKE(mode);
+            };
+            VfxTest::DeferredRegister(e);
+            e.id="TYFireWindEffect_AUTHORED_NULLSPELL";
+            e.factory=[](const S3DPoint& origin)->void* {
+                auto* c=static_cast<SW3DYFireWindCtx*>(W3DYFireWindSpawn(origin));
+                if(c->eff)c->eff->SetNativeDomain(StartupVfxNativeDomain);
+                log_info("[native-domain] enabled=%d camera_z=0",int(StartupVfxNativeDomain));return c;
+            };
             VfxTest::DeferredRegister(e);
         }
         {
@@ -7510,11 +7521,15 @@ struct SVfxTestBootstrap {
             VfxTest::SEffect e = {};
             e.id            = "TFireWindEffect_BESPOKE__YFireWind";
             e.family        = "fire";
-            e.pipeline      = "FB";
+            e.pipeline      = "IM";
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
-            e.factory       = [](const S3DPoint& o) -> void* { return FireWindBespokeVariantSpawn<EFireWindVariant::YFireWind>(o); };
-            e.submit        = [](void* c, EFxDebugMode d) { FireWindBespokeSubmit(c, d); };
-            e.destroy       = [](void* c) { FireWindBespokeDestroy(c); };
+            e.factory       = [](const S3DPoint& o) -> void* { return W3DYFireWindSpawn(o); };
+            e.submit        = [](void* c, EFxDebugMode d) { W3DYFireWindSubmit(c, d); };
+            e.destroy       = [](void* c) { W3DYFireWindDestroy(c); };
+            e.submit_world=[](void* cp,EFxDebugMode mode) {
+                auto* c=static_cast<SW3DYFireWindCtx*>(cp);
+                if(c&&c->eff)c->eff->SubmitWorldMeshes_BESPOKE(mode);
+            };
             VfxTest::DeferredRegister(e);
         }
         {

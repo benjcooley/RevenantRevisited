@@ -6146,35 +6146,6 @@ class TFireBallEffect_Bespoke__YFireBall : public TFireBallEffect
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
 };
 
-// W3-D YFireWind — boss-variant firewind. No dedicated class candidate; only
-// string XREFs in spell-handler area. Asset Magic\YFirewind.I3D.
-// Minimal placeholder — single ScreenAligned Alpha billboard.
-_CLASSDEF(TFireWindEffect_Bespoke__YFireWind)
-class TFireWindEffect_Bespoke__YFireWind : public TEffect
-{
-  public:
-    TFireWindEffect_Bespoke__YFireWind(TObjectImagery* newim) : TEffect(newim) {}
-    TFireWindEffect_Bespoke__YFireWind(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
-    ~TFireWindEffect_Bespoke__YFireWind() override = default;
-
-    void OffScreen() override { KillThisEffect(); }
-
-    [[nodiscard]] static TFireWindEffect_Bespoke__YFireWind* SpawnForTest_BESPOKE(const S3DPoint& origin);
-    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
-    [[nodiscard]] bool IsAlive() const { return alive_; }
-
-  private:
-    static constexpr int32_t kStubLifetimeMs   = 3000;
-    static constexpr float   kStubBaseSizeWu   = 32.0f;
-    static constexpr int32_t kStubSimTickMs    = 1000 / 24;
-
-    int32_t  age_ms_       = 0;
-    bool     alive_        = true;
-    double   sim_accum_ms_ = 0.0;
-    TTextureHandle texture_    = kInvalidTexture;
-    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
-};
-
 // W3-D YCataclysm — boss-variant cataclysm. Ghidra XREF for s_YCataclysm_
 // at 0x005e1520 lives in virt_meth_0x507530 (spell handler), no dedicated
 // class. Base Cataclysm is similarly spell-only (no class). Asset
@@ -6372,12 +6343,24 @@ class TFireWindEffect_Bespoke : public TEffect, private firewind_core::State
     void SubmitWorldMeshes_BESPOKE(EFxDebugMode mode);
     void SetNativeDomain(bool enabled){native_domain_=enabled;}
     bool IsAlive()const{return alive_;}
+  protected:
+    bool InitializeVisual(const S3DPoint& origin);
   private:
     bool BindMeshes();void Simulate();
     struct Part {MeshHandle mesh=0;S3DMat material{};};
     std::array<Part,2> parts_{};
     bool alive_=true,native_domain_=false;
     double sim_accum_=0;
+};
+
+// Own native Y registrations5066a0/5067b0; visual core compatibility is
+// checked against its full original400-slot state and authored draw matrices.
+_CLASSDEF(TFireWindEffect_Bespoke__YFireWind)
+class TFireWindEffect_Bespoke__YFireWind : public TFireWindEffect_Bespoke
+{
+  public:
+    using TFireWindEffect_Bespoke::TFireWindEffect_Bespoke;
+    static TFireWindEffect_Bespoke__YFireWind* SpawnForTest_BESPOKE(const S3DPoint& origin);
 };
 
 _CLASSDEF(TFireConeEffect_Bespoke)
