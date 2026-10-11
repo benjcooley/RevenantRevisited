@@ -84,6 +84,7 @@ PARTIAL = {
 # their owner constructors. These newer implementations predate their ledger
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
+    '0xfacedbed': 'TIcedEffect_BESPOKE__Snow',
     '0x0c052637': 'Dust_AUTHORED',
     '0xad92bd31': 'FGeyser_AUTHORED',
     '0xb3ae0fed': 'TRestorelife_AUTHORED_TAGS',

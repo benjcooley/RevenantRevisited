@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 117,
+    "retail_rows_with_source_fixes_recorded": 118,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 98,
+    "visual_fidelity_confirmed_rows": 99,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 98,
-    "remaining_visual_review_rows": 78
+    "reviewed_visual_pass_rows": 99,
+    "remaining_visual_review_rows": 77
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1512,6 +1512,13 @@
       "check": "dust_exact_controller_blank_software_modulation",
       "status": "diagnostic_no_visual_credit",
       "scope": "Exact state/RNG and whole blank software quantization; visible modern policy is diagnostic only."
+    },
+    "recon/retail_asm/runtime/effects/current-snow-authored-20261010/Snow-root-approval.json": {
+      "sha256": "300c8ee7f1e7b95222a15e6aeffcd39a0a7bfa34a80c44446b7c2eebdb3c0633",
+      "retail_row": "Snow:0xfacedbed",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Six original default-render50-root/actual Metal static ice-geometry phases,60-frame unchanged film and actual map presence/cleanup.45,000 native legacy key channels exact; original Snow static leaf, not Iced victim/shatter. Natural caller, other states, device/depth and exact pixels remain open."
     }
   }
 }

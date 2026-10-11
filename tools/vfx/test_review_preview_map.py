@@ -18,7 +18,7 @@ TCombatFlashEffect_BESPOKE TStrikeEffect_BESPOKE
 TFlareAnimator_BESPOKE TFlareAnimator_BESPOKE__Teleporter
 TFireSwarmEffect_BESPOKE__dragonfire TFireConeEffect_BESPOKE__dragonfire
 TFireSwarmEffect_BESPOKE__dragonattack TFireSwarmEffect_BESPOKE__headfireball
-TIcedEffect_BESPOKE__Snow TIcedEffect_BESPOKE__Icedsparks
+TIcedEffect_BESPOKE__Icedsparks
 TWaterFallEffect_BESPOKE__WaterFlft TWaterFallEffect_BESPOKE__RiverFall
 TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertEqual(admitted_candidates({'preview_candidates': candidates}), [])
