@@ -154,10 +154,17 @@ PROTOCOL.md §5: hello, start, step, observe, project, pick, export_slot,
 mark, replay (`verify`), checkpoint / restore (machine images on disk, with
 the recording so far), caption, quit. The log on stderr is one line per
 entry, `t=<tick> <kind> <detail>`: commands, input events, boundaries,
-text-bar lines, speech. `--watch DIR` writes `frame.png` (zlib level 1,
+text-bar lines, speech, dialog choices as the player reads them.
+`--watch DIR` writes `frame.png` (zlib level 1,
 written then renamed) after every tick and `caption.txt`; `--pace N` caps
 ticks per wall-clock second. A `start` with an `ini` other than the
 machine's is refused: retail reads the INI during game init, before play.
+
+Named builds (`--build build.json`, build_contract.py) boot their own image
+and report their name and patches in `hello` and the recording's header.
+Checked with the `clickwalk` build: from the same slot, a left click on
+open floor leaves the baseline's Locke where he stands and walks the
+build's onto the point (Goto target `(1362,534)`, reached at tick 45).
 
 ## Boundaries
 
@@ -166,9 +173,38 @@ opening reached no other: with NOSOUND no Miles call, no Smacker (the intro
 movie is before QUICKSTART's branch). An in-game movie, DirectPlay or audio
 call would stop the run by name.
 
-## Measured (this Mac, 2026-10-10)
+## Measured (this Mac, 2026-10-11)
 
-See the commit that adds the evidence; numbers there.
+Wall times on a shared machine (load average 4-12 while measuring, 20-45
+at other times, which slows everything proportionally):
+
+| | |
+|---|---|
+| Boot a machine image (once per build and machine) | 99-134 s idle, up to 260 s under load |
+| Load the cached image, `hello` | 0.5-1.5 s, 0.13 s |
+| `start` new game / from a slot | 3-9 s / 4-8 s |
+| Stepping, no watch (through server.py) | 8.0 ticks/s (7.0 over a whole recorded opening, 7.1 replaying it) |
+| Stepping with `--watch` / `--watch --pace 24` | 7.45 / 7.0 ticks/s |
+| `checkpoint` / `restore` (8.6-10 MB image) | 0.34-0.5 s / 0.8-1.1 s |
+| `observe` / a check line | about 5 ms / under 0.1 ms |
+
+Where a tick goes (a dialog scene, 76 ms): the guest's own work in Unicorn
+about 40-50 ms; the Python side of API boundaries about 25-35 ms (1360
+calls a tick -- DirectDraw locks and blits, critical sections -- of which
+handler bodies 14 ms); `--watch`'s PNG 10-20 ms (RGB565 expansion and
+zlib level 1). Scenes with more on screen run slower (0.12-0.15 s).
+Already removed: Unicorn's per-instruction count (solo threads, 4.7x),
+the checkpoint write hook (1.9x), per-pixel Python colour-keyed blits
+(100x on those calls).
+
+Evidence run (`opening_session.py`, 2026-10-11): a new game recorded
+through the channel; both choice menus answered `3`; control at tick 7492;
+Locke walked right 48 ticks ((1207,667) to (1368,506)); Ctrl+Backspace
+wrote "Quick Save 1" (game.sav, ss.bmp, 25 CurMap sectors) and
+`export_slot @last` copied it; `replay` with `verify` of the 7580-tick
+bundle compared 317 check lines with no divergence. The port loads that
+slot with `--quickstart="Quick Save 1"`: Locke on level 2 at (1368,506,17),
+HP 100/100, 9 items.
 
 ## Gaps
 
@@ -177,4 +213,6 @@ See the commit that adds the evidence; numbers there.
   attacks only; `quick_spells` checked only empty (no spell bound in the
   states tested).
 - The guest heap is 64 MB (`Runtime.HEAP_SIZE`); with block reuse a long
-  session holds steady, but a level change has not been measured.
+  session holds steady (the opening: 41.6 MB used, flat), but a level
+  change has not been measured.
+- Speed: 7-13 ticks/s, not 24: see Measured.
