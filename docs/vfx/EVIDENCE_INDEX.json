@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 77,
+    "visual_fidelity_confirmed_rows": 81,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 77,
-    "remaining_visual_review_rows": 99
+    "reviewed_visual_pass_rows": 81,
+    "remaining_visual_review_rows": 95
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1330,6 +1330,34 @@
       "check": "heal_native_domain_actual_metal_visual",
       "status": "pass",
       "scope": "Default level1/facing0 original software and actual Metal native-domain bubble/cylinder lifecycle, corrected aligned90-frame sequence and empty tail. Natural caller/resource dispatch/levels2-4/device/exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-authored-water-full-visual-20261010/WaterFlft-root-approval.json": {
+      "sha256": "23433712d89106f23a58e894c35ff4dd4818525e583170753c9d24893e24be29",
+      "retail_row": "WaterFlft:0xd0c0f036",
+      "check": "authored_water_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Six original-software versus actual Metal native-domain whole1280x960 phases, birth/growth/steady and left/right blue-green shape. Numeric packet float residual diagnostic retained; natural scene/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-authored-water-full-visual-20261010/WaterFrt-root-approval.json": {
+      "sha256": "573057d3b9ce084c64012e824edf2d708e902b75a1b948d675822c27ec1e206c",
+      "retail_row": "WaterFrt:0xd0c0f037",
+      "check": "authored_water_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Six original-software versus actual Metal native-domain whole1280x960 phases, birth/growth/steady and left/right blue-green shape. Numeric packet float residual diagnostic retained; natural scene/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-authored-water-full-visual-20261010/WaterClft-root-approval.json": {
+      "sha256": "e0e71af23998d0fde863b80d62d75f4aa309f68d71bd6166a30fb4715022e461",
+      "retail_row": "WaterClft:0xd0c0f038",
+      "check": "authored_water_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Six original-software versus actual Metal native-domain whole1280x960 phases, birth/growth/steady and left/right blue-green shape. Numeric packet float residual diagnostic retained; natural scene/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-authored-water-full-visual-20261010/WaterCrt-root-approval.json": {
+      "sha256": "11f82fc19dcf0482c5e11cdcfca3dfc4c54fda6bbf9e55ac7ba8a1760afce857",
+      "retail_row": "WaterCrt:0xd0c0f039",
+      "check": "authored_water_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Six original-software versus actual Metal native-domain whole1280x960 phases, birth/growth/steady and left/right blue-green shape. Numeric packet float residual diagnostic retained; natural scene/device/exactpixels remain open."
     }
   }
 }

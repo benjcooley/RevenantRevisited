@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "de18f868471bbe596f6a358e6176a99be20d5452f85fd79cf215b24ebbb0c691",
+    "harness_sha256": "8c5105eacf0af93b65288854525664c2400df3ce29bf40ce1dae7c12bf25e2b1",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 77,
+    "visual_fidelity_confirmed_rows": 81,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 77,
-    "remaining_visual_review_rows": 99
+    "reviewed_visual_pass_rows": 81,
+    "remaining_visual_review_rows": 95
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -21433,7 +21433,8 @@
       "source_fixes": [
         "Exact-ID TEffect::Pulse skips obsolete snapshot frame0 reset, matching retail default-animator path. Post-build actual frame observations prove progression/wrap; this is a prerequisite, not partsys render coverage.",
         "Source-backed immutable partsys parser and owner-bound default-animator controller restored: six authored emitters, 140 fall/52 cap slots, original simulation/RNG/curve order and 24Hz Pulse. Source Render preserves authored quad/UV, packed color, absolute pose and litadd ONE/ONE depth-test/no-write. Tagframe5 is retained metadata, ignored by this retail controller; loops do not reset the pool.",
-        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical.",
+        "2026-10-10: exact seven-root/six-emitter water profile restores camera-facing prototype, cached emitter cadence and RGB5 additive colors. Actual typed map owner runs source particles; malformed resources rejected; no renderer changes."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -21446,13 +21447,13 @@
         "port_smoke": true,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "default_animator_authored_partsys_verified_through_saved_identity_and_original_map_slice",
-      "next_action": "Recover visibly animated native reference for exact type; compare original map projection, tile lighting, sampler/depth and complete particle lifecycle. No arbitrary screen-space fitting. Other particle-controller tags, external definitions and geysers remain fail closed.",
+      "next_action": "Preserve approved authored particle appearance and controlled create/move/delete; natural map setting/device and retained raw-centre/FIX float residuals remain open.",
       "notes": [
         "Exact retail type uses generic EFFECT/default T3DAnimator; no named Waterfall animator registration. Literal Waterfall implementation is not valid for this profile. Preserve catalogue association as an invalid candidate, not proven runtime mapping.",
         "Previous static 60-frame capture is retained only as pre-controller baseline. Retail ignores tagframe5 in this partsys Initialize/Pulse/Render path; source/controller and runtime evidence supersedes the missing-controller interpretation.",
@@ -21584,6 +21585,16 @@
           }
         ],
         "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six original-software versus actual Metal native-domain whole1280x960 phases, birth/growth/steady and left/right blue-green shape. Numeric packet float residual diagnostic retained; natural scene/device/exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-authored-water-full-visual-20261010/WaterFlft-root-approval.json",
+        "sha256": "23433712d89106f23a58e894c35ff4dd4818525e583170753c9d24893e24be29",
+        "note": "docs/vfx/forensics/AUTHORED_WATER_VISUAL_BATCH_20261010.md"
       }
     },
     {
@@ -21598,7 +21609,8 @@
       "source_fixes": [
         "Exact-ID TEffect::Pulse skips obsolete snapshot frame0 reset, matching retail default-animator path. Post-build actual frame observations prove progression/wrap; this is a prerequisite, not partsys render coverage.",
         "Source-backed immutable partsys parser and owner-bound default-animator controller restored: six authored emitters, 140 fall/52 cap slots, original simulation/RNG/curve order and 24Hz Pulse. Source Render preserves authored quad/UV, packed color, absolute pose and litadd ONE/ONE depth-test/no-write. Tagframe5 is retained metadata, ignored by this retail controller; loops do not reset the pool.",
-        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical.",
+        "2026-10-10: exact seven-root/six-emitter water profile restores camera-facing prototype, cached emitter cadence and RGB5 additive colors. Actual typed map owner runs source particles; malformed resources rejected; no renderer changes."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -21611,13 +21623,13 @@
         "port_smoke": true,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "default_animator_authored_partsys_verified_through_saved_identity_and_original_map_slice",
-      "next_action": "Recover visibly animated native reference for exact type; compare original map projection, tile lighting, sampler/depth and complete particle lifecycle. No arbitrary screen-space fitting. Other particle-controller tags, external definitions and geysers remain fail closed.",
+      "next_action": "Preserve approved authored particle appearance and controlled create/move/delete; natural map setting/device and retained raw-centre/FIX float residuals remain open.",
       "notes": [
         "Exact retail type uses generic EFFECT/default T3DAnimator; no named Waterfall animator registration. Literal Waterfall implementation is not valid for this profile. Preserve catalogue association as an invalid candidate, not proven runtime mapping.",
         "Previous static 60-frame capture is retained only as pre-controller baseline. Retail ignores tagframe5 in this partsys Initialize/Pulse/Render path; source/controller and runtime evidence supersedes the missing-controller interpretation.",
@@ -21722,6 +21734,16 @@
           }
         ],
         "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six original-software versus actual Metal native-domain whole1280x960 phases, birth/growth/steady and left/right blue-green shape. Numeric packet float residual diagnostic retained; natural scene/device/exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-authored-water-full-visual-20261010/WaterFrt-root-approval.json",
+        "sha256": "573057d3b9ce084c64012e824edf2d708e902b75a1b948d675822c27ec1e206c",
+        "note": "docs/vfx/forensics/AUTHORED_WATER_VISUAL_BATCH_20261010.md"
       }
     },
     {
@@ -21736,7 +21758,8 @@
       "source_fixes": [
         "Exact-ID TEffect::Pulse skips obsolete snapshot frame0 reset, matching retail default-animator path. Post-build actual frame observations prove progression/wrap; this is a prerequisite, not partsys render coverage.",
         "Source-backed immutable partsys parser and owner-bound default-animator controller restored: six authored emitters, 140 fall/52 cap slots, original simulation/RNG/curve order and 24Hz Pulse. Source Render preserves authored quad/UV, packed color, absolute pose and litadd ONE/ONE depth-test/no-write. Tagframe5 is retained metadata, ignored by this retail controller; loops do not reset the pool.",
-        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical.",
+        "2026-10-10: exact seven-root/six-emitter water profile restores camera-facing prototype, cached emitter cadence and RGB5 additive colors. Actual typed map owner runs source particles; malformed resources rejected; no renderer changes."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -21749,13 +21772,13 @@
         "port_smoke": true,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "default_animator_authored_partsys_verified_through_saved_identity_and_original_map_slice",
-      "next_action": "Recover visibly animated native reference for exact type; compare original map projection, tile lighting, sampler/depth and complete particle lifecycle. No arbitrary screen-space fitting. Other particle-controller tags, external definitions and geysers remain fail closed.",
+      "next_action": "Preserve approved authored particle appearance and controlled create/move/delete; natural map setting/device and retained raw-centre/FIX float residuals remain open.",
       "notes": [
         "Exact retail type uses generic EFFECT/default T3DAnimator; no named Waterfall animator registration. Literal Waterfall implementation is not valid for this profile. Preserve catalogue association as an invalid candidate, not proven runtime mapping.",
         "Previous static 60-frame capture is retained only as pre-controller baseline. Retail ignores tagframe5 in this partsys Initialize/Pulse/Render path; source/controller and runtime evidence supersedes the missing-controller interpretation.",
@@ -21860,6 +21883,16 @@
           }
         ],
         "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six original-software versus actual Metal native-domain whole1280x960 phases, birth/growth/steady and left/right blue-green shape. Numeric packet float residual diagnostic retained; natural scene/device/exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-authored-water-full-visual-20261010/WaterClft-root-approval.json",
+        "sha256": "e0e71af23998d0fde863b80d62d75f4aa309f68d71bd6166a30fb4715022e461",
+        "note": "docs/vfx/forensics/AUTHORED_WATER_VISUAL_BATCH_20261010.md"
       }
     },
     {
@@ -21874,7 +21907,8 @@
       "source_fixes": [
         "Exact-ID TEffect::Pulse skips obsolete snapshot frame0 reset, matching retail default-animator path. Post-build actual frame observations prove progression/wrap; this is a prerequisite, not partsys render coverage.",
         "Source-backed immutable partsys parser and owner-bound default-animator controller restored: six authored emitters, 140 fall/52 cap slots, original simulation/RNG/curve order and 24Hz Pulse. Source Render preserves authored quad/UV, packed color, absolute pose and litadd ONE/ONE depth-test/no-write. Tagframe5 is retained metadata, ignored by this retail controller; loops do not reset the pool.",
-        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical.",
+        "2026-10-10: exact seven-root/six-emitter water profile restores camera-facing prototype, cached emitter cadence and RGB5 additive colors. Actual typed map owner runs source particles; malformed resources rejected; no renderer changes."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -21887,13 +21921,13 @@
         "port_smoke": true,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "default_animator_authored_partsys_verified_through_saved_identity_and_original_map_slice",
-      "next_action": "Recover visibly animated native reference for exact type; compare original map projection, tile lighting, sampler/depth and complete particle lifecycle. No arbitrary screen-space fitting. Other particle-controller tags, external definitions and geysers remain fail closed.",
+      "next_action": "Preserve approved authored particle appearance and controlled create/move/delete; natural map setting/device and retained raw-centre/FIX float residuals remain open.",
       "notes": [
         "Exact retail type uses generic EFFECT/default T3DAnimator; no named Waterfall animator registration. Literal Waterfall implementation is not valid for this profile. Preserve catalogue association as an invalid candidate, not proven runtime mapping.",
         "Previous static 60-frame capture is retained only as pre-controller baseline. Retail ignores tagframe5 in this partsys Initialize/Pulse/Render path; source/controller and runtime evidence supersedes the missing-controller interpretation.",
@@ -21998,6 +22032,16 @@
           }
         ],
         "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six original-software versus actual Metal native-domain whole1280x960 phases, birth/growth/steady and left/right blue-green shape. Numeric packet float residual diagnostic retained; natural scene/device/exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-authored-water-full-visual-20261010/WaterCrt-root-approval.json",
+        "sha256": "11f82fc19dcf0482c5e11cdcfca3dfc4c54fda6bbf9e55ac7ba8a1760afce857",
+        "note": "docs/vfx/forensics/AUTHORED_WATER_VISUAL_BATCH_20261010.md"
       }
     },
     {
