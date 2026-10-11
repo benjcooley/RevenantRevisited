@@ -584,5 +584,9 @@ def level_is(level: int) -> Callable[[dict, Director], bool]:
     return lambda obs, d: obs.get('player', {}).get('level') == level
 
 
+def every(*checks: Callable[[dict, Director], bool]) -> Callable[[dict, Director], bool]:
+    return lambda obs, d: all(check(obs, d) for check in checks)
+
+
 def near(pos: tuple[int, int], within: int = 200) -> Callable[[dict, Director], bool]:
     return lambda obs, d: math.hypot(obs['player']['pos'][0] - pos[0], obs['player']['pos'][1] - pos[1]) <= within

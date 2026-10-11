@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 
-from director import Milestone, after_scene, character_dead, control_on, near, talked_to
+from director import Milestone, after_scene, character_dead, control_on, every, level_is, near, talked_to
 
 KEEP = [
     Milestone('opening',
@@ -31,6 +31,14 @@ KEEP = [
               'Explore the Keep. Talk to the people there, and find the guard Rand in the dungeon below '
               'to question him about the cult.',
               after_scene(talked_to('Rand')), save=True, goal='RandK'),
+    # keep.s: TendrickT, told of Rand (TENDRICKSTATE 1), takes Locke to level 6
+    # for GowE's scene, which brings him back to level 2 and unlocks KeepExit.
+    Milestone('tendrick told',
+              'Go back up through the Keep to Tendrick and tell him what Rand said.',
+              after_scene(every(talked_to('TendrickT'), level_is(6))), save=True, goal='TendrickT'),
+    Milestone('left the keep',
+              'Leave the Keep by its gate, out into the world.',
+              after_scene(level_is(0)), save=True, goal='KeepExit'),
 ]
 
 # The reference host's toy world (fakehost.py): one person to reach.
