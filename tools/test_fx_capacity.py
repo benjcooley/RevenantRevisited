@@ -22,22 +22,28 @@ struct SFxBatchKey{uint16_t pipeline_id{};uint8_t blend{},depth_mode{};uint32_t 
 struct SStripSegment{float world_a[3]{},world_b[3]{1,0,0};float width_a_wu=1,width_b_wu=1;
  float color_a[4]{1,1,1,1},color_b[4]{1,1,1,1};float u_a=0,u_b=1,v_left=0,v_right=1;bool uv_swapped=false;};
 struct Entry{std::vector<SStripSegment>segments;SFxBatchKey key{};EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
-struct SQuadDrawItem{bool retail_rgb565_additive=false;float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{1,1,1,1};SFxBatchKey key{};
+struct SQuadDrawItem{bool per_corner_color=false;float corner_color_rgba[4][4]{};bool retail_rgb565_additive=false;float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{1,1,1,1};SFxBatchKey key{};
  bool retail_software_projection=false;float retail_camera_z=0;int corner_count=4,retail_texture=0;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 constexpr int kFxStripVertexFloats=18,kMaxFxStripVerts=8192;
 void log_warn(const char*,...){}
-struct Result{int vertices,spans,drawn,dropped;};
+struct Result{int vertices,spans,drawn,dropped;std::vector<float> packed;};
 '''
 body=r'''
 Result Pack(const std::vector<Entry>&fx_strip_queue,const std::vector<SQuadDrawItem>&fx_quad_queue){
 PACKING
  int drawn=0;
 UPLOAD {for(const auto&s:spans){assert(s.first>=0&&s.first+s.count<=int(scratch.size()/kFxStripVertexFloats));drawn+=s.count;}}
- return {int(scratch.size()/kFxStripVertexFloats),int(spans.size()),drawn,dropped_capacity_items};
+ return {int(scratch.size()/kFxStripVertexFloats),int(spans.size()),drawn,dropped_capacity_items,scratch};
 }
 Entry Strip(int n){Entry e;e.segments.resize(n);return e;}
 SQuadDrawItem Tri(){SQuadDrawItem q;q.corner_count=3;return q;}
 int main(){
+ SQuadDrawItem colored;colored.per_corner_color=true;
+ for(int c=0;c<4;++c)for(int k=0;k<4;++k)colored.corner_color_rgba[c][k]=float(c*4+k)/16;
+ auto vertices=Pack({},{colored});const int corners[6]={2,0,3,1,3,0};
+ for(int i=0;i<6;++i)for(int k=0;k<4;++k)assert(vertices.packed[i*18+9+k]==colored.corner_color_rgba[corners[i]][k]);
+ colored.per_corner_color=false;vertices=Pack({},{colored});
+ for(int i=0;i<6;++i)for(int k=0;k<4;++k)assert(vertices.packed[i*18+9+k]==1);
  // One excess quad must not erase the 1365 valid ones ahead of it.
  auto full=Pack({},std::vector<SQuadDrawItem>(1366));assert(full.vertices==8190&&full.drawn==8190&&full.spans==1365&&full.dropped==1);
  // Mix real strip packing with quad/triangle packing. A later triangle can fit

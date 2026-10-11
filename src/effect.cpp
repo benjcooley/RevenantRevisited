@@ -59,6 +59,7 @@
 #include "revenant.h"
 #include "effect.h"
 #include "fireballquad.h"
+#include "fireballring.h"
 #include "fireballcore.h"
 #include "fireballspark.h"
 
@@ -6721,22 +6722,20 @@ void TFireBallEffect::StepAnimate()
                 if (ring_active_ && !ring_done_)
                 {
                     ring_scale_ *= kFireBallRingFactor;
+                    // Original shock Animate retains the first overshoot;
+                    // the done flag suppresses subsequent growth/drawing.
                     if (ring_scale_ > kFireBallRingMaxSize)
-                    {
-                        ring_scale_ = kFireBallRingMaxSize;
-                        ring_done_  = true;
-                    }
+                        ring_done_ = true;
                 }
                 for (auto& bq : burst_)
                 {
                     if (!bq.used) continue;
                     ++live_burst_count;
                     bq.scale *= 0.90f;
+                    // Retail511421 clears used but still consumes this
+                    // slot's final glow RNG and advances its atlas frame.
                     if (bq.scale < 0.50f)
-                    {
                         bq.used = false;
-                        continue;
-                    }
                     bq.glow = 1.0f + 0.05f * float(random(0, 15));
                     bq.frame += 1.0f;
                     if (int32_t(bq.frame) == glow_frame_)
@@ -6854,49 +6853,6 @@ TFireBallEffect* TFireBallEffect::SpawnForTestWithAsset(const S3DPoint& origin,
     if (fb->asset_.box02_tex == kInvalidTexture)
         fb->asset_.box02_tex = fb->asset_.box01_tex;   // safe fallback (atlas has warm cells)
 
-    // Register the cylinder01 sub-mesh for additive-blend helper-mesh
-    // submission (the shockwave ring). Same path TTeleporterEffect uses
-    // for its glow column. We pull texslot 0 if there's no resolvable
-    // material binding; the ring's geometry doesn't carry the warm
-    // gradient (that comes from our per-frame vertex tint).
-    {
-        const int32_t cyl = kFireBallObjCylinder01;
-        const int32_t texslots = num_tex + 1;
-        for (int32_t texslot = 0; texslot < texslots; ++texslot)
-        {
-            std::vector<SMeshVertex> verts;
-            std::vector<uint16_t>    indices;
-            if (!ExtractSubMeshTextureSlot(img3d, cyl, texslot, verts, indices))
-                continue;
-            if (verts.empty() || indices.empty()) continue;
-            TTextureHandle albedo = Renderer->WhiteTextureHandle();
-            if (texslot > 0 && texslot - 1 < num_tex)
-            {
-                S3DTex t = {};
-                img3d->GetTexture(texslot - 1, &t);
-                if (t.htexture != kInvalidTexture) albedo = t.htexture;
-            }
-            const MeshHandle h = Renderer->RegisterMesh(
-                verts.data(), int32_t(verts.size()),
-                indices.data(), int32_t(indices.size()),
-                albedo);
-            if (h)
-            {
-                fb->asset_.ring_mesh = h;
-                BuildStaticObjectMatrix(img3d, cyl, 0, 0, fb->asset_.ring_mat);
-                log_info("[fireball]   cylinder01 sub-obj=%d texslot=%d "
-                         "verts=%zu indices=%zu mesh_handle=%u",
-                         cyl, texslot, verts.size(), indices.size(), h);
-                break;
-            }
-        }
-        if (fb->asset_.ring_mesh == 0)
-        {
-            log_warn("[fireball] SpawnForTest: cylinder01 mesh extract failed — "
-                     "ring won't draw (impact will still produce burst+sparks)");
-        }
-    }
-
     // Harness aim: random horizontal byte-angle (in-game caller would
     // supply via TSpell::Timer + GetAngle()).
     fb->aim_angle_ = random(0, 255);
@@ -6911,12 +6867,12 @@ TFireBallEffect* TFireBallEffect::SpawnForTestWithAsset(const S3DPoint& origin,
     fb->SetProjectileEndpoints(p,destination);
 
     log_info("[fireball] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
-             "aim=%d box01_tex=%u box02_tex=%u ring_mesh=%u "
+             "aim=%d box01_tex=%u box02_tex=%u "
              "fly_range_ticks=%d",
              asset_path, fb->GetMapIndex(),
              origin.x, origin.y, origin.z,
              fb->aim_angle_,
-             fb->asset_.box01_tex, fb->asset_.box02_tex, fb->asset_.ring_mesh,
+             fb->asset_.box01_tex, fb->asset_.box02_tex,
              kFireBallFlyRangeTicks);
     return fb;
 }
@@ -6980,6 +6936,7 @@ bool TFireBallEffect::EnsureAuthoredQuad() const
     const int32_t slot=FireBallSubObjTextureSlot(mesh,0);
     if(slot<0||slot>=mesh->NumTextures())return false;
     S3DTex texture{};mesh->GetTexture(slot,&texture);
+    asset_.box01_argb4444=RetailMeshTextureLighting(texture.desc.pixelFormat)==3;
     asset_.box01_tex=texture.htexture;asset_.has_box01_quad=texture.htexture!=kInvalidTexture;
     return asset_.has_box01_quad;
 }
@@ -6996,6 +6953,7 @@ bool TFireBallEffect::EnsureAuthoredSpark() const
     const int32_t slot=FireBallSubObjTextureSlot(mesh,1);
     if(slot<0||slot>=mesh->NumTextures())return false;
     S3DTex texture{};mesh->GetTexture(slot,&texture);
+    asset_.box02_argb4444=RetailMeshTextureLighting(texture.desc.pixelFormat)==3;
     asset_.box02_tex=texture.htexture;asset_.has_box02_quad=texture.htexture!=kInvalidTexture;
     return asset_.has_box02_quad;
 }
@@ -7010,7 +6968,8 @@ void TFireBallEffect::SubmitAuthoredSpark(const SFireBallSpark& spark,EFxDebugMo
         uv[size_t(i)]={asset_.box02_vertices[i].tu,asset_.box02_vertices[i].tv};
     }
     const float scale=spark.scale*(spark.flicker_status?kFireBallSparkFlicker:1.0f);
-    const auto quad=fireball_quad::BuildSpark(authored,uv,scale,spark.pos);
+    const auto quad=native_domain_ ? fireball_quad::BuildSparkNativeD3D(authored,uv,scale,spark.pos) :
+        fireball_quad::BuildSpark(authored,uv,scale,spark.pos);
     SQuadDrawItem item{};
     for(int i=0;i<4;++i)
     {
@@ -7019,6 +6978,7 @@ void TFireBallEffect::SubmitAuthoredSpark(const SFireBallSpark& spark,EFxDebugMo
         item.world_pos[i][2]=quad.position[size_t(i)].Z;
         item.uv[i][0]=quad.uv[size_t(i)][0];item.uv[i][1]=quad.uv[size_t(i)][1];
     }
+    item.retail_argb4444=asset_.box02_argb4444;item.retail_software_projection=native_domain_;
     item.key.texture=asset_.box02_tex;item.key.blend=uint8_t(EFxBlend::Alpha);
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);item.light_mode=EFxLightMode::Unlit;
     item.debug_mode=debug_mode;Renderer->SubmitFxQuad(item);
@@ -7030,8 +6990,9 @@ void TFireBallEffect::SubmitAuthoredCard(const SFireBallData& pose,int32_t frame
     std::array<hmm_vec3,4> authored{};
     for(int i=0;i<4;++i)authored[size_t(i)]=asset_.box01_vertices[i].pos;
     const float scale=glow?pose.scale*pose.glow:pose.scale;
-    const auto quad=fireball_quad::Build(authored,frame,glow?0:int(pose.rotation),GetFace(),scale,
-        pose.pos,Transform().Matrix());
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) { const auto p=Pos(); BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace())); }
+    const auto quad=fireball_quad::Build(authored,frame,glow?0:int(pose.rotation),GetFace(),scale,pose.pos,owner);
     SQuadDrawItem item{};
     for(int i=0;i<4;++i)
     {
@@ -7040,6 +7001,7 @@ void TFireBallEffect::SubmitAuthoredCard(const SFireBallData& pose,int32_t frame
         item.world_pos[i][2]=quad.position[size_t(i)].Z;
         item.uv[i][0]=quad.uv[size_t(i)][0];item.uv[i][1]=quad.uv[size_t(i)][1];
     }
+    item.retail_argb4444=asset_.box01_argb4444;item.retail_software_projection=native_domain_;
     item.key.texture=asset_.box01_tex;item.key.blend=uint8_t(EFxBlend::Alpha);
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);item.debug_mode=debug_mode;
     item.light_mode=EFxLightMode::Unlit;
@@ -7068,68 +7030,36 @@ void TFireBallEffect::SubmitAuthoredTrail(EFxDebugMode debug_mode) const
         }
 }
 
+void TFireBallEffect::SubmitAuthoredBurst(EFxDebugMode debug_mode) const
+{
+    if(!Renderer||!EnsureAuthoredQuad())return;
+    std::array<hmm_vec3,4> authored{};
+    for(int i=0;i<4;++i)authored[size_t(i)]=asset_.box01_vertices[i].pos;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) { const auto p=Pos(); BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace())); }
+    for(const auto& burst:burst_) {
+        if(!burst.used)continue;
+        const auto glow=fireball_quad::BuildBurstGlow(authored,glow_frame_,burst.scale*burst.glow,burst.pos,owner);
+        SQuadDrawItem item{};
+        for(int i=0;i<4;++i) {
+            const auto& p=glow.position[size_t(i)];
+            item.world_pos[i][0]=p.X;item.world_pos[i][1]=p.Y;item.world_pos[i][2]=p.Z;
+            item.uv[i][0]=glow.uv[size_t(i)][0];item.uv[i][1]=glow.uv[size_t(i)][1];
+        }
+        item.key.texture=asset_.box01_tex;item.key.blend=uint8_t(EFxBlend::Alpha);
+        item.retail_argb4444=asset_.box01_argb4444;item.retail_software_projection=native_domain_;
+        item.debug_mode=debug_mode;Renderer->SubmitFxQuad(item);
+        SubmitAuthoredCard(burst,int(burst.frame),false,debug_mode);
+    }
+}
+
 void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
 {
     if (!Renderer || asset_.box01_tex == kInvalidTexture)
         return;
 
-    const S3DPoint base = Pos();
-
-    // Per-instance facing rotation. Snapshot draw matrices apply
-    // `RotateZ(-(GetFace(...)/256) * TORADIAN)` as the last spin
-    // (missileeffect.cpp:846/906/953/1002/1041), composed under the
-    // fixed -30°/+60° XY tilt + per-slot rotation. We collapse those
-    // into one in-plane rotation per WorldXY-tipped quad:
-    //   rotation_rad = -slot.rotation * (π/180)  +  facing_rad
-    // facing comes from aim_angle_ (the byte-angle 0..255 we stored at
-    // launch) — same source the snapshot used via GetFace.
-    const float facing_rad = -(float(aim_angle_) / 256.0f) * 2.0f * float(M_PI);
-
-    // Intended retail order (full cross-pipeline ordering remains open):
-    // 1060-1085): spark first; then per state — LAUNCH/FLY: glow, trail,
-    // ball; EXPLODE: trail, burst, ring (ring drawn in SubmitWorldRing).
-    //
-    // The remaining burst adapter is a legacy FB particle. Spark, head,
-    // glow and trail submit original authored corners/UVs on the quad queue.
-    // Prior particle adapter comments apply only to the pending burst.
-    // Pipeline = FB particle (SubmitFxParticle / SParticleDrawItem) —
-    // billboards don't plumb per-instance rotation_rad, but particles do
-    // (renderer.h:248-263). Sister effects (Fizzle, B01 FLY droplets)
-    // use the particle pipeline for the same reason: keep the snapshot's
-    // matrix-tilt + per-instance spin without re-implementing matrices.
-    // Orientation = WorldXY so each quad lies in the world plane the
-    // snapshot's RotateX(-30°)/RotateY(+60°) defined; the per-instance
-    // rotation_rad then spins it in that plane.
-    SParticleDrawItem ball_item = {};
-    ball_item.key.texture     = asset_.box01_tex;
-    ball_item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
-    // Blend = Alpha — pre-release calls SetBlendState() = MODULATE/
-    // SRCALPHA/INVSRCALPHA (missileeffect.cpp:1062-1063 + forensics §7).
-    // The black-keyed atlas supplies transparency; the modulate stage
-    // lets the warm-orange texel tint dominate.
-    ball_item.key.blend       = uint8_t(EFxBlend::Alpha);
-    ball_item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    ball_item.light_mode      = EFxLightMode::Unlit;
-    ball_item.orientation     = EFxBillboardOrientation::WorldXY;
-    ball_item.debug_mode      = debug_mode;
-    // White tint — color lives in the warm-orange atlas texels per §10.
-    ball_item.color_rgba[0] = 1.0f;
-    ball_item.color_rgba[1] = 1.0f;
-    ball_item.color_rgba[2] = 1.0f;
-    ball_item.color_rgba[3] = 1.0f;
-
-    // --- Spark trail (TSubParticleAnimator::Render — effectcomp.cpp:
-    // 526-570 in spirit). Drawn first so the ball + glow layer on top.
-    // Sparks have no per-instance rotation in the snapshot (the original
-    // `TSubParticleAnimator::Render` uses a fixed rotZ-60°/rotX-45° face
-    // rotation, not a per-particle accumulator), so rotation_rad stays
-    // 0 — but they still ride the WorldXY tip so they read as embers in
-    // the world plane, not camera-pasted dots.
-    // Original spark Render uses authored box02, absolute coordinates and
-    // its native fixed tilt. Submit into the same quad order as glow/trail.
+    // Original512150 dispatches sparks before the state-specific cards.
     for(const auto& spark:sparks_)SubmitAuthoredSpark(spark,debug_mode);
-
-    constexpr float kDegToRad = float(M_PI) / 180.0f;
 
     if (state_ == 0 /*LAUNCH*/ || state_ == 1 /*FLY*/)
     {
@@ -7157,90 +7087,47 @@ void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
     {
         // EXPLODE branch (:1075-1079): trail, burst, ring. The trail
         // keeps draining at the frozen stale-spin angles; ring is drawn
-        // via SubmitHelperMesh.
+        // after the burst through the same ordered quad queue.
         SubmitAuthoredTrail(debug_mode);
 
-        // Burst quads (RenderFireBallBurst — :793-869). Snapshot seeds
-        // `burst[i].rotation = 0` (:694), so the per-slot rotation_rad
-        // collapses to just the facing_rad term — the matrix tilt at
-        // :846-851 reduces to the WorldXY plane + facing rotation.
-        SParticleDrawItem burst = ball_item;
-        for (const auto& bq : burst_)
-        {
-            if (!bq.used) continue;
-            FillAtlasUv(int32_t(bq.frame), burst.uv_rect);
-            const float bsize = kFireBallBaseQuadWu * bq.scale * bq.glow;
-            burst.size_wu[0] = bsize;
-            burst.size_wu[1] = bsize;
-            burst.world_pos[0] = float(base.x) + bq.pos.X;
-            burst.world_pos[1] = float(base.y) + bq.pos.Y;
-            burst.world_pos[2] = float(base.z) + bq.pos.Z;
-            burst.rotation_rad = -bq.rotation * kDegToRad + facing_rad;
-            Renderer->SubmitFxParticle(burst);
-        }
+        SubmitAuthoredBurst(debug_mode);
     }
 }
 
-void TFireBallEffect::SubmitWorldRing(EFxDebugMode /*debug_mode*/)
+void TFireBallEffect::SubmitWorldRing(EFxDebugMode debug_mode)
 {
-    // Shockwave ring (cylinder01 via SubmitHelperMesh, additive blend).
-    // Same primitive M09b TTeleporterEffect uses (forensics §7).
-    if (!Renderer || asset_.ring_mesh == 0 || !ring_active_)
-        return;
-
-    // Compose the world matrix: T(ring_pos) * S(ring_scale,*,*) applied
-    // to the cylinder's authored parent matrix. The ring grows isotropic
-    // (all 3 axes scale together), matching ring.scale_factor = 1.085 on
-    // x/y/z (missileeffect.cpp:715-717).
-    float t[16] = {
-        ring_scale_, 0.0f,        0.0f,        ring_pos_.X,
-        0.0f,        ring_scale_, 0.0f,        ring_pos_.Y,
-        0.0f,        0.0f,        ring_scale_, ring_pos_.Z,
-        0.0f,        0.0f,        0.0f,        1.0f
-    };
-    float world[16];
-    // world = t * parent_matrix (row-major). Reuse the renderer-side
-    // helper structure of TTeleporterEffect — but the helper is local
-    // there. Compose inline.
-    for (int32_t r = 0; r < 4; ++r)
-        for (int32_t c = 0; c < 4; ++c)
-        {
-            float s = 0.0f;
-            for (int32_t k = 0; k < 4; ++k)
-                s += t[r * 4 + k] * asset_.ring_mat[k * 4 + c];
-            world[r * 4 + c] = s;
+    if(!Renderer || !ring_active_ || ring_done_)return;
+    if(asset_.ring_vertices.empty()) {
+        auto* image=dynamic_cast<T3DImagery*>(imagery);
+        if(!image || image->NumObjects()<3 || image->NumObjVerts(2)!=96 || image->NumObjFaces(2)!=144)return;
+        asset_.ring_vertices.resize(96);asset_.ring_faces.resize(144);
+        image->GetObjVerts(2,asset_.ring_vertices.data(),0,0,ERender3DVertex::Vertex);
+        int32_t starts[9]{},counts[9]{};
+        image->GetObjFaces(2,asset_.ring_faces.data(),starts,counts);
+        // Original ring is untextured and draws every authored cylinder face.
+        if(counts[0]!=144) { asset_.ring_vertices.clear();asset_.ring_faces.clear();return; }
+    }
+    const float native_z=RetailSoftwareOwnerZ(int32_t(ring_pos_.Z));
+    for(const auto& face:asset_.ring_faces) {
+        SQuadDrawItem item{};item.corner_count=3;item.per_corner_color=true;
+        item.key.texture=Renderer->WhiteTextureHandle();item.key.blend=uint8_t(EFxBlend::Alpha);
+        item.retail_software_projection=native_domain_;item.debug_mode=debug_mode;
+        const int indices[3]={face.v1,face.v2,face.v3};
+        for(int corner=0;corner<3;++corner) {
+            const int index=indices[corner];if(index<0||index>=96)return;
+            const auto& p=asset_.ring_vertices[size_t(index)].pos;
+            item.world_pos[corner][0]=p.X*ring_scale_+ring_pos_.X;
+            item.world_pos[corner][1]=p.Y*ring_scale_+ring_pos_.Y;
+            const float z=p.Z*ring_scale_+native_z;
+            item.world_pos[corner][2]=native_domain_?z:z*1.4600000381469727f;
+            const uint32_t color=fireball_ring::PackedColor(index/24,ring_scale_);
+            item.corner_color_rgba[corner][0]=float((color>>16)&255)/255.0f;
+            item.corner_color_rgba[corner][1]=float((color>>8)&255)/255.0f;
+            item.corner_color_rgba[corner][2]=float(color&255)/255.0f;
+            item.corner_color_rgba[corner][3]=float(color>>24)/255.0f;
         }
-
-    // Alpha-fade per SHOCKWAVE_FLAG_FADE (effectcomp.cpp:732-748):
-    // alpha = (max_size - scale) / (max_size - init_scale).
-    const float fade_num = kFireBallRingMaxSize - ring_scale_;
-    const float fade_den = kFireBallRingMaxSize - kFireBallRingScale;
-    const float fade     = fade_den > 0.0f
-                               ? std::fmax(0.0f, std::fmin(1.0f, fade_num / fade_den))
-                               : 1.0f;
-
-    SHelperMeshSubmit m = {};
-    m.mesh           = asset_.ring_mesh;
-    m.additive_blend = true;
-    m.shadow_plane   = false;
-    std::memcpy(m.world, world, sizeof(world));
-
-    // Warm-orange ring tint — the 4 ring color stops (forensics §10):
-    // mid stop = (0.78,0.24,0.06) red-orange / (0.97,0.61,0.06) orange.
-    // Helper-mesh shader emissive carries the color directly (additive
-    // pass = self-luminant), modulated by `fade` so the ring fades out
-    // as it grows past max_size.
-    m.diffuse[0]  = 1.0f; m.diffuse[1]  = 1.0f; m.diffuse[2]  = 1.0f; m.diffuse[3]  = 1.0f;
-    m.ambient[0]  = 0.0f; m.ambient[1]  = 0.0f; m.ambient[2]  = 0.0f; m.ambient[3]  = 1.0f;
-    m.specular[0] = 0.0f; m.specular[1] = 0.0f; m.specular[2] = 0.0f; m.specular[3] = 0.0f;
-    m.emissive[0] = 0.97f * fade;   // bright orange
-    m.emissive[1] = 0.45f * fade;
-    m.emissive[2] = 0.06f * fade;
-    m.emissive[3] = 1.0f;
-    m.power       = 1.0f;
-    m.sort_depth  = float(Pos().z);
-
-    Renderer->SubmitHelperMesh(m);
+        Renderer->SubmitFxQuad(item);
+    }
 }
 
 #if 0

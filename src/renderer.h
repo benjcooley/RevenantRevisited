@@ -347,6 +347,9 @@ struct SQuadDrawItem
     float uv[4][2] = {{0.0f, 0.0f}, {1.0f, 0.0f},
                        {0.0f, 1.0f}, {1.0f, 1.0f}};
     float color_rgba[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    // Optional authored vertex colors; default remains the uniform tint.
+    bool per_corner_color = false;
+    float corner_color_rgba[4][4] = {};
     SFxBatchKey key = {};
     uint8_t corner_count = 4; // 3 preserves one authored triangle; 4 uses the quad diagonal.
     uint8_t retail_texture = 0; // 1: nearest; 3: software ARGB4444; 4: software RGB565 additive.

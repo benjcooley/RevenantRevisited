@@ -6388,7 +6388,8 @@ void TRenderer::DrainFxQueue()
                 scratch.push_back(1.0f); scratch.push_back(0.0f); scratch.push_back(0.0f);
                 scratch.push_back(0.0f);  // no strip extrusion
                 scratch.push_back(quad.uv[corner][0]); scratch.push_back(quad.uv[corner][1]);
-                for (float channel : quad.color_rgba) scratch.push_back(channel);
+                const float* color = quad.per_corner_color ? quad.corner_color_rgba[corner] : quad.color_rgba;
+                for (int channel=0; channel<4; ++channel) scratch.push_back(color[channel]);
                 scratch.push_back(float(uint8_t(quad.debug_mode)));
                 scratch.push_back(float(uint8_t(quad.light_mode)));
                 scratch.push_back(float(quad.retail_texture));

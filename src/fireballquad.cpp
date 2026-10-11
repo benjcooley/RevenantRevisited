@@ -28,6 +28,24 @@ Quad Build(const std::array<hmm_vec3,4>& authored,int frame,int spin_degrees,
     return result;
 }
 
+Quad BuildBurstGlow(const std::array<hmm_vec3,4>& authored,int frame,float scale,
+                    const hmm_vec3& local_position,const hmm_mat4& owner_world)
+{
+    // Native5116b4 uses the TRS path: Rx(-45), Ry(0), Rz(-60), S, T.
+    hmm_mat4 local{},world{};MtxClear(&local);
+    MtxRotateX(&local,-0.785398185253143311f);
+    MtxRotateY(&local,0.0f);
+    MtxRotateZ(&local,-1.047197580337524414f);
+    const hmm_vec3 uniform{scale,scale,scale};MtxScale(&local,&uniform);
+    MtxTranslate(&local,&local_position);MtxMultiply(&world,&local,&owner_world);
+    Quad result;const float u=float(frame%4)*.25f,v=float(frame/4)*.25f;
+    for(int i=0;i<4;++i) {
+        MtxTransform(&world,&authored[size_t(i)],&result.position[size_t(i)]);
+        result.uv[size_t(i)]={u+float(i>>1)*.25f,v+float(i&1)*.25f};
+    }
+    return result;
+}
+
 Quad BuildSparkNativeD3D(const std::array<hmm_vec3,4>& authored,
                 const std::array<std::array<float,2>,4>& uv,float scale,
                 const hmm_vec3& absolute_position)

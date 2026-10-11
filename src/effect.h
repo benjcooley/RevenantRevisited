@@ -3611,12 +3611,12 @@ struct SFireBallAssetBind
     TTextureHandle box02_tex     = 0;     // spark quad sprite
     S3DVertex box01_vertices[4] = {};     // Original authored geometry, not damage-rect dimensions.
     bool has_box01_quad = false;
+    bool box01_argb4444 = false;
     S3DVertex box02_vertices[4] = {};
     bool has_box02_quad = false;
-    // The cylinder01 ring is drawn via SubmitHelperMesh — its MeshHandle
-    // is kept here so the effect doesn't need to re-extract per draw.
-    MeshHandle     ring_mesh     = 0;
-    float          ring_mat[16]  = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    bool box02_argb4444 = false;
+    std::vector<S3DVertex> ring_vertices;
+    std::vector<S3DFace> ring_faces;
     // Authoring scale of the box01 quad (atlas-cell size in normalized
     // texture coords). The original uses a 4×4 grid (0.25 × 0.25).
     float          atlas_cell_w  = 0.25f;
@@ -3672,6 +3672,7 @@ class TFireBallEffect : public TEffect
     void TickAndSubmit(EFxDebugMode debug_mode);
     void SubmitWorldRing(EFxDebugMode debug_mode);
 
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
     [[nodiscard]] bool IsAlive() const { return alive_; }
 
   protected:
@@ -3694,6 +3695,7 @@ class TFireBallEffect : public TEffect
     S3DPoint projectile_destination_{};
     bool has_projectile_destination_=false;
     bool preview_mode_=false;
+    bool native_domain_=false;
     bool preview_target_collision_=false;
 
     // Per-tick velocity in world wu/tick (set on LAUNCH→FLY transition).
@@ -3730,6 +3732,7 @@ class TFireBallEffect : public TEffect
     void SubmitBillboards(EFxDebugMode debug_mode) const;
     bool EnsureAuthoredQuad() const;
     void SubmitAuthoredCard(const SFireBallData& pose,int32_t frame,bool glow,EFxDebugMode debug_mode) const;
+    void SubmitAuthoredBurst(EFxDebugMode debug_mode) const;
     void SubmitAuthoredTrail(EFxDebugMode debug_mode) const;
     bool EnsureAuthoredSpark() const;
     void SubmitAuthoredSpark(const SFireBallSpark& spark,EFxDebugMode debug_mode) const;

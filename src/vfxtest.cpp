@@ -3077,6 +3077,7 @@ struct SFireBallCtx {
     TFireBallEffect* fireball = nullptr;
     S3DPoint         origin   = {0, 0, 0};
     float            gap      = 0.0f;
+    bool authored_flight = false;
 };
 
 constexpr float kFireBallRetriggerGap = 1.5f;  // clear gap between casts (s)
@@ -3089,6 +3090,21 @@ void* FireBallSpawn(const S3DPoint& origin)
     if (!c->fireball)
         log_warn("[vfx] TFireBallEffect::SpawnForTest returned null; F07 entry will draw nothing");
     return c;
+}
+
+void ConfigureFireBallFlight(SFireBallCtx* c)
+{
+    if(!c||!c->fireball)return;
+    c->fireball->SetNativeDomain(StartupVfxNativeDomain);
+    log_info("[native-domain] enabled=%d camera_z=0",int(StartupVfxNativeDomain));
+    const S3DPoint source{c->origin.x,c->origin.y,c->origin.z+50};
+    const S3DPoint target{source.x+1000,source.y,source.z};
+    c->fireball->SetProjectileEndpoints(source,target);
+}
+void* FireBallFlightSpawn(const S3DPoint& origin)
+{
+    auto* c=static_cast<SFireBallCtx*>(FireBallSpawn(origin));
+    c->authored_flight=true;ConfigureFireBallFlight(c);return c;
 }
 
 void FireBallDestroy(void* cp)
@@ -3108,11 +3124,13 @@ void FireBallSubmit(void* cp, EFxDebugMode dbg)
     // fully play out, wait a clear gap, then re-fire ONE fresh cast.
     if (!c->fireball || !c->fireball->IsAlive())
     {
+        if(c->authored_flight)return; // One complete lifecycle, including its empty tail.
         c->gap -= float(TTime::DeltaTime());
         if (c->gap <= 0.0f)
         {
             delete c->fireball;
             c->fireball = TFireBallEffect::SpawnForTest(c->origin);
+            if(c->authored_flight)ConfigureFireBallFlight(c);
             c->gap = kFireBallRetriggerGap;
         }
     }
@@ -5478,6 +5496,9 @@ struct SVfxTestBootstrap {
         fireball.submit        = [](void* c, EFxDebugMode d) { FireBallSubmit(c, d); };
         fireball.submit_world  = [](void* c, EFxDebugMode d) { FireBallSubmitWorld(c, d); };
         fireball.destroy       = [](void* c) { FireBallDestroy(c); };
+        VfxTest::DeferredRegister(fireball);
+        fireball.id="TFireBallEffect_AUTHORED_FLIGHT";
+        fireball.factory=[](const S3DPoint& o)->void* { return FireBallFlightSpawn(o); };
         VfxTest::DeferredRegister(fireball);
 
         VfxTest::SEffect spark = {};
