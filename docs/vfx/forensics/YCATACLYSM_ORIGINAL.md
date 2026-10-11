@@ -48,3 +48,16 @@ Native-domain depth is 0..65535; common rendering keeps its ordinary depth and
 full geometry. Common launch brightness/clipping is diagnostic. Native/software
 span rejection, raster/sample coverage, destination precision, actor/spell
 variants, damage, audio, natural caller, backend and exact pixels remain open.
+
+Root independently reviewed all 16 whole-life/detail phases and approved the
+scoped native-domain, raw-local-Z, null-spell variant-zero appearance. Green
+falling head/trail, torus, fragments, glows, dust and blank tail align. All
+original/native-domain sample bounds remain inside the complete viewport.
+Fresh replay reproduces all 90 states and three checked pixel samples exactly.
+
+Frozen `ycataclysm-review-final/root-approval.json` SHA-256:
+`a4d92475bf5da149ac28997aa7a7264b63f146accbf9a1ce41298f79c99159df`. It pins pair manifest
+`e3810a4d8308554048eb1bac6230312a61d2c47aece8231b0f3c86024da4ee27`,
+cases `a228112aeb38401264019bf4fe5571a3b9b3b75b6c55e4dc77f3cce94116570b`,
+and binary
+`ba85318a706e1410e996c413216d1ae79be4862fb8049e63eb7777d618e51c5c`.
