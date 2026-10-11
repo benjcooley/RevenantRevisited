@@ -5325,6 +5325,9 @@ struct SVfxTestBootstrap {
             VfxTest::SEffect original{};original.id="ArrowEffect_ORIGINAL";
             original.family="projectile";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
             original.factory=[](const S3DPoint& o)->void*{return arrow_original::SpawnArrow({o.x-180,o.y,o.z+78},{o.x+180,o.y,o.z+78});};
+            original.factory_endpoints=[](const S3DPoint& source,const S3DPoint& target)->void*{
+                return arrow_original::SpawnArrow(source,target);
+            };
             original.submit=[](void* c,EFxDebugMode){arrow_original::Advance(static_cast<arrow_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode d){arrow_original::SubmitWorld(static_cast<arrow_original::State*>(c),d);};
             original.is_alive=[](void* c){return arrow_original::IsAlive(static_cast<arrow_original::State*>(c));};
