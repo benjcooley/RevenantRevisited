@@ -422,6 +422,13 @@ The port's design and state: §7.
   button and one that ends a HUD item drag. A right-button walk let go
   over the side panel now stops; before, it walked on until the next
   right click (playtest FINDINGS F4).
+- **Moves reach the map wherever the pointer is** (2026-10-11), as
+  `TScreen::MouseMove` gives every move to every pane (`0x00490530`).
+  A right-button walk steers over the side panel and a drawn bow aims
+  there. The pointer's map point holds past the view's edge, as
+  retail's `posx + x` does (`TMapRenderer::ScreenToMapScreen`). In both
+  games a pointer over the panel steers as one inside the view does
+  (playtest FINDINGS F5).
 
 Open:
 - Input-simulator note: `move X Y` glides for `kDefaultMoveMs`; sweeps

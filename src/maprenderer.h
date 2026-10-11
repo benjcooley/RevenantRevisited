@@ -237,7 +237,8 @@ class TMapRenderer
     [[nodiscard]] bool Pick(int32_t x, int32_t y, SPick& out, EPickRead read = EPickRead::Exact) const;
     // The map-screen point (WorldToScreen's space, TObjectInstance::
     // GetScreenPos's) under a viewport pixel, as the last frame drew it:
-    // retail's (x + posx, y + posy). False outside the viewport. Exact for
+    // retail's (x + posx, y + posy), which holds past the viewport's edge
+    // too (the pointer over the HUD). False outside the viewport. Exact for
     // the orthographic camera at any zoom; the perspective camera is not
     // linear and only approximates.
     [[nodiscard]] bool ScreenToMapScreen(int32_t screen_x, int32_t screen_y,

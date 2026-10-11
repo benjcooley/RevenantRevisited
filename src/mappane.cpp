@@ -803,9 +803,11 @@ void TMapPane::ScreenToMapPos(int32_t x, int32_t y, S3DPoint &p, int32_t zoffset
     S3DPoint curpos;
     Player->GetPos(curpos);
 
-    // The map view sits at the screen's top left: the pointer is in its pixels.
+    // The map view sits at the screen's top left: the pointer is in its
+    // pixels. Retail's x + posx has no bounds: past the view (over the HUD)
+    // the point lies on beyond its edge.
     int32_t mapx = 0, mapy = 0;
-    PaneToMapScreen(x, y, mapx, mapy);
+    (void)PaneToMapScreen(x, y, mapx, mapy);
     ScreenToWorld(mapx, mapy, p, curpos.z + zoffset);
 }
 

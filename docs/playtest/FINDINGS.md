@@ -4,6 +4,48 @@ Bugs and gaps that Jev's sessions surfaced in the games, with what reproduces
 each. Newest first. Each entry: what was seen, the evidence, the repro, and
 who owns the fix.
 
+## F5. The right-button walk stopped steering over the HUD (port bug, fixed)
+
+**Seen 2026-10-11.** With the right button held, moving the pointer over
+the side panel left Locke walking his old way. In retail he turns
+toward the pointer there as anywhere.
+
+**Evidence.**
+- `TScreen::MouseMove` (`0x00490530`) gives every pane every move with
+  no rect test (`0x004905b9..0x0049063d`).
+- `TMapPane::MouseMove` (`0x004504d0`) steers the right-button walk
+  (`0x0044ee00`) and aims a drawn bow at the pointer wherever it is.
+- Its map point, `posx − pane.x + cursorx`, has no bounds.
+- The port gave the world a move only over the play field.
+- Its pointer-to-map conversion (`TMapRenderer::ScreenToMapScreen`)
+  wrote nothing past the view's edge, so a point there read as the map
+  origin.
+- **Retail** (play slot, `opening`): right held at (120, 240), then 12
+  ticks at (560, 240) over the side panel. Locke moves (+20, −20), the
+  same as with the pointer at (380, 215) inside the view, under the
+  wedge cursor.
+- **Port before the fix:** (0, +68); he kept his old heading.
+
+**Repro (port).** As F4. Compare the 12 ticks with the pointer at
+(560, 240) against the same with it at (380, 215).
+
+**Resolution.** Fixed on `playtest/tabs`.
+- `TPlayScreen::MouseMove` gives the world every move. A modal holding
+  the mouse and a running load still stop them.
+- The HUD's own move handling (item drags, the spell book, the paper
+  doll, the screen's panes) is unchanged.
+- `ScreenToMapScreen` writes the map point past the view's edge too, and
+  still returns false there; `ScreenToMapPos` uses it.
+- After the fix, the port moves the same over the panel as inside the
+  view: (+59, +16) at both points, wedge cursor over the panel.
+- Drags, click-walk and tab clicks are unchanged.
+
+**Open (movement, not routing).** For the same pointer, the two games
+head differently. Retail turns in place and moves (+20, −20) in 12
+ticks; the port moves (+59, +16), whether the pointer is in the view or
+not. That is a variance in the right-button walk itself (its direction
+sector or its turn) and belongs to whoever owns player movement.
+
 ## F4. A right-button walk released over the HUD never stopped (port bug, fixed)
 
 **Seen 2026-10-11**, while checking where retail sends button releases.

@@ -1702,13 +1702,11 @@ bool TMapRenderer::ScreenToMapScreen(int32_t screen_x, int32_t screen_y,
     if (!impl || !Display.IsActive()) return false;
     const Impl& s = *impl;
     const SViewUnwrap v = ComputeViewUnwrap(s);
-    if (screen_x < 0 || screen_y < 0 || screen_x >= v.vw || screen_y >= v.vh)
-        return false;
     int32_t cam_sx = 0, cam_sy = 0;
     ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x, s.sectorCameraWorld.y, 0), cam_sx, cam_sy);
     map_x = cam_sx + int32_t(std::lround(float(screen_x - v.cam_ox) / v.zoom));
     map_y = cam_sy + int32_t(std::lround(float(screen_y - v.cam_oy) / v.zoom));
-    return true;
+    return screen_x >= 0 && screen_y >= 0 && screen_x < v.vw && screen_y < v.vh;
 }
 
 bool TMapRenderer::MapScreenToScreen(int32_t map_x, int32_t map_y,

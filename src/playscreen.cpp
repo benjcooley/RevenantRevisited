@@ -1807,7 +1807,7 @@ void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
 
 void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
 {
-    if (ModalHas(MODAL_MOUSE) || InBuySellDrawer(x, y))
+    if (ModalHas(MODAL_MOUSE))
     {
         TScreen::MouseMove(button, x, y);
         return;
@@ -1815,35 +1815,31 @@ void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
     if (GameFlow.Session().Loading())
         return;
 
-    if (g_playHudInitialized)
+    if (g_playHudInitialized && !InBuySellDrawer(x, y))
     {
-        const SHudState& s = GetHudState();
-        if (HandleMouseMoveUISidebarModeConsumed(button, x, y))
-            return;
-        if (UIDragState::IsActive() &&
-            UIDragState::Get().source == EDragSource::SpellPane)
-        {
+        // A HUD item drag follows the pointer; otherwise the spell book,
+        // the paper doll and the screen's panes (the bottom bar, the side
+        // panes) see the move.
+        if (UIDragState::IsActive() && UIDragState::Get().source == EDragSource::SpellPane)
             UIDragState::UpdateDrag(x, y);
-            return;
-        }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseMoveUISpellbookMode(button, x, y);
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
-            HandleMouseMoveUIEquipMode(button, x, y);
-        // Over the side tabs the map has the move too: retail offers every
-        // pane every move (TScreen::MouseMove 0x00490530) and the map's has
-        // no side-tab test (0x004504d0).
-        if (IsOffMapPane(x, y) || UIDragState::IsActive())
+        else if (!HandleMouseMoveUISidebarModeConsumed(button, x, y))
         {
-            TScreen::MouseMove(button, x, y);   // the screen's panes, as clicks: the bottom bar, the side panes
-            return;
+            const SHudState& s = GetHudState();
+            if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
+                HandleMouseMoveUISpellbookMode(button, x, y);
+            if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+                HandleMouseMoveUIEquipMode(button, x, y);
+            TScreen::MouseMove(button, x, y);
         }
     }
+    else
+        TScreen::MouseMove(button, x, y);
 
-    TScreen::MouseMove(button, x, y);
-    // Game mode -> MapPane.MouseMove (drives wedge cursor while walking,
-    // bow aim, etc.). Editor mode default no-op until we wire its
-    // hover/drag overlays.
+    // REVSYNC: TScreen::MouseMove 0x00490530 -- every pane gets every move,
+    // with no rect test (0x004905b9..0x0049063d), so the map's comes wherever
+    // the pointer is: a right-button walk steers, and a drawn bow aims, over
+    // the HUD as over the play field (TMapPane::MouseMove 0x004504d0). Game
+    // mode -> MapPane.MouseMove; editor mode has no move handling yet.
     CurrentMode()->HandleMouseMove(button, x, y);
 }
 
