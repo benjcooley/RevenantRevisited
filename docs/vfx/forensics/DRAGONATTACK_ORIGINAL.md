@@ -89,3 +89,29 @@ coverage before visual credit.
 `dragonattack-cache-first/manifest.json` SHA256: `75d6b86bdcb4b7bf53875bee1ba2842bcac59418119205aa0754119084ea2ce6`.
 
 `dragonattack-native-repeat/repeat.json` SHA256: `3414adc3644d71dc7acb05b51ec4edd4b570bce79357d1f4d1370163e9080886`.
+
+The separate production route is now `Dragonattack_ORIGINAL`, using exact
+ID0xba09fead plus the strict Hfire resource fingerprint. Its controlled owner
+keeps the genuine caller's base-before-custom Pulse order, muzzle(14,14),
+100Z launch, target(sourceX+280,sourceY,ground0), three states and real OF_KILL.
+It exports IsAlive. The original trap route and all other profile admissions
+remain unchanged. The isolated test camera uses the explicitly supplied source
+XY, retaining world coordinates rather than shifting simulation inputs.
+
+The first actual Metal run matches946 witness fields over86 active renders:
+owner state/frame/position, live particle count/capacity, all809 random draws
+and prototype-cache XYZ. Its1280×960 images are still partial diagnostics.
+The existing exact Hfire profile/key regression passes (170 rejected mutations,
+450 default-key controls). The full private build passes.
+
+A whole-view control rejects simply repeating Render: original Hfire samples
+CRT random values during Render (11 calls at record37), so a second Render
+cannot be compared without restoring the pre-Render random and caller state.
+Additional coverage therefore uses a full VM/host checkpoint before Render,
+then reproduces canonical Render before continuing simulation. A viewport-
+dependent cache difference has not been established by that failed control.
+Whole appearance remains open.
+
+`dragonattack-metal-first/manifest.json` SHA256: `b10150e156fd40af69ac9a2a44a917e4d5a67ba5fb7d9df4ae9de0efdaafd66c`.
+
+`dragonattack-metal-first/state-witness.json` SHA256: `ad9da483eb0a963ecc896a9eeb40b8b7fc7c031024dcba018221d2528c53c34b`.

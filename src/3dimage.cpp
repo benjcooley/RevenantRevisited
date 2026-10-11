@@ -3494,7 +3494,8 @@ struct T3DAnimator::SPartSysControllers
                            TObjectInstance& owner)
     {
         const bool funnel_pose=(owner.ObjId()==0xad92bc17u && animator.Get3DImagery()->HasRetailFunnelProfile());
-        const bool head_pose=(owner.ObjId()==0xd000f005u && animator.Get3DImagery()->HasRetailHeadFireBallProfile());
+        const bool dragon_pose=(owner.ObjId()==0xba09feadu && animator.Get3DImagery()->HasRetailHeadFireBallProfile());
+        const bool head_pose=((owner.ObjId()==0xd000f005u || dragon_pose) && animator.Get3DImagery()->HasRetailHeadFireBallProfile());
         const bool jhaga_pose=(owner.ObjId()==0xaeaeeb32u && animator.Get3DImagery()->HasRetailJhagaAttackProfile());
         const bool lightstrip_pose=(owner.ObjId()==0x10da54d0u && animator.Get3DImagery()->HasRetailLightStripProfile());
         const bool comet_pose=(owner.ObjId()==0xf32bcfacu && animator.Get3DImagery()->HasRetailCometProfile());
@@ -3529,13 +3530,17 @@ struct T3DAnimator::SPartSysControllers
             inputs.has_object_zero_origin=true;
             inputs.object_zero_origin={origin.X,origin.Y,origin.Z};
         }
-        if(head_pose){
+        if(head_pose && !dragon_pose){
             // Original4033db/40efc0 reads the cached prototype matrix. Outgoing
             // flight Render leaves its origin zero; eager authored-key resampling here
             // would add a false37.824-unit relative-velocity kick at state2.
             const auto origin=animator.HeadFireBallObjectZeroOrigin();
             inputs.has_object_zero_origin=true;
             inputs.object_zero_origin={origin.X,origin.Y,origin.Z};
+        }
+        if(dragon_pose){
+            inputs.has_object_zero_origin=true;
+            inputs.object_zero_origin=animator.DragonAttackPrototype().value;
         }
         for (size_t i = 0; i < controller.track.emitters.size(); ++i)
         {
@@ -3611,7 +3616,7 @@ void T3DAnimator::RefreshPartSysControllers()
     const bool poison=id==0xe0a3bc42u && imagery->HasRetailPoisonProfile() && current_state==0;
     const bool dust=id==0x0c052637u && imagery->HasRetailDustProfile() && current_state==0;
     const bool funnel=id==0xad92bc17u && imagery->HasRetailFunnelProfile() && current_state>=0 && current_state<3;
-    const bool head=id==0xd000f005u && imagery->HasRetailHeadFireBallProfile() && current_state>=0 && current_state<3;
+    const bool head=(id==0xd000f005u || id==0xba09feadu) && imagery->HasRetailHeadFireBallProfile() && current_state>=0 && current_state<3;
     const bool jhaga=id==0xaeaeeb32u && imagery->HasRetailJhagaAttackProfile() && current_state>=0 && current_state<3;
     const bool lightstrip=id==0x10da54d0u && imagery->HasRetailLightStripProfile() && current_state>=0 && current_state<3;
     const bool static_particles=imagery->HasRetailStaticParticleProfile(id) && current_state==0;
@@ -3780,6 +3785,17 @@ void T3DAnimator::SetHeadFireBallGround(std::function<int(int,int,int)> query)
     if(!inst || inst->ObjId()!=0xd000f005u || !Get3DImagery()->HasRetailHeadFireBallProfile())return;
     lightstrip_ground=std::move(query);
     if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
+}
+void T3DAnimator::SetDragonAttackGround(std::function<int(int,int,int)> query)
+{
+    if(!inst || inst->ObjId()!=0xba09feadu || !Get3DImagery()->HasRetailHeadFireBallProfile())return;
+    lightstrip_ground=std::move(query);
+    if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
+}
+void T3DAnimator::SetDragonAttackPrototypePose(const hmm_vec3& position,const hmm_vec3& scale)
+{
+    if(inst && inst->ObjId()==0xba09feadu && Get3DImagery()->HasRetailHeadFireBallProfile())
+        dragonattack_object_zero.Authored({position.X,position.Y,position.Z},{scale.X,scale.Y,scale.Z});
 }
 void T3DAnimator::SetFunnelGround(std::function<int(int,int,int)> query)
 {
@@ -4191,7 +4207,8 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
     const bool poison=inst->ObjId()==0xe0a3bc42u && inst->GetState()==0 && Get3DImagery()->HasRetailPoisonProfile();
     const bool dust=inst->ObjId()==0x0c052637u && inst->GetState()==0 && Get3DImagery()->HasRetailDustProfile();
     const bool funnel=inst->ObjId()==0xad92bc17u && Get3DImagery()->HasRetailFunnelProfile();
-    const bool head=inst->ObjId()==0xd000f005u && Get3DImagery()->HasRetailHeadFireBallProfile();
+    const bool dragon=inst->ObjId()==0xba09feadu && Get3DImagery()->HasRetailHeadFireBallProfile();
+    const bool head=(inst->ObjId()==0xd000f005u || dragon) && Get3DImagery()->HasRetailHeadFireBallProfile();
     const bool jhaga=inst->ObjId()==0xaeaeeb32u && Get3DImagery()->HasRetailJhagaAttackProfile();
     const bool lightstrip=inst->ObjId()==0x10da54d0u && Get3DImagery()->HasRetailLightStripProfile();
     int32_t submitted = 0;
@@ -4217,6 +4234,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             const auto sample = controller.simulation.SampleRender(slot, rng);
             if(jhaga && object==0)NoteJhagaAttackPrototypeSample();
             if(head && object==0)NoteHeadFireBallPrototypeSample();
+            if(dragon && object==0)dragonattack_object_zero.Sample(sample.scale,sample.position);
             // Native Speed RenderObject40a9e7..9f3 skips geometry when its
             // CalcObjectMatrix scale gate40a591..5c1 returns0. Sampling still
             // happens first, preserving its three render-time RNG calls.

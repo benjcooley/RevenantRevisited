@@ -11,6 +11,7 @@
 // *************************************************************************
 
 #pragma once
+#include "dragonattackcache.h"
 
 #include <cstdint>
 #include <memory>
@@ -541,6 +542,7 @@ class T3DAnimator : public TObjectAnimator
     retail_warp::State retail_warp_state;
     struct SPartSysControllers;
     std::unique_ptr<SPartSysControllers> partsys_controllers;
+    retail_dragonattack::PrototypeOrigin dragonattack_object_zero;
     bool headfireball_object_zero_sampled=false;
     hmm_vec3 headfireball_object_zero_origin{}; // original outgoing-flight initialization input
     bool jhagaattack_object_zero_sampled=false;
@@ -615,6 +617,9 @@ class T3DAnimator : public TObjectAnimator
     void SetHeadFireBallObjectZeroOrigin(const hmm_vec3& origin);
     void NoteHeadFireBallPrototypeSample();
     void SetHeadFireBallGround(std::function<int(int,int,int)> query);
+    void SetDragonAttackGround(std::function<int(int,int,int)> query);
+    void SetDragonAttackPrototypePose(const hmm_vec3& position,const hmm_vec3& scale);
+    const retail_dragonattack::PrototypeOrigin& DragonAttackPrototype() const { return dragonattack_object_zero; }
     void SetLightStripGround(std::function<int(int,int,int)> query);
     void SetFunnelGround(std::function<int(int,int,int)> query);
     void SetCometGround(std::function<int(int,int,int)> query);

@@ -18,6 +18,7 @@
 #include "effects/ytelekinesisoriginal.h"
 #include "effects/jhagaattackoriginal.h"
 #include "effects/headfireballoriginal.h"
+#include "effects/dragonattackoriginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
@@ -1684,8 +1685,18 @@ void Render()
     const float zfar  = StartupVfxNativeDomain ? 65535.0f : kCam + zHalf;
     if(g_state.frames_rendered==1)
         log_info("[vfx-source-depth] native=%d near=%.9g far=%.9g",int(StartupVfxNativeDomain),znear,zfar);
+    // The genuine Dragon caller retains nonzero world coordinates because
+    // its prototype-origin initialization is world-position dependent. Use
+    // the declared source XY as this isolated fixture's actual camera XY.
+    const bool dragon_world_camera = StartupVfxOriginSet && g_state.active_idx >= 0 &&
+        g_state.active_idx < int32_t(g_state.catalogue.size()) &&
+        g_state.catalogue[g_state.active_idx].id == "Dragonattack_ORIGINAL";
+    const float world_camera_x = dragon_world_camera ? float(StartupVfxOrigin[0]) : 0.0f;
+    const float world_camera_y = dragon_world_camera ? float(StartupVfxOrigin[1]) : 0.0f;
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy),
-                                      znear, zfar, 0.0f, 0.0f, kCam, 0.0f);
+                                      znear, zfar, world_camera_x, world_camera_y, kCam, 0.0f);
+    if(g_state.frames_rendered==1 && dragon_world_camera)
+        log_info("[dragonattack-camera] world=%.9g,%.9g,0",world_camera_x,world_camera_y);
     Renderer->ClearPointLights();
 
     // Step 1: tick the character rig (24 Hz sim-tick gated animation)
@@ -5348,6 +5359,16 @@ struct SVfxTestBootstrap {
             original.submit_world=[](void* c,EFxDebugMode d){headfireball_original::SubmitWorld(static_cast<headfireball_original::State*>(c),d);};
             original.is_alive=[](void* c){return headfireball_original::IsAlive(static_cast<headfireball_original::State*>(c));};
             original.destroy=[](void* c){headfireball_original::Destroy(static_cast<headfireball_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="Dragonattack_ORIGINAL";
+            original.family="projectile";original.pipeline="IM+QUAD";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return dragonattack_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){dragonattack_original::Advance(static_cast<dragonattack_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode d){dragonattack_original::SubmitWorld(static_cast<dragonattack_original::State*>(c),d);};
+            original.is_alive=[](void* c){return dragonattack_original::IsAlive(static_cast<dragonattack_original::State*>(c));};
+            original.destroy=[](void* c){dragonattack_original::Destroy(static_cast<dragonattack_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
         {
