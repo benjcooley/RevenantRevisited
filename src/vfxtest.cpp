@@ -65,6 +65,7 @@
 #include "effects/vortexpreview.h"
 #include "effects/jtelepreview.h"
 #include "effects/irisflarepreview.h"
+#include "effects/essencedrainpreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
@@ -6086,6 +6087,11 @@ struct SVfxTestBootstrap {
         {
             VfxTest::SEffect e={};e.id="IrisFlare_AUTHORED";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
             e.factory=[](const S3DPoint&o)->void*{return irisflare_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){irisflare_preview::Advance(static_cast<irisflare_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){irisflare_preview::SubmitWorld(static_cast<irisflare_preview::State*>(c));};e.is_alive=[](void*c){return irisflare_preview::Alive(static_cast<irisflare_preview::State*>(c));};e.destroy=[](void*c){irisflare_preview::Destroy(static_cast<irisflare_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+
+        {
+            VfxTest::SEffect e={};e.id="EssenceDrain_AUTHORED";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return essencedrain_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){essencedrain_preview::Advance(static_cast<essencedrain_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){essencedrain_preview::SubmitWorld(static_cast<essencedrain_preview::State*>(c));};e.is_alive=[](void*c){return essencedrain_preview::Alive(static_cast<essencedrain_preview::State*>(c));};e.destroy=[](void*c){essencedrain_preview::Destroy(static_cast<essencedrain_preview::State*>(c));};VfxTest::DeferredRegister(e);
         }
 
         // Shipped literal Vortex resolves the default animator and three legacy roots.
