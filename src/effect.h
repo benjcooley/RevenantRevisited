@@ -4462,12 +4462,15 @@ class THealEffect_Bespoke : public TEffect
   public:
     THealEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
     THealEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
-    ~THealEffect_Bespoke() override = default;
+    ~THealEffect_Bespoke() override;
 
     void OffScreen() override { KillThisEffect(); }
 
     [[nodiscard]] static THealEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
+    void SetNativeDomainForTest(bool enabled);
 
     [[nodiscard]] bool IsAlive() const { return alive_; }
 
@@ -4476,7 +4479,7 @@ class THealEffect_Bespoke : public TEffect
     static constexpr float   kHealScaleStep  = 0.15f;
     static constexpr int32_t kHealingRadius  = 20;
     static constexpr int32_t kHealDuration   = 40;
-    static constexpr int32_t kHealSimTickMs  = 1000 / 24;
+    static constexpr double kHealSimTickMs  = 1000.0 / 24.0;
 
     hmm_vec3 p_[kHealBubbles]        {};
     float    scale_[kHealBubbles]    {};
@@ -4488,10 +4491,14 @@ class THealEffect_Bespoke : public TEffect
     int32_t  glow_num_     = 1;     // glow sub-object index (1/3/5/7)
     double   sim_accum_ms_ = 0.0;
     bool     alive_        = true;
+    std::vector<SMeshVertex> vertices_[2];
+    std::vector<uint16_t> indices_[2];
+    S3DMat materials_[2]{};
+    mutable MeshHandle meshes_[2]{};
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_{};
     TTextureHandle bubble_tex_  = kInvalidTexture;
     TTextureHandle glow_tex_    = kInvalidTexture;
-    float          bubble_uv_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
-    float          glow_uv_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
 };
 
 _CLASSDEF(TMistEffect_Bespoke)

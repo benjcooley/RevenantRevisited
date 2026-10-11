@@ -8599,25 +8599,26 @@ void TAuraEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 
 THealEffect_Bespoke* THealEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    static const char* kHealCandidates[] = {
-        "Magic\\heal.i3d",
-        "Magic\\Heal.I3D",
-        "Magic\\heal1.i3d",
-    };
-
-    auto* heal = new THealEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    auto* img = LoadWaterImagery("Magic/Heal.I3D", "heal");
+    if (!img || img->NumObjects() != 8 || img->NumTextures() != 8) return nullptr;
+    auto* heal = new THealEffect_Bespoke(img);
     heal->ForcePos(origin);
     heal->SetMapIndex(MapPane.MakeIndex());
     heal->ActivateComponents();
-
-    heal->bubble_tex_ = TryLoadMagicTexture(kHealCandidates,
-                                            int32_t(sizeof(kHealCandidates) / sizeof(*kHealCandidates)),
-                                            heal->bubble_uv_, "heal-bubble");
-    heal->glow_tex_   = heal->bubble_tex_;
-    heal->glow_uv_[0] = heal->bubble_uv_[0];
-    heal->glow_uv_[1] = heal->bubble_uv_[1];
-    heal->glow_uv_[2] = heal->bubble_uv_[2];
-    heal->glow_uv_[3] = heal->bubble_uv_[3];
+    for (int j = 0; j < 2; ++j) {
+        S3DObj object = {}; S3DTex texture = {};
+        img->GetObject(j, &object);
+        if (object.material != j) { delete heal; return nullptr; }
+        img->GetMaterial(j, &heal->materials_[j]);
+        img->GetTexture(j, &texture);
+        if (texture.htexture == kInvalidTexture || texture.numframes != 1 ||
+            !ExtractSubMeshTextureSlot(img, j, j + 1, heal->vertices_[j], heal->indices_[j]) ||
+            heal->vertices_[j].size() != size_t(j ? 174 : 12) ||
+            heal->indices_[j].size() != size_t(j ? 576 : 36)) {
+            delete heal; return nullptr;
+        }
+        (j ? heal->glow_tex_ : heal->bubble_tex_) = texture.htexture;
+    }
 
     // Snapshot effect_old.cpp:628-685 — Initialize. heal_num/glow_num
     // depend on spell level; default branch is heal_num=0, glow_num=1.
@@ -8635,7 +8636,7 @@ THealEffect_Bespoke* THealEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& o
         heal->p_[n].X = float(random(-kHealingRadius, kHealingRadius));
         heal->p_[n].Y = float(random(-kHealingRadius, kHealingRadius));
         heal->p_[n].Z = 2.0f;
-        heal->rise_[n] = float(random(3, 6) * 4.0f / 3.0f);
+        heal->rise_[n] = float(random(3, 6)) * 1.3333333730697632f;
         // snapshot assigns scale[n] = 0 then immediately scale[n] = 4.5 —
         // preserve the second assignment (the live value); the leading 0
         // assignment is dead per snapshot effect_old.cpp:682-683.
@@ -8652,16 +8653,15 @@ THealEffect_Bespoke* THealEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& o
     return heal;
 }
 
-void THealEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+void THealEffect_Bespoke::Advance(double seconds)
 {
-    if (!Renderer)
-        return;
+    if (!std::isfinite(seconds) || seconds <= 0.0) return;
 
     // --- Animate port (effect_old.cpp:695-760), 24Hz sim-tick gated.
     if (alive_)
     {
-        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-        while (sim_accum_ms_ >= double(kHealSimTickMs))
+        sim_accum_ms_ += seconds * 1000.0;
+        while (sim_accum_ms_ + 1e-9 >= kHealSimTickMs)
         {
             sim_accum_ms_ -= double(kHealSimTickMs);
 
@@ -8710,7 +8710,7 @@ void THealEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
                                 p_[n].X = float(random(-kHealingRadius, kHealingRadius));
                                 p_[n].Y = float(random(-kHealingRadius, kHealingRadius));
                                 p_[n].Z = 2.0f;
-                                rise_[n] = float(random(3, 6) * 4.0f / 3.0f);
+                                rise_[n] = float(random(3, 6)) * 1.3333333730697632f;
                                 scale_[n] = 4.5f;
                                 framenum_[n] = -1;
                             }
@@ -8721,79 +8721,82 @@ void THealEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
         }
     }
 
-    // --- Render port (effect_old.cpp:770-832). SetBlendState -> Alpha.
-    if (bubble_tex_ == kInvalidTexture)
-        return;
+}
 
-    const S3DPoint& base = Pos();
+THealEffect_Bespoke::~THealEffect_Bespoke()
+{
+    if (Renderer) for (auto mesh : meshes_) if (mesh) Renderer->ReleaseMeshAssetRef(mesh);
+}
 
-    // Snapshot :777-811 — per-visible-bubble billboard draws.
-    for (int32_t n = 1; n < kHealBubbles; ++n)
-    {
-        if (framenum_[n] <= 0 || scale_[n] <= 0.0f)
-            continue;
+void THealEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled;
+    const auto p = Pos();
+    if (enabled) BuildRetailSoftwareOwner(native_owner_, p.x, p.y, p.z, uint8_t(GetFace()));
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Heal level=1", int(enabled));
+}
 
-        // Bubble billboard.
-        SBillboardDrawItem item = {};
-        const float size = 8.0f * scale_[n];
-        item.size_wu[0] = size;
-        item.size_wu[1] = size;
-        // Soft green-blue heal tint (placeholder until forensics).
-        item.color_rgba[0] = 0.5f;
-        item.color_rgba[1] = 1.0f;
-        item.color_rgba[2] = 0.7f;
-        item.color_rgba[3] = 1.0f;
-        item.uv_rect[0] = bubble_uv_[0];
-        item.uv_rect[1] = bubble_uv_[1];
-        item.uv_rect[2] = bubble_uv_[2];
-        item.uv_rect[3] = bubble_uv_[3];
-        item.key.texture     = bubble_tex_;
-        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-        item.key.blend       = uint8_t(EFxBlend::Alpha);
-        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        item.light_mode      = EFxLightMode::Unlit;
-        item.orientation     = EFxBillboardOrientation::ScreenAligned;
-        item.debug_mode      = debug_mode;
-        item.world_pos[0] = float(base.x) + p_[n].X;
-        item.world_pos[1] = float(base.y) + p_[n].Y;
-        item.world_pos[2] = float(base.z) + p_[n].Z;
-        Renderer->SubmitFxBillboard(item);
+void THealEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !alive_ || debug_mode != EFxDebugMode::Normal) return;
+    auto* img = dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img) return;
+    for (int j = 0; j < 2; ++j) {
+        if (meshes_[j]) continue;
+        const uint64_t key = 0x4845414c00000000ull ^ (uint64_t(uint32_t(img->ImageryId())) << 16) ^ uint64_t(j);
+        meshes_[j] = Renderer->RegisterMeshAsset(key, vertices_[j].data(), int32_t(vertices_[j].size()),
+            indices_[j].data(), int32_t(indices_[j].size()), j ? glow_tex_ : bubble_tex_);
+        if (meshes_[j]) Renderer->AddMeshAssetRef(meshes_[j]);
     }
-
-    // Snapshot :813-826 — cylindrical glow at the player's feet, drawn
-    // TWICE (forward + reverse rotation), preserving the two-pass shape.
-    if (glow_tex_ != kInvalidTexture && scale_[0] > 0.0f)
-    {
-        SBillboardDrawItem glow = {};
-        const float size = 24.0f * scale_[0] * 0.75f;   // snapshot scl * 3/4
-        glow.size_wu[0] = size;
-        glow.size_wu[1] = size;
-        glow.color_rgba[0] = 0.6f;
-        glow.color_rgba[1] = 1.0f;
-        glow.color_rgba[2] = 0.7f;
-        glow.color_rgba[3] = 1.0f;
-        glow.uv_rect[0] = glow_uv_[0];
-        glow.uv_rect[1] = glow_uv_[1];
-        glow.uv_rect[2] = glow_uv_[2];
-        glow.uv_rect[3] = glow_uv_[3];
-        glow.key.texture     = glow_tex_;
-        glow.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-        glow.key.blend       = uint8_t(EFxBlend::Alpha);
-        glow.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        glow.light_mode      = EFxLightMode::Unlit;
-        glow.orientation     = EFxBillboardOrientation::WorldXY;   // ground-plane cylinder
-        glow.debug_mode      = debug_mode;
-        glow.world_pos[0] = float(base.x) + p_[0].X;
-        glow.world_pos[1] = float(base.y) + p_[0].Y;
-        glow.world_pos[2] = float(base.z) + p_[0].Z;
-        // Pass 1: forward rotation (snapshot obj->rot.z = rotation).
-        Renderer->SubmitFxBillboard(glow);
-        // Pass 2: reverse rotation (snapshot obj->rot.z = -rotation +
-        // RenderObject(obj) again). Preserves the two-pass shape; in our
-        // billboard path this duplicates the draw so the overlapping
-        // additive contributions stack as in the snapshot.
-        Renderer->SubmitFxBillboard(glow);
+    if (!meshes_[0] || !meshes_[1]) return;
+    const auto& owner = native_domain_ ? native_owner_ : Transform().Matrix();
+    auto submit = [&](int part, const hmm_mat4& local) {
+        hmm_mat4 world{}; MtxMultiply(&world, &local, &owner);
+        SHelperMeshSubmit draw{};
+        draw.mesh = meshes_[part]; draw.retail_lighting = 3;
+        draw.retail_positive_face_cull = true;
+        draw.retail_software_projection = native_domain_;
+        for (int row=0; row<4; ++row) for (int col=0; col<4; ++col)
+            draw.world[row*4+col] = world.Elements[col][row];
+        const auto& m = materials_[part].matdesc;
+        std::memcpy(draw.diffuse, &m.diffuse, 4*sizeof(float));
+        std::memcpy(draw.ambient, &m.ambient, 4*sizeof(float));
+        std::memcpy(draw.specular, &m.specular, 4*sizeof(float));
+        std::memcpy(draw.emissive, &m.emissive, 4*sizeof(float));
+        draw.power=m.power;
+        // Keep the original ordered alpha composite, including both glow passes.
+        draw.sort_depth=0.0f;
+        Renderer->SubmitHelperMesh(draw);
+    };
+    // Original4dfa9c starts at zero: slot0 is also a visible central heal mesh.
+    for (int n=0; n<kHealBubbles; ++n) {
+        if (framenum_[n]<=0 || scale_[n]<=0.0f) continue;
+        hmm_mat4 local{}; MtxClear(&local);
+        if (n) {
+            MtxRotateX(&local, -1.5707963705062866f);
+            MtxRotateY(&local, 0.0f);
+            MtxRotateZ(&local, -0.7853981852531433f);
+            const int degrees = (-int(uint8_t(GetFace())) * 360) / 256;
+            MtxRotateZ(&local, float(double(degrees) * 0.017453292519943295));
+        }
+        const hmm_vec3 scale={scale_[n],scale_[n],scale_[n]};
+        MtxScale(&local,&scale); MtxTranslate(&local,&p_[n]); submit(0,local);
     }
+    // Original CalcObjectMatrix rejects the exhausted zero-scale glow.
+    if (scale_[0] <= 0.0f) return;
+    // Source0x9c flags: authored TRS composition is decoded by the shared
+    // original-compatible CalcObjectMatrix; two distinct signed rotations.
+    for (int pass=0; pass<2; ++pass) {
+        S3DAnimObj object{}; object.objnum=glow_num_; object.flags=0x9c;
+        object.pos=p_[0]; object.rot={0,0,pass ? -rotation_ : rotation_};
+        const float scale=scale_[0]*0.75f; object.scl={scale,scale,scale};
+        if (img->CalcObjectMatrix(&object,0,0,const_cast<hmm_mat4*>(&owner),false)) submit(1,object.matrix);
+    }
+}
+
+void THealEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime()); Submit(debug_mode);
 }
 
 // =========================================================================

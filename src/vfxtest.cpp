@@ -2256,14 +2256,16 @@ void AuraBespokeSubmit(void* cp, EFxDebugMode dbg)
         c->aura->TickAndSubmitForTest_BESPOKE(dbg);
 }
 
-struct SHealBespokeCtx { THealEffect_Bespoke* heal = nullptr; S3DPoint origin{0,0,0}; float gap = 0.0f; };
+struct SHealBespokeCtx { THealEffect_Bespoke* heal = nullptr; S3DPoint origin{0,0,0}; float gap = 0.0f; bool auto_retrigger = true; };
 constexpr float kHealBespokeRetriggerGap = 1.5f;
 
-void* HealBespokeSpawn(const S3DPoint& origin)
+void* HealBespokeSpawn(const S3DPoint& origin, bool auto_retrigger = true)
 {
     auto* c = new SHealBespokeCtx();
     c->origin = origin;
+    c->auto_retrigger = auto_retrigger;
     c->heal   = THealEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (c->heal) c->heal->SetNativeDomainForTest(StartupVfxNativeDomain);
     if (!c->heal)
         log_warn("[vfx] THealEffect_Bespoke::SpawnForTest_BESPOKE returned null; M03 entry will draw nothing");
     return c;
@@ -2275,16 +2277,24 @@ void HealBespokeSubmit(void* cp, EFxDebugMode dbg)
     if (!c) return;
     if (!c->heal || !c->heal->IsAlive())
     {
+        if (!c->auto_retrigger) return;
         c->gap -= float(TTime::DeltaTime());
         if (c->gap <= 0.0f)
         {
             delete c->heal;
             c->heal = THealEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            if (c->heal) c->heal->SetNativeDomainForTest(StartupVfxNativeDomain);
             c->gap  = kHealBespokeRetriggerGap;
         }
     }
     if (c->heal)
-        c->heal->TickAndSubmitForTest_BESPOKE(dbg);
+        c->heal->Advance(TTime::DeltaTime());
+}
+
+void HealBespokeSubmitWorld(void* cp, EFxDebugMode debug_mode)
+{
+    auto* c = static_cast<SHealBespokeCtx*>(cp);
+    if (c && c->heal) c->heal->Submit(debug_mode);
 }
 
 struct SMistBespokeCtx
@@ -5111,13 +5121,19 @@ struct SVfxTestBootstrap {
         VfxTest::SEffect heal_bespoke = {};
         heal_bespoke.id            = "THealEffect_BESPOKE";
         heal_bespoke.family        = "magic";
-        heal_bespoke.pipeline      = "FB";
+        heal_bespoke.pipeline      = "IM";
         heal_bespoke.preview_style = VfxTest::EVfxPreviewStyle::CharacterIdle;
         heal_bespoke.anchor.kind   = VfxTest::SVfxAnchor::EKind::CharacterRoot;
         heal_bespoke.factory       = [](const S3DPoint& o) -> void* { return HealBespokeSpawn(o); };
         heal_bespoke.submit        = [](void* c, EFxDebugMode d) { HealBespokeSubmit(c, d); };
+        heal_bespoke.submit_world  = [](void* c, EFxDebugMode d) { HealBespokeSubmitWorld(c, d); };
         heal_bespoke.destroy       = [](void* c) { HealBespokeDestroy(c); };
         VfxTest::DeferredRegister(heal_bespoke);
+        auto heal_single = heal_bespoke;
+        heal_single.id = "THealEffect_BESPOKE_SINGLE_BURST";
+        heal_single.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        heal_single.factory = [](const S3DPoint& o) -> void* { return HealBespokeSpawn(o, false); };
+        VfxTest::DeferredRegister(heal_single);
 
         VfxTest::SEffect mist_bespoke = {};
         mist_bespoke.id            = "TMistEffect_BESPOKE";
