@@ -66,3 +66,10 @@ not independent approval. Exact gallery mapping selects
 `Quicksand_ORIGINAL_TARGET`; its Static route reports real owner OF_KILL and
 preserves the existing bespoke preview separately. Port actor damage/reactions,
 natural actor/map scheduling and arbitrary targets remain open.
+
+The private integrated gallery build also passes. Actual label-free40-frame
+capture selects exact `Quicksand_ORIGINAL_TARGET`,40visible/7distinct images,
+three creations with two observed phase55 completions and clean exit. This
+exercises real owner liveness/recreation; it is not a substitute for the fixed
+native comparison. Evidence:
+`hard-alpha/quicksand-gallery/0xbabeface-Quicksand/manifest.json`.
