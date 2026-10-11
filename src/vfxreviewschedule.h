@@ -1,9 +1,11 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <vector>
 
 // Stateless geometry in logical screen pixels. Stations run upper-right and
 // the camera follows them, so stationary effects travel lower-left on screen.
@@ -18,8 +20,17 @@ struct VfxReviewSchedule
     double ratio = 2.5;     // positive screen X / negative screen Y
     double gap = 720.0;     // path distance before first and after last station
 
+    std::vector<double> station_distances; // optional cumulative distances; first is zero
+
     bool IsValid() const
     {
+        if (!station_distances.empty()) {
+            if (station_distances.size() != count || station_distances.front() != 0.0)
+                return false;
+            for (std::size_t i = 0; i < station_distances.size(); ++i)
+                if (!std::isfinite(station_distances[i]) ||
+                    (i && station_distances[i] <= station_distances[i-1])) return false;
+        }
         return count > 0 && std::isfinite(spacing) && spacing > 0.0 &&
             std::isfinite(speed) && speed > 0.0 && std::isfinite(ratio) && ratio > 0.0 &&
             std::isfinite(gap) && gap >= 0.0 && std::isfinite(PathLength()) &&
@@ -36,7 +47,8 @@ struct VfxReviewSchedule
 
     double PathLength() const
     {
-        return count ? 2.0 * gap + double(count - 1) * spacing : 0.0;
+        return count ? 2.0 * gap + (station_distances.empty()
+            ? double(count - 1) * spacing : station_distances.back()) : 0.0;
     }
 
     double Duration() const { return IsValid() ? PathLength() / speed : 0.0; }
@@ -59,10 +71,34 @@ struct VfxReviewSchedule
         return loops >= double(maximum) ? maximum : std::uint64_t(loops);
     }
 
+    double SlotDistance(std::size_t index) const
+    {
+        return index < station_distances.size() ? station_distances[index] : double(index) * spacing;
+    }
+
+    // The closest station to the camera, clamped through both padding gaps.
+    // Exact midpoint ties select the upcoming station, matching uniform round.
+    std::size_t NearestSlot(double elapsed) const
+    {
+        if (!IsValid()) return 0;
+        // Keep seconds until the final multiplication, avoiding an extra
+        // divide/multiply round trip at exactly representable midpoints.
+        const double seconds = std::isfinite(elapsed) && elapsed > 0.0
+            ? std::fmod(elapsed, Duration()) : 0.0;
+        const double distance = -gap + seconds * speed;
+        if (distance <= 0.0) return 0;
+        if (distance >= SlotDistance(count-1)) return count-1;
+        if (station_distances.empty())
+            return std::size_t(std::floor(distance / spacing + 0.5));
+        const auto next = std::lower_bound(station_distances.begin(), station_distances.end(), distance);
+        const std::size_t index = std::size_t(next - station_distances.begin());
+        return distance - station_distances[index-1] < *next - distance ? index-1 : index;
+    }
+
     Vec2 SlotScreenOffset(std::size_t index) const
     {
         if (!IsValid()) return {};
-        return Along(double(index) * spacing);
+        return Along(SlotDistance(index));
     }
 
     Vec2 CameraScreenOffset(double elapsed) const
@@ -76,7 +112,7 @@ struct VfxReviewSchedule
     Endpoints SlotEndpoints(std::size_t index, double length) const
     {
         if (!IsValid() || !std::isfinite(length) || length < 0.0) return {};
-        const double center = double(index) * spacing;
+        const double center = SlotDistance(index);
         return {Along(center - length * 0.5), Along(center + length * 0.5)};
     }
 
