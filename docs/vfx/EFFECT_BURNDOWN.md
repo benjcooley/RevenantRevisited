@@ -2,9 +2,9 @@
 
 ## Current VFX progress (2026-10-10)
 
-**81 / 176 effects have reviewed visual passes for their recorded test configuration; 95 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they are not 71 completed effects. These counts overlap and must not be added.
+**81 / 176 effects have reviewed visual passes for their recorded test configuration; 95 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
-Passed appearance cases: CyanFont, RedFont, GreenFont, BlueFont, base Flame, Ripple emitted by Drip, Globe, Sparks editor defaults, isolated Cure, isolated Pixie, Shadowfist, Warriorborn, teleportation, goldeffect, Might, Immortalmight and blue TeleportDoorInsideB. The additional passes are all12 town signs, the other6 Warp colors, Speaker and both LabGate barriers. Their per-row visual reviews record the configuration and remaining limitations. Fresh Might/Immortalmight footage passes after the parser correction. Blue Warp retains an open seven-pixel apex/projection discrepancy despite its scoped overall appearance pass.
+Examples of passed appearance cases: CyanFont, RedFont, GreenFont, BlueFont, base Flame, Ripple emitted by Drip, Globe, Sparks editor defaults, isolated Cure, isolated Pixie, Shadowfist, Warriorborn, teleportation, goldeffect, Might, Immortalmight and blue TeleportDoorInsideB. The additional passes are all12 town signs, the other6 Warp colors, Speaker and both LabGate barriers. Their per-row visual reviews record the configuration and remaining limitations. Fresh Might/Immortalmight footage passes after the parser correction. Blue Warp retains an open seven-pixel apex/projection discrepancy despite its scoped overall appearance pass.
 
 A useful pass compares actual port output with actual retail output and reviews form, scale, color/blending, animation, motion and lifetime within the recorded configuration. Independent random seeds are acceptable. Moving projectiles and two-endpoint effects must exercise those behaviors. State-only or partial shared-raster proofs are supporting evidence and do not establish a complete visual pass.
 
@@ -23,6 +23,8 @@ Prioritize speed and repeatability, with known renderer limits recorded
 separately from VFX defects. The counts and earlier captures below are retained
 historical evidence; this migration alone grants no additional acceptance.
 
+**Viewer audit (2026-10-10):** a complete catalogue capture sweep finds108 visible entries,64 unavailable and4 empty short samples. Drip becomes visible in a longer run; Fog and both jtele rows expose incomplete preview/controller admissions now corrected. Presence is separate from retail fidelity. [Reproduction and scope](forensics/GALLERY_RUNTIME_AUDIT_20261010.md).
+
 **Latest thin-emulator coverage: 77 / 176 bounded rendered frontends.**
 
 **Seven current closures (2026-10-10):** fspray, MistFog, FlowWater, BendWater1, BendWater2, StillWater and FireBall now have current original/actual-Metal scoped visual passes. FireBall uses its whole native leaf renderer through flight, impact and decay; MistFog fixes normal lighting and live RNG. Natural callers/scenes and exact pixels remain separate.
@@ -31,13 +33,13 @@ historical evidence; this migration alone grants no additional acceptance.
 
 **Six further passes (2026-10-10):** Faultfire, Streamer, YEnergy, YEnergyLose, YAbsorb and nullifier pass actual native/Metal appearance for their declared configurations. Original cached-emitter sampling fixes nullifier's phase. FireSwarm late phases improve, but its early software rejection remains held for a device reference.
 
-**Four authored water effects closed (2026-10-10):** WaterFlft/Frt/Clft/Crt run exact six-emitter source profiles. Root reviewed original-software/actual-Metal six-phase full comparisons for each, and controlled map creation/movement/deletion passes. Small numeric packet residuals stay recorded; exactpixel/natural scene gates remain open. [Evidence](forensics/AUTHORED_WATER_VISUAL_BATCH_20261010.md).
+**Four authored water effects closed (2026-10-10):** WaterFlft/Frt/Clft/Crt run exact six-emitter source profiles. Root reviewed six complete original software and actual Metal phase comparisons for each. Controlled map creation, movement and deletion pass. Small numeric packet residuals stay recorded; exact pixels and natural scenes remain open. [Evidence](forensics/AUTHORED_WATER_VISUAL_BATCH_20261010.md).
 
-**Heal closed (2026-10-10):** restored authored bubble/cylinder meshes, texture order, rise and24Hz lifecycle. Root reviewed corrected original/native-domain Metal phase pairs including decay and empty tail; defaultlevel1/facing0 passes. Common-world projection, naturalcaller andotherlevels remain open. [Evidence](forensics/HEAL_NATIVE_DOMAIN_VISUAL_20261010.md).
+**Heal closed (2026-10-10):** restored authored bubble/cylinder meshes, texture order, rise and 24 Hz lifecycle. Root reviewed corrected original/native-domain Metal phase pairs including decay and empty tail; default level 1 and facing 0 pass. Common-world projection, natural caller and other levels remain open. [Evidence](forensics/HEAL_NATIVE_DOMAIN_VISUAL_20261010.md).
 
 **Photon closed (2026-10-10):** original moving controller, five texture frames, charge/flight/impact/decay and blank tail pass independent native-domain actual-Metal review for two declared caller orderings. The gallery runs the real charged projectile with an explicit target collision fixture. Natural caller/audio/map draw dispatch remains open. [Evidence](forensics/PHOTON_NATIVE_VISUAL.md).
 
-**Current closure (2026-10-10):** Mist, SymGlow and native-domain FireCone pass independent actual-port/retail fixed-sample appearance review. Four Y/nullifier rows add independent emitter/render proofs and real map lifecycles: coverage is75 rendered frontends,88 controlled runtime rows and99 source-fix rows; their whole visual reviews remain open.
+**Earlier source checkpoint (2026-10-10):** Mist, SymGlow and native-domain FireCone pass independent actual-port/retail fixed-sample appearance review. Four Y/nullifier rows add independent emitter/render proofs and real map lifecycles: coverage is75 rendered frontends,88 controlled runtime rows and99 source-fix rows; their whole visual reviews remain open.
 
 **Three buffs closed (2026-10-10):** Speed, Quicksilver and Fmastery pass reviewed isolated native-domain appearance against original software rendering. Each has six fixed native/Metal samples with matching RNG counts and source lighting. Ordinary map projection, natural attachment and exact framebuffer parity remain open. [Review](forensics/NATIVE_SOFTWARE_DOMAIN_20261010.md).
 

@@ -186,10 +186,12 @@ VfxReviewSpawnInfo ConfigureVfxReviewSpawn(TObjectInstance& effect,
     info.uses_effect_runtime = particle_renderer || replacing_component || authored_draw;
     if (particles && !particle_renderer && !replacing_component) {
         info.renderer_supported = false;
-        info.description = "Unsupported authored particle controller; generic geometry may be visible";
+        info.uses_effect_runtime = false;
+        info.description = "Unsupported authored particle controller; label only";
     } else if (unknown_controller && !replacing_component) {
         info.renderer_supported = false;
-        info.description = "Authored controller not implemented; generic geometry may be visible";
+        info.uses_effect_runtime = false;
+        info.description = "Authored controller not implemented; label only";
     } else if (!faces && !particle_renderer && !replacing_component &&
                !dynamic_cast<TFireBallEffect*>(&effect)) {
         info.renderer_supported = false;

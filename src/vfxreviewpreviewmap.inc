@@ -92,7 +92,6 @@
 {0xb1c4c90fu, "TIceBoltEffect_BESPOKE"}, // IceBolt
 {0xbabefaceu, "TQuicksandEffect_BESPOKE"}, // Quicksand
 {0xbecefedau, "TSandswirlEffect_BESPOKE"}, // Sandswirl
-{0xc24b2a85u, "TFogEffect_BESPOKE"}, // Fog
 {0xd0c0f035u, "TGoldEffect_AUTHORED_TAGS"}, // goldeffect
 {0xddc4042eu, "TBloodEffect_BESPOKE"}, // Blood
 {0xddc4042eu, "TBloodEffect"}, // Blood

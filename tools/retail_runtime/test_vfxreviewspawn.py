@@ -57,6 +57,7 @@ int main(){
  owner.id=0x63fd382a;assert(!ConfigureVfxReviewSpawn(owner,source,destination).safe_factory);owner.id=1;
  T3DImagery image;owner.image=&image;d=ConfigureVfxReviewSpawn(owner,source,destination);assert(d.renderer_supported&&!d.uses_effect_runtime);
  image.tags={{0,"partsys"}};assert(!ConfigureVfxReviewSpawn(owner,source,destination).renderer_supported);
+ image.scroll=true;d=ConfigureVfxReviewSpawn(owner,source,destination);assert(!d.renderer_supported&&!d.uses_effect_runtime);image.scroll=false;
  owner.id=0x10ac03de;image.admitted=true;d=ConfigureVfxReviewSpawn(owner,source,destination);assert(d.renderer_supported&&d.uses_effect_runtime);
  image.admitted=false;image.tags={{0,"unknowncont"},{0,"play"},{2,"play"}};owner.id=1;d=ConfigureVfxReviewSpawn(owner,source,destination);assert(!d.renderer_supported&&d.authored_sound_tags==2);
  image.tags={{2,"unknowncont"}};assert(ConfigureVfxReviewSpawn(owner,source,destination).renderer_supported);

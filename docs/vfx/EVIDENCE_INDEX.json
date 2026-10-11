@@ -1358,6 +1358,27 @@
       "check": "authored_water_full_native_actual_metal_visual",
       "status": "pass",
       "scope": "Six original-software versus actual Metal native-domain whole1280x960 phases, birth/growth/steady and left/right blue-green shape. Numeric packet float residual diagnostic retained; natural scene/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-gallery-runtime-20261010/full-catalogue-current.json": {
+      "sha256": "2b897a56d38303b3c95f94be300981e79cccd1806fa00c962ebe7e6ec8fe69e4",
+      "retail_row": "catalogue diagnostic",
+      "check": "actual_gallery_presence",
+      "status": "diagnostic",
+      "scope": "Actual Metal viewer presence only; no animation correctness or retail fidelity credit."
+    },
+    "recon/retail_asm/runtime/effects/current-gallery-runtime-20261010/water-and-delayed-current.json": {
+      "sha256": "174844769b167e9df2b0a81b8a7b48d52c30e625125fc89f06492ae185a95b1f",
+      "retail_row": "catalogue diagnostic",
+      "check": "actual_gallery_presence",
+      "status": "diagnostic",
+      "scope": "Actual Metal viewer presence only; no animation correctness or retail fidelity credit."
+    },
+    "recon/retail_asm/runtime/effects/current-gallery-runtime-20261010/teleport-delayed-current.json": {
+      "sha256": "15c5bc0e61e8e23b13a69703434a2089f31e963133797e5ee7af2582a91d4a19",
+      "retail_row": "catalogue diagnostic",
+      "check": "actual_gallery_presence",
+      "status": "diagnostic",
+      "scope": "Actual Metal viewer presence only; no animation correctness or retail fidelity credit."
     }
   }
 }

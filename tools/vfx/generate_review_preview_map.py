@@ -21,7 +21,7 @@ TRedFountainAnimator_BESPOKE TGreenFountainAnimator_BESPOKE TBlueFountainAnimato
 TRibbonAnimator_BESPOKE TFlameEffect_BESPOKE TFlameEffect
 TFlameEffect_BESPOKE__FlameB TFlameEffect_BESPOKE__FlameG
 TFireBallEffect LightStrip TStripEffect TIceBoltEffect_BESPOKE TPhotonEffect_BESPOKE
-TSymGlowAnimator_BESPOKE TMeteorStormEffect_BESPOKE TFlyEffect_BESPOKE TFogEffect_BESPOKE
+TSymGlowAnimator_BESPOKE TMeteorStormEffect_BESPOKE TFlyEffect_BESPOKE
 TCureEffect_BESPOKE TFireFlashEffect_BESPOKE TFireConeEffect_BESPOKE TBurnEffect_BESPOKE
 TIcedEffect_BESPOKE TStreamerEffect_BESPOKE TFireSwarmEffect_BESPOKE TFaultFireEffect_BESPOKE
 TQuicksandEffect_BESPOKE TSandswirlEffect_BESPOKE TWindStripAnimator_BESPOKE THaloEffect
@@ -48,6 +48,9 @@ TWaterEffect_BESPOKE__StillWater TWaterEffect_BESPOKE__FlowWater TWaterEffect_BE
        'vfxtest.cpp: AuthoredTextureMeshVariantSpawn' for i in (1, 2, 3)},
 }
 
+# Fog is also absent: its current body averages a36-vertex animated grid into
+# one billboard, and the gallery40-frame probe resolves no texture. It is an
+# approximation awaiting conversion, not an implemented original mesh path.
 # Deliberately absent: Blast/FireWind/Fairy and W3D/E/H single-billboard stubs;
 # old buff/Gold/PunchAndJudy/CombatFlash placeholders (authored replacements
 # above remain); Tornado/Vortex/Pulp/Dust/geyser/cfire null factories; Strike
