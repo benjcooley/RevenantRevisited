@@ -55,7 +55,7 @@
 {0x562c743fu, "TRibbonAnimator_BESPOKE__RibbonW", false, "Implemented preview controller; map caller not certified"}, // RibbonW
 {0x562c7440u, "TRibbonAnimator_BESPOKE__RibbonY", false, "Implemented preview controller; map caller not certified"}, // RibbonY
 {0x582c1e78u, "TFireSwarmEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // FireSwarm
-{0x5975abdeu, "TDripEffect", false, "Implemented preview controller; map caller not certified"}, // Drip
+{0x5975abdeu, "TDripEffect_LINKED_NO_SPLASH", false, "Persistent Drip SetParams(20,128,1), managed no-splash Ripple children; natural map residency and audio not certified"}, // Drip
 {0x5be39ae0u, "TMight_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Might
 {0x63fd382au, "TFireBallEffect", false, "Implemented preview controller; map caller not certified"}, // FireBall
 {0x82aeb30fu, "TImmortalmight_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Immortalmight

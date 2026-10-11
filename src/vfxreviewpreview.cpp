@@ -42,6 +42,11 @@ const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nu
             return e.id == mapping.preview_id;
         });
         if (it == catalogue.end() || !it->factory || !it->destroy) continue;
+        // Exact continuous Drip proof requires its real owner liveness and
+        // world submission. Never fall back to an unrelated/default alias.
+        if (id==0x5975abdeu && (it->id!="TDripEffect_LINKED_NO_SPLASH" ||
+            it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
+            !it->is_alive || !it->submit_world)) continue;
         if (NeedsEndpoints(id) && !it->factory_endpoints && !IsDeclaredSelfMoving(id,*it)) continue;
         if (!it->submit) {
             if (it->submit_attached && unavailable)

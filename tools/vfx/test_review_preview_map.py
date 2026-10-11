@@ -23,6 +23,12 @@ TWaterFallEffect_BESPOKE__WaterFlft TWaterFallEffect_BESPOKE__RiverFall
 TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertEqual(admitted_candidates({'preview_candidates': candidates}), [])
 
+    def test_drip_exact_continuous_scope_rejects_aliases(self):
+        row={'retail_type_id':'0x5975abde','preview_candidates':['TDripEffect','TDripEffect_LINKED_DRAIN','TDripEffect.OnHand','TBloodEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row),['TDripEffect_LINKED_NO_SPLASH'])
+        self.assertIn('SetParams(20,128,1)',candidate_metadata(row,'TDripEffect_LINKED_NO_SPLASH')[1])
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['TDripEffect_LINKED_NO_SPLASH']}),[])
+
     def test_ytelekinesis_uses_exact_moving_chunk_controller(self):
         row={"retail_type_id":"0xaeaeeb28","preview_candidates":[]}
         self.assertEqual(admitted_candidates(row),["YTelekinesis_ORIGINAL"])

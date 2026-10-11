@@ -11,7 +11,7 @@
 #include <cstring>
 
 namespace {
-int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0, dragon_negative=0;
+int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0, dragon_negative=0, drip_negative=0;
 void* Spawn(const S3DPoint& p) {
     assert(p.x==17 && p.y==33 && p.z==21); ++creates; return new int(0);
 }
@@ -26,6 +26,12 @@ VfxTest::SEffect Row(const char* id,VfxTest::EVfxPreviewStyle style) {
 namespace VfxTest {
 std::vector<SEffect> ReviewCatalogue() {
     ++catalogue_reads;
+    auto drip=Row("TDripEffect_LINKED_NO_SPLASH",EVfxPreviewStyle::Static);
+    drip.is_alive=[](void*){return true;};
+    if(drip_negative==1)drip.is_alive={};
+    if(drip_negative==2)drip.submit_world={};
+    if(drip_negative==3)drip.preview_style=EVfxPreviewStyle::Combat;
+    if(drip_negative==4)drip.id="TDripEffect_LINKED_DRAIN";
     auto blood=Row("TBloodEffect_BESPOKE",EVfxPreviewStyle::Combat);
     blood.is_alive=[](void*){return true;};
     auto flare=Row("TCureEffect_BESPOKE",EVfxPreviewStyle::CharacterCast);
@@ -56,7 +62,7 @@ std::vector<SEffect> ReviewCatalogue() {
     paralize.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
     paralize.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
     auto manadrain=paralize;manadrain.id="TManaDrain_CONFIGURED_TARGET";
-    return {dragon,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    return {drip,dragon,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -77,6 +83,12 @@ float ReviewRestartInterval(EVfxPreviewStyle style) {
 }
 int main(int argc,char** argv) {
     const S3DPoint origin{17,33,21};
+    if(argc==2 && std::strlen(argv[1])==2 && argv[1][0]=='d'){
+        drip_negative=argv[1][1]-'0';assert(drip_negative>=1 && drip_negative<=4);
+        assert(!DescribeVfxReviewPreview(0x5975abdeu).supported);
+        assert(!CreateVfxReviewPreview(0x5975abdeu,origin));
+        assert(creates==0 && destroys==0);return 0;
+    }
     if(argc>1){
         assert(argc==2 && std::strlen(argv[1])==1 && argv[1][0]>='1' && argv[1][0]<='4');
         dragon_negative=argv[1][0]-'0';
@@ -205,6 +217,18 @@ int main(int argc,char** argv) {
         assert(target && target->Id()=="TManaDrain_CONFIGURED_TARGET" && target->RestartInterval()==0);
         const int initial=creates;target->Submit();target->Submit();assert(target->Alive()==false && creates==initial);
         target->Submit();assert(target->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0x5975abdeu);
+        assert(info.supported && !info.partial && info.lifetime_known && !info.requires_endpoints);
+        assert(std::strstr(info.description,"SetParams(20,128,1)"));
+        auto drip=CreateVfxReviewPreview(0x5975abdeu,origin);
+        assert(drip && drip->Id()=="TDripEffect_LINKED_NO_SPLASH" && drip->RestartInterval()==0);
+        const int initial=creates;
+        for(int i=0;i<1000;++i){TTime::BeginFixedFrame();drip->Submit();drip->SubmitWorld();}
+        assert(drip->Alive()==true && creates==initial);
+        assert(!CreateVfxReviewPreview(0x5975abdeu,origin,{80,-120,128}));
     }
     assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";

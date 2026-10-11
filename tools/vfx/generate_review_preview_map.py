@@ -85,6 +85,7 @@ PARTIAL = {
 # their owner constructors. These newer implementations predate their ledger
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
+    '0x5975abde': 'TDripEffect_LINKED_NO_SPLASH',
     '0xad92bc16': 'Invisible_AUTHORED',
     '0xd000f005': 'HeadFireBall_ORIGINAL',
     '0xba09fead': 'Dragonattack_ORIGINAL',
@@ -155,7 +156,10 @@ IMPLEMENTED.update(dict.fromkeys(
 
 
 def admitted_candidates(row):
-    candidates = [name for name in row['preview_candidates'] if name in IMPLEMENTED]
+    if row.get('retail_type_id','').lower()=='0x5975abde':
+        return ['TDripEffect_LINKED_NO_SPLASH']
+    candidates = [name for name in row['preview_candidates'] if name in IMPLEMENTED
+                  and name!='TDripEffect_LINKED_NO_SPLASH']
     explicit = SOURCE_MAPPINGS.get(row.get('retail_type_id', '').lower())
     if explicit: candidates.insert(0, explicit)
     candidates.sort(key=lambda name: (0 if name == explicit else 1 if '_AUTHORED_' in name else 2 if '_BESPOKE' in name.upper() else 3))
@@ -166,6 +170,8 @@ def admitted_candidates(row):
 
 
 def candidate_metadata(row, name):
+    if row.get('retail_type_id','').lower()=='0x5975abde' and name=='TDripEffect_LINKED_NO_SPLASH':
+        return False, 'Persistent Drip SetParams(20,128,1), managed no-splash Ripple children; natural map residency and audio not certified'
     if row.get('retail_type_id','').lower()=='0xba09fead' and name=='Dragonattack_ORIGINAL':
         return False, 'Declared Fighting caller: target offset(280,0), ground0, face96 muzzle(14,14,+100); arbitrary endpoints and natural dragon actors not certified'
     if row.get('retail_type_id','').lower()=='0xad92bc13' and name=='TManaDrain_CONFIGURED_TARGET':
