@@ -50,7 +50,10 @@ TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
                                                  'preview_candidates': [name]}), [])
             self.assertEqual(admitted_candidates({'retail_type_id': retail_id,
                                                  'preview_candidates': []}), [])
-        self.assertEqual(PARTIAL['0xc24b2a85'][0], 'TFogEffect_BESPOKE')
+        fog={'retail_type_id':'0xc24b2a85','preview_candidates':['TFogEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(fog), ['TFogEffect_BESPOKE'])
+        self.assertTrue(candidate_metadata(fog, 'TFogEffect_BESPOKE')[0])
+        self.assertIn('post-blend RGB565', candidate_metadata(fog, 'TFogEffect_BESPOKE')[1])
 
     def test_implemented_precedes_partial_and_keeps_separate_metadata(self):
         row = {'retail_type_id': '0x0ea34fa3', 'preview_candidates': [

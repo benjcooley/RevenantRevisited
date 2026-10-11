@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "effects/fog_grid.h"
 #include "revenant.h"
 
 #include <memory>
@@ -5284,56 +5285,24 @@ class TVortexEffect_Bespoke : public TEffect
 
 _CLASSDEF(TFogEffect_Bespoke)
 
-// W06: ambient ground fog overlay. Snapshot:
-// src/effect_old.cpp:6621-6750 (TFogAnimator). 36-vertex flat grid (6x6)
-// over a scl=7.475 quad, with per-vertex random color/alpha brightness
-// drift on 20 "anchored" border verts (frozen at c=.7/a=.125) and the
-// other 16 inner verts drifting through random color_velocity /
-// alpha_velocity / position-delta walks. SetBlendState -> Alpha (verbatim,
-// preserved AS WRITTEN — no AdditiveStraight reinterpretation).
-//
-// First-pass bespoke: collapse the 36-vertex animated grid down to a
-// single ground-aligned (WorldXY) Alpha billboard whose color/alpha is
-// the mean of the inner verts. Preserves the snapshot's brightness/alpha
-// random walk shape (same min/max/velocity bounds) so the visual breathes
-// at the same cadence; the per-vertex gradient is a follow-up upgrade
-// once the engine has a triangulated-quad-with-vertex-color render path.
+// Original Fog: 36 authored prelit vertices, 50 triangles, no textures.
 class TFogEffect_Bespoke : public TEffect
 {
   public:
     TFogEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
     TFogEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
-    ~TFogEffect_Bespoke() override = default;
-
     void OffScreen() override { KillThisEffect(); }
-
-    [[nodiscard]] static TFogEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    static TFogEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void SetNativeDomainForTest(bool enabled);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
-
-    [[nodiscard]] bool IsAlive() const { return true; }   // ambient overlay — never dies
-
+    bool IsAlive() const { return true; }
   private:
-    // Snapshot constants (effect_old.cpp:6621-6750).
-    static constexpr int32_t kFogVertex      = 36;   // FOG_VERTEX
-    static constexpr float   kFogScale       = 7.475f;
-    static constexpr int32_t kFogSimTickMs   = 1000 / 24;
-    static constexpr float   kFogBaseSizeWu  = 96.0f * kFogScale;  // grid quad ~ 96 wu base * 7.475
-
-    struct SFogVert
-    {
-        float c   = 0.7f;
-        float a   = 0.125f;
-        float cv  = 0.0f;     // color_velocity
-        float av  = 0.0f;     // alpha_velocity
-        hmm_vec3 dpos     = {0.0f, 0.0f, 0.0f};
-        hmm_vec3 velocity = {0.0f, 0.0f, 0.0f};
-        bool  anchored    = false;   // border vert (frozen) vs inner vert (drifting)
-    };
-
-    SFogVert       verts_[kFogVertex] {};
-    double         sim_accum_ms_  = 0.0;
-    TTextureHandle texture_       = kInvalidTexture;
-    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+    retail_fog::State state_;
+    S3DVertex vertices_[retail_fog::Count]{};
+    S3DFace faces_[50]{};
+    bool native_domain_=false;
 };
 
 _CLASSDEF(TSandswirlEffect_Bespoke)

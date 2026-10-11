@@ -11025,234 +11025,85 @@ void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 // Constants are snapshot-only (no retail recon for any of W06/W04/W05).
 
 // =========================================================================
-// W06 — TFogEffect_Bespoke
+// Fog: original4e84c0/4e86f0/4e8b10 prelit animated authored grid.
 // =========================================================================
-//
-// Faithful direct port of TFogAnimator::Initialize/Animate/Render
-// (src/effect_old.cpp:6621-6750). Snapshot uses a 36-vertex grid (6x6)
-// over a scl=7.475 quad; 20 "anchored" border vertices are frozen at
-// (c=0.7, a=0.125) and the remaining 16 inner vertices random-walk both
-// brightness/alpha and position with bounded velocity envelopes.
-// SetBlendState -> Alpha (preserved AS WRITTEN; sister atmospheric
-// overlays use Alpha per W2A batch gotcha).
-//
-// First-pass bespoke collapses the 36-vertex grid into a single ground-
-// aligned (WorldXY) Alpha billboard whose color/alpha is the mean of
-// the inner-vert random walk. The per-vertex random walks (color/alpha
-// drift, velocity bounds, anchored-vs-free distinction) are preserved
-// verbatim — the visual breathes at the same cadence. Full triangulated
-// grid is a follow-up upgrade.
-
 TFogEffect_Bespoke* TFogEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    static const char* kFogCandidates[] = {
-        "Misc\\Fog.I3D",     // the only fog.i3d on disk lives here
-        "Misc\\fog.i3d",
-        "Magic\\fog.i3d",    // batch task spec; not present in the snapshot data
-    };
-
-    auto* fog = new TFogEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
-    fog->ForcePos(origin);
-    fog->SetMapIndex(MapPane.MakeIndex());
-    fog->ActivateComponents();
-
-    fog->texture_ = TryLoadMagicTexture(kFogCandidates,
-                                        int32_t(sizeof(kFogCandidates) / sizeof(*kFogCandidates)),
-                                        fog->uv_rect_, "fog");
-
-    // Fog isn't auto-loaded by Class.Def the way Mist is (Class.Def has
-    // "Fog" "Misc\Fog.I3D" but no spell calls Fog at boot in this build),
-    // so TryLoadMagicTexture's FindImagery-only path returns -1. Fall
-    // back to RegisterImagery (resource pack lookup) for each candidate,
-    // matching the TFlameEffect_Bespoke / TFireSwarm pattern.
-    if (fog->texture_ == kInvalidTexture)
-    {
-        for (size_t i = 0; i < sizeof(kFogCandidates) / sizeof(*kFogCandidates); ++i)
-        {
-            int32_t img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFogCandidates[i]));
-            if (img_id < 0)
-                continue;
-            TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
-            if (!base)
-                continue;
-            T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
-            if (!img3d)
-            {
-                TObjectImagery::FreeImagery(base);
-                continue;
-            }
-            (void)img3d->NumObjects();
-            if (img3d->NumTextures() <= 0)
-                continue;
-            S3DTex tex = {};
-            img3d->GetTexture(0, &tex);
-            if (tex.htexture == kInvalidTexture)
-                continue;
-            fog->uv_rect_[0] = 0.0f;
-            fog->uv_rect_[1] = 0.0f;
-            fog->uv_rect_[2] = 1.0f;
-            fog->uv_rect_[3] = 1.0f;
-            fog->texture_ = tex.htexture;
-            log_info("[fog] resolved imagery='%s' via RegisterImagery tex=%u",
-                     kFogCandidates[i], tex.htexture);
-            break;
-        }
-    }
-
-    // Snapshot effect_old.cpp:6628-6657 — Initialize each of FOG_VERTEX
-    // verts. The 20 "anchored" indices are frozen at (c=0.7, a=0.125,
-    // dpos=0). The remaining 16 inner verts get random c, a, dpos in
-    // their snapshot envelopes.
-    static const int32_t anchored_ids[] = {
-        0, 4, 6, 8, 10, 3, 13, 19, 25,
-        31, 30, 32, 33, 34, 35, 29, 23,
-        17, 11, 1
-    };
-    constexpr int32_t kNumAnchored = int32_t(sizeof(anchored_ids) / sizeof(*anchored_ids));
-    for (int32_t i = 0; i < kFogVertex; ++i)
-    {
-        SFogVert& v = fog->verts_[i];
-        v.anchored = false;
-        for (int32_t a = 0; a < kNumAnchored; ++a)
-        {
-            if (anchored_ids[a] == i)
-            {
-                v.anchored = true;
-                break;
-            }
-        }
-        if (v.anchored)
-        {
-            v.c        = 0.7f;
-            v.a        = 0.125f;
-            v.dpos.X   = 0.0f;
-            v.dpos.Y   = 0.0f;
-            v.dpos.Z   = 0.0f;
-        }
-        else
-        {
-            v.c        = float(random(400, 1000)) / 1000.0f;
-            v.a        = float(random(100, 400)) / 1000.0f;
-            v.dpos.X   = float(random(-50, 50)) / 100.0f;
-            v.dpos.Y   = float(random(-50, 50)) / 100.0f;
-            v.dpos.Z   = float(random(-50, 50)) / 100.0f;
-        }
-        v.velocity.X = 0.0f;
-        v.velocity.Y = 0.0f;
-        v.velocity.Z = 0.0f;
-        v.cv = 0.0f;
-        v.av = 0.0f;
-    }
-
-    log_info("[fog-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
-             "tex=%u verts=%d (anchored=%d, drifting=%d)",
-             fog->GetMapIndex(), origin.x, origin.y, origin.z,
-             fog->texture_, kFogVertex, kNumAnchored, kFogVertex - kNumAnchored);
+    auto* img=LoadWaterImagery("Misc\\Fog.I3D","Fog");
+    if (!img || img->NumObjects()!=1 || img->NumVerts()!=36 ||
+        img->NumFaces()!=50 || img->NumTextures()!=0) return nullptr;
+    auto* fog=new TFogEffect_Bespoke(img);
+    fog->ForcePos(origin); fog->SetMapIndex(MapPane.MakeIndex()); fog->ActivateComponents();
+    img->GetObjVerts(0,fog->vertices_);
+    img->GetObjFaces(0,fog->faces_);
+    const auto* indices=reinterpret_cast<const uint16_t*>(fog->faces_);
+    for(int i=0;i<150;++i) if(indices[i]>=36) {delete fog;return nullptr;}
+    fog->state_.Initialize([](int low,int high){return random(low,high);});
+    log_info("[fog-asset] objectverts=%d objectfaces=%d p0=(%.9g,%.9g,%.9g) firstface=(%u,%u,%u)",
+        img->NumObjVerts(0),img->NumObjFaces(0),fog->vertices_[0].pos.X,fog->vertices_[0].pos.Y,fog->vertices_[0].pos.Z,
+        unsigned(indices[0]),unsigned(indices[1]),unsigned(indices[2]));
+    log_info("[fog] authored36-vertex/50-triangle prelit grid, no texture; origin=(%d,%d,%d) rng_draws=%llu",
+             origin.x,origin.y,origin.z,static_cast<unsigned long long>(RandomDraws()));
     return fog;
 }
-
+void TFogEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_=enabled;
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Fog",int(enabled));
+}
+void TFogEffect_Bespoke::Advance(double seconds)
+{
+    if(!std::isfinite(seconds)||seconds<=0) return;
+    state_.Advance(seconds,[](int low,int high){return random(low,high);});
+}
+void TFogEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if(!Renderer) return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) {const auto p=Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace()));}
+    hmm_vec3 points[36];
+    float colors[36][4];
+    for(int i=0;i<36;++i) {
+        const auto& v=state_.vertices[i];
+        const auto& original=vertices_[i];
+        hmm_vec3 local{{(original.pos.X+v.offset[0])*retail_fog::Scale,
+                       (original.pos.Y+v.offset[1])*retail_fog::Scale,original.pos.Z+v.offset[2]}};
+        MtxTransform(&owner,&local,&points[i]);
+        // Original Render packs8-bit color, FVF_LVERTEX converts to RGB5/A5.
+        // The untextured alpha lookup uses (A5+1)/32 and writes depth even
+        // though Scene mode2 requests ZWRITE=false. GPU interpolation remains
+        // higher precision than the original scanline/RGB565 framebuffer.
+        const int color=int(double(v.c)*255.0)>>3;
+        const int alpha=int(double(v.a)*255.0)>>3;
+        colors[i][0]=colors[i][2]=float(color)/31.0f;
+        colors[i][1]=float(color*2)/63.0f;
+        colors[i][3]=float(alpha+1)/32.0f;
+    }
+    const auto* indices=reinterpret_cast<const uint16_t*>(faces_);
+    if(state_.ticks==2) log_info("[fog-draw] firstworld=(%.9g,%.9g,%.9g) lastworld=(%.9g,%.9g,%.9g) rgba0=(%.9g,%.9g,%.9g,%.9g)",
+        points[0].X,points[0].Y,points[0].Z,points[35].X,points[35].Y,points[35].Z,
+        colors[0][0],colors[0][1],colors[0][2],colors[0][3]);
+    for(int face=0;face<50;++face) {
+        SQuadDrawItem draw{};draw.corner_count=3;draw.per_corner_color=true;
+        draw.key.texture=Renderer->WhiteTextureHandle(); // identity carrier for untextured vertex color
+        draw.key.blend=uint8_t(EFxBlend::Alpha);draw.key.depth_mode=uint8_t(EFxDepthMode::TestWrite);
+        draw.retail_software_projection=native_domain_;draw.debug_mode=debug_mode;
+        for(int c=0;c<3;++c) {
+            const int i=indices[face*3+c];
+            std::memcpy(draw.world_pos[c],points[i].Elements,3*sizeof(float));
+            std::memcpy(draw.corner_color_rgba[c],colors[i],4*sizeof(float));
+        }
+        Renderer->SubmitFxQuad(draw);
+    }
+}
 void TFogEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
-    if (!Renderer)
-        return;
-
-    // 24Hz sim-tick gate (snapshot was ungated; modern fix per
-    // feedback_framerate_independent_anim).
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kFogSimTickMs))
-    {
-        sim_accum_ms_ -= double(kFogSimTickMs);
-
-        // Snapshot effect_old.cpp:6664-6698 — per-vert Animate. Anchored
-        // verts skip; drifting verts random-walk color/alpha/position.
-        for (int32_t i = 0; i < kFogVertex; ++i)
-        {
-            SFogVert& v = verts_[i];
-            if (v.anchored)
-                continue;
-            v.cv += float(random(-10, 10)) / 1000.0f;
-            v.av += float(random(-10, 10)) / 1000.0f;
-
-            v.c += v.cv;
-            if (v.cv > 1.0f || v.cv < 0.4f)
-                v.cv = 0.0f;
-            v.c = min(1.0f, max(0.4f, v.c));
-            v.a += v.av;
-            if (v.av > 0.4f || v.av < 0.1f)
-                v.av = 0.0f;
-            v.a = min(0.4f, max(0.1f, v.a));
-
-            v.velocity.X += float(random(-10, 10)) / 1000.0f;
-            v.velocity.Y += float(random(-10, 10)) / 1000.0f;
-            v.velocity.Z += float(random(-10, 10)) / 1000.0f;
-
-            v.dpos.X += v.velocity.X;
-            if (v.dpos.X < -0.5f || v.dpos.X > 0.5f)
-                v.velocity.X = 0.0f;
-            v.dpos.X = min(0.5f, max(-0.5f, v.dpos.X));
-            v.dpos.Y += v.velocity.Y;
-            if (v.dpos.Y < -0.5f || v.dpos.Y > 0.5f)
-                v.velocity.Y = 0.0f;
-            v.dpos.Y = min(0.5f, max(-0.5f, v.dpos.Y));
-            v.dpos.Z += v.velocity.Z;
-            if (v.dpos.Z < -0.5f || v.dpos.Z > 0.5f)
-                v.velocity.Z = 0.0f;
-            v.dpos.Z = min(0.5f, max(-0.5f, v.dpos.Z));
-        }
-    }
-
-    // --- Render port (effect_old.cpp:6701-6736). SetBlendState -> Alpha
-    // (preserved AS WRITTEN). Snapshot sets per-vert color = D3DRGBA(c,c,c,a)
-    // and renders the 36-vert grid at scl=7.475. First-pass collapses
-    // to a single billboard at the mean inner-vert color.
-    if (texture_ == kInvalidTexture)
-        return;
-
-    static const bool s_fog_logged_first_submit = []{
-        log_info("[fog-bespoke] first submit (TickAndSubmit running)");
-        return true;
-    }();
-    (void)s_fog_logged_first_submit;
-
-    // Mean of the 16 inner (drifting) verts — captures the animated
-    // brightness/alpha breathing.
-    float sum_c = 0.0f;
-    float sum_a = 0.0f;
-    int32_t n = 0;
-    for (int32_t i = 0; i < kFogVertex; ++i)
-    {
-        if (verts_[i].anchored)
-            continue;
-        sum_c += verts_[i].c;
-        sum_a += verts_[i].a;
-        ++n;
-    }
-    const float mean_c = (n > 0) ? sum_c / float(n) : 0.7f;
-    const float mean_a = (n > 0) ? sum_a / float(n) : 0.125f;
-
-    const S3DPoint& base = Pos();
-    SBillboardDrawItem item = {};
-    item.size_wu[0] = kFogBaseSizeWu;   // snapshot scl=7.475 along X/Y
-    item.size_wu[1] = kFogBaseSizeWu;
-    item.color_rgba[0] = mean_c;        // D3DRGBA(c, c, c, a) -- gray
-    item.color_rgba[1] = mean_c;
-    item.color_rgba[2] = mean_c;
-    item.color_rgba[3] = mean_a;
-    item.uv_rect[0] = uv_rect_[0];
-    item.uv_rect[1] = uv_rect_[1];
-    item.uv_rect[2] = uv_rect_[2];
-    item.uv_rect[3] = uv_rect_[3];
-    item.key.texture     = texture_;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);   // SetBlendState -> Alpha
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::WorldXY;   // ground-pinned overlay
-    item.debug_mode      = debug_mode;
-    item.world_pos[0]    = float(base.x);
-    item.world_pos[1]    = float(base.y);
-    item.world_pos[2]    = float(base.z);
-    Renderer->SubmitFxBillboard(item);
+    Advance(TTime::DeltaTime());
+    if(state_.ticks==2 || state_.ticks==30 || state_.ticks==120)
+        log_info("[fog-phase] tick=%d rng_draws=%llu c2=%.9g a2=%.9g offset2=(%.9g,%.9g,%.9g)",
+            state_.ticks,static_cast<unsigned long long>(RandomDraws()),state_.vertices[2].c,state_.vertices[2].a,
+            state_.vertices[2].offset[0],state_.vertices[2].offset[1],state_.vertices[2].offset[2]);
+    Submit(debug_mode);
 }
 
 // =========================================================================

@@ -3556,6 +3556,7 @@ void* FogBespokeSpawn(const S3DPoint& origin)
 {
     auto* c = new SFogBespokeCtx();
     c->fog = TFogEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if(c->fog) c->fog->SetNativeDomainForTest(StartupVfxNativeDomain);
     if (!c->fog)
         log_warn("[vfx] TFogEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
                  " W06 bespoke entry will draw nothing");

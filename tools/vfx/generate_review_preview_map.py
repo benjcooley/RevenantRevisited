@@ -55,7 +55,7 @@ TWaterEffect_BESPOKE__StillWater TWaterEffect_BESPOKE__FlowWater TWaterEffect_BE
 # Spawn/TickAndSubmit and each factory's own asset binding were audited in
 # effect.cpp/vfxtest.cpp against the shipped class identity, 2026-10-10.
 PARTIAL = {
-    '0xc24b2a85': ('TFogEffect_BESPOKE', '36-point fog grid collapsed to mean billboard; texture path may fail'),
+    '0xc24b2a85': ('TFogEffect_BESPOKE', 'authored animated grid; original post-blend RGB565 quantization incomplete'),
     '0x00ab1d1d': ('TAuraEffect_BESPOKE', 'billboard preview; original character bones and attachment missing'),
     '0x0ea34fa3': ('TBlastEffect_BESPOKE', 'placeholder expanding and fading asset billboard'),
     '0x98974eab': ('TFireWindEffect_BESPOKE', 'placeholder asset billboard; original controller incomplete'),
