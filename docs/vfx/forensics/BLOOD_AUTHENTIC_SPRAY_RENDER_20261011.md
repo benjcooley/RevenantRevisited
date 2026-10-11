@@ -50,3 +50,13 @@ lighting, audio/device and exact-pixel gates stay open.
 Gallery admission followup keeps the explicit comparison `Init` seed2 separate from the game stream. Only standalone `--test=vfx` uses the private MSVC seed2 controller; `vfx-review` initializes the same controller after the real owner/resource factory using the game `random(a,b)` provider and never reseeds it. Equal bounds consume no RNG, reversed bounds normalize, and a second spray continues the preceding terminal stream. ASan/UBSan `live-rng-final` verifies 76 first-lifetime draws and the next seed967200302; the native90 recheck retains 32,760 state, 11,104 matrix, 2,776 color and91 RNG fields with no errors. Gallery spawn leaves scene ambient unchanged and rendering reads the current real MapPane ambient.
 
 The exact0xddc4042e→`Blood_AUTHORED` route precedes the generic drawable map factory only when the exact preview has a static style, real liveness, world submission and nonpartial admission. Four missing/mismatched callback/style/alias controls reject it without falling back to the old generic Blood preview; foreign IDs cannot admit its name. The mock bridge also proves natural completion recreates this controller without a forced combat timer. The direct actor damage/map-insertion branch remains open. `blood_gallery_smoke.py` records live provider scope and actual implementation; ordinary gallery visibility is a route/lifecycle witness, not a new native-domain appearance claim.
+
+Root's integrated live follow-up also passes:100 gallery captures,98 nonblack
+samples/45 distinct images, exact `Blood_AUTHORED` route and two logged
+`live_global_no_reseed` creations with clean exit. The independent sanitized
+provider test confirms76 first-lifetime draws and continuation at state967200302;
+the compiled bridge and four invalid-route controls pass. All90 fixed-fixture
+PNGs remain byte-identical after this live-RNG integration. Root reports are
+under `vfx-blood-root-20261011/{gallery-live,live-rng,live-source-fixture-repeat}`
+in the local research directory. These close the pending route/RNG checks
+without adding a second visual pass or claiming natural combat/map insertion.
