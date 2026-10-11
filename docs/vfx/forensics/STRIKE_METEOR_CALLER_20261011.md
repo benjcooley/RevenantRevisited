@@ -19,3 +19,5 @@ Private evidence under `/Users/benjamincooley/RevenantRetailLab/research/vfx-wid
 - `strike-owner-final/manifest.json`: compiled source state and three rejected controls.
 - `strike-raster-prefix-control.json`: all43 complete historical-prefix rows match.
 - `strike-manager-sampled/contact.png`: native-only diagnostic, not an A/B approval.
+
+Root independently reran the compiled launch/manager/owner comparison: all3,638fields agree and the three wrong-index-RNG/double-Pulse/omitted-delay controls fail. This remains source/caller proof, with rendering/appearance approval pending.

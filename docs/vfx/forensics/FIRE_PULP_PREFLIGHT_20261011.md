@@ -44,3 +44,9 @@ reason to invent a texture timer, change the geometry, or award visual credit.
 Reproducer: `tools/retail_runtime/fire_authentic_preflight.py`.
 Private evidence: `hard-alpha/fire-authentic-final/manifest.json`.
 Manifest SHA256: `9bb956f1c4c3b8885fec9c7b7a42107e53f4e7f83ecc4a9778dd912a31427c0c`.
+
+## First-frame texel sampling diagnosis
+
+Root `fire_first_texel_probe.py` replays the observed original Fire draw with its literal first64x64ARGB4444 texture, actual matrix/cull/source-alpha/no-Z-write state, camera and light. A read-only memory hook records35 original texture reads; every sampled word iszero. Its119 nonzero texels occupy a small upper-edge patch that the approximately10x5 projected quad misses. The first image staysblank for this bounded defaultcaller without an invented atlas clock, scale or brightness. ExactassetSHA remains70574ac537f9ec6f6a39df1adb449e969afa15691a9190c5b4450114d0ae3fee. The private report is `research/vfx-fire-root-20261011/retained/first-replay.json`; this diagnostic supplies no visible-effect approval.
+
+A read-only exact-ID scan of all4896serialized main Ahkuilon module sectors parses without error and finds no top-level Fire, Sandswirl or MagicShield placements. `research/vfx-remaining-map-placements-20261011.json` pins that archive and scan scope. This does not establish absence from inventory children, dynamic scripts, other modules or natural gameplay.
