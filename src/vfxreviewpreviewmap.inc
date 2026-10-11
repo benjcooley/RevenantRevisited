@@ -90,6 +90,7 @@
 {0xad92bc19u, "Cataclysm_ORIGINAL", false, "Implemented preview controller; map caller not certified"}, // cataclysm
 {0xad92bc19u, "TCataclysmEffect_BESPOKE", true, "Partial preview: single asset billboard; original controller incomplete; not complete original implementation"}, // cataclysm
 {0xad92bc1au, "TDragonFire_BESPOKE_NULLSPELL", false, "Implemented preview controller; map caller not certified"}, // dragonfire
+{0xad92bc1bu, "MagicShield_PUBLIC_AURA", false, "Exact MagicShield public SetSpell(real Acolyte/named Aura), unmatched-name constructor-storage0 control; natural MagicShield tiers/caller/audio not certified"}, // magicshield
 {0xad92bc1bu, "TMagicShieldEffect_BESPOKE", true, "Partial preview: tinted asset billboard; original shield geometry incomplete; not complete original implementation"}, // magicshield
 {0xad92bc1cu, "TEnergySpray_BESPOKE_NULLSPELL", false, "Implemented preview controller; map caller not certified"}, // energyspray
 {0xad92bc1du, "THealEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // heal

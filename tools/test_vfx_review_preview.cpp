@@ -39,6 +39,8 @@ std::vector<SEffect> ReviewCatalogue() {
     if(halo_negative==2)halo.submit_world={};
     if(halo_negative==3)halo.preview_style=EVfxPreviewStyle::Combat;
     if(halo_negative==4)halo.id="Halo_AUTHORED_PUBLIC20";
+    auto magicshield=Row("MagicShield_PUBLIC_AURA",EVfxPreviewStyle::Static);
+    magicshield.is_alive=[](void*c){return *static_cast<int*>(c)<2;};magicshield.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
     auto aura=Row("Aura_AUTHENTIC_ACOLYTE_INTEGER",EVfxPreviewStyle::Static);
     aura.is_alive=[](void*c){return *static_cast<int*>(c)<2;};aura.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
     auto burn=Row("Burn_AUTHENTIC_ACOLYTE_INTEGER",EVfxPreviewStyle::Static);
@@ -111,7 +113,7 @@ std::vector<SEffect> ReviewCatalogue() {
     if(cfire_negative==2)cfire.submit_world={};
     if(cfire_negative==3)cfire.preview_style=EVfxPreviewStyle::Combat;
     if(cfire_negative==4)cfire.id="TCFireEffect_BESPOKE";
-    return {cfire,sgeyser,strike,aura,burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    return {magicshield,cfire,sgeyser,strike,aura,burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -387,6 +389,12 @@ int main(int argc,char** argv) {
         auto actor=CreateVfxReviewPreview(0x152dafddu,origin);
         assert(actor && actor->Id()=="TPulp_CONFIGURED_ACTOR" && actor->RestartInterval()==0);
         const int initial=creates;for(int i=0;i<500;++i)actor->Submit();assert(actor->Alive() && creates==initial);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0xad92bc1bu);assert(info.supported && !info.partial && info.lifetime_known);assert(std::strstr(info.description,"real Acolyte"));
+        auto burn=CreateVfxReviewPreview(0xad92bc1bu,origin);assert(burn && burn->Id()=="MagicShield_PUBLIC_AURA" && burn->RestartInterval()==0);
+        const int initial=creates;burn->Submit();burn->Submit();assert(burn->Alive()==false);burn->Submit();assert(burn->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);
     {

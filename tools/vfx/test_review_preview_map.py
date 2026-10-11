@@ -4,6 +4,13 @@ from generate_review_preview_map import PARTIAL, SOURCE_MAPPINGS, admitted_candi
 
 
 class ReviewPreviewAdmission(unittest.TestCase):
+    def test_magicshield_exact_control(self):
+        row={'retail_type_id':'0xad92bc1b','preview_candidates':['TMagicShieldEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row)[0],'MagicShield_PUBLIC_AURA')
+        partial,reason=candidate_metadata(row,'MagicShield_PUBLIC_AURA')
+        self.assertFalse(partial);self.assertIn('unmatched-name',reason)
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['MagicShield_PUBLIC_AURA']}),[])
+
     def test_aura_exact_identity(self):
         row={'retail_type_id':'0x00ab1d1d','preview_candidates':['TAuraEffect_BESPOKE']}
         self.assertEqual(admitted_candidates(row)[0],'Aura_AUTHENTIC_ACOLYTE_INTEGER')
