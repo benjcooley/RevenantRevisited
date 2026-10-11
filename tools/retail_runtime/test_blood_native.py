@@ -5,7 +5,11 @@ from blood_native_actor_reference import run as native
 from blood_state_probe import run as state
 from blood_profile_probe import run as profile
 from blood_owner_probe import run as owner
+from blood_rng_probe import run as rng
 class BloodNativeTests(unittest.TestCase):
+ def test_live_random_provider_retains_unreseeded_stream(self):
+  with tempfile.TemporaryDirectory(prefix='blood-rng-')as t:r=rng(Path(t)/'proof')
+  self.assertEqual(r['status'],'pass');self.assertGreater(r['provider_draws'],r['first_lifetime_draws'])
  def test_whole_resource_rejects_foreign_path_and_body(self):
   with tempfile.TemporaryDirectory(prefix='blood-profile-')as t:r=profile(Path(t)/'proof')
   self.assertEqual(r['status'],'pass');self.assertEqual((r['accept'],r['reject']),(4,2156))

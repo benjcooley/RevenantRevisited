@@ -161,6 +161,7 @@
 {0xd0c0f035u, "TGoldEffect_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // goldeffect
 {0xd3ae043au, "TAntimagic_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Antimagic
 {0xdcc4011du, "TLabback_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Labback
+{0xddc4042eu, "Blood_AUTHORED", false, "Exact Blood public SetParams(40,224,3,5,5,1) spray, live global RNG without reseed; natural actor damage/map insertion not certified"}, // Blood
 {0xddc4042eu, "TBloodEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Blood
 {0xddc4042eu, "TBloodEffect", false, "Implemented preview controller; map caller not certified"}, // Blood
 {0xded3dbedu, "TWindStrip_BESPOKE_NULLSPELL", false, "Implemented preview controller; map caller not certified"}, // WindStrip

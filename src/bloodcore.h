@@ -8,8 +8,10 @@ struct Slot{hmm_vec3 velocity{},position{};float scale=0;int32_t used=0;uint8_t 
 struct Params{int height=40,hangle=224,vangle=3,hspread=5,vspread=5,num=1;};
 struct State{
  std::array<Slot,30>slots{};uint32_t rng;Params params;int done=0,ticks=0;
- int Random(int a,int b){if(a>b){int t=a;a=b;b=t;}if(a==b)return a;rng=rng*214013u+2531011u;return a+int((rng>>16)&32767u)%(b-a+1);}
- State(uint32_t seed=2,const Params&p={},int detail=4):rng(seed),params(p){int cap=3*detail;if(cap>14)cap=14;int n=cap-Random(0,cap);if(n>0)n=cap-Random(0,cap);else n=0;
+ using RandomProvider=int(*)(int,int);RandomProvider live_random=nullptr;
+ uint32_t random_draws=0;
+ int Random(int a,int b){if(a>b){int t=a;a=b;b=t;}if(a==b)return a;++random_draws;if(live_random)return live_random(a,b);rng=rng*214013u+2531011u;return a+int((rng>>16)&32767u)%(b-a+1);}
+ State(uint32_t seed=2,const Params&p={},int detail=4,RandomProvider provider=nullptr):rng(seed),params(p),live_random(provider){int cap=3*detail;if(cap>14)cap=14;int n=cap-Random(0,cap);if(n>0)n=cap-Random(0,cap);else n=0;
   for(int i=0;i<n;++i){auto&a=slots[i];auto&b=slots[n+i];float h=float(double((params.hangle+Random(-params.hspread,params.hspread))&255)*double(360.f)*double(.00390625f)*.017453292522222223);float v=float(double((params.vangle+Random(-params.vspread,params.vspread))&255)*double(360.f)*double(.00390625f)*.017453292522222223);a.used=1;a.object=uint8_t(Random(0,2));a.position.Z=float(params.height);double ch=std::cos(double(h)),sh=std::sin(double(h)),sv=std::sin(double(v));a.velocity.X=float(double(Random(100,300))*2*ch*.01);a.velocity.Y=float(double(Random(100,300))*2*sh*.01);a.velocity.Z=float(double(Random(100,300))*2*sv*.005);a.scale=.5f;
    b.used=1;b.object=uint8_t(Random(0,b.object));b.position.Z=float(params.height);b.velocity.X=float(double(Random(60,80))*double(a.velocity.X)*ch*.014285714285714285);b.velocity.Y=float(double(Random(60,80))*double(a.velocity.Y)*sh*.014285714285714285);b.velocity.Z=float(double(Random(60,80))*double(a.velocity.Z)*sv*.0125);b.delay=uint8_t(int(a.delay)+Random(-1,1)+3);b.scale=.5f;
   }

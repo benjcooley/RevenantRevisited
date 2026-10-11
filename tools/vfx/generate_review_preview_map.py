@@ -85,6 +85,7 @@ PARTIAL = {
 # their owner constructors. These newer implementations predate their ledger
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
+    '0xddc4042e': 'Blood_AUTHORED',
     '0x5975abde': 'TDripEffect_LINKED_NO_SPLASH',
     '0xad92bc16': 'Invisible_AUTHORED',
     '0xd000f005': 'HeadFireBall_ORIGINAL',
@@ -157,6 +158,8 @@ IMPLEMENTED.update(dict.fromkeys(
 
 
 def admitted_candidates(row):
+    if row.get('retail_type_id','').lower()!='0xddc4042e':
+        row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n!='Blood_AUTHORED'])
     if row.get('retail_type_id','').lower()=='0x5975abde':
         return ['TDripEffect_LINKED_NO_SPLASH']
     candidates = [name for name in row['preview_candidates'] if name in IMPLEMENTED
@@ -171,6 +174,8 @@ def admitted_candidates(row):
 
 
 def candidate_metadata(row, name):
+    if row.get('retail_type_id','').lower()=='0xddc4042e' and name=='Blood_AUTHORED':
+        return False, 'Exact Blood public SetParams(40,224,3,5,5,1) spray, live global RNG without reseed; natural actor damage/map insertion not certified'
     if row.get('retail_type_id','').lower()=='0x5975abde' and name=='TDripEffect_LINKED_NO_SPLASH':
         return False, 'Persistent Drip SetParams(20,128,1), managed no-splash Ripple children; natural map residency and audio not certified'
     if row.get('retail_type_id','').lower()=='0xba09fead' and name=='Dragonattack_ORIGINAL':

@@ -11,7 +11,7 @@
 #include <cstring>
 
 namespace {
-int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0, dragon_negative=0, drip_negative=0;
+int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0, dragon_negative=0, drip_negative=0, blood_negative=0;
 void* Spawn(const S3DPoint& p) {
     assert(p.x==17 && p.y==33 && p.z==21); ++creates; return new int(0);
 }
@@ -32,6 +32,15 @@ std::vector<SEffect> ReviewCatalogue() {
     if(drip_negative==2)drip.submit_world={};
     if(drip_negative==3)drip.preview_style=EVfxPreviewStyle::Combat;
     if(drip_negative==4)drip.id="TDripEffect_LINKED_DRAIN";
+    auto authored_blood=Row("Blood_AUTHORED",EVfxPreviewStyle::Static);
+    authored_blood.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
+    authored_blood.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
+    if(blood_negative==1)authored_blood.is_alive={};
+    if(blood_negative==2)authored_blood.submit_world={};
+    if(blood_negative==3)authored_blood.preview_style=EVfxPreviewStyle::Combat;
+    if(blood_negative==4)authored_blood.id="TBloodEffect";
+    auto sparks=Row("TSparksEffect_BESPOKE",EVfxPreviewStyle::Combat);
+    sparks.is_alive=[](void*){return true;};
     auto blood=Row("TBloodEffect_BESPOKE",EVfxPreviewStyle::Combat);
     blood.is_alive=[](void*){return true;};
     auto flare=Row("TCureEffect_BESPOKE",EVfxPreviewStyle::CharacterCast);
@@ -63,13 +72,13 @@ std::vector<SEffect> ReviewCatalogue() {
     paralize.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
     auto manadrain=paralize;manadrain.id="TManaDrain_CONFIGURED_TARGET";
     auto ymanadrain=manadrain;ymanadrain.id="TYManaDrain_CONFIGURED_TARGET";
-    return {drip,dragon,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    return {authored_blood,drip,dragon,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
             Row("TFogEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TJhagaAttackEffect_BESPOKE",EVfxPreviewStyle::Projectile),
-            Row("TSparksEffect_BESPOKE",EVfxPreviewStyle::Combat),
+            sparks,
             Row("TBlastEffect_BESPOKE",EVfxPreviewStyle::Combat),
             Row("TFairyEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TTornadoEffect_BESPOKE",EVfxPreviewStyle::Static),
@@ -84,6 +93,12 @@ float ReviewRestartInterval(EVfxPreviewStyle style) {
 }
 int main(int argc,char** argv) {
     const S3DPoint origin{17,33,21};
+    if(argc==2 && std::strlen(argv[1])==2 && argv[1][0]=='b'){
+        blood_negative=argv[1][1]-'0';assert(blood_negative>=1 && blood_negative<=4);
+        assert(!DescribeVfxReviewPreview(0xddc4042eu).supported);
+        assert(!CreateVfxReviewPreview(0xddc4042eu,origin));
+        assert(creates==0 && destroys==0);return 0;
+    }
     if(argc==2 && std::strlen(argv[1])==2 && argv[1][0]=='d'){
         drip_negative=argv[1][1]-'0';assert(drip_negative>=1 && drip_negative<=4);
         assert(!DescribeVfxReviewPreview(0x5975abdeu).supported);
@@ -126,8 +141,8 @@ int main(int argc,char** argv) {
     assert(DescribeVfxReviewPreview(0x14db0f2e).supported); // replaced Sparks stub
     assert(creates==0);
     {
-        auto blood=CreateVfxReviewPreview(0xddc4042e,origin);
-        assert(blood && blood->Id()=="TBloodEffect_BESPOKE");
+        auto blood=CreateVfxReviewPreview(0x14db0f2e,origin);
+        assert(blood && blood->Id()=="TSparksEffect_BESPOKE");
         assert(blood->Alive()==true && blood->RestartInterval()==.5f);
         for(int i=0;i<10;++i) {TTime::BeginFixedFrame();blood->Submit();blood->SubmitWorld();}
         assert(creates==1 && destroys==0 && ticks==10 && worlds==10);
@@ -241,6 +256,16 @@ int main(int argc,char** argv) {
         assert(target && target->Id()=="TYManaDrain_CONFIGURED_TARGET" && target->RestartInterval()==0);
         const int initial=creates;target->Submit();target->Submit();assert(target->Alive()==false && creates==initial);
         target->Submit();assert(target->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0xddc4042eu);
+        assert(info.supported && !info.partial && info.lifetime_known);
+        assert(std::strstr(info.description,"live global RNG without reseed"));
+        auto spray=CreateVfxReviewPreview(0xddc4042eu,origin);
+        assert(spray && spray->Id()=="Blood_AUTHORED" && spray->RestartInterval()==0);
+        const int initial=creates;TTime::BeginFixedFrame();spray->Submit();TTime::BeginFixedFrame();spray->Submit();assert(spray->Alive()==false);
+        TTime::BeginFixedFrame();spray->Submit();assert(spray->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";

@@ -258,6 +258,17 @@ S3DPoint PathEndpoint(size_t index,bool target) {
 void Spawn(Entry& e, size_t index) {
     const auto support=DescribeVfxReviewSpawn(e.id);
     const auto controlled=DescribeVfxReviewPreview(e.id);
+    // The exact Blood route consumes live global RNG and owns its finite spray.
+    // Prefer it over the generic drawable owner factory only for this exact ID.
+    if(e.id==0xddc4042eu && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Blood_AUTHORED")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Configured Blood initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
     // The reviewed Drip fixture uses explicit no-splash parameters. Prefer
     // only this exact audited persistent route in the gallery; the normal
     // map factory and its authored/default gameplay parameters stay intact.

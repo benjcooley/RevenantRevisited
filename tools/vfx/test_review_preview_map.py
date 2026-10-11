@@ -23,6 +23,15 @@ TWaterFallEffect_BESPOKE__WaterFlft TWaterFallEffect_BESPOKE__RiverFall
 TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertEqual(admitted_candidates({'preview_candidates': candidates}), [])
 
+    def test_blood_exact_controller_precedes_drawable_fallback(self):
+        row={'retail_type_id':'0xddc4042e','preview_candidates':['TBloodEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row),['Blood_AUTHORED','TBloodEffect_BESPOKE'])
+        partial,description=candidate_metadata(row,'Blood_AUTHORED')
+        self.assertFalse(partial)
+        self.assertIn('live global RNG without reseed',description)
+        self.assertIn('SetParams(40,224,3,5,5,1)',description)
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Blood_AUTHORED']}),[])
+
     def test_drip_exact_continuous_scope_rejects_aliases(self):
         row={'retail_type_id':'0x5975abde','preview_candidates':['TDripEffect','TDripEffect_LINKED_DRAIN','TDripEffect.OnHand','TBloodEffect_BESPOKE']}
         self.assertEqual(admitted_candidates(row),['TDripEffect_LINKED_NO_SPLASH'])
