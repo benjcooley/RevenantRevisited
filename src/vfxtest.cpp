@@ -3444,6 +3444,17 @@ void* PhotonBespokeSpawn(const S3DPoint& origin)
     return c;
 }
 
+void* PhotonFlightSpawn(const S3DPoint& origin,bool charge)
+{
+    auto* context=static_cast<SPhotonBespokeCtx*>(PhotonBespokeSpawn(origin));
+    if(context->photon) {
+        context->photon->SetNativeDomain(StartupVfxNativeDomain);
+        log_info("[native-domain] enabled=%d camera_z=0",int(StartupVfxNativeDomain));
+        if(charge)context->photon->PrimeLaunchForTest();
+    }
+    return context;
+}
+
 void PhotonBespokeDestroy(void* cp)
 {
     auto* c = static_cast<SPhotonBespokeCtx*>(cp);
@@ -5603,6 +5614,12 @@ struct SVfxTestBootstrap {
         photon_bespoke.factory       = [](const S3DPoint& o) -> void* { return PhotonBespokeSpawn(o); };
         photon_bespoke.submit        = [](void* c, EFxDebugMode d) { PhotonBespokeSubmit(c, d); };
         photon_bespoke.destroy       = [](void* c) { PhotonBespokeDestroy(c); };
+        VfxTest::DeferredRegister(photon_bespoke);
+        photon_bespoke.id="TPhotonEffect_AUTHORED_FLIGHT";
+        photon_bespoke.factory=[](const S3DPoint& o)->void* { return PhotonFlightSpawn(o,false); };
+        VfxTest::DeferredRegister(photon_bespoke);
+        photon_bespoke.id="TPhotonEffect_AUTHORED_CHARGE";
+        photon_bespoke.factory=[](const S3DPoint& o)->void* { return PhotonFlightSpawn(o,true); };
         VfxTest::DeferredRegister(photon_bespoke);
 
         // M08 TPixieAnimator — 25-particle ambient fairy swarm, Misc/Pixies.I3D.

@@ -9472,398 +9472,137 @@ void TSymGlowEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mod
 
 // ----- M07 TPhotonEffect_Bespoke ------------------------------------------
 
-void TPhotonEffect_Bespoke::ResetLaunch_()
+void TPhotonEffect_Bespoke::Initialize()
 {
-    // --- Port of TPhotonAnimator::Initialize (missileeffect.cpp:187-234).
-    // Initialize central flare (slot 0).
-    p_[0].X = p_[0].Y = p_[0].Z = 0.0f;
-    v_[0].X = v_[0].Y = v_[0].Z = 0.0f;
-    scale_[0]    = 1.0f;
-    framenum_[0] = 0;
-
-    // Initialize the starting position of each spark, its scale and a
-    // delay before it starts (a neg. framenum). NUM_PHOTON_SPARKS=16.
-    for (int32_t n = 1; n < kPhotonBespokeNumSparks; n++)
-    {
-        p_[n].X = float(random(-kPhotonBespokeLaunchRadius, kPhotonBespokeLaunchRadius));
-        p_[n].Y = float(random(-kPhotonBespokeLaunchRadius, kPhotonBespokeLaunchRadius));
-        p_[n].Z = float(random(-kPhotonBespokeLaunchRadius, kPhotonBespokeLaunchRadius));
-
-        // Set a vector for most of the sparks to move them to the center
-        // of the effect (missileeffect.cpp:213-219).
-        if (n > kPhotonBespokeNumSparks / 3)
-        {
-            v_[n].X = -p_[n].X / float(kPhotonBespokeLaunchDuration * 3 / 4);
-            v_[n].Y = -p_[n].Y / float(kPhotonBespokeLaunchDuration * 3 / 4);
-            v_[n].Z = -p_[n].Z / float(kPhotonBespokeLaunchDuration * 3 / 4);
-        }
-        else
-        {
-            v_[n].X = v_[n].Y = v_[n].Z = 0.0f;
-        }
-
-        scale_[n] = 0.0f;
-
-        framenum_[n] = random(-kPhotonBespokeLaunchDuration / 2, 0);
-    }
-
-    // Initialize the framenums for the trailing photon sparks
-    // (missileeffect.cpp:229-230).
-    for (int32_t n = kPhotonBespokeNumSparks; n < kPhotonBespokeSlots; n++)
-        framenum_[n] = -1;
-
-    // Set how many photon sparks are active at the beginning
-    // (missileeffect.cpp:233).
-    activesparks_ = kPhotonBespokeNumSparks - 1;
+    particles_.Initialize([](int low,int high){return random(low,high);});
+    missile_=missile_state::State{};missile_.speed_fixed=16*missile_state::Rollover;
+    flags=(flags&~(OF_MOVING|OF_WEIGHTLESS))|OF_IMMOBILE|OF_PULSE;
 }
 
-void TPhotonEffect_Bespoke::EnterFly_()
+bool TPhotonEffect_Bespoke::SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination)
 {
-    // --- Port of TPhotonAnimator::Animate FLY first-time block
-    // (missileeffect.cpp:302-322). Harness has no live velocity so we
-    // use a fixed back-projection direction (Y- = "behind" in iso).
-    // dir.x / dir.y / dir.z are in ROLLOVER units (1 wu = 65536); the
-    // snapshot scales each trailing photon by `t / ROLLOVER` along
-    // -dir, so we use a tiny fake vel that produces visible spacing.
-    constexpr float kFakeVelMag = 8.0f;   // per-step wu (matches MISSILE_SPEED feel)
-    const float dirx = 0.0f;
-    const float diry = kFakeVelMag;       // sim "moving south"
-    const float dirz = 0.0f;
-
-    // Initialize the variables for the leading photon (missileeffect.cpp:308-310).
-    p_[0].X = p_[0].Y = p_[0].Z = 0.0f;
-    scale_[0]    = 3.5f;
-    framenum_[0] = 0;
-
-    // Initialize the variables for the trailing photons
-    // (missileeffect.cpp:312-321).
-    int32_t t = 1;
-    for (int32_t n = kPhotonBespokeNumSparks; n < kPhotonBespokeSlots; n++, t++)
-    {
-        framenum_[n] = -t;
-        framenum_[t] = -1;
-        // Back-projection: -dir * t (skipping the ROLLOVER division —
-        // dir is already in our local wu/step scale).
-        p_[n].X = -dirx * float(t);
-        p_[n].Y = -diry * float(t);
-        p_[n].Z = -dirz * float(t);
-        scale_[n] = 3.5f - float(t) * kPhotonBespokeScaleStep;
-    }
+    if(missile_.state!=0 || (source.x==destination.x&&source.y==destination.y&&source.z==destination.z))return false;
+    ForcePos(source);destination_=destination;has_destination_=true;return true;
 }
 
-void TPhotonEffect_Bespoke::EnterExplode_()
+void TPhotonEffect_Bespoke::PrimeLaunchForTest()
 {
-    // --- Port of TPhotonAnimator::Animate EXPLODE first-time block
-    // (missileeffect.cpp:335-353).
-    for (int32_t n = 0; n < kPhotonBespokeNumSparks; n++)
-    {
-        p_[n].X = p_[n].Y = p_[n].Z = 0.0f;
-        scale_[n] = 3.0f;
+    if(missile_.state==0)particles_.Animate(0,{0,0,0},[](int low,int high){return random(low,high);});
+}
 
-        v_[n].X = float(random(-3, 3)) * 3.0f / 2.0f;
-        v_[n].Y = float(random(-3, 3)) * 3.0f / 2.0f;
-        v_[n].Z = float(random(-3, 3)) * 3.0f / 2.0f;
-
-        framenum_[n] = 0;
+void TPhotonEffect_Bespoke::AdvanceTick()
+{
+    const auto position=Pos();missile_.position={position.x,position.y,position.z};missile_.flags=GetFlags();
+    missile_state::Inputs input;input.in_inventory=IsInInventory();input.object_class=ObjClass();
+    input.launch_ready=particles_.ready;input.animator_present=true;
+    S3DPoint next{};GetNextMove(next);input.next_move_fixed={next.x,next.y,next.z};
+    input.ground_height=[this](const missile_state::Point& p) {
+        if(preview_mode_)return int32_t(1);
+        S3DPoint query{p.x,p.y,p.z};return MapPane.GetWalkHeight(query);
+    };
+    input.aim_angle=[this]() {
+        if(spell) {
+            auto* invoker=spell->GetInvokerRef().Get();auto* target=spell->GetTargetRef(0).Get();
+            if(target&&target!=invoker)return ConvertToFacing(Pos(),target->Pos());
+            if(invoker)return invoker->GetFace();
+        }
+        return has_destination_?ConvertToFacing(Pos(),destination_):GetFace();
+    };
+    input.convert_vector=[](int facing,int32_t speed) {
+        S3DPoint v{};ConvertToVector(facing,speed,v);return missile_state::Point{v.x,v.y,v.z};
+    };
+    input.character_hit=[this](const missile_state::Point& p) {
+        if(preview_mode_)return false; // Explicit range-impact fixture.
+        TObjectInstance* invoker_object=spell?spell->GetInvokerRef().Get():nullptr;
+        auto* invoker=dynamic_cast<TCharacter*>(invoker_object);const S3DPoint query{p.x,p.y,p.z};
+        std::vector<TCharacter*> around;
+        if(TCharacter::nearbyCharactersSeam)around=TCharacter::nearbyCharactersSeam(query,256);
+        else {
+            SRect r{query.x-256,query.y-256,query.x+256,query.y+256};
+            for(TMapIterator it(GetLevel(),&r,CHECK_NOINVENT,OBJSET_CHARACTER);it;it++)
+                if(auto* character=dynamic_cast<TCharacter*>(it.Item()))around.push_back(character);
+        }
+        for(auto* character:around) {
+            if(character==invoker_object||character->Health()<=0||::Distance(query,character->Pos())>32)continue;
+            if(invoker&&!invoker->IsEnemy(character))continue;
+            return true;
+        }
+        return false;
+    };
+    const auto result=missile_.Advance(input);const auto p=missile_.position;const S3DPoint updated{p.x,p.y,p.z};
+    if(p.x!=position.x||p.y!=position.y||p.z!=position.z) {
+        if(preview_mode_||!GetSector())ForcePos(updated);else SetPos(updated,-1,false);
     }
-    activesparks_ = kPhotonBespokeNumSparks;
+    flags=missile_.flags;SetMoveBits(result.move_bits);
+    if(GetState()!=missile_.state)SetState(missile_.state);
+    const auto v=missile_.velocity_fixed;
+    particles_.Animate(missile_.state,{v.x,v.y,v.z},[](int low,int high){return random(low,high);});
+}
+
+void TPhotonEffect_Bespoke::Pulse()
+{
+    if(IsAlive())AdvanceTick();
+    // Keep the collapsed visual controller until every positive-scale slot drains.
+    SetCommandDone(false);if(!IsAlive())KillThisEffect();TEffect::Pulse();
+}
+
+bool TPhotonEffect_Bespoke::EnsureAsset()
+{
+    if(!texture_frames_.empty())return true;
+    auto* image=dynamic_cast<T3DImagery*>(imagery);
+    if(!image||image->NumObjects()!=1||image->NumObjVerts(0)!=4||image->NumObjFaces(0)!=2||image->NumTextures()!=1)return false;
+    S3DFace faces[2]{};image->GetObjFaces(0,faces);
+    constexpr uint16_t expected[6]={0,1,3,3,2,0};if(std::memcmp(faces,expected,sizeof(expected)))return false;
+    image->GetObjVerts(0,authored_.data(),0,0,ERender3DVertex::Vertex);
+    S3DTex texture{};image->GetTexture(0,&texture);
+    if(texture.numframes!=5||!texture.framehtexs)return false;
+    argb4444_=RetailMeshTextureLighting(texture.desc.pixelFormat)==3;
+    texture_frames_.assign(texture.framehtexs,texture.framehtexs+texture.numframes);return true;
 }
 
 TPhotonEffect_Bespoke* TPhotonEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    SLoadedImagery loaded = SparkleLoadImagery(kPhotonBespokeImageryPath, "photon");
-    if (!loaded.img3d)
-        return nullptr;
-
-    auto* photon = new TPhotonEffect_Bespoke(loaded.base);
-    photon->ForcePos(origin);
-    photon->SetMapIndex(MapPane.MakeIndex());
-    photon->ActivateComponents();
-
-    const int32_t num_obj = loaded.img3d->NumObjects();
-    const int32_t num_tex = loaded.img3d->NumTextures();
-    if (num_obj < 1 || num_tex <= 0)
-    {
-        log_error("[photon] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
-                  num_obj, num_tex);
-        delete photon;
-        return nullptr;
-    }
-
-    // Get how many frames are in the texture (missileeffect.cpp:194-195).
-    S3DTex tex = {};
-    const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, 0);
-    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
-    loaded.img3d->GetTexture(slot, &tex);
-    photon->texture_      = tex.htexture;
-    photon->numtexframes_ = tex.numframes > 0 ? tex.numframes : 1;
-    SparkleResolveSubObjUv(loaded.img3d, 0, photon->uv_rect_);
-    photon->size_wu_ = kPhotonBespokeBaseSizeWu;
-    if (photon->texture_ == kInvalidTexture)
-    {
-        log_error("[photon] SpawnForTest: sub-object 0 texture unresolved");
-        delete photon;
-        return nullptr;
-    }
-
-    // Set the beginning state of the effect (missileeffect.cpp:198).
-    photon->state_       = 0;     // MISSILE_LAUNCH
-    photon->oldstate_    = -1;    // force first-time on entry
-    photon->state_ticks_ = 0;
-    photon->ResetLaunch_();
-
-    log_info("[photon] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
-             "texture=%u numtexframes=%d uv=[%.3f,%.3f %.3fx%.3f]",
-             kPhotonBespokeImageryPath, photon->GetMapIndex(),
-             origin.x, origin.y, origin.z,
-             photon->texture_, photon->numtexframes_,
-             photon->uv_rect_[0], photon->uv_rect_[1],
-             photon->uv_rect_[2], photon->uv_rect_[3]);
-    return photon;
+    SLoadedImagery loaded=SparkleLoadImagery(kPhotonBespokeImageryPath,"photon");if(!loaded.img3d)return nullptr;
+    auto* effect=new TPhotonEffect_Bespoke(loaded.base);effect->preview_mode_=true;
+    effect->SetMapIndex(MapPane.MakeIndex());effect->ActivateComponents();
+    const S3DPoint destination{origin.x+1000,origin.y,origin.z};effect->SetProjectileEndpoints(origin,destination);
+    if(!effect->EnsureAsset()) {delete effect;return nullptr;}
+    log_info("[photon] authored moving preview source=%d,%d,%d target=%d,%d,%d frames=5",origin.x,origin.y,origin.z,destination.x,destination.y,destination.z);
+    return effect;
 }
 
 void TPhotonEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
-    if (!Renderer)
-        return;
-
-    // --- Update: port of TPhotonAnimator::Animate (missileeffect.cpp:243-399).
-    // Framerate-independent via the 24Hz sim-tick accumulator.
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kPhotonBespokeSimTickMs))
-    {
-        sim_accum_ms_ -= double(kPhotonBespokeSimTickMs);
-        state_ticks_++;
-
-        // Harness state machine: cycle LAUNCH (until activesparks<NUM/3)
-        // -> FLY (kPhotonBespokeFlyTicks) -> EXPLODE (until activesparks==0)
-        // -> IDLE (gap) -> LAUNCH again. In-game this would be driven by
-        // TMissileEffect::Pulse range/hit transitions, but the harness has
-        // no live missile machinery so we drive the cycle on a fixed cadence.
-
-        switch (state_)
-        {
-            case 0:     // MISSILE_LAUNCH
-            {
-                // missileeffect.cpp:256-259: adjust central flare.
-                framenum_[0]++;
-                if ((framenum_[0] > kPhotonBespokeLaunchDuration / 2)
-                    && (scale_[0] < 5.5f))
-                {
-                    scale_[0] += kPhotonBespokeScaleStep;
-                }
-
-                // missileeffect.cpp:262-295: adjust the other sparks.
-                for (int32_t n = 1; n < kPhotonBespokeNumSparks; n++)
-                {
-                    framenum_[n]++;
-
-                    if (framenum_[n] >= 0)
-                    {
-                        // Move the sparks (missileeffect.cpp:269-271).
-                        p_[n].X += v_[n].X;
-                        p_[n].Y += v_[n].Y;
-                        p_[n].Z += v_[n].Z;
-
-                        if (framenum_[n] > kPhotonBespokeLaunchDuration / 2)
-                        {
-                            // missileeffect.cpp:275-290: scale-down + retire.
-                            if (scale_[n] != 0.0f)
-                            {
-                                scale_[n] -= kPhotonBespokeScaleStep;
-                                if (scale_[n] <= 0.0f)
-                                {
-                                    activesparks_--;
-                                    // missileeffect.cpp:284-286: when 2/3 of
-                                    // sparks are gone, set missile status
-                                    // (= "ready to fly"). Harness analog:
-                                    // transition to FLY when the snapshot
-                                    // would set status.
-                                    scale_[n] = 0.0f;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            // missileeffect.cpp:292-293: scale-up.
-                            scale_[n] += kPhotonBespokeScaleStep;
-                        }
-                    }
-                }
-
-                // State transition: in-game this happens when TMissileEffect
-                // sees the status flag (missileeffect.cpp:286). Harness
-                // mirrors: when activesparks_ < NUM/3.
-                if (activesparks_ < kPhotonBespokeNumSparks / 3)
-                {
-                    state_       = 1;     // MISSILE_FLY
-                    state_ticks_ = 0;
-                }
-                break;
-            }
-
-            case 1:     // MISSILE_FLY
-            {
-                if (state_ != oldstate_)
-                {
-                    EnterFly_();
-                }
-                else
-                {
-                    // missileeffect.cpp:325-327: just update the frame counter
-                    // for the trailing photons.
-                    for (int32_t n = kPhotonBespokeNumSparks; n < kPhotonBespokeSlots; n++)
-                        framenum_[n]++;
-                }
-
-                if (state_ticks_ >= kPhotonBespokeFlyTicks)
-                {
-                    state_       = 2;     // MISSILE_EXPLODE
-                    state_ticks_ = 0;
-                }
-                break;
-            }
-
-            case 2:     // MISSILE_EXPLODE
-            {
-                if (state_ != oldstate_)
-                {
-                    EnterExplode_();
-                }
-                else
-                {
-                    // missileeffect.cpp:357-393: per-spark integration +
-                    // scale fall + trailing-photon drain.
-                    for (int32_t n = 0; n < kPhotonBespokeNumSparks; n++)
-                    {
-                        const int32_t t = n + kPhotonBespokeNumSparks;
-                        framenum_[n]++;
-
-                        // Move the sparks (missileeffect.cpp:363-365).
-                        p_[n].X += v_[n].X;
-                        p_[n].Y += v_[n].Y;
-                        p_[n].Z += v_[n].Z;
-
-                        if (scale_[n] > 0.0f)
-                        {
-                            scale_[n] -= kPhotonBespokeScaleStep / 2.0f;
-                            if (scale_[n] <= 0.0f)
-                            {
-                                scale_[n] = 0.0f;
-                                activesparks_--;
-                            }
-                        }
-
-                        // Trailing photon drain (missileeffect.cpp:383-389).
-                        if (scale_[t] != 0.0f)
-                        {
-                            framenum_[t]++;
-                            scale_[t] -= kPhotonBespokeScaleStep / 2.0f;
-                            if (scale_[t] <= 0.0f)
-                                scale_[t] = 0.0f;
-                        }
-                    }
-                }
-
-                if (activesparks_ <= 0 || state_ticks_ >= kPhotonBespokeExplodeTicks)
-                {
-                    state_       = 3;     // IDLE (harness gap)
-                    state_ticks_ = 0;
-                }
-                break;
-            }
-
-            default:    // 3 = IDLE (harness-only gap before next LAUNCH)
-            {
-                if (state_ticks_ >= kPhotonBespokeIdleTicks)
-                {
-                    state_       = 0;     // back to LAUNCH
-                    state_ticks_ = 0;
-                    ResetLaunch_();
-                }
-                break;
-            }
-        }
-
-        // Keep track of the state we're in (missileeffect.cpp:398).
-        oldstate_ = state_;
-    }
-
-    // --- Render: port of TPhotonAnimator::Render (missileeffect.cpp:408-441).
-    // SetBlendState = Alpha. Single sub-object drawn up to 32 times with
-    // per-spark scale and position.
-    const S3DPoint& base = Pos();
-    SParticleDrawItem item = {};
-    item.color_rgba[0] = 1.0f;
-    item.color_rgba[1] = 1.0f;
-    item.color_rgba[2] = 1.0f;
-    item.color_rgba[3] = 1.0f;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;
-    item.debug_mode      = debug_mode;
-    item.key.texture     = texture_;
-    item.rotation_rad    = 0.0f;
-    // UV: snapshot picks per-spark frame = framenum % numtexframes
-    // (missileeffect.cpp:429). The decoded photon.i3d texture's frames
-    // are laid out along U (each frame occupies 1/numtexframes_ of the
-    // U range). We compute the per-frame UV sub-rect at submission time.
-
-    for (int32_t n = 0; n < kPhotonBespokeSlots; n++)
-    {
-        // missileeffect.cpp:418: only render the spark if framenum is positive.
-        if (framenum_[n] < 0)
-            continue;
-        if (scale_[n] <= 0.0f)
-            continue;
-
-        // missileeffect.cpp:424-426: scale + position.
-        const float scl = scale_[n];
-        item.size_wu[0] = size_wu_ * scl;
-        item.size_wu[1] = size_wu_ * scl;
-        item.world_pos[0] = float(base.x) + p_[n].X;
-        item.world_pos[1] = float(base.y) + p_[n].Y;
-        item.world_pos[2] = float(base.z) + p_[n].Z;
-
-        // Per-spark frame UV. The snapshot's `frame = framenum % numtexframes`
-        // (missileeffect.cpp:429) cycles the bound texture frame; we slice
-        // the authored U range into numtexframes_ cells and pick the
-        // (framenum % numtexframes_)-th.
-        const int32_t fnum = framenum_[n] % numtexframes_;
-        if (numtexframes_ > 1)
-        {
-            const float cell_w = uv_rect_[2] / float(numtexframes_);
-            item.uv_rect[0] = uv_rect_[0] + cell_w * float(fnum);
-            item.uv_rect[1] = uv_rect_[1];
-            item.uv_rect[2] = cell_w;
-            item.uv_rect[3] = uv_rect_[3];
-        }
-        else
-        {
-            item.uv_rect[0] = uv_rect_[0];
-            item.uv_rect[1] = uv_rect_[1];
-            item.uv_rect[2] = uv_rect_[2];
-            item.uv_rect[3] = uv_rect_[3];
-        }
-
-        Renderer->SubmitFxParticle(item);
-    }
-
-    // --- LS coupling: re-add one bright blue-white point light at the
-    // effect origin per frame. Brightest at EXPLODE (per the bolt
-    // discharge); fades with the leading-spark scale during LAUNCH/FLY.
-    float light_t = 0.5f;
-    if (state_ == 2)    // EXPLODE — brightest
-        light_t = 1.0f;
-    else if (scale_[0] > 0.0f)
-        light_t = std::fmin(1.0f, scale_[0] / 5.5f);
-    Renderer->AddPointLight(float(base.x), float(base.y), float(base.z) + 24.0f,
-                            kPhotonBespokeLightRadiusWu,
-                            0.7f, 0.85f, 1.0f,
-                            kPhotonBespokeLightIntensity * light_t);
+    constexpr double step=1.0/24.0;sim_accum_+=TTime::DeltaTime();
+    while(sim_accum_+1e-9>=step) {sim_accum_-=step;if(IsAlive())AdvanceTick();}
+    Submit(debug_mode);
 }
+
+void TPhotonEffect_Bespoke::Submit(EFxDebugMode debug_mode)
+{
+    if(!Renderer||!EnsureAsset())return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) {const auto p=Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace()));}
+    std::array<hmm_vec3,4> vertices{};for(int i=0;i<4;++i)vertices[i]=authored_[i].pos;
+    for(int slot=0;slot<32;++slot) {
+        if(particles_.frame[slot]<0||particles_.scale[slot]<=0)continue;
+        const auto quad=photon_core::BuildQuad(vertices,particles_.scale[slot],particles_.position[slot],owner);
+        SQuadDrawItem item{};item.key.texture=texture_frames_[size_t(particles_.frame[slot])%texture_frames_.size()];
+        item.key.blend=uint8_t(EFxBlend::Alpha);item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
+        item.retail_argb4444=argb4444_;item.retail_software_projection=native_domain_;item.debug_mode=debug_mode;
+        // Reverse the four corners so the shared diagonal emits original
+        // triangles (0,1,3),(3,2,0), each with its original UV and winding.
+        for(int corner=0;corner<4;++corner) {
+            const int source=3-corner;const auto p=quad[source];
+            item.world_pos[corner][0]=p.X;item.world_pos[corner][1]=p.Y;item.world_pos[corner][2]=p.Z;
+            item.uv[corner][0]=authored_[source].tu;item.uv[corner][1]=authored_[source].tv;
+        }
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
+DEFINE_BUILDER("Photon",TPhotonEffect_Bespoke)
+REGISTER_BUILDER(TPhotonEffect_Bespoke)
 
 // ----- M08 TPixieEffect_Bespoke -------------------------------------------
 

@@ -36,6 +36,7 @@ _CLASSDEF(TEffect)
 _CLASSDEF(TSpellBlock)
 
 #include "particlefx.h"
+#include "photoncore.h"
 #include "missilestate.h"
 #include "renderer.h"   // EFxDebugMode, SBillboardDrawItem, TRenderer
 
@@ -4723,78 +4724,36 @@ class TSymGlowEffect_Bespoke : public TEffect
     double         sim_accum_ms_ = 0.0;
 };
 
-// ----- M07 TPhotonEffect (Bespoke) -----------------------------------------
-//
-// "Photon" — 32-slot energy-bolt missile (forensics docs/vfx/forensics/
-// M07_TPhotonEffect.md). REGISTER_3DANIMATOR("Photon", TPhotonAnimator)
-// (missileeffect.cpp:176). Three-state LAUNCH / FLY / EXPLODE machine; the
-// in-game TMissileEffect base drives transit + state transitions, but the
-// harness drives the visual choreography only (no live char/collision).
-//
-// We collapse the choreography onto a freestanding TEffect subclass and
-// cycle LAUNCH -> FLY -> EXPLODE on a fixed visual cadence so the harness
-// can replay every state without the missile-base machinery. The
-// per-state per-spark kinematics are line-for-line from
-// missileeffect.cpp:187-399 (Initialize/Animate); the render is from
-// :408-441.
-//
-// SetBlendState in the snapshot's Render is Alpha. We submit one alpha
-// billboard per spark per frame and re-add one point light at the
-// effect origin per frame (LS coupling — bright blue-white glow during
-// the bolt, brightest at EXPLODE).
-//
-// Asset: Magic\Photon.I3D (Class.Def-registered + byte-identical in
-// data/imagery.rvi per forensics §2.1(1)).
-
-inline constexpr int32_t kPhotonBespokeNumSparks       = 16;     // NUM_PHOTON_SPARKS
-inline constexpr int32_t kPhotonBespokeSlots           = 32;     // NUM_PHOTON_SPARKS * 2
-inline constexpr int32_t kPhotonBespokeLaunchRadius    = 20;     // PHOTON_LAUNCH_RADIUS
-inline constexpr int32_t kPhotonBespokeLaunchDuration  = 25;     // PHOTON_LAUNCH_DURATION
-inline constexpr float   kPhotonBespokeScaleStep       = 0.25f;  // PHOTON_LAUNCH_SCALE_STEP
-inline constexpr int32_t kPhotonBespokeSimTickMs       = 1000 / 24;
-inline constexpr float   kPhotonBespokeBaseSizeWu      = 16.0f;
-inline constexpr float   kPhotonBespokeLightRadiusWu   = 280.0f;
-inline constexpr float   kPhotonBespokeLightIntensity  = 1.4f;
-// Harness-only state-cycle cadence (tick durations for LAUNCH/FLY/EXPLODE).
-// In-game these are driven by TMissileEffect range/Pulse; the harness
-// cycles them on a fixed timer so all three visuals replay.
-inline constexpr int32_t kPhotonBespokeFlyTicks        = 40;
-inline constexpr int32_t kPhotonBespokeExplodeTicks    = 30;
-inline constexpr int32_t kPhotonBespokeIdleTicks       = 12;     // gap between EXPLODE and next LAUNCH
-
+// ----- M07 Photon: original moving controller and authored five-frame quad -----
 _CLASSDEF(TPhotonEffect_Bespoke)
-
 class TPhotonEffect_Bespoke : public TEffect
 {
   public:
-    TPhotonEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TPhotonEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
-    ~TPhotonEffect_Bespoke() override = default;
-
-    void OffScreen() override { KillThisEffect(); }
-
+    TPhotonEffect_Bespoke(TObjectImagery* image) : TEffect(image) { Initialize(); }
+    TPhotonEffect_Bespoke(SObjectDef* definition,TObjectImagery* image) : TEffect(definition,image) { Initialize(); }
+    void OffScreen() override { }
+    void Pulse() override;
+    uint32_t Move() override { return GetMoveBits(); }
+    bool SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination);
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
+    void PrimeLaunchForTest(); // Explicit alternate original Animate-before-Pulse sequencing.
+    const missile_state::State& ProjectileState() const { return missile_; }
+    [[nodiscard]] bool IsAlive() const { return !particles_.Finished(missile_.state); }
     [[nodiscard]] static TPhotonEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
-    [[nodiscard]] bool IsAlive() const { return true; }   // cycles forever in the harness
-
   private:
-    void ResetLaunch_();
-    void EnterFly_();
-    void EnterExplode_();
-
-    hmm_vec3       p_[kPhotonBespokeSlots] {};
-    hmm_vec3       v_[kPhotonBespokeSlots] {};
-    float          scale_[kPhotonBespokeSlots] {};
-    int32_t        framenum_[kPhotonBespokeSlots] {};
-    int32_t        activesparks_ = 0;
-    int32_t        numtexframes_ = 1;
-    int32_t        state_        = 0;     // 0=LAUNCH 1=FLY 2=EXPLODE 3=IDLE (harness gap)
-    int32_t        oldstate_     = -1;    // force first-time block on entry
-    int32_t        state_ticks_  = 0;
-    TTextureHandle texture_      = kInvalidTexture;
-    float          uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
-    float          size_wu_      = kPhotonBespokeBaseSizeWu;
-    double         sim_accum_ms_ = 0.0;
+    void Initialize();
+    void AdvanceTick();
+    bool EnsureAsset();
+    void Submit(EFxDebugMode debug_mode);
+    photon_core::State particles_;
+    missile_state::State missile_;
+    S3DPoint destination_{};
+    bool has_destination_=false,preview_mode_=false,native_domain_=false;
+    std::array<S3DVertex,4> authored_{};
+    std::vector<TTextureHandle> texture_frames_;
+    bool argb4444_=false;
+    double sim_accum_=0;
 };
 
 // ----- M08 TPixieEffect (Bespoke) ------------------------------------------
