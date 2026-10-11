@@ -57,6 +57,7 @@
 #include "effects/fairy2preview.h"
 #include "effects/flamevariantspreview.h"
 #include "effects/ribbonpreview.h"
+#include "effects/vortexpreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
@@ -5985,17 +5986,18 @@ struct SVfxTestBootstrap {
         tornado_bespoke.destroy       = [](void* c) { TornadoBespokeDestroy(c); };
         VfxTest::DeferredRegister(tornado_bespoke);
 
-        // W03 TVortexAnimator: PE+SR sucking spiral. Multi-sub-object I3D
-        // mesh draws plus per-vertex alpha writeback into LVERTEX.color —
-        // bespoke pipeline lacks both.
+        // Shipped literal Vortex resolves the default animator and three legacy roots.
+        // The unrelated snapshot procedural TVortexAnimator is not this binding.
         VfxTest::SEffect vortex_bespoke = {};
         vortex_bespoke.id            = "TVortexEffect_BESPOKE";
         vortex_bespoke.family        = "weather";
-        vortex_bespoke.pipeline      = "PE+SR";
+        vortex_bespoke.pipeline      = "Mesh";
         vortex_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
-        vortex_bespoke.factory       = [](const S3DPoint& o) -> void* { return VortexBespokeSpawn(o); };
-        vortex_bespoke.submit        = [](void* c, EFxDebugMode d) { VortexBespokeSubmit(c, d); };
-        vortex_bespoke.destroy       = [](void* c) { VortexBespokeDestroy(c); };
+        vortex_bespoke.factory       = [](const S3DPoint& o) -> void* { return vortex_preview::Spawn(o); };
+        vortex_bespoke.submit_world = [](void*c,EFxDebugMode){vortex_preview::SubmitWorld(static_cast<vortex_preview::State*>(c));};
+        vortex_bespoke.is_alive = [](void*c){return vortex_preview::Alive(static_cast<vortex_preview::State*>(c));};
+        vortex_bespoke.submit        = [](void*c,EFxDebugMode){vortex_preview::Advance(static_cast<vortex_preview::State*>(c),TTime::DeltaTime());};
+        vortex_bespoke.destroy       = [](void*c){vortex_preview::Destroy(static_cast<vortex_preview::State*>(c));};
         VfxTest::DeferredRegister(vortex_bespoke);
 
         // --- wave3 W2C weather-C family bespoke entries ------------------

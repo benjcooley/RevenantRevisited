@@ -12,6 +12,7 @@
 // *************************************************************************
 
 #include "ribbonlegacykeys.h"
+#include "vortexlegacykeys.h"
 #include "i3dtexturealpha.h"
 #include "3dimage.h"
 
@@ -1204,9 +1205,11 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
 
     flags = mesh->flags;
     version = 0;
-    // Only the independently audited two-root, one-frame base Ribbon body.
-    // Every other old-body caller keeps its existing zero-key fallback.
+    // Independently audited one-frame Ribbon and shipped default Vortex bodies.
+    // Other old-body callers keep their existing zero-key fallback.
     const bool ribbon_keys=ribbon_legacy::Matches(GetResFilename(),mesh,
+        GetResSize(),NumStates(),GetAniLength(0),GetAniFlags(0));
+    const bool vortex_keys=vortex_legacy::Matches(GetResFilename(),mesh,
         GetResSize(),NumStates(),GetAniLength(0),GetAniFlags(0));
 
     // ---- morph vertex lists ----
@@ -1303,6 +1306,11 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
                 obj.numanikeys[d] = GetAniLength(d);
                 std::memset(obj.anikeys[d], 0, sizeof(SAniKey) * GetAniLength(d));
                 if (ribbon_keys && d==0) {
+                    static_assert(sizeof(SAniKey)==8);
+                    const auto* raw=static_cast<const uint8_t*>(mesh->anikeys[0].ptr());
+                    std::memcpy(obj.anikeys[d],raw+size_t(c)*8,8);
+                }
+                if (vortex_keys && d==0) {
                     static_assert(sizeof(SAniKey)==8);
                     const auto* raw=static_cast<const uint8_t*>(mesh->anikeys[0].ptr());
                     std::memcpy(obj.anikeys[d],raw+size_t(c)*8,8);
