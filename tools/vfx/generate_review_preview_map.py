@@ -172,6 +172,8 @@ IMPLEMENTED.update(dict.fromkeys(
 
 
 def admitted_candidates(row):
+    if row.get("retail_type_id", "").lower()=="0x119f01e3":
+        return ["Fire_INSTALLED_FACE0"]
     if row.get("retail_type_id", "").lower()=="0xad92bd27":
         return ["CFire_INSTALLED_NO_PRESETS"]
     row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n not in ('Burn_AUTHENTIC_ACOLYTE_INTEGER','Aura_AUTHENTIC_ACOLYTE_INTEGER') and not n.startswith('MagicShield_PUBLIC_')])
@@ -203,6 +205,8 @@ def admitted_candidates(row):
 
 
 def candidate_metadata(row, name):
+    if row.get("retail_type_id", "").lower()=="0x119f01e3" and name=="Fire_INSTALLED_FACE0":
+        return True, "Shipped default Fire: exact static quad/frame0, blank facing0; legacy procedural scatter is not this retail implementation, pixel sampling and natural caller remain open"
     if row.get("retail_type_id", "").lower()=="0xad92bd27" and name=="CFire_INSTALLED_NO_PRESETS":
         return False, "Exact installed Misc/cfire authored base sprites after genuine missing cfire/csparks presets; real kill30, intended particle definitions and natural caller remain open"
     if row.get('retail_type_id','').lower()=='0xad92bc1b' and name=='MagicShield_PUBLIC_AURA':

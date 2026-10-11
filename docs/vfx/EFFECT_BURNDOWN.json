@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "1e46371ff1fb7ddc5eace00b99a5e2da49504394f93ee5e79ae18d98da5c0014",
+    "harness_sha256": "c8fb3749cb897336a5fd945b4045c073a43225465e6fe48700fb76df9dbf45dd",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -6783,11 +6783,13 @@
       "retail_type_id": "0x119f01e3",
       "asset": "Misc\\Fire.I3D",
       "preview_candidates": [
+        "Fire_INSTALLED_FACE0",
         "TFireEffect",
         "TFireEffect_BESPOKE"
       ],
       "source_fixes": [
-        "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested Misc\\Fire.I3D is distinguished from Imagery/Magic/fire.i3d."
+        "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested Misc\\Fire.I3D is distinguished from Imagery/Magic/fire.i3d.",
+        "2026-10-11: Exact shipped default staticFire resource/key/material/controller adapter; strictbodyguards/9nativepose/192actualGPUmatrixfields andadjacentlegacyregressionspass. Viewerreplacesunrelatedproceduralscatter withpartialstatic; onepixelrastergateopen."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -6795,8 +6797,8 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
@@ -6806,7 +6808,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Recover an actual visible Fire caller/texture-selection or shipped setting; defaultoneframe legacyrenderer samplesonlyzero texels. Preserve nativegeometry/clock and rejectproceduralFirepreview as retailproof.",
+      "next_action": "Resolve original integer span/UV/alpha source raster vs GPU one-pixel cardinal residual; keep exactdefaultframe0, reject proceduralscatter/atlasclock as retailproof.",
       "notes": [
         "VFS collision corrected. Earlier port evidence must be checked against the requested asset before certifying visual fidelity; old bytes differ.",
         "2026-10-05: No useful animated visible reference in bounded standalone recipe. No accurate-reference or visual-acceptance credit.",

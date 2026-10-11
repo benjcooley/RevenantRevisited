@@ -64,6 +64,7 @@
 #include "effects/cameraparticlespreview.h"
 #include "effects/scrollwaterpreview.h"
 #include "effects/genericstaticpreview.h"
+#include "effects/fireinstalled.h"
 #include "effects/blastpreview.h"
 #include "effects/fairypreview.h"
 #include "effects/fairy2preview.h"
@@ -1710,7 +1711,8 @@ void Render()
         g_state.active_idx < int32_t(g_state.catalogue.size()) &&
         (g_state.catalogue[g_state.active_idx].id == "Dragonattack_ORIGINAL" ||
          g_state.catalogue[g_state.active_idx].id == "StrikeEffect_METEOR_CALLER" ||
-         g_state.catalogue[g_state.active_idx].id == "SGeyser_LOADED_INLINE");
+         g_state.catalogue[g_state.active_idx].id == "SGeyser_LOADED_INLINE" ||
+         g_state.catalogue[g_state.active_idx].id.rfind("Fire_INSTALLED_FACE",0)==0);
     const float world_camera_x = dragon_world_camera ? float(StartupVfxOrigin[0]) : 0.0f;
     const float world_camera_y = dragon_world_camera ? float(StartupVfxOrigin[1]) : 0.0f;
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy),
@@ -5806,6 +5808,13 @@ struct SVfxTestBootstrap {
         halo.destroy       = [](void* c) { HaloDestroy(c); };
         VfxTest::DeferredRegister(halo);
 
+        for(uint8_t facing:{0,64,128,192}){
+            VfxTest::SEffect e={};e.id="Fire_INSTALLED_FACE"+std::to_string(facing);e.family="fire";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[facing](const S3DPoint&o)->void*{return fire_installed::Spawn(o,facing);};
+            e.submit=[](void*p,EFxDebugMode){fire_installed::Advance(static_cast<fire_installed::State*>(p),TTime::DeltaTime());};
+            e.submit_world=[](void*p,EFxDebugMode){fire_installed::SubmitWorld(static_cast<fire_installed::State*>(p));};
+            e.is_alive=[](void*p){return fire_installed::Alive(static_cast<fire_installed::State*>(p));};e.destroy=[](void*p){fire_installed::Destroy(static_cast<fire_installed::State*>(p));};VfxTest::DeferredRegister(e);
+        }
         VfxTest::SEffect fire = {};
         fire.id            = "TFireEffect";
         fire.family        = "fire";

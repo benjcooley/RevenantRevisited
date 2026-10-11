@@ -4,6 +4,11 @@ from generate_review_preview_map import PARTIAL, SOURCE_MAPPINGS, admitted_candi
 
 
 class ReviewPreviewAdmission(unittest.TestCase):
+    def test_fire_routes_shipped_static_not_procedural_scatter(self):
+        row={"retail_type_id":"0x119f01e3","preview_candidates":["TFireEffect","TFireEffect_BESPOKE"]}
+        self.assertEqual(admitted_candidates(row),["Fire_INSTALLED_FACE0"])
+        self.assertTrue(candidate_metadata(row,"Fire_INSTALLED_FACE0")[0])
+
     def test_magicshield_exact_control(self):
         row={'retail_type_id':'0xad92bc1b','preview_candidates':['TMagicShieldEffect_BESPOKE']}
         self.assertEqual(admitted_candidates(row)[0],'MagicShield_PUBLIC_AURA')

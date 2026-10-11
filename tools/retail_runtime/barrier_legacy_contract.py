@@ -14,7 +14,7 @@ COPY=r'''
 std::array<SAniKey,5> Copy(const SOld3DImageryBody*mesh,bool barrier_keys){
  std::array<SAniKey,5> out{};
  for(int c=0;c<5;++c){
-  bool ribbon_keys=false,vortex_keys=false,smoke_keys=false;int d=0;
+  bool ribbon_keys=false,vortex_keys=false,smoke_keys=false,fire_keys=false;int d=0;
   void*ptr=nullptr;int count=0;
   struct{void**anikeys;int*numanikeys;}obj{&ptr,&count};
   auto GetAniLength=[](int){return 1;};

@@ -95,6 +95,7 @@ std::vector<SEffect> ReviewCatalogue() {
     auto teleporter=Row("Teleporter_ORIGINAL_NULL",EVfxPreviewStyle::Static);
     teleporter.is_alive=[](void*c){return *static_cast<int*>(c)<2;};
     teleporter.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
+    auto fire=Row("Fire_INSTALLED_FACE0",EVfxPreviewStyle::Static);fire.is_alive=[](void*){return true;};
     auto food=Row("Createfood_ORIGINAL_CONTEXT",EVfxPreviewStyle::Static);
     food.is_alive=[](void*c){return *static_cast<int*>(c)<2;};
     food.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
@@ -113,7 +114,7 @@ std::vector<SEffect> ReviewCatalogue() {
     if(cfire_negative==2)cfire.submit_world={};
     if(cfire_negative==3)cfire.preview_style=EVfxPreviewStyle::Combat;
     if(cfire_negative==4)cfire.id="TCFireEffect_BESPOKE";
-    return {magicshield,cfire,sgeyser,strike,aura,burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    return {fire,magicshield,cfire,sgeyser,strike,aura,burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -423,6 +424,12 @@ int main(int argc,char** argv) {
         auto preview=CreateVfxReviewPreview(id,origin);assert(preview && preview->RestartInterval()==0);
         const int initial=creates;preview->Submit();preview->Submit();assert(preview->Alive()==false);
         preview->Submit();assert(preview->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0x119f01e3u);assert(info.supported && info.partial && info.lifetime_known);
+        auto fire=CreateVfxReviewPreview(0x119f01e3u,origin);assert(fire && fire->Id()=="Fire_INSTALLED_FACE0");
+        const int initial=creates;for(int i=0;i<100;++i)fire->Submit();assert(fire->Alive()==true && creates==initial);
     }
     assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";

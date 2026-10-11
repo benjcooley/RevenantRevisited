@@ -42,6 +42,9 @@ const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nu
             return e.id == mapping.preview_id;
         });
         if (it == catalogue.end() || !it->factory || !it->destroy) continue;
+        if (id==0x119f01e3u && (it->id!="Fire_INSTALLED_FACE0" ||
+            it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
+            !it->is_alive || !it->submit_world)) continue;
         if (id==0xad92bd27u && (it->id!="CFire_INSTALLED_NO_PRESETS" ||
             it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
             !it->is_alive || !it->submit_world)) continue;

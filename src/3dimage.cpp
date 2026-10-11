@@ -15,6 +15,7 @@
 #include "vortexlegacykeys.h"
 #include "smokelegacykeys.h"
 #include "barrierlegacykeys.h"
+#include "firelegacykeys.h"
 #include "i3dtexturealpha.h"
 #include "3dimage.h"
 #include "legacybonecompose.h"
@@ -1333,6 +1334,8 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
     const bool barrier_keys=barrier_legacy::Matches(GetResFilename(),mesh,
         GetResSize(),NumStates(),GetAniLength(0),GetAniFlags(0));
 
+    const bool fire_keys=fire_legacy::Matches(GetResFilename(),mesh,GetResSize(),NumStates(),GetAniLength(0),GetAniFlags(0));
+
     // ---- morph vertex lists ----
     numverts = mesh->numverts;
 
@@ -1439,6 +1442,10 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
                 if (smoke_keys) {
                     static_assert(sizeof(SAniKey)==8);
                     std::memcpy(obj.anikeys[d],mesh->anikeys[d].ptr(),size_t(GetAniLength(d))*8);
+                }
+                if (fire_keys && d==0) {
+                    static_assert(sizeof(SAniKey)==8);
+                    std::memcpy(obj.anikeys[d],mesh->anikeys[0].ptr(),8);
                 }
                 if (barrier_keys && d==0) {
                     static_assert(sizeof(SAniKey)==8);
