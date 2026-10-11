@@ -1847,11 +1847,16 @@ TObjectInstance* TMapPane::ObjectInCube(PS3DRect cube, int32_t lvl, int32_t objs
 // position replaces retail's (x + posx, y + posy).
 TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with)
 {
+    return OnObject(screenx, screeny, with, EPickRead::Exact);
+}
+
+TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with, EPickRead read)
+{
     if (!mapview)
         return nullptr;
 
     TMapRenderer::SPick pick;
-    if (mapview->Pick(screenx, screeny, pick) && pick.mesh)
+    if (mapview->Pick(screenx, screeny, pick, read) && pick.mesh)
         return pick.mesh;
 
     SPoint p;
@@ -3984,8 +3989,9 @@ void TMapPane::Animate(bool draw)
     if (!PaneToMapScreen(x, y, mapx, mapy))
         return;
 
-    // The next frame copies back the ids around the pointer, so the pick
-    // below finds them without waiting on the GPU.
+    // Each frame copies back the ids around the pointer; the hover reads the
+    // latest copy, taken where the pointer was a frame or two ago, rather
+    // than wait on the GPU for this frame's (a click reads it exactly).
     mapview->SetPickPoint(x, y);
 
     const int32_t frame = CurrentScreen ? CurrentScreen->FrameCount() : 0;
@@ -3993,7 +3999,7 @@ void TMapPane::Animate(bool draw)
     {
         hoverpickframe = frame;
         hovercursor = CURSOR_NONE;
-        TObjectInstance* on = OnObject(x, y);
+        TObjectInstance* on = OnObject(x, y, nullptr, EPickRead::Latest);
         if (on)
         {
             if (!GetDragObj() && on->IsInventoryItem() && !(on->GetFlags() & OF_INVISIBLE))

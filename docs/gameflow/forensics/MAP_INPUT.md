@@ -367,10 +367,14 @@ The port's design and state: §7.
 - `[mapinput] over …` (hover changes) and `[mapinput] release …` (what a
   click acted on, positions, distance) are in the log for test runs.
 
+- **Hover never waits on the GPU** (2026-10-10). It read the last frame
+  synchronously (`ReadIdProbe`) on the 8th frame whenever the pointer had
+  moved since the last copy: a small stall while the mouse moved. It now
+  picks with `EPickRead::Latest`, the ids copied back around wherever the
+  pointer was a frame or two ago; a click still reads exactly at its
+  point. Over the level-46 gate: door cursor, nothing, door cursor again
+  as the pointer leaves and returns, and the click on it as before.
+
 Open:
-- Hover reads the last frame synchronously (`ReadIdProbe`) on the 8th
-  frame when the pointer has moved since the last probe: a small GPU
-  wait while the mouse moves. Hover can keep its last answer until the
-  asynchronous probe at the new point arrives.
 - Input-simulator note: `move X Y` glides for `kDefaultMoveMs`; sweeps
   want `move X Y 0`.
