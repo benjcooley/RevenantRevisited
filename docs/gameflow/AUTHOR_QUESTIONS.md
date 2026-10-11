@@ -317,11 +317,16 @@ Answer inline (or in chat) and the owning doc gets updated.
     ever considered?
 88. Buying with a full pack does nothing and says nothing. Was a line
     planned (there is a no-gold line but no no-room line)?
-89. Hruthford stocks the Bracelet of Fortune and the Ivory Pendant for
+89. ~~Hruthford stocks the Bracelet of Fortune and the Ivory Pendant for
     0 gp: their class.def `Value` is 0 (most jewelry is, and is also
     SaleType 1). Were jewelry prices still to be filled in, or meant to
     come from ARMOR.DEF's BASICMODS value column (which the shop never
-    reads)?
+    reads)?~~ Settled from the code: at load, BindTypes writes every
+    ARMOR.DEF / WEAPON.DEF entry's BASICMODS over its type's class.def
+    stats (`0x0048c7f0`), Value included, so the shop reads ARMOR.DEF's
+    prices: 750 and 500 in the emulator. The 0 gp was the port's, which
+    hadn't made the copy ([../playtest/FINDINGS.md](../playtest/FINDINGS.md)
+    F6).
 123. The first shop visit of a game that goes straight to Sell lists
      nothing: `BuySellAddbuyitem` lists the customer's items, the customer
      is only set by `buysellscreen` (after the add lines), and the shop's

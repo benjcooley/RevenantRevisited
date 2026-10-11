@@ -974,9 +974,9 @@ class.def's TYPES rows are only defaults. At load, BindTypes (`0x0048cab0`
 Only armour has STATLINEs. While an item is equipped, its line is applied to
 Locke's modified stat copy (PLAYER_STATS §2–3).
 
-The port doesn't make this copy (`src/rules.cpp:814-819`). Its prices, its
-damage values and Gina's and Cronus's stock come from class.def, so they
-differ from retail [L: read, not run].
+The port makes the same copy (`TRules::BindTypeData`, `src/rules.cpp`;
+FINDINGS F6). Before that, its prices, damage values and Gina's and Cronus's
+stock came from class.def.
 
 ### 5.2 What Locke may equip: CanEquip `0x00519300` [C]
 
@@ -1581,7 +1581,7 @@ marked.
 | Death loot | the inventory drops to the floor; the corpse fades out after about 10 s | items stay on the corpse; it never fades (`src/character.cpp:409-422`) |
 | U and G keys | Use and Get (§4.2) | not dispatched by `TPlayScreen::Command` |
 | A pickup into a full pack | the item probably vanishes [L] | the item goes back on the map |
-| Item numbers | `weapon.def` and `armor.def` BASICMODS copied over class.def (§5.1) | class.def values: different prices, damage, MinStrength and shop stock [L] |
+| Item numbers | `weapon.def` and `armor.def` BASICMODS copied over class.def (§5.1) | the same since FINDINGS F6 |
 | Jong's lessons | `player.lastattack` completes the lesson | NotPorted, so the lesson never completes and the Training Sword keeps re-equipping |
 | Boss AI (Baez, the Solifuge, Jhaga, Yhagoro) | `AIPerMonster` cases 1–4 | the boss kind is set, but its behaviour isn't ported (`src/character.cpp:3065`) |
 | Kill Exp, skill Exp, level-up, Invoke Exp | §1–2 | ported. The `invoke2` level-up animation isn't played (PLAYER_STATS §9); Invoke experience matches retail (spell-cast kata, 2071/2071) |
@@ -1674,8 +1674,8 @@ marked.
   - the shop rows;
   - screen positions for the equip-pane slots and the belt boxes.
 - **In the director:** `monster_brief`'s inverted DAMAGEMODS sign.
-- **In the port:** no generators, no death drop, no U or G keys, class.def
-  item numbers, no Jong lesson completion, no boss AI.
+- **In the port:** no generators, no death drop, no U or G keys, no Jong
+  lesson completion, no boss AI.
 - **Unconfirmed in retail:** generator reach and the sector window; floor
   drops across a save; a full-pack pickup; the order of chest steps; belt
   pouches; Restart after a load; which monsters take the grapples; the

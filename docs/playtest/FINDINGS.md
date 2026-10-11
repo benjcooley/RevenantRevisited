@@ -4,6 +4,73 @@ Bugs and gaps that Jev's sessions surfaced in the games, with what reproduces
 each. Newest first. Each entry: what was seen, the evidence, the repro, and
 who owns the fix.
 
+## F6. Weapon and armour numbers came from class.def (port bug, fixed)
+
+**Seen 2026-10-11**, reading for GRIND.md §5.1 and §10. The port's item
+prices, damage, Protection, MinStrength and MinConstitution were class.def's
+TYPES rows. Retail overwrites them at load with `weapon.def` and `armor.def`
+BASICMODS. The Short Sword cost 100 instead of 195. The Club had Damage 0 and
+MinStrength 48, so it could never be equipped (retail: 14 and 16). Cloth
+armour gave no Protection and asked for Str 16 and Con 12 (retail: 1, 14 and
+10).
+
+**Retail.**
+- BindTypes (`0x0048cab0`) walks every type of every class. For each it
+  calls BindType (`0x0048c930`), then BindTypeData (`0x0048c7f0`) with the
+  type's name.
+- BindTypeData takes the first class (by id) with a type of that name. For
+  WEAPON it finds the `weapon.def` entry of that name (`_stricmp`) and runs
+  `0x0048af30`. For ARMOR it finds the `armor.def` entry and runs
+  `0x0048b4a0`. Other classes are left alone.
+- Those two write each BASICMODS field into the type's class stat of that
+  name: FindStat on the class's type stats (`+0x14`), then the type's stats
+  (`+0x34[type] → +0x10`). Weapons, in file order: EqSlot, Type, Damage,
+  Combining, Poison, Value, DamageType, MinStrength. Armour: EqSlot,
+  Protection, Combining, ResistPoison, Stealth, Value, MinStrength,
+  MinConstitution. The armour loader (`0x0048b1a0`) stores Stealth at
+  `+0xb4` and Value at `+0xb0`, and the copy reads them back by name, so
+  the file order holds. SaleType and SwipeFull keep class.def's values.
+- BindTypes runs at the end of LoadClasses (`0x0047654f`) and after a rules
+  reload (`0x0047c9a0`, `0x0047cb97`).
+- **Emulator.** The clickwalk build's boot image stops after game init, so
+  class.def is loaded and BindTypes has run. Read from the class registry
+  (`0x0065a148`): WEAPON has 69 types, ARMOR 206. Every row equals class.def
+  with its entry's BASICMODS laid over it by the mapping above (275 of 275).
+  60 weapon rows and 203 armour rows differ from class.def. Types with no
+  entry keep class.def's numbers: the daggers, OgrokAxe, the sword parts,
+  Amulet of Rogoss, Diamond Ring and Wolfsbane Pendant.
+- **Emulator, on items.** On the `forest` slot, GetStat (vtable `+0xd4`,
+  `0x00473600`) on Locke's own items gives the same numbers. The Short
+  Sword has Damage 13, Value 195 and MinStrength 16. The cloth shirt and
+  pants have Protection 1, Value 10, MinStrength 14 and MinConstitution 10.
+
+**Port before the fix.** `TRules::BindType` bound only CHARACTER and PLAYER
+types. Nothing copied the item numbers. Checked on 27 types (14 weapons, 13
+armour, including Dagger and Amulet of Rogoss), every stat through the
+item's GetStat: 196 of 257 values equal retail, 61 differ.
+
+**Repro (port).** On the `forest` slot, add an item, name it, and test a
+stat against retail's: `--exec 'sleep 24; add "Short Sword"; "Short
+Sword".name it1; if it1.stat value = 195'`. The exec log shows
+`(result=0x40)` when the condition holds and `0x80` when it doesn't.
+(`it1.stat value` alone prints "Bad parameters." from `--exec`, because
+the queue ends each line with a newline token.)
+
+**Resolution.** Fixed on `playtest/items`.
+- `TRules::BindTypeData` (`src/rules.cpp`) is retail's `0x0048c7f0`. It
+  writes the entry's BASICMODS into the type's stats by name. BindTypes
+  calls it after BindType for every type, as retail does.
+- After the fix, all 257 sampled values equal retail.
+- `crosscheck.py --slot` on the `forest` slot (both games, one tick) shows
+  no item variance. Every carried item's numbers match: the Short Sword
+  13 / 16 / 195 and the cloth pieces' Protection, requirements and Value.
+  The run's five variances are screen positions and the click grid.
+- Everything that reads these stats now sees retail's numbers: shop prices
+  (`TBuySellPane::BuildItem` reads `Value`), CanEquip's MinStrength and
+  MinConstitution, weapon Damage and armour Protection. So does the stock
+  filter the town scripts give Gina and Cronus (`minstrength` in [1,
+  VALUE], `town.s:1830`, `2039`).
+
 ## F5. The right-button walk stopped steering over the HUD (port bug, fixed)
 
 **Seen 2026-10-11.** With the right button held, moving the pointer over
