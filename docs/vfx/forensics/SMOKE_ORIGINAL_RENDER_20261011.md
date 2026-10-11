@@ -37,3 +37,33 @@ RenderObject calls, illumination and software ARGB4444 raster. Immutable decoded
 resource/COM surfaces, base script/bookkeeping, declared light/camera and quality
 are explicit boundaries. Appearance review and actual GPU/gallery evidence are
 pending; no natural map, caller, device or exact-pixel acceptance is claimed here.
+
+## Full rendered comparison and source-alpha correction
+
+The first full comparison was held: the shape and motion matched, but Metal's
+unquantized source contribution made the puff edges gray. The eight actual
+ARGB4444 words now pass512 original Scene2 raster controls (four destinations,
+two ignored vertex-color inputs, eight overlapping draws). Dominant `0x0555`
+and `0x0666` contribute RGB565 `(0,1,0)` on black. This is the source of the green
+rings; a fitted tint or transparent color key would be incorrect.
+
+Smoke now opts into the existing `retail_alpha_source_quantize` policy only for
+explicit native-domain rendering. No renderer or shader changed. Original
+background arithmetic is `dst - floor(dst*alpha) + floor(src*alpha)` per channel;
+GPU destination arithmetic still retains fractional values. This remaining
+overlap brightness/raster difference is not exact-pixel acceptance.
+
+Final comparison `smoke-review-quant/manifest.json` SHA-256:
+`be59d0eda39b0b174aa35d4605925210c66a179f5cf35ddc3781a36fcd5f5e9f`.
+Actual binary: `4fd590321af13234481be13ae60ca9696b3664a4d6acdfca5863011b21b46bfe`.
+Ten whole phases2/20/80/140/199/200/250/300/500/600 cover motion, expansion,
+shrink/reset and the center's bounce. Both actual films contain600 visible,
+distinct frames; logged state samples differ from original by at most4.9952e-8.
+The ordinary projection's600 pixel hashes are unchanged by the opt-in fix.
+
+`smoke-native-repeat/replay-check.json` verifies601 state/RNG snapshots,
+30,050 draw calls and all11 raster PNGs against a fresh original replay.
+`smoke-gallery-quant` verifies the real translated review owner, exact runtime
+mapping,300 visible/distinct frames and clean shutdown. Quality0/1 actual GPU
+controls remain blank. Natural map placement/caller, device, destination
+precision and exact pixels remain separate open gates.
