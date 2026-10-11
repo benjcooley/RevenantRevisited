@@ -86,6 +86,7 @@
 #include "effects/prelitquadcontrol.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
+#include "effects/retailbloodpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
 #include "imagery.h"     // TObjectClass / TObjectImagery
 #include "imgui.h"
@@ -7394,6 +7395,23 @@ struct SVfxTestBootstrap {
                 kinsecretdoor_still_preview::SubmitWorld(static_cast<kinsecretdoor_still_preview::State*>(c),mode);
             };
             e.destroy = [](void* c) { kinsecretdoor_still_preview::Destroy(static_cast<kinsecretdoor_still_preview::State*>(c)); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            // The retail combat blood: one actual Blood owner and its
+            // TBloodAnimator, with EffectBurst's parameters for a blow.
+            VfxTest::SEffect e = {};
+            e.id = "TBloodEffect_RETAIL";
+            e.family = "combat"; e.pipeline = "FX quads";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory = [](const S3DPoint& origin) -> void* { return retail_blood_preview::Spawn(origin); };
+            e.submit = [](void* context, EFxDebugMode mode) {
+                auto* state = static_cast<retail_blood_preview::State*>(context);
+                retail_blood_preview::Advance(state, TTime::DeltaTime());
+                retail_blood_preview::Submit(state, mode);
+            };
+            e.destroy = [](void* context) { retail_blood_preview::Destroy(static_cast<retail_blood_preview::State*>(context)); };
+            e.is_alive = [](void* c) { return retail_blood_preview::Alive(static_cast<retail_blood_preview::State*>(c)); };
             VfxTest::DeferredRegister(e);
         }
         for (int start = 1; start <= 9; ++start)
