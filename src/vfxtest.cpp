@@ -11,6 +11,7 @@
 #include "effects/gvortexoriginal.h"
 #include "effects/maelstromoriginal.h"
 #include "effects/cataclysmoriginal.h"
+#include "effects/rockstormoriginal.h"
 #include "effects/lightstriporiginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
@@ -5430,6 +5431,16 @@ struct SVfxTestBootstrap {
             original.submit_world=[](void* c,EFxDebugMode mode){cataclysm_original::SubmitWorld(static_cast<cataclysm_original::State*>(c),mode);};
             original.is_alive=[](void* c){return cataclysm_original::IsAlive(static_cast<cataclysm_original::State*>(c));};
             original.destroy=[](void* c){cataclysm_original::Destroy(static_cast<cataclysm_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="RockStorm_ORIGINAL";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return rockstorm_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){rockstorm_original::Advance(static_cast<rockstorm_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){rockstorm_original::SubmitWorld(static_cast<rockstorm_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return rockstorm_original::IsAlive(static_cast<rockstorm_original::State*>(c));};
+            original.destroy=[](void* c){rockstorm_original::Destroy(static_cast<rockstorm_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
         {
