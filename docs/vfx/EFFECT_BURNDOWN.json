@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "a35647ee891145570e2ef4086817bcd771a1988fdf49e1ed0d7c6c3f13796c20",
+    "harness_sha256": "de18f868471bbe596f6a358e6176a99be20d5452f85fd79cf215b24ebbb0c691",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 102,
+    "retail_rows_with_source_fixes_recorded": 103,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 76,
+    "visual_fidelity_confirmed_rows": 77,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 76,
-    "remaining_visual_review_rows": 100
+    "reviewed_visual_pass_rows": 77,
+    "remaining_visual_review_rows": 99
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -16084,27 +16084,39 @@
       "preview_candidates": [
         "THealEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: restored actual Heal registry, 59 authored bubble meshes and double cylinder, original ARGB4444 textures/order, exact24Hz rise/decay and world submission. 27300 state fields and whole92-frame original lifecycle agree."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve scoped native-domain default Heal appearance; verify other levels and natural actor/caller/resource dispatch separately.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Default level1/facing0 original software and actual Metal native-domain bubble/cylinder lifecycle, corrected aligned90-frame sequence and empty tail. Natural caller/resource dispatch/levels2-4/device/exact pixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-heal-full-visual-20261010/root-approval.json",
+        "sha256": "903daefb82e29696d6383408b943acc0fa82e691f4cd8a2af0fd3d264f9c5d1d",
+        "note": "docs/vfx/forensics/HEAL_NATIVE_DOMAIN_VISUAL_20261010.md"
+      }
     },
     {
       "index": 101,
