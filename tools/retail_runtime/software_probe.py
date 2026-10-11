@@ -23,14 +23,14 @@ RETAIL_SHA='28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5'
 
 class SoftwareFixture:
     """Independent Runtime and surfaces: workers never share mutable guest state."""
-    def __init__(self,executable,width=64,height=64,build=None):
+    def __init__(self,executable,width=64,height=64,build=None,vm=None):
         self.build=verify_build(executable,build)
-        self.vm=Runtime(executable)
+        self.vm=Runtime(executable) if vm is None else vm
         if hashlib.sha256(self.vm.image).hexdigest()!=self.build['executable_sha256']:
             raise ValueError('Executable changed while creating the software fixture')
         # Actual retail CRT heap/thread initialization. Stop before locale and
         # static game constructors, then original table builders can allocate.
-        self.vm.call(0x58ed0d,stop_address=0x58ed8e)
+        if vm is None:self.vm.call(0x58ed0d,stop_address=0x58ed8e)
         if width%2 or height<1:raise ValueError('The fixture requires an even positive width')
         self.width=width;self.height=height
         self.screen=self.vm.surface('screen',width,height)
