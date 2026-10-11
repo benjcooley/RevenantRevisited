@@ -5433,6 +5433,16 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(original);
         }
         {
+            VfxTest::SEffect original{};original.id="YCataclysm_ORIGINAL";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return cataclysm_original::Spawn(o,true);};
+            original.submit=[](void* c,EFxDebugMode){cataclysm_original::Advance(static_cast<cataclysm_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){cataclysm_original::SubmitWorld(static_cast<cataclysm_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return cataclysm_original::IsAlive(static_cast<cataclysm_original::State*>(c));};
+            original.destroy=[](void* c){cataclysm_original::Destroy(static_cast<cataclysm_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
             VfxTest::SEffect original{};original.id="Maelstrom_ORIGINAL";
             original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
             original.factory=[](const S3DPoint& o)->void*{return maelstrom_original::Spawn(o);};

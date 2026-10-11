@@ -25,18 +25,19 @@ class CataclysmWorld(MissileProbe):
   super().boundary(uc,address,size,user)
 
 class CataclysmScene(FireBallScene):
+ owner_vtable,owner_init,registry_name,builder_vtable=0x5aedb8,0x4fe9e0,"Cataclysm",0x5aefb4
  owner_pulse,anim_factory,anim_vtable,anim_init,anim_pulse,anim_render,builder=(0x4fea00,0x500b50,0x5aefb8,0x4fec80,0x4fef10,0x4ff170,0x66cfe0)
- def __init__(self,exe,data,width=1280,height=960,center=(640,640),registry_name="cataclysm"):
+ def __init__(self,exe,data,width=1280,height=960,center=(640,640)):
   self.put_string=lambda s:self.bytes(s.encode('latin1')+b'\0');self.data=data;self.asset=read_fireball(data);
   self.rng_draws=0;self.software=LitSoftwareFixture(exe,width,height,camera=(0,0,0));self.vm=self.software.vm;v=self.vm;self.software.lighting((38,38,38),(1,1,1));v.put_u32(0x675fc0,center[0]);v.put_u32(0x675fc4,center[1])
   self.missile=CataclysmWorld(exe,vm=v);self.missile.configure([0,0,78],[0,-500,78],target_hp=0,animator_present=True);self.owner=self.missile.obj;self.imagery=v.allocate(0x200)
   # Generic EFFECT owner vtable, not the missile subclass used to allocate world services.
-  v.write(self.missile.vtable,bytes(v.uc.mem_read(0x5aedb8,0x184)))
+  v.write(self.missile.vtable,bytes(v.uc.mem_read(self.owner_vtable,0x184)))
   v.put_u32(self.owner+0xd8,0);v.call(0x41e2de,stop_address=0x41e535,instruction_limit=20000000)
   self.boundaries={0x40dd60:0,0x49c430:4,0x40b2e0:12,0x40b5c0:12,0x40c7d0:28,0x471020:4,0x4548a0:8,0x452750:12,0x456790:8,0x4567c0:0}
   for address in self.boundaries:v.uc.hook_add(UC_HOOK_CODE,self.external,begin=address,end=address)
   # Original allocator 482fb0 zeroes the allocation; discard missile-only fields.
-  v.write(self.owner+0xd8,bytes(0xac));v.write(self.owner+0x184,bytes(0x28));v.put_u32(self.owner+8,0x48001);v.call(0x4fe9e0,this=self.owner)
+  v.write(self.owner+0xd8,bytes(0xac));v.write(self.owner+0x184,bytes(0x28));v.put_u32(self.owner+8,0x48001);v.call(self.owner_init,this=self.owner)
   h=v.uc.hook_add(UC_HOOK_CODE,self.imagery_lookup,begin=0x46e8a0,end=0x46e8a0);self.animator=v.call(self.anim_factory,(self.owner,),this=self.builder);v.uc.hook_del(h);assert v.u32(self.animator)==self.anim_vtable;v.put_u32(self.owner+0x58,self.animator)
   self.required_pose_indices=set();self.unused_rejected_pose_indices=set();NativeSpeed.setup_resources(self);self.setup_resources()
   v.uc.hook_add(UC_HOOK_CODE,self.rng,begin=0x58c582,end=0x58c582)
@@ -54,8 +55,8 @@ class CataclysmScene(FireBallScene):
   self.prototype_index=0
   from default_static_probe import original_registry
   self.dispatch=original_registry(v,())
-  name=self.put_string('Cataclysm');self.dispatch['lookup']['Cataclysm']=hex(v.call(0x40dca0,(name,)));assert self.dispatch['lookup']['Cataclysm']=='0x66cfe0'
-  assert v.u32(0x5aefb4)==self.anim_factory
+  name=self.put_string(self.registry_name);self.dispatch['lookup'][self.registry_name]=hex(v.call(0x40dca0,(name,)));assert self.dispatch['lookup'][self.registry_name]==hex(self.builder)
+  assert v.u32(self.builder_vtable)==self.anim_factory
   for o in self.asset['objects']:
    resource=v.u32(v.u32(self.imagery+0x74)+o['index']*4)
    v.put_u32(resource+0x20,self.bytes(struct.pack('<'+'i'*len(o['states']),*[t['parent']for t in o['states']])))

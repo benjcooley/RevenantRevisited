@@ -20,6 +20,7 @@ struct State {
     std::array<Part,5> parts{};
     double accumulated=0;
     int ticks=0;
+    bool yellow_variant=false;
     ~State(){if(Renderer)for(auto& p:parts)if(p.mesh)Renderer->ReleaseMeshAssetRef(p.mesh);}
 };
 static bool ValidateCataclysm(T3DImagery& image) {
@@ -38,10 +39,10 @@ static bool ValidateCataclysm(T3DImagery& image) {
     }
     return true;
 }
-State* Spawn(const S3DPoint& source) {
-    if(!Renderer)return nullptr;auto c=std::make_unique<State>();auto* cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(0xad92bc19u):-1;if(type<0)return nullptr;
+State* Spawn(const S3DPoint& source,bool yellow_variant) {
+    if(!Renderer)return nullptr;auto c=std::make_unique<State>();c->yellow_variant=yellow_variant;const uint32_t id=yellow_variant?0xad92fc13u:0xad92bc19u;auto* cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(id):-1;if(type<0)return nullptr;
     SObjectDef def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;c->owner.reset(cls->NewObject(&def));
-    auto* owner=c->owner.get();if(!owner || owner->ObjId()!=0xad92bc19u)return nullptr;
+    auto* owner=c->owner.get();if(!owner || owner->ObjId()!=id)return nullptr;
     owner->ForcePos(source);owner->Face(0);owner->OnScreen();auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());
     if(!image || !ValidateCataclysm(*image)){log_warn("[cataclysm-original] exact profile rejected");return nullptr;}
     constexpr int slots[]={1,2,0,3,4};
@@ -53,7 +54,7 @@ State* Spawn(const S3DPoint& source) {
         if(!p.mesh)return nullptr;Renderer->AddMeshAssetRef(p.mesh);
     }
     c->core.Initialize([](int lo,int hi){return random(lo,hi);});
-    log_info("[cataclysm-original] id=ad92bc19 pieces=30 dust=70 glows=50 null_spell=1 empty_character_world=1 source=%d,%d,%d",source.x,source.y,source.z);
+    log_info("[cataclysm-original] id=%08x raw_local_z=%d pieces=30 dust=70 glows=50 null_spell=1 empty_character_world=1 source=%d,%d,%d",id,int(yellow_variant),source.x,source.y,source.z);
     log_info("[native-domain] enabled=%d camera_z=0",int(StartupVfxNativeDomain));return c.release();
 }
 bool IsAlive(const State* c){return c && c->owner && c->core.alive && !(c->owner->GetFlags()&OF_KILL);}
@@ -69,7 +70,7 @@ void SubmitWorld(State* c,EFxDebugMode) {
     if(!IsAlive(c) || !Renderer)return;
     const auto source=c->owner->Pos();
     cataclysm_core::ForEachDraw(c->core,[&](const cataclysm_core::Draw& d){
-        if(d.scale<=1e-5f)return;const auto& p=c->parts[d.object];hmm_mat4 world;cataclysm_core::Matrix(world,d);
+        if(d.scale<=1e-5f)return;const auto& p=c->parts[d.object];hmm_mat4 world;cataclysm_core::Matrix(world,d,c->yellow_variant);
         // Translation relocates the explicit empty-world fixture for map review.
         world.Elements[3][0]+=source.x;world.Elements[3][1]+=source.y;world.Elements[3][2]+=RetailSoftwareOwnerZ(source.z);
         if(!StartupVfxNativeDomain)for(int col=0;col<4;++col)world.Elements[col][2]*=WORLD3D_Z_SCALE;

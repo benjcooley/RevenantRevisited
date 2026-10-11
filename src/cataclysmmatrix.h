@@ -26,9 +26,9 @@ template<class Submit> void ForEachDraw(const State& s,Submit submit) {
         }
     }
 }
-inline void Matrix(hmm_mat4& m,const Draw& d) {
+inline void Matrix(hmm_mat4& m,const Draw& d,bool raw_local_z=false) {
     MtxClear(&m);const hmm_vec3 scale={d.scale,d.scale,d.scale};MtxScale(&m,&scale);
     MtxRotateX(&m,d.rotation.x);MtxRotateY(&m,d.rotation.y);MtxRotateZ(&m,d.rotation.z);
-    const hmm_vec3 p={float(d.position.x),float(d.position.y),RetailSoftwareOwnerZ(d.position.z)};MtxTranslate(&m,&p);
+    const hmm_vec3 p={float(d.position.x),float(d.position.y),raw_local_z?float(d.position.z):RetailSoftwareOwnerZ(d.position.z)};MtxTranslate(&m,&p);
 }
 }

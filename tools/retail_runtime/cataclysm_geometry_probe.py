@@ -2,13 +2,13 @@
 import argparse,json,struct,subprocess
 from pathlib import Path
 from speed_controller_preflight import ROOT,sha
-p=argparse.ArgumentParser();p.add_argument('--trace',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True);native=json.loads(a.trace.read_text())
+p=argparse.ArgumentParser();p.add_argument('--trace',type=Path,required=True);p.add_argument('--raw-local-z',action='store_true');p.add_argument('--output',type=Path,required=True);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True);native=json.loads(a.trace.read_text())
 cpp=r'''
 #include <cstdio>
 #include "cataclysmmatrix.h"
 uint32_t seed=1;int random_range(int lo,int hi){seed=seed*214013+2531011;return lo+int((seed>>16)&32767)%(hi-lo+1);}
 int main(){cataclysm_core::State s;s.Initialize(random_range);for(int tick=0;tick<TICKS;++tick){s.Pulse(random_range);int index=0;cataclysm_core::ForEachDraw(s,[&](const cataclysm_core::Draw& d){if(d.scale<=1e-5f)return;hmm_mat4 m;cataclysm_core::Matrix(m,d);printf("%d %d %d %d %u",tick,index++,d.object,d.mode,d.color);for(int j=0;j<16;++j)printf(" %.9g",(&m.Elements[0][0])[j]);puts("");});}}
-'''.replace('TICKS',str(len(native['records'])))
+'''.replace('TICKS',str(len(native['records']))).replace('Matrix(m,d)','Matrix(m,d,true)'if a.raw_local_z else'Matrix(m,d)')
 source=a.output/'draw.cpp';source.write_text(cpp);binary=a.output/'draw';subprocess.run(['clang++','-std=c++17','-ffp-contract=off','-I'+str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)],check=True)
 raw=subprocess.check_output([str(binary)],text=True);(a.output/'source.trace').write_text(raw);port={}
 for line in raw.splitlines():
