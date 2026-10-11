@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 69,
+    "visual_fidelity_confirmed_rows": 75,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 69,
-    "remaining_visual_review_rows": 107
+    "reviewed_visual_pass_rows": 75,
+    "remaining_visual_review_rows": 101
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -10788,7 +10788,8 @@
         "TFireBallEffect_Bespoke__YFireBall_BESPOKE"
       ],
       "source_fixes": [
-        "Replaced stationaryYpreview lifetimebillboard/41msclock/agefade withshared movingFireBall runtime andexactgreenYasset throughprotectedassetfactory. ExistingbaseAPIpreserved;naturalNPCmap/cast/hit behavior untouched."
+        "Replaced stationaryYpreview lifetimebillboard/41msclock/agefade withshared movingFireBall runtime andexactgreenYasset throughprotectedassetfactory. ExistingbaseAPIpreserved;naturalNPCmap/cast/hit behavior untouched.",
+        "2026-10-10: own native factory/Animate/Render verifies green ring palette; derived colors and existing preview world-ring hook restored. Four original invoker-height controls and whole state/impact packets pass."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -10796,18 +10797,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Use actualY moving frontend fixture/privatepreview; check naturalYhagoro map/cast/hit/growth/burst/ring andhardware/GPU gates separately.",
+      "next_action": "Preserve recorded original/actual-Metal appearance; pursue stated natural caller/scene/device and exact framebuffer gates separately.",
       "notes": [],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "thin_emulator_checks": [
@@ -10831,7 +10832,17 @@
           ],
           "full_acceptance_granted": false
         }
-      ]
+      ],
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Independent root review of original full own leaf renderer and actual Metal: moving green flight/impact/decay/blank tail passes in ordinary-invoker native-domain condition. Yhagoro conditional height and natural combat, other device/exact pixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-yfireball-full-visual-20261010/root-approval.json",
+        "sha256": "e5f0f45fea1cb5dbe7f5d2667d0d8dfb3a1984ef789d427259ffd80f153a4322",
+        "note": "docs/vfx/forensics/YFIREBALL_FULL_RENDER_20261010.md"
+      }
     },
     {
       "index": 33,
@@ -14611,7 +14622,8 @@
         "Three authored Fizzle quads/UV/material and literal source transform order, bespoke and shim. Bespoke clock corrected to double 1000.0/24.0 with boundary epsilon; source-state check passed 900 cases across 100 seeds at 24/30/60/144Hz. Integrated rebuild after timing fix completed successfully; post-fix canonical/shim first 37 render frames were identical.",
         "Exact24Hz in canonical and shim; source system/RNG/degree-spin/reaping order restored;900state checks over100seeds and24/30/60/144Hz passed.",
         "Recovered shipped animator/particle-helper bodies confirm geometry/state/RNG call order. Growth peak compares exact sum of stored float operands before rounding, matching retail x87 threshold. 71 independent exact-rational boundary cases and 900 multi-rate state cases passed; lifecycle/final RNG/reap assertions passed.",
-        "Actual Fizzle animator attaches one borrowed-imagery reference state, advances audited24Hz simulation and requests OF_KILL normal map reaping. SpellList initialized at startup; spell/effect lifetime uses generation-checked weak references and owned spell deletion."
+        "Actual Fizzle animator attaches one borrowed-imagery reference state, advances audited24Hz simulation and requests OF_KILL normal map reaping. SpellList initialized at startup; spell/effect lifetime uses generation-checked weak references and owned spell deletion.",
+        "2026-10-10: relative source owner composition and exact ARGB4444 software policy restored; active map component uses shared retail RNG with40-tick/425-call original differential proof."
       ],
       "port_smoke_ids": [
         "TFizzleEffect",
@@ -14634,13 +14646,13 @@
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "reference_component_verified_through_actual_command_map_lifecycle",
-      "next_action": "Prove real failed quickspell through the loaded player: delay, burst, associated retail LIGHT and FAIL audio. Residual sampling/color/coverage and natural character trigger remain open; command-created burst cleans up normally.",
+      "next_action": "Preserve recorded original/actual-Metal appearance; pursue stated natural caller/scene/device and exact framebuffer gates separately.",
       "notes": [
         "Source state audited against recovered retail instructions; MSVC CRT and Mac libc random streams differ. Native visible frame count is display sampling, not simulation tick count.",
         "First and repeat captures start before atomic addat, have no selection overlay, contain whole burst and blank tail, and retain exactly stable backgrounds below recorded FPS band.",
@@ -14720,7 +14732,17 @@
           ],
           "full_acceptance_granted": false
         }
-      ]
+      ],
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Independent root review of original lifecycle/owner/software raster and actual Metal: birth/growth/spin/flicker/decay/blank tail passes in explicit native-domain condition. Correct map RNG/texture policy and smoke retained separately; natural player/quickspell/light/audio and exact pixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-fizzle-full-visual-20261010/root-approval.json",
+        "sha256": "ff72f20ca93f1ec8c7d61f105c99cff66d16568844308dad4a9599f7b2c2da75",
+        "note": "docs/vfx/forensics/FIZZLE_NATIVE_DOMAIN_VISUAL_20261010.md"
+      }
     },
     {
       "index": 74,
@@ -15156,13 +15178,13 @@
         "port_smoke": true,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "generic_default_animator_exact_static_mesh_map_and_browser_verified",
-      "next_action": "Retain corrected actual static preview/map lifecycle and original-raster proof; locate natural sewer placement and verify lighting/culling/full device parity separately.",
+      "next_action": "Preserve recorded original/actual-Metal appearance; pursue stated natural caller/scene/device and exact framebuffer gates separately.",
       "notes": [
         "2026-10-07: fresh merged-source bounded retail proof retained; no full acceptance. No production change needed. Helper white-input fixture does not claim live character/map dispatch."
       ],
@@ -15203,6 +15225,16 @@
         "vertices": 4,
         "triangles": 2,
         "full_acceptance_granted": false
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Independent root review of six original whole-renderer/actual-Metal water phases: entire authored plane/strip, texture/color and source scrolling pass. Waves use1280x960 and allvertices/imagebounds remain inside; Sewer staysconstant. No scale/phase fitting; natural map/device/depth interactions and exact pixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-sewerwater-full-visual-20261010/root-approval.json",
+        "sha256": "c505111b39350de9ae28fb37007c4f12da2f2435d4c419907988ffa95e184c7b",
+        "note": "docs/vfx/forensics/SEWER_WAVE_VISUAL_BATCH_20261010.md"
       }
     },
     {
@@ -15224,13 +15256,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "native_default_builder_scrolltex_and_actual_generic_map_verified",
-      "next_action": "Retain exact original controller/UV/authored mesh plus actual generic map lifecycle. Verify authored environment/lighting/culling and original device/Metal separately.",
+      "next_action": "Preserve recorded original/actual-Metal appearance; pursue stated natural caller/scene/device and exact framebuffer gates separately.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -15263,6 +15295,16 @@
         "created_visible": true,
         "clean_floor_restored": true,
         "natural_trigger_verified": false
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Independent root review of six original whole-renderer/actual-Metal water phases: entire authored plane/strip, texture/color and source scrolling pass. Waves use1280x960 and allvertices/imagebounds remain inside; Sewer staysconstant. No scale/phase fitting; natural map/device/depth interactions and exact pixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-wave-full-visual-20261010/root-approval.json",
+        "sha256": "944fc74678f79f1fa90f41e893d3c82e65e6541f0189e1d55afae05cef4d598d",
+        "note": "docs/vfx/forensics/SEWER_WAVE_VISUAL_BATCH_20261010.md"
       }
     },
     {
@@ -15286,13 +15328,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "native_default_builder_scrolltex_and_actual_generic_map_verified",
-      "next_action": "Retain exact original controller/UV/authored mesh plus actual generic map lifecycle. Verify authored environment/lighting/culling and original device/Metal separately.",
+      "next_action": "Preserve recorded original/actual-Metal appearance; pursue stated natural caller/scene/device and exact framebuffer gates separately.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -15325,6 +15367,16 @@
         "created_visible": true,
         "clean_floor_restored": true,
         "natural_trigger_verified": false
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Independent root review of six original whole-renderer/actual-Metal water phases: entire authored plane/strip, texture/color and source scrolling pass. Waves use1280x960 and allvertices/imagebounds remain inside; Sewer staysconstant. No scale/phase fitting; natural map/device/depth interactions and exact pixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-waves-full-visual-20261010/root-approval.json",
+        "sha256": "4447396e616aba3bfe9751a522543b7eb77fd4b002fa646d810610caaeb55992",
+        "note": "docs/vfx/forensics/SEWER_WAVE_VISUAL_BATCH_20261010.md"
       }
     },
     {
@@ -15346,13 +15398,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "native_default_builder_scrolltex_and_actual_generic_map_verified",
-      "next_action": "Retain exact original controller/UV/authored mesh plus actual generic map lifecycle. Verify authored environment/lighting/culling and original device/Metal separately.",
+      "next_action": "Preserve recorded original/actual-Metal appearance; pursue stated natural caller/scene/device and exact framebuffer gates separately.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -15385,6 +15437,16 @@
         "created_visible": true,
         "clean_floor_restored": true,
         "natural_trigger_verified": false
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Independent root review of six original whole-renderer/actual-Metal water phases: entire authored plane/strip, texture/color and source scrolling pass. Waves use1280x960 and allvertices/imagebounds remain inside; Sewer staysconstant. No scale/phase fitting; natural map/device/depth interactions and exact pixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-wavem-full-visual-20261010/root-approval.json",
+        "sha256": "8a5c113952c1a60cc93a3b4c994c7e0e20ef379dc381f9d12c0da37ceee58024",
+        "note": "docs/vfx/forensics/SEWER_WAVE_VISUAL_BATCH_20261010.md"
       }
     },
     {

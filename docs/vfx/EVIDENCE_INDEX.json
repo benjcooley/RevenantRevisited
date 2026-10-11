@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 69,
+    "visual_fidelity_confirmed_rows": 75,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 69,
-    "remaining_visual_review_rows": 107
+    "reviewed_visual_pass_rows": 75,
+    "remaining_visual_review_rows": 101
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1274,6 +1274,48 @@
       "check": "fireball_full_current_actual_metal_native_visual_review",
       "status": "scoped_visual_pass",
       "scope": "Eleven original full leaf Init/Pulse/Animate/RenderObject/software-raster versus actual Metal phases: moving flight/trail/sparks, paired burst/authored colored ring, decay and blank tail pass in declared native-domain scenario. Full state/RNG and impact geometry/color controls pass; exact pixels and natural spell/character/map/device contexts remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-yfireball-full-visual-20261010/root-approval.json": {
+      "sha256": "e5f0f45fea1cb5dbe7f5d2667d0d8dfb3a1984ef789d427259ffd80f153a4322",
+      "retail_row": "YFireBall:0x63fd3827",
+      "check": "current_own_original_actual_metal_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Independent root review of original full own leaf renderer and actual Metal: moving green flight/impact/decay/blank tail passes in ordinary-invoker native-domain condition. Yhagoro conditional height and natural combat, other device/exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-fizzle-full-visual-20261010/root-approval.json": {
+      "sha256": "ff72f20ca93f1ec8c7d61f105c99cff66d16568844308dad4a9599f7b2c2da75",
+      "retail_row": "Fizzle:0xab8800dd",
+      "check": "current_own_original_actual_metal_visual_review",
+      "status": "root_approved_scoped_appearance",
+      "scope": "Independent root review of original lifecycle/owner/software raster and actual Metal: birth/growth/spin/flicker/decay/blank tail passes in explicit native-domain condition. Correct map RNG/texture policy and smoke retained separately; natural player/quickspell/light/audio and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-sewerwater-full-visual-20261010/root-approval.json": {
+      "sha256": "c505111b39350de9ae28fb37007c4f12da2f2435d4c419907988ffa95e184c7b",
+      "retail_row": "SewerWater:0xadbcef19",
+      "check": "current_own_original_actual_metal_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Independent root review of six original whole-renderer/actual-Metal water phases: entire authored plane/strip, texture/color and source scrolling pass. Waves use1280x960 and allvertices/imagebounds remain inside; Sewer staysconstant. No scale/phase fitting; natural map/device/depth interactions and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-wave-full-visual-20261010/root-approval.json": {
+      "sha256": "944fc74678f79f1fa90f41e893d3c82e65e6541f0189e1d55afae05cef4d598d",
+      "retail_row": "Wave:0x9d92bc1d",
+      "check": "current_own_original_actual_metal_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Independent root review of six original whole-renderer/actual-Metal water phases: entire authored plane/strip, texture/color and source scrolling pass. Waves use1280x960 and allvertices/imagebounds remain inside; Sewer staysconstant. No scale/phase fitting; natural map/device/depth interactions and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-waves-full-visual-20261010/root-approval.json": {
+      "sha256": "4447396e616aba3bfe9751a522543b7eb77fd4b002fa646d810610caaeb55992",
+      "retail_row": "WaveS:0x9d92bc1e",
+      "check": "current_own_original_actual_metal_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Independent root review of six original whole-renderer/actual-Metal water phases: entire authored plane/strip, texture/color and source scrolling pass. Waves use1280x960 and allvertices/imagebounds remain inside; Sewer staysconstant. No scale/phase fitting; natural map/device/depth interactions and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-wavem-full-visual-20261010/root-approval.json": {
+      "sha256": "8a5c113952c1a60cc93a3b4c994c7e0e20ef379dc381f9d12c0da37ceee58024",
+      "retail_row": "WaveM:0x9d92bc1f",
+      "check": "current_own_original_actual_metal_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Independent root review of six original whole-renderer/actual-Metal water phases: entire authored plane/strip, texture/color and source scrolling pass. Waves use1280x960 and allvertices/imagebounds remain inside; Sewer staysconstant. No scale/phase fitting; natural map/device/depth interactions and exact pixels remain open."
     }
   }
 }
