@@ -45,6 +45,7 @@
 #include <time.h>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 extern TEditStatusPane StatusBar;
 extern TConsolePane Console;
@@ -1766,11 +1767,29 @@ int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width
     if (maxnum < 1)
         return 0;
 
-    S3DPoint itempos;
-    int32_t sqrwidth = sqr(width);
-    int32_t *dist = new int32_t[maxnum];
-    int32_t found = 0, d;
+  // REVSYNC: 0x00452060 -- the nearest `maxnum`, nearest first: one goes in
+  // before the first as far or farther, the ones after it moving up (retail
+  // memmoves the distances and the ids alike; the 1998 code copied bytes,
+  // not entries, and left the ids where they were).
+    std::vector<int32_t> dist(static_cast<size_t>(maxnum));
+    int32_t found = 0;
+    const auto keep = [&](int32_t d, int32_t id) {
+        int32_t j = 0;
+        while (j < found && d > dist[size_t(j)])
+            j++;
+        if (j >= maxnum)
+            return;
+        const int32_t last = (std::min)(found, maxnum - 1);
+        std::copy_backward(dist.begin() + j, dist.begin() + last, dist.begin() + last + 1);
+        std::copy_backward(array + j, array + last, array + last + 1);
+        dist[size_t(j)] = d;
+        array[j] = id;
+        if (found < maxnum)
+            found++;
+    };
 
+    const int32_t sqrwidth = sqr(width);
+    S3DPoint itempos;
     for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
     {
         TObjectInstance* inst = i;
@@ -1793,24 +1812,9 @@ int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width
                 r = (int32_t)(tr * tr);
             }
 
-            if ((d = (SQRDIST(pos, itempos) - r)) < sqrwidth)
-            {
-                int32_t j;
-                for (j = 0; j < found && d > dist[j]; j++)
-                    ;
-
-                if (j >= maxnum)
-                    continue;
-
-                if (j != found)
-                    memcpy(&(dist[j+1]), &(dist[j]), min(maxnum - 1, found) - j);
-
-                array[j] = inst->GetMapIndex();
-                dist[j] = d;
-
-                if (found < maxnum)
-                    found++;
-            }
+            const int32_t d = SQRDIST(pos, itempos) - r;
+            if (d < sqrwidth)
+                keep(d, inst->GetMapIndex());
         }
 
         else
@@ -1819,29 +1823,10 @@ int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width
             int32_t dy = absval(pos.y - itempos.y);
 
             if (dx <= (width >> 1) && dy <= (height >> 1))
-            {
-                d = sqr(dx) + sqr(dy);
-
-                int32_t j;
-                for (j = 0; j < found && d > dist[j]; j++)
-                    ;
-
-                if (j >= maxnum)
-                    continue;
-
-                if (j != found)
-                    memcpy(&(dist[j+1]), &(dist[j]), min(maxnum - 1, found) - j);
-
-                array[j] = inst->GetMapIndex();
-                dist[j] = d;
-
-                if (found < maxnum)
-                    found++;
-            }
+                keep(sqr(dx) + sqr(dy), inst->GetMapIndex());
         }
     }
 
-    delete dist;
     return found;
 }
 
