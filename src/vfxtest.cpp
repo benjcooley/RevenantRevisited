@@ -73,6 +73,7 @@
 #include "effects/labbackpreview.h"
 #include "effects/swamppreview.h"
 #include "effects/paralizepreview.h"
+#include "effects/manadrainpreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
 #include "effects/restorelifepreview.h"
@@ -7083,6 +7084,19 @@ struct SVfxTestBootstrap {
         // *   load the I3D asset and draw sub-object 0 as a billboard.         *
         // *   Awaiting user video A/B for forensics + kinematic tuning.        *
         // =====================================================================
+        {
+            VfxTest::SEffect e={};e.id="TManaDrain_AUTHENTIC_TARGET_FIXTURE";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return manadrain_preview::SpawnTargetFixture(o);};
+            e.submit=[](void* c,EFxDebugMode){manadrain_preview::Advance(static_cast<manadrain_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){manadrain_preview::SubmitWorld(static_cast<manadrain_preview::State*>(c));};
+            e.is_alive=[](void* c){return manadrain_preview::Alive(static_cast<manadrain_preview::State*>(c));};
+            e.destroy=[](void* c){manadrain_preview::Destroy(static_cast<manadrain_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+            e.id="TManaDrain_CONFIGURED_TARGET";
+            e.factory=[](const S3DPoint& o)->void*{return manadrain_preview::SpawnConfiguredTarget(o);};
+            VfxTest::DeferredRegister(e);
+        }
         {
             VfxTest::SEffect e = {};
             e.id = "TParalize1_NAMED_NO_TARGET";e.family="ambient";e.pipeline="IM";

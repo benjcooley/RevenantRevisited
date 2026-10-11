@@ -73,6 +73,7 @@
 {0xacabfadau, "TIcedsparks_AUTHORED_STILL", false, "Implemented preview controller; map caller not certified"}, // Icedsparks
 {0xad92bc11u, "TPuke_BESPOKE_NULLSPELL", false, "Implemented preview controller; map caller not certified"}, // puke
 {0xad92bc12u, "TShriek_BESPOKE_NULLSPELL", false, "Implemented preview controller; map caller not certified"}, // shriek
+{0xad92bc13u, "TManaDrain_CONFIGURED_TARGET", false, "Configured genuine Acolyte fighting target: offset(96,0,0), Mana Drain variant; actual mana transfer and completion; arbitrary moving actors not certified"}, // manadrain
 {0xad92bc14u, "TParalize1_CONFIGURED_TARGET", false, "Configured genuine Acolyte target: offset(96,0,0), radius16; original variant1 lifecycle; arbitrary targets and bones not certified"}, // paralize1
 {0xad92bc14u, "TParalize1_NAMED_NO_TARGET", true, "Partial preview: actual named no-target branch; target-bound behavior and enormous full trajectory unreviewed; not complete original implementation"}, // paralize1
 {0xad92bc15u, "TSetVortexEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // setvortex

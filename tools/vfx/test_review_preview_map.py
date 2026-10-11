@@ -36,6 +36,14 @@ TNewUnreviewedEffect_BESPOKE'''.split()
         for type_id,name in [('0x224a5adf','BarrierEW_ORIGINAL'),('0x224b5adc','BarrierNS_ORIGINAL'),('0xaeaeeb32','JhagaAttack_ORIGINAL')]:
             self.assertEqual(admitted_candidates({'retail_type_id':type_id,'preview_candidates':[]}),[name])
 
+    def test_manadrain_exact_configured_target(self):
+        row={'retail_type_id':'0xad92bc13','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['TManaDrain_CONFIGURED_TARGET'])
+        partial,description=candidate_metadata(row,'TManaDrain_CONFIGURED_TARGET')
+        self.assertFalse(partial)
+        self.assertIn('actual mana transfer',description)
+        self.assertNotIn('TManaDrain_CONFIGURED_TARGET',admitted_candidates({'retail_type_id':'0xad92bc12','preview_candidates':[]}))
+
     def test_paralize_named_no_target_is_explicitly_partial(self):
         row = {'retail_type_id': '0xad92bc14', 'preview_candidates': []}
         self.assertEqual(admitted_candidates(row), ['TParalize1_CONFIGURED_TARGET'])

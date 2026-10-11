@@ -55,7 +55,8 @@ std::vector<SEffect> ReviewCatalogue() {
     auto paralize=Row("TParalize1_CONFIGURED_TARGET",EVfxPreviewStyle::Static);
     paralize.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
     paralize.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
-    return {dragon,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    auto manadrain=paralize;manadrain.id="TManaDrain_CONFIGURED_TARGET";
+    return {dragon,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -192,6 +193,17 @@ int main(int argc,char** argv) {
         assert(target && target->Id()=="TParalize1_CONFIGURED_TARGET" && target->RestartInterval()==0);
         const int initial=creates;
         target->Submit();target->Submit();assert(target->Alive()==false && creates==initial);
+        target->Submit();assert(target->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0xad92bc13u);
+        assert(info.supported && !info.partial && !info.requires_endpoints && info.lifetime_known);
+        assert(std::strstr(info.description,"actual mana transfer"));
+        assert(!CreateVfxReviewPreview(0xad92bc13u,origin,{80,-120,128}));
+        auto target=CreateVfxReviewPreview(0xad92bc13u,origin);
+        assert(target && target->Id()=="TManaDrain_CONFIGURED_TARGET" && target->RestartInterval()==0);
+        const int initial=creates;target->Submit();target->Submit();assert(target->Alive()==false && creates==initial);
         target->Submit();assert(target->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);

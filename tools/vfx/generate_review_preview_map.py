@@ -135,6 +135,7 @@ SOURCE_MAPPINGS = {
     '0xdcc4011d': 'TLabback_AUTHORED_TAGS',
     '0xbecffeda': 'TSwamp_AUTHORED_TAGS',
     '0xad92bc14': 'TParalize1_CONFIGURED_TARGET',
+    '0xad92bc13': 'TManaDrain_CONFIGURED_TARGET',
     '0x42e0fcd0': 'TOgrestrength_AUTHORED_TAGS',
     '0xad92bd39': 'TTrollblood_AUTHORED_TAGS',
     '0x10ac03de': 'TRegeneration_AUTHORED_TAGS',
@@ -167,6 +168,8 @@ def admitted_candidates(row):
 def candidate_metadata(row, name):
     if row.get('retail_type_id','').lower()=='0xba09fead' and name=='Dragonattack_ORIGINAL':
         return False, 'Declared Fighting caller: target offset(280,0), ground0, face96 muzzle(14,14,+100); arbitrary endpoints and natural dragon actors not certified'
+    if row.get('retail_type_id','').lower()=='0xad92bc13' and name=='TManaDrain_CONFIGURED_TARGET':
+        return False, 'Configured genuine Acolyte fighting target: offset(96,0,0), Mana Drain variant; actual mana transfer and completion; arbitrary moving actors not certified'
     if row.get('retail_type_id','').lower()=='0xad92bc14' and name=='TParalize1_CONFIGURED_TARGET':
         return False, 'Configured genuine Acolyte target: offset(96,0,0), radius16; original variant1 lifecycle; arbitrary targets and bones not certified'
     partial = PARTIAL.get(row.get('retail_type_id', '').lower())
