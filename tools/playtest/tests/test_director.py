@@ -112,5 +112,21 @@ class Calibration(unittest.TestCase):
             self.assertNotIn('UpRight', steps)                          # the toy world has no diagonal keys
 
 
+class Clicking(unittest.TestCase):
+    def test_a_host_without_object_picks_is_asked_by_hovering(self):
+        os.environ.setdefault('OPEN_ROUTER_KEY', 'test-key')
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            with Host([sys.executable, HERE / 'fakehost.py', '--hover-only'], tmp / 'play', timeout=30) as host:
+                host.hello()
+                host.start('newgame', seed=1)
+                director = Director(host, Jev(post=PreferObjects()), Router(post=NoRouter()), Knowledge({}, {}),
+                                    Bindings({}), tmp, [])
+                sardok = next(o for o in host.observe()['objects'] if o['name'] == 'Sardok')
+                point = director.clickable(sardok)
+                self.assertEqual(point, tuple(sardok['screen']))       # his feet: the toy pick's only spot
+                self.assertEqual(host.observe()['cursor'], sardok['id'])
+
+
 if __name__ == '__main__':
     unittest.main()

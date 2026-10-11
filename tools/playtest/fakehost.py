@@ -3,7 +3,7 @@
 toy world, for testing the director, the client and recordings without a
 game.
 
-    fakehost.py [--drift-at T]
+    fakehost.py [--drift-at T] [--hover-only]
 
 The world is deterministic: held arrow keys move the player one unit per
 tick, a left click on the screen walks the player toward the point it maps
@@ -12,7 +12,9 @@ to him (a text-bar line) and walks nowhere, as in the game. The camera
 follows the player at the screen's centre, a pixel to a world unit. Floor ends at
 x = 1150 (a wall: no walking past it), and one person, Sardok, stands at
 (1000, 1800). `--drift-at T` nudges the player at tick T on every run, so a
-replay through it diverges there: the divergence test.
+replay through it diverges there: the divergence test. `--hover-only` makes
+it answer `pick` without the object, as the retail host does; the object
+under the pointer is then the observation's `cursor`.
 """
 from __future__ import annotations
 
@@ -51,11 +53,16 @@ class World:
             pressed = event['buttons'] & ~self.buttons
             self.pointer, self.buttons = list(event['mouse']), event['buttons']
             if pressed & rec.BUTTON_LEFT:
-                point = self.world(*self.pointer)
-                if abs(point[0] - SARDOK['pos'][0]) <= 4 and abs(point[1] - SARDOK['pos'][1]) <= 4:
+                if self.under(*self.pointer) == SARDOK['id']:
                     self.messages.append('Sardok says: Welcome, Revenant.')
                 else:
-                    self.goal = point[:2]
+                    self.goal = self.world(*self.pointer)[:2]
+
+    def under(self, x: int, y: int) -> int | None:
+        """The object a click at screen (x, y) acts on."""
+        point = self.world(x, y)
+        near = abs(point[0] - SARDOK['pos'][0]) <= 4 and abs(point[1] - SARDOK['pos'][1]) <= 4
+        return SARDOK['id'] if near else None
 
     def screen(self, pos) -> list[int]:
         return [320 + (pos[0] - self.pos[0]) * SCALE, 240 + (pos[1] - self.pos[1]) * SCALE]
@@ -85,8 +92,9 @@ class World:
 
 
 class FakeHost:
-    def __init__(self, drift_at: int | None):
+    def __init__(self, drift_at: int | None, hover_only: bool = False):
         self.drift_at = drift_at
+        self.hover_only = hover_only
         self.world: World | None = None
         self.recording: rec.Recording | None = None
         self.bundle: Path | None = None
@@ -152,6 +160,8 @@ class FakeHost:
                'player': {'pos': list(w.pos), 'screen': [320, 240], 'level': 0, 'health': [100, 100]},
                'objects': [dict(SARDOK, screen=w.screen(SARDOK['pos']))], 'messages': w.messages}
         w.messages = []
+        if self.hover_only:
+            obs['cursor'] = w.under(*w.pointer)
         if 'walkgrid' in req:
             r = req['walkgrid'] // 16
             ox, oy = w.pos[0] // 16 - r, w.pos[1] // 16 - r
@@ -165,8 +175,9 @@ class FakeHost:
 
     def pick(self, req: dict) -> dict:
         pos = self.world.world(req['x'], req['y'])
-        near = abs(pos[0] - SARDOK['pos'][0]) <= 4 and abs(pos[1] - SARDOK['pos'][1]) <= 4
-        return {'pos': pos, 'object': SARDOK['id'] if near else None, 'world': True}
+        if self.hover_only:
+            return {'pos': pos, 'world': True}
+        return {'pos': pos, 'object': self.world.under(req['x'], req['y']), 'world': True}
 
     def mark(self, req: dict) -> dict:
         extra = {k: v for k, v in req.items() if k not in ('id', 'cmd', 'kind')}
@@ -233,7 +244,9 @@ class FakeHost:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--drift-at', type=int)
-    FakeHost(parser.parse_args().drift_at).serve()
+    parser.add_argument('--hover-only', action='store_true')
+    args = parser.parse_args()
+    FakeHost(args.drift_at, args.hover_only).serve()
 
 
 if __name__ == '__main__':

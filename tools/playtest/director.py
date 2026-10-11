@@ -55,6 +55,9 @@ WIDE_WALKGRID_RADIUS = 2400          # once per stop, when the way to it isn't i
 DIGITS = '123456'
 # Each direction straight after its opposite, so calibrating ends where it began.
 CALIBRATION_ORDER = tuple(DIRECTIONS[i + offset] for i in range(4) for offset in (0, 4))
+# Where to click a person, from the feet: the body, head, feet and either side.
+CLICK_SPOTS = ((0, -30), (0, -45), (0, -15), (-12, -30), (12, -30), (0, -60), (-20, -45), (20, -45), (0, 0))
+HOVER_TICKS = 2                      # a frame drawn with the pointer there, so its pick is the pointer's
 
 
 @dataclass
@@ -376,20 +379,35 @@ class Director:
 
     def clickable(self, obj: dict) -> tuple[int, int] | None:
         """A screen point that the game's own pick resolves to `obj` and
-        that reaches the world: its feet, body and head first. The object's
-        screen position is where its feet are; Locke, a wall or bars may
-        cover that, and a click then lands on whatever is on top."""
+        that reaches the world: its body, head and feet in turn. The
+        object's screen position is where its feet are; Locke, a wall or
+        bars may cover that, and a click then lands on whatever is on top.
+        A host that can't pick an arbitrary point (retail: its pick draws a
+        frame) is asked as a player finds out: the pointer goes there for a
+        tick and the observation's `cursor` names what is under it."""
         fx, fy = obj['screen']
-        for dx, dy in ((0, -30), (0, -45), (0, -15), (-12, -30), (12, -30), (0, -60), (-20, -45), (20, -45), (0, 0)):
+        for dx, dy in CLICK_SPOTS:
             x, y = fx + dx, fy + dy
             if not (0 <= x < 640 and 0 <= y < 480):
                 continue
             picked = self.host.pick(x, y)
-            if 'object' not in picked:
-                return fx, fy - 30                  # a host that can't pick objects: the body, untested
-            if picked.get('object') == obj['id'] and picked.get('world', True):
+            if not picked.get('world', True):
+                continue
+            if 'object' in picked:
+                if picked['object'] == obj['id']:
+                    return x, y
+            elif self.hover(x, y) == obj['id']:
                 return x, y
         return None
+
+    def hover(self, x: int, y: int) -> int | None:
+        """Put the pointer at (x, y) for a tick: the object under it then,
+        by the observation's `cursor` (None: nothing, or a host without it)."""
+        plan = Plan(self.state)
+        plan.move(0, x, y)
+        self.host.step(plan.ticks(HOVER_TICKS), plan.events())
+        self.state = plan.state
+        return self.host.observe(objects=0).get('cursor')
 
     def step_aside(self, obs: dict, obj: dict) -> bool:
         """Walk a few steps to the side of `obj`, so it isn't behind Locke."""
