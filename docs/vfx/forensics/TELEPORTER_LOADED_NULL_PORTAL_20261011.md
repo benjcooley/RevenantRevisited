@@ -83,3 +83,17 @@ Exact gallery admission maps only `0x369a5d2e` to `Teleporter_ORIGINAL_NULL`;
 IrisFlare/hybrid aliases and this preview supplied for a foreign ID are rejected.
 Twenty map admission tests and the compiled lifecycle bridge pass, including
 actual callback-based completion/recreation without a repeat timer.
+
+Actual private gallery smoke selects the exact mapped `Teleporter_ORIGINAL_NULL`
+route:59/60 visible samples,60 distinct images,five creations and four completed
+tick50 cycles, clean exit. Evidence is
+`teleporter-gallery/0x369a5d2e-Teleporter/manifest.json`. The separate frozen
+single-life comparison above is unchanged and remains the appearance reference.
+
+The adapter also stops a batched update immediately on OF_KILL. A compiled
+extraction of the actual Advance function, under ASan/UBSan, verifies that a
+three-second update performs exactly51 owner steps, invalid/zero time performs
+none, and later updates perform none after death. This closes a batching edge
+case without changing the captured24Hz path. Full native matrix/lifecycle
+comparison and production build still pass; retained proof is
+`teleporter-terminal-source/manifest.json`.
