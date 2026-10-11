@@ -1756,38 +1756,53 @@ TPlayScreen::EClickRoute TPlayScreen::ClickRoute(int32_t x, int32_t y)
     return EClickRoute::World;
 }
 
+static bool IsButtonRelease(int32_t button)
+{
+    return button == MB_LEFTUP || button == MB_RIGHTUP || button == MB_MIDDLEUP;
+}
+
 void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
 {
+    // REVSYNC: TScreen::MouseClick 0x004904ef..0x004904fc -- a release goes
+    // to every pane wherever it lands, the map's too, which leaves one on a
+    // side tab's button alone (0x0044f17b) and off its rect only forgets its
+    // press or ends the right-button walk (0x0044f917, 0x0044fbad). The HUD's
+    // item drag takes its own release (the drop).
+    const bool releaseToWorld = IsButtonRelease(button) && !UIDragState::IsActive() &&
+                                !(g_playHudInitialized && UISideTabButtonAt(x, y) >= 0);
     switch (ClickRoute(x, y))
     {
       case EClickRoute::Modal:
-      case EClickRoute::BuySell:
         TScreen::MouseClick(button, x, y);
         return;
       case EClickRoute::Ignored:
         return;
-      case EClickRoute::Hud:
-      {
-        const SHudState& s = GetHudState();
-        if (HandleMouseClickUISidebarModeConsumed(button, x, y))
-            return;
-        TScreen::MouseClick(button, x, y);      // the screen's panes: the bottom bar
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseClickUISpellbookMode(button, x, y);
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
-            HandleMouseClickUIEquipMode(button, x, y);
-        if (button == MB_LEFTUP)
-            UIDragState::ReleaseUnclaimed();    // a drag no pane took ends here
-        return;
-      }
-      case EClickRoute::World:
+      case EClickRoute::BuySell:
+        TScreen::MouseClick(button, x, y);
         break;
+      case EClickRoute::Hud:
+        if (!HandleMouseClickUISidebarModeConsumed(button, x, y))
+        {
+            const SHudState& s = GetHudState();
+            TScreen::MouseClick(button, x, y);  // the screen's panes: the bottom bar
+            if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
+                HandleMouseClickUISpellbookMode(button, x, y);
+            if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+                HandleMouseClickUIEquipMode(button, x, y);
+            if (button == MB_LEFTUP)
+                UIDragState::ReleaseUnclaimed();    // a drag no pane took ends here
+        }
+        break;
+      case EClickRoute::World:
+        TScreen::MouseClick(button, x, y);
+        // Route to the active runtime mode; editor mode forwards to the
+        // renderer's gizmo / drag picker, game mode forwards to MapPane's
+        // gameplay click handler (movement / interact / combat).
+        CurrentMode()->HandleMouseClick(button, x, y);
+        return;
     }
-    TScreen::MouseClick(button, x, y);
-    // Route to the active runtime mode; editor mode forwards to the
-    // renderer's gizmo / drag picker, game mode forwards to MapPane's
-    // gameplay click handler (movement / interact / combat).
-    CurrentMode()->HandleMouseClick(button, x, y);
+    if (releaseToWorld)
+        CurrentMode()->HandleMouseClick(button, x, y);
 }
 
 void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)

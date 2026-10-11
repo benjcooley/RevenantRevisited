@@ -416,6 +416,12 @@ The port's design and state: §7.
   the port host (`--clickwalk`) a click in the gap at (421, 300) and in the
   margin at (445, 250) each walks Locke; the map tab (421, 392) and the
   inventory tab (421, 355) switch the lower pane and don't.
+- **Releases reach the map wherever they land** (2026-10-11), as
+  `TScreen::MouseClick` gives a release to every pane
+  (`0x004904ef..0x004904fc`). The exceptions are one on a side tab's
+  button and one that ends a HUD item drag. A right-button walk let go
+  over the side panel now stops; before, it walked on until the next
+  right click (playtest FINDINGS F4).
 
 Open:
 - Input-simulator note: `move X Y` glides for `kDefaultMoveMs`; sweeps

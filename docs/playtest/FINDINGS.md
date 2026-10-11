@@ -4,6 +4,51 @@ Bugs and gaps that Jev's sessions surfaced in the games, with what reproduces
 each. Newest first. Each entry: what was seen, the evidence, the repro, and
 who owns the fix.
 
+## F4. A right-button walk released over the HUD never stopped (port bug, fixed)
+
+**Seen 2026-10-11**, while checking where retail sends button releases.
+Hold the right button on the play field so Locke walks, move over the
+side panel, and let go there. Locke kept walking until the next right
+click.
+
+**Evidence.**
+- `TScreen::MouseClick` hands a release (4, 5, 6) to every pane,
+  whatever the point (`0x004904ef..0x004904fc`).
+- The map pane's right release (`0x0044f917..0x0044f96a`) ends the walk
+  with no rect test: the arrow cursor comes back, the held direction key
+  is released, and `+0x11c` is cleared.
+- Its left release off the pane only clears `clicked` (`0x0044fbad` →
+  `0x0045046f`).
+- On a side tab's button it does nothing (`0x0044f17b`).
+- The port routed a release by its point, like a press. One over the
+  side panel or the bottom bar went to the HUD only, so the map kept
+  `walking` and its held key.
+- **Retail** (play slot, `opening`): right held at (120, 240), then over
+  the side panel at (560, 240), let go there. Locke stops (0 units in
+  the next 24 ticks).
+- **Port before the fix:** he walked on 131 units.
+
+**Repro (port).** From `opening`, through the port host:
+`{"mouse": [120, 240], "buttons": 2}`, 12 ticks later
+`{"mouse": [560, 240], "buttons": 2}`, 12 ticks later
+`{"mouse": [560, 240], "buttons": 0}`, then step 24 and compare
+`player.pos`.
+
+**Resolution.** Fixed on `playtest/tabs`.
+- `TPlayScreen::MouseClick` also gives the world every release, wherever
+  it lands. The exceptions are a release on a side tab's button and one
+  that ends a HUD item drag, which the drag's drop takes.
+- The map's own cases do the rest, as in retail.
+- After the fix: Locke stops (0 units).
+- Unchanged before and after: drags pack → belt, belt → pack, a drag let
+  go over the map (cancelled; see Open), a click on a pack item, and
+  click-walk and tab clicks.
+
+**Open (not routing).** Retail drops an item dragged out of the HUD onto
+the map, or uses it on the object there: `0x0044fff8`, the `FULLSINGDROP`
+/ `FULLMULTDROP` messages (MAP_INPUT.md §4.3). The port's HUD drag
+(`UIDragState`) cancels instead and the item goes back.
+
 ## F3. The side panel came back from the save (port bug, fixed)
 
 **Seen 2026-10-11.** `crosscheck.py --from port:forest` listed the four
