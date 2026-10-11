@@ -63,7 +63,7 @@ State* Spawn(const S3DPoint& origin)
 void Advance(State* s,double seconds)
 {
  if(!s || !std::isfinite(seconds) || seconds<=0)return;s->accumulator+=seconds;
- while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;if(!Alive(s))return;s->owner->NextFrame();s->owner->Pulse();s->particles.Advance(s->inputs,[](int a,int b){return random(a,b);});++s->ticks;}
+ while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;if(!Alive(s))return;s->owner->NextFrame();s->owner->Pulse();++s->ticks;if(!Alive(s))return;s->particles.Advance(s->inputs,[](int a,int b){return random(a,b);});}
 }
 bool Alive(State* s){return s && s->owner && !(s->owner->GetFlags()&OF_KILL);}
 void SubmitWorld(State* s)
