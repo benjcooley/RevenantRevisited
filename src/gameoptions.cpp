@@ -16,6 +16,7 @@ int32_t GammaLevel       = 3;      // 0x005d7a48
 bool    RealTimeLight    = true;   // 0x005d7a18
 bool    CombatFace       = true;   // 0x005d7a64
 bool    NoCombatResults  = false;  // 0x00668194
+bool    SquishyScroll    = true;   // 0x005d7a40
 bool    NoGameSpeedLimit = false;  // 0x006682a8
 
 namespace {
@@ -27,7 +28,7 @@ constexpr const char* kOptionsSection = "Options";
 void ReadOptions()
 {
     // Retail's order; each key's default is the global's current value. Keys
-    // with no port owner (ZoomSpeed, Software3D, SquishyScroll, BeepOnChat,
+    // with no port owner (ZoomSpeed, Software3D, NoTexOverlay, BeepOnChat,
     // ...) are not read; OPTIONS.md §9 lists them.
     INISetSection(kOptionsSection);
     DoubleTapTicks   = INIGetInt("DoubleTapTicks", DoubleTapTicks);
@@ -41,6 +42,7 @@ void ReadOptions()
     EffectsVolume    = INIGetInt("EffectsVolume", EffectsVolume);
     EnhancedLighting = INIGetYesNo("EnhancedLighting", EnhancedLighting);
     RealTimeLight    = INIGetYesNo("RealTimeLight", RealTimeLight);
+    SquishyScroll    = INIGetYesNo("SquishyScroll", SquishyScroll);
     NoCombatResults  = INIGetYesNo("NoCombatResults", NoCombatResults);
 
     // REVSYNC-DIVERGENCE: retail read EffectsVolume at each sample's start
@@ -65,5 +67,6 @@ void SaveOptions()
     INISetInt("EffectsVolume", EffectsVolume);
     INISetYesNo("EnhancedLighting", EnhancedLighting);
     INISetYesNo("RealTimeLight", RealTimeLight);
+    INISetYesNo("SquishyScroll", SquishyScroll);
     INISetYesNo("NoCombatResults", NoCombatResults);
 }

@@ -312,12 +312,30 @@ inline float CameraDepth(const S3DPoint& rel, float cam_forward)
          - (float(rel.x + rel.y) * kIsoCos30 + float(rel.z) * 0.5f);
 }
 
+// Where a camera-relative point (world x, y less the camera's; z absolute)
+// lands on the map screen, from the camera's ground point: WorldToScreen of
+// the world point less WorldToScreen of the camera's x, y, as retail placed
+// everything against its scroll origin (WorldToScreen(center) less half the
+// pane, 0x004539d0). WorldToScreen truncates, so projecting rel itself
+// rounds differently: with the camera's x + y odd, everything below the
+// camera landed a pixel high, a seam through the view.
+inline void CameraRelMapScreen(const SMapRenderContext& ctx, const S3DPoint& rel,
+                               int32_t& sx, int32_t& sy)
+{
+    const S3DPoint& cam = ctx.sectorCameraWorld;
+    int32_t ground_x = 0, ground_y = 0;
+    WorldToScreen(S3DPoint(rel.x + cam.x, rel.y + cam.y, rel.z), sx, sy);
+    WorldToScreen(S3DPoint(cam.x, cam.y, 0), ground_x, ground_y);
+    sx -= ground_x;
+    sy -= ground_y;
+}
+
 inline void ProjectCameraRelToScreen(const SMapRenderContext& ctx,
                                      const S3DPoint& rel,
                                      float& sx, float& sy)
 {
     int32_t iso_x = 0, iso_y = 0;
-    WorldToScreen(rel, iso_x, iso_y);
+    CameraRelMapScreen(ctx, rel, iso_x, iso_y);
     const float zoom = (std::max)(ctx.camera_zoom, 0.0001f);
     sx = float(iso_x) * zoom;
     sy = float(iso_y) * zoom;
@@ -477,7 +495,7 @@ static bool TileCameraVolumeVisible(const SMapRenderContext& ctx,
     if (ctx.perspective_camera)
     {
         int32_t sx_i = 0, sy_i = 0;
-        WorldToScreen(rel, sx_i, sy_i);
+        CameraRelMapScreen(ctx, rel, sx_i, sy_i);
         anchor_x = float(sx_i);
         anchor_y = float(sy_i);
     }
@@ -1051,7 +1069,7 @@ void SSectorDrawableInst::AccumulateSceneZ(const SMapRenderContext& ctx, float& 
     {
         const auto& tex = (*ctx.tile_assets)[asset_idx];
         S3DPoint sp;
-        WorldToScreen(rel, sp.x, sp.y);
+        CameraRelMapScreen(ctx, rel, sp.x, sp.y);
         const int32_t x0 = sp.x - regx + ctx.cam_ox;
         const int32_t y0 = sp.y - regy + ctx.cam_oy;
         const int32_t x1 = x0 + tex.w;
@@ -1124,7 +1142,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         const SRendererImagePairInfo* image_pair = Renderer ? Renderer->ImagePairInfo(tex.image_pair) : nullptr;
         const S3DPoint rel = {world_pos.x - ctx.sectorCameraWorld.x, world_pos.y - ctx.sectorCameraWorld.y, world_pos.z};
         int32_t anchor_cam_x = 0, anchor_cam_y = 0;
-        WorldToScreen(rel, anchor_cam_x, anchor_cam_y);
+        CameraRelMapScreen(ctx, rel, anchor_cam_x, anchor_cam_y);
         float spx = 0.0f, spy = 0.0f;
         ProjectCameraRelToScreen(ctx, rel, spx, spy);
         const float sprite_scale = (std::max)(ctx.camera_zoom, 0.0001f);

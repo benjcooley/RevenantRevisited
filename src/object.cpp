@@ -128,19 +128,31 @@ uint16_t UniqueTypeID;
 // * Map/Screen Conversion Utils *
 // *******************************
 
+// REVSYNC: WorldToScreen @ 0x0046d7a0 (also inlined in the object's screen
+// position, 0x0046eb40). Retail projects through the float matrix at
+// 0x005d4740: x - y across, x / 2 + y / 2 - 0.867f * z down, truncated once
+// (__ftol). The 1998 form truncated (x + y) / 2 and z * 867 / 1000 apart,
+// which put about half of all points a pixel off. 0.867f is exactly
+// 14545846 / 2^24, so the sum is exact in 64-bit integers, and truncating it
+// gives the x87 result: the same as 0x0046d7a0 over 7200 points in the
+// emulator (an FPU left at single precision, as a D3D device may set it,
+// would round about 1 point in 70 the other way).
+namespace {
+constexpr int64_t kScreenYOne = int64_t(1) << 24;
+constexpr int64_t kScreenYPerZ = 14545846;      // 0.867f * 2^24 (0x005d475c, negated)
+}
+
 void WorldToScreen(const S3DPoint& pos, int32_t &x, int32_t &y)
 {
     // 2:1
     x = pos.x - pos.y;
-    y = ((pos.x + pos.y) / 2) - (int32_t)((pos.z * MYSTERYVAL1) / MYSTERYVAL2);
+    y = (int32_t)(((int64_t(pos.x) + pos.y) * (kScreenYOne / 2) - pos.z * kScreenYPerZ) / kScreenYOne);
         // the screen z is actually pos.z * cos(30), cos(30) = .866
 }
 
 void WorldToScreen(const S3DPoint& pos, S3DPoint& spos)
 {
-    // 2:1
-    spos.x = pos.x - pos.y;
-    spos.y = ((pos.x + pos.y) / 2) - (int32_t)((pos.z * MYSTERYVAL1) / MYSTERYVAL2);
+    WorldToScreen(pos, spos.x, spos.y);
     spos.z = (uint16_t)(WORLDZOFFSET - (int32_t)(pos.z / 2) - (int32_t)((pos.x + pos.y) * MYSTERYVAL1 / MYSTERYVAL2));
     //spos.z = (uint16_t)(WORLDZOFFSET - (int32_t)(pos.z * 2560 / 5120) - (int32_t)((pos.x + pos.y) * 4434 / 5120));
         // Z must be figured out based on the plates being tilted at a 30 degree angle
