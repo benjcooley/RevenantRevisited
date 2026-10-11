@@ -26,14 +26,14 @@
     "unmapped_preview_ids": 8,
     "retail_rows_with_source_fixes_recorded": 155,
     "port_smoke_preview_ids": 36,
-    "retail_rows_with_port_smoke": 31,
+    "retail_rows_with_port_smoke": 32,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
     "visual_fidelity_confirmed_rows": 143,
-    "repeatable_ab_rows": 7,
+    "repeatable_ab_rows": 8,
     "thin_bounded_render_frontend_rows": 77,
     "reviewed_visual_pass_rows": 143,
     "remaining_visual_review_rows": 33
@@ -6730,38 +6730,46 @@
       "retail_type_id": "0xddc4042e",
       "asset": "Misc\\Blood.I3D",
       "preview_candidates": [
+        "TBloodEffect_RETAIL",
         "TBloodEffect",
         "TBloodEffect_BESPOKE",
         "TBloodAnimator_SHIM"
       ],
       "source_fixes": [
-        "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested Misc\\Blood.I3D is distinguished from Imagery/Magic/blood.i3d."
+        "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested Misc\\Blood.I3D is distinguished from Imagery/Magic/blood.i3d.",
+        "2026-10-11 (combat dojo): the shipped TBloodAnimator (vtable 0x005acd18; Initialize 0x004f18d0, Pulse 0x004f1c60, Render 0x004f1de0) replaces the generic TEffect that drew Blood.I3D's eight boxes as static opaque meshes (the black squares beside a struck character). The \"Blood\" type now builds TBloodEffect (SetParams 0x004f9490); EffectBurst 0x004c85d0 passes retail's (height, facing+128, 3, 5, 5, random(1,5)); TCharacter::Pulse's four death squirts replace the snapshot impdecap. Droplet simulation bit-exact against the original in the emulator (tools/retail_runtime/blood_spray_probe.py: 33 cases, 1769 ticks, every field, rand() count and kill tick; two negative controls in test_blood_spray.py)."
       ],
-      "port_smoke_ids": [],
+      "port_smoke_ids": [
+        "TBloodEffect_RETAIL"
+      ],
       "reference_runs": [],
-      "comparison_runs": [],
+      "comparison_runs": [
+        "docs/gameplay/forensics/combat_effects/blood_retail_vs_port.png (recorded retail Rahul fight vs arena Locke/Araknid)",
+        "docs/gameplay/forensics/combat_effects/blood_isolated_gallery.png (one TBloodEffect_RETAIL owner)"
+      ],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
-        "port_smoke": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
+        "port_smoke": true,
         "accurate_software_reference": false,
-        "repeatable_ab": false,
+        "repeatable_ab": true,
         "visual_fidelity": false,
-        "runtime_trigger_integration": false,
-        "map_or_character_context": false,
+        "runtime_trigger_integration": true,
+        "map_or_character_context": true,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Defer plain editor ADDAT: six snapshot parameters are uninitialized and actual retail defaults are not established. Recover a real parameterized caller or explicit proven parameters before another capture; no unsafe guessed initialization.",
+      "runtime_dispatch": "retail_TBloodAnimator_natural_EffectBurst_and_death_squirts",
+      "next_action": "Root visual review of the arena/gallery footage against the recorded retail splats; an in-flight droplet reference (the 6-8 fps DOSBox capture resolves splats only). Plain ADDAT remains unparameterized.",
       "notes": [
         "VFS collision corrected. Earlier port evidence must be checked against the requested asset before certifying visual fidelity; old bytes differ.",
-        "Plain ADDAT is deferred because six uninitialized snapshot parameters and unproven retail defaults make it an unsafe reference recipe. Current proxy/source asset-collision work is not a proven natural blood caller."
+        "Plain ADDAT is deferred because six uninitialized snapshot parameters and unproven retail defaults make it an unsafe reference recipe. Current proxy/source asset-collision work is not a proven natural blood caller.",
+        "2026-10-11 combat dojo: real parameterized caller recovered (EffectBurst from ResolveImpact, four TCharacter::Pulse death squirts). Retail differs from the snapshot TBloodSystem: violence-sized count (min(V*3,14) less a random part; the requested count is unread), a trailing partner per droplet, half the vertical speed, a random splat size, big droplets become the splat sprite; the prelit colour is an ill-formed byte merge of twice the area ambient plus nearby lights. docs/gameplay/forensics/COMBAT_EFFECTS.md section 2."
       ],
       "batch": "2 \u2014 Close early parity and map/combat regressions",
       "requires_post_vfs_fix_recheck": true,
-      "work_queue_status": "deferred_requires_parameterized_caller"
+      "work_queue_status": "combat_dojo_ported_pending_root_visual_review"
     },
     {
       "index": 3,
@@ -19355,43 +19363,63 @@
       "asset": "misc\\Impact.i3d",
       "preview_candidates": [
         "TCombatFlashEffect_BESPOKE",
-        "TCombatFlashEffect_AUTHORED_START1"
+        "TCombatFlashEffect_AUTHORED_START1",
+        "TCombatFlashEffect_AUTHORED_START2",
+        "TCombatFlashEffect_AUTHORED_START3",
+        "TCombatFlashEffect_AUTHORED_START4",
+        "TCombatFlashEffect_AUTHORED_START5",
+        "TCombatFlashEffect_AUTHORED_START6",
+        "TCombatFlashEffect_AUTHORED_START7",
+        "TCombatFlashEffect_AUTHORED_START8",
+        "TCombatFlashEffect_AUTHORED_START9"
       ],
       "source_fixes": [
         "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested misc\\Impact.i3d is distinguished from Imagery/Magic/impact.I3D.",
         "Integrated bounded combatflash0xad92bd29 default-animator state0/start1 profile: actual Impact asset/prototype/emitter/base, cached expression frame/current-owner emitter pose, # fixed-camera matrices, separate prelit RGB565 mode16 particles and source normal/material base, controller-before-base draw order,19-frame nonlooping cleanup and real exact-owner preview.24 source contracts and frozen staged/applied file hashes retained; other states remain unsupported. No visual/full/natural-combat acceptance.",
-        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical."
+        "2026-10-09: shared original4010f3 clears only first cached curve destination; absent/literal defaults preserved. Cold-parser newborn/update rechecked; prior template1 initialized-packet claims are historical.",
+        "2026-10-11 (combat dojo): whole-asset profile (18 states, 21 objects, 18 exact tags, 10 RGB565 textures; src/combatflashprofile.h) admits all nine start states EffectCombatFlash 0x004c8500 selects; before, eight of nine hits drew the Impact meshes as opaque dark quads without particles. Partsys from the retail asm: a trailing \",\" ends the list (ParseParams 0x0040d461..0x0040d480); numtrails low:high draws random(low,high) last in the spawn when low is nonzero (0x00403265..0x004032a4); trails draw after the main draw (0x00402901..0x00402a0b). Every Impact flare draws litadd, depth-tested, with \"#\" camera matrices and the scale gate; anything off that route draws nothing."
       ],
       "port_smoke_ids": [
-        "TCombatFlashEffect_AUTHORED_START1"
+        "TCombatFlashEffect_AUTHORED_START1",
+        "TCombatFlashEffect_AUTHORED_START2",
+        "TCombatFlashEffect_AUTHORED_START3",
+        "TCombatFlashEffect_AUTHORED_START4",
+        "TCombatFlashEffect_AUTHORED_START5",
+        "TCombatFlashEffect_AUTHORED_START6",
+        "TCombatFlashEffect_AUTHORED_START7",
+        "TCombatFlashEffect_AUTHORED_START8",
+        "TCombatFlashEffect_AUTHORED_START9"
       ],
       "reference_runs": [
         "captures/runs/sw-fps-combatflash-start1-20261005"
       ],
       "comparison_runs": [
         "captures/ab/sw-fps-combatflash-authored-start1-20261005",
-        "captures/ab/sw-fps-combatflash-post-z-domain-20261005"
+        "captures/ab/sw-fps-combatflash-post-z-domain-20261005",
+        "docs/gameplay/forensics/combat_effects/combatflash_retail_vs_port.png (recorded retail Rahul fight vs arena and gallery)",
+        "docs/gameplay/forensics/combat_effects/combatflash_states.png (nine gallery owners)"
       ],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
         "visual_fidelity": false,
-        "runtime_trigger_integration": false,
-        "map_or_character_context": false,
+        "runtime_trigger_integration": true,
+        "map_or_character_context": true,
         "accepted": false
       },
-      "runtime_dispatch": "exact_generic_default_animator_state0_start1_verified_through_real_creation_natural_cleanup_move_delete",
-      "next_action": "Retain exact state0/start1 implementation,12 runtime checks and own inconclusive pair. Establish native onset/cadence and raster/progression with a second seed or source-backed review without fitting. Other17 states, even-state impact selection, collision normal/attacker/victim, multi-tick cached-frame scheduling and natural combat remain mandatory open work; advance simple missing-native RGB565 queue.",
+      "runtime_dispatch": "exact_generic_default_animator_all_18_states_natural_EffectCombatFlash",
+      "next_action": "Root visual review of the nine states against the recorded retail combat; an emulator run of a non-zero state (trail draw order/count executed rather than read). The state0 onset/cadence pair stays inconclusive.",
       "notes": [
         "VFS collision corrected. Earlier port evidence must be checked against the requested asset before certifying visual fidelity; old bytes differ.",
         "Pre-implementation checkpoint: Actual generic EFFECT/default animator Impact asset has18 authored states and controller tags. Current reference is only state0/start1; the old tinted billboard proxy does not implement state/caller/tag behavior. No new implementation/runtime/visual credit; only the prior VFS path correction remains recorded as a source fix.",
         "First static attempt expectedcapacity1 and is retained FAILED; actual source pool is floor(250\u00d745/24)=468, so corrected recipe was rerun in a fresh directory. No engine fault. Current born10\u219215 and actual one default animator are logged; static4rows/40tail and MOVE/DELETE8rows/100tail pass on f4fe9f56\u2026. Own240-frame pair has background0/0 but root review is inconclusive: comparable flash/streak and23 visible samples, differing onset/late brightness; first visible native sample is not proven simtick0 and RNG differs.",
-        "Currentbb0a4+8runtimechecks/40+100groundtail pass andown240frame pair rootINCONCLUSIVE: nativeahead/portbright at.4-.6sec; initialphase/cadence andPNGpreviewdepth versusnativefloor unisolated. No phasefit/visualcredit; other17states/combatcaller open."
+        "Currentbb0a4+8runtimechecks/40+100groundtail pass andown240frame pair rootINCONCLUSIVE: nativeahead/portbright at.4-.6sec; initialphase/cadence andPNGpreviewdepth versusnativefloor unisolated. No phasefit/visualcredit; other17states/combatcaller open.",
+        "2026-10-11 combat dojo: docs/gameplay/forensics/COMBAT_EFFECTS.md section 3 (per-state particle/flare/colour table, trails, selection 2*random(0,9) capped at 16)."
       ],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "requires_post_vfs_fix_recheck": false,
@@ -19432,7 +19460,7 @@
         "TCombatFlashEffect_BESPOKE"
       ],
       "preview_candidate_notes": "Actual generic EFFECT/default animator Impact asset has18 authored states and controller tags. Current reference is only state0/start1; the old tinted billboard proxy does not implement state/caller/tag behavior.",
-      "work_queue_status": "state0_runtime_pair_complete_visual_inconclusive_other17states_and_combat_pending",
+      "work_queue_status": "combat_dojo_all_states_pending_root_visual_review",
       "runtime_regression": {
         "fixtures": [
           {

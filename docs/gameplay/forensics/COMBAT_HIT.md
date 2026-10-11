@@ -585,6 +585,9 @@ inventory: gold at `pos + (30,30)`, every other item along
 `random(0,256)` until the walk map accepts it; in multiplayer the
 player's items go into a "pouch".
 
+The effects themselves (the blood animator, the nine combat-flash states,
+the struck body's additive pass): [COMBAT_EFFECTS.md](COMBAT_EFFECTS.md).
+
 ## 4. RNG draws
 
 All through `random(lo,hi)` `0x483300` unless noted. In order of a melee

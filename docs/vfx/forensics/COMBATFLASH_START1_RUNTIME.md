@@ -68,3 +68,12 @@ The post-integration [Gold regression](/Users/benjamincooley/RevenantRetailLab/c
 ## Current post-Z runtime protection, visual inconclusive
 
 Currentbb0a natural4/MOVEDELETE8checks/40+100groundtails and own240-frame pair complete. [Root review](/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fps-combatflash-post-z-domain-20261005/visual-review.json) remainsINCONCLUSIVE: nativeahead/portbright0.4–0.6sec, exact initialphase/cadence andPNGpreviewdepth/nativefloor unisolated. No phasefit or appearance credit; other17states/naturalcombat selection/context unverified. [Current shared hashes](PARTSYS_Z_DOMAIN_HANDOFF.md).
+
+## All nine start states (2026-10-11, combat dojo)
+
+The profile now fingerprints the whole asset and admits every state;
+trailing-comma, `numtrails` range and trail-draw semantics come from the
+retail asm, and EffectCombatFlash's natural selection runs in the combat
+arena. Gallery: `TCombatFlashEffect_AUTHORED_START1..9`. Evidence and the
+per-state table: [COMBAT_EFFECTS.md](../../gameplay/forensics/COMBAT_EFFECTS.md) §3.
+The state0 onset/cadence pair above remains inconclusive.
