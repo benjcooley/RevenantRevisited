@@ -474,6 +474,8 @@ class TCharacter : public TComplexObject
       // Create a burst effect of the given name
     void EffectCombatFlash();
       // The flash of a blow (retail 0x004c8500)
+    void SquirtBlood(int32_t height, int32_t heading, int32_t elevation, int32_t spread);
+      // A death animation's blood squirt (retail TCharacter::Pulse 0x004c1cc3..0x004c20d0)
     int32_t GetCombatFlashTicks() { return combatflashticks; }
       // Returns 0 if no flash, or positive number of ticks left if flash being drawn
     void MakeInvisible();

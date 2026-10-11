@@ -378,33 +378,23 @@ void TCharacter::Pulse()
     if (CurrentScreen->FrameCount() - exittimestamp > 5)
         SetFlag(OF_ONEXIT, false);
 
-    // Do blood for impdecap (you can be dead!)
-    if (doing->Is("impdecap"))
+    // REVSYNC: 0x004c1cc0..0x004c20d0 -- blood squirting from the death
+    // animations that open a character up (you can be dead!), for a bleeder
+    // (COMBAT_EFFECTS.md §2.5). The heading uses the facing as a signed
+    // byte; the animator wraps it.
+    if (doing && !(chardata->flags & CF_BADBLEEDER) && chardata->bleeder)
     {
-        if (frame > 5 && frame < 65 && frame % 5 == 0)
-        {
-            int32_t height = 95;
-
-            extern TObjectClass EffectClass;
-
-            SObjectDef def;
-            memset(&def, 0, sizeof(SObjectDef));
-
-            def.objclass = OBJCLASS_EFFECT;
-            def.objtype = EffectClass.FindObjType("blood");
-            def.level = MapPane.GetMapLevel();
-            def.pos = pos;
-            def.pos.z += height;
-            def.facing = 0;
-
-            int32_t index = MapPane.NewObject(&def);
-            TObjectInstance* inst = MapPane.GetInstance(index);
-            if (inst)
-            {
-                ((TBloodEffect*)inst)->SetParams(height, 0, 64, 255, 5, 1);
-            }
-        }
+        const int32_t back = int8_t(GetFace()) - 0x5b;
+        if (doing->Is("decapdeath") && frame > 5 && frame < 0x41 && frame % 5 == 0)
+            SquirtBlood(0x4b, back, 0x40, 0x5b);
+        if (doing->Is("combat to ripinhalfed") && frame > 0x41 && frame < 0x49 && frame % 2 == 0)
+            SquirtBlood(0x69, back, 0x40, 0x5b);
+        if (doing->Is("ripkilldeath") && frame > 0x73 && frame < 0x7e)
+            for (int32_t squirt = 0; squirt < 2; ++squirt)
+                SquirtBlood(0x82, back, 0x40, 0x5b);
     }
+    if (doing && !stricmp(GetName(), "Rand") && doing->Is("walk to dead") && frame % 5 == 0)
+        SquirtBlood(0x28, int8_t(GetFace()) - 0x80, 0x20, 0x20);
 
   // REVSYNC: TCharacter::Pulse @ 0x004c1bb0 -- one step of any fade, dead
   // or alive (UpdateFade's only caller in retail).
@@ -2686,6 +2676,23 @@ void TCharacter::EffectCombatFlash()
     flash->SetState(states > 0 ? (std::min)(2 * random(0, states / 2), states - 2) : 0);
 }
 
+// REVSYNC: TCharacter::Pulse @ 0x004c1d27..0x004c1db8 (and its three
+// siblings) -- a "blood" effect `height` above the character: heading and
+// elevation, the heading's spread, an elevation spread of 5 and a count of
+// one (the animator sizes the spray itself).
+void TCharacter::SquirtBlood(int32_t height, int32_t heading, int32_t elevation, int32_t spread)
+{
+    extern TObjectClass EffectClass;
+    SObjectDef def{};
+    def.objclass = OBJCLASS_EFFECT;
+    def.objtype = EffectClass.FindObjType("blood");
+    def.level = MapPane.GetMapLevel();
+    def.pos = pos;
+    def.pos.z += height;
+    if (auto* blood = dynamic_cast<TBloodEffect*>(MapPane.GetInstance(MapPane.NewObject(&def))))
+        blood->SetParams(height, heading, elevation, spread, 5, 1);
+}
+
 void TCharacter::EffectBurst(const char *name, int32_t height)
 {
     if (effectBurstSeam)
@@ -2710,6 +2717,11 @@ void TCharacter::EffectBurst(const char *name, int32_t height)
 
     if (!stricmp(name, "blood"))
     {
+      // REVSYNC: 0x004c862e..0x004c8682 -- the spray starts `height` above
+      // the bleeder and heads away from its facing (facing + 128, unmasked;
+      // the animator wraps it), elevation 3, both spreads 5. The count,
+      // random(1, 5), is drawn once the object exists; retail's animator
+      // never reads it (effects/retailblood.cpp).
         def.pos = pos;
         def.pos.z += height;
 
@@ -2719,14 +2731,10 @@ void TCharacter::EffectBurst(const char *name, int32_t height)
         TObjectInstance* inst = MapPane.GetInstance(index);
         if (!inst)
             return;
-
-      // TODO retail: the imagery factory currently returns a generic
-      // TEffect for "blood" instead of a TBloodEffect (typeinfo for
-      // TBloodEffect isn't even emitted — no key function). Calling
-      // the virtual SetParams via the wrong vtable crashes. Skip the
-      // splatter-params call until the effect-class registration is
-      // ported. Combat still kills the target; blood is cosmetic.
-        // ((TBloodEffect*)inst)->SetParams(height, (GetFace() + 128) & 255, 0, 80, 20, random(1, 5));
+        const int32_t heading = GetFace() + 0x80;
+        const int32_t count = random(1, 5);
+        if (auto* blood = dynamic_cast<TBloodEffect*>(inst))
+            blood->SetParams(height, heading, 3, 5, 5, count);
     }
     else if (!stricmp(name, "sparks"))
     {
