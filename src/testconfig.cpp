@@ -51,6 +51,7 @@ char  StartupMenuButton[32]             = "";
 char  StartupVfxBackground[16] = "";
 char  StartupVfxBackdrop[MAXPATHLEN] = "";
 float StartupVfxCamera[2] = {-1.0f, -1.0f};
+bool StartupVfxCameraExplicit = false;
 int32_t StartupVfxOrigin[3] = {0, 0, 0};
 bool StartupVfxOriginSet = false;
 std::string StartupInputScript;

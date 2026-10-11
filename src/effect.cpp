@@ -71,6 +71,7 @@
 #include "mappane.h"
 #include "math3d.h"
 #include "retailsoftwaretransform.h"
+#include "cometsoftwarebounds.h"
 #include "testconfig.h"
 #include "effects/flamevariantspreview.h"
 #include "meshextract.h"   // M09b: ExtractSubMesh for I3D cylinder mesh
@@ -11112,6 +11113,7 @@ void TFogEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     if(!Renderer) return;
     hmm_mat4 owner=Transform().Matrix();
     if(native_domain_) {const auto p=Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace()));}
+    const bool native_prelit = native_domain_ && Renderer->UsesRetailSoftwareMeshLighting();
     hmm_vec3 points[36];
     float colors[36][4];
     for(int i=0;i<36;++i) {
@@ -11124,11 +11126,12 @@ void TFogEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         // The untextured alpha lookup uses (A5+1)/32 and writes depth even
         // though Scene mode2 requests ZWRITE=false. GPU interpolation remains
         // higher precision than the original scanline/RGB565 framebuffer.
+        // The explicit native policy carries raw RGBA5 to its quantized fragment path.
         const int color=int(double(v.c)*255.0)>>3;
         const int alpha=int(double(v.a)*255.0)>>3;
-        colors[i][0]=colors[i][2]=float(color)/31.0f;
-        colors[i][1]=float(color*2)/63.0f;
-        colors[i][3]=float(alpha+1)/32.0f;
+        colors[i][0]=colors[i][2]=native_prelit?float(color):float(color)/31.0f;
+        colors[i][1]=native_prelit?float(color):float(color*2)/63.0f;
+        colors[i][3]=native_prelit?float(alpha):float(alpha+1)/32.0f;
     }
     const auto* indices=reinterpret_cast<const uint16_t*>(faces_);
     if(state_.ticks==2) log_info("[fog-draw] firstworld=(%.9g,%.9g,%.9g) lastworld=(%.9g,%.9g,%.9g) rgba0=(%.9g,%.9g,%.9g,%.9g)",
@@ -11138,7 +11141,7 @@ void TFogEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         SQuadDrawItem draw{};draw.corner_count=3;draw.per_corner_color=true;
         draw.key.texture=Renderer->WhiteTextureHandle(); // identity carrier for untextured vertex color
         draw.key.blend=uint8_t(EFxBlend::Alpha);draw.key.depth_mode=uint8_t(EFxDepthMode::TestWrite);
-        draw.retail_software_projection=native_domain_;draw.debug_mode=debug_mode;
+        draw.retail_software_projection=native_domain_;draw.retail_prelit_rgba5=native_prelit;draw.debug_mode=debug_mode;
         for(int c=0;c<3;++c) {
             const int i=indices[face*3+c];
             std::memcpy(draw.world_pos[c],points[i].Elements,3*sizeof(float));
@@ -14033,6 +14036,22 @@ TAuthoredStaticMeshEffect::~TAuthoredStaticMeshEffect()
             }
 }
 
+// These immutable buffers are shared across preview owners. Include the exact
+// source asset, object, texture slot and texture frame; owner position/time do
+// not change vertex/index data. Keep this domain separate from map mesh keys.
+static uint64_t AuthoredStaticMeshKey(uint64_t asset, int32_t object, int32_t slot, int32_t frame)
+{
+    uint64_t hash = 1469598103934665603ull;
+    const uint64_t fields[] = {0x4155544853544154ull, asset, uint64_t(uint32_t(object)),
+                               uint64_t(uint32_t(slot)), uint64_t(uint32_t(frame))};
+    for (uint64_t value : fields)
+        for (int byte = 0; byte < 8; ++byte) {
+            hash ^= (value >> (byte * 8)) & 255u;
+            hash *= 1099511628211ull;
+        }
+    return hash ? hash : 1ull;
+}
+
 TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const S3DPoint& origin,
                                                                     const char* asset_override,bool animate_textures,bool scroll_textures)
 {
@@ -14094,20 +14113,27 @@ TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const
                 if(desc.numframes>1) {
                     if(!desc.framehtexs)return nullptr;
                     for(int32_t frame=0;frame<desc.numframes;++frame) {
-                        const MeshHandle frame_mesh=Renderer->RegisterMesh(vertices.data(),int32_t(vertices.size()),
+                        const MeshHandle frame_mesh=Renderer->RegisterMeshAsset(
+                            AuthoredStaticMeshKey(img->AssetId(),object,slot,frame),vertices.data(),int32_t(vertices.size()),
                             indices.data(),int32_t(indices.size()),desc.framehtexs[frame]);
                         if(!frame_mesh) {
                             for(MeshHandle retained:part.frame_meshes)Renderer->ReleaseMeshAssetRef(retained);
                             return nullptr;
                         }
+                        Renderer->AddMeshAssetRef(frame_mesh);
                         part.frame_meshes.push_back(frame_mesh);
                     }
                     part.mesh=part.frame_meshes.front();
                 }
             }
-            if(!part.mesh)part.mesh = Renderer->RegisterMesh(vertices.data(), int32_t(vertices.size()),
-                indices.data(), int32_t(indices.size()), texture);
-            if (!part.mesh) return nullptr;
+            if(!part.mesh) {
+                part.mesh = Renderer->RegisterMeshAsset(
+                    AuthoredStaticMeshKey(img->AssetId(),object,slot,
+                        slot>0 ? img->GetTextureFrame(slot-1) : 0),vertices.data(),int32_t(vertices.size()),
+                    indices.data(),int32_t(indices.size()),texture);
+                if (!part.mesh) return nullptr;
+                Renderer->AddMeshAssetRef(part.mesh);
+            }
             BuildStaticObjectMatrix(img, object, 0, 0, part.local_matrix);
             eff->parts_.push_back(part);
             total_vertices += vertices.size();
@@ -16919,6 +16945,9 @@ void TFireSwarmEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     const hmm_vec3 scale={cylhscl_,cylhscl_,cylvscl_};
     MtxScale(&local,&scale); MtxRotateZ(&local,cylth_);
     const auto& world=native_domain_ ? native_owner_ : Transform().Matrix();
+    const bool software_bounds = native_domain_ && Renderer->UsesRetailSoftwareMeshLighting();
+    hmm_mat4 native_world={};
+    if (software_bounds) MtxMultiply(&native_world,&local,&world);
     SQuadDrawItem item={}; item.corner_count=3; item.retail_texture=1;
     item.retail_argb4444=true;
     item.retail_software_projection=native_domain_;
@@ -16926,6 +16955,16 @@ void TFireSwarmEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
     item.debug_mode=debug_mode;
     for (size_t face=0;face+2<indices_.size();face+=3) {
+        if (software_bounds) {
+            hmm_vec3 authored[3];
+            for (int c=0;c<3;++c) {
+                const auto& v=vertices_[indices_[face+c]];
+                authored[c]={v.pos[0],v.pos[1],v.pos[2]};
+            }
+            // Actual ARGB branch56e006/36/5c/82 uses the same literal
+            // edge0->1/2 span guard. Ordinary geometry remains complete.
+            if (!RetailCometTriangleAllowed(authored,native_world)) continue;
+        }
         for (int corner=0;corner<3;++corner) {
             const auto& v=vertices_[indices_[face+corner]];
             const hmm_vec3 authored={v.pos[0],v.pos[1],v.pos[2]};

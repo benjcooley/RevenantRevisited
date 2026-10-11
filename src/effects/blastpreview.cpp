@@ -3,16 +3,18 @@
 #include "../logging.h"
 #include "../meshextract.h"
 #include "../speedauthoredmatrix.h"
+#include "../cometsoftwarebounds.h"
 #include "../retailsoftwaretransform.h"
 #include "../testconfig.h"
 #include "../time.h"
 #include <cmath>
+#include <array>
 #include <cstring>
 #include <memory>
 #include <vector>
 
 namespace blast_preview {
-struct Part { int object=0, slot=0; MeshHandle mesh=0; };
+struct Part { int object=0, slot=0; MeshHandle mesh=0; std::vector<std::array<hmm_vec3,3>> triangles; };
 struct State {
  std::unique_ptr<TObjectInstance> owner;
  std::vector<Part> parts;
@@ -40,7 +42,13 @@ State* Spawn(const S3DPoint& origin)
   if(!ExtractSubMeshTextureSlot(img,object,slot,vertices,indices))continue;
   const auto texture=img->GetTextureHandle(slot-1);if(texture==kInvalidTexture)return nullptr;
   const auto mesh=Renderer->RegisterMeshAsset(0x424c415354000000ull|uint64_t(slot<<16)|uint64_t(object),vertices.data(),int(vertices.size()),indices.data(),int(indices.size()),texture);
-  if(!mesh)return nullptr;Renderer->AddMeshAssetRef(mesh);s->parts.push_back({object,slot,mesh});
+  if(!mesh)return nullptr;Renderer->AddMeshAssetRef(mesh);
+  Part part{object,slot,mesh,{}};
+  for(size_t face=0;face<indices.size();face+=3){std::array<hmm_vec3,3> triangle;
+   for(int c=0;c<3;++c){const auto& v=vertices[indices[face+c]];triangle[c]={v.pos[0],v.pos[1],v.pos[2]};}
+   part.triangles.push_back(triangle);
+  }
+  s->parts.push_back(std::move(part));
  }
  if(s->parts.size()!=56)return nullptr;
  log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Blast authored=56",int(StartupVfxNativeDomain));
@@ -70,7 +78,16 @@ void SubmitWorld(State* s)
   mesh.additive_blend=true;mesh.retail_lighting=1;mesh.retail_positive_face_cull=true;mesh.retail_gold_no_depth=true;
   mesh.retail_software_projection=StartupVfxNativeDomain;
   if(part.object==55)mesh.uv_offset[0]=float(TTime::LegacyFrameCount())*-.01f;
-  Renderer->SubmitHelperMesh(mesh);++draws;
+  // The original RGB565 raster rejects oversized edges from vertex0 before
+  // drawing. Keep complete ordinary geometry and source face order.
+  if(StartupVfxNativeDomain && Renderer->UsesRetailSoftwareMeshLighting()){
+   mesh.index_count=3;
+   for(size_t face=0;face<part.triangles.size();++face){
+    if(!RetailCometTriangleAllowed(part.triangles[face].data(),world))continue;
+    mesh.index_offset=int(face*3);Renderer->SubmitHelperMesh(mesh);
+   }
+  }else Renderer->SubmitHelperMesh(mesh);
+  ++draws;
  }
  if(s->ticks==2 || s->ticks==16 || s->ticks==60 || s->ticks==119)log_info("[blast-phase] tick=%d global=%lld draws=%d",s->ticks,static_cast<long long>(TTime::LegacyFrameCount()),draws);
 }

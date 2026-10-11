@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "6fce4a987c798d9a5185c284babb894120d697415479355ca28a366328420b63",
+    "harness_sha256": "4d8d65e500128fc8cd9ace53674e941c4e9544abec9e54c127e9038223e7ede5",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 132,
+    "retail_rows_with_source_fixes_recorded": 141,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 116,
+    "visual_fidelity_confirmed_rows": 128,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 116,
-    "remaining_visual_review_rows": 60
+    "reviewed_visual_pass_rows": 128,
+    "remaining_visual_review_rows": 48
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -9685,27 +9685,39 @@
       "preview_candidates": [
         "TRibbonAnimator_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact base Ribbon legacy keys and active null-target controller replace preview; actual local\u00d7owner composition fixes translated gallery placement. Full seven-phase retail appearance reviewed with thirty sparks and five-frame texture animation."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved null-target appearance and translated gallery; verify natural revive target/actor/decay/spell and device/sampling residuals.",
       "notes": [],
-      "batch": "3 \u2014 Environment, water, signs and simple reusable variants"
+      "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Seven full original/actual Metal native-domain null-target phases2/6/16/20/30/60/90: blue three-tube growth, animated five-frame floor and thirty spark cycles.22,230 state/RNG fields,18 pose channels, guarded original legacy keys; translated gallery40/40 visible and2,232 owner-geometry controls. All90 origin-zero RGB frames unchanged after placement correction. Natural revive actor/target/decay/spell, sampling/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-ribbon-authored-20261011/Ribbon-root-approval.json",
+        "sha256": "e96e80f5f325d22a3e0880de380b10636207a77e88473f99e0a35300a5fb7466",
+        "note": "docs/vfx/forensics/RIBBON_NULL_TARGET_RENDER_20261011.md"
+      }
     },
     {
       "index": 21,
@@ -11639,27 +11651,39 @@
       "preview_candidates": [
         "TVortexEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact shipped default Vortex own legacy keys and all mesh groups replace stale procedural preview; original pertrianglecull/flatmaxdepth/write matches interior/rim. Six unclipped retail phases independently reviewed and translatedgallery verified."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved exact shipped default leaf; verify natural map/other context/lighting and retained raster/device residuals.",
       "notes": [],
-      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
+      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six full original/actual Metal native-domain static default-leaf phases2/6/16/30/46/60. Own205vertices/304triangles/3roots/24legacykeybytes and fullARGBglow; exactfactorydefault binding,27posechannels,148positivefaces/cull/depthcontrols,2460ownergeometrychecks. Actualtranslatedgallery70/70visible. SnapshotproceduralVortex is a different binding;2pxedge/color/floatdepth/device/naturalmap/otherlighting/exactpixels remainopen.",
+        "report": "recon/retail_asm/runtime/effects/current-vortex-default-20261011/Vortex-root-approval.json",
+        "sha256": "5742ac72cf255807ced76b25dbeb13fc258a622a2ea03e120fec37d2fe004608",
+        "note": "docs/vfx/forensics/VORTEX_SHIPPED_DEFAULT_RENDER_20261011.md"
+      }
     },
     {
       "index": 43,
@@ -11729,7 +11753,8 @@
         "TFogEffect_BESPOKE"
       ],
       "source_fixes": [
-        "2026-10-10: replaced collapsed Fog card with authored36-vertex/50-triangle animated grid, exact native state/RNG and neutral white texture binding. Current gallery40/40 visible. Post-alpha RGB565 truncation brightness residual holds appearance credit."
+        "2026-10-10: replaced collapsed Fog card with authored36-vertex/50-triangle animated grid, exact native state/RNG and neutral white texture binding. Current gallery40/40 visible. Post-alpha RGB565 truncation brightness residual holds appearance credit.",
+        "2026-10-11: Native-domain/software-only explicit dynamicRGBA5 format fixes steppedbrightness and pertriangleflatdepth; original fixed8 slope residual disclosed rather than fittedbrightness."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -11737,18 +11762,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
+        "animator_and_asset_mapping": true,
         "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "candidate_billboard_mismatches_source_untextured_grid",
-      "next_action": "Visible grid/controller now runs; retain held low-brightness alpha-to-RGB565 truncation difference, without fitted multiplier. Natural setting/exactpixels remain open.",
+      "next_action": "Preserve scoped reviewed appearance; verify the remaining natural caller/device and raster limits recorded in its evidence.",
       "notes": [
         "2026-10-05: standalone software Fog invisible, final150 samples exactly ground; deletion and camera cleanup exact. Legacy body word36 is vertex count, not format version; no raw-controller absence claim."
       ],
@@ -11785,6 +11810,16 @@
         "source_animator": "TFogAnimator in original effect.cpp:6415",
         "port_gap": "Single textured WorldXY billboard instead of source untextured vertex-colored36-vertex grid.",
         "forensics": "docs/vfx/forensics/DUST_FOG.md"
+      },
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Nine whole original/actual Metal native-domain corrected36vertex50triangle moving grid phases2..120. Literal dynamicRGBA5 sourcequantization/flatmaxdepth/integerlattice controls;22/24varyingGPU samples exact,2fixed8-vs-affine residuals causally explained,3depth controls pass. Defaultcommon andsiblings retained, actualtranslatedgallery70/70visible. Common fractionalbrightness, destinationrounding/interpolation/naturalmap/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-fog-quantized-20261011/root-approval.json",
+        "sha256": "d4daffbf144998a9762c9f009c3657880541063abac20b10ac62068df005a098",
+        "note": "docs/vfx/forensics/FOG_NATIVE_GRID_20261010.md"
       }
     },
     {
@@ -13039,7 +13074,8 @@
       ],
       "source_fixes": [
         "Replaced wrong-texture billboard with authored174-vertex/192-triangle cylinder object1/texture1, unchanged UVs, source scale/yaw, Alpha/noZwrite, true24Hz and strict tick76 expiry; no preview respawn. Exact type owner component follows map movement and normal reaping.",
-        "Corrected software winding: Blue tests Y-up then negates raster Y; screen-down determinant must cull negative winding. No authored topology/cull disabling or appearance fitting."
+        "Corrected software winding: Blue tests Y-up then negates raster Y; screen-down determinant must cull negative winding. No authored topology/cull disabling or appearance fitting.",
+        "2026-10-11: Actual ARGB primitive-bound admission applied only in native-domain software; complete original lifecycle/partial-to-full cylinder/shrink/kill reviewed with ordinary geometry unchanged."
       ],
       "port_smoke_ids": [
         "TFireSwarmEffect_BESPOKE"
@@ -13058,18 +13094,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": true,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_fireswarm_builder_authored_cylinder_component_verified",
-      "next_action": "Later full-native/current Metal cylinder/ring appearance is close after sourceARGB4444; early original software rejects oversized triangles and remains empty while Metal draws. Resolve targeted device reference before full sampled-lifecycle appearance credit.",
+      "next_action": "Preserve reviewed full software lifecycle; verify natural caller/audio and device/raster residuals.",
       "notes": [
         "2026-10-05: source geometry/texture/timing and actual runtime repaired. Port240frames/76distinct/120exact-ground tail;5 natural expiry and6 explicit deletion checks pass. Retail43.65sec/26distinct retains large cylinder residue; exact camera-nudge floor reset proves cache residue. Diagnostic only, no accurate reference/visual acceptance. Historical combined runtime fixture failed because its generation-bound selector refused a recreated owner; separate corrected fixtures preserve identity checks.",
         "Current source winding correction changes rendered surface selection; earlier mesh captures are historical. Current-binary cylinder preview/runtime regressions retained separately after correction.",
@@ -13148,11 +13184,14 @@
         "scope": "Current source-authored FireSwarm against clean actual retail software lifecycle. Elapsed-time comparison, no phase or appearance fitting; fidelity review pending."
       },
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "pending",
-        "finding": "Clean retail and port both animate and return to exact ground. Their initial visible cylinder phase/progression differs in raw elapsed samples; source 24Hz timing is established but native first-visible phase and observed cadence remain unresolved. No fitted time, scale, alpha or RNG changes.",
-        "scope": "Actual marker-free software reference; no full visual or natural context acceptance."
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Fourteen full original/actual Metal native-domain software phases2..80 in supported1920x1080 with whole visible geometry. Early2/15/25blank, partial27, full28onward, flatten75 and kill76/blank80. Native-only actualARGB640/480edgeguard proven by2304authored decisions/20kernel boundary controls/constants-only differential;79state source proof. Ordinarycommon80images unchanged; translatedtypedgalleryvisible/dynamic. Commonearly geometry/device, integer-edge/interpolation/naturalcaller/audio/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-fireswarm-authored-20261011/root-approval.json",
+        "sha256": "f3d0d869fcaa44fd8773a66d953297f2dcf9965d98a352a207230e8f66d911c0",
+        "note": "docs/vfx/forensics/FIRESWARM_SOFTWARE_APPEARANCE_20261011.md"
       },
       "work_queue_status": "clean_reference_initial_phase_cadence_review_pending",
       "current_cull_regression": {
@@ -13448,27 +13487,39 @@
       "preview_candidates": [
         "TWindStripAnimator_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Complete twenty-strip null-spell owner/controller,400drop slots and real halo replace three-strip preview. Actual Pulse/NextFrame order preserves lifetime; full original/GPU animation and translatedgallery reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved full null-spell lifecycle; verify natural live-spell orbit/damage/audio and renderer/device residuals.",
       "notes": [],
-      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
+      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Sixteen full original/actual Metal native-domain null-spell phases2..255: twenty moving strips, falling drops, own normal-lit halo growth/shrink and realkill252.2,030,592 state/RNG fields plus505,168 strip/UV/halo matrix fields; actual Pulse-before-NextFrame ordering and incoming-stack-width boundary proven. All510 final common/native images unchanged; translated gallery60frames53visible54distinct. Natural live-spell orbit/damage/audio, raster/depth/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-windstrip-authored-20261011/root-approval.json",
+        "sha256": "8b3796f49a093ea1adf5c36d98b269ff10f27868ac45b6c82719a411071d8fab",
+        "note": "docs/vfx/forensics/WINDSTRIP_NULLSPELL_RENDER_20261011.md"
+      }
     },
     {
       "index": 64,
@@ -16123,27 +16174,39 @@
       "preview_candidates": [
         "TCataclysmEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Complete original null-spell variant0 pool/caller/RNG/lifetime and ordered five-mesh renderer replace billboard preview. Original base nonlinear local-height policy; red torus/glows and own five-mesh asset. Sixteen whole phases independently reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved original null-spell variant0 lifecycle; verify natural actors/other spell variant/damage/audio and renderer/device residuals.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Sixteen full original/actual Metal native-domain null-spell variant0 phases1..89: falling rocky head/trail, impact torus, fragments/glows/dust and blanktail; whole visible bounds inside1280x960. Thirty pieces/seventy dust/fifty glows,110565 state fields exact/826RNG, original life80 kill. Explicit prelit RGB565/RGBA5 and additive cull-none/order policies separately proven. Original base nonlinear local-height policy; red torus/glows and own five-mesh asset. Common launch brightness/clipping, natural actors/other spell variant/damage/audio, interpolation/destination/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-cataclysm-original-20261011/root-approval.json",
+        "sha256": "80c10aa098e941db8ec4db51e0aa8e7aaff716ce339bc2d74d2e6372c5b5e070",
+        "note": "docs/vfx/forensics/CATACLYSM_ORIGINAL.md"
+      }
     },
     {
       "index": 95,
@@ -16154,27 +16217,39 @@
       "preview_candidates": [
         "TCataclysmEffect_Bespoke__YCataclysm_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Complete original null-spell variant0 pool/caller/RNG/lifetime and ordered five-mesh renderer replace billboard preview. Own Y raw local-height policy and green textures; independent named factory and asset. Sixteen whole phases independently reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved original null-spell variant0 lifecycle; verify natural actors/other spell variant/damage/audio and renderer/device residuals.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Sixteen full original/actual Metal native-domain null-spell variant0 phases1..89: falling rocky head/trail, impact torus, fragments/glows/dust and blanktail; whole visible bounds inside1280x960. Thirty pieces/seventy dust/fifty glows,110565 state fields exact/826RNG, original life80 kill. Explicit prelit RGB565/RGBA5 and additive cull-none/order policies separately proven. Own Y raw local-height policy and green textures; independent named factory and asset. Common launch brightness/clipping, natural actors/other spell variant/damage/audio, interpolation/destination/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-ycataclysm-original-20261011/root-approval.json",
+        "sha256": "a4d92475bf5da149ac28997aa7a7264b63f146accbf9a1ce41298f79c99159df",
+        "note": "docs/vfx/forensics/YCATACLYSM_ORIGINAL.md"
+      }
     },
     {
       "index": 96,
@@ -16258,29 +16333,41 @@
       "retail_type_id": "0xad92bc1c",
       "asset": "Magic\\Energyspray.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: Complete original EnergySpray owner phases/RNG,25radialcards/core and20prelitRGBA5 triangles replace unverified preview. Explicitdefault-off helper format preserves realcolors/alpha/flatdepth; constants-only controls prove native oversizedtriangle rejection forbothformats. Wholefan/lifecycle appearance independently reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve approved full null-spell composite; verify natural actor-hand/facing/damage/audio and destination/viewport/device residuals.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Fifteen full original software/actual Metal native-domain null-spell composite phases through realkill136/blank140, plus three wholefan70/90/110 comparisons using four fixedsupported1920x1080 views.25radialcards/core/20prelittriangles,87,984state/RNG fields,82,096matrices/2,220colors. ExplicitRGBA5 alpha/flat-depth andsource-contribution controls, native-only textured/untextured primitiveguard. Common140frames/defaultdiagnostics unchanged. Naturalactor-hand/facing/damage/audio, viewportoverlap/destination/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-energyspray-authored-20261010/root-approval.json",
+        "sha256": "9e455d84008037c7c39757ceea0a339eb58b08f1f8fdd1f32d5bdcf943c87220",
+        "note": "docs/vfx/forensics/ENERGYSPRAY_NULLSPELL_RENDER_20261010.md"
+      }
     },
     {
       "index": 99,
@@ -18626,27 +18713,39 @@
       "preview_candidates": [
         "TRockStormEffect_Bespoke_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Complete original named Rock Storm level1 pool/lifetime, actual authoredrock/glow transforms and caller-target inputs replace billboard preview. Sixteen whole phases independently reviewed and exact translatedgallery verified."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved named level1 stationary-target visual; verify naturalactors/otherlevels/targets/damage/audio and raster/device limits.",
       "notes": [],
-      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
+      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Sixteen original/actual Metal native-domain phases1..89, whole visible bounds inside1280x960: five growing/orbiting/converging blue-glow rocks, impact/recovery/fade and realkill77/blanktail. Named Rock Storm level1, stationary targetorigin/radius24 and invokerFighting identity;12489state fields exact/1600matrix fields max2.4e-7,26initialRNG. Own authoredglowRY retained; translatedtypedgallery69/70visible with repeatedownerexpiry. Damage/reaction observedboundaries; naturalactors/otherlevels/targets/audio/device/quant/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-rockstorm-original-20261011/root-approval.json",
+        "sha256": "797073d8a470a749af89514109693c5def569b7fcffc3a60c538f53b6c24c1a0",
+        "note": "docs/vfx/forensics/ROCKSTORM_ORIGINAL.md"
+      }
     },
     {
       "index": 127,
@@ -20486,7 +20585,8 @@
       "asset": "Misc\\Gvortex.i3d",
       "preview_candidates": [],
       "source_fixes": [
-        "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested Misc\\Gvortex.i3d is distinguished from Imagery/Magic/gvortex.I3D."
+        "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested Misc\\Gvortex.i3d is distinguished from Imagery/Magic/gvortex.I3D.",
+        "2026-10-10: Actual12-object GVortex240-END lifecycle, normal mode16 plus four mode80 flare layers replace missing preview. Complete native/source keys/profile/owner and two fixed-view whole-extent appearance; no fitted geometry or one-giant-framebuffer claim."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -20494,25 +20594,35 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve approved pillar/coiledbands/flares; verify naturalcaller/audio/device and recorded viewport-dependent raster overlap.",
       "notes": [
         "Retail Teleporter uses IrisFlare; M09 teleporter preview uses composite teleportation/gvortex. These names must not be conflated.",
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "VFS collision corrected. Earlier port evidence must be checked against the requested asset before certifying visual fidelity; duplicate entries have identical bytes."
       ],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
-      "requires_post_vfs_fix_recheck": true
+      "requires_post_vfs_fix_recheck": true,
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Twenty full original software/actual Metal native-domain greenpillar/coiledband/risingflare phases across real240-frame owner/blanktail. Two fixed1920x1080 views cover authored1920x1780 extents without scaling; native overlap0\u20132125 differing pixels remains viewport/raster limit, rawwindows retained.33 sparse/full actual pixelmatches preserve24Hz Render;25,920 keys/22,560 matrices. Naturalcaller/audio/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-gvortex-authored-20261010/root-approval.json",
+        "sha256": "111317505a78eb3e653aaabb85b24d8b160c2ddd7d6e4f46b15085536c06ddbb",
+        "note": "docs/vfx/forensics/GVORTEX_NATIVE_VISUAL.md"
+      }
     },
     {
       "index": 145,
@@ -23430,27 +23540,39 @@
       "preview_candidates": [
         "TMaelstromEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Complete own Maelstrom authored keys/camera matrices/hidden prototypes/scrolltex/draw-order adapter; original single parenthesized selectors admitted with production controls. Whole lifecycle retail appearance independently approved; exact gallery route verified."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved full authored lifecycle; verify natural boss/spell/map/audio/device and viewport/raster residuals.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Seventeen original/actual Metal native-domain full authored phases through245END, with three fixed supported1920x1080 views covering all whole triangles. Own51objects/4textures,45visibleobjects,7cameraobjects,3actualscrolltexcontrollers;112455keys/77504matrices/2304UV fields verified. Full260tick schedules/freshpixels repeat; ordinary gallery70/70visible with real ownerkill/restart. Raw viewportoverlap, raster/destination/device and naturalboss/spell/map/audio/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-maelstrom-authored-20261011/root-approval.json",
+        "sha256": "0d699dee126ac687c7ed863796ba0594837247d722dad43ad413728006b12881",
+        "note": "docs/vfx/forensics/MAELSTROM_NATIVE_VISUAL.md"
+      }
     },
     {
       "index": 167,
@@ -23461,27 +23583,39 @@
       "preview_candidates": [
         "TMaelstromEffect_Bespoke__ymaelstrom_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Complete own YMaelstrom asset/profile, inclusive keys/camera matrices/visibility/scrolltex/draw order; full native/Metal lifecycle reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve scoped reviewed appearance; verify the remaining natural caller/device and raster limits recorded in its evidence.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Seventeen full original/actual Metal native-domain own green pillar, flares, expanding rings and blanktail phases through245END, three supported fixedviews covering whole geometry. Own asset/keys/matrices/three scrollcontrollers, sixfreshpixel replays, all260schedules; ordinarygallery70/70distinct with actualownerrestart. Rawoverlap/raster/device/naturalboss/spell/map/audio/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-ymaelstrom-authored-20261011/root-approval.json",
+        "sha256": "2be2f4388611fa3541f68b9f01b444fa7a0806947673fe0b662a3b70daa976b8",
+        "note": "docs/vfx/forensics/YMAELSTROM_NATIVE_VISUAL.md"
+      }
     },
     {
       "index": 168,

@@ -8,6 +8,10 @@
 #include "effects/yattackoriginal.h"
 #include "effects/mpappearoriginal.h"
 #include "effects/ceyesoriginal.h"
+#include "effects/gvortexoriginal.h"
+#include "effects/maelstromoriginal.h"
+#include "effects/cataclysmoriginal.h"
+#include "effects/rockstormoriginal.h"
 #include "effects/lightstriporiginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
@@ -54,6 +58,8 @@
 #include "effects/fairypreview.h"
 #include "effects/fairy2preview.h"
 #include "effects/flamevariantspreview.h"
+#include "effects/ribbonpreview.h"
+#include "effects/vortexpreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
@@ -63,7 +69,11 @@
 #include "effects/skinpreview.h"
 #include "effects/pukepreview.h"
 #include "effects/shriekpreview.h"
+#include "effects/energyspraypreview.h"
 #include "effects/argbsourcecontrol.h"
+#include "effects/prelitrgbcontrol.h"
+#include "effects/windstrippreview.h"
+#include "effects/prelitquadcontrol.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -1614,8 +1624,12 @@ void Render()
 
     const int32_t vw = Display.Width();
     const int32_t vh = Display.Height();
-    const float cam_ox = StartupVfxCamera[0] >= 0 ? StartupVfxCamera[0] : vw / 2;
-    const float cam_oy = StartupVfxCamera[1] >= 0 ? StartupVfxCamera[1] : vh / 2;
+    const float cam_ox = (StartupVfxCameraExplicit || StartupVfxCamera[0] >= 0) ? StartupVfxCamera[0] : vw / 2;
+    const float cam_oy = (StartupVfxCameraExplicit || StartupVfxCamera[1] >= 0) ? StartupVfxCamera[1] : vh / 2;
+
+    if (g_state.frames_rendered == 1)
+        log_info("[vfx-camera] explicit=%d actual=(%.9g,%.9g) viewport=(%d,%d)",
+            StartupVfxCameraExplicit ? 1 : 0, cam_ox, cam_oy, vw, vh);
 
     // Neutral 3D scene: directional sun, modern lighting, no shadows/AO.
     // Camera centred at world origin, kCam world-units back. Scene is
@@ -5403,6 +5417,66 @@ struct SVfxTestBootstrap {
             original.destroy=[](void* c){ceyes_original::Destroy(static_cast<ceyes_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
+        {
+            VfxTest::SEffect original{};original.id="GVortex_ORIGINAL";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return gvortex_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){gvortex_original::Advance(static_cast<gvortex_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){gvortex_original::SubmitWorld(static_cast<gvortex_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return gvortex_original::IsAlive(static_cast<gvortex_original::State*>(c));};
+            original.destroy=[](void* c){gvortex_original::Destroy(static_cast<gvortex_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="Cataclysm_ORIGINAL";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return cataclysm_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){cataclysm_original::Advance(static_cast<cataclysm_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){cataclysm_original::SubmitWorld(static_cast<cataclysm_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return cataclysm_original::IsAlive(static_cast<cataclysm_original::State*>(c));};
+            original.destroy=[](void* c){cataclysm_original::Destroy(static_cast<cataclysm_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="RockStorm_ORIGINAL";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return rockstorm_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){rockstorm_original::Advance(static_cast<rockstorm_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){rockstorm_original::SubmitWorld(static_cast<rockstorm_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return rockstorm_original::IsAlive(static_cast<rockstorm_original::State*>(c));};
+            original.destroy=[](void* c){rockstorm_original::Destroy(static_cast<rockstorm_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="YCataclysm_ORIGINAL";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return cataclysm_original::Spawn(o,true);};
+            original.submit=[](void* c,EFxDebugMode){cataclysm_original::Advance(static_cast<cataclysm_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){cataclysm_original::SubmitWorld(static_cast<cataclysm_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return cataclysm_original::IsAlive(static_cast<cataclysm_original::State*>(c));};
+            original.destroy=[](void* c){cataclysm_original::Destroy(static_cast<cataclysm_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="Maelstrom_ORIGINAL";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return maelstrom_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){maelstrom_original::Advance(static_cast<maelstrom_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){maelstrom_original::SubmitWorld(static_cast<maelstrom_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return maelstrom_original::IsAlive(static_cast<maelstrom_original::State*>(c));};
+            original.destroy=[](void* c){maelstrom_original::Destroy(static_cast<maelstrom_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="YMaelstrom_ORIGINAL";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return maelstrom_original::Spawn(o,true);};
+            original.submit=[](void* c,EFxDebugMode){maelstrom_original::Advance(static_cast<maelstrom_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){maelstrom_original::SubmitWorld(static_cast<maelstrom_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return maelstrom_original::IsAlive(static_cast<maelstrom_original::State*>(c));};
+            original.destroy=[](void* c){maelstrom_original::Destroy(static_cast<maelstrom_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
 
 
         VfxTest::SEffect shock_bespoke = {};
@@ -5435,12 +5509,14 @@ struct SVfxTestBootstrap {
         ribbon_bespoke.id            = "TRibbonAnimator_BESPOKE";
         ribbon_bespoke.family        = "ribbon";
         ribbon_bespoke.pipeline      = "FB";
-        // Ribbon: revive halo — SpellGround cadence (one halo, ground-
-        // anchored, lifts then fades; harness recycles every ~kRibbonLifeTicks).
-        ribbon_bespoke.preview_style = VfxTest::EVfxPreviewStyle::SpellGround;
-        ribbon_bespoke.factory       = [](const S3DPoint& o) -> void* { return RibbonBespokeSpawn(o); };
-        ribbon_bespoke.submit        = [](void* c, EFxDebugMode d) { RibbonBespokeSubmit(c, d); };
-        ribbon_bespoke.destroy       = [](void* c) { RibbonBespokeDestroy(c); };
+        // Exact base Ribbon null-spell controller: grow20ticks, then hold;
+        // sparks continue their authored24tick cycles without forced retrigger.
+        ribbon_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
+        ribbon_bespoke.factory=[](const S3DPoint&o)->void*{return ribbon_preview::Spawn(o);};
+        ribbon_bespoke.submit=[](void*c,EFxDebugMode){ribbon_preview::Advance(static_cast<ribbon_preview::State*>(c),TTime::DeltaTime());};
+        ribbon_bespoke.submit_world=[](void*c,EFxDebugMode){ribbon_preview::SubmitWorld(static_cast<ribbon_preview::State*>(c));};
+        ribbon_bespoke.is_alive=[](void*c){return ribbon_preview::Alive(static_cast<ribbon_preview::State*>(c));};
+        ribbon_bespoke.destroy=[](void*c){ribbon_preview::Destroy(static_cast<ribbon_preview::State*>(c));};
         VfxTest::DeferredRegister(ribbon_bespoke);
 
         VfxTest::SEffect ripple = {};
@@ -5947,17 +6023,18 @@ struct SVfxTestBootstrap {
         tornado_bespoke.destroy       = [](void* c) { TornadoBespokeDestroy(c); };
         VfxTest::DeferredRegister(tornado_bespoke);
 
-        // W03 TVortexAnimator: PE+SR sucking spiral. Multi-sub-object I3D
-        // mesh draws plus per-vertex alpha writeback into LVERTEX.color —
-        // bespoke pipeline lacks both.
+        // Shipped literal Vortex resolves the default animator and three legacy roots.
+        // The unrelated snapshot procedural TVortexAnimator is not this binding.
         VfxTest::SEffect vortex_bespoke = {};
         vortex_bespoke.id            = "TVortexEffect_BESPOKE";
         vortex_bespoke.family        = "weather";
-        vortex_bespoke.pipeline      = "PE+SR";
+        vortex_bespoke.pipeline      = "Mesh";
         vortex_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
-        vortex_bespoke.factory       = [](const S3DPoint& o) -> void* { return VortexBespokeSpawn(o); };
-        vortex_bespoke.submit        = [](void* c, EFxDebugMode d) { VortexBespokeSubmit(c, d); };
-        vortex_bespoke.destroy       = [](void* c) { VortexBespokeDestroy(c); };
+        vortex_bespoke.factory       = [](const S3DPoint& o) -> void* { return vortex_preview::Spawn(o); };
+        vortex_bespoke.submit_world = [](void*c,EFxDebugMode){vortex_preview::SubmitWorld(static_cast<vortex_preview::State*>(c));};
+        vortex_bespoke.is_alive = [](void*c){return vortex_preview::Alive(static_cast<vortex_preview::State*>(c));};
+        vortex_bespoke.submit        = [](void*c,EFxDebugMode){vortex_preview::Advance(static_cast<vortex_preview::State*>(c),TTime::DeltaTime());};
+        vortex_bespoke.destroy       = [](void*c){vortex_preview::Destroy(static_cast<vortex_preview::State*>(c));};
         VfxTest::DeferredRegister(vortex_bespoke);
 
         // --- wave3 W2C weather-C family bespoke entries ------------------
@@ -7389,6 +7466,18 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(e);
         }
         {
+            VfxTest::SEffect e={};e.id="TPrelitRGB5_DIAGNOSTIC";e.family="diagnostic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&)->void*{return prelit_rgb_control::Spawn();};
+            e.submit_world=[](void* c,EFxDebugMode){prelit_rgb_control::SubmitWorld(static_cast<prelit_rgb_control::State*>(c));};
+            e.destroy=[](void* c){prelit_rgb_control::Destroy(static_cast<prelit_rgb_control::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TEnergyARGB_DIAGNOSTIC";e.family="diagnostic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&)->void*{return argb_source_control::Spawn(true);};
+            e.submit_world=[](void* c,EFxDebugMode){argb_source_control::SubmitWorld(static_cast<argb_source_control::State*>(c));};
+            e.destroy=[](void* c){argb_source_control::Destroy(static_cast<argb_source_control::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
             VfxTest::SEffect e = {};
             e.id="TArgbSourceContribution_DIAGNOSTIC";
             e.family="diagnostic"; e.pipeline="IM";
@@ -7397,6 +7486,28 @@ struct SVfxTestBootstrap {
             e.submit_world=[](void* c,EFxDebugMode){argb_source_control::SubmitWorld(static_cast<argb_source_control::State*>(c));};
             e.destroy=[](void* c){argb_source_control::Destroy(static_cast<argb_source_control::State*>(c));};
             VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TPrelitQuadRGBA5_DIAGNOSTIC";e.family="diagnostic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&)->void*{return prelit_quad_control::Spawn();};
+            e.submit_world=[](void* c,EFxDebugMode){prelit_quad_control::SubmitWorld(static_cast<prelit_quad_control::State*>(c));};
+            e.destroy=[](void* c){prelit_quad_control::Destroy(static_cast<prelit_quad_control::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TWindStrip_BESPOKE_NULLSPELL";e.family="magic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return windstrip_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){windstrip_preview::Advance(static_cast<windstrip_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){windstrip_preview::SubmitWorld(static_cast<windstrip_preview::State*>(c));};
+            e.is_alive=[](void* c){return windstrip_preview::Alive(static_cast<windstrip_preview::State*>(c));};
+            e.destroy=[](void* c){windstrip_preview::Destroy(static_cast<windstrip_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TEnergySpray_BESPOKE_NULLSPELL";e.family="magic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return energyspray_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){energyspray_preview::Advance(static_cast<energyspray_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){energyspray_preview::SubmitWorld(static_cast<energyspray_preview::State*>(c));};
+            e.is_alive=[](void* c){return energyspray_preview::Alive(static_cast<energyspray_preview::State*>(c));};
+            e.destroy=[](void* c){energyspray_preview::Destroy(static_cast<energyspray_preview::State*>(c));};VfxTest::DeferredRegister(e);
         }
         {
             VfxTest::SEffect e = {};

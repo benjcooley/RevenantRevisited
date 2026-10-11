@@ -11,6 +11,8 @@
 // *  in Phase 3.                                                          *
 // *************************************************************************
 
+#include "ribbonlegacykeys.h"
+#include "vortexlegacykeys.h"
 #include "i3dtexturealpha.h"
 #include "3dimage.h"
 
@@ -948,10 +950,16 @@ static bool ParseScrollTexParams(const char* params, std::string& object,
         if (value.empty()) return false;
         if (!stricmp(key.c_str(), "obj"))
         {
-            if (have_obj || value.find_first_of("()\"'") != std::string::npos) return false;
-            for (unsigned char c : value)
+            if (have_obj) return false;
+            // Original 0x401820 accepts both obj=name and obj=(name).
+            // Keep this route to one literal selector; lists/wildcards remain unsupported.
+            std::string selector = value;
+            if (selector.front() == '(' && selector.back() == ')')
+                selector = trim(selector.substr(1, selector.size() - 2));
+            if (selector.empty() || selector.find_first_of("()\"'") != std::string::npos) return false;
+            for (unsigned char c : selector)
                 if (!std::isalnum(c) && c != '_' && c != '#') return false;
-            object = value; have_obj = true;
+            object = selector; have_obj = true;
         }
         else if (!stricmp(key.c_str(), "du") || !stricmp(key.c_str(), "dv"))
         {
@@ -1197,6 +1205,12 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
 
     flags = mesh->flags;
     version = 0;
+    // Independently audited one-frame Ribbon and shipped default Vortex bodies.
+    // Other old-body callers keep their existing zero-key fallback.
+    const bool ribbon_keys=ribbon_legacy::Matches(GetResFilename(),mesh,
+        GetResSize(),NumStates(),GetAniLength(0),GetAniFlags(0));
+    const bool vortex_keys=vortex_legacy::Matches(GetResFilename(),mesh,
+        GetResSize(),NumStates(),GetAniLength(0),GetAniFlags(0));
 
     // ---- morph vertex lists ----
     numverts = mesh->numverts;
@@ -1291,6 +1305,16 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
                 obj.anikeys[d] = new SAniKey[GetAniLength(d)];
                 obj.numanikeys[d] = GetAniLength(d);
                 std::memset(obj.anikeys[d], 0, sizeof(SAniKey) * GetAniLength(d));
+                if (ribbon_keys && d==0) {
+                    static_assert(sizeof(SAniKey)==8);
+                    const auto* raw=static_cast<const uint8_t*>(mesh->anikeys[0].ptr());
+                    std::memcpy(obj.anikeys[d],raw+size_t(c)*8,8);
+                }
+                if (vortex_keys && d==0) {
+                    static_assert(sizeof(SAniKey)==8);
+                    const auto* raw=static_cast<const uint8_t*>(mesh->anikeys[0].ptr());
+                    std::memcpy(obj.anikeys[d],raw+size_t(c)*8,8);
+                }
             }
         }
 

@@ -43,6 +43,11 @@ def review(native,common,domain,output):
   input_manifest_sha256=[sha(p/'manifest.json')for p in(native,common,domain)],binary_sha256=[m['binary_sha256']for m in captures],
   contact_sha256=sha(output/'contact.png'),detail_sha256=sha(output/'detail.png'),appearance_fitted=False,
   scope='Whole36-vertex/50-triangle untextured Fog; exact original state/RNG range/order, source packed vertex RGB5/A5, native owner/projector fixture. Real120-frame films per projection. Original prelit alpha lookup uses(A5+1)/32 and writes depth; GPU vertex interpolation/blend/fragmentdepth retains higher precision than original scanlines/RGB565 and flat triangledepth. Ordinary world projection/natural caller and map integration remain separate. Ambient is irrelevant to original prelit vertex colors.')
+ # Actual draw log distinguishes literal dynamicRGBA5 from the historical
+ # normalized-color carrier, without inferring policy from an output filename.
+ if 'rgba0=(22,22,22,3)' in (domain/'run.log').read_text():
+  report['native_domain_dynamic_rgba5']=True
+  report['scope']='Whole36-vertex/50-triangle Fog; actual original leaf/owner/FVF_LVERTEX/raster with declared resource/base-animator/extents/RenderObject dispatch boundaries. Real120-frame films per projection and original RNG checkpoints. Native-domain carries literalRGBA5, truncated source contribution, integer screen samples and flat maximum triangledepth. Original fixed8 scanline interpolation, destinationRGB565 rounding and triangleedge ownership remain residuals. Common rendering remains normalized-color policy. Naturalcaller/device/exactpixels are open; ambient is irrelevant to prelit colors.'
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print('PASS',len(cases),'phase triples')
 
 if __name__=='__main__':

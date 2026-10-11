@@ -6,7 +6,7 @@ from generate_review_preview_map import PARTIAL, SOURCE_MAPPINGS, admitted_candi
 class ReviewPreviewAdmission(unittest.TestCase):
     def test_placeholders_and_invalid_aliases_fail_closed(self):
         candidates = '''TBlastEffect_BESPOKE
-TTornadoEffect_BESPOKE TVortexEffect_BESPOKE
+TTornadoEffect_BESPOKE
 TMeteorStormEffect_BESPOKE
 TPulpEffect_BESPOKE TDustEffect_BESPOKE TMagicShieldEffect_BESPOKE
 TLabyrinthEffect_BESPOKE TJhagaAttackEffect_BESPOKE TJTeleEffect_BESPOKE TCEyesEffect_BESPOKE
@@ -30,6 +30,10 @@ TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
         self.assertEqual(set(admitted_candidates({'preview_candidates': candidates})), set(candidates))
 
     def test_new_exact_source_registration_overrides_stale_ledger(self):
+        self.assertEqual(admitted_candidates({'retail_type_id':'0x452dade0',
+            'preview_candidates':[]}), ['TVortexEffect_BESPOKE'])
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff',
+            'preview_candidates':[]}), [])
         self.assertEqual(admitted_candidates({'retail_type_id':'0xf32bcfac',
             'preview_candidates':['TMeteorStormEffect_BESPOKE']}),
             ['MeteorStorm_AUTHORED'])
@@ -40,6 +44,23 @@ TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
             'preview_candidates':[]}), ['TQuicksilver_AUTHORED_TAGS'])
         self.assertEqual(admitted_candidates({'retail_type_id':'0x0ea34fa3',
             'preview_candidates':['TBlastEffect_BESPOKE']}), ['TBlastEffect_BESPOKE'])
+
+    def test_maelstrom_original_precedes_retained_partial(self):
+        row = {'retail_type_id': '0xaeaeeb26',
+               'preview_candidates': ['TMaelstromEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row),
+                         ['Maelstrom_ORIGINAL', 'TMaelstromEffect_BESPOKE'])
+        self.assertFalse(candidate_metadata(row, 'Maelstrom_ORIGINAL')[0])
+        self.assertTrue(candidate_metadata(row, 'TMaelstromEffect_BESPOKE')[0])
+        self.assertEqual(admitted_candidates({'retail_type_id': '0xae5eeb26',
+            'preview_candidates': []}), ['YMaelstrom_ORIGINAL'])
+
+    def test_windstrip_exact_retail_replacement_precedes_three_strip_preview(self):
+        names = admitted_candidates({'retail_type_id':'0xded3dbed',
+            'preview_candidates':['TWindStripAnimator_BESPOKE']})
+        self.assertEqual(names[0], 'TWindStrip_BESPOKE_NULLSPELL')
+        self.assertNotIn('TWindStrip_BESPOKE_NULLSPELL', admitted_candidates({
+            'retail_type_id':'0xdedbdbed', 'preview_candidates':[]}))
 
     def test_partial_requires_exact_identity_and_explicit_warning(self):
         self.assertTrue(PARTIAL)

@@ -89,6 +89,23 @@ print('assets='+os.environ['REVENANT_ASSETS_PATH'],flush=True)
                 report=json.loads((output/'manifest.json').read_text())
                 self.assertIn('viewer depth range',report['error'])
 
+    def test_signed_actual_camera_is_recorded(self):
+        scenario,output,_=self.exercise(depth='[vfx-camera] explicit=1 actual=(1280,-220) viewport=(1920,1080)')
+        scenario.update(camera=[1280,-220],resolution=[1920,1080])
+        report=capture(scenario,output)
+        self.assertEqual(report['actual_camera'],[1280,-220])
+        self.assertEqual(report['actual_viewport'],[1920,1080])
+
+    def test_camera_fallback_and_wrong_resolution_reject(self):
+        for marker in ('[vfx-camera] explicit=1 actual=(1280,540) viewport=(1920,1080)',
+                       '[vfx-camera] explicit=0 actual=(1280,-220) viewport=(1920,1080)',
+                       '[vfx-camera] explicit=1 actual=(1280,-220) viewport=(640,480)'):
+            with self.subTest(marker=marker):
+                scenario,output,_=self.exercise(depth=marker)
+                scenario.update(camera=[1280,-220],resolution=[1920,1080])
+                with self.assertRaises(RuntimeError):capture(scenario,output)
+                self.assertIn('Actual viewer',json.loads((output/'manifest.json').read_text())['error'])
+
     def test_nonpositive_resolution_rejects_before_process_launch(self):
         scenario,output,_=self.exercise()
         scenario['resolution']=[1024,0]
