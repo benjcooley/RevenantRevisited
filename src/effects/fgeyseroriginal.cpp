@@ -82,5 +82,9 @@ void SubmitWorld(State* c,EFxDebugMode)
         const auto& m=part.material.matdesc;std::memcpy(q.diffuse,&m.diffuse,16);std::memcpy(q.ambient,&m.ambient,16);std::memcpy(q.specular,&m.specular,16);std::memcpy(q.emissive,&m.emissive,16);q.power=m.power;q.sort_depth=world.Elements[3][2];Renderer->SubmitHelperMesh(q);
     }
 }
+bool IsAlive(const State* c)
+{
+    return c && c->owner && !(c->owner->GetFlags()&OF_KILL);
+}
 void Destroy(State* c){delete c;}
 }

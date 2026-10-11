@@ -71,3 +71,11 @@ and all17 selected PNGs exactly; the state-only comparison trace is identical.
 All native sampled pixels and both complete Metal films remain inside the
 full1024x768 viewport. Root independently reviewed and approved the16-phase
 whole/detail comparison; the external approval record pins that scoped gate.
+
+Frozen root approval SHA256:
+`e7256c919e66d31539c039d6a47ffb2c8c52eef726700b41f9466bbb066d24a4`.
+Its captured source revision is `be47dd51672922e6cf9984a1ef1e002de2a6f3ab`.
+A subsequent integration-only `IsAlive(const State*)` query reads the owned
+instance's actual `OF_KILL` flag. It adds no timer and changes no captured
+Advance or Submit behavior: the owner remains alive through the blank tail
+until the original frame89 completion. The query follow-up also builds cleanly.
