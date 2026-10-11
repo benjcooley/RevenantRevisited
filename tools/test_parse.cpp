@@ -215,6 +215,21 @@ void test_leading_negative()
     EXPECT_EQ(c,  20, "[2]");
 }
 
+// 12. Escapes in quoted text (retail tokenizer 0x00478c9c): \n \r \t \\
+// and \xXX decode; after any other character the backslash stays.
+void test_string_escapes()
+{
+    char buf[32] = {};
+    EXPECT_TRUE(TryParse("\"a\\nb\\tc\\rd\"", "%30s", buf), "escapes parse");
+    EXPECT_TRUE(std::strcmp(buf, "a\nb\tc\rd") == 0, "\\n \\t \\r decode");
+    EXPECT_TRUE(TryParse("\"\\x41\\x7a\\xe9!\"", "%30s", buf), "hex escapes parse");
+    EXPECT_TRUE(std::strcmp(buf, "Az\xe9!") == 0, "\\xXX decodes either case");
+    EXPECT_TRUE(TryParse("\"a\\\\nb\"", "%30s", buf), "double backslash parse");
+    EXPECT_TRUE(std::strcmp(buf, "a\\nb") == 0, "\\\\ is one backslash, n stays");
+    EXPECT_TRUE(TryParse("\"a\\qb\"", "%30s", buf), "unknown escape parse");
+    EXPECT_TRUE(std::strcmp(buf, "a\\qb") == 0, "unknown escape keeps its backslash");
+}
+
 } // namespace
 
 int main()
@@ -230,6 +245,7 @@ int main()
     test_string_const();
     test_veteran_statreqs();
     test_leading_negative();
+    test_string_escapes();
 
     if (g_failures == 0) {
         std::printf("test_parse: all tests OK\n");

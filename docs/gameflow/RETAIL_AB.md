@@ -633,13 +633,15 @@ cores): say-duration 22 → 15 s, dialog-layout 1.1 → 0.3 s with 4.
 
 - ~~The run-on decision~~ and ~~the CUBE search level~~: done 2026-10-07
   (targets 1, 4 and 5 above).
-- **`Start` ends a running block** (`0x00492440` calls `End` when the ip
-  is set), so a trigger that interrupts an ALWAYS block gives back what
-  that block took and clears its guard before the new block starts; the
-  port's `Start` doesn't. Found reading the code, not tested.
-- **String escapes**: retail's tokenizer also decodes `\r`, `\t` and
-  `\xNN` in quoted text (`0x00478c9c`, unless the token's flag 1 is set);
-  the port's decodes `\n` only. Not tested here.
+- ~~**`Start` ends a running block**~~ (`0x00492440` calls `End` when the
+  ip is set): done 2026-10-10, with End at every block's end as Continue
+  does (`0x00493dc2`); script-step 17/18 and trigger-test 137/138 as
+  before.
+- ~~**String escapes**~~: retail's tokenizer decodes `\n`, `\r`, `\t`,
+  `\\` and `\xXX` in quoted text (`0x00478c9c`, unless the token's flag 1
+  is set); after any other character the backslash stays. Ported
+  2026-10-10 (`test_parse` cases); the shipped scripts and DEF files use
+  `\n` only (twice), so script-parse is 22/29 as before.
 - **The rest of `Continue`**: waits across calls (`WaitSatisfied`
   `0x00492d70`) and the trigger scan (priorities, an interrupted ALWAYS
   block's resume at `+0xac`): a run-loop A/B with several `Continue` calls

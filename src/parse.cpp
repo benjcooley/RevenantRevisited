@@ -206,17 +206,38 @@ moretext:
         while (ch != EOF && ch != '\"' && ch != '\n')
         {
             if (pos >= MAXTOKENTEXT - 1)
-                Error("String too int32_t");
+                Error("String too long");
             if (ch == '\\' && !literalbackslash)
             {
+                // REVSYNC: 0x00478c9c -- \n, \r, \t, \\ and \xXX (two hex
+                // digits, either case); after any other character the
+                // backslash stays and the character is read as itself.
                 ch = ReadChar();
-                if (ch == 'n')
+                switch (ch)
                 {
-                    text[pos++] = '\n';
+                  case 'n':  text[pos++] = '\n'; ch = ReadChar(); break;
+                  case 'r':  text[pos++] = '\r'; ch = ReadChar(); break;
+                  case 't':  text[pos++] = '\t'; ch = ReadChar(); break;
+                  case '\\': text[pos++] = '\\'; ch = ReadChar(); break;
+                  case 'x':
+                  {
+                    int32_t value = 0;
+                    for (int32_t digit = 0; digit < 2; digit++)
+                    {
+                        const int32_t c = toupper(ReadChar());
+                        if (c >= '0' && c <= '9')
+                            value = value * 16 + (c - '0');
+                        else if (c >= 'A' && c <= 'F')
+                            value = value * 16 + (c - 'A' + 10);
+                        else
+                            Error("Illegal \\xXX character in string");
+                    }
+                    text[pos++] = char(value);
                     ch = ReadChar();
+                    break;
+                  }
+                  default:   text[pos++] = '\\'; break;
                 }
-                else
-                    text[pos++] = '\\';
             }
             else
             {

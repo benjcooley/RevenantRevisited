@@ -351,19 +351,26 @@ The port's design and state: §7.
   frames; `WOPENPORT`; Locke walks through; `CLOSING`; `CLOSED`) and the
   snapshots show the bars rising, Locke under the arch and the bars coming
   down behind him. The 47 portcullises are on levels 31 and 41–48
-  (PortNS/PortEW exits, InportNS/InportEW walk-throughs); a PortNS/EW by
-  mouse is still to run.
+  (PortNS/PortEW exits, InportNS/InportEW walk-throughs).
+- **An exit gate (PortNS) by mouse** (2026-10-10). `Lv46D5` (7899, 6022,
+  13): from `player.pos 7899 5971 13 46` the door cursor shows over it at
+  about (183, 300); locked, "It seems to be locked"; after `Lv46D5.stat
+  locked = 0` a click runs `PORTNS` (Locke walks up, `OPENING`,
+  `WOPENPORT`, fade, `ACTIVATE`, `CLOSED`) and he arrives through the
+  gate, beside it on the far side. Test set-up: `--exec "sleep 48; prompt
+  alreadydead; prompt dummies; player.pos …"` keeps the camp's monsters
+  off him.
+- **Click-to-talk and click-to-get** (2026-10-09): the mouth cursor over
+  Tendrick and a click starts his conversation; a click on the Short Sword
+  says "Short Sword Picked up." and puts it in the pack.
 - The opening still plays to `SardokR: END` with no ERROR lines.
 - `[mapinput] over …` (hover changes) and `[mapinput] release …` (what a
   click acted on, positions, distance) are in the log for test runs.
 
 Open:
-- A click on a character (talk) and on an item (get) by mouse: the code
-  path is retail's (§4.3) but no run has shown it yet.
 - Hover reads the last frame synchronously (`ReadIdProbe`) on the 8th
   frame when the pointer has moved since the last probe: a small GPU
   wait while the mouse moves. Hover can keep its last answer until the
   asynchronous probe at the new point arrives.
-- A PortNS/PortEW (gate with an exit) by mouse.
 - Input-simulator note: `move X Y` glides for `kDefaultMoveMs`; sweeps
   want `move X Y 0`.
