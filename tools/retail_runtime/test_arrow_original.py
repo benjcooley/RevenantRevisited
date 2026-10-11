@@ -16,4 +16,10 @@ class ArrowTests(unittest.TestCase):
     out=Path(tmp)/str(stride);native=out/'native';self.invoke('arrow_visual_reference.py',ROOT/'recon/retail_asm/baseline/Revenant.rebuilt.exe','--output',native,'--frames',24,'--state-only','--render-stride',stride,'--resolution',640,480,'--center',320,320)
     rows=json.loads((native/'trace.json').read_text())['records'];self.assertEqual(rows[0]['state']['position'],[-157,0,78]);self.assertEqual(rows[15]['state']['position'],[188,0,78]);self.assertEqual(rows[16]['state']['countdown'],3);self.assertEqual(rows[17]['state']['countdown'],1);self.assertTrue(rows[18]['state']['flags']&4096)
     self.invoke('arrow_core_probe.py',native/'trace.json','--output',out/'source');self.assertEqual(json.loads((out/'source/manifest.json').read_text())['status'],'pass')
+ def test_original_moving_attachment_terrain_and_deletion(self):
+  with tempfile.TemporaryDirectory(prefix='arrow-attached-')as tmp:
+   for stride in(1,3):
+    out=Path(tmp)/str(stride);native=out/'native';self.invoke('arrow_attached_visual_reference.py',ROOT/'recon/retail_asm/baseline/Revenant.rebuilt.exe','--output',native,'--frames',24,'--state-only','--render-stride',stride)
+    rows=json.loads((native/'trace.json').read_text())['records'];self.assertEqual(rows[0]['state']['position'],[-160,0,78]);self.assertEqual(rows[17]['state']['position'],[180,0,78]);self.assertNotIn('countdown',rows[0]['state']);self.assertTrue(rows[17]['state']['attached']);self.assertFalse(rows[18]['state']['attached']);self.assertTrue(rows[18]['state']['flags']&4096)
+    self.invoke('arrow_core_probe.py',native/'trace.json','--output',out/'source');r=json.loads((out/'source/manifest.json').read_text());self.assertEqual(r['status'],'pass');self.assertGreater(r['matrix_fields'],1000)
 if __name__=='__main__':unittest.main()

@@ -30,7 +30,9 @@ class QueenArrowScene(CataclysmScene):
   self.vm.call(0x40e460,(0,),this=self.animator,instruction_limit=5000000);native_owner(self)
  def state(self):
   v=self.vm;o=self.owner
-  return dict(position=list(struct.unpack('<3i',v.uc.mem_read(o+0x10,12))),velocity=list(struct.unpack('<3f',v.uc.mem_read(o+0x184,12))),initial=v.u32(o+0x190),angle=v.u32(o+0x194),grow=v.u32(o+0x198),color=v.u32(o+0x19c),countdown=struct.unpack('<i',v.uc.mem_read(o+0x1a0,4))[0],flags=v.u32(o+8),rng_draws=self.rng_draws,seed=v.rng_seed,events=list(self.events))
+  result=dict(position=list(struct.unpack('<3i',v.uc.mem_read(o+0x10,12))),velocity=list(struct.unpack('<3f',v.uc.mem_read(o+0x184,12))),initial=v.u32(o+0x190),angle=v.u32(o+0x194),grow=v.u32(o+0x198),color=v.u32(o+0x19c),flags=v.u32(o+8),rng_draws=self.rng_draws,seed=v.rng_seed,events=list(self.events))
+  if self.registry_name=='QueenArrow':result['countdown']=struct.unpack('<i',v.uc.mem_read(o+0x1a0,4))[0]
+  return result
 
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('exe',type=Path);p.add_argument('--output',type=Path,required=True);p.add_argument('--frames',type=int,default=40);p.add_argument('--state-only',action='store_true');p.add_argument('--render-stride',type=int,default=1);p.add_argument('--resolution',type=int,nargs=2,default=[1280,960]);p.add_argument('--center',type=int,nargs=2,default=[640,640]);p.add_argument('--samples',type=int,nargs='+',default=[0,1,3,5,10,15,20,25,30,35,39]);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)

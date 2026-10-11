@@ -56,3 +56,37 @@ agree; the caller/device/exact-pixel limits above remain open. Frozen private
 `queen-arrow-review-final/root-approval.json` pins the pairs, panels, native
 replay and captured binary. Approval SHA-256:
 `5d7ec006a594db826d78997689ce53b54c234c2c77fcfa68f3a8a419b05f7ee9`.
+
+ArrowEffect now has its own exact type0xad92bd1f adapter and
+`SpawnArrow(source,target)` API. Its declared physical caller begins at
+(-180,0,78), facing64, with fixed16.16 velocity20 and weightless flags. Original
+Move470920 advances the source before original Effect attachment copy4de800
+and Arrow Pulse504920. At the declared terrain planeX180, blocked Move causes
+an explicit source-deletion notification to original Notify4df0f0; that routine
+clears the matching attachment and kills the follower at native record18.
+A notification for an unrelated object leaves the follower unchanged. This
+fixture proves the moving leaf and notification boundary, not natural bow or
+physical-arrow construction/map deletion dispatch.
+
+Compiled production state/RNG matches all26 ticks (260 actual fields), and
+4,928 Render matrix fields agree within4.633e-8. Full and stride3 Render tests
+preserve jitter cadence. The earlier shared trace printer included an unused
+zero word at owner+0x1a0; ArrowEffect has no Queen countdown field. That word is
+excluded from the state comparison and removed from the maintained fixture.
+The common core's negative countdown sentinel only selects constant spacing3.
+Fresh native replay matches all actual state, RNG and draw packets exactly;
+phase1/10/17/18 PNGs are byte-identical.
+
+Both actual24-frame Metal films exit cleanly, with36 active RNG milestones
+matching native. Nineteen whole/detail phases are frozen in
+`hard-alpha/arrow-attached-review-final`, pair-manifest SHA-256:
+`4e2b0516021ce04edba47a0c2f857e29a5cf6f26ad0439dd447f8970ffb82b71`.
+All full reference frames fit640x480; the supplemental Arrow crop includes the
+complete final trail. A fresh QueenArrow native-domain film using the attached
+implementation is byte-identical to its previous24 frames. Private regression
+record SHA-256:
+`b00ba49f0c99fb861690ef03bacb01a81648fb9d0f4f9f4031e7f6581d13e185`.
+The Arrow registration uses its real IsAlive callback; gallery endpoint wiring
+is a separate integration. Build and all three native regression tests pass.
+Natural actors/bow/damage/audio, hardware device behavior, raster edges and
+exact framebuffer equality remain open.
