@@ -19,4 +19,6 @@ Private evidence under `/Users/benjamincooley/RevenantRetailLab/research/vfx-wid
 - `powerup-metal-first/{native-domain,common-domain}/`: actual110-frame films.
 - `powerup-review-final/{whole-life.png,detail.png,pair-manifest.json,cases.json,native-replay.json}`:17 matched phases and frozen hashes.
 
-Natural boss/spell orchestration, state1 gameplay use, actor/audio/damage behavior, arbitrary camera and complete device/game caller remain open. The common/native projector and raster/backend differences are retained. Independent review is required for scoped appearance; source tests do not assert exact framebuffer equivalence.
+Natural boss/spell orchestration, state1 gameplay use, actor/audio/damage behavior, arbitrary camera and complete device/game caller remain open. The common/native projector and raster/backend differences are retained. The independent review below grants scoped appearance; source tests do not assert exact framebuffer equivalence.
+
+Root independently reviewed all17 matched phases and approved scoped native-domain appearance. Frozen `root-approval.json` SHA256 `63f9f20979d8dd7c43d3d5daae288e4c7ae21d375bac25410b92538e4774d946`; pair SHA256 `839def6926855ca44fe89d5c70793d9972e914f32f15e76cda1d2abb38bed6d1`; cases SHA256 `b2e1bb5e15ca987513062f924737cd48e3bac57f7f8b44d4d385229c4e2be3d8`. Captured binary SHA256 `7330f433958e9d4959f4280e571e50148acf2c4fab17f34a131ad29f9e048674`. Both actual110-frame films have87 visible frames. Approval retains all caller/state1/backend/raster limits above.
