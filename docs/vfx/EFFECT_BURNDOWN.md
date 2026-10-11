@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-11)
 
-**165 / 176 effects have reviewed visual passes for their recorded test configuration; 11 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
+**166 / 176 effects have reviewed visual passes for their recorded test configuration; 10 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
 **YTelekinesis (2026-10-11):** four moving/rotating chunks match through actual owner completion across six fixed supported capture views; all 39,600 triangles covered and 24 root-repeated Metal frames identical. Corrected exact-ID mapping displays and restarts it in the gallery. Natural actor/spell/audio and raster overlap limits remain open. [Evidence and scope](forensics/YTELEKINESIS_ORIGINAL.md).
 
@@ -1137,3 +1137,5 @@ Audited `class.def`: 233,484 bytes; SHA-256 `bf46eaa4e25a43fa9828e1e8737114d63b9
 - [x] **Aura** `0x00ab1d1d` — genuine named spell/Acolyte, selector0/integer pose, full750-tick appearance and repeat approved; finite gallery passes. Natural moving actor/spell integration remains open. [Evidence](forensics/AURA_AUTHENTIC_ACOLYTE_RENDER_20261011.md).
 
 - [x] **StrikeEffect** `0xad92bd32` — named Meteor Storm four-owner full trajectory appearance approved;167 phase repeat images and eight finite gallery cycles pass. Natural populated damage/scheduling remains open. [Evidence](forensics/STRIKE_METEOR_CALLER_20261011.md).
+
+- [x] **sgeyser** `0xad92bd30` — genuine inline steam and authored burst appearance approved;180 repeat frames and16 finite gallery cycles pass. Natural trap/map context remains open. [Evidence](forensics/SGEYSER_SOURCE_RENDER_20261011.md).

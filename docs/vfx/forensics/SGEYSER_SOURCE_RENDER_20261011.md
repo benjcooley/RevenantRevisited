@@ -79,3 +79,9 @@ It pins15 whole phase pairs and all source/runtime/pose/gallery controls.
 The fixed-center change preserves all120 original pools, ordered packets,
 ground coordinates and RNG states exactly. Sampling/edges and RGB565
 framebuffer precision remain differences, not a claim of exact pixels.
+
+## Root independent approval
+
+Exact sgeyser 0xad92bd30 genuine generic owner and loaded CavSGeyser resource at declared saved position1019/11935/289; one104-slot inline controller and authored #blast, original failed optional vapor preset retained. Full120-tick original state/pool/RNG/draw evidence; current243672 particle fields,1215 keys/2160 matrices pass; actual10560 runtime/ground fields pass,1745 terrain queries return0. Initial zero emitter cache and previous-owner origin, original material mode0 then16 preserved. All15 whole/detail phases independently reviewed with complete submitted bounds in1280x960 center640/640; all25 root review panels byte-identical. Independent120native+60common phase PNGs identical to frozen port with clean exits; source state/runtime matches in both projections. Real kill45/frame44,37 visible lifecycle ticks and blanktail retained. Gallery746ticks,16 genuine45-tick completion cycles plus26-tick teardown, live RNG/no factory reseed, clean exit. Declared empty ground only: actual natural trap/map layers/audio/device and exact raster pixel equality remain open; optional missing vapor definition not invented.
+
+Report: `recon/retail_asm/runtime/effects/current-sgeyser-inline-20261011/root-approval.json`. Scoped visual passes:166/176.

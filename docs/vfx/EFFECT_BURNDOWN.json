@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "48dfb23db5734c249f585396fdbdc697eaaab2614ea9b95e054dd7b8f2bf63db",
+    "harness_sha256": "2f5b63337d99e1ca825fe8396d7dfe7a30b7ee07236fd572307eef137749684e",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 165,
+    "visual_fidelity_confirmed_rows": 166,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 165,
-    "remaining_visual_review_rows": 11
+    "reviewed_visual_pass_rows": 166,
+    "remaining_visual_review_rows": 10
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -19906,10 +19906,12 @@
       "retail_type_id": "0xad92bd30",
       "asset": "cave\\Cavsgeyser.i3d",
       "preview_candidates": [
+        "SGeyser_LOADED_INLINE",
         "TGeyserEffect_Bespoke__sgeyser_BESPOKE"
       ],
       "source_fixes": [
-        "Removed synthesized 100-particle geyser profile misattributed from PoisonCloud OOAnalyzer class. Exact geyser preview factory now fails closed without imagery allocation, map identity, RNG consumption or drawing; 200 extracted factory/RNG cases and direct no-op tick check pass. This is an unsupported-path correction, not a verified effect port."
+        "Removed synthesized 100-particle geyser profile misattributed from PoisonCloud OOAnalyzer class. Exact geyser preview factory now fails closed without imagery allocation, map identity, RNG consumption or drawing; 200 extracted factory/RNG cases and direct no-op tick check pass. This is an unsupported-path correction, not a verified effect port.",
+        "2026-10-11: Genuine inline104-slot steam and authored burst full lifecycle/state/appearance approved;120+60rootrepeat and16gallerycycles pass. Missingoptionalvapor and naturaltrap/map context explicit."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -19917,18 +19919,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "unsupported_retail_partsys_and_blendcont_tag_path",
-      "next_action": "Port/prove complete valid inline steam controller and normal burst mesh against genuine120-phase original; preserve failed optional vapor tag and45-tick lifetime. Actual TRAP/map scheduling/device/audio remainopen.",
+      "next_action": "Verify actual trap/map layers, terrain, audio and hardware context; retain approved installed inline-controller configuration and missing optional vapor diagnostic.",
       "notes": [
         "Retail CavFGeyser/CavSGeyser TRAP builds exact EFFECT via MapPane.NewObject at trap position; actual animation comes from authored partsys tags, not the preceding PoisonCloud 100-particle initializer.",
         "partsys/blendcont/litadd handlers remain unsupported. Source-behavior audit, render smoke, natural trigger and visual acceptance remain false despite fail-closed validation.",
@@ -19952,7 +19954,17 @@
         "scope": "Fail-closed only; no render coverage or complete source behavior audit."
       },
       "work_queue_status": "deferred_reference_or_controller_complexity",
-      "deferred_reason": "User requests easy-to-reproduce retail A/B first; visible native/device/controller investigation postponed. Existing port fixes and evidence retained."
+      "deferred_reason": "User requests easy-to-reproduce retail A/B first; visible native/device/controller investigation postponed. Existing port fixes and evidence retained.",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole lifecycle/detail inspection and integrated repeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Exact sgeyser 0xad92bd30 genuine generic owner and loaded CavSGeyser resource at declared saved position1019/11935/289; one104-slot inline controller and authored #blast, original failed optional vapor preset retained. Full120-tick original state/pool/RNG/draw evidence; current243672 particle fields,1215 keys/2160 matrices pass; actual10560 runtime/ground fields pass,1745 terrain queries return0. Initial zero emitter cache and previous-owner origin, original material mode0 then16 preserved. All15 whole/detail phases independently reviewed with complete submitted bounds in1280x960 center640/640; all25 root review panels byte-identical. Independent120native+60common phase PNGs identical to frozen port with clean exits; source state/runtime matches in both projections. Real kill45/frame44,37 visible lifecycle ticks and blanktail retained. Gallery746ticks,16 genuine45-tick completion cycles plus26-tick teardown, live RNG/no factory reseed, clean exit. Declared empty ground only: actual natural trap/map layers/audio/device and exact raster pixel equality remain open; optional missing vapor definition not invented.",
+        "report": "recon/retail_asm/runtime/effects/current-sgeyser-inline-20261011/root-approval.json",
+        "sha256": "8a3de11be188ddc509d8ae8f59efc52da756672501597075f5624dbf2568b4fb",
+        "note": "docs/vfx/forensics/SGEYSER_SOURCE_RENDER_20261011.md"
+      }
     },
     {
       "index": 134,
