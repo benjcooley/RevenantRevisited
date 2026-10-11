@@ -144,6 +144,7 @@ SOURCE_MAPPINGS = {
     '0xad92bc13': 'TManaDrain_CONFIGURED_TARGET',
     '0xae92bc14': 'TYManaDrain_CONFIGURED_TARGET',
     '0x2784abde': 'TTornado_CONFIGURED_TARGET',
+    '0x152dafdd': 'TPulp_CONFIGURED_ACTOR',
     '0x42e0fcd0': 'TOgrestrength_AUTHORED_TAGS',
     '0xad92bd39': 'TTrollblood_AUTHORED_TAGS',
     '0x10ac03de': 'TRegeneration_AUTHORED_TAGS',
@@ -198,6 +199,8 @@ def candidate_metadata(row, name):
         return False, 'Persistent Drip SetParams(20,128,1), managed no-splash Ripple children; natural map residency and audio not certified'
     if row.get('retail_type_id','').lower()=='0xba09fead' and name=='Dragonattack_ORIGINAL':
         return False, 'Declared Fighting caller: target offset(280,0), ground0, face96 muzzle(14,14,+100); arbitrary endpoints and natural dragon actors not certified'
+    if row.get('retail_type_id','').lower()=='0x152dafdd' and name=='TPulp_CONFIGURED_ACTOR':
+        return False, 'Configured genuine Acolyte public Set: velocity(0,0,8), five chunks/drops/splats, empty terrain and failed blood tiles with declared clock0; persistent chunks, natural mapped caller not certified'
     if row.get('retail_type_id','').lower()=='0x2784abde' and name=='TTornado_CONFIGURED_TARGET':
         return False, 'Exact Tornado owner with explicit genuine Acolytes and loaded Tornado variant; natural variant selects Funnel, so no natural-cast or successful-damage claim'
     if row.get('retail_type_id','').lower()=='0xae92bc14' and name=='TYManaDrain_CONFIGURED_TARGET':

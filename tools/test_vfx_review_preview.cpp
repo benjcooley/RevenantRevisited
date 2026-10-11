@@ -80,13 +80,15 @@ std::vector<SEffect> ReviewCatalogue() {
     auto manadrain=paralize;manadrain.id="TManaDrain_CONFIGURED_TARGET";
     auto ymanadrain=manadrain;ymanadrain.id="TYManaDrain_CONFIGURED_TARGET";
     auto tornado=ymanadrain;tornado.id="TTornado_CONFIGURED_TARGET";
+    auto pulp=Row("TPulp_CONFIGURED_ACTOR",EVfxPreviewStyle::Static);
+    pulp.is_alive=[](void*){return true;};
     auto teleporter=Row("Teleporter_ORIGINAL_NULL",EVfxPreviewStyle::Static);
     teleporter.is_alive=[](void*c){return *static_cast<int*>(c)<2;};
     teleporter.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
     auto food=Row("Createfood_ORIGINAL_CONTEXT",EVfxPreviewStyle::Static);
     food.is_alive=[](void*c){return *static_cast<int*>(c)<2;};
     food.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
-    return {food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    return {pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -329,6 +331,16 @@ int main(int argc,char** argv) {
         const int initial=creates;
         portal->Submit();portal->Submit();assert(portal->Alive()==false && creates==initial);
         portal->Submit();assert(portal->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0x152dafddu);
+        assert(info.supported && !info.partial && !info.requires_endpoints && info.lifetime_known);
+        assert(std::strstr(info.description,"declared clock0"));
+        assert(!CreateVfxReviewPreview(0x152dafddu,origin,{80,-120,128}));
+        auto actor=CreateVfxReviewPreview(0x152dafddu,origin);
+        assert(actor && actor->Id()=="TPulp_CONFIGURED_ACTOR" && actor->RestartInterval()==0);
+        const int initial=creates;for(int i=0;i<500;++i)actor->Submit();assert(actor->Alive() && creates==initial);
     }
     assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";

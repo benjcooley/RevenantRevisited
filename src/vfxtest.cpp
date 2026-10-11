@@ -81,6 +81,7 @@
 #include "effects/manadrainpreview.h"
 #include "effects/ymanadrainpreview.h"
 #include "effects/tornadopreview.h"
+#include "effects/pulppreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
 #include "effects/restorelifepreview.h"
@@ -7188,6 +7189,19 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(e);
             e.id="TYManaDrain_CONFIGURED_TARGET";
             e.factory=[](const S3DPoint& o)->void*{return ymanadrain_preview::SpawnConfiguredTarget(o);};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TPulp_AUTHENTIC_ACTOR_FIXTURE";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return pulp_preview::SpawnActorFixture(o);};
+            e.submit=[](void* c,EFxDebugMode){pulp_preview::Advance(static_cast<pulp_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){pulp_preview::SubmitWorld(static_cast<pulp_preview::State*>(c));};
+            e.is_alive=[](void* c){return pulp_preview::Alive(static_cast<pulp_preview::State*>(c));};
+            e.destroy=[](void* c){pulp_preview::Destroy(static_cast<pulp_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+            e.id="TPulp_CONFIGURED_ACTOR";
+            e.factory=[](const S3DPoint& o)->void*{return pulp_preview::SpawnConfiguredActor(o);};
             VfxTest::DeferredRegister(e);
         }
         {

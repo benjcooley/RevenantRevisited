@@ -21,6 +21,7 @@
 {0x12309867u, "TRippleEffect", false, "Implemented preview controller; map caller not certified"}, // Ripple
 {0x14db0f2eu, "TSparksEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Sparks
 {0x14db0f2eu, "TSparkEffect", false, "Implemented preview controller; map caller not certified"}, // Sparks
+{0x152dafddu, "TPulp_CONFIGURED_ACTOR", false, "Configured genuine Acolyte public Set: velocity(0,0,8), five chunks/drops/splats, empty terrain and failed blood tiles with declared clock0; persistent chunks, natural mapped caller not certified"}, // Pulp
 {0x152dafefu, "TCureEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Cure
 {0x180674bau, "TFogEffect_Bespoke__MistFog_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // MistFog
 {0x1903abcdu, "TWaterEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Water
