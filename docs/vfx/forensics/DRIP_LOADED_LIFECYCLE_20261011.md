@@ -4,8 +4,14 @@
 retail startup cache, original PlayScreen prefix and actual class factory.
 The real Drip owner has vtable `0x5ac630`, its public SetParams receives
 `(20,128,1)`, and original CreateAnimator loads the resource and produces
-animator vtable `0x5ac83c`. Original NextFrame and full custom Animate execute
+animator vtable `0x5ac83c`. Original NextFrame and custom animator Pulse execute
 for96 ticks. No owner, resource, animation or child-request handler is replaced.
+
+The actual `0x4f11e0` method occupies Pulse slot `0x2c`; default Animate is
+`0x40e460` in slot `0x30`. The earlier source-snapshot Animate label is corrected
+here. This state probe calls Pulse once directly; full owner Pulse already
+invokes it, so a full-render scheduler must not call both. Owner bookkeeping
+and default Animate/transform are outside this state-only probe.
 
 The actual AddNewRipple requests occur at24,48,72,96 with `(0,0,0,20)`.
 Read-only entry/return hooks show all four original map-factory calls return

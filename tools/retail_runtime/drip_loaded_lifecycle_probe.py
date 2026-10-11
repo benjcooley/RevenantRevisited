@@ -62,7 +62,7 @@ def run(boot, output):
         boot_image_sha256=sha(boot), probe_sha256=sha(Path(__file__)),
         parameters=[20, 128, 1], rows=rows, ripple_requests=requests,
         map_factory_requests=map_requests, error=error,
-        scope='Actual cached startup/class/resource loading, typed Drip owner public SetParams/CreateAnimator, NextFrame and complete custom Animate. Ripple birth and sound execute original instructions; request observation is read-only. No map sectors loaded, no invented child residency, raster, port or visual acceptance claim.')
+        scope='Actual cached startup/class/resource loading, typed Drip owner public SetParams/CreateAnimator, NextFrame and complete custom animator Pulse4f11e0 (vtable slot0x2c). Ripple birth and sound execute original instructions; request observation is read-only. Full owner Pulse and default Animate/transform remain outside this state probe. No map sectors loaded, no invented child residency, raster, port or visual acceptance claim.')
     (output / 'manifest.json').write_text(json.dumps(report, indent=2)+'\n')
     print(report['status'], len(rows), requests, error, flush=True)
     return report
