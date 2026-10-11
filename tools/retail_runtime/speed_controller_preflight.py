@@ -63,7 +63,7 @@ def read_asset(data):
 
 
 class NativeSpeed:
-    def __init__(self, executable, asset, width=512, height=512, software_factory=SoftwareFixture):
+    def __init__(self, executable, asset, width=512, height=512, software_factory=SoftwareFixture, particle_required=True):
         self.software = software_factory(executable, width, height)
         self.vm = self.software.vm
         v = self.vm
@@ -71,16 +71,21 @@ class NativeSpeed:
             raise ValueError('Requires pinned original retail executable')
         self.asset = asset
         particles = [t for t in asset['tags'] if t['name']=='partsys' and t['state']==0]
-        if len(particles)!=1:
-            raise ValueError('Requires exactly one explicit state0 particle tag')
-        import re
-        particle_name = re.search(r'\bparticle=([^,]+)',particles[0]['parameters'])[1].strip().strip('"')
-        self.prototype_index = next(o['index']for o in asset['objects']if o['name']==particle_name)
-        emitter_text = re.search(r'\bobj=(\([^)]*\)|"[^"]*"|[^,]+)',particles[0]['parameters'])[1]
-        if emitter_text.startswith('('):emitter_text=emitter_text[1:-1]
-        emitter_names = [name.strip().strip('"') for name in emitter_text.split(',')]
-        self.required_pose_indices = {0,self.prototype_index}
-        self.required_pose_indices.update(o['index']for o in asset['objects']if o['name']in emitter_names)
+        if not particle_required:
+            if particles:raise ValueError('Generic resource adapter requires no particle tags')
+            self.prototype_index=-1
+            self.required_pose_indices={o['index']for o in asset['objects']}
+        else:
+            if len(particles)!=1:
+                raise ValueError('Requires exactly one explicit state0 particle tag')
+            import re
+            particle_name = re.search(r'\bparticle=([^,]+)',particles[0]['parameters'])[1].strip().strip('"')
+            self.prototype_index = next(o['index']for o in asset['objects']if o['name']==particle_name)
+            emitter_text = re.search(r'\bobj=(\([^)]*\)|"[^"]*"|[^,]+)',particles[0]['parameters'])[1]
+            if emitter_text.startswith('('):emitter_text=emitter_text[1:-1]
+            emitter_names = [name.strip().strip('"') for name in emitter_text.split(',')]
+            self.required_pose_indices = {0,self.prototype_index}
+            self.required_pose_indices.update(o['index']for o in asset['objects']if o['name']in emitter_names)
         self.unused_rejected_pose_indices = set()
         self.calls = {}
         self.boundaries = {}
