@@ -99,7 +99,8 @@
 #include "retailmeshlighting.h"
 #include "revenant.h"     // VK_LEFT, VK_RIGHT, VK_SPACE
 #include "stripeffect.h"  // TStripEffect (S01 SR-pipeline port)
-#include "weaponswipe.h"  // TWeaponSwipe (S09 SR-pipeline port)
+#include "charanimator.h" // TCharAnimator::SubmitSwipeStrip
+#include "weaponswipe.h"  // TWeaponSwipe (retail weapon swipe)
 #include "surface.h"
 #include "testconfig.h"  // StartupVfxId, StartupVfxHideUi
 #include "time.h"
@@ -674,6 +675,20 @@ bool EnsureRigForStyle(VfxTest::EVfxPreviewStyle style)
         return false;
     }
 
+    // --vfx-rig names the character to load first.
+    if (StartupVfxRig[0])
+    {
+        for (int32_t i = 0; i < int32_t(rig.roster.size()); ++i)
+        {
+            const auto [objclass, objtype] = rig.roster[size_t(i)];
+            TObjectClass* cl = TObjectClass::GetClass(objclass);
+            const SObjectInfo* info = cl ? cl->GetObjType(objtype) : nullptr;
+            if (info && !stricmp(info->name, StartupVfxRig) && BuildRigCharacter(i, style))
+                return true;
+        }
+        log_warn("[vfx.rig] --vfx-rig=%s: no such character; using the default", StartupVfxRig);
+    }
+
     // Try each roster entry in order until one builds successfully.
     // Some imageries (esp. early-load monsters) won't have a valid
     // T3DImagery; skip them rather than failing outright.
@@ -765,9 +780,7 @@ bool ResolveAnchor(const VfxTest::SVfxAnchor& a, VfxTest::SVfxAttachment& out)
             out.world_pos[2] = float(p.z) + (bz - cz) * s;
             // Extract bone basis rows from the upper-3 of the matrix.
             // The matrix is row-major; the basis vectors are the
-            // columns of the rotation block. (Sufficient for spell-cast
-            // facing — sword-trail will need a tangent derivation
-            // when S09 Phase B comes online.)
+            // columns of the rotation block (spell-cast facing).
             out.world_basis[0] = m[0]; out.world_basis[1] = m[4]; out.world_basis[2] = m[8];
             out.world_basis[3] = m[1]; out.world_basis[4] = m[5]; out.world_basis[5] = m[9];
             out.world_basis[6] = m[2]; out.world_basis[7] = m[6]; out.world_basis[8] = m[10];
@@ -779,15 +792,10 @@ bool ResolveAnchor(const VfxTest::SVfxAnchor& a, VfxTest::SVfxAttachment& out)
 }
 
 // -------------------------------------------------------------------------
-// Weapon-sub-object helpers (S09 TWeaponSwipe Phase B)
-//
-// The retail TWeaponSwipe pulled the weapon hilt + tip from the
-// character's `weapon` / `sword` / `ogrokaxe` named sub-object
-// (priority order matches src/weapontrail.cpp:609-615 fallback chain).
-// For the harness we need the same lookup plus the cached local-space
-// max-Z extent of the weapon mesh (so a long sword draws a wide arc
-// and a dagger draws a narrow one — same `GetWeaponExtents()` shape
-// per S09 forensics §1).
+// Weapon helpers for the rig (the TWeaponSwipe gallery entry): the
+// character's `weapon` / `sword` / `ogrokaxe` object -- retail's lookup
+// order (TWeaponSwipe::AddPoint 0x004d96c0) -- and whether the rig is
+// playing an attack.
 // -------------------------------------------------------------------------
 
 // Find the weapon sub-object's bone index on the currently loaded rig
@@ -804,87 +812,6 @@ int32_t FindWeaponObjNum()
         if (n >= 0) return n;
     }
     return -1;
-}
-
-const char* FindWeaponBoneName()
-{
-    SCharacterRig& rig = g_state.rig;
-    if (!rig.img) return nullptr;
-    static constexpr const char* kNames[] = { "weapon", "sword", "ogrokaxe" };
-    for (const char* nm : kNames)
-    {
-        if (rig.img->GetObjectNum(const_cast<char*>(nm)) >= 0) return nm;
-    }
-    return nullptr;
-}
-
-// Scan the weapon sub-object's vertices for the maximum local-Z value;
-// that's the weapon-tip local coordinate that retail's
-// `GetWeaponExtents()` cached. Result is cached for the current rig
-// character on the rig itself so we only pay the extract cost once.
-struct SWeaponCache
-{
-    const T3DImagery* for_img    = nullptr;  // invalidated on character swap
-    int32_t  objnum              = -1;
-    float    tip_local_z         = 0.0f;
-    bool     valid               = false;
-};
-SWeaponCache g_weapon_cache;
-
-const SWeaponCache* GetWeaponCache()
-{
-    SCharacterRig& rig = g_state.rig;
-    if (!rig.img)
-    {
-        g_weapon_cache = {};
-        return nullptr;
-    }
-    if (g_weapon_cache.valid && g_weapon_cache.for_img == rig.img)
-        return &g_weapon_cache;
-
-    g_weapon_cache = {};
-    g_weapon_cache.for_img = rig.img;
-    g_weapon_cache.objnum  = FindWeaponObjNum();
-    if (g_weapon_cache.objnum < 0)
-        return &g_weapon_cache;
-
-    // Pull the weapon mesh vertices and walk Z for the max extent.
-    // Same shape as retail GetWeaponExtents in src/weapontrail.cpp:504:
-    // start the hilt at local (0,0,0) (retail does ivweapbeg but then
-    // clears it to zero; the rotation hub is the bone pivot) and let
-    // the tip's Z drive the strip width.
-    std::vector<SMeshVertex> verts;
-    std::vector<uint16_t>    indices;
-    if (!ExtractSubMesh(rig.img, g_weapon_cache.objnum, verts, indices))
-    {
-        log_warn("[vfx.swipe] weapon sub-object %d extract failed; "
-                 "tipZ unavailable",
-                 g_weapon_cache.objnum);
-        return &g_weapon_cache;
-    }
-    float max_z = -1e9f;
-    for (const auto& v : verts)
-        if (v.pos[2] > max_z) max_z = v.pos[2];
-    if (max_z <= 0.0f)
-    {
-        // Pre-release `GetWeaponExtents` starts `end = -100000` and
-        // would carry a degenerate end if all verts had Z<=0. Skip.
-        log_warn("[vfx.swipe] weapon mesh has no positive-Z extent; "
-                 "tip degenerate, swipe disabled");
-        return &g_weapon_cache;
-    }
-    g_weapon_cache.tip_local_z = max_z;
-    g_weapon_cache.valid       = true;
-    {
-        const int32_t st = rig.inst ? rig.inst->GetState() : -1;
-        auto* sd = (st >= 0 && rig.img) ? rig.img->GetState(st) : nullptr;
-        log_info("[vfx.swipe] weapon='%s' objnum=%d tipZ=%.1f verts=%zu "
-                 "rig_state=%d ('%s')",
-                 FindWeaponBoneName(), g_weapon_cache.objnum,
-                 double(max_z), verts.size(),
-                 st, (sd && sd->animname[0]) ? sd->animname : "?");
-    }
-    return &g_weapon_cache;
 }
 
 // Is the rig character currently playing an "attack*" state? Used by
@@ -922,46 +849,6 @@ bool RigIsInAttackState()
            starts_with_ci(name, "upslash")    ||
            starts_with_ci(name, "spinswing")  ||
            starts_with_ci(name, "turnswing");
-}
-
-// Resolve the (hilt, tip) world-space anchor pair for the current
-// rig's weapon. Returns false if the weapon sub-object isn't present
-// or the rig isn't loaded; the swipe should skip Submit in that case.
-bool ResolveWeaponAnchors(VfxTest::SVfxAttachment& out_hilt,
-                          VfxTest::SVfxAttachment& out_tip)
-{
-    out_hilt = {};
-    out_tip  = {};
-    SCharacterRig& rig = g_state.rig;
-    if (!rig.inst || !rig.img) return false;
-
-    const SWeaponCache* wc = GetWeaponCache();
-    if (!wc || !wc->valid) return false;
-
-    const char* bone = FindWeaponBoneName();
-    if (!bone) return false;
-
-    // Hilt = weapon bone pivot (local origin transformed to world).
-    VfxTest::SVfxAnchor hilt_anchor = {};
-    hilt_anchor.kind = VfxTest::SVfxAnchor::EKind::Bone;
-    std::strncpy(hilt_anchor.bone_name, bone,
-                 sizeof(hilt_anchor.bone_name) - 1);
-    if (!ResolveAnchor(hilt_anchor, out_hilt) || !out_hilt.resolved)
-        return false;
-
-    // Tip = local (0, 0, tipZ_local) through the weapon bone matrix.
-    // The rig's BoneLocalPoint resolver already handles the scale +
-    // bbox recentre composition.
-    VfxTest::SVfxAnchor tip_anchor = {};
-    tip_anchor.kind = VfxTest::SVfxAnchor::EKind::BoneLocalPoint;
-    std::strncpy(tip_anchor.bone_name, bone,
-                 sizeof(tip_anchor.bone_name) - 1);
-    tip_anchor.local_offset[0] = 0.0f;
-    tip_anchor.local_offset[1] = 0.0f;
-    tip_anchor.local_offset[2] = wc->tip_local_z;
-    if (!ResolveAnchor(tip_anchor, out_tip) || !out_tip.resolved)
-        return false;
-    return true;
 }
 
 void TickCharacterRig()
@@ -3356,99 +3243,141 @@ void FlareSubmit(void* cp, EFxDebugMode dbg)
                             1.2f * pulse);
 }
 
-// --- SR: TWeaponSwipe (S09 sword slash trail) ---------------------------
-// Character-attached strip effect. Owned per-character in retail; here
-// we instantiate one TWeaponSwipe inside the harness ctx and feed it
-// the live (hilt, tip) anchor pair every frame from the rig. The
-// strip ring + Catmull-Rom spline + per-vertex colour curve all live
-// inside TWeaponSwipe (src/weaponswipe.cpp); this glue just resolves
-// the two anchors and drives the visibility gate.
-//
-// **CharacterAttack** preview style — `PickInitialState` cycles to the
-// first `attack*` animation on the loaded character (any character
-// with one will work; Locke has multiple). The retrigger cadence
-// (1.5 s) re-seeds the ring buffer between swings so the trail starts
-// clean on each new attack.
-//
-// SCharData::swipecolor wiring — retail pulls the colour from
-// chardata->swipecolor (RGB 0..255), set per-character in RULES.DEF
-// (e.g. Locke = `SWIPECOLOR 0, 0, 10` → normalizes to vivid blue with
-// the +0.4 hilt boost reading purplish-pink over warm backdrops).
-// We read it from the rig's loaded character every submit so cycling
-// characters in the harness picks up the right tint automatically.
-struct SSwipeCtx {
-    TWeaponSwipe* swipe = nullptr;
-    int32_t       last_roster_idx = -1;  // re-read chardata only on character change
+// --- SR: TWeaponSwipe (retail weapon swipe) ------------------------------
+// The retail class (weaponswipe.h) on the rig's character, driven as
+// TCharAnimator drives it in play: SWIPECOLOR and SWIPEFULL from the
+// character, the bounds and matrix of its "weapon"/"sword"/"ogrokaxe"
+// object, the swipe frames of the attack its state is named for. The rig
+// steps its pose once a tick without easing, so the swipe does too, and it
+// samples the weapon from the pose the rig draws. The rig is no player and
+// plays states without the action system: an attack state is an attack.
+// --vfx-rig picks the character (one with a SWIPECOLOR, e.g. Skeleton).
+struct SSwipeCtx
+{
+    TWeaponSwipe swipe;
+    int32_t roster_idx = -1;
+    int64_t tick = -1;
 };
 
 void* SwipeSpawn(const S3DPoint& /*origin*/)
 {
-    auto* c = new SSwipeCtx();
-    c->swipe = new TWeaponSwipe();
-    c->swipe->ResetForNewWeapon();
-    // Colour deferred to first submit — chardata is only available once
-    // the rig has loaded its character.
-    return c;
+    return new SSwipeCtx();
 }
 
 void SwipeDestroy(void* cp)
 {
-    auto* c = static_cast<SSwipeCtx*>(cp);
-    delete c->swipe;
-    delete c;
+    delete static_cast<SSwipeCtx*>(cp);
 }
 
-void SwipeSubmitAttached(void* cp, EFxDebugMode dbg,
+// The rig's weapon object in the character's model space, as a D3D matrix
+// (BuildAnimPoseObjectMatrix yields the transposed form).
+TWeaponSwipe::SMatrix RigWeaponMatrix(int32_t objnum)
+{
+    SCharacterRig& rig = g_state.rig;
+    const int32_t state = rig.inst->GetState();
+    const SAnimPose pose = SampleI3DAnimPose(rig.img, state, rig.inst->GetFrame(),
+                                             rig.inst->GetPrevState(), rig.inst->GetPrevFrame());
+    float m[16];
+    BuildAnimPoseObjectMatrix(rig.img, pose, state, objnum, m);
+    TWeaponSwipe::SMatrix out;
+    for (int32_t row = 0; row < 4; ++row)
+        for (int32_t col = 0; col < 4; ++col)
+            out[size_t(row * 4 + col)] = m[col * 4 + row];
+    return out;
+}
+
+TWeaponSwipe::SFrame RigSwipeFrame(int32_t objnum, TWeaponSwipe::SMatrix& weapon)
+{
+    SCharacterRig& rig = g_state.rig;
+    TWeaponSwipe::SFrame frame;
+    frame.attacking = RigIsInAttackState();
+    frame.frame = rig.inst->GetFrame();
+    auto* character = dynamic_cast<TCharacter*>(rig.inst);
+    SCharData* data = character ? character->GetCharData() : nullptr;
+    const auto* state = rig.img->GetState(rig.inst->GetState());
+    if (frame.attacking && data && state)
+        for (int32_t i = 0; i < data->attacks.NumItems(); ++i)
+            if (!stricmp(data->attacks[i].attackname, state->animname))
+            {
+                frame.frame_on = data->attacks[i].swipeframeon;
+                frame.frame_off = data->attacks[i].swipeframeoff;
+                break;
+            }
+    if (objnum >= 0)
+    {
+        weapon = RigWeaponMatrix(objnum);
+        frame.weapon = &weapon;
+    }
+    return frame;
+}
+
+void SwipeSubmitAttached(void* cp, EFxDebugMode /*dbg*/,
                          const VfxTest::SVfxAttachment& /*hilt_attach*/)
 {
     auto* c = static_cast<SSwipeCtx*>(cp);
-    if (!c->swipe) return;
-
-    // Pull the per-character swipecolor from chardata when the rig's
-    // loaded character changes. Retail's TCharAnimator::SetupWeaponSwipe
-    // does this on attach; we mirror it on roster-cycle. Zero colour
-    // short-circuits the trail entirely (matches retail behaviour for
-    // characters without a SWIPECOLOR entry in RULES.DEF).
     SCharacterRig& rig = g_state.rig;
-    if (c->last_roster_idx != rig.roster_idx)
+    if (!rig.inst || !rig.img || !Renderer)
+        return;
+    auto* character = dynamic_cast<TCharacter*>(rig.inst);
+    const SCharData* data = character ? character->GetCharData() : nullptr;
+    if (!data)
+        return;
+    const int32_t objnum = FindWeaponObjNum();
+    TWeaponSwipe::SMatrix weapon{};
+
+    // A new character starts a new swipe (SetupWeaponSwipe 0x004d8f10).
+    if (c->roster_idx != rig.roster_idx)
     {
-        c->last_roster_idx = rig.roster_idx;
-        c->swipe->ResetForNewWeapon();
-        if (auto* chr = dynamic_cast<TCharacter*>(rig.inst))
+        c->roster_idx = rig.roster_idx;
+        c->swipe.Close();
+        const SColor& color = data->swipecolor;
+        if (color.red || color.green || color.blue)
         {
-            if (SCharData* cd = chr->GetCharData())
+            TWeaponSwipe::SParams params;
+            if (objnum >= 0)
             {
-                c->swipe->SetColour(float(cd->swipecolor.red)   / 255.0f,
-                                    float(cd->swipecolor.green) / 255.0f,
-                                    float(cd->swipecolor.blue)  / 255.0f);
+                hmm_vec3 low, high;
+                rig.img->GetObjectBounds(objnum, low, high);
+                params.extent_min = {low.X, low.Y, low.Z};
+                params.extent_max = {high.X, high.Y, high.Z};
             }
+            params.color = TWeaponSwipe::ColorOf(color.red, color.green, color.blue);
+            params.full = data->swipefull != 0;
+            c->swipe.Init(params, RigSwipeFrame(objnum, weapon));
+            log_info("[vfx.swipe] %s: object %d '%s', colour %u,%u,%u, full %d, bounds (%.1f,%.1f,%.1f)-(%.1f,%.1f,%.1f)",
+                     rig.inst->GetTypeName(), objnum, objnum >= 0 ? rig.img->GetObjectName(objnum) : "-",
+                     color.red, color.green, color.blue, int(params.full),
+                     double(params.extent_min[0]), double(params.extent_min[1]), double(params.extent_min[2]),
+                     double(params.extent_max[0]), double(params.extent_max[1]), double(params.extent_max[2]));
         }
     }
-
-    // Resolve the (hilt, tip) anchor pair against the live weapon
-    // matrix. The `hilt_attach` passed in by the dispatcher is the
-    // hilt; we discard it and re-resolve both at once so a single
-    // call site reads the rig state consistently (and so the tip
-    // local-Z cache lives next to the lookup it gates).
-    VfxTest::SVfxAttachment hilt, tip;
-    const bool ok = ResolveWeaponAnchors(hilt, tip);
-    if (!ok)
-    {
-        // Rig isn't loaded, or character has no recognised weapon
-        // sub-object. Keep ring at zero — the strip never draws and
-        // the next valid character/frame picks up cleanly.
+    if (!c->swipe.Initialized())
         return;
+
+    // Once a tick, at the rig's frame.
+    const int64_t tick = TTime::LegacyFrameCount();
+    if (tick != c->tick)
+    {
+        c->tick = tick;
+        c->swipe.Update(RigSwipeFrame(objnum, weapon));
     }
+    if (!TWeaponSwipe::HasWidth(c->swipe.Ring()))
+        return;
+    TWeaponSwipe::SStrip strip;
+    TWeaponSwipe::BuildStrip(c->swipe.Ring(), c->swipe.Color(), strip);
 
-    // Visibility gate matches retail TCharAnimator::Render:
-    //   IsAttack() && initialized && (player ? primehand != null : true)
-    // The harness has no equip slots so the primehand check is a
-    // no-op (the bone presence check above already covers "weapon
-    // exists"). IsAttack() maps to RigIsInAttackState() above.
-    const bool attack_visible = RigIsInAttackState();
-
-    c->swipe->TickAndSubmit(hilt.world_pos, tip.world_pos,
-                            attack_visible, dbg);
+    // The rig draws the model scaled about its bounds' centre, there.
+    const float s = rig.scale;
+    const S3DPoint root = rig.inst->Pos();
+    hmm_mat4 place;
+    MtxClear(&place);
+    const hmm_vec3 scaling = {s, s, s};
+    MtxScale(&place, &scaling);
+    const hmm_vec3 offset = {float(root.x) - 0.5f * (rig.bbox_min[0] + rig.bbox_max[0]) * s,
+                             float(root.y) - 0.5f * (rig.bbox_min[1] + rig.bbox_max[1]) * s,
+                             float(root.z) - 0.5f * (rig.bbox_min[2] + rig.bbox_max[2]) * s};
+    MtxTranslate(&place, &offset);
+    TCharAnimator::SubmitSwipeStrip(*Renderer, strip, place);
 }
 
 // --- wave-bespoke-05: sparkle/glow family bespoke harness wrappers -------
@@ -5820,25 +5749,20 @@ struct SVfxTestBootstrap {
         tele.destroy = [](void* c) { TeleDestroy(c); };
         VfxTest::DeferredRegister(tele);
 
-        // --- SR: TWeaponSwipe — S09 sword slash trail -----------------
-        // Strip ribbon traced from the live weapon hilt + tip on a
-        // character playing an attack* animation. Bespoke per
-        // AGENT_GUIDE §3.2.1 (per-vertex custom geometry,
-        // weapon-extents-driven width, character-attached behaviour).
-        // The hilt anchor is registered explicitly so the dispatcher
-        // resolves SOMETHING (gives the UI panel a readable
-        // "Anchor: weapon @ (...)" line); the submit lambda re-
-        // resolves both hilt + tip together via ResolveWeaponAnchors.
+        // --- SR: TWeaponSwipe — the retail weapon swipe ----------------
+        // The retail class on the rig's character playing an attack
+        // (SwipeSubmitAttached). The hilt anchor is registered so the
+        // panel reads "Anchor: weapon @ (...)"; the swipe samples the
+        // weapon object itself.
         VfxTest::SEffect swipe = {};
         swipe.id            = "TWeaponSwipe";
         swipe.family        = "strip";
         swipe.pipeline      = "SR";
         swipe.preview_style = VfxTest::EVfxPreviewStyle::CharacterAttack;
         swipe.anchor.kind   = VfxTest::SVfxAnchor::EKind::Bone;
-        // "weapon" is the primary retail name (charanimator.cpp:264);
-        // FindWeaponBoneName() inside the submit lambda walks the full
-        // fallback chain (weapon -> sword -> ogrokaxe). The anchor name
-        // here is purely for the UI readout.
+        // "weapon" is retail's first name; FindWeaponObjNum walks the
+        // full order (weapon -> sword -> ogrokaxe). The anchor name is
+        // only for the readout.
         std::strncpy(swipe.anchor.bone_name, "weapon",
                      sizeof(swipe.anchor.bone_name) - 1);
         swipe.factory         = [](const S3DPoint& o) -> void* { return SwipeSpawn(o); };

@@ -332,6 +332,8 @@ class T3DImagery : public TObjectImagery
     int32_t NumObjVerts(int32_t objnum);
     void GetObjVerts(int32_t objnum, void* vertbuf, int32_t state = 0, int32_t frame = 0,
         ERender3DVertex verttype = ERender3DVertex::Vertex);
+    void GetObjectBounds(int32_t objnum, hmm_vec3& low, hmm_vec3& high, int32_t state = 0, int32_t frame = 0);
+      // The object's vertex bounds (0x00408c20); +-1e6 when it has none
     int32_t NumFaces();
     void GetFaces(S3DFace* facesbuf);
     int32_t NumObjFaces(int32_t objnum);
@@ -521,6 +523,13 @@ obj##Builder obj##BuilderInstance;
 #define ANI3D_UPDATEALLSTATES       4   // (default false) resets extents for all states
 #define ANI3D_UPDATEFRONTONLY       8   // (default false) resets extents for front rotation only
 
+// An animation key: a state and a frame of it.
+struct SLegacyRenderKey
+{
+    int32_t state = -1;
+    int32_t frame = 0;
+};
+
 class T3DAnimator : public TObjectAnimator
 {
   protected:
@@ -687,6 +696,12 @@ class T3DAnimator : public TObjectAnimator
     bool RenderObject(S3DAnimObj* animobj, int32_t tex = -1, bool uselastmatrix = false)
       { return Get3DImagery()->RenderObject(animobj, state, frame, &matrix, tex, uselastmatrix); }
     bool GetObjectMatrix(int32_t objnum, hmm_mat4* m);
+    bool ObjectModelMatrix(int32_t objnum, float framefrac, hmm_mat4& model);
+      // An object's model-space matrix (its parent chain, not the owner's
+      // transform) in the pose UpdateBoneTransforms draws at framefrac: 0
+      // this tick's key, 1 the next one. The bones are left as they are.
+    [[nodiscard]] SLegacyRenderKey NextKey() const;
+      // The key the render blends toward from the instance's current one
     bool GetObjectPos(int32_t objnum, hmm_vec3& v, hmm_vec3* s = nullptr);
     bool GetObjectPos(const char* objname, hmm_vec3& v, hmm_vec3* s = nullptr);
     bool GetObjectMapPos(int32_t objnum, S3DPoint& pos);
@@ -710,6 +725,9 @@ class T3DAnimator : public TObjectAnimator
       // Opacity to draw the object at, 0..1; 0 = not drawn
     [[nodiscard]] virtual bool DrawsCombatFlash() const { return false; }
       // Draw the meshes a second time, added on top (a struck character)
+    virtual void SubmitFx(TRenderer& renderer) const { (void)renderer; }
+      // Submits what the animator draws besides its meshes (a character's
+      // weapon swipe); the scene manager calls it once a drawn frame
 
   // Extents
     void ResetExtents()

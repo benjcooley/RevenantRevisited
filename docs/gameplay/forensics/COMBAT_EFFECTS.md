@@ -5,13 +5,13 @@ the blood (EffectBurst "blood" and the death-animation squirts), the combat
 flash (EffectCombatFlash, the `combatflash` effect on `misc\Impact.i3d`),
 the struck body's white-hot flash (TCharacter `+0x224`), the sparks of a
 blocked blow, and the weapon swipe. Who bleeds, and in what colour.
-**Status:** 2026-10-11. Blood, combat flash and struck-body flash are
-ported (§2–§4); sparks were already ported and are unchanged (§5); the
-weapon swipe is mapped but not yet in live play (§6).
+**Status:** 2026-10-11. Blood, combat flash, struck-body flash and the
+weapon swipe are ported (§2–§4, §6); sparks were already ported and are
+unchanged (§5).
 **Evidence:** the unchanged retail image through `rdis.py`/`fn.py`
 (capstone over `recon/retail_asm/baseline/Revenant.rebuilt.exe`); the
-retail TBloodAnimator droplet code run in the in-process emulator against
-the port (§2.6); the DOSBox lab's recording of real retail combat,
+retail TBloodAnimator droplet code and the retail TWeaponSwipe run in the
+in-process emulator against the port (§2.6, §6.8); the DOSBox lab's recording of real retail combat,
 `~/RevenantRetailLab/captures/gameflow/opening-20261006-run2.avi`
 (the Rahul fight, 370–466 s: 30-odd blows with blood, nine-colour flashes
 and struck bodies); the port in the combat arena
@@ -356,16 +356,164 @@ the facing for the spray, the point halfway to the target 45 up,
 (`character.cpp`), and its TSparkEffect has the VFX track's editor-default
 visual pass. Not exercised here: the arena's fights produced no block.
 
-## 6. Weapon swipe (retail draws one; not yet ported)
+## 6. Weapon swipe
 
-Retail TCharAnimator embeds a TWeaponSwipe at `+0x1a8`: initialized once
-(`0x004d8f10`, from chardata SWIPECOLOR bytes `+0x168..+0x16a`, none when
-all zero, and the player's weapon SwipeFull stat; parameters 8 and 40
-to `0x004d90b0`), updated every render (`0x004d95b0`), built into a
-strip (`0x004d9380`) and drawn in blend mode 2 (alpha) after the character
-(`0x004d7c23..0x004d7cc3`). The port's `src/weaponswipe.{h,cpp}` (VFX
-S09) follows the snapshot and is not in live play. Next: transcribe the
-four retail functions and draw the strip from TCharAnimator's submission.
+The ribbon a weapon leaves through an attack. Retail draws it for every
+character with a SWIPECOLOR; the 1998 snapshot's version (`weapontrail.cpp`)
+is not what shipped.
+
+### 6.1 Where it lives
+
+TCharAnimator embeds a TWeaponSwipe at `+0x1a8` (vtable `0x005a7e98`, whose
+only slot is the deleting destructor; the constructor inline at
+`0x004d770c` clears its running flag `+0x528`).
+
+- **Animate** `0x004d7a20` (vtable slot 12): SetupWeaponSwipe `0x004d8f10`
+  while the swipe isn't running, then T3DAnimator::Animate.
+- **Render** `0x004d7a50`: nothing while OF_INVISIBLE or below the drawn
+  alpha floor (0.01). At `0x004d7c23`, unless the animator is drawing the
+  inventory portrait (`+0x1a4`, set only around `0x00536fda`) and while
+  running: Update `0x004d95b0`; then, still running, blend mode 2
+  (`0x00417d60`), BuildStrip `0x004d9380` and RenderObject `0x0040a8f0`
+  under the animator's matrix (`+0xac`).
+- The destructor closes it (`0x004d7902`).
+
+### 6.2 SetupWeaponSwipe `0x004d8f10`
+
+1. The weapon's bounds, GetWeaponExtents `0x004d8e60`: a player's weapon
+   in hand (`+0x2b0`) on its own imagery, the object GetWeaponNum
+   `0x004d8bd0` finds for this body (the weapon's "still"/"all" state, or
+   the body type's, a name prefix; then its first shown object the body
+   has a place for, "weapon" falling back to "sword"); otherwise this
+   character's own `weapon`, `sword` or `ogrokaxe` object. T3DImagery
+   `0x00408c20` at state 0, frame 0: the vertex bounds, from ±1e6 with
+   strict compares. Zero with no object.
+2. A player's weapon in hand: its name (`+0x38`) is copied, and SwipeFull
+   is the weapon's `SwipeFull` stat (vtable `+0xd4`; class.def's weapon
+   STATS `SWFL 0 0 1`).
+3. No SWIPECOLOR (`+0x168..+0x16a` all zero): nothing. (A check of the
+   bytes against −1 after zero-extension never fires.)
+4. The colour: each byte × `0.00392156886f` (`0x005a3830`). The parser
+   (`0x0048a4a3`, `"%b, %b, %b"`) stores red at `+0x16a`, blue at `+0x168`.
+   **Not normalised:** NormalizeColors `0x004d9980` is reachable only from
+   ChangeColor `0x004d9ac0`, which nothing calls. Locke's 200,0,230 draws
+   0.78,0,0.90; the 5,5,5 of Jhaga, the Shadow Minion and the Dark
+   Revenant draws an almost black, smoky trail (normalised, as the
+   snapshot did, it would be white).
+5. A character's SwipeFull is SWIPEFULL (`+0x16c`, a byte).
+6. Init `0x004d90b0` with maxsegs 40 and smooth 8.
+
+### 6.3 Init `0x004d90b0`, ChooseAxis `0x004d9820`
+
+40/8 + 3 = **8 samples** a side, hilt (`+0x35c`) and tip (`+0x360`), in
+zero-filled arrays (`0x00482fb0`); a 112-vertex D3DLVERTEX buffer (FVF
+`0x1e2`) and 80 faces (i, i+1, i+2). Then 41 AddPoints of the weapon as it
+is (with the previous axis: zero the first time) and ChooseAxis: the
+longest axis of the bounds, ties to the later axis. The hilt point is the
+weapon's pivot (or, with SwipeFull, the low end of that axis); the tip is
+the high end, **except on y**: `0x004d9909` loads `+0x388` (min.y) again,
+so a weapon modelled along y sweeps its short end. The port keeps that.
+
+### 6.4 Update `0x004d95b0`, once a drawn frame
+
+- Not doing ACTION_ATTACK (doing `+0xd8`, action 7), or a player with no
+  weapon in hand: **ten Shrinks** (maxsegs/4). Each pair of samples closes
+  on its midpoint by 1 − 1/8 (`0x004d9b60`), so an idle swipe vanishes in
+  a few frames.
+- Attacking, with attack data (GetDoing, vtable `+0x1fc`, `+0x48`) and a
+  window (swipeframeon `+0xec` / swipeframeoff `+0xf0`, char.def ATTACK
+  fields 23/24; both 0 is none): at frame == on, **Reset** `0x004d9c60`
+  sets every sample to the weapon now; while on ≤ frame ≤ off,
+  **AddPoint** `0x004d96c0`: Shift (`0x004d9ae0`), Shrink, and sample 0 =
+  the weapon object's matrix (GetObject `0x0040eef0` `+0x58`, model space)
+  × the two axis points (`0x0043ad80`).
+- Otherwise (outside the window, no data): Shift and Shrink: the history
+  runs on into the stationary newest sample.
+
+AddPoint closes the swipe when a player's weapon changes (the copied name
+against the one in hand, `_stricmp` `0x0059a530`); the next Animate sets
+it up again. With no weapon object AddPoint would transform through a null
+matrix; every character with a SWIPECOLOR has one (`Skeleton.I3D` calls its
+sword `ogrokaxe`).
+
+### 6.5 BuildStrip `0x004d9380` and the draw
+
+Five segments of eight steps: Catmull-Rom (`0x0043b280`) through samples
+p..p+3 for p = 0..4, so the strip runs **from sample 1**, a frame behind
+the blade, to sample 6; sample 0 only bends the first segment. Each step
+is a vertex pair (hilt, tip) of colour `alpha<<24 | R<<16 | G<<8 | B`
+(`ftol(x × 255)`); alpha starts at 0.7 and loses 0.7/48 a step (0.13 at
+the tail). Blend mode 2 (`0x00417f46`): SRCALPHA/INVSRCALPHA, depth
+tested, no depth writes, no culling; prelit, untextured. The vertices are
+in the character's model space and drawn under the animator matrix
+(object flags `0x5a110` with an identity matrix), so the trail moves with
+the character.
+
+**Retail bug.** The 80 faces run two past the 80 vertices BuildStrip
+writes: faces 78 and 79 index the zero-filled vertices 80 and 81 (the
+emulator confirms they stay zero), a faint wedge, alpha 0.13 → 0 toward
+black, from the strip's tail to the character's origin at its feet. The
+port draws the 78 strip triangles (REVSYNC-DIVERGENCE in
+`charanimator.cpp`).
+
+SWIPECOLOR in char.def: Locke 200,0,230; Bayne, Morganna, Navarro 50,0,75;
+Jong 155,0,155; the seven Ogroks 255,0,0; Dorogar 0,25,0; Acolyte and
+Arcanist 0,0,150; Cinderate and Burning Praetor 155,0,0; Druid and Invoker
+0,150,0; Jhaga, Shadow Minion, Dark Revenant 5,5,5; Skeleton 255,0,0;
+Vashar 0,80,40; Ramage 0,50,0; Sirocco 50,0,0. Locke's swords swipe in
+swing (frames 2–6), chop (3–8), upslash, spinswing and the chains; his
+hand-to-hand attacks have no window.
+
+### 6.6 Cadence
+
+Retail updates once a drawn frame, and drew at most once a 24 Hz tick. The
+port updates on the first drawn frame after each tick, at that tick's key
+(`T3DAnimator::ObjectModelMatrix` at fraction 0, the pose the renderer
+draws there), and keeps the history the next key's update would make
+(fraction 1). Frames between draw the history eased toward it: at each
+tick the strip is retail's, and between ticks it follows the interpolated
+blade at any frame rate. No random numbers are drawn.
+
+### 6.7 Port
+
+- `src/weaponswipe.{h,cpp}`: the retail class, free of engine types. It
+  replaces the VFX track's S09 Phase B class (snapshot constants, unused
+  in play) under the same name.
+- `TCharAnimator` (`charanimator.cpp`): SetupWeaponSwipe, WeaponExtents,
+  WeaponObjectNum, WeaponSwipeFrame, UpdateWeaponSwipe (from
+  UpdateDrawState) and SubmitFx: 39 FX quads a strip, Alpha,
+  TestNoWrite, unlit, per-corner colour.
+- `T3DImagery::GetObjectBounds` (`0x00408c20`);
+  `T3DAnimator::ObjectModelMatrix` and `NextKey`; `TTransform::ComposeLocal`.
+- The map renderer calls `T3DAnimator::SubmitFx` once an object a gather.
+- The VFX gallery's `TWeaponSwipe` entry drives the retail class on the
+  rig's character; `--vfx-rig=<type>` picks it (e.g. `Skeleton`).
+
+### 6.8 Evidence
+
+- **Emulator A/B** (`tools/retail_runtime/weapon_swipe_probe.py`): the
+  original SetupWeaponSwipe, Update and BuildStrip a drawn frame at a time
+  against `src/weaponswipe.cpp` compiled unchanged: 45 cases, 2138 frames
+  (2125 running). The running flag, the colour, both eight-sample
+  histories and the 80 strip vertices (position bits and packed colour)
+  match bit for bit in every frame. Cases cover char.def's swings, all
+  bounds shapes (each axis, both tie kinds, zero, no vertices),
+  SwipeFull, no window, missing attack data, a skipped opening frame,
+  off before on, other actions, an armed and an unarmed player, weapon
+  changes (case-insensitive) and no SWIPECOLOR, plus fuzzed sequences.
+  `test_weapon_swipe.py` adds three negative controls that must fail and
+  do: the snapshot's strip from sample 0, the tip at max.y, and no reset
+  when the window opens.
+- **Combat arena**, `locke_vs_araknid`, one tick a frame: Locke's sword
+  swing and chop,
+  [swipe_arena_locke.png](combat_effects/swipe_arena_locke.png).
+- **Gallery**, one Skeleton swinging,
+  [swipe_gallery_skeleton.png](combat_effects/swipe_gallery_skeleton.png).
+- **No retail footage yet.** The recorded Rahul fight has none to show:
+  Locke fights unarmed (hand attacks have no window) and Rahul has no
+  SWIPECOLOR. The lab capture to make (load the Port Resave slot in
+  retail, fight the forest's Druhgs with Locke's sword) could not run: the
+  DOSBox lab was held by another dojo run.
 
 ## 7. Bloody chunks
 
@@ -382,7 +530,7 @@ created), EffectCombatFlash's `random(0, n/2)`; at the next draw the blood
 animator's Initialize (per pair: two spreads, size, three speeds, three
 trailing factors, a delay), then each tick's splat sizes; the combat
 flash's partsys draws in its Pulse (spawn) and Render (rotation samples,
-numtrails). The katas seam EffectBurst and EffectCombatFlash, so they are
+numtrails). The weapon swipe draws none. The katas seam EffectBurst and EffectCombatFlash, so they are
 unaffected: melee-resolvers 2100/2100, melee-damage 1137/1137, melee-hit
 7855/7855, combat-update 259/259 match; the arena stays deterministic
 (`--repeat 2`, identical traces).

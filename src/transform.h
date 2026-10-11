@@ -120,6 +120,13 @@ class TTransform : public TSafeObjectBase<TTransform>
 
     [[nodiscard]] const hmm_mat4& LocalMatrix() const;
 
+    // A scale, rotation and position as one local matrix: scale, then
+    // rotation, then translation (row vectors), the way LocalMatrix()
+    // composes a transform's own parts. For a pose read without a
+    // transform to hold it.
+    [[nodiscard]] static hmm_mat4 ComposeLocal(const hmm_vec3& pos, const SAnimQuat& rot,
+                                               const hmm_vec3& scl);
+
     // ---- World (global) accessors -----------------------------------------
 
     [[nodiscard]] hmm_vec3        Pos() const;

@@ -25,7 +25,7 @@
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
     "retail_rows_with_source_fixes_recorded": 155,
-    "port_smoke_preview_ids": 36,
+    "port_smoke_preview_ids": 37,
     "retail_rows_with_port_smoke": 32,
     "accurate_software_reference_rows": 50,
     "ab_workflow_demonstrated_rows": 49,
@@ -24675,10 +24675,16 @@
     {
       "id": "TWeaponSwipe",
       "retail_type_candidates": [],
-      "association_method": "unmapped",
-      "smoke": null,
-      "runtime_supported": null,
-      "retail_accepted": false
+      "association_method": "retail_class_outside_effect_registry",
+      "retail_source": "TCharAnimator +0x1a8 TWeaponSwipe (vtable 0x005a7e98): SetupWeaponSwipe 0x004d8f10, Init 0x004d90b0, Update 0x004d95b0, AddPoint 0x004d96c0, Reset 0x004d9c60, BuildStrip 0x004d9380; drawn from TCharAnimator::Render 0x004d7c23..0x004d7cc3 in blend mode 2",
+      "smoke": {
+        "frames": 30,
+        "distinct_frames": 11,
+        "note": "--vfx-rig=Skeleton: one 11-tick swing cycle, repeated bit for bit"
+      },
+      "runtime_supported": true,
+      "retail_accepted": false,
+      "evidence": "2026-10-11 combat dojo: tools/retail_runtime/weapon_swipe_probe.py runs the original Setup/Update/BuildStrip against src/weaponswipe.cpp: 45 cases, 2138 drawn frames, histories and strips bit for bit; three negative controls (test_weapon_swipe.py). Live in play from TCharAnimator (combat arena locke_vs_araknid). No retail footage of a swipe yet. docs/gameplay/forensics/COMBAT_EFFECTS.md section 6."
     },
     {
       "id": "TFireBallEffect",
@@ -26107,7 +26113,7 @@
       "TTest3DAnimator: debug/snapshot-only candidate",
       "TFlareAnimator.placeholder: diagnostic placeholder, not an effect acceptance unit",
       "TBloodSystem and base TMissileEffect: infrastructure rather than retail type rows",
-      "TWeaponSwipe: actual character combat visual outside EFFECT type registry; keep an independent runtime/retail acceptance task"
+      "TWeaponSwipe: actual character combat visual outside EFFECT type registry; ported from retail (TCharAnimator +0x1a8) with an emulator A/B, retail footage pending (docs/gameplay/forensics/COMBAT_EFFECTS.md section 6)"
     ],
     "unmapped_preview_ids": [
       "TIceEffect_BESPOKE",

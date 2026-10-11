@@ -103,6 +103,9 @@ extern char StartupMenuButton[32];
 // --vfx-bg=<black|ltgray|forest|dungeon> — pre-select the diagnostic
 // backdrop for --test=vfx (default ltgray). Empty / unknown = default.
 extern char StartupVfxBackground[16];
+// --vfx-rig=<type name> — the character a character-attached preview loads
+// first (default: the first player type, Locke).
+extern char StartupVfxRig[64];
 // Retail comparison controls: optional baked backdrop, authored camera origin
 // in screen pixels, and an explicit world-space effect origin (no auto-fit).
 extern char StartupVfxBackdrop[MAXPATHLEN];

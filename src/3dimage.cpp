@@ -2009,6 +2009,29 @@ void T3DImagery::GetObjVerts(int32_t objnum, void* vertbuf, int32_t state, int32
         objects[objnum].startvert, objects[objnum].numverts);
 }
 
+// REVSYNC: T3DImagery::GetObjectBounds @ 0x00408c20 -- over the object's
+// vertices in the state/frame (a morph's frame, else the base vertices),
+// from +-1e6 with strict compares.
+void T3DImagery::GetObjectBounds(int32_t objnum, hmm_vec3& low, hmm_vec3& high, int32_t state, int32_t frame)
+{
+    if (!meshinitialized)
+        InitializeMesh((S3DImageryBody*)GetBody());
+    low = {1000000.0f, 1000000.0f, 1000000.0f};
+    high = {-1000000.0f, -1000000.0f, -1000000.0f};
+    if (objnum < 0 || objnum >= objects.NumItems() || !objects.Used(objnum))
+        return;
+    const S3DVertex* v = ((flags & I3D_ISMORPH) ? verts[state][frame] : verts[0][0]) + objects[objnum].startvert;
+    for (int32_t i = 0; i < objects[objnum].numverts; ++i, ++v)
+    {
+        if (v->pos.X < low.X) low.X = v->pos.X;
+        if (v->pos.Y < low.Y) low.Y = v->pos.Y;
+        if (v->pos.Z < low.Z) low.Z = v->pos.Z;
+        if (v->pos.X > high.X) high.X = v->pos.X;
+        if (v->pos.Y > high.Y) high.Y = v->pos.Y;
+        if (v->pos.Z > high.Z) high.Z = v->pos.Z;
+    }
+}
+
 int32_t T3DImagery::NumFaces()
 {
     if (!meshinitialized)
@@ -4512,12 +4535,6 @@ bool T3DAnimator::WarpAtlasOffset(int32_t object, float output[2]) const
 // Estimated 1-2 hours of careful work + smoke testing. Deferred
 // (as of c3a8f21) so the AI / combat bring-up doesn't block on it.
 // ---------------------------------------------------------------------------
-struct SLegacyRenderKey
-{
-    int32_t state = -1;
-    int32_t frame = 0;
-};
-
 static int32_t FindTaggedContinuationState(T3DImagery* img, int32_t state)
 {
     if (!img || state < 0 || state >= img->NumStates())
@@ -4757,6 +4774,60 @@ void T3DAnimator::UpdateBoneTransforms()
     pose_update_prev_state = sample_prevstate;
     pose_update_prev_frame = sample_prevframe;
     pose_update_frame_frac = framefrac;
+}
+
+SLegacyRenderKey T3DAnimator::NextKey() const
+{
+    if (!inst)
+        return {};
+    return NextRenderKey(inst, Get3DImagery(), inst->GetState(), inst->GetFrame());
+}
+
+bool T3DAnimator::ObjectModelMatrix(int32_t objnum, float framefrac, hmm_mat4& model)
+{
+    S3DAnimObj* object = GetObject(objnum);
+    T3DImagery* img = Get3DImagery();
+    if (!object || !img || !inst)
+        return false;
+    if (pose_layout.bone_count != img->NumObjects() || pose_current.Count() != pose_layout.channel_count)
+        UpdateBoneTransforms();     // configures the pose layout
+    if (!pose_layout.IsValid())
+        return false;
+
+    // The pose UpdateBoneTransforms samples, at the given fraction. Its pose
+    // buffers are scratch: the bones, not the buffers, hold what it drew.
+    const int32_t s = inst->GetState();
+    const int32_t f = inst->GetFrame();
+    const SLegacyRenderKey nextkey = NextRenderKey(inst, img, s, f);
+    const bool use_transition_blend = pose_transition_active && f < kLegacyTransitionBlendFrames;
+    const float* pose = nullptr;
+    if (!SampleI3DLegacyFrameBlendToPose(img, pose_layout, s, f, nextkey.state, nextkey.frame, framefrac,
+            use_transition_blend ? inst->GetPrevState() : -1, use_transition_blend ? inst->GetPrevFrame() : 0,
+            pose_current.Data(), pose_next.Data(), pose_blended.Data(), pose_current.Count(), &pose) || !pose)
+        return false;
+
+    MtxClear(&model);
+    for (const S3DAnimObj* o = object; o; o = o->parent)
+    {
+        // An object layering transforms over its track has no pose of its
+        // own here: take its chain as last drawn.
+        if (o->flags & (OBJ3D_ROTMASK | OBJ3D_POSMASK | OBJ3D_SCLMASK | OBJ3D_ADDTOANI))
+        {
+            model = object->matrix;
+            return true;
+        }
+        const int32_t target = (o->flags & OBJ3D_ANIMTRACK) ? o->animtrack : o->objnum;
+        const int32_t base = pose_layout.BoneOffset(target);
+        hmm_mat4 local = o->transform.LocalMatrix();
+        if (base >= 0 && base + ANIM_BONE_STRIDE <= pose_layout.channel_count)
+            local = TTransform::ComposeLocal(
+                {pose[base + ANIM_BONE_POS_X], pose[base + ANIM_BONE_POS_Y], pose[base + ANIM_BONE_POS_Z]},
+                {pose[base + ANIM_BONE_ROT_X], pose[base + ANIM_BONE_ROT_Y], pose[base + ANIM_BONE_ROT_Z],
+                 pose[base + ANIM_BONE_ROT_W]},
+                {pose[base + ANIM_BONE_SCALE_X], pose[base + ANIM_BONE_SCALE_Y], pose[base + ANIM_BONE_SCALE_Z]});
+        MtxMultiply(&model, &model, &local);
+    }
+    return true;
 }
 
 void T3DAnimator::Animate(bool draw)

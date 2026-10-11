@@ -3543,6 +3543,7 @@ void TMapRenderer::RenderFrame()
     drawctx.cov = &s.coverageScratch;
     ParticleManager().BeginDrawPulsePass();
     std::unordered_set<TObjectInstance*> submitted_replacement_owners;
+    std::unordered_set<const TObjectInstance*> submitted_fx_owners;
     for (int32_t idx : s.frameDrawIndices)
     {
         if (idx < 0 || idx >= int32_t(s.sectorDrawInst.size()))
@@ -3579,6 +3580,12 @@ void TMapRenderer::RenderFrame()
             if (TParticleEffectComponent* particle_effect = oi->GetComponent<TParticleEffectComponent>())
                 particle_effect->DrawPulse();
         s.sectorDrawInst[idx].Submit(drawctx, stats, obj_id);
+        // What the animator draws besides the meshes (a character's weapon
+        // swipe), once an object.
+        if (const TObjectInstance* owner = s.sectorDrawInst[idx].src.Get())
+            if (const auto* animator = dynamic_cast<const T3DAnimator*>(owner->GetAnimator()))
+                if (submitted_fx_owners.insert(owner).second)
+                    animator->SubmitFx(*Renderer);
     }
     // Effect-component buckets are drained through the FX submission API
     // (see docs/vfx/PHASE1_SPINE.md). The renderer's DrainFxQueue runs
