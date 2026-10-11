@@ -2884,7 +2884,8 @@ void* DripLinkedSpawn(const S3DPoint& origin,bool drain) {
     auto c=std::make_unique<SDripLinkedCtx>();
     c->drip=TDripEffect::SpawnForTest(origin);
     if(!c->drip)return nullptr;
-    c->drip->SetParams(20,128,1);c->drain=drain;
+    c->drip->SetParams(20,128,1);c->drip->SetNativeDomain(StartupVfxNativeDomain);c->drain=drain;
+    log_info("[native-domain] enabled=%d camera_z=0",int(StartupVfxNativeDomain));
     log_info("[drip-linked] parameters=20,128,1 managed_children=1 drain=%d",int(drain));
     return c.release();
 }

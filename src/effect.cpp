@@ -3627,7 +3627,7 @@ T3DImagery* LoadWaterImagery(const char* path, const char* tag)
 }
 
 bool LoadWaterQuad(T3DImagery* img, int32_t object,
-                   std::vector<S3DVertex>& vertices, TTextureHandle& texture)
+                   std::vector<S3DVertex>& vertices, TTextureHandle& texture, bool* argb4444=nullptr)
 {
     if (!img || object >= img->NumObjects() || img->NumObjVerts(object) != 4)
         return false;
@@ -3642,6 +3642,11 @@ bool LoadWaterQuad(T3DImagery* img, int32_t object,
         S3DTex tex = {};
         img->GetTexture(slot - 1, &tex);
         texture = tex.htexture;
+        if(argb4444) {
+            const auto& f=tex.desc.pixelFormat;
+            *argb4444=f.dwRGBBitCount==16 && f.dwRBitMask==0x0f00 &&
+                f.dwGBitMask==0x00f0 && f.dwBBitMask==0x000f && f.dwRGBAlphaBitMask==0xf000;
+        }
         return texture != kInvalidTexture;
     }
     return false;
@@ -3649,12 +3654,20 @@ bool LoadWaterQuad(T3DImagery* img, int32_t object,
 
 void SubmitWaterQuad(TObjectInstance& owner, const std::vector<S3DVertex>& vertices,
                      TTextureHandle texture, const hmm_vec3& local_pos,
-                     const hmm_vec3& scale, EFxDebugMode debug_mode, int32_t atlas_cell = -1)
+                     const hmm_vec3& scale, EFxDebugMode debug_mode, int32_t atlas_cell = -1,
+                     bool native_domain=false, bool argb4444=false)
 {
     if (!Renderer || texture == kInvalidTexture || vertices.size() != 4)
         return;
     SQuadDrawItem item = {};
-    const hmm_mat4& world = owner.Transform().Matrix();
+    hmm_mat4 native_owner;
+    if(native_domain) {
+        const auto& p=owner.Pos();
+        BuildRetailSoftwareOwner(native_owner,p.x,p.y,p.z,uint8_t(owner.GetFace()));
+    }
+    const hmm_mat4& world = native_domain?native_owner:owner.Transform().Matrix();
+    item.retail_software_projection=native_domain;
+    item.retail_argb4444=native_domain && argb4444;
     for (int32_t i = 0; i < 4; ++i)
     {
         const hmm_vec3& v = vertices[size_t(i)].pos;
@@ -3741,8 +3754,8 @@ void TRippleEffect::Initialize()
 {
     if (GetComponent<TFlipbookBillboardComponent>()) return;
     auto* img = dynamic_cast<T3DImagery*>(GetImagery());
-    if (!LoadWaterQuad(img, 0, ring_vertices_, ring_texture_) ||
-        !LoadWaterQuad(img, 1, splash_vertices_, splash_texture_))
+    if (!LoadWaterQuad(img, 0, ring_vertices_, ring_texture_, &ring_argb4444_) ||
+        !LoadWaterQuad(img, 1, splash_vertices_, splash_texture_, &splash_argb4444_))
     {
         log_error("[ripple] map instance lacks required authored ring/splash asset");
         return;
@@ -3767,8 +3780,8 @@ TRippleEffect* TRippleEffect::SpawnForTest(const S3DPoint& origin)
     ripple->SetMapIndex(MapPane.MakeIndex());
     ripple->SetLength(96);
     ripple->ActivateComponents();
-    if (!LoadWaterQuad(img, 0, ripple->ring_vertices_, ripple->ring_texture_) ||
-        !LoadWaterQuad(img, 1, ripple->splash_vertices_, ripple->splash_texture_))
+    if (!LoadWaterQuad(img, 0, ripple->ring_vertices_, ripple->ring_texture_, &ripple->ring_argb4444_) ||
+        !LoadWaterQuad(img, 1, ripple->splash_vertices_, ripple->splash_texture_, &ripple->splash_argb4444_))
     {
         log_error("[ripple] required ring/splash quad or texture unavailable");
         delete ripple;
@@ -3822,6 +3835,7 @@ void TRippleEffect::Advance(double seconds)
                     if (auto* child = SpawnForTest(landing))
                     {
                         child->SetLength(len / 2);
+                        child->SetNativeDomain(native_domain_);
                         spawned_ripples_.emplace_back(child);
                     }
                     drop.dead = true;
@@ -3839,12 +3853,12 @@ void TRippleEffect::Submit(EFxDebugMode debug_mode)
         const float scale = .5f + float(double(frameon_) + tick_fraction_) / 16.0f;
         const int32_t cell = kRippleFrameOf[std::clamp(15 - ripframe_, 0, 15)];
         SubmitWaterQuad(*this, ring_vertices_, ring_texture_, hmm_vec3{},
-                        hmm_vec3{scale, scale, 1.0f}, debug_mode, cell);
+                        hmm_vec3{scale, scale, 1.0f}, debug_mode, cell, native_domain_, ring_argb4444_);
         for (const auto& drop : splash_drops_)
             if (!drop.dead)
                 SubmitWaterQuad(*this, splash_vertices_, splash_texture_,
                                 WaterDropPosition(drop.pos, drop.vel, tick_fraction_),
-                                hmm_vec3{.25f,.25f,.25f}, debug_mode);
+                                hmm_vec3{.25f,.25f,.25f}, debug_mode, -1, native_domain_, splash_argb4444_);
     }
     for (auto& child : spawned_ripples_) child->Submit(debug_mode);
 }
@@ -4295,7 +4309,7 @@ TDripEffect::~TDripEffect() = default;
 void TDripEffect::Initialize()
 {
     if (GetComponent<TFlipbookBillboardComponent>()) return;
-    if (!LoadWaterQuad(dynamic_cast<T3DImagery*>(GetImagery()), 0, drop_vertices_, drop_texture_))
+    if (!LoadWaterQuad(dynamic_cast<T3DImagery*>(GetImagery()), 0, drop_vertices_, drop_texture_, &drop_argb4444_))
     {
         log_error("[drip] map instance lacks required authored droplet asset");
         return;
@@ -4327,7 +4341,7 @@ TDripEffect* TDripEffect::SpawnForTest(const S3DPoint& origin)
     drip->ForcePos(origin);
     drip->SetMapIndex(MapPane.MakeIndex());
     drip->ActivateComponents();
-    if (!LoadWaterQuad(img, 0, drip->drop_vertices_, drip->drop_texture_))
+    if (!LoadWaterQuad(img, 0, drip->drop_vertices_, drip->drop_texture_, &drip->drop_argb4444_))
     {
         log_error("[drip] required authored droplet quad or texture unavailable");
         delete drip;
@@ -4371,6 +4385,7 @@ void TDripEffect::Advance(double seconds)
                     if (auto* ripple = TRippleEffect::SpawnForTest(landing))
                     {
                         ripple->SetLength(ripplesize);
+                        ripple->SetNativeDomain(native_domain_);
                         spawned_ripples_.emplace_back(ripple);
                     }
                     dead_ = true;
@@ -4389,7 +4404,7 @@ void TDripEffect::Submit(EFxDebugMode debug_mode)
     if (!dead_)
         SubmitWaterQuad(*this, drop_vertices_, drop_texture_,
                         WaterDropPosition(drop_pos_, drop_vel_, tick_fraction_),
-                        hmm_vec3{.3f,.3f,.3f}, debug_mode);
+                        hmm_vec3{.3f,.3f,.3f}, debug_mode, -1, native_domain_, drop_argb4444_);
     for (auto& ripple : spawned_ripples_) ripple->Submit(debug_mode);
 }
 

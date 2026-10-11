@@ -2298,9 +2298,12 @@ class TRippleEffect : public TEffect
     // submission never advances the child's simulation a second time.
     void Advance(double seconds);
     void Submit(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
     [[nodiscard]] bool IsAlive() const { return alive_ || !spawned_ripples_.empty(); }
 
   private:
+    bool native_domain_ = false;
+    bool ring_argb4444_ = false, splash_argb4444_ = false;
     struct SWaterDrop
     {
         hmm_vec3 pos = {};
@@ -2389,8 +2392,11 @@ class TDripEffect : public TEffect
     void TickAndSubmitForTest(EFxDebugMode debug_mode);
     void Advance(double seconds);
     void Submit(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
 
   private:
+    bool native_domain_ = false;
+    bool drop_argb4444_ = false;
     int32_t ripplesize = 64;
     int32_t height = 128;
     int32_t period = 48;

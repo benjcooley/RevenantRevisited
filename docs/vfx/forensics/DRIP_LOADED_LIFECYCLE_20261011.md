@@ -71,3 +71,56 @@ Private artifacts under `hard-alpha/`:
 - `drip-source-state/manifest.json`, SHA256
   `160ca075d695ad3ee4f5772f56468639ae33751be4ec0409586ffd201e177bd3`.
 - `drip-loaded-corrected/source-comparison.json`, the1,825-field comparator.
+
+A fresh144-tick loaded replay matches every before/after state, submitted bounds,
+birth/death/request record and original failed map result. Seven common actual
+software PNGs (7/25/49/73/97/121/141) are byte-identical.
+Replay manifest SHA256: `4fa5ad9a4742008164026961a621fd61a94f9ee103bf36b2f5ff16d4f046e36c`.
+
+Actual Metal comparison and scoped water submission
+-------------------------------------------------
+
+The controlled `TDripEffect_LINKED_NO_SPLASH` preview retains the public
+SetParams(20,128,1) continuous parent and managed children. The separate
+`TDripEffect_LINKED_DRAIN` fixture changes the public period before121 and
+retains the real ambient-owner liveness; no lifetime timer is invented.
+Both use the existing real production Drip/Ripple classes. Their optional
+native-domain flag selects the proven original owner/projector. Strict16-bit
+masks R0x0f00/G0x00f0/B0x000f/A0xf000 additionally select the existing software
+ARGB4444 quad policy. Ordinary paths and unknown/1555 formats retain defaults.
+No renderer/shader, color, geometry or controller timing was changed.
+
+Actual loaded submitted geometry additionally matches900 channels: all original
+triangle indices and float32 UVs agree, world positions differ at most
+2.9988321e-6 from compiled production geometry. Native draw states are
+CULL_NONE/source-alpha/ZWRITE_OFF. Drip uses actual FVF112 and Ripple actual
+LVERTEX0x1e2; neither reference substitutes a white carrier or texture.
+
+The36-frame actual Metal film samples ticks1,5,...141 while still advancing
+and rendering at24Hz. Fourteen native/Metal common ticks are selected by their
+recorded simulation times, with no phase adjustment. The full1280×960 images
+and identical fixed4x detail crops retain the droplet, ring growth, five cycles,
+final drain and blank141. Original and corrected Metal bounds differ by about
+one pixel. Low-intensity native green versus Metal gray, sample coverage and
+RGB565 framebuffer quantization remain explicit residuals; exact pixels,
+software/device equivalence, natural map residency, arbitrary randomized
+periods and recursive-splash appearance are not claimed.
+
+The earlier common-policy36-frame film remains the diagnostic control. All36
+same-binary common frames after the change are decoded-RGB identical to that
+baseline. The actual production policy extraction test passes ASan/UBSan with
+strict4444 positive, five format-field mutations,1555 rejection, explicit native
+flags, and ordinary/default world/flag controls. Existing linked composite
+4tests and recursive Ripple4tests also pass. The private application build passes.
+
+Review artifacts under `hard-alpha/drip-review-final/`:
+- `pair-manifest.json`, SHA256
+  `89264ffbcbff8842b57f1b016dd10f484434dda0cc3f4ce50297e0d08bdc2d59`.
+- `whole-life.png`, `detail-1.png` through `detail-4.png`, and14 raw whole pairs.
+- Frozen binary SHA256
+  `b21b2d8613b3c0067e56034845e098ffe032e3365c12fc24596c9f25d6eaceb6`.
+
+The manifest pins the original/Metal manifests, fresh replay, state/geometry
+comparison and common-image regression. Independent root appearance review and
+integrated repeat/gallery remain separate; this source checkpoint does not
+record approval or grant a natural-map claim.

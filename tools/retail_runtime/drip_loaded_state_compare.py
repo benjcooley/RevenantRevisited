@@ -30,8 +30,25 @@ def run(native,source,output):
   expected=[{k:v for k,v in x.items()if k in('tick','id')}for x in b['cases'][-1]['port'][key]]
   checks+=len(expected)
   if a[key]!=expected:errors.append([key,a[key],expected])
+ geometry_checks=0;maximum_position_error=0.0
+ for record in a['records']:
+  if record['tick'] not in a['samples']:continue
+  draws=b['cases'][record['tick']]['port']['draws']
+  if len(record['draws'])!=len(draws):errors.append([record['tick'],'draw_count'])
+  for original,port in zip(record['draws'],draws):
+   assert original['arguments'][3]==4 and original['arguments'][5]==6
+   assert struct.unpack('<6H',bytes.fromhex(original['indices_hex']))==(0,1,3,3,2,0)
+   raw=bytes.fromhex(original['vertices_hex']);matrix=original['matrix']
+   for i in range(4):
+    point=(*struct.unpack_from('<3f',raw,i*32),1)
+    transformed=[sum(point[k]*matrix[j+4*k]for k in range(4))for j in range(3)]
+    error=max(abs(x-y)for x,y in zip(transformed,port['positions'][i]));maximum_position_error=max(error,maximum_position_error)
+    if error>2e-5:errors.append([record['tick'],'native_render_position',error])
+    for x,y in zip(struct.unpack_from('<2f',raw,i*32+24),port['uvs'][i]):
+     if struct.pack('<f',x)!=struct.pack('<f',y):errors.append([record['tick'],'native_render_uv'])
+    geometry_checks+=5
  assert len(a['map_returns'])==5 and all(x['index']==0xffffffff for x in a['map_returns'])
- result=dict(status='pass'if not errors else'fail',checks=checks,errors=errors,native_sha256=sha(native),source_sha256=sha(source),scope='144 genuine parent/standalone child records versus compiled real production methods, exact active float32 fields, all births/ages/deaths; declared managed scheduling. Original empty-map allocations remain−1. Original audio RNG is not reproduced by silent port; fixed period1 physics consumes no random draw, and length20 has no splash recursion.')
+ result=dict(status='pass'if not errors else'fail',checks=checks,geometry_checks=geometry_checks,maximum_position_error=maximum_position_error,errors=errors,native_sha256=sha(native),source_sha256=sha(source),scope='144 genuine parent/standalone child records versus compiled real production methods, exact active float32 fields, all births/ages/deaths; declared managed scheduling. Original empty-map allocations remain−1. Original audio RNG is not reproduced by silent port; fixed period1 physics consumes no random draw, and length20 has no splash recursion.')
  output.write_text(json.dumps(result,indent=2)+'\n');print(result);return result
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('native',type=Path);p.add_argument('source',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();raise SystemExit(run(a.native,a.source,a.output)['status']!='pass')
