@@ -395,7 +395,7 @@ void BuildSpellPieces(const JsonValue& cs, const TFixtureWorld& world)
             auto* player = static_cast<TPlayer*>(chr);
             const auto& q = spec["quickspells"].Items();
             for (size_t i = 0; i < q.size(); i++)
-                player->SetQuickSpell((int32_t)i, const_cast<char*>(q[i].Str().c_str()));
+                player->SetQuickSpell((int32_t)i, q[i].Str().c_str());
         }
         IFixtureChar* fx = world.Fixture(chr);
         if (spec.Has("doing_attack") && !spec["doing_attack"].IsNull())
@@ -491,7 +491,7 @@ std::string SpellTalismans(const Case& c, std::string& error)
             auto* player = static_cast<TPlayer*>(me);
             j.Key("returned").Begin('[');
             for (const JsonValue& q : cs["queries"].Items())
-                j.Value(player->HasTalismans(const_cast<char*>(q.Str().c_str())) ? 1 : 0);
+                j.Value(player->HasTalismans(q.Str().c_str()) ? 1 : 0);
             j.End(']');
         }
         else if (call == "quick-spell")

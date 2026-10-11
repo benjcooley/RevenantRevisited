@@ -439,6 +439,19 @@ enum class ERendererTextureFilter : uint8_t
     Nearest,
 };
 
+// Retail's two 2:1 reductions, done as the reduce pipeline draws
+// (TRenderer::DrawBitmapHalvedToTarget; kCompositeReduceFs has the
+// arithmetic).
+enum class EHalving : uint8_t
+{
+    // 0x004a31a0: the mean of the opaque texels of a block, empty where fewer
+    // than three are opaque (a pouch's thumbnail of the first item in it).
+    OpaqueMean,
+    // 0x00538e40: all four texels, the empty ones black, and empty where
+    // that comes out black (the inventory's icon of the bag it shows).
+    BoxOverBlack,
+};
+
 // Per-vertex layout for rigid meshes (mesh slot 0). Tight-packed, 32 bytes.
 struct SMeshVertex
 {
@@ -974,16 +987,15 @@ public:
                                             int32_t src_w, int32_t src_h,
                                             int32_t target_w, int32_t target_h,
                                             EBitmapDecode decode = EBitmapDecode::Pixels);
-    // The bitmap at half its size: each pixel the mean of the opaque texels
-    // in its 2x2 block (each RGB565 channel the floor of the mean, as retail
-    // takes it), empty where fewer than three of the four are opaque.
-    // Retail's 2:1 reduction (0x004a31a0); a pouch shows the first item inside
-    // it this way.
+    // The bitmap at half its size, each pixel averaged from its 2x2 block of
+    // texels as retail averages it (see EHalving).
     void DrawBitmapHalvedToTarget(PTBitmap bm, int32_t x, int32_t y,
-                                  int32_t target_w, int32_t target_h);
+                                  int32_t target_w, int32_t target_h,
+                                  EHalving halving = EHalving::OpaqueMean);
     // The same of a composed layer (a stacked icon put together first).
     void DrawSurfaceHalvedToTarget(TSurface* surf, int32_t x, int32_t y,
-                                   int32_t target_w, int32_t target_h);
+                                   int32_t target_w, int32_t target_h,
+                                   EHalving halving = EHalving::OpaqueMean);
     void DrawBitmapTintedToTarget(PTBitmap bm, int32_t x, int32_t y,
                                   int32_t target_w, int32_t target_h,
                                   float tr, float tg, float tb, float ta);
@@ -1023,6 +1035,17 @@ public:
                                     int32_t src_x, int32_t src_y,
                                     int32_t src_w, int32_t src_h,
                                     int32_t target_w, int32_t target_h);
+    // A surface's subrect stretched over (dst_x, dst_y, dst_w, dst_h), in
+    // pixels of the active target, sampled with the surface's own filter (a
+    // surface made with SG_FILTER_NEAREST draws point-sampled).
+    void DrawSurfaceStretchedToTarget(TSurface* surf,
+                                      float dst_x, float dst_y, float dst_w, float dst_h,
+                                      int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                                      int32_t target_w, int32_t target_h);
+    // Clips the draws that follow in the active target pass to (x, y, w, h)
+    // until ResetTargetClip (retail's viewport clip, T3DScene 0x00412150).
+    void SetTargetClip(int32_t x, int32_t y, int32_t w, int32_t h);
+    void ResetTargetClip(int32_t target_w, int32_t target_h);
 
     // Dropshadow convenience — draws a darkened silhouette of `bm` at
     // (x + off_x, y + off_y), then the normal bitmap on top. The shadow
@@ -1098,6 +1121,22 @@ public:
     void DrawSolidRectToTarget(int32_t x, int32_t y, int32_t w, int32_t h,
                                int32_t target_w, int32_t target_h,
                                uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+
+    // Indexed triangles of coloured vertices, each vertex's colour (straight
+    // alpha) interpolated across its triangles and blended over the active
+    // target: retail's untextured Gouraud draws (the automap's fog mesh).
+    // Positions are in pixels of the target. At most kMaxColorMeshVertices
+    // vertices and kMaxColorMeshIndices indices a frame, all draws together.
+    struct SColorVertex2D
+    {
+        float x = 0.0f, y = 0.0f;
+        uint8_t r = 0, g = 0, b = 0, a = 0;
+    };
+    static constexpr int32_t kMaxColorMeshVertices = 4096;
+    static constexpr int32_t kMaxColorMeshIndices = 16384;
+    void DrawColoredTrianglesToTarget(const SColorVertex2D* vertices, int32_t vertex_count,
+                                      const uint16_t* indices, int32_t index_count,
+                                      int32_t target_w, int32_t target_h);
 
     // 9-slice blit (A.2d). Treats `bm` as a stretchable panel: the four
     // corner pieces render verbatim at their source size; the four edges
@@ -1250,7 +1289,8 @@ private:
                          int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                          int32_t target_w, int32_t target_h,
                          int32_t src_x, int32_t src_y,
-                         int32_t src_tex_w, int32_t src_tex_h);
+                         int32_t src_tex_w, int32_t src_tex_h,
+                         EHalving halving);
     void CompositeTinted(sg_image img,
                          int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                          int32_t target_w, int32_t target_h,
@@ -1291,6 +1331,10 @@ private:
     sg_pipeline composite_pip_premul_swap = {};   // Swapchain, premultiplied source
     sg_shader   composite_reduce_shader = {};     // the 2:1 reduction
     sg_pipeline composite_pip_reduce_rt = {};     // RGBA8 RT, the 2:1 reduction
+    sg_shader   color_mesh_shader = {};           // DrawColoredTrianglesToTarget
+    sg_pipeline color_mesh_pip_rt = {};           // RGBA8 RT, straight alpha
+    sg_buffer   color_mesh_vbuf = {};             // streamed, appended per draw
+    sg_buffer   color_mesh_ibuf = {};
 
     // ---- Passes ---------------------------------------------------------
     sg_pass default_pass = {};   // G-buffer MRT fill

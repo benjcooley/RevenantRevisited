@@ -172,6 +172,8 @@ class OFFSET
       { if (p) offset = ((ptrdiff_t)p - (ptrdiff_t)this); else offset = 0; }
     void *ptr()
       { return offset ? (void *)((ptrdiff_t)this + offset) : nullptr; }
+    const void *ptr() const
+      { return offset ? (const void *)((ptrdiff_t)this + offset) : nullptr; }
     OFFSET &operator = (uint32_t l)
       { offset = l; return *this; }
     OFFSET &operator = (OFFSET &o)

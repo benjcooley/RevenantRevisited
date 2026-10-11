@@ -7,6 +7,7 @@
 #include "player.h"
 
 #include "armor.h"
+#include "automap.h"
 #include "dialog.h"
 #include "equip.h"
 #include "gameflow.h"
@@ -1144,7 +1145,7 @@ void TPlayer::GetOnYerHog()
 }
 
 // Gets the talisman list for the given quickspell
-char *TPlayer::GetQuickSpell(int32_t button)
+const char *TPlayer::GetQuickSpell(int32_t button) const
 {
     if ((uint32_t)button >= QSPELL_NUM)
         return "";
@@ -1153,7 +1154,7 @@ char *TPlayer::GetQuickSpell(int32_t button)
 }
 
 // Sets the quickspell button
-void TPlayer::SetQuickSpell(int32_t button, char *talismans)
+void TPlayer::SetQuickSpell(int32_t button, const char *talismans)
 {
     if ((uint32_t)button >= QSPELL_NUM)
         return;
@@ -1216,7 +1217,7 @@ bool TPlayer::InvokeQuickSpell(int32_t button)
 // REVSYNC: TPlayer::HasTalismans @ 0x0051b7c0 -- the Spell Pouch's talismans,
 // counted by TALISMAN type name, cover the string: each code (the type's Code
 // stat, case-sensitive) takes one. Codes of no type (M-P) cost nothing.
-bool TPlayer::HasTalismans(char *talismans)
+bool TPlayer::HasTalismans(const char *talismans) const
 {
     bool has = true;
     int32_t len = strlen(talismans);
@@ -1304,9 +1305,8 @@ void SAutoMapRecord::Load(RTInputStream is)
     }
 }
 
-// REVSYNC: automap record Save @ 0x00529830. Retail first had the automap
-// pane fold the level it was showing back into the record (0x0052c5c0);
-// the port's automap pane doesn't keep one yet.
+// REVSYNC: automap record Save @ 0x00529830. The player's save first has
+// the automap fold the level it shows into the record (0x0052c5c0).
 void SAutoMapRecord::Save(RTOutputStream os) const
 {
     os << module.c_str();
@@ -1436,6 +1436,10 @@ void TPlayer::Save(RTOutputStream os)
     for (int32_t count : frags)
         os << count;
 
+    // REVSYNC: 0x00529830 -- the level the automap shows goes into the
+    // record first.
+    if (AutoMap.IsBoundTo(automap))
+        AutoMap.FlushGrid();
     automap.Save(os);
 }
 
@@ -1567,11 +1571,13 @@ void TPlayerManager::BindMainPlayerToScreen()
         MapPane.GetMapPos(pos);
         MapPane.CenterOnPos(pos, MapPane.GetMapLevel());
         Inventory.SetContainer(nullptr);
+        AutoMap.BindPlayer(nullptr);            // REVSYNC: 0x0051ef84
         return;
     }
     MapPane.CenterOnObj(Player);
     Player->RefreshEquip();
     Inventory.SetContainer(Player);
+    AutoMap.BindPlayer(Player);                 // REVSYNC: 0x0051f03e
 }
 
 // Sets the main player for the game

@@ -57,17 +57,27 @@ TButton::TButton(const char *bname, int32_t bx, int32_t by, int32_t bw, int32_t 
     }
 }
 
-// The up or down bitmap at the button's place, less the bitmap's
-// registration point (DM_USEREG: the radial buttons centre theirs).
+// REVSYNC: 0x0042cc30 -- the down bitmap while pressed, the grey one while
+// disabled, else the up one, at the button's place. The draw mode is the
+// button's own; the default takes the bitmap's, less DM_BACKGROUND and
+// DM_USEREG, with DM_NORESTORE, and DM_USEDEFAULT with other flags adds the
+// bitmap's to them. It is keyed only with DM_TRANSPARENT (a bitmap with an
+// alpha track blends through it); with DM_USEREG it sits at its
+// registration point (the radial buttons centre theirs).
 void TButton::Compose(int32_t target_w, int32_t target_h)
 {
     dirty = false;
-    TBitmap* bitmap = down && downbitmap ? downbitmap : upbitmap;
+    TBitmap* bitmap = down && downbitmap ? downbitmap : disabled && greybitmap ? greybitmap : upbitmap;
     if (hidden || !bitmap || !Renderer)
         return;
-    const bool registered = (bitmap->flags & BM_REGPOINT) != 0;
+    uint32_t mode = drawmode == DM_USEDEFAULT ? (bitmap->drawmode & ~(DM_BACKGROUND | DM_USEREG)) | DM_NORESTORE
+                                               : drawmode;
+    if (mode & DM_USEDEFAULT)
+        mode |= bitmap->drawmode;
+    const bool registered = (mode & DM_USEREG) && (bitmap->flags & BM_REGPOINT);
     Renderer->DrawBitmapToTarget(bitmap, x - (registered ? bitmap->regx : 0), y - (registered ? bitmap->regy : 0),
-                                 target_w, target_h);
+                                 target_w, target_h,
+                                 (mode & DM_TRANSPARENT) ? EBitmapDecode::Pixels : EBitmapDecode::Unkeyed);
 }
 
 #define REPEATWAIT      7
@@ -83,9 +93,11 @@ void TButton::Animate(bool draw)
 }
 
 // REVSYNC: 0x0042d0d0 (rectangular: x <= bx < x + w)
+// A disabled button takes no press: retail's hit test doesn't look at flag
+// 4, its pane's press path does.
 bool TButton::OnButton(int32_t bx, int32_t by)
 {
-    if (hidden || (radiogroup >= 0 && down))
+    if (hidden || disabled || (radiogroup >= 0 && down))
         return false;
 
     if (radial)

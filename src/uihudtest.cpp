@@ -7,12 +7,11 @@
 // existing per-panel test modes. The sidebar owns only tab selection state in
 // composed mode; each selected content pane owns and refreshes its own render
 // texture. The rebuilt panes are the play screen's own (the status bar, the
-// bottom bar); --test=ui-hud hosts them beside this (testmodes.cpp).
+// bottom bar, the inventory, the spell pane, the automap); --test=ui-hud
+// hosts them beside this
+// (testmodes.cpp).
 //
-// 2026-05-31: Added Inventory pane initialization so page-offset (#7a),
-// drag visual (#7b), and arrow gray-out (#7e) are visible in ui-hud
-// filmstrips.  The live Equip paperdoll is embedded when the upper
-// sidebar slot is Equip.
+// The live Equip paperdoll is embedded when the upper sidebar slot is Equip.
 //
 // *************************************************************************
 
@@ -28,19 +27,13 @@
 #include "surface.h"
 
 #include "uiequiptest.h"
-#include "uiinventorytest.h"
-#include "uimaptest.h"
 #include "uisidebartest.h"
 #include "uispellbooktest.h"
-#include "uispellcreatetest.h"
 #include "uistatstest.h"
 
 namespace {
 
 bool g_initSidebar   = false;
-bool g_initInventory = false;
-bool g_initMap       = false;
-bool g_initSpell     = false;
 bool g_initStats     = false;
 bool g_initBook      = false;
 bool g_initEquip     = false;
@@ -86,9 +79,6 @@ bool InitializeUIHudMode()
     // by SHudState, matching the retail upper/lower region selectors.
     SafeInit("Stats",         g_initStats,     &InitializeUIStatsMode);
     SafeInit("Spellbook",     g_initBook,      &InitializeUISpellbookMode);
-    SafeInit("Inventory",     g_initInventory, &InitializeUIInventoryMode);
-    SafeInit("Map",           g_initMap,       &InitializeUIMapMode);
-    SafeInit("SpellCreate",   g_initSpell,     &InitializeUISpellCreateMode);
 
     // Equip pane — live 3D paperdoll + equipment slots.
     SafeInit("Equip",         g_initEquip,     &InitializeUIEquipMode);
@@ -132,7 +122,6 @@ void RenderUIHudModeEmbedded()
     if (g_initSidebar)   RenderUISidebarModeEmbedded();
     const SHudState& s = GetHudState();
     const bool upperVisible = (s.sidebarState == HUD_SIDEBAR_OPEN);
-    const bool lowerVisible = (s.sidebarState == HUD_SIDEBAR_OPEN);
     if (g_initStats)
     {
         SetUIStatsModeVisible(upperVisible && s.topSlot == HUD_TOP_STATS);
@@ -142,21 +131,6 @@ void RenderUIHudModeEmbedded()
     {
         SetUISpellbookModeVisible(upperVisible && s.topSlot == HUD_TOP_BOOK);
         RenderUISpellbookModeEmbedded();
-    }
-    if (g_initInventory)
-    {
-        SetUIInventoryModeVisible(lowerVisible && s.bottomSlot == HUD_BOT_INV);
-        RenderUIInventoryModeEmbedded();
-    }
-    if (g_initMap)
-    {
-        SetUIMapModeVisible(lowerVisible && s.bottomSlot == HUD_BOT_MAP);
-        RenderUIMapModeEmbedded();
-    }
-    if (g_initSpell)
-    {
-        SetUISpellCreateModeVisible(lowerVisible && s.bottomSlot == HUD_BOT_SPELL);
-        RenderUISpellCreateModeEmbedded();
     }
     if (g_initEquip)
     {
@@ -174,9 +148,6 @@ void CloseUIHudMode()
         g_cursorOverlayRegistered = false;
     }
     SafeClose("Equip",         g_initEquip,     &CloseUIEquipMode);
-    SafeClose("SpellCreate",   g_initSpell,     &CloseUISpellCreateMode);
-    SafeClose("Map",           g_initMap,       &CloseUIMapMode);
-    SafeClose("Inventory",     g_initInventory, &CloseUIInventoryMode);
     SafeClose("Spellbook",     g_initBook,      &CloseUISpellbookMode);
     SafeClose("Stats",         g_initStats,     &CloseUIStatsMode);
     SafeClose("Sidebar",       g_initSidebar,   &CloseUISidebarMode);

@@ -38,6 +38,8 @@
 #include "automap.h"
 #include "bottombar.h"
 #include "buysell.h"
+#include "inventory.h"
+#include "spellpane.h"
 #include "consoleexec.h"
 #include "cursor.h"
 #include "debugui.h"
@@ -319,13 +321,6 @@ bool TPlayScreen::Initialize()
 
     EditorLoadState();
 
-    // AutoMap loads automap.dat from resources.rvr and allocates the
-    // MapList / ActiveBuf state every other AutoMap method treats as
-    // required-non-null. Has to run after resources.rvr is mounted
-    // (InitGlobals step pre-condition).
-    if (!AutoMap.Initialize())
-        log_warn("[playscreen] AutoMap.Initialize failed; the automap will be empty");
-
     // Retail TPlayScreen::Initialize adds the dialog pane right after the
     // map pane; the screen's pane pass pulses it after the world each tick.
     if (!DialogPane.Initialize())
@@ -373,6 +368,42 @@ bool TPlayScreen::Initialize()
     }
     else
         log_error("[playscreen] Trouble initializing the bottom bar");
+
+    // REVSYNC: 0x0047ab8f -- the inventory, in the side panel's lower slot
+    // while the side panel shows it (UpdateSidePanes). Its container is the
+    // main player's (BindMainPlayerToScreen, below).
+    if (Inventory.Initialize())
+    {
+        AddPane(&Inventory);
+        Inventory.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the inventory");
+
+    // REVSYNC: 0x0047a660 ("Trouble initializing spell pane") -- the spell
+    // pane, in the same slot while the side panel shows the spell tab.
+    if (SpellPane.Initialize())
+    {
+        AddPane(&SpellPane);
+        SpellPane.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the spell pane");
+
+    // REVSYNC: 0x0047a660 -- the automap, in the same slot while the side
+    // panel shows the map tab. It loads AutoMap.dat from resources.rvr,
+    // mounted by now. The main player's explored area comes with
+    // BindMainPlayerToScreen.
+    if (AutoMap.Initialize())
+    {
+        AddPane(&AutoMap);
+        AutoMap.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the automap");
 
     // The session made the main player under the loading screen: the panes
     // show it now that they exist.
@@ -679,6 +710,10 @@ void TPlayScreen::Close()
     BuySellPane.Close();
     buysellrequest = false;
     drawerclose    = false;
+    RemovePane(&SpellPane);
+    SpellPane.Close();
+    RemovePane(&Inventory);
+    Inventory.Close();
     RemovePane(bottombar.get());
     bottombar->Close();
     RemovePane(statusbar.get());
@@ -687,6 +722,7 @@ void TPlayScreen::Close()
     TextBar.Close();                        // REVSYNC: 0x0047b30c
     RemovePane(&DialogPane);
     DialogPane.Close();
+    RemovePane(&AutoMap);
     AutoMap.Close();
     if (g_playHudInitialized)
     {
@@ -804,9 +840,10 @@ void TPlayScreen::Update()
     GameFlow.Session().ProcessRequests();
 
     // The bottom drawer follows its requests (the shop opening or closing),
-    // and the bottom bar the HUD's lower panel.
+    // the bottom bar the HUD's lower panel, the side panes the side panel.
     UpdateDrawer();
     UpdateBottomBar();
+    UpdateSidePanes();
 
     // REVSYNC: 0x0048fda0 / 0x0052b9f0 / 0x0047c2c0 -- under a MODAL_PAUSE
     // modal (the single-player in-game menu and its dialogs) only the modal
@@ -1078,6 +1115,37 @@ void TPlayScreen::UpdateBottomBar()
     }
     if (open == bottombar->IsHidden())
         open ? bottombar->Show() : bottombar->Hide();
+}
+
+// A pane of the side panel's lower slot, at the display's right edge under
+// the 306-tall upper slot: placed and shown while the slot is its, else
+// hidden.
+static void PlaceLowerSlotPane(TPane& pane, bool shown)
+{
+    if (!pane.IsOpen())
+        return;
+    constexpr int32_t kLowerSlotTop = 306;
+    if (shown)
+    {
+        const int32_t dw = Display.Width() > 0 ? Display.Width() : WIDTH;
+        pane.Resize(dw - pane.GetWidth(), kLowerSlotTop, pane.GetWidth(), pane.GetHeight());
+        if (pane.WasResized())
+            pane.PaneResized();
+    }
+    if (shown == pane.IsHidden())
+        shown ? pane.Show() : pane.Hide();
+}
+
+// The side panel's rebuilt panes, in the lower slot while the side panel is
+// open on theirs: the inventory, the spell pane and the automap. (The upper
+// slot's panes are still the HUD harness's.)
+void TPlayScreen::UpdateSidePanes()
+{
+    const SHudState& hud = GetHudState();
+    const bool open = hud.sidebarState == HUD_SIDEBAR_OPEN;
+    PlaceLowerSlotPane(Inventory, open && hud.bottomSlot == HUD_BOT_INV);
+    PlaceLowerSlotPane(SpellPane, open && hud.bottomSlot == HUD_BOT_SPELL);
+    PlaceLowerSlotPane(AutoMap, open && hud.bottomSlot == HUD_BOT_MAP);
 }
 
 // The shop's rect while the drawer holds it: its clicks and moves are its
@@ -1525,11 +1593,14 @@ static void DrawClosestMonsterOverlay()
 // (matching what TTestScreen does for TestModes::Render); DrawBackground
 // only consumes the redraw flag -- no BITMAP.100 backdrop on the new path.
 // REVSYNC: Pulse @ 0x0047b4d0 -- the world, then the screen's panes
-// (0x0048fda0 at its end).
+// (0x0048fda0 at its end), then what the player explored for the automap
+// (0x0047c224: not while a modal pauses the world).
 void TPlayScreen::Pulse()
 {
     Update();
     TScreen::Pulse();
+    if (!ModalHas(MODAL_PAUSE))
+        AutoMap.RecordTravels();
 }
 void TPlayScreen::Animate(bool /*draw*/)
 {
@@ -1727,7 +1798,10 @@ void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
             HandleMouseMoveUIEquipMode(button, x, y);
         if (IsReconstructedHudPoint(x, y) || UIDragState::IsActive())
+        {
+            TScreen::MouseMove(button, x, y);   // the screen's panes, as clicks: the bottom bar, the side panes
             return;
+        }
     }
 
     TScreen::MouseMove(button, x, y);

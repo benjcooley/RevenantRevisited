@@ -240,7 +240,7 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
     //
     // The line metrics (ascent, descent) come from the printable ASCII glyphs
     // alone, as before the atlas held more: an accented capital rises into
-    // GDI's internal leading (kGdiTopLeading in font.cpp) as in retail rather
+    // GDI's internal leading (kGdiTopLeading below) as in retail rather
     // than moving every baseline down.
     for (size_t i = 0; i < codepoints.size(); i++)
     {
@@ -266,6 +266,15 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
             atlas->MapGlyph(cp, uint16_t(i));
         atlas->glyphs.push_back(r);
     }
+
+    // Retail drew this text with GDI DrawTextA (DT_TOP), which hangs a line
+    // from the cell top by the font's ascent less its internal leading: the
+    // visible strokes sit about 2 px above a `cellTop + ascent` baseline
+    // (HUD_REBUILD.md P6 settles it against Win98 GDI captures).
+    constexpr float kGdiTopLeading = 2.0f;
+    atlas->cellBaseline = atlas->ascent - kGdiTopLeading;
+    // GDI's glyphs read heavier than one pass of the oversampled coverage.
+    atlas->doubleStrike = true;
 
     if (Renderer)
     {

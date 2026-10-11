@@ -348,6 +348,161 @@ castable, one word, long names), and the belt: still and animated items at
 several game frames, pouches, amounts (ammo, money), a pouch holding a
 stack.
 
+## 6b. P4 design: the inventory
+
+**What retail draws** (measured with `slots/hud/inventory.py`, 2026-10-10).
+TInventory (`0x0065d4f8`, vtable `0x005a58c0`) is a TButtonPane in the side
+panel's lower slot, (452, 306), 188×174, sharing it with the automap and the
+spell pane. Its art is Inventory.dat (`0x0065c130`). Slot 20 (`0x00537a30`)
+repaints the grid (slot 21, `0x00537a70`) when dirty, then the buttons;
+Animate (`0x00537f90`) draws the animated items.
+
+- `Inventory` (188×174) at (0, 0), opaque.
+- The container's icon, 20×20 at (10, 10), keyed on 0 (`0x00438df0`,
+  DM_TRANSPARENT): `Backpack` for the player's own inventory; for a bag,
+  the bag's inventory icon reduced to 20×20 when the pane opens it
+  (`0x00538e40`). That reduction is not the shelf's: the icon goes on a
+  black 40×40 surface, every 2×2 block is averaged unkeyed (red and blue
+  the floor of the mean, green half the sum of the top five bits) and what
+  comes out black is keyed (`EHalving::BoxOverBlack`).
+- The player's gold, `GetInventoryAmount("Gold")`, as `"%d$"` in the
+  "Gold" bitmap font (retail's font 9; the forensics' "GoldMed" was wrong),
+  left-aligned at (80, 13) (the font draws `$` as "gp"); "0$" with no gold.
+  Then `GoldPile` (32×32) at (40, 5) with alpha. The pile is a fixed
+  bitmap, not a stack.
+- A bitmap font hangs a line from its 'A': the font table gives it
+  StartHeight('A') as its ascent (`0x004ac990`), and a glyph's top is at
+  y + ascent − StartHeight(ch). Each glyph is one blit (`0x004b5820`) in
+  the font's draw mode, DM_TRANSPARENT | DM_ALIAS: the keyed data and the
+  alias buffer's edge pixels, each at its own coverage.
+- Twelve cells at (8 + 45·col, 42 + 44·row), column-major: slot
+  first + col·3 + row. Each is the shared item cell, exactly the shelf's
+  recipe (`TInvSlot`): the icon, the amount over 1 in "Numbers", a pouch's
+  slot-0 item halved with its count in white "Small".
+- Two arrow buttons, "scrollleft" at (140, 11) and "scrollright" at (161, 12),
+  24×24 with alpha (DM_USEDEFAULT | DM_ALPHA: DM_USEDEFAULT adds the
+  bitmap's mode to the flags, it doesn't replace them), from
+  `InvArwL{U,D,G}` / `InvArwR{U,D,G}`. A click moves
+  the first slot one column (3), within 0..243 (`0x00537520`); an arrow that
+  can't move is grey.
+- The pane's container (+0x17c) is the main player's, set as the player
+  becomes main (`0x0051eef0`, on the play screen only); SetContainer
+  (`0x005391a0`) builds the bag icon and goes back to the first page.
+  Clicking a bag opens it, clicking the container icon climbs back to its
+  owner.
+
+**Port.** `TInventory` (`src/inventory.*`) evolves into retail's pane: a
+`TButtonPane` with the two arrows, twelve `TInvSlot` cells and the art
+above; it owns its first slot (retail +0x188), which the side panel's drag
+hit-tests read until the drag moves into the pane. `TPlayScreen` hosts it in
+the lower slot while the side panel shows the inventory. The A/B is
+`hud_ab.py inventory` over `--test=ab-inventory`: gold amounts, stacks and
+pouches, animated items, pages, an opened bag.
+
+## 6c. P4 design: the spell pane
+
+**What retail draws** (measured with `slots/hud/spellpane.py` and the
+disassembly, 2026-10-10). TSpellPane (`0x006661b0`, vtable `0x005a5978`)
+is a TButtonPane in the side panel's lower slot, (452, 306), 188×174:
+the player puts a spell together from the talismans in the spell pouch and
+casts it. Its art is SpellPane.dat (`0x0065a574`); the talismans' plates
+and icons are GameData's (playscrn.dat). Slot 20 (`0x005435c0`) repaints
+the background (slot 21, `0x005435f0`) when dirty, then the buttons.
+
+- `spellconstr` (188×174) at (0, 0), DM_BACKGROUND: unkeyed.
+- The talismans in the player's "spell pouch" (the lookup of "spellpouch"
+  after it is thrown away, retail's bug as in the snapshot), in talisman
+  type order, from (33, 10): each a `%scandy` plate (28×26) and its icon
+  (24×21), keyed, each first in black 2 px right (the plate) or 1 px right
+  and down of it (the icon) -- a Put with a colour, DM_CHANGECOLOR. Plate
+  at (x, y − 2), icon at (x + 2, y + 1); the pressed talisman 1 px down
+  and right. With names on, the name (the dialog list's line for it, else
+  the type name) in "Small", white, shadowed, at (x + 29, y + 10).
+  The next goes 30 px right, 60 with names; past x 130 it wraps to
+  33, 30 px down. Rows from y 126 are not drawn. With names on, the
+  talismans before the first line (+0x180) are skipped.
+- Buttons (`0x005432a0`): "spell" (24, 136) 142×36, SpellInvD/U, the
+  talisman button (vtable `0x005b9bf0`): the construct spell (quick spell
+  0) as glyphs `S<Talisman>` (32×32, DM_ALPHA) from x + 7 + (5 − n)·14,
+  25 px apart, at y + 5, 1 px down while pressed (`0x005424a0`); "back"
+  (164, 143) 22×20, SpellBackD/U, key VK_BACK; "up" (166, 82) and "down"
+  (166, 112) 20×26, SpellArwU*/D*, repeating at 8; "min" (166, 37)
+  18×18, SpellNameD/U with names on, SpellTalD/U off.
+- Up shows with names on and a first line ≥ 1; down with names on and more
+  than six talismans from the first line; hidden, they are released.
+- A button's draw mode is its own (+0xd4); the default takes the bitmap's
+  without DM_BACKGROUND / DM_USEREG, with DM_NORESTORE (`0x0042cc30`). So
+  these buttons are unkeyed: keying follows DM_TRANSPARENT, here too.
+
+**What it does.** A press on a talisman (x 33..162, y 10..135, the same
+layout, 30×30 cells) picks it; moving off and back follows it; the release
+on it adds its code to the construct spell (`0x00543b40`, `0x00543c40`,
+`0x00543ca0`) -- at most 5; if the player can't cast the result
+(`0x0051b7c0`) the talisman comes off again and the text bar says
+SPLOUTTAL (`0x00542640`). Only while the player has control. "spell" casts
+the construct spell (`0x0051b5d0`) and has the spellbook find it by its
+talismans (`0x00544fb0`); "back" drops the last talisman; up and down move
+the first line by two, not below 0; "min" toggles the names.
+
+**Port.** `TSpellPane` (`src/spellpane.*`) becomes retail's pane, shaped
+like TInventory: Pulse binds the pouch's talismans and the construct
+spell, marking the pane dirty on a change and setting the arrows and the
+names art; ComposeBackground draws from that; the layout is one function
+for the draw and the hit test. `TTalismanButton` draws the bound spell.
+`TButton` takes retail's draw-mode rule. `TPlayScreen` hosts the pane in
+the lower slot while the side panel shows the spell tab. The A/B is
+`hud_ab.py spellpane` over `--test=ab-spellpane`: no pouch, an empty one,
+a few talismans and all twelve with names on and off, first lines, spells
+of 0..5 talismans, a pressed talisman and a pressed "spell".
+
+## 6d. P4 design: the automap
+
+**What retail draws and does** (`docs/ui/forensics/AutoMapPane_RETAIL.md`,
+read from the disassembly; the frame confirmed with `slots/hud/automap.py`,
+2026-10-10). TAutoMap (`0x0065b4f0`, vtable `0x005a5658`) is a TPane in the
+side panel's lower slot, (452, 306), 188×174, drawn entirely through
+T3DScene's overlay quads (`0x00414d70`, point-sampled: TEXTUREMAG/MIN
+NEAREST at `0x00414ab0`) in the texture pass (slot 7, `0x0052a5f0`):
+
+1. The map body (`0x0052a830`): a 320×320 mosaic holding the 5×5 ring of
+   64×64 module tiles (`<module>\automaps\<level>_<x>_<y>.bmp`, each in its
+   slot of the torus, a missing one black), scaled by zoom · 144 / 256 and
+   drawn four times over, clipped to the 144×144 window at (20, 18).
+2. With fog of war on (`0x005d7a6c`, toggled by `fow`): the living, visible
+   characters within 512 px of the player as 4×4 markers from the Marker
+   sheet (frame across, every five pulses; player / enemy / other down),
+   then the fog (`0x0052b520`): a 10×10 grid of black vertices, alpha the
+   share of unexplored 128 px cells each samples, drawn as Gouraud
+   triangles blended by alpha.
+3. The frame (`0x0052bdb0`): `Amap` at (0, 0); `PlusSel` at (8, 3) while
+   "+" is held, `MinusSel` at (144, 3) while "−" is. (The forensics'
+   "−0x70" was 0x90 read as a signed char; the harness drew both always,
+   "−" at x −112.)
+
+Each pulse (`0x0052a280`): ±10 zoom while a button is held, 100..300; the
+window follows the camera (the map view's centre ÷ 8), or keeps its centre
+through a zoom once dragged off it; the tile ring and the fog catch up.
+After the panes pulse, RecordTravels (`0x0052b9f0`) moves the ring with
+the scroll and, when the player moved, explores ±512 px around the player
+in the level's visgrid, which lives in the player's automap record
+(TPlayer::automap, saved with the player). Input (`0x0052c1a0`,
+`0x0052c2c0`): "+" / "−" held to zoom; a press in the ring and a drag
+scroll the map a mosaic px a pointer px; a right release returns to the
+camera.
+
+**Port.** `TAutoMap` (`src/automap.*`; the 1998 pane is in
+`attic/src/automap.*`) is retail's pane on the GPU: the mosaic is a
+nearest-filtered render target stamped a tile at a time
+(`TSurface::ContinuePass`), the body four stretched quads under a target
+clip (`TRenderer::DrawSurfaceStretchedToTarget`, `SetTargetClip`), the fog
+coloured triangles (`DrawColoredTrianglesToTarget`), all moved half a pixel
+for D3D7's integer pixel centres. `TAutoMapGrid` is the visgrid with its RLE
+codec. `TPlayScreen` hosts the pane in the lower slot for the map tab and
+calls RecordTravels after its pane pass; `BindMainPlayerToScreen` binds the
+main player's record (`0x0052c3d0`) and the player's save folds the shown
+level in first (`0x0052c5c0`). `hud_ab.py automap` compares the frame with
+the buttons released and held.
+
 ## 7. Status
 
 - 2026-10-07: survey done; retail pipeline verified (§3); P0 started.
@@ -397,7 +552,7 @@ stack.
     - Retail's "Small" is `CreateFontA(+12, "Arial")`: a 12 px cell, about
       9 px em. The port's "Small" atlas is 12 px by stb's
       ScaleForPixelHeight, about 10.7 px em.
-    - `font.cpp`'s `kGdiTopLeading = 2` puts glyphs 2 px above the cell top,
+    - `ttfatlas.cpp`'s `kGdiTopLeading = 2` puts glyphs 2 px above the cell top,
       where GDI's DT_TOP never draws (the A/B's text overflow).
     - Both change every pane's text, so they get settled together against
       Win98 GDI captures.
@@ -456,3 +611,74 @@ stack.
       (`0x0043a820`). P4, with the other item panes.
     - Revisited at 16:9: the shelf shows (w − 220) / 45 boxes, more than the
       belt's 11 slots at wide widths. A layout question for P7.
+- 2026-10-10: **P4: the inventory done (still frames).**
+  - `TInventory` is retail's pane (§6b), hosted by `TPlayScreen` in the side
+    panel's lower slot and bound to the main player as the screen starts
+    (`TPlayerManager::BindMainPlayerToScreen`: the session loads the game,
+    and makes its player main, under the loading screen).
+    `--test=ui-inventory` and `--test=ab-inventory` are thin hosts over
+    `uipanehost.*`, which the bottom bar's hosts share.
+  - `hud_ab.py inventory`: 14/14 cases with no defects (gold 0 / 1 / 64 /
+    large, stacks, pouches, animated frames, pages 0 / 3 / 12 / last, an
+    opened bag). Bottom bar 19/19 and status bar 20/20 still.
+  - What the A/B found and fixed:
+    - The gold readout sat a row high: bitmap fonts took the GDI fonts'
+      top leading. A font atlas now carries its own cell baseline
+      (`TextCellBaseline`): a bitmap font's 'A', a TrueType stand-in's
+      ascent less 2 (P6 still settles that one).
+    - Bitmap glyphs lacked their anti-aliased edges: the font atlas
+      decodes them as retail draws them (`EBitmapDecode::PixelsAndAlias`),
+      blitted once (the double strike is the TrueType stand-ins').
+    - The backpack is keyed on 0, not on magenta alone.
+    - The bag's icon takes retail's second reduction (`EHalving::BoxOverBlack`).
+  - Fixture fixes: the alpha mask follows DM_USEDEFAULT as retail does and
+    takes the glyphs' alias edges (same 5-bit tables, same tolerance); the
+    pane gets its container through SetContainer, which builds the bag icon.
+  - Open (P4, interactions): retail's clicks and drags (`0x00538210`:
+    opening a bag, climbing out, use and swap) are still the side panel
+    harness's hit tests.
+- 2026-10-10: **P4: the spell pane done** (it never worked in the port).
+  - `TSpellPane` is retail's pane (§6c), hosted by `TPlayScreen` in the
+    lower slot for the spell tab, with its interactions: picking talismans
+    (press, follow, release), back, the page arrows, the names toggle, and
+    casting the construct spell. `--test=ui-spellcreate` hosts it for the
+    demo player with a pouch of talismans; `--test=ab-spellpane` is the
+    A/B's host. The 679-line harness pane is gone.
+  - `hud_ab.py spellpane`: 15/15 cases with no defects (no pouch, an empty
+    one, a few talismans, all twelve with names and without, first lines,
+    spells of 1..5 talismans, lower-case codes, a pressed talisman, the held
+    "spell" button). Inventory 14/14, bottom bar 19/19, status bar 20/20.
+  - What the A/B found and fixed:
+    - `TButton` puts its bitmap as retail does (`0x0042cc30`): its own draw
+      mode, by default the bitmap's less DM_BACKGROUND / DM_USEREG; keyed
+      only with DM_TRANSPARENT. The spell pane's buttons are unkeyed; the
+      inventory's arrows say DM_ALPHA themselves.
+    - The talisman names hang from a baseline: retail's text-at-a-point
+      (`0x00438ed0`) draws with flag 0x80.
+    - The A/B's text mask was too generous: a name laid out in an open-ended
+      rect (x, y, x + 10000, y + 10000) masked everything right of and
+      below it. A GDI call's cell is now bounded by its font's height a
+      character across and a line down (`text_cell`).
+  - Retail bug, reported, not reproduced: with no spell pouch the page
+    arrows show with nothing to page (the background sets them only while
+    there is a pouch). The fixture fixes it (`spellpane.py`).
+  - The quick-spell API is const-correct (`TPlayer::GetQuickSpell`,
+    `SetQuickSpell`, `HasTalismans`).
+  - Open: casting has the spellbook find the spell (`0x00544fb0`), with the
+    spellbook pane (P4).
+- 2026-10-10: **P4: the automap done** (its buttons and layout had long been
+  broken, its map never shown).
+  - `TAutoMap` is retail's pane (§6d), hosted by `TPlayScreen` in the lower
+    slot for the map tab: the module's tiles around the camera, the fog
+    over the unexplored area, the markers, the frame; hold-to-zoom, drag to
+    scroll, right-click back to the camera; the explored area recorded into
+    the player's save. The `fow` console command works. `--test=ui-map` /
+    `ab-automap` are thin hosts; the 409-line harness is gone.
+  - `hud_ab.py automap`: 4/4 cases, every pixel exact (the frame, "+" and
+    "−" released and held). The rest of the HUD A/B still clean.
+  - Found on the way: the play screen kept pointer moves over the HUD from
+    the screen's panes (clicks reached them), so the side panes never saw a
+    drag; it routes them now.
+  - Open: the map body's A/B needs a level in the fixture (the visgrid,
+    the module's tiles, characters to mark) and OverlayRaster scaled quads
+    and triangles; the mosaic texture's format (565 or 4444) is part of it.

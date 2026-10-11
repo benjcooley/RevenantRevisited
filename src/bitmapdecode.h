@@ -27,11 +27,17 @@ enum class EBitmapDecode : uint8_t
     // bitmap retail keys on the display's own key first, so its stored key
     // (often 0, black) stays opaque (the quick-spell circles, 0x00542ab3).
     MagentaKeyed,
-    // The BM_ALIAS RLE coverage buffer, for the draws that want the
-    // anti-aliased form (the cursor's ground shadow, soft text shadows,
+    // The BM_ALIAS RLE coverage buffer alone, for the draws that want only
+    // the anti-aliased form (the cursor's ground shadow, soft text shadows,
     // glows); the data array when the bitmap has none. Sprites such as the
     // cursor carry both and draw from the data array otherwise.
     Alias,
+    // The data array keyed as Pixels, with the alias buffer's pixels -- the
+    // anti-aliased edge around the keyed shape, each with its own colour
+    // and coverage -- over it: a DM_TRANSPARENT | DM_ALIAS draw, as retail
+    // draws a bitmap font's glyphs (FONT.DEF's default draw mode; the glyph
+    // blit 0x004b5820 writes both).
+    PixelsAndAlias,
     // A 15/16-bit bitmap as one of retail's ARGB4444 overlay textures holds
     // it after it went in through a 16-bit surface (the HUD's portraits):
     // only magenta is transparent -- the surface's key, so the bitmap's own

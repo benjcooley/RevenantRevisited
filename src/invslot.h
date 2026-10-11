@@ -59,6 +59,13 @@ struct SInvSlotStyle
     int32_t pouchItemX = 0;         // a pouch: its slot-0 item at half size
     int32_t pouchItemY = 0;
     SInvSlotText pouchCount;        //          and how many items it holds
+
+    // The cell retail's shelf and inventory both draw (0x0052ca70,
+    // 0x00537a70): the amount right-aligned across the cell's top in
+    // "Numbers" (FONT.DEF's red), shadowed; a pouch's slot-0 item halved 20
+    // down, and its count beside it in white "Small", shadowed, 20 wide at
+    // (20, 26). A font FONT.DEF lacks is null.
+    [[nodiscard]] static SInvSlotStyle Retail();
 };
 
 // What a cell shows of its item. A pane compares it from one pulse to the

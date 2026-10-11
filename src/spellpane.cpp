@@ -4,436 +4,438 @@
 // *                     SpellPane.cpp - Spell Pane                        *
 // *************************************************************************
 
-#include "revenant.h"
+#include "spellpane.h"
+
 #include "bitmap.h"
-#include "character.h"
 #include "dialog.h"
-#include "display.h"
+#include "font.h"
 #include "fonttable.h"
 #include "logging.h"
-#include "mappane.h"
 #include "multi.h"
+#include "object.h"
 #include "player.h"
 #include "playscreen.h"
 #include "renderer.h"
 #include "spell.h"
-#include "font.h"
-#include "spellpane.h"
 #include "textbar.h"
 #include "uidragstate.h"
 
+#include <algorithm>
+#include <cctype>
+#include <cstring>
 #include <iterator>
 #include <string>
 
 extern TObjectClass TalismanClass;
 
-char *Old[] =
-{ "Sun", "Life", "Ocean", "Law", "Soul", "Stars", "Death", "Chaos", "Sky", "Earth", "Ward", "Moon", nullptr };
+namespace {
+
+// REVSYNC: 0x005e4f80 -- the talismans' art names, in type order: GameData's
+// "<name>" icon and "<name>candy" plate, SpellPane.dat's "S<name>" glyph
+// (0x005e4fb4).
+constexpr const char *kTalismanArtNames[kNumTalismanTypes] = {
+    "Sun", "Life", "Ocean", "Law", "Soul", "Stars", "Death", "Chaos", "Sky", "Earth", "Ward", "Moon",
+};
+
+// REVSYNC: 0x00542640 / 0x005424a0 -- the spell pane keeps a spell of 5
+// talismans at most.
+constexpr size_t kSpellTalismans = 5;
+
+// REVSYNC: 0x005424a0 -- the glyphs from x + glyphleft + (5 - n) * 14, 25
+// apart, at y + 5, a pixel down while pressed.
+constexpr int32_t kGlyphShift = 14;
+constexpr int32_t kGlyphStep = 0x19;
+constexpr int32_t kGlyphTop = 5;
+
+}  // namespace
 
 // *******************
 // * TTalismanButton *
 // *******************
 
-void TTalismanButton::Compose(int32_t target_w, int32_t target_h)
+TTalismanButton::TTalismanButton(const char *bname, int32_t bx, int32_t by, int32_t bw, int32_t bh, void (*bfunc)(),
+                                 TBitmap *dbm, TBitmap *ubm, const TTalismanArt *talismanart, int32_t left)
+    : TButton(bname, bx, by, bw, bh, 0, bfunc, dbm, ubm, false, false, true)
+    , art(talismanart)
+    , glyphleft(left)
 {
-    TButton::Compose(target_w, target_h);
-    if (hidden || !Player || !Renderer)
-        return;
-
-    char spell[SPELLSIZE + 1];
-    strncpyz(spell, Player->GetQuickSpell(quickspellid), MAXTALISMANLEN);
-    const int32_t len = int32_t(strlen(spell));
-    const int32_t start = x + xoffset + ((SPELLSIZE - len) * 11) - 4;
-
-    for (int32_t i = 0; i < len; i++)
-        for (int32_t t = 0; t < TalismanClass.NumTypes(); t++)
-            if (toupper(spell[i]) == toupper(TalismanClass.GetStat(t, "Code")))
-                Renderer->DrawBitmapToTarget(GameData->Bitmap(Old[t]), start + i * 23, y + 3 + (down ? 1 : 0),
-                                             target_w, target_h);
 }
 
-void TTalismanButton::AddTalisman(char t)
+void TTalismanButton::SetSpell(const std::string &talismans)
 {
-    if (!Player)
+    if (talismans == spell)
         return;
-
-    char spell[SPELLSIZE + 1];
-    strncpyz(spell, Player->GetQuickSpell(quickspellid), MAXTALISMANLEN);
-    int32_t len = strlen(spell);
-
-    if (len < SPELLSIZE)
-    {
-        // add it
-        spell[len++] = t;
-        spell[len] = '\0';
-                
-        // now check for if you got that many
-        if (!HasTalismans())
-        {
-            len--;
-            spell[len] = '\0';
-            TextBar.Print("No more talismans of that type.");
-        }
-
-        SetDirty();
-    }
-    
-    Player->SetQuickSpell(quickspellid, spell);
-}
-
-void TTalismanButton::Backspace()
-{
-    if (!Player)
-        return;
-
-    char spell[SPELLSIZE + 1];
-    strncpyz(spell, Player->GetQuickSpell(quickspellid), MAXTALISMANLEN);
-    int32_t len = strlen(spell);
-
-    if (len > 0)
-    {
-        len--;
-        spell[len] = '\0';
-        SetDirty();
-    }
-
-    Player->SetQuickSpell(quickspellid, spell);
-}
-
-void TTalismanButton::Clear()
-{
-    if (!Player)
-        return;
-
-    Player->SetQuickSpell(quickspellid, "");
-}
-
-char *TTalismanButton::GetSpell()
-{
-    if (!Player)
-        return "";
-
-    return Player->GetQuickSpell(quickspellid);
-}
-
-void TTalismanButton::SetSpell(char *talismans)
-{
-    if (!Player)
-        return;
-
-    Player->SetQuickSpell(quickspellid, talismans);
-
+    spell = talismans;
     SetDirty();
 }
 
-// Checks to see if player has talismans for this spell
-bool TTalismanButton::HasTalismans()
+// REVSYNC: 0x005424a0 -- the button, then each talisman's glyph with alpha
+// (every type whose code matches, case aside).
+void TTalismanButton::Compose(int32_t target_w, int32_t target_h)
 {
-    if (!Player)
-        return false;
-
-    return Player->HasTalismans(Player->GetQuickSpell(quickspellid));
-}
-
-void TTalismanButton::Invoke()
-{
-    if (Player)
-        Player->InvokeQuickSpell(quickspellid);
+    TButton::Compose(target_w, target_h);
+    if (hidden || !art || !Renderer)
+        return;
+    const size_t count = (std::min)(spell.size(), kSpellTalismans);
+    int32_t left = x + glyphleft + static_cast<int32_t>(kSpellTalismans - count) * kGlyphShift;
+    const int32_t top = y + kGlyphTop + (down ? 1 : 0);
+    for (size_t i = 0; i < count; ++i, left += kGlyphStep)
+        for (const STalismanArt &talisman : *art)
+            if (talisman.glyph && std::toupper(static_cast<unsigned char>(talisman.code))
+                                      == std::toupper(static_cast<unsigned char>(spell[i])))
+                Renderer->DrawBitmapToTarget(talisman.glyph, left, top, target_w, target_h, EBitmapDecode::Unkeyed);
 }
 
 // **************
 // * TSpellPane *
 // **************
 
-void BtnSpellPane()
+namespace {
+
+// REVSYNC: 0x005432a0 -- the buttons: "spell" (the talisman button, its
+// glyphs 7 in), "back" (key VK_BACK), "up" and "down" (repeating at 8),
+// "min".
+constexpr int32_t kRepeatRate = 8;
+constexpr int32_t kSpellGlyphLeft = 7;
+enum EButton : int32_t { kSpell, kBack, kUp, kDown, kNames, kNumButtons };
+struct SButton
 {
-    SpellPane.Invoke();
-}
+    const char *name;
+    int32_t x, y, w, h;
+    uint16_t key;
+    int32_t repeat;
+    const char *down;
+    const char *up;
+};
+constexpr SButton kButtons[kNumButtons] = {
+    { "spell", 0x18, 0x88, 0x8e, 0x24, 0, 0, "SpellInvD", "SpellInvU" },
+    { "back", 0xa4, 0x8f, 0x16, 0x14, VK_BACK, 0, "SpellBackD", "SpellBackU" },
+    { "up", 0xa6, 0x52, 0x14, 0x1a, 0, kRepeatRate, "SpellArwUD", "SpellArwUU" },
+    { "down", 0xa6, 0x70, 0x14, 0x1a, 0, kRepeatRate, "SpellArwDD", "SpellArwDU" },
+    { "min", 0xa6, 0x25, 0x12, 0x12, 0, 0, "SpellNameD", "SpellNameU" },
+};
+void (*const kButtonFunctions[kNumButtons])() = {
+    [] { SpellPane.Invoke(); },
+    [] { SpellPane.RemoveTalisman(); },
+    [] { SpellPane.Scroll(-1); },
+    [] { SpellPane.Scroll(1); },
+    [] { SpellPane.ToggleNames(); },
+};
+// The names button's art: names on, names off (0x005435f0).
+constexpr const char *kNamesOn[2] = { "SpellNameD", "SpellNameU" };
+constexpr const char *kNamesOff[2] = { "SpellTalD", "SpellTalU" };
 
-void BtnSpellBook()
-{
-}
+// REVSYNC: 0x005435f0 / 0x00543ca0 -- the list: from (33, 10), 30 px a
+// talisman (60 with names), wrapping past x 130 to 30 px down; rows from y
+// 126 left out. Hits fall in (33..162, 10..135), a talisman 30 x 30.
+constexpr int32_t kListLeft = 0x21;
+constexpr int32_t kListTop = 0xa;
+constexpr int32_t kListStep = 0x1e;
+constexpr int32_t kListWrap = 0x82;
+constexpr int32_t kListBottom = 0x7e;
+constexpr int32_t kHitRight = 0xa3;
+constexpr int32_t kHitBottom = 0x88;
+constexpr int32_t kTalismansPerLine = 2;
+constexpr int32_t kLinesShown = 6;          // "down" shows past this many from the first line
 
-void BtnSpellAdd()
-{
-}
+// REVSYNC: 0x005435f0 -- a talisman's plate at (x, y - 2) and icon at
+// (x + 2, y + 1), keyed, each over its black silhouette (a Put with a colour)
+// 2 px right (the plate) or 1 px right and down (the icon); pressed, both
+// sit 1 px down and right. Its name from (x + 29, y + 10), a baseline
+// (0x00438ed0 draws with flag 0x80).
+constexpr int32_t kNameLeft = 0x1d;
+constexpr int32_t kNameTop = 0xa;
 
-void BtnSpellBack()
-{
-    SpellPane.RemoveTal();
-}
+constexpr const char *kPouchName = "spell pouch";   // retail's second look, "spellpouch", is thrown away
 
-void BtnSpellDown()
-{
-    SpellPane.Scroll(1);
-}
+}  // namespace
 
-void BtnSpellUp()
-{
-    SpellPane.Scroll(-1);
-}
+TSpellPane::TSpellPane() : TButtonPane(0, 0, kWidth, kHeight) {}
+TSpellPane::~TSpellPane() = default;
 
-void BtnSpellMin()
-{
-    SpellPane.ToggleTalismanNames();
-}
-
-#define REPEATRATE      8
-
+// REVSYNC: 0x005432a0. Its host places it in the side panel's lower slot.
 bool TSpellPane::Initialize()
 {
-    TButtonPane::Initialize();
-
-    NewButton(new TTalismanButton("spell",  24,  95, 120, 34, 0, BtnSpellPane, GameData->Bitmap("spellinvokedown"), GameData->Bitmap("spellinvokeup"), false, false, true, QSPELL_CONSTRUCT));
-    NewButton("book",   3,   62, 16, 14, 0, BtnSpellBook, GameData->Bitmap("spellbookdown"), GameData->Bitmap("spellbookup"));
-    NewButton("add",    3,   84, 16, 14, 0, BtnSpellAdd, GameData->Bitmap("spelladddown"), GameData->Bitmap("spelladdup"));
-    NewButton("back",   142, 94, 12, 11, VK_BACK, BtnSpellBack, GameData->Bitmap("spellbackdown"), GameData->Bitmap("spellbackup"));
-    NewButton("down",   149, 83, 16, 14, 0, BtnSpellDown, GameData->Bitmap("spelldowndown"), GameData->Bitmap("spelldownup"), false, false, false, -1, REPEATRATE);
-    NewButton("up",     149, 66, 16, 14, 0, BtnSpellUp, GameData->Bitmap("spellupdown"), GameData->Bitmap("spellupup"), false, false, false, -1, REPEATRATE);
-    NewButton("min",    149, 45, 16, 14, 0, BtnSpellMin, GameData->Bitmap("spellmindown"), GameData->Bitmap("spellminup"));
-
+    if (IsOpen())
+        return true;
+    archive.reset(TMulti::LoadMulti("SpellPane.dat"));
+    namefont = FontTable ? FontTable->Atlas("Small") : nullptr;
+    if (!archive || !GameData || !namefont)
+    {
+        log_error("[spellpane] SpellPane.dat, GameData or the \"Small\" font is missing");
+        archive.reset();
+        return false;
+    }
+    background = archive->Bitmap("spellconstr");
+    for (int32_t type = 0; type < kNumTalismanTypes; ++type)
+    {
+        const std::string name = kTalismanArtNames[type];
+        STalismanArt &talisman = art[type];
+        talisman.code = type < TalismanClass.NumTypes() ? static_cast<char>(TalismanClass.GetStat(type, "Code")) : 0;
+        talisman.plate = GameData->Bitmap((name + "candy").c_str());
+        talisman.icon = GameData->Bitmap(name.c_str());
+        talisman.glyph = archive->Bitmap(("S" + name).c_str());
+    }
+    if (!TButtonPane::Initialize())
+        return false;
+    for (int32_t i = 0; i < kNumButtons; ++i)
+    {
+        const SButton &b = kButtons[i];
+        TBitmap *down = archive->Bitmap(b.down);
+        TBitmap *up = archive->Bitmap(b.up);
+        NewButton(i == kSpell ? new TTalismanButton(b.name, b.x, b.y, b.w, b.h, kButtonFunctions[i], down, up, &art,
+                                                    kSpellGlyphLeft)
+                              : new TButton(b.name, b.x, b.y, b.w, b.h, b.key, kButtonFunctions[i], down, up, false,
+                                            false, false, -1, b.repeat));
+    }
+    talismans.clear();
+    heldtypes = 0;
     shownames = true;
-    startline = 0;
-    clickedtal = -1;
-
-    Update();
-
+    firstline = 0;
+    pressed = -1;
+    onpressed = false;
+    RefreshButtons();
+    SetDirty(true);
     return true;
 }
 
-#define TAL_STARTX      25
-#define TAL_STARTY      9
-#define TAL_WIDTH       30
-#define TAL_HEIGHT      30
-#define TAL_WRAPWIDTH   130
-#define TAL_WRAPHEIGHT  76
-#define TAL_NONAMEGAP   30
-
-void TSpellPane::DrawBackground()
+void TSpellPane::Close()
 {
-    bool wasdirty = IsDirty();
-
-    if (wasdirty)
-    {
-        Display.Put(0, 0, GameData->Bitmap("spell"), DM_BACKGROUND);
-
-        RedrawButtons();
-
-        if (Player)
-        {
-            // find their spell pouch
-            TObjectInstance* pouch = Player->FindObjInventory("spell pouch");
-            if (!pouch)
-                TObjectInstance* pouch = Player->FindObjInventory("spellpouch");
-            if (pouch)
-            {
-                int32_t x = TAL_STARTX, y = TAL_STARTY;
-
-                SColor color = { 0, 0, 0 };
-
-                int32_t line = 0;
-                for (int32_t i = 0; i<TalismanClass.NumTypes(); i++)
-                {
-                    char *name = TalismanClass.GetObjType(i)->name;
-
-                    if (pouch->FindObjInventory(name))
-                    {
-                        if ((line++ >= startline || !ShowTalismanNames()) && y < TAL_WRAPHEIGHT)
-                        {
-                            int32_t add = 0;
-                            if (onclickedtal && i == clickedtal)
-                                add = 1;
-
-                            char buf[80];
-                            sprintf(buf, "%scandy", Old[i]);
-                            Display.Put(x+2, y-2+2, GameData->Bitmap(buf), DM_BACKGROUND | DM_TRANSPARENT, &color);
-                            Display.Put(x+add, y-2+add, GameData->Bitmap(buf), DM_BACKGROUND | DM_TRANSPARENT);
-                            Display.Put(x+2+1, y+1+1, GameData->Bitmap(Old[i]), DM_BACKGROUND | DM_TRANSPARENT, &color);
-                            Display.Put(x+2+add, y+1+add, GameData->Bitmap(Old[i]), DM_BACKGROUND | DM_TRANSPARENT);
-
-                            if (ShowTalismanNames())
-                                Display.WriteTextShadow(name, x + TAL_WIDTH - 1, y, 1, GameData->Font("goldfont"));
-
-                            x += TAL_WIDTH;
-                            if (ShowTalismanNames())
-                                x += TAL_NONAMEGAP;
-
-                            if (x > TAL_WRAPWIDTH)
-                            {
-                                x = TAL_STARTX;
-                                y += TAL_HEIGHT;
-                            }
-                        }
-                    }
-                }
-
-                //color.red = 255;
-                //Display.WriteTextShadow("Greater Slurpee", 32, 79, 1, GameData->Font("tinyfont"), &color);
-
-                // set up button visibility
-                if (!ShowTalismanNames() || startline < 1)
-                {
-                    Button(5)->SetState(false);
-                    Button(5)->Hide();
-                }
-                else
-                    Button(5)->Show();
-
-                if (!ShowTalismanNames() || (line - startline) <= 6)
-                {
-                    Button(4)->SetState(false);
-                    Button(4)->Hide();
-                }
-                else
-                    Button(4)->Show();
-            }
-        }
-
-        if (shownames)
-        {
-            Button(6)->SetUpBitmap(GameData->Bitmap("spellminup"));
-            Button(6)->SetDownBitmap(GameData->Bitmap("spellmindown"));
-        }
-        else
-        {
-            Button(6)->SetUpBitmap(GameData->Bitmap("spellmaxup"));
-            Button(6)->SetDownBitmap(GameData->Bitmap("spellmaxdown"));
-        }
-
-        PlayScreen.MultiUpdate();
-        SetDirty(false);
-    }
-
-
-    if (wasdirty)
-        TButtonPane::DrawBackground();
+    if (!IsOpen())
+        return;
+    TButtonPane::Close();
+    talismans.clear();
+    heldtypes = 0;
+    art = {};
+    background = nullptr;
+    archive.reset();
 }
 
+TTalismanButton *TSpellPane::SpellButton()
+{
+    return Buttons.NumItems() > kSpell ? static_cast<TTalismanButton *>(Button(kSpell)) : nullptr;
+}
+
+std::string TSpellPane::ConstructSpell() const
+{
+    const char *spell = Player ? Player->GetQuickSpell(QSPELL_CONSTRUCT) : "";
+    return std::string(spell, (std::min)(std::strlen(spell), kSpellTalismans));
+}
+
+// REVSYNC: 0x005435f0 -- the talismans in the player's spell pouch, in type
+// order, named as the game names them (the dialog list's line, else the type
+// name); the construct spell on the "spell" button.
+void TSpellPane::Pulse()
+{
+    TButtonPane::Pulse();
+    const int32_t types = (std::min)(TalismanClass.NumTypes(), kNumTalismanTypes);
+    uint32_t held = 0;
+    if (TObjectInstance *pouch = Player ? Player->FindObjInventory(kPouchName) : nullptr)
+        for (int32_t type = 0; type < types; ++type)
+            if (pouch->FindObjInventory(TalismanClass.GetObjType(type)->name))
+                held |= 1u << type;
+    if (held != heldtypes)
+    {
+        heldtypes = held;
+        talismans.clear();
+        for (int32_t type = 0; type < types; ++type)
+            if (held & (1u << type))
+            {
+                const char *name = TalismanClass.GetObjType(type)->name;
+                const char *line = DialogList.GetLine(name);
+                talismans.push_back({ type, line[0] == '[' ? name : line });
+            }
+        RefreshButtons();
+        SetDirty(true);
+    }
+    if (TTalismanButton *button = SpellButton())
+        button->SetSpell(ConstructSpell());
+}
+
+template <typename Fn>
+void TSpellPane::ForEachShown(Fn &&fn) const
+{
+    int32_t x = kListLeft, y = kListTop, line = 0;
+    for (const STalisman &talisman : talismans)
+    {
+        if ((line++ < firstline && shownames) || y >= kListBottom)
+            continue;
+        fn(talisman, x, y);
+        x += shownames ? 2 * kListStep : kListStep;
+        if (x > kListWrap)
+        {
+            x = kListLeft;
+            y += kListStep;
+        }
+    }
+}
+
+int32_t TSpellPane::TalismanAt(int32_t x, int32_t y) const
+{
+    if (x < kListLeft || x >= kHitRight || y < kListTop || y >= kHitBottom)
+        return -1;
+    int32_t hit = -1;
+    ForEachShown([&](const STalisman &talisman, int32_t left, int32_t top) {
+        if (hit < 0 && x >= left && x < left + kListStep && y >= top && y < top + kListStep)
+            hit = talisman.type;
+    });
+    return hit;
+}
+
+// REVSYNC: 0x005435f0 -- "up" shows with names on and a first line past 0,
+// "down" with names on and more than six talismans from it; a hidden arrow
+// is released. "min" shows the names art with names on, the talismans art
+// off. (Retail sets the arrows only while the player has a spell pouch: with
+// none they stay as they were, shown from the start with nothing to page.
+// A retail bug, not reproduced: with no talismans both are hidden.)
+void TSpellPane::RefreshButtons()
+{
+    if (Buttons.NumItems() < kNumButtons)
+        return;
+    const auto show = [](TButton *button, bool shown) {
+        if (shown)
+            button->Show();
+        else if (!button->IsHidden())
+        {
+            button->SetState(false);
+            button->Hide();
+        }
+    };
+    show(Button(kUp), shownames && firstline >= 1);
+    show(Button(kDown), shownames && static_cast<int32_t>(talismans.size()) - firstline > kLinesShown);
+    const char *const *names = shownames ? kNamesOn : kNamesOff;
+    TBitmap *down = archive->Bitmap(names[0]);
+    TBitmap *up = archive->Bitmap(names[1]);
+    TButton *toggle = Button(kNames);
+    if (toggle->DownBitmap() != down || toggle->UpBitmap() != up)
+    {
+        toggle->SetDownBitmap(down);
+        toggle->SetUpBitmap(up);
+    }
+}
+
+void TSpellPane::ComposeBackground(int32_t target_w, int32_t target_h)
+{
+    if (!Renderer)
+        return;
+    Renderer->DrawBitmapToTarget(background, 0, 0, target_w, target_h, EBitmapDecode::Unkeyed);
+    ForEachShown([&](const STalisman &talisman, int32_t x, int32_t y) {
+        const STalismanArt &look = art[talisman.type];
+        const int32_t sink = PressedTalisman() == talisman.type ? 1 : 0;
+        if (look.plate)
+        {
+            Renderer->DrawBitmapTintedToTarget(look.plate, x + 2, y, target_w, target_h, 0.0f, 0.0f, 0.0f, 1.0f);
+            Renderer->DrawBitmapToTarget(look.plate, x + sink, y - 2 + sink, target_w, target_h);
+        }
+        if (look.icon)
+        {
+            Renderer->DrawBitmapTintedToTarget(look.icon, x + 3, y + 2, target_w, target_h, 0.0f, 0.0f, 0.0f, 1.0f);
+            Renderer->DrawBitmapToTarget(look.icon, x + 2 + sink, y + 1 + sink, target_w, target_h);
+        }
+        if (shownames)
+            DrawTextShadowedAtBaseline(namefont, talisman.name.c_str(), static_cast<float>(x + kNameLeft),
+                                       static_cast<float>(y + kNameTop), 1.0f, 1.0f, 1.0f, target_w, target_h);
+    });
+}
+
+// REVSYNC: 0x00543b40 -- only while the player has control: a press on a
+// talisman picks it, a release on it adds it.
 void TSpellPane::MouseClick(int32_t button, int32_t x, int32_t y)
 {
+    if (!PlayScreen.IsControlOn())
+        return;
     TButtonPane::MouseClick(button, x, y);
-
     if (button == MB_LEFTDOWN)
     {
-        clickedtal = OnTal(x, y);
-        if (clickedtal >= 0)
+        pressed = TalismanAt(x, y);
+        if (pressed >= 0)
         {
-            onclickedtal = true;
-            Update();
+            onpressed = true;
+            SetDirty(true);
         }
     }
-    else if (button == MB_LEFTUP && clickedtal >= 0)
+    else if (button == MB_LEFTUP && pressed >= 0)
     {
-        if (onclickedtal)
-            AddTal(clickedtal);
-
-        clickedtal = -1;
-        Update();
+        if (onpressed)
+            AddTalisman(pressed);
+        pressed = -1;
+        onpressed = false;
+        SetDirty(true);
     }
 }
 
+// REVSYNC: 0x00543c40 -- the pressed talisman follows the pointer on and off.
 void TSpellPane::MouseMove(int32_t button, int32_t x, int32_t y)
 {
     TButtonPane::MouseMove(button, x, y);
-
-    if (button == MB_LEFTDOWN && clickedtal >= 0)
+    if (button != MB_LEFTDOWN || pressed < 0)
+        return;
+    const bool on = TalismanAt(x, y) == pressed;
+    if (on != onpressed)
     {
-        bool oldonclickedtal = onclickedtal;
-
-        if (OnTal(x, y) == clickedtal)
-            onclickedtal = true;
-        else
-            onclickedtal = false;
-
-        if (oldonclickedtal != onclickedtal)
-            Update();
-    }
-}
-
-int32_t TSpellPane::OnTal(int32_t x, int32_t y)
-{
-    if (x < TAL_STARTX || x >= (TAL_STARTX + TAL_WRAPWIDTH) ||
-        y < TAL_STARTY || y >= (TAL_STARTY + TAL_WRAPHEIGHT))
-        return -1;
-
-    if (Player)
-    {
-        TObjectInstance* pouch = Player->FindObjInventory("spell pouch");
-        if (!pouch)
-            TObjectInstance* pouch = Player->FindObjInventory("spellpouch");
-        if (pouch)
-        {
-            int32_t x0 = TAL_STARTX, y0 = TAL_STARTY;
-
-            int32_t line = 0;
-            for (int32_t i = 0; Old[i]; i++)
-                if (pouch->FindObjInventory(Old[i]))
-                    if ((line++ >= startline || !ShowTalismanNames()) && y0 < TAL_WRAPHEIGHT)
-                    {
-                        if (x >= x0 && x < (x0 + TAL_WIDTH) && y >= y0 && y < (y0 + TAL_HEIGHT))
-                            return i;
-
-                        x0 += TAL_WIDTH;
-                        if (ShowTalismanNames())
-                            x0 += TAL_NONAMEGAP;
-
-                        if (x0 > TAL_WRAPWIDTH)
-                        {
-                            x0 = TAL_STARTX;
-                            y0 += TAL_HEIGHT;
-                        }
-                    }
-        }
-    }
-
-    return -1;
-}
-
-void TSpellPane::Scroll(int32_t numlines)
-{
-    int32_t oldstartline = startline;
-
-    startline += numlines * 2;      // two talismans on a line
-
-    if (startline < 0)
-        startline = 0;
-
-    if (startline != oldstartline)
+        onpressed = on;
         SetDirty(true);
+    }
 }
 
-void TSpellPane::ToggleTalismanNames()
-{
-    shownames = !shownames;
-    SetDirty(true);
-}
-
-bool TSpellPane::AddTal(int32_t tal)
-{
-    char code = TalismanClass.GetStat(tal, "Code");
-    ((PTTalismanButton)Button(0))->AddTalisman(code);
-    SetDirty(true);
-    return false;
-}
-
-bool TSpellPane::RemoveTal(int32_t numtals)
-{
-    for(int32_t i = 0; i < numtals; ++i)
-        ((PTTalismanButton)Button(0))->Backspace();
-
-    SetDirty(true);
-
-    return true;
-}
-
+// REVSYNC: 0x00542d50
 void TSpellPane::Invoke()
 {
-    ((PTTalismanButton)Button(0))->Invoke();
+    if (Player)
+        Player->InvokeQuickSpell(QSPELL_CONSTRUCT);
 }
 
-char *TSpellPane::GetSpell()
+// REVSYNC: 0x00542640 -- a full spell stays as it is; a talisman the player
+// holds no more of comes off again, and the text bar says so.
+void TSpellPane::AddTalisman(int32_t type)
 {
-    return ((PTTalismanButton)Button(0))->GetSpell();
+    if (!Player || type < 0 || type >= kNumTalismanTypes)
+        return;
+    std::string spell = ConstructSpell();
+    if (spell.size() < kSpellTalismans)
+    {
+        spell += art[type].code;
+        Player->SetQuickSpell(QSPELL_CONSTRUCT, spell.c_str());
+        if (!Player->HasTalismans(spell.c_str()))
+        {
+            spell.pop_back();
+            TextBar.Print("%s", DialogList.GetLine("SPLOUTTAL"));
+        }
+    }
+    Player->SetQuickSpell(QSPELL_CONSTRUCT, spell.c_str());
+    SetDirty(true);
+}
+
+// REVSYNC: 0x00542e30
+void TSpellPane::RemoveTalisman()
+{
+    if (Player)
+    {
+        std::string spell = ConstructSpell();
+        if (!spell.empty())
+            spell.pop_back();
+        Player->SetQuickSpell(QSPELL_CONSTRUCT, spell.c_str());
+    }
+    SetDirty(true);
+}
+
+// REVSYNC: 0x00542ed0 / 0x00542f00 -- not below the first talisman.
+void TSpellPane::Scroll(int32_t lines)
+{
+    const int32_t first = (std::max)(firstline + lines * kTalismansPerLine, 0);
+    if (first == firstline)
+        return;
+    firstline = first;
+    RefreshButtons();
+    SetDirty(true);
+}
+
+// REVSYNC: 0x00542f30
+void TSpellPane::ToggleNames()
+{
+    shownames = !shownames;
+    RefreshButtons();
+    SetDirty(true);
 }
 
 // *********************
@@ -467,10 +469,10 @@ TQuickSpellButton::TQuickSpellButton(const char *bname, int32_t bx, int32_t by, 
                                      void (*bfunc)(), TBitmap *ringdown, TBitmap *ringup, TBitmap *ringgrey,
                                      const SFontAtlas *labelfont, int32_t labelline)
     : TButton(bname, bx, by, bw, bh, 0, bfunc, ringdown, ringup)
-    , greybitmap(ringgrey)
     , font(labelfont)
     , lineheight(labelline)
 {
+    greybitmap = ringgrey;
 }
 
 void TQuickSpellButton::SetSpell(TBitmap *circle, std::string top, std::string bottom, bool cancast)
@@ -580,7 +582,7 @@ void TQuickSpellPane::Pulse()
     for (int32_t ring = 1; ring <= kNumRings; ++ring)
     {
         TQuickSpellButton *button = Ring(ring);
-        char *talismans = Player ? Player->GetQuickSpell(ring) : nullptr;
+        const char *talismans = Player ? Player->GetQuickSpell(ring) : nullptr;
         SSpellData *spell = talismans && *talismans ? SpellList.GetSpellDataByTalismans(talismans) : nullptr;
         SSpellVariant *variant = spell ? SpellList.GetVariantDataByTalismans(talismans) : nullptr;
         if (!variant)

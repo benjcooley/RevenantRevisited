@@ -82,7 +82,7 @@ TSurface::TSurface() {
     img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
 }
 
-TSurface::TSurface(int32_t w, int32_t h, sg_pixel_format fmt)
+TSurface::TSurface(int32_t w, int32_t h, sg_pixel_format fmt, sg_filter filter)
 {
     locked = nullptr;
     width = w;
@@ -117,8 +117,8 @@ TSurface::TSurface(int32_t w, int32_t h, sg_pixel_format fmt)
     img_desc.usage = SG_USAGE_IMMUTABLE; // render target - data comes from rendering
     img_desc.pixel_format = format;
     img_desc.sample_count = 1;
-    img_desc.min_filter = SG_FILTER_LINEAR;
-    img_desc.mag_filter = SG_FILTER_LINEAR;
+    img_desc.min_filter = filter;
+    img_desc.mag_filter = filter;
     img_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
     img_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
     image = sg_make_image(&img_desc);
@@ -185,6 +185,26 @@ void TSurface::Reset()
 void TSurface::StartPass(float r, float g, float b, float a)
 {
     if (!image.id) return;
+    sg_pass_action pa = {};
+    pa.colors[0].action = SG_ACTION_CLEAR;
+    pa.colors[0].value  = { r, g, b, a };
+    pa.depth.action     = SG_ACTION_DONTCARE;
+    pa.stencil.action   = SG_ACTION_DONTCARE;
+    BeginPass(pa);
+}
+
+void TSurface::ContinuePass()
+{
+    if (!image.id) return;
+    sg_pass_action pa = {};
+    pa.colors[0].action = SG_ACTION_LOAD;
+    pa.depth.action     = SG_ACTION_DONTCARE;
+    pa.stencil.action   = SG_ACTION_DONTCARE;
+    BeginPass(pa);
+}
+
+void TSurface::BeginPass(const sg_pass_action& action)
+{
     if (!pass.id)
     {
         sg_pass_desc pd = {};
@@ -192,12 +212,7 @@ void TSurface::StartPass(float r, float g, float b, float a)
         pd.label = "tsurface.pass";
         pass = sg_make_pass(&pd);
     }
-    sg_pass_action pa = {};
-    pa.colors[0].action = SG_ACTION_CLEAR;
-    pa.colors[0].value  = { r, g, b, a };
-    pa.depth.action     = SG_ACTION_DONTCARE;
-    pa.stencil.action   = SG_ACTION_DONTCARE;
-    sg_begin_pass(pass, &pa);
+    sg_begin_pass(pass, &action);
 }
 
 void TSurface::EndPass()

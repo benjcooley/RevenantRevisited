@@ -1,5 +1,10 @@
 # MapPane (Map / Automap sidebar content) — Reconstruction SPEC
 
+> **Superseded (2026-10-10)** by `AutoMapPane_RETAIL.md`, read from the
+> disassembly: this file has the zoom buttons' places (they are pane (8, 3)
+> and (0x90, 3), drawn only while held), the tile path's argument order,
+> the mosaics' roles and the "0xfff0bdc0 clear" wrong.
+
 Class: `cls_0x5a5658` (role label **MapSidebarPane**; candidate src class
 `TAutoMap`). The automap pane shown in the lower sidebar region when the "Map"
 tab is selected.

@@ -34,8 +34,9 @@ class TSurface
   public:
     TSurface();
       // Initializes Surface with empty state
-    TSurface(int32_t w, int32_t h, sg_pixel_format fmt = SG_PIXELFORMAT_RGBA8);
-      // Initialize and create new Sokol image
+    TSurface(int32_t w, int32_t h, sg_pixel_format fmt = SG_PIXELFORMAT_RGBA8, sg_filter filter = SG_FILTER_LINEAR);
+      // Initialize and create new Sokol image, sampled with `filter` when drawn
+      // (nearest for a surface drawn scaled as retail's point-sampled quads)
     TSurface(sg_image existing_image, int32_t w, int32_t h, sg_pixel_format fmt = SG_PIXELFORMAT_RGBA8);
       // Initialize with existing Sokol image
     virtual ~TSurface();
@@ -65,6 +66,9 @@ class TSurface
     // created lazily on first StartPass; the surface's image must have been
     // created with render_target=true.
     void StartPass(float r = 0.0f, float g = 0.0f, float b = 0.0f, float a = 1.0f);
+    // The same pass keeping what the surface holds: a surface drawn into a
+    // piece at a time (the automap's tile mosaic).
+    void ContinuePass();
     void EndPass();
     int32_t  Stride() {return stride;}
       // Returns current stride
@@ -306,6 +310,9 @@ class TSurface
     //   use the 'func' member and the ParamDraw() function.
 
   protected:
+    void BeginPass(const sg_pass_action& action);
+      // Opens the pass on this surface's image (made on first use)
+
     uint32_t flags;          // 'BM' flags for surface  
     int32_t width;           // Width of Surface
     int32_t height;          // Height of Surface
