@@ -8,6 +8,7 @@
 #include "effects/yattackoriginal.h"
 #include "effects/mpappearoriginal.h"
 #include "effects/ceyesoriginal.h"
+#include "effects/gvortexoriginal.h"
 #include "effects/lightstriporiginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
@@ -5401,6 +5402,16 @@ struct SVfxTestBootstrap {
             original.submit_world=[](void* c,EFxDebugMode mode){ceyes_original::SubmitWorld(static_cast<ceyes_original::State*>(c),mode);};
             original.is_alive=[](void* c){return ceyes_original::IsAlive(static_cast<ceyes_original::State*>(c));};
             original.destroy=[](void* c){ceyes_original::Destroy(static_cast<ceyes_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="GVortex_ORIGINAL";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return gvortex_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){gvortex_original::Advance(static_cast<gvortex_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){gvortex_original::SubmitWorld(static_cast<gvortex_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return gvortex_original::IsAlive(static_cast<gvortex_original::State*>(c));};
+            original.destroy=[](void* c){gvortex_original::Destroy(static_cast<gvortex_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
 
