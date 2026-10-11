@@ -62,7 +62,8 @@ The first `rahul.stat` lists `Flags: MOVING AI KILL ANIMATE PULSE COMPLEX
 NOTIFY`. The second answers `rahul: Context not found`.
 
 **Resolution.** This is retail behaviour, so the engine is unchanged. The
-playtest has to save after Tendrick's scene. `tools/playtest/milestones.py`
-still saves `rahul defeated` on `character_dead('Rahul')`, the moment of the
-blow. That milestone should end once the scene has played and control is
-back. Owner: playtest.
+playtest saves after Tendrick's scene: `rahul defeated` is
+`after_scene(character_dead('Rahul'))` (director.py), done once the scene
+has played and control has been back for two seconds. Waypoints from before
+that change (`rahul-defeated--20261010-230646`, `-231018`, `-231733`) are
+the half-settled kind and should not be played from.
