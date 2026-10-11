@@ -87,4 +87,13 @@ The lab has no memory reads: retail's side is its video and its game log
 | Test | Retail | Port | |
 |---|---|---|---|
 | A1 (an Araknid 450 east, Locke idle, a minute) | it never comes: no blow | the same | match: out of its notice (it finds him by ear, M9b) |
-| A1b (the Araknid 150 east) | pending (the lab was in use) | it closes and bites; Locke (44 hp) dies at 16 s: 24 attacks, 4 hits | |
+| A1b (the Araknid 150 east) | it closes and bites: hit 7, glance 3, hit 10, glance 1, hit 9, hit 10, glance 4 = 44, Locke dead after ~38 s of lab time | hit 12, glance 5, glance 2, hit 11, glance 2, hit 10, double 19 = 61, dead at tick 382 (13.5 s after the first bite) | same blows (seven, hits and glances); port damage maybe higher (more runs); pace not yet comparable: retail's ticks a second in the lab unmeasured |
+
+Open from A1b:
+- **Retail's tick rate in the lab.** Two saves a known wall time apart give
+  it (the save header's game time is frames × 100 / 24).
+- **Damage.** Seven blows a side is too few: repeat A1b and compare the
+  distributions (hit and glance amounts, doubles).
+- **The port's combat results print raw tags** ("[BASEHIT] Locke [BASEDMG]:12
+  [BASEDEF]:10 [BASEOFF]:12") where retail prints "Hit vs. Locke Dmg:7
+  Def:10 Off:12": the text lookup for those lines fails.
