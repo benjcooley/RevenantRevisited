@@ -9,6 +9,7 @@ import csv
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import time
@@ -23,15 +24,15 @@ def sha(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def capture(scenario,output):
     binary=Path(scenario.get('binary',ROOT.parent/'build/Revenant')).resolve()
     data=Path(scenario.get('data_root',ROOT/'data')).resolve()
-    count=int(scenario['frames']);fps=int(scenario.get('fps',24))
-    if count<1 or fps<1:raise ValueError('Positive frame count and FPS required')
+    count=int(scenario['frames']);fps=int(scenario.get('fps',24));stride=int(scenario.get('capture_stride',1))
+    if count<1 or fps<1 or stride<1:raise ValueError('Positive frame count, FPS and capture stride required')
     output=output.resolve();output.mkdir(parents=True,exist_ok=False)
     origin=scenario.get('origin',[0,0,0]);camera=scenario.get('camera',[320,170])
     rectangle=scenario.get('rectangle',[272,122,96,96])
     command=[str(binary),'--headless','--test=vfx','--vfx='+scenario['effect'],'--vfx-no-ui',
         '--vfx-bg='+scenario.get('background','black'),
         '--vfx-camera='+','.join(map(str,camera)),'--vfx-origin='+','.join(map(str,origin)),
-        f'--filmstrip={count},{1/fps:.16f}',f'--snapstep={1/fps:.16f}',
+        f'--filmstrip={count},{stride/fps:.16f}',f'--snapstep={1/fps:.16f}',
         '--snapseed='+str(scenario.get('seed',1)),'--snapwarmup='+str(scenario.get('warmup',1)),
         '--snaprect='+','.join(map(str,rectangle)),'--snapprefix='+str(output/'frame-')]
     if 'resolution' in scenario:
@@ -68,7 +69,10 @@ def capture(scenario,output):
                 if process.poll() is not None:break
                 time.sleep(.1)
         finally:
-            try:process.wait(timeout=2)
+            # Filmstrip is opened before its PNG encoder finishes. Give a
+            # completed frame batch the remaining declared capture budget to
+            # flush and exit, rather than killing large captures after 2s.
+            try:process.wait(timeout=max(2.0,deadline-time.monotonic()))
             except subprocess.TimeoutExpired:
                 terminated=True;process.terminate()
                 try:process.wait(timeout=2)
@@ -91,12 +95,31 @@ def capture(scenario,output):
     if complete:
         with (output/'frame-timing.csv').open() as timing_file:
             timing=list(csv.DictReader(timing_file))
-        if len(timing)!=count or any(abs(float(row['relative_seconds'])-i/fps)>1e-6 for i,row in enumerate(timing)):
+        if len(timing)!=count or any(abs(float(row['relative_seconds'])-i*stride/fps)>1e-6 for i,row in enumerate(timing)):
             report['status']='fail';report['error']='Simulation cadence differs from the explicit scenario'
         report['timing']=timing
+        report['simulation_fps']=fps;report['capture_stride']=stride
+        report['sample_simulation_ticks']=[round(float(row['simulation_seconds'])*fps) for row in timing]
         if "--vfx='"+scenario['effect']+"' matched" not in log.read_text(errors='replace'):
             report['status']='fail';report['error']='Requested effect did not match the actual catalogue'
         log_text=log.read_text(errors='replace')
+        # Old binaries have no camera marker; retain their historical behavior.
+        # New captures must prove the requested signed origin reached the renderer.
+        framing=re.search(r'\[vfx-camera\] explicit=(\d+) actual=\(([0-9.eE+-]+),([0-9.eE+-]+)\) viewport=\((\d+),(\d+)\)',log_text)
+        if framing:
+            report['actual_camera']=[float(framing[2]),float(framing[3])]
+            report['actual_viewport']=[int(framing[4]),int(framing[5])]
+            report['camera_explicit']=bool(int(framing[1]))
+            if not report['camera_explicit'] or any(abs(a-float(b))>1e-4 for a,b in zip(report['actual_camera'],camera)):
+                report['status']='fail';report['error']='Actual viewer camera differs from explicit capture origin'
+            elif 'resolution' in scenario and report['actual_viewport']!=list(scenario['resolution']):
+                report['status']='fail';report['error']='Actual viewer viewport differs from explicit capture resolution'
+        depth=re.search(r'\[vfx-source-depth\] native=(\d+) near=([0-9.eE+-]+) far=([0-9.eE+-]+)',log_text)
+        if depth:
+            report['depth_range']=[float(depth[2]),float(depth[3])]
+            report['depth_range_native_domain']=bool(int(depth[1]))
+        if 'depth_range' in scenario and report.get('depth_range')!=scenario['depth_range']:
+            report['status']='fail';report['error']='Actual viewer depth range differs from explicit capture policy'
         if scenario.get('native_domain',False) and '[native-domain] enabled=1 camera_z=0' not in log_text:
             report['status']='fail';report['error']='Requested native-domain preview did not confirm its owner/particle coordinate policy'
         if '[authored-static] missing objects or unsupported controller tags' in log_text:

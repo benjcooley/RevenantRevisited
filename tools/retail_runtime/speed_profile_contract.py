@@ -86,7 +86,7 @@ class T3DImagery{public:
  void Select(){speed_partsys_profile=ValidateRetailSpeedPartSysProfile();}
  void*GetBody(){assert(false);return nullptr;}bool InitializeMesh(S3DImageryBody*){assert(false);return false;}
  bool ValidateRetailSpeedPartSysProfile();
- bool GetUninterpolatedAniKey(int32_t,int32_t,int32_t,hmm_vec3&,hmm_vec3&,hmm_vec3&);
+ bool GetUninterpolatedAniKey(int32_t,int32_t,int32_t,hmm_vec3&,hmm_vec3&,hmm_vec3&,bool=false);
 };
 uint32_t U(const std::vector<unsigned char>&b,size_t p){assert(p+4<=b.size());uint32_t v;memcpy(&v,b.data()+p,4);return v;}
 uint16_t H(const std::vector<unsigned char>&b,size_t p){assert(p+2<=b.size());uint16_t v;memcpy(&v,b.data()+p,2);return v;}

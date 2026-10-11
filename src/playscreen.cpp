@@ -71,7 +71,8 @@
 #include "uiequiptest.h"
 #include "uihudtest.h"
 #include "uisidebartest.h"
-#include "uispellbooktest.h"
+#include "spellbook.h"
+#include "statpane.h"
 
 #include <vector>
 
@@ -395,6 +396,30 @@ bool TPlayScreen::Initialize()
     else
         log_error("[playscreen] Trouble initializing the spell pane");
 
+    // The stats (0x00546b50, after the spell pane), in the side panel's upper
+    // slot while the side panel shows the stats tab: the main player's, or an
+    // examined object's.
+    if (StatPane.Initialize())
+    {
+        AddPane(&StatPane);
+        StatPane.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the stat pane");
+
+    // The spell book (0x005449e0, after the stats), in the side panel's
+    // upper slot while the side panel shows the book tab. Its rows are the
+    // main player's known spells.
+    if (SpellBook.Initialize())
+    {
+        AddPane(&SpellBook);
+        SpellBook.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the spell book");
+
     // REVSYNC: 0x0047a660 -- the automap, in the same slot while the side
     // panel shows the map tab. It loads AutoMap.dat from resources.rvr,
     // mounted by now. The main player's explored area comes with
@@ -713,6 +738,10 @@ void TPlayScreen::Close()
     BuySellPane.Close();
     buysellrequest = false;
     drawerclose    = false;
+    RemovePane(&SpellBook);
+    SpellBook.Close();
+    RemovePane(&StatPane);
+    StatPane.Close();
     RemovePane(&SpellPane);
     SpellPane.Close();
     RemovePane(&Inventory);
@@ -1120,18 +1149,18 @@ void TPlayScreen::UpdateBottomBar()
         open ? bottombar->Show() : bottombar->Hide();
 }
 
-// A pane of the side panel's lower slot, at the display's right edge under
-// the 306-tall upper slot: placed and shown while the slot is its, else
-// hidden.
-static void PlaceLowerSlotPane(TPane& pane, bool shown)
+// A pane of the side panel, at the display's right edge: the upper slot at
+// the top, the lower slot under its 306 px. Placed and shown while the slot
+// is its, else hidden.
+enum class ESideSlot : int32_t { Upper = 0, Lower = 306 };
+static void PlaceSidePane(TPane& pane, ESideSlot slot, bool shown)
 {
     if (!pane.IsOpen())
         return;
-    constexpr int32_t kLowerSlotTop = 306;
     if (shown)
     {
         const int32_t dw = Display.Width() > 0 ? Display.Width() : WIDTH;
-        pane.Resize(dw - pane.GetWidth(), kLowerSlotTop, pane.GetWidth(), pane.GetHeight());
+        pane.Resize(dw - pane.GetWidth(), static_cast<int32_t>(slot), pane.GetWidth(), pane.GetHeight());
         if (pane.WasResized())
             pane.PaneResized();
     }
@@ -1139,16 +1168,19 @@ static void PlaceLowerSlotPane(TPane& pane, bool shown)
         shown ? pane.Show() : pane.Hide();
 }
 
-// The side panel's rebuilt panes, in the lower slot while the side panel is
-// open on theirs: the inventory, the spell pane and the automap. (The upper
-// slot's panes are still the HUD harness's.)
+// The side panel's rebuilt panes while the side panel is open on theirs:
+// the stats and the spell book in the upper slot; the inventory, the spell
+// pane and the automap in the lower. (The equipment is still the HUD
+// harness's.)
 void TPlayScreen::UpdateSidePanes()
 {
     const SHudState& hud = GetHudState();
     const bool open = hud.sidebarState == HUD_SIDEBAR_OPEN;
-    PlaceLowerSlotPane(Inventory, open && hud.bottomSlot == HUD_BOT_INV);
-    PlaceLowerSlotPane(SpellPane, open && hud.bottomSlot == HUD_BOT_SPELL);
-    PlaceLowerSlotPane(AutoMap, open && hud.bottomSlot == HUD_BOT_MAP);
+    PlaceSidePane(StatPane, ESideSlot::Upper, open && hud.topSlot == HUD_TOP_STATS);
+    PlaceSidePane(SpellBook, ESideSlot::Upper, open && hud.topSlot == HUD_TOP_BOOK);
+    PlaceSidePane(Inventory, ESideSlot::Lower, open && hud.bottomSlot == HUD_BOT_INV);
+    PlaceSidePane(SpellPane, ESideSlot::Lower, open && hud.bottomSlot == HUD_BOT_SPELL);
+    PlaceSidePane(AutoMap, ESideSlot::Lower, open && hud.bottomSlot == HUD_BOT_MAP);
 }
 
 // The shop's rect while the drawer holds it: its clicks and moves are its
@@ -1758,9 +1790,7 @@ void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
         const SHudState& s = GetHudState();
         if (HandleMouseClickUISidebarModeConsumed(button, x, y))
             return;
-        TScreen::MouseClick(button, x, y);      // the screen's panes: the bottom bar
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseClickUISpellbookMode(button, x, y);
+        TScreen::MouseClick(button, x, y);      // the screen's panes: the bars, the side panes
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
             HandleMouseClickUIEquipMode(button, x, y);
         if (button == MB_LEFTUP)
@@ -1790,14 +1820,8 @@ void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
         const SHudState& s = GetHudState();
         if (HandleMouseMoveUISidebarModeConsumed(button, x, y))
             return;
-        if (UIDragState::IsActive() &&
-            UIDragState::Get().source == EDragSource::SpellPane)
-        {
+        if (UIDragState::IsActive())
             UIDragState::UpdateDrag(x, y);
-            return;
-        }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseMoveUISpellbookMode(button, x, y);
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
             HandleMouseMoveUIEquipMode(button, x, y);
         if (IsReconstructedHudPoint(x, y) || UIDragState::IsActive())

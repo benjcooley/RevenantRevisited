@@ -3597,12 +3597,17 @@ bool Initialize(const char* mode)
         return InitializeABSpellPaneMode();
     if (strcmp(mode, "ab-automap") == 0)
         return InitializeABAutoMapMode();
+    if (strcmp(mode, "ab-spellbook") == 0)
+        return InitializeABSpellBookMode();
+    if (strcmp(mode, "ab-statpane") == 0)
+        return InitializeABStatPaneMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         SetUISidebarSyntheticStateEnabled(true);
         SetUIHudCursorOverlayEnabled(true);
         return InitializeUIHudMode() && InitializeUIBottomBarModeEmbedded() && InitializeUIInventoryModeEmbedded()
-            && InitializeUISpellCreateModeEmbedded() && InitializeUIMapModeEmbedded();
+            && InitializeUISpellCreateModeEmbedded() && InitializeUIMapModeEmbedded()
+            && InitializeUISpellbookModeEmbedded() && InitializeUIStatsModeEmbedded();
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
@@ -3676,8 +3681,14 @@ void Close(const char* mode)
         CloseABSpellPaneMode();
     if (strcmp(mode, "ab-automap") == 0)
         CloseABAutoMapMode();
+    if (strcmp(mode, "ab-spellbook") == 0)
+        CloseABSpellBookMode();
+    if (strcmp(mode, "ab-statpane") == 0)
+        CloseABStatPaneMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
+        CloseUIStatsMode();
+        CloseUISpellbookMode();
         CloseUIMapMode();
         CloseUISpellCreateMode();
         CloseUIInventoryMode();
@@ -3773,6 +3784,10 @@ void Render(const char* mode)
         return RenderABSpellPaneMode();
     if (strcmp(mode, "ab-automap") == 0)
         return RenderABAutoMapMode();
+    if (strcmp(mode, "ab-spellbook") == 0)
+        return RenderABSpellBookMode();
+    if (strcmp(mode, "ab-statpane") == 0)
+        return RenderABStatPaneMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         RenderUIHudMode();
@@ -3780,6 +3795,8 @@ void Render(const char* mode)
         RenderUIInventoryMode();
         RenderUISpellCreateMode();
         RenderUIMapMode();
+        RenderUISpellbookMode();
+        RenderUIStatsMode();
         return;
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
@@ -3801,8 +3818,6 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
         const SHudState& s = GetHudState();
         if (HandleMouseClickUISidebarModeConsumed(button, x, y))
             return;
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseClickUISpellbookMode(button, x, y);
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
             HandleMouseClickUIEquipMode(button, x, y);
         if (button == MB_LEFTUP)
@@ -3811,8 +3826,6 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
     }
     if (strcmp(mode, "ui-sidebar") == 0)
         return HandleMouseClickUISidebarMode(button, x, y);
-    if (strcmp(mode, "ui-spellbook") == 0)
-        return HandleMouseClickUISpellbookMode(button, x, y);
     if (strcmp(mode, "ui-equip") == 0)
         return HandleMouseClickUIEquipMode(button, x, y);
     if (strcmp(mode, "ui-scrollpane") == 0)
@@ -3872,22 +3885,13 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 
 void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 {
-    // #8 iOS-style velocity drag for the spellbook scroll
-    if (strcmp(mode, "ui-spellbook") == 0)
-        return HandleMouseMoveUISpellbookMode(button, x, y);
     if (strcmp(mode, "ui-hud") == 0)
     {
         const SHudState& s = GetHudState();
         if (HandleMouseMoveUISidebarModeConsumed(button, x, y))
             return;
-        if (UIDragState::IsActive() &&
-            UIDragState::Get().source == EDragSource::SpellPane)
-        {
+        if (UIDragState::IsActive())
             UIDragState::UpdateDrag(x, y);
-            return;
-        }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseMoveUISpellbookMode(button, x, y);
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
             HandleMouseMoveUIEquipMode(button, x, y);
         return;

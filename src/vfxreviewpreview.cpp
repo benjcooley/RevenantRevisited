@@ -4,7 +4,7 @@
 #include <cstring>
 
 namespace {
-struct Mapping { uint32_t type_id; const char* preview_id; };
+struct Mapping { uint32_t type_id; const char* preview_id; bool partial; const char* description; };
 constexpr Mapping mappings[] = {
 #include "vfxreviewpreviewmap.inc"
 };
@@ -21,7 +21,6 @@ bool NeedsEndpoints(uint32_t id)
 
 const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nullptr)
 {
-    if (NeedsEndpoints(id)) return nullptr;
     // Lazy snapshot occurs after static registration, when review requests it.
     // SEffect copies retain their callbacks independently of browser selection.
     static const auto catalogue = VfxTest::ReviewCatalogue();
@@ -31,6 +30,7 @@ const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nu
             return e.id == mapping.preview_id;
         });
         if (it == catalogue.end() || !it->factory || !it->destroy) continue;
+        if (NeedsEndpoints(id) && !it->factory_endpoints) continue;
         if (!it->submit) {
             if (it->submit_attached && unavailable)
                 *unavailable={false,it->id.c_str(),"Preview attachment API unavailable; label only",false,true};
@@ -39,10 +39,14 @@ const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nu
         using Style = VfxTest::EVfxPreviewStyle;
         // Character-style entries with a standalone submit callback already
         // accept this exact origin; only attachment-only hooks need a rig.
-        if (it->preview_style == Style::Projectile) {
+        // An explicitly audited partial may draw its stationary origin-only
+        // preview. This does not create endpoints or claim projectile motion.
+        if (it->preview_style == Style::Projectile && !mapping.partial && !it->factory_endpoints) {
             if (unavailable) *unavailable={false,it->id.c_str(),"Preview endpoint API unavailable; label only",true};
             continue;
         }
+        if (unavailable)
+            *unavailable={true,it->id.c_str(),mapping.description,bool(it->factory_endpoints) || it->preview_style==Style::Projectile,false,bool(it->is_alive),mapping.partial};
         return &*it;
     }
     return nullptr;
@@ -51,15 +55,20 @@ const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nu
 
 VfxReviewPreviewInfo DescribeVfxReviewPreview(uint32_t type_id)
 {
-    if (NeedsEndpoints(type_id)) return {false,"","Preview endpoint API unavailable; label only",true};
     VfxReviewPreviewInfo result;
-    if (const auto* effect = Find(type_id,&result))
-        return {true,effect->id.c_str(),"Implemented preview controller; map caller not certified",false,false,bool(effect->is_alive)};
+    if (NeedsEndpoints(type_id)) result={false,"","Preview endpoint API unavailable; label only",true};
+    Find(type_id,&result);
     return result;
 }
 
-VfxReviewPreview::VfxReviewPreview(const VfxTest::SEffect& effect, void* context, const S3DPoint& origin)
-    : effect_(effect), context_(context), origin_(origin), restart_remaining_(RestartInterval()) {}
+VfxReviewPreview::VfxReviewPreview(const VfxTest::SEffect& effect, void* context, const S3DPoint& origin,
+                                 const S3DPoint* destination)
+    : effect_(effect), context_(context), origin_(origin), restart_remaining_(RestartInterval()) {
+    if(destination) { destination_=*destination; endpoints_=true; }
+}
+void* VfxReviewPreview::Recreate() {
+    return endpoints_ ? effect_.factory_endpoints(origin_,destination_) : effect_.factory(origin_);
+}
 VfxReviewPreview::~VfxReviewPreview() { if (context_) effect_.destroy(context_); }
 float VfxReviewPreview::RestartInterval() const { return VfxTest::ReviewRestartInterval(effect_.preview_style); }
 void VfxReviewPreview::Submit()
@@ -71,15 +80,15 @@ void VfxReviewPreview::Submit()
     // governed solely by the existing browser cadence below.
     if (context_ && effect_.is_alive && !effect_.is_alive(context_)) {
         effect_.destroy(context_);
-        context_=effect_.factory(origin_);
+        context_=Recreate();
         restart_remaining_=RestartInterval();
     }
     const float interval=RestartInterval();
-    if (interval>0) {
+    if (interval>0 && !endpoints_) {
         restart_remaining_-=float(TTime::DeltaTime());
         if (restart_remaining_<=0) {
             if (context_) effect_.destroy(context_);
-            context_=effect_.factory(origin_);
+            context_=Recreate();
             restart_remaining_=interval;
         }
     }
@@ -96,8 +105,18 @@ std::optional<bool> VfxReviewPreview::Alive() const
 std::unique_ptr<VfxReviewPreview> CreateVfxReviewPreview(uint32_t type_id, const S3DPoint& origin)
 {
     const auto* effect = Find(type_id);
-    if (!effect) return {};
+    if (!effect || NeedsEndpoints(type_id)) return {};
     void* context = effect->factory(origin);
     if (!context) return {};
     return std::make_unique<VfxReviewPreview>(*effect,context,origin);
+}
+
+std::unique_ptr<VfxReviewPreview> CreateVfxReviewPreview(uint32_t type_id,
+    const S3DPoint& source,const S3DPoint& destination)
+{
+    const auto* effect=Find(type_id);
+    if(!effect || !effect->factory_endpoints)return {};
+    void* context=effect->factory_endpoints(source,destination);
+    if(!context)return {};
+    return std::make_unique<VfxReviewPreview>(*effect,context,source,&destination);
 }

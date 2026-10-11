@@ -54,6 +54,13 @@ uint32_t type_id=0;
 struct Owner{uint32_t ObjId()const{return type_id;}int GetState()const{return 0;}};
 struct Imagery{uint32_t static_particles_profile=type_id;
  STATIC_PROFILE_METHOD
+ bool HasRetailLightStripProfile()const{return false;}
+ bool HasRetailJhagaAttackProfile()const{return false;}
+ bool HasRetailFunnelProfile()const{return false;}
+ bool HasRetailCometProfile()const{return false;}
+ bool HasRetailFGeyserProfile()const{return false;}
+ bool HasRetailDustProfile()const{return false;}
+ bool HasRetailPoisonProfile()const{return false;}
  bool HasRetailMightPartSysProfile()const{return false;}
  bool HasRetailImmortalmightPartSysProfile()const{return false;}
  bool HasRetailFmasteryPartSysProfile()const{return false;}
@@ -71,6 +78,7 @@ struct T3DAnimator{struct SPartSysControllers{
  std::vector<Controller>controllers;bool unsupported=false;uint64_t renders=0,quads=0;};
  std::unique_ptr<SPartSysControllers>partsys_controllers;Owner*inst;Imagery im;
  Imagery*Get3DImagery(){return &im;}
+ void NoteJhagaAttackPrototypeSample(){}
  int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&,bool=false);};
 constexpr float WORLD3D_Z_SCALE=1.5f;
 '''

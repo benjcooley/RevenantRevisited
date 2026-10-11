@@ -1054,6 +1054,8 @@ class TObjectInstance : protected SObjectDef
         // Finds a stat and returns its stat id or -1 if not found
     const char *ObjStatName(int32_t statid) const { return cl->ObjStatName(statid); }
         // Returns a statistic for an class
+    int32_t NumObjStats() const { return cl->NumObjStats(); }
+        // How many object statistics the class defines
     virtual int32_t GetObjStat(int32_t statid) const { if ((uint32_t)statid < (uint32_t)stats.NumItems()) return stats[statid]; else return 0; }
         // Returns a statistic for an object (retail vtable +0xdc; a player
         // answers from its equipment- and spell-modified copy)

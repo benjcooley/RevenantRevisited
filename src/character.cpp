@@ -1424,24 +1424,37 @@ void TCharacter::RestoreHealth()
     SetHealth(MaxHealth());
 }
 
-// REVSYNC: TCharacter::GetFieldText = retail 0x004d5260 (vtable +0xc8).
-// "armor" is ArmorValue(), plus for the main player its DmgResMisc (vtable
-// +0x260; spells such as STATLINE DmgResMisc 4 raise it) and the armor of
-// the effects on it (0x005407d0, the +0x134 of each object in the
-// character's list at +0x170) -- that list isn't in the port yet.
-// "attackpct", "defensepct", "damage" and "stealth" are combat formulas
-// over getters not yet identified in the port; they answer "no such field".
+// REVSYNC: TCharacter::GetFieldText = retail 0x004d5260 (vtable +0xc8). The
+// stat sheet's character figures, over this character's spells
+// (SpellManager, retail +0x170: GetDefense 0x005407d0, GetOffense
+// 0x00540820):
+//   armor       ArmorValue; the main player adds his DmgResMisc and his
+//               spells' defense
+//   attackpct   the player: his spells' offense + LuckMod + Offense (Offense
+//               counts the spells again). Anyone else: his Offense + LuckMod
+//               less the player's Defense, LuckMod and DmgResMisc and --
+//               retail's slip -- his own spells' defense, not the player's
+//   defensepct  the player: his spells' defense + LuckMod + Defense +
+//               DmgResMisc. Anyone else: his Defense + LuckMod less the
+//               player's Offense, LuckMod and (the same slip) his own spells'
+//               offense
+//   damage      WeaponDamage scaled by DamageMod %, then for a player's knife,
+//               sword or axe by EdgeBonus % (retail calls the player-only slot
+//               0x3d4 on any character; the port asks only a player)
+//   stealth     StealthMod
+// Without a main player, attackpct and defensepct take the player's formula.
 bool TCharacter::GetFieldText(const char *field, char *buf, int32_t buflen)
 {
     if (!field || !buf || buflen <= 0)
         return false;
 
+    const bool versusplayer = Player && this != Player;
     int32_t value = 0;
     if (stricmp(field, "armor") == 0)
     {
         value = ArmorValue();
         if (this == Player)
-            value += GetObjStat(CHRRESIST_FIRST + CHRRESIST_MISC);
+            value += Player->DmgResMisc() + SpellManager.GetDefense();
     }
     else if (stricmp(field, "maxhealth") == 0)
         value = MaxHealth();
@@ -1449,9 +1462,22 @@ bool TCharacter::GetFieldText(const char *field, char *buf, int32_t buflen)
         value = MaxFatigue();
     else if (stricmp(field, "maxmana") == 0)
         value = MaxMana();
-    else if (stricmp(field, "attackpct") == 0 || stricmp(field, "defensepct") == 0 ||
-             stricmp(field, "damage") == 0 || stricmp(field, "stealth") == 0)
-        return false;
+    else if (stricmp(field, "attackpct") == 0)
+        value = versusplayer ? Offense() + LuckMod() - Player->Defense() - Player->LuckMod() - Player->DmgResMisc()
+                                   - SpellManager.GetDefense()
+                             : SpellManager.GetOffense() + LuckMod() + Offense();
+    else if (stricmp(field, "defensepct") == 0)
+        value = versusplayer ? Defense() + LuckMod() - Player->Offense() - Player->LuckMod() - SpellManager.GetOffense()
+                             : SpellManager.GetDefense() + LuckMod() + Defense() + DmgResMisc();
+    else if (stricmp(field, "damage") == 0)
+    {
+        value = (DamageMod() + 100) * WeaponDamage() / 100;
+        const int32_t weapon = WeaponType();
+        if (ObjClass() == OBJCLASS_PLAYER && (weapon == WT_KNIFE || weapon == WT_SWORD || weapon == WT_AXE))
+            value = (static_cast<TPlayer *>(this)->EdgeBonus() + 100) * value / 100;
+    }
+    else if (stricmp(field, "stealth") == 0)
+        value = StealthMod();
     else
         return TComplexObject::GetFieldText(field, buf, buflen);
 

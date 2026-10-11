@@ -1,0 +1,27 @@
+{
+  "scope": "Two exact generic state0 roots, including all texture slots; other Door states/natural context separate.",
+  "profiles": [
+    {
+      "name": "CharUtility",
+      "id": "0xadbcef13",
+      "asset": "misc/charutility.i3d",
+      "asset_sha256": "c4ec995f0278f9a81eec5278797828d57a841147f4fb0b715efc0b7f36e26a3b",
+      "states": 1,
+      "frames": 100,
+      "objects": 5,
+      "textures": 5,
+      "materials": 5
+    },
+    {
+      "name": "KinSecretDoor",
+      "id": "0xad92bd23",
+      "asset": "misc/secretdoor.i3d",
+      "asset_sha256": "c53eb85e0c6b493af5928173ef7eed76ea61b369267c005366742982536e141e",
+      "states": 3,
+      "frames": 2,
+      "objects": 1,
+      "textures": 2,
+      "materials": 2
+    }
+  ]
+}

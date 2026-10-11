@@ -140,6 +140,15 @@ VfxReviewSpawnInfo ConfigureVfxReviewSpawn(TObjectInstance& effect,
     }
     VfxReviewSpawnInfo info = DescribeVfxReviewSpawn(effect.ObjId());
     if (!info.safe_factory) return info;
+    if (effect.ObjId() == 0xaeaeeb26u || effect.ObjId() == 0xae5eeb26u) {
+        // Generic scrolltex admission does not reproduce Maelstrom's original
+        // camera objects, inclusive keys and texture-major draw policy. Select
+        // the exact registered adapter through the existing preview fallback.
+        info.uses_effect_runtime = false;
+        info.renderer_supported = false;
+        info.description = "Maelstrom requires its original authored leaf adapter";
+        return info;
+    }
     auto* fireball = dynamic_cast<TFireBallEffect*>(&effect);
     if (info.supports_endpoints && !fireball) {
         info.safe_factory = false;
@@ -186,10 +195,12 @@ VfxReviewSpawnInfo ConfigureVfxReviewSpawn(TObjectInstance& effect,
     info.uses_effect_runtime = particle_renderer || replacing_component || authored_draw;
     if (particles && !particle_renderer && !replacing_component) {
         info.renderer_supported = false;
-        info.description = "Unsupported authored particle controller; generic geometry may be visible";
+        info.uses_effect_runtime = authored_draw;
+        info.description = "Partial authored draw; particle controller unavailable";
     } else if (unknown_controller && !replacing_component) {
         info.renderer_supported = false;
-        info.description = "Authored controller not implemented; generic geometry may be visible";
+        info.uses_effect_runtime = authored_draw;
+        info.description = "Partial authored draw; controller unavailable";
     } else if (!faces && !particle_renderer && !replacing_component &&
                !dynamic_cast<TFireBallEffect*>(&effect)) {
         info.renderer_supported = false;

@@ -19,7 +19,7 @@ def production_spans():
         constants=span(source,'constexpr int32_t kWaterFallMaxDrops','// Snapshot constants — direct from effect_old.cpp:11903'),
         initialize=span(source,'    numdrops_ = kWaterFallMaxDrops;','    if (attach_runtime_component)\n    {'),
         helpers=span(source,'TWaterFallEffect_Bespoke::~TWaterFallEffect_Bespoke()','void TWaterFallEffect_Bespoke::Initialize('),
-        advance_submit=span(source,'void TWaterFallEffect_Bespoke::Advance(','void TWaterFallEffect_Bespoke::TickAndSubmitForTest_BESPOKE('),
+        advance_submit=span(source,'void TWaterFallEffect_Bespoke::Advance(','void TWaterFallEffect_Bespoke::SetNativeDomain('),
         map_dispatch=span(source,'class TWaterfallReferenceComponent final','TWaterFallEffect_Bespoke::~TWaterFallEffect_Bespoke()'),
         math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
 
@@ -40,9 +40,11 @@ def build_port(output,asset,inputs,ticks):
 #undef max
 enum class EFxBlend:uint8_t{Alpha,AdditiveStraight};constexpr uint32_t OF_KILL=0x1000;enum class EFxDepthMode:uint8_t{TestNoWrite};enum class EFxDebugMode:uint8_t{Normal};enum class EFxLightMode:uint8_t{Unlit};
 struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
-struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};TRenderer renderer;TRenderer*Renderer=&renderer;
-struct TObjectImagery{};struct SObjectDef{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
-struct TObjectInstance{virtual void OffScreen(){}};struct TEffect:TObjectInstance{World world;TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;uint32_t Flags()const{return 0;}void SetCommandDone(bool){};uint32_t ObjId()const{return 0xa907dabf;}int GetMapIndex()const{return 1;}int GetFace()const{return 0;}const World&Transform()const{return world;}};
+using MeshHandle=uint64_t;struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}void ReleaseMeshAssetRef(MeshHandle){}bool UsesRetailSoftwareMeshLighting(){return false;}};TRenderer renderer;TRenderer*Renderer=&renderer;
+struct TObjectImagery{virtual~TObjectImagery()=default;};struct SObjectDef{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
+struct T3DImagery:TObjectImagery{};
+namespace literal_water_mesh{bool Matches(T3DImagery*){return false;}MeshHandle Cache(TRenderer&,T3DImagery*,TTextureHandle){return 0;}void Submit(TRenderer&,MeshHandle,const hmm_mat4&,bool){throw std::runtime_error("Normal-lit path requires actual Metal proof");}}
+struct TObjectInstance{virtual void OffScreen(){}};struct TEffect:TObjectInstance{World world;TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;uint32_t Flags()const{return 0;}void SetCommandDone(bool){};uint32_t ObjId()const{return 0xa907dabf;}int GetMapIndex()const{return 1;}int GetFace()const{return 0;}TObjectImagery*GetImagery()const{return nullptr;}const World&Transform()const{return world;}};
 struct TTime{static constexpr double LegacyFrameSeconds=1.0/24.0;};void log_info(const char*,...){};
 std::ifstream rng;int rng_count=0;int random(int low,int high){int a,b,v;if(!(rng>>a>>b>>v)||a!=low||b!=high)throw std::runtime_error("Waterfall native/port RNG order mismatch");++rng_count;return v;}
 '''

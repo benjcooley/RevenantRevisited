@@ -17,6 +17,7 @@
 #include "playscreen.h"
 #include "renderer.h"
 #include "spell.h"
+#include "spellbook.h"
 #include "textbar.h"
 #include "uidragstate.h"
 
@@ -29,13 +30,6 @@
 extern TObjectClass TalismanClass;
 
 namespace {
-
-// REVSYNC: 0x005e4f80 -- the talismans' art names, in type order: GameData's
-// "<name>" icon and "<name>candy" plate, SpellPane.dat's "S<name>" glyph
-// (0x005e4fb4).
-constexpr const char *kTalismanArtNames[kNumTalismanTypes] = {
-    "Sun", "Life", "Ocean", "Law", "Soul", "Stars", "Death", "Chaos", "Sky", "Earth", "Ward", "Moon",
-};
 
 // REVSYNC: 0x00542640 / 0x005424a0 -- the spell pane keeps a spell of 5
 // talismans at most.
@@ -379,10 +373,13 @@ void TSpellPane::MouseMove(int32_t button, int32_t x, int32_t y)
 }
 
 // REVSYNC: 0x00542d50
+// The spell book learns the spell, cast or not, if it is a known one (0x00544fb0).
 void TSpellPane::Invoke()
 {
-    if (Player)
-        Player->InvokeQuickSpell(QSPELL_CONSTRUCT);
+    if (!Player)
+        return;
+    Player->InvokeQuickSpell(QSPELL_CONSTRUCT);
+    SpellBook.Reveal(Player->GetQuickSpell(QSPELL_CONSTRUCT));
 }
 
 // REVSYNC: 0x00542640 -- a full spell stays as it is; a talisman the player
@@ -537,6 +534,24 @@ constexpr const char *kDefaultCircle = "Aura";
 
 }  // namespace
 
+std::shared_ptr<TMulti> AcquireSpellIcons()
+{
+    static std::weak_ptr<TMulti> shared;
+    std::shared_ptr<TMulti> icons = shared.lock();
+    if (!icons)
+    {
+        icons.reset(TMulti::LoadMulti("SpellIcons.dat"));
+        shared = icons;
+    }
+    return icons;
+}
+
+TBitmap *SpellCircle(TMulti &icons, const SSpellData &spell)
+{
+    TBitmap *circle = spell.iconname[0] ? icons.FindBitmap(spell.iconname) : nullptr;
+    return circle ? circle : icons.Bitmap(kDefaultCircle);
+}
+
 TQuickSpellPane::TQuickSpellPane() : TButtonPane(0, 0, 0, 0) {}
 TQuickSpellPane::~TQuickSpellPane() = default;
 
@@ -545,7 +560,7 @@ bool TQuickSpellPane::Initialize()
 {
     if (IsOpen())
         return true;
-    icons.reset(TMulti::LoadMulti("SpellIcons.dat"));
+    icons = AcquireSpellIcons();
     const SFontAtlas *font = FontTable ? FontTable->Atlas("Small") : nullptr;
     const TGenericFont *small = FontTable ? FontTable->FindFont("Small") : nullptr;
     if (!icons || !font || !small)
@@ -590,9 +605,7 @@ void TQuickSpellPane::Pulse()
             button->SetSpell(nullptr, {}, {}, false);
             continue;
         }
-        TBitmap *circle = spell->iconname[0] ? icons->FindBitmap(spell->iconname) : nullptr;
-        if (!circle)
-            circle = icons->Bitmap(kDefaultCircle);
+        TBitmap *circle = SpellCircle(*icons, *spell);
         const std::string name = DialogList.DisplayName(variant->name);
         const size_t space = name.find(' ');
         button->SetSpell(circle, LabelPart(name.substr(0, space)),
@@ -611,9 +624,9 @@ void TQuickSpellPane::MouseClick(int32_t button, int32_t x, int32_t y)
         && InPane(x, y))
     {
         const int32_t ring = RingAt(x, y);
-        const int32_t row = UIDragState::Get().source_idx;     // the spell book's row: a known spell
-        std::string talismans = Player && row >= 0 && row < Player->NumKnownSpells() ? Player->KnownSpell(row) : "";
-        const bool dropped = ring > 0 && !talismans.empty() && SpellList.GetSpellDataByTalismans(talismans.data());
+        std::string talismans = UIDragState::Get().spell;
+        const bool dropped = Player && ring > 0 && !talismans.empty()
+                          && SpellList.GetSpellDataByTalismans(talismans.data());
         if (dropped)
             Player->SetQuickSpell(ring, talismans.data());
         UIDragState::CompleteDrag(EDragSource::QuickSpell, ring, dropped);

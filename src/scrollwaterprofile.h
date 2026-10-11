@@ -14,7 +14,8 @@ inline constexpr Profile profiles[]={
 {0xadbcef19u,"misc/sewerw.i3d","box02",4,2,"",1,9,0,0x5ed98b844e7bd053ull,0x28290cd4dd04f640ull,0x2d2f1ce48e120923ull,0xaa234e3981f0b7b3ull},
 {0x9d92bc1du,"misc/wave.i3d","wave",38,47,"obj=wave,du=0,dv=-0.005",1,6,1,0x4a0b958712e25d38ull,0xd0ab47dc836c4c89ull,0x5b2b785049d078a7ull,0xfa1022423e58b839ull},
 {0x9d92bc1eu,"misc/waves.i3d","wave02",38,47,"obj=wave,du=0,dv=-0.005",1,6,1,0x6347ba9c8ac6d141ull,0xd0ab47dc836c4c89ull,0x5b2b785049d078a7ull,0xfa1022423e58b839ull},
-{0x9d92bc1fu,"misc/wavem.i3d","wave01",38,47,"obj=wave01,du=0,dv=-0.005",1,6,1,0xa95812e11d94ac6bull,0xd0ab47dc836c4c89ull,0x5b2b785049d078a7ull,0xfa1022423e58b839ull}};
+{0x9d92bc1fu,"misc/wavem.i3d","wave01",38,47,"obj=wave01,du=0,dv=-0.005",1,6,1,0xa95812e11d94ac6bull,0xd0ab47dc836c4c89ull,0x5b2b785049d078a7ull,0xfa1022423e58b839ull},
+{0xd0c0f03au,"misc/riverfall.i3d","water",14,12,"obj=water,du=0,dv=0.01 ",100,9,1,0xafe840ae77f0a17eull,0xf59ec0416de17b8aull,0x0857b73768e383a1ull,0x2d6e7c4f0d54f390ull}};
 inline const Profile* Find(uint32_t id){for(const auto& p:profiles)if(p.id==id)return &p;return nullptr;}
 inline uint64_t Hash(const void* ptr,size_t size){uint64_t h=1469598103934665603ull;const auto* data=static_cast<const uint8_t*>(ptr);for(size_t i=0;i<size;++i){h^=data[i];h*=1099511628211ull;}return h;}
 inline bool Matches(const TObjectInstance* owner,T3DImagery* imagery)

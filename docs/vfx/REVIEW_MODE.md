@@ -30,6 +30,13 @@ Filter entries accept case-insensitive full names or hexadecimal retail type
 IDs, separated by commas. Duplicate names retain separate type-ID entries.
 Unknown entries are rejected so typos cannot silently change the review.
 
+Exact moving preview adapters may supply a source/destination initializer.
+QueenArrow and Funnel use that API to travel along the configured review path,
+mostly upward with the requested slight rightward tilt. Their original movement
+and completion drive animation and repetition; the viewer does not substitute
+a projectile restart timer. Standalone origin-only A/B fixtures keep their
+declared source/target inputs.
+
 Options:
 
 - `--vfx-review-speed=48`: logical pixels/sec, range 0.1–240.

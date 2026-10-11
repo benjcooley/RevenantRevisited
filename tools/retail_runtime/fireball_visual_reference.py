@@ -16,7 +16,8 @@ from speed_controller_preflight import NativeSpeed,read_asset,ROOT,sha
 def read_fireball(data):
  u=lambda p:struct.unpack_from('<I',data,p)[0];r=lambda p:p+u(p);bo=20+u(16);raw=r(r(r(bo+16)));faces=r(bo+24)
  a=dict(body_offset=bo,flags=u(bo),version=u(bo+4),vertices=u(bo+12),faces=u(bo+20),materials=u(bo+28),textures=u(bo+36),states=u(24),objects=[],tags=[],state0_frames=struct.unpack_from('<h',data,70)[0])
- if a['version']==3:return read_asset(data)
+ # Compressed version2 assets (for example Cataclysm) use the same key layout.
+ if a['version']==3 or (a['version']==2 and a['flags']&0x80):return read_asset(data)
  assert a['version']==1 and a['states']==3
  for i in range(u(bo+44)):
   p=r(bo+48)+48*i;material,start,count=struct.unpack_from('<3H',data,p+32);tracks=[]
@@ -80,8 +81,8 @@ class FireBallScene:
    resource=v.u32(v.u32(self.imagery+0x74)+o['index']*4)
    for off,value in [(0x24,o['vertex_count']),(0x28,o['vertex_start']),(0x30,0),(0x3c,o['material'])]:v.put_u32(resource+off,value)
    runs=o['texture_runs'];v.put_u32(resource+0x34,self.bytes(struct.pack('<'+'I'*len(runs[::2]),*runs[::2])));v.put_u32(resource+0x38,self.bytes(struct.pack('<'+'I'*len(runs[1::2]),*runs[1::2])))
-   v.put_u32(resource+0x40,self.bytes(struct.pack('<'+'I'*len(o['states']),*[len(t['keys']) if self.asset['version']==3 else t['frames']for t in o['states']])))
-   keys=[self.bytes(struct.pack('<'+'I'*len(t['keys']),*t['keys']) if self.asset['version']==3 else t['raw_keys'])for t in o['states']];v.put_u32(resource+0x44,self.bytes(struct.pack('<'+'I'*len(keys),*keys)))
+   v.put_u32(resource+0x40,self.bytes(struct.pack('<'+'I'*len(o['states']),*[len(t['keys']) if (self.asset['version']==3 or (self.asset['version']==2 and self.asset['flags']&0x80)) else t['frames']for t in o['states']])))
+   keys=[self.bytes(struct.pack('<'+'I'*len(t['keys']),*t['keys']) if (self.asset['version']==3 or (self.asset['version']==2 and self.asset['flags']&0x80)) else t['raw_keys'])for t in o['states']];v.put_u32(resource+0x44,self.bytes(struct.pack('<'+'I'*len(keys),*keys)))
   materials=[];rawmat=r(bo+32)
   for i in range(a['materials']):
    mat=v.allocate(0x58);v.write(mat,data[rawmat+i*80:rawmat+i*80+80]);v.put_u32(mat+0x54,0);materials.append(mat)

@@ -125,6 +125,7 @@ Expression* Field(Definition& d, const std::string& name) {
     if (name == "relvel") return &d.relvel;
     if (name == "charvel") return &d.charvel;
     if (name == "scale") return &d.scale;
+    if (name == "scljitter") return &d.scljitter;
     if (name == "bounce") return &d.bounce;
     return nullptr;
 }
@@ -171,6 +172,30 @@ bool ParseDefinition(std::string_view tag, Definition& output, std::string& diag
                 exact >= static_cast<double>(std::numeric_limits<int>::max())+1))
                 success = r.Fail("unsupported emittersize numeric literal");
             if (success) d.emittersize = static_cast<int>(exact);
+        } else if (name == "posjitter") {
+            // Original Dust parser/controller differential: explicit 0:0 is
+            // byte-identical to omission. Other position jitter is unsupported.
+            float value=0;double low=0,high=0;
+            success = r.Number(value,&low);
+            if (success && !r.Take(':')) success = r.Fail("expected constant posjitter range");
+            if (success) success = r.Number(value,&high);
+            if (success && (low != 0 || high != 0))
+                success = r.Fail("unsupported nonzero or curved posjitter");
+        } else if (name == "numtrails") {
+            float low=0,high=0;double exact_low=0,exact_high=0;
+            success=r.Number(low,&exact_low) && r.Take(':') && r.Number(high,&exact_high);
+            if(!success && r.error.empty())r.Fail("expected numtrails constant range");
+            if(success && (exact_low!=exact_high || exact_low!=std::trunc(exact_low) || exact_low<0 || exact_low>64))
+                success=r.Fail("unsupported numtrails constant integer range");
+            if(success)d.numtrails.constant={low,high,0};
+        } else if (name == "localrotation" && (r.Space(),r.text.substr(r.at,sizeof("[0:(0,0,0),100(0,0,0)]")-1)=="[0:(0,0,0),100(0,0,0)]")) {
+            // Original 401273..40127e overwrites the missing-colon key's
+            // time with its first zero, retaining TWO zero-time curve keys.
+            // Exact shipped Stone/Iskin typo only; never repair time to100.
+            constexpr std::string_view literal="[0:(0,0,0),100(0,0,0)]";
+            d.localrotation.constant[0]=0;
+            d.localrotation.keys={{0,{0,0,0}},{0,{0,0,0}}};
+            r.at+=literal.size();
         } else if (Expression* expression = Field(d, name)) {
             success = r.Expr(*expression);
         } else {

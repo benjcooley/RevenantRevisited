@@ -214,32 +214,48 @@ bool BeginDragLayers(EDragSource src, int32_t slot_idx,
     return true;
 }
 
+namespace {
+
+// The pending grab becomes a drag: its ghost follows the pointer.
+void Promote(int32_t mouse_x, int32_t mouse_y)
+{
+    g_state.pending = false;
+    g_state.dragging = true;
+    if (g_state.layer_count > 0)
+        SetDragBitmapLayers(g_state.layers, g_state.layer_count, g_state.grab_x, g_state.grab_y);
+    else
+        ClearDragBitmap();
+    log_info("[drag] promote %s slot=%d at (%d,%d) grab=(%d,%d)",
+             SrcName(g_state.source), g_state.source_idx,
+             mouse_x, mouse_y, g_state.grab_x, g_state.grab_y);
+}
+
+}  // namespace
+
+bool BeginSpellDrag(int32_t row, const char* talismans, PTBitmap icon,
+                    int32_t mouse_x, int32_t mouse_y, int32_t grab_x, int32_t grab_y)
+{
+    if (!talismans || !*talismans)
+        return false;
+    const SDragBitmapLayer layer = { icon, 0, 0 };
+    BeginDragLayers(EDragSource::SpellPane, row, nullptr, mouse_x, mouse_y, icon ? &layer : nullptr,
+                    icon ? 1 : 0, grab_x, grab_y);
+    g_state.spell = talismans;
+    Promote(mouse_x, mouse_y);
+    return true;
+}
+
 bool UpdateDrag(int32_t mouse_x, int32_t mouse_y)
 {
     if (g_state.source == EDragSource::None)
         return false;
-
     if (!g_state.dragging)
     {
         const int32_t dx = mouse_x - g_state.start_x;
         const int32_t dy = mouse_y - g_state.start_y;
-        if (std::abs(dx) < kDragThresholdPx && std::abs(dy) < kDragThresholdPx)
-            return true;
-
-        g_state.pending = false;
-        g_state.dragging = true;
-
-        if (g_state.layer_count > 0)
-            SetDragBitmapLayers(g_state.layers, g_state.layer_count,
-                                g_state.grab_x, g_state.grab_y);
-        else
-            ClearDragBitmap();
-
-        log_info("[drag] promote %s slot=%d at (%d,%d) grab=(%d,%d)",
-                 SrcName(g_state.source), g_state.source_idx,
-                 mouse_x, mouse_y, g_state.grab_x, g_state.grab_y);
+        if (std::abs(dx) >= kDragThresholdPx || std::abs(dy) >= kDragThresholdPx)
+            Promote(mouse_x, mouse_y);
     }
-
     return true;
 }
 

@@ -28,14 +28,10 @@
 
 #include "uiequiptest.h"
 #include "uisidebartest.h"
-#include "uispellbooktest.h"
-#include "uistatstest.h"
 
 namespace {
 
 bool g_initSidebar   = false;
-bool g_initStats     = false;
-bool g_initBook      = false;
 bool g_initEquip     = false;
 bool g_cursorOverlayRequested = false;
 bool g_cursorOverlayRegistered = false;
@@ -77,8 +73,6 @@ bool InitializeUIHudMode()
 
     // Content panes. Each owns one render surface and is visibility-gated
     // by SHudState, matching the retail upper/lower region selectors.
-    SafeInit("Stats",         g_initStats,     &InitializeUIStatsMode);
-    SafeInit("Spellbook",     g_initBook,      &InitializeUISpellbookMode);
 
     // Equip pane — live 3D paperdoll + equipment slots.
     SafeInit("Equip",         g_initEquip,     &InitializeUIEquipMode);
@@ -122,16 +116,6 @@ void RenderUIHudModeEmbedded()
     if (g_initSidebar)   RenderUISidebarModeEmbedded();
     const SHudState& s = GetHudState();
     const bool upperVisible = (s.sidebarState == HUD_SIDEBAR_OPEN);
-    if (g_initStats)
-    {
-        SetUIStatsModeVisible(upperVisible && s.topSlot == HUD_TOP_STATS);
-        RenderUIStatsModeEmbedded();
-    }
-    if (g_initBook)
-    {
-        SetUISpellbookModeVisible(upperVisible && s.topSlot == HUD_TOP_BOOK);
-        RenderUISpellbookModeEmbedded();
-    }
     if (g_initEquip)
     {
         SetUIEquipModeVisible(upperVisible && s.topSlot == HUD_TOP_EQUIP);
@@ -148,8 +132,6 @@ void CloseUIHudMode()
         g_cursorOverlayRegistered = false;
     }
     SafeClose("Equip",         g_initEquip,     &CloseUIEquipMode);
-    SafeClose("Spellbook",     g_initBook,      &CloseUISpellbookMode);
-    SafeClose("Stats",         g_initStats,     &CloseUIStatsMode);
     SafeClose("Sidebar",       g_initSidebar,   &CloseUISidebarMode);
     ClearUIBitmapAtlas();
 }

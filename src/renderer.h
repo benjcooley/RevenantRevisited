@@ -352,9 +352,13 @@ struct SQuadDrawItem
     float corner_color_rgba[4][4] = {};
     SFxBatchKey key = {};
     uint8_t corner_count = 4; // 3 preserves one authored triangle; 4 uses the quad diagonal.
-    uint8_t retail_texture = 0; // 1: nearest; 3: software ARGB4444; 4: software RGB565 additive.
+    uint8_t retail_texture = 0; // 1: nearest; 3: ARGB4444; 4: RGB565 additive; 5: untextured RGBA5.
     bool retail_rgb565_additive = false; // Exact RGB565/profile opt-in; software policy only.
     bool retail_argb4444 = false; // Exact source format opt-in; fallback policy stays above.
+    // Explicit untextured format: color is literal RGB5/A5; per-triangle flat
+    // maximum depth and source contribution truncation. Native projection also
+    // uses the original integer sample lattice. Defaults preserve ordinary FX.
+    bool retail_prelit_rgba5 = false;
     bool retail_software_projection = false; // XYZ are original software MODELZ/world.
     float retail_camera_z = 0.0f; // Explicit original camera input; XY use reconstruction camera.
     EFxDebugMode debug_mode = EFxDebugMode::Normal;
@@ -523,12 +527,25 @@ struct SHelperMeshSubmit
     // five-bit vertex Gouraud modulation, nearest wrapped texture sampling.
     // 2: normalized ARGB unlit. 3: exact ARGB4444 software lookup.
     // Material specular/emissive are not implemented by the source SW path.
-    int32_t    retail_lighting = 0;
+    int32_t    retail_lighting = 0; // 4: untextured RGB5; 6: RGB565 constant prelit RGBA5 in diffuse (explicit input format)
+    int32_t    index_offset = 0, index_count = 0; // zero count keeps the full mesh
+    bool       retail_flat_depth = false; // original untextured max(vertex Z), one triangle
+    float      retail_flat_depth_offset = 0.0f; // depth minus camera/base translation
+    bool       retail_prelit_rgba5 = false; // explicit mode4 vertex format: normal=RGB5, uv.x=alpha5; no normal lighting
+    // Optional immutable weighted prelit mesh: uv.y is the vertex weight.
+    // Color layout is A5:R5:G5:B5 in bits15:10:5:0; exact in a float uniform.
+    bool       retail_prelit_color_uniform = false;
+    uint32_t   retail_prelit_color = 0;
+    bool       retail_additive_cull_none = false; // explicit Scene8 full native draw-state proof
+    bool       retail_opaque = false; // audited Scene1: ONE/ZERO, depth test/write, selected face cull
+    bool       retail_source_alpha = false; // audited source mode2: cull-none; mode4 writes Z as the native untextured kernel
+    bool       retail_alpha_source_quantize = false; // opt-in original ARGB4444 source contribution floor; destination precision remains GPU
     // Undo an explicit geometry-only Z bridge before source normal lighting.
     float      retail_normal_z_scale = 1.0f;
     bool       retail_gold_no_depth = false; // audited authored mode80, no depth test/write
     bool       retail_positive_face_cull = false; // source positive screen-down; opt-in only
     bool       retail_software_projection = false;
+    bool       retail_software_pixel_grid = false; // Source integer raster inputs; explicit native/software only.
     float      retail_camera_z = 0.0f;
 };
 
@@ -620,6 +637,8 @@ public:
     // Exact Goldp default animator: retail draws alpha coins before its base
     // additive flare. Normal helper queue and shader modes are unchanged.
     void SubmitGoldFlareAfterFx(const SHelperMeshSubmit& m);
+    // Original mode2 ARGB layers submitted after their particle controller.
+    void SubmitRetailSourceAlphaAfterFx(const SHelperMeshSubmit& m);
     void EndTilePass();
     [[nodiscard]] SRendererTilePassStats GetLastTilePassStats() const
     {
@@ -1390,6 +1409,11 @@ private:
     sg_shader   helper_mesh_shader        = {};
     sg_pipeline helper_mesh_back_pipeline = {};
     sg_pipeline helper_mesh_front_pipeline = {};
+    sg_pipeline helper_opaque_back_pipeline = {};
+    sg_pipeline helper_opaque_front_pipeline = {};
+    sg_pipeline helper_source_alpha_pipeline = {};
+    sg_pipeline helper_untextured_software_pipeline = {};
+    sg_pipeline helper_additive_cull_none_pipeline{};
     sg_pipeline helper_mesh_add_back_pipeline = {};
     sg_pipeline helper_mesh_add_front_pipeline = {};
     sg_pipeline helper_gold_no_depth_back_pipeline = {};

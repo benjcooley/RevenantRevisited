@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+"""Full caller/actual Metal colored Flame18tick loops and frozen unchanged pairs."""
+import argparse,json,re
+from pathlib import Path
+from PIL import Image,ImageDraw
+from speed_profile_contract import sha
+from flame_variants_visual_reference import PROFILES
+
+def digest(p):return sha(Path(p).read_bytes())
+def review(evidence,output,qualified=False):
+ output.mkdir(parents=True,exist_ok=False);native=json.loads((evidence/'native-final/manifest.json').read_text());repeat=json.loads((evidence/'native-final-repeat/manifest.json').read_text());guard=json.loads((evidence/('profile-contract-qualified/manifest.json'if qualified else'profile-contract/manifest.json')).read_text());assert guard['status']=='pass';cases=[];binaries=set();ticks=(2,4,6,8,10,13,15,17,18,20,36)
+ for name,id,_ in PROFILES:
+  n=next(c for c in native['cases']if c['id']==id);r=next(c for c in repeat['cases']if c['id']==id);assert [(c['internal_frame'],c['rgb565_sha256'],c['draws'],c['geometry_bounds'])for c in n['rows']]==[(c['internal_frame'],c['rgb565_sha256'],c['draws'],c['geometry_bounds'])for c in r['rows']];assert [c['internal_frame']for c in n['rows']]==[t%18 for t in range(38)];assert len({c['rgb565_sha256']for c in n['rows']})==8
+  m=json.loads((evidence/(('metal-qualified-'if qualified else'metal-argb-final-')+name)/'manifest.json').read_text());assert m['status']=='pass' and m['scenario']['native_domain'] and m['scenario']['frames']==36 and m['pixel_summary']['distinct_frames']==8;binaries.add(m['binary_sha256']);
+  if qualified:assert m['pixel_summary']['pixel_sha256']==json.loads((evidence/('metal-argb-final-'+name)/'manifest.json').read_text())['pixel_summary']['pixel_sha256']
+  log=(evidence/(('metal-qualified-'if qualified else'metal-argb-final-')+name)/'run.log').read_text();uv_checks=[]
+  for tick,u,v,w,h in re.findall(r'flame-phase\] tick=(\d+) uv=([^,]+),([^,]+),([^,]+),([^\n]+)',log):
+   tick=int(tick);expected=n['rows'][tick]['draws'][0]['uvs'];actual=[[float(u)+float(w)*(i&1),float(v)+float(h)*(i>>1)]for i in range(4)];assert actual==expected;uv_checks.append(tick)
+  assert uv_checks==list(range(1,38));panel=Image.new('RGB',(1280,len(ticks)*505));detail=Image.new('RGB',(640,len(ticks)*385));d=ImageDraw.Draw(panel);dd=ImageDraw.Draw(detail);pairs=[]
+  for row,tick in enumerate(ticks):
+   nc=n['rows'][tick];mc=m['frames'][tick-2];paths=[Path(nc['image']),Path(mc['path'])];hashes=[nc['image_sha256'],mc['sha256']];assert list(map(digest,paths))==hashes;images=[Image.open(p).convert('RGB')for p in paths];bounds=[i.getbbox()for i in images];assert all(b is not None for b in bounds);pairs.append(dict(tick=tick,internal_frame=nc['internal_frame'],draws=len(nc['draws']),native_geometry_bounds=nc['geometry_bounds'],visible_bounds=bounds,images=list(map(str,paths)),sha256=hashes))
+   for col,(im,label)in enumerate(zip(images,('Original','Actual Metal'))):panel.paste(im.resize((640,480)),(col*640,row*505+25));d.text((col*640+5,row*505+5),name+' '+label+' tick'+str(tick),fill='white');detail.paste(im.crop((280,195,360,285)).resize((320,360)),(col*320,row*385+25));dd.text((col*320+3,row*385+5),name+' '+label+' same fixed crop tick'+str(tick),fill='white')
+  panel.save(output/(name+'-whole.png'));detail.save(output/(name+'-fixed-crop.png'));cases.append(dict(name=name,id=id,pairs=pairs,native_and_port_atlas_uvs_equal_all37=True,independent_original_repeat_identical=True,whole_sha256=digest(output/(name+'-whole.png')),fixed_crop_sha256=digest(output/(name+'-fixed-crop.png'))))
+ assert len(binaries)==1;report=dict(status='awaiting_independent_review',accepted=False,cases=cases,binary_sha256=next(iter(binaries)),input_manifest_sha256={str(p):digest(p)for p in[evidence/'native-final/manifest.json',evidence/'native-final-repeat/manifest.json',evidence/('profile-contract-qualified/manifest.json'if qualified else'profile-contract/manifest.json'),*[evidence/(('metal-qualified-'if qualified else'metal-argb-final-')+n)/'manifest.json'for n,_,_ in PROFILES]]},appearance_fitted=False,reviewed_raw_pixels_unchanged=qualified,prior_review_manifest_sha256=digest(evidence/'review-final/manifest.json')if qualified else None,scope='Own exact FlameB/G CLASS IDs/assets, full original custom factory/all constructors/Initialize/CopyVertices/Animate/RenderObject/prelit LVERTEX/ARGB4444 software kernel. Whole640x480 owner/camera0,seed1,ambient38/dir1,18counter/8atlas cells/two cycles vs actual typed source owner/component/Metal under explicit native-domain policy. All37 actual UV phases exact;38nativeframes pertype repeat across freshVM. Existing retailARGB4444/point-sampling flags correct only these2typed variants; no global shader/color fit. Bounded map review factory/liveness smoke separate; natural scene/placement/movement/delete differential and native device/exact pixels remain open.');(output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],report['binary_sha256']);return report
+if __name__=='__main__':
+ p=argparse.ArgumentParser();p.add_argument('--evidence',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--qualified',action='store_true');a=p.parse_args();review(a.evidence,a.output,a.qualified)

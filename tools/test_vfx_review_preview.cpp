@@ -7,6 +7,7 @@
 #endif
 #include <cassert>
 #include <iostream>
+#include <cstring>
 
 namespace {
 int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0;
@@ -32,10 +33,20 @@ std::vector<SEffect> ReviewCatalogue() {
     auto finite=Row("TMPAppear_AUTHORED_START",EVfxPreviewStyle::Static);
     finite.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
     finite.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
-    return {finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    auto queen=Row("QueenArrow_ORIGINAL",EVfxPreviewStyle::Projectile);
+    queen.factory_endpoints=[](const S3DPoint& source,const S3DPoint& target)->void*{
+        assert(source.x==-90 && source.y==40 && source.z==128);
+        assert(target.x==80 && target.y==-120 && target.z==128);
+        ++creates;return new int(0);
+    };
+    queen.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
+    queen.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
+    return {queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
+            Row("TFogEffect_BESPOKE",EVfxPreviewStyle::Static),
+            Row("TJhagaAttackEffect_BESPOKE",EVfxPreviewStyle::Projectile),
             Row("TSparksEffect_BESPOKE",EVfxPreviewStyle::Combat),
             Row("TBlastEffect_BESPOKE",EVfxPreviewStyle::Combat),
             Row("TFairyEffect_BESPOKE",EVfxPreviewStyle::Static),
@@ -45,7 +56,9 @@ std::vector<SEffect> ReviewCatalogue() {
 }
 // Deliberately different value proves the bridge delegates policy instead of
 // hardcoding a second cadence. Production delegates to RetriggerInterval.
-float ReviewRestartInterval(EVfxPreviewStyle style) { return style==EVfxPreviewStyle::Combat?.5f:0; }
+float ReviewRestartInterval(EVfxPreviewStyle style) {
+    return style==EVfxPreviewStyle::Combat?.5f:style==EVfxPreviewStyle::Projectile?.001f:0;
+}
 }
 int main() {
     const S3DPoint origin{17,33,21};
@@ -56,12 +69,23 @@ int main() {
     assert(!CreateVfxReviewPreview(0x152dafef,origin));
     assert(!CreateVfxReviewPreview(0x12309867,origin));
     // A registered, callable factory is insufficient: the implementation audit
-    // must reject placeholders and invalid animator aliases before spawning.
-    for (uint32_t id : {0x0ea34fa3u,0xad92bd25u,0x2784abdeu,0xad92bd33u,0xd0c0f03au}) {
+    // must reject null bodies and invalid animator aliases before spawning.
+    for (uint32_t id : {0x2784abdeu,0xd0c0f03au}) {
         assert(!DescribeVfxReviewPreview(id).supported);
         assert(!CreateVfxReviewPreview(id,origin));
     }
-    assert(DescribeVfxReviewPreview(0x00ab1d1d).supported); // real Aura
+    for (uint32_t id : {0x0ea34fa3u,0xad92bd33u,0x00ab1d1du,0xc24b2a85u}) {
+        const auto info=DescribeVfxReviewPreview(id);
+        assert(info.supported && info.partial);
+        assert(std::strstr(info.description,"Partial preview:"));
+        assert(std::strstr(info.description,"not complete original implementation"));
+    }
+    const auto fairy=DescribeVfxReviewPreview(0xad92bd25u);
+    assert(fairy.supported && !fairy.partial);
+    const auto stationary=DescribeVfxReviewPreview(0xaeaeeb32u);
+    assert(stationary.supported && stationary.partial && stationary.requires_endpoints);
+    assert(std::strstr(stationary.description,"stationary"));
+    assert(!DescribeVfxReviewPreview(0x14db0f2e).partial);
     assert(DescribeVfxReviewPreview(0x14db0f2e).supported); // replaced Sparks stub
     assert(creates==0);
     {
@@ -87,5 +111,26 @@ int main() {
         assert(finite->Alive()==true && creates==5 && destroys==4);
     }
     assert(creates==destroys); // Natural completion recreates without a timer.
+    {
+        auto partial=CreateVfxReviewPreview(0x0ea34fa3u,origin);
+        assert(partial && partial->Id()=="TBlastEffect_BESPOKE");
+        const int before=ticks;
+        partial->Submit(); partial->SubmitWorld();
+        assert(ticks==before+1);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0xad92bd1e);
+        assert(info.supported && info.requires_endpoints && info.lifetime_known);
+        assert(!CreateVfxReviewPreview(0xad92bd1e,origin));
+        auto queen=CreateVfxReviewPreview(0xad92bd1e,{-90,40,128},{80,-120,128});
+        assert(queen && queen->Alive()==true);
+        const int initial=creates;
+        TTime::BeginFixedFrame();queen->Submit();
+        TTime::BeginFixedFrame();queen->Submit();
+        assert(queen->Alive()==false && creates==initial);
+        queen->Submit();assert(queen->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";
 }

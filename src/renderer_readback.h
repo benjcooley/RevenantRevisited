@@ -24,13 +24,16 @@ namespace RendererReadback {
 // handle is invalid, or if the request is out of bounds.
 //
 // Synchronous: blocks until the GPU has finished the most recent frame
-// touching `img`. Cheap when called rarely (selection clicks).
+// touching `img`. Requires the current frame to have been committed;
+// otherwise returns false rather than blocking behind an uncommitted frame.
+// Cheap when called rarely (selection clicks).
 bool ReadPixel(sg_image img, int32_t x, int32_t y, uint8_t out_rgba[4]);
 
 // Read a rectangular region of `img` as tightly-packed RGBA8 bytes.
 // `out_rgba` must point to at least `w * h * 4` bytes. Returns false on
 // non-Apple builds, invalid handle, or out-of-bounds request. Synchronous —
-// blocks until the GPU finishes the most recent frame touching `img`.
+// blocks until the GPU finishes the most recent committed frame touching `img`.
+// Returns false if a render frame is still awaiting sg_commit().
 // Used by the headless filmstrip / single-snap PNG output path.
 bool ReadRect(sg_image img, int32_t x, int32_t y, int32_t w, int32_t h,
               uint8_t* out_rgba);

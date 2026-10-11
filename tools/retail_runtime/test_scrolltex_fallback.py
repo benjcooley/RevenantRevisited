@@ -29,6 +29,7 @@ class NativeMultipleObjects(probe.ScrollFixture):
             v.write(image_obj, name.encode()+b'\0')
             v.put_u32(image_rows+4*i, image_obj)
             v.put_u32(draw_rows+4*i, self.drawobjects[i])
+            v.put_u32(self.drawobjects[i]+4, i)  # Native name selection reads each animator object's index.
             v.put_u32(self.drawobjects[i]+0xa0, 4)
             v.put_u32(self.drawobjects[i]+0xa4, self.multi_verts[i])
             for vertex in range(4):
@@ -67,6 +68,20 @@ class ScrollTexFallback(unittest.TestCase):
                 self.assertEqual(u,.125*vertex)
                 self.assertAlmostEqual(value,.25*i+.01*24,places=6)
 
+    def test_native_single_parenthesized_selector_matches_bare(self):
+        image=Path(os.environ.get('RETAIL_RUNTIME_EXE',str(probe.ROOT/'recon/retail_asm/baseline/Revenant.rebuilt.exe')))
+        results=[]
+        for selector in ('second','(second)','( second )'):
+            f=NativeMultipleObjects(image);v=f.vm;text=('obj='+selector+',du=-0.03,dv=0').encode()+b'\0'
+            pointer=v.allocate(len(text));v.write(pointer,text)
+            controller=v.call(0x4059e0,(0,0,f.animator,f.context,f.owner))
+            self.assertEqual(v.call(0x401820,(pointer,),this=controller),1)
+            self.assertEqual(v.u32(controller+0x18),1)
+            self.assertEqual(v.u32(v.u32(controller+0x28)),f.drawobjects[1])
+            v.put_u32(0x65cb38,24);v.call(0x401990,this=controller)
+            results.append([bytes(v.uc.mem_read(p,128))for p in f.multi_verts])
+        self.assertEqual(results[0],results[1]);self.assertEqual(results[0],results[2])
+
     def test_compiled_initializer_keeps_strict_grammar_and_per_object_overlap(self):
         profiles = json.loads(Path(probe.__file__).with_name('scrolltex_water_profiles.json').read_text())['profiles']
         with zipfile.ZipFile(probe.ROOT/'data/imagery.rvi') as z:
@@ -87,7 +102,11 @@ int main(){T3DImagery image;image.objects.rows={{"first"},{"second"},{"third"}};
   assert(!memcmp(a,b,sizeof a));assert(a[0]==0&&a[1]==.01f*24);}
  body.tags={{0,0,{"scrolltex"},{"obj=second,du=0,dv=.02"}}};
  image.InitializeScrollTexTracks(&body);assert(image.scrolltex_tracks.size()==1&&image.scrolltex_tracks[0].object==1);
- for(const char*bad:{"obj=(second),du=0,dv=.01","obj=second,du=0","obj=second,du=nan,dv=0",
+ for(const char*good:{"obj=(second),du=0,dv=.02","obj=( second ),du=0,dv=.02"}){
+  body.tags={{0,0,{"scrolltex"},{good}}};image.InitializeScrollTexTracks(&body);
+  assert(image.scrolltex_tracks.size()==1&&image.scrolltex_tracks[0].object==1);
+  float uv[2];assert(image.ScrollTexOffset(1,0,0,24,uv)&&uv[1]==.02f*24);}
+ for(const char*bad:{"obj=((second)),du=0,dv=.01","obj=(first,second),du=0,dv=.01","obj=(),du=0,dv=.01","obj=second,du=0","obj=second,du=nan,dv=0",
   "obj=second,du=1e999,dv=0","obj=second,du=0,dv=.01,other=1","obj=second,du=0,dv=.01,du=1",
   "obj=second,du=0,dv=.01,","obj=second*,du=0,dv=.01"}){
   body.tags={{0,0,{"scrolltex"},{bad}}};image.InitializeScrollTexTracks(&body);assert(image.scrolltex_tracks.empty());}

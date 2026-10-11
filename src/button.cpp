@@ -142,6 +142,14 @@ bool TButtonPane::Initialize()
 
 void TButtonPane::Close()
 {
+    ClearButtons();
+    layer.reset();
+    TPane::Close();
+}
+
+// REVSYNC: 0x00436890
+void TButtonPane::ClearButtons()
+{
     TPointerIterator<TButton> i(&Buttons);
 
     while (i)
@@ -156,8 +164,7 @@ void TButtonPane::Close()
     }
     clicked = -1;
     hover = nullptr;
-    layer.reset();
-    TPane::Close();
+    SetDirty(true);
 }
 
 // REVSYNC: 0x004369f0. Retail plays "frontend_move" whenever the hover is

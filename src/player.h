@@ -303,8 +303,24 @@ class TPlayer : public TCharacter
     [[nodiscard]] int32_t NumKnownSpells() const { return (int32_t)knownspells.size(); }
     [[nodiscard]] const char* KnownSpell(int32_t i) const { return knownspells[i].data(); }
         // Talisman codes of the spells the player has learned (retail +0x2ec), in the order learned
+    [[nodiscard]] int32_t KnownSpellsVersion() const { return knownspellsversion; }
+        // Moves on whenever that list changes
     bool LearnSpell(const char* talismans);
         // Adds a spell's talisman code; false when it is already known
+    void ForgetSpell(int32_t i);
+        // Removes the i'th known spell, the later ones moving down (retail
+        // TPointerArray RemoveAt 0x0041cb80, as the spell book prunes codes
+        // spell.def doesn't know)
+    bool TrainStat(int32_t attribute);
+        // REVSYNC: 0x0051fe50 -- the stat pane's pick of attribute 0..5
+        // (Strn..Luck) to raise at the next level: it takes the pick not
+        // made last, unless the attribute is at 30, or is already that pick
+        // and at 29. False when nothing changed.
+    [[nodiscard]] int32_t LevelUpPick(int32_t pick) const { return levelupstats[pick]; }
+        // The attribute picked first (0) or second (1) for the next level;
+        // pick 2 is which of them was made last
+    void SetLevelUpPicks(const std::array<int32_t, 3> &picks) { levelupstats = picks; }
+        // All three, as a save holds them
     void SetMoney(int32_t amount);
         // REVSYNC: 0x0051e900 -- the gold carried becomes `amount`: the pile
         // set to it, added when there is none, removed below 1
@@ -467,6 +483,7 @@ class TPlayer : public TCharacter
 
   // Shipped-game player record, in retail's save order (SAVE_GAME.md §11.4)
     std::vector<TSpellCode> knownspells;            // +0x2ec: talisman codes learned
+    int32_t knownspellsversion = 0;
     SPlayerHudWords hudwords;                       // HUD state as last saved/loaded
     std::array<int32_t, 3> levelupstats{};          // +0x360: player-stat indices the level-up messages use
     SPlayerTeamRecord team;                         // +0x490: multiplayer team record

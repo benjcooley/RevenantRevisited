@@ -68,6 +68,7 @@
 #include "multi.h"
 #include "multictrl.h"
 #include "spell.h"
+#include "spellbook.h"
 #include "spellpane.h"
 #include "statpane.h"
 #include "retailab.h"
@@ -148,6 +149,7 @@ TMultiCtrlPane  MultiCtrl;          // Multipane control panel (buttons)
 TEquipPane      EquipPane;          // Equipment pane
 TAutoMap        AutoMap;            // Automapper
 TSpellPane      SpellPane;          // Talisman stuff
+TSpellBookPane  SpellBook;          // The spells the main player knows
 TQuickSpellPane QuickSpells;        // Quick spell buttons
 TStatPane       StatPane;           // Display of char's abilities
 TScriptManager  ScriptManager;      // Manages all scripts in the game
@@ -1714,7 +1716,7 @@ void GetParameters(int argc, char **argv)
         const ReviewArg args[] = {
             {"vfx-review-speed", &StartupVfxReviewSpeed, 0.1, 240.0},
             {"vfx-review-ratio", &StartupVfxReviewRatio, 2.0f, 3.0f},
-            {"vfx-review-spacing", &StartupVfxReviewSpacing, 180.0f, 800.0f},
+            {"vfx-review-spacing", &StartupVfxReviewSpacing, 64.0f, 800.0f},
             {"vfx-review-gap", &StartupVfxReviewGap, 640.0f, 1600.0f},
             {"vfx-review-offset", &StartupVfxReviewOffset, 0.0f, 1000000.0f},
             {"vfx-review-path-tilt", &StartupVfxReviewPathTilt, -1.0f, 1.0f},
@@ -1830,10 +1832,11 @@ void GetParameters(int argc, char **argv)
             if (p == "0") StartupPartSysQuality = 0;
             else if (p == "1") StartupPartSysQuality = 1;
             else if (p == "2") StartupPartSysQuality = 2;
-            else FatalError("Invalid --partsys-quality: expected 0, 1 or 2", nullptr);
+            else if (p == "3") StartupPartSysQuality = 3;
+            else FatalError("Invalid --partsys-quality: expected 0, 1, 2 or 3", nullptr);
         }
         else if (arg_flag(cmd, "partsys-quality"))
-            FatalError("Missing --partsys-quality value; expected 0, 1 or 2", nullptr);
+            FatalError("Missing --partsys-quality value; expected 0, 1, 2 or 3", nullptr);
     }
 
     {
@@ -1861,7 +1864,15 @@ void GetParameters(int argc, char **argv)
         if (arg_param(cmd, "vfx-backdrop", p))
             strncpyz(StartupVfxBackdrop, p.c_str(), MAXPATHLEN);
         if (arg_param(cmd, "vfx-camera", p))
-            sscanf(p.c_str(), "%f,%f", &StartupVfxCamera[0], &StartupVfxCamera[1]);
+        {
+            float x, y;
+            if (sscanf(p.c_str(), "%f,%f", &x, &y) == 2)
+            {
+                StartupVfxCamera[0] = x;
+                StartupVfxCamera[1] = y;
+                StartupVfxCameraExplicit = true;
+            }
+        }
         if (arg_param(cmd, "vfx-origin", p))
             StartupVfxOriginSet = sscanf(p.c_str(), "%d,%d,%d", &StartupVfxOrigin[0],
                                         &StartupVfxOrigin[1], &StartupVfxOrigin[2]) == 3;

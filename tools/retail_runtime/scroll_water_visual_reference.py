@@ -16,14 +16,14 @@ from software_probe import save_rgb565_png
 from firecone_owner_probe import native_owner
 
 class NativeScrollScene(NativeParticleScene):
- def __init__(self,exe,data,name,width=640,height=340):
+ def __init__(self,exe,data,name,width=640,height=340,particle_required=False,native_binding=None,eager_pose=True):
   self.data=data;a=read_asset(data);a['name']=name
-  NativeSpeed.__init__(self,exe,a,width,height,software_factory=LitSoftwareFixture,particle_required=False)
+  NativeSpeed.__init__(self,exe,a,width,height,software_factory=LitSoftwareFixture,particle_required=particle_required,native_binding=native_binding,eager_pose=eager_pose)
   self.software.lighting((38,38,38),(1,1,1));v=self.vm
   for addr,value in ((0x5d7a28,1),(0x66818c,0),(0x5e91c0,0),(0x5e8740,0),(0x5c61ac,1),(0x5e8790,0),(0x5c619c,1),(0x5e8850,1)):v.put_u32(addr,value)
   method=v.allocate(16);v.write_code(method,b'\xb8'+struct.pack('<I',self.animator)+b'\xc3');vt=v.allocate(0x100);v.put_u32(vt+0x24,method);v.put_u32(self.owner,vt)
   def texture_frame(uc,address,size,user):self.ret(1,8)
-  v.uc.hook_add(UC_HOOK_CODE,texture_frame,begin=0x40c520,end=0x40c520)
+  self.texture_frame_hook=v.uc.hook_add(UC_HOOK_CODE,texture_frame,begin=0x40c520,end=0x40c520)
   device=v.allocate(4);devicevt=v.allocate(0xa0);v.put_u32(device,devicevt);v.put_u32(0x668f14,device);self.material_state=0
   def getlight(args):v.put_u32(args[2],self.material_state);return 0
   def setlight(args):self.material_state=args[2];return 0
@@ -48,14 +48,14 @@ class NativeScrollScene(NativeParticleScene):
   for controller in self.controllers:
    if v.u32(controller)!=0x5a3480:raise ValueError('Only original scrolltex controllers admitted')
   return dict(dispatch=self.dispatch,constructor=self.constructor,controllers=[dict(vtable=hex(v.u32(c)),state=v.u32(c+4),frame=v.u32(c+8),objects=v.u32(c+0x18),rates=list(struct.unpack('<2f',v.uc.mem_read(c+0x2c,8))))for c in self.controllers],object_flags=[hex(v.u32(o))for o in self.animobjs])
- def render(self,global_tick,owner_frame,mode=0):
+ def render(self,global_tick,owner_frame,mode=0,cull=2):
   v=self.vm;v.put_u32(0x65cb38,global_tick);v.write(self.owner+0x5c,struct.pack('<h',owner_frame));v.put_u32(self.animator+0x14,owner_frame)
   owner=native_owner(self)
   for controller in self.controllers:v.call(0x401990,this=controller)
   self.software.clear();self.draws=[];self.render_states={}
   # Explicit initial normal-mode/depth/cull inputs, not fitted per effect.
   v.call(0x417d60,(mode,1),this=0x65a57c)
-  for key,value in ((7,1),(14,1),(22,2)):v.call(0x56d400,(key,value))
+  for key,value in ((7,1),(14,1),(22,cull)):v.call(0x56d400,(key,value))
   for index,obj in enumerate(self.animobjs):
    if v.call(0x40a420,(obj,0,owner_frame,0,0),this=self.imagery)!=1:raise AssertionError('Original matrix rejected')
    v.call(0x40a8f0,(obj,0,owner_frame,self.animator+0xac,0xffffffff,1),this=self.imagery,instruction_limit=100000000)

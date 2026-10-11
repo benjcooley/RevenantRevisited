@@ -98,9 +98,13 @@ class ItemPaneKit:
 
     # ---- the frame's masks ---------------------------------------------
 
-    def record(self, origin):
-        """Starts the frame's alpha mask; panes draw at `origin`."""
+    def record(self, origin, surfaces=None):
+        """Starts the frame's alpha mask; panes draw at `origin`. A pane that
+        composes on its own surfaces names them: {pointer: (dx, dy, (left,
+        top, right, bottom))}, where each lands in the pane and the rect of
+        the pane it shows in."""
         self.origin = origin
+        self.surfaces = surfaces or {}
         self.alpha = bytearray(SCREEN[0] * SCREEN[1])
 
     def stop(self):
@@ -109,7 +113,13 @@ class ItemPaneKit:
         return zlib.compress(bytes(alpha), 9).hex()
 
     def _track_alpha(self, name, this, a):
-        if self.alpha is None or name != 'Put' or self.scene.screen_surface(this) != 'display':
+        if self.alpha is None or name != 'Put':
+            return
+        if self.scene.screen_surface(this) == 'display':
+            dx, dy, clip = 0, 0, (-SCREEN[0], -SCREEN[1], SCREEN[0], SCREEN[1])
+        elif this in self.surfaces:
+            dx, dy, clip = self.surfaces[this]
+        else:
             return
         bitmap = a[2]
         fields = struct.unpack('<18I', self.vm.uc.mem_read(bitmap, 72))
@@ -121,14 +131,17 @@ class ItemPaneKit:
         if not (mode & DM_ALPHA and flags & BM_ALPHA and fields[9] and fields[10]):
             return
         coverage = self.vm.uc.mem_read(bitmap + 40 + fields[10], width * height)
-        left, top = self.origin[0] + s32(a[0]), self.origin[1] + s32(a[1])
+        left, top = dx + s32(a[0]), dy + s32(a[1])
         for y in range(height):
-            sy = top + y
-            if not 0 <= sy < SCREEN[1]:
+            py = top + y
+            sy = self.origin[1] + py
+            if not (0 <= sy < SCREEN[1] and clip[1] <= py < clip[3]):
                 continue
             for x in range(width):
-                sx = left + x
-                if 0 <= sx < SCREEN[0] and 0 < (coverage[y * width + x] & 0x1f) < OPAQUE_ALPHA:
+                px = left + x
+                sx = self.origin[0] + px
+                if (0 <= sx < SCREEN[0] and clip[0] <= px < clip[2]
+                        and 0 < (coverage[y * width + x] & 0x1f) < OPAQUE_ALPHA):
                     self.alpha[sy * SCREEN[0] + sx] = 1
 
     def _track_glyph_alias(self, uc, address, size, user):
