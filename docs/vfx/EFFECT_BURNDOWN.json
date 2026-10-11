@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 63,
+    "visual_fidelity_confirmed_rows": 69,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 63,
-    "remaining_visual_review_rows": 113
+    "reviewed_visual_pass_rows": 69,
+    "remaining_visual_review_rows": 107
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -10610,7 +10610,8 @@
       ],
       "source_fixes": [
         "Original shared missile Pulse/Move restored in production FireBall: 16.16 accumulators and full speed, launch/range/live-foe/dead/friend/wall/kill-request semantics; constructor Initialize and real factory enabled; normal map Pulse advances motion/visual lifetime without double generic Move. Six original-code scenarios compare5760integerfields exactly; actual factory/walkmap runtime moves, impacts and requests kill. Visual/damage/natural-cast/map-reaper gates remain open.",
-        "Authored Fireball head/glow quads restored from original moving Render kernels: removed guessed192wuWorldXY square, literal spin/tilt/owner-facing matrices and UVvertex1/2 topology recovered. Four source/destination moving trajectories produce48exactwarm renderpairs,1920geometry/UVchecks and zero softwarepixel differences. Trail/burst/sparks, complete animator and Metal/map/damage remain open."
+        "Authored Fireball head/glow quads restored from original moving Render kernels: removed guessed192wuWorldXY square, literal spin/tilt/owner-facing matrices and UVvertex1/2 topology recovered. Four source/destination moving trajectories produce48exactwarm renderpairs,1920geometry/UVchecks and zero softwarepixel differences. Trail/burst/sparks, complete animator and Metal/map/damage remain open.",
+        "2026-10-10: full original impact exposes final expired-burst RNG/frame update, ring overshoot, two authored burst cards and per-vertex four-color annulus. Production and optional per-corner quad packing corrected; uniform path unchanged."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -10618,18 +10619,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "fireball_factory_constructor_and_actual_world_pulse_verified",
-      "next_action": "Verify leaf FireBall rendered frontend/animation/damage and natural cast/character-hit/map cleanup; retain shared missile and actual factory motion evidence.",
+      "next_action": "Retain complete leaf flight/impact/decay appearance and state proofs; natural spell damage/character collision/map reaper, audio and exact framebuffer/device parity remain separate.",
       "notes": [],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "runtime_regression": {
@@ -10765,7 +10766,17 @@
           ],
           "full_acceptance_granted": false
         }
-      ]
+      ],
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent eleven-phase full-frame inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Eleven original full leaf Init/Pulse/Animate/RenderObject/software-raster versus actual Metal phases: moving flight/trail/sparks, paired burst/authored colored ring, decay and blank tail pass in declared native-domain scenario. Full state/RNG and impact geometry/color controls pass; exact pixels and natural spell/character/map/device contexts remain open.",
+        "report": "recon/retail_asm/runtime/effects/fireball-full-current-visual-20261010/root-approval.json",
+        "sha256": "a792313d4237ebf2db755a546c733d9da804e7635fb105afd951da28d8258807",
+        "note": "docs/vfx/forensics/FIREBALL_FULL_RENDER_20261010.md"
+      }
     },
     {
       "index": 32,
@@ -13987,7 +13998,8 @@
         "Exact retail ID uses Misc/Mistfog.i3d RGB565, zero emissive and authored quad/UV/material; removed wrong Magic ARGB fallback, guessed billboard and fitted tint. Literal OBJ3D_SCL1|POS2 transform restored.",
         "Snapshot gravity -0.01f, literal rand()/RAND_MAX order, 25-puff state and true 24Hz accumulator restored; 1600 exact host-CRT state/next-RNG cases pass. Typed stable-identity hook attaches one persistent reference component, uses live owner transform and separates update/submit; manual preview avoids duplicate ticks.",
         "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested misc\\Mistfog.i3d is distinguished from Imagery/Magic/mistfog.i3d.",
-        "Native x87 reset arithmetic restored: float reciprocal/constants with double intermediates until final float stores, preserving six RNG draws per puff. Original Initialize/Animate produce 241 exact float32 state cases across25puffs and432nativeRNG outputs; previous10465field mismatches removed. Nine shared-original-raster images match; illumination/additive/modern-renderer/map gates remain open."
+        "Native x87 reset arithmetic restored: float reciprocal/constants with double intermediates until final float stores, preserving six RNG draws per puff. Original Initialize/Animate produce 241 exact float32 state cases across25puffs and432nativeRNG outputs; previous10465field mismatches removed. Nine shared-original-raster images match; illumination/additive/modern-renderer/map gates remain open.",
+        "2026-10-10: authored normal-lit RGB565 helper replaces unlit material quad in software policy; four host rand draws use retail GameRand/32767, preserving source draw order and restoring live stream."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -14000,13 +14012,13 @@
         "port_smoke": true,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "reference_component_verified_through_actual_saved_identity_and_command_map_lifecycle",
-      "next_action": "Capture visible native Misc RGB565 output at documented controlled brighter ambient, then compare authored-normal vertex lighting and SW raster/depth. Verify original full-map context. Saved identity and real ADDAT/MOVE/persistence/DELETE pass.",
+      "next_action": "Retain scoped current actual native/Metal appearance; investigate original natural scene/visibility, caller and device separately.",
       "notes": [
         "Original normal-bearing D3DVT_VERTEX and SW RGB565 Gouraud illumination are not reproduced by current Unlit; LitFlat is also approximate. Material/device illumination stays open. No Magic substitution, fitted tint or authored-Z adjustment.",
         "Saved and command captures completed but teardown stalled; owned processes required termination (exit -15). Normal shutdown remains open.",
@@ -14114,7 +14126,17 @@
           "after_state_field_errors": 0,
           "full_acceptance_granted": false
         }
-      ]
+      ],
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent eleven-phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Eleven original whole25-puff Render/owner/normal-light/software raster versus actual current Metal phases through241ticks; source38/dir1 lighting and live retail RNG match. Scoped form/color/growth/reset progression passes; natural setting/caller/device and exact framebuffer parity remain open.",
+        "report": "recon/retail_asm/runtime/effects/mistfog-current-visual-20261010/root-approval.json",
+        "sha256": "6bd421033eab2ef67c9a7753fa5dca16847a87352072a351c20407fa71cf9a9f",
+        "note": "docs/vfx/forensics/M06_MISTFOG_RUNTIME.md"
+      }
     },
     {
       "index": 71,
@@ -14800,13 +14822,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "retail_default_animator_lookup_verified_generic_mesh_map_texture_lifecycle_verified",
-      "next_action": "Verify natural caller/map or character context, lighting/culling and full backend parity; retain bounded original-raster proof and normal map texture lifecycle independently.",
+      "next_action": "Preserve scoped original/actual-Metal water appearance; natural authored map/lighting/depth and exact device/framebuffer parity remain open.",
       "notes": [
         "2026-10-07: fresh merged-source bounded retail proof retained; no full acceptance. Four-row map create/frame-wrap/move/delete40-observation test passes, changing texture pixels and restored floor; floor-only diagnostic lacks module dialog."
       ],
@@ -14837,7 +14859,17 @@
         "clean_floor_restored": true,
         "natural_trigger_verified": false
       },
-      "work_queue_status": "thin_bounded_pass_natural_context_open"
+      "work_queue_status": "thin_bounded_pass_natural_context_open",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent six-phase whole-frame inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six fixed whole original factory/RenderObject/software-raster versus actual-owner Metal samples. Recorded water form, texture, color and authored scrolling pass; StillWater correctly stays constant. No image/phase fitting; precision, depth interaction and natural-map/device contexts remain open.",
+        "report": "recon/retail_asm/runtime/effects/scroll-stillwater-visual-20261010/root-approval.json",
+        "sha256": "2b6928cfa6cea3479b76b9f35d57661172ebc8f54a192f8e72dfd4bb90b77f0a",
+        "note": "docs/vfx/forensics/SMALL_FAMILY_VISUAL_BATCH_20261010.md"
+      }
     },
     {
       "index": 77,
@@ -14863,13 +14895,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "native_default_builder_scrolltex_and_actual_generic_map_verified",
-      "next_action": "Retain exact original controller/UV/authored mesh plus actual generic map lifecycle. Verify authored environment/lighting/culling and original device/Metal separately.",
+      "next_action": "Preserve scoped original/actual-Metal water appearance; natural authored map/lighting/depth and exact device/framebuffer parity remain open.",
       "notes": [],
       "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
       "thin_emulator_checks": [
@@ -14900,6 +14932,16 @@
         "created_visible": true,
         "clean_floor_restored": true,
         "natural_trigger_verified": false
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent six-phase whole-frame inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six fixed whole original factory/RenderObject/software-raster versus actual-owner Metal samples. Recorded water form, texture, color and authored scrolling pass; StillWater correctly stays constant. No image/phase fitting; precision, depth interaction and natural-map/device contexts remain open.",
+        "report": "recon/retail_asm/runtime/effects/scroll-flowwater-visual-20261010/root-approval.json",
+        "sha256": "9a32672e6d5ae30fd9cc59229d2e2777288f36f33304fcabc74156997511c14a",
+        "note": "docs/vfx/forensics/SCROLL_WATER_VISUAL_BATCH_20261010.md"
       }
     },
     {
@@ -14923,13 +14965,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "native_default_builder_scrolltex_and_actual_generic_map_verified",
-      "next_action": "Retain exact original controller/UV/authored mesh plus actual generic map lifecycle. Verify authored environment/lighting/culling and original device/Metal separately.",
+      "next_action": "Preserve scoped original/actual-Metal water appearance; natural authored map/lighting/depth and exact device/framebuffer parity remain open.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -14962,6 +15004,16 @@
         "created_visible": true,
         "clean_floor_restored": true,
         "natural_trigger_verified": false
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent six-phase whole-frame inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six fixed whole original factory/RenderObject/software-raster versus actual-owner Metal samples. Recorded water form, texture, color and authored scrolling pass; StillWater correctly stays constant. No image/phase fitting; precision, depth interaction and natural-map/device contexts remain open.",
+        "report": "recon/retail_asm/runtime/effects/scroll-bendwater1-visual-20261010/root-approval.json",
+        "sha256": "bd945371d20f81241264692314dca86838007384f3675928f6c76578d56de470",
+        "note": "docs/vfx/forensics/SCROLL_WATER_VISUAL_BATCH_20261010.md"
       }
     },
     {
@@ -14985,13 +15037,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "native_default_builder_scrolltex_and_actual_generic_map_verified",
-      "next_action": "Retain exact original controller/UV/authored mesh plus actual generic map lifecycle. Verify authored environment/lighting/culling and original device/Metal separately.",
+      "next_action": "Preserve scoped original/actual-Metal water appearance; natural authored map/lighting/depth and exact device/framebuffer parity remain open.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -15024,6 +15076,16 @@
         "created_visible": true,
         "clean_floor_restored": true,
         "natural_trigger_verified": false
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent six-phase whole-frame inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Six fixed whole original factory/RenderObject/software-raster versus actual-owner Metal samples. Recorded water form, texture, color and authored scrolling pass; StillWater correctly stays constant. No image/phase fitting; precision, depth interaction and natural-map/device contexts remain open.",
+        "report": "recon/retail_asm/runtime/effects/scroll-bendwater2-visual-20261010/root-approval.json",
+        "sha256": "0a6c69cf01666ac0c74f0e95fde21ec2a1ea101285206316da544c5202207e29",
+        "note": "docs/vfx/forensics/SCROLL_WATER_VISUAL_BATCH_20261010.md"
       }
     },
     {

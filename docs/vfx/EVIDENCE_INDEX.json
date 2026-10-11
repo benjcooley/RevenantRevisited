@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 63,
+    "visual_fidelity_confirmed_rows": 69,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 63,
-    "remaining_visual_review_rows": 113
+    "reviewed_visual_pass_rows": 69,
+    "remaining_visual_review_rows": 107
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1232,6 +1232,48 @@
       "check": "rgb565_current_actual_metal_native_visual_review",
       "status": "scoped_visual_pass",
       "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open."
+    },
+    "recon/retail_asm/runtime/effects/mistfog-current-visual-20261010/root-approval.json": {
+      "sha256": "6bd421033eab2ef67c9a7753fa5dca16847a87352072a351c20407fa71cf9a9f",
+      "retail_row": "MistFog:0x180674ba",
+      "check": "mistfog_current_actual_metal_native_visual_review",
+      "status": "root_approved_scoped_appearance",
+      "scope": "Eleven original whole25-puff Render/owner/normal-light/software raster versus actual current Metal phases through241ticks; source38/dir1 lighting and live retail RNG match. Scoped form/color/growth/reset progression passes; natural setting/caller/device and exact framebuffer parity remain open."
+    },
+    "recon/retail_asm/runtime/effects/scroll-flowwater-visual-20261010/root-approval.json": {
+      "sha256": "9a32672e6d5ae30fd9cc59229d2e2777288f36f33304fcabc74156997511c14a",
+      "retail_row": "FlowWater:0xadbcef15",
+      "check": "scroll_water_current_actual_metal_native_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Six fixed whole original factory/RenderObject/software-raster versus actual-owner Metal samples. Recorded water form, texture, color and authored scrolling pass; StillWater correctly stays constant. No image/phase fitting; precision, depth interaction and natural-map/device contexts remain open."
+    },
+    "recon/retail_asm/runtime/effects/scroll-bendwater1-visual-20261010/root-approval.json": {
+      "sha256": "bd945371d20f81241264692314dca86838007384f3675928f6c76578d56de470",
+      "retail_row": "BendWater1:0xadbcef16",
+      "check": "scroll_water_current_actual_metal_native_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Six fixed whole original factory/RenderObject/software-raster versus actual-owner Metal samples. Recorded water form, texture, color and authored scrolling pass; StillWater correctly stays constant. No image/phase fitting; precision, depth interaction and natural-map/device contexts remain open."
+    },
+    "recon/retail_asm/runtime/effects/scroll-bendwater2-visual-20261010/root-approval.json": {
+      "sha256": "0a6c69cf01666ac0c74f0e95fde21ec2a1ea101285206316da544c5202207e29",
+      "retail_row": "BendWater2:0xadbcef17",
+      "check": "scroll_water_current_actual_metal_native_visual_review",
+      "status": "scoped_primary_visual_pass",
+      "scope": "Six fixed whole original factory/RenderObject/software-raster versus actual-owner Metal samples. Recorded water form, texture, color and authored scrolling pass; StillWater correctly stays constant. No image/phase fitting; precision, depth interaction and natural-map/device contexts remain open."
+    },
+    "recon/retail_asm/runtime/effects/scroll-stillwater-visual-20261010/root-approval.json": {
+      "sha256": "2b6928cfa6cea3479b76b9f35d57661172ebc8f54a192f8e72dfd4bb90b77f0a",
+      "retail_row": "StillWater:0xadbcef14",
+      "check": "scroll_water_current_actual_metal_native_visual_review",
+      "status": "root_approved_scoped_appearance",
+      "scope": "Six fixed whole original factory/RenderObject/software-raster versus actual-owner Metal samples. Recorded water form, texture, color and authored scrolling pass; StillWater correctly stays constant. No image/phase fitting; precision, depth interaction and natural-map/device contexts remain open."
+    },
+    "recon/retail_asm/runtime/effects/fireball-full-current-visual-20261010/root-approval.json": {
+      "sha256": "a792313d4237ebf2db755a546c733d9da804e7635fb105afd951da28d8258807",
+      "retail_row": "FireBall:0x63fd382a",
+      "check": "fireball_full_current_actual_metal_native_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Eleven original full leaf Init/Pulse/Animate/RenderObject/software-raster versus actual Metal phases: moving flight/trail/sparks, paired burst/authored colored ring, decay and blank tail pass in declared native-domain scenario. Full state/RNG and impact geometry/color controls pass; exact pixels and natural spell/character/map/device contexts remain open."
     }
   }
 }

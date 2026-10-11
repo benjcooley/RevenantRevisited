@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-10)
 
-**63 / 176 effects have reviewed visual passes for their recorded test configuration; 113 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they are not 71 completed effects. These counts overlap and must not be added.
+**69 / 176 effects have reviewed visual passes for their recorded test configuration; 107 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they are not 71 completed effects. These counts overlap and must not be added.
 
 Passed appearance cases: CyanFont, RedFont, GreenFont, BlueFont, base Flame, Ripple emitted by Drip, Globe, Sparks editor defaults, isolated Cure, isolated Pixie, Shadowfist, Warriorborn, teleportation, goldeffect, Might, Immortalmight and blue TeleportDoorInsideB. The additional passes are all12 town signs, the other6 Warp colors, Speaker and both LabGate barriers. Their per-row visual reviews record the configuration and remaining limitations. Fresh Might/Immortalmight footage passes after the parser correction. Blue Warp retains an open seven-pixel apex/projection discrepancy despite its scoped overall appearance pass.
 
@@ -24,6 +24,8 @@ separately from VFX defects. The counts and earlier captures below are retained
 historical evidence; this migration alone grants no additional acceptance.
 
 **Latest thin-emulator coverage: 77 / 176 bounded rendered frontends.**
+
+**Seven current closures (2026-10-10):** fspray, MistFog, FlowWater, BendWater1, BendWater2, StillWater and FireBall now have current original/actual-Metal scoped visual passes. FireBall uses its whole native leaf renderer through flight, impact and decay; MistFog fixes normal lighting and live RNG. Natural callers/scenes and exact pixels remain separate.
 
 **RGB565 correction (2026-10-10):** fspray now passes its twelve-sample original/Metal appearance review after exact software RGB5 modulation replaces normalized multiplication. Fresh films preserve the other eight affected scoped passes. The gallery also retains all62 previously verified types in a label-free centered draw audit; normal scroll-in lifetime controls are separate. [Source and measured scope](forensics/RGB565_PARTICLE_MODULATION.md).
 
