@@ -95,6 +95,7 @@ class Director:
     stuck_at: list | None = None
     dead_ends: int = 0                                         # dead ends since Locke last got nearer
     wide_looks: set = field(default_factory=set)               # (level, stop) a wide walk grid was fetched for
+    no_walkgrid: bool = False                                  # the host offers no walk grid (the emulator, so far)
     best_gap: float = math.inf                                 # the nearest he has been to the next stop
 
     def __post_init__(self) -> None:
@@ -142,7 +143,16 @@ class Director:
         if path:
             path.parent.mkdir(parents=True, exist_ok=True)
             self.last_frame = self.host.tick
-        obs = self.host.observe(objects=800, frame=path, walkgrid=walkgrid)
+        if walkgrid is not None and self.no_walkgrid:
+            walkgrid = None
+        try:
+            obs = self.host.observe(objects=800, frame=path, walkgrid=walkgrid)
+        except HostError as error:
+            if walkgrid is None or 'walkgrid' not in str(error):
+                raise
+            self.no_walkgrid = True                             # this host has none: walk without it
+            self.note('no walkgrid', host=str(error))
+            obs = self.host.observe(objects=800, frame=path)
         logged = {k: v for k, v in obs.items() if k != 'walkgrid'}
         with (self.bundle / 'observations.jsonl').open('a', encoding='utf-8') as f:
             f.write(json.dumps(logged, separators=(',', ':')) + '\n')
@@ -323,7 +333,7 @@ class Director:
         if path and distance(path[-1], stop_pos) > USE_REACH and (level, tuple(stop_pos)) not in self.wide_looks:
             # the way isn't in the map yet: look wider once (the host holds the whole level)
             self.wide_looks.add((level, tuple(stop_pos)))
-            wide = self.host.observe(objects=0, walkgrid=WIDE_WALKGRID_RADIUS)
+            wide = self.observe(walkgrid=WIDE_WALKGRID_RADIUS)
             if wide.get('walkgrid'):
                 self.maps.merge(level, WalkGrid(wide['walkgrid']))
                 path = self.maps.plan(level, pos, stop_pos, radius)
