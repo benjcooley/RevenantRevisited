@@ -85,6 +85,7 @@ PARTIAL = {
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
     '0xad99bd33': 'GVortex_ORIGINAL',
+    '0xaeaeeb26': 'Maelstrom_ORIGINAL',
     '0x0c052639': 'CEyes_ORIGINAL',
     '0xad99fdf2': 'MPAppear_ORIGINAL',
     '0xad92bc1c': 'TEnergySpray_BESPOKE_NULLSPELL',

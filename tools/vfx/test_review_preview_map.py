@@ -41,6 +41,14 @@ TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
         self.assertEqual(admitted_candidates({'retail_type_id':'0x0ea34fa3',
             'preview_candidates':['TBlastEffect_BESPOKE']}), ['TBlastEffect_BESPOKE'])
 
+    def test_maelstrom_original_precedes_retained_partial(self):
+        row = {'retail_type_id': '0xaeaeeb26',
+               'preview_candidates': ['TMaelstromEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row),
+                         ['Maelstrom_ORIGINAL', 'TMaelstromEffect_BESPOKE'])
+        self.assertFalse(candidate_metadata(row, 'Maelstrom_ORIGINAL')[0])
+        self.assertTrue(candidate_metadata(row, 'TMaelstromEffect_BESPOKE')[0])
+
     def test_partial_requires_exact_identity_and_explicit_warning(self):
         self.assertTrue(PARTIAL)
         self.assertNotIn('0x98974eab', PARTIAL)

@@ -116,7 +116,7 @@
 {0xaeaeeb23u, "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1", false, "Implemented preview controller; map caller not certified"}, // ogrokwatcher1
 {0xaeaeeb24u, "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher2", false, "Implemented preview controller; map caller not certified"}, // ogrokwatcher2
 {0xaeaeeb25u, "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher3", false, "Implemented preview controller; map caller not certified"}, // ogrokwatcher3
-{0xaeaeeb26u, "TMaelstromEffect_BESPOKE", true, "Partial preview: ground-flat asset billboard; original controller incomplete; not complete original implementation"}, // maelstrom
+{0xaeaeeb26u, "Maelstrom_ORIGINAL", false, "Implemented original authored leaf; natural map/spell caller not certified"}, // maelstrom
 {0xaeaeeb27u, "YPowerUp_AUTHORED", false, "Implemented preview controller; map caller not certified"}, // YPowerUp
 {0xaeaeeb29u, "TYAbsorb_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // YAbsorb
 {0xaeaeeb30u, "TYEnergy_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // YEnergy
