@@ -104,7 +104,9 @@ firing of the `timeSetEvent` callback and one pass of the screen loop
 `TPlayScreen` (`--fixedstep`: exactly one per frame). Events stamped for
 tick N are delivered before tick N updates.
 
-**Format** `*.rvrec`: JSON Lines, UTF-8.
+**Format** `*.rvrec`: JSON Lines, UTF-8. The exact contract, including
+the control channel, is [PROTOCOL.md](PROTOCOL.md); this section is the
+overview.
 
 ```jsonc
 {"rvrec": 1, "game": "retail", "build": {"sha": "…", "name": "clickwalk"},
@@ -115,8 +117,8 @@ tick N are delivered before tick N updates.
 {"t": 122, "key": "C", "down": false}
 {"t": 130, "mouse": [412, 233], "buttons": 1}       // the whole pointer state
 {"t": 131, "mouse": [412, 233], "buttons": 0}
-{"t": 160, "char": "a"}                             // text: the prompt, save names
-{"t": 240, "hash": "…", "pos": [6280, 4338, 33], "level": 2, "hp": 87}
+{"t": 160, "char": 97}                              // text: the prompt, save names
+{"t": 240, "check": {"pos": [6280, 4338, 33], "level": 2, "health": 87, "draws": 18342}}
 {"t": 300, "mark": "quicksave", "slot": "Quick Save 1"}
 {"t": 912, "end": true}
 ```
@@ -125,10 +127,11 @@ tick N are delivered before tick N updates.
 - The pointer is in 640x480 game-screen pixels in both games. A mouse line
   carries the whole pointer state; hosts derive move, down and up from the
   change.
-- `hash` lines are written every 24 ticks and at marks. They cover fields
+- `check` lines are written every 24 ticks and at marks. They hold fields
   both games define the same way: the player's position, facing, health,
   mana, fatigue, level and action; the target's position and health; and
-  the count of game random draws. A replay stops at the first mismatch.
+  the count of game random draws. A replay compares them field by field
+  and stops at the first tick that differs, naming the fields.
 - `timing: "lockstep"` means one rendered frame per tick, which is what
   both hosts use under the agent and the only timing two games can share.
   A person playing the port at the display's rate records
