@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 124,
+    "visual_fidelity_confirmed_rows": 125,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 124,
-    "remaining_visual_review_rows": 52
+    "reviewed_visual_pass_rows": 125,
+    "remaining_visual_review_rows": 51
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1694,6 +1694,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Six full original/actual Metal native-domain static default-leaf phases2/6/16/30/46/60. Own205vertices/304triangles/3roots/24legacykeybytes and fullARGBglow; exactfactorydefault binding,27posechannels,148positivefaces/cull/depthcontrols,2460ownergeometrychecks. Actualtranslatedgallery70/70visible. SnapshotproceduralVortex is a different binding;2pxedge/color/floatdepth/device/naturalmap/otherlighting/exactpixels remainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-fireswarm-authored-20261011/root-approval.json": {
+      "sha256": "f3d0d869fcaa44fd8773a66d953297f2dcf9965d98a352a207230e8f66d911c0",
+      "retail_row": "FireSwarm:0x582c1e78",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Fourteen full original/actual Metal native-domain software phases2..80 in supported1920x1080 with whole visible geometry. Early2/15/25blank, partial27, full28onward, flatten75 and kill76/blank80. Native-only actualARGB640/480edgeguard proven by2304authored decisions/20kernel boundary controls/constants-only differential;79state source proof. Ordinarycommon80images unchanged; translatedtypedgalleryvisible/dynamic. Commonearly geometry/device, integer-edge/interpolation/naturalcaller/audio/exactpixels open."
     }
   }
 }

@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 124,
+    "visual_fidelity_confirmed_rows": 125,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 124,
-    "remaining_visual_review_rows": 52
+    "reviewed_visual_pass_rows": 125,
+    "remaining_visual_review_rows": 51
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -13074,7 +13074,8 @@
       ],
       "source_fixes": [
         "Replaced wrong-texture billboard with authored174-vertex/192-triangle cylinder object1/texture1, unchanged UVs, source scale/yaw, Alpha/noZwrite, true24Hz and strict tick76 expiry; no preview respawn. Exact type owner component follows map movement and normal reaping.",
-        "Corrected software winding: Blue tests Y-up then negates raster Y; screen-down determinant must cull negative winding. No authored topology/cull disabling or appearance fitting."
+        "Corrected software winding: Blue tests Y-up then negates raster Y; screen-down determinant must cull negative winding. No authored topology/cull disabling or appearance fitting.",
+        "2026-10-11: Actual ARGB primitive-bound admission applied only in native-domain software; complete original lifecycle/partial-to-full cylinder/shrink/kill reviewed with ordinary geometry unchanged."
       ],
       "port_smoke_ids": [
         "TFireSwarmEffect_BESPOKE"
@@ -13093,18 +13094,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": true,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_fireswarm_builder_authored_cylinder_component_verified",
-      "next_action": "Later full-native/current Metal cylinder/ring appearance is close after sourceARGB4444; early original software rejects oversized triangles and remains empty while Metal draws. Resolve targeted device reference before full sampled-lifecycle appearance credit.",
+      "next_action": "Preserve reviewed full software lifecycle; verify natural caller/audio and device/raster residuals.",
       "notes": [
         "2026-10-05: source geometry/texture/timing and actual runtime repaired. Port240frames/76distinct/120exact-ground tail;5 natural expiry and6 explicit deletion checks pass. Retail43.65sec/26distinct retains large cylinder residue; exact camera-nudge floor reset proves cache residue. Diagnostic only, no accurate reference/visual acceptance. Historical combined runtime fixture failed because its generation-bound selector refused a recreated owner; separate corrected fixtures preserve identity checks.",
         "Current source winding correction changes rendered surface selection; earlier mesh captures are historical. Current-binary cylinder preview/runtime regressions retained separately after correction.",
@@ -13183,11 +13184,14 @@
         "scope": "Current source-authored FireSwarm against clean actual retail software lifecycle. Elapsed-time comparison, no phase or appearance fitting; fidelity review pending."
       },
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "pending",
-        "finding": "Clean retail and port both animate and return to exact ground. Their initial visible cylinder phase/progression differs in raw elapsed samples; source 24Hz timing is established but native first-visible phase and observed cadence remain unresolved. No fitted time, scale, alpha or RNG changes.",
-        "scope": "Actual marker-free software reference; no full visual or natural context acceptance."
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Fourteen full original/actual Metal native-domain software phases2..80 in supported1920x1080 with whole visible geometry. Early2/15/25blank, partial27, full28onward, flatten75 and kill76/blank80. Native-only actualARGB640/480edgeguard proven by2304authored decisions/20kernel boundary controls/constants-only differential;79state source proof. Ordinarycommon80images unchanged; translatedtypedgalleryvisible/dynamic. Commonearly geometry/device, integer-edge/interpolation/naturalcaller/audio/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-fireswarm-authored-20261011/root-approval.json",
+        "sha256": "f3d0d869fcaa44fd8773a66d953297f2dcf9965d98a352a207230e8f66d911c0",
+        "note": "docs/vfx/forensics/FIRESWARM_SOFTWARE_APPEARANCE_20261011.md"
       },
       "work_queue_status": "clean_reference_initial_phase_cadence_review_pending",
       "current_cull_regression": {
