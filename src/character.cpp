@@ -3961,92 +3961,129 @@ bool TCharacter::Pull(TObjectInstance* inst)
     return true;
 }
 
-// Attempts to use something in the direction character is facing
+namespace {
+
+// What Use and Get look through: up to 10 objects within `reach` of the
+// point `ahead` in front of the character, nearest first
+// (FindObjectsInRange 0x00452060, objects of any class).
+int32_t ObjectsAhead(TCharacter* chr, int32_t ahead, int32_t reach, int32_t (&list)[10])
+{
+    S3DPoint pos, step;
+    chr->GetPos(pos);
+    ConvertToVector(chr->GetFace(), ahead, step);
+    pos += step;
+    return MapPane.FindObjectsInRange(pos, list, reach, 0, -1, 10);
+}
+
+} // namespace
+
+// REVSYNC: TCharacter::Use @ 0x004d01e0 (Command 0xe, the Use control:
+// GRIND.md §4.2) -- the nearest thing to use 60 ahead, within 60 of that
+// point: a container or an exit (classes 5 and 10), or a character that isn't
+// this one or its enemy (IsEnemy 0x004c89c0); nothing flagged invisible. The
+// main player reads "Talk to <type>" (FULLTALKTO, else TALKTO) or "Use
+// <name>" (FULLUSE, else BASEUSE), or USENOTHING. A dead character does
+// nothing.
 bool TCharacter::TryUse()
 {
-    S3DPoint pos, v;
-    GetPos(pos);
-    ConvertToVector(GetFace(), 60, v);
-    pos += v;
+    if (Health() < 1)
+        return false;
 
-    int32_t list[MAXFOUNDOBJS];
-    int32_t n = MapPane.FindObjectsInRange(pos, list, 60);
-
+    int32_t list[10];
+    const int32_t n = ObjectsAhead(this, 60, 60, list);
     TObjectInstance* best = nullptr;
-    int32_t bestdist;
-
+    int32_t bestdist = 0;
     for (int32_t i = 0; i < n; i++)
     {
         TObjectInstance* oi = MapPane.GetInstance(list[i]);
-        if (!oi)
+        if (!oi || (oi->GetFlags() & OF_INVISIBLE))
             continue;
 
-        if (oi->ObjClass() == OBJCLASS_CONTAINER ||
-            oi->ObjClass() == OBJCLASS_EXIT)
-        {
-            int32_t dist = Distance(oi);
+        const int32_t objclass = oi->ObjClass();
+        const bool character = objclass == OBJCLASS_PLAYER || objclass == OBJCLASS_CHARACTER;
+        if (objclass != OBJCLASS_CONTAINER && objclass != OBJCLASS_EXIT &&
+            !(character && oi != this && !IsEnemy(static_cast<TCharacter*>(oi))))
+            continue;
 
-            if (best == nullptr || dist <= bestdist)
-            {
-                best = oi;
-                bestdist = dist;
-            }
+        const int32_t dist = Distance(oi);
+        if (!best || dist <= bestdist)
+        {
+            best = oi;
+            bestdist = dist;
         }
     }
 
     if (!best)
     {
-        TextBar.Print("Nothing to use");
+        if (this == Player)
+            TextBar.Print("%s", DialogList.GetLine("USENOTHING"));
         return false;
     }
-    
-    TextBar.Print("Use %s", best->GetName());
-    best->Use(this);
 
+    if (this == Player)
+    {
+        const bool talk = best->ObjClass() == OBJCLASS_PLAYER || best->ObjClass() == OBJCLASS_CHARACTER;
+        const std::string name = ShownName(talk ? best->GetTypeName() : best->GetName());
+        const char* full = talk ? "FULLTALKTO" : "FULLUSE";
+        if (DialogList.FindLine(full) >= 0)
+            TextBar.Print(DialogList.GetLine(full), name.c_str());
+        else
+            TextBar.Print("%s %s", DialogList.GetLine(talk ? "TALKTO" : "BASEUSE"), name.c_str());
+    }
+    best->Use(this, -1);
     return true;
 }
 
-// Attempts to get something in the direction character is facing
+// REVSYNC: TCharacter::Get @ 0x004d0430 (Command 0xf, the Get and Combat Get
+// controls: GRIND.md §4.2) -- the nearest thing 40 ahead, within 80 of that
+// point, that shows a cursor or goes in an inventory; not this character,
+// nothing flagged invisible. The main player reads "Get <name>" (FULLGET,
+// else BASEGET), or GETNOTHING; then Pickup, which takes only an item, so a
+// nearer door, chest or character silently blocks it. A dead character does
+// nothing.
 bool TCharacter::TryGet()
 {
-    S3DPoint pos, v;
-    GetPos(pos);
-    ConvertToVector(GetFace(), 60, v);
-    pos += v;
+    if (Health() < 1)
+        return false;
 
-    int32_t list[MAXFOUNDOBJS];
-    int32_t n = MapPane.FindObjectsInRange(pos, list, 60);
-
+    int32_t list[10];
+    const int32_t n = ObjectsAhead(this, 40, 80, list);
     TObjectInstance* best = nullptr;
-    int32_t bestdist;
-
+    int32_t bestdist = 0;
     for (int32_t i = 0; i < n; i++)
     {
         TObjectInstance* oi = MapPane.GetInstance(list[i]);
-        if (!oi)
+        if (!oi || oi == this)
+            continue;
+        if (oi->CursorType() == CURSOR_NONE && !oi->IsInventoryItem())
+            continue;
+        if (oi->GetFlags() & OF_INVISIBLE)
             continue;
 
-        if (oi->CursorType() != CURSOR_NONE || oi->IsInventoryItem())
+        const int32_t dist = Distance(oi);
+        if (!best || dist <= bestdist)
         {
-            int32_t dist = Distance(oi);
-
-            if (best == nullptr || dist <= bestdist)
-            {
-                best = oi;
-                bestdist = dist;
-            }
+            best = oi;
+            bestdist = dist;
         }
     }
 
     if (!best)
     {
-        TextBar.Print("Nothing to get");
+        if (this == Player)
+            TextBar.Print("%s", DialogList.GetLine("GETNOTHING"));
         return false;
     }
 
-    TextBar.Print("Get %s", best->GetName());
+    if (this == Player)
+    {
+        const std::string name = ShownName(best->GetName());
+        if (DialogList.FindLine("FULLGET") >= 0)
+            TextBar.Print(DialogList.GetLine("FULLGET"), name.c_str());
+        else
+            TextBar.Print("%s %s", DialogList.GetLine("BASEGET"), name.c_str());
+    }
     Pickup(best);
-
     return true;
 }
 

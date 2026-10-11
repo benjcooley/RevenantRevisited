@@ -220,9 +220,11 @@ class TCharacter : public TComplexObject
     bool Pull(TObjectInstance* inst);
       // Causes character to pull lever
     bool TryUse();
-      // Attempts to use something in the direction character is facing
+      // Uses the nearest container, exit or friendly character in front of
+      // the character (the Use control; retail 0x004d01e0)
     bool TryGet();
-      // Attempts to get something in the direction character is facing
+      // Picks up the nearest item in front of the character (the Get
+      // control; retail 0x004d0430)
     bool Say(const char *string, int32_t wait = -1, const char *anim = nullptr, const char *sound = nullptr);
       // Causes character to blather incessantly about something irrelevant
       // (anim is override for animation to play when saying, nullptr is "say")

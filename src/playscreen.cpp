@@ -144,6 +144,8 @@ static SControlEntry g_defaultGameControls[] =
     // -- world interaction --
     {"Use",  "Use",  CTRL_NORMALMODE, {{'U'}, {'T'}}, GAMECMD_USE,  0, 0, false},
     {"Get",  "Get",  CTRL_NORMALMODE, {{'G'}},         GAMECMD_GET,  0, 0, false},
+    // retail's control 35 (table 0x005d5500): Get in combat and bow modes
+    {"Combat Get", "CombatGet", CTRL_COMBATMODE | CTRL_BOWMODE, {{'G'}}, GAMECMD_GET, 0, 0, false},
     {"Jump", "Jump", CTRL_NORMALMODE, {{'J'}},         GAMECMD_JUMP, 0, 0, false},
 
     // -- walk-mode action slots (unmapped by default; scripted hooks bind these) --
@@ -1911,6 +1913,14 @@ void TPlayScreen::Command(GAMECOMMAND command)
     case GAMECMD_DODGE:
         if (Player)
             Player->Dodge(-1);  // the back roll: retail has eight dodge controls, one a direction
+        break;
+    case GAMECMD_USE:               // 0xe: Use 0x004d01e0
+        if (Player)
+            Player->TryUse();
+        break;
+    case GAMECMD_GET:               // 0xf: Get 0x004d0430
+        if (Player)
+            Player->TryGet();
         break;
     case GAMECMD_JUMP:
         if (Player)
