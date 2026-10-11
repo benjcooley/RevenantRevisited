@@ -100,6 +100,15 @@ class TDisplay : public TSurface
     using TCaptureDone = std::function<void(const uint8_t* rgba, int32_t width, int32_t height)>;
     static constexpr float kWholeFrame = 1.0e30f;  // every HUD layer (TRenderer::kAllHudLayers)
     bool RequestCapture(TCaptureDone done, float hudBelowZ = kWholeFrame);
+    // Reads back the frame last presented, now, from what it was drawn from
+    // (the scene, the overlay and the HUD as they stand); `done` as above.
+    // Between frames only: no pass may be open. False when the display
+    // isn't up.
+    bool CaptureNow(const TCaptureDone& done);
+    // Presents the last frame again without drawing it anew: the scene's
+    // targets, the overlay and the HUD as they stand, and the debug UI. A
+    // playtest host that waits between steps keeps its window live with it.
+    void Represent();
 
     // Headless-capture target: when FrameSnap is active, FlipPage mirrors
     // the swapchain composite into this offscreen sg_image RGBA8 RT so

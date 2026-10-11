@@ -377,12 +377,18 @@ void TArea::CloseCDMusic()
 // Advances the playlist. Called from the area's per-tick update. The
 // caller-visible behavior matches 1998: pick the next track when the
 // previous one finishes, with `cdplaypause` seconds of silence between.
+//
+// A deterministic run (DeterministicRun) plays the list as a NOSOUND retail
+// would: no track is ever playing or starts, and the retry waits on game
+// time, so the list's random picks fall on the same ticks in every run
+// (docs/playtest/PLAN.md §6.3).
 void TArea::PlayCDMusic()
 {
     if (cdplaylistsize <= 0) return;
-    if (audio::MusicPlaying()) return;
+    const bool sounding = !DeterministicRun();
+    if (sounding && audio::MusicPlaying()) return;
 
-    const int32_t now = static_cast<int32_t>(tickcount());
+    const int32_t now = static_cast<int32_t>(GameTickCount());
 
     // Hold the silence gap after a track ends.
     if (cdplaystart != 0 && (now - cdplaystart) < cdplaywait) {
@@ -401,7 +407,7 @@ void TArea::PlayCDMusic()
     }
 
     char path[MAXPATHLEN];
-    if (!BuildMusicTrackPath(cdplaylist[cdplaynum], path, sizeof(path)) ||
+    if (!sounding || !BuildMusicTrackPath(cdplaylist[cdplaynum], path, sizeof(path)) ||
         !audio::MusicPlayFile(path, /*looping*/ false)) {
         // Failed to start — back off so we don't hammer disk on missing files.
         cdplaystart  = now;

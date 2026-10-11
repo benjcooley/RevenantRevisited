@@ -417,7 +417,13 @@ bool TSaveGame::Save(const char* name)
     }
 
     log_info("[savegame] saved '%s' (%d bytes, time=%d)", name, os.DataSize(), header.gametime);
+    lastSaved = name;
     return true;
+}
+
+fs::path TSaveGame::SlotsDir()
+{
+    return SinglePlayerSlotsDir();
 }
 
 // <SavePath>/ss.bmp: retail's ".\ss.bmp" in the install directory; the port

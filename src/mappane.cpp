@@ -792,12 +792,20 @@ char *Directions[] = { "ne", "e", "se", "s", "sw", "w", "nw", "n", "ne" };
 // Gets the world position (given character's z pos) that mouse is hovering over
 void TMapPane::GetMouseMapPos(S3DPoint &p, int32_t zoffset)
 {
+    ScreenToMapPos(cursorx, cursory, p, zoffset);
+}
+
+// The world point under the screen pixel (x, y) at Locke's height plus
+// `zoffset`: the pointer conversion the right-button walk uses
+// (UpdateMouseMovement @ 0x0044ee00, + 50).
+void TMapPane::ScreenToMapPos(int32_t x, int32_t y, S3DPoint &p, int32_t zoffset)
+{
     S3DPoint curpos;
     Player->GetPos(curpos);
 
     // The map view sits at the screen's top left: the pointer is in its pixels.
     int32_t mapx = 0, mapy = 0;
-    PaneToMapScreen(cursorx, cursory, mapx, mapy);
+    PaneToMapScreen(x, y, mapx, mapy);
     ScreenToWorld(mapx, mapy, p, curpos.z + zoffset);
 }
 
@@ -1156,6 +1164,8 @@ void TMapPane::PlayMouseRelease(int32_t x, int32_t y, bool attackcursor)
                 TakenObject = taken.Get();
             }
         }
+        if (!on && onobject == -1 && clickwalk && !Player->IsCombat() && !Player->IsBowMode())
+            ClickWalkTo(x, y);
         return;
     }
 
@@ -1195,6 +1205,24 @@ void TMapPane::PlayMouseRelease(int32_t x, int32_t y, bool attackcursor)
 
         DroppedObject = inst;
     }
+}
+
+// Click to walk (docs/playtest/PLAN.md §10), a patch both games carry for the
+// playtest (retail's named build "clickwalk" patches this release path of
+// MouseClick @ 0x0044f140; CLICKWALK.md §9): a press and release on open
+// ground -- nothing under either, Locke's root neither combat nor the bow,
+// as retail's gates read it -- sends Locke to the point under the release
+// by the right-button walk's conversion (UpdateMouseMovement @ 0x0044ee00:
+// the release's own x, y at Locke's height + 50), through Goto (0x004cedb0),
+// which turns to any of 256 angles and stops on the point. The walk mode is
+// the root's (the run key held: running).
+void TMapPane::ClickWalkTo(int32_t x, int32_t y)
+{
+    S3DPoint target;
+    ScreenToMapPos(x, y, target, 50);
+    const bool going = Player->Goto(target.x, target.y, nullptr);
+    log_info("[mapinput] click walk (%d, %d) to (%d,%d): %s", x, y, target.x, target.y,
+             going ? "going" : "refused");
 }
 
 // Retail 0x0044fd98..0x0044ff40: an object out of reach. Locke walks to the
@@ -1857,6 +1885,11 @@ TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectIns
 {
     if (!mapview)
         return nullptr;
+
+    // A deterministic run picks from the drawn frame, as retail did: what the
+    // hover and a click see then follows the frames, not the GPU's timing.
+    if (DeterministicRun())
+        read = EPickRead::Drawn;
 
     TMapRenderer::SPick pick;
     if (mapview->Pick(screenx, screeny, pick, read) && pick.mesh)
@@ -3995,7 +4028,9 @@ void TMapPane::Animate(bool draw)
 
     // Each frame copies back the ids around the pointer; the hover reads the
     // latest copy, taken where the pointer was a frame or two ago, rather
-    // than wait on the GPU for this frame's (a click reads it exactly).
+    // than wait on the GPU for this frame's (a click reads it exactly). A
+    // deterministic run reads the drawn frame at once (OnObject), retail's
+    // synchronous pick.
     mapview->SetPickPoint(x, y);
 
     const int32_t frame = CurrentScreen ? CurrentScreen->FrameCount() : 0;

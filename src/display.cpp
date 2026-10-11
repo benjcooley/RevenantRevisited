@@ -383,6 +383,42 @@ void TDisplay::MirrorComposite(float hudBelowZ)
     sg_destroy_image(snapDepth);
 }
 
+bool TDisplay::CaptureNow(const TCaptureDone& done)
+{
+    if (!backbuffer || !done || overlay_pass_open)
+        return false;
+    MirrorComposite(kWholeFrame);
+    std::vector<uint8_t> rgba(size_t(snap_capture_w) * size_t(snap_capture_h) * 4);
+    const bool read = RendererReadback::ReadRect(snap_capture_color, 0, 0, snap_capture_w,
+                                                 snap_capture_h, rgba.data());
+    if (!read)
+        log_warn("[display] frame capture readback failed");
+    done(read ? rgba.data() : nullptr, read ? snap_capture_w : 0, read ? snap_capture_h : 0);
+    return true;
+}
+
+void TDisplay::Represent()
+{
+    if (!backbuffer || overlay_pass_open)
+        return;
+
+    sg_pass_action pa = {};
+    pa.colors[0].action = SG_ACTION_CLEAR;
+    pa.colors[0].value  = { 0.0f, 0.0f, 0.0f, 1.0f };
+    pa.depth.action     = SG_ACTION_DONTCARE;
+    pa.stencil.action   = SG_ACTION_DONTCARE;
+
+    sg_begin_default_pass(&pa, sapp_width(), sapp_height());
+    if (Renderer) {
+        Renderer->PresentForSnap();       // the scene's targets keep the last frame
+        Renderer->Composite(backbuffer);
+        Renderer->DrawHud();
+    }
+    simgui_render();
+    sg_end_pass();
+    sg_commit();
+}
+
 bool TDisplay::RequestCapture(TCaptureDone done, float hudBelowZ)
 {
     if (!backbuffer || !done)

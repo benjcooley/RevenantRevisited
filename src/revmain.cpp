@@ -39,6 +39,7 @@
 #include "graphics.h"
 #include "module.h"
 #include "playscreen.h"
+#include "playtest.h"
 #include "revisited_defaults.h"
 #include "revisited_settings.h"
 #include "testscreen.h"
@@ -54,6 +55,7 @@
 #include "mappane.h"
 #include "object.h"
 #include "automap.h"
+#include "inputqueue.h"
 #include "inventory.h"
 #include "mainwnd.h"
 #include "savegame.h"
@@ -303,13 +305,6 @@ bool CtrlDown, ShiftDown, AltDown;
 
 // Is System Closing Down?
 bool Closing = false;
-
-// Set by SAPP_EVENTTYPE_MOUSE_MOVE; consumed once per frame in AppFrame. A
-// single frame can see dozens of move events on macOS — forwarding every one
-// synchronously to CurrentScreen->MouseMove() backs up the NSEvent queue and
-// the cursor appears to lag seconds behind reality. Coalesce to one call per
-// frame with the latest cursor position.
-static bool g_pendingMouseMove = false;
 
 // For setting up 3D object bounding rects in the editor
 bool UpdatingBoundingRect = false;
@@ -2633,6 +2628,8 @@ sapp_desc sokol_main(int argc, char* argv[])
     return desc;
 }
 
+static bool BootGame();
+
 static void AppInit()
 {
     // Equivalent to the top of the retired WinMain: set paths, load INI,
@@ -2647,12 +2644,35 @@ static void AppInit()
     // the executable directory, SavePath is the per-user writable
     // Application Support / XDG_DATA_HOME dir (created if missing).
     rev_resolve_program_paths(RunPath, SavePath, MAXPATHLEN);
+
+    // A playtest session (--control, --record, --replay; playtest.h). Under
+    // --control the game boots when the director sends `start`.
+    if (!Playtest.Initialize(g_argc, g_argv, &BootGame))
+    {
+        sapp_request_quit();
+        return;
+    }
+    if (Playtest.WaitsForStart())
+    {
+        if (HeadlessWindow::ParseArgs(g_argc, g_argv))
+            HeadlessWindow::HideAllWindows();
+        return;
+    }
+    BootGame();
+}
+
+// The rest of the retired WinMain: the INI and the command line, the data,
+// the engine, and the first screen. At launch, or on a playtest `start`.
+static bool BootGame()
+{
+    Playtest.BeforeIni();
     INISetPath(RunPath);
 
     GetINISettings();
     ReadOptions();   // retail's order (0x004865a0): INI, [Options], command line
 
     GetParameters(g_argc, g_argv);
+    Playtest.ApplyStart();
 
     // Headless snap / filmstrip flags. Parsed once after GetParameters so
     // the args[] argh consumed are still around (we read argv ourselves).
@@ -2707,7 +2727,7 @@ static void AppInit()
     if (!InitGlobals())
     {
         sapp_request_quit();
-        return;
+        return false;
     }
 
     // Revisited tunables. Layered defaults, lowest priority first:
@@ -2778,6 +2798,8 @@ static void AppInit()
     TestModes::InputSimArm();   // no-op without --input-script
 
     SystemInitialized = true;
+    Playtest.Started();
+    return true;
 }
 
 // --max-runtime=N: wall-clock hard ceiling that std::_Exit(0)s the process
@@ -2794,6 +2816,25 @@ void SetMaxRuntimeSeconds(double s)
     g_max_runtime_started = false;
 }
 
+// A frame that runs no game: a playtest host waiting between steps keeps
+// its window showing the last frame, under the director's caption.
+static void PresentIdleFrame()
+{
+    if (!SystemInitialized || Closing || HeadlessWindow::IsActive() || !Display.IsActive())
+        return;
+    simgui_frame_desc_t fd = {};
+    fd.width      = sapp_width();
+    fd.height     = sapp_height();
+    fd.delta_time = sapp_frame_duration();
+    fd.dpi_scale  = sapp_dpi_scale();
+    simgui_new_frame(&fd);
+    Playtest.DrawOverlay();
+    const uint64_t draws = RandomDraws();
+    Display.Represent();
+    if (RandomDraws() != draws)
+        log_error("[playtest] presenting the last frame again drew game random numbers");
+}
+
 static void AppFrame()
 {
     // Drive the legacy screen dispatch. The pre-port top-level loop was:
@@ -2805,18 +2846,6 @@ static void AppFrame()
     // when the screen sets `done`, we EndCurrentScreen and advance to
     // GetNextScreen (or quit if there isn't one).
 
-    if (!SystemInitialized || Closing)
-        return;
-
-    // --fixedstep: one game tick per frame on an integer count; otherwise
-    // a frame capture's --snapstep, otherwise the live clock.
-    const auto& snap_config = FrameSnap::GetConfig();
-    if (FixedStep)
-        TTime::BeginFixedFrame();
-    else
-        TTime::BeginFrame(FrameSnap::Active() && snap_config.fixed_step_sec > 0.0
-                         ? snap_config.fixed_step_sec : sapp_frame_duration());
-
     // --max-runtime hard ceiling: if a positive limit was passed, hard-
     // exit when wall-clock elapsed since first frame exceeds it. Belt-
     // and-suspenders with the input-script auto-exit -- catches engine
@@ -2826,7 +2855,7 @@ static void AppFrame()
     // be swallowed by a hung screen TimerLoop -- the whole point of this
     // safety net is that it WORKS even when something is stuck. Mid-
     // capture PNGs may be lost, which is fine: max-runtime hitting means
-    // the run was already broken.
+    // the run was already broken. A recording gets its end line first.
     if (g_max_runtime_sec > 0.0)
     {
         const auto now = std::chrono::steady_clock::now();
@@ -2840,9 +2869,31 @@ static void AppFrame()
         {
             log_info("[max-runtime] hit %.1fs limit -- hard exit",
                      g_max_runtime_sec);
+            Playtest.Shutdown();
             std::_Exit(0);
         }
     }
+
+    // A playtest session decides whether a frame runs: under --control only
+    // while a step has ticks left (docs/playtest/PLAN.md §6.2).
+    if (Playtest.Active() && !Playtest.BeginFrame())
+    {
+        PresentIdleFrame();
+        return;
+    }
+
+    if (!SystemInitialized || Closing)
+        return;
+
+    // --fixedstep (and a lockstep playtest session): one game tick per frame
+    // on an integer count; otherwise a frame capture's --snapstep, otherwise
+    // the live clock (a replay's recorded frame times).
+    const auto& snap_config = FrameSnap::GetConfig();
+    if (FixedStep || (Playtest.Active() && Playtest.Lockstep()))
+        TTime::BeginFixedFrame();
+    else
+        TTime::BeginFrame(Playtest.FrameTime(FrameSnap::Active() && snap_config.fixed_step_sec > 0.0
+                                             ? snap_config.fixed_step_sec : sapp_frame_duration()));
 
     // Start the ImGui frame before Animate/draw so screens can build debug
     // panels from their normal per-frame code. simgui_render() is called
@@ -2882,16 +2933,12 @@ static void AppFrame()
         return;
     }
 
-    // Flush coalesced mouse move. See AppEvent MOUSE_MOVE for the rationale.
-    if (g_pendingMouseMove)
-    {
-        g_pendingMouseMove = false;
-        if (AppActive)
-            CurrentScreen->MouseMove(mousebutton, cursorx, cursory);
-    }
-
-    // Scripted input (--input-script) takes the same route as real input.
+    // The frame's input, in order, before the tick (inputqueue.h): what the
+    // hardware sent since the last frame, then scripted input (--input-script),
+    // then a playtest session's (its step's events, or its recording's).
     TestModes::InputSimTick(CurrentScreen);
+    Playtest.BeforeDrain();
+    InputQueue.Drain(CurrentScreen);
 
     // Tick / Draw split (see docs/FRAME_PIPELINE.md). Tick catches up
     // missed legacy 24Hz pulses (pure sim, no draw calls); DrawFrame
@@ -2902,6 +2949,7 @@ static void AppFrame()
     TObjectComponent::RunUpdateList();
     CurrentScreen->DrawFrame();
     DebugUI::DrawFrame();
+    Playtest.DrawOverlay();     // over the window only: frame captures leave it out
 
     // Present the frame: composite backbuffer onto the swapchain and commit
     // the Metal command buffer. Without this, sokol's cmd_buffer is never
@@ -2922,6 +2970,8 @@ static void AppFrame()
     if (FrameSnap::Active())
         FrameSnap::TickAfterRender();
 
+    Playtest.EndFrame();
+
     // A closing screen runs on until its fade-out reaches black.
     if (CurrentScreen->ReadyToEnd() || Closing)
     {
@@ -2941,21 +2991,34 @@ static void AppCleanup()
     // The log lines bracket the teardown so a test run can confirm the
     // process went through it rather than a hard exit.
     log_info("[shutdown] begin");
+    Playtest.Shutdown();        // a recording's end line, while the game is still up
     // REVSYNC: 0x004870ee -- retail saved [Options] once its main loop ended.
     SaveOptions();
     if (SystemInitialized)
         ShutdownGlobals();
     UnmountAll();
     log_info("[shutdown] complete");
+    // A verified replay that diverged exits 1, a session that couldn't
+    // start 2 (playtest.h).
+    if (const int code = Playtest.ExitCode())
+        std::exit(code);
 }
 
-// Translate an sapp_keycode into the legacy VK_* codes the screen / pane
-// key handlers were written against. Only the keys the engine actually
-// switches on need an accurate mapping; everything else passes through
-// as the sokol enum value (the game's key-binding system compares codes
-// numerically, it doesn't care what they are as long as they're stable).
+// Translate an sapp_keycode into the Windows virtual-key code the screen and
+// pane key handlers were written against, and the recordings name
+// (docs/playtest/PROTOCOL.md §2). Letters and digits are their ASCII codes
+// in both; punctuation and the keypad have VK codes of their own (passing
+// sokol's through made ' read as Right and - as Insert). 0: no VK (the key
+// is not delivered).
 static int32_t SappKeyToVK(sapp_keycode key)
 {
+    if ((key >= SAPP_KEYCODE_A && key <= SAPP_KEYCODE_Z) ||
+        (key >= SAPP_KEYCODE_0 && key <= SAPP_KEYCODE_9))
+        return (int32_t)key;
+    if (key >= SAPP_KEYCODE_F1 && key <= SAPP_KEYCODE_F24)
+        return VK_F1 + (key - SAPP_KEYCODE_F1);
+    if (key >= SAPP_KEYCODE_KP_0 && key <= SAPP_KEYCODE_KP_9)
+        return VK_NUMPAD0 + (key - SAPP_KEYCODE_KP_0);
     switch (key)
     {
         case SAPP_KEYCODE_LEFT_CONTROL:
@@ -2964,8 +3027,12 @@ static int32_t SappKeyToVK(sapp_keycode key)
         case SAPP_KEYCODE_RIGHT_ALT:     return VK_MENU;
         case SAPP_KEYCODE_LEFT_SHIFT:
         case SAPP_KEYCODE_RIGHT_SHIFT:   return VK_SHIFT;
+        case SAPP_KEYCODE_LEFT_SUPER:    return VK_LWIN;
+        case SAPP_KEYCODE_RIGHT_SUPER:   return VK_RWIN;
+        case SAPP_KEYCODE_MENU:          return VK_APPS;
         case SAPP_KEYCODE_BACKSPACE:     return VK_BACK;
-        case SAPP_KEYCODE_ENTER:         return VK_RETURN;
+        case SAPP_KEYCODE_ENTER:
+        case SAPP_KEYCODE_KP_ENTER:      return VK_RETURN;
         case SAPP_KEYCODE_TAB:           return VK_TAB;
         case SAPP_KEYCODE_ESCAPE:        return VK_ESCAPE;
         case SAPP_KEYCODE_SPACE:         return VK_SPACE;
@@ -2979,22 +3046,36 @@ static int32_t SappKeyToVK(sapp_keycode key)
         case SAPP_KEYCODE_END:           return VK_END;
         case SAPP_KEYCODE_PAGE_UP:       return VK_PRIOR;
         case SAPP_KEYCODE_PAGE_DOWN:     return VK_NEXT;
-        case SAPP_KEYCODE_F1:            return VK_F1;
-        case SAPP_KEYCODE_F2:            return VK_F2;
-        case SAPP_KEYCODE_F3:            return VK_F3;
-        case SAPP_KEYCODE_F4:            return VK_F4;
-        case SAPP_KEYCODE_F5:            return VK_F5;
-        case SAPP_KEYCODE_F6:            return VK_F6;
-        case SAPP_KEYCODE_F7:            return VK_F7;
-        case SAPP_KEYCODE_F8:            return VK_F8;
-        case SAPP_KEYCODE_F9:            return VK_F9;
-        case SAPP_KEYCODE_F10:           return VK_F10;
-        case SAPP_KEYCODE_F11:           return VK_F11;
-        case SAPP_KEYCODE_F12:           return VK_F12;
-        default:                          return (int32_t)key;
+        case SAPP_KEYCODE_CAPS_LOCK:     return VK_CAPITAL;
+        case SAPP_KEYCODE_SCROLL_LOCK:   return VK_SCROLL;
+        case SAPP_KEYCODE_NUM_LOCK:      return VK_NUMLOCK;
+        case SAPP_KEYCODE_PRINT_SCREEN:  return VK_SNAPSHOT;
+        case SAPP_KEYCODE_PAUSE:         return VK_PAUSE;
+        case SAPP_KEYCODE_KP_DECIMAL:    return VK_DECIMAL;
+        case SAPP_KEYCODE_KP_DIVIDE:     return VK_DIVIDE;
+        case SAPP_KEYCODE_KP_MULTIPLY:   return VK_MULTIPLY;
+        case SAPP_KEYCODE_KP_SUBTRACT:   return VK_SUBTRACT;
+        case SAPP_KEYCODE_KP_ADD:        return VK_ADD;
+        // The US layout's OEM keys (VK_OEM_1 .. VK_OEM_7, VK_OEM_PLUS ..).
+        case SAPP_KEYCODE_SEMICOLON:     return 0xBA;
+        case SAPP_KEYCODE_EQUAL:         return 0xBB;
+        case SAPP_KEYCODE_COMMA:         return 0xBC;
+        case SAPP_KEYCODE_MINUS:         return 0xBD;
+        case SAPP_KEYCODE_PERIOD:        return 0xBE;
+        case SAPP_KEYCODE_SLASH:         return 0xBF;
+        case SAPP_KEYCODE_GRAVE_ACCENT:  return 0xC0;
+        case SAPP_KEYCODE_LEFT_BRACKET:  return 0xDB;
+        case SAPP_KEYCODE_BACKSLASH:     return 0xDC;
+        case SAPP_KEYCODE_RIGHT_BRACKET: return 0xDD;
+        case SAPP_KEYCODE_APOSTROPHE:    return 0xDE;
+        default:                         return 0;
     }
 }
 
+// sokol's events become the game's input. Window, focus and quit events are
+// handled here; game input passes the ImGui and focus gates and joins the
+// input queue, which the frame dispatches before its tick (AppFrame,
+// inputqueue.h).
 static void AppEvent(const sapp_event* ev)
 {
     if (!ev) return;
@@ -3008,49 +3089,44 @@ static void AppEvent(const sapp_event* ev)
     const bool imgui_kbd   = io.WantCaptureKeyboard;
     const bool imgui_mouse = io.WantCaptureMouse;
 
+    // A controlled or replayed session's input is its director's or its
+    // recording's alone; the window still closes.
+    if (Playtest.OwnsInput())
+    {
+        if (ev->type == SAPP_EVENTTYPE_QUIT_REQUESTED)
+            Closing = true;
+        return;
+    }
+
     switch (ev->type)
     {
       case SAPP_EVENTTYPE_KEY_DOWN:
+      case SAPP_EVENTTYPE_KEY_UP:
       {
-        const int32_t vk = SappKeyToVK(ev->key_code);
-        if (vk == VK_CONTROL) CtrlDown = true;
-        else if (vk == VK_MENU) AltDown = true;
-        else if (vk == VK_SHIFT) ShiftDown = true;
+        const bool down = ev->type == SAPP_EVENTTYPE_KEY_DOWN;
 
         // macOS Cmd+Q quits the app, matching the platform convention.
         // ImGui doesn't get to swallow this -- the user always wants it
         // to work even if a slider has keyboard focus.
-        if (ev->key_code == SAPP_KEYCODE_Q
-            && (ev->modifiers & SAPP_MODIFIER_SUPER))
+        if (down && ev->key_code == SAPP_KEYCODE_Q && (ev->modifiers & SAPP_MODIFIER_SUPER))
         {
             sapp_request_quit();
             break;
         }
 
-        if (vk == VK_F10)
+        const int32_t vk = SappKeyToVK(ev->key_code);
+        if (down && vk == VK_F10)
         {
             DebugUI::SetVisible(!DebugUI::IsVisible());
             break;
         }
 
-        if (!AppActive) break;
-        if (imgui_kbd) break;
-        if (CurrentScreen)
-            CurrentScreen->KeyPress(vk, true);
-        break;
-      }
-
-      case SAPP_EVENTTYPE_KEY_UP:
-      {
-        const int32_t vk = SappKeyToVK(ev->key_code);
-        if (vk == VK_CONTROL) CtrlDown = false;
-        else if (vk == VK_MENU) AltDown = false;
-        else if (vk == VK_SHIFT) ShiftDown = false;
-
-        if (!AppActive) break;
-        if (imgui_kbd) break;
-        if (CurrentScreen)
-            CurrentScreen->KeyPress(vk, false);
+        // The modifiers always reach the game, so CtrlDown and the others
+        // follow the keyboard while ImGui has it or the app is inactive.
+        const bool modifier = vk == VK_CONTROL || vk == VK_MENU || vk == VK_SHIFT;
+        if (!vk || (!modifier && (!AppActive || imgui_kbd)))
+            break;
+        InputQueue.PushKey(vk, down);
         break;
       }
 
@@ -3058,11 +3134,10 @@ static void AppEvent(const sapp_event* ev)
       {
         if (!AppActive) break;
         if (imgui_kbd) break;
-        if (CtrlDown && ShiftDown) break;
+        if (InputQueue.QueuedCtrl() && InputQueue.QueuedShift()) break;
         // The game reads WM_CHAR codes; macOS reports Backspace as DEL.
         const int32_t ch = ev->char_code == 0x7f ? 0x08 : (int32_t)ev->char_code;
-        if (CurrentScreen)
-            CurrentScreen->CharPress(ch, true);
+        InputQueue.PushChar(ch);
         break;
       }
 
@@ -3078,64 +3153,39 @@ static void AppEvent(const sapp_event* ev)
       case SAPP_EVENTTYPE_MOUSE_MOVE:
       {
         // While an --input-script owns the cursor, ignore hardware moves so the
-        // script has exclusive control of cursorx/cursory + hover dispatch.
+        // script has exclusive control of the pointer + hover dispatch.
         if (TestModes::InputScriptActive()) break;
-        cursorx = (int32_t)ev->mouse_x;
-        cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
         const bool sector_test_drag =
             StartupTestMode[0] &&
             stricmp(StartupTestMode, "sector") == 0 &&
-            (mousebutton != 0);
+            (InputQueue.QueuedButtons() != 0);
         if (imgui_mouse && !sector_test_drag) break;
-        // Coalesce. A single frame can now see dozens of MOUSE_MOVE events
-        // (trackpads fire at 120–500 Hz and we drain the whole NSEvent queue
-        // at the top of drawRect). Calling CurrentScreen->MouseMove for each
-        // one drives pane/screen logic harder than needed — just flag a
-        // pending move and AppFrame forwards the latest cursor position once
-        // per frame.
-        g_pendingMouseMove = true;
+        // A frame can see dozens of moves (trackpads fire at 120–500 Hz);
+        // the queue keeps the latest of a run of them.
+        InputQueue.PushMove((int32_t)ev->mouse_x, (int32_t)ev->mouse_y);
         break;
       }
 
       case SAPP_EVENTTYPE_MOUSE_DOWN:
-      {
-        if (TestModes::InputScriptActive()) break;   // script owns the mouse
-        cursorx = (int32_t)ev->mouse_x;
-        cursory = (int32_t)ev->mouse_y;
-        if (!AppActive) break;
-        if (imgui_mouse) break;
-        int32_t btn = 0;
-        switch (ev->mouse_button)
-        {
-          case SAPP_MOUSEBUTTON_LEFT:   btn = MB_LEFTDOWN;   mousebutton |= MB_LEFTDOWN;   break;
-          case SAPP_MOUSEBUTTON_RIGHT:  btn = MB_RIGHTDOWN;  mousebutton |= MB_RIGHTDOWN;  break;
-          case SAPP_MOUSEBUTTON_MIDDLE: btn = MB_MIDDLEDOWN; mousebutton |= MB_MIDDLEDOWN; break;
-          default: break;
-        }
-        if (btn && CurrentScreen)
-            CurrentScreen->MouseClick(btn, cursorx, cursory);
-        break;
-      }
-
       case SAPP_EVENTTYPE_MOUSE_UP:
       {
         if (TestModes::InputScriptActive()) break;   // script owns the mouse
-        cursorx = (int32_t)ev->mouse_x;
-        cursory = (int32_t)ev->mouse_y;
         if (!AppActive) break;
-        // MouseUp always forwarded so in-progress drags can clear even if
-        // the release lands over an ImGui panel; otherwise drag state latches.
-        int32_t btn = 0;
+        const bool down = ev->type == SAPP_EVENTTYPE_MOUSE_DOWN;
+        // A release always goes through so an in-progress drag can clear even
+        // if it lands over an ImGui panel; otherwise drag state latches.
+        if (down && imgui_mouse) break;
+        int32_t button = 0;
         switch (ev->mouse_button)
         {
-          case SAPP_MOUSEBUTTON_LEFT:   btn = MB_LEFTUP;   mousebutton &= ~MB_LEFTDOWN;   break;
-          case SAPP_MOUSEBUTTON_RIGHT:  btn = MB_RIGHTUP;  mousebutton &= ~MB_RIGHTDOWN;  break;
-          case SAPP_MOUSEBUTTON_MIDDLE: btn = MB_MIDDLEUP; mousebutton &= ~MB_MIDDLEDOWN; break;
+          case SAPP_MOUSEBUTTON_LEFT:   button = SInputEvent::kButtonLeft;   break;
+          case SAPP_MOUSEBUTTON_RIGHT:  button = SInputEvent::kButtonRight;  break;
+          case SAPP_MOUSEBUTTON_MIDDLE: button = SInputEvent::kButtonMiddle; break;
           default: break;
         }
-        if (btn && CurrentScreen)
-            CurrentScreen->MouseClick(btn, cursorx, cursory);
+        if (button)
+            InputQueue.PushButton(button, down, (int32_t)ev->mouse_x, (int32_t)ev->mouse_y);
         break;
       }
 

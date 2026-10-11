@@ -184,6 +184,8 @@ class TComplexObject : public TObjectInstance
     const TActionBlock* DoingBlock() const { return doing; }
     const TActionBlock* DesiredBlock() const { return desired; }
         // Read-only views of the three action blocks (traces, debug panes)
+    int32_t DoingSince() const { return doingsince; }
+        // The game frame (TPlayScreen::GameFrame) the doing block started in
     virtual void Notify(int32_t notify, void *ptr);
         // Notify Action (check root,desired, and doing for deleted target obj)
 
@@ -238,6 +240,7 @@ class TComplexObject : public TObjectInstance
     PTActionBlock doing;        // Pointer to what they are currently doing
     PTActionBlock desired;      // Pointer to what they *want* to be doing
     PTActionBlock root;         // Root state (return here by default)
+    int32_t doingsince = 0;     // GameFrame() when doing became the block it is
 };
 
 #endif

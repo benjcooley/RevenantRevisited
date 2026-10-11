@@ -98,7 +98,10 @@ void TickAfterRender();
 // Returns true if a capture happened this call, false otherwise.
 bool TriggerSnapshot(const char* label = nullptr);
 
-// Internal: write a single RGBA8 image to disk via stb_image_write.
-bool WritePngRGBA(const char* path, int32_t w, int32_t h, const uint8_t* pixels);
+// Write a single RGBA8 image to disk. `compression` is zlib's level: 8,
+// stb_image_write's default, makes small files; 1 or less writes about ten
+// times faster through miniz (a frame every tick).
+bool WritePngRGBA(const char* path, int32_t w, int32_t h, const uint8_t* pixels,
+                  int32_t compression = 8);
 
 } // namespace FrameSnap

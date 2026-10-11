@@ -56,13 +56,17 @@ constexpr auto kLoadSlice = std::chrono::milliseconds(30);
 
 // Loads sectors of `level` for one slice; the map, complete once
 // !Loading(). nullptr if the level can't be loaded (a negative level).
+// A deterministic run can't size its slices by the clock: it loads the
+// whole level in one, as retail's synchronous load did (the world holds no
+// ticks for it there either; docs/playtest/PLAN.md §6.3).
 TGameMap* LoadSlice(int32_t level)
 {
+    const bool whole = DeterministicRun();
     const auto until = std::chrono::steady_clock::now() + kLoadSlice;
     TGameMap* map = nullptr;
     do
         map = MapManager.LoadStaged(level, 1);
-    while (map && map->Loading() && std::chrono::steady_clock::now() < until);
+    while (map && map->Loading() && (whole || std::chrono::steady_clock::now() < until));
     return map;
 }
 

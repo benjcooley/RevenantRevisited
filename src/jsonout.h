@@ -3,8 +3,9 @@
 // *            jsonout.h - a minimal streaming JSON writer                *
 // *************************************************************************
 //
-// For the A/B dumps (retailab.cpp, the --test=ab-* hosts): flat records of
-// numbers, booleans, strings and lists. Strings arrive as UTF-8.
+// For the A/B dumps (retailab.cpp, the --test=ab-* hosts) and the playtest
+// channel and recordings: records of numbers, booleans, strings and lists.
+// Strings arrive as UTF-8.
 
 #pragma once
 
@@ -24,6 +25,7 @@ class JsonOut
     JsonOut& Bool(bool v) { Sep(); out << (v ? "true" : "false"); return *this; }
     JsonOut& Null() { Sep(); out << "null"; return *this; }
     JsonOut& String(const std::string& utf8) { Sep(); Quote(utf8); return *this; }
+    JsonOut& Raw(const std::string& json) { Sep(); out << json; return *this; }   // a value already JSON
 
     template <typename T> JsonOut& Field(const char* key, T v) { Key(key); return Value((long long)v); }
     JsonOut& FieldBool(const char* key, bool v) { Key(key); return Bool(v); }
