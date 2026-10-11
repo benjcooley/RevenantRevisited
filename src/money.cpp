@@ -98,6 +98,12 @@ int32_t PileState(int32_t amount)
 
 } // namespace
 
+bool TMoney::AddToMap()
+{
+    SetState(PileState(Amount()));
+    return TObjectInstance::AddToMap();
+}
+
 // REVSYNC: TMoney::MergeInto @ 0x00515b50 (vtable 0x98). Gold joins the first
 // "Gold" in the new owner's inventory, bags included, when that is money of
 // the same type. (Retail also counts the uses of its composed inventory icons

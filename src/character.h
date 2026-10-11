@@ -214,6 +214,9 @@ class TCharacter : public TComplexObject
       // Causes character to follow another character.
     bool Pickup(TObjectInstance* inst, TObjectInstance* to = nullptr);
       // Causes character to move to and pickup object.
+    void DropInventory();
+      // A dead character's things go to the floor around it, all at once
+      // (retail 0x004d6570)
     bool Pull(TObjectInstance* inst);
       // Causes character to pull lever
     bool TryUse();

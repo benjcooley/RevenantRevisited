@@ -1015,6 +1015,13 @@ class TObjectInstance : protected SObjectDef
     virtual void UseRange(int32_t &mindist, int32_t &maxdist, int32_t &minang, int32_t &maxang)
         { mindist = 20; maxdist = 50; minang = 0; maxang = 255; }
         // Valid locations character can be standing in order to use the object
+    virtual bool CanTrade() { return Value() != -1; }
+        // REVSYNC: 0x0046fad0 (vtable 0x5c) -- whether the item can change
+        // hands; a Value of -1 keeps it where it is (a dead character's drop
+        // leaves it on the corpse). Containers override it.
+    bool PlayClassSound();
+        // REVSYNC: 0x00473a10 -- the sound of the item's class (dropped,
+        // picked up, equipped); false for a class that has none
 
   // Rotation and velocity and scale functions
     void SetRotateX(int32_t ang) { rotatex = uint8_t(ang); SyncTransformRot(); }

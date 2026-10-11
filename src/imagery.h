@@ -14,6 +14,7 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <memory>
 
 // *************************************************************************
 // * TObjectImagery/TImageryBuilder - Represents the imagery for an object *
@@ -462,8 +463,9 @@ class TObjectAnimator : public TObjectComponent
       // The animation is complete (set to false when ResetState() caled and true when anim is done)
     virtual void SetNewState(bool newst) { newstate = newst; }
       // The this is a new state (set to true when ResetState() is called, and false after first frame)
-    virtual void Pulse() {}
-      // Called during each timer Pulse() to update animaton.
+    virtual void Pulse();
+      // Called during each timer Pulse() to update animaton. The base
+      // advances a toss; an override calls it.
     virtual void Animate(bool draw);
       // Animates object
 
@@ -474,4 +476,28 @@ class TObjectAnimator : public TObjectComponent
 
     void ClearPrevState() { state = prevstate = -1; }
       // Clears previous state (prevents interpolation)
+
+  // Tossing: an item thrown to the floor (a dead character's drop) or let
+  // fall (retail's drop from the hand) flies there, spinning, and bounces
+  // until it settles (retail TObjectAnimator +0x38)
+    void Toss(const S3DPoint& from, S3DPoint to, bool fall = false);
+      // REVSYNC: 0x00445ef0 -- the object goes to `to` (raised by its
+      // registration height) and flies from `from`, thrown or, with `fall`,
+      // dropped straight down
+
+  private:
+    void PulseToss();
+      // One pulse of the toss (from Pulse, 0x00445b20)
+
+    struct SToss
+    {
+        double vel[3] = {};        // +0x000 per pulse
+        double spin[3] = {};       // +0x018 radians per pulse (only z turns)
+        double pos[3] = {};        // +0x030 where it flies
+        double rot[3] = {};        // +0x0a8 its turn about each axis
+        S3DPoint to{0, 0, 0};      // +0x12c where it lands
+        double gravity = 1.5;      // +0x138 taken from vel[2] each pulse in the air
+        int32_t settle = -1;       // +0x140 pulses left once it rests; -1 in the air
+    };
+    std::unique_ptr<SToss> toss;
 };

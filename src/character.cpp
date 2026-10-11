@@ -410,8 +410,14 @@ void TCharacter::Pulse()
   // or alive (UpdateFade's only caller in retail).
     UpdateFade();
 
-    if (IsDead())
+  // REVSYNC: TCharacter::Pulse @ 0x004c1bb0, the dead branch (0x004c2163..):
+  // an unkillable character (charflags 8) goes on as the living. A dead one
+  // but the player (single player) drops what it holds first (0x004c21e4).
+    if (IsDead() && !(charflags & kCharFlagUnkillable))
     {
+        if (ObjClass() != OBJCLASS_PLAYER && NumInventoryItems() > 0)
+            DropInventory();
+
       // When we're dead, we're dead!
         if (!IsDoing(ACTION_DEAD))
             ForceCommand(new TActionBlock("blood", ACTION_DEAD));
@@ -3793,6 +3799,125 @@ bool TCharacter::Pickup(TObjectInstance* inst, TObjectInstance* to)
         TextBar.Print("%s", DialogList.GetLine("CARRYFULL2"));
     }
     return true;
+}
+
+namespace {
+
+// Where DropInventory throws an item (0x004d67ab..0x004d6949): from the
+// corpse in steps of 16 along a random direction (random(0, 256) 256ths of
+// a turn), at most 2 * (Radius / 16) + 1 steps. Each step tests the spot it
+// leaves, not the one it reaches (GetWalkHeightRadius within 16: a rise over
+// 32 or a hole fails it), and the next spot takes that spot's walk height. A
+// failure within the first Radius / 16 steps starts again from the corpse in
+// a new direction (another draw); a later one keeps the spot reached. So the
+// item lies a step past the last spot that passed.
+S3DPoint DropSpot(TCharacter* corpse)
+{
+    constexpr double kTwoPi = 6.283185308;      // 0x005a3a68
+    constexpr int32_t kStep = 16;
+
+    S3DPoint origin;
+    corpse->GetPos(origin);
+    const int32_t steps = corpse->Radius() / kStep;
+
+    float x = 0.0f, y = 0.0f, z = 0.0f, dx = 0.0f, dy = 0.0f;
+    S3DPoint spot;
+    const auto start = [&] {
+        x = float(origin.x);
+        y = float(origin.y);
+        z = float(origin.z);
+        spot = origin;
+        const double angle = double(random(0, 256)) * kTwoPi * (1.0 / 256.0);
+        dx = float(cos(angle) * kStep);
+        dy = float(sin(angle) * kStep);
+    };
+
+    start();
+    int32_t taken = 0;
+    bool blocked = false;
+    do
+    {
+        x += dx;
+        y += dy;
+        int32_t rise = 0, height = 0;
+        bool hole = false;
+        MapPane.GetWalkHeightRadius(spot, kStep, rise, height, hole);
+        z = float(height);
+        if (abs(rise) > 32 || hole)
+        {
+          // REVSYNC-DIVERGENCE: when the corpse's own spot fails, retail
+          // starts again for ever (Radius / 16 of 2 or more: every new start
+          // tests that spot again); the port leaves the item at the corpse.
+            if (taken >= steps || (taken > 0 && spot == origin))
+                blocked = true;
+            else
+            {
+                start();
+                taken = 0;
+            }
+        }
+        if (!blocked)
+            spot = S3DPoint(int32_t(x), int32_t(y), int32_t(z));
+        taken++;
+    } while (taken <= steps * 2 && !blocked);
+    return spot;
+}
+
+} // namespace
+
+// REVSYNC: TCharacter::DropInventory @ 0x004d6570. Pulse calls it on every
+// pulse a dead character (not the player) holds anything (GRIND.md §4.1):
+//   - the "gold" sound plays, once a call;
+//   - every item it can trade (CanTrade, vtable 0x5c) leaves its inventory
+//     for the floor: gold (type "gold") at the corpse's x + 30, y + 30, with
+//     no walk test; anything else at a DropSpot, thrown there from the corpse
+//     (from 60 up but armour, TObjectAnimator::Toss), then its class sound.
+// Bags go whole, with what they hold. An item it can't trade stays, so Pulse
+// calls again next pulse and the "gold" sound plays every pulse (no placed
+// monster carries one). Not ported, multiplayer only: the Swag Bag brought
+// up to the top first, a dead player's things put in a new Pouch, and the
+// network message after (0x0046ff80).
+void TCharacter::DropInventory()
+{
+    if (NumInventoryItems() <= 0)
+        return;
+
+    const int32_t sound = SoundPlayer.FindSound("gold");
+    if (sound >= 0 && SoundPlayer.Mount(sound))
+        SoundPlayer.Play(sound);
+
+    S3DPoint corpse;
+    GetPos(corpse);
+    for (TInventoryIterator i(this); i; i++)
+    {
+        TObjectInstance* item = i.Item();
+        if (!item->CanTrade())
+            continue;
+
+        if (!stricmp(item->GetTypeName(), "gold"))
+        {
+            item->RemoveFromInventory();
+            item->SetPos(S3DPoint(corpse.x + 30, corpse.y + 30, corpse.z), GetLevel());
+            item->AddToMap();
+            continue;
+        }
+
+        const S3DPoint spot = DropSpot(this);
+        item->RemoveFromInventory();
+        item->SetPos(spot, GetLevel());
+        item->AddToMap();
+        if (item->NeedsAnimator())
+            item->CreateAnimator();
+        log_debug("[inv] %s drops %s at (%d,%d,%d)", GetName(), item->GetName(), spot.x, spot.y, spot.z);
+        if (TObjectAnimator* animator = item->GetAnimator())
+        {
+            S3DPoint from = corpse;
+            if (item->ObjClass() != OBJCLASS_ARMOR)
+                from.z += 60;
+            animator->Toss(from, spot);
+        }
+        item->PlayClassSound();
+    }
 }
 
 

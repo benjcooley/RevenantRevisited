@@ -149,6 +149,11 @@ int32_t TContainer::NumObjects()
     return RealNumInventoryItems();
 }
 
+bool TContainer::CanTrade()
+{
+    return ObjClass() != OBJCLASS_INVCONTAINER || stricmp(GetName(), "Swag Bag") != 0;
+}
+
 // REVSYNC: TContainer::Load @ 0x004dd3e0 (SAVE_GAME.md §11.3).
 void TContainer::Load(RTInputStream is, int32_t version, int32_t objversion)
 {

@@ -24,6 +24,9 @@ class TContainer : public TObjectInstance
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
     int32_t CursorType(TObjectInstance* inst = nullptr) override;
+    bool CanTrade() override;
+        // REVSYNC: 0x004dd3a0 -- every container, whatever its Value, but the
+        // multiplayer Swag Bag
 
     virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
     virtual void Save(RTOutputStream os);

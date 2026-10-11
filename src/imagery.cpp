@@ -16,6 +16,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include <algorithm>
+#include <iterator>
+
 // Builder array for imagery builder class
 int32_t TImageryBuilder::numimagerytypes = 0;
 PTImageryBuilder TImageryBuilder::builders[MAXIMAGERYTYPES];
@@ -113,6 +116,167 @@ void TObjectAnimator::Animate(bool draw)
     prevstate = inst->GetPrevState();
     frame = inst->GetFrame();
     framerate = inst->GetFrameRate();
+}
+
+void TObjectAnimator::Pulse()
+{
+    PulseToss();
+}
+
+// *************
+// * Tossing   *
+// *************
+
+namespace {
+
+// Retail's constants, as its code reads them (double unless noted).
+constexpr double kQuarterTurn     = 1.570796327;            // every turn of a new toss
+constexpr double kTwoPi           = 6.2831854820251465;     // float 2 pi (0x005a36c0): the turns' wrap
+constexpr double kFacingScale     = 255.0;                  // 0x005a3a20
+constexpr double kTurnsPerRadian  = -0.15915494307111402;   // 0x005a4838: -1 / 2 pi
+constexpr double kSettleRise      = 3.0;                    // gravities a landing may still rise and settle
+constexpr int32_t kSettleReach    = 16;                     // from the resting x and y
+constexpr int32_t kSettlePulses   = 5;
+
+// The facing a z turn gives an object: -0x40 - trunc(turn * 255 / -2 pi).
+int32_t TossFacing(double zturn)
+{
+    return (-0x40 - static_cast<int32_t>(zturn * kFacingScale * kTurnsPerRadian)) & 0xff;
+}
+
+// An angle back into 0..2 pi, at most ten turns either way.
+double WrapTurn(double angle)
+{
+    for (int32_t n = 0; angle > kTwoPi && n < 10; n++)
+        angle -= kTwoPi;
+    for (int32_t n = 0; angle < 0.0 && n < 10; n++)
+        angle += kTwoPi;
+    return angle;
+}
+
+} // namespace
+
+// REVSYNC: TObjectAnimator::Toss @ 0x00445ef0 (its callers pass 0, -1 and
+// `fall` last: an unread word at +0x144, the settle count, the drop flag).
+// Nothing happens unless the animator's state is one of the imagery's
+// states. Then:
+//   - `to` rises by 2, and but for money and weapons by the state's
+//     registration z too: 1..32, halved when over the state's height,
+//     otherwise -3;
+//   - the flight starts at `from`, turned a quarter turn about each axis,
+//     and the object faces the way that turn gives (0xff);
+//   - random(0, 150) sets the flight's length t = (r + 75) * 0.01 * 16 (a
+//     float);
+//   - the object goes to `to` at once: the game sees it there, the flight is
+//     the animator's;
+//   - thrown, it crosses to `to` at (to - from) / (2.5 t) a pulse, leaves
+//     rising 80 / t + t * 1.5 * 0.125 * 0.5, and its z turn spins
+//     (random(0, 50) + 50) * 0.01 * 0.4 a pulse; let fall, it has no speed
+//     and no spin, and draws no second number.
+// Gravity is 1.5 a pulse. Retail's x87 runs at double precision, so the
+// arithmetic is double but for t.
+void TObjectAnimator::Toss(const S3DPoint& from, S3DPoint to, bool fall)
+{
+  // Retail's constructor (0x00445940) starts the state at 0; the port's
+  // animator holds -1 until it first animates.
+    const int32_t at = state >= 0 ? state : 0;
+    if (!image || at >= image->NumStates())
+        return;
+
+    int32_t raise = image->GetRegZ(at);
+    if (raise < 1 || raise > 32)
+        raise = -3;
+    if (raise > image->GetHeight(at))
+        raise /= 2;
+    const int32_t objclass = inst->ObjClass();
+    to.z += (objclass == OBJCLASS_MONEY || objclass == OBJCLASS_WEAPON) ? 2 : raise + 2;
+
+    toss = std::make_unique<SToss>();
+    SToss& t = *toss;
+    t.pos[0] = from.x;
+    t.pos[1] = from.y;
+    t.pos[2] = from.z;
+    t.rot[0] = t.rot[1] = t.rot[2] = kQuarterTurn;
+    inst->Face(TossFacing(t.rot[2]));
+
+    const float length = static_cast<float>(double(random(0, 150) + 75) * double(0.01f) * 16.0);
+    t.to = to;
+    inst->SetPos(to, -1, false);
+    if (fall)
+        return;
+
+    const double across = double(length) * 2.5;
+    t.vel[0] = double(to.x - from.x) / across;
+    t.vel[1] = double(to.y - from.y) / across;
+    t.vel[2] = double(length) * 1.5 * 0.125 * 0.5 + 80.0 / double(length);
+    t.spin[2] = double(random(0, 50) + 50) * double(0.01f) * double(0.4f);
+    log_debug("[toss] %s from (%d,%d,%d) to (%d,%d,%d): length %.2f", inst->GetName(),
+              from.x, from.y, from.z, to.x, to.y, to.z, double(length));
+}
+
+// REVSYNC: TObjectAnimator::Pulse @ 0x00445b20, the toss. While it flies
+// (settle -1), each pulse:
+//   - above its landing z it moves by its speed, turns by its spin (each
+//     angle kept in 0..2 pi) and gravity takes from its rise;
+//   - below it, it lands: back up to the landing z + 0.1, the rise reversed
+//     at half, the spin halved; within 16 of the landing x and y, rising at
+//     most three gravities, it stops dead and settles for 5 pulses (this one
+//     the first).
+// When the count runs out the object faces where its z turn left it, goes to
+// the place it came to rest (not `to`: it lands about a step short of it, on
+// the first bounce close enough), and the toss ends.
+// Not ported, both for the draw: retail keeps the four places and turns before
+// (+0x48.., +0xc0..), the trail its 3D animator draws behind a flying item
+// (0x0040f5b0), and steps a byte at +0x34 up to 6 and back after each toss.
+// The port doesn't draw the flight: the item shows where the game holds it,
+// `to`, until it rests.
+void TObjectAnimator::PulseToss()
+{
+    if (!toss)
+        return;
+
+    SToss& t = *toss;
+    if (t.settle < 0)
+    {
+        const double rest = t.to.z;
+        if (rest < t.pos[2])
+        {
+            for (int32_t k = 0; k < 3; k++)
+            {
+                t.pos[k] += t.vel[k];
+                t.rot[k] += t.spin[k];
+            }
+            for (double& turn : t.rot)
+                turn = WrapTurn(turn);
+            t.vel[2] -= t.gravity;
+        }
+        if (t.pos[2] < rest)
+        {
+            t.pos[2] = rest + double(0.1f);
+            t.vel[2] *= -0.5;
+            t.spin[2] *= 0.5;
+            const bool near = t.pos[0] < t.to.x + kSettleReach && t.pos[0] > t.to.x - kSettleReach &&
+                              t.pos[1] < t.to.y + kSettleReach && t.pos[1] > t.to.y - kSettleReach;
+            if (near && t.vel[2] <= t.gravity * kSettleRise)
+            {
+                std::fill(std::begin(t.vel), std::end(t.vel), 0.0);
+                std::fill(std::begin(t.spin), std::end(t.spin), 0.0);
+                if (t.settle == -1)
+                    t.settle = kSettlePulses;
+            }
+        }
+    }
+
+    if (t.settle > 0 && --t.settle == 0)
+    {
+        const S3DPoint rest(static_cast<int32_t>(t.pos[0]), static_cast<int32_t>(t.pos[1]),
+                            static_cast<int32_t>(t.pos[2]));
+        inst->Face(TossFacing(t.rot[2]));
+        inst->SetPos(rest, -1, false);
+        log_debug("[toss] %s rests at (%d,%d,%d) facing %d", inst->GetName(), rest.x, rest.y, rest.z,
+                  inst->GetFace());
+        toss.reset();
+    }
 }
 
 // *******************
