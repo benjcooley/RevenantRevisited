@@ -16,6 +16,8 @@ def run(trace,log,output):
   cache=list(map(float,row[9:]));actual=a['object_matrices'][0][12:15]
   if max(abs(x-y)for x,y in zip(cache,actual))>.00002:errors.append(dict(tick=tick,source_cache=cache,native_cache=actual))
   checks+=11;ticks.append(tick)
+ expected_ticks=[record['tick'] for record in records if not(record['after']['flags']&(1<<12))]
+ if ticks!=expected_ticks:errors.append(dict(expected_render_ticks=expected_ticks,actual_render_ticks=ticks))
  assert ticks,'No actual Dragon phase witnesses'
  result=dict(status='fail'if errors else'pass',checks=checks,records=len(ticks),ticks=ticks,errors=errors,trace_sha256=sha(trace.read_bytes()),log_sha256=sha(log.read_bytes()),scope='Actual process owner state/frame/position, live particles/capacity, random draw count and cached prototype origin; complete RNG seed and every pool field separately proved by native/core comparator. No image verdict.')
  output.write_text(json.dumps(result,indent=2)+'\n');print(result['status'],checks,errors[:3]);return result
