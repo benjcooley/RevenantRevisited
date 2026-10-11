@@ -111,3 +111,31 @@ owner animation selects only its authored active frames. Device equivalence,
 RGB5-to-RGB4 quantization, modern sampling/projection/blending, generic owner
 Pulse and natural map placement remain open. Reports explicitly retain
 `accepted=false`, `primary_visual_pass=false`, and `device_identical=false`.
+
+## Correct portable decoder and actual Metal diagnostic
+
+`watcher_decode_contract.py` compiles the unchanged production texture decoder
+with ASan/UBSan and the actual `retailmeshlighting.h` selector. All65,536 words
+of each1555/4444/565 format pass786,432 independent channel assertions. In
+particular1555 opaque alpha becomes255, and RGB5 uses full normalized expansion;
+the policy selector returns2 for1555,3 for exact4444, and1 for565. This proves the
+portable decoder rather than importing the original software corruption.
+
+Fresh actual Metal captures in `hard-alpha/watcher{1,2,3}-metal-final` each
+completed8/8 visible frames, four distinct authored phases, and clean exit.
+They use unchanged binary
+`4ab18b5620806b6b555c23235838a2168279df8c372aa9b09c14d03590a6e620`,
+640x480, origin0, camera320/240, ambient32/white, configured85% directional
+light (logged source ambient38/255 and direction1), and24Hz rendering. The
+existing static preview advances its real owner NextFrame and selects the
+registered authored frame meshes. No native projection opt-in was added.
+
+`watcher-qualified-review/ogrokwatcher{1,2,3}-metal-detail.png` compares all four
+active phases against the explicitly adapted semantic-alpha reference. A fixed
+identical crop250/70/390/260 and nearest2x enlargement contains every whole
+visible effect on both sides; raw640x480 frames and hashes remain retained.
+Shape, phase and authored purple/gold hues agree on inspection. Metal is a few
+pixels taller/higher and has brighter fine detail. Common-world projection,
+RGB5 versus adaptedRGB4 precision, sampling and framebuffer arithmetic remain
+explicit differences. `metal-diagnostic.json` does not grant acceptance or
+claim an unchanged original device, natural world placement or exact pixels.
