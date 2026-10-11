@@ -69,6 +69,7 @@
 #include "effects/vortexpreview.h"
 #include "effects/jtelepreview.h"
 #include "effects/irisflarepreview.h"
+#include "effects/teleporteroriginal.h"
 #include "effects/essencedrainpreview.h"
 #include "effects/invisiblepreview.h"
 #include "effects/bloodpreview.h"
@@ -6186,6 +6187,11 @@ struct SVfxTestBootstrap {
         {
             VfxTest::SEffect e={};e.id="IrisFlare_AUTHORED";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
             e.factory=[](const S3DPoint&o)->void*{return irisflare_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){irisflare_preview::Advance(static_cast<irisflare_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){irisflare_preview::SubmitWorld(static_cast<irisflare_preview::State*>(c));};e.is_alive=[](void*c){return irisflare_preview::Alive(static_cast<irisflare_preview::State*>(c));};e.destroy=[](void*c){irisflare_preview::Destroy(static_cast<irisflare_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+
+        {
+            VfxTest::SEffect e={};e.id="Teleporter_ORIGINAL_NULL";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return teleporter_original::Spawn(o);};e.submit=[](void*c,EFxDebugMode){teleporter_original::Advance(static_cast<teleporter_original::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){teleporter_original::SubmitWorld(static_cast<teleporter_original::State*>(c));};e.is_alive=[](void*c){return teleporter_original::Alive(static_cast<teleporter_original::State*>(c));};e.destroy=[](void*c){teleporter_original::Destroy(static_cast<teleporter_original::State*>(c));};VfxTest::DeferredRegister(e);
         }
 
         {
