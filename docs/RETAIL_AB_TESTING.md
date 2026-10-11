@@ -264,7 +264,7 @@ build against its manifest, prints its disassembly diff, or applies the bytes.
 
 | Patch | Changes | SHA-256 | Verified |
 |---|---|---|---|
-| [`clickwalk`](../recon/retail_asm/patches/clickwalk/README.md) | A left click on open ground walks Locke to the point under it through `Goto` (the playtest agent's movement, [playtest/CLICKWALK.md](playtest/CLICKWALK.md)) | `016a73ad…3762` | build contract, disassembly diff, the original click path in the emulator against the baseline (`test_clickwalk.py`); not yet in a loaded level |
+| [`clickwalk`](../recon/retail_asm/patches/clickwalk/README.md) | A left click on open ground walks Locke to the point under it through `Goto` (the playtest agent's movement, [playtest/CLICKWALK.md](playtest/CLICKWALK.md)) | `016a73ad…3762` | build contract, disassembly diff, the original click path in the emulator against the baseline (`test_clickwalk.py`); a click in a loaded level walks Locke onto the point (play slot) |
 
 ## Required evidence
 

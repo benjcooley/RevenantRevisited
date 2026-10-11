@@ -54,8 +54,10 @@ run in the emulator, **[I]** inferred, **[U]** unknown.
   walk block heads there; the baseline does nothing; eleven other click
   situations run identically on both builds; booted to game init on the HUD
   slot's machine, the two builds' whole machines differ only in the patched
-  bytes (§8). **Not yet seen**: a click
-  in a loaded level with Locke walking there frame by frame (§8.4).
+  bytes; over game ticks on flat ground Locke turns to the point and stops
+  on it (§8). **In a loaded level** (the play slot, 2026-10-11) a click
+  into the room walks Locke onto the point exactly; a goal past the room's
+  ledge ends in retail's blocked slide (§8.4).
 
 ## 1. The left button in `TMapPane::MouseClick` (`0x0044f140`)
 
@@ -215,7 +217,8 @@ other than his root or a move, or when the first 4 units are blocked
 here). The walk then runs in `ResolveMove`, which arrives within 8
 (MAP_INPUT.md §4.3, `0x004c6155`; not re-read here). A Goto walk survives
 `UpdateMove`'s stop with no direction held because its block has a target:
-`0x0047e030..0x0047e043` stop only a move whose target is 0, 0, 0. [C]
+`0x0047e030..0x0047e043` stop only a move whose target is 0, 0, 0. [C; run
+in §8.2, `open-ground-walk`]
 
 ## 5. The run key
 
@@ -357,6 +360,7 @@ at (6280, 4338, 33), facing 64, the view centred on him.
 | `open-ground`: press and release at (400, 200), walk mode | nothing | `Goto(6323, 4301, 0)`; doing `walkf` (via `walk to walkf`) with target (6323, 4301, 33) and the `0x1000` flag |
 | `open-ground-turn`: (200, 330), behind him | nothing | `Goto(6353, 4531, 0)`; a pivot-first `walk` block, `waitpivot`, the same target |
 | `open-ground-run`: `SetRunMode` first (the run key), then (400, 200) | root "run", nothing more | `Goto(6323, 4301, 0)`; doing `runf` with the target |
+| `open-ground-walk`: the click, then 60 game ticks on flat ground | Locke stands still | facing 48 → 35 at once, re-aimed 34..36 each tick; at tick 14 Locke stands **exactly** on (6323, 4301) (`ResolveMove`'s within 8, then `MoveTo`); the `walkf to walk` stop transition then carries him 7 more units (its synthetic motion) and he stands at his root |
 | `right-button` at (400, 200) | `ScreenToWorld(2022, 5241, z 83)` → (6323, 4301), `wedge-e`, key `0x27` | identical |
 | combat, attack cursor (none / swords) | `ButtonAttack(2)`, release nothing | identical |
 | combat, stale door cursor | nothing | identical; the cave ran and declined |
@@ -364,16 +368,25 @@ at (6280, 4338, 33), facing 64, the view centred on him.
 | bow drawn | `ShootBow(35)` | identical |
 | press on Tendrick, release on ground; press on ground, release on him; drag release (no press); outside the pane; Locke dead | nothing | identical |
 
+The game ticks of `open-ground-walk` are retail's own order (combat kata
+M8): `UpdateMove` `0x0047de30` with nothing held and a control used before
+(so its stop is armed), then `Pulse` (UpdateAction, `ResolveMove`), `Move`
+(`MoveStep`, the walk grid as original over a flat ground seam),
+`SetObjectMotion` over a synthetic walk cycle (5 units a frame), the game
+frame, `NextFrame`. So the "any of 256 angles, onto the point within 8"
+half of the rule and `UpdateMove`'s stop exemption are retail's own code,
+run.
+
 The point the click walks to is, argument for argument, the right-button
 walk's for the same pointer (`ScreenToWorld(2022, 5241, &p, 83)`), and an
 independent Python `ScreenToWorld` gives the same (6323, 4301). The
-`clickwalk` code at `0x005a2a40` ran in the three walking cases and the two
+`clickwalk` code at `0x005a2a40` ran in the four walking cases and the two
 declining ones, never otherwise; the baseline never runs there.
 
 ```sh
 "$PY" tools/retail_runtime/clickwalk_probe.py --baseline recon/retail_asm/baseline/Revenant.rebuilt.exe \
   --clickwalk <exe> --build <build.json>                    # failures: []
-"$PY" -m unittest discover -s tools/retail_runtime -p 'test_clickwalk.py'   # 6 tests OK
+"$PY" -m unittest discover -s tools/retail_runtime -p 'test_clickwalk.py'   # 7 tests OK
 ```
 
 ### 8.3 On the HUD slot's booted game
@@ -399,15 +412,47 @@ are still the fixture's.
 About 2 to 4.5 minutes per executable to boot on a loaded Mac (95 s
 unloaded); the boot images are cached in `slots/hud/__pycache__`.
 
-### 8.4 Still to verify in real play
+### 8.4 In a loaded level (play slot, 2026-10-11)
 
-- A click in a loaded level (`QUICKSTART`), through the real pick
-  (`OnObject`'s 3D probe and 2D walk) and the real screen routing, with
-  Locke walking to the point over the following ticks, arriving within 8,
-  running with the run key held, and a re-click mid-walk retargeting. This
-  needs the play slot (`slots/play`), which runs this build.
-- The real `UpdateMove`/`ResolveMove` loop around a click walk (the stop
-  exemption is read, §4, not run).
+Run by the play slot's agent (`slots/play`, in-process, the software
+machine with Software3D = Yes; their script
+`scratchpad/retail/proto/clickprobe.py`), not by this track. The start is a
+quick save taken just after the opening ("Quick Save 1"), with Locke at
+(1383, 488, 17) and Rahul hostile nearby. That save was made after Locke
+walked east until the room's east ledge stopped him, so he stands against
+it at x ≈ 1383, and any goal with a larger x is past the edge.
+
+- **Baseline**: a click on the floor leaves Locke where he is (150 ticks).
+- **Into the room**, screen (160, 180): the goal is (1362, 534) (z + 50 =
+  67 for the conversion). After the release the doing block is `walk`
+  with target (1362, 534, 17) and flag `0x1000`. His facing turns 64 →
+  112 → 145, then `walkf` at angle 146–147: (1379, 498) at t = 36, (1371,
+  514) at t = 39, (1364, 529) at t = 42. At t = 45 **he stands exactly on
+  (1362, 534)** and the doing block returns to the root.
+- **Toward the ledge**, screen (260, 250): the goal is (1482, 554), past
+  the edge. The target is set as above (flags `0x1600`: walkto, noroot,
+  waitpivot). He faces 88 → 75 but only slides along +y at about 1 unit a
+  tick, (1383, 488) → (1383, 527), and gives up at t = 63 at (1380, 532),
+  at his root.
+- Their first sample, screen (150, 300) → (1477, 659), is the same case:
+  past the ledge, a slide along +y, stopped 99 short.
+
+So in a real level the patched click reaches `Goto` with the rule's point,
+Locke turns to it and stands on it, and a goal past an edge ends in
+retail's own blocked slide, as a far-object walk would. Not logged in
+those runs: the Move bits per tick and the walk-grid heights along the
+blocked line.
+
+Note on the point itself (the rule's, not the patch's): at z + 50 the
+screen point lands 43 units further in +x and +y (one screen row of 43:
+`50 * 867 / 1000`) than the floor point under the pointer at Locke's own
+height; near an edge that can put the goal past it. The director's
+`walk.py` should treat such a stop as "blocked" and pick a nearer point.
+
+### 8.5 Still to verify in real play
+
+- In a loaded level: with the run key held, running; a re-click mid-walk
+  retargeting. The play slot runs this build.
 - Mid-walk run key changes (§5, [I]).
 - The DOSBox lab has not run the build.
 
