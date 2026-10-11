@@ -1,3 +1,4 @@
+#include <cstdlib>
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                    Copyright (C) 1998 Cinematix                       *
@@ -2782,6 +2783,10 @@ MeshHandle TRenderer::RegisterMeshAsset(uint64_t key,
 
     meshes.push_back(e);
     const MeshHandle handle = MeshHandle(meshes.size());   // index+1
+    static const bool trace_mesh_assets = std::getenv("REVENANT_TRACE_MESH_ASSETS") != nullptr;
+    if (trace_mesh_assets)
+        log_info("[mesh-allocation] handle=%u key=%016llx vertices=%d indices=%d texture=%u cache_meshes=%zu",
+                 unsigned(handle), static_cast<unsigned long long>(key), num_verts, num_indices, unsigned(albedo_texture), meshes.size());
     if (key != 0)
         mesh_by_key[key] = handle;
     return handle;

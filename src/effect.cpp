@@ -14036,6 +14036,22 @@ TAuthoredStaticMeshEffect::~TAuthoredStaticMeshEffect()
             }
 }
 
+// These immutable buffers are shared across preview owners. Include the exact
+// source asset, object, texture slot and texture frame; owner position/time do
+// not change vertex/index data. Keep this domain separate from map mesh keys.
+static uint64_t AuthoredStaticMeshKey(uint64_t asset, int32_t object, int32_t slot, int32_t frame)
+{
+    uint64_t hash = 1469598103934665603ull;
+    const uint64_t fields[] = {0x4155544853544154ull, asset, uint64_t(uint32_t(object)),
+                               uint64_t(uint32_t(slot)), uint64_t(uint32_t(frame))};
+    for (uint64_t value : fields)
+        for (int byte = 0; byte < 8; ++byte) {
+            hash ^= (value >> (byte * 8)) & 255u;
+            hash *= 1099511628211ull;
+        }
+    return hash ? hash : 1ull;
+}
+
 TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const S3DPoint& origin,
                                                                     const char* asset_override,bool animate_textures,bool scroll_textures)
 {
@@ -14097,20 +14113,26 @@ TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const
                 if(desc.numframes>1) {
                     if(!desc.framehtexs)return nullptr;
                     for(int32_t frame=0;frame<desc.numframes;++frame) {
-                        const MeshHandle frame_mesh=Renderer->RegisterMesh(vertices.data(),int32_t(vertices.size()),
+                        const MeshHandle frame_mesh=Renderer->RegisterMeshAsset(
+                            AuthoredStaticMeshKey(img->AssetId(),object,slot,frame),vertices.data(),int32_t(vertices.size()),
                             indices.data(),int32_t(indices.size()),desc.framehtexs[frame]);
                         if(!frame_mesh) {
                             for(MeshHandle retained:part.frame_meshes)Renderer->ReleaseMeshAssetRef(retained);
                             return nullptr;
                         }
+                        Renderer->AddMeshAssetRef(frame_mesh);
                         part.frame_meshes.push_back(frame_mesh);
                     }
                     part.mesh=part.frame_meshes.front();
                 }
             }
-            if(!part.mesh)part.mesh = Renderer->RegisterMesh(vertices.data(), int32_t(vertices.size()),
-                indices.data(), int32_t(indices.size()), texture);
-            if (!part.mesh) return nullptr;
+            if(!part.mesh) {
+                part.mesh = Renderer->RegisterMeshAsset(
+                    AuthoredStaticMeshKey(img->AssetId(),object,slot,0),vertices.data(),int32_t(vertices.size()),
+                    indices.data(),int32_t(indices.size()),texture);
+                if (!part.mesh) return nullptr;
+                Renderer->AddMeshAssetRef(part.mesh);
+            }
             BuildStaticObjectMatrix(img, object, 0, 0, part.local_matrix);
             eff->parts_.push_back(part);
             total_vertices += vertices.size();
