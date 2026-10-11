@@ -169,6 +169,7 @@
 {0xddc4042eu, "TBloodEffect", false, "Implemented preview controller; map caller not certified"}, // Blood
 {0xded3dbedu, "TWindStrip_BESPOKE_NULLSPELL", false, "Implemented preview controller; map caller not certified"}, // WindStrip
 {0xded3dbedu, "TWindStripAnimator_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // WindStrip
+{0xdedbdbedu, "Halo_AUTHORED_PUBLIC60", false, "Exact Halo authored mesh/public InitParams(60,0.04), explicit test inputs; natural retail caller not certified"}, // Halo
 {0xdedbdbedu, "THaloEffect", false, "Implemented preview controller; map caller not certified"}, // Halo
 {0xdefeca7eu, "EssenceDrain_AUTHORED", false, "Implemented preview controller; map caller not certified"}, // Essencedrain
 {0xe0a3bc42u, "Poison_AUTHORED", false, "Implemented preview controller; map caller not certified"}, // poison

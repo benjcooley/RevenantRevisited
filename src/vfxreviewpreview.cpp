@@ -42,6 +42,10 @@ const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nu
             return e.id == mapping.preview_id;
         });
         if (it == catalogue.end() || !it->factory || !it->destroy) continue;
+        // Exact public-parameter Halo controller; old procedural alias is not a fallback.
+        if (id==0xdedbdbedu && (it->id!="Halo_AUTHORED_PUBLIC60" ||
+            it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
+            !it->is_alive || !it->submit_world)) continue;
         // Blood must retain its complete finite controller and world submission.
         if (id==0xddc4042eu && (it->id!="Blood_AUTHORED" ||
             it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||

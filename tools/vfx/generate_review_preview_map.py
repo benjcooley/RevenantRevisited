@@ -85,6 +85,7 @@ PARTIAL = {
 # their owner constructors. These newer implementations predate their ledger
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
+    '0xdedbdbed': 'Halo_AUTHORED_PUBLIC60',
     '0xddc4042e': 'Blood_AUTHORED',
     '0xbabeface': 'Quicksand_ORIGINAL_TARGET',
     '0x5975abde': 'TDripEffect_LINKED_NO_SPLASH',
@@ -161,6 +162,7 @@ IMPLEMENTED.update(dict.fromkeys(
 
 
 def admitted_candidates(row):
+    row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if not n.startswith('Halo_AUTHORED_PUBLIC')])
     if row.get('retail_type_id','').lower()!='0xddc4042e':
         row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n!='Blood_AUTHORED'])
     if row.get('retail_type_id','').lower()=='0x369a5d2e':
@@ -179,6 +181,8 @@ def admitted_candidates(row):
 
 
 def candidate_metadata(row, name):
+    if row.get('retail_type_id','').lower()=='0xdedbdbed' and name=='Halo_AUTHORED_PUBLIC60':
+        return False, 'Exact Halo authored mesh/public InitParams(60,0.04), explicit test inputs; natural retail caller not certified'
     if row.get('retail_type_id','').lower()=='0xddc4042e' and name=='Blood_AUTHORED':
         return False, 'Exact Blood public SetParams(40,224,3,5,5,1) spray, live global RNG without reseed; natural actor damage/map insertion not certified'
     if row.get('retail_type_id','').lower()=='0x369a5d2e' and name=='Teleporter_ORIGINAL_NULL':

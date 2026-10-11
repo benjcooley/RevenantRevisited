@@ -23,6 +23,14 @@ TWaterFallEffect_BESPOKE__WaterFlft TWaterFallEffect_BESPOKE__RiverFall
 TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertEqual(admitted_candidates({'preview_candidates': candidates}), [])
 
+    def test_halo_exact_public_case_has_no_parameter_alias(self):
+        row={'retail_type_id':'0xdedbdbed','preview_candidates':['THaloEffect']}
+        self.assertEqual(admitted_candidates(row),['Halo_AUTHORED_PUBLIC60','THaloEffect'])
+        partial,description=candidate_metadata(row,'Halo_AUTHORED_PUBLIC60')
+        self.assertFalse(partial);self.assertIn('explicit test inputs',description)
+        for name in ('Halo_AUTHORED_PUBLIC60','Halo_AUTHORED_PUBLIC20'):
+            self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':[name]}),[])
+
     def test_blood_exact_controller_precedes_drawable_fallback(self):
         row={'retail_type_id':'0xddc4042e','preview_candidates':['TBloodEffect_BESPOKE']}
         self.assertEqual(admitted_candidates(row),['Blood_AUTHORED','TBloodEffect_BESPOKE'])
