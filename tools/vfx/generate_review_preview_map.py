@@ -133,7 +133,7 @@ SOURCE_MAPPINGS = {
     '0xad92bd23': 'TKinSecretDoor_NATIVE_STILL',
     '0xdcc4011d': 'TLabback_AUTHORED_TAGS',
     '0xbecffeda': 'TSwamp_AUTHORED_TAGS',
-    '0xad92bc14': 'TParalize1_NAMED_NO_TARGET',
+    '0xad92bc14': 'TParalize1_CONFIGURED_TARGET',
     '0x42e0fcd0': 'TOgrestrength_AUTHORED_TAGS',
     '0xad92bd39': 'TTrollblood_AUTHORED_TAGS',
     '0x10ac03de': 'TRegeneration_AUTHORED_TAGS',
@@ -164,6 +164,8 @@ def admitted_candidates(row):
 
 
 def candidate_metadata(row, name):
+    if row.get('retail_type_id','').lower()=='0xad92bc14' and name=='TParalize1_CONFIGURED_TARGET':
+        return False, 'Configured genuine Acolyte target: offset(96,0,0), radius16; original variant1 lifecycle; arbitrary targets and bones not certified'
     partial = PARTIAL.get(row.get('retail_type_id', '').lower())
     if partial and name == partial[0]:
         return True, 'Partial preview: ' + partial[1] + '; not complete original implementation'

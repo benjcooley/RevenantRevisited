@@ -2,6 +2,7 @@
 // provider makes any accidental browser initialization an unresolved symbol.
 #include "../src/vfxreviewpreview.h"
 #include "../src/time.h"
+#include "../src/effects/paralizepreview.h"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -44,7 +45,10 @@ std::vector<SEffect> ReviewCatalogue() {
     auto head=Row("HeadFireBall_ORIGINAL",EVfxPreviewStyle::Static);
     head.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
     head.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
-    return {head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    auto paralize=Row("TParalize1_CONFIGURED_TARGET",EVfxPreviewStyle::Static);
+    paralize.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
+    paralize.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
+    return {paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -145,6 +149,21 @@ int main() {
         head->Submit();head->Submit();
         assert(head->Alive()==false && creates==initial);
         head->Submit();assert(head->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
+    {
+        static_assert(paralize_preview::kConfiguredTarget.source_x==3185);
+        static_assert(paralize_preview::kConfiguredTarget.target_dx==96);
+        static_assert(paralize_preview::kConfiguredTarget.expected_radius==16);
+        const auto info=DescribeVfxReviewPreview(0xad92bc14u);
+        assert(info.supported && !info.partial && !info.requires_endpoints && info.lifetime_known);
+        assert(std::strstr(info.description,"Configured genuine Acolyte"));
+        assert(!CreateVfxReviewPreview(0xad92bc14u,origin,{80,-120,128}));
+        auto target=CreateVfxReviewPreview(0xad92bc14u,origin);
+        assert(target && target->Id()=="TParalize1_CONFIGURED_TARGET" && target->RestartInterval()==0);
+        const int initial=creates;
+        target->Submit();target->Submit();assert(target->Alive()==false && creates==initial);
+        target->Submit();assert(target->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";

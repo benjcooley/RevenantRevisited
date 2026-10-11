@@ -38,7 +38,12 @@ TNewUnreviewedEffect_BESPOKE'''.split()
 
     def test_paralize_named_no_target_is_explicitly_partial(self):
         row = {'retail_type_id': '0xad92bc14', 'preview_candidates': []}
-        self.assertEqual(admitted_candidates(row), ['TParalize1_NAMED_NO_TARGET'])
+        self.assertEqual(admitted_candidates(row), ['TParalize1_CONFIGURED_TARGET'])
+        configured, description=candidate_metadata(row,'TParalize1_CONFIGURED_TARGET')
+        self.assertFalse(configured)
+        self.assertIn('offset(96,0,0), radius16',description)
+        row['preview_candidates']=['TParalize1_NAMED_NO_TARGET']
+        self.assertEqual(admitted_candidates(row),['TParalize1_CONFIGURED_TARGET','TParalize1_NAMED_NO_TARGET'])
         partial, reason = candidate_metadata(row, 'TParalize1_NAMED_NO_TARGET')
         self.assertTrue(partial)
         self.assertIn('enormous full trajectory', reason)

@@ -7083,6 +7083,9 @@ struct SVfxTestBootstrap {
             e.is_alive=[](void* c){return paralize_preview::Alive(static_cast<paralize_preview::State*>(c));};
             e.destroy=[](void* c){paralize_preview::Destroy(static_cast<paralize_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
+            e.id="TParalize1_CONFIGURED_TARGET";
+            e.factory=[](const S3DPoint& o)->void*{return paralize_preview::SpawnConfiguredTarget(o);};
+            VfxTest::DeferredRegister(e);
         }
         {
             VfxTest::SEffect e = {};

@@ -92,3 +92,21 @@ Each following path is relative to the evidence root above and names
 - `paralize-target-metal-final`: `da07dbadbc8845ed3572aaafe57d57eca7ff4b16f2a9807c90eb6cd385c8bcc0`
 - `paralize-target-metal-translated`: `f693c5abc15f7138cc50384ca58be606ae5d9b5bc872f0d3753d6ecea2bf60ce`
 - `paralize-target-review-final2`: `c51dd5aeeae55c81f69e219c8f655ebeed680ad14699bae91c5e15cf45e5a4c8`
+
+## Configured gallery API
+
+`SpawnConfiguredTarget(display_origin)` exposes only the proven configuration
+in `kConfiguredTarget`: genuine Acolytes at the declared source coordinates,
+target offset `(96,0,0)`, expected Radius16. It accepts no arbitrary endpoints,
+target radii or bone poses. The exact retail mapping selects
+`TParalize1_CONFIGURED_TARGET`; the separate named no-target browser registration
+and its partial metadata remain available. Original-owner completion drives
+gallery recreation, rather than a guessed timeout.
+
+The configured gallery factory preserves the shared game RNG. Only the explicit
+isolated `TParalize1_AUTHENTIC_TARGET_FIXTURE` reapplies a requested snapshot seed
+after context construction. Cleanup restores the owned target's initial
+paralysis/disabled bits on natural kill or early destruction and logs the
+actual resulting flags, health and position. Sixteen mapping tests and the
+compiled bridge callback/liveness/recreation test cover the new admission and
+reject arbitrary endpoint use. Actual gallery validation is recorded separately.
