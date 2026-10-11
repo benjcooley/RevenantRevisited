@@ -129,6 +129,7 @@ struct SDefWidget
     int32_t     selrow    = -1;
     int32_t     scrolltop = 0;
     int32_t     value = 0, minval = 0, maxval = 100; // SCROLLBAR
+    int32_t     page  = 100;                       // SCROLLBAR (+0xa0): a track click's step
 
     [[nodiscard]] bool Contains(int32_t px, int32_t py) const
     {
@@ -234,6 +235,9 @@ class TDefPane : public TPane
     // REVSYNC: scrollbar SetValue @ 0x0042e440 -- clamped into the range;
     // a change raises OnSliderChanged (OPTIONS.md §8).
     void SetSliderValue(const char* name, int32_t value);
+    // A SCROLLBAR's page (+0xa0): how far a click on its track moves it.
+    // Retail's constructors make it 100; screens set their own.
+    void SetSliderPage(const char* name, int32_t page);
 
   protected:
     // Subclass hooks (retail OnControl, vtable slot 37, by event).
@@ -311,8 +315,23 @@ class TDefPane : public TPane
     void ClickListRow(SDefWidget& w, int32_t lx, int32_t ly);
     bool ClickListScrollbar(SDefWidget& w, int32_t lx, int32_t ly);
     void SetSelection(SDefWidget& w, int32_t row);
-    void SetSliderFromCursor(SDefWidget& w, int32_t lx, int32_t ly);
-    bool StepSliderArrow(SDefWidget& w, int32_t lx, int32_t ly);
+    // A SCROLLBAR's parts along its axis (x across a horizontal one, y down
+    // a vertical one), in pane coordinates: the arrows at the ends, then the
+    // span the thumb travels as the value goes from minval to maxval.
+    struct SSliderBar
+    {
+        bool     vertical = false;
+        PTBitmap dec = nullptr, inc = nullptr, thumb = nullptr;   // "<base>U" art
+        int32_t  decEnd = 0;            // the decrement arrow ends here
+        int32_t  incStart = 0;          // the increment arrow starts here
+        int32_t  travelStart = 0;       // the thumb's position at minval
+        int32_t  travel = 0;            // its run to maxval
+        int32_t  thumbPos = 0, thumbLen = 0;
+    };
+    [[nodiscard]] SSliderBar SliderLayout(const SDefWidget& w);
+    void PressSlider(int32_t index, int32_t lx, int32_t ly);
+    void DragSlider(SDefWidget& w, int32_t lx, int32_t ly);
+    void ReleaseSliderArrow(int32_t lx, int32_t ly);
     void ChangeSlider(SDefWidget& w, int32_t value);   // clamp, set, raise OnSliderChanged
     void DrawNineSlice(PTBitmap bm, const SDefInsets& frame, int32_t x,
                        int32_t y, int32_t w, int32_t h);
@@ -330,7 +349,9 @@ class TDefPane : public TPane
     TSurface*                 surface    = nullptr;
     int32_t paneW = 0, paneH = 0;
     TActivateHandler onActivate;
-    int32_t draggingSlider = -1;                 // widget index being dragged
+    int32_t draggingSlider = -1;                 // widget whose thumb is held
+    int32_t dragGrab = 0;                        // where on the thumb it was taken
+    int32_t arrowSlider = -1, arrowStep = 0;     // the arrow pressed (-1 / +1), stepped on release
     bool    open  = false;
 
     // DEF flags and the DEF_FADE transition (retail +0x60, +0xb8..+0xc0).

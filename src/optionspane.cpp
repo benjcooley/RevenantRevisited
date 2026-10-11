@@ -40,19 +40,20 @@ constexpr SToggleBinding kToggles[] = {
     { "NoCombatRes", &SOptionsPaneValues::noCombatResults },
 };
 
-// The sliders, their copies and ranges (0x0053aa90 event 1; retail's page
-// sizes 1 / 0xc / 0xf / 1 are not used: OPTIONS.md §8).
+// The sliders, their copies, ranges and pages (0x0053aa90 event 1,
+// 0x0053ad4d-0x0053ae00: a track click moves Music by 12, Sound by 15).
 struct SSliderBinding
 {
     const char* name;
     int32_t SOptionsPaneValues::* field;
     int32_t maxval;
+    int32_t page;
 };
 constexpr SSliderBinding kSliders[] = {
-    { "Violence", &SOptionsPaneValues::violence, 4 },
-    { "Music",    &SOptionsPaneValues::music,    kMusicLevelMax },
-    { "Sound",    &SOptionsPaneValues::effects,  kEffectsLevelMax },
-    { "Gamma",    &SOptionsPaneValues::gamma,    4 },
+    { "Violence", &SOptionsPaneValues::violence, 4,                1 },
+    { "Music",    &SOptionsPaneValues::music,    kMusicLevelMax,   0xc },
+    { "Sound",    &SOptionsPaneValues::effects,  kEffectsLevelMax, 0xf },
+    { "Gamma",    &SOptionsPaneValues::gamma,    4,                1 },
 };
 
 // Render one code's keys ("CTRL-A", "F1", or "-" when unbound) into buf.
@@ -131,6 +132,7 @@ void TOptionsPane::OnOpened()
     for (const SSliderBinding& s : kSliders)
     {
         SetSliderRange(s.name, 0, s.maxval);
+        SetSliderPage(s.name, s.page);
         SetSliderValue(s.name, values.*s.field);
     }
 

@@ -295,9 +295,14 @@ frame), Violence (read at each blood effect), Music, Sound.
   it has no effect.
 - `Enhanced` is never disabled: every device the port runs on has the
   overbright modes.
-- The DEF slider's track click jumps to the cursor and drags; retail
-  pages by the slider's page size (§8). The DEF engine's slider input is
-  unchanged here.
+- The DEF slider is retail's since 2026-10-10 (§8): a track click pages
+  toward the pointer by the page, with `click1`; the thumb drags from
+  where it was taken; an arrow steps on its release. The pages are the
+  pane's (Violence 1, Music 12, Sound 15, Gamma 1; `0x0053ad4d`–`0x0053ae00`)
+  over the constructors' 100. Checked with `--test=ui-options`: three
+  track clicks move Music three pages, an arrow pressed and released off
+  it does nothing, the SFX thumb drags, a Gamma track click moves it one
+  step.
 - `[Controls]` isn't saved at shutdown: only OK changes the port's
   control map, and it saves.
 - Keys the port has no owner for (`ZoomSpeed`, `VertPanSpeed`,

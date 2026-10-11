@@ -76,7 +76,7 @@ reads.
 | [x] | `[Controls]` read when the control map is built (it never was, so OK overwrote the player's bindings with the port's table) | 2026-10-05 |
 | [x] | Gamma on screen: the ambient offset in `TMapPane::SetAmbientLight` and OK's re-set, as retail; no display ramp, which the retail captures show has no effect (OPTIONS.md §7.11, §9; LIGHTING_FIDELITY.md §2.5, §8; question 92) | 2026-10-07 |
 | [ ] | Combat reads `CombatFace` and `NoCombatResults` (gameplay track; OPTIONS.md §7.4, §7.7) | — |
-| [ ] | DEF slider: a track click pages by the slider's page size, as retail (DEF engine; OPTIONS.md §8) | — |
+| [x] | DEF slider as retail: a track click pages toward the pointer by the page (Options: 1 / 12 / 15 / 1), the thumb drags, an arrow steps on release (OPTIONS.md §8, §9) | 2026-10-10 |
 | [ ] | The control table → retail's (`0x005d5500`: order, defaults, entries), so a missing `[Controls]` gives retail's keys. Decoded 2026-10-10: 69 entries of 0x4c bytes in the port's `SControlEntry` layout, but retail's command numbers (Use 14, Invoke 20, belt 24-28, dodges 48-55, camera 70/71) are not the port's 1998 enum, and several have no dispatch yet (combat track). Until then the port's default binds Combat Mode to Enter, which also opens the text-bar prompt; retail's is `C` (the GOG INI's `[Controls]` says `C`, so only an INI without the section sees it) | 2026-10-10 |
 
 **Exit:** Options opens from the title and in game; changes take effect and persist in `Revenant.ini` as retail's did, and the GOG install's INI loads unchanged.
@@ -165,7 +165,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 |--------|------|--------------|
 | [x] | Retail death countdown (192 frames, TPlayer::Animate 0x00518aa0) -> `GameFlow.PlayerDied()` | 2026-10-04 (64c0f25) |
 | [x] | Retail `TDeathScreen` + `TDeathPane` (Restart / Load / Exit, death voice) | 2026-10-04 (64c0f25) |
-| [ ] | Restart semantics after a loaded game (author question 40) | — |
+| [x] | Restart after a loaded game starts a new game, as retail's (`0x00533950`: the start slot was consumed when that game began; `TGameFlow::RestartAfterDeath`). Author question 40 asks whether reloading was meant | 2026-10-10 |
 | [x] | Death "Load" -> Load Game screen (retail 0x00533970) | 2026-10-05 |
 | [x] | Death voices audible (MP3 voice support in the sound player; `gosar00` stays missing, as in retail) | 2026-10-05 |
 
