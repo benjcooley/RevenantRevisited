@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 116,
+    "visual_fidelity_confirmed_rows": 117,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 116,
-    "remaining_visual_review_rows": 60
+    "reviewed_visual_pass_rows": 117,
+    "remaining_visual_review_rows": 59
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1638,6 +1638,13 @@
       "check": "independent_native_software_actual_metal_appearance",
       "status": "pass_for_recorded_configuration",
       "scope": "Nineteen complete original software/actual Metal native-domain tiny gold-eye phases across two120-frame loops. Proven integerXYZ/UV and sample-lattice mapping recovers width/glints;430 original packets/10,320fields. Common245frame byteidentity retained.1\u20135pixel scanline/quantization/naturalattachment/otherstates/device/exactpixels remain open; realend1kill separate."
+    },
+    "recon/retail_asm/runtime/effects/current-gvortex-authored-20261010/root-approval.json": {
+      "sha256": "111317505a78eb3e653aaabb85b24d8b160c2ddd7d6e4f46b15085536c06ddbb",
+      "retail_row": "gvortex:0xad99bd33",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Twenty full original software/actual Metal native-domain greenpillar/coiledband/risingflare phases across real240-frame owner/blanktail. Two fixed1920x1080 views cover authored1920x1780 extents without scaling; native overlap0\u20132125 differing pixels remains viewport/raster limit, rawwindows retained.33 sparse/full actual pixelmatches preserve24Hz Render;25,920 keys/22,560 matrices. Naturalcaller/audio/device/exactpixels open."
     }
   }
 }

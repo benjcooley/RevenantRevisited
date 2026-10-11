@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "6fce4a987c798d9a5185c284babb894120d697415479355ca28a366328420b63",
+    "harness_sha256": "95c53eaa94f35e2f4a030cc6f9376c0dd40a2f704eac949659c987784e618700",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 116,
+    "visual_fidelity_confirmed_rows": 117,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 116,
-    "remaining_visual_review_rows": 60
+    "reviewed_visual_pass_rows": 117,
+    "remaining_visual_review_rows": 59
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -20486,7 +20486,8 @@
       "asset": "Misc\\Gvortex.i3d",
       "preview_candidates": [],
       "source_fixes": [
-        "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested Misc\\Gvortex.i3d is distinguished from Imagery/Magic/gvortex.I3D."
+        "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested Misc\\Gvortex.i3d is distinguished from Imagery/Magic/gvortex.I3D.",
+        "2026-10-10: Actual12-object GVortex240-END lifecycle, normal mode16 plus four mode80 flare layers replace missing preview. Complete native/source keys/profile/owner and two fixed-view whole-extent appearance; no fitted geometry or one-giant-framebuffer claim."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -20494,25 +20495,35 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve approved pillar/coiledbands/flares; verify naturalcaller/audio/device and recorded viewport-dependent raster overlap.",
       "notes": [
         "Retail Teleporter uses IrisFlare; M09 teleporter preview uses composite teleportation/gvortex. These names must not be conflated.",
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "VFS collision corrected. Earlier port evidence must be checked against the requested asset before certifying visual fidelity; duplicate entries have identical bytes."
       ],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
-      "requires_post_vfs_fix_recheck": true
+      "requires_post_vfs_fix_recheck": true,
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Twenty full original software/actual Metal native-domain greenpillar/coiledband/risingflare phases across real240-frame owner/blanktail. Two fixed1920x1080 views cover authored1920x1780 extents without scaling; native overlap0\u20132125 differing pixels remains viewport/raster limit, rawwindows retained.33 sparse/full actual pixelmatches preserve24Hz Render;25,920 keys/22,560 matrices. Naturalcaller/audio/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-gvortex-authored-20261010/root-approval.json",
+        "sha256": "111317505a78eb3e653aaabb85b24d8b160c2ddd7d6e4f46b15085536c06ddbb",
+        "note": "docs/vfx/forensics/GVORTEX_NATIVE_VISUAL.md"
+      }
     },
     {
       "index": 145,
