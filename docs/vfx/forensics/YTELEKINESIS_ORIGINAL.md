@@ -72,3 +72,5 @@ Reproducible coverage and review tools are `ytelekinesis_grid_coverage.py` and
 Parent integration independently passed the native regression and confirmed six
 existing helper/prelit GPU controls remained byte-identical with the default-off
 opaque pipelines. Independent whole-appearance review remains pending.
+
+Root independently reviewed whole contacts and actual-size chunk detail, verified477 frozen pair files, reproduced24 same-phase Metal PNGs byte-identically, and corrected the missing exact-ID review mapping. The translated gallery displays38/70 frames and restarts after real owner completion. Scoped appearance is approved; all stated natural/context/device/exact-pixel and raw overlap limits remain open.

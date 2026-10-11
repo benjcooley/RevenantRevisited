@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 148,
+    "retail_rows_with_source_fixes_recorded": 149,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 136,
+    "visual_fidelity_confirmed_rows": 137,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 136,
-    "remaining_visual_review_rows": 40
+    "reviewed_visual_pass_rows": 137,
+    "remaining_visual_review_rows": 39
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1778,6 +1778,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Nineteen full original/actual Metal native-domain moving attached graytrail phases andblanktail. Source(-180,0,78), originalweightlessMove20/tick, targetterrainplane180, matching originalNotify deletion/followerkill19.26native state/RNG rows and4928drawmatrices max4.633e-8, unrelatedNotify negativecontrol, full/stride3 tests,freshpixels exact. Queen24frames unchanged; actualendpointgallery93/100visible/repeats followsconfiguredpath. Naturalphysicalarrow/bow/actors/damage/audio/device/edge/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-ytelekinesis-original-20261011/root-approval.json": {
+      "sha256": "639e31264658a7805c377924c69d25d7197e06e14204209590bd016f577748db",
+      "retail_row": "YTelekinesis:0xaeaeeb28",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Whole original/actual Metal native-domain appearance of four moving, accelerating, rotating chunks with stationary player/owner origin and null spell, seed1. 24 exact phases across six fixed supported1920x1080 windows; all39600 triangles covered. Frozen expired chunks and real owner kill165/blank169+ agree. Native raw overlap differences0\u2013441pixels and Metal0\u201311 retained; common narrow-depth output is diagnostic. Natural moving player, actors/spell damage, audio/map dispatch, resource/base-init boundaries, UV/light quantization, device and exact pixels remain open."
     }
   }
 }

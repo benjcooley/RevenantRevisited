@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 148,
+    "retail_rows_with_source_fixes_recorded": 149,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 136,
+    "visual_fidelity_confirmed_rows": 137,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 136,
-    "remaining_visual_review_rows": 40
+    "reviewed_visual_pass_rows": 137,
+    "remaining_visual_review_rows": 39
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -24091,29 +24091,41 @@
       "retail_type_id": "0xaeaeeb28",
       "asset": "misc\\chunk.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact original four-chunk moving controller, strict profile/opaque depth, frozen expiration and real lifetime; full fixed-grid appearance independently approved. Corrected missing exact-ID review mapping."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve scoped full trajectory; verify natural moving player/spell actors/audio and recorded device/quantization limits.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase and actual-size detail inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Whole original/actual Metal native-domain appearance of four moving, accelerating, rotating chunks with stationary player/owner origin and null spell, seed1. 24 exact phases across six fixed supported1920x1080 windows; all39600 triangles covered. Frozen expired chunks and real owner kill165/blank169+ agree. Native raw overlap differences0\u2013441pixels and Metal0\u201311 retained; common narrow-depth output is diagnostic. Natural moving player, actors/spell damage, audio/map dispatch, resource/base-init boundaries, UV/light quantization, device and exact pixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-ytelekinesis-original-20261011/root-approval.json",
+        "sha256": "639e31264658a7805c377924c69d25d7197e06e14204209590bd016f577748db",
+        "note": "docs/vfx/forensics/YTELEKINESIS_ORIGINAL.md"
+      }
     },
     {
       "index": 176,
