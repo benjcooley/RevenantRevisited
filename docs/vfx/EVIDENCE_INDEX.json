@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 159,
+    "visual_fidelity_confirmed_rows": 160,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 159,
-    "remaining_visual_review_rows": 17
+    "reviewed_visual_pass_rows": 160,
+    "remaining_visual_review_rows": 16
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1939,6 +1939,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Exact Dragonfire0xad92bc1a genuine loaded nullspell/facing0 owner/custom two300-slot fire/smoke pools, own meshes. Actual executable births random(-4,4)XYZ, no snapshot+18/-50/+15 offsets. Full100originalupdates/render/raster,34emissionticks, realkill93/blanktail. Rootindependent453120definedstatefields/RNG exact and19626orderedmatrices/314016channels bitexact; snapshotbirthoffset/doubleAnimate negativesreject. Fourteen whole original/actualMetal phases, five fullresolutiondetailstrips and four actualsizeimages independentlyreviewed,35pinsverified/allgeometrycontained. Integrated101PNGs byteidentical92visible/cleanexit; sourcebuild/compiledmapping/lifecycle pass. Roottranslatedgallery20/20visible through458updates, fourunreseededcompletions93/95/96/96+partial78cleanup. Uninitializedflicker/deadstorage ignored asunused byRender(false,false). Commonprojection/live-spell/casterfacing/naturalactor/map/audio/device/exactpixels andsampling/RGB565overlap residualsremainopen; noFireConecontrolleralias orfit."
+    },
+    "recon/retail_asm/runtime/effects/current-punch-full-20261011/root-approval.json": {
+      "sha256": "acc53ed394ff463941d0b79bd49d18e9837847e612a732491bbd40e4f44a67e2",
+      "retail_row": "PunchAndJudy:0x0c05263a",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact genuine loaded PunchAndJudy0x0c05263a/defaultowner/animator, eightroots/twoRGB565textures, complete600Pulse/Animate/PreRender/Render/Post/raster updates and581framewrap580\u21920\u21921, zeroRNG/controllers. NativeScene1/CULL3/depthtest/write/ONEZERO, existingopaquehelper/nativeownerprojector. Leaf passes actualowner previousstate0/frame0 toGetAniKey first5frames includingwrap; missingcallernegative26matrices fails. Rootall600\u00d78\u00d716=76800GPUmatrixchannels matchmax9.55e-7. Eighteenwholephasepairs/fivefullresolutiondetailstrips/fiveactualsizeimages independentlyreviewed,46pinsverified/allgeometrycontained. Integrated31stride20PNGsexact/all60124Hzupdates/render retained/cleanexit. Rootmappedgallery32/32visible, onepersistentowner,746modulo581framescorrect/cleanteardown. Ordinary31PNGs unchanged agentcontrol. Nativecaller/fractionalstate scheduling/terrain/light/audio/device/exactpixels andedge/surfacequantization remainopen; no fittedcamera/time/geometry or inventedlifetime."
     }
   }
 }

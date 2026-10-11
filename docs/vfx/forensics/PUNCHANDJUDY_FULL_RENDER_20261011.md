@@ -25,3 +25,9 @@ Evidence root: `/Users/benjamincooley/RevenantRetailLab/research/vfx-wide-202610
 - `punch-common-control.json`: `514306d386e0545b57701e0192d2807052111b1abbfd9854a5445c551d029ae8`.
 
 Reproduction tools: `punch_full_visual_reference.py --boot-image ... --output ... --frames 600`; `port_capture.py` with frozen `punch-native-scenario.json`/`punch-common-scenario.json`; `punch_full_visual_review.py`; `punch_transition_control.py`; `punch_gallery_smoke.py`. Root repeats may replace only the binary path in the pinned scenarios.
+
+## Independent root review
+
+Exact genuine loaded PunchAndJudy0x0c05263a/defaultowner/animator, eightroots/twoRGB565textures, complete600Pulse/Animate/PreRender/Render/Post/raster updates and581framewrap580→0→1, zeroRNG/controllers. NativeScene1/CULL3/depthtest/write/ONEZERO, existingopaquehelper/nativeownerprojector. Leaf passes actualowner previousstate0/frame0 toGetAniKey first5frames includingwrap; missingcallernegative26matrices fails. Rootall600×8×16=76800GPUmatrixchannels matchmax9.55e-7. Eighteenwholephasepairs/fivefullresolutiondetailstrips/fiveactualsizeimages independentlyreviewed,46pinsverified/allgeometrycontained. Integrated31stride20PNGsexact/all60124Hzupdates/render retained/cleanexit. Rootmappedgallery32/32visible, onepersistentowner,746modulo581framescorrect/cleanteardown. Ordinary31PNGs unchanged agentcontrol. Nativecaller/fractionalstate scheduling/terrain/light/audio/device/exactpixels andedge/surfacequantization remainopen; no fittedcamera/time/geometry or inventedlifetime.
+
+Rootapproval SHA256 `acc53ed394ff463941d0b79bd49d18e9837847e612a732491bbd40e4f44a67e2`; fullacceptance remainsopen.

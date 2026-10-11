@@ -155,3 +155,5 @@ matches the original, reducing tick2 RGB absolute error65641→9267 and tick3
 Small scanline/fixed-point/GPU destination quantization residuals remain. Reports:
 `integer-normal-observation`, `native-owner-negative-proof`, `native-owner-base`
 and `native-owner-full`. Independent full-effect review remains separate.
+
+Existing default-static native/source/raster regression passes5.565s after the nativeowner correction; no new CombatFlash visual credit is added by that unrelated regression.

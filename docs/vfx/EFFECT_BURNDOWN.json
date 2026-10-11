@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 159,
+    "visual_fidelity_confirmed_rows": 160,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 159,
-    "remaining_visual_review_rows": 17
+    "reviewed_visual_pass_rows": 160,
+    "remaining_visual_review_rows": 16
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -23231,7 +23231,8 @@
         "TPunchAndJudy_AUTHORED_OWNER"
       ],
       "source_fixes": [
-        "Applied exact PunchAndJudy actual-owner/default opaque all8-mesh profile with materials/normals/UV/sourcecull,581-frame loop and real final identity. Inclusive actual4096bcJGE key-window policy is selected only by audited8 key-stream fingerprints; unrelated assets retain previous policy. Four extracted production decoder bodies compile under ASan/UBSan and actualasset4648poses/41832channels match actualretail with max2.40956e-7 at3e-6 tolerance;10 guard cases pass. Fractional/stateblend/livebuffers/GPU/nativefullcycle remain distinct unverified scope."
+        "Applied exact PunchAndJudy actual-owner/default opaque all8-mesh profile with materials/normals/UV/sourcecull,581-frame loop and real final identity. Inclusive actual4096bcJGE key-window policy is selected only by audited8 key-stream fingerprints; unrelated assets retain previous policy. Four extracted production decoder bodies compile under ASan/UBSan and actualasset4648poses/41832channels match actualretail with max2.40956e-7 at3e-6 tolerance;10 guard cases pass. Fractional/stateblend/livebuffers/GPU/nativefullcycle remain distinct unverified scope.",
+        "2026-10-11: Full581frame authoredloop originalpreviousstate caller/nativeowner/opaquehelper verified;18phase appearance independentlyapproved,600-frame integratedmatrices/31PNGrepeat/gallery pass. Ordinarypath unchanged."
       ],
       "port_smoke_ids": [
         "TPunchAndJudy_AUTHORED_OWNER"
@@ -23246,17 +23247,17 @@
       "acceptance": {
         "catalogued": true,
         "animator_and_asset_mapping": true,
-        "source_behavior_audited": false,
+        "source_behavior_audited": true,
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_generic_all8mesh_punch581loop_integer_pose_guard_verified_create_wrap_move_delete",
-      "next_action": "Preserve exact8-key fingerprint/inclusive4096bc integer policy and actual581-loop owner. Review remaining fractional/GetAniKey state-blend, native cadence/full581-frame coverage and raster/contrast in own inconclusive pair without fitted frame/pose/size/brightness/clock changes. Real story/map context remains open; no global decoder policy change for unrelated assets.",
+      "next_action": "Preserve approved full581frame isolated loop; verify natural caller/fractionalstate scheduling/terrain/audio/device and framebuffer residuals.",
       "notes": [
         "Clean native loop excerpt28seconds/576 derivative images, raw584 distinct, exact background/delete/restore. Authored loop is581frames, but exact full-cycle coverage is explicitly unproved; repetition check finds no matched32-image sequence. Reference-only credit, no implementation/runtime/visual acceptance.",
         "Current55256525\u2026 actualmap900frames/10rows verifies24,580,0at581,1at582,MOVE600,DELETE650 andabsence651 with70 exact-groundtail. Raw840previewframes/timeCSV completed; original90s filmstrip postprocessing deadline retains FAILED. First offlineassembly missing sequence failed and remains retained; corrected complete840-frame comparison adopts/hardlinks originalrawframes without rerender. Root review INCONCLUSIVE: geometry/colours/articulation broadlyagree, rawposes/cadence/raster differ, no fitting or visual credit."
@@ -23399,13 +23400,14 @@
         }
       },
       "visual_review": {
-        "date": "2026-10-05",
-        "reviewer": "root",
-        "result": "inconclusive",
-        "scope": "Isolated default581-frame loop excerpt, all8actual authored meshes; no naturalstory/context claim",
-        "basis": "Geometry, size, colour families and articulated motion are present and substantially agree. Raw elapsed poses/progression differ across sampledtimes, with remaining raster/contrast differences. Integer source pose decoder and real581-frame wrap proved separately; fractional/transition sampling and native cadence/fullcycle coverage remain unproven. No frame/position/scale/brightness fitting applied.",
-        "contact_sheet": "punch-active-zoom.png",
-        "requires_pixel_identity": false
+        "date": "2026-10-11",
+        "reviewer": "root independent full-loop whole/detail review and integratedrepeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Exact genuine loaded PunchAndJudy0x0c05263a/defaultowner/animator, eightroots/twoRGB565textures, complete600Pulse/Animate/PreRender/Render/Post/raster updates and581framewrap580\u21920\u21921, zeroRNG/controllers. NativeScene1/CULL3/depthtest/write/ONEZERO, existingopaquehelper/nativeownerprojector. Leaf passes actualowner previousstate0/frame0 toGetAniKey first5frames includingwrap; missingcallernegative26matrices fails. Rootall600\u00d78\u00d716=76800GPUmatrixchannels matchmax9.55e-7. Eighteenwholephasepairs/fivefullresolutiondetailstrips/fiveactualsizeimages independentlyreviewed,46pinsverified/allgeometrycontained. Integrated31stride20PNGsexact/all60124Hzupdates/render retained/cleanexit. Rootmappedgallery32/32visible, onepersistentowner,746modulo581framescorrect/cleanteardown. Ordinary31PNGs unchanged agentcontrol. Nativecaller/fractionalstate scheduling/terrain/light/audio/device/exactpixels andedge/surfacequantization remainopen; no fittedcamera/time/geometry or inventedlifetime.",
+        "report": "recon/retail_asm/runtime/effects/current-punch-full-20261011/root-approval.json",
+        "sha256": "acc53ed394ff463941d0b79bd49d18e9837847e612a732491bbd40e4f44a67e2",
+        "note": "docs/vfx/forensics/PUNCHANDJUDY_FULL_RENDER_20261011.md"
       },
       "source_integer_pose_validation": {
         "poses": 4648,
