@@ -33,7 +33,15 @@ std::vector<SEffect> ReviewCatalogue() {
     auto finite=Row("TMPAppear_AUTHORED_START",EVfxPreviewStyle::Static);
     finite.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
     finite.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
-    return {finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    auto queen=Row("QueenArrow_ORIGINAL",EVfxPreviewStyle::Projectile);
+    queen.factory_endpoints=[](const S3DPoint& source,const S3DPoint& target)->void*{
+        assert(source.x==-90 && source.y==40 && source.z==128);
+        assert(target.x==80 && target.y==-120 && target.z==128);
+        ++creates;return new int(0);
+    };
+    queen.is_alive=[](void* c){return *static_cast<int*>(c)<2;};
+    queen.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
+    return {queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -107,6 +115,17 @@ int main() {
         const int before=ticks;
         partial->Submit(); partial->SubmitWorld();
         assert(ticks==before+1);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0xad92bd1e);
+        assert(info.supported && info.requires_endpoints && info.lifetime_known);
+        assert(!CreateVfxReviewPreview(0xad92bd1e,origin));
+        auto queen=CreateVfxReviewPreview(0xad92bd1e,{-90,40,128},{80,-120,128});
+        assert(queen && queen->Alive()==true);
+        const int initial=creates;
+        queen->Submit();queen->Submit();assert(queen->Alive()==false);
+        queen->Submit();assert(queen->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";

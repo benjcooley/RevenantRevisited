@@ -5324,6 +5324,9 @@ struct SVfxTestBootstrap {
             VfxTest::SEffect original{};original.id="QueenArrow_ORIGINAL";
             original.family="projectile";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
             original.factory=[](const S3DPoint& o)->void*{return arrow_original::SpawnQueen({o.x-180,o.y,o.z+38},{o.x+180,o.y,o.z+78});};
+            original.factory_endpoints=[](const S3DPoint& source,const S3DPoint& target)->void*{
+                return arrow_original::SpawnQueen({source.x,source.y,source.z-40},target);
+            };
             original.submit=[](void* c,EFxDebugMode){arrow_original::Advance(static_cast<arrow_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode d){arrow_original::SubmitWorld(static_cast<arrow_original::State*>(c),d);};
             original.is_alive=[](void* c){return arrow_original::IsAlive(static_cast<arrow_original::State*>(c));};
@@ -5334,6 +5337,9 @@ struct SVfxTestBootstrap {
             VfxTest::SEffect original{};original.id="Funnel_ORIGINAL";
             original.family="strip";original.pipeline="IM+QUAD";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
             original.factory=[](const S3DPoint& o)->void*{S3DPoint source={o.x-180,o.y,o.z+78},target={o.x+180,o.y,o.z+78};return funnel_original::Spawn(source,target);};
+            original.factory_endpoints=[](const S3DPoint& source,const S3DPoint& target)->void*{
+                return funnel_original::Spawn(source,target);
+            };
             original.submit=[](void* c,EFxDebugMode){funnel_original::Advance(static_cast<funnel_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){funnel_original::SubmitWorld(static_cast<funnel_original::State*>(c),mode);};
             original.is_alive=[](void* c){return funnel_original::IsAlive(static_cast<funnel_original::State*>(c));};

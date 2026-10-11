@@ -136,6 +136,8 @@ struct SEffect
     EVfxPreviewStyle preview_style = EVfxPreviewStyle::Static;
     SVfxAnchor       anchor        = {};
     std::function<void*(const S3DPoint&)>                  factory;
+    // Optional controlled source/target fixture for moving review effects.
+    std::function<void*(const S3DPoint&, const S3DPoint&)> factory_endpoints;
     std::function<void(void* ctx, EFxDebugMode dbg)>       submit;
     std::function<void(void* ctx, EFxDebugMode dbg,
                        const SVfxAttachment& attach)>      submit_attached;

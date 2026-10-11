@@ -174,7 +174,7 @@ bool LayoutStations() {
             case 0xad92bc15u: case 0xad92bc17u: case 0xad99bd33u:
                 e.review_footprint=(std::max)(e.review_footprint,720.0); break;
         }
-        if(support.projectile || support.supports_endpoints) {
+        if(support.projectile || support.supports_endpoints || DescribeVfxReviewPreview(e.id).requires_endpoints) {
             const double path_projection=StartupVfxReviewPathLength*
                 std::abs(direction.x*StartupVfxReviewPathTilt-direction.y)/
                 std::hypot(StartupVfxReviewPathTilt,1.0);
@@ -257,6 +257,16 @@ S3DPoint PathEndpoint(size_t index,bool target) {
 }
 void Spawn(Entry& e, size_t index) {
     const auto support=DescribeVfxReviewSpawn(e.id);
+    const auto controlled=DescribeVfxReviewPreview(e.id);
+    if(controlled.supported && controlled.requires_endpoints) {
+        const auto source=PathEndpoint(index,false),target=PathEndpoint(index,true);
+        e.preview=CreateVfxReviewPreview(e.id,source,target);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Controlled endpoint initializer failed"; return; }
+        e.missing_visual=controlled.partial; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] path name=%s type=%08x implementation=%s source=%d,%d,%d target=%d,%d,%d",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),source.x,source.y,source.z,target.x,target.y,target.z);
+        return;
+    }
     const bool authored_yfireball = e.id==0x63fd3827u;
     const bool authored_photon = e.id==0x113803f4u;
     const bool authored_icebolt = e.id==0xb1c4c90fu;
