@@ -1547,6 +1547,42 @@ TObjectInstance* TObjectInstance::GetInventorySlot(int32_t slot) const
 }
 
 // REVSYNC: 0x00470280 (vtable 0xa8), bags included.
+// REVSYNC: 0x00473a10 (DEATH_LOOT.md §3). By class: money "gold", ranged
+// weapons "bow", weapons "weapon", talismans one of "talis1".."talis3", food
+// "food", potions "potion", scrolls "scroll", armor "jewel" in slot 1,
+// "jewel2" in slots 5 and 6 and "armor" otherwise, keys "viles" for a vial
+// and "keys" otherwise; anything else is silent. Full volume, unplaced.
+void TObjectInstance::PlayItemSound()
+{
+    static constexpr const char* kTalismanSounds[] = { "talis1", "talis2", "talis3" };   // 0x005d47f0
+
+    const char* sound = nullptr;
+    switch (ObjClass())
+    {
+      case OBJCLASS_MONEY:        sound = "gold";   break;
+      case OBJCLASS_RANGEDWEAPON: sound = "bow";    break;
+      case OBJCLASS_WEAPON:       sound = "weapon"; break;
+      case OBJCLASS_TALISMAN:     sound = kTalismanSounds[random(0, 2)]; break;
+      case OBJCLASS_FOOD:         sound = "food";   break;
+      case OBJCLASS_POTION:       sound = "potion"; break;
+      case OBJCLASS_SCROLL:       sound = "scroll"; break;
+      case OBJCLASS_ARMOR:
+      {
+        const int32_t slot = EqSlot();
+        sound = slot == 1 ? "jewel" : (slot == 5 || slot == 6) ? "jewel2" : "armor";
+        break;
+      }
+      case OBJCLASS_KEY:
+        sound = (GetName() && strstr(GetName(), "Vial")) ? "viles" : "keys";
+        break;
+      default:
+        return;
+    }
+    const int32_t id = SoundPlayer.FindSound(sound);
+    if (id >= 0 && SoundPlayer.Mount(id))
+        SoundPlayer.Play(id);
+}
+
 TObjectInstance* TObjectInstance::FindObjInventory(const char *name) const
 {
     for (TConstInventoryIterator i(this, EInvWalk::Nested); i; i++)

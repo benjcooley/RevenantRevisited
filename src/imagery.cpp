@@ -115,6 +115,156 @@ void TObjectAnimator::Animate(bool draw)
     framerate = inst->GetFrameRate();
 }
 
+// REVSYNC: TObjectAnimator::Pulse @ 0x00445b20 (docs/gameflow/forensics/
+// DEATH_LOOT.md §4). The landing pulse rises 0..6 and falls back, a step a
+// tick; then the toss steps. Only the Equip animator's Pulse comes here in
+// retail; the default 3D animator's has its own and never steps a toss.
+void TObjectAnimator::Pulse()
+{
+    if (landpulsestep < 0)
+    {
+        if (landpulse > 0)
+            --landpulse;
+        else
+            landpulse = landpulsestep = 0;
+    }
+    if (landpulsestep > 0)
+    {
+        if (landpulse <= 5)
+            ++landpulse;
+        else
+            landpulsestep = -1;
+    }
+    if (toss)
+        StepToss();
+}
+
+namespace {
+
+constexpr double kTwoPi = 6.283185307179586;     // 0x005a36c0 (as float)
+constexpr double kHalfPi = 1.5707963267948966;   // 0x3ff921fb54524550
+
+// An angle back into [0, 2π), at most ten turns each way (0x00445c3b).
+double WrapAngle(double a)
+{
+    for (int32_t n = 0; a > double(float(kTwoPi)) && n < 10; ++n)
+        a -= double(float(kTwoPi));
+    for (int32_t n = 0; a < 0.0 && n < 10; ++n)
+        a += double(float(kTwoPi));
+    return a;
+}
+
+// The facing an angle about z turns into (0x00446018, 0x00445e63): retail
+// truncates (ftol) angle * 255 / -2π.
+int32_t FacingFromAngle(double az)
+{
+    return (-0x40 - int32_t(az * 255.0 * -0.15915494309189535)) & 0xff;
+}
+
+}  // namespace
+
+// REVSYNC: TObjectAnimator::Toss @ 0x00445ef0. The target is raised by the
+// object's height (2 for money and weapons, else 2 + its state's regz, -3
+// outside 1..32 and halved when above the state's height); the object stands
+// there from now on. The flight takes t = (random(0,150) + 75) * 0.01 * 16
+// ticks: across at (to - from) / (t * 2.5), up at t * 1.5 * 0.0625 + 80 / t,
+// spinning 0.2..0.4 radians a tick about z. Retail's animator starts in state
+// 0 (constructor 0x00445940); the port's starts at -1, read as 0 here.
+void TObjectAnimator::Toss(const S3DPoint& from, S3DPoint to, int32_t countdown, bool still)
+{
+    const SImageryHeader* header = image ? image->GetHeader() : nullptr;
+    const int32_t st = state < 0 ? 0 : state;
+    if (!header || st >= header->numstates)
+        return;
+
+    int32_t raise = header->states[st].regz;
+    if (raise < 1 || raise > 32)
+        raise = -3;
+    if (raise > header->states[st].height)
+        raise /= 2;
+    const int32_t objclass = inst->ObjClass();
+    to.z += (objclass == OBJCLASS_MONEY || objclass == OBJCLASS_WEAPON) ? 2 : raise + 2;
+
+    toss = std::make_unique<SToss>();
+    SToss& t = *toss;
+    for (int32_t k = 0; k < SToss::kHistory; ++k)
+    {
+        t.pos[k] = { double(from.x), double(from.y), double(from.z) };
+        t.angle[k] = { kHalfPi, kHalfPi, kHalfPi };
+    }
+    inst->Face(FacingFromAngle(t.angle[0].z));
+
+    // x87: the draw times 0.01f and 16 in extended precision, stored as a float.
+    const float ticks = float(double(random(0, 150) + 75) * double(0.01f) * 16.0);
+    t.from = from;
+    t.to = to;
+    t.countdown = countdown;
+    inst->SetPos(to);
+
+    if (!still)
+    {
+        const double across = double(ticks) * 2.5;
+        t.vel.x = double(to.x - t.from.x) / across;
+        t.vel.y = double(to.y - t.from.y) / across;
+        t.vel.z = double(ticks) * 1.5 * 0.125 * 0.5 + 80.0 / double(ticks);
+        t.spin.z = double(random(0, 50) + 50) * double(0.01f) * double(0.4f);
+    }
+}
+
+// REVSYNC: 0x00445b6e-0x00445edd. The poses move down the history; above the
+// floor it moves and spins and falls; through the floor it bounces at half
+// speed and half spin, and stops when it is within 16 of the target and
+// barely rising. Five ticks later it stands where it came to rest, turned to
+// its last angle, and the landing pulse starts.
+void TObjectAnimator::StepToss()
+{
+    SToss& t = *toss;
+    if (t.countdown < 0)
+    {
+        for (int32_t k = SToss::kHistory - 1; k > 0; --k)
+        {
+            t.pos[k] = t.pos[k - 1];
+            t.angle[k] = t.angle[k - 1];
+        }
+        SToss::SVec& p = t.pos[0];
+        SToss::SVec& a = t.angle[0];
+        const double floor = double(t.to.z);
+        if (floor < p.z)
+        {
+            p.x += t.vel.x;
+            p.y += t.vel.y;
+            p.z += t.vel.z;
+            a.x = WrapAngle(a.x + t.spin.x);
+            a.y = WrapAngle(a.y + t.spin.y);
+            a.z = WrapAngle(a.z + t.spin.z);
+            t.vel.z -= t.gravity;
+        }
+        if (floor > p.z)
+        {
+            p.z = floor + 0.1;
+            t.vel.z *= -0.5;
+            t.spin.z *= 0.5;
+            if (double(t.to.x + 16) > p.x && double(t.to.x - 16) < p.x &&
+                double(t.to.y + 16) > p.y && double(t.to.y - 16) < p.y &&
+                t.gravity * 3.0 >= t.vel.z)
+            {
+                t.vel = {};
+                t.spin = {};
+                if (t.countdown == -1)
+                    t.countdown = 5;
+            }
+        }
+    }
+    if (t.countdown > 0 && --t.countdown == 0)
+    {
+        inst->Face(FacingFromAngle(t.angle[0].z));
+        inst->SetPos(S3DPoint{ int32_t(t.pos[0].x), int32_t(t.pos[0].y), int32_t(t.pos[0].z) });
+        toss.reset();
+        landpulse = 0;
+        landpulsestep = 1;
+    }
+}
+
 // *******************
 // * TImageryBuilder *
 // *******************

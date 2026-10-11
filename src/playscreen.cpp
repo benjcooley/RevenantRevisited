@@ -155,6 +155,9 @@ static SControlEntry g_defaultGameControls[] =
     // -- world interaction --
     {"Use",  "Use",  CTRL_NORMALMODE, {{'U'}, {'T'}}, GAMECMD_USE,  0, 0, false},
     {"Get",  "Get",  CTRL_NORMALMODE, {{'G'}},         GAMECMD_GET,  0, 0, false},
+    // Retail's entry 35 (0x005d5500): Get in combat and bow modes, so loot
+    // can be picked up straight after a fight.
+    {"Combat Get", "CombatGet", CTRL_COMBATMODE | CTRL_BOWMODE, {{'G'}}, GAMECMD_GET, 0, 0, false},
     {"Jump", "Jump", CTRL_NORMALMODE, {{'J'}},         GAMECMD_JUMP, 0, 0, false},
 
     // -- walk-mode action slots (unmapped by default; scripted hooks bind these) --
@@ -1917,6 +1920,10 @@ void TPlayScreen::Command(GAMECOMMAND command)
     case GAMECMD_JUMP:
         if (Player)
             Player->Jump();
+        break;
+    case GAMECMD_GET:               // 0xf: Get 0x004d0430
+        if (Player)
+            Player->TryGet();
         break;
     case GAMECMD_GAMEOPTIONS:       // 0x52: 0x0047e700
         ingamemenu->OpenOptions();

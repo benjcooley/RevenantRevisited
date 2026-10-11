@@ -1000,6 +1000,12 @@ class TObjectInstance : protected SObjectDef
         // TFood (so TPotion) merge; everything else never does.
     virtual void SignalAddedToInventory();
         // Called to signal object that it was added to a new inventory
+    virtual bool CanTrade() { return Value() != -1; }
+        // REVSYNC: vtable 0x5c (0x0046fad0) -- the object can change hands:
+        // it has a value. A dead character drops only these (DEATH_LOOT.md §2)
+    void PlayItemSound();
+        // REVSYNC: 0x00473a10 -- the sound of this kind of thing being
+        // handled: dropped, picked up, equipped (DEATH_LOOT.md §3)
     virtual TObjectInstance* FindObjInventory(const char *name) const;
         // Find an object by name in inventory, bags included
     virtual TObjectInstance* FindObjInventory(int32_t objclass, int32_t type = -1) const;
