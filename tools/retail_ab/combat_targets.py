@@ -238,6 +238,14 @@ def kernel_cases(data: Path, workdir: Path) -> list[dict]:
     # 256..383 is defined; the strike spell's patterns reach it.
     wide = [[a, s, z] for a in range(256, 384) for s in (1, 16, 100, 1000, 0x40000) for z in (0, 64)]
     cases.append(dict(name='k.vector-wide', kernel='vector', inputs=wide))
+    # The screen point: both sums' parities and fractions (x + y odd and
+    # even, every height through two of 0.867's periods), across the map.
+    spots = [(1000, 1000), (1001, 1000), (1300, 700), (1301, 700), (25375, 3072), (25376, 3073),
+             (40000, 30000), (65000, 64001), (131000, 120000), (0, 0), (7, -40)]
+    screen = [[x, y, z] for x, y in spots for z in range(-60, 1001)]
+    for kernel in ('screen-xy', 'screen-pos'):
+        for i in range(0, len(screen), 4096):
+            cases.append(dict(name=f'k.{kernel}.{i // 4096}', kernel=kernel, inputs=screen[i:i + 4096]))
     return finish(cases)
 
 

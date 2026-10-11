@@ -235,6 +235,19 @@ std::string CombatKernels(const Case& c, std::string& error)
                 b.ForcePos(point(in[1]));
                 j.Value(kernel == "obj-distance" ? a.Distance(&b) : a.AngleTo(&b));
             }
+            else if (kernel == "screen-xy" || kernel == "screen-pos")
+            {
+                a.ForcePos(point(in));
+                S3DPoint s{0, 0, 0};
+                if (kernel == "screen-xy")
+                    a.GetScreenPos(s.x, s.y);
+                else
+                    a.GetScreenPos(s);
+                j.Begin('[').Value(s.x).Value(s.y);
+                if (kernel == "screen-pos")
+                    j.Value(s.z);
+                j.End(']');
+            }
             else
                 throw std::runtime_error("unknown kernel '" + kernel + "'");
         }

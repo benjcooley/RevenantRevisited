@@ -936,44 +936,38 @@ int32_t TObjectInstance::FaceAngleTo(const TObjectInstance* inst) const
     return angle;
 }
 
+// REVSYNC: TObjectInstance::GetScreenPos @ 0x0046eb40 (x, y) and
+// 0x0046ec50 (x, y, z) -- the screen point, kept until the object moves.
+// Both project through the float matrix at 0x005d4740 and truncate each sum
+// once (_ftol): x = px - py, y = 0.5 px + 0.5 py - 0.867 pz, z = 47359 -
+// 0.867 py - 0.867 px - 0.5 pz, to 16 bits. WorldToScreen's integer form
+// truncates the height term on its own, so off the ground its y can be one
+// more. In doubles the sums are exact, as on the x87.
 void TObjectInstance::GetScreenPos(int32_t &x, int32_t &y) const
 {
-    if (oldpos == pos)
-    {
-        x = screenx;
-        y = screeny;
-    }
-    else
-    {
-        WorldToScreen(pos, x, y);
-        WorldToScreenZ(pos, screenz);
-
-        screenx = x;
-        screeny = y;
-
-        oldpos = pos;
-    }
+    if (oldpos != pos)
+        Project();
+    x = screenx;
+    y = screeny;
 }
 
 void TObjectInstance::GetScreenPos(S3DPoint& s) const
 {
-    if (oldpos == pos)
-    {
-        s.x = screenx;
-        s.y = screeny;
-        s.z = screenz;
-    }
-    else
-    {
-        WorldToScreen(pos, screenx, screeny);
-        WorldToScreenZ(pos, screenz);
+    if (oldpos != pos)
+        Project();
+    s.x = screenx;
+    s.y = screeny;
+    s.z = screenz;
+}
 
-        s.x = screenx;
-        s.y = screeny;
-        s.z = screenz;
-
-        oldpos = pos;
-    }
+void TObjectInstance::Project() const
+{
+    constexpr float kHalf = 0.5f, kHeight = 0.867f;     // retail's floats
+    const double px = pos.x, py = pos.y, pz = pos.z;
+    screenx = int32_t(px - py);
+    screeny = int32_t(px * kHalf + py * kHalf - pz * kHeight);
+    screenz = int32_t(47359.0 - pz * kHalf - py * kHeight - px * kHeight) & 0xffff;
+    oldpos = pos;
 }
 
 // Sets the current object position. REVSYNC: 0x0046ed70 -- a level not given

@@ -12,6 +12,9 @@ in retail (the tables built by the original init 0x41e2de..0x41e535):
 - `obj-distance` / `obj-angle`: TObjectInstance::Distance `0x46ea20` /
   AngleTo `0x46ea90` (thiscall (obj), ret 4) on two bare objects
   (position at +0x10)
+- `screen-xy` / `screen-pos`: TObjectInstance::GetScreenPos `0x46eb40`
+  (thiscall (&x, &y), ret 8) / `0x46ec50` (thiscall (&point), ret 4) on a
+  bare object, its kept position (+0xc0) unlike its own so it projects
 
 A case is a batch: {"kernel", "inputs": [[...], ...]}; the result is the
 outputs in order. Schema `combat.kernels.v1`, shared with the port's
@@ -32,6 +35,7 @@ from guest import s32, serve, start  # noqa: E402
 SCHEMA = 'combat.kernels.v1'
 ANGLE_DIFF, FACING, DISTANCE, VECTOR = 0x46ded0, 0x46dc60, 0x46de60, 0x46db20
 OBJ_DISTANCE, OBJ_ANGLE = 0x46ea20, 0x46ea90
+SCREEN_XY, SCREEN_POS = 0x46eb40, 0x46ec50
 
 
 class KernelFixture:
@@ -69,6 +73,17 @@ class KernelFixture:
                 vm.write(self.o2 + 0x10, struct.pack('<3i', b[0], b[1], b[2] if len(b) > 2 else 0))
                 out.append(s32(vm.call(OBJ_DISTANCE if kernel == 'obj-distance' else OBJ_ANGLE, (self.o2,),
                                        this=self.o1)))
+            elif kernel in ('screen-xy', 'screen-pos'):
+                x, y, z = args
+                vm.write(self.o1 + 0x10, struct.pack('<3i', x, y, z))
+                vm.write(self.o1 + 0xc0, struct.pack('<3i', ~x, y, z))
+                vm.write(self.out, bytes(12))
+                if kernel == 'screen-xy':
+                    vm.call(SCREEN_XY, (self.out, self.out + 4), this=self.o1)
+                    out.append(list(struct.unpack('<2i', vm.uc.mem_read(self.out, 8))))
+                else:
+                    vm.call(SCREEN_POS, (self.out,), this=self.o1)
+                    out.append(list(struct.unpack('<3i', vm.uc.mem_read(self.out, 12))))
             else:
                 raise ValueError(f'unknown kernel {kernel!r}')
         return dict(schema=SCHEMA, side='retail', kernel=kernel, outputs=out)

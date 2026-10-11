@@ -1483,15 +1483,14 @@ def damage_cases(data: Path, workdir: Path) -> list[dict]:
     # half, else white; at its screen point (GetScreenPos 0x0046eb40), 135
     # up. A player's maximum is his MaxHealth (slot 0x1d8). Health is read
     # more often in retail's than in the port's (no side effect), so these
-    # cases don't record the reads. On the ground only: GetScreenPos's
-    # height term differs (retail rounds its float matrix once, the port's
-    # WorldToScreen truncates the height on its own; COMBAT_HIT.md §9.2).
+    # cases don't record the reads. Off the ground as well: GetScreenPos
+    # truncates its float sums once (the kernel kata's screen-pos).
     numbers = {'Araknid': (30, [(30, 23), (30, 22), (30, 16), (30, 15), (30, 0), (5, 9), (40, 5), (1, 1)]),
                'Locke': (100, [(100, 76), (100, 75), (100, 51), (100, 50), (100, 0), (10, 40), (130, 2), (1, 1)])}
     for victim, (top, blows) in numbers.items():
         attacker = 'Locke' if victim != 'Locke' else 'Araknid'
         for health, dmg in blows:
-            for at in (None, [1301, 700, 0], [600, 1500, 0]):
+            for at in (None, [1301, 700, 0], [600, 1500, 0], [1300, 700, 40], [1301, 700, 33]):
                 chars, rules = damage_world(data, victim, attacker, health=health)
                 chars[0]['animator'] = 1
                 if victim == 'Locke':

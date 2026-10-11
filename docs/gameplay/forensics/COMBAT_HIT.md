@@ -918,19 +918,23 @@ Corrections to §3.4:
   into its 64 × 32 image; between ticks the rise and the fade ease toward
   the next tick's. The A/B fixtures record the call (`animator.ShowNumber`,
   retail's at `0x004da3b0`).
-- The number in the kata (2026-10-11, `damage.number.*`, 56 cases, an
+- The number in the kata (2026-10-11, `damage.number.*`, 88 cases, an
   animator on the struck character): the amount (overkill included), the
   colour on both sides of 25 % and 50 % for an Araknid (MaxHealth from
-  its data) and the player (slot `0x1d8`), three ground positions, the
-  gates. Two things found. Retail reads Health() once or twice more than
+  its data) and the player (slot `0x1d8`), three ground positions and two
+  off the ground, the gates. Two things found. Retail reads Health() once or twice more than
   the port (`0x4c4b24`, `0x4c4bb5`; no side effect), so these cases don't
   record stat reads. And GetScreenPos `0x46eb40` is a float matrix
   (`0x5d4740`: x = px − py, y = 0.5·px + 0.5·py − 0.867·pz, truncated
   once by `_ftol`), where the port's WorldToScreen truncates the height
   term on its own: off the ground y can be one more than retail's (at
   (1300, 700, 40): retail 965, port 966, so the number stands one pixel
-  lower). The cases stay on the ground; the fix belongs to
-  GetScreenPos / WorldToScreen and everything that uses them.
+  lower). Fixed: the port's GetScreenPos (both overloads, `0x46eb40`
+  and `0x46ec50`, z = 47359 − 0.867·py − 0.867·px − 0.5·pz to 16 bits)
+  projects as retail's does, checked over 23k points by the kernel
+  kata's `screen-xy` / `screen-pos`. WorldToScreen, the free function,
+  keeps its integer form: each of its callers is a different retail
+  routine, to be checked on its own.
 
 Divergences (none noticeable): the slot after a full impact list (six)
 is an empty impact (retail reads past the list); the given block's attack

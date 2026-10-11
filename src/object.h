@@ -1439,7 +1439,9 @@ class TObjectInstance : protected SObjectDef
 
     // members to optimize function calls
     mutable S3DPoint oldpos;                    // Where it was last time function was called
-    mutable int32_t screenx, screeny, screenz;  // Pixel/zbuf coords as of oldpos
+    mutable int32_t screenx = 0, screeny = 0, screenz = 0;  // Pixel/zbuf coords as of oldpos
+    void Project() const;
+      // pos's screen point into screenx/y/z, oldpos = pos (GetScreenPos)
 };
 
 // TSafeRef<T>, safe_cast helpers, and TSafeObjectBase<Self> live in
