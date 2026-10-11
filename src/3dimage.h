@@ -240,7 +240,9 @@ class T3DImagery : public TObjectImagery
     bool speed_partsys_profile = false;
     bool quicksilver_partsys_profile = false;
     bool lightstrip_partsys_profile = false;
+    bool funnel_partsys_profile = false;
     bool ValidateRetailLightStripProfile();
+    bool ValidateRetailFunnelProfile();
     bool comet_partsys_profile=false;
     bool fgeyser_partsys_profile=false;
     bool dust_partsys_profile=false;
@@ -345,6 +347,7 @@ class T3DImagery : public TObjectImagery
     bool HasRetailDustProfile() const { return dust_partsys_profile; }
     bool HasRetailPoisonProfile() const { return poison_partsys_profile; }
     bool HasRetailLightStripProfile() const { return lightstrip_partsys_profile; }
+    bool HasRetailFunnelProfile() const { return funnel_partsys_profile; }
     bool HasGoldPartSysProfile() const { return gold_partsys_profile; }
     bool HasRetailMightPartSysProfile() const { return might_partsys_profile; }
     bool HasRetailImmortalmightPartSysProfile() const { return immortalmight_partsys_profile; }
@@ -595,6 +598,7 @@ class T3DAnimator : public TObjectAnimator
     // True for the hidden particle prototype, or every mesh when an authored
     // controller is unsupported. The caller must not submit a static substitute.
     void SetLightStripGround(std::function<int(int,int,int)> query);
+    void SetFunnelGround(std::function<int(int,int,int)> query);
     void SetCometGround(std::function<int(int,int,int)> query);
     void SetFGeyserGround(std::function<int(int,int,int)> query);
     void SetDustGround(std::function<int(int,int,int)> query);

@@ -55,6 +55,7 @@ struct Owner{uint32_t ObjId()const{return type_id;}int GetState()const{return 0;
 struct Imagery{uint32_t static_particles_profile=type_id;
  STATIC_PROFILE_METHOD
  bool HasRetailLightStripProfile()const{return false;}
+ bool HasRetailFunnelProfile()const{return false;}
  bool HasRetailCometProfile()const{return false;}
  bool HasRetailFGeyserProfile()const{return false;}
  bool HasRetailDustProfile()const{return false;}

@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 141,
+    "retail_rows_with_source_fixes_recorded": 144,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 128,
+    "visual_fidelity_confirmed_rows": 132,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 128,
-    "remaining_visual_review_rows": 48
+    "reviewed_visual_pass_rows": 132,
+    "remaining_visual_review_rows": 44
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1722,6 +1722,34 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Sixteen original/actual Metal native-domain phases1..89, whole visible bounds inside1280x960: five growing/orbiting/converging blue-glow rocks, impact/recovery/fade and realkill77/blanktail. Named Rock Storm level1, stationary targetorigin/radius24 and invokerFighting identity;12489state fields exact/1600matrix fields max2.4e-7,26initialRNG. Own authoredglowRY retained; translatedtypedgallery69/70visible with repeatedownerexpiry. Damage/reaction observedboundaries; naturalactors/otherlevels/targets/audio/device/quant/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-blast-whole-20261011/root-approval.json": {
+      "sha256": "08a9554447c09f4164893e2cc0b13137f50f5a254c7fc07ea679a5ad151bd9ee",
+      "retail_row": "Blast:0x0ea34fa3",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Eight original/actual Metal native-domain lifecycle phases plus complete phase60/90 six-view2560x2600 geometry coverage across all56roots. Fixed1920x1080 tiles/signedorigins verified; literal640/480span guard justified by18rejects/constants-only231887\u2192303854pixels. Common120frames unchanged; source60480key/25680matrix fields and actualgallery70/70visible with ownercycles. Original1245/Metal5tile-overlap pixels, quantization/naturalcaller/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-funnel-original-20261011/root-approval.json": {
+      "sha256": "38ab6a80ecdc8387fbd2da7fdec8ed10a59248eb8a0e3bbfceb0e585b9c3a60c",
+      "retail_row": "funnel:0xad92bc17",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Nineteen timestamp-matched original/actual Metal native-domain moving coil/wisps/sparks phases throughterraintransition101/state2at130/real140kill/blanktail. Ownthree-state/twoParticleSys profiles, source(-180,0,78), targetvoidplane180, declaredspell/ground1\u21920;108490pool fields and stride3 proof,3600keys/6304matrices/5808particle render fields. Full1280x960visiblebounds, freshpixel replay, actualtranslatedgallery70/70visible. Naturalterrain/actors/damage/audio/device/interpolation/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-jtele-authored-20261011/Jtele-root-approval.json": {
+      "sha256": "050328c0ab069e0d1230fbb3a27a2beb8202e22eede2a062fe2c4f4ecc581715",
+      "retail_row": "jtele:0x0c05263b",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Nine full original/actual Metal native-domain own-blue core/three stars/trails phases2/6/16/25/40/48/49 and realkill50/blank50/53. Actual finite defaultfactory/owner/controller cadence; own profiles4positive2871negative,3600pose/5920matrix fields. Native-only beamspan admission independently proven byconstants-only widening, ordinarybeam geometry retained. Both53mergedRGBframes unchanged; exact translatedgallery67/70visible68distinct andcleanexit. Jtele17628state fields pass. Gallery beamtopclipping is liveness-only; naturalcaller/ordinarybeamdevice/audio/destinationquant/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-jteled-authored-20261011/Jteled-root-approval.json": {
+      "sha256": "033ba595a9b00c3f47c090b585f0bb07685f319a26b2424c54439b84224baab9",
+      "retail_row": "jteled:0x0c05263c",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Nine full original/actual Metal native-domain own-blue core/three stars/trails phases2/6/16/25/40/48/49 and realkill50/blank50/53. Actual finite defaultfactory/owner/controller cadence; own profiles4positive2871negative,3600pose/5920matrix fields. Native-only beamspan admission independently proven byconstants-only widening, ordinarybeam geometry retained. Both53mergedRGBframes unchanged; exact translatedgallery67/70visible68distinct andcleanexit. Jteled three strictZresiduals max4.58e-5 retained, no numeric-equality claim. Gallery beamtopclipping is liveness-only; naturalcaller/ordinarybeamdevice/audio/destinationquant/exactpixels open."
     }
   }
 }

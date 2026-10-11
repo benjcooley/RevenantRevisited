@@ -31,8 +31,9 @@ struct Inputs { V owner_position,object_zero_origin; int owner_face=0,animation_
 struct Controller { Inputs inputs; struct {std::vector<int> emitters{1};} track; };
 struct S3DAnimObj { hmm_vec3 pos{},scl{}; };
 struct Imagery {
- int sampled=-1,expected_state=0;bool lightstrip=false,comet=false,fgeyser=false,dust=false,poison=false;
+ int sampled=-1,expected_state=0;bool funnel=false,lightstrip=false,comet=false,fgeyser=false,dust=false,poison=false;
  bool HasRetailLightStripProfile(){return lightstrip;}
+ bool HasRetailFunnelProfile(){return funnel;}
  bool HasRetailCometProfile(){return comet;}
  bool HasRetailFGeyserProfile(){return fgeyser;}
  bool HasRetailDustProfile(){return dust;}
@@ -44,7 +45,7 @@ struct Imagery {
  bool HasRetailCameraParticleProfile(uint32_t){return false;}
  bool HasRetailStaticParticleProfile(uint32_t id){return id==0xad92bd38u;}
  bool GetUninterpolatedAniKey(int object,int state,int frame,hmm_vec3& p,hmm_vec3& r,hmm_vec3& s,bool inclusive=false){
-  assert(object==1 && state==expected_state && inclusive==(lightstrip||comet||fgeyser||dust||poison));sampled=frame;p={float(frame),0,0};r={0,0,0};s={float(frame+1),1,1};return true;
+  assert(object==1 && state==expected_state && inclusive==(lightstrip||funnel||comet||fgeyser||dust||poison));sampled=frame;p={float(frame),0,0};r={0,0,0};s={float(frame+1),1,1};return true;
  }
 };
 struct TObjectInstance { uint32_t id=0xad92bd38u;int state=0,frame=8;S3DPoint Pos(){return {};};int GetFace(){return 0;}uint32_t ObjId(){return id;}int GetState(){return state;}int GetFrame(){return frame;} };
@@ -75,6 +76,11 @@ int main(){
  // Exact LightStrip uses the same cached pose in all three authored states.
  for(int state=0;state<3;++state){TObjectInstance owner;owner.id=0x10da54d0u;owner.state=state;
   T3DAnimator animator;animator.imagery.lightstrip=true;animator.imagery.expected_state=state;Controller c;
+  for(owner.frame=8;owner.frame<=10;++owner.frame){Extracted::FillInputs(c,animator,owner);
+   assert(c.inputs.animation_frame==7 && c.inputs.emitters[0].position.x==7);}}
+ // Exact Funnel uses the same cached pose in all three authored states.
+ for(int state=0;state<3;++state){TObjectInstance owner;owner.id=0xad92bc17u;owner.state=state;
+  T3DAnimator animator;animator.imagery.funnel=true;animator.imagery.expected_state=state;Controller c;
   for(owner.frame=8;owner.frame<=10;++owner.frame){Extracted::FillInputs(c,animator,owner);
    assert(c.inputs.animation_frame==7 && c.inputs.emitters[0].position.x==7);}}
  // Comet's three emitters obey the same render-cached frame despite skipped draws.
