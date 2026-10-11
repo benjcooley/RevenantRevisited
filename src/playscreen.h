@@ -245,6 +245,9 @@ class TPlayScreen : public TScreen
     // Borrowed pointer to the owned map renderer. Null before Initialize()
     // and after Close().
     [[nodiscard]] TMapRenderer* MapRenderer() const { return mapRenderer.get(); }
+    // The bottom bar (the belt's boxes, the quick-spell rings); null outside
+    // a game.
+    [[nodiscard]] TBottomBarPane* BottomBar() const { return bottombar.get(); }
 
     // ---- Map input ------------------------------------------------------
     // Whether the map has the pointer at (x, y): no modal holding the mouse,

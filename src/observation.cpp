@@ -5,7 +5,10 @@
 
 #include "observation.h"
 
+#include "bottombar.h"
+#include "charstats.h"
 #include "cinematicscreen.h"
+#include "container.h"
 #include "cursor.h"
 #include "death.h"
 #include "dialog.h"
@@ -23,16 +26,29 @@
 #include "spell.h"
 #include "textbar.h"
 #include "textencoding.h"
+#include "uisidebartest.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <sstream>
 #include <vector>
 
 namespace
 {
 
 int64_t g_messagesSeen = 0;     // text-bar lines the last observation reported
+
+constexpr int32_t kBeltObserved = 5;   // the belt slots F5-F9 use
+
+// The skills in stat order (charstats.h SK_*: stats 40-50, their experience
+// 51-61, the experience for their next level 62-72).
+constexpr const char* kSkillNames[NUM_SKILLS] = {
+    "attack", "defense", "invoke", "hands", "knife", "sword", "bludgeon", "axes", "bows", "stealth", "lockpick",
+};
+
+// The attributes in stat order (charstats.h PLRSTAT_*: stats 34-39).
+constexpr const char* kAttributeNames[NUM_PLRSTATS] = { "strn", "cons", "agil", "rflx", "mind", "luck" };
 
 std::string Lower(const char* s)
 {
@@ -99,6 +115,129 @@ void QuickSpell(JsonOut& out, TPlayer& p, int32_t slot)
         out.Null();
 }
 
+// An item's own equipment slot, its EqSlot stat; -1 for an item without one.
+int32_t EqSlot(TObjectInstance& item)
+{
+    return item.FindStat("EqSlot") < 0 ? -1 : item.GetStat("EqSlot");
+}
+
+// The numbers a grinding director weighs an item by (docs/playtest/GRIND.md
+// §8), by the names GetStat takes (class.def STATS). An armour's EqSlot is
+// the item's `eqslot`.
+const std::vector<const char*>& ItemNumberNames(int32_t objclass)
+{
+    static const std::vector<const char*> none;
+    static const std::vector<const char*> weapon{ "Type", "Damage", "MinStrength", "Value" };
+    static const std::vector<const char*> armor{ "Protection", "MinStrength", "MinConstitution", "Value" };
+    static const std::vector<const char*> food{ "Health", "Mana", "Poison" };
+    switch (objclass)
+    {
+      case OBJCLASS_WEAPON: return weapon;
+      case OBJCLASS_ARMOR:  return armor;
+      case OBJCLASS_FOOD:
+      case OBJCLASS_POTION: return food;
+      default:              return none;
+    }
+}
+
+// An item's amount, its own equipment slot and its numbers, each read the
+// way the game reads it, GetStat(name) on the item: so a number that comes
+// from elsewhere than retail's (weapon.def and armor.def bound over
+// class.def, GRIND §5.1) shows as a difference between the games.
+void WriteItemNumbers(JsonOut& out, TObjectInstance& item)
+{
+    out.Field("amount", item.Amount());
+    out.Field("eqslot", EqSlot(item));
+    out.Key("stats").Begin('{');
+    for (const char* name : ItemNumberNames(item.ObjClass()))
+        out.Field(Lower(name).c_str(), item.GetStat(name));
+    out.End('}');
+}
+
+// The items `holder` holds, in slot order.
+std::vector<TObjectInstance*> HeldItems(TObjectInstance& holder)
+{
+    std::vector<TObjectInstance*> items;
+    for (TInventoryIterator i(&holder); i; i++)
+        items.push_back(i.Item());
+    std::sort(items.begin(), items.end(),
+              [](const TObjectInstance* a, const TObjectInstance* b) { return a->InventNum() < b->InventNum(); });
+    return items;
+}
+
+// Every item the player carries: the pack (slots 0..0xfe), what he wears
+// and wields (0x100..), the belt (0x10b..), and what the bags among them
+// hold, each with `bag`, the slots of the bags it is in, outermost first.
+void WriteItems(JsonOut& out, TObjectInstance& holder, std::vector<int32_t>& bag)
+{
+    for (TObjectInstance* item : HeldItems(holder))
+    {
+        out.Begin('{');
+        out.Field("slot", item->InventNum());
+        out.FieldString("name", ToUtf8(item->GetName()));
+        out.FieldString("class", Lower(item->GetClassName()));
+        WriteItemNumbers(out, *item);
+        if (!bag.empty())
+        {
+            out.Key("bag").Begin('[');
+            for (int32_t slot : bag)
+                out.Value(slot);
+            out.End(']');
+        }
+        out.End('}');
+        if (item->NumInventoryItems() > 0)
+        {
+            bag.push_back(item->InventNum());
+            WriteItems(out, *item, bag);
+            bag.pop_back();
+        }
+    }
+}
+
+// A STATLINE as words: the stored line's spacing (a leading blank, the
+// blank INITIALIZE leaves) is the store's, not the effect's.
+std::string StatLineWords(const std::string& line)
+{
+    std::istringstream words(line);
+    std::string word, out;
+    while (words >> word)
+        out += (out.empty() ? "" : " ") + word;
+    return out;
+}
+
+// The stat effect in force -- one at a time: AddStatEffect ends the others
+// -- and the ticks till it ends by the player's play clock (1/100 s), null
+// for one without a TIME. Null with none.
+void WriteEffect(JsonOut& out, const TPlayer& p)
+{
+    out.Key("effect");
+    if (p.StatEffects().empty())
+    {
+        out.Null();
+        return;
+    }
+    const TPlayer::SStatEffect& effect = p.StatEffects().back();
+    out.Begin('{');
+    out.FieldString("statline", ToUtf8(StatLineWords(effect.statline).c_str()));
+    out.Key("ticks");
+    if (effect.expires < 0)
+        out.Null();
+    else
+        out.Value((int64_t(effect.expires) - p.PlayClock()) * 24 / 100);
+    out.End('}');
+}
+
+// The skills by name, each as [level, experience, experience for the next
+// level], from the modified stats (skills capped at 30 there).
+void WriteSkills(JsonOut& out, TPlayer& p)
+{
+    out.Key("skills").Begin('{');
+    for (int32_t skill = 0; skill < NUM_SKILLS; ++skill)
+        out.Key(kSkillNames[skill]).Begin('[')
+           .Value(p.Skill(skill)).Value(p.SkillExp(skill)).Value(p.GetObjStat(SKN_FIRST + skill)).End(']');
+    out.End('}');
+}
+
 // The items the side panel's inventory shows of the player's pack, each with
 // its slot, class, own equipment slot (its EqSlot stat, -1 for none) and the
 // screen centre of its cell, null while the pane is hidden. A right click on
@@ -119,7 +258,7 @@ void WritePack(JsonOut& out, TPlayer& p)
             out.Field("slot", slot);
             out.FieldString("name", ToUtf8(item->GetName()));
             out.FieldString("class", Lower(item->GetClassName()));
-            out.Field("eqslot", item->FindStat("EqSlot") < 0 ? -1 : item->GetStat("EqSlot"));
+            out.Field("eqslot", EqSlot(*item));
             out.Key("screen");
             int32_t x = 0, y = 0;
             if (Inventory.CellCenter(slot, x, y))
@@ -158,17 +297,30 @@ void WritePlayer(JsonOut& out, TPlayer& p)
     Id(out, "target", p.Fighting());
     out.Field("gold", p.GetInventoryAmount("Gold"));
     out.Key("xp").Begin('[').Value(p.Level()).Value(p.Exp()).Value(p.NextExp()).End(']');
+    out.Field("attacklevel", p.AttackLevel());
 
-    out.Key("skills").Begin('{');
-    out.Field("attack", p.Skill(SK_ATTACK));
-    out.Field("defense", p.Skill(SK_DEFENSE));
-    out.Field("invoke", p.Skill(SK_INVOKE));
-    out.Field("weapon", p.WeaponSkill(p.WeaponType()));
+    out.Key("stats").Begin('{');
+    for (int32_t stat = 0; stat < NUM_PLRSTATS; ++stat)
+        out.Field(kAttributeNames[stat], p.PlyrStat(stat));
     out.End('}');
+    WriteSkills(out, p);
+
+    const std::array<int32_t, 3>& levelup = p.LevelUpStats();
+    out.Key("levelup").Begin('[').Value(levelup[0]).Value(levelup[1]).Value(levelup[2]).End(']');
+
+    out.Key("combat").Begin('{');
+    out.Field("offense", p.Offense());
+    out.Field("defense", p.Defense());
+    out.Field("armor", p.ArmorValue());
+    out.Field("damage", p.WeaponDamage());
+    out.End('}');
+    WriteEffect(out, p);
 
     // char.def's weapon mask bit for the weapon in hand (IsValidAttack's
-    // 1 << WeaponType()), 0 with nothing in hand.
+    // 1 << WeaponType()), 0 with nothing in hand, and the skill a kill
+    // with it raises (stat 43 + WeaponType: Hands barehanded).
     TObjectInstance* weapon = p.PrimeHand();
+    const int32_t skill = SK_WEAPONSKILLS + p.WeaponType();
     out.Key("weapon").Begin('{');
     out.Key("name");
     if (weapon)
@@ -176,6 +328,11 @@ void WritePlayer(JsonOut& out, TPlayer& p)
     else
         out.Null();
     out.Field("mask", weapon ? (1 << p.WeaponType()) : 0);
+    out.Key("skill");
+    if (skill >= 0 && skill < NUM_SKILLS)
+        out.String(kSkillNames[skill]);
+    else
+        out.Null();
     out.End('}');
 
     out.Key("quick_spells").Begin('[');
@@ -184,7 +341,7 @@ void WritePlayer(JsonOut& out, TPlayer& p)
     out.End(']');
 
     out.Key("belt").Begin('[');
-    for (int32_t box = 0; box < 5; ++box)
+    for (int32_t box = 0; box < kBeltObserved; ++box)
     {
         const TObjectInstance* item = p.GetInventorySlot(kInvSlotBeltFirst + box);
         if (item)
@@ -195,7 +352,57 @@ void WritePlayer(JsonOut& out, TPlayer& p)
     out.End(']');
     WritePack(out, p);
     WriteEquipped(out, p);
+
+    out.Key("items").Begin('[');
+    std::vector<int32_t> bag;
+    WriteItems(out, p, bag);
+    out.End(']');
     out.End('}');
+}
+
+// Where a press picks up what is worn: the equip pane's cell for each
+// equipment slot (EQ_*), null while the side panel doesn't show the pane.
+// A drag from there to the pack unequips.
+void WriteEquipSlots(JsonOut& out)
+{
+    out.Key("equip_slots");
+    int32_t x = 0, y = 0;
+    if (CurrentScreen != &PlayScreen || !UIEquipSlotCenter(0, x, y))
+    {
+        out.Null();
+        return;
+    }
+    out.Begin('[');
+    for (int32_t slot = 0; slot < NUM_EQ_SLOTS; ++slot)
+        if (UIEquipSlotCenter(slot, x, y))
+            out.Begin('[').Value(x).Value(y).End(']');
+        else
+            out.Null();
+    out.End(']');
+}
+
+// The belt's boxes on the bottom bar, in step with `player.belt`: entry n
+// the centre of the box showing belt slot n, null where no box shows it;
+// null while the bar is hidden. A drop there puts an item on the belt.
+void WriteBeltBoxes(JsonOut& out)
+{
+    TBottomBarPane* bar = CurrentScreen == &PlayScreen ? PlayScreen.BottomBar() : nullptr;
+    out.Key("belt_boxes");
+    if (!bar || !bar->IsOpen() || bar->IsHidden())
+    {
+        out.Null();
+        return;
+    }
+    out.Begin('[');
+    for (int32_t box = 0; box < kBeltObserved; ++box)
+    {
+        int32_t x = 0, y = 0;
+        if (bar->Shelf().BoxCenter(box, x, y))
+            out.Begin('[').Value(x).Value(y).End(']');
+        else
+            out.Null();
+    }
+    out.End(']');
 }
 
 // The newest NPC line still up, and the choices while they are up. Choices
@@ -273,11 +480,42 @@ void WriteObject(JsonOut& out, TObjectInstance* inst)
         TCharacter& c = *static_cast<TCharacter*>(inst);
         out.FieldBool("enemy", Player && c.IsEnemy(Player));
         Pair(out, "health", c.Health(), c.MaxHealth());
+        // Its class Value, what a kill earns and its to-hit go by (the kill
+        // formula reads it so, GetStat("Value")); a corpse below 1 health.
+        out.Field("value", c.GetStat("Value"));
+        out.FieldBool("dead", c.Health() < 1);
         Action(out, c);
         Id(out, "target", c.Fighting());
+        out.End('}');
+        return;
     }
-    else if (inst->Amount() > 1)
+    if (inst->Amount() > 1)
         out.Field("amount", inst->Amount());
+    if (inst->IsInventoryItem())
+    {
+        out.Key("item").Begin('{');
+        WriteItemNumbers(out, *inst);
+        out.End('}');
+    }
+    if (inst->ObjClass() == OBJCLASS_CONTAINER)
+    {
+        // Open (its state, 0 shut), whether a use opens it, locked, and what
+        // it holds: a use takes one item.
+        TContainer& box = *static_cast<TContainer*>(inst);
+        out.FieldBool("open", box.GetState() != 0);
+        out.FieldBool("openable", box.Openable() != 0);
+        out.FieldBool("locked", box.Locked() != 0);
+        out.Key("contents").Begin('[');
+        for (TObjectInstance* item : HeldItems(box))
+        {
+            out.Begin('{');
+            out.Field("slot", item->InventNum());
+            out.FieldString("name", ToUtf8(item->GetName()));
+            out.Field("amount", item->Amount());
+            out.End('}');
+        }
+        out.End(']');
+    }
     out.End('}');
 }
 
@@ -428,6 +666,8 @@ void Observation::Write(JsonOut& out, int32_t objects, int32_t walkgrid)
         WritePlayer(out, *Player);
     else
         out.Key("player").Null();
+    WriteEquipSlots(out);
+    WriteBeltBoxes(out);
     WriteCursor(out);
     WriteDialog(out);
 

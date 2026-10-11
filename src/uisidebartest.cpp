@@ -616,27 +616,38 @@ static int32_t HitBarInvSlot(int32_t x, int32_t y)
     return HitBarInvSlotRect(x, y, slot, sx, sy) ? slot : -1;
 }
 
-// Hit-test the Equip paperdoll 11-slot layout. Per EquipPane_SPEC
-// DAT_005e3f60 table (mirrored in uiequiptest.cpp). Returns 0..10 in
-// EQ_* enum order, -1 otherwise.
+// The Equip paperdoll's 11 cells, pane-local top-left corners in EQ_* enum
+// order: the {x, y} table at DAT_005e3f60 that retail's MouseClick tests
+// each 40x40 cell against (0x005363fc..0x00536437; EquipPane_SPEC §4,
+// mirrored in uiequiptest.cpp).
+struct SEquipAnchor { int32_t x; int32_t y; };
+static constexpr SEquipAnchor kEquipAnchor[NUM_EQ_SLOTS] = {
+    { 0x4a, 0x25 }, { 0x07, 0x3a }, { 0x8d, 0x3a }, { 0x8d, 0x6a },
+    { 0x07, 0x6a }, { 0x07, 0x9a }, { 0x8d, 0x9a }, { 0x18, 0x0b },
+    { 0x7c, 0x0b }, { 0x07, 0xca }, { 0x8d, 0xca },
+};
+static constexpr int32_t kEquipCell = 40;
+
+// The equip pane's screen origin: the side panel's upper slot.
+static void EquipPaneOrigin(int32_t& x, int32_t& y)
+{
+    const int32_t dw = Display.Width();
+    x = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+    y = 0;
+}
+
+// Hit-test the Equip paperdoll 11-slot layout. Returns 0..10 in EQ_* enum
+// order, -1 otherwise.
 static bool HitEquipSlotRect(int32_t x, int32_t y,
                              int32_t& slot, int32_t& sx, int32_t& sy)
 {
-    struct SA { int32_t x; int32_t y; };
-    static constexpr SA kAnchor[11] = {
-        { 0x4a, 0x25 }, { 0x07, 0x3a }, { 0x8d, 0x3a }, { 0x8d, 0x6a },
-        { 0x07, 0x6a }, { 0x07, 0x9a }, { 0x8d, 0x9a }, { 0x18, 0x0b },
-        { 0x7c, 0x0b }, { 0x07, 0xca }, { 0x8d, 0xca },
-    };
-    constexpr int32_t kSlot = 40;
-    const int32_t dw     = Display.Width();
-    const int32_t pane_x = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
-    const int32_t pane_y = 0;
-    for (int32_t i = 0; i < 11; ++i)
+    int32_t pane_x = 0, pane_y = 0;
+    EquipPaneOrigin(pane_x, pane_y);
+    for (int32_t i = 0; i < NUM_EQ_SLOTS; ++i)
     {
-        const int32_t bx = pane_x + kAnchor[i].x;
-        const int32_t by = pane_y + kAnchor[i].y;
-        if (x >= bx && x < bx + kSlot && y >= by && y < by + kSlot)
+        const int32_t bx = pane_x + kEquipAnchor[i].x;
+        const int32_t by = pane_y + kEquipAnchor[i].y;
+        if (x >= bx && x < bx + kEquipCell && y >= by && y < by + kEquipCell)
         {
             slot = i;
             sx = bx;
@@ -653,13 +664,24 @@ static int32_t HitEquipSlot(int32_t x, int32_t y)
     return HitEquipSlotRect(x, y, slot, sx, sy) ? slot : -1;
 }
 
+bool UIEquipSlotCenter(int32_t slot, int32_t& x, int32_t& y)
+{
+    const SHudState& s = GetHudState();
+    if (s.sidebarState != HUD_SIDEBAR_OPEN || s.topSlot != HUD_TOP_EQUIP || slot < 0 || slot >= NUM_EQ_SLOTS)
+        return false;
+    EquipPaneOrigin(x, y);
+    x += kEquipAnchor[slot].x + kEquipCell / 2;
+    y += kEquipAnchor[slot].y + kEquipCell / 2;
+    return true;
+}
+
 // The equip pane's whole rect (top slot, 188x306), the area retail's
 // button-up bounds test covers (0x005363e0: 0 <= x < w, 0 <= y < h).
 static bool InEquipPane(int32_t x, int32_t y)
 {
-    const int32_t dw     = Display.Width();
-    const int32_t pane_x = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
-    return x >= pane_x && x < pane_x + kPaneW && y >= 0 && y < kTopH;
+    int32_t pane_x = 0, pane_y = 0;
+    EquipPaneOrigin(pane_x, pane_y);
+    return x >= pane_x && x < pane_x + kPaneW && y >= pane_y && y < pane_y + kTopH;
 }
 
 bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
