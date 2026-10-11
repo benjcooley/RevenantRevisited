@@ -36,12 +36,56 @@ target keeps this fixture on the defined original target branch.
 
 Private evidence is under RevenantRetailLab
 `research/vfx-wide-20261010/hard-alpha/dragonattack-actor-first/` and
-`dragonattack-owner-core/`. This checkpoint proves the owner dependency and
-state machine only. Full controller, original render and actual Metal
-appearance remain pending.
+`dragonattack-owner-core/`. The first checkpoint proves the owner dependency and state machine.
+The follow-up below executes the complete original controller and renderer;
+production admission and actual Metal appearance remain pending.
 
 `dragonattack-actor-first/manifest.json` SHA256: `d597f61a7136ba20c70ddedb311207f14f6a16d2afdb2b2e7aee5f048959c036`.
 
 `dragonattack-owner-core/manifest.json` SHA256: `a49604e2b2e2d7a6327e41b8c103056668e20e2ad961e87cb269cd3c700b2b1a`.
 
 The second fresh genuine-actor run reproduces all original owner fields from the private feasibility run exactly.
+
+The genuine-VM render follow-up executes actual CreateAnimator before the
+first owner Pulse, then NextFrame, whole owner Pulse, Animate, BeginScene,
+PreRender, Render, PostRender and EndScene. Both BeginScene and PreRender
+rebind the HUD surfaces; the declared 1280×960 RAM target is selected through
+the original camera API after PreRender. Camera (3185,3185,0), center (640,480)
+and ambient38/directional1 are explicit comparison inputs. Loaded original
+I3D objects, vertices and COM textures are retained; no synthetic color or
+geometry is supplied. The only new COM boundary supplies material LightState1
+get/set. Original srand1 and unmodified CRT rand are observed.
+
+The base Effect Pulse runs the animator before the custom owner moves or
+changes state. Controller creation therefore follows owner transitions by one
+Pulse: flight at12 and impact at33. The independent shared-particle comparator
+uses each actual controller's state, rather than the owner's later state.
+It matches 514,238 fields (maximum error 5.0e-6) and every CRT seed under
+ASan/UBSan; the actual controller uses809 random draws and owner kill remains86.
+
+The longer Dragon flight also disproves transferring the trap's final-zero
+prototype shortcut. Original particle Render leaves object zero's last
+sample matrix: zero for a rejected zero scale, otherwise the absolute MODELZ
+sample center. Once the authored flight emission stops, the final sample is
+nonzero. At impact initialization, original4033db/40efc0 reads cached
+(3451.3125,3199,60.98197937011719), then adds owner XYZ. The resulting large
+relative-velocity kick is original behavior in this declared world fixture.
+The compiled `PrototypeOrigin` helper matches all339 cached/initialization
+channels. No coordinate rescaling or velocity correction is applied. Submitted
+triangles extend well beyond the current RAM viewport, so these images are
+partial diagnostics and do not establish whole-effect appearance.
+
+Two fresh110-record full-render runs use different final-raster subsets. All
+before/after owner, controller, raw pool, random state and submitted bounds
+are identical. Four common sampled PNGs (21,33,49,85) are byte-identical. The
+source must still receive a separate typed adapter, preserve this caller
+ordering and cache behavior, and obtain supported whole-view Metal/native
+coverage before visual credit.
+
+`dragonattack-native-first/trace.json` SHA256: `40a0aee7b8af4000705274d752a65d501fb80c6d1771114832f6c6e67348b7e7`.
+
+`dragonattack-state-first/manifest.json` SHA256: `9a2d50c25b56b2c856ff25bbec7f570994eb678e03c09c8bb7881c08c4a24fe6`.
+
+`dragonattack-cache-first/manifest.json` SHA256: `75d6b86bdcb4b7bf53875bee1ba2842bcac59418119205aa0754119084ea2ce6`.
+
+`dragonattack-native-repeat/repeat.json` SHA256: `3414adc3644d71dc7acb05b51ec4edd4b570bce79357d1f4d1370163e9080886`.
