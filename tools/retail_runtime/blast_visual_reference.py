@@ -24,7 +24,11 @@ class NativeBlast(NativeScrollScene):
   self.vm.uc.hook_add(UC_HOOK_CODE,observe_object,begin=0x40a8f0,end=0x40a8f0)
   self.vm.uc.hook_add(UC_HOOK_CODE,observe_packet,begin=0x56eb30,end=0x56eb30)
   def observe_raster(uc,address,size,user):
-   if self.draws:self.draws[-1]['lit_vertices_sha256']=hashlib.sha256(uc.mem_read(self.software.vertices,self.draws[-1]['args'][3]*36)).hexdigest()
+   if self.draws:
+    raw=bytes(uc.mem_read(self.software.vertices,self.draws[-1]['args'][3]*36))
+    self.draws[-1]['lit_vertices_sha256']=hashlib.sha256(raw).hexdigest()
+    points=list(struct.iter_unpack('<3f4I2f',raw))
+    self.draws[-1]['projected_bounds']=[min(p[0]for p in points),-max(p[1]for p in points),max(p[0]for p in points),-min(p[1]for p in points)]
   self.vm.uc.hook_add(UC_HOOK_CODE,observe_raster,begin=0x56d960,end=0x56d960)
   from unicorn.x86_const import UC_X86_REG_EFLAGS
   def observe_size_guard(uc,address,size,user):
@@ -63,25 +67,25 @@ class NativeBlast(NativeScrollScene):
   self.controllers=[v.u32(v.u32(self.animator+0x68)+i*4)for i in range(v.u32(self.animator+0x58))]
   assert len(self.controllers)==2
   return dict(dispatch=dispatch,controllers=[hex(v.u32(c))for c in self.controllers],flags=[hex(v.u32(o))for o in self.animobjs],blend_modes=[v.u32(o+0x348)for o in self.animobjs])
- def render(self,tick,frame):
+ def render(self,tick,frame,instruction_limit=100000000):
   v=self.vm;v.put_u32(0x65cb38,tick);v.write(self.owner+0x5c,struct.pack('<h',frame));v.put_u32(self.animator+0x14,frame);owner=native_owner(self)
   self.software.clear();self.draws=[];self.render_states={}
   # Mode0 is an original no-op; mode1 updates both native state and its cache.
   v.call(0x417d60,(1,1),this=0x65a57c)
-  v.call(0x40e8d0,this=self.animator,instruction_limit=100000000)
+  v.call(0x40e8d0,this=self.animator,instruction_limit=instruction_limit)
   assert not any(s.locked for s in self.surfaces)
   return v.surface_bytes('screen'),v.surface_bytes('depth'),dict(owner=owner,draws=self.draws,flags=[hex(v.u32(o))for o in self.animobjs])
 
-def run(executable,archive,output,samples):
+def run(executable,archive,output,samples,width=640,height=480,instruction_limit=100000000):
  output.mkdir(parents=True,exist_ok=False)
  with zipfile.ZipFile(archive)as z:data=z.read(next(n for n in z.namelist()if n.lower()=='imagery/magic/blast.i3d'))
- f=NativeBlast(executable,data);initialization=f.initialize_scene();cases=[]
+ f=NativeBlast(executable,data,width,height);initialization=f.initialize_scene();cases=[]
  for tick in samples:
-  raw,depth,draw=f.render(tick,tick%120);replay=f.render(tick,tick%120)
+  raw,depth,draw=f.render(tick,tick%120,instruction_limit);replay=f.render(tick,tick%120,instruction_limit)
   if replay!=(raw,depth,draw):raise AssertionError('Original warm frame replay differs')
-  path=output/f'native-{tick:03d}.png';save_rgb565_png(path,raw,640,480)
+  path=output/f'native-{tick:03d}.png';save_rgb565_png(path,raw,width,height)
   cases.append(dict(tick=tick,image=str(path),image_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),rgb565_sha256=hashlib.sha256(raw).hexdigest(),depth_sha256=hashlib.sha256(depth).hexdigest(),nonzero_pixels=sum(p!=(0,)for p in struct.iter_unpack('<H',raw)),**draw));print(tick,len(draw['draws']),cases[-1]['nonzero_pixels'],flush=True)
- report=dict(status='reference_complete',accepted=False,warm_replays=2,retail_type_id='0x0ea34fa3',viewport=[640,480],owner=[0,0,0],camera=[0,0,0],ambient=[38]*3,directional=[1]*3,source_mode=80,initialization=initialization,cases=cases,asset_sha256=hashlib.sha256(data).hexdigest(),original_executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),probe_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),scope='Complete original default Render40e8d0/controller Render/RenderObject40a8f0/authored keys/camera-facing matrices/FVF112 normal illumination/software RGB565 raster. Actual full registry and RefreshControllers/parser/Initialize; native owner/projector. Immutable decoded resources, material COM handles and exact three single-frame textures are explicit boundaries. Integer owner clock is a declared fixture input; natural spell/light/audio caller and original outer owner lifecycle are separate. Original textured raster retains fixed640x480 oversized-edge rejection; Metal clipping differs. No fitted geometry/colors.')
+ report=dict(status='reference_complete',accepted=False,warm_replays=2,retail_type_id='0x0ea34fa3',viewport=[width,height],owner=[0,0,0],camera=[0,0,0],ambient=[38]*3,directional=[1]*3,source_mode=80,initialization=initialization,cases=cases,asset_sha256=hashlib.sha256(data).hexdigest(),original_executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(),probe_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),scope='Complete original default Render40e8d0/controller Render/RenderObject40a8f0/authored keys/camera-facing matrices/FVF112 normal illumination/software RGB565 raster. Actual full registry and RefreshControllers/parser/Initialize; native owner/projector. Immutable decoded resources, material COM handles and exact three single-frame textures are explicit boundaries. Integer owner clock is a declared fixture input; natural spell/light/audio caller and original outer owner lifecycle are separate. Original textured raster retains fixed640x480 oversized-edge rejection. No fitted geometry/colors.')
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');return report
 if __name__=='__main__':
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--archive',type=Path,default=ROOT/'data/imagery.rvi');p.add_argument('--output',type=Path,required=True);p.add_argument('--samples',type=int,nargs='+',default=[1,5,15,29,45,59,89,119]);a=p.parse_args();run(a.executable,a.archive,a.output,a.samples)
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--archive',type=Path,default=ROOT/'data/imagery.rvi');p.add_argument('--output',type=Path,required=True);p.add_argument('--samples',type=int,nargs='+',default=[1,5,15,29,45,59,89,119]);p.add_argument('--width',type=int,default=640);p.add_argument('--height',type=int,default=480);p.add_argument('--instruction-limit',type=int,default=100000000);a=p.parse_args();run(a.executable,a.archive,a.output,a.samples,a.width,a.height,a.instruction_limit)

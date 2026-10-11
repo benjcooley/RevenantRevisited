@@ -68,3 +68,33 @@ Validation: full private build; `test_blast.py` (two tests); Speed profile,
 Quicksilver profile and water profile regressions; two clean actual Metal
 captures; generated preview-map check. Only source/tools/this record are
 committed; imagery, binaries and generated reference artifacts remain private.
+
+## Native primitive-span correction (2026-10-11)
+
+The native-domain/software adapter now applies the proven original640/480
+edge-span admission per authored triangle, retaining face order and all ordinary
+geometry. At phase60, changing only the original raster constants to6400/4800
+restores18 rejected triangles and increases visible pixels from231,887 to303,854.
+Owner, flags, complete draw packets, source vertices, transformed colors, UVs
+and matrices remain identical. The widened diagnostic needs a400-million
+instruction budget; the failed100-million attempt remains private evidence.
+
+Both fresh120-frame Metal captures exit cleanly. All120 ordinary-frame RGB
+images are byte-identical to the pre-change capture. The eight640x480
+original/native-domain phase pairs now agree on the previously extra outer ring.
+Both existing Blast runtime tests pass:60,480 key and25,680 matrix fields, plus
+full original warm-replay controls.
+
+Appearance credit remains held pending whole-geometry supported-view coverage.
+A full original1920x1080 phase60 replay succeeds twice with a400-million budget,
+but the native visible bounds still touch the top edge. Submitted geometry spans
+x[36.40,1902.36],y[-673.48,1624.28]. Fixed vertically overlapping views can cover
+that extent without changing world geometry, lighting or the original span
+limits. This checkpoint does not silently accept the clipped contact as complete.
+
+Evidence root: `research/vfx-next-blast-20261011`. `native-bounds-budget400m`
+records the constants-only differential; `common-before`,
+`metal-common-bounded`, `metal-native-bounded` and `review-first` retain the
+fresh captures and phase checks. `native-wide-budget400m` records the expanded
+original replay; failed attempts remain separate. Natural callers, other
+lighting/device behavior and precise framebuffer equality remain open.
