@@ -982,6 +982,7 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float3 source_light = p.retail_ambient.xyz + p.retail_directional.xyz *
         max(dot(source_normal, float3(0.0, 0.78125, 0.625)), 0.0);
     o.retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
+    if (p.retail_directional.w > 4.5) o.retail_color = clamp(in.normal, 0.0, 31.0) / 31.0;
     o.retail_mode = p.retail_directional.w;
     return o;
 }
@@ -1012,6 +1013,14 @@ fragment float4 _main(vs_out in [[stage_in]],
                       texture2d<float> albedo_tex [[texture(0)]],
                       sampler smp [[sampler(0)]]) {
     // Original untextured Gouraud stores RGB5 as R5/G6-even/B5; no material or texture.
+    // Explicit prelit RGBA5 format, original untextured alpha kernel.
+    if (in.retail_mode > 4.5) {
+        float a5 = floor(clamp(in.uv.x, 0.0, 31.0) + 0.00001);
+        float alpha = (a5 + 1.0) / 32.0;
+        float3 channels = floor(in.retail_color * 31.0 + 0.00001) * float3(1.0, 2.0, 1.0);
+        float3 source = alpha > 0.0 ? floor(channels * alpha) / (alpha * float3(31.0, 63.0, 31.0)) : float3(0.0, 0.0, 0.0);
+        return float4(source, alpha);
+    }
     if (in.retail_mode > 3.5) return float4(floor(in.retail_color * 31.0 + 0.00001) * float3(1.0/31.0, 2.0/63.0, 1.0/31.0), 1.0);
     if (in.retail_mode > 0.5) {
         // RGB565 source raster: texture times Gouraud light; no material
@@ -1155,6 +1164,7 @@ void main() {
     vec3 source_light = retail_ambient.xyz + retail_directional.xyz *
         max(dot(source_normal, vec3(0.0, 0.78125, 0.625)), 0.0);
     v_retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
+    if (retail_directional.w > 4.5) v_retail_color = clamp(normal, 0.0, 31.0) / 31.0;
     v_retail_mode = retail_directional.w;
 }
 )GLSL";
@@ -1179,6 +1189,14 @@ uniform sampler2D albedo_tex;
 out vec4 fragColor;
 void main() {
     // Original untextured Gouraud stores RGB5 as R5/G6-even/B5; no material or texture.
+    // Explicit prelit RGBA5 format, original untextured alpha kernel.
+    if (v_retail_mode > 4.5) {
+        float a5 = floor(clamp(v_uv.x, 0.0, 31.0) + 0.00001);
+        float alpha = (a5 + 1.0) / 32.0;
+        vec3 channels = floor(v_retail_color * 31.0 + 0.00001) * vec3(1.0, 2.0, 1.0);
+        vec3 source = alpha > 0.0 ? floor(channels * alpha) / (alpha * vec3(31.0, 63.0, 31.0)) : vec3(0.0, 0.0, 0.0);
+        fragColor = vec4(source, alpha); return;
+    }
     if (v_retail_mode > 3.5) { fragColor = vec4(floor(v_retail_color * 31.0 + 0.00001) * vec3(1.0/31.0, 2.0/63.0, 1.0/31.0), 1.0); return; }
     if (v_retail_mode > 0.5) {
         ivec2 size = textureSize(albedo_tex, 0);
@@ -1326,6 +1344,7 @@ vs_out main_vs(vs_in i) {
     float3 source_light = retail_ambient.xyz + retail_directional.xyz *
         max(dot(source_normal, float3(0.0, 0.78125, 0.625)), 0.0);
     o.retail_color = floor(clamp(source_light, 0.0, 1.0) * 31.0) / 31.0;
+    if (retail_directional.w > 4.5) o.retail_color = clamp(i.normal, 0.0, 31.0) / 31.0;
     o.retail_mode = retail_directional.w;
     return o;
 }
@@ -1353,6 +1372,14 @@ struct ps_in {
 };
 float4 main_ps(ps_in input) : SV_Target0 {
     // Original untextured Gouraud stores RGB5 as R5/G6-even/B5; no material or texture.
+    // Explicit prelit RGBA5 format, original untextured alpha kernel.
+    if (input.retail_mode > 4.5) {
+        float a5 = floor(clamp(input.uv.x, 0.0, 31.0) + 0.00001);
+        float alpha = (a5 + 1.0) / 32.0;
+        float3 channels = floor(input.retail_color * 31.0 + 0.00001) * float3(1.0, 2.0, 1.0);
+        float3 source = alpha > 0.0 ? floor(channels * alpha) / (alpha * float3(31.0, 63.0, 31.0)) : float3(0.0, 0.0, 0.0);
+        return float4(source, alpha);
+    }
     if (input.retail_mode > 3.5) return float4(floor(input.retail_color * 31.0 + 0.00001) * float3(1.0/31.0, 2.0/63.0, 1.0/31.0), 1.0);
     if (input.retail_mode > 0.5) {
         uint width, height; albedo_tex.GetDimensions(width, height);
@@ -3164,7 +3191,7 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     for (int c = 0; c < 3; ++c) vsu[vo++] = retail_mesh_ambient[c];
     vsu[vo++] = s.retail_normal_z_scale;
     for (int c = 0; c < 3; ++c) vsu[vo++] = retail_mesh_directional[c];
-    vsu[vo++] = float(!UsesRetailSoftwareMeshLighting() && s.retail_lighting == 4 ? 0 : s.retail_lighting == 3 && !UsesRetailSoftwareMeshLighting() ? 2 : s.retail_lighting);
+    vsu[vo++] = float(s.retail_lighting == 4 && s.retail_prelit_rgba5 && UsesRetailSoftwareMeshLighting() ? 5 : !UsesRetailSoftwareMeshLighting() && s.retail_lighting == 4 ? 0 : s.retail_lighting == 3 && !UsesRetailSoftwareMeshLighting() ? 2 : s.retail_lighting);
     vsu[vo++] = s.uv_offset[0];
     vsu[vo++] = s.uv_offset[1];
     vsu[vo++] = s.retail_software_projection ?

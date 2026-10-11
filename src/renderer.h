@@ -527,6 +527,7 @@ struct SHelperMeshSubmit
     int32_t    index_offset = 0, index_count = 0; // zero count keeps the full mesh
     bool       retail_flat_depth = false; // original untextured max(vertex Z), one triangle
     float      retail_flat_depth_offset = 0.0f; // depth minus camera/base translation
+    bool       retail_prelit_rgba5 = false; // explicit mode4 vertex format: normal=RGB5, uv.x=alpha5; no normal lighting
     bool       retail_source_alpha = false; // audited source mode2: cull-none; mode4 writes Z as the native untextured kernel
     bool       retail_alpha_source_quantize = false; // opt-in original ARGB4444 source contribution floor; destination precision remains GPU
     // Undo an explicit geometry-only Z bridge before source normal lighting.

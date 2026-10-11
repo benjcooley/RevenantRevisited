@@ -65,6 +65,7 @@
 #include "effects/pukepreview.h"
 #include "effects/shriekpreview.h"
 #include "effects/argbsourcecontrol.h"
+#include "effects/prelitrgbcontrol.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -7398,6 +7399,18 @@ struct SVfxTestBootstrap {
             e.is_alive=[](void* c){return antimagic_preview::Alive(static_cast<antimagic_preview::State*>(c));};
             e.destroy=[](void* c){antimagic_preview::Destroy(static_cast<antimagic_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TPrelitRGB5_DIAGNOSTIC";e.family="diagnostic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&)->void*{return prelit_rgb_control::Spawn();};
+            e.submit_world=[](void* c,EFxDebugMode){prelit_rgb_control::SubmitWorld(static_cast<prelit_rgb_control::State*>(c));};
+            e.destroy=[](void* c){prelit_rgb_control::Destroy(static_cast<prelit_rgb_control::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TEnergyARGB_DIAGNOSTIC";e.family="diagnostic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&)->void*{return argb_source_control::Spawn(true);};
+            e.submit_world=[](void* c,EFxDebugMode){argb_source_control::SubmitWorld(static_cast<argb_source_control::State*>(c));};
+            e.destroy=[](void* c){argb_source_control::Destroy(static_cast<argb_source_control::State*>(c));};VfxTest::DeferredRegister(e);
         }
         {
             VfxTest::SEffect e = {};

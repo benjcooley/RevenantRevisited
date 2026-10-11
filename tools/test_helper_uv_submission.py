@@ -84,6 +84,8 @@ int main(){
  draw.retail_flat_depth=true;draw.retail_flat_depth_offset=12.75f;draw.index_offset=3;draw.index_count=3;
  renderer.EmitTransparentHelper(draw);assert(vertex_uniforms[40]==1&&vertex_uniforms[41]==std::floor(2750+13*.7142857909202576f+12.75f));
  draw.index_offset=0;draw.index_count=0;
+ draw.retail_prelit_rgba5=true;renderer.EmitTransparentHelper(draw);assert(vertex_uniforms[35]==5&&pipeline==8);
+ draw.retail_prelit_rgba5=false;
  draw.retail_lighting=3;draws=0;renderer.EmitTransparentHelper(draw);assert(draws==1&&pipeline==7&&vertex_uniforms[35]==3&&vertex_uniforms[40]==0);
  draw.retail_lighting=4;renderer.software_lighting=false;draws=0;
  renderer.EmitTransparentHelper(draw);assert(draws==2&&pipeline==2&&vertex_uniforms[35]==0&&vertex_uniforms[40]==0);
