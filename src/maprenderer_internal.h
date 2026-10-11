@@ -10,9 +10,13 @@
 #include "sector.h"
 
 #include <cstdint>
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
+
+class T3DImagery;
 
 struct SSectorTileTex {
     struct SDepthDump {
@@ -256,6 +260,15 @@ struct TMapRenderer::Impl
     // frame texture every render frame, so this lookup must stay O(1) against
     // resident asset count. Draw items still do not own renderer assets.
     std::unordered_map<PTBitmap, int32_t> sectorTileTexByBitmap;
+    // Equipped items' object meshes (TCharAnimator::EquipAttachments), by
+    // imagery asset and object; non-owning, as sectorMeshAsset. An item is
+    // in no sector while worn, so it has no draw record: it draws with its
+    // wearer (submitEquipment), once a frame (frameEquipOwners).
+    std::map<std::pair<uint64_t, int32_t>, std::vector<SSectorMeshAsset>> equipMeshAssets;
+    std::vector<const TObjectInstance*> frameEquipOwners;
+    void submitEquipment(const SMapRenderContext& ctx, SMapRenderStats& stats,
+                         TObjectInstance& oi, uint32_t obj_id);
+    const std::vector<SSectorMeshAsset>& equipObjectMeshes(T3DImagery& mesh, int32_t objnum);
 
     // Non-owning draw intents derived from the current map contents. Rebuilds
     // here should be cheap bookkeeping over resident assets.
@@ -546,6 +559,7 @@ struct TMapRenderer::Impl
         // destroyed by TRenderer::Shutdown. These records are renderer-facing
         // metadata and non-owning handles.
         sectorMeshAsset.clear();
+        equipMeshAssets.clear();
         dlightTexIdx = -1;
     }
 

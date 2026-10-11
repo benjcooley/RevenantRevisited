@@ -193,6 +193,8 @@ def main():
     s.add_argument('--owner', default=os.environ.get('USER', 'gameflow'), help='who holds the lab (shown to others)')
     sub.add_parser('restore', help='close the game, restore the INI, relaunch the editor')
     sub.add_parser('newgame', help='click New Game on the title screen')
+    s = sub.add_parser('click', help='left-click guest pixels (640x480), in order: X,Y ...')
+    s.add_argument('points', nargs='+', help='X,Y')
     s = sub.add_parser('key', help='press keys one at a time (keyboard-map.json names)')
     s.add_argument('keys', nargs='+')
     s = sub.add_parser('prompt', help="type a line into retail's Enter prompt (cheats, @script)")
@@ -214,6 +216,13 @@ def main():
     elif a.cmd == 'newgame':
         x, y = NEW_GAME_BUTTON
         run_lua(LUA_CLICK, {'x': x, 'y': y}, 'gf_click')
+    elif a.cmd == 'click':
+        # An inventory item is picked up by one click and put down by the
+        # next (an equip slot equips it): `click 523,455 479,126`.
+        for point in a.points:
+            x, y = (int(v) for v in point.split(','))
+            run_lua(LUA_CLICK, {'x': x, 'y': y}, 'gf_click')
+            time.sleep(0.3)
     else:
         with Control() as c:
             if a.cmd == 'key':

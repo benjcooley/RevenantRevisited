@@ -14,6 +14,7 @@
 #include "staticpartsysprofiles.h"
 #include "bitmap.h"
 #include "bitmapdata.h"
+#include "charanimator.h"
 #include "chunkcache.h"
 #include "decompdata.h"
 #include "display.h"
@@ -256,6 +257,70 @@ static void AddRendererMeshSourceRef(TObjectImagery* img, uint64_t key, MeshHand
         });
 }
 
+enum class EObjectMeshResult { Registered, NoFaces, UploadFailed };
+
+// Extracts an I3D object's faces in one texture slot (-1: all its faces as one
+// mesh) and registers them with the renderer under the object's asset key.
+// The albedo is the slot's texture (texture 0 for the whole object); with
+// material_texture (helpers), an untextured one falls back to the object's
+// material texture.
+static EObjectMeshResult RegisterI3DObjectMesh(T3DImagery* meshimg, int32_t objnum, int32_t texslot,
+                                               bool material_texture, SSectorMeshAsset& asset)
+{
+    if (!Renderer)
+        return EObjectMeshResult::UploadFailed;
+    std::vector<SMeshVertex> verts;
+    std::vector<uint16_t> indices;
+    const bool extracted = texslot >= 0
+        ? ExtractSubMeshTextureSlot(meshimg, objnum, texslot, verts, indices)
+        : ExtractSubMesh(meshimg, objnum, verts, indices);
+    if (!extracted)
+        return EObjectMeshResult::NoFaces;
+
+    int32_t texture_index = texslot > 0 ? texslot - 1
+                          : (texslot < 0 && meshimg->NumTextures() > 0) ? 0 : -1;
+    TTextureHandle albedo = texture_index >= 0 ? meshimg->GetTextureHandle(texture_index)
+                                               : kInvalidTexture;
+    if (albedo == kInvalidTexture && material_texture)
+    {
+        S3DObj o = {};
+        meshimg->GetObject(objnum, &o);
+        if (o.material >= 0 && o.material < meshimg->NumMaterials())
+        {
+            S3DMat mat = {};
+            meshimg->GetMaterial(o.material, &mat);
+            if (mat.texture >= 0 && mat.texture < meshimg->NumTextures())
+            {
+                albedo = meshimg->GetTextureHandle(mat.texture);
+                texture_index = mat.texture;
+            }
+        }
+    }
+    if (albedo == kInvalidTexture)
+        albedo = Renderer->WhiteTextureHandle();
+
+    const uint64_t mesh_key = RendererI3DMeshKey(meshimg->AssetId(), objnum, texslot);
+    const MeshHandle handle = Renderer->RegisterMeshAsset(
+        mesh_key, verts.data(), int32_t(verts.size()), indices.data(), int32_t(indices.size()), albedo);
+    if (!handle)
+        return EObjectMeshResult::UploadFailed;
+    AddRendererMeshSourceRef(meshimg, mesh_key, handle);
+
+    asset = {};
+    asset.imagery_key = meshimg;
+    asset.objnum = objnum;
+    asset.texslot = texslot;
+    asset.texture_index = texture_index;
+    asset.handle = handle;
+    if (texslot > 0)
+    {
+        S3DTex texture = {};
+        meshimg->GetTexture(texslot - 1, &texture);
+        asset.retail_lighting = RetailMeshTextureLighting(texture.desc.pixelFormat);
+    }
+    return EObjectMeshResult::Registered;
+}
+
 static SMapContentSignature ComputeMapContentSignature(const TGameMap* map)
 {
     SMapContentSignature sig = {};
@@ -328,6 +393,30 @@ inline void ProjectCameraRelToScreen(const SMapRenderContext& ctx,
     const float focal_zoom = (std::max)(ctx.cam_forward * zoom, 1.0f);
     sx = float(iso_x) * focal_zoom / z;
     sy = float(iso_y) * focal_zoom / z;
+}
+
+// A mesh object's camera-relative position: XY from the camera, Z absolute.
+inline S3DPoint MeshCameraRel(const SMapRenderContext& ctx, const S3DPoint& world_pos)
+{
+    const S3DPoint mesh_world  = MapRendererMeshWorld(world_pos,             ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+    const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
+    return { mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z };
+}
+
+// Cheap padded-G-buffer cull: project the mesh anchor to screen pixels and
+// cull only once it is well outside the drawable border. The object-size
+// margin covers tall/wide meshes whose bounds extend past the anchor;
+// kGBufPad preserves offscreen shadow occluders.
+inline bool MeshAnchorInView(const SMapRenderContext& ctx, const S3DPoint& world_pos)
+{
+    float spx = 0.0f, spy = 0.0f;
+    ProjectCameraRelToScreen(ctx, MeshCameraRel(ctx, world_pos), spx, spy);
+    const int32_t px = int32_t(std::lround(spx)) + ctx.cam_ox;
+    const int32_t py = int32_t(std::lround(spy)) + ctx.cam_oy;
+    const int32_t margin = ScalePixel(ctx.camera_zoom, 256.0f);
+    const int32_t pad = TRenderer::kGBufPad;
+    return px + margin > -pad && py + margin > -pad &&
+           px - margin < ctx.vw + pad && py - margin < ctx.vh + pad;
 }
 
 inline void ProjectWorldPointToScreen(const SMapRenderContext& ctx,
@@ -1297,26 +1386,10 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         if (draw_alpha <= 0.0f)
             return;
 
-        // Cheap padded-G-buffer cull: project the mesh anchor to screen
-        // pixels and skip only once it is well outside the drawable border.
-        // The object-size margin covers tall/wide meshes whose bounds extend
-        // past the anchor; kGBufPad preserves offscreen shadow occluders.
+        if (!MeshAnchorInView(ctx, world_pos))
         {
-            const S3DPoint mesh_world  = MapRendererMeshWorld(world_pos,             ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
-            const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
-            const S3DPoint rel = { mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z };
-            float spx = 0.0f, spy = 0.0f;
-            ProjectCameraRelToScreen(ctx, rel, spx, spy);
-            const int32_t px = int32_t(std::lround(spx)) + ctx.cam_ox;
-            const int32_t py = int32_t(std::lround(spy)) + ctx.cam_oy;
-            const int32_t kMargin = ScalePixel(ctx.camera_zoom, 256.0f);
-            const int32_t pad = TRenderer::kGBufPad;
-            if (px + kMargin <= -pad || py + kMargin <= -pad ||
-                px - kMargin >= ctx.vw + pad || py - kMargin >= ctx.vh + pad)
-            {
-                ++stats.mesh_skipped;
-                return;
-            }
+            ++stats.mesh_skipped;
+            return;
         }
         const SSectorMeshAsset& asset = (*ctx.mesh_assets)[asset_idx];
         const TTextureHandle live_texture = MapMeshTexture(*meshimg,
@@ -1342,6 +1415,14 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
            !d3->IsObjectEnabled(asset.objnum))
         {++stats.mesh_skipped;return;}
         if (state < 0 || state >= meshimg->NumStates() || meshimg->IsHidden(asset.objnum, state))
+        {
+            ++stats.mesh_skipped;
+            return;
+        }
+        // A character shows what retail's TCharAnimator::Render shows this
+        // frame: not its own sword or weapon, nor what a player's equipment
+        // replaces (TCharAnimator::UpdateEquipment).
+        if (d3 && oi->IsCharacter() && !d3->IsObjectEnabled(asset.objnum))
         {
             ++stats.mesh_skipped;
             return;
@@ -1524,8 +1605,6 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             // Sort keys for the renderer's translucent pass (it uses them only
             // when draw_alpha is below opaque): the object's camera depth, and
             // the object as the surface all its meshes belong to.
-            const S3DPoint mesh_world = MapRendererMeshWorld(world_pos, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
-            const S3DPoint mesh_camera = MapRendererMeshWorld(ctx.sectorCameraWorld, ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z);
             SMeshSubmit m = {};
             m.mesh = asset.handle;
             m.texture_override = live_texture;
@@ -1556,12 +1635,97 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             // The global clock advances at 24Hz, independent of render cadence.
             meshimg->ScrollTexOffset(asset.objnum, oi->GetState(), oi->GetFrame(),
                                      TTime::LegacyFrameCount(), m.uv_offset);
-            m.sort_depth = CameraDepth({ mesh_world.x - mesh_camera.x, mesh_world.y - mesh_camera.y, mesh_world.z }, ctx.cam_forward);
+            m.sort_depth = CameraDepth(MeshCameraRel(ctx, world_pos), ctx.cam_forward);
             m.surface_id = uint32_t(oi->GetMapIndex() + 1);
             Renderer->SubmitMesh(m);
         }
         ++stats.mesh_submitted;
     }
+}
+
+// REVSYNC: TCharAnimator::ProcessEquipment @ 0x004d7f20, task 2 -- after
+// the body, each equipped item's object draws through the item's imagery
+// (state 0, frame 0) with the matrix of the character object it rides
+// (OBJ3D_MATRIX) and the character's alpha (SetMaterialTransparency
+// 0x004d82a0). The animator lists the pairs each drawn frame
+// (TCharAnimator::EquipAttachments); they draw like the body's own objects,
+// on its bone transforms, as part of its surface. What a player wears
+// changes without the map changing, so the item meshes live here rather
+// than in the sector draw list.
+void TMapRenderer::Impl::submitEquipment(const SMapRenderContext& ctx, SMapRenderStats& stats,
+                                         TObjectInstance& oi, uint32_t obj_id)
+{
+    if (!Renderer || !ctx.show_meshes || ctx.force_mesh_preview_pose)
+        return;
+    auto* animator = dynamic_cast<TCharAnimator*>(oi.GetAnimator());
+    if (!animator || animator->EquipAttachments().empty())
+        return;
+    if (const auto* visual = oi.GetComponent<TFlipbookBillboardComponent>())
+        if (visual->ReplacesDefaultVisual())
+            return;
+    const float draw_alpha = animator->DrawAlpha();
+    if (draw_alpha <= 0.0f)
+        return;
+    const S3DPoint world_pos = oi.Pos();
+    if (!MeshAnchorInView(ctx, world_pos))
+        return;
+
+    const float sort_depth = CameraDepth(MeshCameraRel(ctx, world_pos), ctx.cam_forward);
+    float scale[16];
+    MatrixScale16(ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z, scale);
+    for (const TCharAnimator::SEquipAttachment& attachment : animator->EquipAttachments())
+    {
+        TObjectInstance* item = attachment.item.Get();
+        const S3DAnimObj* bone = animator->GetObject(attachment.bone);
+        auto* mesh = item ? dynamic_cast<T3DImagery*>(item->GetImagery()) : nullptr;
+        if (!bone || !mesh)
+            continue;
+
+        float bone_world[16];
+        float world[16];
+        TransposeSourceToRenderer(bone->transform.Matrix(), bone_world);
+        MatrixMul16(scale, bone_world, world);
+        for (const SSectorMeshAsset& asset : equipObjectMeshes(*mesh, attachment.object))
+        {
+            SMeshSubmit m = {};
+            m.mesh = asset.handle;
+            m.texture_override = MapMeshTexture(*mesh, nullptr, asset.texture_index,
+                asset.texslot >= 0 ? asset.texslot : asset.texture_index + 1, 0,
+                Renderer->WhiteTextureHandle());
+            std::memcpy(m.world, world, sizeof(m.world));
+            m.tint[0] = m.tint[1] = m.tint[2] = 1.0f;
+            m.tint[3] = draw_alpha;
+            m.obj_id = obj_id;
+            mesh->ScrollTexOffset(attachment.object, 0, 0, TTime::LegacyFrameCount(), m.uv_offset);
+            m.sort_depth = sort_depth;
+            m.surface_id = uint32_t(oi.GetMapIndex() + 1);
+            Renderer->SubmitMesh(m);
+            ++stats.mesh_submitted;
+        }
+    }
+}
+
+// An item object's meshes, registered the first time it draws: one for each
+// texture slot its faces use, or the whole object as one.
+const std::vector<SSectorMeshAsset>& TMapRenderer::Impl::equipObjectMeshes(T3DImagery& mesh, int32_t objnum)
+{
+    auto [it, added] = equipMeshAssets.try_emplace({mesh.AssetId(), objnum});
+    if (!added)
+        return it->second;
+    std::vector<SSectorMeshAsset>& meshes = it->second;
+    for (int32_t texslot = 0; texslot <= mesh.NumTextures(); ++texslot)
+    {
+        SSectorMeshAsset asset;
+        if (RegisterI3DObjectMesh(&mesh, objnum, texslot, false, asset) == EObjectMeshResult::Registered)
+            meshes.push_back(asset);
+    }
+    if (meshes.empty())
+    {
+        SSectorMeshAsset asset;
+        if (RegisterI3DObjectMesh(&mesh, objnum, -1, false, asset) == EObjectMeshResult::Registered)
+            meshes.push_back(asset);
+    }
+    return meshes;
 }
 
 TMapRenderer::TMapRenderer() : impl(std::make_unique<Impl>()) {}
@@ -2553,58 +2717,18 @@ void TMapRenderer::RebuildForCurrentMap()
                         }
                         if (asset_idx < 0)
                         {
-                            std::vector<SMeshVertex> verts;
-                            std::vector<uint16_t> indices;
-                            if (!ExtractSubMeshTextureSlot(meshimg, objnum, texslot, verts, indices))
+                            SSectorMeshAsset asset;
+                            const EObjectMeshResult result = RegisterI3DObjectMesh(
+                                meshimg, objnum, texslot, oi->ObjClass() == OBJCLASS_HELPER, asset);
+                            if (result == EObjectMeshResult::NoFaces)
                             {
                                 ++extract_fail;
                                 if (texslot > 0)
                                     ++empty_texslots;
                                 continue;
                             }
+                            if (result == EObjectMeshResult::UploadFailed) { ++mesh_upload_fail; continue; }
 
-                            TTextureHandle albedo = kInvalidTexture;
-                            int32_t texture_index = texslot > 0 ? texslot - 1 : -1;
-                            if (texslot > 0)
-                                albedo = meshimg->GetTextureHandle(texslot - 1);
-                            if (albedo == kInvalidTexture && oi->ObjClass() == OBJCLASS_HELPER)
-                            {
-                                S3DObj o = {};
-                                meshimg->GetObject(objnum, &o);
-                                if (o.material >= 0 && o.material < meshimg->NumMaterials())
-                                {
-                                    S3DMat mat = {};
-                                    meshimg->GetMaterial(o.material, &mat);
-                                    if (mat.texture >= 0 && mat.texture < meshimg->NumTextures())
-                                    {
-                                        albedo = meshimg->GetTextureHandle(mat.texture);
-                                        texture_index = mat.texture;
-                                    }
-                                }
-                            }
-                            if (albedo == kInvalidTexture)
-                                albedo = Renderer ? Renderer->WhiteTextureHandle() : kInvalidTexture;
-
-                            const uint64_t mesh_key = RendererI3DMeshKey(meshimg->AssetId(), objnum, texslot);
-                            MeshHandle h = Renderer->RegisterMeshAsset(
-                                mesh_key,
-                                verts.data(), int32_t(verts.size()),
-                                indices.data(), int32_t(indices.size()),
-                                albedo);
-                            if (!h) { ++mesh_upload_fail; continue; }
-                            AddRendererMeshSourceRef(meshimg, mesh_key, h);
-
-                            SSectorMeshAsset asset = {};
-                            asset.imagery_key = img;
-                            asset.objnum = objnum;
-                            asset.texslot = texslot;
-                            asset.texture_index = texture_index;
-                            asset.handle = h;
-                            if (texslot > 0) {
-                                S3DTex texture = {};
-                                meshimg->GetTexture(texslot - 1, &texture);
-                                asset.retail_lighting = RetailMeshTextureLighting(texture.desc.pixelFormat);
-                            }
                             if (oi->ObjClass() == OBJCLASS_HELPER ||
                                 (oi->ObjId() == 0xd0c0f035u && meshimg->HasGoldPartSysProfile()) ||
                                 (oi->ObjId() == 0xad99fdf2u && oi->GetState()==0 && meshimg->HasRetailMPAppearStartProfile()) ||
@@ -2671,54 +2795,16 @@ void TMapRenderer::RebuildForCurrentMap()
                         }
                         if (asset_idx < 0)
                         {
-                            std::vector<SMeshVertex> verts;
-                            std::vector<uint16_t> indices;
-                            if (ExtractSubMesh(meshimg, objnum, verts, indices))
+                            SSectorMeshAsset asset;
+                            const EObjectMeshResult result = RegisterI3DObjectMesh(
+                                meshimg, objnum, -1, oi->ObjClass() == OBJCLASS_HELPER, asset);
+                            if (result == EObjectMeshResult::Registered)
                             {
-                                TTextureHandle albedo = kInvalidTexture;
-                                int32_t texture_index = meshimg->NumTextures() > 0 ? 0 : -1;
-                                if (meshimg->NumTextures() > 0)
-                                    albedo = meshimg->GetTextureHandle(0);
-                                if (albedo == kInvalidTexture && oi->ObjClass() == OBJCLASS_HELPER)
-                                {
-                                    S3DObj o = {};
-                                    meshimg->GetObject(objnum, &o);
-                                    if (o.material >= 0 && o.material < meshimg->NumMaterials())
-                                    {
-                                        S3DMat mat = {};
-                                        meshimg->GetMaterial(o.material, &mat);
-                                        if (mat.texture >= 0 && mat.texture < meshimg->NumTextures())
-                                        {
-                                            albedo = meshimg->GetTextureHandle(mat.texture);
-                                            texture_index = mat.texture;
-                                        }
-                                    }
-                                }
-                                if (albedo == kInvalidTexture)
-                                    albedo = Renderer ? Renderer->WhiteTextureHandle() : kInvalidTexture;
-                                const uint64_t mesh_key = RendererI3DMeshKey(meshimg->AssetId(), objnum, -1);
-                                MeshHandle h = Renderer->RegisterMeshAsset(
-                                    mesh_key,
-                                    verts.data(), int32_t(verts.size()),
-                                    indices.data(), int32_t(indices.size()),
-                                    albedo);
-                                if (h)
-                                {
-                                    AddRendererMeshSourceRef(meshimg, mesh_key, h);
-                                    SSectorMeshAsset asset = {};
-                                    asset.imagery_key = img;
-                                    asset.objnum = objnum;
-                                    asset.texslot = -1;
-                                    asset.texture_index = texture_index;
-                                    asset.handle = h;
-                                    asset_idx = (int32_t)s.sectorMeshAsset.size();
-                                    s.sectorMeshAsset.push_back(asset);
-                                }
-                                else
-                                {
-                                    ++mesh_upload_fail;
-                                }
+                                asset_idx = (int32_t)s.sectorMeshAsset.size();
+                                s.sectorMeshAsset.push_back(asset);
                             }
+                            else if (result == EObjectMeshResult::UploadFailed)
+                                ++mesh_upload_fail;
                         }
                         if (asset_idx >= 0)
                         {
@@ -3532,6 +3618,7 @@ void TMapRenderer::RenderFrame()
     drawctx.cov = &s.coverageScratch;
     ParticleManager().BeginDrawPulsePass();
     std::unordered_set<TObjectInstance*> submitted_replacement_owners;
+    s.frameEquipOwners.clear();
     for (int32_t idx : s.frameDrawIndices)
     {
         if (idx < 0 || idx >= int32_t(s.sectorDrawInst.size()))
@@ -3568,6 +3655,16 @@ void TMapRenderer::RenderFrame()
             if (TParticleEffectComponent* particle_effect = oi->GetComponent<TParticleEffectComponent>())
                 particle_effect->DrawPulse();
         s.sectorDrawInst[idx].Submit(drawctx, stats, obj_id);
+
+        // A player's equipment draws with its body, once.
+        if (TObjectInstance* owner = s.sectorDrawInst[idx].src.Get())
+            if (owner->ObjClass() == OBJCLASS_PLAYER &&
+                s.sectorDrawInst[idx].kind == ESectorDrawableKind::Mesh &&
+                std::find(s.frameEquipOwners.begin(), s.frameEquipOwners.end(), owner) == s.frameEquipOwners.end())
+            {
+                s.frameEquipOwners.push_back(owner);
+                s.submitEquipment(drawctx, stats, *owner, obj_id);
+            }
     }
     // Effect-component buckets are drained through the FX submission API
     // (see docs/vfx/PHASE1_SPINE.md). The renderer's DrainFxQueue runs

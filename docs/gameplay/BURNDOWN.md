@@ -83,6 +83,7 @@ UI side is in [../ui/BURNDOWN.md](../ui/BURNDOWN.md) B.6/B.7. Game-state side li
 - `[ ]` **G.3 Use consumable** — `GAMECMD_INVUSE` ([playscreen.cpp:102](../../src/playscreen.cpp#L102)). Potion → restore HP, scroll → cast spell, etc. Per-object `Use()` virtual in [src/object.h](../../src/object.h).
 - `[ ]` **G.4 Move equipped item between slots** — `GAMECMD_INVMOVE` ([playscreen.cpp:103](../../src/playscreen.cpp#L103)). Swap-on-conflict semantics from retail.
 - `[ ]` **G.5 Container interaction** — chest → contents listed in inventory pane. `TContainer` exists. Verify pickup loop.
+- `[x]` **G.6 Equipment drawn on the character** — done 2026-10-11. Equipped weapons and clothes ride the character's objects (TCharAnimator::ProcessEquipment `0x004d7f20`), the character's own sword/weapon is hidden, and object parents follow the animation state (T3DAnimator::Render `0x0040e8d0`). Checked against the shipped game in the DOSBox lab. [forensics/EQUIPMENT_RENDER.md](forensics/EQUIPMENT_RENDER.md); its §7 lists what's left (the hit flash pass, the paperdoll's own matcher).
 
 ## Phase H — Boss AI (post-Demo 1)
 

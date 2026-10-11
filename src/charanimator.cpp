@@ -99,24 +99,11 @@ bool TCharAnimator::Render()
     // crap to them.  BEN
 
     SetPoisonColor();       // Sets green color for character
-    UpdateDrawState(TTime::LegacyFrameSeconds);   // this path draws once a 24 Hz frame
+    UpdateDrawState(TTime::LegacyFrameSeconds);   // this path draws once a 24 Hz frame;
+                                                  // hides the replaced objects
     if (DrawAlpha() <= 0.0f)
         return true;        // Invisible, or too dim to render
 
-  // Unhide all objects (except for weapon/sword)
-    for (int32_t c = 0; c < NumObjects(); c++)
-    {
-        S3DAnimObj* obj = GetObject(c);
-        if (!stricmp(Get3DImagery()->GetObjectName(obj->objnum), "sword") ||
-            !stricmp(Get3DImagery()->GetObjectName(obj->objnum), "weapon"))
-            obj->flags |= OBJ3D_HIDE;
-        else
-            obj->flags &= ~OBJ3D_HIDE;
-    }
-
-    if (inst->ObjClass() == OBJCLASS_PLAYER)
-        HideCharParts();        // Hides char parts replaced by equipment before rendering
-    
   // Now reset transparency (if needed)
     if (std::fabs(transparency - 1.0f) > 0.001f)
         SetMaterialTransparency(Get3DImagery());
@@ -136,8 +123,7 @@ bool TCharAnimator::Render()
     if (std::fabs(transparency - 1.0f) > 0.001f)
         ResetMaterialTransparency(Get3DImagery());
 
-    if (inst->ObjClass() == OBJCLASS_PLAYER)
-        RenderEquipment();      // Renders equipment geometry
+    RenderEquipment();      // Renders equipment geometry
 
 //  RenderCombatFlashes();
 
@@ -231,140 +217,111 @@ void TCharAnimator::SetPoisonColor()
 // * Equipment Methods *
 // *********************
 
-#define PROCESSEQUIPMENT_HIDECHARPARTS    1
-#define PROCESSEQUIPMENT_RENDEREQUIPPARTS 2
-
-// Finds the weapon in the character object and hides it
-void TCharAnimator::ProcessEquipment(int32_t task)
+// REVSYNC: TCharAnimator::Render @ 0x004d7a50 (0x004d7b0b..0x004d7b87) and
+// ProcessEquipment @ 0x004d7f20: its task 1 (hide), and the choice its
+// task 2 draws by.
+//
+// Render first shows every object of the character but its own "sword" and
+// "weapon". For a player, every equipped item whose imagery is a mesh
+// (header type 1), and every object of that imagery:
+//   - a '*' or '@' first in the name is dropped; '@' leaves the character's
+//     object showing under the item's;
+//   - the player's body type first in the name is dropped (_strnicmp), so
+//     "*normalchest" is "chest", and the other body types' objects
+//     ("*largechest") match nothing;
+//   - the prime hand draws outside bow mode, the ranged weapon only in it,
+//     both on the character's "weapon", else its "sword", else the object
+//     the name gives; any other slot on the object the name gives;
+//   - with no such character object, the item's object doesn't draw.
+// The item's object draws with that character object's matrix
+// (OBJ3D_MATRIX: its own keys and states play no part) and the
+// character's alpha. Retail's paperdoll draw (+0x1a4) also leaves the
+// ranged weapon out; the map never draws that way.
+void TCharAnimator::UpdateEquipment()
 {
+    T3DImagery* img = Get3DImagery();
+    for (int32_t c = 0; c < NumObjects(); c++)
+        if (S3DAnimObj* obj = GetObject(c))
+        {
+            const char* name = img->GetObjectName(obj->objnum);
+            if (!stricmp(name, "sword") || !stricmp(name, "weapon"))
+                obj->flags |= OBJ3D_HIDE;
+            else
+                obj->flags &= ~OBJ3D_HIDE;
+        }
+
+    equipment.clear();
     if (inst->ObjClass() != OBJCLASS_PLAYER)
         return;
 
-    S3DAnimObj equipobj;
-    memset(&equipobj, 0, sizeof(S3DAnimObj));
-
-    TPlayer* player = (TPlayer*)inst;
-
-    for (int32_t eq = 0; eq < NUM_EQ_SLOTS; eq++)
+    TPlayer* player = static_cast<TPlayer*>(inst);
+    const char* bodytype = player->BodyType();
+    const size_t bodylen = strlen(bodytype);
+    const bool bowmode = player->IsBowMode();
+    for (int32_t slot = 0; slot < NUM_EQ_SLOTS; slot++)
     {
-        TObjectInstance* oi = player->GetEquip(eq);
-        if (!oi)
+        TObjectInstance* item = player->GetEquip(slot);
+        if (!item || (slot == EQ_PRIMEHAND && bowmode) || (slot == EQ_RANGEDWEAPON && !bowmode))
             continue;
-            
-        if (oi->GetImagery()->GetHeader()->imageryid != OBJIMAGE_MESH3D)
+        TObjectImagery* imagery = item->GetImagery();
+        const SImageryHeader* header = imagery ? imagery->GetHeader() : nullptr;
+        if (!header || header->imageryid != OBJIMAGE_MESH3D)
             continue;
+        T3DImagery* mesh = static_cast<T3DImagery*>(imagery);
 
-        T3DImagery* equipimagery = (T3DImagery*)oi->GetImagery();
-        SImageryHeader* equipheader = equipimagery->GetHeader();
-
-      // Find equipment state for player's body type
-        int32_t nlen = 0;
-        int32_t st = 0;
-        for (; st < equipheader->numstates; st++)
+        for (int32_t o = 0; o < mesh->NumObjects(); o++)
         {
-          // Objects in this state are for all chars
-            if (!stricmp(equipheader->states[st].animname, "still") ||
-                !stricmp(equipheader->states[st].animname, "all"))
+            const char* name = mesh->GetObjectName(o);
+            bool replaces = true;
+            if (name[0] == '*' || name[0] == '@')
+                replaces = *name++ == '*';
+            if (!strnicmp(name, bodytype, bodylen))
+                name += bodylen;
+
+            int32_t bone = -1;
+            if (slot == EQ_PRIMEHAND || slot == EQ_RANGEDWEAPON)
             {
-                nlen = 0;
-                break;
+                bone = GetObjectNum("weapon");
+                if (bone < 0)
+                    bone = GetObjectNum("sword");
             }
-
-          // Has specific state for this body type
-            if (!stricmp(equipheader->states[st].animname, player->BodyType()))
-            {
-                nlen = strlen(player->BodyType());
-                break;
-            }
-        }
-
-      // No geometry for player's body type!  Exit (this should never happen!)
-        if (st >= equipheader->numstates)
-            continue;
-
-      // Go through equip objects, and processes for matching player objects    
-        for (int32_t o = 0; o < equipimagery->NumObjects(); o++)
-        {
-            if (equipimagery->IsHidden(o, st))
+            if (bone < 0)
+                bone = GetObjectNum(name);
+            if (bone < 0)
                 continue;
 
-            char *n = equipimagery->GetObjectName(o);
-
-            if (nlen > 0 && !strnicmp(n, player->BodyType(), nlen))
-                n += nlen;
-
-            int32_t playerobjnum;
-
-            if (eq == EQ_PRIMEHAND)     // If weapon slot
-            {   
-                if (((TCharacter*)inst)->IsBowMode())   // Not in combat mode.. don't replace
-                    playerobjnum = -1;
-                else
-                {
-                    playerobjnum = GetObjectNum("weapon");  // Find weapon or sword object to replace
-                    if (playerobjnum < 0)
-                        playerobjnum = GetObjectNum("sword");
-                    if (playerobjnum < 0)
-                        playerobjnum = GetObjectNum(n);     // All else fails, try object name
-                }
-            }
-            else if (eq == EQ_RANGEDWEAPON)     // If bow slot
-            {
-                if (!((TCharacter*)inst)->IsBowMode())  // Not in bow mode.. don't replace
-                    playerobjnum = -1;
-                else
-                {
-                    playerobjnum = GetObjectNum("weapon");  // Find weapon or sword object to replace
-                    if (playerobjnum < 0)
-                        playerobjnum = GetObjectNum("sword");
-                    if (playerobjnum < 0)
-                        playerobjnum = GetObjectNum(n); // All else fails, try object name
-                }
-            }
-            else    // Otherwise find the object name specified in the inventory object
-                playerobjnum = GetObjectNum(n);
-
-            if (playerobjnum < 0)
-                continue;
-
-            S3DAnimObj* playerobj = GetObject(playerobjnum);
-
-          // Do the actual thing now
-            if (task == PROCESSEQUIPMENT_HIDECHARPARTS)
-            {
-                playerobj->flags |= OBJ3D_HIDE;
-            }
-            else if (task == PROCESSEQUIPMENT_RENDEREQUIPPARTS)
-            {
-                equipobj.objnum = o;
-                equipobj.flags = OBJ3D_MATRIX;
-
-              // Copy the matrix for the weapon in the character, to the inventory item weapon!
-                memcpy(&(equipobj.matrix), &(playerobj->matrix), sizeof(hmm_mat4));
-
-              // Set transparency (if needed)
-                if (std::fabs(transparency - 1.0f) > 0.001f)
-                    SetMaterialTransparency(equipimagery);
-
-             // Render the inventory item weapon via it's own imagery object!!
-                equipimagery->RenderObject(&equipobj, 0, 0, &matrix, -1, false);
-
-              // Now reset transparency (if needed)
-                if (std::fabs(transparency - 1.0f) > 0.001f)
-                    ResetMaterialTransparency(equipimagery);
-            }
+            if (replaces)
+                GetObject(bone)->flags |= OBJ3D_HIDE;
+            equipment.push_back({TSafeRef<TObjectInstance>(item), o, bone});
         }
     }
 }
 
-void TCharAnimator::HideCharParts()
-{
-    ProcessEquipment(PROCESSEQUIPMENT_HIDECHARPARTS);
-}
-
+// REVSYNC: ProcessEquipment @ 0x004d7f20, task 2 -- the legacy draw: each
+// item object through its own imagery, state 0 frame 0, with the matrix of
+// the character object it rides.
 void TCharAnimator::RenderEquipment()
 {
-    ProcessEquipment(PROCESSEQUIPMENT_RENDEREQUIPPARTS);
+    const bool translucent = std::fabs(transparency - 1.0f) > 0.001f;
+    S3DAnimObj object;
+    for (const SEquipAttachment& attachment : equipment)
+    {
+        TObjectInstance* item = attachment.item.Get();
+        const S3DAnimObj* bone = GetObject(attachment.bone);
+        if (!item || !bone)
+            continue;
+        T3DImagery* mesh = static_cast<T3DImagery*>(item->GetImagery());
+
+        object.objnum = attachment.object;
+        object.flags = OBJ3D_MATRIX;
+        object.matrix = bone->matrix;
+
+        if (translucent)
+            SetMaterialTransparency(mesh);
+        mesh->RenderObject(&object, 0, 0, &matrix, -1, false);
+        if (translucent)
+            ResetMaterialTransparency(mesh);
+    }
 }
 
 // ************************
@@ -399,6 +356,9 @@ void TCharAnimator::InitTransparency()
 // animator (TCharacter::IsAnimatorPermanent), so the alpha is seeded again
 // on that frame instead. That's what lets `player.toggle invisible` +
 // `fadecharacterin player` fade Locke in from nothing.
+//
+// A drawn frame also settles which objects show and what the equipment
+// draws (UpdateEquipment), as Render does next in retail.
 void TCharAnimator::UpdateDrawState(double dt_seconds)
 {
     if (IsHidden())
@@ -410,9 +370,10 @@ void TCharAnimator::UpdateDrawState(double dt_seconds)
     {
         InitTransparency();
         reseed_transparency = false;
-        return;
     }
-    UpdateTransparency(dt_seconds);
+    else
+        UpdateTransparency(dt_seconds);
+    UpdateEquipment();
 }
 
 float TCharAnimator::DrawAlpha() const
