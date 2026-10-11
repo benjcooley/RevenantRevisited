@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-11)
 
-**155 / 176 effects have reviewed visual passes for their recorded test configuration; 21 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
+**156 / 176 effects have reviewed visual passes for their recorded test configuration; 20 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
 **YTelekinesis (2026-10-11):** four moving/rotating chunks match through actual owner completion across six fixed supported capture views; all 39,600 triangles covered and 24 root-repeated Metal frames identical. Corrected exact-ID mapping displays and restarts it in the gallery. Natural actor/spell/audio and raster overlap limits remain open. [Evidence and scope](forensics/YTELEKINESIS_ORIGINAL.md).
 
@@ -1117,3 +1117,5 @@ print(len(rows), len({name.casefold() for name, asset, type_id in rows}),
 ```
 
 Audited `class.def`: 233,484 bytes; SHA-256 `bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d`. The old extraction recipe's letter-only filter silently drops retail names containing digits (for example BendWater1, ogrokwatcher1). Use the quoted-field parser above and preserve type IDs.
+
+- [x] **Createfood** `0x838cffba` — declared lookup/failed-food context appearance pass. Glow, moving swirls, smoke and real kill80;21-phase review/85PNG integrated repeat/exact gallery pass. Natural lighting, successful FOOD insertion, actor/map/audio/device remain open. [Evidence](forensics/CREATEFOOD_LOADED_CONTEXT_20261011.md).

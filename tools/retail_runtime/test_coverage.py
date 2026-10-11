@@ -4,8 +4,9 @@ import argparse
 import json
 from pathlib import Path
 import time
+import tempfile
 import unittest
-from coverage import generate,canonical_id
+from coverage import generate,canonical_id,LEDGER,ROOT
 
 
 class CoverageTests(unittest.TestCase):
@@ -37,8 +38,16 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(row['gates']['full_acceptance']['status'],'open')
         self.assertFalse(row['gates']['runtime']['natural_context_verified'])
         self.assertEqual(row['gates']['visual_review']['status'],'pass_for_tested_configuration')
-        # Fog remains unreviewed; MistFog now has an explicit current Metal review.
-        fog=self.coverage['types']['0xc24b2a85']
+        # An independent appearance approval can change in the live ledger.
+        # Preserve frontend evidence but explicitly remove approval in a copy.
+        ledger=json.loads(LEDGER.read_text())
+        fog_row=next(r for r in ledger['retail_effects'] if r['retail_type_id']=='0xc24b2a85')
+        fog_row['acceptance']['visual_fidelity']=False
+        fog_row.pop('visual_review',None)
+        with tempfile.TemporaryDirectory(prefix='coverage-gate-',dir=ROOT/'recon/retail_asm/runtime') as temp:
+            path=Path(temp)/'ledger.json';path.write_text(json.dumps(ledger))
+            fog=generate(ledger_path=path)['types']['0xc24b2a85']
+        self.assertEqual(fog['gates']['pixel_frontend']['status'],'shared_original_raster_pass')
         self.assertEqual(fog['gates']['gpu']['status'],'not_checked')
         self.assertEqual(fog['gates']['full_acceptance']['status'],'open')
         self.assertEqual(fog['gates']['visual_review']['status'],'pending')

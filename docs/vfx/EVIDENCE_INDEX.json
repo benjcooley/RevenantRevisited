@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 163,
+    "retail_rows_with_source_fixes_recorded": 164,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 155,
+    "visual_fidelity_confirmed_rows": 156,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 155,
-    "remaining_visual_review_rows": 21
+    "reviewed_visual_pass_rows": 156,
+    "remaining_visual_review_rows": 20
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1911,6 +1911,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "ExactTeleporter nullspellportal/distinctfromIrisFlare; genuine cachedoriginalowner/oldbodyresources/customPulse+2c/baseAnimate/fullscene/raster. Five rotating/scaledcylinders, phase2\u21924 at25,symmetricreturn, fourdraws50, actualkill51/blank60; fresh60state/draw/bounds replay exact. Source249draws/3984matrices<=2.4324e-7/360lifecyclefields pass; batched3sec stops51 underASan. Eighteen original/actualMetal whole/detailphases reviewed,54imagehashes verified; root60samephasePNGs byteidentical/cleanexit andretained native/sourceunitPASS4.925s. Rootexactgallery59/60visible,5creations/realfiniterecreation/cleanexit. NamedTeleportgenuineactor/emptymapfailurekill21 isseparatecontrol, NOT successfulteleport/motion/actorfade. Edge/overlapbrightness,destinationprecision,naturalmap/actor/spellvariants/audio/device/exactpixels remainopen; nofittedgeometry/phase/color."
+    },
+    "recon/retail_asm/runtime/effects/current-createfood-context-20261011/root-approval.json": {
+      "sha256": "d48c608f59cd723581904fb2b6d27a99ff8d8d8685f5d32605279536c0acede9",
+      "retail_row": "Createfood:0x838cffba",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact Createfood quality3 150-slot controller and own two RGB565 meshes, genuine loaded original owner/Pulse/defaultAnimate/full render packets with selected native software raster. Declared white light0 multiplier28/ambient32 generated1024-word adjacent lookup context; failed FOOD60 service observes original clock0/epoch946598400/prefix0 intrinsic RNG reseed, no item insertion credit. Full85ticks:255000 pool fields and1024lookupwords exact,61168 matrix channels max3.428e-7, RNG counts/seeds exact. Twenty-one same-tick whole original/Metal pairs and six actual-size detail pages independently reviewed;63 paired image hashes and12 other pins verified. Integrated85PNG repeat byte-identical,79visible,cleanexit; native/source unitPASS15.554s,26 mapping tests and compiled gallery lifecycle pass. Actual mapped gallery100frames99visible/99distinct/two real finite creations/cleanexit. Smoother stronger low-intensity Metal haze, edge/RGB565 quantization retained. Natural lighting/spells/actors, food/map insertion, audio/device/exact pixels remain open; no fitted geometry/color or shared renderer changes."
     }
   }
 }

@@ -53,4 +53,4 @@ ordinary-projection diagnostic rendered at24Hz with stride4, not a reference fit
 
 Validation: build PASS; retained genuine full native/source regression PASS
 (14.1s), fresh85-tick state/full-draw replay exact; source preview-map21 tests PASS.
-Independent root visual approval and integrated gallery witness remain pending.
+Independent root approval now covers the declared isolated appearance: all21 whole phases and six actual-size detail pages inspected,75 pinned files verified. Integrated85PNGs byte-identical with clean exit; exact gallery100frames/99visible/99distinct/two finite creations/clean exit. Native/source regressionPASS15.554s,26 mapping tests and compiled lifecycle checksPASS. Root approval SHA256 d48c608f59cd723581904fb2b6d27a99ff8d8d8685f5d32605279536c0acede9. Natural lighting/food insertion and the stated residuals remain open.

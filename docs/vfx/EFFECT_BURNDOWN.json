@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "7f93016c081f007c0ab0b9a24e02c9e7b6c813e57fcf641d5c1ed99453878ba3",
+    "harness_sha256": "65b983ae9fbb92c67129f0deada2d5940212a56048877098733ad233636e8dd5",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 163,
+    "retail_rows_with_source_fixes_recorded": 164,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 155,
+    "visual_fidelity_confirmed_rows": 156,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 155,
-    "remaining_visual_review_rows": 21
+    "reviewed_visual_pass_rows": 156,
+    "remaining_visual_review_rows": 20
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -12136,30 +12136,44 @@
       "retail_name": "Createfood",
       "retail_type_id": "0x838cffba",
       "asset": "Magic\\Createfood.I3D",
-      "preview_candidates": [],
-      "source_fixes": [],
+      "preview_candidates": [
+        "Createfood_ORIGINAL_CONTEXT"
+      ],
+      "source_fixes": [
+        "2026-10-11: Exact150-slot original Createfood controller/two-mesh adapter, explicit generated lookup/failed FOOD index context, real kill80. Independent21-phase appearance review,85PNG integrated repeat and exact gallery pass. Natural lights/food insertion remain open."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve approved declared-context appearance; verify natural lighting/actors/spells, successful FOOD/map insertion, audio/device and retained sampling/quantization residuals.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole/detail review and integratedrepeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Exact Createfood quality3 150-slot controller and own two RGB565 meshes, genuine loaded original owner/Pulse/defaultAnimate/full render packets with selected native software raster. Declared white light0 multiplier28/ambient32 generated1024-word adjacent lookup context; failed FOOD60 service observes original clock0/epoch946598400/prefix0 intrinsic RNG reseed, no item insertion credit. Full85ticks:255000 pool fields and1024lookupwords exact,61168 matrix channels max3.428e-7, RNG counts/seeds exact. Twenty-one same-tick whole original/Metal pairs and six actual-size detail pages independently reviewed;63 paired image hashes and12 other pins verified. Integrated85PNG repeat byte-identical,79visible,cleanexit; native/source unitPASS15.554s,26 mapping tests and compiled gallery lifecycle pass. Actual mapped gallery100frames99visible/99distinct/two real finite creations/cleanexit. Smoother stronger low-intensity Metal haze, edge/RGB565 quantization retained. Natural lighting/spells/actors, food/map insertion, audio/device/exact pixels remain open; no fitted geometry/color or shared renderer changes.",
+        "report": "recon/retail_asm/runtime/effects/current-createfood-context-20261011/root-approval.json",
+        "sha256": "d48c608f59cd723581904fb2b6d27a99ff8d8d8685f5d32605279536c0acede9",
+        "note": "docs/vfx/forensics/CREATEFOOD_LOADED_CONTEXT_20261011.md"
+      }
     },
     {
       "index": 47,
