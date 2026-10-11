@@ -90,3 +90,15 @@ The Arrow registration uses its real IsAlive callback; gallery endpoint wiring
 is a separate integration. Build and all three native regression tests pass.
 Natural actors/bow/damage/audio, hardware device behavior, raster edges and
 exact framebuffer equality remain open.
+
+Root independently approved all19 ArrowEffect whole/detail phases after the
+fresh original replay and unchanged Queen control: growing moving gray trail,
+matching attachment deletion and real kill/blank tail agree in the declared
+native-domain condition. `arrow-attached-review-final/root-approval.json`
+pins source checkpointc5a70169, both films, panels, actual binary and witnesses.
+Approval SHA-256:
+`5e54c04e9e8ce980633379430dd106884da99f222bae5712b077803adf9e6f3a`.
+Captured binary SHA-256:
+`4f4307c7f75eb0ffbdfc0f5079849223ea2a02b66e11b9ce00eff926197a1240`.
+The three final runtime regressions pass in24.193s; the documented natural
+caller/device/raster limits are unchanged.
