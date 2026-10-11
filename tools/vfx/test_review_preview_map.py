@@ -6,7 +6,7 @@ from generate_review_preview_map import PARTIAL, admitted_candidates, candidate_
 class ReviewPreviewAdmission(unittest.TestCase):
     def test_placeholders_and_invalid_aliases_fail_closed(self):
         candidates = '''TBlastEffect_BESPOKE
-TFairyEffect_BESPOKE TTornadoEffect_BESPOKE TVortexEffect_BESPOKE
+TTornadoEffect_BESPOKE TVortexEffect_BESPOKE
 TPulpEffect_BESPOKE TDustEffect_BESPOKE TMagicShieldEffect_BESPOKE
 TLabyrinthEffect_BESPOKE TJhagaAttackEffect_BESPOKE TJTeleEffect_BESPOKE TCEyesEffect_BESPOKE
 TCataclysmEffect_BESPOKE TFunnelEffect_BESPOKE TMaelstromEffect_BESPOKE TNakrnothEffect_BESPOKE
@@ -24,7 +24,7 @@ TNewUnreviewedEffect_BESPOKE'''.split()
 
     def test_replacement_bodies_survive_stale_stub_banners(self):
         candidates = '''TBloodEffect_BESPOKE TSparksEffect_BESPOKE
-TFireConeEffect_BESPOKE TFireFlashEffect_BESPOKE TFireWindEffect_BESPOKE TMeteorStormEffect_BESPOKE
+TFireConeEffect_BESPOKE TFireFlashEffect_BESPOKE TFireWindEffect_BESPOKE TFairyEffect_BESPOKE TMeteorStormEffect_BESPOKE
 TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
         self.assertEqual(set(admitted_candidates({'preview_candidates': candidates})), set(candidates))
 

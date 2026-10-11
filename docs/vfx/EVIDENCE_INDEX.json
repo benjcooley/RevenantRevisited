@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 110,
+    "retail_rows_with_source_fixes_recorded": 111,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 88,
+    "visual_fidelity_confirmed_rows": 89,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 88,
-    "remaining_visual_review_rows": 88
+    "reviewed_visual_pass_rows": 89,
+    "remaining_visual_review_rows": 87
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1435,6 +1435,13 @@
       "check": "blast_authored_whole_visual",
       "status": "held_renderer_residual",
       "scope": "Authored rotating lobes align early; actual Metal displays correct oversized outer geometry rejected by original software at60/90. Complete animation/state/geometry proven; literal whole-frame appearance remains held."
+    },
+    "recon/retail_asm/runtime/effects/current-fairy-authored-20261010/root-approval.json": {
+      "sha256": "8c076a620de9218cdb9780efe9dc52c6f9c4f74f97281acdebecb763508ac9e3",
+      "retail_row": "Fairy:0xad92bd25",
+      "check": "fairy_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Ten original full software/common/native-domain actual Metal phases: moving authored sprite, colored dust, persistent trail and199\u21920 wrap. Scoped state0 loop; natural caller/end-state trigger/audio/device/exactpixels remain open."
     }
   }
 }

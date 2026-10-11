@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-10)
 
-**88 / 176 effects have reviewed visual passes for their recorded test configuration; 88 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
+**89 / 176 effects have reviewed visual passes for their recorded test configuration; 87 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
 Examples of passed appearance cases: CyanFont, RedFont, GreenFont, BlueFont, base Flame, Ripple emitted by Drip, Globe, Sparks editor defaults, isolated Cure, isolated Pixie, Shadowfist, Warriorborn, teleportation, goldeffect, Might, Immortalmight and blue TeleportDoorInsideB. The additional passes are all12 town signs, the other6 Warp colors, Speaker and both LabGate barriers. Their per-row visual reviews record the configuration and remaining limitations. Fresh Might/Immortalmight footage passes after the parser correction. Blue Warp retains an open seven-pixel apex/projection discrepancy despite its scoped overall appearance pass.
 
@@ -32,6 +32,8 @@ historical evidence; this migration alone grants no additional acceptance.
 **RGB565 correction (2026-10-10):** fspray now passes its twelve-sample original/Metal appearance review after exact software RGB5 modulation replaces normalized multiplication. Fresh films preserve the other eight affected scoped passes. The gallery also retains all62 previously verified types in a label-free centered draw audit; normal scroll-in lifetime controls are separate. [Source and measured scope](forensics/RGB565_PARTICLE_MODULATION.md).
 
 **Six further passes (2026-10-10):** Faultfire, Streamer, YEnergy, YEnergyLose, YAbsorb and nullifier pass actual native/Metal appearance for their declared configurations. Original cached-emitter sampling fixes nullifier's phase. FireSwarm late phases improve, but its early software rejection remains held for a device reference.
+
+**Fairy closed (2026-10-10):** the authored moving sprite and colored dust trail replace the placeholder. Ten original software and actual Metal phase pairs match, including the 200-frame wrap. Native scale jitter and unchanged default streams are verified. Natural caller and end-state triggers remain open. [Evidence](forensics/FAIRY_AUTHORED_RENDER_20261010.md).
 
 **Blast conversion (2026-10-10):** all 56 authored animated parts and three textures replace the placeholder card. Original keys and active matrices pass, with default decoding preserved. Appearance credit remains held for the original software renderer’s oversized-triangle rejection; the port keeps full geometry. [Evidence](forensics/BLAST_AUTHORED_RENDER_20261010.md).
 

@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "be6d67b37d6b75f17b0a9865ab75519a7e520f0e7a5ad4b9273bfef8a35a5fd6",
+    "harness_sha256": "5b5c3966d440a5844c587a4fbb96a89c3fbda2efabc2e69ff6793b7209a85ed1",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 110,
+    "retail_rows_with_source_fixes_recorded": 111,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 88,
+    "visual_fidelity_confirmed_rows": 89,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 88,
-    "remaining_visual_review_rows": 88
+    "reviewed_visual_pass_rows": 89,
+    "remaining_visual_review_rows": 87
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -18831,30 +18831,42 @@
       "preview_candidates": [
         "TFairyEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: original authored moving fairy/#dust controller replace bobbing tinted card. Native constant scljitter uses tenths and preserves old zero-jitter streams. Complete202-tick source/native state/RNG and actual Metal loop/wrap comparisons pass."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Later: port authored animated emitter path, partsys and blend controller; use actual retail reference. Advance static/simple effects first.",
+      "next_action": "Preserve approved authored loop and dust. Natural caller/end-state trigger/audio and broader device/context gates remain open.",
       "notes": [
         "2026-10-05 asset audit: complex animated emitter pose and partsys/blendcont tags. Existing guessed hover billboard cannot establish fidelity. Evidence: research/quick-fairy-20261005/fairy-asset.json."
       ],
       "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
-      "work_queue_status": "deferred_complex_controller"
+      "work_queue_status": "deferred_complex_controller",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Ten original full software/common/native-domain actual Metal phases: moving authored sprite, colored dust, persistent trail and199\u21920 wrap. Scoped state0 loop; natural caller/end-state trigger/audio/device/exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-fairy-authored-20261010/root-approval.json",
+        "sha256": "8c076a620de9218cdb9780efe9dc52c6f9c4f74f97281acdebecb763508ac9e3",
+        "note": "docs/vfx/forensics/FAIRY_AUTHORED_RENDER_20261010.md"
+      }
     },
     {
       "index": 130,
