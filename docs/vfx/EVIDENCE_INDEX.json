@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 149,
+    "visual_fidelity_confirmed_rows": 150,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 149,
-    "remaining_visual_review_rows": 27
+    "reviewed_visual_pass_rows": 150,
+    "remaining_visual_review_rows": 26
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1869,6 +1869,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Complete declared Drip20/128/1 no-splash composite atorigin0, publicperiod1000000 before121 drainslastchild. Genuine loaded originalparent plus originalclass-factory standaloneRipple children after unchanged\u22121map allocations; managed scheduler declared. ActualownerPulse once/baseAnimate40e460/fullparent+childraster,5births24/48/72/96/120 andkills45/69/93/117/141, true ambientparent retained. 1825statefields exact,900submittedgeometrychannels<=2.999e-6, indices/UVs exact; fresh144record native replay exact. Fourteen complete original/Metal phasepairs independently reviewed,42pairedimage hashes checked. Root36samephasePNGs byte-identical through141,24Hzupdates/render/cleanexit. Ordinary36image path unchanged privately; rootlinked4/recursive4/ASanpolicy1/19map/bridge plus4invalidroute controls pass. Rootgallerydefaultmapfactory(64,128,48) supportingliveness66/100visible/397ticks/cleanexit; it doesnot certify controlledpreview routing. Onepixel edges, lowintensitynativegreen-vsMetalgray/framebufferquantization, naturalsector residency, arbitraryrandomperiods, splashappearance/audio/globalRNG/device/exactpixels remainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-blood-spray-20261011/root-approval.json": {
+      "sha256": "5c7b353ffa6f3e75cb32b34ad805d66cfdcb3dd8bc059cd47813ebae45706396",
+      "retail_row": "Blood:0xddc4042e",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Complete declared Blood publicspray40/224/3/5/5/1, detail4, explicitcommonInitseed2; genuine originalAcolyte/publicSetParams/typedowner/animator andownMisc/Blood.I3D68716bytebody. Full90native lifecycle/selectedwhole rasters, fly\u2192splat\u2192shrink/kill60/blank90; source32760definedfields exact,11104localmatrixchannels<5e-8,2776prelitcolors/91RNGvalues exact,4positive/2156profile negatives and5552vertex/1388drawchecks pass. Twelve original/actualMetal whole/detailphases independentlyreviewed,24pairedimagehashes verified; root90samephasePNGs byte-identical/cleanexit withthreefocusedtests PASS. Two interleavedRGBA4444 alpha-over/RGB565 ONEONE passes retainall8authoredquads. Genericoriginalmap/worldPulse explicitlyisolated andoriginalmapinsertion\u22121 retained; sourcefixturefixedseed2 isnot a livegallery/globalRNG proof. Onepixelbounds/sampling andtick58nativeblank/Metal1pixel remainopen; naturalcombat/map/damage/caster, alternatelights, audio/device/exactpixels andactualnewgalleryroute remainopen."
     }
   }
 }

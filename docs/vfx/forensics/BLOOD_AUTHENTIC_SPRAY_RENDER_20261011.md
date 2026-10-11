@@ -32,3 +32,17 @@ python tools/retail_runtime/port_capture.py --scenario /Users/benjamincooley/Rev
 ```
 
 Source/evidence checkpoint freeze SHA `f0d9153d4ee5cd04215d7214984ac4f1c8d71ead5481716b5bda64efeea78f8b`; actual capture binary `65b3ddbd6b7ceb840df417e950290716cd4dd10d08e4d56340c60eb327866028`.
+
+Root independently inspected all12 phases in whole frames and fixed nearest
+detail crops and verified24 paired image hashes. The integrated binary repeats
+all90 numbered PNGs byte-identically with clean exit0; its three focused native
+tests pass in65.417seconds. Fixed public-spray appearance receives a scoped
+pass with the recorded0–1px/nearzero58 residual. A live gallery/global-RNG route
+is a separate pending follow-up; the fixed Init seed2 fixture does not prove it.
+
+Approval:
+`recon/retail_asm/runtime/effects/current-blood-spray-20261011/root-approval.json`,
+SHA256 `5c7b353ffa6f3e75cb32b34ad805d66cfdcb3dd8bc059cd47813ebae45706396`.
+Root capture: `/Users/benjamincooley/RevenantRetailLab/research/vfx-blood-root-20261011/film/manifest.json`.
+The reviewed count advances to150/176;26 remain. Natural gameplay, alternate
+lighting, audio/device and exact-pixel gates stay open.

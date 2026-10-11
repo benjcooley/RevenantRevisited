@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-11)
 
-**149 / 176 effects have reviewed visual passes for their recorded test configuration; 27 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
+**150 / 176 effects have reviewed visual passes for their recorded test configuration; 26 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
 **YTelekinesis (2026-10-11):** four moving/rotating chunks match through actual owner completion across six fixed supported capture views; all 39,600 triangles covered and 24 root-repeated Metal frames identical. Corrected exact-ID mapping displays and restarts it in the gallery. Natural actor/spell/audio and raster overlap limits remain open. [Evidence and scope](forensics/YTELEKINESIS_ORIGINAL.md).
 
@@ -909,7 +909,7 @@ Preview associations remain candidates. Batch groups partition all 176 retail ty
 
 ## Batch 2 — Close early parity and map/combat regressions (8 retail rows)
 
-- [ ] **Blood** `0xddc4042e` — `Misc\Blood.I3D`. Candidates: `TBloodEffect`, `TBloodEffect_BESPOKE`, `TBloodAnimator_SHIM`. Progress: archive-path collision corrected; no usable native/caller acceptance yet. Next: plain ADDAT is deferred because six snapshot parameters are uninitialized and actual retail defaults are unproven. Require a real parameterized caller or source-proven initialization; do not guess a safe editor recipe.
+- [x] **Blood** `0xddc4042e` — fixedpublicspray appearance pass. Originalfly/splat/shrink, all8authoredquads/twointerleavedpasses,12phase review/90PNG integrated repeat pass. Nearzero58onepixel, livegallery/RNG, naturalcombat/map/lighting/audio/device remain open. [Evidence](forensics/BLOOD_AUTHENTIC_SPRAY_RENDER_20261011.md).
 - [x] **Flame** `0x50ba373b` — `Magic\Flame.I3D`. Candidates: `TFlameEffect`, `TFlameEffect_BESPOKE`, `TFlameAnimator_SHIM`. Progress: Current authored-quad preview isolated appearance passes own retail reference; exact-type create/move/delete and animation pass. Next: natural shipped setting and precise cadence; colored same-name IDs remain separate.
 - [x] **Flame** `0x50ba373c` — configured appearance pass. Exact typed blue Flame owner and strict resource guard replace imagery-only preview. Existing retailARGB4444/point-sampling flags recover native atlas/extent;37UV phases and normalmap runtime verified. Next: Preserve approved blue atlas loop; verify other lighting/scenes, movement/delete and native device/exactpixels.
 - [x] **Flame** `0x50ba373d` — configured appearance pass. Exact typed green Flame owner and strict resource guard replace imagery-only preview. Existing retailARGB4444/point-sampling flags recover native atlas/extent;37UV phases and normalmap runtime verified. Next: Preserve approved green atlas loop; verify other lighting/scenes, movement/delete and native device/exactpixels.

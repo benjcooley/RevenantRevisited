@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 149,
+    "visual_fidelity_confirmed_rows": 150,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 149,
-    "remaining_visual_review_rows": 27
+    "reviewed_visual_pass_rows": 150,
+    "remaining_visual_review_rows": 26
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -6730,12 +6730,14 @@
       "retail_type_id": "0xddc4042e",
       "asset": "Misc\\Blood.I3D",
       "preview_candidates": [
+        "Blood_AUTHORED",
         "TBloodEffect",
         "TBloodEffect_BESPOKE",
         "TBloodAnimator_SHIM"
       ],
       "source_fixes": [
-        "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested Misc\\Blood.I3D is distinguished from Imagery/Magic/blood.i3d."
+        "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested Misc\\Blood.I3D is distinguished from Imagery/Magic/blood.i3d.",
+        "2026-10-11: Original publicspray fixedInitseed2/detail4,30slot fly/splat/shrink controller, delayedrenderedslots andtwointerleavedauthoredpasses; fullbody admission/state/matrix/color/RNG and12phase appearance pass. Integrated90PNG repeat exact; newlivegallery/globalRNG path remainsseparate."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -6743,25 +6745,35 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Defer plain editor ADDAT: six snapshot parameters are uninitialized and actual retail defaults are not established. Recover a real parameterized caller or explicit proven parameters before another capture; no unsafe guessed initialization.",
+      "next_action": "Preserve approved fixedpublicspray appearance; integrate livegallery/RNG route and verify naturalcombat/map/caster/alternatelights/audio/device.",
       "notes": [
         "VFS collision corrected. Earlier port evidence must be checked against the requested asset before certifying visual fidelity; old bytes differ.",
         "Plain ADDAT is deferred because six uninitialized snapshot parameters and unproven retail defaults make it an unsafe reference recipe. Current proxy/source asset-collision work is not a proven natural blood caller."
       ],
       "batch": "2 \u2014 Close early parity and map/combat regressions",
       "requires_post_vfs_fix_recheck": true,
-      "work_queue_status": "deferred_requires_parameterized_caller"
+      "work_queue_status": "deferred_requires_parameterized_caller",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent twelvephase whole/detail review and integrated90frame repeat",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Complete declared Blood publicspray40/224/3/5/5/1, detail4, explicitcommonInitseed2; genuine originalAcolyte/publicSetParams/typedowner/animator andownMisc/Blood.I3D68716bytebody. Full90native lifecycle/selectedwhole rasters, fly\u2192splat\u2192shrink/kill60/blank90; source32760definedfields exact,11104localmatrixchannels<5e-8,2776prelitcolors/91RNGvalues exact,4positive/2156profile negatives and5552vertex/1388drawchecks pass. Twelve original/actualMetal whole/detailphases independentlyreviewed,24pairedimagehashes verified; root90samephasePNGs byte-identical/cleanexit withthreefocusedtests PASS. Two interleavedRGBA4444 alpha-over/RGB565 ONEONE passes retainall8authoredquads. Genericoriginalmap/worldPulse explicitlyisolated andoriginalmapinsertion\u22121 retained; sourcefixturefixedseed2 isnot a livegallery/globalRNG proof. Onepixelbounds/sampling andtick58nativeblank/Metal1pixel remainopen; naturalcombat/map/damage/caster, alternatelights, audio/device/exactpixels andactualnewgalleryroute remainopen.",
+        "report": "recon/retail_asm/runtime/effects/current-blood-spray-20261011/root-approval.json",
+        "sha256": "5c7b353ffa6f3e75cb32b34ad805d66cfdcb3dd8bc059cd47813ebae45706396",
+        "note": "docs/vfx/forensics/BLOOD_AUTHENTIC_SPRAY_RENDER_20261011.md"
+      }
     },
     {
       "index": 3,
