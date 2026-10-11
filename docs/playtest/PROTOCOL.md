@@ -208,7 +208,10 @@ a NUL byte, the file's bytes and a NUL byte.
   and the skill of the weapon in hand); `weapon.mask` is char.def's weapon
   mask bit for the weapon in hand (`WM_*`), `0` bare-handed.
 - `quick_spells`, `belt`: what the four quick-spell slots (F1-F4) and the
-  five belt slots (F5-F9) hold, by name, `null` when empty.
+  five belt slots (F5-F9) hold, `null` when empty: a spell by its spell.def
+  VARIANT name, an item by its name.
+- Names are the game's own (instance, type, spell variant names: what the
+  .def files and scripts use), never display text.
 - `pack`: the player's items in the inventory pane's twelve cells in view:
   slot, name, class (lower case), `eqslot` (the item's own equipment slot,
   its EqSlot stat; -1 for none) and the cell's screen centre (`null` while

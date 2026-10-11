@@ -32,7 +32,10 @@ CLICKWALK_BUILDS = REPO / 'recon' / 'retail_asm' / 'variants' / 'clickwalk' / 'b
 
 def clickwalk_build() -> Path:
     """The retail build sessions play: the `clickwalk` named build
-    (docs/playtest/CLICKWALK.md), the newest one built."""
+    (docs/playtest/CLICKWALK.md), the newest one built; $PLAYTEST_RETAIL_BUILD
+    names another build.json (a worktree without a build of its own)."""
+    if os.environ.get('PLAYTEST_RETAIL_BUILD'):
+        return Path(os.environ['PLAYTEST_RETAIL_BUILD'])
     builds = sorted(CLICKWALK_BUILDS.glob('clickwalk-*/build.json'), key=lambda p: p.stat().st_mtime)
     if not builds:
         raise FileNotFoundError(f'no clickwalk build in {CLICKWALK_BUILDS}: '

@@ -88,13 +88,13 @@ void Action(JsonOut& out, const TCharacter& c)
     out.Field("action_tick", (std::max)(0, PlayScreen.GameFrame() - c.DoingSince()));
 }
 
-// A quick spell slot's spell, as the spell ring names it (spellpane.cpp).
+// A quick spell slot's spell, by its spell.def name.
 void QuickSpell(JsonOut& out, TPlayer& p, int32_t slot)
 {
     const char* tal = p.GetQuickSpell(slot);
     const SSpellVariant* v = (tal && *tal) ? SpellList.GetVariantDataByTalismans(tal) : nullptr;
     if (v)
-        out.String(ToUtf8(DialogList.DisplayName(v->name).c_str()));
+        out.String(ToUtf8(v->name));
     else
         out.Null();
 }
@@ -117,7 +117,7 @@ void WritePack(JsonOut& out, TPlayer& p)
                 continue;
             out.Begin('{');
             out.Field("slot", slot);
-            out.FieldString("name", ToUtf8(DialogList.DisplayName(item->GetName()).c_str()));
+            out.FieldString("name", ToUtf8(item->GetName()));
             out.FieldString("class", Lower(item->GetClassName()));
             out.Field("eqslot", item->FindStat("EqSlot") < 0 ? -1 : item->GetStat("EqSlot"));
             out.Key("screen");
@@ -137,7 +137,7 @@ void WriteEquipped(JsonOut& out, TPlayer& p)
     out.Key("equipped").Begin('{');
     for (int32_t slot = 0; slot < NUM_EQ_SLOTS; ++slot)
         if (TObjectInstance* item = p.GetInventorySlot(kInvSlotEquipFirst + slot))
-            out.FieldString(std::to_string(slot).c_str(), ToUtf8(DialogList.DisplayName(item->GetName()).c_str()));
+            out.FieldString(std::to_string(slot).c_str(), ToUtf8(item->GetName()));
     out.End('}');
 }
 
@@ -172,7 +172,7 @@ void WritePlayer(JsonOut& out, TPlayer& p)
     out.Key("weapon").Begin('{');
     out.Key("name");
     if (weapon)
-        out.String(ToUtf8(DialogList.DisplayName(weapon->GetName()).c_str()));
+        out.String(ToUtf8(weapon->GetName()));
     else
         out.Null();
     out.Field("mask", weapon ? (1 << p.WeaponType()) : 0);

@@ -113,8 +113,9 @@ VT_INVENTORY_AMOUNT = 0x84        # GetInventoryAmount(name) 0x0046fde0, nested 
 GOLD = 0x005e41a0                 # "Gold", the string the inventory pane asks with (0x00537b3b)
 QUICK_SPELLS = 0x2cc              # TPlayer: char[6] talisman codes, slot 0 the cursor, 1-4 the buttons
 SPELL_LIST = 0x00667c38           # TSpellList: +4 pointer array of SSpellData (count +0, data +0x10)
-SPELL_NAME, SPELL_VARIANTS = 0x1c, 0x00   # SSpellData: char[32] name, variants pointer array
-VARIANT_TALISMANS = 0x24          # SSpellVariant: char[6] (slots/combat/spell_guest.py)
+SPELL_VARIANTS = 0x00              # SSpellData: the variants pointer array
+VARIANT_NAME, VARIANT_TALISMANS = 0x04, 0x24   # SSpellVariant: char[32] spell.def VARIANT name, char[6]
+                                               # (src/spell.h; slots/combat/spell_guest.py)
 CLASS_NAMES = ['item', 'weapon', 'armor', 'talisman', 'food', 'container', 'lightsource', 'tool',
                'money', 'tile', 'exit', 'player', 'character', 'trap', 'shadow', 'helper', 'key',
                'invcontainer', 'potion', None, None, 'ammo', 'scroll', 'rangedweapon', None,
@@ -532,9 +533,11 @@ class Observer:
         return False
 
     def quick_spells(self, player):
-        """The spell each quick slot 1-4 casts: its talisman code matched
-        exactly (stricmp) against the spell list's variants, first in file
-        order, as retail casts by talismans (SPELLS_MISSILES.md §5.1)."""
+        """The spell variant each quick slot 1-4 casts, by its spell.def
+        VARIANT name: its talisman code matched exactly (stricmp) against
+        the spell list's variants, first in file order, as retail casts by
+        talismans (SPELLS_MISSILES.md §5.1, GetVariantDataByTalismans
+        0x0053ef90)."""
         m = self.m
         spells = m.pointers(m.u32(SPELL_LIST + 4 + 0x10), m.i32(SPELL_LIST + 4))
         names = {}
@@ -542,7 +545,7 @@ class Observer:
             variants = m.pointers(m.u32(spell + SPELL_VARIANTS + 0x10), m.i32(spell + SPELL_VARIANTS))
             for variant in variants:
                 code = (m.text(variant + VARIANT_TALISMANS, 6) or '').lower()
-                names.setdefault(code, m.text(spell + SPELL_NAME, 32))
+                names.setdefault(code, m.text(variant + VARIANT_NAME, 32))
         slots = []
         for slot in range(1, 5):
             code = m.text(player + QUICK_SPELLS + 6 * slot, 6)
