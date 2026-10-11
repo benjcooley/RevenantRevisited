@@ -58,7 +58,7 @@ PARTIAL = {
     '0xc24b2a85': ('TFogEffect_BESPOKE', 'authored animated grid; original post-blend RGB565 quantization incomplete'),
     '0x00ab1d1d': ('TAuraEffect_BESPOKE', 'billboard preview; original character bones and attachment missing'),
     '0x0ea34fa3': ('TBlastEffect_BESPOKE', 'authored 56-part animation; original oversized-triangle clipping differs'),
-    '0xad92bd25': ('TFairyEffect_BESPOKE', 'placeholder bobbing and tinted asset billboard'),
+    '0xad92bd25': ('TFairyEffect_BESPOKE', 'authored moving fairy and dust; scoped looping fixture, natural caller unverified'),
     '0xad92bd20': ('TLabyrinthEffect_BESPOKE', 'single asset billboard; original controller incomplete'),
     '0xaeaeeb32': ('TJhagaAttackEffect_BESPOKE', 'stationary asset billboard; endpoint motion and original controller incomplete'),
     '0x0c05263b': ('TJTeleEffect_BESPOKE', 'single asset billboard; original teleport controller incomplete'),

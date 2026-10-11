@@ -84,7 +84,7 @@
 {0xad92bd23u, "TKinSecretDoor_AUTHORED_STILL", false, "Implemented preview controller; map caller not certified"}, // KinSecretDoor
 {0xad92bd23u, "TKinSecretDoor_NATIVE_STILL", false, "Implemented preview controller; map caller not certified"}, // KinSecretDoor
 {0xad92bd24u, "TGlobeEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Globe
-{0xad92bd25u, "TFairyEffect_BESPOKE", true, "Partial preview: placeholder bobbing and tinted asset billboard; not complete original implementation"}, // Fairy
+{0xad92bd25u, "TFairyEffect_BESPOKE", true, "Partial preview: authored moving fairy and dust; scoped looping fixture, natural caller unverified; not complete original implementation"}, // Fairy
 {0xad92bd29u, "TCombatFlashEffect_AUTHORED_START1", false, "Implemented preview controller; map caller not certified"}, // combatflash
 {0xad92bd33u, "TBuffEffect_Bespoke__Stoneskin_BESPOKE", true, "Partial preview: tinted asset billboard; original buff controller incomplete; not complete original implementation"}, // stoneskin
 {0xad92bd35u, "TQuicksilver_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // quicksilver

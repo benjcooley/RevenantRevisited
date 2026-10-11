@@ -16,9 +16,9 @@ from software_probe import save_rgb565_png
 from firecone_owner_probe import native_owner
 
 class NativeScrollScene(NativeParticleScene):
- def __init__(self,exe,data,name,width=640,height=340):
+ def __init__(self,exe,data,name,width=640,height=340,particle_required=False):
   self.data=data;a=read_asset(data);a['name']=name
-  NativeSpeed.__init__(self,exe,a,width,height,software_factory=LitSoftwareFixture,particle_required=False)
+  NativeSpeed.__init__(self,exe,a,width,height,software_factory=LitSoftwareFixture,particle_required=particle_required)
   self.software.lighting((38,38,38),(1,1,1));v=self.vm
   for addr,value in ((0x5d7a28,1),(0x66818c,0),(0x5e91c0,0),(0x5e8740,0),(0x5c61ac,1),(0x5e8790,0),(0x5c619c,1),(0x5e8850,1)):v.put_u32(addr,value)
   method=v.allocate(16);v.write_code(method,b'\xb8'+struct.pack('<I',self.animator)+b'\xc3');vt=v.allocate(0x100);v.put_u32(vt+0x24,method);v.put_u32(self.owner,vt)

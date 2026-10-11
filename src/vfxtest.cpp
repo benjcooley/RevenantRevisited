@@ -40,6 +40,7 @@
 #include "effects/scrollwaterpreview.h"
 #include "effects/genericstaticpreview.h"
 #include "effects/blastpreview.h"
+#include "effects/fairypreview.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -6724,9 +6725,11 @@ struct SVfxTestBootstrap {
             e.family        = "ambient";
             e.pipeline      = "FB";
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
-            e.factory       = [](const S3DPoint& o) -> void* { return FairyBespokeSpawn(o); };
-            e.submit        = [](void* c, EFxDebugMode d) { FairyBespokeSubmit(c, d); };
-            e.destroy       = [](void* c) { FairyBespokeDestroy(c); };
+            e.factory       = [](const S3DPoint& o) -> void* { return fairy_preview::Spawn(o); };
+            e.submit        = [](void* c, EFxDebugMode) { fairy_preview::Advance(static_cast<fairy_preview::State*>(c),TTime::DeltaTime()); };
+            e.submit_world  = [](void* c, EFxDebugMode) { fairy_preview::SubmitWorld(static_cast<fairy_preview::State*>(c)); };
+            e.is_alive      = [](void* c) { return fairy_preview::Alive(static_cast<fairy_preview::State*>(c)); };
+            e.destroy       = [](void* c) { fairy_preview::Destroy(static_cast<fairy_preview::State*>(c)); };
             VfxTest::DeferredRegister(e);
         }
         {
