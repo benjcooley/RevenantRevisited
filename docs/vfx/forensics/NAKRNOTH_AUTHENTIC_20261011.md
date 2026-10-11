@@ -95,3 +95,22 @@ review output uses `nakrnoth-review-single-light`. The original 790-tick pool,
 1280×960 main native film, terrain proof, source comparison and all actual Metal
 films remain unchanged. Only the corrected independent-review pins can be
 considered for appearance acceptance.
+
+The corrected six-window runs are complete: each advances all 701 original
+simulation/render ticks, records exactly 601/621/641/661/681/701, and preserves
+all baseline owner/RNG checkpoints and same-tick controller pools. Outer-view
+manifest SHA256 is
+`4bd87f5cd73502c9c02c280724d7221b5813c271cc8c51da22cd1e49d6c73772`;
+middle-view manifest SHA256 is
+`94ee8790395c2f872a7221aaa6dd69f64b64b5e5557632b26eb7677cf1951645`.
+The repeated primitive-span negative control retains 799 observations/two
+rejects under original bounds versus 800/zero with widened bounds.
+
+Corrected review manifest SHA256 is
+`37930305bed44e9df2513b6290bbd832ea7e12a0e8191a757d828b869e617bed`.
+It pins all forty unchanged main pairs, 36 corrected native/unchanged Metal raw
+window pairs, the six coverage unions, source/terrain/lighting proofs, and the
+rejected duplicate-light review manifest. Lane inspection finds the artificial
+ring brightness discrepancy resolved; sampling, RGB565 accumulation, raw-window
+overlap and exact framebuffer differences remain. Independent approval and
+integrated-gallery validation belong to the root reviewer.
