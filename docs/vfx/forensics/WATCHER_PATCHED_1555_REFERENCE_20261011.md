@@ -77,3 +77,9 @@ The local build, proof and reference folders are respectively
 `watcher-patched-build-v2`, `watcher-patch-proof-qualified-ztest`, and
 `watcher-patched-reference-v2` / `watcher-patched-reference-repeat` under
 `/Users/benjamincooley/RevenantRetailLab/research/vfx-wide-20261010/hard-alpha`.
+
+## Root independent qualified approval
+
+Exact three installed ogrokwatcher1/2/3 assets, genuine owner/controller and eight24Hz frames each covering four authored poses. Explicit modified original PE e3e5fa7ef5841e70dc6855e492595ca47cda03cc414a832eb4c1c6be697f76fa repairs exact1555 decode at two observed54ff60 depth-tested scan halves; unchanged resident texture bytes/fullRGB5, geometry/UV/scan conversion/blend arithmetic. Independent524288 assembledx86 channel assertions, fiveformat negatives, eightactualraster binaryalpha literals pass; original4444/565color/depth unchanged. Fresh original24frames repeat exactly; currentroot24sourceframes repeat frozen correctport exactly, all6rootwhole/detail panels byte-identical,66pins verified and independentlyinspected. Source correct1555decoder/nativeowner projection unchanged. Approx1–2pixel sampling/edge/filter/precision residuals retained; no phase/color/geometry fit. Qualified modified-renderer appearance only, device_identical=false; unmodifiedrainbow/alpha8 controls retained as rejectedreferences. Startupcache replay before mappedpatch, no fullgamepatched boot claim; natural map/ownerPulse, other primitive/blendbranches, fullanimation variants and exactpixels remainopen.
+
+Report: `recon/retail_asm/runtime/effects/current-watchers-qualified-20261011/root-approval.json`. The ledger records170/176 scoped passes, including these3 explicitly modified-reference passes. Full/natural and unchanged-device acceptance remain open.
