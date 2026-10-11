@@ -23,6 +23,14 @@ Start (WinMain from 0x00486e7f):
   so the play slot posts it before the first frame. The WndProc stores
   wParam in 0x006582c8; TimerLoop pumps in a busy loop while it is 0
   (0x00491252) and the mouse handlers ignore clicks.
+- A slot start also needs the save manager's slot list (0x0065a618).
+  Retail fills it only in 0x0048d260 (the Load / Save panes, QuickSave
+  and the console's loadgame call it), never in game init, and
+  TPlayScreen::Initialize's start mode 1 looks the name up in it without
+  a rescan (0x0047aedb): so retail's own QUICKSTART="name" from a cold
+  start finds no slot and starts a new game ("Unable to load saved
+  game..."). The host calls 0x0048d260(0) once before WinMain continues,
+  as the title's Load Game screen does before it loads.
 - Seed: retail seeds the CRT's per-thread rand (0x0058c582) once, srand
   (0x0058c575) of time() in WinMain 0x0048662d; the boot's virtual clock
   makes that seed fixed. `start(seed=N)` calls retail's srand(N) on the
@@ -96,6 +104,7 @@ TICK_EVENT = 0x006687f0                     # TTimer's tick event handle
 CLOCK_TICKS = 0x006687ec                    # TTimer clockticks
 WM_ACTIVATEAPP = 0x1c
 RAND, SRAND = 0x0058c582, 0x0058c575
+SAVE_MANAGER, SCAN_SLOTS = 0x0065a618, 0x0048d260   # thiscall (multiplayer = 0): rebuild the slot list
 TEXTBAR_LINE = 0x0054d0e3                   # TTextBar::AddLine past its empty-line test; EBP = text
 SAY = 0x004d0610                            # TCharacter::Say(text, frames, anim, sound), thiscall
 DIALOG_ENTRY = 0x00533f10                   # TDialogEntry ctor(pane, chr, mode, ..., count, texts, labels, duration)
@@ -247,6 +256,8 @@ class PlayWorld:
         vm.write(QUICKSTART_NAME, name + b'\0')
         line = BOOT_COMMAND_LINE + (f' QUICKSTART="{slot}"' if slot else ' QUICKSTART')
         vm.write(COMMAND_COPY, line.encode('cp1252') + b'\0')
+        if slot:
+            self._main_thread_call(SCAN_SLOTS, (0,), this=SAVE_MANAGER)
         if seed is not None:
             self._main_thread_call(SRAND, (seed & 0xffffffff,))
         vm.post_message(self.hwnd, WM_ACTIVATEAPP, 1, 0, *self.input.cursor)
@@ -258,7 +269,7 @@ class PlayWorld:
         self.draws = 0                         # draws count from play's tick 0
         self.start_info = dict(slot=slot, seed=seed, command_line=line)
 
-    def _main_thread_call(self, address, args):
+    def _main_thread_call(self, address, args, this=None):
         """Call a retail function on the main thread while WinMain is
         stopped (before start), keeping WinMain's context."""
         vm = self.vm
@@ -266,7 +277,7 @@ class PlayWorld:
         if main.state != 'stopped':
             raise RuntimeError('The main thread is not stopped')
         context = vm.uc.context_save()
-        vm.call(address, args)
+        vm.call(address, args, this=this, instruction_limit=100_000_000)
         vm.uc.context_restore(context)
         main.context, main.state = context, 'stopped'
 

@@ -213,9 +213,15 @@ conversions.
 (`slots/hud`: `system.py`, `winfs.py`, `profile.py`, `window.py`,
 `ddraw.py`, `gdi.py`). That machine already boots the shipped game by its
 own code through game init in about 95 s, and caches the result as a disk
-image (`hudworld.py`, `image.py`). The play slot continues from there:
+image (`hudworld.py`, `image.py`). The play slot boots it with the
+install's Revenant.ini set to `Software3D = Yes`, retail's own software
+renderer: on the HUD slot's hybrid machine retail's internal rasterizer
+draws the map's ARGB1555 background with its ARGB4444 span and the floor
+is noise (slots/play/README.md). The play slot continues from there:
 
-1. **Command line** `NOSOUND QUICKSTART[=<slot>]`: retail skips the intro
+1. **Command line** `NOSOUND QUICKSTART[=<slot>]`, as the values retail
+   parsed before game init (GetParameters runs first; nothing reads them
+   until after it), so one boot image serves every start: retail skips the intro
    movie and the title and starts a new game or loads the slot, so
    neither Smacker nor Miles playback is reached. In-game movies
    (`playmovie`) are answered as finished at a recorded boundary.
@@ -228,8 +234,9 @@ image (`hudworld.py`, `image.py`). The play slot continues from there:
 3. **Input.** A host-owned keyboard state answers `GetKeyboardState`; key,
    character, move and button messages are posted to the game window at
    the tick boundary; the virtual cursor answers `GetCursorPos`.
-   `TranslateMessage` gains its character translation. DirectInput stays
-   absent, as in the HUD slot. Which path retail reads for each control is
+   `TranslateMessage` translates nothing: recordings carry characters as
+   their own events (PROTOCOL.md §2), so it would type each letter twice.
+   DirectInput stays absent, as in the HUD slot. Which path retail reads for each control is
    settled by tracing, not assumed.
 4. **Files.** The install stays read-only. A write overlay holds `Save\`,
    `CurMap\` and INI writes, and `export_slot` copies a slot out.

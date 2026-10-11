@@ -142,10 +142,18 @@ class SaveOverlay:
     # ---- slots ---------------------------------------------------------
 
     def slot_files(self, name):
-        """{relative path: bytes} of Save\\Single\\<name> (case-folded)."""
-        prefix = f'{SINGLE}/{name.lower()}/'
-        return {key[len(prefix):]: bytes(data) for key, data in self.vm.files.items()
-                if key.startswith(prefix)}
+        """{relative path: bytes} of Save\\Single\\<name>, each component
+        in the case the game created it with (winfs `names`)."""
+        prefix = f'{SINGLE}/{name.lower()}'
+        files = {}
+        for key, data in self.vm.files.items():
+            if key.startswith(prefix + '/'):
+                parts, cursor = [], prefix
+                for part in key[len(prefix) + 1:].split('/'):
+                    cursor += '/' + part
+                    parts.append(self.fs.names.get(cursor, part))
+                files['/'.join(parts)] = bytes(data)
+        return files
 
     def slot_name(self, name):
         """The slot's name as the game created it (winfs keeps the case of

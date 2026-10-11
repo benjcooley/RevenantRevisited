@@ -52,7 +52,15 @@ recording made on the other one.
   boot's srand(time()) at `0x0048662d` saw the virtual clock, so without
   it the seed would be a constant too.
 - **Slot start.** The bundle's `start/<slot>` is copied into
-  `Save\Single\<slot>` (`overlay.place_slot`) before WinMain continues.
+  `Save\Single\<slot>` (`overlay.place_slot`) before WinMain continues,
+  and the host calls retail's slot scan `0x0048d260(0)` on the save
+  manager `0x0065a618`. Retail fills that list only there (Load / Save
+  panes, QuickSave, the console's loadgame), never in game init, and
+  TPlayScreen::Initialize's start mode 1 looks the name up without a
+  rescan (`0x0047aedb`): retail's own `QUICKSTART="name"` from a cold
+  start finds nothing and starts a new game ("Unable to load saved
+  game... starting new game", seen here before the scan was added). The
+  scan is what the title's Load Game screen does before it loads.
 - `start` returns at the play screen's first tick wait: the module and
   the game are loaded inside TPlayScreen::Initialize. A new game's opening
   then plays under `step`, control off.

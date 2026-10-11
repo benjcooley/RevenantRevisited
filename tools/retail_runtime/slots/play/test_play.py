@@ -16,7 +16,7 @@ sys.path.insert(0, str(HERE.parent / 'hud'))
 sys.path.insert(0, str(HERE.parents[1]))
 from runtime import Runtime  # noqa: E402
 from build_contract import BASELINE  # noqa: E402
-from winfs import WinFileSystem  # noqa: E402
+from winfs import WinFileSystem, find_match  # noqa: E402
 from ddraw import DirectDraw, RGB565  # noqa: E402
 from gdi import Gdi  # noqa: E402
 from gditext import GdiText  # noqa: E402
@@ -121,6 +121,12 @@ class OverlayTests(unittest.TestCase):
             self.assertEqual(name, 'Quick Save 1')
             self.assertEqual(sorted(p.name for p in path.iterdir()), ['game.sav'])
 
+    def test_find_patterns_match_as_windows(self):
+        self.assertTrue(find_match('quick save 1', '*.*'))
+        self.assertTrue(find_match('game.sav', '*.*'))
+        self.assertTrue(find_match('revboot', 'revboot.*'))
+        self.assertFalse(find_match('revboot.log', '*.sav'))
+
     def test_place_slot_keeps_names_for_the_games_scan(self):
         with tempfile.TemporaryDirectory() as temp:
             slot = Path(temp) / 'Keep After Opening'
@@ -130,11 +136,11 @@ class OverlayTests(unittest.TestCase):
             self.assertEqual(self.overlay.place_slot(slot, slot.name), 2)
         find = self.vm.allocate(320)
         pattern = self.vm.allocate(64)
-        self.vm.write(pattern, b'C:\\REVENANT\\Save\\Single\\*\0')
+        self.vm.write(pattern, b'C:\\REVENANT\\Save\\Single\\*.*\0')     # retail's own slot scan pattern
         self.vm.call(self.vm.api_address('kernel32.dll', 'FindFirstFileA'), (pattern, find))
         self.assertEqual(self.vm.string(find + 44), 'Keep After Opening')
         self.assertEqual(self.overlay.slot_name('keep after opening'), 'Keep After Opening')
-        self.assertEqual(self.overlay.slot_files('Keep After Opening')['curmap/2_1_1.dat'], b'sector')
+        self.assertEqual(self.overlay.slot_files('Keep After Opening')['CurMap/2_1_1.DAT'], b'sector')
 
 
 class FrameTests(unittest.TestCase):

@@ -15,6 +15,10 @@ names). This layer adds what WinMain and the CRT reach:
   to the core with the canonical name.
 - CreateDirectoryA / RemoveDirectoryA: directories are implicit in the
   file tree; created ones are kept in `directories` (and listed by finds).
+- Find patterns match as Windows' do: `*` and `?` over the lower-case
+  name, and a pattern ending in `.*` also matches names without an
+  extension (`*.*` is everything; retail's slot scan asks for
+  `Save\\Single\\*.*` and its slots are directories like "Quick Save 1").
 - Names keep the case they were created with (`names`), as FAT32 does:
   FindFirstFileA / FindNextFileA return it. The install's names are its
   canonical lower case.
@@ -33,6 +37,14 @@ from pathlib import Path
 FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_ARCHIVE = 0x10, 0x20
 INVALID = 0xffffffff
 ERROR_FILE_NOT_FOUND, ERROR_NO_MORE_FILES = 2, 18
+
+
+def find_match(name, mask):
+    """Windows' wildcard match: a mask ending in `.*` also matches the
+    name with no extension at all."""
+    if fnmatch.fnmatchcase(name, mask):
+        return True
+    return mask.endswith('.*') and '.' not in name and fnmatch.fnmatchcase(name, mask[:-2])
 
 
 def canonical_key(path, root='C:\\REVENANT', cwd='C:\\REVENANT'):
@@ -222,7 +234,7 @@ class WinFileSystem:
         names = sorted({directory + '/' + name[len(directory) + 1:].split('/')[0]
                         for name in (*self.vm.files, *self.directories)
                         if name.startswith(directory + '/')})
-        matches = [n for n in names if fnmatch.fnmatchcase(posixpath.basename(n), mask)]
+        matches = [n for n in names if find_match(posixpath.basename(n), mask)]
         if not matches:
             self.vm.scheduler.set_error((ERROR_FILE_NOT_FOUND,))
             return INVALID
