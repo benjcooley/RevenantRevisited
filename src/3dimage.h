@@ -360,7 +360,7 @@ class T3DImagery : public TObjectImagery
     void GetObject(int32_t objnum, S3DObj* obj);
     bool IsHidden(int32_t objnum, int32_t state);
     bool GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t frame,
-        hmm_vec3 &pos, hmm_vec3 &rot, hmm_vec3 &scl);
+        hmm_vec3 &pos, hmm_vec3 &rot, hmm_vec3 &scl, bool retail_inclusive = false);
     bool GetAniKey(int32_t objnum, int32_t state, int32_t frame,
         hmm_vec3 &pos, hmm_vec3 &rot, hmm_vec3 &scl);
     void SetPrevState(int32_t pstate, int32_t pframe)

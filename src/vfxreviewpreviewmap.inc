@@ -6,7 +6,7 @@
 {0x0c052639u, "TCEyesEffect_BESPOKE", true, "Partial preview: single asset billboard; original controller incomplete; not complete original implementation"}, // ceyes
 {0x0c05263au, "TPunchAndJudy_AUTHORED_OWNER", false, "Implemented preview controller; map caller not certified"}, // PunchAndJudy
 {0x0c05263bu, "TJTeleEffect_BESPOKE", true, "Partial preview: single asset billboard; original teleport controller incomplete; not complete original implementation"}, // jtele
-{0x0ea34fa3u, "TBlastEffect_BESPOKE", true, "Partial preview: placeholder expanding and fading asset billboard; not complete original implementation"}, // Blast
+{0x0ea34fa3u, "TBlastEffect_BESPOKE", true, "Partial preview: authored 56-part animation; original oversized-triangle clipping differs; not complete original implementation"}, // Blast
 {0x10ac03deu, "TRegeneration_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Regeneration
 {0x10da54d0u, "LightStrip", false, "Implemented preview controller; map caller not certified"}, // LightStrip
 {0x10da54d0u, "TStripEffect", false, "Implemented preview controller; map caller not certified"}, // LightStrip

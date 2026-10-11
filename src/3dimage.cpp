@@ -1991,7 +1991,7 @@ static inline void GetAniKey32(int32_t /*key*/, SAniKey32* keys, int32_t numkeys
 }
 
 bool T3DImagery::GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t frame,
-    hmm_vec3& pos, hmm_vec3& rot, hmm_vec3& scl)
+    hmm_vec3& pos, hmm_vec3& rot, hmm_vec3& scl, bool retail_inclusive)
 {
     S3DObj* obj = &objects[objnum];
 
@@ -2039,8 +2039,9 @@ bool T3DImagery::GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t 
                 // frame samples the second-to-last key, and loop playback
                 // visibly goes second-last -> first -> held first.
                 // Actual retail4096bc JGE is inclusive. Opt in only the
-                // exact audited Punch, Appear, Sfist and Wborn keys; others keep their policy.
-                const bool reached = (retail_punch_keys || retail_mpappear_start_profile || retail_shadowfist_profile || retail_warriorborn_profile || retail_teleportation_profile || might_partsys_profile || immortalmight_partsys_profile || fmastery_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || (static_particles_profile && state==0)) ? frame <= curframe + frames : frame < curframe + frames;
+                // admitted profiles or an explicitly audited caller (Blast). The
+                // default argument preserves the existing per-profile policy.
+                const bool reached = (retail_inclusive || retail_punch_keys || retail_mpappear_start_profile || retail_shadowfist_profile || retail_warriorborn_profile || retail_teleportation_profile || might_partsys_profile || immortalmight_partsys_profile || fmastery_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || (static_particles_profile && state==0)) ? frame <= curframe + frames : frame < curframe + frames;
                 if ((num <= 0) || reached)
                 {
                     GetAniKey32(curkey, keys, numkeys,

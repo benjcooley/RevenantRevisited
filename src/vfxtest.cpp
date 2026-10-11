@@ -39,6 +39,7 @@
 #include "effects/cameraparticlespreview.h"
 #include "effects/scrollwaterpreview.h"
 #include "effects/genericstaticpreview.h"
+#include "effects/blastpreview.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -7480,9 +7481,11 @@ struct SVfxTestBootstrap {
             e.family        = "magic";
             e.pipeline      = "FB";
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
-            e.factory       = [](const S3DPoint& o) -> void* { return BlastBespokeSpawn(o); };
-            e.submit        = [](void* c, EFxDebugMode d) { BlastBespokeSubmit(c, d); };
-            e.destroy       = [](void* c) { BlastBespokeDestroy(c); };
+            e.factory       = [](const S3DPoint& o) -> void* { return blast_preview::Spawn(o); };
+            e.submit        = [](void* c, EFxDebugMode) { blast_preview::Advance(static_cast<blast_preview::State*>(c), TTime::DeltaTime()); };
+            e.submit_world  = [](void* c, EFxDebugMode) { blast_preview::SubmitWorld(static_cast<blast_preview::State*>(c)); };
+            e.is_alive      = [](void* c) { return blast_preview::Alive(static_cast<blast_preview::State*>(c)); };
+            e.destroy       = [](void* c) { blast_preview::Destroy(static_cast<blast_preview::State*>(c)); };
             VfxTest::DeferredRegister(e);
         }
         {
