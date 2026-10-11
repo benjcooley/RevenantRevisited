@@ -11112,6 +11112,7 @@ void TFogEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     if(!Renderer) return;
     hmm_mat4 owner=Transform().Matrix();
     if(native_domain_) {const auto p=Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace()));}
+    const bool native_prelit = native_domain_ && Renderer->UsesRetailSoftwareMeshLighting();
     hmm_vec3 points[36];
     float colors[36][4];
     for(int i=0;i<36;++i) {
@@ -11124,11 +11125,12 @@ void TFogEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         // The untextured alpha lookup uses (A5+1)/32 and writes depth even
         // though Scene mode2 requests ZWRITE=false. GPU interpolation remains
         // higher precision than the original scanline/RGB565 framebuffer.
+        // The explicit native policy carries raw RGBA5 to its quantized fragment path.
         const int color=int(double(v.c)*255.0)>>3;
         const int alpha=int(double(v.a)*255.0)>>3;
-        colors[i][0]=colors[i][2]=float(color)/31.0f;
-        colors[i][1]=float(color*2)/63.0f;
-        colors[i][3]=float(alpha+1)/32.0f;
+        colors[i][0]=colors[i][2]=native_prelit?float(color):float(color)/31.0f;
+        colors[i][1]=native_prelit?float(color):float(color*2)/63.0f;
+        colors[i][3]=native_prelit?float(alpha):float(alpha+1)/32.0f;
     }
     const auto* indices=reinterpret_cast<const uint16_t*>(faces_);
     if(state_.ticks==2) log_info("[fog-draw] firstworld=(%.9g,%.9g,%.9g) lastworld=(%.9g,%.9g,%.9g) rgba0=(%.9g,%.9g,%.9g,%.9g)",
@@ -11138,7 +11140,7 @@ void TFogEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         SQuadDrawItem draw{};draw.corner_count=3;draw.per_corner_color=true;
         draw.key.texture=Renderer->WhiteTextureHandle(); // identity carrier for untextured vertex color
         draw.key.blend=uint8_t(EFxBlend::Alpha);draw.key.depth_mode=uint8_t(EFxDepthMode::TestWrite);
-        draw.retail_software_projection=native_domain_;draw.debug_mode=debug_mode;
+        draw.retail_software_projection=native_domain_;draw.retail_prelit_rgba5=native_prelit;draw.debug_mode=debug_mode;
         for(int c=0;c<3;++c) {
             const int i=indices[face*3+c];
             std::memcpy(draw.world_pos[c],points[i].Elements,3*sizeof(float));

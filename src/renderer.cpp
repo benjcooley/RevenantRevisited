@@ -6229,7 +6229,11 @@ void TRenderer::SubmitFxQuad(const SQuadDrawItem& item)
         return;
     }
     SQuadDrawItem queued = item;
-    if (queued.retail_argb4444 && UsesRetailSoftwareMeshLighting()) {
+    if (queued.retail_prelit_rgba5) {
+        queued.retail_texture = 5;
+        queued.key.blend = uint8_t(EFxBlend::Alpha);
+        queued.key.depth_mode = uint8_t(EFxDepthMode::TestWrite);
+    } else if (queued.retail_argb4444 && UsesRetailSoftwareMeshLighting()) {
         // Original ARGB4444 kernels use alpha-over even after an additive request.
         queued.retail_texture = 3;
         queued.key.blend = uint8_t(EFxBlend::Alpha);
@@ -6610,7 +6614,24 @@ void TRenderer::DrainFxQueue()
                 // A nonzero tangent keeps all shader normalizations defined.
                 scratch.push_back(1.0f); scratch.push_back(0.0f); scratch.push_back(0.0f);
                 scratch.push_back(0.0f);  // no strip extrusion
-                scratch.push_back(quad.uv[corner][0]); scratch.push_back(quad.uv[corner][1]);
+                float u = quad.uv[corner][0];
+                if (quad.retail_prelit_rgba5) {
+                    // Untextured format has no UV consumer. Carry the actual
+                    // original trunc(max(vertex depth)) for this triangle.
+                    float farthest = -INFINITY;
+                    const int first = (i / 3) * 3;
+                    for (int j = first; j < first + 3; ++j) {
+                        const int k = ds.count == 3 ? triangle[j] : corners[j];
+                        const auto& w = quad.world_pos[k];
+                        const float sum = (w[0] - recon.center_wx) + (w[1] - recon.center_wy);
+                        const float z = quad.retail_software_projection
+                            ? 2750.0f - .8748177289962769f * sum - .7142857909202576f * (w[2] - quad.retail_camera_z)
+                            : recon.kcam_forward - .867f * sum - .5f * w[2];
+                        farthest = (std::max)(farthest, z);
+                    }
+                    u = std::trunc(farthest);
+                }
+                scratch.push_back(u); scratch.push_back(quad.uv[corner][1]);
                 const float* color = quad.per_corner_color ? quad.corner_color_rgba[corner] : quad.color_rgba;
                 for (int channel=0; channel<4; ++channel) scratch.push_back(color[channel]);
                 scratch.push_back(float(uint8_t(quad.debug_mode)));

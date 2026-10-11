@@ -71,6 +71,7 @@
 #include "effects/argbsourcecontrol.h"
 #include "effects/prelitrgbcontrol.h"
 #include "effects/windstrippreview.h"
+#include "effects/prelitquadcontrol.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -7449,6 +7450,12 @@ struct SVfxTestBootstrap {
             e.submit_world=[](void* c,EFxDebugMode){argb_source_control::SubmitWorld(static_cast<argb_source_control::State*>(c));};
             e.destroy=[](void* c){argb_source_control::Destroy(static_cast<argb_source_control::State*>(c));};
             VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TPrelitQuadRGBA5_DIAGNOSTIC";e.family="diagnostic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&)->void*{return prelit_quad_control::Spawn();};
+            e.submit_world=[](void* c,EFxDebugMode){prelit_quad_control::SubmitWorld(static_cast<prelit_quad_control::State*>(c));};
+            e.destroy=[](void* c){prelit_quad_control::Destroy(static_cast<prelit_quad_control::State*>(c));};VfxTest::DeferredRegister(e);
         }
         {
             VfxTest::SEffect e={};e.id="TWindStrip_BESPOKE_NULLSPELL";e.family="magic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;

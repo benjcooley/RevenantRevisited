@@ -352,9 +352,13 @@ struct SQuadDrawItem
     float corner_color_rgba[4][4] = {};
     SFxBatchKey key = {};
     uint8_t corner_count = 4; // 3 preserves one authored triangle; 4 uses the quad diagonal.
-    uint8_t retail_texture = 0; // 1: nearest; 3: software ARGB4444; 4: software RGB565 additive.
+    uint8_t retail_texture = 0; // 1: nearest; 3: ARGB4444; 4: RGB565 additive; 5: untextured RGBA5.
     bool retail_rgb565_additive = false; // Exact RGB565/profile opt-in; software policy only.
     bool retail_argb4444 = false; // Exact source format opt-in; fallback policy stays above.
+    // Explicit untextured format: color is literal RGB5/A5; per-triangle flat
+    // maximum depth and source contribution truncation. Native projection also
+    // uses the original integer sample lattice. Defaults preserve ordinary FX.
+    bool retail_prelit_rgba5 = false;
     bool retail_software_projection = false; // XYZ are original software MODELZ/world.
     float retail_camera_z = 0.0f; // Explicit original camera input; XY use reconstruction camera.
     EFxDebugMode debug_mode = EFxDebugMode::Normal;

@@ -231,11 +231,13 @@ void main() {
         T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
         scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
     }
-    float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
+    bool prelit_rgba5 = retail_metadata.x > 4.5;
+    float scene_z_n  = ((prelit_rgba5 ? uv.x : scene_z_wu) - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
     float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
     float spy = vp.y + T * persp_scale;
+    if (prelit_rgba5 && native_projection) { spx = trunc(spx) + 0.5; spy = trunc(spy) + 0.5; }
     gl_Position.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
     gl_Position.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
     gl_Position.z = scene_z_n;
@@ -264,6 +266,14 @@ uniform sampler2D atlas;
 out vec4 o_color;
 void main() {
     int mode = int(v_debug + 0.5);
+    if (v_retail_texture > 4.5) {
+        // Original dynamic untextured RGBA5: interpolate, truncate, lookup.
+        float a5 = floor(clamp(v_color.a, 0.0, 31.0) + 0.00001);
+        float alpha = (a5 + 1.0) / 32.0;
+        vec3 channels = floor(clamp(v_color.rgb, 0.0, 31.0) + 0.00001) * vec3(1.0, 2.0, 1.0);
+        vec3 source = floor(channels * alpha) / (alpha * vec3(31.0, 63.0, 31.0));
+        o_color = vec4(source, alpha); return;
+    }
     vec4 texel = texture(atlas, v_uv);
     if (v_retail_texture > 0.5) {
         ivec2 size = textureSize(atlas, 0);
