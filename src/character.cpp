@@ -3784,17 +3784,18 @@ static std::string PickupLine(TObjectInstance* inst)
 }
 
 // REVSYNC: Pickup @ 0x004cfef0 -- `to` (this character when null) takes the
-// item into its inventory (AddToInventory 0x0046f3d0, vtable 0x58);
-// "CARRYFULL2" on the text bar when it can't. The main player is told what
-// it picked up first: money (class 8) and ammo (21) with their amount
-// (FULLMONEYPICKUP / FULLAMMOPICKUP with amount and name, else their ...REV
-// form with name and amount, else "%i %s %s." with CONTPICKUP), anything
-// else by name (FULLCONTPICKUP, else "%s %s."). The shipped english.def has
-// only CONTPICKUP ("Picked up"): "Short Sword Picked up.".
-// Not ported: the multiplayer request (0x005845c0 / 0x00584500), the item's
-// class sound (0x00473a10), and the item's vtable 0x144 hook (empty in the
-// base). The port's AddToInventory doesn't take the item off the map, so it
-// leaves here and comes back if it doesn't fit (retail's stayed put).
+// item into its inventory (AddToInventory 0x0046f3d0, vtable 0x58). The main
+// player is told what it picked up first: money (class 8) and ammo (21) with
+// their amount (FULLMONEYPICKUP / FULLAMMOPICKUP with amount and name, else
+// their ...REV form with name and amount, else "%i %s %s." with CONTPICKUP),
+// anything else by name (FULLCONTPICKUP, else "%s %s."); the shipped
+// english.def has only CONTPICKUP ("Picked up"): "Short Sword Picked up.".
+// Then the item's class sound. The item leaves the map before the add
+// (RemoveFromMap, vtable 0x90). When `to` can't take it (no free slot: a
+// pile it could join doesn't help, GRIND.md §4.3), "CARRYFULL2" shows and
+// the item is lost: retail leaves it off the map and in no inventory, the
+// port deletes it. Not ported: the multiplayer request (0x005845c0 /
+// 0x00584500).
 bool TCharacter::Pickup(TObjectInstance* inst, TObjectInstance* to)
 {
     if (!inst || !inst->IsInventoryItem() || inst == this)
@@ -3803,13 +3804,17 @@ bool TCharacter::Pickup(TObjectInstance* inst, TObjectInstance* to)
         to = this;
 
     if (this == Player)
+    {
         TextBar.Print("%s", PickupLine(inst).c_str());
+        inst->PlayClassSound();
+    }
 
     inst->RemoveFromMap();
     if (!to->AddToInventory(inst))
     {
-        inst->AddToMap();
         TextBar.Print("%s", DialogList.GetLine("CARRYFULL2"));
+        log_debug("[inv] %s can't carry %s: it is lost", to->GetName(), inst->GetName());
+        MapPane.DeleteObject(inst);
     }
     return true;
 }
