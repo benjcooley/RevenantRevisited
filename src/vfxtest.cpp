@@ -2177,15 +2177,18 @@ struct SIcedBespokeCtx {
     TIcedEffect_Bespoke* iced   = nullptr;
     S3DPoint             origin = {0, 0, 0};
     float                gap    = 0.0f;
+    bool auto_retrigger = true;
 };
 
 constexpr float kIcedBespokeRetriggerGap = 1.5f;
 
-void* IcedBespokeSpawn(const S3DPoint& origin)
+void* IcedBespokeSpawn(const S3DPoint& origin, bool auto_retrigger = true)
 {
     auto* c = new SIcedBespokeCtx();
     c->origin = origin;
+    c->auto_retrigger = auto_retrigger;
     c->iced   = TIcedEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (c->iced) c->iced->SetNativeDomainForTest(StartupVfxNativeDomain);
     if (!c->iced)
         log_warn("[vfx] TIcedEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
                  " I22 bespoke entry will draw nothing");
@@ -2206,16 +2209,24 @@ void IcedBespokeSubmit(void* cp, EFxDebugMode dbg)
         return;
     if (!c->iced || !c->iced->IsAlive())
     {
+        if (!c->auto_retrigger) return;
         c->gap -= float(TTime::DeltaTime());
         if (c->gap <= 0.0f)
         {
             delete c->iced;
             c->iced = TIcedEffect_Bespoke::SpawnForTest_BESPOKE(c->origin);
+            if (c->iced) c->iced->SetNativeDomainForTest(StartupVfxNativeDomain);
             c->gap  = kIcedBespokeRetriggerGap;
         }
     }
     if (c->iced)
-        c->iced->TickAndSubmitForTest_BESPOKE(dbg);
+        c->iced->Advance(TTime::DeltaTime());
+}
+
+void IcedBespokeSubmitWorld(void* cp, EFxDebugMode dbg)
+{
+    auto* c=static_cast<SIcedBespokeCtx*>(cp);
+    if (c && c->iced) c->iced->Submit(dbg);
 }
 
 // --- wave-bespoke-04 Magic family (M01/M03/M05/X09) ----------------------
@@ -5095,12 +5106,18 @@ struct SVfxTestBootstrap {
         VfxTest::SEffect iced_bespoke = {};
         iced_bespoke.id            = "TIcedEffect_BESPOKE";
         iced_bespoke.family        = "ice";
-        iced_bespoke.pipeline      = "FB";   // facet billboards + chunk billboards
+        iced_bespoke.pipeline      = "IM";   // authored facets + tumbling cube meshes
         iced_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
         iced_bespoke.factory       = [](const S3DPoint& o) -> void* { return IcedBespokeSpawn(o); };
         iced_bespoke.submit        = [](void* c, EFxDebugMode d) { IcedBespokeSubmit(c, d); };
+        iced_bespoke.submit_world  = [](void* c, EFxDebugMode d) { IcedBespokeSubmitWorld(c,d); };
         iced_bespoke.destroy       = [](void* c) { IcedBespokeDestroy(c); };
         VfxTest::DeferredRegister(iced_bespoke);
+        auto iced_single=iced_bespoke;
+        iced_single.id="TIcedEffect_BESPOKE_SINGLE_BURST";
+        iced_single.preview_style=VfxTest::EVfxPreviewStyle::Static;
+        iced_single.factory=[](const S3DPoint& o)->void* { return IcedBespokeSpawn(o,false); };
+        VfxTest::DeferredRegister(iced_single);
 
         // --- wave-bespoke-04 Magic family entries -----------------------
         // First-pass faithful direct ports of TAura/THeal/TMist/TShield

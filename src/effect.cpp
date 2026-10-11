@@ -8087,96 +8087,45 @@ constexpr float kIcedFacetSizeWu    = 24.0f;   // single-facet billboard size
 TIcedEffect_Bespoke* TIcedEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
                                                               const char* asset_override)
 {
-    // --- Load Magic\iced.I3D (forensics §4 — byte-identical asset
-    // confirmed MD5 10e7e15b3cd6b491e47ab1743b5cdf8e snapshot vs ship).
-    // Wave-4 variants (Icedsparks, Snow) reuse the same Iced.i3d asset path;
-    // accept an override for future variants that may swap the asset.
-    const char* asset_path = asset_override ? asset_override : kIcedImageryPath;
-    int32_t img_id = TObjectImagery::FindImagery(asset_path);
-    if (img_id < 0)
-        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(asset_path));
-    if (img_id < 0)
-    {
-        log_error("[iced] SpawnForTest: FindImagery/RegisterImagery('%s') failed"
-                  " — asset missing",
-                  asset_path);
-        return nullptr;
-    }
-    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
-    if (!base)
-    {
-        log_error("[iced] SpawnForTest: LoadImagery(id=%d '%s') failed",
-                  img_id, asset_path);
-        return nullptr;
-    }
-    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
-    if (!img3d)
-    {
-        log_error("[iced] SpawnForTest: imagery for '%s' is not a T3DImagery",
-                  asset_path);
-        TObjectImagery::FreeImagery(base);
-        return nullptr;
-    }
-
-    auto* iced = new TIcedEffect_Bespoke(base);
+    auto* img = LoadWaterImagery(asset_override ? asset_override : kIcedImageryPath, "Iced");
+    if (!img || img->NumObjects() != 50 || img->NumTextures() != 2) return nullptr;
+    auto* iced = new TIcedEffect_Bespoke(img);
     iced->ForcePos(origin);
     iced->SetMapIndex(MapPane.MakeIndex());
     iced->ActivateComponents();
-
-    // Lazy-mesh-init poke.
-    const int32_t num_obj = img3d->NumObjects();
-    const int32_t num_tex = img3d->NumTextures();
-    if (num_obj <= 0 || num_tex <= 0)
-    {
-        log_error("[iced] SpawnForTest: imagery underspec'd "
-                  "(objects=%d, textures=%d)", num_obj, num_tex);
-        delete iced;
-        return nullptr;
+    iced->parts_.resize(50);
+    for (int j=0; j<50; ++j) {
+        S3DObj object{}; S3DTex texture{};
+        img->GetObject(j,&object);
+        if (object.material<0 || object.material>=2) { delete iced; return nullptr; }
+        auto& part=iced->parts_[j];
+        img->GetMaterial(object.material,&part.material);
+        img->GetTexture(object.material,&texture);
+        if (texture.htexture==kInvalidTexture || texture.numframes!=1 ||
+            !ExtractSubMeshTextureSlot(img,j,object.material+1,part.vertices,part.indices)) {
+            delete iced; return nullptr;
+        }
+        part.texture=texture.htexture;
     }
-
-    // Resolve sub-object 0 (the cube chunk mesh) texture for billboards.
-    // Forensics §4: iced.I3D has face01..43 reveal facets + icicle01..06
-    // + a cube chunk mesh at sub-obj 0 used for the shatter phase.
-    const int32_t tex_slot = SubObjTextureSlot(img3d, 0);
-    const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
-    S3DTex tex = {};
-    img3d->GetTexture(slot, &tex);
-    iced->facet_tex_ = tex.htexture;
-    ResolveSubObjUv(img3d, 0, iced->facet_uv_);
-    iced->facet_size_wu_ = kIcedFacetSizeWu;
-
-    if (iced->facet_tex_ == kInvalidTexture)
-    {
-        log_error("[iced] SpawnForTest: sub-obj 0 texture unresolved — "
-                  "facet/chunk billboards will draw nothing");
-    }
-
-    // Port of TIcedAnimator::Initialize (snapshot :8749-8756).
-    iced->frameon_      = 0;                                    // :8752
-    iced->angle_        = float(random(0, 359))
-                            * float(TORADIAN);                  // :8753
-    // icedchar_ stays nullptr (harness has no victim) — :8754
-    iced->donebouncing_ = 0;                                    // :8755
-
-    log_info("[iced] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
-             "angle=%.3f facet_tex=%u num_obj=%d",
-             asset_path, iced->GetMapIndex(),
-             origin.x, origin.y, origin.z,
-             iced->angle_, iced->facet_tex_, num_obj);
+    iced->frameon_=0;
+    // Original4eca7c..90 multiplies the integer by a binary64 angle constant.
+    iced->angle_=float(double(random(0,359))*0.017453292519943295);
+    iced->donebouncing_=0;
+    log_info("[iced] actual50meshes owner-policy=stationary-live-victim origin=(%d,%d,%d) angle=%.9g",
+             origin.x,origin.y,origin.z,iced->angle_);
     return iced;
 }
 
-void TIcedEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+void TIcedEffect_Bespoke::Advance(double seconds)
 {
-    if (!Renderer)
-        return;
+    if (!std::isfinite(seconds) || seconds<=0.0) return;
 
     // --- Update: port of TIcedAnimator::Animate (effect_old.cpp:
     // 8777-8891), framerate-independent via 24 Hz sim-tick gate.
     if (alive_)
     {
-        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-        while (sim_accum_ms_ >= double(kIcedSimTickMs))
+        sim_accum_ms_ += seconds * 1000.0;
+        while (sim_accum_ms_ + 1e-9 >= kIcedSimTickMs)
         {
             sim_accum_ms_ -= double(kIcedSimTickMs);
 
@@ -8212,7 +8161,8 @@ void TIcedEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
                     // angular velocity (:8821)
                     ch.ang.X = ch.ang.Y = float(random(0, 25) / 100.0);
                     // angular position (:8826: t.z = atan2(v.y, v.x))
-                    ch.rot.Z = std::atan2(ch.vel.Y, ch.vel.X);
+                    // Native FPATAN widens the stored float inputs before rounding.
+                    ch.rot.Z = float(std::atan2(double(ch.vel.Y), double(ch.vel.X)));
                     // scale (:8828-8839)
                     if (random(0, 1))
                     {
@@ -8273,79 +8223,79 @@ void TIcedEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
                 }
             }
 
+            if (frameon_==239 || frameon_==240 || frameon_==241)
+                log_info("[iced-runtime-phase] frame=%d alive=1 rng_draws=%llu", frameon_, static_cast<unsigned long long>(RandomDraws()));
+
             // Self-destruct (snapshot :8887-8890).
             if (donebouncing_)
             {
                 alive_ = false;
+                log_info("[iced-runtime-phase] frame=%d alive=0 rng_draws=%llu", frameon_, static_cast<unsigned long long>(RandomDraws()));
                 break;
             }
         }
     }
 
-    if (!alive_)
-        return;
+}
 
-    // --- Render: port of TIcedAnimator::Render (effect_old.cpp:
-    // 8900-8953). Blend = Alpha, Lit-mode = Unlit, Depth = TestNoWrite.
-    // Phase A (HOLD): min(frameon*4, 50) facet billboards at origin.
-    // Phase B+C: one billboard per live chunk at world pos.
-    if (facet_tex_ == kInvalidTexture)
-        return;
+TIcedEffect_Bespoke::~TIcedEffect_Bespoke()
+{
+    if (Renderer) for (const auto& part : parts_) if (part.mesh) Renderer->ReleaseMeshAssetRef(part.mesh);
+}
 
-    const S3DPoint& base_pos = Pos();
+void TIcedEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_=enabled;
+    const auto p=Pos();
+    if (enabled) BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(GetFace()));
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Iced victim=stationary-live",int(enabled));
+}
 
-    SBillboardDrawItem item = {};
-    item.color_rgba[0] = 1.0f;
-    item.color_rgba[1] = 1.0f;
-    item.color_rgba[2] = 1.0f;
-    item.color_rgba[3] = 1.0f;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::ScreenAligned;
-    item.debug_mode      = debug_mode;
-    item.key.texture     = facet_tex_;
-    std::memcpy(item.uv_rect, facet_uv_, sizeof(item.uv_rect));
-
-    if (frameon_ < kIcedDuration)
-    {
-        // Phase A: HOLD. Snapshot :8907-8920 — for i in 1..min(frameon*4, 50)
-        // RenderObject(GetObject(i)) with RotateZ(angle). All facets share
-        // origin transform; with billboard quads, they all stack visually.
-        // `min`/`max` are macros from revtypes.h:20-21; expand inline so
-        // std::min parses.
-        const int32_t reveal_raw = frameon_ * 4;
-        const int32_t reveal_count =
-            reveal_raw < kIcedRevealCap ? reveal_raw : kIcedRevealCap;
-        const float ring_scale = 1.0f;
-        for (int32_t i = 1; i < reveal_count; ++i)
-        {
-            item.world_pos[0] = float(base_pos.x);
-            item.world_pos[1] = float(base_pos.y);
-            item.world_pos[2] = float(base_pos.z);
-            item.size_wu[0] = item.size_wu[1] =
-                facet_size_wu_ * ring_scale;
-            Renderer->SubmitFxBillboard(item);
+void TIcedEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !alive_ || debug_mode!=EFxDebugMode::Normal) return;
+    auto* img=dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img) return;
+    const auto& owner=native_domain_ ? native_owner_ : Transform().Matrix();
+    auto submit=[&](int index,const hmm_mat4& local) {
+        const auto& part=parts_[index];
+        if (!part.mesh) {
+            const uint64_t key=0x4943454400000000ull ^ (uint64_t(uint32_t(img->ImageryId()))<<16) ^ uint64_t(index);
+            part.mesh=Renderer->RegisterMeshAsset(key,part.vertices.data(),int32_t(part.vertices.size()),
+                part.indices.data(),int32_t(part.indices.size()),part.texture);
+            if (part.mesh) Renderer->AddMeshAssetRef(part.mesh);
+        }
+        if (!part.mesh) return;
+        hmm_mat4 world{}; MtxMultiply(&world,&local,&owner);
+        SHelperMeshSubmit draw{};
+        draw.mesh=part.mesh; draw.retail_lighting=3; draw.retail_positive_face_cull=true;
+        draw.retail_software_projection=native_domain_; draw.sort_depth=0.0f;
+        for (int row=0; row<4; ++row) for (int col=0; col<4; ++col) draw.world[row*4+col]=world.Elements[col][row];
+        const auto& m=part.material.matdesc;
+        std::memcpy(draw.diffuse,&m.diffuse,4*sizeof(float));
+        std::memcpy(draw.ambient,&m.ambient,4*sizeof(float));
+        std::memcpy(draw.specular,&m.specular,4*sizeof(float));
+        std::memcpy(draw.emissive,&m.emissive,4*sizeof(float)); draw.power=m.power;
+        Renderer->SubmitHelperMesh(draw);
+    };
+    if (frameon_<kIcedDuration) {
+        hmm_mat4 local{}; MtxClear(&local); MtxRotateZ(&local,angle_);
+        const int count=frameon_*4<50 ? frameon_*4 : 50;
+        for (int index=1; index<count; ++index) submit(index,local);
+    } else {
+        for (const auto& chunk : chunks_) {
+            if (chunk.life==0) continue;
+            hmm_mat4 local{}; MtxClear(&local); MtxScale(&local,&chunk.scl);
+            MtxRotateX(&local,chunk.rot.X); MtxRotateY(&local,chunk.rot.Y); MtxRotateZ(&local,chunk.rot.Z);
+            MtxTranslate(&local,&chunk.pos); submit(0,local);
         }
     }
-    else
-    {
-        // Phase B+C: SHATTER chunks. Snapshot :8923-8948 — one
-        // RenderObject(GetObject(0)) per live chunk at p[i] world pos.
-        for (int32_t i = 0; i < MAX_ICED_CHUNKS; ++i)
-        {
-            const SIcedChunk& ch = chunks_[i];
-            if (ch.life == 0)
-                continue;
-            item.world_pos[0] = float(base_pos.x) + ch.pos.X;
-            item.world_pos[1] = float(base_pos.y) + ch.pos.Y;
-            item.world_pos[2] = float(base_pos.z) + ch.pos.Z;
-            item.size_wu[0] = item.size_wu[1] =
-                facet_size_wu_ * (ch.scl.X + ch.scl.Y) * 0.5f;
-            Renderer->SubmitFxBillboard(item);
-        }
-    }
+}
+
+void TIcedEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime());
+    Submit(debug_mode);
 }
 // --- end ice bespoke first-pass
 

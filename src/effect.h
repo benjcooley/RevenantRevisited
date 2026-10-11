@@ -4320,7 +4320,7 @@ class TIceBoltEffect_Bespoke : public TEffect
 // effect standalone (no victim coupling: `icedchar` stays nullptr,
 // SetParalize/IsIced/IsDead branches are guarded out for sector-less
 // preview, lifecycle runs purely on frameon).
-inline constexpr int32_t kIcedSimTickMs = 1000 / 24;
+inline constexpr double kIcedSimTickMs = 1000.0 / 24.0;
 inline constexpr int32_t kIcedDuration  = 24 * 10;   // ICED_DURATION (effect_old.cpp:8720)
 inline constexpr float   kIcedChunkGravity = 0.25f;  // ICED_CHUNK_GRAVITY (effect_old.cpp:8721)
 inline constexpr int32_t kIcedRevealCap = 50;        // min(frameon*4, 50) (effect_old.cpp:8909)
@@ -4344,13 +4344,16 @@ class TIcedEffect_Bespoke : public TEffect
   public:
     TIcedEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
     TIcedEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
-    ~TIcedEffect_Bespoke() override = default;
+    ~TIcedEffect_Bespoke() override;
 
     void OffScreen() override { KillThisEffect(); }
 
     [[nodiscard]] static TIcedEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
                                                                   const char* asset_override = nullptr);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
+    void SetNativeDomainForTest(bool enabled);
     [[nodiscard]] bool IsAlive() const { return alive_; }
 
   private:
@@ -4359,10 +4362,16 @@ class TIcedEffect_Bespoke : public TEffect
     int32_t frameon_       = 0;
     int32_t donebouncing_  = 0;
 
-    // box01 (chunk mesh) texture handle + UVs.
-    TTextureHandle facet_tex_ = kInvalidTexture;
-    float          facet_uv_[4] {0.0f, 0.0f, 1.0f, 1.0f};
-    float          facet_size_wu_ = 24.0f;
+    struct MeshPart {
+        std::vector<SMeshVertex> vertices;
+        std::vector<uint16_t> indices;
+        S3DMat material{};
+        TTextureHandle texture = kInvalidTexture;
+        mutable MeshHandle mesh{};
+    };
+    std::vector<MeshPart> parts_;
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_{};
 
     bool   alive_        = true;
     double sim_accum_ms_ = 0.0;
