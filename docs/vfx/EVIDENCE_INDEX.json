@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 130,
+    "retail_rows_with_source_fixes_recorded": 132,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 112,
+    "visual_fidelity_confirmed_rows": 116,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 112,
-    "remaining_visual_review_rows": 64
+    "reviewed_visual_pass_rows": 116,
+    "remaining_visual_review_rows": 60
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1610,6 +1610,34 @@
       "check": "independent_native_software_actual_metal_appearance",
       "status": "pass_for_recorded_configuration",
       "scope": "Eighteen full1280x960 original normal-lit software/actual Metal native-domain blue/white column and expanding/turning base phases, contraction and realtick89 kill/blank90/100/110.5,670 keys/8,592 matrices, strict own profile and complete fresh replay. Silent play/audio and natural multiplayer/network caller, device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-shriek-authored-20261010/root-approval.json": {
+      "sha256": "46facc58e0e4813731fd03442320ff6a6da0c9c20fc107d79b3d88ad0d803420",
+      "retail_row": "shriek:0xad92bc12",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Fifteen complete original owner/software versus actual Metal native-domain eight-ring purple phases through startup16 and actualkill46/blank50.1,836 state/RNG fields and literal GPU controls; exact opt-in source RGB565 contribution floor removes spurious skirt. Common50frame byteidentity, destination rounding/naturalactor/damage/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-flameb-authored-20261010/FlameB-root-approval.json": {
+      "sha256": "7e7e354f512f16713c8acb85048a2397f6c5526e82ae74832e9854b3b43ee2a5",
+      "retail_row": "Flame:0x50ba373c",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Eleven full original custom Initialize/CopyVertices/Animate/RenderObject/software versus actual Metal native-domain blue Flame phases. All eight atlas cells and18tick wraps; normal real-map40/40visible/8distinct. Literal own asset/prelit colors and existingARGB4444/point flags. Darktextureplate presentboth;1pxsampling/quantization/naturalotherlighting/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-flameg-authored-20261010/FlameG-root-approval.json": {
+      "sha256": "f4195943d883bf8b1a25704fd14d6acd55062872ef2e99f2f5eb9afdcebcd579",
+      "retail_row": "Flame:0x50ba373d",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Eleven full original custom Initialize/CopyVertices/Animate/RenderObject/software versus actual Metal native-domain green Flame phases. All eight atlas cells and18tick wraps; normal real-map40/40visible/8distinct. Literal own asset/prelit colors and existingARGB4444/point flags. Darktextureplate presentboth;1pxsampling/quantization/naturalotherlighting/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-ceyes-authored-20261010/root-approval.json": {
+      "sha256": "7cde501dcdcc08eb7f21e430399de2de93340e30028a717a79784771289d42fd",
+      "retail_row": "ceyes:0x0c052639",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Nineteen complete original software/actual Metal native-domain tiny gold-eye phases across two120-frame loops. Proven integerXYZ/UV and sample-lattice mapping recovers width/glints;430 original packets/10,320fields. Common245frame byteidentity retained.1\u20135pixel scanline/quantization/naturalattachment/otherstates/device/exactpixels remain open; realend1kill separate."
     }
   }
 }
