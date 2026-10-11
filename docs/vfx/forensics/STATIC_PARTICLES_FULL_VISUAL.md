@@ -127,3 +127,19 @@ all four native pose probes PASS; eight isolated Metal films PASS; all four
 ordinary map lifecycle captures PASS. Earlier `y-visual-native-final/` and
 `y-visual-native-first/` used an advanced-frame Pulse and are superseded by
 `y-visual-native-cached/`; they must not be reused as appearance references.
+
+## Additional root review: Regeneration and SwiftStrike
+
+The same complete original caller and independent Metal factory pipeline now
+records twelve fixed samples each for Regeneration and SwiftStrike. Root reviewed
+the whole viewport and fixed detail panels and approved their sampled emission,
+form, color and continuing animation in the declared native-domain configuration.
+Private frozen evidence is `research/vfx-static-closure-20261010/root-review-final/`
+under the lab root; each type has a hashed `review-approved.json` linked from the
+central ledger. Native/common actual films run90frames at24Hz with seed1 and one
+discarded warmup, and every logged RNG checkpoint matches. Exact pixels and
+natural caster/map invocation remain open.
+
+fspray has the same complete measured captures but remains unapproved: its Metal
+sprites look whiter/cyan than the original green-tinted software output. Its
+source/clock/frontend proofs remain valid; a color diagnosis is pending.
