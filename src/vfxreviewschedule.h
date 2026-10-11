@@ -116,6 +116,20 @@ struct VfxReviewSchedule
         return {Along(center - length * 0.5), Along(center + length * 0.5)};
     }
 
+    // A mostly vertical projectile/beam path independent of scroll direction.
+    // Positive tilt places the source lower-left and target upper-right.
+    Endpoints SlotPathEndpoints(std::size_t index, double length, double tilt = 0.25) const
+    {
+        if (!IsValid() || !std::isfinite(length) || length < 0.0 || !std::isfinite(tilt))
+            return {};
+        const Vec2 center = SlotScreenOffset(index);
+        const double norm = std::hypot(tilt, 1.0);
+        const Vec2 half = {(tilt / norm) * (length * 0.5),
+                           (-1.0 / norm) * (length * 0.5)};
+        return {{center.x-half.x, center.y-half.y},
+                {center.x+half.x, center.y+half.y}};
+    }
+
     static Vec2 ScreenToWorld(Vec2 screen)
     {
         // Inverse of screen=(worldX-worldY, (worldX+worldY)/2), at fixed Z.

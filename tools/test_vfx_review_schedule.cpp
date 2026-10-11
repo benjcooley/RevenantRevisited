@@ -124,6 +124,39 @@ int main()
         }
         Equal(mixed.CameraScreenOffset(mixed.Duration()+55.0),mixed.CameraScreenOffset(55.0));
     }
+    Vec2 baselinePath{};
+    for (double scrollRatio : {2.0, 2.5, 3.0}) {
+        VfxReviewSchedule path; path.count=4; path.ratio=scrollRatio;
+        path.station_distances={0.0,420.0,1140.0,2240.0};
+        const Vec2 center=path.SlotScreenOffset(2);
+        const auto ends=path.SlotPathEndpoints(2,200.0);
+        const Vec2 direction=Subtract(ends.target,ends.source);
+        assert(Near(Length(direction),200.0));
+        assert(Near(direction.x/-direction.y,0.25));
+        assert(ends.source.x<center.x && ends.source.y>center.y);
+        assert(ends.target.x>center.x && ends.target.y<center.y);
+        Equal({(ends.source.x+ends.target.x)*0.5,(ends.source.y+ends.target.y)*0.5},center);
+        Equal(Project(VfxReviewSchedule::ScreenToWorld(ends.source)),ends.source);
+        Equal(Project(VfxReviewSchedule::ScreenToWorld(ends.target)),ends.target);
+        if (scrollRatio==2.0) baselinePath=direction;
+        else Equal(direction,baselinePath); // scroll ratio cannot rotate the path
+        const auto vertical=path.SlotPathEndpoints(2,200.0,0.0);
+        Equal(vertical.source,{center.x,center.y+100.0});
+        Equal(vertical.target,{center.x,center.y-100.0});
+        const auto perpendicular=path.SlotPathEndpoints(2,200.0,-1.0/scrollRatio);
+        const Vec2 tangent=Subtract(perpendicular.target,perpendicular.source);
+        const Vec2 scroll=path.StepDirection();
+        assert(Near(tangent.x*scroll.x+tangent.y*scroll.y,0.0));
+        assert(Near(Length(tangent),200.0));
+        const auto point=path.SlotPathEndpoints(2,0.0);
+        Equal(point.source,center); Equal(point.target,center);
+        // Legacy endpoints continue to follow the conveyor, not the new path.
+        const auto legacy=path.SlotEndpoints(2,200.0);
+        const Vec2 oldDirection=Subtract(legacy.target,legacy.source);
+        assert(Near(oldDirection.x/-oldDirection.y,scrollRatio));
+        const auto invalid=path.SlotPathEndpoints(2,200.0,std::numeric_limits<double>::quiet_NaN());
+        Equal(invalid.source,{}); Equal(invalid.target,{});
+    }
     VfxReviewSchedule malformed; malformed.count=4;
     for (const std::vector<double>& distances : {
             std::vector<double>{0,420,1140}, {1,420,1140,2240}, {0,420,420,2240},
