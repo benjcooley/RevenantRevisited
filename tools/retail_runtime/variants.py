@@ -105,6 +105,9 @@ class Workspace:
                 raise RuntimeError('Private source changed while assembly ran; no build published')
             manifest = dict(changes=patch_manifest, source_sha256=sources,
                 assembler=nasm, assembler_output=result.stderr)
+            if isinstance(patch_manifest, dict) and 'allowed_modified_spans' in patch_manifest:
+                # Where the build contract reads them, as for an imported build.
+                manifest['allowed_modified_spans'] = patch_manifest['allowed_modified_spans']
             return self.import_variant(name, output, manifest)
 
     def find(self, build_id):

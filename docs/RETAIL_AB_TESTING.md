@@ -251,6 +251,21 @@ while all 18 color/depth outputs equal the unmodified control. Other fixture
 adapters require their own supported build contract. Record all patch addresses
 and changed behavior in the build manifest.
 
+## Patch catalogue
+
+Retail behaviour patches that work and could serve another track live in
+[`recon/retail_asm/patches/`](../recon/retail_asm/patches/), one directory per
+patch: the source diff against the baseline assembly, a `retail-patch.v1`
+manifest (addresses, original and patched bytes, declared spans, the build's
+SHA-256), a build script, and what it is for and how it was verified
+([gameflow/RETAIL_AB.md](gameflow/RETAIL_AB.md) §3).
+[`tools/retail_asm/retail_patch.py`](../tools/retail_asm/retail_patch.py) checks a
+build against its manifest, prints its disassembly diff, or applies the bytes.
+
+| Patch | Changes | SHA-256 | Verified |
+|---|---|---|---|
+| [`clickwalk`](../recon/retail_asm/patches/clickwalk/README.md) | A left click on open ground walks Locke to the point under it through `Goto` (the playtest agent's movement, [playtest/CLICKWALK.md](playtest/CLICKWALK.md)) | `016a73ad…3762` | build contract, disassembly diff, the original click path in the emulator against the baseline (`test_clickwalk.py`); not yet in a loaded level |
+
 ## Required evidence
 
 Every comparison records the exact build name/hash/parent/patch manifest, scenario

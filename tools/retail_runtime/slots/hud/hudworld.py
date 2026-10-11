@@ -51,6 +51,7 @@ sys.path.insert(0, str(HERE.parents[1]))
 from unicorn import UC_HOOK_CODE, UC_HOOK_MEM_FETCH_UNMAPPED, UC_HOOK_MEM_READ_UNMAPPED, UC_HOOK_MEM_WRITE_UNMAPPED  # noqa: E402
 from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_EIP, UC_X86_REG_ESP  # noqa: E402
 from runtime import Runtime  # noqa: E402
+from build_contract import verify_build  # noqa: E402
 import image  # noqa: E402
 from ddraw import DirectDraw  # noqa: E402
 from gdi import Gdi  # noqa: E402
@@ -59,7 +60,6 @@ from system import SystemApis  # noqa: E402
 from window import Windows  # noqa: E402
 from winfs import WinFileSystem, mount_tree  # noqa: E402
 
-RETAIL_SHA = '28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5'
 CRT_INIT, CRT_INIT_STOP = 0x0058ed0d, 0x0058ed8e     # entry: heap + TLS, before _ioinit
 IOINIT, ENVIRONMENT, ENVIRONMENT_PTR = 0x0059299f, 0x00593c9c, 0x00676f58
 C_INIT = (0x005c58f0, 0x005c5908)
@@ -86,14 +86,17 @@ G_INTERNAL_RASTER = 0x005d7a28
 class HudWorld:
     """Build with `HudWorld.open(executable)` (a cached boot image when one
     matches, else a boot that saves one) or `HudWorld(executable)` (always
-    boot)."""
+    boot). The executable is the unchanged retail image, or a named build
+    (`build`: its build.json record or path) that passes the build contract
+    (`build_contract.verify_build`: the fixed-address layout, its declared
+    patch spans). HUD fixtures themselves are verified on the baseline."""
 
     @classmethod
-    def open(cls, executable, install=RETAIL_INSTALL):
+    def open(cls, executable, install=RETAIL_INSTALL, build=None):
         path = cls.image_path(executable)
         if path.exists():
-            return cls(executable, install, image_path=path)
-        world = cls(executable, install)
+            return cls(executable, install, image_path=path, build=build)
+        world = cls(executable, install, build=build)
         world.save(path)
         return world
 
@@ -104,18 +107,17 @@ class HudWorld:
             digest.update(source.read_bytes())
         return IMAGE_DIR / f'hud-boot-{digest.hexdigest()[:16]}.image'
 
-    def __init__(self, executable, install=RETAIL_INSTALL, image_path=None):
+    def __init__(self, executable, install=RETAIL_INSTALL, image_path=None, build=None):
         self.install = install
         self.boundary_calls = []               # (name, detail) in call order
         self._boundaries = {}
         self.last_fault = None
+        self.record = verify_build(executable, build)
         if image_path is not None:
             self._load(executable, image_path)
             return
         self.vm = vm = Runtime(executable)
         self.sha = hashlib.sha256(vm.image).hexdigest()
-        if self.sha != RETAIL_SHA:
-            raise ValueError('HUD fixtures are verified for the unchanged retail image only')
         self._install_hooks()
         vm.call(CRT_INIT, stop_address=CRT_INIT_STOP)
         self.system = SystemApis(vm)
