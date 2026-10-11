@@ -65,3 +65,7 @@ preview factory association. It refuses changed inputs and emits an explicit
 deferred result with `rendered_pairs=0`, `native_execution=false` and the next
 action. Current local evidence is retained at
 `research/vfx-next-20261009/irisflare-preflight/diagnostic.json` in the retail lab.
+
+## IrisFlare follow-up, 2026-10-11
+
+The standalone exact IrisFlare factory/resource/controller now executes through205 ticks, including its original blank reset201/restart202, and has a complete actual Metal comparison. See `IRISFLARE_COMPOUND_RENDER_20261011.md` for source, controls, image hashes and review state. Executed registration also corrects the earlier builder terminology: `5a9f28` is the builder vtable; the instance returned after all93 constructors is `66cc58`. Teleporter remains a distinct, unconverted gameplay caller; the existing shared-asset Flare preview does not gain equivalence from this follow-up.

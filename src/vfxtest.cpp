@@ -63,6 +63,7 @@
 #include "effects/ribbonpreview.h"
 #include "effects/vortexpreview.h"
 #include "effects/jtelepreview.h"
+#include "effects/irisflarepreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
@@ -6055,6 +6056,11 @@ struct SVfxTestBootstrap {
         for(const auto&typed: {std::pair<const char*,uint32_t>{"Jtele_AUTHORED",0x0c05263bu},{"Jteled_AUTHORED",0x0c05263cu}}){
             VfxTest::SEffect e={};e.id=typed.first;e.family="teleport";e.pipeline="PE+Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
             const auto id=typed.second;e.factory=[id](const S3DPoint&o)->void*{return jtele_preview::Spawn(o,id);};e.submit=[](void*c,EFxDebugMode){jtele_preview::Advance(static_cast<jtele_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){jtele_preview::SubmitWorld(static_cast<jtele_preview::State*>(c));};e.is_alive=[](void*c){return jtele_preview::Alive(static_cast<jtele_preview::State*>(c));};e.destroy=[](void*c){jtele_preview::Destroy(static_cast<jtele_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+
+        {
+            VfxTest::SEffect e={};e.id="IrisFlare_AUTHORED";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return irisflare_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){irisflare_preview::Advance(static_cast<irisflare_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){irisflare_preview::SubmitWorld(static_cast<irisflare_preview::State*>(c));};e.is_alive=[](void*c){return irisflare_preview::Alive(static_cast<irisflare_preview::State*>(c));};e.destroy=[](void*c){irisflare_preview::Destroy(static_cast<irisflare_preview::State*>(c));};VfxTest::DeferredRegister(e);
         }
 
         // Shipped literal Vortex resolves the default animator and three legacy roots.
