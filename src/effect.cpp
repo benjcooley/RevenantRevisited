@@ -67,6 +67,7 @@
 #include "defdoc.h"
 #include "mappane.h"
 #include "math3d.h"
+#include "retailsoftwaretransform.h"
 #include "meshextract.h"   // M09b: ExtractSubMesh for I3D cylinder mesh
 #include "revutils.h"
 #include "logging.h"
@@ -17859,9 +17860,23 @@ void TFireConeEffect_Bespoke::Advance(double elapsed_seconds)
     }
 }
 
+void TFireConeEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    // Only the isolated preview calls this adapter. Runtime owners retain
+    // their common-world transform and ordinary scene projector.
+    native_domain_ = enabled && !runtime_owned_;
+    if (native_domain_) {
+        const auto position = Pos();
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z,
+                                 uint8_t(GetFace()));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT particle=relative FireCone",
+             int(native_domain_));
+}
+
 void TFireConeEffect_Bespoke::SubmitPool(const Pool& pool, int object, EFxDebugMode debug_mode) const
 {
-    const auto& owner_world = Transform().Matrix();
+    const auto& owner_world = native_domain_ ? native_owner_ : Transform().Matrix();
     for (const auto& particle : pool.particles) {
         if (!particle.used) continue;
         // Source renders used particles even with zero/negative scale. Do not
@@ -17893,7 +17908,10 @@ void TFireConeEffect_Bespoke::SubmitPool(const Pool& pool, int object, EFxDebugM
             float sx[3], sy[3];
             for (int k = 0; k < 3; ++k) {
                 const auto& v = face_points[k];
-                sx[k] = v.X - v.Y; sy[k] = 0.5f * (v.X + v.Y) - 0.867f * v.Z;
+                sx[k] = v.X - v.Y;
+                sy[k] = native_domain_
+                    ? 0.5050762891769409f * (v.X + v.Y) - 1.237179160118103f * v.Z
+                    : 0.5f * (v.X + v.Y) - 0.867f * v.Z;
             }
             if ((sx[1]-sx[0])*(sy[2]-sy[0]) < (sx[2]-sx[0])*(sy[1]-sy[0])) {
                 source_faces_visible = false; break;
@@ -17904,6 +17922,7 @@ void TFireConeEffect_Bespoke::SubmitPool(const Pool& pool, int object, EFxDebugM
         SHelperMeshSubmit submit = {};
         submit.mesh = meshes_[object]; submit.additive_blend = true;
         submit.retail_lighting = 1;
+        submit.retail_software_projection = native_domain_;
         for (int row = 0; row < 4; ++row) for (int col = 0; col < 4; ++col)
             submit.world[row * 4 + col] = mesh_world.Elements[col][row];
         const auto& material = materials_[object].matdesc;

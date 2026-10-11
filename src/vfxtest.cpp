@@ -4853,6 +4853,7 @@ void* FireConeBespokeVariantSpawn(const S3DPoint& origin)
     auto* c = new SFireConeBespokeCtx();
     c->path   = FireConeVariantPath(V);
     c->eff    = TFireConeEffect_Bespoke::SpawnForTest_BESPOKE(origin, c->path);
+    if (c->eff) c->eff->SetNativeDomainForTest(StartupVfxNativeDomain);
     if (!c->eff)
         log_warn("[vfx] TFireConeEffect_Bespoke::SpawnForTest_BESPOKE('%s') returned null",
                  c->path ? c->path : "<base>");
