@@ -67,3 +67,13 @@ The ordinary projection's600 pixel hashes are unchanged by the opt-in fix.
 mapping,300 visible/distinct frames and clean shutdown. Quality0/1 actual GPU
 controls remain blank. Natural map placement/caller, device, destination
 precision and exact pixels remain separate open gates.
+
+## Independent scoped approval
+
+Root reviewed the corrected actual-size phases80/140 and all ten phases, and
+approved overall native-domain quality3 appearance: green rings, puff forms,
+motion, shrink/reset and center bounce agree. The destination-rounding brightness
+residual remains open; this is not exact pixels or ordinary-mode visual parity.
+The frozen `smoke-review-quant/root-approval.json` pins the final comparison,
+original repeat, state/key/parser/lifecycle controls, both600-frame films,
+quality0/1 blank GPU controls and300-frame translated gallery to the binary above.
