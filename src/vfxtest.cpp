@@ -3656,7 +3656,7 @@ void SetVortexBespokeDestroy(void* cp)
 void SetVortexBespokeSubmit(void* cp, EFxDebugMode dbg)
 {
     auto* c = static_cast<SSetVortexBespokeCtx*>(cp);
-    if (c && c->effect) c->effect->TickAndSubmitForTest_BESPOKE(dbg);
+    if (c && c->effect) c->effect->Advance(TTime::DeltaTime());
 }
 
 // --- wave-bespoke-W2A: weather A — ground/atmospheric scatter family ----
@@ -6084,6 +6084,8 @@ struct SVfxTestBootstrap {
         setvortex_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
         setvortex_bespoke.factory = [](const S3DPoint& o) -> void* { return SetVortexBespokeSpawn(o); };
         setvortex_bespoke.submit = [](void* c, EFxDebugMode d) { SetVortexBespokeSubmit(c, d); };
+        setvortex_bespoke.submit_world = [](void* p, EFxDebugMode d) { auto*c=static_cast<SSetVortexBespokeCtx*>(p); if(c && c->effect)c->effect->Submit(d); };
+        setvortex_bespoke.is_alive = [](void*p) { auto*c=static_cast<SSetVortexBespokeCtx*>(p); return c && c->effect && c->effect->IsAlive(); };
         setvortex_bespoke.destroy = [](void* c) { SetVortexBespokeDestroy(c); };
         VfxTest::DeferredRegister(setvortex_bespoke);
 

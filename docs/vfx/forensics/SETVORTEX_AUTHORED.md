@@ -94,3 +94,27 @@ Build passed (`research/setvortex-20261005/build-authored.log`, binary42bcd45414
 Read-only orientation audit found no justified rotation or mirror: SCL1/POS2 suppresses animation keys, ABSPOS suppresses owner/root rotation, and extraction preserves XYZ/UV/indices. Raw faces0–1 and2–3 are coincident opposite-facing quads with mirrored U; eight remaining triangles are degenerate. Snapshot and current projected winding both select faces0–1. Retail SW camera disassembly at0x56cdc0 confirms +45degreeZ then−120degreeX, matching snapshot.
 
 Source versus current local screen-Y scale is approximately `.25254*(vx+vy)-.61859*vz` versus `.25*(vx+vy)-.65025*vz`; that modest difference does not explain a mirror/viewing-angle change. Next bounded diagnostic, later: trace actual retail SW projected triangles and UV raster arguments to identify selected surface/sampling orientation. Preserve authored data until evidence identifies the correction.
+
+## Genuine loaded renderer correction, 2026-10-11
+
+`setvortex_loaded_preflight.py` now executes the actual null-spell class factory,
+owner5a9f9c, CreateAnimator5aa19c, complete owner Pulse4e67d0, custom
+Animate4e6890, and full Render4e6920. Original Begin/PreRender/Post/End remain
+active, with explicit isolated RAM target1280x960/camera0/source0 and ambient38/dir1.
+All105 updates persist without RNG or death. Actual render state is SRC_ALPHA /
+INV_SRC_ALPHA, depth test on, no depth writes, **CULL_NONE**. Both coincident
+opposite-facing quads contribute; the old host-side winding rejection was wrong.
+
+Native Init4e6800 uses the nonlinear original FIX(ownerZ+30), not the port's
+linear macro: initialZ21.3433853. The source now uses the independently proven
+RetailSoftwareOwnerZ helper without changing the global macro. The exact32x32
+ARGB4444 format is checked and opts into existing texture mode3. Ordinary mesh
+geometry remains complete; native-domain projection is explicitly opt-in.
+No renderer/shader or other effect policy changes are needed.
+
+Compiled actual Advance and Submit functions under ASan/UBSan agree with all105
+native updates:315 bob channels max4.89e-8,1260 submitted triangles and18900
+vertex/UV channels. The old linear-height negative control differs0.79544 at
+first draw. Evidence: hard-alpha/setvortex-submit-proof/manifest.json and
+setvortex-loaded-first/manifest.json. Fixed24Hz updates/render are certified by
+this comparison; arbitrary skipped-render scheduling remains unverified.

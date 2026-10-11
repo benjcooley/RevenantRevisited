@@ -18115,6 +18115,10 @@ void TSetVortexEffect_Bespoke::Initialize(bool attach_runtime_component)
     img->GetMaterial(object.material, &material);
     if (material.texture != 0) return;
     img->GetTexture(material.texture, &tex);
+    const auto& format = tex.desc.pixelFormat;
+    if (tex.desc.width != 32 || tex.desc.height != 32 || format.dwRGBBitCount != 16 ||
+        format.dwRBitMask != 0xf00 || format.dwGBitMask != 0xf0 ||
+        format.dwBBitMask != 0xf || format.dwRGBAlphaBitMask != 0xf000) return;
     if (tex.htexture == kInvalidTexture || tex.numframes != 1 ||
         !ExtractSubMeshTextureSlot(img, 0, material.texture + 1, vertices_, indices_) ||
         vertices_.size() != 12 || indices_.size() != 36) return;
@@ -18126,7 +18130,7 @@ void TSetVortexEffect_Bespoke::Initialize(bool attach_runtime_component)
 
     // These are animator-owned absolute coordinates, NOT an owner offset.
     const auto origin = Pos();
-    cached_d3d_position_ = {float(origin.x), float(origin.y), FIX_Z_VALUE(float(origin.z) + 30.0f)};
+    cached_d3d_position_ = {float(origin.x), float(origin.y), RetailSoftwareOwnerZ(origin.z + 30)};
     current_height_ = 30.0f; direction_ = 1; sim_accum_ms_ = 0.0;
     SetCommandDone(false);
     initialized_ = true;
@@ -18150,6 +18154,7 @@ void TSetVortexEffect_Bespoke::Initialize(bool attach_runtime_component)
             }
         }
     }
+    log_info("[native-domain] enabled=%d camera_z=0 exact SetVortex cached absolute position", int(StartupVfxNativeDomain));
     log_info("[setvortex-runtime] initialized id=%08x map_index=%d origin=(%d,%d,%d) runtime=%d vertices=%zu triangles=%zu cached_d3d_z=%.6f",
              attach_runtime_component ? ObjId() : 0xad92bc15u, GetMapIndex(),
              origin.x, origin.y, origin.z, int(attach_runtime_component),
@@ -18191,7 +18196,8 @@ void TSetVortexEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
 {
     if (!Renderer || !initialized_) return;
     SQuadDrawItem item = {};
-    item.corner_count = 3; item.retail_texture = 1;
+    item.corner_count = 3; item.retail_texture = 3;
+    item.retail_software_projection = StartupVfxNativeDomain;
     item.key.texture = texture_;
     item.key.blend = uint8_t(EFxBlend::Alpha);
     item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
@@ -18199,22 +18205,18 @@ void TSetVortexEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     // The existing FX path cannot establish normal/material illumination
     // parity. Keep authored diffuse, with this gate explicit in the forensic doc.
     for (int channel = 0; channel < 4; ++channel) item.color_rgba[channel] = diffuse_[channel];
-    const float cached_world_z = REV_FIX_Z_VALUE(cached_d3d_position_.Z);
+    const float cached_world_z = StartupVfxNativeDomain ? cached_d3d_position_.Z : REV_FIX_Z_VALUE(cached_d3d_position_.Z);
+    const float local_z_scale = StartupVfxNativeDomain ? 1.0f : WORLD3D_Z_SCALE;
     for (size_t face = 0; face + 2 < indices_.size(); face += 3) {
         for (int corner = 0; corner < 3; ++corner) {
             const auto& v = vertices_[indices_[face + corner]];
             item.world_pos[corner][0] = cached_d3d_position_.X + v.pos[0] * 0.5f;
             item.world_pos[corner][1] = cached_d3d_position_.Y + v.pos[1] * 0.5f;
-            item.world_pos[corner][2] = cached_world_z + v.pos[2] * 0.5f * WORLD3D_Z_SCALE;
+            item.world_pos[corner][2] = cached_world_z + v.pos[2] * 0.5f * local_z_scale;
             item.uv[corner][0] = v.uv[0]; item.uv[corner][1] = v.uv[1];
         }
-        // Blue culling tests Y-up before its rasterizer negates Y.
-        float sx[3], sy[3];
-        for (int corner = 0; corner < 3; ++corner) {
-            const auto* p = item.world_pos[corner];
-            sx[corner] = p[0] - p[1]; sy[corner] = 0.5f * (p[0] + p[1]) - 0.867f * p[2];
-        }
-        if ((sx[1]-sx[0])*(sy[2]-sy[0]) < (sx[2]-sx[0])*(sy[1]-sy[0])) continue;
+        // Original 4e6920 selects Scene mode2: CULL_NONE. Both authored
+        // coincident opposite-facing quads contribute in source order.
         Renderer->SubmitFxQuad(item);
     }
 }

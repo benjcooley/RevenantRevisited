@@ -6866,7 +6866,7 @@ class TSetVortexEffect_Bespoke : public TEffect
     void Submit(EFxDebugMode debug_mode = EFxDebugMode::Normal) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] static TSetVortexEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
-    [[nodiscard]] bool IsAlive() const { return true; }
+    [[nodiscard]] bool IsAlive() const { return !(GetFlags() & OF_KILL); }
 
   private:
     std::vector<SMeshVertex> vertices_;
