@@ -1861,7 +1861,15 @@ void GetParameters(int argc, char **argv)
         if (arg_param(cmd, "vfx-backdrop", p))
             strncpyz(StartupVfxBackdrop, p.c_str(), MAXPATHLEN);
         if (arg_param(cmd, "vfx-camera", p))
-            sscanf(p.c_str(), "%f,%f", &StartupVfxCamera[0], &StartupVfxCamera[1]);
+        {
+            float x, y;
+            if (sscanf(p.c_str(), "%f,%f", &x, &y) == 2)
+            {
+                StartupVfxCamera[0] = x;
+                StartupVfxCamera[1] = y;
+                StartupVfxCameraExplicit = true;
+            }
+        }
         if (arg_param(cmd, "vfx-origin", p))
             StartupVfxOriginSet = sscanf(p.c_str(), "%d,%d,%d", &StartupVfxOrigin[0],
                                         &StartupVfxOrigin[1], &StartupVfxOrigin[2]) == 3;

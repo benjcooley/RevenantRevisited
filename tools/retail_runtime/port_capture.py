@@ -103,6 +103,17 @@ def capture(scenario,output):
         if "--vfx='"+scenario['effect']+"' matched" not in log.read_text(errors='replace'):
             report['status']='fail';report['error']='Requested effect did not match the actual catalogue'
         log_text=log.read_text(errors='replace')
+        # Old binaries have no camera marker; retain their historical behavior.
+        # New captures must prove the requested signed origin reached the renderer.
+        framing=re.search(r'\[vfx-camera\] explicit=(\d+) actual=\(([0-9.eE+-]+),([0-9.eE+-]+)\) viewport=\((\d+),(\d+)\)',log_text)
+        if framing:
+            report['actual_camera']=[float(framing[2]),float(framing[3])]
+            report['actual_viewport']=[int(framing[4]),int(framing[5])]
+            report['camera_explicit']=bool(int(framing[1]))
+            if not report['camera_explicit'] or any(abs(a-float(b))>1e-4 for a,b in zip(report['actual_camera'],camera)):
+                report['status']='fail';report['error']='Actual viewer camera differs from explicit capture origin'
+            elif 'resolution' in scenario and report['actual_viewport']!=list(scenario['resolution']):
+                report['status']='fail';report['error']='Actual viewer viewport differs from explicit capture resolution'
         depth=re.search(r'\[vfx-source-depth\] native=(\d+) near=([0-9.eE+-]+) far=([0-9.eE+-]+)',log_text)
         if depth:
             report['depth_range']=[float(depth[2]),float(depth[3])]

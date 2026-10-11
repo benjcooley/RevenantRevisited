@@ -107,6 +107,7 @@ extern char StartupVfxBackground[16];
 // in screen pixels, and an explicit world-space effect origin (no auto-fit).
 extern char StartupVfxBackdrop[MAXPATHLEN];
 extern float StartupVfxCamera[2];
+extern bool StartupVfxCameraExplicit; // Signed screen origin supplied by --vfx-camera.
 extern int32_t StartupVfxOrigin[3];
 extern bool StartupVfxOriginSet;
 

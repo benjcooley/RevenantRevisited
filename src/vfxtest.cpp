@@ -1624,8 +1624,12 @@ void Render()
 
     const int32_t vw = Display.Width();
     const int32_t vh = Display.Height();
-    const float cam_ox = StartupVfxCamera[0] >= 0 ? StartupVfxCamera[0] : vw / 2;
-    const float cam_oy = StartupVfxCamera[1] >= 0 ? StartupVfxCamera[1] : vh / 2;
+    const float cam_ox = (StartupVfxCameraExplicit || StartupVfxCamera[0] >= 0) ? StartupVfxCamera[0] : vw / 2;
+    const float cam_oy = (StartupVfxCameraExplicit || StartupVfxCamera[1] >= 0) ? StartupVfxCamera[1] : vh / 2;
+
+    if (g_state.frames_rendered == 1)
+        log_info("[vfx-camera] explicit=%d actual=(%.9g,%.9g) viewport=(%d,%d)",
+            StartupVfxCameraExplicit ? 1 : 0, cam_ox, cam_oy, vw, vh);
 
     // Neutral 3D scene: directional sun, modern lighting, no shadows/AO.
     // Camera centred at world origin, kCam world-units back. Scene is
