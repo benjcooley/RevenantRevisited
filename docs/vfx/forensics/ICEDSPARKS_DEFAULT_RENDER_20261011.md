@@ -53,3 +53,22 @@ missing particle motion. Native/GPU edge sampling, quantization, helper depth
 write policy, natural caller/actor context and other devices remain open.
 Watchers remain deferred at the independent ARGB1555 texture-transfer boundary;
 this conversion provides no watcher or Iced credit.
+
+## Frozen independent approval
+
+Root independently approved the ten whole native-domain phase pairs and
+actual-size detail: the exact default blue crystal/cube form, texture and size
+remain aligned through both100-frame wraps. The separate approval record is
+`icedsparks-review-final/root-approval.json`, SHA256
+`b520cbd96b93d252aa992ccf2fdcc0454d2324f4d56b56ebadc7fe174bd9275b`. Source checkpoint is `eb40efdf`.
+
+The same pinned binary also completed an actual no-UI review-gallery run:
+220/220 visible frames, two real99-to0 owner wraps, exact
+`TIcedsparks_AUTHORED_STILL` admission and clean shutdown. Its two distinct
+images reflect the slow review camera crossing a pixel boundary; the isolated
+fixed-camera200-frame film remains exactly constant. Gallery manifest SHA256
+`c83fafb89406f2e61f6981a829f0ff16aff967b9577deb06af3eac9aef29d785`.
+
+This is scoped default-state appearance approval, with the limits above
+unchanged. It does not grant Iced victim/shatter, natural-caller or exact-pixel
+acceptance.
