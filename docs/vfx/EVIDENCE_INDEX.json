@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 148,
+    "visual_fidelity_confirmed_rows": 149,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 148,
-    "remaining_visual_review_rows": 28
+    "reviewed_visual_pass_rows": 149,
+    "remaining_visual_review_rows": 27
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1862,6 +1862,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Full declared Mana Drain variant with genuine stationary Acolyte caster/fighting target atoffset96. Fourteen whole original/actualMetal phasepairs5..100 cover cone/glow,15movingstreams, actual62mana transfer21, shrink andkill91/blanktail100; allsampled geometry fitsfixed1280x960. Native100ticks,10495definedstate/RNG/mana fields and19680matrixchannels pass;704640authoredvertexbytes/97560indices exact. ActualGPU90render RNGcounts/firstpositions exact, maxphaseerror4.56e-8. Root28pairedimagehashes and4fullresolutiondetailpages independentlyreviewed; integrated100samephasePNGs byteidentical andcleanexit. Rootgallery24Hz completes91ticksfourtimes withreal60..62mana transfer, health102, targetposition/flags retained, spellTimer0 and no sharedRNGreseed; 31/32samplesvisible. Standalone originalowner/spelllist association and base/pre matrix fragments aredeclaredboundaries; naturalmap/cast scheduling, movingactors/attachment, healthdrainvariants,audio/device/quantization/exactpixels remainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-drip-loaded-20261011/root-approval.json": {
+      "sha256": "0d776d56dbd85d7dba27cf581fc196e72d66bffac4b00ba2e30b8aa01b8a0956",
+      "retail_row": "Drip:0x5975abde",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Complete declared Drip20/128/1 no-splash composite atorigin0, publicperiod1000000 before121 drainslastchild. Genuine loaded originalparent plus originalclass-factory standaloneRipple children after unchanged\u22121map allocations; managed scheduler declared. ActualownerPulse once/baseAnimate40e460/fullparent+childraster,5births24/48/72/96/120 andkills45/69/93/117/141, true ambientparent retained. 1825statefields exact,900submittedgeometrychannels<=2.999e-6, indices/UVs exact; fresh144record native replay exact. Fourteen complete original/Metal phasepairs independently reviewed,42pairedimage hashes checked. Root36samephasePNGs byte-identical through141,24Hzupdates/render/cleanexit. Ordinary36image path unchanged privately; rootlinked4/recursive4/ASanpolicy1/19map/bridge plus4invalidroute controls pass. Rootgallerydefaultmapfactory(64,128,48) supportingliveness66/100visible/397ticks/cleanexit; it doesnot certify controlledpreview routing. Onepixel edges, lowintensitynativegreen-vsMetalgray/framebufferquantization, naturalsector residency, arbitraryrandomperiods, splashappearance/audio/globalRNG/device/exactpixels remainopen."
     }
   }
 }

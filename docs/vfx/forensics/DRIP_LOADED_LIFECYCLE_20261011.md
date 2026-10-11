@@ -124,3 +124,27 @@ The manifest pins the original/Metal manifests, fresh replay, state/geometry
 comparison and common-image regression. Independent root appearance review and
 integrated repeat/gallery remain separate; this source checkpoint does not
 record approval or grant a natural-map claim.
+
+## Independent scoped approval
+
+Root verified42 original/Metal/pair image hashes and independently inspected
+all14 phases in four fixed-crop detail pages. The integrated executable repeats
+all36 sampled PNGs byte-identically through tick141, retains24Hz simulation and
+rendering, and exits cleanly. Linked composite4tests, recursive Ripple4tests,
+the sanitized water-policy test,19 mapping tests and the compiled preview
+bridge with four invalid Drip-route controls all pass.
+
+The actual current viewer selected the normal map factory with default
+`(64,128,48)` parameters. Its100 label-free samples include66 visible frames
+over397 ticks and clean shutdown. This is supporting default-map liveness,
+not a claim that the configured no-splash gallery route was selected. Viewer
+route preference remains a separate follow-up. The parent retains its true
+ambient lifetime; only the controlled drain fixture changes its public period.
+
+Approval is pinned at
+`recon/retail_asm/runtime/effects/current-drip-loaded-20261011/root-approval.json`,
+SHA256 `0d776d56dbd85d7dba27cf581fc196e72d66bffac4b00ba2e30b8aa01b8a0956`.
+Root captures remain outside Git under
+`/Users/benjamincooley/RevenantRetailLab/research/vfx-drip-root-20261011/`.
+The reviewed total advances to149/176, with27 remaining. The recorded hue,
+edge, audio/RNG, natural sector, arbitrary period and splash limits remain open.
