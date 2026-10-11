@@ -466,6 +466,23 @@ void TComplexObject::Load(RTInputStream is, int32_t version, int32_t objversion)
         ab = new TActionBlock(rootname.substr(0, RESNAMELEN - 1).c_str(), (ACTION)action);
     }
 
+  // REVSYNC-DIVERGENCE: a root that names no state of the model can never be
+  // entered. Every ForceCommand back to it is impossible, so a speaker who
+  // finishes a line stays in "say" and the script's speech wait never ends.
+  // The shipped level-46 map saves Shegra and the slaves with a "combat" root
+  // their walk-and-say models lack (docs/gameflow/forensics/DIALOG.md §2.5).
+  // Such a root becomes the default one, else "walk", as a plain animation
+  // block like the one Clear builds.
+    if (imagery && !imagery->HasState(ab->name))
+    {
+        const char* fallback = imagery->HasState(DefaultRootState()) ? DefaultRootState() : "walk";
+        if (imagery->HasState(fallback))
+        {
+            delete ab;
+            ab = new TActionBlock(fallback);
+        }
+    }
+
     SetRoot(ab);
     SetDoing(ab);
     SetDesired(ab);

@@ -127,6 +127,14 @@ def update_cases(data: Path, workdir: Path) -> list[dict]:
     for wait, stop in itertools.product((0, 1, 5), (0, 1)):
         doing = dict(name='say', action=SAY, wait=wait, flags=['stop'] if stop else [])
         case(f'say.w{wait}.st{stop}', [_who(doing=doing, desired='doing')])
+    # A speaker whose root names a state its model lacks (the level-46
+    # slaves: a "combat" root from the map, a model with walk and say only).
+    SPEAKER_STATES = ['walk', 'walkf', 'give', 'walk to say', '33:say', '66:say', '100:say', 'say to walk', 'kiss']
+    for wait, desired in itertools.product((0, 5), ('doing', 'root')):
+        root = dict(name='combat', action=COMBAT, angle=64, moveangle=64)
+        doing = dict(name='say', action=SAY, wait=wait)
+        case(f'say.noroot.w{wait}.{desired}', [_who(name='Shegra', states=SPEAKER_STATES, root=root, doing=doing,
+                                                    desired=desired)])
     for name, facing, cdone in itertools.product(('walk', 'pivotl'), (64, 30), (0, 1)):
         doing = dict(name=name, action=PIVOT, angle=64, moveangle=64, turnrate=8)
         case(f'pivotblock.{name}.f{facing}.cd{cdone}', [_who(facing=facing, doing=doing, desired='doing',

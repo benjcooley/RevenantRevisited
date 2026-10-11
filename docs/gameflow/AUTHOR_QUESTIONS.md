@@ -382,6 +382,17 @@ Answer inline (or in chat) and the owning doc gets updated.
      run-on intended (the NPC goes back to his business as part of the
      scene), or a side effect of the depth count? The port follows retail
      either way.
+142. The level-46 map saves Shegra and the druhg slaves with the root
+     `combat` (and animation state −1), but their models have only walk,
+     say, give and kiss. A character whose root its model can't play never
+     gets back to root after a line, so the script's speech wait doesn't
+     end. The slaves' conversations open with `try walk`, which re-roots
+     them; Shegra's doesn't, and the port stalled on her first line until
+     it repaired such roots on load ([forensics/DIALOG.md](forensics/DIALOG.md)
+     §2.5). Were these characters placed while their models still had a
+     combat stance (a stand-in model, say), and was `try walk` the known
+     workaround? The dosbox-x lab check of Shegra in the shipped game is
+     still to do on our side.
 
 ## The first fight ([../gameplay/forensics/PLAYER_INPUT.md](../gameplay/forensics/PLAYER_INPUT.md))
 

@@ -233,6 +233,9 @@ class TObjectImagery : public TAsset
       // states as the state names would then not be unique.  The closest to but not
       // above way of specifying percentages in the name ensures that each state name IS
       // unique.
+    bool HasState(const char *name) const;
+      // Whether any state is called 'name', a "##:" frequency prefix aside. Unlike
+      // FindState it never rolls a random percent.
     virtual int32_t FindTransitionState(const char *from, const char *to, int32_t pcnt = -1) const;
       // Returns state number for transition state matching "<from> to <to>".  The
       // 'pcnt' value specifies the 'pcnt' used to find a random state (see above).  If 

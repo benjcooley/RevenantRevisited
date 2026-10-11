@@ -565,6 +565,22 @@ int32_t TObjectImagery::FindState(const char *name, int32_t pcnt) const
     return found;
 }
 
+bool TObjectImagery::HasState(const char *name) const
+{
+    if (!name)
+        return false;
+
+    for (int32_t loop = 0; loop < GetHeader()->numstates; loop++)
+    {
+        const char *n = GetHeader()->states[loop].animname;
+        const char *pcntchar = (n[0] >= '0' && n[0] <= '9') ? strchr(n, ':') : nullptr;
+        if (!stricmp(pcntchar ? pcntchar + 1 : n, name))
+            return true;
+    }
+
+    return false;
+}
+
 // This function checks string against statename allowing for the "or" seperator.
 // For example, "one" would match up against "one or two or three".
 bool StateMatch(const char *string, const char *statename)

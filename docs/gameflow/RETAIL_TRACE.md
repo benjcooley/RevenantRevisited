@@ -16,8 +16,9 @@ in what order, with what values. Questions the story tests keep hitting:
 
 - does a scene run the same lines in the same order (the opening, Tendrick's
   scene, the NPC sweep's 34 DIALOG blocks)?
-- how long does a `say` hold the script (Kylie's ~40 s lines and the
-  level-46 speakers that never return to root, BURNDOWN T9)?
+- how long does a `say` hold the script? Does the shipped game hang at
+  Shegra, whose saved root `combat` her model lacks (DIALOG.md §2.5,
+  AUTHOR_QUESTIONS 142)?
 - what a test reads (`If Rahul.stat health = 0`, game states) at the
   moment it reads it;
 - the dialog pane's entry rects, the text bar's lines, level entry and
