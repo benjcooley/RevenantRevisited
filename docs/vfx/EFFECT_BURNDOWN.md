@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-11)
 
-**163 / 176 effects have reviewed visual passes for their recorded test configuration; 13 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
+**164 / 176 effects have reviewed visual passes for their recorded test configuration; 12 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
 **YTelekinesis (2026-10-11):** four moving/rotating chunks match through actual owner completion across six fixed supported capture views; all 39,600 triangles covered and 24 root-repeated Metal frames identical. Corrected exact-ID mapping displays and restarts it in the gallery. Natural actor/spell/audio and raster overlap limits remain open. [Evidence and scope](forensics/YTELEKINESIS_ORIGINAL.md).
 
@@ -1133,3 +1133,5 @@ Audited `class.def`: 233,484 bytes; SHA-256 `bf46eaa4e25a43fa9828e1e8737114d63b9
 - [x] **Burn** `0x55471bff` — genuine integer Acolyte/publicSet finitefire/smoke appearance pass.14phase review/90PNG exactrepeat/livegallery andactualdamage pass. Naturalmovingrigs/map/poster/reignite/spell/audio/device remainopen. [Evidence](forensics/BURN_AUTHENTIC_ACOLYTE_RENDER_20261011.md).
 
 - [x] **Nakrnoth** `0xad92bd21` — complete775frame nullspell appearance pass. Correctedone-light whole/sixview review, main+laterepeat andfinitegallery pass. Naturalboss/map/audio/device remainopen. [Evidence](forensics/NAKRNOTH_AUTHENTIC_20261011.md).
+
+- [x] **Aura** `0x00ab1d1d` — genuine named spell/Acolyte, selector0/integer pose, full750-tick appearance and repeat approved; finite gallery passes. Natural moving actor/spell integration remains open. [Evidence](forensics/AURA_AUTHENTIC_ACOLYTE_RENDER_20261011.md).

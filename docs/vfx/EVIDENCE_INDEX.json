@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 167,
+    "retail_rows_with_source_fixes_recorded": 168,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 163,
+    "visual_fidelity_confirmed_rows": 164,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 163,
-    "remaining_visual_review_rows": 13
+    "reviewed_visual_pass_rows": 164,
+    "remaining_visual_review_rows": 12
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1967,6 +1967,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Exact Nakrnoth0xad92bd21 genuine loaded nullspell/fixedowner/defaultanimator, own63objects/775frame nonloop clip/tenemitter260slotPartSys, unchanged shippedterminal-vector omission parsedasnative. Source645775definedparticlefields/RNGexact within declaredworldfloat0.0021(max.0019525),187840ordinarymatrixchannels max1.33e-5; prototype0 Render mutation excludedfrom ordinarymatrixproof. Originalhidden*paths omitted; exactgeometry/material/keys/profile130rejectcontrols andsoftware640/480span guard preserved onlynative mode, commongeometrycomplete. All49675actualterrainqueriesreturn0 and790owner/RNGstatesmatch; sourceemptygroundexplicit. Correctedone-light native reference (actual23\u219231\u219223 duplicate-lightpositive/removalcontrol) matches unchangedport. Fortyretainedmainphasepairs and36rawlatepairs/sixfixedsupported1920x1080windows, wholecontacts/all5detailpages/late641+681coverageMAXunions independentlyreviewed,257pinsverified. MAXunions arecoveragecontacts, notgiantframebuffers; allsoftwareadmitted authoredtrianglescovered. Rootmain40stride20PNGsbyteidentical through78124Hzupdates/render/kill775/blanktail; lateview2 six601..701PNGsbyteidentical/cleanexit. Rootconfiguredgallery40frames36visible/two finitecreations through938renderframes/cleanexit; no actualnaturalboss/mapgroundcredit. Mainlateclip, overlap/raster/RGB565precision,worldfloatdrift, naturalboss/actor/spell/map/audio/device/exactpixels remainopen. Olddouble-light/warmup25/unguarded/widened-limit controls retained; nofit orportbrightnesschange."
+    },
+    "recon/retail_asm/runtime/effects/current-aura-public-20261011/root-approval.json": {
+      "sha256": "54941edc026bfcb05344e90bf7d2f3cd0cdaa6f8ea023d0bd9de5aa9aa3fdb38",
+      "retail_row": "Aura:0x00ab1d1d",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact Aura 0x00ab1d1d, own 9484-byte RGB565 resource, genuine named Aura spell and Acolyte state14/frame0/facing96, declared selector storage0 and integer/no-transition bone query. Full750-tick original and source state/RNG match:375719 state fields,280912 matrices; actual integrated122899 slot fields max4.825e-8, zero errors. Real CalcObjectMatrix hierarchy queries with temporary interpolation disable restored; no recorded bone matrices. All15 whole/fixed-crop/detail phases independently reviewed, emission stops721, kill744, blanktail through750. Integrated750 PNGs repeat byte-identically;100 gallery samples visible/distinct with two unreseeded finite creations and clean exit. Original cached zero selector is a fixture control, not universal allocator initialization. Natural moving actor/transition/spell/map/audio/device and exact pixel equality remain open; raster edge/quantization differences retained."
     }
   }
 }

@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "329e9dee0c45f14de3bf2feb2458ea849fb1bb7d8df06774654758537a116268",
+    "harness_sha256": "ad138d50a55a4102f27541e96b45334c5bf13a816c6c4f91bac56a215c636223",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 167,
+    "retail_rows_with_source_fixes_recorded": 168,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 163,
+    "visual_fidelity_confirmed_rows": 164,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 163,
-    "remaining_visual_review_rows": 13
+    "reviewed_visual_pass_rows": 164,
+    "remaining_visual_review_rows": 12
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -15231,29 +15231,42 @@
       "retail_type_id": "0x00ab1d1d",
       "asset": "Magic\\Aura.I3D",
       "preview_candidates": [
+        "Aura_AUTHENTIC_ACOLYTE_INTEGER",
         "TAuraEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact genuine actor/named spell Aura finite control, integer bone queries and full750 state/RNG/appearance approved; selector0 scope explicit, natural moving actor and spell scheduling remain open."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Use corrected real actor bone APIs to recover genuine Aura caller/attachment; no recorded or synthetic bone matrices.",
+      "next_action": "Preserve approved selector0/integer actor control; verify natural selector initialization, moving/transitioning actors and real spell/map/audio/device integration.",
       "notes": [],
-      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
+      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent full-lifetime visual inspection and integrated repeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Exact Aura 0x00ab1d1d, own 9484-byte RGB565 resource, genuine named Aura spell and Acolyte state14/frame0/facing96, declared selector storage0 and integer/no-transition bone query. Full750-tick original and source state/RNG match:375719 state fields,280912 matrices; actual integrated122899 slot fields max4.825e-8, zero errors. Real CalcObjectMatrix hierarchy queries with temporary interpolation disable restored; no recorded bone matrices. All15 whole/fixed-crop/detail phases independently reviewed, emission stops721, kill744, blanktail through750. Integrated750 PNGs repeat byte-identically;100 gallery samples visible/distinct with two unreseeded finite creations and clean exit. Original cached zero selector is a fixture control, not universal allocator initialization. Natural moving actor/transition/spell/map/audio/device and exact pixel equality remain open; raster edge/quantization differences retained.",
+        "report": "recon/retail_asm/runtime/effects/current-aura-public-20261011/root-approval.json",
+        "sha256": "54941edc026bfcb05344e90bf7d2f3cd0cdaa6f8ea023d0bd9de5aa9aa3fdb38",
+        "note": "docs/vfx/forensics/AURA_AUTHENTIC_ACOLYTE_RENDER_20261011.md"
+      }
     },
     {
       "index": 75,
