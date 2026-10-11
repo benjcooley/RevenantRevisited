@@ -204,10 +204,11 @@ TGameSession::EStep TGameSession::EnterWorld()
 
     PlacePlayers(*map, /*entering=*/true);
 
-    // The camera starts on the main player and follows it (retail set this
-    // up as TPlayScreen::Initialize made the player the main one).
+    // The view starts on the main player. Following it is the main player's
+    // binding to the play screen (TPlayerManager::BindMainPlayerToScreen,
+    // retail's SetMainPlayerNum): an in-game load has made it already, a
+    // new session makes it as the play screen starts.
     S3DPoint pos = Player->Pos();
-    MapPane.CenterOnObj(Player);
     MapPane.SetMapPos(pos);
     MapPane.SetMapLevel(Player->GetLevel());
 

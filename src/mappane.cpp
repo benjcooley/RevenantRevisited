@@ -3950,8 +3950,11 @@ void TMapPane::UpdateActiveWindow()
     BindWindow(map);
 }
 
-// Where the camera looks this frame: the center, moved `fraction` of the way
-// from the previous tick's (the center steps at 24 Hz).
+// Where the camera looks this frame: the previous tick's center, moved
+// `fraction` of the way to this tick's (the center steps at 24 Hz). At the
+// tick that is retail's view: TMapPane::Pulse (0x00454390) takes the pane's
+// current scroll as the frame's origin (+0x78) before the scroll this tick's
+// UpdateMapPos asked for comes in, so retail drew each tick one center behind.
 S3DPoint TMapPane::CameraPos(double fraction) const
 {
     const double f = std::clamp(fraction, 0.0, 1.0);

@@ -305,9 +305,14 @@ frame), Violence (read at each blood effect), Music, Sound.
   step.
 - `[Controls]` isn't saved at shutdown: only OK changes the port's
   control map, and it saves.
+- `SquishyScroll` (no pane control; `Yes` by default) is read and saved
+  in retail's place. It picks how the camera follows the main player:
+  `TPlayerManager::BindMainPlayerToScreen` passes `SetMainPlayerNum`'s
+  flags (`0x0051efda`): scroll to the player (12) with it on, jump to him
+  each tick (8) with it off.
 - Keys the port has no owner for (`ZoomSpeed`, `VertPanSpeed`,
   `HorzPanSpeed`, `Software3D`, `ShortEditorDisplay`, `NoTexOverlay`,
-  `SquishyScroll`, `NoEAX`, `No3DAudio`, `Cache3DImagery`, `BeepOnChat`,
+  `NoEAX`, `No3DAudio`, `Cache3DImagery`, `BeepOnChat`,
   `VidMemZBuffer`, `WaitMapUpdate`, `LastEditedModule`, `LastOptions`,
   `[DedicatedServer]`) are neither read nor written; the INI layer keeps
   whatever the file holds, so a retail-written INI round-trips them.

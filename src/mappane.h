@@ -372,11 +372,11 @@ class TMapPane : public TPane
       // may add CENTERON_SCROLL (scroll rather than jump) and CENTERON_SNAP
       // (jump once first); `centeron` passes both, `scrollto` scroll.
     TObjectInstance* GetCenterOnObj() { return centeron.obj; }
+      // Gets centered object
     [[nodiscard]] bool IsFollowingPlayer() const;
       // The camera follows the player
     [[nodiscard]] S3DPoint CameraPos(double fraction) const;
-      // Where the camera looks between ticks: the center, `fraction` of the way from the last tick's
-      // Gets centered object
+      // Where the camera looks: the last tick's center, `fraction` of the way to this tick's
     void CenterOnPos(const S3DPoint& pos, int32_t level, uint32_t flags = 0);
       // Center on a point. REVSYNC: SetCameraPos @ 0x00453940 (flags as above)
     void GetCenterOnPos(S3DPoint& pos, int32_t &level) { pos = centeron.pos; level = centeron.level; }

@@ -11,6 +11,7 @@
 #include "dialog.h"
 #include "equip.h"
 #include "gameflow.h"
+#include "gameoptions.h"
 #include "inventory.h"
 #include "logging.h"
 #include "mappane.h"
@@ -1563,6 +1564,10 @@ void TPlayerManager::SetMainPlayer(int32_t newplayernum)
 // SetMainPlayer, which ran inside TPlayScreen::Initialize (0x0047a660). The
 // port's session loads a game under the loading screen, so the play screen
 // calls this as it starts.
+//
+// REVSYNC: SetMainPlayerNum @ 0x0051eef0 -- the camera jumps to the player at
+// its next update, then follows it: scrolling to it with SquishyScroll on
+// (flags 12 at 0x0051efda), jumping to it each update with it off (8).
 void TPlayerManager::BindMainPlayerToScreen()
 {
     if (!Player)
@@ -1574,7 +1579,7 @@ void TPlayerManager::BindMainPlayerToScreen()
         AutoMap.BindPlayer(nullptr);            // REVSYNC: 0x0051ef84
         return;
     }
-    MapPane.CenterOnObj(Player);
+    MapPane.CenterOnObj(Player, SquishyScroll ? CENTERON_SCROLL | CENTERON_SNAP : CENTERON_SNAP);
     Player->RefreshEquip();
     Inventory.SetContainer(Player);
     AutoMap.BindPlayer(Player);                 // REVSYNC: 0x0051f03e
