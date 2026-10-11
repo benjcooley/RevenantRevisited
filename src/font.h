@@ -253,13 +253,14 @@ void DrawTextShadowedAtBaseline(const SFontAtlas* atlas, const char* text,
 // A wrapped block as retail's DrawTextA with DT_WORDBREAK | DT_EDITCONTROL
 // lays it in its rect (x, y, w, h): `text` wrapped to w (WrapTextLines), a
 // line every SFontAtlas::lineStep from the rect's top, each aligned in w,
-// and only the lines that fit whole in h. Shadowed as
-// DrawTextShadowedToTarget when `shadowed`.
-void DrawTextWrappedToTarget(const SFontAtlas* atlas, const char* text,
-                             int32_t x, int32_t y, int32_t w, int32_t h,
-                             ETextAlign align, float r, float g, float b, bool shadowed,
-                             int32_t target_w, int32_t target_h,
-                             ETextEncoding encoding = kGameTextEncoding);
+// and only the lines that fit whole in h (the first always). Shadowed as
+// DrawTextShadowedToTarget when `shadowed`. Returns the height drawn, as
+// DrawTextA does.
+int32_t DrawTextWrappedToTarget(const SFontAtlas* atlas, const char* text,
+                                int32_t x, int32_t y, int32_t w, int32_t h,
+                                ETextAlign align, float r, float g, float b, bool shadowed,
+                                int32_t target_w, int32_t target_h,
+                                ETextEncoding encoding = kGameTextEncoding);
 
 // A text draw as the canonical helpers make it, for the retail A/B hosts:
 // the A/B compares it with retail's own text compose (0x004be2b0, which

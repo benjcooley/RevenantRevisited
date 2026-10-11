@@ -311,6 +311,16 @@ class TPlayer : public TCharacter
         // Removes the i'th known spell, the later ones moving down (retail
         // TPointerArray RemoveAt 0x0041cb80, as the spell book prunes codes
         // spell.def doesn't know)
+    bool TrainStat(int32_t attribute);
+        // REVSYNC: 0x0051fe50 -- the stat pane's pick of attribute 0..5
+        // (Strn..Luck) to raise at the next level: it takes the pick not
+        // made last, unless the attribute is at 30, or is already that pick
+        // and at 29. False when nothing changed.
+    [[nodiscard]] int32_t LevelUpPick(int32_t pick) const { return levelupstats[pick]; }
+        // The attribute picked first (0) or second (1) for the next level;
+        // pick 2 is which of them was made last
+    void SetLevelUpPicks(const std::array<int32_t, 3> &picks) { levelupstats = picks; }
+        // All three, as a save holds them
     void SetMoney(int32_t amount);
         // REVSYNC: 0x0051e900 -- the gold carried becomes `amount`: the pile
         // set to it, added when there is none, removed below 1

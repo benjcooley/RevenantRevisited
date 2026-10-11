@@ -78,6 +78,7 @@ class TextCall:
     color: int
     back_mode: int
     layout: list = field(default_factory=list)      # [[x, y, line, width]]: where each line's cell starts
+    cell: int = 0                                   # the font's cell height (tmHeight): a line's height
 
 
 class Gdi:
@@ -264,7 +265,7 @@ class Gdi:
         layout = [[lx + ox, ly + oy, line, width] for lx, ly, line, width in layout]
         self.text_calls.append(TextCall(function, dc.surface, text, x, y, rect, fmt,
                                         f'{font.face} {font.height}{" bold" if font.bold else ""}',
-                                        dc.text_color, dc.back_mode, layout))
+                                        dc.text_color, dc.back_mode, layout, font.metrics.height))
 
     def layout(self, dc, text, rect, fmt):
         """DrawTextA's lines in `rect`: [[x, y, line, width]], each line one

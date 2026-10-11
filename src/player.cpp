@@ -1489,6 +1489,19 @@ void TPlayer::ForgetSpell(int32_t i)
     }
 }
 
+bool TPlayer::TrainStat(int32_t attribute)
+{
+    if (attribute < 0 || attribute >= NUM_PLRSTATS)
+        return false;
+    const int32_t value = GetObjStat(PLRSTAT_FIRST + attribute);
+    int32_t &last = levelupstats[2];                // the pick made last (+0x368)
+    if (value >= 30 || (attribute == levelupstats[last != 0] && value >= 29))
+        return false;
+    last = last == 0 ? 1 : 0;
+    levelupstats[last] = attribute;
+    return true;
+}
+
 void TPlayer::SetMoney(int32_t amount)
 {
     constexpr const char* kGoldName = "gold";       // 0x005e2b44

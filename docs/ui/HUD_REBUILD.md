@@ -559,6 +559,45 @@ compared structurally: every compose's string, font, rect, alignment,
 colour, shadow and wrapped lines against the port's recorded draws
 (`SetTextDrawRecorder`).
 
+## 6f. P4 design: the stats
+
+**What retail draws and does** (`docs/ui/forensics/StatPane_RETAIL.md`, from
+the disassembly; both pages confirmed with `slots/hud/statpane.py`,
+2026-10-10). TStatPane (`0x0065b140`, vtable `0x005a5ba0`) is a TButtonPane
+in the side panel's upper slot, (452, 0), 188×306. Its paint (`0x005491c0`)
+puts StatsPane.dat's `Stats` and then runs statpane.def (resources.rvr's,
+read packs first): a block picked by the bound object's class and the format
+("page1" / "page2"), whose statements move a cursor (POS, MOVE, TAB,
+NEXTLINE), set colours, and draw TEXT and FIELDs with GDI TextOutA in
+"Small", each with the 3-pass shadow, the cursor following GDI's current
+position (TA_UPDATECP: left text moves it right, right-aligned text leaves it
+at its left edge). FIELDs resolve through the pane (`train<attribute>`: "+"
+for the level-up picks; `objdesc`, `type`, `stmod...`) and then the object's
+own field text (vtable +0xc8: TPlayer's class, TCharacter's armor, max
+health / fatigue / mana, attack and defense %, damage, stealth, the stats by
+name). The shipped DEF's stat-modifier columns name no field, so they never
+draw. BUTTONs are invisible hot spots, made when the block changes: "page1" /
+"page2" switch the format, train<attribute> picks it for the next level
+(`TPlayer::TrainStat`, 0x0051fe50; STATMAX past 30). A right press shows
+the player again. The examined-object formats (Character, Weapon, Armor,
+Default) add the portrait (ICON) and a description paged by Prev / Next.
+
+**Port.** `TStatPane` (`src/statpane.*`; the 1998 skill-tree pane is in
+`attic/src/statpane.*`) parses statpane.def once into blocks of statements
+and runs the selected block on each compose, its text through the canonical
+helpers. The hot spots are rebuilt when the block changes
+(`TButtonPane::ClearButtons`). Retail repainted on the bound object's
+stat-changed notification, which the port lacks; the pane recomposes when
+anything it shows changes. `TCharacter::GetFieldText` gains attackpct,
+defensepct, damage and stealth (the getters named in the spec, retail's
+quirks kept). `TPlayScreen` hosts the pane in the upper slot for the stats
+tab. `hud_ab.py statpane` over `--test=ab-statpane`: both pages, the
+level-up marks, wide values, and clicks on the hot spots. The port reports
+what the fields read (the player's stats by name, the combat getters by
+retail slot, max health / mana, the class) and the fixture answers with
+it, so the A/B checks the interpreter, the formulas and the layout. The text
+is compared structurally against retail's GDI calls (`gdi_draws`).
+
 ## 7. Status
 
 - 2026-10-07: survey done; retail pipeline verified (§3); P0 started.
@@ -763,3 +802,16 @@ colour, shadow and wrapped lines against the port's recorded draws
     it now has the GOG install's `.\Resources`. The port mounts the module
     before `InitGlobals`, which retail doesn't: a base file named bare can
     resolve into the module (gameflow's to settle).
+- 2026-10-10: **P4: the stats done** (the harness drew a 1998-style skill
+  tree in the wrong font).
+  - `TStatPane` is retail's pane (§6f), hosted by `TPlayScreen` in the upper
+    slot for the stats tab; `--test=ui-stats` / `ab-statpane` are thin hosts;
+    the 509-line harness is gone. In game: page 1 shows the main player's
+    figures, "/Skills" switches to page 2, the train hot spots pick the
+    level-up attributes.
+  - `hud_ab.py statpane`: 9/9 cases, every pixel outside text exact, every
+    text draw structurally identical (string, font, position as GDI's
+    current position flows, colour, shadow).
+  - Found on the way: clearing a pane's buttons by count never ends
+    (TPointerArray leaves holes); `TButtonPane::ClearButtons` (0x00436890)
+    does it as Close does.

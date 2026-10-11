@@ -391,6 +391,14 @@ drawn**. [EMU] confirmed: those FIELDs make no TextOutA.
 | `damage` | `d = (vt2b0()+100)*vt2d0()/100`. If `t=vt2cc()` is 1, 2 or 4: `d = (vt3d4()+100)*d/100`. Signed /100 via 0x51eb851f, see `0x4d54f6..0x4d5560`. |
 | `stealth` | `vt2e8()` |
 
+The getters (field forensics, 2026-10-10): vt260 DmgResMisc, vt2b0 DamageMod,
+vt2bc ArmorValue, vt2c0 Defense, vt2c4 Offense, vt2cc WeaponType, vt2d0
+WeaponDamage, vt2e8 StealthMod, vt2ec LuckMod, vt3d4 EdgeBonus (a TPlayer slot:
+retail calls it through any character's vtable, a latent crash it never
+triggers). The list is `this`'s SpellManager (+0x170) in every branch -- in
+the obj≠Player ones retail's slip subtracts the object's own spells, not the
+player's. The port: `TCharacter::GetFieldText`.
+
 **TObjectInstance `0x472f80`** (`buf[0]=0` first):
 | field | value |
 |---|---|
@@ -699,14 +707,14 @@ for train marks, the armor bonus and the attack/defense percentages.
 | `+6` word | `0x473412` | type index (STATS path only) | 0 |
 | `+0x4c` → type rec | `0x472fbd`, `0x547319` | +0 name, +0x1c objdesc key | record with +0 = "Locke" |
 | `+0xfc` → chardata | `0x51dfce` | [+0x190] class display string | block with +0x190 string |
-| `+0x170`/`+0x180` | `0x5407d0`, `0x540820` | effect list count / data | 0 |
+| `+0x170`/`+0x180` | `0x5407d0`, `0x540820` | the SpellManager's spells (count / data): GetDefense sums +0x134, GetOffense +0x138 | 0 |
 | `+0x360`, `+0x364`, `+0x368` | `0x5472b3`, `0x5472d6`, TrainStat | level-up choices / last slot | ints |
 | vt+0xdc(i) | `0x4733ca` | GetObjStat (ids in §5.2) | stub |
 | vt+0xd4(name) | `0x5472c6` ("Level"), `0x5473d6` ("type") | GetStat by name | stub |
 | vt+0x1d8 / 0x1e0 / 0x1e8 | TCharacter | max health / fatigue / mana | hudscene stubs |
 | vt+0x2bc, 0x260 | armor | ArmorValue, DmgResMisc | stub |
-| vt+0x2b0, 0x2d0, 0x2cc, 0x3d4 | damage | (unnamed getters) | stub |
-| vt+0x2c0, 0x2c4, 0x2ec | attack/defense pct | (unnamed getters) | stub |
+| vt+0x2b0, 0x2d0, 0x2cc, 0x3d4 | damage | DamageMod, WeaponDamage, WeaponType, EdgeBonus (player only) | stub |
+| vt+0x2c0, 0x2c4, 0x2ec, 0x2e8 | attack/defense pct, stealth | Defense, Offense, LuckMod, StealthMod | stub |
 | vt+0x9c / 0xa0 | SetObject | notify (empty for TPlayer) | real |
 | vt+0xc8 | `0x547576` | GetFieldText chain | real |
 | vt+0x130 | ICON only | inventory image | not needed for Player |

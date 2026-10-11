@@ -543,7 +543,8 @@ class TCharacter : public TComplexObject
 
   // Damage resistances and modifier (the shipped game's code-defined stats;
   // their values come from class.def and saves, nothing in the port reads them yet)
-    OBJSTAT(DmgResMisc)
+    OBJSTATFUNC(DmgResMisc)
+      // REVSYNC: slot 0x260, 0x004d6f90 (setter 0x264)
     OBJSTAT(DmgResHand)
     OBJSTAT(DmgResPuncture)
     OBJSTAT(DmgResCut)

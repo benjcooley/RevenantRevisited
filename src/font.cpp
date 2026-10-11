@@ -553,12 +553,12 @@ void DrawTextShadowedAtBaseline(const SFontAtlas* atlas, const char* text,
 
 // Retail's description box (DrawTextA, DT_WORDBREAK | DT_EDITCONTROL):
 // word-wrapped to `w`, a line every lineStep, whole lines only.
-void DrawTextWrappedToTarget(const SFontAtlas* atlas, const char* text,
-                             int32_t x, int32_t y, int32_t w, int32_t h,
-                             ETextAlign align, float r, float g, float b, bool shadowed,
-                             int32_t target_w, int32_t target_h, ETextEncoding encoding)
+int32_t DrawTextWrappedToTarget(const SFontAtlas* atlas, const char* text,
+                                int32_t x, int32_t y, int32_t w, int32_t h,
+                                ETextAlign align, float r, float g, float b, bool shadowed,
+                                int32_t target_w, int32_t target_h, ETextEncoding encoding)
 {
-    if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
+    if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return 0;
     std::vector<std::string> lines;
     WrapTextLines(atlas, text, float(w), lines, encoding);
     // DT_EDITCONTROL: the first line always, then whole lines only.
@@ -577,6 +577,7 @@ void DrawTextWrappedToTarget(const SFontAtlas* atlas, const char* text,
         else
             DrawColouredRun(atlas, lines[i].c_str(), encoding, penX, baselineY, r, g, b, target_w, target_h);
     }
+    return static_cast<int32_t>(static_cast<float>(lines.size()) * step);
 }
 
 int32_t WrapTextLines(const SFontAtlas* atlas, const char* text, float wrapWidth,

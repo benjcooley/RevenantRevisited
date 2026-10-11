@@ -72,6 +72,7 @@
 #include "uihudtest.h"
 #include "uisidebartest.h"
 #include "spellbook.h"
+#include "statpane.h"
 
 #include <vector>
 
@@ -392,7 +393,19 @@ bool TPlayScreen::Initialize()
     else
         log_error("[playscreen] Trouble initializing the spell pane");
 
-    // The spell book (0x005449e0, after the spell pane), in the side panel's
+    // The stats (0x00546b50, after the spell pane), in the side panel's upper
+    // slot while the side panel shows the stats tab: the main player's, or an
+    // examined object's.
+    if (StatPane.Initialize())
+    {
+        AddPane(&StatPane);
+        StatPane.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the stat pane");
+
+    // The spell book (0x005449e0, after the stats), in the side panel's
     // upper slot while the side panel shows the book tab. Its rows are the
     // main player's known spells.
     if (SpellBook.Initialize())
@@ -724,6 +737,8 @@ void TPlayScreen::Close()
     drawerclose    = false;
     RemovePane(&SpellBook);
     SpellBook.Close();
+    RemovePane(&StatPane);
+    StatPane.Close();
     RemovePane(&SpellPane);
     SpellPane.Close();
     RemovePane(&Inventory);
@@ -1151,13 +1166,14 @@ static void PlaceSidePane(TPane& pane, ESideSlot slot, bool shown)
 }
 
 // The side panel's rebuilt panes while the side panel is open on theirs:
-// the spell book in the upper slot; the inventory, the spell pane and the
-// automap in the lower. (The stats and equipment are still the HUD
+// the stats and the spell book in the upper slot; the inventory, the spell
+// pane and the automap in the lower. (The equipment is still the HUD
 // harness's.)
 void TPlayScreen::UpdateSidePanes()
 {
     const SHudState& hud = GetHudState();
     const bool open = hud.sidebarState == HUD_SIDEBAR_OPEN;
+    PlaceSidePane(StatPane, ESideSlot::Upper, open && hud.topSlot == HUD_TOP_STATS);
     PlaceSidePane(SpellBook, ESideSlot::Upper, open && hud.topSlot == HUD_TOP_BOOK);
     PlaceSidePane(Inventory, ESideSlot::Lower, open && hud.bottomSlot == HUD_BOT_INV);
     PlaceSidePane(SpellPane, ESideSlot::Lower, open && hud.bottomSlot == HUD_BOT_SPELL);

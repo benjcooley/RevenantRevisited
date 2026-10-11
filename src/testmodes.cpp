@@ -3599,13 +3599,15 @@ bool Initialize(const char* mode)
         return InitializeABAutoMapMode();
     if (strcmp(mode, "ab-spellbook") == 0)
         return InitializeABSpellBookMode();
+    if (strcmp(mode, "ab-statpane") == 0)
+        return InitializeABStatPaneMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         SetUISidebarSyntheticStateEnabled(true);
         SetUIHudCursorOverlayEnabled(true);
         return InitializeUIHudMode() && InitializeUIBottomBarModeEmbedded() && InitializeUIInventoryModeEmbedded()
             && InitializeUISpellCreateModeEmbedded() && InitializeUIMapModeEmbedded()
-            && InitializeUISpellbookModeEmbedded();
+            && InitializeUISpellbookModeEmbedded() && InitializeUIStatsModeEmbedded();
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
@@ -3681,8 +3683,11 @@ void Close(const char* mode)
         CloseABAutoMapMode();
     if (strcmp(mode, "ab-spellbook") == 0)
         CloseABSpellBookMode();
+    if (strcmp(mode, "ab-statpane") == 0)
+        CloseABStatPaneMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
+        CloseUIStatsMode();
         CloseUISpellbookMode();
         CloseUIMapMode();
         CloseUISpellCreateMode();
@@ -3781,6 +3786,8 @@ void Render(const char* mode)
         return RenderABAutoMapMode();
     if (strcmp(mode, "ab-spellbook") == 0)
         return RenderABSpellBookMode();
+    if (strcmp(mode, "ab-statpane") == 0)
+        return RenderABStatPaneMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         RenderUIHudMode();
@@ -3789,6 +3796,7 @@ void Render(const char* mode)
         RenderUISpellCreateMode();
         RenderUIMapMode();
         RenderUISpellbookMode();
+        RenderUIStatsMode();
         return;
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
