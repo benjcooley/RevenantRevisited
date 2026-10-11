@@ -43,7 +43,10 @@ def audit(output, binary_hash, command, elapsed, exit_code, baseline=None):
         checks['same_index_gallery_pixels'] = len(prior) == len(frames) and not differences
         comparison = dict(baseline=str(baseline), frame_count=len(prior), differing_frames=differences,
                           baseline_log_sha256=sha(baseline / 'run.log'))
-    report = dict(status='pass' if all(checks.values()) else 'fail', checks=checks,
+    report = dict(status='pass' if all(checks.values()) else 'fail',
+                  resource_status='pass' if all(value for name, value in checks.items() if name != 'same_index_gallery_pixels') else 'fail',
+                  pixel_status=('pass' if checks.get('same_index_gallery_pixels') else 'different') if baseline else 'not_requested',
+                  checks=checks,
                   binary_sha256=binary_hash, command=command, exit_code=exit_code, elapsed_seconds=elapsed,
                   loop_seconds=float(ready[2]) if ready else None, last_loop=loop,
                   per_loop_resources=per_loop, allocations_by_loop=allocations,
