@@ -220,8 +220,8 @@ bool UseClearZBuffer = false;       // Use a clear z buffer for z restores (i.e.
 bool IsVooDoo        = false;       // True if using a voodoo card
 bool IsMMX           = false;       // Has MMX extensions
 bool NoAI            = false;       // Turns off monster AI
-bool CheatNahkranoth = false;       // retail 0x00668108 (IsValidAttack, Damage); no console toggle yet
-bool CheatAlreadyDead = false;      // retail 0x00668104 (Damage; also 0x004c2a20, 0x004d3590); no console toggle yet
+bool CheatNahkranoth = false;       // retail 0x00668108 (IsValidAttack, Damage); text-bar cheat "nahkranoth"
+bool CheatAlreadyDead = false;      // retail 0x00668104 (Damage; also 0x004c2a20, 0x004d3590); text-bar cheat "alreadydead"
 bool AutoBeginCombat = true;        // Automatically begins combat if enemy in range and facing him
 bool PlaySpeech      = true;        // Play speech wave files
 bool ShowDialog      = false;       // Show dialog lines (always shows if no speech file found)
@@ -3014,8 +3014,10 @@ static void AppEvent(const sapp_event* ev)
         if (!AppActive) break;
         if (imgui_kbd) break;
         if (CtrlDown && ShiftDown) break;
+        // The game reads WM_CHAR codes; macOS reports Backspace as DEL.
+        const int32_t ch = ev->char_code == 0x7f ? 0x08 : (int32_t)ev->char_code;
         if (CurrentScreen)
-            CurrentScreen->CharPress((int32_t)ev->char_code, true);
+            CurrentScreen->CharPress(ch, true);
         break;
       }
 

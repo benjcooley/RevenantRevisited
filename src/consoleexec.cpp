@@ -14,6 +14,7 @@
 #include "logging.h"
 #include "parse.h"
 #include "player.h"
+#include "screen.h"
 #include "testconfig.h"
 
 namespace {
@@ -62,6 +63,22 @@ void PulseStartupExec()
     {
         g_sleepTicks = std::atoi(cmd.c_str() + 5);
         log_info("[exec] sleep %d", g_sleepTicks);
+        return;
+    }
+
+    // "prompt <text>": typed at the text bar's prompt as a player would --
+    // Enter, the characters, Enter -- so a cheat word or "@<script line>".
+    if (cmd.rfind("prompt ", 0) == 0)
+    {
+        constexpr int32_t kEnter = 0x0d;
+        if (CurrentScreen)
+        {
+            CurrentScreen->CharPress(kEnter, true);
+            for (const char c : cmd.substr(7))
+                CurrentScreen->CharPress((unsigned char)c, true);
+            CurrentScreen->CharPress(kEnter, true);
+        }
+        log_info("[exec] %s", cmd.c_str());
         return;
     }
 

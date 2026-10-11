@@ -3164,6 +3164,18 @@ void InputSimStart(const char* script)
                 t_ms += kTypeIntervalMs;
             }
         }
+        else if (op == "char")
+        {
+            // One character event: a code (13) or enter / backspace / escape,
+            // the characters those keys send besides their key events.
+            const std::string arg = (tok.size() > 1) ? tok[1] : "";
+            const int32_t ch = arg == "enter" ? 0x0d : arg == "backspace" ? 0x08 : arg == "escape" ? 0x1b
+                             : (int32_t)std::strtol(arg.c_str(), nullptr, 0);
+            if (ch > 0)
+                g_inputSimEvents.push_back({ t_ms, MS_CHAR, ch, 0, 0, "" });
+            else
+                log_warn("[input-sim] char: unknown character '%s'", arg.c_str());
+        }
         else if (op == "loop")
             g_inputSimLoop = true;
         else if (op == "take_snapshot" || op == "snapshot" || op == "snap")

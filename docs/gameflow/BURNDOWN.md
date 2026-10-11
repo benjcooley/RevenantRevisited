@@ -77,7 +77,7 @@ reads.
 | [x] | Gamma on screen: the ambient offset in `TMapPane::SetAmbientLight` and OK's re-set, as retail; no display ramp, which the retail captures show has no effect (OPTIONS.md §7.11, §9; LIGHTING_FIDELITY.md §2.5, §8; question 92) | 2026-10-07 |
 | [ ] | Combat reads `CombatFace` and `NoCombatResults` (gameplay track; OPTIONS.md §7.4, §7.7) | — |
 | [ ] | DEF slider: a track click pages by the slider's page size, as retail (DEF engine; OPTIONS.md §8) | — |
-| [ ] | The control table → retail's (`0x005d5500`: order, defaults, entries), so a missing `[Controls]` gives retail's keys | — |
+| [ ] | The control table → retail's (`0x005d5500`: order, defaults, entries), so a missing `[Controls]` gives retail's keys. Decoded 2026-10-10: 69 entries of 0x4c bytes in the port's `SControlEntry` layout, but retail's command numbers (Use 14, Invoke 20, belt 24-28, dodges 48-55, camera 70/71) are not the port's 1998 enum, and several have no dispatch yet (combat track). Until then the port's default binds Combat Mode to Enter, which also opens the text-bar prompt; retail's is `C` (the GOG INI's `[Controls]` says `C`, so only an INI without the section sees it) | 2026-10-10 |
 
 **Exit:** Options opens from the title and in game; changes take effect and persist in `Revenant.ini` as retail's did, and the GOG install's INI loads unchanged.
 
@@ -224,7 +224,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | Locks and keys (`CheckKeyUse`), the door prototypes' USE scripts end to end | 2026-10-05 |
 | [x] | Doors and lift gates by mouse: the map pane's retail pick on the GPU id buffer, the door cursor, click-to-use; `ressexit` opens and teleports, `soldoor`'s INPORTEW runs ([forensics/MAP_INPUT.md](forensics/MAP_INPUT.md) §7.1) | 2026-10-08 |
 | [x] | Portcullis (InportNS) by mouse, seen lifting and closing behind Locke at the level-46 gatehouse; locked gates say "It seems to be locked" (MAP_INPUT §7.1) | 2026-10-09 |
-| [ ] | By mouse, not yet shown: click-to-talk, click-to-get, a PortNS/PortEW exit gate; hover's synchronous read while the pointer moves (MAP_INPUT §7.1 Open) | 2026-10-09 |
+| [ ] | By mouse, not yet shown: a PortNS/PortEW exit gate; hover's synchronous read while the pointer moves (MAP_INPUT §7.1 Open). Click-to-talk (Tendrick: mouth cursor, conversation) and click-to-get ("Short Sword Picked up.", into the pack) shown 2026-10-09 (`IsInventoryItem` = `OF_INVENTORY`, retail `Pickup`) | 2026-10-10 |
 | [-] | curmap written on every transition: the port keeps visited levels loaded and writes them when saving (ARCHITECTURE §7) | 2026-10-05 |
 | [x] | Walk-on of an unscripted AutoActivate exit: a level-41 teleport pad sends Locke to `Lv41Tel5`'s target | 2026-10-05 |
 | [x] | The loading bar fills per sector during the world load (staged `TGameMap` load) | 2026-10-05 |
@@ -240,6 +240,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 
 | Status | Item | Last touched |
 |--------|------|--------------|
+| [x] | Retail's typed-message prompt on the text bar: Enter opens "Message: ", typing and Backspace, Enter commits "Locke: …"; `@<line>` runs a script line on Locke, the ten cheat words (`alreadydead`, `alchemy`, `nahkranoth`, `noamnesia`, `lookunderthehood`, `dummies`, `abracadabra`, `potionsnlotions`, `gimmesomegrub`, `debug`) answer "Cheat Enabled"/"Disabled" with `potionmix`; the play screen takes no keys while it is open; a fight commits it (TTextBar_SPEC §10; `src/cheats.cpp`). Tests type it with `--exec "prompt <text>"` or input-script `char enter` / `type`; storytest `--god` | 2026-10-10 |
 | [ ] | `src/gamelogpane.{h,cpp}` — retained-mode TPane | — |
 | [ ] | `SLogEntry` ring buffer | — |
 | [ ] | `log_to_player(category, fmt, ...)` API | — |

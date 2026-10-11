@@ -1570,6 +1570,12 @@ void TPlayScreen::DrawBackground()
 
 void TPlayScreen::KeyPress(int32_t key, bool down)
 {
+    // REVSYNC: 0x0047c63e -- while the text bar's prompt is open the play
+    // screen takes no keys at all, its panes', Escape and the editor's
+    // included: the typing arrives as characters (TTextBar::CharPress).
+    if (TextBar.IsPrompting())
+        return;
+
     // A load is under way: the panes get the key (the progress popup holds
     // it, when up), the world and the editor nothing.
     if (GameFlow.Session().Loading())
@@ -1755,8 +1761,13 @@ void TPlayScreen::Command(GAMECOMMAND command)
     case GAMECMD_COMBAT:            // 1: BeginFighting(0, ACTION_COMBAT) / EndFighting
         if (Player)
         {
-            if (Player->IsCombat()) Player->EndCombat();
-            else                    Player->BeginCombat();
+            if (Player->IsCombat())
+                Player->EndCombat();
+            else
+            {
+                TextBar.CommitInput();      // 0x0047d0d5
+                Player->BeginCombat();
+            }
         }
         break;
     case GAMECMD_SIDEPANEL:

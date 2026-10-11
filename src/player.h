@@ -303,6 +303,9 @@ class TPlayer : public TCharacter
         // Talisman codes of the spells the player has learned (retail +0x2ec), in the order learned
     bool LearnSpell(const char* talismans);
         // Adds a spell's talisman code; false when it is already known
+    void SetMoney(int32_t amount);
+        // REVSYNC: 0x0051e900 -- the gold carried becomes `amount`: the pile
+        // set to it, added when there is none, removed below 1
 
     // Cheat - ride that hog
     void GetOnYerHog();
