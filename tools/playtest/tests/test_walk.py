@@ -79,12 +79,13 @@ class WithTheReferenceHost(unittest.TestCase):
         w = walker()
         obs = self.host.observe(walkgrid=320)
         found = {d.key: d for d in w.destinations(self.host, obs, WalkGrid(obs['walkgrid']))}
-        self.assertIn('obj:5', found)
-        self.assertIn("person 'Sardok'", found['obj:5'].words)
+        self.assertIn('near:5', found)                          # a person: walked up to by the ground beside them
+        self.assertIn("walk up to 'Sardok'", found['near:5'].words)
+        self.assertNotIn('obj:5', found)
         ground = [k for k in found if k.startswith('ground:')]
         self.assertEqual(len(ground), 15)
         self.assertNotIn('ground:0:far', ground)                # 160 right: past the wall at 1150
-        self.assertEqual(self.host.pick(*found['obj:5'].screen)['object'], 5)
+        self.assertIsNone(self.host.pick(*found['near:5'].screen)['object'])     # ground, not Sardok
         state = self.to_the_wall()
         obs = self.host.observe(walkgrid=320)
         found = {d.key for d in w.destinations(self.host, obs, WalkGrid(obs['walkgrid']))}
@@ -110,14 +111,26 @@ class WithTheReferenceHost(unittest.TestCase):
         self.assertEqual(result, 'stalled')
         self.assertEqual(obs['player']['pos'][0], 1149)
 
-    def test_walk_to_a_person_stops_within_use_reach(self):
+    def test_walk_up_to_a_person_then_talk(self):
         w = walker()
-        obs = self.host.observe()
-        sardok = next(d for d in w.destinations(self.host, obs, None) if d.key == 'obj:5')
-        result, obs, _ = w.walk(self.host, InputState(), sardok)
+        approach = next(d for d in w.destinations(self.host, self.host.observe(), None) if d.key == 'near:5')
+        result, obs, state = w.walk(self.host, InputState(), approach)
         self.assertEqual(result, 'arrived')
-        # beside him now, just reached: not offered again, so a walk can't loop on him
-        self.assertNotIn('obj:5', {d.key for d in w.destinations(self.host, self.host.observe(), None)})
+        self.assertLessEqual(abs(obs['player']['pos'][1] - 1860), 8)                # beside him
+        talk = next(d for d in w.destinations(self.host, obs, None) if d.key == 'talk:5')
+        result, obs, _ = w.walk(self.host, state, talk)
+        self.assertEqual(result, 'talked')
+        self.assertIn('Sardok says: Welcome, Revenant.', obs['messages'])
+        # just talked to: not offered again, so the director can't loop on him
+        self.assertNotIn('talk:5', {d.key for d in w.destinations(self.host, self.host.observe(), None)})
+
+    def test_a_refused_walk_sits_out(self):
+        state = self.to_the_wall()
+        w = walker()
+        dest = self._ground(self.host.observe(), 520, 240)
+        dest = type(dest)('ground:0:near', dest.words, dest.screen, dest.world)
+        self.assertIn(w.walk(self.host, state, dest)[0], ('refused', 'stalled'))   # 8 units, then the wall
+        self.assertNotIn('ground:0:near', {d.key for d in w.destinations(self.host, self.host.observe(), None)})
 
     def _ground(self, obs, x, y):
         from walk import Destination

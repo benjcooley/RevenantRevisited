@@ -15,7 +15,9 @@ blow, a normal blow, a charging lunge), so "close", "a lunge away" and
 "far" follow from which of Locke's and the enemy's ordinary attacks cover
 it. The enemy's action becomes a phase from its attack's timings (winding
 up, about to strike, striking, recovering). Directions become keys through
-a calibration table measured in game.
+each direction control's step measured in the world at the first fight
+(the director's calibration), so an enemy off the screen is steered toward
+as surely as one on it.
 """
 from __future__ import annotations
 
@@ -160,9 +162,10 @@ class Tactician:
     jev: Jev
     kb: Knowledge
     bindings: Bindings
-    directions: dict[str, tuple[float, float]] = field(default_factory=dict)
+    steps: dict[str, tuple[float, float]] = field(default_factory=dict)  # control -> world step, measured
     confidence_floor: float = 0.25
     history: list[str] = field(default_factory=list)
+    messages: list[str] = field(default_factory=list)        # the game's text-bar lines, the director's
 
     def target_of(self, obs: dict) -> dict | None:
         player = obs['player']
@@ -233,6 +236,7 @@ class Tactician:
                        'resists': brief.get('resists')},
             'other_enemies_near': len(others),
             'last_tactics': self.history[-3:],
+            'recent_blows': [m for m in self.messages if ' vs. ' in m][-4:],
         }
 
     # -- deciding --
@@ -240,6 +244,8 @@ class Tactician:
         s = self.assess(obs)
         if not s:
             return None
+        if s.reach == 'far' and not s.in_its_reach:
+            return self._chose(Tactic('close_in', 'rule: too far for either to strike'))
         options = self.options(obs, s)
         questions = {'intent': Choice('What should Locke do next in this fight against `target`?',
                                       {i: INTENTS[i] for i in options})}
@@ -271,11 +277,11 @@ class Tactician:
 
     # -- doing --
     def direction(self, vector: tuple[float, float]) -> str:
-        """The direction control whose measured screen step is closest to
-        `vector` (screen pixels, y down). Uncalibrated, each control is
-        assumed to step the way its name says."""
-        steps = self.directions or {name: (math.cos(math.radians(45 * i)), -math.sin(math.radians(45 * i)))
-                                    for i, name in enumerate(DIRECTIONS)}
+        """The direction control whose step is closest to `vector`: a world
+        vector against the measured world steps, or, uncalibrated, a screen
+        vector (y down) against each control stepping the way its name says."""
+        steps = self.steps or {name: (math.cos(math.radians(45 * i)), -math.sin(math.radians(45 * i)))
+                               for i, name in enumerate(DIRECTIONS)}
         length = math.hypot(*vector) or 1.0
         unit = (vector[0] / length, vector[1] / length)
         return max(steps, key=lambda name: (steps[name][0] * unit[0] + steps[name][1] * unit[1])
@@ -285,11 +291,14 @@ class Tactician:
         """Add the tactic's input to `plan` from tick 0; returns how many
         ticks to run before deciding again."""
         s = self.assess(obs)
-        here = obs['player'].get('screen') or [320, 240]
-        there = (s.target.get('screen') if s else None) or here
+        if self.steps:                                       # world vectors against the measured steps
+            here, there = obs['player']['pos'], (s.target['pos'] if s else obs['player']['pos'])
+        else:                                                # screen vectors against the names
+            here = obs['player'].get('screen') or [320, 240]
+            there = (s.target.get('screen') if s else None) or here
         toward = (there[0] - here[0], there[1] - here[1])
         away = (-toward[0], -toward[1])
-        left = (toward[1], -toward[0])                       # screen y grows downward
+        left = (toward[1], -toward[0])                       # a quarter turn; circling either way
         right = (-left[0], -left[1])
         kind, _, arg = tactic.name.partition(':')
         if kind == 'attack':
@@ -310,8 +319,9 @@ class Tactician:
             vector = {'dodge_back': away, 'dodge_left': left, 'dodge_right': right}[kind]
             plan.press(0, self.bindings['Dodge' + self.direction(vector)], hold=2)
             return 8
+        stride = 12 if s and s.reach == 'far' else 4             # a long walk in while nothing can strike
         vector, hold = {'orbit_left': (left, 6), 'orbit_right': (right, 6),
-                        'close_in': (toward, 4), 'back_off': (away, 4)}[kind]
+                        'close_in': (toward, stride), 'back_off': (away, 4)}[kind]
         keys = self.bindings[self.direction(vector)]
         plan.hold(0, keys)
         plan.release(hold, keys)

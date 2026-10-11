@@ -8,7 +8,7 @@ show what each moment looks like.
 """
 from __future__ import annotations
 
-from director import Milestone, character_dead, control_on, level_is, near
+from director import Milestone, character_dead, control_on, near, talked_to
 
 KEEP = [
     Milestone('opening',
@@ -18,10 +18,10 @@ KEEP = [
     Milestone('rahul defeated',
               'A crazed priest, Rahul, attacks Locke in the summoning chamber. Fight him until he falls.',
               character_dead('Rahul'), save=True),
-    Milestone('keep explored',
+    Milestone('rand questioned',
               'Explore the Keep. Talk to the people there, and find the guard Rand in the dungeon below '
               'to question him about the cult.',
-              level_is(2)),
+              talked_to('Rand'), save=True),
 ]
 
 # The reference host's toy world (fakehost.py): one person to reach.

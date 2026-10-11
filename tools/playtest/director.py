@@ -46,7 +46,7 @@ from knowledge import Knowledge
 from walk import Walker, WalkGrid
 from waypoints import Catalogue, Waypoint
 
-COMBAT_RADIUS = 400                  # an enemy this close and on Locke means a fight
+ENGAGE_RADIUS = 500                  # a living enemy this close means a fight
 WALKGRID_RADIUS = 480
 DIGITS = '123456'
 # Each direction straight after its opposite, so calibrating ends where it began.
@@ -81,10 +81,11 @@ class Director:
     log: list[dict] = field(default_factory=list)
     messages: list[str] = field(default_factory=list)
     choices_taken: dict[str, set[str]] = field(default_factory=dict)
+    talked: set[str] = field(default_factory=set)              # people Locke has talked to (names)
 
     def __post_init__(self) -> None:
         self.walker = Walker(self.jev, self.bindings)
-        self.tactician = Tactician(self.jev, self.kb, self.bindings)
+        self.tactician = Tactician(self.jev, self.kb, self.bindings, messages=self.messages)
         self.current = self.start
         self.created: list[tuple[Waypoint, int]] = []           # waypoints made, and the tick of their mark
         self.last_frame = -self.frame_every
@@ -147,11 +148,13 @@ class Director:
         return 'explore'
 
     def threats(self, obs: dict) -> list[dict]:
+        """Living enemies near enough to fight. Locke squares up to them
+        rather than waiting to be attacked: in the Keep, Rahul stands in his
+        fighting stance and only strikes once Locke closes."""
         player = obs['player']
         return [o for o in obs.get('objects', [])
                 if o.get('class') == 'character' and o.get('enemy') and (o.get('health') or [1])[0] > 0
-                and distance(o['pos'], player['pos']) < COMBAT_RADIUS
-                and (o.get('target') == 0 or player.get('mode') == 'combat')]
+                and distance(o['pos'], player['pos']) < ENGAGE_RADIUS]
 
     # -- modes --
     def wait(self, obs: dict) -> None:
@@ -161,6 +164,8 @@ class Director:
     def dialog(self, obs: dict) -> None:
         dialog = obs['dialog']
         choices = dialog['choices'][:len(DIGITS)]
+        if dialog.get('speaker'):
+            self.talked.add(dialog['speaker'])
         asked = self.choices_taken.setdefault(dialog.get('speaker', '') + '|' + '|'.join(choices), set())
         options = {DIGITS[i]: text + (' (already chosen before)' if DIGITS[i] in asked else '')
                    for i, text in enumerate(choices)}
@@ -179,7 +184,7 @@ class Director:
         if obs['player'].get('mode') != 'combat':
             self.press(self.bindings['CombatMode'], then=6)
             return
-        if not self.tactician.directions and self.host.capable('project'):
+        if not self.tactician.steps:
             self.calibrate()
             return
         if not self.tactician.history:
@@ -211,6 +216,8 @@ class Director:
         self.caption('explore', f'walking to {dest.words}')
         result, _, self.state = self.walker.walk(self.host, self.state, dest, observe=self.observe)
         self.note('walk', to=dest.key, words=dest.words, result=result)
+        if result == 'talked':
+            self.talked.add(dest.name)
         if result != 'arrived':
             self.observe(frame=True)
 
@@ -250,21 +257,19 @@ class Director:
         self.state = plan.state
 
     def calibrate(self, hold: int = 3) -> None:
-        """Measure which way on screen each direction control steps Locke:
-        step briefly with each, and project where he started and ended with
-        the same camera (the camera follows him, so his own screen position
-        hardly moves). Opposite steps follow each other, so he ends where he
-        began."""
+        """Measure where each direction control steps Locke in the world:
+        a short step with each, opposites in turn, so he ends near where he
+        began. The tactician then steers by world vectors, which works as
+        well for an enemy off the screen."""
         steps: dict[str, tuple[float, float]] = {}
         for name in CALIBRATION_ORDER:
             before = self.observe()['player']['pos']
             self.press(self.bindings[name], then=hold)
             after = self.observe()['player']['pos']
-            a, b = self.host.project([before, after])
-            if a and b and (a[0], a[1]) != (b[0], b[1]):
-                steps[name] = (b[0] - a[0], b[1] - a[1])
-        self.tactician.directions = steps
-        self.note('calibrated', steps={k: [round(v, 1) for v in s] for k, s in steps.items()})
+            if (after[0], after[1]) != (before[0], before[1]):
+                steps[name] = (after[0] - before[0], after[1] - before[1])
+        self.tactician.steps = steps
+        self.note('calibrated', steps={k: list(v) for k, v in steps.items()})
 
     # -- milestones and waypoints --
     def _reached(self, obs: dict) -> None:
@@ -341,6 +346,13 @@ def character_dead(name: str) -> Callable[[dict, Director], bool]:
         o = next((o for o in obs.get('objects', []) if (o.get('name') or '').lower() == name.lower()), None)
         return o is not None and (o.get('health') or [1])[0] <= 0
     return check
+
+
+def talked_to(name: str) -> Callable[[dict, Director], bool]:
+    """Locke has talked to someone whose name contains `name` (instance
+    names carry suffixes: RandK, SardokR)."""
+    lowered = name.lower()
+    return lambda obs, d: any(lowered in who.lower() for who in d.talked)
 
 
 def level_is(level: int) -> Callable[[dict, Director], bool]:

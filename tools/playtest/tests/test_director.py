@@ -26,7 +26,7 @@ class PreferObjects:
         answers = {}
         for name, question in body['questions'].items():
             options = list(question['criteria'])
-            choice = next((o for o in options if o.startswith('obj:')), options[0])
+            choice = next((o for o in options if o.startswith(('near:', 'obj:'))), options[0])
             answers[name] = {'type': 'choice', 'choice': choice, 'confidence': 0.9,
                              'probabilities': {o: float(o == choice) for o in options}}
         return {'answers': answers, 'usage': {'cost': 0.00001}}
@@ -106,7 +106,7 @@ class Calibration(unittest.TestCase):
                                     bindings, tmp, [])
                 director.calibrate()
                 self.assertEqual(host.observe()['player']['pos'], start)
-            steps = director.tactician.directions
+            steps = director.tactician.steps
             self.assertEqual(steps['Right'], (2, 0))                   # the key held 2 ticks, a unit a tick
             self.assertEqual(steps['Up'], (0, -2))
             self.assertNotIn('UpRight', steps)                          # the toy world has no diagonal keys

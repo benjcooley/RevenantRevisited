@@ -4,8 +4,12 @@ Both games walk Locke to the map point under a left click on open ground,
 and to an object (then use or take it) under a left click on the object
 (docs/playtest/PLAN.md §10). So walking is choosing a screen point:
 
-- objects in view (people, doors and exits, containers, items) are
-  destinations as they are;
+- objects in view (doors and exits, containers, items) are destinations as
+  they are: a click walks to one and uses or takes it;
+- a click on a person talks to them where they stand and never walks
+  (PlayMouseRelease: characters aren't walked to), so a person farther than
+  use reach is approached by the open ground beside them, projected to the
+  screen by the host, and one within reach is a 'talk' destination;
 - open ground is sampled in rings around Locke on screen, mapped to the
   world by the host's `pick` (the game's own pointer conversion), and kept
   when the walk grid says the way there is open by the game's rule
@@ -31,6 +35,8 @@ EXPLORED_CELL = 256                  # memory cell for "been there", world units
 SNAP = 8                             # Goto snaps onto its point within this
 ARRIVE = 24                          # stopped this close to a ground point is arrived
 USE_REACH = 100                      # a clicked object is used from within 96
+BESIDE = 60                          # how far from a person to stand when walking up to them
+SHUNNED = 6                          # choices a destination sits out after a refused or stalled walk
 COMPASS = ('right', 'up and right', 'up', 'up and left', 'left', 'down and left', 'down', 'down and right')
 DESTINATION_CLASSES = {'character', 'exit', 'container', 'item', 'weapon', 'armor', 'food', 'potion',
                        'money', 'scroll', 'talisman', 'key', 'tool', 'lightsource'}
@@ -44,11 +50,13 @@ def screen_direction(dx: float, dy: float) -> str:
 
 @dataclass(frozen=True)
 class Destination:
-    key: str                         # the Jev option name: 'obj:1712', 'ground:3:far'
+    key: str                         # the Jev option name: 'obj:1712', 'near:1712', 'talk:1712', 'ground:3:far'
     words: str                       # what it is, for Jev
     screen: tuple[int, int]
     world: tuple[int, int, int] | None
     object_id: int | None = None
+    talk: bool = False               # a click on a person in reach: talk, no walk
+    name: str = ''                   # the object's name, for objects
 
 
 @dataclass
@@ -110,6 +118,7 @@ class Walker:
     bindings: Bindings
     memory: Memory = field(default_factory=Memory)
     recent: list[str] = field(default_factory=list)          # destination keys reached lately, newest last
+    shunned: dict[str, int] = field(default_factory=dict)    # key -> choices left to sit out
     rings: tuple[int, ...] = (80, 160)
     playfield: tuple[int, int, int, int] = (0, 0, 640, 480)
 
@@ -119,20 +128,38 @@ class Walker:
         level = player.get('level', 0)
         field_rect = obs.get('playfield', self.playfield)
         found: list[Destination] = []
+        self.shunned = {k: n - 1 for k, n in self.shunned.items() if n > 1}
         for o in obs.get('objects', []):
             screen = o.get('screen')
             if (o.get('class') not in DESTINATION_CLASSES or not screen or not in_rect(screen, field_rect)
                     or o.get('enemy')):
                 continue
-            key = f"obj:{o['id']}"
-            beside = math.hypot(o['pos'][0] - player['pos'][0], o['pos'][1] - player['pos'][1]) <= USE_REACH
-            if beside and key in self.recent:
-                continue                                         # just reached, and still here
+            name = o.get('name') or o.get('type')
+            gap = math.hypot(o['pos'][0] - player['pos'][0], o['pos'][1] - player['pos'][1])
             way = screen_direction(screen[0] - here[0], screen[1] - here[1])
-            kind = 'person' if o['class'] == 'character' else o['class']
+            if o['class'] == 'character':
+                if gap <= USE_REACH:
+                    key = f"talk:{o['id']}"
+                    if key not in self.recent:
+                        found.append(Destination(key, f"talk to '{name}', beside Locke", tuple(screen), None,
+                                                 o['id'], talk=True, name=name))
+                    continue
+                key = f"near:{o['id']}"
+                f = BESIDE / gap
+                spot = (round(o['pos'][0] + (player['pos'][0] - o['pos'][0]) * f),
+                        round(o['pos'][1] + (player['pos'][1] - o['pos'][1]) * f), o['pos'][2])
+                shown = host.project([spot])[0]
+                if (key in self.shunned or not shown or not in_rect(shown, field_rect)
+                        or (grid and not grid.open_line(player['pos'], spot))):
+                    continue
+                found.append(Destination(key, f"walk up to '{name}', {way}", tuple(shown), spot, name=name))
+                continue
+            key = f"obj:{o['id']}"
+            if key in self.shunned or (gap <= USE_REACH and key in self.recent):
+                continue                                         # just reached, and still here
             lately = ', went there just now' if key in self.recent else ''
-            found.append(Destination(key, f"{kind} '{o.get('name') or o.get('type')}', {way}{lately}",
-                                     tuple(screen), tuple(o['pos']), o['id']))
+            found.append(Destination(key, f"{o['class']} '{name}', {way}{lately}",
+                                     tuple(screen), tuple(o['pos']), o['id'], name=name))
         for sector, word in enumerate(COMPASS):
             angle = math.radians(45 * sector)
             for ring, label in zip(self.rings, ('near', 'far')):
@@ -145,9 +172,11 @@ class Walker:
                     continue
                 if grid and not grid.open_line(player['pos'], pos):
                     continue
+                key = f'ground:{sector}:{label}'
+                if key in self.shunned:
+                    continue
                 been = 'visited' if self.memory.seen(level, pos) else 'unexplored'
-                found.append(Destination(f'ground:{sector}:{label}', f'open ground {word}, {label}, {been}',
-                                         point, tuple(pos)))
+                found.append(Destination(key, f'open ground {word}, {label}, {been}', point, tuple(pos)))
         return found
 
     def choose(self, objective: str, obs: dict, candidates: Sequence[Destination]) -> Destination:
@@ -171,6 +200,12 @@ class Walker:
         reach the game uses it from (MAP_INPUT.md §4: 96). `observe`, when
         given, is called in place of the host's (the director's logs)."""
         observe = observe or host.observe
+        if dest.talk:
+            plan = Plan(state)
+            end = plan.click(0, *dest.screen)
+            host.step(plan.ticks(end + 12), plan.events())
+            self.recent = [k for k in self.recent if k != dest.key][-4:] + [dest.key]
+            return 'talked', observe(), plan.state
         arrive = USE_REACH if dest.object_id is not None else ARRIVE
         plan = Plan(state)
         if run:
@@ -207,4 +242,6 @@ class Walker:
             state = plan.state
         if result == 'arrived':
             self.recent = [k for k in self.recent if k != dest.key][-4:] + [dest.key]
+        elif result in ('refused', 'stalled'):
+            self.shunned[dest.key] = SHUNNED
         return result, obs, state

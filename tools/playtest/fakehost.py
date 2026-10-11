@@ -7,8 +7,9 @@ game.
 
 The world is deterministic: held arrow keys move the player one unit per
 tick, a left click on the screen walks the player toward the point it maps
-to, and every tick draws three "random numbers". The camera follows the
-player at the screen's centre, a pixel to a world unit. Floor ends at
+to, and every tick draws three "random numbers"; a click on Sardok talks
+to him (a text-bar line) and walks nowhere, as in the game. The camera
+follows the player at the screen's centre, a pixel to a world unit. Floor ends at
 x = 1150 (a wall: no walking past it), and one person, Sardok, stands at
 (1000, 1800). `--drift-at T` nudges the player at tick T on every run, so a
 replay through it diverges there: the divergence test.
@@ -41,6 +42,7 @@ class World:
         self.buttons = 0
         self.draws = 0
         self.drift_at = drift_at
+        self.messages: list[str] = []
 
     def deliver(self, event: dict) -> None:
         if 'key' in event:
@@ -49,7 +51,11 @@ class World:
             pressed = event['buttons'] & ~self.buttons
             self.pointer, self.buttons = list(event['mouse']), event['buttons']
             if pressed & rec.BUTTON_LEFT:
-                self.goal = self.world(*self.pointer)[:2]
+                point = self.world(*self.pointer)
+                if abs(point[0] - SARDOK['pos'][0]) <= 4 and abs(point[1] - SARDOK['pos'][1]) <= 4:
+                    self.messages.append('Sardok says: Welcome, Revenant.')
+                else:
+                    self.goal = point[:2]
 
     def screen(self, pos) -> list[int]:
         return [320 + (pos[0] - self.pos[0]) * SCALE, 240 + (pos[1] - self.pos[1]) * SCALE]
@@ -144,7 +150,8 @@ class FakeHost:
         w = self.world
         obs = {'t': w.t, 'screen': 'play', 'control': True,
                'player': {'pos': list(w.pos), 'screen': [320, 240], 'level': 0, 'health': [100, 100]},
-               'objects': [dict(SARDOK, screen=w.screen(SARDOK['pos']))], 'messages': []}
+               'objects': [dict(SARDOK, screen=w.screen(SARDOK['pos']))], 'messages': w.messages}
+        w.messages = []
         if 'walkgrid' in req:
             r = req['walkgrid'] // 16
             ox, oy = w.pos[0] // 16 - r, w.pos[1] // 16 - r

@@ -136,7 +136,7 @@ class Deciding(unittest.TestCase):
         hurt = tactician(Answers('attack', confidence=0.1)).decide(observation(health=(15, 100)))
         self.assertEqual(hurt.name, 'potion:2')
         far = tactician(Answers('attack', confidence=0.1)).decide(observation(d=600))
-        self.assertEqual(far.name, 'close_in')
+        self.assertEqual((far.name, far.reason), ('close_in', 'rule: too far for either to strike'))
 
 
 class Doing(unittest.TestCase):
@@ -145,8 +145,18 @@ class Doing(unittest.TestCase):
         self.assertEqual(t.direction((1, 0)), 'Right')
         self.assertEqual(t.direction((0, -1)), 'Up')
         self.assertEqual(t.direction((-1, 1)), 'DownLeft')
-        t.directions = {'Up': (0.7, -0.7), 'Right': (0.7, 0.7)}       # a measured, rotated table
+        t.steps = {'Up': (0.7, -0.7), 'Right': (0.7, 0.7)}            # measured world steps, rotated
         self.assertEqual(t.direction((1, -1)), 'Up')
+
+    def test_calibrated_steering_uses_world_positions(self):
+        t = tactician()
+        t.steps = {'Up': (0, -9), 'Down': (0, 9), 'Left': (-9, 0), 'Right': (9, 0)}
+        obs = observation()
+        obs['objects'][0]['pos'] = [1000, 1300, 0]                   # below Locke in the world...
+        obs['objects'][0]['screen'] = None                            # ...and off the screen
+        plan = Plan()
+        t.plan(Tactic('close_in', 'test'), obs, plan)
+        self.assertEqual(plan.events()[0]['key'], 'DOWN')
 
     def test_plans(self):
         t = tactician()

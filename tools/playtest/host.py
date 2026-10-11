@@ -204,7 +204,7 @@ class PortHost(Host):
     @classmethod
     def launch(cls, binary: Path, run_dir: Path, ini: Path, args: Sequence[str] = (),
                name: str = 'playtest', data: Path | None = None, headless: bool = True) -> PortHost:
-        run_dir = Path(run_dir)
+        run_dir, binary = Path(run_dir).resolve(), Path(binary).resolve()
         save = run_dir / 'save'
         save.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ini, save / 'Revenant.ini')
