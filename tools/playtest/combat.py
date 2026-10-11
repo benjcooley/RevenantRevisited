@@ -199,9 +199,12 @@ class Tactician:
         if not target:
             return None
         player = obs['player']
-        skills = player.get('skills', {})
-        attacks = tuple(self.kb.locke_attacks(player.get('weapon', {}).get('mask', 0) or WM_HAND,
-                                              skills.get('attack', 0), skills.get('weapon', 0)))
+        weapon = player.get('weapon') or {}
+        # Attacks are gated on AttackLevel (stat 20, raised only by Jong's
+        # lessons) and the skill of the weapon in hand (GRIND.md §2.3).
+        skill = (player.get('skills') or {}).get(weapon.get('skill') or 'hands') or [0]
+        attacks = tuple(self.kb.locke_attacks(weapon.get('mask', 0) or WM_HAND,
+                                              player.get('attacklevel', 0), skill[0]))
         d = distance(player['pos'], target['pos'])
         covering = [a for a in attacks if a.covers(d)]
         reach = ('far' if not covering else
