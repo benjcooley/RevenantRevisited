@@ -103,7 +103,7 @@ class Director:
     best_gap: float = math.inf                                 # the nearest he has been to the next stop
 
     def __post_init__(self) -> None:
-        self.walker = Walker(self.jev, self.bindings)
+        self.walker = Walker(self.jev, self.bindings, under=self.object_under)
         self.maps = LevelMaps()                                 # walk heights seen so far, per level
         self.tactician = Tactician(self.jev, self.kb, self.bindings, messages=self.messages)
         self.current = self.start
@@ -388,17 +388,18 @@ class Director:
         fx, fy = obj['screen']
         for dx, dy in CLICK_SPOTS:
             x, y = fx + dx, fy + dy
-            if not (0 <= x < 640 and 0 <= y < 480):
-                continue
-            picked = self.host.pick(x, y)
-            if not picked.get('world', True):
-                continue
-            if 'object' in picked:
-                if picked['object'] == obj['id']:
-                    return x, y
-            elif self.hover(x, y) == obj['id']:
+            if 0 <= x < 640 and 0 <= y < 480 and self.object_under(x, y) == obj['id']:
                 return x, y
         return None
+
+    def object_under(self, x: int, y: int) -> int | None | bool:
+        """What a left click at (x, y) acts on: an object's id, None for
+        the ground, False when the click doesn't reach the world. The
+        host's pick says when it can; else the pointer goes there."""
+        picked = self.host.pick(x, y)
+        if not picked.get('world', True):
+            return False
+        return picked['object'] if 'object' in picked else self.hover(x, y)
 
     def hover(self, x: int, y: int) -> int | None:
         """Put the pointer at (x, y) for a tick: the object under it then,

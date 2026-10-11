@@ -9,7 +9,7 @@ sys.path.insert(0, str(HERE))
 from host import Host  # noqa: E402
 from inputs import Bindings, InputState, Plan, chord  # noqa: E402
 from jev import Jev  # noqa: E402
-from walk import Memory, WalkGrid, Walker, screen_direction  # noqa: E402
+from walk import USE_REACH, Memory, WalkGrid, Walker, game_distance, screen_direction  # noqa: E402
 
 BINDINGS = Bindings({'Run': chord('R')})
 
@@ -56,6 +56,20 @@ class Pieces(unittest.TestCase):
         self.assertTrue(memory.seen(2, (700, 400)))
         self.assertFalse(memory.seen(2, (900, 300)))
         self.assertFalse(memory.seen(1, (600, 300)))
+
+
+class GameRules(unittest.TestCase):
+    def test_distance_is_the_games(self):
+        self.assertEqual(game_distance((6280, 4338), (6258, 4434)), 98)       # retail: "You are too far away."
+        self.assertGreater(game_distance((6280, 4338), (6258, 4434)), USE_REACH)
+        self.assertEqual(game_distance((0, 0), (300, 400)), 500)              # halved once to fit the table
+        self.assertEqual(game_distance((0, 0), (1001, 0)), 1000)              # and the low bits go
+
+    def test_a_ground_click_on_an_object_is_nudged_off_it(self):
+        walker = Walker(None, None, under=lambda x, y: 5 if abs(x - 100) < 6 and abs(y - 100) < 6 else None)
+        self.assertEqual(walker.uncovered((100, 100)), (100, 92))
+        walker = Walker(None, None, under=lambda x, y: 5)
+        self.assertIsNone(walker.uncovered((100, 100)))
 
 
 class WithTheReferenceHost(unittest.TestCase):

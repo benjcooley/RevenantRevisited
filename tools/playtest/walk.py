@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Callable, Sequence
 
 from inputs import Bindings, Plan
 from jev import Choice, Jev
@@ -36,12 +36,23 @@ UNKNOWN = -1                         # a walk grid cell no loaded sector holds
 EXPLORED_CELL = 256                  # memory cell for "been there", world units
 SNAP = 8                             # Goto snaps onto its point within this
 ARRIVE = 24                          # stopped this close to a ground point is arrived
-USE_REACH = 100                      # a clicked object is used from within 96
+USE_REACH = 0x60                     # a clicked object is used within this game distance (0x0044fd74)
+NUDGES = ((0, 0), (0, -8), (8, 0), (0, 8), (-8, 0), (8, -8), (-8, 8))   # pixels to try round a covered spot
 BESIDE = 60                          # how far from a person to stand when walking up to them
 SHUNNED = 6                          # choices a destination sits out after a refused or stalled walk
 COMPASS = ('right', 'up and right', 'up', 'up and left', 'left', 'down and left', 'down', 'down and right')
 DESTINATION_CLASSES = {'character', 'exit', 'container', 'item', 'weapon', 'armor', 'food', 'potion',
                        'money', 'scroll', 'talisman', 'key', 'tool', 'lightsource'}
+
+
+def game_distance(a: Sequence[float], b: Sequence[float]) -> int:
+    """The flat distance as the game measures it (::Distance,
+    src/object.cpp; retail's DistTable): sqrt rounded, both components
+    halved together until they fit the 256x256 table."""
+    x, y, shifts = abs(int(b[0]) - int(a[0])), abs(int(b[1]) - int(a[1])), 0
+    while x > 255 or y > 255:
+        x, y, shifts = x >> 1, y >> 1, shifts + 1
+    return min(255, math.floor(math.sqrt(x * x + y * y) + 0.5)) << shifts
 
 
 def cell_of(x: float) -> int:
@@ -126,6 +137,10 @@ def in_rect(point: Sequence[float], rect: Sequence[int]) -> bool:
     return rect[0] <= point[0] < rect[2] and rect[1] <= point[1] < rect[3]
 
 
+def playfield_clamp(point: Sequence[float], rect: Sequence[int]) -> tuple[int, int]:
+    return (min(max(int(point[0]), rect[0]), rect[2] - 1), min(max(int(point[1]), rect[1]), rect[3] - 1))
+
+
 @dataclass
 class Walker:
     jev: Jev
@@ -135,6 +150,7 @@ class Walker:
     shunned: dict[str, int] = field(default_factory=dict)    # key -> choices left to sit out
     rings: tuple[int, ...] = (80, 160)
     playfield: tuple[int, int, int, int] = (0, 0, 640, 480)
+    under: Callable[[int, int], int | None] | None = None   # the object a click at a pixel acts on
 
     def destinations(self, host, obs: dict, grid: WalkGrid | None) -> list[Destination]:
         player = obs['player']
@@ -149,7 +165,7 @@ class Walker:
                     or o.get('enemy')):
                 continue
             name = o.get('name') or o.get('type')
-            gap = math.hypot(o['pos'][0] - player['pos'][0], o['pos'][1] - player['pos'][1])
+            gap = game_distance(o['pos'], player['pos'])
             way = screen_direction(screen[0] - here[0], screen[1] - here[1])
             if o['class'] == 'character':
                 if gap <= USE_REACH:
@@ -210,6 +226,19 @@ class Walker:
             {c.key: c.words for c in candidates}))['where']
         return next(c for c in candidates if c.key == answer.choice)
 
+    def uncovered(self, screen: Sequence[int]) -> tuple[int, int] | None:
+        """A pixel at or a few from `screen` where a click is a walk, not
+        a use: no object under it (a ground click beside an exit would take
+        Locke through it). Unchecked without `under`."""
+        if not self.under:
+            return tuple(screen)
+        x0, y0 = playfield_clamp(screen, self.playfield)
+        for dx, dy in NUDGES:
+            x, y = playfield_clamp((x0 + dx, y0 + dy), self.playfield)
+            if self.under(x, y) is None:
+                return x, y
+        return None
+
     def walk(self, host, state, dest: Destination, run: bool = False, limit: int = 24 * 15,
              chunk: int = 6, observe=None) -> tuple[str, dict, object]:
         """Click `dest` and step until Locke arrives ('arrived'), stops short
@@ -219,6 +248,12 @@ class Walker:
         reach the game uses it from (MAP_INPUT.md §4: 96). `observe`, when
         given, is called in place of the host's (the director's logs)."""
         observe = observe or host.observe
+        if not dest.use and dest.object_id is None:
+            spot = self.uncovered(dest.screen)
+            if spot is None:                                 # every pixel there is on some object
+                self.shunned[dest.key] = SHUNNED
+                return 'refused', observe(), state
+            dest = Destination(dest.key, dest.words, spot, dest.world, name=dest.name)
         if dest.use:
             plan = Plan(state)
             end = plan.click(0, *dest.screen)
@@ -245,7 +280,8 @@ class Walker:
             moving = math.hypot(pos[0] - last[0], pos[1] - last[1]) >= 2
             last = pos
             if dest.world:
-                gap = math.hypot(pos[0] - dest.world[0], pos[1] - dest.world[1])
+                gap = (game_distance(pos, dest.world) if dest.object_id is not None
+                       else math.hypot(pos[0] - dest.world[0], pos[1] - dest.world[1]))
                 if gap <= SNAP or (gap <= arrive and not moving):
                     result = 'arrived'
                     break
