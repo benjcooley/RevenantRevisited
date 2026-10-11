@@ -203,7 +203,7 @@ class PortHost(Host):
 
     @classmethod
     def launch(cls, binary: Path, run_dir: Path, ini: Path, args: Sequence[str] = (),
-               name: str = 'playtest', data: Path | None = None) -> PortHost:
+               name: str = 'playtest', data: Path | None = None, headless: bool = True) -> PortHost:
         run_dir = Path(run_dir)
         save = run_dir / 'save'
         save.mkdir(parents=True, exist_ok=True)
@@ -213,7 +213,8 @@ class PortHost(Host):
         env = dict(os.environ, REVENANT_SAVE_PATH=str(save))
         if data:
             env['REVENANT_DATA_PATH'] = str(data)
-        return cls([copy, '--headless', '--control=stdio', *args], run_dir, env, binary_copy=copy)
+        window = ['--headless'] if headless else []
+        return cls([copy, *window, '--control=stdio', *args], run_dir, env, binary_copy=copy)
 
     def close(self, grace: float = 30.0) -> int:
         code = super().close(grace)

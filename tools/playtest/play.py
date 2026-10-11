@@ -6,6 +6,10 @@
     play.py retail --out SESSION_DIR [--build EXE] [--slot SLOT_DIR] [--milestones keep] ...
     play.py fake   --out SESSION_DIR                    the reference host (a smoke run)
 
+    --watch        watch it live: the port plays in its window at real speed
+                   with captions; either game's frames, captions and Jev's
+                   decisions show on a page (watch.py) opened in the browser
+
 The session directory holds the run (host log, save path), the recording
 bundle (`bundle/`: session.rvrec, the INI, the start slot, director.jsonl,
 the Jev ledger session.rvlog, frames) and the summary. Milestones marked
@@ -19,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -31,19 +36,24 @@ from inputs import Bindings  # noqa: E402
 from jev import Jev, Ledger, Router  # noqa: E402
 from knowledge import Knowledge  # noqa: E402
 from milestones import LISTS  # noqa: E402
+import watch  # noqa: E402
 
 REPO = HERE.parents[1]
 RETAIL_INI = Path('/Users/benjamincooley/RevenantRetailLab/retail-cd/REVENANT/revenant.ini')
 DEFAULT_SAVES = Path.home() / 'RevenantRevisited-testsaves' / 'jev'
+WATCH_PACE = 24                      # ticks a second while someone watches: real speed
 
 
-def launch(args: argparse.Namespace, run: Path, purpose: str) -> Host:
+def launch(args: argparse.Namespace, run: Path, purpose: str, watching: bool = False) -> Host:
     where = run / purpose
+    frames = run / 'watch'
     if args.game == 'port':
+        shown = [f'--control-pace={WATCH_PACE}', f'--watch-frames={frames}'] if watching else []
         return PortHost.launch(args.binary, where, args.ini, name=f'playtest-{purpose}',
-                               args=['--clickwalk', *args.host_arg])
+                               args=['--clickwalk', *shown, *args.host_arg], headless=not watching)
     if args.game == 'retail':
-        return RetailHost.launch(where, build=args.build, args=args.host_arg)
+        shown = ['--watch', str(frames), '--pace', str(WATCH_PACE)] if watching else []
+        return RetailHost.launch(where, build=args.build, args=[*shown, *args.host_arg])
     return Host([sys.executable, HERE / 'fakehost.py', *args.host_arg], where)
 
 
@@ -61,6 +71,8 @@ def main() -> int:
     parser.add_argument('--minutes', type=float, default=20.0, help='game minutes to play at most')
     parser.add_argument('--saves', type=Path, default=DEFAULT_SAVES)
     parser.add_argument('--verify', action='store_true')
+    parser.add_argument('--watch', action='store_true', help='watch live (window and browser page)')
+    parser.add_argument('--watch-port', type=int, default=8765)
     parser.add_argument('--host-arg', action='append', default=[], help='passed to the host')
     args = parser.parse_args()
 
@@ -72,7 +84,12 @@ def main() -> int:
     jev, router = Jev(ledger=ledger, seed=args.seed, session=session), Router(ledger=ledger, session=session)
     bindings = Bindings.from_ini(args.ini if args.game == 'port' else RETAIL_INI)
 
-    host = launch(args, run, 'play')
+    if args.watch:
+        watch.serve(run, args.watch_port)
+        url = f'http://127.0.0.1:{args.watch_port}/'
+        print(f'watch at {url}', flush=True)
+        subprocess.run(['open', url], check=False)
+    host = launch(args, run, 'play', watching=args.watch)
     started = time.time()
     info: dict = {}
     try:
@@ -80,7 +97,8 @@ def main() -> int:
         host.start('slot' if args.slot else 'newgame', seed=args.seed, slot=args.slot, record=bundle,
                    ini=args.ini if args.game == 'port' else None, timeout=1800)
         director = Director(host, jev, router, Knowledge.load(args.data), bindings, bundle,
-                            list(LISTS[args.milestones]), SaveLibrary(args.saves), game=args.game)
+                            list(LISTS[args.milestones]), SaveLibrary(args.saves), game=args.game,
+                            watch=run / 'watch' if args.watch else None)
         summary = director.run(max_ticks=round(args.minutes * 60 * 24))
     finally:
         host.close()

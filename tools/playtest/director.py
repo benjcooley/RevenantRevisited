@@ -82,6 +82,7 @@ class Director:
     milestones: list[Milestone]
     saves: SaveLibrary | None = None
     game: str = 'port'
+    watch: Path | None = None        # where a watcher's page reads state.json (watch.py)
     state: InputState = field(default_factory=InputState)
     log: list[dict] = field(default_factory=list)
     messages: list[str] = field(default_factory=list)
@@ -91,6 +92,9 @@ class Director:
         self.walker = Walker(self.jev, self.bindings)
         self.tactician = Tactician(self.jev, self.kb, self.bindings)
         self.current = 0
+        self.shown = ('', '')                                   # the caption: mode, text
+        if self.watch:
+            self.watch.mkdir(parents=True, exist_ok=True)
 
     # -- the loop --
     @property
@@ -108,6 +112,7 @@ class Director:
             mode = self.mode(obs)
             self.note('mode', mode=mode)
             getattr(self, mode)(obs)
+            self.publish()
             if mode == 'dead':
                 break
         return {'tick': self.host.tick, 'reached': [m.name for m in self.milestones[:self.current]],
@@ -138,6 +143,7 @@ class Director:
 
     # -- modes --
     def wait(self, obs: dict) -> None:
+        self.caption('watching', 'the scene plays' if not obs.get('control', True) else 'loading')
         self.host.step(12)
 
     def dialog(self, obs: dict) -> None:
@@ -152,7 +158,9 @@ class Director:
             'Which reply should Locke give to `speaker` to make progress on `objective`? A reply already '
             'chosen before leads back to what was heard.', options))['reply']
         asked.add(pick.choice)
-        self.note('dialog', speaker=dialog.get('speaker'), choice=pick.choice, text=choices[int(pick.choice) - 1])
+        text = choices[int(pick.choice) - 1]
+        self.caption('dialog', f'reply {pick.choice}: "{text}" ({pick.confidence:.2f})')
+        self.note('dialog', speaker=dialog.get('speaker'), choice=pick.choice, text=text)
         self.press(chord(pick.choice), then=24)
 
     def combat(self, obs: dict) -> None:
@@ -168,6 +176,9 @@ class Director:
             return
         plan = Plan(self.state)
         ticks = self.tactician.plan(tactic, obs, plan)
+        s = self.tactician.assess(obs)
+        self.caption('combat', f"{tactic.name.replace(':', ' ')} against {s.target.get('type') or s.target.get('name')} "
+                               f"({s.phase.word}, {s.reach}) - {tactic.reason} {tactic.confidence:.2f}")
         self.note('tactic', tactic=tactic.name, reason=tactic.reason, confidence=round(tactic.confidence, 2))
         self.host.step(plan.ticks(ticks), plan.events())
         self.state = plan.state
@@ -183,6 +194,7 @@ class Director:
             self.unknown(full, why='no destination in view')
             return
         dest = self.walker.choose(self.milestone.objective, full, candidates)
+        self.caption('explore', f'walking to {dest.words}')
         result, _, self.state = self.walker.walk(self.host, self.state, dest)
         self.note('walk', to=dest.key, words=dest.words, result=result)
 
@@ -191,6 +203,7 @@ class Director:
         self.note('dead')
 
     def unknown(self, obs: dict, why: str = 'a screen the director has no state for') -> None:
+        self.caption('looking', f'{why}: asking the router')
         frame = self.bundle / 'frames' / f't{self.host.tick:07d}.png'
         frame.parent.mkdir(parents=True, exist_ok=True)
         self.host.observe(frame=frame)
@@ -240,6 +253,7 @@ class Director:
     # -- milestones and saves --
     def _reached(self, obs: dict) -> None:
         milestone = self.milestone
+        self.caption('milestone', milestone.name)
         self.host.mark('milestone', name=milestone.name)
         self.note('milestone', name=milestone.name)
         if milestone.save and self.saves:
@@ -251,6 +265,28 @@ class Director:
             except (HostError, KeyError) as error:
                 self.note('save failed', error=str(error))
         self.current += 1
+
+    # -- watching --
+    def caption(self, mode: str, text: str) -> None:
+        """What the director is doing, for a person watching: drawn by the
+        host over its window, and in the watch page's state."""
+        if (mode, text) == self.shown:
+            return
+        self.shown = (mode, text)
+        if self.host.capable('caption'):
+            self.host.request('caption', text=f'{mode}: {text}')
+        self.publish()
+
+    def publish(self) -> None:
+        if not self.watch:
+            return
+        state = {'game': self.game, 'tick': self.host.tick, 'mode': self.shown[0], 'caption': self.shown[1],
+                 'objective': self.milestone.objective if self.milestone else 'done',
+                 'milestones': [m.name for m in self.milestones], 'current': self.current,
+                 'spend': self.jev.ledger.summary()}
+        temporary = self.watch / 'state.json.tmp'
+        temporary.write_text(json.dumps(state))
+        temporary.replace(self.watch / 'state.json')
 
     # -- helpers --
     def press(self, keys, then: int = 0) -> None:
