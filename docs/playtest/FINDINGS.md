@@ -4,6 +4,50 @@ Bugs and gaps that Jev's sessions surfaced in the games, with what reproduces
 each. Newest first. Each entry: what was seen, the evidence, the repro, and
 who owns the fix.
 
+## F3. The side panel came back from the save (port bug, fixed)
+
+**Seen 2026-10-11.** `crosscheck.py --from port:forest` listed the four
+pack cells as variances. The port showed Book and Map with the inventory
+hidden; retail showed Equip and Inventory.
+
+**Evidence.**
+- The `forest` save's HUD words (the player record, SAVE_GAME.md §11.4)
+  say Book / Map. The port applied them on every load
+  (`TSaveGame::RestoreHud`, a deliberate divergence).
+- Retail only writes them. `TPlayer::Load` keeps them at `+0x304..+0x310`
+  and nothing reads them. Entering play (`TPlayScreen::Initialize`
+  `0x0047a660`) sets the side pane to Equip and Inventory (`0x0047ae4c`,
+  `0x0047ae57`) and opens the side panel and the bottom bar (`0x0047ae7a`,
+  `0x0047ebc0(1)`).
+- An in-game load runs in the pulse (`0x0047bf01..0x0047bfd9`). It leaves
+  the side panel as it was, and `LoadGame` closes the bottom bar
+  (`0x0047ece0`; AUTHOR_QUESTIONS.md 81).
+- Emulator, play slot (SAVE_GAME.md §11.4a). Booted, the words are 0.
+  Set to Stats / Map before a start, nothing writes them, yet the panes
+  show Equip and Inventory. Map picked in play and then an in-game load
+  of the same slot: still Map, with the bottom bar closed.
+- The fourth word, once "unidentified", is `+0x6ac`: the bottom drawer
+  is open.
+
+**Repro (port).** `crosscheck.py --from port:forest`: the `pack slot N`
+variances. In the port host, from `forest`, pick the Map tab and type
+`@loadgame "Port Resave"` at the text bar. Before the fix, the load put
+Book / Map back; retail keeps Map.
+
+**Resolution.** Fixed on `playtest/tabs`.
+- `TPlayScreen::Initialize` resets the side panel to Equip and
+  Inventory, open, with the bottom bar.
+- Loads no longer apply the words. The port still writes them, the
+  fourth from the drawer.
+- `CloseDrawer` closes the bottom bar as well as the shop, so an in-game
+  load leaves the bar closed.
+- Retail bug, not reproduced: after tabs were changed in a session,
+  entering play again presses the old tabs over Equip and Inventory
+  (§11.4a).
+- After the fix, the `forest` crosscheck has no pack variances. Through
+  the port host: Equip and Inventory on entering play, Map kept across
+  an in-game load, bottom bar closed.
+
 ## F2. Clicks around the side tabs never reached the world (port bug, fixed)
 
 **Seen 2026-10-11.** `crosscheck.py --from port:opening` showed 32 grid

@@ -332,6 +332,18 @@ bool TPlayScreen::Initialize()
     if (!SpellList.Initialize())
         log_warn("[playscreen] spell.def failed to load; no spells");
 
+    // REVSYNC: 0x0047ae4c..0x0047ae7a, 0x0047ebc0(1) -- every entry into play
+    // (a new game, or a load from the title or death screen) shows the side
+    // panel open on Equip and Inventory, and the bottom bar. A save's HUD
+    // words never come back (TPlayer::Load keeps them at +0x304, unread), and
+    // an in-game load, which runs in the pulse (0x0047bf01..0x0047bfd9), leaves
+    // the HUD as it was.
+    SHudState& hud = GetHudState();
+    hud.topSlot       = HUD_TOP_EQUIP;
+    hud.bottomSlot    = HUD_BOT_INV;
+    hud.sidebarState  = HUD_SIDEBAR_OPEN;
+    hud.bottomBarOpen = 1;
+
     SetUIHudCursorOverlayEnabled(false);
     SetUISidebarSyntheticStateEnabled(false);
     g_playHudInitialized = InitializeUIHudMode();
@@ -398,10 +410,6 @@ bool TPlayScreen::Initialize()
     // The session made the main player under the loading screen: the panes
     // show it now that they exist.
     PlayerManager.BindMainPlayerToScreen();
-
-    // The HUD starts as the loaded game left it (building the HUD resets it).
-    if (Player)
-        TSaveGame::RestoreHud(Player->HudWords());
 
     // REVSYNC: 0x0047b10c -- the fader, starting black, outside the
     // editor. TScreen fades it in once Initialize returns.
@@ -1022,14 +1030,19 @@ int32_t TPlayScreen::DrawerHeight() const
     return GetHudState().bottomBarOpen ? kBottomBarH : 0;
 }
 
-// Retail's close request reaches whatever the drawer holds; only the shop is
-// closed here. The HUD's bottom bar (mode 2) belongs to the HUD, whose Lower
-// Panel toggle is SHudState::bottomBarOpen; retail's LoadGame (0x0047ece0)
-// and hideresponse would close it too (AUTHOR_QUESTIONS.md 81).
+// REVSYNC: 0x0047ecc0 / 0x0047ece0 -- a close request reaches whatever the
+// drawer holds: the shop, or the HUD's bottom bar (mode 2, the HUD's Lower
+// Panel, SHudState::bottomBarOpen), which stays closed until that command
+// opens it again. An in-game load closes the bar so (LoadGame's reset;
+// seen in the emulator, AUTHOR_QUESTIONS.md 81), as would `hideresponse`,
+// which no shipped script uses; entering play opens it (Initialize). The
+// camera and fadescreenout ask only in mode 3, for the shop.
 void TPlayScreen::CloseDrawer()
 {
     if (drawer == EDrawer::BuySell)
         drawerclose = true;
+    else if (drawer == EDrawer::Hud)
+        GetHudState().bottomBarOpen = 0;
 }
 
 // REVSYNC: the drawer half of Pulse 0x0047b4d0, mode 3. A shop request opens

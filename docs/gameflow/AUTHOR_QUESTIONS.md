@@ -291,8 +291,10 @@ Answer inline (or in chat) and the owning doc gets updated.
 81. Retail's drawer close (`0x0047ecc0` / `0x0047ece0`) closes whatever the
     bottom drawer holds. `LoadGame` calls it, so an in-game load would
     close the HUD's bottom bar (belt, quick spells) until the player opens
-    it again, and so would `hideresponse`. Was that seen in play? The port
-    closes only the shop there for now.
+    it again, and so would `hideresponse`. Was that seen in play? *Seen in
+    the emulator (2026-10-11): an in-game load leaves the bar closed and
+    the side panel's tabs as they were. The port does the same now; only
+    whether it was intended remains.*
 82. After a shop's Exit the drawer stays closed: the bottom bar does not
     come back until Lower Panel (B). Intended, or was the bar meant to
     return with the shop's close?

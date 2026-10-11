@@ -246,7 +246,7 @@ void TSaveGame::ResetWorld(const fs::path& slotCurMap)
         MapManager.ClearCurMap();               // 0x0044e460
     else
         MapManager.LoadCurMap(slotCurMap);      // 0x0044e460 + 0x0044e050
-    PlayScreen.CloseDrawer();                   // 0x0047ece0 (the shop's; see CloseDrawer)
+    PlayScreen.CloseDrawer();                   // 0x0047ece0: the shop, or the bottom bar
     DialogPane.ResetForLoad();                  // 0x005360f0
     BuySellPane.Clear();                        // 0x00532f40
     ScriptManager.ResetScripts();               // 0x00496e20
@@ -323,10 +323,7 @@ bool TSaveGame::ReadPlayers(TInputStream& is, const SSaveHeader& header)
         PlayerManager.AddPlayer(player);
         player->SetPlayerState((player->PlayerState() & ~kPlayerStateStop) | kPlayerStateActive);
         if (!header.multiplayer)
-        {
             PlayerManager.SetMainPlayer(player);
-            RestoreHud(player->HudWords());
-        }
     }
     if (is.Overrun())
     {
@@ -336,21 +333,10 @@ bool TSaveGame::ReadPlayers(TInputStream& is, const SSaveHeader& header)
     return true;
 }
 
-// REVSYNC-DIVERGENCE: retail stored the HUD words it saved (§11.4) but never
-// applied them, so a load left the HUD as it was. The port restores the
-// sidebar from them.
-void TSaveGame::RestoreHud(const SPlayerHudWords& words)
-{
-    SHudState& hud = GetHudState();
-    hud.sidebarState = words.sidebarOpen ? HUD_SIDEBAR_OPEN : HUD_SIDEBAR_CLOSED;
-    if (words.upperMode >= HUD_TOP_EQUIP && words.upperMode <= HUD_TOP_BOOK)
-        hud.topSlot = words.upperMode;
-    if (words.lowerMode >= HUD_BOT_INV && words.lowerMode <= HUD_BOT_SPELL)
-        hud.bottomSlot = words.lowerMode;
-}
-
 // What retail's SaveGame wrote from its HUD globals (TPlayer::Save
-// @ 0x0051bdc0); the word the port can't identify keeps the loaded value.
+// @ 0x0051bdc0). Only written: a load keeps them in the player record and
+// nothing reads them (SAVE_GAME.md §11.4), so the HUD is never restored
+// from a save (TPlayScreen::Initialize).
 SPlayerHudWords TSaveGame::CurrentHudWords(const TPlayer& player)
 {
     const SHudState& hud = GetHudState();
@@ -358,6 +344,7 @@ SPlayerHudWords TSaveGame::CurrentHudWords(const TPlayer& player)
     words.sidebarOpen = hud.sidebarState == HUD_SIDEBAR_OPEN ? 1 : 0;
     words.upperMode   = hud.topSlot;
     words.lowerMode   = hud.bottomSlot;
+    words.drawerOpen  = PlayScreen.DrawerHeight() > 0 ? 1 : 0;
     return words;
 }
 

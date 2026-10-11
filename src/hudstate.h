@@ -4,9 +4,11 @@
 // *************************************************************************
 //
 // Mirror of the retail HUD's persistent state — the modal slot selections,
-// the sidebar/HUD open flags, and a few derived display modes that must
-// survive Save/Load.  Per user note 2026-05-30: this was a forensics gap,
-// the per-panel SPECs did not flag that this state belongs in the savegame.
+// the sidebar/HUD open flags, and a few derived display modes. Per user note
+// 2026-05-30: this was a forensics gap, the per-panel SPECs did not flag that
+// this state belongs in the savegame. Retail writes it there (the player's
+// HUD words, TSaveGame::CurrentHudWords) but never reads it back: entering
+// play resets it and an in-game load keeps it (TPlayScreen::Initialize).
 //
 // Retail evidence (from `recon/discovered/FUN_0047cf40_TPlayScreen_DispatchCommand.cpp`):
 //   DAT_0065d1b8 — upper-region modal: 0=Equip, 1=Stats, 2=Book (Spellbook)
