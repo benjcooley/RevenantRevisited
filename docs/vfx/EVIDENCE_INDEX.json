@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 170,
+    "retail_rows_with_source_fixes_recorded": 171,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -2023,6 +2023,13 @@
       "check": "exact_fire_legacy_source_and_cardinal_raster_gate",
       "status": "source_pose_pass_raster_gate_open",
       "scope": "Exact shipped Fire defaultowner/resource/staticframe0/33residenttextureframes, strictwhole277496bytebody andactual8bytekeycopy. Source9posefields and192actualGPUmatrixfields match genuinecardinaloriginalmax1e-6;551guardrejectsASan/UBSan andadjacentlegacyregressionspass. Fourcardinalsourcecapturesframe0/RNG0cleanexit; originalface64/192onepixel, sourceintegergridface64blank/face192onepixel same647,469 butRGB8,4,0 versusoriginal16,8,0. Unsnappedsourceface64onepixel632,462 differentcolor; retaineddiagnostic. Noatlasclock/brightness/scale/assetfit. Exactdefaultface0viewerpartialreplacesunrelatedpre-releaseproceduralscatter; naturalcaller/raster/exactpixel fidelityremainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-parent-20261011/parent-source/manifest.json": {
+      "sha256": "2a2d3fce953e4f37a94092bda3e24dca3665dc85a47852fcf819303a08df1b61",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "qualified_sandswirl_parent_only_source",
+      "status": "pass",
+      "scope": "4340 parent schedule/target fields across310 genuineactor/publicSetSpell ticks with explicitmodifiedSparkschild andQuicksandspellcontrol; no intendedsandasset/particle/fullruntime/visualcredit. Missingchild/caller failsclosed."
     }
   }
 }

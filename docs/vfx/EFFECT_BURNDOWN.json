@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 170,
+    "retail_rows_with_source_fixes_recorded": 171,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -13635,7 +13635,9 @@
       "preview_candidates": [
         "TSandswirlEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Parent-only Sandswirl schedule/target contract independentlymatches4340fields/310ticks from explicitly modifiedSparkschild+realQuicksandspell control. No runtimeadmission or intendedsandimagery/particleparity/appearancecredit."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
@@ -13653,7 +13655,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Original literal sand child lookup returns-1 before map residency; genuine loaded sector control proves residency is not the immediate blocker. Locate actual child registry/module association; do not invent alias.",
+      "next_action": "Port/verify complete original particle seeking and real mapspawn lifecycle usingqualifiedchild diagnostic, recover intendedmissing sand resource; parent4340fields/310ticks proven, seekzstackcontract remainsopen.",
       "notes": [],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
     },
