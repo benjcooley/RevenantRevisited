@@ -286,12 +286,17 @@ float4 main_ps(vs_out i) : SV_Target {
         int2 xy = min(int2(floor(frac(i.uv) * float2(size))), size - int2(1,1));
         texel = atlas.Load(int3(xy,0));
     }
+    if (i.retail_texture > 2.5) {
+        float4 nibble = floor(texel * 15.0 + 0.5);
+        texel = float4(nibble.rgb * float3(2.0/31.0, 4.0/63.0, 2.0/31.0),
+                       (nibble.a + 1.0) / 16.0);
+    }
     float4 c;
     if      (mode == 1) c = i.color;
     else if (mode == 2) c = texel;
     else if (mode == 3) { c = texel; c = float4(1,1,1,c.a); }
-    else                c = texel * i.color;
-    c.rgb *= i.lit;
+    else                c = i.retail_texture > 2.5 ? texel : texel * i.color;
+    if (i.retail_texture < 2.5) c.rgb *= i.lit;
     if (c.a < 0.002) discard;
     return c;
 }

@@ -66,8 +66,8 @@ Private inspection evidence is under
   core is reduced, but coverage/brightness still differ. No visual pass is
   claimed. `strict-4444/` retains the earlier G-buffer negative control.
 
-Mist and SymGlow use the separate FX-quad shader and are not corrected by this
-mesh/helper change. Full-pixel RGB565/ARGB4444 equivalence, source projector,
+Mist and SymGlow use the separate FX-quad shader; the initial mesh/helper
+change did not correct them. The follow-up below supplies their audited opt-in. Full-pixel RGB565/ARGB4444 equivalence, source projector,
 software destination quantization, and spell/caller context remain open.
 
 ### Follow-up: original alpha scene state
@@ -139,3 +139,40 @@ shows ticks27/31 in `transitions.png`, so all13 reported samples are displayed.
 `review-approved.json` freezes raw native/Metal pairs, both recording manifests,
 all three comparison panels and the explicit scope limits. No exact pixel or
 natural-caller claim is added.
+
+### Mist/SymGlow strict4444 FX follow-up
+
+Both producers now retain an exact-format flag from `RetailMeshTextureLighting`
+(bitcount16 and masks0xf00/0xf0/0xf/0xf000). Only the software renderer policy
+converts that flag into nearest wrapped texels, native nibble RGB/alpha decoding
+and alpha-over. The existing modern sampling, additive request and face filter
+remain their fallback. Actual compiled queue controls exercise eight combinations
+of software/modern, format opt-in and existing sampler policy. GLSL/Metal/HLSL
+carry the same decoder; original4444 ignores all vertex RGBA/light fields.
+
+Original SymGlow Render requests mode2 and overwrites object flags with0x2040.
+An executed RenderObject40adfc dispatch on that actual object does not override
+the mode. Original Scene.SetBlendMode417d60 selects CULL_NONE and no depth writes;
+the previous host positive-face rejection incorrectly removed half the cylinder.
+The fixture now executes the original setter and passes all92 authored triangles
+to the native raster. Forty-two complete native/frontend cases and both UV-store
+render-stride controls pass. Mist's original mode8 also now executes in its
+fixture. Native mode2/mode8 controls render both windings and give identical
+ARGB4444 pixels for vertex RGBA0/9/31, proving that lighting/color fabrication is
+unnecessary for this kernel and that the additive request still uses alpha-over.
+
+`alpha_quad_visual_reference.py` retains original Init/Animate/Render/pose,
+original owner and software projection/raster for both types at the same24Hz
+cadence as actual60-frame Metal recordings. Twelve independently observed CRT
+phase counts match. Source ambient38/directional1 descriptors correspond to the
+recorded ambient32 white scene; native color fields are zero sentinels whose
+irrelevance is tested, not guessed illumination. Private `quad-alpha/review-final/`
+freezes the twelve raw pairs, source/Metal manifest hashes and identical pixel
+crops. The corrected mist particles and complete red/white cylinder closely
+match; original/common projection and destination quantization remain distinct.
+
+Actual map create/move/delete records also pass for both types,16 images and
+10typed observations each with exact floor restoration. Mist's first map probe
+incorrectly assumed one owner frame and stopped at its frame assertion; the
+retained successful `Mist/map-final/` uses the literal16-frame asset header.
+No engine behavior was changed to accommodate that fixture correction.

@@ -8953,6 +8953,9 @@ void TMistEffect_Bespoke::Initialize(bool attach_runtime_component)
     // consume random draws until the actual owner asset can be submitted.
     if (!imagery || GetMapIndex() < 0 ||
         !LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    S3DTex source_texture = {};
+    imagery->GetTexture(0, &source_texture);
+    retail_argb4444_ = RetailMeshTextureLighting(source_texture.desc.pixelFormat) == 3;
     // Snapshot effect_old.cpp:11383-11392 — seed all 50 drops up-front.
     for (int32_t i = 0; i < kMistMaxDrops; ++i)
     {
@@ -9051,10 +9054,11 @@ void TMistEffect_Bespoke::Submit(EFxDebugMode debug_mode, bool software_alpha_di
         return;
 
     SQuadDrawItem item = {};
+    item.retail_argb4444 = retail_argb4444_;
     item.key.texture     = texture_;
-    // The software-reference diagnostic changes only compositing. It
-    // approximates the source software device's fixed ARGB alpha-over,
-    // without claiming its RGB565 table quantization or nearest sampling.
+    // Preserve the canonical additive request outside the software policy.
+    // Exact4444 source metadata lets SubmitFxQuad select the native kernel;
+    // the optional diagnostic can still request alpha under modern policy.
     item.key.blend       = uint8_t(software_alpha_diagnostic
                                   ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
     item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
@@ -9482,6 +9486,7 @@ void TSymGlowEffect_Bespoke::Initialize(bool attach_runtime_component)
     img->GetTexture(0, &tex);
     if (tex.htexture == kInvalidTexture ||
         !ExtractSubMeshTextureSlot(img, 0, 1, vertices_, indices_) || indices_.empty()) return;
+    retail_argb4444_ = RetailMeshTextureLighting(tex.desc.pixelFormat) == 3;
     // SetupObjects changes V once; Render advances U by the Animate random step.
     for (auto& v : vertices_) v.uv[1] -= 0.01f;
     texture_ = tex.htexture;
@@ -9542,6 +9547,7 @@ void TSymGlowEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     SQuadDrawItem item = {};
     item.corner_count = 3;
     item.retail_texture = 1;
+    item.retail_argb4444 = retail_argb4444_;
     item.key.texture = texture_;
     item.key.blend = uint8_t(EFxBlend::Alpha);
     item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
@@ -9556,7 +9562,8 @@ void TSymGlowEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
             item.world_pos[corner][0] = p.X; item.world_pos[corner][1] = p.Y; item.world_pos[corner][2] = p.Z;
             item.uv[corner][0] = v.uv[0]; item.uv[corner][1] = v.uv[1];
         }
-        // blue/swscene.cpp culls this projected winding even for ARGB. Classic
+        // Original SymGlow requests mode2, which selects CULL_NONE. Retain
+        // the earlier face filter only outside the audited software policy. Classic
         // isometric projection has constant positive zoom, so translation and
         // zoom cancel from the determinant. Blue tests Y-up before negating Y,
         // so the screen-down determinant has the opposite sign.
@@ -9564,7 +9571,8 @@ void TSymGlowEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         for (int k=0;k<3;++k) {
             const auto* p = item.world_pos[k]; sx[k]=p[0]-p[1]; sy[k]=.5f*(p[0]+p[1])-.867f*p[2];
         }
-        if ((sx[1]-sx[0])*(sy[2]-sy[0]) < (sx[2]-sx[0])*(sy[1]-sy[0])) continue;
+        if (!(retail_argb4444_ && Renderer->UsesRetailSoftwareMeshLighting()) &&
+            (sx[1]-sx[0])*(sy[2]-sy[0]) < (sx[2]-sx[0])*(sy[1]-sy[0])) continue;
         Renderer->SubmitFxQuad(item);
     }
 }

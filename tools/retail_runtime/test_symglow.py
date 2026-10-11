@@ -4,11 +4,30 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unicorn import UC_HOOK_CODE
 
 from symglow_probe import ROOT, SymGlowFixture, parse_asset, build_port
 
 
 class SymGlowNativeComparison(unittest.TestCase):
+    def test_original_render_selects_mode2_and_prevents_object_override(self):
+        with zipfile.ZipFile(ROOT/'data/imagery.rvi') as archive:
+            mesh=parse_asset(archive.read('Imagery/Misc/symglow.i3d'))
+        native=SymGlowFixture(ROOT/'recon/retail_asm/baseline/Revenant.rebuilt.exe',mesh)
+        native.reset();native.advance();native.render_state()
+        v=native.vm
+        self.assertEqual(v.u32(native.obj),0x2040)
+        self.assertEqual(v.u32(0x5e8790),2)
+        calls=[]
+        def observe(uc,address,size,user): calls.append(address)
+        h=v.uc.hook_add(UC_HOOK_CODE,observe,begin=0x417d60,end=0x417d60)
+        try:
+            v.put_u32(v.call_sp+0xc8,native.obj)
+            v.call(0x40adfc,stop_address=0x40aeba)
+        finally: v.uc.hook_del(h)
+        self.assertEqual(calls,[])
+        self.assertEqual(v.u32(0x5e8790),2)
+
     def test_production_preserves_native_uv_stores_with_skipped_renders(self):
         with zipfile.ZipFile(ROOT/'data/imagery.rvi') as archive:
             mesh = parse_asset(archive.read('Imagery/Misc/symglow.i3d'))

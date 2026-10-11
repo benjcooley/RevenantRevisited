@@ -438,6 +438,11 @@ fragment float4 _main(vs_out in [[stage_in]],
         uint2 xy = min(uint2(floor(fract(in.uv) * float2(size))), size - uint2(1));
         texel = atlas.read(xy);
     }
+    if (in.retail_texture > 2.5) {
+        float4 nibble = floor(texel * 15.0 + 0.5);
+        texel = float4(nibble.rgb * float3(2.0/31.0, 4.0/63.0, 2.0/31.0),
+                       (nibble.a + 1.0) / 16.0);
+    }
     float4 c;
     if (mode == 1) {
         c = in.color;
@@ -445,9 +450,9 @@ fragment float4 _main(vs_out in [[stage_in]],
         c = texel;
         if (mode == 3) c = float4(1.0, 1.0, 1.0, c.a);
     } else {
-        c = texel * in.color;
+        c = in.retail_texture > 2.5 ? texel : texel * in.color;
     }
-    c.rgb *= in.lit_factor;
+    if (in.retail_texture < 2.5) c.rgb *= in.lit_factor;
     if (c.a < 0.002) discard_fragment();
     return c;
 }

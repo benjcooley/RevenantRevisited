@@ -4494,9 +4494,9 @@ class TMistEffect_Bespoke : public TEffect
     void Submit(EFxDebugMode debug_mode, bool software_alpha_diagnostic = false) const;
 
     [[nodiscard]] static TMistEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
-    // Diagnostic alpha-over approximates the original software device's
-    // fixed ARGB path; it does not reproduce RGB565 tables or sampling.
-    // Default submission preserves the canonical additive request.
+    // Explicit alpha diagnostic for the modern renderer policy. The normal
+    // additive request is also decoded as original4444 alpha-over when the
+    // renderer's audited software policy is active.
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode,
                                     bool software_alpha_diagnostic = false);
 
@@ -4524,6 +4524,7 @@ class TMistEffect_Bespoke : public TEffect
     bool           alive_         = true;
     bool           initialized_   = false;
     TTextureHandle texture_       = kInvalidTexture;
+    bool retail_argb4444_ = false;
     std::vector<S3DVertex> authored_vertices_;
 };
 
@@ -4689,6 +4690,7 @@ class TSymGlowEffect_Bespoke : public TEffect
 
   private:
     TTextureHandle texture_      = kInvalidTexture;
+    bool retail_argb4444_ = false;
     mutable std::vector<SMeshVertex> vertices_;
     std::vector<uint16_t> indices_;
     bool initialized_ = false;

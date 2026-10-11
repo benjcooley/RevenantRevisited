@@ -60,9 +60,9 @@ def build_port(output, mesh, rng_path, ticks, render_stride=1):
 #define _CLASSDEF(name)
 enum class EFxBlend:uint8_t{Alpha};enum class EFxDepthMode:uint8_t{TestNoWrite};enum class EFxDebugMode:uint8_t{Normal};
 struct SMeshVertex{float pos[3]{},normal[3]{},uv[2]{};};
-struct SQuadDrawItem{int corner_count=4,retail_texture=0;float world_pos[4][3]{},uv[4][2]{};
+struct SQuadDrawItem{bool retail_argb4444=false;int corner_count=4,retail_texture=0;float world_pos[4][3]{},uv[4][2]{};
  struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};};
-struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};
+struct TRenderer{bool UsesRetailSoftwareMeshLighting()const{return true;}std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};
 TRenderer renderer;TRenderer*Renderer=&renderer;
 struct TObjectImagery{};struct SObjectDef{};
 struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
@@ -79,7 +79,7 @@ int random(int low,int high){int a,b,v;if(!(inputs>>a>>b>>v)||a!=low||b!=high)th
     trailer = r'''
 int main(int argc,char**argv){inputs.open(argv[1]);TSymGlowEffect_Bespoke effect(nullptr);
  SMeshVertex vertices[]={VERTICES};uint16_t indices[]={INDICES};
- effect.vertices_.assign(vertices,vertices+66);effect.indices_.assign(indices,indices+276);effect.Initialize(false);
+ effect.retail_argb4444_=true;effect.vertices_.assign(vertices,vertices+66);effect.indices_.assign(indices,indices+276);effect.Initialize(false);
  for(int tick=0;tick<=TICKS;++tick){if(tick)effect.Advance(1.0/24.0);renderer.draws.clear();if(!(tick%STRIDE))effect.Submit(EFxDebugMode::Normal);
  printf("S %d %d %.9g %.9g %.9g %d\n",tick,effect.timer_,effect.zscale_,effect.dz_,effect.u_step_,rng_count);
  for(const auto&v:effect.vertices_)printf("V %d %.9g %.9g\n",tick,v.uv[0],v.uv[1]);
@@ -133,6 +133,9 @@ class SymGlowFixture:
         for address in (0x483300, 0x48332c):
             self.vm.uc.hook_add(UC_HOOK_CODE, self.observe_random, begin=address, end=address)
         self.random = []; self.random_pending = []
+        for address,value in ((0x5d7a28,1),(0x66818c,0),(0x5e91c0,0),
+            (0x5e8740,0),(0x5c61ac,1),(0x5e8790,0)):
+            self.vm.put_u32(address,value)
         self.software.clear(); self.software.checkpoint()
 
     def external(self, uc, address, size, user):
@@ -146,6 +149,7 @@ class SymGlowFixture:
         elif address == 0x417d60:
             if (self.vm.u32(sp+4), self.vm.u32(sp+8)) != (2, 1):
                 raise AssertionError('SymGlow blend request changed')
+            return  # Execute actual Scene.SetBlendMode and native software states.
         elif address == 0x40a8f0:
             if self.vm.u32(sp+4) != self.obj or self.vm.u32(self.obj) != 0x2040:
                 raise AssertionError('SymGlow pose flags changed')
@@ -177,17 +181,12 @@ class SymGlowFixture:
             positions.append(list(struct.unpack('<3f', self.vm.uc.mem_read(self.result, 12))))
         uvs = self.render_state(False)['uvs']
         draws = []
-        # The fixture supplies the current frontend's culling boundary to
-        # both packets. Native/device culling equivalence is a separate gate.
-        float32 = lambda value: struct.unpack('<f', struct.pack('<f', value))[0]
+        # Render selected original mode2 above: native CULL_NONE. Submit every
+        # authored triangle; the software device independently decides coverage.
         for i in range(0, len(self.mesh['indices']), 3):
             indices = self.mesh['indices'][i:i+3]
-            points = [positions[j] for j in indices]
-            x = [float32(p[0]-p[1]) for p in points]
-            y = [float32(float32(.5*float32(p[0]+p[1]))-float32(float32(.867)*p[2])) for p in points]
-            if float32(float32(x[1]-x[0])*float32(y[2]-y[0])) < float32(float32(x[2]-x[0])*float32(y[1]-y[0])):
-                continue
-            draws.append(dict(positions=points, uvs=[uvs[j] for j in indices]))
+            draws.append(dict(positions=[positions[j] for j in indices],
+                              uvs=[uvs[j] for j in indices]))
         return draws
 
     def pixels(self, draws):
@@ -269,7 +268,7 @@ def main():
                   port_component=compiled, original_setup='0x4e5130', original_animate='0x4e51c0', original_render='0x4e5260',
                   sampled_pixel_ticks=samples, replays_per_case=2, render_stride=args.render_stride,
                   median_warm_pixel_pair_ms=statistics.median(pair_times) if pair_times else None,
-                  scope='Actual native setup/animation/render vertex stores, object matrix and SW pixels versus production initialization/Advance/Submit. Authored66vertex/92triangleARGB4444cylinder, identityowner, selected render stride and explicitwhitevertex light. Currentfrontendculling supplied at adapted mesh submission boundary; realmapbinding/ownerposes/light/deviceculling/Metal remain open.',
+                  scope='Actual native setup/animation/render vertex stores, object matrix and SW pixels versus production initialization/Advance/Submit. Authored66vertex/92triangleARGB4444cylinder, identityowner, selected render stride and explicitwhitevertex light. OriginalSceneMode2/CULL_NONE executes and all authored triangles reach the native raster; realmapbinding/ownerposes/light/Metal remain open.',
                   dosbox_used=False, pixel_rendering_intercepted=False, cases=cases)
     (args.output/'manifest.json').write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps({k:v for k,v in report.items() if k not in ('cases','failures','port_component','source_span_sha256')}, indent=2))
