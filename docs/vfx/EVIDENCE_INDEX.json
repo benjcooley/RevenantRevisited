@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 126,
+    "retail_rows_with_source_fixes_recorded": 127,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 107,
+    "visual_fidelity_confirmed_rows": 108,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 107,
-    "remaining_visual_review_rows": 69
+    "reviewed_visual_pass_rows": 108,
+    "remaining_visual_review_rows": 68
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1575,6 +1575,13 @@
       "check": "independent_native_software_actual_metal_appearance",
       "status": "pass_for_recorded_configuration",
       "scope": "Thirteen original full software/actual Metal native-domain gold flare/trail phases across three30-frame loops. Exact three-position history/current duplication, stride1/3 state/RNG and malformed zero-vector native semantics. Natural buff/endstate/audio/depth/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-fairy2-authored-20261010/Fairy2-root-approval.json": {
+      "sha256": "e6d4fb88024763922872f2d8479a111d2830748b173f0eadfa5d288a697ffa09",
+      "retail_row": "Fairy2:0xad92bd26",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Nine unchanged whole original software/actual Metal native-domain moving multicolor star/dust phases through finite399-frame owner completion and blank399/400. RNG/lifecycle/alive/count/credit pass; strict state proof retains800 numerical residuals/max0.0003658 without equality claim. Natural map renderer unsupported; caller/audio/device/exactpixels remain open."
     }
   }
 }

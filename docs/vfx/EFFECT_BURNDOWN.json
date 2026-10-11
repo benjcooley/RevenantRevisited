@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "f321485cce917950c2076fd2a7b490009cf957680aca555d1de4aed88a663d57",
+    "harness_sha256": "6f2c4aa80901b5c87a6cb2430f84e818b28f4fc847822721b247ff91904b1548",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 126,
+    "retail_rows_with_source_fixes_recorded": 127,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 107,
+    "visual_fidelity_confirmed_rows": 108,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 107,
-    "remaining_visual_review_rows": 69
+    "reviewed_visual_pass_rows": 108,
+    "remaining_visual_review_rows": 68
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -19005,31 +19005,43 @@
       "retail_type_id": "0xad92bd26",
       "asset": "misc\\Fairy2.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: Own exact finite399-frame Fairy2 typed-owner preview with208-slot variable-pps controller replaces missing variant. Complete original factory/owner/Render, fresh native replays and actual Metal growth/motion/decay/kill-tail appearance; obsolete loop assumptions superseded."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Later: port authored animated emitter path, partsys and blend controller; use actual retail reference. Advance static/simple effects first.",
+      "next_action": "Preserve approved finite gallery leaf; resolve strict small numeric residual and separately admit normal-map companion controller before natural appearance acceptance.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "2026-10-05 asset audit: complex animated emitter pose and partsys/blendcont tags. Existing guessed hover billboard cannot establish fidelity. Evidence: research/quick-fairy-20261005/fairy2-asset.json."
       ],
       "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
-      "work_queue_status": "deferred_complex_controller"
+      "work_queue_status": "deferred_complex_controller",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Nine unchanged whole original software/actual Metal native-domain moving multicolor star/dust phases through finite399-frame owner completion and blank399/400. RNG/lifecycle/alive/count/credit pass; strict state proof retains800 numerical residuals/max0.0003658 without equality claim. Natural map renderer unsupported; caller/audio/device/exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-fairy2-authored-20261010/Fairy2-root-approval.json",
+        "sha256": "e6d4fb88024763922872f2d8479a111d2830748b173f0eadfa5d288a697ffa09",
+        "note": "docs/vfx/forensics/FAIRY2_FINITE_APPEARANCE_20261010.md"
+      }
     },
     {
       "index": 131,
