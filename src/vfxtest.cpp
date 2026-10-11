@@ -92,6 +92,7 @@
 #include "effects/quickpreview.h"
 #include "effects/restorelifepreview.h"
 #include "effects/nakrnothoriginal.h"
+#include "effects/cfireoriginal.h"
 #include "effects/dexteritypreview.h"
 #include "effects/antimagicpreview.h"
 #include "effects/skinpreview.h"
@@ -8115,6 +8116,14 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(e);
         }
 
+        {
+            VfxTest::SEffect e={};e.id="CFire_INSTALLED_NO_PRESETS";e.family="magic";e.pipeline="MS";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return cfire_original::Spawn(o);};
+            e.submit=[](void* p,EFxDebugMode){cfire_original::Advance(static_cast<cfire_original::State*>(p),TTime::DeltaTime());};
+            e.submit_world=[](void* p,EFxDebugMode m){cfire_original::SubmitWorld(static_cast<cfire_original::State*>(p),m);};
+            e.is_alive=[](void* p){return cfire_original::IsAlive(static_cast<cfire_original::State*>(p));};
+            e.destroy=[](void* p){cfire_original::Destroy(static_cast<cfire_original::State*>(p));};VfxTest::DeferredRegister(e);
+        }
         {
             VfxTest::SEffect e={};e.id="Nakrnoth_ORIGINAL";e.family="magic";e.pipeline="MS+SQ";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
             e.factory=[](const S3DPoint& o)->void*{return nakrnoth_original::Spawn(o);};
