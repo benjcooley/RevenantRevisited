@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 115,
+    "retail_rows_with_source_fixes_recorded": 116,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 96,
+    "visual_fidelity_confirmed_rows": 97,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 96,
-    "remaining_visual_review_rows": 80
+    "reviewed_visual_pass_rows": 97,
+    "remaining_visual_review_rows": 79
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1491,6 +1491,13 @@
       "check": "independent_native_software_actual_metal_appearance",
       "status": "pass_for_recorded_configuration",
       "scope": "Sixteen full original software/actual Metal native-domain growth, flame/glow, separate sparks, decay and blank-tail phases. Exact90-frame owner lifetime and two PartSys pools. Natural trap caller/audio, common projection and device/exactpixel limits remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-quick-authored-20261010/root-approval.json": {
+      "sha256": "01d06766e5aa999abecb8d4a479e3e23aa71f9a4b3e1afd286b529cb59686992",
+      "retail_row": "Quick:0xbabfface",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Ten original full-software/actual Metal native-domain six-layer swirl/sparks phases including shrink55 and blank56/60. Common projection tick56 stale prior image explicitly open; natural caller, audio, device and exact pixels remain open."
     }
   }
 }

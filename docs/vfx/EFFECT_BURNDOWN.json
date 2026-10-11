@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "78dbd1cf239146c02db24ad1ed606542313b6d5d507a0c890733e1d3287d2be7",
+    "harness_sha256": "ee6a61b93dbbd5069b4a91d6eb4311e04c872c0d9d21609b79ea3820a6e2c3e9",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 115,
+    "retail_rows_with_source_fixes_recorded": 116,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 96,
+    "visual_fidelity_confirmed_rows": 97,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 96,
-    "remaining_visual_review_rows": 80
+    "reviewed_visual_pass_rows": 97,
+    "remaining_visual_review_rows": 79
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -13259,29 +13259,41 @@
       "retail_type_id": "0xbabfface",
       "asset": "Magic\\Quick.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: Exact six ARGB4444 authored layers and RGB565 sparks now render in original order using narrowly guarded source-alpha post-particle submission.13,429 state/RNG and448 poses checked; real owner completes tick56."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve approved native-domain Quick; resolve common tick56 stale capture and verify natural caller/audio/context.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
+      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Ten original full-software/actual Metal native-domain six-layer swirl/sparks phases including shrink55 and blank56/60. Common projection tick56 stale prior image explicitly open; natural caller, audio, device and exact pixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-quick-authored-20261010/root-approval.json",
+        "sha256": "01d06766e5aa999abecb8d4a479e3e23aa71f9a4b3e1afd286b529cb59686992",
+        "note": "docs/vfx/forensics/QUICK_AUTHORED_RENDER_20261010.md"
+      }
     },
     {
       "index": 61,
