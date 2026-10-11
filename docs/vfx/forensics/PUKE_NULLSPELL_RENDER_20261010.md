@@ -55,7 +55,10 @@ Current records are `puke-native-final2`, `puke-state-final2`,
 Review manifest SHA256:
 `afdf132714a52fcc52b3cc9bfa5fd98bcbeb812b2303659e61c80282088e71dc`.
 
-Appearance is awaiting independent root review. Exact pixels are not claimed:
+Root independently approved the scoped null-spell native-domain overall
+shape, motion, startup and kill appearance across all15 phases. Approval record
+`puke-review-final/root-approval.json`, SHA256
+`845b0444f045482cd034d7d8204febba5521ce7a153fe0f1bc05806eff0e351b`. Exact pixels are not claimed:
 at shrinking ticks24/25, native software has1/0 nonzero pixels and Metal
 native-domain has15/7; both are blank at26. Small-triangle coverage and
 framebuffer precision remain explicit raster limits. Ordinary-world projection
