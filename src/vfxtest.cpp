@@ -1,4 +1,5 @@
 #include "effects/strikemeteorpreview.h"
+#include "effects/sgeyserpreview.h"
 #include "effects/dragonfirepreview.h"
 #include "effects/cometoriginal.h"
 #include "effects/fgeyseroriginal.h"
@@ -1706,7 +1707,8 @@ void Render()
     const bool dragon_world_camera = StartupVfxOriginSet && g_state.active_idx >= 0 &&
         g_state.active_idx < int32_t(g_state.catalogue.size()) &&
         (g_state.catalogue[g_state.active_idx].id == "Dragonattack_ORIGINAL" ||
-         g_state.catalogue[g_state.active_idx].id == "StrikeEffect_METEOR_CALLER");
+         g_state.catalogue[g_state.active_idx].id == "StrikeEffect_METEOR_CALLER" ||
+         g_state.catalogue[g_state.active_idx].id == "SGeyser_LOADED_INLINE");
     const float world_camera_x = dragon_world_camera ? float(StartupVfxOrigin[0]) : 0.0f;
     const float world_camera_y = dragon_world_camera ? float(StartupVfxOrigin[1]) : 0.0f;
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy),
@@ -8601,6 +8603,14 @@ struct SVfxTestBootstrap {
         // Localized-at-end pattern: structs + factory adapters + registration
         // all live in this block for clean diff-stack append.
 
+        {
+            VfxTest::SEffect e{};e.id="SGeyser_LOADED_INLINE";e.family="environment";e.pipeline="IM+QUAD";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return sgeyser_preview::Spawn(o);};
+            e.submit=[](void*c,EFxDebugMode){sgeyser_preview::Advance(static_cast<sgeyser_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode){sgeyser_preview::SubmitWorld(static_cast<sgeyser_preview::State*>(c));};
+            e.is_alive=[](void*c){return sgeyser_preview::Alive(static_cast<sgeyser_preview::State*>(c));};
+            e.destroy=[](void*c){sgeyser_preview::Destroy(static_cast<sgeyser_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
         // W3-C sgeyser TGeyserEffect_Bespoke — steam variant. Periodic
         // upward spurt of 100 ballistic particles. Static preview style
         // (ambient cave fixture, no re-trigger).

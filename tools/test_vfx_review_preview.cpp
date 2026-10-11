@@ -11,7 +11,7 @@
 #include <cstring>
 
 namespace {
-int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0, dragon_negative=0, drip_negative=0, blood_negative=0,halo_negative=0,burn_negative=0,strike_negative=0;
+int catalogue_reads=0, creates=0, destroys=0, ticks=0, worlds=0, dragon_negative=0, drip_negative=0, blood_negative=0,halo_negative=0,burn_negative=0,strike_negative=0,sgeyser_negative=0;
 void* Spawn(const S3DPoint& p) {
     assert(p.x==17 && p.y==33 && p.z==21); ++creates; return new int(0);
 }
@@ -101,7 +101,12 @@ std::vector<SEffect> ReviewCatalogue() {
     if(strike_negative==2)strike.submit_world={};
     if(strike_negative==3)strike.preview_style=EVfxPreviewStyle::Combat;
     if(strike_negative==4)strike.id="TStrikeEffect_BESPOKE";
-    return {strike,aura,burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    auto sgeyser=food;sgeyser.id="SGeyser_LOADED_INLINE";
+    if(sgeyser_negative==1)sgeyser.is_alive={};
+    if(sgeyser_negative==2)sgeyser.submit_world={};
+    if(sgeyser_negative==3)sgeyser.preview_style=EVfxPreviewStyle::Combat;
+    if(sgeyser_negative==4)sgeyser.id="TGeyserEffect_Bespoke__sgeyser_BESPOKE";
+    return {sgeyser,strike,aura,burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -125,6 +130,11 @@ int main(int argc,char** argv) {
     if(argc==2 && std::strlen(argv[1])==2 && argv[1][0]=='u'){
         burn_negative=argv[1][1]-'0';assert(burn_negative>=1 && burn_negative<=4);
         assert(!DescribeVfxReviewPreview(0x55471bffu).supported);assert(!CreateVfxReviewPreview(0x55471bffu,origin));assert(creates==0 && destroys==0);return 0;
+    }
+    if(argc==2 && std::strlen(argv[1])==2 && argv[1][0]=='g'){
+        sgeyser_negative=argv[1][1]-'0';assert(sgeyser_negative>=1 && sgeyser_negative<=4);
+        assert(!DescribeVfxReviewPreview(0xad92bd30u).supported);
+        assert(!CreateVfxReviewPreview(0xad92bd30u,origin));assert(creates==0);return 0;
     }
     if(argc==2 && std::strlen(argv[1])==2 && argv[1][0]=='s'){
         strike_negative=argv[1][1]-'0';assert(strike_negative>=1 && strike_negative<=4);
@@ -166,6 +176,7 @@ int main(int argc,char** argv) {
     assert(!CreateVfxReviewPreview(0x63fd382a,origin));
     assert(DescribeVfxReviewPreview(0x152dafef).requires_attachment);
     assert(!CreateVfxReviewPreview(0x152dafef,origin));
+    assert(DescribeVfxReviewPreview(0xad92bd30u).supported);
     assert(!CreateVfxReviewPreview(0x12309867,origin));
     // A registered, callable factory is insufficient: the implementation audit
     // must reject null bodies and invalid animator aliases before spawning.

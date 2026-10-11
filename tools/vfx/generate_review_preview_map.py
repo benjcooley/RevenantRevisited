@@ -133,6 +133,7 @@ SOURCE_MAPPINGS = {
     '0xfacedbed': 'TIcedEffect_BESPOKE__Snow',
     '0x0c052637': 'Dust_AUTHORED',
     '0xad92bd31': 'FGeyser_AUTHORED',
+    '0xad92bd30': 'SGeyser_LOADED_INLINE',
     '0xad92bd34': 'Tironskin_AUTHORED_TAGS',
     '0xad92bd33': 'Tstoneskin_AUTHORED_TAGS',
     '0xd3ae043a': 'TAntimagic_AUTHORED_TAGS',
@@ -170,6 +171,8 @@ IMPLEMENTED.update(dict.fromkeys(
 
 def admitted_candidates(row):
     row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n not in ('Burn_AUTHENTIC_ACOLYTE_INTEGER','Aura_AUTHENTIC_ACOLYTE_INTEGER')])
+    if row.get("retail_type_id", "").lower()=="0xad92bd30":
+        return ["SGeyser_LOADED_INLINE"]
     if row.get('retail_type_id','').lower()=='0xad92bd32':
         return ['StrikeEffect_METEOR_CONFIGURED']
     row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if not n.startswith('Halo_AUTHORED_PUBLIC')])
@@ -200,6 +203,8 @@ def candidate_metadata(row, name):
         return False, 'Exact Aura public SetSpell(real Acolyte/named Aura), integer pose14/0/facing96 and original zero selector; natural bone initialization, attachment/interpolation/audio not certified'
     if row.get('retail_type_id','').lower()=='0x55471bff' and name=='Burn_AUTHENTIC_ACOLYTE_INTEGER':
         return False, 'Exact Burn public Set(real Acolyte), declared integer pose14/0/facing96, real damage/fire/smoke; natural attachment/interpolation not certified'
+    if row.get("retail_type_id", "").lower()=="0xad92bd30" and name=="SGeyser_LOADED_INLINE":
+        return False, "Exact loaded sgeyser inline104-slot controller and authored burst, original missing vapor preset omitted; declared empty ground0 and finite45-tick owner, natural trap/map/audio not certified"
     if row.get('retail_type_id','').lower()=='0xad92bd32' and name=='StrikeEffect_METEOR_CONFIGURED':
         return False, 'Named Meteor Storm caller: four delayed Comet-image strikes, duration93 and genuine configured Acolytes; live RNG plus original index reseeds, empty ground0, natural scheduling/damage and other variants not certified'
     if row.get('retail_type_id','').lower()=='0xdedbdbed' and name=='Halo_AUTHORED_PUBLIC60':
