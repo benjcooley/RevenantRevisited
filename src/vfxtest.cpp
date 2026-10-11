@@ -48,6 +48,7 @@
 #include "effects/genericstaticpreview.h"
 #include "effects/blastpreview.h"
 #include "effects/fairypreview.h"
+#include "effects/fairy2preview.h"
 #include "effects/labbackpreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
@@ -6855,6 +6856,19 @@ struct SVfxTestBootstrap {
             e.submit_world  = [](void* c, EFxDebugMode) { fairy_preview::SubmitWorld(static_cast<fairy_preview::State*>(c)); };
             e.is_alive      = [](void* c) { return fairy_preview::Alive(static_cast<fairy_preview::State*>(c)); };
             e.destroy       = [](void* c) { fairy_preview::Destroy(static_cast<fairy_preview::State*>(c)); };
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TFairy2_AUTHORED";
+            e.family        = "ambient";
+            e.pipeline      = "FB";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory       = [](const S3DPoint& o) -> void* { return fairy2_preview::Spawn(o); };
+            e.submit        = [](void* c, EFxDebugMode) { fairy2_preview::Advance(static_cast<fairy2_preview::State*>(c),TTime::DeltaTime()); };
+            e.submit_world  = [](void* c, EFxDebugMode) { fairy2_preview::SubmitWorld(static_cast<fairy2_preview::State*>(c)); };
+            e.is_alive      = [](void* c) { return fairy2_preview::Alive(static_cast<fairy2_preview::State*>(c)); };
+            e.destroy       = [](void* c) { fairy2_preview::Destroy(static_cast<fairy2_preview::State*>(c)); };
             VfxTest::DeferredRegister(e);
         }
         {
