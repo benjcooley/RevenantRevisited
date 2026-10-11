@@ -120,10 +120,10 @@ Also optional:
 - The hermit `Olihoot1`, level 0 (5837, 24805, 44). His choice 4 "Nothing
   right now." gives the `SKY` talisman (`forest.s:324-335`); choices 1–3
   loop.
-- The combat master `Jong1`, level 0 (965, 29901, 19). Avoid his training
-  in the port: its `COMBAT` path loops on `player.lastattack`, which is not
-  ported ([STORY_TESTING.md](../gameflow/STORY_TESTING.md) §7.1, BURNDOWN
-  T8).
+- The combat master `Jong1`, level 0 (965, 29901, 19). His training
+  (`COMBAT`) waits until Locke lands the move he teaches
+  (`player.lastattack`, [GRIND.md](GRIND.md) §2.3). It needs a target
+  Locke may fight: the dummy MUDOKON1 only while it fights him.
 
 ### S2. Free Jason, get the Golden Sun Key
 

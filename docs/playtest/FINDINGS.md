@@ -4,6 +4,92 @@ Bugs and gaps that Jev's sessions surfaced in the games, with what reproduces
 each. Newest first. Each entry: what was seen, the evidence, the repro, and
 who owns the fix.
 
+## F7. Jong's lessons never completed: `player.lastattack` wasn't ported (port bug, fixed)
+
+**Seen 2026-10-11**, reading for GRIND.md §2.3 and §10. Each of Jong's
+lessons (`forest.s:794-1690`) loops on `if player.lastattack = "<move>"`
+until Locke lands the move. The port answered the member with "isn't
+ported" and failed the expression. So a lesson never ended, and MUDOKON1's
+ALWAYS block re-added and re-equipped the Training Sword every second.
+
+**Retail.** The member is in the expression evaluator (`0x0041f230`), at
+`0x0041f755`:
+- On a character or player whose last attack (`+0x160`) is set: Get,
+  WhiteGet, an optional `=` (Get, WhiteGet past it), then the value is
+  `Is(lastattack->name)` on the next token (`0x00479700`, case-blind) when
+  the hit flag `+0x168` is set, else 0. A final WhiteGet ends it.
+- Anything else gives 0 after one WhiteGet. The `=` and the name are then
+  left to the evaluator, which compares 0 with the name's hash.
+- ResolveAttack (`0x004c6dd0`) sets `+0x160` and clears `+0x168` on an
+  attack's first tick. At the impact frame `+0x168` is whether the attack
+  struck its main target (ResolveHit `0x004c62b0`).
+- **Emulator.** On the forest slot, retail's own CommandInterpreter
+  (`0x0041e8e0`) ran each line as the text bar's `@` prompt does
+  (`0x0054d700`), through `PlayWorld.peek`, with `+0x160` and `+0x168` set
+  per case. Results for `if player.lastattack = "CHARGETHRUST"` (0x40 true,
+  0x80 false):
+
+  | Last attack | Hit | Line | Result |
+  |---|---|---|---|
+  | none | – | as above | 0x80 |
+  | chargethrust | 0 | as above | 0x80 |
+  | chargethrust | 1 | as above | 0x40 |
+  | chargethrust | 1 | `= "chargethrust"` | 0x40 |
+  | chargethrust | 1 | no `=` | 0x40 |
+  | thrust | 1 | as above | 0x80 |
+  | none | – | `… and 1` | 0x40 |
+  | chargethrust | 0 | `… and 1` | 0x80 |
+  | chargethrust | 1 | `… and 1` | 0x40 |
+
+  The `and 1` rows show the token handling. With no last attack, the `=`
+  is left to the evaluator, which compares 0 with the name's hash, and
+  `and 1` then tests the hash: true. With a missed attack, the member
+  takes the `=` and the name itself: false.
+
+**Resolution.** Fixed on `playtest/items`.
+- `MemberValue` (`src/scriptvalue.cpp`) evaluates `lastattack` as
+  `0x0041f755` does, token for token.
+- `TCharacter::LastAttack` and `LastAttackHit` (`src/character.h`) expose
+  `+0x160` and `+0x168`. ResolveAttack already kept both.
+- **Port, the same lines from `--exec`** on the forest slot. Before any
+  attack: plain 0x80, `and 1` 0x40. After C then A with no one in reach
+  (a thrust that strikes nothing): `= "THRUST"`, `= "thrust"`, no `=`,
+  `and 1` and `= "CHARGETHRUST"` all give 0x80. These match retail's rows.
+- **Port, lesson 1 end to end** (`forest`, Locke placed near Jong,
+  `JONGMEETSTATE` 1, choice 2):
+  - The script sets ATTACKLEVEL to 1. Control returns with the Training
+    Sword re-equipped every second.
+  - Practice on the dummy needs it as a target (see Open). The harness
+    made it fight Locke (`@mudokon1.beginfighting locke` each round; it
+    took on the fourth). Then C targeted it, and A from 260 units charged
+    it.
+  - When a Charging Thrust struck, the loop took `jump complete1`, printed
+    "EXCELLENT !" and set EQUIPSTATE 0. Locke bowed. The script unequipped
+    and deleted the Training Sword ("1 TRAINING SWORD deleted") and set
+    LEARNSTATE 1. Jong said II2JON17/18.
+  - No ADDINV or EQUIP of the sword followed. 240 ticks later Locke held no
+    weapon.
+  - The pre-fix binary, given the same inputs, logged "'.lastattack' isn't
+    ported" and never left the loop. The sword was re-equipped 83 times in
+    3,966 ticks. (In that run the dummy never became Locke's target, so it
+    shows the failing expression, not a landed move being ignored.)
+
+**Open (retail, not run end to end).** The emulator ran about 2.5 ticks a
+minute on the loaded machine, so the whole lesson (about 2,400 ticks) wasn't
+played in retail. The practice target is the open question:
+- Retail's IsEnemy (`0x004c89c0`, which the port matches) counts the dummy
+  only while it fights Locke. Its type `Mudukon` has no GROUPS, and Locke's
+  ENEMIES (`player,trainer,human,…`) don't name it. In the port, C left
+  Locke without a target, as that reading predicts.
+- A with no target picks `thrust`, the first button-1 attack, because the
+  distance test is skipped without a target (COMBAT_ATTACK_CHOICE §3.1
+  item 8). The thrust strikes no one and never completes a lesson.
+- In the port, `@combat jong1` let Locke attack Jong (`trainer`,
+  aggressive), and Jong fought back.
+
+How a retail player was meant to land the move is a question for a retail
+play-through.
+
 ## F6. Weapon and armour numbers came from class.def (port bug, fixed)
 
 **Seen 2026-10-11**, reading for GRIND.md §5.1 and §10. The port's item

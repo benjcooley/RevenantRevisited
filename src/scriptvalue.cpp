@@ -258,8 +258,30 @@ std::optional<int32_t> MemberValue(TToken& t, TObjectInstance& obj,
         return value;
     }
     if (t.Is("lastattack"))
-        return NotPorted("lastattack", 0x004c62b0,
-                         "whether the character's last attack landed (TCharacter +0x168)");
+    {
+        // REVSYNC: 0x0041f755 -- `<character>.lastattack = "<attack>"`: 1 when
+        // the character's last attack (+0x160) is the one named (case-blind)
+        // and struck its target (+0x168, ResolveAttack 0x004c6dd0). The `=`
+        // and the name are the member's own. Anything but a character that
+        // has attacked leaves them to the evaluator, so the line compares 0
+        // with the name's hash.
+        const TCharacter* chr = obj.IsCharacter() ? static_cast<const TCharacter*>(&obj) : nullptr;
+        if (chr && chr->LastAttack())
+        {
+            t.Get();
+            t.WhiteGet();
+            if (t.Is("="))
+            {
+                t.Get();
+                t.WhiteGet();
+            }
+            const int32_t value = chr->LastAttackHit() && t.Is(chr->LastAttack()->attackname);
+            t.WhiteGet();
+            return value;
+        }
+        t.WhiteGet();
+        return 0;
+    }
     if (t.Is("position"))
     {
         t.Get();                            // "."

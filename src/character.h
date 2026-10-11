@@ -348,6 +348,10 @@ class TCharacter : public TComplexObject
         int32_t tohit, int32_t roll);
       // REVSYNC: 0x004c62b0 -- one character struck by an attack at its impact frame
       // (ResolveAttack calls it for the target and each character in reach)
+    [[nodiscard]] const SCharAttackData *LastAttack() const { return lastattack; }
+      // The attack last started (retail +0x160; ResolveAttack's first tick); null before any
+    [[nodiscard]] bool LastAttackHit() const { return lasthit != 0; }
+      // Whether it struck its target at the impact frame (retail +0x168)
 
   // Info functions specific to characters
     bool IsFighting() { return IsCombat() || IsBowMode(); }

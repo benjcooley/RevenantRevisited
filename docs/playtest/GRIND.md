@@ -320,7 +320,10 @@ lesson whose requirement Locke meets, in order:
    MUDOKON1's ALWAYS block re-adds and re-equips the sword every second
    (`forest.s:1902-1911`).
 4. The script waits until `player.lastattack` names the move
-   (`forest.s:857`, …).
+   (`forest.s:857`, …): Locke's last attack is that move and it struck
+   its target (`0x0041f755`; FINDINGS F7). The target has to be one Locke
+   may fight (IsEnemy `0x004c89c0`). MUDOKON1 isn't one unless it is
+   fighting him: it has no GROUPS, and Locke's ENEMIES don't name it.
 5. Locke bows, and the sword is unequipped and deleted.
 
 Jong1 stands on level 0 at (965, 29901, 19) (STORY.md S1).
@@ -333,9 +336,8 @@ is practice with no experience and no risk.
 **Every lesson is a weapon move.** None of the moves Jong unlocks has WM_HAND
 in its mask, so AttackLevel gives a barehanded Locke nothing.
 
-**Port:** `player.lastattack` isn't ported (`src/scriptvalue.cpp:260`,
-NotPorted). A lesson in the port never completes, and the Training Sword
-keeps re-equipping every second. Avoid Jong in the port (STORY.md S1).
+**Port:** `player.lastattack` is ported (FINDINGS F7). A lesson completes
+once the move lands, and the Training Sword is taken back.
 
 ### 2.4 To-hit and damage, in numbers [C]
 
@@ -1582,7 +1584,7 @@ marked.
 | U and G keys | Use and Get (§4.2) | not dispatched by `TPlayScreen::Command` |
 | A pickup into a full pack | the item probably vanishes [L] | the item goes back on the map |
 | Item numbers | `weapon.def` and `armor.def` BASICMODS copied over class.def (§5.1) | the same since FINDINGS F6 |
-| Jong's lessons | `player.lastattack` completes the lesson | NotPorted, so the lesson never completes and the Training Sword keeps re-equipping |
+| Jong's lessons | `player.lastattack` completes the lesson | the same since FINDINGS F7 |
 | Boss AI (Baez, the Solifuge, Jhaga, Yhagoro) | `AIPerMonster` cases 1–4 | the boss kind is set, but its behaviour isn't ported (`src/character.cpp:3065`) |
 | Kill Exp, skill Exp, level-up, Invoke Exp | §1–2 | ported. The `invoke2` level-up animation isn't played (PLAYER_STATS §9); Invoke experience matches retail (spell-cast kata, 2071/2071) |
 
@@ -1674,8 +1676,8 @@ marked.
   - the shop rows;
   - screen positions for the equip-pane slots and the belt boxes.
 - **In the director:** `monster_brief`'s inverted DAMAGEMODS sign.
-- **In the port:** no generators, no death drop, no U or G keys, no Jong
-  lesson completion, no boss AI.
+- **In the port:** no generators, no death drop, no U or G keys, no boss
+  AI.
 - **Unconfirmed in retail:** generator reach and the sector window; floor
   drops across a save; a full-pack pickup; the order of chest steps; belt
   pouches; Restart after a load; which monsters take the grapples; the
