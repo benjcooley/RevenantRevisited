@@ -25,3 +25,41 @@ Private evidence roots: `nakrnoth-native-whole`, `nakrnoth-native-main`, `nakrno
 This checkpoint is ready for independent appearance review, not approval. The natural boss/spell/map/audio/device and exact-pixel boundaries remain open. Native software framebuffer quantization, nearest sampling and overlapping-window raster differences remain explicit.
 
 Root independently compiles the integrated controller/key/matrix code:645775particlefields agree within the declared0.0021world-position tolerance (max0.0019525),187840ordinarymatrixchannels max1.33e-5, zero state/RNG errors. Application/compiledgallerybridge/28mappingtests pass. Main40stride20PNGs byte-identical through781actual24Hz updates/render withcleanexit. The six-window late ring brightness discrepancy remains held for causal analysis; no appearance approval follows from the positive main-view repeat.
+
+## Terrain and complete-view follow-up
+
+`nakrnoth_ground_probe.py` observes the actual PartSys call at `403082` to
+`452e10`, and its return at `403087`, without replacing either. Across the
+same 790 original lifecycle ticks, all 49,675 calls return zero. Their actual
+MapPane receiver is `6668d8`, level and option are zero, and queried integer
+coordinate bounds are X 3143–3246, Y 3129–3209, Z −86–102. Every owner
+flag/frame/RNG checkpoint remains identical to the frozen whole reference.
+`nakrnoth-ground-native/manifest.json` SHA256 is
+`a705b0bb0577aa8b075001e0aa69fae2911b487a7c558f075ae9f44010b361ef`.
+The source zero-height callback is consequently grounded in this explicit
+empty-map fixture; it does not claim natural terrain behavior.
+
+The owned ordinary animator rejects Nakrnoth's unsupported generic companion
+controller/profile and retains no generic PartSys runtime. The standalone
+adapter alone advances the audited PartSys. This avoids consuming RNG twice;
+the exact source/native lifecycle comparisons include the complete 90,820-call
+sequence.
+
+All six corrected late Metal films assert simulation ticks
+601/621/641/661/681/701 and actual 1920×1080 dimensions. Earlier auxiliary
+films used warmup 25 frames by mistake, were rejected by CSV timing, and remain
+separate diagnostics. `nakrnoth_visual_review.py` freezes forty main pairs,
+36 raw late-window pairs, immutable coverage unions and source/configuration
+hashes. The pair manifest SHA256 is
+`67c060d61ef002a22234e4f2c4f2e1baa89f9d296d91eac63eaf881606e5b8d2`;
+its captured binary SHA256 is
+`3fe353e57b2318c9db380dd031474c5322a5d02349fa3c0358329add5f73c15a`.
+
+Appearance remains held: the complete expansion has matching shape and timing,
+but original shock rings are visibly brighter than Metal at 641/681. Actual
+loaded original Illuminate produces RGB5 `(23,23,23)` for the 16 shock vertices
+in those two phases, matching the helper's normalized-normal calculation.
+Single-original-triangle isolation still reaches `(30,62,30)`, ruling out
+opposite-facing duplicate geometry as the cause. The downstream raster/state
+boundary is under investigation; no light, tint or geometry correction is
+inferred from these images.
