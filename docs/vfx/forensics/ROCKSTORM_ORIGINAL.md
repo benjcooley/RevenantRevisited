@@ -61,3 +61,10 @@ resource/COM setup, audio and external callbacks are explicit boundaries.
 Texture sampling, scanline coverage, destination blend precision, arbitrary
 camera/actor inputs, natural caller and device/exact-framebuffer fidelity remain
 open. Independent appearance approval is recorded separately.
+
+Root independently approved all 16 whole-life/detail phases and actual-size
+pairs 20/48 for the declared named level-one stationary-target condition.
+The frozen `rockstorm-review-final/root-approval.json` SHA-256 is
+`797073d8a470a749af89514109693c5def569b7fcffc3a60c538f53b6c24c1a0`. It pins the pair manifest, cases, source binary and both panels.
+This is scoped appearance acceptance; the caller, damage and raster limits
+above remain open.
