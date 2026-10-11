@@ -40,7 +40,7 @@ struct Entry {
     std::string name, asset, status = "Approaching";
     S3DPoint station{};
     int map_index = -1;
-    double clearance = 420;
+    double clearance = 240;
     double review_footprint = 0;
     unsigned cycles = 0;
     int sound_tags = 0;
@@ -137,8 +137,9 @@ bool LayoutStations() {
         // An unavailable entry still has a named slot. With no drawable, it
         // needs the minimum slot rather than its asset's oversized bounds.
         if(!support.safe_factory) continue;
-        // Header bounds cover authored poses; broad emitter hints below cover
-        // known trajectories extending beyond those bounds. Layout only.
+        // These are padded culling/refresh bounds, not measured visible size.
+        // Bound their layout contribution; explicit large-effect hints below
+        // reserve space for genuinely broad trajectories.
         const auto* info=EffectClass.GetObjType(e.type);
         const auto* image=info?TObjectImagery::GetImageryEntry(info->imageryid):nullptr;
         if(image && image->header) {
@@ -146,7 +147,8 @@ bool LayoutStations() {
                 const auto& state=image->header->states[i];
                 const double projected=(std::max)(0,int(state.width))*direction.x+
                     (std::max)(0,int(state.height))*std::abs(direction.y);
-                e.review_footprint=(std::max)(e.review_footprint,projected);
+                e.review_footprint=(std::max)(e.review_footprint,
+                    (std::min)(projected,layout.ViewSpan()*.5));
             }
         }
         switch(e.id) {

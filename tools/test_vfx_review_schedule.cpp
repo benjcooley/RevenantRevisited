@@ -24,7 +24,7 @@ int main()
 {
     assert(VfxReviewSchedule{}.speed == 48.0);
     for (double ratio : {2.0, 2.5, 3.0}) {
-        VfxReviewSchedule schedule; schedule.count = 176; schedule.ratio = ratio; schedule.speed = 16;
+        VfxReviewSchedule schedule; schedule.count = 176; schedule.ratio = ratio; schedule.speed = 16; schedule.spacing = 420;
         assert(schedule.IsValid());
         const Vec2 direction = schedule.StepDirection();
         assert(Near(Length(direction), 1.0));
@@ -167,7 +167,7 @@ int main()
         assert(!malformed.IsValid()); assert(malformed.NearestSlot(50.0)==0);
         Equal(malformed.CameraScreenOffset(50.0),{});
     }
-    VfxReviewSchedule uniform; uniform.count=4;
+    VfxReviewSchedule uniform; uniform.count=4; uniform.spacing=420;
     assert(uniform.SlotDistance(3)==1260.0);
     assert(uniform.NearestSlot((uniform.gap+210.0)/uniform.speed)==1);
     assert(uniform.NearestSlot((uniform.gap+1250.0)/uniform.speed)==3);

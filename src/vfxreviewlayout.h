@@ -10,7 +10,7 @@ struct VfxReviewLayout
     double ratio = 2.5;
     double width = 640.0;
     double height = 480.0;
-    double requested_minimum = 420.0;
+    double requested_minimum = 240.0;
 
     double ViewSpan() const
     {
@@ -22,7 +22,7 @@ struct VfxReviewLayout
 
     double MinimumClearance() const
     {
-        return (std::max)({320.0, Nonnegative(requested_minimum), ViewSpan() / 2.25});
+        return (std::max)({240.0, Nonnegative(requested_minimum), ViewSpan() / 3.0});
     }
 
     double Clearance(double footprint, double requested = 0.0) const
