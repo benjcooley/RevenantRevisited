@@ -453,10 +453,14 @@ the character.
 
 **Retail bug.** The 80 faces run two past the 80 vertices BuildStrip
 writes: faces 78 and 79 index the zero-filled vertices 80 and 81 (the
-emulator confirms they stay zero), a faint wedge, alpha 0.13 → 0 toward
-black, from the strip's tail to the character's origin at its feet. The
-port draws the 78 strip triangles (REVSYNC-DIVERGENCE in
-`charanimator.cpp`).
+emulator confirms they stay zero), the character's model origin at its
+feet. Face 78 is a sliver from the strip's tail down to the feet; the lab
+recording shows it as a thin line in the swipe's colour (retail 16.08 s
+and 16.17 s in the figure below), the software rasterizer not fading it
+out. The port draws the 78 strip triangles and leaves the line out
+(REVSYNC-DIVERGENCE in `charanimator.cpp`), as it leaves out retail's
+other draw slips (the HUD's pink fringe); drawing the two faces would
+restore it.
 
 SWIPECOLOR in char.def: Locke 200,0,230; Bayne, Morganna, Navarro 50,0,75;
 Jong 155,0,155; the seven Ogroks 255,0,0; Dorogar 0,25,0; Acolyte and
@@ -512,11 +516,21 @@ blade at any frame rate. No random numbers are drawn.
   [swipe_arena_locke.png](combat_effects/swipe_arena_locke.png).
 - **Gallery**, one Skeleton swinging,
   [swipe_gallery_skeleton.png](combat_effects/swipe_gallery_skeleton.png).
-- **No retail footage yet.** The recorded Rahul fight has none to show:
-  Locke fights unarmed (hand attacks have no window) and Rahul has no
-  SWIPECOLOR. The lab capture to make (load the Port Resave slot in
-  retail, fight the forest's Druhgs with Locke's sword) could not run: the
-  DOSBox lab was held by another dojo run.
+- **Retail, from the same slot.** `make_arena_slot.py ArenaSwipe --locke
+  25375,3072 --monster Skeleton@25525,3072` puts a Skeleton 150 east of
+  the idle Locke on the flat arena (COMBAT_ARENA.md); the DOSBox lab loads
+  it and records the fight
+  (`~/RevenantRetailLab/captures/combat/swipe-skeleton-arena-20261011.avi`,
+  40 s; the Skeleton kills Locke in two blows, as in the port). Its first
+  blow against the port's from the same slot,
+  [swipe_retail_vs_port.png](combat_effects/swipe_retail_vs_port.png): the
+  same red arc over the Skeleton's head down to the blade, the same colour
+  and fade, the trail following the weapon. Retail renders at about 6–8
+  frames a second in the lab and updates once a drawn frame, so its arc is
+  sampled more coarsely than at full speed; retail's random attack choice
+  may differ from the port's chop. The thin line from the arc's tail to
+  the feet is the face-count slip above. (The recorded Rahul fight has
+  no swipe: Locke fights unarmed and Rahul has no SWIPECOLOR.)
 
 ## 7. Bloody chunks
 

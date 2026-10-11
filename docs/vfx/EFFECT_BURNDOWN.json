@@ -24684,7 +24684,10 @@
       },
       "runtime_supported": true,
       "retail_accepted": false,
-      "evidence": "2026-10-11 combat dojo: tools/retail_runtime/weapon_swipe_probe.py runs the original Setup/Update/BuildStrip against src/weaponswipe.cpp: 45 cases, 2138 drawn frames, histories and strips bit for bit; three negative controls (test_weapon_swipe.py). Live in play from TCharAnimator (combat arena locke_vs_araknid). No retail footage of a swipe yet. docs/gameplay/forensics/COMBAT_EFFECTS.md section 6."
+      "evidence": "2026-10-11 combat dojo: tools/retail_runtime/weapon_swipe_probe.py runs the original Setup/Update/BuildStrip against src/weaponswipe.cpp: 45 cases, 2138 drawn frames, histories and strips bit for bit; three negative controls (test_weapon_swipe.py). Live in play from TCharAnimator (combat arena locke_vs_araknid). Retail: a Skeleton on the shared arena slot (make_arena_slot.py ArenaSwipe) recorded in the DOSBox lab (~/RevenantRetailLab/captures/combat/swipe-skeleton-arena-20261011.avi) against the port from the same slot: same arc, colour and fade (docs/gameplay/forensics/combat_effects/swipe_retail_vs_port.png); the port omits retail's face-count line to the feet. docs/gameplay/forensics/COMBAT_EFFECTS.md section 6.",
+      "comparison_runs": [
+        "docs/gameplay/forensics/combat_effects/swipe_retail_vs_port.png"
+      ]
     },
     {
       "id": "TFireBallEffect",
@@ -26113,7 +26116,7 @@
       "TTest3DAnimator: debug/snapshot-only candidate",
       "TFlareAnimator.placeholder: diagnostic placeholder, not an effect acceptance unit",
       "TBloodSystem and base TMissileEffect: infrastructure rather than retail type rows",
-      "TWeaponSwipe: actual character combat visual outside EFFECT type registry; ported from retail (TCharAnimator +0x1a8) with an emulator A/B, retail footage pending (docs/gameplay/forensics/COMBAT_EFFECTS.md section 6)"
+      "TWeaponSwipe: actual character combat visual outside EFFECT type registry; ported from retail (TCharAnimator +0x1a8) with an emulator A/B and a DOSBox lab comparison (docs/gameplay/forensics/COMBAT_EFFECTS.md section 6)"
     ],
     "unmapped_preview_ids": [
       "TIceEffect_BESPOKE",

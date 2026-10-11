@@ -593,10 +593,11 @@ void TCharAnimator::WeaponExtents(TWeaponSwipe::SVec3& low, TWeaponSwipe::SVec3&
 // 0x0040a8f0). Its alpha is its own: the character's fade doesn't reach it.
 //
 // REVSYNC-DIVERGENCE: retail's 80 faces run two past the 80 vertices
-// BuildStrip writes; the last two index the zero-filled vertices 80 and 81,
-// a faint black wedge from the strip's tail to the character's feet. The
-// port draws the 78 strip triangles. Between ticks it draws the history
-// eased toward the next tick's (UpdateWeaponSwipe).
+// BuildStrip writes; the last two index the zero-filled vertices 80 and 81
+// (the model origin), a thin line in the swipe's colour from the strip's
+// tail to the character's feet in the lab recording. The port draws the 78
+// strip triangles. Between ticks it draws the history eased toward the
+// next tick's (UpdateWeaponSwipe).
 void TCharAnimator::SubmitFx(TRenderer& renderer) const
 {
     if (!inst || !swipe.Initialized() || DrawAlpha() <= 0.0f)
