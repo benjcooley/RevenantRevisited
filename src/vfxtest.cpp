@@ -3,6 +3,7 @@
 #include "effects/dustoriginal.h"
 #include "effects/poisonoriginal.h"
 #include "effects/poweruporiginal.h"
+#include "effects/ypoweruporiginal.h"
 #include "effects/lightstriporiginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
@@ -5339,6 +5340,15 @@ struct SVfxTestBootstrap {
             original.submit=[](void* c,EFxDebugMode){powerup_original::Advance(static_cast<powerup_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){powerup_original::SubmitWorld(static_cast<powerup_original::State*>(c),mode);};
             original.destroy=[](void* c){powerup_original::Destroy(static_cast<powerup_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="YPowerUp_AUTHORED";
+            original.family="environment";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return ypowerup_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){ypowerup_original::Advance(static_cast<ypowerup_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){ypowerup_original::SubmitWorld(static_cast<ypowerup_original::State*>(c),mode);};
+            original.destroy=[](void* c){ypowerup_original::Destroy(static_cast<ypowerup_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
 
