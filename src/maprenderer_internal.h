@@ -366,6 +366,7 @@ struct TMapRenderer::Impl
     bool sectorShowObjectLabels = true;
     bool sectorShowGizmos = true;
     bool sectorShowTiles = true;
+    bool sectorShowGroundTiles = true;
     bool sectorShowMeshes = true;
     bool sectorShowMeshLocators = false;
     bool sectorForceMeshPreviewPose = false;

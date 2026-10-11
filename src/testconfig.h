@@ -75,6 +75,7 @@ extern char StartupVfxReviewEffects[2048];
 extern char StartupVfxReviewSpacingOverrides[2048];
 extern float StartupVfxReviewPathTilt;
 extern float StartupVfxReviewPathLength;
+extern bool StartupVfxReviewFirst;
 // --partsys-quality=0|1|2 — match retail controller quality during captures.
 // 0 preserves full emission; retail 1 uses one quarter, 2 uses one half.
 extern int32_t StartupPartSysQuality;

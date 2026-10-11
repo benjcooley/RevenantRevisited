@@ -109,6 +109,9 @@ class TMapRenderer
     // defines night ambient values). The modern model's sun only exists in
     // such areas; retail had no sun at all, so Classic never uses one.
     void SetDaylightCycle(bool has_cycle);
+    // Keep tile walkmaps/collision resident while hiding ground visuals.
+    // EFFECT sprites and meshes continue to render (VFX review backdrop).
+    void SetGroundTilesVisible(bool visible);
 
     // Last-frame draw counts, exposed so the editor status bar can show
     // exactly what's hitting the GPU. All-zero before the first frame.
