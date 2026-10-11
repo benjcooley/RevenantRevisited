@@ -91,7 +91,7 @@ One JSON object per line each way; responses carry the request's `id`.
 | `project {points}` / `pick {x, y}` | World to screen and screen to map, by the game's own functions |
 | `export_slot {slot, to}` | Copies a save slot directory to the host |
 | `checkpoint {name}` / `restore {name}` | Retail only: an image of the whole machine |
-| `replay {path, verify}` | Runs a recording; with `verify`, reports the first tick whose hash differs |
+| `replay {path, verify}` | Runs a recording; with `verify`, reports the first tick whose check line differs |
 | `quit` | |
 
 A host never advances on its own: time moves only through `step`.
@@ -185,7 +185,7 @@ In `--control`, `--record` and `--replay`:
 | area music: `MusicPlaying()` (audio thread) and `tickcount()` before `random()` (`area.cpp`) | game time for the retry, and the music state answered as "not playing", as in a `NOSOUND` retail |
 | render-time game `random()` (animators created on screen, `SubmitPartSys`) | kept, as retail draws there too; lockstep fixes the frames, and `timing: "frames"` replays the recorded `dt`s |
 | effects' libc `std::rand()` | seeded with the game seed; its draws follow the frames |
-| INI options (`GameSpeed`, `PlaySpeech`, …) and `--revisited` | INI hash in the header; the replay uses the recorded INI |
+| INI options (`GameSpeed`, `PlaySpeech`, …) and `--revisited` | the INI's SHA in the header; the replay uses the recorded INI |
 | ImGui and focus gating | off in control mode |
 
 A per-tick check line (`gameframes`, `RandomDraws()`, the player's
@@ -375,7 +375,7 @@ disengage and heal, and whether to switch targets.
 | Phase | Delivers | Done when |
 |---|---|---|
 | P0 | `jev.py`, `rec.py`, the protocol, the knowledge skeleton | Unit tests; one live Decisions and one router call logged |
-| P1 | Port host: the input queue, `--control`, `--record`/`--replay`, the determinism fixes, `observe`, click to walk | A recorded opening replays with every hash matching; so does a person's session |
+| P1 | Port host: the input queue, `--control`, `--record`/`--replay`, the determinism fixes, `observe`, click to walk | A recorded opening replays with every check line matching; so does a person's session |
 | P2 | Retail host: the play slot through the opening; the `clickwalk` build | `QUICKSTART` reaches play, input moves Locke, a frame captures, a recording replays exactly |
 | P3 | Director: walking, conversations, combat | Jev plays the Keep chain (opening, Rahul, Rand, the exit) in the port and saves at each milestone |
 | P4 | Cross replay | A retail recording replays in the port and reports its first divergent tick |
