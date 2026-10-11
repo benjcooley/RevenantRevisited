@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "4d8d65e500128fc8cd9ace53674e941c4e9544abec9e54c127e9038223e7ede5",
+    "harness_sha256": "3fefab79022a81ee0d668c4cf8e5250fd04c68207d500b2cce2940dda1c6ad22",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 141,
+    "retail_rows_with_source_fixes_recorded": 144,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 128,
+    "visual_fidelity_confirmed_rows": 132,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 128,
-    "remaining_visual_review_rows": 48
+    "reviewed_visual_pass_rows": 132,
+    "remaining_visual_review_rows": 44
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -16143,27 +16143,39 @@
       "preview_candidates": [
         "TFunnelEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Complete original moving three-state Funnel owner, two authored particle controllers, source/target terrainfixture and lifetime replace billboard preview; full native/Metal appearance independently reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve scoped original-software appearance and complete ordinary geometry; verify naturalcaller/device and retained residuals.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Nineteen timestamp-matched original/actual Metal native-domain moving coil/wisps/sparks phases throughterraintransition101/state2at130/real140kill/blanktail. Ownthree-state/twoParticleSys profiles, source(-180,0,78), targetvoidplane180, declaredspell/ground1\u21920;108490pool fields and stride3 proof,3600keys/6304matrices/5808particle render fields. Full1280x960visiblebounds, freshpixel replay, actualtranslatedgallery70/70visible. Naturalterrain/actors/damage/audio/device/interpolation/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-funnel-original-20261011/root-approval.json",
+        "sha256": "38ab6a80ecdc8387fbd2da7fdec8ed10a59248eb8a0e3bbfceb0e585b9c3a60c",
+        "note": "docs/vfx/forensics/FUNNEL_ORIGINAL.md"
+      }
     },
     {
       "index": 94,
@@ -16379,7 +16391,8 @@
         "TBlastEffect_BESPOKE"
       ],
       "source_fixes": [
-        "2026-10-10: replaced Blast card with56 authored parts/three RGB565 textures, inclusive original key decoding opt-in, actual owner NextFrame/Pulse and complete world render hooks. 60480 key fields/25680 matrix fields pass; default6720 decoder cases unchanged. Appearance held for proven original software oversized-triangle rejection."
+        "2026-10-10: replaced Blast card with56 authored parts/three RGB565 textures, inclusive original key decoding opt-in, actual owner NextFrame/Pulse and complete world render hooks. 60480 key fields/25680 matrix fields pass; default6720 decoder cases unchanged. Appearance held for proven original software oversized-triangle rejection.",
+        "2026-10-11: Native-only primitive-span admission, full supported fixedtile coverage and explicit signed-camera validation close originalsoftware ring mismatch; ordinary geometry unchanged."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -16392,23 +16405,23 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Preserve complete authored Blast animation and controlled lifetime. Original software rejects large outer shock/flare triangles; appearance remains held pending renderer/device reference, without fitting geometry.",
+      "next_action": "Preserve scoped original-software appearance and complete ordinary geometry; verify naturalcaller/device and retained residuals.",
       "notes": [],
       "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
       "visual_review": {
-        "date": "2026-10-10",
+        "date": "2026-10-11",
         "reviewer": "root independent whole-effect phase inspection",
-        "result": "held_renderer_residual",
-        "visual_pass": false,
-        "scope": "Authored rotating lobes align early; actual Metal displays correct oversized outer geometry rejected by original software at60/90. Complete animation/state/geometry proven; literal whole-frame appearance remains held.",
-        "report": "recon/retail_asm/runtime/effects/current-blast-authored-20261010/manifest.json",
-        "sha256": "3b5a97fa994d9b9096c8dfb3a06ca69feea715b7dab82b5e09a7a69ba76d061e",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Eight original/actual Metal native-domain lifecycle phases plus complete phase60/90 six-view2560x2600 geometry coverage across all56roots. Fixed1920x1080 tiles/signedorigins verified; literal640/480span guard justified by18rejects/constants-only231887\u2192303854pixels. Common120frames unchanged; source60480key/25680matrix fields and actualgallery70/70visible with ownercycles. Original1245/Metal5tile-overlap pixels, quantization/naturalcaller/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-blast-whole-20261011/root-approval.json",
+        "sha256": "08a9554447c09f4164893e2cc0b13137f50f5a254c7fc07ea679a5ad151bd9ee",
         "note": "docs/vfx/forensics/BLAST_AUTHORED_RENDER_20261010.md"
       }
     },
@@ -23119,27 +23132,39 @@
       "preview_candidates": [
         "TJTeleEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact own finite default emitter/cached-pose/scrolltex and full meshes replace billboard preview. Whole originalsoftware/native-domain ninephase appearance reviewed with unchanged ordinarybeam and realowner50 expiry."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved finite original-software appearance; verify naturalcaller, ordinarybeam graphicsdevice and retained numeric/raster/audio limits.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Nine full original/actual Metal native-domain own-blue core/three stars/trails phases2/6/16/25/40/48/49 and realkill50/blank50/53. Actual finite defaultfactory/owner/controller cadence; own profiles4positive2871negative,3600pose/5920matrix fields. Native-only beamspan admission independently proven byconstants-only widening, ordinarybeam geometry retained. Both53mergedRGBframes unchanged; exact translatedgallery67/70visible68distinct andcleanexit. Jtele17628state fields pass. Gallery beamtopclipping is liveness-only; naturalcaller/ordinarybeamdevice/audio/destinationquant/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-jtele-authored-20261011/Jtele-root-approval.json",
+        "sha256": "050328c0ab069e0d1230fbb3a27a2beb8202e22eede2a062fe2c4f4ecc581715",
+        "note": "docs/vfx/forensics/JTELE_FINITE_DEFAULT_RENDER_20261011.md"
+      }
     },
     {
       "index": 160,
@@ -23148,29 +23173,41 @@
       "retail_type_id": "0x0c05263c",
       "asset": "magic\\jteled.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact own finite default emitter/cached-pose/scrolltex and full meshes replace billboard preview. Whole originalsoftware/native-domain ninephase appearance reviewed with unchanged ordinarybeam and realowner50 expiry."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve approved finite original-software appearance; verify naturalcaller, ordinarybeam graphicsdevice and retained numeric/raster/audio limits.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Nine full original/actual Metal native-domain own-blue core/three stars/trails phases2/6/16/25/40/48/49 and realkill50/blank50/53. Actual finite defaultfactory/owner/controller cadence; own profiles4positive2871negative,3600pose/5920matrix fields. Native-only beamspan admission independently proven byconstants-only widening, ordinarybeam geometry retained. Both53mergedRGBframes unchanged; exact translatedgallery67/70visible68distinct andcleanexit. Jteled three strictZresiduals max4.58e-5 retained, no numeric-equality claim. Gallery beamtopclipping is liveness-only; naturalcaller/ordinarybeamdevice/audio/destinationquant/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-jteled-authored-20261011/Jteled-root-approval.json",
+        "sha256": "033ba595a9b00c3f47c090b585f0bb07685f319a26b2424c54439b84224baab9",
+        "note": "docs/vfx/forensics/JTELE_FINITE_DEFAULT_RENDER_20261011.md"
+      }
     },
     {
       "index": 161,
