@@ -240,6 +240,7 @@ REVSYNC-QUESTIONs surfaced for the user.
 
 | Status | Item | Last touched |
 |--------|------|--------------|
+| [x] | Death loot as retail ([forensics/DEATH_LOOT.md](forensics/DEATH_LOOT.md)): a dead character's gold drops at its feet and its things are thrown out around it (walk-checked steps along a random heading), weapons, light sources and arrows flying with retail's toss physics; each thing's class sound; the Get key (and Combat Get) picks up the nearest; the Equip animator lays equipment flat on the ground. Open: the trailing ghosts and the landing flash; a dosbox-x check of the pose and flight | 2026-10-11 |
 | [x] | Retail's typed-message prompt on the text bar: Enter opens "Message: ", typing and Backspace, Enter commits "Locke: …"; `@<line>` runs a script line on Locke, the ten cheat words (`alreadydead`, `alchemy`, `nahkranoth`, `noamnesia`, `lookunderthehood`, `dummies`, `abracadabra`, `potionsnlotions`, `gimmesomegrub`, `debug`) answer "Cheat Enabled"/"Disabled" with `potionmix`; the play screen takes no keys while it is open; a fight commits it (TTextBar_SPEC §10; `src/cheats.cpp`). Tests type it with `--exec "prompt <text>"` or input-script `char enter` / `type`; storytest `--god` | 2026-10-10 |
 | [ ] | `src/gamelogpane.{h,cpp}` — retained-mode TPane | — |
 | [ ] | `SLogEntry` ring buffer | — |

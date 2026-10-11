@@ -3018,21 +3018,35 @@ TAnimation* T3DImagery::GetInvAnimation(int32_t state)
     return icons[state].invanim;
 }
 
+// REVSYNC: T3DImagery::NewAnimator @ 0x0040cf50 -- the animator registered
+// under the object's type name; else for a weapon, armor, light source or
+// arrow (an AMMO type named "arrow") the "Equip" animator; else the one
+// registered under the class name; else the default
+// (docs/gameflow/forensics/DEATH_LOOT.md §5). `name` is the name it was found by.
+static T3DAnimatorBuilder* SelectAnimatorBuilder(const TObjectInstance* oi, const char*& name)
+{
+    name = oi->GetTypeName();
+    T3DAnimatorBuilder* builder = T3DAnimatorBuilder::GetBuilder(name);
+    if (builder != &T3DAnimatorBuilderInstance)
+        return builder;
+
+    const char* classname = oi->GetClassName();
+    const bool equipment = !stricmp(classname, "WEAPON") || !stricmp(classname, "ARMOR") ||
+                           !stricmp(classname, "LIGHTSOURCE") ||
+                           (!stricmp(classname, "AMMO") && !stricmp(oi->GetTypeName(), "arrow"));
+    name = equipment ? "Equip" : classname;
+    return T3DAnimatorBuilder::GetBuilder(name);
+}
+
 void T3DImagery::AttachAnimatorComponents(TObjectInstance* oi)
 {
     if (!meshinitialized)
         if (!InitializeMesh((S3DImageryBody*)GetBody()))
             FatalError("Unable to initialize 3D imagery for %s", oi->GetName());
 
-    const char* name = oi->GetTypeName();
-    T3DAnimatorBuilder* builder = T3DAnimatorBuilder::GetBuilder(name);
-    const char* initial_name = name;
-
-    if (builder == &T3DAnimatorBuilderInstance)
-    {
-        name = oi->GetClassName();
-        builder = T3DAnimatorBuilder::GetBuilder(name);
-    }
+    const char* initial_name = oi->GetTypeName();
+    const char* name = nullptr;
+    T3DAnimatorBuilder* builder = SelectAnimatorBuilder(oi, name);
 
     const bool interesting = (builder != &T3DAnimatorBuilderInstance) ||
                              (oi && oi->ObjClass() == OBJCLASS_EFFECT);
@@ -3058,15 +3072,8 @@ TObjectAnimator* T3DImagery::NewObjectAnimator(TObjectInstance* oi)
         if (!InitializeMesh((S3DImageryBody*)GetBody()))
             FatalError("Unable to initialize 3D imagery for %s", oi->GetName());
 
-    const char* name = oi->GetTypeName();
-    T3DAnimatorBuilder* builder = T3DAnimatorBuilder::GetBuilder(name);
-
-    if (builder == &T3DAnimatorBuilderInstance)
-    {
-        name = oi->GetClassName();
-        builder = T3DAnimatorBuilder::GetBuilder(name);
-    }
-
+    const char* name = nullptr;
+    T3DAnimatorBuilder* builder = SelectAnimatorBuilder(oi, name);
     builder->AttachComponents(oi);
     return (TObjectAnimator*)builder->Build(oi);
 }
