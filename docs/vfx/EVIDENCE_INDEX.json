@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 146,
+    "retail_rows_with_source_fixes_recorded": 147,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 134,
+    "visual_fidelity_confirmed_rows": 135,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 134,
-    "remaining_visual_review_rows": 42
+    "reviewed_visual_pass_rows": 135,
+    "remaining_visual_review_rows": 41
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1764,6 +1764,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Nineteen full original/actual Metal native-domain moving QueenArrow phases: source(-180,0,38),target(180,0,78),literal+40launch/velocity23,growing3\u219220mesh trail,targetcollision/countdown/kill andblanktail.440state/RNG fields and1312drawmatrices max4.742e-7, freshnative replay/selectedpixels exact. Nativeuntexturedgraypolicy retained; actual endpointgallery75/100visible/repeats followsconfiguredpath. Naturalactors/damage/audio,quantizededge/interpolation/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-irisflare-authored-20261011/IrisFlare-root-approval.json": {
+      "sha256": "a27093c74bb2570eef11756274d939bf3d2a6de502ba52423d52faa6f905665f",
+      "retail_row": "IrisFlare:0x120054d1",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Fourteen complete original/actual Metal native-domain own five morphingflares/cylinders/earlyexpandingring phases1..205 includingblank201/restart202. Exactcustomfactory/legacyasset, actualcachedangle semantics retained,4715state/23264matrix fields, strict4positive10401negative/18legacychannels/2232ownergeometry checks. Wholebounds1280x960,205GPUframes204visible205distinct; translatedgallery100/100visible/100distinct andcleanexit. NotTeleporter;1pxedge/interpolation/naturalcaller/audio/device/exactpixels open."
     }
   }
 }

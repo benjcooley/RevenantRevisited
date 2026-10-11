@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 146,
+    "retail_rows_with_source_fixes_recorded": 147,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 134,
+    "visual_fidelity_confirmed_rows": 135,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 134,
-    "remaining_visual_review_rows": 42
+    "reviewed_visual_pass_rows": 135,
+    "remaining_visual_review_rows": 41
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -11323,25 +11323,27 @@
       "preview_candidates": [
         "TFlareAnimator_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Complete exact IrisFlare legacy compound morph and original cached-angle/201-tick reset replace unrelated bouncing-spark preview. Fourteen whole original/Metal phases and actual translatedgallery independently verified."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Implement exact legacyasset/controllerfixturelater; currentFlare-basedTeleporter previewunsupportedforretailA/B. IrisFlareandTeleporter requireseparatecontrollers; Teleporter naturaltransition needscaster/source/destination.",
+      "next_action": "Preserve exact compound IrisFlare appearance/reset; verify naturalcaller/audio/device and recorded raster limits, independently of Teleporter.",
       "notes": [
         "2026-10-05: Visible residue after delete/redraw; background reference unstable. No accurate-reference or visual-acceptance credit.",
         "Retail probe shows large blue cylinder plus flares; existing TFlare ten-spark preview association is unverified. Delete and Ctrl+R leave blue pixels outside floor. Retail recovered by verified shutdown and fixture reopen, no map saves.",
@@ -11360,7 +11362,17 @@
         "restored_ground_mean_error": 1.1006907393292682,
         "reason": "Visible residue after delete/redraw; background reference unstable"
       },
-      "work_queue_status": "deferred_exact_legacy_asset_controller_adapter"
+      "work_queue_status": "deferred_exact_legacy_asset_controller_adapter",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Fourteen complete original/actual Metal native-domain own five morphingflares/cylinders/earlyexpandingring phases1..205 includingblank201/restart202. Exactcustomfactory/legacyasset, actualcachedangle semantics retained,4715state/23264matrix fields, strict4positive10401negative/18legacychannels/2232ownergeometry checks. Wholebounds1280x960,205GPUframes204visible205distinct; translatedgallery100/100visible/100distinct andcleanexit. NotTeleporter;1pxedge/interpolation/naturalcaller/audio/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-irisflare-authored-20261011/IrisFlare-root-approval.json",
+        "sha256": "a27093c74bb2570eef11756274d939bf3d2a6de502ba52423d52faa6f905665f",
+        "note": "docs/vfx/forensics/IRISFLARE_COMPOUND_RENDER_20261011.md"
+      }
     },
     {
       "index": 37,
