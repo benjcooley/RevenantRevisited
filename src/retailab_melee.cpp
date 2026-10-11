@@ -3,18 +3,22 @@
 // *   retailab_melee.cpp - the port's side of the melee A/B dumps         *
 // *************************************************************************
 //
-// The combat dojo's melee katas (docs/gameplay/COMBAT_DOJO.md C2-C5): attack
-// choice, hit resolution, Damage, the resolvers. Mirrors
+// The combat dojo's melee katas (docs/gameplay/COMBAT_DOJO.md C2-C7): attack
+// choice, hit resolution, Damage, the resolvers, the AI, the character's
+// tick, experience. Mirrors
 // tools/retail_runtime/slots/combat/melee_attack.py: the same case (one JSON
 // object, field 0 of the case line), the same seams answered from it, the
 // same JSON out (schema `combat.melee.v1`).
 
 #include "retailab_fixture.h"
 
+#include "effect.h"               // TBloodEffect
+#include "gameflow.h"             // TGameFlow::playerDiedSeam
 #include "gameoptions.h"          // NoCombatResults
 #include "logging.h"
 #include "mappane.h"                // TMapPane::lineOfSightSeam
-#include "revenant.h"             // CheatNahkranoth, CheatAlreadyDead
+#include "playscreen.h"
+#include "revenant.h"             // CheatNahkranoth, CheatAlreadyDead, AutoBeginCombat
 #include "sound.h"
 
 namespace RetailAB
@@ -386,9 +390,12 @@ class SMeleeScope
         Editor = cs["globals"]["editor"].Bool(false);
         NoAI = cs["globals"]["ai_off"].Bool(false);       // retail 0x00668110, the dummies cheat
         TSoundPlayer::findSeam = CaseSound;
-        TPlayer::killExpSeam = CaseKillExp;
-        TPlayer::awardSkillExpSeam = CaseSkillExp;
-        TPlayer::stealthExpSeam = CaseStealthExp;
+        if (cs["seam_exp"].Bool(true))
+        {
+            TPlayer::killExpSeam = CaseKillExp;
+            TPlayer::awardSkillExpSeam = CaseSkillExp;
+            TPlayer::stealthExpSeam = CaseStealthExp;
+        }
         static const bool captured = log_add_callback(CaptureTextBar, nullptr, LOG_DEBUG) == 0;
         (void)captured;
     }
@@ -419,6 +426,168 @@ class SMeleeScope
     SMeleeScope(const SMeleeScope&) = delete;
     SMeleeScope& operator=(const SMeleeScope&) = delete;
 };
+
+// ---- The tick's world (kata C6) and experience's (C7) ---------------------------
+
+// An object NewObject makes (blood, a level-up's PowerUp): the def recorded
+// as the spells katas record it, a stand-in at the next map index whose
+// SetParams (retail slot 0x200) is recorded. TBloodEffect, as the tick's
+// blood takes what it finds there to be.
+class TFixtureMade : public TBloodEffect
+{
+  public:
+    TFixtureMade(TObjectImagery* im, std::string label) : TBloodEffect(im), who(std::move(label)) {}
+    void SetParams(int32_t he, int32_t ha, int32_t va, int32_t hs, int32_t vs, int32_t nu) override
+    {
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "blood.SetParams").FieldString("who", who);
+        j.Key("args").Begin('[').Value(he).Value(ha).Value(va).Value(hs).Value(vs).Value(nu).End(']');
+        j.Field("result", 0).End('}');
+        Seam(j.str());
+    }
+
+  private:
+    std::string who;
+};
+// Made before the case's seams start (their imagery is asked about the
+// animator as they are built); NewObject hands them out in turn.
+std::vector<std::unique_ptr<TFixtureMade>> g_made;
+size_t g_madeUsed = 0;
+constexpr int32_t kMadeIndex = 0x7100;          // map indices the made objects take (retail BLOOD_INDEX)
+constexpr size_t kMadeObjects = 16;
+
+void MakeMadeObjects()
+{
+    g_made.clear();
+    g_madeUsed = 0;
+    for (size_t i = 0; i < kMadeObjects; ++i)
+    {
+        const std::string label = "made " + std::to_string(i + 1);
+        auto* imagery = new TFixtureImagery(TFixtureImagery::Register({}), label, {}, false);
+        g_made.push_back(std::make_unique<TFixtureMade>(imagery, label));
+    }
+}
+
+// The type by name, in lower case: the retail fixture has the name the
+// code looks up, the port the class's own spelling of it.
+std::string LowerName(const char* name)
+{
+    std::string s = name;
+    for (char& c : s)
+        c = (char)tolower((unsigned char)c);
+    return s;
+}
+
+int32_t CaseNewObject(SObjectDef* def)
+{
+    TObjectClass* cl = TObjectClass::GetClass(def->objclass);
+    SObjectInfo* info = cl ? cl->GetObjType(def->objtype) : nullptr;
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "NewObject").Field("class", def->objclass).Key("type");
+    if (info)
+        j.String(LowerName(info->name));
+    else
+        j.Value(def->objtype);
+    j.Field("flags", (int64_t)def->flags).Field("state", def->state).Field("level", def->level);
+    j.Key("pos").Begin('[').Value(def->pos.x).Value(def->pos.y).Value(def->pos.z).End(']');
+    j.Key("vel").Begin('[').Value(def->vel.x).Value(def->vel.y).Value(def->vel.z).End(']');
+    j.Field("facing", def->facing).End('}');
+    Seam(j.str());
+    if (g_madeUsed == g_made.size())
+        throw std::runtime_error("more objects made than the fixture holds");
+    const int32_t index = kMadeIndex + (int32_t)g_madeUsed;
+    g_made[g_madeUsed++]->SetMapIndex(index);
+    return index;
+}
+
+void CaseRecord(const char* seam, const TObjectInstance* who)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", seam);
+    if (who)
+        j.FieldString("who", g_answers.world->NameOf(who));
+    j.End('}');
+    Seam(j.str());
+}
+
+// The recovery rules by the combat-data dump's names (melee_attack.py
+// RULES_RECOVERY).
+struct SRecoveryRule
+{
+    const char* name;
+    int32_t TRules::*field;
+};
+constexpr std::array<SRecoveryRule, 8> kRecovery{{
+    {"healthrecovval", &TRules::healthrecovval}, {"fatiguerecovval", &TRules::fatiguerecovval},
+    {"manarecovval", &TRules::manarecovval}, {"healthrecovrate", &TRules::healthrecovrate},
+    {"fatiguerecovrate", &TRules::fatiguerecovrate}, {"manarecovrate", &TRules::manarecovrate},
+    {"poisondamageval", &TRules::poisondamageval}, {"poisondamagerate", &TRules::poisondamagerate}}};
+
+// The tick's globals for a case (melee_attack.py _pulse_world): the play
+// screen as the current screen with the case's screen frames and game
+// time, the AutoBeginCombat option, the recovery rules; the seams of the
+// tick and of experience. All put back when the scope ends.
+class SPulseScope
+{
+  public:
+    SPulseScope(const JsonValue& cs, bool ticking)
+        : savedScreen(CurrentScreen), savedGameTime(PlayScreen.GameTime()),
+          savedScreenFrames(PlayScreen.FrameCount()), savedAutoBegin(AutoBeginCombat)
+    {
+        for (size_t i = 0; i < kRecovery.size(); ++i)
+            savedRules[i] = Rules.*kRecovery[i].field;
+        const JsonValue& g = cs["globals"];
+        if (ticking)
+        {
+            CurrentScreen = &PlayScreen;
+            PlayScreen.SetGameTime((int32_t)g["gametime"].Int(0));
+            PlayScreen.SetFixtureScreenFrames((int32_t)g["screenframe"].Int(0));
+            AutoBeginCombat = g["autobegincombat"].Bool(true);
+            for (const SRecoveryRule& r : kRecovery)
+                Rules.*r.field = (int32_t)cs["rules"][r.name].Int(Rules.*r.field);
+            MakeMadeObjects();
+            ClearSeams();
+            TMapPane::newObjectSeam = CaseNewObject;
+            TGameFlow::playerDiedSeam = [] { CaseRecord("DeathScreen", nullptr); };
+            TPlayer::refreshStatsSeam = [](TPlayer* p) { CaseRecord("RefreshStats", p); };
+        }
+        const bool pulse = cs["call"].Str() == "pulse";
+        quietReads = cs["quiet_reads"].Bool(ticking);
+        seamUpdateAction = pulse && cs["seam_update"].Bool(true);
+        seamAI = pulse && cs["seam_ai"].Bool(true);
+    }
+    ~SPulseScope()
+    {
+        CurrentScreen = savedScreen;
+        PlayScreen.SetGameTime(savedGameTime);
+        PlayScreen.SetFixtureScreenFrames(savedScreenFrames);
+        AutoBeginCombat = savedAutoBegin;
+        for (size_t i = 0; i < kRecovery.size(); ++i)
+            Rules.*kRecovery[i].field = savedRules[i];
+        TMapPane::newObjectSeam = nullptr;
+        TGameFlow::playerDiedSeam = nullptr;
+        TPlayer::refreshStatsSeam = nullptr;
+        quietReads = seamUpdateAction = seamAI = false;
+        g_made.clear();
+    }
+    SPulseScope(const SPulseScope&) = delete;
+    SPulseScope& operator=(const SPulseScope&) = delete;
+
+  private:
+    TScreen* savedScreen;
+    int32_t savedGameTime;
+    int32_t savedScreenFrames;
+    bool savedAutoBegin;
+    std::array<int32_t, 8> savedRules{};
+};
+
+TPlayer* AsPlayer(TCharacter* c)
+{
+    auto* p = dynamic_cast<TPlayer*>(c);
+    if (!p)
+        throw std::runtime_error("the experience calls need a player");
+    return p;
+}
 
 // ---- Dumps -------------------------------------------------------------------
 
@@ -547,7 +716,8 @@ void SetBlockFields(const TFixtureWorld& world, const JsonValue& cs)
 // "find-button", "find-pcnt", "find-interactive", "do-attack",
 // "button-attack", "button-action", "random-attack", "specific-attack",
 // "resolve-attack", "resolve-hit", "on-attacked", "damage", "resolve-impact",
-// "resolve-block", "resolve-dead", "block", "stop-block", "dodge", "ai".
+// "resolve-block", "resolve-dead", "block", "stop-block", "dodge", "ai",
+// "pulse", "kill-exp", "exp-kill", "exp-skill", "exp-stealth", "add-skill-exp".
 std::string MeleeCall(const Case& c, std::string& error)
 {
     try
@@ -562,6 +732,10 @@ std::string MeleeCall(const Case& c, std::string& error)
         world.blockExtra = [&](JsonOut& j, const TActionBlock& ab) { WriteBlockExtra(j, world, cs, ab); };
         SCaseScope scope(cs, world);
         SMeleeScope melee(cs, world);
+        const std::string call = cs["call"].Str();
+        const bool ticking = call == "pulse" || call == "kill-exp" || call == "exp-kill" || call == "exp-skill" ||
+                             call == "exp-stealth" || call == "add-skill-exp";
+        SPulseScope pulseScope(cs, ticking);
         for (const JsonValue& spec : cs["chars"].Items())
             if (spec.Has("aistate"))
             {
@@ -570,7 +744,6 @@ std::string MeleeCall(const Case& c, std::string& error)
                                                                          : HelperOrCharacter(world, look.Str()));
             }
         TCharacter* me = world.Get(cs["self"].Str());
-        const std::string call = cs["call"].Str();
         const JsonValue& a = cs["args"];
 
         JsonOut j;
@@ -645,6 +818,50 @@ std::string MeleeCall(const Case& c, std::string& error)
             j.Field("returned", me->RandomAttack((int32_t)a["pcnt"].Int()) ? 1 : 0);
         else if (call == "specific-attack")
             j.Field("returned", me->SpecificAttack((int32_t)a["attack"].Int()) ? 1 : 0);
+        else if (call == "pulse")
+        {
+          // Tick k: game frame `frame` + k, game time `gametime` + k * 100 / 24,
+          // screen frame `screenframe` + k; then the vitals.
+            const JsonValue& g = cs["globals"];
+            const int32_t frame = (int32_t)g["frame"].Int(0), gametime = (int32_t)g["gametime"].Int(0);
+            const int32_t screenframe = (int32_t)g["screenframe"].Int(0);
+            IFixtureChar* fx = world.Fixture(me);
+            for (int32_t k = 0; k < (int32_t)a["ticks"].Int(1); ++k)
+            {
+                PlayScreen.SetFixtureState(frame + k, g["control"].Bool(true), g["ps_5d8"].Bool(false));
+                PlayScreen.SetGameTime(gametime + k * 100 / 24);
+                PlayScreen.SetFixtureScreenFrames(screenframe + k);
+                me->Pulse();
+                JsonOut t;
+                t.Begin('{').FieldString("seam", "Tick").Field("n", k);
+                for (const char* vital : {"health", "fatigue", "mana", "poisoned"})
+                {
+                    t.Key(vital);
+                    if (const int32_t* v = fx->PeekStat(vital))
+                        t.Value(*v);
+                    else
+                        t.Null();
+                }
+                t.End('}');
+                Seam(t.str());
+            }
+            j.Field("returned", 0);
+        }
+        else if (call == "kill-exp")
+            j.Field("returned", AsPlayer(me)->KillExp((int32_t)a["value"].Int()));
+        else if (call == "exp-kill" || call == "exp-stealth" || call == "exp-skill" || call == "add-skill-exp")
+        {
+            TPlayer* player = AsPlayer(me);
+            if (call == "exp-kill")
+                player->AwardKillExp(Named(world, a["victim"]));
+            else if (call == "exp-stealth")
+                player->AwardStealthExp(Named(world, a["victim"]));
+            else if (call == "exp-skill")
+                player->AwardSkillExp((int32_t)a["skill"].Int(), Named(world, a["victim"]));
+            else
+                player->AddSkillExp((int32_t)a["skill"].Int(), (int32_t)a["exp"].Int());
+            j.Field("returned", 0);
+        }
         else if (call == "damage")
         {
           // The given block's attack and impact are the attacker's by default.
@@ -679,6 +896,17 @@ std::string MeleeCall(const Case& c, std::string& error)
             j.End('}');
         }
         j.End('}');
+        if (ticking)
+        {
+            j.Key("pulse").Begin('{');
+            for (const JsonValue& spec : cs["chars"].Items())
+                if (spec.Has("pulsestate"))
+                {
+                    j.Key(spec["name"].Str().c_str());
+                    world.Fixture(world.Get(spec["name"].Str()))->WritePulseState(j);
+                }
+            j.End('}');
+        }
         WriteSeams(j);
         WriteDraws(j);
         j.End('}');
@@ -698,6 +926,8 @@ static const bool registered = RegisterTarget("melee-attack-choice", MeleeCall) 
                                RegisterTarget("melee-hit", MeleeCall) &&
                                RegisterTarget("melee-damage", MeleeCall) &&
                                RegisterTarget("melee-resolvers", MeleeCall) &&
-                               RegisterTarget("melee-ai", MeleeCall);
+                               RegisterTarget("melee-ai", MeleeCall) &&
+                               RegisterTarget("melee-pulse", MeleeCall) &&
+                               RegisterTarget("melee-exp", MeleeCall);
 
 }  // namespace RetailAB

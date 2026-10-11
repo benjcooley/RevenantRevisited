@@ -100,6 +100,11 @@ void TGameFlow::ShowOptionsScreen()
 // the death screen and closes it once the death countdown runs out.
 void TGameFlow::PlayerDied()
 {
+    if (playerDiedSeam)
+    {
+        playerDiedSeam();
+        return;
+    }
     log_info("[gameflow] player died");
     SwitchTo(&DeathScreen);
 }

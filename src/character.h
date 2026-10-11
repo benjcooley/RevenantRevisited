@@ -160,6 +160,14 @@ class TCharacter : public TComplexObject
     virtual void Died(TCharacter* /*killer*/) {}
         // This character's health reached 0 (retail +0x248): from Damage with the
         // killer, from Pulse with none
+    virtual int32_t Clock();
+        // REVSYNC: slot 0x314 -- the game time (1/100 s) this character's
+        // recovery and poison run on: the PlayScreen's (0x004d5f50), the
+        // player's own play clock (TPlayer 0x0051d800)
+    enum class EVital { Health, Fatigue, Mana };
+    virtual int32_t RecoveryBonus(EVital /*vital*/) { return 0; }
+        // What a tick adds to a vital's recovery, in 1/10000 points: none
+        // but for the player (his HealthPct / FatiguePct / ManaPct)
     void RestoreHealth();
         // Cure them of all ailments and set health to max
 
@@ -243,7 +251,7 @@ class TCharacter : public TComplexObject
     bool CastByTalismans(char* talismans, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
       // REVSYNC: TCharacter::CastByTalismans @ 0x004d5c20 -- the manager's
       // cast; a player's failed cast of a spell with a cost fizzles
-    bool SetCast(char* ani, TObjectInstance* target, int32_t invoke_delay = INVOKE_DELAY);
+    bool SetCast(const char* ani, TObjectInstance* target, int32_t invoke_delay = INVOKE_DELAY);
       // REVSYNC: TCharacter::SetCast @ 0x004d5900 -- the invoke animation
     bool Cast(char* talismans, S3DPoint* sourcepos = nullptr);
       // REVSYNC: TCharacter::Cast @ 0x004d5ae0 -- cast at the combat or bow
@@ -432,6 +440,10 @@ class TCharacter : public TComplexObject
     static constexpr uint32_t kCharFlagWalkFighter   = 0x4000;    // fights in its walk root (BeginFighting, AI)
     static constexpr uint32_t kCharFlagNotTargetable = 0x8000;    // IsValidTarget refuses (setter unidentified)
     static constexpr uint32_t kCharFlagPlayAnimRoots = 0x10000;   // a PLAYANIM "c..." / "w..." needs that root
+    static constexpr uint32_t kCharFlagDeathHold     = 0x1000;    // the player's death screen waits (TPlayer::Pulse
+                                                                  // 0x00518b46; setter unidentified)
+    static constexpr uint32_t kCharFlagImpaleRelease = 0x20000;   // Yhagoro's impale let go of the player (Pulse
+                                                                  // 0x004c200c): his next pulse walks him on
     static constexpr uint32_t kCharFlagDead          = 0x40000;   // Died has been told (Damage; retail's Pulse
                                                                   // too, which clears it when health returns)
     static constexpr uint32_t kCharFlagInteractive   = 0x80000;   // in an interactive move: Go skips its gates
@@ -682,6 +694,20 @@ class TCharacter : public TComplexObject
     void AIPerMonster();
       // The boss kind (retail AI_PerMonster's first part)
 
+    // Pulse's steps (retail 0x004c1bb0, CHARACTER_PULSE.md §2)
+    void PulseCorpse();
+      // A dead character's tick: its death played and rooted, the script
+      // told, then the fade out and the removal
+    void PulseAutoCombat();
+      // The player falls into combat with an enemy ahead (every 32 ticks)
+    void PulseImpaleRelease();
+      // Let go by an impale: back to walking
+    void PulseRecovery();
+      // Health, mana and fatigue recover (fatigue drains while running),
+      // poison bites, an invoke delay runs down
+    void PulseActionTimers();
+      // The burn and the flail end on time
+
     char *GetAngleMoveAnim(int32_t movedir, int32_t facedir, char *root, char *animname, int32_t buflen);
       // Returns the correct angle movce animation given the current movedir, facedir, and root name
     void AdvanceAngles(int32_t faceang, int32_t moveang, int32_t maxturn);
@@ -737,13 +763,22 @@ class TCharacter : public TComplexObject
     int32_t glimpse;                // Value from 1-100 indicating how visible last move was
     int32_t noise;                  // Value from 1-100 indicating how quiet last move was
 
-  // Stat recovery stuff
-    int32_t lasthealthrecov;        // Game time values for last
-    int32_t lastfatiguerecov;       // health, fatigue, and mana recovery
-    int32_t lastmanarecov;      
+  // Recovery (TCharacter::Pulse): the Clock() time each vital last recovered,
+  // and what has gathered towards its next point, in 1/10000 points.
+    int32_t lasthealthrecov = 0;    // retail +0x138
+    int32_t lastfatiguerecov = 0;   // retail +0x13c
+    int32_t lastmanarecov = 0;      // retail +0x140
+    int32_t lastrunfatigue = 0;     // retail +0x144: last running charge, -1 while not running
+    int32_t healthaccum = 0;        // retail +0x148
+    int32_t fatigueaccum = 0;       // retail +0x14c
+    int32_t manaaccum = 0;          // retail +0x150
+    int32_t runaccum = 0;           // retail +0x154: fatigue the running costs
+    int32_t poisonaccum = 0;        // retail +0x158
 
   // Poison damage stuff
-    int32_t lastpoisondamage;
+    int32_t lastpoisondamage = 0;   // retail +0x15c: last charge, -1 while not poisoned
+    int32_t deadticks = 0;          // retail +0x228: ticks a corpse has lain (it fades out at 240)
+    int32_t burnticks = 0;          // retail +0x1bc: ticks the burning goes on (Burn sets 50)
 
   // Attack stuff
     PSCharAttackData lastattack = nullptr; // retail +0x160: the attack last started (ResolveAttack)
@@ -764,7 +799,7 @@ class TCharacter : public TComplexObject
     int32_t fade = 100;             // retail +0x194, 0..100
     int32_t fade_step = 0;          // retail +0x198, subtracted from fade each pulse
     int32_t fade_limit = 100;       // retail +0x19c, where the fade stops (-1: at 0 or 100)
-    int32_t fade_direction = 0;     // retail +0x1a0, -1 out / 1 in / 0 still (no retail reader found)
+    int32_t fade_direction = 0;     // retail +0x1a0, -1 out / 1 in / 0 still (a corpse fades once it is 0)
 
   // Invisible Spell Addition
     bool invisible_spell = false;   // retail +0x1a4
@@ -847,6 +882,7 @@ protected:
   // rule); SetFighting resets them.
   // Retail +0x280: the boss kind AI_PerMonster 0x004c9b70 gives, once (1
   // Baez, whom magic can't hurt, 2 Solifuge, 3 Jhaga, 4 Yhagoro, -1 any other).
+    static constexpr int32_t kMonsterBaez = 1, kMonsterYhagoro = 4;
     int32_t monsterkind  = 0;
     int32_t lastbutton   = -1;
     int32_t buttonrepeat = 0;

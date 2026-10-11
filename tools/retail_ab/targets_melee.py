@@ -25,6 +25,19 @@ Block (the gates, the monster's timing, the duration), StopBlock, Dodge
 found, the attack branch, the move branch (retreat, standing, stepping:
 stop, chase, search), the retreat state, the boss kind.
 
+`melee-pulse` (kata C6, forensics CHARACTER_PULSE.md): ticks of the
+character's Pulse and the player's -- recovery (the share by the stamp's
+age, the carry, the 50000 pull, the 32-bit wrap, the player's per-minute
+percentages), running fatigue, poison through Damage, the alreadydead
+cheat, Died and the corpse (its death, the fade, the removal), the blood of
+the scripted deaths, the impale holds, the invoke / burn / flail timers,
+the player's auto-combat, the chain, the AI gate, the exit mark, the
+player's clock and death screen; long runs for how fast it all goes.
+
+`melee-exp` (kata C7, PLAYER_STATS.md §7): KillExp, AwardKillExp with the
+level-up, AwardSkillExp and AddSkillExp, AwardStealthExp over the victim's
+45-second memory.
+
 Retail: tools/retail_runtime/slots/combat/melee_attack.py; port:
 src/retailab_melee.cpp (`Revenant --retail-ab=melee-*`). The compare is
 combat_targets.compare (every field; the seams aligned as sequences).
@@ -82,7 +95,9 @@ def shipped(data: Path, workdir: Path) -> dict:
     rules = result['rules']
     _DATA['shipped'] = dict(
         rules={k: rules[k] for k in ('tohitcenter', 'tohitrangechar', 'tohitrangeplyr', 'tohitblock', 'tohitface',
-                                     'tohitdamage', 'statlevels')},
+                                     'tohitdamage', 'statlevels', 'healthrecovval', 'fatiguerecovval',
+                                     'manarecovval', 'healthrecovrate', 'fatiguerecovrate', 'manarecovrate',
+                                     'poisondamageval', 'poisondamagerate', 'exp', 'skillexp')},
         chars={c['name']: c for c in result['chars']})
     return _DATA['shipped']
 
@@ -1461,6 +1476,38 @@ def damage_cases(data: Path, workdir: Path) -> list[dict]:
         for flags in (0, 0x40000):
             chars, rules = damage_world(data, victim, attacker, health=3, me_flags=flags)
             add(f'damage.frags.{victim}.by{attacker}.f{flags:#x}', chars, rules, damage=9)
+
+    # The blow's number over the struck character (its animator's
+    # ShowNumber, 0x004da3b0): minus the damage, at most the health it had;
+    # red under a quarter of its maximum left after the blow, yellow under
+    # half, else white; at its screen point (GetScreenPos 0x0046eb40), 135
+    # up. A player's maximum is his MaxHealth (slot 0x1d8). Health is read
+    # more often in retail's than in the port's (no side effect), so these
+    # cases don't record the reads. On the ground only: GetScreenPos's
+    # height term differs (retail rounds its float matrix once, the port's
+    # WorldToScreen truncates the height on its own; COMBAT_HIT.md §9.2).
+    numbers = {'Araknid': (30, [(30, 23), (30, 22), (30, 16), (30, 15), (30, 0), (5, 9), (40, 5), (1, 1)]),
+               'Locke': (100, [(100, 76), (100, 75), (100, 51), (100, 50), (100, 0), (10, 40), (130, 2), (1, 1)])}
+    for victim, (top, blows) in numbers.items():
+        attacker = 'Locke' if victim != 'Locke' else 'Araknid'
+        for health, dmg in blows:
+            for at in (None, [1301, 700, 0], [600, 1500, 0]):
+                chars, rules = damage_world(data, victim, attacker, health=health)
+                chars[0]['animator'] = 1
+                if victim == 'Locke':
+                    chars[0]['maxhealth'] = top
+                where = 'here' if at is None else f'{at[0]}_{at[1]}_{at[2]}'
+                if at is not None:
+                    chars[0]['pos'] = at
+                add(f'damage.number.{victim}.h{health}.d{dmg}.{where}', chars, rules, damage=dmg, quiet_reads=True)
+        for label, kw, extra in (('alreadydead', {}, dict(alreadydead=1)), ('unkillable', dict(me_flags=8), {}),
+                                 ('invulnerable', dict(me_objflags=0x10000000), {}),
+                                 ('typed', {}, dict(type=3, mod=40))):
+            chars, rules = damage_world(data, victim, attacker, health=top // 2, **kw)
+            chars[0]['animator'] = 1
+            if victim == 'Locke':
+                chars[0]['maxhealth'] = top
+            add(f'damage.number.{victim}.{label}', chars, rules, damage=top // 3, quiet_reads=True, **extra)
     return finish(cases)
 
 
@@ -1890,6 +1937,473 @@ def ai_cases(data: Path, workdir: Path) -> list[dict]:
     return finish(cases)
 
 
+# ---- C6: the character's tick (forensics/CHARACTER_PULSE.md) ---------------------------
+
+# The tick's own state, by retail's names (melee_attack.py PULSESTATE): the
+# recovery stamps and accumulators, the timers, the fade, the corpse.
+PULSE_STATE = dict(lasthealth=0, lastfatigue=0, lastmana=0, lastrun=-1, accumhealth=0, accumfatigue=0,
+                   accummana=0, accumrun=0, accumpoison=0, lastpoison=-1, invokedelay=0, fade=100, fadestep=0,
+                   fadelimit=100, fadedir=0, burnticks=0, deadticks=0, exittimestamp=0, forcecommanddone=0)
+PLAYER_PULSE_STATE = dict(deathcountdown=0xc0, stateframes=0, statetime=0, stateffectexpires=-1)
+NOW = 20000                       # the clock a case's tick starts on (PlayScreen game time, the play clock)
+
+
+def pulse_char(data, name, typ, *, pos=None, facing=64, ident=0x10, stats=None, pulse=None, states=('walk',),
+               root=None, doing=None, desired=None, chardata_changes=None, **spec):
+    """A character for the tick: `typ`'s shipped data, its own stats over
+    the class's, an animator, the tick state over PULSE_STATE (a player's
+    over PLAYER_PULSE_STATE too, its play clock at NOW)."""
+    s = shipped(data, None)
+    cd = chardata(s['chars'][typ])
+    cd.update(chardata_changes or {})
+    cls = 11 if typ in PLAYERS else 12
+    base = dict(PLAYER_STATS, healthpct=0, manapct=0, fatiguepct=0) if cls == 11 else dict(MONSTER_STATS)
+    base.update(poisoned=0, sleeping=0, aggressive=1, health=cd['health'], fatigue=cd['fatigue'], mana=cd['mana'])
+    c = make_char(name, cls, pos or ME_AT, facing, cd, typ=typ, states=states,
+                  root=root or dict(name='walk', action=1), doing=doing, desired=desired,
+                  stats=dict(base, **(stats or {})), ident=ident,
+                  charflags=spec.pop('charflags', 0), objflags=spec.pop('objflags', 0), frame=spec.pop('frame', 0))
+    st = dict(PULSE_STATE, lasthealth=NOW, lastfatigue=NOW, lastmana=NOW)
+    if cls == 11:
+        st.update(PLAYER_PULSE_STATE, statetime=NOW, stateframes=NOW * 24 // 100)
+        c.update(maxhealth=100, maxfatigue=78, maxmana=105)
+    st.update(pulse or {})
+    c['pulsestate'] = st
+    c['animator'] = 1
+    c.update(spec)
+    return c
+
+
+def pulse_cases(data: Path, workdir: Path) -> list[dict]:
+    s = shipped(data, workdir)
+    rules = s['rules']
+    cases = []
+    seed = 101
+
+    def add(name, chars, *, ticks=1, self_='Me', frame=0x200, gametime=NOW, screenframe=500, tape=None, **kw):
+        nonlocal seed
+        seed += 1
+        g = dict(gametime=gametime, screenframe=screenframe, autobegincombat=kw.pop('autobegincombat', 1),
+                 pvp=kw.pop('pvp', 0), editor=kw.pop('editor', 0), control=kw.pop('control', 1),
+                 ps_5d8=kw.pop('ps_5d8', 0))
+        c = case(name, 'pulse', chars, rules, self_=self_, args=dict(ticks=ticks), seed=seed * 7919 + 3,
+                 tape=tape or [], frame=frame, **kw)
+        c['globals'].update(g)
+        cases.append(c)
+
+    def one(name, typ='Araknid', *, ticks=1, case_kw=None, **kw):
+        add(name, [pulse_char(data, 'Me', typ, **kw)], ticks=ticks, **(case_kw or {}))
+
+    # Recovery, one vital at a time below its maximum: the step's share by
+    # the stamp's age, the accumulator's carry and its 10000 edge, the
+    # stamps pulled from the future and from more than 50000 back.
+    ages = (0, 4, 5, 100, 6000, 21474, 21475, 30000, 42950, 50000, 50001, -5)
+    for typ in ('Araknid', 'Locke'):
+        cd = s['chars'][typ]
+        for vital, last, accum in (('health', 'lasthealth', 'accumhealth'), ('fatigue', 'lastfatigue', 'accumfatigue'),
+                                   ('mana', 'lastmana', 'accummana')):
+            top = {'Locke': dict(health=100, fatigue=78, mana=105)}.get(typ, cd)[vital]
+            if top <= 0:
+                continue
+            for age in ages:
+                for acc in (0, 9999, 10000, 25000, -20000):
+                    one(f'pulse.recover.{typ}.{vital}.age{age}.acc{acc}', typ, stats={vital: top // 2},
+                        pulse={last: NOW - age, accum: acc})
+            for acc in (0, 9999, 30001):
+                one(f'pulse.recover.{typ}.{vital}.full.acc{acc}', typ, stats={vital: top},
+                    pulse={last: NOW - 400, accum: acc})
+                one(f'pulse.recover.{typ}.{vital}.over.acc{acc}', typ, stats={vital: top + 3},
+                    pulse={last: NOW - 400, accum: acc})
+            one(f'pulse.recover.{typ}.{vital}.nearly', typ, stats={vital: top - 1},
+                pulse={last: NOW - 9000, accum: 5000})
+    # The player's per-minute percentages, signed.
+    for pct in (0, 1, 7, 60, 144, -30, -1441):
+        one(f'pulse.recover.Locke.pct{pct}', 'Locke', stats=dict(health=50, fatigue=30, mana=40, healthpct=pct,
+                                                                 manapct=pct + 3, fatiguepct=-pct),
+            pulse=dict(lasthealth=NOW - 4, lastfatigue=NOW - 4, lastmana=NOW - 4))
+    # How fast it really goes: ten seconds and a minute from low.
+    for typ in ('Araknid', 'Locke'):
+        for ticks in (240, 1440):
+            one(f'pulse.feel.{typ}.t{ticks}', typ, ticks=ticks,
+                stats=dict(health=3, fatigue=0, mana=0, **({'healthpct': 25, 'manapct': 10, 'fatiguepct': 4}
+                                                          if typ == 'Locke' else {})))
+
+    # Running costs fatigue: the run roots (combat / bow by action), only
+    # while a step plays (doing isn't the root), from the second tick, not
+    # below 0; the other roots recover.
+    runs = (('run', 2, 'run'), ('combatrun', 3, 'combatrun'), ('handrun', 3, 'handrun'), ('bowrun', 25, 'bowrun'),
+            ('combatrun.walkaction', 1, 'combatrun'), ('bowrun.combat', 3, 'bowrun'), ('walk', 1, 'walk'),
+            ('sneak', 1, 'sneak'))
+    for typ in ('Locke', 'Araknid'):
+        for label, action, rname in runs:
+            for lastrun, fat in ((-1, 50), (NOW - 4, 50), (NOW - 400, 50), (NOW - 4, 0), (NOW - 4000, 3)):
+                for stepping in (True, False):
+                    root = dict(name=rname, action=action)
+                    doing = dict(name='runl', action=2) if stepping else None
+                    one(f'pulse.run.{typ}.{label}.last{lastrun}.f{fat}.step{int(stepping)}', typ,
+                        states=['walk', rname, 'runl'], root=root, doing=doing, stats=dict(fatigue=fat),
+                        pulse=dict(lastrun=lastrun, lastfatigue=NOW - 4, accumrun=7000))
+        for rf in ([1, 100], [10, 100], [7, 30], [0, 100]):
+            one(f'pulse.run.{typ}.rf{rf[0]}_{rf[1]}', typ, ticks=48, states=['walk', 'run', 'runl'],
+                root=dict(name='run', action=2), doing=dict(name='runl', action=2), stats=dict(fatigue=40),
+                chardata_changes=dict(runfatigue=rf), pulse=dict(lastrun=NOW))
+
+    # Poison: through Damage, short of the last point, cured at 1; reduced
+    # by the poison resistance; the first tick only starts the clock.
+    for typ in ('Araknid', 'Locke'):
+        for health in (30, 2, 1):
+            for age in (-1, 4, 100, 1491, 1492, 5000, 50000):
+                for resist in (0, 50, 100, 130, -40):
+                    kw = {}
+                    if typ == 'Locke':
+                        kw['resists'] = [0] * 9 + [resist]
+                    else:
+                        kw['chardata_changes'] = dict(damagemods=[0] * 9 + [resist])
+                    one(f'pulse.poison.{typ}.h{health}.age{age}.r{resist}', typ,
+                        stats=dict(health=health, poisoned=1),
+                        pulse=dict(lastpoison=-1 if age < 0 else NOW - age, accumpoison=3000), **kw)
+        one(f'pulse.poison.{typ}.cured', typ, stats=dict(poisoned=0, health=5), pulse=dict(lastpoison=NOW - 50))
+    # A minute of poison, the blows real (Damage's impacts) and seamed.
+    for typ in ('Araknid', 'Locke'):
+        cd = s['chars'][typ]
+        for real in (False, True):
+            one(f'pulse.poison.feel.{typ}.real{int(real)}', typ, ticks=240,
+                states=['walk', 'combat'] + victim_states(cd), stats=dict(health=12, poisoned=1),
+                pulse=dict(lastpoison=NOW), case_kw=dict(seam_damage=not real))
+
+    # The run and poison stamps pulled from the future and from more than
+    # 50000 back; past 50000 on the clock the "not running" / "not
+    # poisoned" -1 is itself pulled to now each tick.
+    for last in (NOW + 7, NOW - 50001, NOW - 50000):
+        one(f'pulse.pull.run.{last - NOW}', 'Locke', ticks=3, states=['walk', 'run', 'runl'],
+            root=dict(name='run', action=2), doing=dict(name='runl', action=2), stats=dict(fatigue=40),
+            pulse=dict(lastrun=last))
+        one(f'pulse.pull.poison.{last - NOW}', 'Araknid', ticks=3, stats=dict(health=20, poisoned=1),
+            pulse=dict(lastpoison=last))
+    for typ in ('Araknid', 'Locke'):
+        for running in (True, False):
+            big = dict(lasthealth=60000, lastfatigue=60000, lastmana=60000, lastrun=-1, lastpoison=-1)
+            if typ == 'Locke':
+                big.update(statetime=60000, stateframes=60000 * 24 // 100)
+            one(f'pulse.bigclock.{typ}.run{int(running)}', typ, ticks=5, states=['walk', 'run', 'runl'],
+                root=dict(name='run', action=2) if running else None,
+                doing=dict(name='runl', action=2) if running else None,
+                stats=dict(fatigue=40, poisoned=1, health=10), pulse=big, case_kw=dict(gametime=60000))
+
+    # The alreadydead cheat keeps the player full and cured, and skips his
+    # invoke timer; a character takes no notice.
+    for typ in ('Locke', 'Araknid'):
+        for poisoned in (0, 1):
+            one(f'pulse.alreadydead.{typ}.p{poisoned}', typ, ticks=3,
+                stats=dict(health=4, fatigue=2, mana=1, poisoned=poisoned),
+                doing=dict(name='invoke', action=11), states=['walk', 'invoke'],
+                pulse=dict(invokedelay=1, lastpoison=NOW - 100), case_kw=dict(alreadydead=1))
+
+    # Death: Died told once, the paralysis gone; health back clears the
+    # mark; the unkillable stay among the living.
+    for typ in ('Araknid', 'Locke'):
+        for health in (0, -3, 5):
+            for flags in (0, 0x40000, 0x8, 0x40008):
+                for objflags in (0, 0x800000):
+                    one(f'pulse.died.{typ}.h{health}.c{flags:#x}.o{objflags:#x}', typ, stats=dict(health=health),
+                        charflags=flags, objflags=objflags, states=['walk', 'dead'])
+
+    # The corpse's death: the transition from its root and the dead loop,
+    # prefixed or plain, or none; already dead; the fade after 240 ticks
+    # and the removal.
+    dead_sets = (('all', ['{root} to {p}dead', '{p}dead', 'dead']), ('trans.plain', ['{root} to {p}dead', 'dead']),
+                 ('prefixed', ['{p}dead']), ('plain', ['dead']), ('none', []))
+    corpse_roots = {'Araknid': [('walk', 1, 'c'), ('combat', 3, 'c')],
+                    'Locke': [('walk', 1, 'w'), ('combat', 3, 'c'), ('hand', 3, 'h'), ('bow', 25, 'b')]}
+    for typ, roots in corpse_roots.items():
+        for rname, raction, p in roots:
+            for label, names in dead_sets:
+                states = ['walk', 'combat'] + [n.format(root=rname, p=p) for n in names]
+                for doing in (None, dict(name='impact', action=12, flags=['priority']), dict(name='dead', action=19)):
+                    dl = 'root' if doing is None else doing['name']
+                    one(f'pulse.corpse.{typ}.{rname}.{label}.{dl}', typ, stats=dict(health=0), states=states,
+                        root=dict(name=rname, action=raction), doing=doing)
+    for ticks0, fade, fadestep, fadedir in ((0, 100, 0, 0), (238, 100, 0, 0), (239, 100, 0, 0), (239, 60, 3, -1),
+                                            (300, 0, 0, 0), (300, 1, 1, -1), (300, 40, 0, 0)):
+        one(f'pulse.corpse.fade.d{ticks0}.f{fade}.s{fadestep}.dir{fadedir}', 'Araknid', ticks=3,
+            stats=dict(health=0), states=['walk', 'cdead'], doing=dict(name='cdead', action=19),
+            root=dict(name='cdead', action=19),
+            pulse=dict(deadticks=ticks0, fade=fade, fadestep=fadestep, fadelimit=0 if fadedir else 100,
+                       fadedir=fadedir))
+    for typ in ('Araknid', 'Locke'):
+        for health in (0, 5):
+            one(f'pulse.script.{typ}.h{health}', typ, ticks=2, stats=dict(health=health), script=1,
+                states=['walk', 'cdead', 'wdead', 'dead'])
+    one('pulse.corpse.feel', 'Araknid', ticks=360, stats=dict(health=0), states=['walk', 'combat to cdead', 'cdead'],
+        root=dict(name='combat', action=3), objflags=0x800000)
+    for real in (False, True):
+        one(f'pulse.corpse.update.real{int(real)}', 'Araknid', ticks=12, stats=dict(health=0),
+            states=['walk', 'combat to cdead', 'cdead'], root=dict(name='combat', action=3),
+            case_kw=dict(seam_update=not real))
+
+    # Blood from the scripted deaths by frame; a bad BLEEDER or none.
+    sprays = (('decapdeath', range(3, 68)), ('combat to ripinhalfed', range(63, 76)),
+              ('ripkilldeath', range(112, 128)), ('walk to dead', range(0, 12)))
+    for anim, frames in sprays:
+        for frame in frames:
+            for facing in (0x40, 0x10):
+                one(f'pulse.blood.{anim}.f{frame}.face{facing}', 'Araknid', frame=frame, facing=facing,
+                    states=['walk', anim], doing=dict(name=anim, action=19), stats=dict(health=0),
+                    root=dict(name=anim, action=19))
+        for bleeder, cflags in ((0, 0), (1, 0x10), (2, 0)):
+            one(f'pulse.blood.{anim}.b{bleeder}.fl{cflags:#x}', 'Araknid', frame=list(frames)[5],
+                states=['walk', anim], doing=dict(name=anim, action=19), stats=dict(health=0),
+                root=dict(name=anim, action=19), chardata_changes=dict(bleeder=bleeder, flags=cflags))
+    for name in ('Rand', 'rand', 'Randy'):
+        add(f'pulse.blood.walktodead.{name}', [pulse_char(data, name, 'Araknid', frame=5, states=['walk', 'walk to dead'],
+                                                         doing=dict(name='walk to dead', action=19),
+                                                         stats=dict(health=0))], self_=name)
+
+    # The impale holds.
+    for typ in ('Araknid', 'Locke'):
+        for anim in ('atkimpale to walk', 'atkimpale', 'atkimpale2', 'walk'):
+            one(f'pulse.impale.hold.{typ}.{anim}', typ, charflags=0x80, states=['walk', anim],
+                doing=dict(name=anim, action=7))
+    for kind in (4, 3):
+        for with_player in (True, False):
+            for anim in ('impimpale', 'impale'):
+                chars = [pulse_char(data, 'Me', 'Yhagoro', monsterkind=kind, states=['walk', anim],
+                                    doing=dict(name=anim, action=7))]
+                if with_player:
+                    chars.append(pulse_char(data, 'Locke', 'Locke', pos=[1100, 1000, 0], ident=0x20))
+                add(f'pulse.impale.yhagoro.k{kind}.p{int(with_player)}.{anim}', chars)
+    for label, root, doing, desired in (
+            ('walking', dict(name='walk', action=1), None, dict(name='walk', action=1)),
+            ('held', dict(name='combat', action=3, flags=['priority']), dict(name='impimpaled', action=12), None),
+            ('held.priority', dict(name='combat', action=3), dict(name='impimpaled', action=12, flags=['priority']),
+             dict(name='combat', action=3)),
+            ('held.priority.same', dict(name='combat', action=3),
+             dict(name='impimpaled', action=12, flags=['priority']), 'doing'),
+            ('walk.desired', dict(name='combat', action=3), None, dict(name='walk', action=1)),
+            ('desired.priority', dict(name='combat', action=3), None,
+             dict(name='combat', action=3, flags=['priority'])),
+            ('desired.priority.held', dict(name='combat', action=3),
+             dict(name='impimpaled', action=12, flags=['priority']), dict(name='walk', action=1, flags=['priority'])),
+            ('root.desired.priority', dict(name='combat', action=3, flags=['priority']), None, 'root'),
+            ('walk.root.combat.desired', dict(name='walk', action=1), dict(name='impimpaled', action=12),
+             dict(name='combat', action=3, flags=['priority']))):
+        one(f'pulse.impale.release.{label}', 'Locke', charflags=0x20000, states=['walk', 'combat', 'impimpaled'],
+            root=root, doing=doing, desired=desired)
+
+    # The invoke, burn and flail timers.
+    for delay in (0, 1, 2):
+        for typ in ('Araknid', 'Locke'):
+            one(f'pulse.timer.invoke.{typ}.d{delay}', typ, states=['walk', 'invoke'], doing=dict(name='invoke', action=11),
+                pulse=dict(invokedelay=delay))
+            one(f'pulse.timer.burn.{typ}.d{delay}', typ, states=['walk', 'onfire'], doing=dict(name='onfire', action=21),
+                pulse=dict(burnticks=delay))
+            one(f'pulse.timer.invoke.notdoing.{typ}.d{delay}', typ, states=['walk'], pulse=dict(invokedelay=delay))
+    for done in (0, 1):
+        for typ in ('Araknid', 'Locke'):
+            one(f'pulse.timer.flail.{typ}.c{done}', typ, states=['walk', 'impact'], doing=dict(name='impact', action=22),
+                commanddone=done)
+
+    # The player falls into combat: the cadence by frame and id, the roots
+    # that keep him out, the one found and every gate on it.
+    def auto(name, *, frame=0x210, root=None, found='Target', tstats=None, dist=20, offset=0, autoc=1, memory=None,
+             **kw):
+        me = pulse_char(data, 'Me', 'Locke', root=root, states=['walk', 'combat', 'run', 'sneak', 'bow'],
+                        attackstate=dict(autocombat=autoc))
+        if memory is not None:
+            me['hasseen'] = memory
+        tg = pulse_char(data, 'Target', 'Araknid', pos=_toward(ME_AT, 64 + offset, dist + 32), facing=192,
+                        ident=0x20, stats=tstats)
+        add(name, [me, tg], frame=frame, found=found, **kw)
+
+    for frame in (0x210, 0x230, 0x211, 0x200, 0x22f):
+        auto(f'pulse.auto.frame{frame:#x}', frame=frame)
+    for rname, action in (('walk', 1), ('run', 2), ('sneak', 1), ('combat', 3), ('bow', 25), ('combatrun', 3),
+                          ('bowrun', 25)):
+        auto(f'pulse.auto.root.{rname}.{action}', root=dict(name=rname, action=action))
+    for autoc in (0, 1):
+        auto(f'pulse.auto.none.a{autoc}', found=None, autoc=autoc)
+        auto(f'pulse.auto.switch.a{autoc}', autoc=autoc)
+    for opt in (0, 1):
+        auto(f'pulse.auto.option{opt}', autobegincombat=opt)
+    for dist in (0, 100, 127, 128, 200):
+        auto(f'pulse.auto.dist{dist}', dist=dist)
+    for offset in (0, 0x2f, 0x30, -0x2f, -0x30, 0x80):
+        auto(f'pulse.auto.angle{offset}', offset=offset)
+    for control, ps in ((1, 0), (0, 1), (0, 0)):
+        auto(f'pulse.auto.control{control}.{ps}', control=control, ps_5d8=ps)
+    auto('pulse.auto.target.dead', tstats=dict(health=0))
+    for noauto in (0, 1):
+        auto(f'pulse.auto.memory.n{noauto}', memory=[['Target', 0x100, noauto]])
+    auto('pulse.auto.memory.other', memory=[['Me', 0x100, 1]])
+
+    # A chain or autocombo continues on its timing (COMBAT_ATTACK_CHOICE.md §3.11).
+    for typ in ('Locke', 'Araknid'):
+        cd = s['chars'][typ]
+        for i, ad in enumerate(cd['attacks']):
+            if not ad['flags'] & (CA_CHAIN | CA_AUTOCOMBO):
+                continue
+            for frame_off in (ad['nextwait'] - 1, ad['nextwait'], ad['nextwait'] + ad.get('chainexptime', 0)):
+                for hits in (0, 1):
+                    chars, _ = duel(data, typ, 'Locke' if typ != 'Locke' else 'Araknid',
+                                    me_state=dict(lastattack=i, lastattackticks=0x200 - frame_off, chainhits=hits))
+                    chars[0]['pulsestate'] = dict(PULSE_STATE, lasthealth=NOW, lastfatigue=NOW, lastmana=NOW,
+                                                  **(PLAYER_PULSE_STATE if typ in PLAYERS else {}))
+                    if typ in PLAYERS:
+                        chars[0].update(maxhealth=100, maxfatigue=78, maxmana=105)
+                        chars[0]['stats'].update(healthpct=0, manapct=0, fatiguepct=0)
+                    for c in chars:
+                        c['stats'].setdefault('poisoned', 0)
+                    add(f'pulse.chain.{typ}.a{i}.o{frame_off}.h{hits}', chars)
+
+    # The AI runs with OF_AI; the exit mark wears off after 5 screen
+    # frames; a forced command; the flash; the forced bit at frame 5.
+    for noai in (0, 1):
+        one(f'pulse.ai.noai{noai}', noai=noai)
+    for since in (4, 5, 6, 30):
+        one(f'pulse.exit.{since}', objflags=0x100000, pulse=dict(exittimestamp=500 - since))
+    for wait in (0, 5):
+        one(f'pulse.forcedone.w{wait}', pulse=dict(forcecommanddone=1), doing=dict(name='walk', action=1, wait=wait),
+            states=['walk'])
+    for flash in (0, 1, 4):
+        one(f'pulse.flash{flash}', attackstate=dict(flashticks=flash))
+    for frame in (4, 5, 9):
+        one(f'pulse.forced.f{frame}', frame=frame, doing=dict(name='combat', action=3, flags=['forced', 'transition']),
+            states=['walk', 'combat'])
+
+    # The player's tick: the play clock by state, the stat effects, the
+    # touched flag, the death screen countdown and its hold.
+    for state in (0, 1, 3, 5):
+        one(f'pulse.player.clock.s{state}', 'Locke', ticks=7, playerstate=state)
+    for expires in (-1, NOW + 100, NOW + 1, NOW - 1, NOW + 50000, NOW + 50001, NOW - 50001):
+        one(f'pulse.player.effects.e{expires}', 'Locke', pulse=dict(stateffectexpires=expires), playerstate=1)
+    one('pulse.player.virgin', 'Locke', objflags=0x4000000)
+    for health in (0, 1):
+        for count in (192, 1, 0, -5):
+            for hold in (0, 0x1000):
+                one(f'pulse.player.death.h{health}.c{count}.hold{hold:#x}', 'Locke', stats=dict(health=health),
+                    charflags=hold, pulse=dict(deathcountdown=count), states=['walk', 'dead'])
+    one('pulse.player.death.editor', 'Locke', stats=dict(health=0), pulse=dict(deathcountdown=0),
+        states=['walk', 'dead'], case_kw=dict(editor=1))
+    one('pulse.player.death.feel', 'Locke', ticks=200, stats=dict(health=0), states=['walk', 'wdead', 'walk to wdead'])
+    return finish(cases)
+
+
+# ---- C7: experience and the level-up (PLAYER_STATS.md §7) ---------------------------------
+
+SKILLS = ('attack', 'defense', 'invoke', 'hands', 'knife', 'sword', 'bludgeons', 'axes', 'bows', 'stealth',
+          'lockpick')
+ATTRIBUTES = ('strn', 'cons', 'agil', 'rflx', 'mind', 'luck')
+
+
+def exp_player(data, name='Me', *, level=3, exp=None, ident=0x10, stats=None, attributes=None, levelup=(0, 1, 0),
+               states=('walk', 'invoke', 'winv2'), pos=None):
+    """A player for experience: his level and experience (as stats and,
+    since KillExp reads them by name, as type stats), his skills' levels
+    and experience, his attributes (the stats themselves too: the level-up
+    raises those), his level-up picks."""
+    s = shipped(data, None)
+    table, skilltable = s['rules']['exp'], s['rules']['skillexp']
+    exp = table[min(level, 29)] - 10 if exp is None else exp
+    attrs = dict(zip(ATTRIBUTES, attributes or (14, 12, 15, 13, 14, 16)))
+    st = dict(level=level, exp=exp, nextexp=table[min(level, 29)], **attrs)
+    for i, sk in enumerate(SKILLS):
+        lv = PLAYER_STATS[sk]
+        st[f'{sk}exp'] = skilltable[max(lv - 1, 0)] + 7 * i
+        st[f'{sk}next'] = skilltable[min(lv, 29)]
+    st.update(stats or {})
+    c = pulse_char(data, name, 'Locke', pos=pos, ident=ident, stats=st, states=list(states))
+    c['classstats'] = dict(radius=16, value=1, level=st['level'], exp=st['exp'])
+    c['basestats'] = {a: st[a] for a in ATTRIBUTES}
+    c['levelup'] = list(levelup)
+    return c
+
+
+def exp_victim(data, *, typ='Araknid', health=0, value=5, level=None, memory=None, name='Victim'):
+    v = pulse_char(data, name, typ, pos=[1100, 1000, 0], ident=0x20, stats=dict(health=health))
+    v['classstats'] = dict(radius=16, value=value)
+    if level is not None:
+        v['classstats']['level'] = level
+        v['stats']['level'] = level
+    if memory is not None:
+        v['hasseen'] = memory
+    return v
+
+
+def exp_cases(data: Path, workdir: Path) -> list[dict]:
+    s = shipped(data, workdir)
+    rules = s['rules']
+    table, skilltable = rules['exp'], rules['skillexp']
+    cases = []
+
+    def add(name, call, chars, args, **kw):
+        cases.append(case(name, call, chars, rules, args=args, seed=len(cases) * 31 + 7, tape=[], frame=0x2000,
+                          seam_exp=False, **kw))
+
+    # KillExp: the gain by the difference of levels.
+    for level in (1, 2, 5, 15, 29, 30):
+        for value in range(level - 6, level + 7):
+            add(f'exp.killexp.l{level}.v{value}', 'kill-exp', [exp_player(data, level=level)], dict(value=value))
+
+    # AwardKillExp: a dead victim only; a creature by its Value, a player by
+    # his Level and half again; the level reached or not, capped at 30; the
+    # messages by the new level; the picks raised, one past 15; a pick at
+    # 29 moves on; the level-up's animation, sound and effect; full again.
+    for health in (1, 0, -4):
+        add(f'exp.kill.health{health}', 'exp-kill', [exp_player(data), exp_victim(data, health=health)],
+            dict(victim='Victim'))
+    for level in (1, 2, 5, 14, 15, 16, 23, 24, 26, 28, 29, 30):
+        need = table[min(level, 29)]
+        for value in (level, level + 3, level - 5):
+            for exp in (need - 1, need - 2000, need):
+                add(f'exp.kill.l{level}.v{value}.e{exp - need}', 'exp-kill',
+                    [exp_player(data, level=level, exp=exp, levelup=(level % 6, (level + 2) % 6, 0)),
+                     exp_victim(data, value=value)], dict(victim='Victim'))
+    for attrs in ((29, 12, 15, 13, 14, 16), (14, 30, 29, 13, 14, 16), (29, 29, 29, 29, 29, 28),
+                  (29, 29, 29, 29, 29, 29), (12, 12, 12, 12, 12, 40)):
+        for picks in ((0, 1, 0), (5, 0, 0), (2, 2, 0)):
+            add(f'exp.kill.picks.{"_".join(map(str, attrs))}.p{picks[0]}{picks[1]}', 'exp-kill',
+                [exp_player(data, level=4, exp=table[4], attributes=attrs, levelup=picks),
+                 exp_victim(data, value=4)], dict(victim='Victim'))
+    for level in (3, 16):
+        for vlevel in (1, level, level + 2):
+            add(f'exp.kill.player.l{level}.v{vlevel}', 'exp-kill',
+                [exp_player(data, level=level, exp=table[level] - 5), exp_victim(data, typ='Locke', level=vlevel)],
+                dict(victim='Victim'))
+    for states in (('walk',), ('walk', 'invoke'), ('walk', 'winv2')):
+        add(f'exp.kill.anim.{"_".join(states)}', 'exp-kill',
+            [exp_player(data, level=5, exp=table[5], states=states), exp_victim(data, value=9)],
+            dict(victim='Victim'))
+
+    # AwardSkillExp: a dead victim's Value into the skill (AddSkillExp: the
+    # skill up one at its next figure, its next figure on; pinned at 30).
+    for skill in range(11):
+        for health in (0, 3):
+            add(f'exp.skill.s{skill}.h{health}', 'exp-skill', [exp_player(data), exp_victim(data, health=health)],
+                dict(skill=skill, victim='Victim'))
+    for level, value in ((3, 9), (3, 3), (3, 1), (10, 1), (10, 7), (10, 6)):
+        add(f'exp.skill.l{level}.v{value}', 'exp-skill', [exp_player(data, level=level), exp_victim(data, value=value)],
+            dict(skill=5, victim='Victim'))
+    for lv in (0, 1, 5, 28, 29, 30, 31):
+        for gap in (-1, 0, 1, 500):
+            nxt = skilltable[min(lv, 29)]
+            add(f'exp.addskill.l{lv}.g{gap}', 'add-skill-exp',
+                [exp_player(data, stats=dict(sword=lv, swordexp=nxt - 100, swordnext=nxt))],
+                dict(skill=SKILLS.index('sword'), exp=100 + gap))
+    for exp in (0, -50, 100000):
+        add(f'exp.addskill.e{exp}', 'add-skill-exp', [exp_player(data)], dict(skill=9, exp=exp))
+
+    # AwardStealthExp: only for a victim whose memory of him is gone
+    # (45 seconds, 1080 frames) or never was.
+    for ago in (None, 0, 1079, 1080, 1081, 5000):
+        for health in (0, 2):
+            memory = [] if ago is None else [['Me', 0x2000 - ago, 0]]
+            add(f'exp.stealth.ago{ago}.h{health}', 'exp-stealth',
+                [exp_player(data), exp_victim(data, health=health, memory=memory)], dict(victim='Victim'))
+    add('exp.stealth.other', 'exp-stealth',
+        [exp_player(data), exp_victim(data, memory=[['Victim', 0x2000, 0]])], dict(victim='Victim'))
+    return finish(cases)
+
+
 TARGETS = {
     'melee-attack-choice': dict(fixture='slots/combat/melee_attack.py', cases=attack_choice_cases, compare=compare,
                                 port_fields=port_fields, unit=lambda r: len(r.get('calls', [])) or 1),
@@ -1901,4 +2415,8 @@ TARGETS = {
                             port_fields=port_fields, unit=lambda r: 1),
     'melee-ai': dict(fixture='slots/combat/melee_attack.py', cases=ai_cases, compare=compare,
                      port_fields=port_fields, unit=lambda r: 1),
+    'melee-pulse': dict(fixture='slots/combat/melee_attack.py', cases=pulse_cases, compare=compare,
+                        port_fields=port_fields, unit=lambda r: 1),
+    'melee-exp': dict(fixture='slots/combat/melee_attack.py', cases=exp_cases, compare=compare,
+                      port_fields=port_fields, unit=lambda r: 1),
 }

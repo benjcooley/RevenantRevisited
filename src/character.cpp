@@ -32,6 +32,7 @@
 #include "combattrace.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <math.h>
 #include <string.h>
 
@@ -199,6 +200,47 @@ SCharAttackImpact* SlotAfter(SCharAttackImpact* list, int32_t used, int32_t capa
     static SCharAttackImpact none{};
     return used < capacity ? &list[used] : &none;
 }
+
+// Retail's 32-bit product, wrapped as its imul wraps it: the recovery and
+// poison arithmetic overflows after a long absence (CHARACTER_PULSE.md §2.2).
+constexpr int32_t Wrap32(int64_t value)
+{
+    return static_cast<int32_t>(static_cast<uint32_t>(value));
+}
+
+// What `elapsed` hundredths of a second add towards a vital's next point,
+// in 1/10000 points: `value` points every `rate` (0x004c2b71).
+int32_t Recovery(int32_t elapsed, int32_t value, int32_t rate)
+{
+    return Wrap32(int64_t(elapsed) * value * 10000) / rate;
+}
+
+// REVSYNC: 0x004c1d27 -- blood from a body: a "blood" effect `height` above
+// its feet, sprayed toward `hangle` (its SetParams, slot 0x200).
+void SprayBlood(const S3DPoint& feet, int32_t height, int32_t hangle, int32_t vangle, int32_t hspread)
+{
+    SObjectDef def{};
+    def.objclass = OBJCLASS_EFFECT;
+    def.objtype = EffectClass.FindObjType("blood");
+    def.level = MapPane.GetMapLevel();
+    def.pos = feet;
+    def.pos.z += height;
+    if (TObjectInstance* blood = MapPane.GetInstance(MapPane.NewObject(&def)))
+        static_cast<TBloodEffect*>(blood)->SetParams(height, hangle & 0xff, vangle, hspread, 5, 1);
+}
+
+// The whole points an accumulator holds: 10000 comes off while more than
+// 10000 is left (so exactly 10000 waits for the next tick).
+int32_t TakePoints(int32_t& accum)
+{
+    int32_t points = 0;
+    while (accum > 10000)
+    {
+        accum -= 10000;
+        ++points;
+    }
+    return points;
+}
 }
 
 // *************************************************************
@@ -256,6 +298,7 @@ void TCharacter::ClearChar()
 
   // Set Burn to nullptr
     ClearBurn();
+    burnticks = 0;
 
   // invoke delay
     invokedelay = 0;
@@ -304,6 +347,11 @@ void TCharacter::ClearChar()
     teleport_position.z = -1;
     teleport_level = -1;
 
+  // REVSYNC: 0x004c1a5d -- the recovery clocks start now, nothing gathered
+  // (the poison stamp and accumulator are Pulse's to set).
+    lasthealthrecov = lastfatiguerecov = lastmanarecov = lastrunfatigue = Clock();
+    healthaccum = fatigueaccum = manaaccum = runaccum = 0;
+
   // Attach the animator component up front. Characters carry the
   // animator for the lifetime of the object (see IsAnimatorPermanent
   // override) -- no lazy create/free during sector load/unload or
@@ -317,54 +365,51 @@ void TCharacter::ClearChar()
         CreateAnimator();
 }
 
+// REVSYNC: TCharacter::Pulse @ 0x004c1bb0 -- a character's tick after its
+// move (forensics/CHARACTER_PULSE.md §2): the spells, the animator and the
+// action state; the blood of the scripted deaths and the impale holds; Died
+// told once. A corpse plays its death and in time fades out and goes. The
+// living chain their attacks, the player falls into combat with an enemy
+// ahead, the AI runs, the vitals recover, poison bites, and the invoke,
+// burn and flail actions end on time.
 void TCharacter::Pulse()
 {
     ai_pulse_count++;
 
-  // REVSYNC: TCharacter::Pulse @ 0x004c1bb0 -- the spells first: the
-  // manager's cooldown and each spell's timers and effects run on the game
-  // tick (TSpellManager::Pulse 0x00540750, whose only caller this is), not
-  // in the draw. Retail skips it while PlayScreen +0x5d4 (0x0065d0c4) is
-  // set; that flag isn't identified in the port yet.
+  // The spells first: the manager's cooldown and each spell's timers and
+  // effects run on the game tick (TSpellManager::Pulse 0x00540750, whose
+  // only caller this is). Retail skips the whole tick while PlayScreen
+  // +0x5d4 (0x0065d0c4) is set; that flag isn't identified in the port yet.
   // (docs/gameplay/forensics/SPELLS_MISSILES.md)
     SpellManager.Pulse();
-//  if (!HasAnimator())  // Quick hack to fix super slodown... BEN  (if not on screen, ignore me)
-//      return;
 
-  // Pulse the animator
+  // The animator's tick: every character's, paralysed or iced too (the
+  // rising damage numbers count down in it).
     if (TObjectAnimator* anim = GetAnimator())
         anim->Pulse();
 
-  // If this is true, causes the command to be forced to done
+  // A command forced to be done: the doing block stops waiting.
     if (forcecommanddone)
     {
         if (doing)
             doing->wait = 0;
-
         commanddone = true;
         forcecommanddone = false;
     }
 
-  // Combat flash ticks 
     if (combatflashticks > 0)
         combatflashticks--;
 
-  // Now do action processing, etc.
+  // The action state's tick (UpdateAction with the move's bits).
     TComplexObject::Pulse();
 
-  // Signal processing - let other characters know what's going on
-    if (IsFighting())
-    {
-      // Call signal hostility to tell character he's being attacked
-        TCharacter* target = Fighting();
-        if (target)
-            target->SignalHostility(this, target);
-
-        // REVSYNC: the 1998 build put the player's target's name and health
-        // on the text bar here. Retail dropped it: TTextBar::SetHealthDisplay
-        // (0x0054ca20) has one caller, the map loader's progress bar
-        // (0x004598c8); the target's health is TPlyrStatusBar's.
-    }
+  // The one we fight hears of it (slot 0x23c, empty in retail). The 1998
+  // build also put the player's target's name and health on the text bar
+  // here; retail dropped it (TTextBar::SetHealthDisplay 0x0054ca20 has one
+  // caller, the map loader's progress bar; the target's health is
+  // TPlyrStatusBar's).
+    if (TCharacter* target = Fighting())
+        target->SignalHostility(this, target);
 
     // Check to see if exit flag has expired (exit flags are set by exit objects)
     // Exits search through the player list to tag a player that is on an exit.  Characters
@@ -378,57 +423,60 @@ void TCharacter::Pulse()
     if (CurrentScreen->FrameCount() - exittimestamp > 5)
         SetFlag(OF_ONEXIT, false);
 
-    // Do blood for impdecap (you can be dead!)
-    if (doing->Is("impdecap"))
+  // REVSYNC: 0x004c1cc3 -- blood from the scripted deaths by animation
+  // frame, from a character that bleeds; Rand's "walk to dead" (his alone,
+  // bleeder or not) too. The 1998 build sprayed for "impdecap" instead.
+    const bool bleeds = !(chardata->flags & CF_BADBLEEDER) && chardata->bleeder;
+    if (doing->Is("decapdeath") && bleeds && frame > 5 && frame < 65 && frame % 5 == 0)
+        SprayBlood(pos, 75, GetFace() - 0x5b, 0x40, 0x5b);
+    if (doing->Is("combat to ripinhalfed") && bleeds && frame > 65 && frame < 73 && frame % 2 == 0)
+        SprayBlood(pos, 105, GetFace() - 0x5b, 0x40, 0x5b);
+    if (doing->Is("ripkilldeath") && bleeds && frame > 115 && frame < 126)
     {
-        if (frame > 5 && frame < 65 && frame % 5 == 0)
-        {
-            int32_t height = 95;
-
-            extern TObjectClass EffectClass;
-
-            SObjectDef def;
-            memset(&def, 0, sizeof(SObjectDef));
-
-            def.objclass = OBJCLASS_EFFECT;
-            def.objtype = EffectClass.FindObjType("blood");
-            def.level = MapPane.GetMapLevel();
-            def.pos = pos;
-            def.pos.z += height;
-            def.facing = 0;
-
-            int32_t index = MapPane.NewObject(&def);
-            TObjectInstance* inst = MapPane.GetInstance(index);
-            if (inst)
-            {
-                ((TBloodEffect*)inst)->SetParams(height, 0, 64, 255, 5, 1);
-            }
-        }
+        SprayBlood(pos, 130, GetFace() - 0x5b, 0x40, 0x5b);
+        SprayBlood(pos, 130, GetFace() - 0x5b, 0x40, 0x5b);
     }
+    if (stricmp(GetName(), "Rand") == 0 && doing->Is("walk to dead") && frame % 5 == 0)
+        SprayBlood(pos, 40, GetFace() - 0x80, 0x20, 0x20);
 
-  // REVSYNC: TCharacter::Pulse @ 0x004c1bb0 -- one step of any fade, dead
-  // or alive (UpdateFade's only caller in retail).
+  // REVSYNC: 0x004c1fa3 -- the impale holds. An impaling attacker lands no
+  // killing blow until its "atkimpale to walk" (the player's hold ends with
+  // the impale itself); Yhagoro's "impimpale" lets go of the player, who
+  // walks on at his next tick.
+    if (doing->Is("atkimpale to walk") || (doing->Is("atkimpale") && ObjClass() == OBJCLASS_PLAYER))
+        charflags &= ~kCharFlagNoKill;
+    if (monsterkind == kMonsterYhagoro && doing->Is("impimpale") && Player)
+        static_cast<TCharacter*>(Player)->charflags |= kCharFlagImpaleRelease;
+
+  // One step of any fade, dead or alive (UpdateFade's only caller in retail).
     UpdateFade();
 
-    if (IsDead())
+  // REVSYNC: 0x004c20f8 -- Died is told once, with no killer (Damage tells
+  // it the killer); a corpse can't stay paralysed. When health comes back
+  // the mark goes (retail then calls slot 0x24c, empty in every class).
+    if (Health() <= 0)
     {
-      // When we're dead, we're dead!
-        if (!IsDoing(ACTION_DEAD))
-            ForceCommand(new TActionBlock("blood", ACTION_DEAD));
+        if (!(charflags & kCharFlagDead))
+        {
+            charflags |= kCharFlagDead;
+            Died(nullptr);
+        }
+        ClearFlag(OF_PARALIZE);
+    }
+    else if (charflags & kCharFlagDead)
+        charflags &= ~kCharFlagDead;
 
-      // Hey Mr. Script.. , I'm dead now...
-        if (script)
-            script->Trigger(TRIGGER_DEAD);
-
+    if (Health() <= 0 && !(charflags & kCharFlagUnkillable))
+    {
+        PulseCorpse();
         return;
-    } 
-    
-    // ****************** all processing below is for alive characters only *****************
-    // ********************************************************************************************
+    }
+
+    // ****************** all processing below is for the living (and the unkillable) *********
 
     // Is the character doing an autocombo or chain attack?
     if (
-        lastattack && 
+        lastattack &&
         PlayScreen.GameFrame() >= lastattackticks + lastattack->nextwait &&
         ((lastattack->flags & CA_AUTOCOMBO) ||  // Is autocombo or..
          ((lastattack->flags & CA_CHAIN) && chainhits > 0)) // Is chain attack..
@@ -440,7 +488,7 @@ void TCharacter::Pulse()
         if (!(lastattack->flags & CA_CHAIN) ||  // We're a chain
             (PlayScreen.GameFrame() - lastattackticks < lastattack->chainexptime)) // We haven't expired
         {
-          // Get attack whose chainname matches last attack name    
+          // Get attack whose chainname matches last attack name
             for (int32_t c = 0; c < chardata->attacks.NumItems(); c++)
             {
                 SCharAttackData* ad = &(chardata->attacks[c]);
@@ -461,111 +509,256 @@ void TCharacter::Pulse()
             chainhits = 0;
     }
 
-  // PLAYER: Update the character's enemy list... and begin combat if targets in range...
-    if (ObjClass() == OBJCLASS_PLAYER && !(PlayScreen.GameFrame() % FRAMERATE))
+    if (ObjClass() == OBJCLASS_PLAYER)
+        PulseAutoCombat();
+
+    if (charflags & kCharFlagImpaleRelease)
+        PulseImpaleRelease();
+
+  // REVSYNC: 0x004c29a2 -- the AI, for a character with OF_AI and for one
+  // running the player AI (charflags 0x100000) whatever its flags. Retail
+  // runs Wander (slot 0x234) before the player AI's; Wander isn't ported
+  // (COMBAT_ATTACK_CHOICE.md §3.15).
+    if ((charflags & kCharFlagPlayerAI) || (flags & OF_AI))
+        AI();
+
+    PulseRecovery();
+    PulseActionTimers();
+}
+
+// REVSYNC: 0x004c2187 -- a dead character's tick. Until the death plays:
+// the transition to it from the root ("<root> to <prefix>dead"), when there
+// is one, then the dead loop (the prefixed "dead", else the plain one) as
+// the new root. The script hears of it every tick and the corpse stops
+// fidgeting. After 240 ticks it fades out over 100 more, and then it goes.
+// Not ported: the death loot (0x004d6570), which first scatters a
+// monster's inventory onto the map round the body (CHARACTER_PULSE.md §1);
+// the port's corpses keep theirs to be looted, as the 1998 build's did.
+void TCharacter::PulseCorpse()
+{
+    if (doing->action != ACTION_DEAD)
     {
-        TCharacter* targ = FindClosestEnemy(GetFace(), 32); // Updates enemy list and HasSeen list
-        if (targ && !targ->IsDead() &&  // Has targ, and targ is alive 
-            !targ->IsInvisibleSpell() &&// Target is hidden with the invisible spell
-            !IsFighting() &&            // We're not fighting now
-            (AutoBeginCombat && autocombat) &&          // AutoBeginCombat option is enabled
-            HasSeenAutoCombat(targ) &&  // Haven't already manually ended combat for targ
-            Distance(targ) < chardata->combatrangemin &&    // Within combat range
-            abs(AngleDiff(GetFace(), AngleTo(targ))) < 32)  // Character is facing
-                BeginCombat(targ);
-
-        if ((!targ) && (!autocombat))
-            autocombat = true;
-
+        doing->priority = doing->interrupt = false;
+        char name[RESNAMELEN * 2];
+        snprintf(name, sizeof(name), "%s to %sdead", root->name,
+                 ObjClass() == OBJCLASS_PLAYER ? AnimPrefix() : "c");
+        if (HasActionAni(name))
+        {
+            auto* fall = new TActionBlock(name, ACTION_DEAD);
+            fall->priority = fall->interrupt = fall->loop = true;
+            if (ForceCommand(fall, 0, 0) != COM_EXECUTING)
+                DropUnheld(fall);
+        }
+        CombatAnimName(name, "dead");
+        if (!HasActionAni(name))
+            strncpyz(name, "dead", sizeof(name));
+        auto* dead = new TActionBlock(name, ACTION_DEAD);
+        if (doing->action == ACTION_DEAD)
+            SetDesired(dead, 0);
+        else
+            ForceCommand(dead, 0, 0);
+        SetRoot(dead);
     }
 
-    // Do the character's AI now
-    AI();
+    if (script)
+    {
+        script->Trigger(TRIGGER_DEAD);
+        SetIncidentals(false);
+    }
 
-    // Recover health, fatigue, and mana
-    // This code checks last recovery time stamps (in game 100ths of a second) to see
-    // if the health,fatigue, or mana for a character need to be updated.  The time stamps
-    // are actually saved with the character data, so even if a character has been unloaded
-    // for a while, when he is reloaded, he will have the proper health,mana,and fatigue based
-    // on the elapsed game time.
-    int32_t gametime = PlayScreen.GameTime();
-    int32_t pcnt;
-    if (gametime - lasthealthrecov >= Rules.healthrecovrate)
+  // (In a network game a player's corpse stays.)
+    if (++deadticks >= 240)
+    {
+        if (fade <= 0)
+            SetFlag(OF_KILL);
+        else if (fade_direction == 0)
+        {
+            fade = 100;
+            fade_step = 1;
+            fade_limit = 0;
+            fade_direction = -1;
+        }
+    }
+}
+
+// REVSYNC: 0x004c25d5 -- the player falls into combat on his own, every 32
+// ticks (staggered by his id) when not running or sneaking: with the
+// nearest enemy within 0x20 of his facing, a valid target he hasn't walked
+// away from (the memory's no-autocombat mark), closer than his COMBATRANGE
+// and within 0x30 of where he faces, while the AutoBeginCombat option and
+// his own switch are on and he has control. Finding no one turns his
+// switch back on. (The 1998 build looked every 24 ticks, from any root,
+// within 32 of his facing.)
+void TCharacter::PulseAutoCombat()
+{
+    if (IsRunMode() || IsSneakMode() || ((PlayScreen.GameFrame() ^ GetMapIndex()) & 0x1f) != 0)
+        return;
+    TCharacter* target = nullptr;
+    if (FindCharacters(&target, 1, -1, GetFace(), 0x20, 7) <= 0 || !target)
+    {
+        autocombat = true;
+        return;
+    }
+    if (!IsValidTarget(target) || IsCombat() || IsBowMode() || IsSneakMode())
+        return;
+  // REVSYNC-DIVERGENCE: retail takes another player only when the game type
+  // allows player killing (a network game's); single player has no other.
+    if (target->ObjClass() == OBJCLASS_PLAYER)
+        return;
+    if (!AutoBeginCombat || !autocombat || !HasSeenAutoCombat(target))
+        return;
+    if (Distance(target) >= chardata->combatrangemin || std::abs(AngleDiff(GetFace(), AngleTo(target))) >= 0x30)
+        return;
+    if (PlayScreen.IsControlOn() || PlayScreen.IsDemoMode())
+        BeginFighting(target, ACTION_COMBAT);
+}
+
+// REVSYNC: 0x004c2867 -- let go by Yhagoro's impale: unless already
+// walking, the hold is dropped -- the root and the desired block lose their
+// priority, the walk is forced (unless a doing block with priority still
+// waits on another) and wanted next, facing as he faces.
+void TCharacter::PulseImpaleRelease()
+{
+    if (!(desired && desired->Is("walk") && root->Is("walk")))
+    {
+        root->priority = false;
+        if (!(doing->priority && desired != doing))
+        {
+            auto* walk = new TActionBlock("walk", ACTION_ANIMATE);
+            walk->angle = GetFace();
+          // REVSYNC-DIVERGENCE: retail leaks the block when it is refused.
+            if (ForceCommand(walk, 0, 0) != COM_EXECUTING)
+                DropUnheld(walk);
+        }
+        desired->priority = false;
+        auto* walk = new TActionBlock("walk", ACTION_ANIMATE);
+        walk->angle = GetFace();
+        if (!SetDesired(walk, 0))
+            DropUnheld(walk);
+    }
+    charflags &= ~kCharFlagImpaleRelease;
+}
+
+// REVSYNC: 0x004c29d7 -- recovery on the character's clock (CHARACTER_PULSE.md
+// §2.1). A vital below its maximum gathers `value` points every `rate`
+// hundredths (the player adds his per-minute percentages), in 1/10000s, and
+// the whole points go on; running costs fatigue instead (RUNFATIGUE).
+// Poison bites through Damage, short of the last point, which cures it. A
+// stamp in the future or more than 50000 off is pulled to now first. Under
+// the alreadydead cheat the player is simply kept full. (The 1998 build
+// gave whole percentages of the maximum each period and poisoned straight
+// off the health.)
+void TCharacter::PulseRecovery()
+{
+    const int32_t now = Clock();
+    for (int32_t* stamp : {&lasthealthrecov, &lastfatiguerecov, &lastmanarecov, &lastrunfatigue, &lastpoisondamage})
+        if (*stamp > now || std::abs(int64_t(now) - *stamp) > 50000)
+            *stamp = now;
+
+    if (CheatAlreadyDead && ObjClass() == OBJCLASS_PLAYER)
     {
         if (Health() < MaxHealth())
-        {
-            pcnt = ((gametime - lasthealthrecov) / Rules.healthrecovrate) * Rules.healthrecovval;
-            SetHealth(min(MaxHealth(), Health() + (MaxHealth() * pcnt / 100)));
-        }
-        lasthealthrecov = gametime;
+            SetHealth(MaxHealth());
+        if (Mana() < MaxMana())
+            SetMana(MaxMana());
+        if (Fatigue() < MaxFatigue())
+            SetFatigue(MaxFatigue());
+        SetPoisoned(false);
+        return;
     }
-    if (gametime - lastfatiguerecov >= Rules.fatiguerecovrate)
+
+    if (Health() < MaxHealth())
     {
+        healthaccum += Recovery(now - lasthealthrecov, Rules.healthrecovval, Rules.healthrecovrate);
+        healthaccum += RecoveryBonus(EVital::Health);
+        if (const int32_t points = TakePoints(healthaccum); points > 0)
+            SetHealth((std::min)(Health() + points, MaxHealth()));
+    }
+    lasthealthrecov = now;
+
+    if (Mana() < MaxMana())
+    {
+        manaaccum += Recovery(now - lastmanarecov, Rules.manarecovval, Rules.manarecovrate);
+        manaaccum += RecoveryBonus(EVital::Mana);
+        if (const int32_t points = TakePoints(manaaccum); points > 0)
+            SetMana((std::min)(Mana() + points, MaxMana()));
+    }
+    lastmanarecov = now;
+
+    if (IsRunMode() && doing != root)
+    {
+        if (lastrunfatigue != -1 && Fatigue() > 0)
+        {
+            runaccum += Recovery(now - lastrunfatigue, chardata->runfatigue[0], chardata->runfatigue[1]);
+            if (const int32_t points = TakePoints(runaccum); points > 0)
+                SetFatigue((std::max)(Fatigue() - points, 0));
+        }
+        lastrunfatigue = now;
+    }
+    else
+    {
+        lastrunfatigue = -1;
         if (Fatigue() < MaxFatigue())
         {
-            pcnt = ((gametime - lastfatiguerecov) / Rules.fatiguerecovrate) * Rules.fatiguerecovval;
-            SetFatigue(min(MaxFatigue(), Fatigue() + (MaxFatigue() * pcnt / 100)));
+            fatigueaccum += Recovery(now - lastfatiguerecov, Rules.fatiguerecovval, Rules.fatiguerecovrate);
+            fatigueaccum += RecoveryBonus(EVital::Fatigue);
+            if (const int32_t points = TakePoints(fatigueaccum); points > 0)
+                SetFatigue((std::min)(Fatigue() + points, MaxFatigue()));
         }
-        lastfatiguerecov = gametime;
     }
-    if (gametime - lastmanarecov >= Rules.manarecovrate)
-    {
-        if (Mana() < MaxMana())
-        { 
-            pcnt = ((gametime - lastmanarecov) / Rules.manarecovrate) * Rules.manarecovval;
-            SetMana(min(MaxMana(), Mana() + (MaxMana() * pcnt / 100)));
-        }
-        lastmanarecov = gametime;
-    }
-    if (gametime - lastpoisondamage >= Rules.poisondamagerate)
-    {
-        if (Poisoned())
-        {
-            if (lastpoisondamage != -1)
-            {
-                if (Health() > 1)
-                { 
-                    pcnt = ((gametime - lastpoisondamage) / Rules.poisondamagerate) * Rules.poisondamageval;
-                    if ((MaxHealth() * (float)pcnt / 100.0f) >= 1)
-                        SetHealth(int32_t(Health() - max(1,(MaxHealth() * (float)pcnt / 100.0f))));
-                    else
-                        SetHealth(1);
-                }
-            }
-        }
-        lastpoisondamage = gametime;
-    }
+    lastfatiguerecov = now;
 
-  // This code below SHOULD be in ResolveInvoke()!
-    if (IsDoing(ACTION_INVOKE))
+    if (Poisoned())
     {
-        if (invokedelay > 0)
+        if (lastpoisondamage != -1)
         {
-            invokedelay--;
-            if (invokedelay == 0)
+            if (Health() > 1)
             {
-                root->interrupt = true;
-                SetDesired(root);
+                const int32_t bite = Wrap32(int64_t(now - lastpoisondamage) * Rules.poisondamageval * 240000)
+                                   / (Rules.poisondamagerate * 100);
+                poisonaccum += Wrap32(int64_t(100 - DamageModifier(DT_POISON)) * bite) / 100;
+                int32_t points = TakePoints(poisonaccum);
+                if (points >= Health())
+                    points = Health() - 1;
+                if (points > 0)
+                    Damage(points, DT_POISON, 0, nullptr, nullptr);
             }
+            else
+                SetPoisoned(false);
         }
+        lastpoisondamage = now;
     }
-        
-    // Handle affects
-/*  if (IsPoisoined()poison > 0)
-    {
-        poisonaccum += poison;
-        int32_t dam = poisonaccum / POISON_SPEED;
-        if (dam)
-        {
-            Damage(dam, DAMAGE_POISON);
-            poisonaccum -= dam * POISON_SPEED;
+    else
+        lastpoisondamage = -1;
 
-            // give a chance for it to wear off
-//          if (GetResistance(DAMAGE_POISON) >= random(0, 100) || random(0, 20) == 7)
-//              poison--;
-        }
+    if (doing->action == ACTION_INVOKE && invokedelay > 0 && --invokedelay == 0)
+    {
+        root->interrupt = true;
+        SetDesired(root);
     }
-*/
+}
+
+// REVSYNC: 0x004c3131 -- a burn runs 50 ticks (Burn's timer); a flail its
+// animation, and ends back in combat.
+void TCharacter::PulseActionTimers()
+{
+    if (doing->action == ACTION_BURN && burnticks > 0 && --burnticks == 0)
+    {
+        root->interrupt = true;
+        SetDesired(root);
+    }
+    if (doing->action == ACTION_FLAIL && commanddone)
+    {
+        root->interrupt = true;
+        SetDesired(root);
+        BeginFighting(nullptr, ACTION_COMBAT);
+    }
+}
+
+// REVSYNC: slot 0x314 @ 0x004d5f50 -- the PlayScreen's game time.
+int32_t TCharacter::Clock()
+{
+    return PlayScreen.GameTime();
 }
 
 // REVSYNC: TCharacter::UpdateAction @ 0x004c3260 -- one tick of the
@@ -1092,7 +1285,7 @@ int32_t TCharacter::CalculateDamage(int32_t damage, int32_t damagetype, int32_t 
     {
         if (charflags & kCharFlagHalfMagic)
             taken /= 2;
-        if (monsterkind == 1)
+        if (monsterkind == kMonsterBaez)
             taken = 0;
     }
     else if (charflags & kCharFlagHalfPhysical)
@@ -4998,11 +5191,19 @@ bool TCharacter::Pulp(S3DPoint vel, int32_t piece_count, int32_t blood_count)
     return true;
 }
 
+// REVSYNC: TCharacter::Burn @ 0x004d3590 -- set alight: not the player
+// under the alreadydead cheat, nor one without an "onfire" animation. The
+// burn runs 50 ticks (Pulse ends it); a new one starts the burn effect and
+// forces "onfire", one already burning restarts its effect. Not ported:
+// the "onfire" sound at the body.
 bool TCharacter::Burn()
 {
+    if (CheatAlreadyDead && ObjClass() == OBJCLASS_PLAYER)
+        return false;
     if (!HasActionAni("onfire"))
         return false;
 
+    burnticks = 50;
     if (!burning)
     {
         SObjectDef def;
@@ -5490,11 +5691,11 @@ void TCharacter::Load(RTInputStream is, int32_t version, int32_t objversion)
     if (Health() < 1)
         ResetFlags(flags | OF_KILL);
 
-  // Fully visible, not fading. Retail also zeroes a fade direction
-  // (+0x1a0) the port's fade doesn't model.
+  // Fully visible, not fading.
     fade = 100;
     fade_step = 0;
     fade_limit = 100;
+    fade_direction = 0;
 }
 
 // REVSYNC: TCharacter::Save @ 0x004d50d0.
@@ -5671,7 +5872,7 @@ void TCharacter::SetInvisibleSpell(bool on)
 // priority-free ACTION_INVOKE block waits the invoke delay, which the
 // character keeps too, and is forced; one ForceCommand didn't take (doing
 // has priority) is dropped.
-bool TCharacter::SetCast(char* ani, TObjectInstance* target, int32_t invoke_delay)
+bool TCharacter::SetCast(const char* ani, TObjectInstance* target, int32_t invoke_delay)
 {
     char name[RESNAMELEN];
     if (strstr(ani, "inv"))
