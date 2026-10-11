@@ -84,6 +84,7 @@ PARTIAL = {
 # their owner constructors. These newer implementations predate their ledger
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
+    '0xad92bd22': 'RockStorm_ORIGINAL',
     '0xad92fc13': 'YCataclysm_ORIGINAL',
     '0xad92bc19': 'Cataclysm_ORIGINAL',
     '0x452dade0': 'TVortexEffect_BESPOKE',

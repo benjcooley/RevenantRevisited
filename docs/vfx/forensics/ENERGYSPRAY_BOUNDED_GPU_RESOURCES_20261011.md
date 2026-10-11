@@ -104,3 +104,12 @@ Final binary SHA256:
 `b9c09f6ad28ccdca9f624f6488008ecb09e8a11ffd73998cf023a7925119245b`.
 This grants no additional effect appearance credit; it restores bounded
 resources while retaining the independently approved visual configurations.
+
+Root repeated the complete audit on the integrated127-pass build, including
+both new Cataclysm adapters. All176 entries completed22 screenshots and entered
+loop3 with clean exit. Initial warmup allocated636 meshes; loops2/3 allocated
+none and retained404,352 vertex bytes/68,106 index bytes. Every resource check
+passes, with no pool failure. Private evidence:
+`research/vfx-review-survey-20261011/127-full-gallery-root/film/manifest.json`.
+Its additional ten meshes belong to the two newly integrated five-mesh effects;
+the difference from the earlier626-mesh catalogue is expected.
