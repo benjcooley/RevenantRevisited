@@ -31,6 +31,7 @@ SETTLE = 24                  # ticks after the start: the screen faded in, the s
 PLAY_BRANCH = 0x0044f84f     # TMapPane::MouseClick past the side tabs and the editor; button at [esp + 0xe8]
 WALK_RADIUS_CALL = 0x004c3a51   # FindClearPath's GetWalkHeightRadius call: esi the character, [esp + 8] the radius
 FIND_SECTOR = 0x00499e10     # cdecl (level, sector x, sector y)
+ON_OBJECT_PRESSED = 0xf8     # TMapPane: onobject, the map index the left press found or -1 (CW §1.1)
 LEFT, RIGHT = 1, 2
 VK_UP, VK_ESCAPE = 0x26, 0x1b
 WAYPOINTS = Path.home() / 'RevenantRevisited-testsaves' / 'waypoints'   # tools/playtest/waypoints.py ROOT
@@ -75,6 +76,9 @@ class ObservationTests(unittest.TestCase):
         """A press and a release at `point`, a tick each, the pointer there first."""
         for buttons in (0, button, 0):
             self.world.step([{'mouse': list(point), 'buttons': buttons}])
+
+    def by_name(self, obs, name):
+        return next(o for o in obs['objects'] if o['name'] == name)
 
     # ---- pack, equipped, radius -----------------------------------------
 
@@ -169,6 +173,25 @@ class ObservationTests(unittest.TestCase):
             world.step([{'mouse': list(point), 'buttons': LEFT}])
             world.step([{'mouse': list(point), 'buttons': 0}])
             self.assertEqual((predicted, LEFT in pressed), (reaches, reaches), point)
+
+    def test_cursor_names_what_the_pointer_is_over(self):
+        obs = self.observer.observe()
+        tendrick = self.by_name(obs, 'TendrickR')
+        for point, expected in ((tendrick['screen'], tendrick['id']), (obs['player']['screen'], 0),
+                                ((300, 300), None), ((500, 100), None)):
+            self.world.step([{'mouse': list(point), 'buttons': 0}])
+            self.assertEqual(self.observer.observe()['cursor'], expected, point)
+
+    def test_a_press_acts_on_the_cursor(self):
+        obs = self.observer.observe()
+        for point in (self.by_name(obs, 'TendrickR')['screen'], (300, 300)):
+            world = PlayWorld.load(BASELINE, self.image)
+            observer = observe.Observer(world)
+            world.step([{'mouse': list(point), 'buttons': 0}])
+            cursor = observer.observe()['cursor']
+            world.step([{'mouse': list(point), 'buttons': LEFT}])
+            pressed = world.vm.u32(observe.MAP_PANE + ON_OBJECT_PRESSED)     # the press's OnObject, by map index
+            self.assertEqual(observe.signed(pressed), -1 if cursor is None else cursor, point)
 
 
 if __name__ == '__main__':

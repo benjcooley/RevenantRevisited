@@ -14,8 +14,9 @@ disassembly of the baseline.
 Reads are plain memory reads, except the getters retail itself uses for
 values it computes (maximum health / fatigue / mana, weapon type, radius,
 gold, an item's stats, whether a character takes Locke for an enemy, the
-panes' click tests), called through `PlayWorld.peek`, which refuses
-anything that is not a getter. Observing never changes the game.
+object under the pointer, the panes' click tests), called through
+`PlayWorld.peek`, which refuses anything that is not a getter. Observing
+never changes the game.
 """
 from __future__ import annotations
 
@@ -46,6 +47,10 @@ MAP_PANE = 0x006668d8             # TMapPane: rect +0x04..+0x10, scroll origin +
 MAP_SCROLL_X, MAP_SCROLL_Y = 0x78, 0x7c
 WORLD_TO_SCREEN = 0x0046d7a0      # cdecl (const S3DPoint*, int *sx, int *sy): map-screen pixels
 IS_ENEMY = 0x004c89c0             # TCharacter::IsEnemy(TCharacter *other), thiscall (src/character.cpp)
+CURSOR_X, CURSOR_Y = 0x00668510, 0x00668514   # the pointer, polled each screen pass (CW §3.3)
+PICK_X, PICK_Y, PICK = 0x005e91cc, 0x005e91d0, 0x005e91d4   # the 3D pick and the point it was made at:
+                                  # every DrawScene picks at the pointer (MI §2.1)
+ON_OBJECT = 0x00452520            # TMapPane::OnObject(x, y, with), thiscall: the pick a click acts on (MI §2)
 WALK_HEIGHT = 0x00452e10          # GetWalkHeight(const S3DPoint*, level, int *flags) (test cross-checks)
 
 # ---- mouse routing (a button message: the dispatcher 0x0048f870, TPlayScreen::
@@ -117,6 +122,7 @@ CLASS_NAMES = ['item', 'weapon', 'armor', 'talisman', 'food', 'container', 'ligh
 CLASS_PLAYER, CLASS_CHARACTER = 11, 12
 NOT_LISTED = {9, 14, 25}          # tiles, shadows, effects
 OF_INVENTORY = 0x40000000
+MISSING = object()                # a value retail can't give without changing the game: left out
 
 
 def signed(value):
@@ -345,6 +351,25 @@ class Observer:
         tabs_x, tabs_y = x - m.i32(SIDE_TABS + PANE_X), y - m.i32(SIDE_TABS + PANE_Y)
         return not self.world.peek(BUTTON_AT, (tabs_x & 0xffffffff, tabs_y & 0xffffffff), this=SIDE_TABS)
 
+    def cursor(self):
+        """The object under the pointer as the last drawn frame picked it:
+        what a click there acts on. TMapPane::OnObject at the pointer (MI
+        §2), which reuses the 3D pick every DrawScene makes at the pointer
+        (PICK at PICK_X / PICK_Y) and so draws nothing, then walks the map's
+        2D objects, as the hover cursor (MI §3) and a click (CW §1.1) ask
+        it. None off the map pane, MISSING while the pick isn't the
+        pointer's (no frame has drawn since the pointer moved: OnObject
+        would draw one to pick)."""
+        m = self.m
+        if m.u32(CURRENT_SCREEN) != PLAY_SCREEN:
+            return None
+        x, y = m.i32(CURSOR_X) - m.i32(MAP_PANE + PANE_X), m.i32(CURSOR_Y) - m.i32(MAP_PANE + PANE_Y)
+        if not (0 <= x < m.i32(MAP_PANE + PANE_W) and 0 <= y < m.i32(MAP_PANE + PANE_H)):
+            return None
+        if (x, y) != (m.i32(PICK_X), m.i32(PICK_Y)):
+            return MISSING
+        return self.world.peek(ON_OBJECT, (x, y, 0), this=MAP_PANE) or None
+
     # ---- the walk map ---------------------------------------------------
 
     def walk_sectors(self, level, first, last):
@@ -425,6 +450,9 @@ class Observer:
         if player:
             result['player'] = self.describe_player(player)
             result['objects'] = self.nearby(player, objects)
+        on = self.cursor()
+        if on is not MISSING:
+            result['cursor'] = None if on is None else self.object_id(on)
         dialog = self.dialog()
         if dialog:
             result['dialog'] = dialog

@@ -34,8 +34,10 @@ Commands: hello, start, step, observe, project, pick, export_slot, mark,
 replay, checkpoint, restore, caption, quit. `project` and `pick` say
 whether a click reaches the world by retail's own routing
 (observe.Observer.world_click); `pick` answers `pos` (retail's
-pointer-to-map conversion) but not the object under the point, which
-needs retail's 3D pick, and that draws a frame.
+pointer-to-map conversion) but not the object under an arbitrary point,
+which needs retail's 3D pick, and that draws a frame. The object under
+the pointer itself, which every drawn frame picks, is the observation's
+`cursor`.
 """
 from __future__ import annotations
 
