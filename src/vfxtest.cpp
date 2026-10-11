@@ -3107,6 +3107,13 @@ void* FireBallFlightSpawn(const S3DPoint& origin)
     c->authored_flight=true;ConfigureFireBallFlight(c);return c;
 }
 
+void* YFireBallFlightSpawn(const S3DPoint& origin)
+{
+    auto* c=new SFireBallCtx();c->origin=origin;c->authored_flight=true;
+    c->fireball=TFireBallEffect_Bespoke__YFireBall::SpawnForTest_BESPOKE(origin);
+    ConfigureFireBallFlight(c);return c;
+}
+
 void FireBallDestroy(void* cp)
 {
     auto* c = static_cast<SFireBallCtx*>(cp);
@@ -5500,6 +5507,9 @@ struct SVfxTestBootstrap {
         fireball.id="TFireBallEffect_AUTHORED_FLIGHT";
         fireball.factory=[](const S3DPoint& o)->void* { return FireBallFlightSpawn(o); };
         VfxTest::DeferredRegister(fireball);
+        fireball.id="TYFireBallEffect_AUTHORED_FLIGHT";
+        fireball.factory=[](const S3DPoint& o)->void* { return YFireBallFlightSpawn(o); };
+        VfxTest::DeferredRegister(fireball);
 
         VfxTest::SEffect spark = {};
         spark.id            = "TSparkEffect";
@@ -7294,6 +7304,10 @@ struct SVfxTestBootstrap {
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory       = [](const S3DPoint& o) -> void* { return W3DYFireBallSpawn(o); };
             e.submit        = [](void* c, EFxDebugMode d) { W3DYFireBallSubmit(c, d); };
+            e.submit_world  = [](void* c, EFxDebugMode d) {
+                auto* context=static_cast<SW3DYFireBallCtx*>(c);
+                if(context&&context->eff)context->eff->SubmitWorldRing(d);
+            };
             e.destroy       = [](void* c) { W3DYFireBallDestroy(c); };
             VfxTest::DeferredRegister(e);
         }

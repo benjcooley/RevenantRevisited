@@ -3678,6 +3678,7 @@ class TFireBallEffect : public TEffect
   protected:
     static TFireBallEffect* SpawnForTestWithAsset(const S3DPoint& origin,
         const char* asset_path,TFireBallEffect* (*factory)(TObjectImagery*));
+    void SetYFireBallRingPalette() { y_ring_palette_=true; }
     void SetPreviewLightColor(float r,float g,float b) { light_color_={r,g,b}; }
 
   private:
@@ -3696,6 +3697,7 @@ class TFireBallEffect : public TEffect
     bool has_projectile_destination_=false;
     bool preview_mode_=false;
     bool native_domain_=false;
+    bool y_ring_palette_=false;
     bool preview_target_collision_=false;
 
     // Per-tick velocity in world wu/tick (set on LAUNCH→FLY transition).
@@ -6279,9 +6281,9 @@ class TFireBallEffect_Bespoke__YFireBall : public TFireBallEffect
 {
   public:
     TFireBallEffect_Bespoke__YFireBall(TObjectImagery* newim) : TFireBallEffect(newim)
-        { SetPreviewLightColor(180.0f/255.0f,1.0f,80.0f/255.0f); }
+        { SetPreviewLightColor(180.0f/255.0f,1.0f,80.0f/255.0f); SetYFireBallRingPalette(); }
     TFireBallEffect_Bespoke__YFireBall(SObjectDef* def,TObjectImagery* newim) : TFireBallEffect(def,newim)
-        { SetPreviewLightColor(180.0f/255.0f,1.0f,80.0f/255.0f); }
+        { SetPreviewLightColor(180.0f/255.0f,1.0f,80.0f/255.0f); SetYFireBallRingPalette(); }
     ~TFireBallEffect_Bespoke__YFireBall() override = default;
     [[nodiscard]] static TFireBallEffect_Bespoke__YFireBall* SpawnForTest_BESPOKE(const S3DPoint& origin);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);

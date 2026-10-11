@@ -7120,7 +7120,7 @@ void TFireBallEffect::SubmitWorldRing(EFxDebugMode debug_mode)
             item.world_pos[corner][1]=p.Y*ring_scale_+ring_pos_.Y;
             const float z=p.Z*ring_scale_+native_z;
             item.world_pos[corner][2]=native_domain_?z:z*1.4600000381469727f;
-            const uint32_t color=fireball_ring::PackedColor(index/24,ring_scale_);
+            const uint32_t color=fireball_ring::PackedColor(index/24,ring_scale_,y_ring_palette_);
             item.corner_color_rgba[corner][0]=float((color>>16)&255)/255.0f;
             item.corner_color_rgba[corner][1]=float((color>>8)&255)/255.0f;
             item.corner_color_rgba[corner][2]=float(color&255)/255.0f;
