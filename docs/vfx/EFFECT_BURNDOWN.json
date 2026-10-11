@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "78803b2a665172922df4983d5760ab35bd54fb2ad18cc364dbb4c57d0a81349e",
+    "harness_sha256": "d78d86a3b78aed0479faf5473123c4ed873679fa39b7381bc185535cc7c62e87",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 140,
+    "retail_rows_with_source_fixes_recorded": 141,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 127,
+    "visual_fidelity_confirmed_rows": 128,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 127,
-    "remaining_visual_review_rows": 49
+    "reviewed_visual_pass_rows": 128,
+    "remaining_visual_review_rows": 48
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -18713,27 +18713,39 @@
       "preview_candidates": [
         "TRockStormEffect_Bespoke_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Complete original named Rock Storm level1 pool/lifetime, actual authoredrock/glow transforms and caller-target inputs replace billboard preview. Sixteen whole phases independently reviewed and exact translatedgallery verified."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved named level1 stationary-target visual; verify naturalactors/otherlevels/targets/damage/audio and raster/device limits.",
       "notes": [],
-      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
+      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Sixteen original/actual Metal native-domain phases1..89, whole visible bounds inside1280x960: five growing/orbiting/converging blue-glow rocks, impact/recovery/fade and realkill77/blanktail. Named Rock Storm level1, stationary targetorigin/radius24 and invokerFighting identity;12489state fields exact/1600matrix fields max2.4e-7,26initialRNG. Own authoredglowRY retained; translatedtypedgallery69/70visible with repeatedownerexpiry. Damage/reaction observedboundaries; naturalactors/otherlevels/targets/audio/device/quant/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-rockstorm-original-20261011/root-approval.json",
+        "sha256": "797073d8a470a749af89514109693c5def569b7fcffc3a60c538f53b6c24c1a0",
+        "note": "docs/vfx/forensics/ROCKSTORM_ORIGINAL.md"
+      }
     },
     {
       "index": 127,

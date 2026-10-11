@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 140,
+    "retail_rows_with_source_fixes_recorded": 141,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 127,
+    "visual_fidelity_confirmed_rows": 128,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 127,
-    "remaining_visual_review_rows": 49
+    "reviewed_visual_pass_rows": 128,
+    "remaining_visual_review_rows": 48
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1715,6 +1715,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Sixteen full original/actual Metal native-domain null-spell variant0 phases1..89: falling rocky head/trail, impact torus, fragments/glows/dust and blanktail; whole visible bounds inside1280x960. Thirty pieces/seventy dust/fifty glows,110565 state fields exact/826RNG, original life80 kill. Explicit prelit RGB565/RGBA5 and additive cull-none/order policies separately proven. Own Y raw local-height policy and green textures; independent named factory and asset. Common launch brightness/clipping, natural actors/other spell variant/damage/audio, interpolation/destination/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-rockstorm-original-20261011/root-approval.json": {
+      "sha256": "797073d8a470a749af89514109693c5def569b7fcffc3a60c538f53b6c24c1a0",
+      "retail_row": "RockStorm:0xad92bd22",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Sixteen original/actual Metal native-domain phases1..89, whole visible bounds inside1280x960: five growing/orbiting/converging blue-glow rocks, impact/recovery/fade and realkill77/blanktail. Named Rock Storm level1, stationary targetorigin/radius24 and invokerFighting identity;12489state fields exact/1600matrix fields max2.4e-7,26initialRNG. Own authoredglowRY retained; translatedtypedgallery69/70visible with repeatedownerexpiry. Damage/reaction observedboundaries; naturalactors/otherlevels/targets/audio/device/quant/exactpixels open."
     }
   }
 }
