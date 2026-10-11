@@ -36,6 +36,15 @@ TNewUnreviewedEffect_BESPOKE'''.split()
         for type_id,name in [('0x224a5adf','BarrierEW_ORIGINAL'),('0x224b5adc','BarrierNS_ORIGINAL'),('0xaeaeeb32','JhagaAttack_ORIGINAL')]:
             self.assertEqual(admitted_candidates({'retail_type_id':type_id,'preview_candidates':[]}),[name])
 
+    def test_paralize_named_no_target_is_explicitly_partial(self):
+        row = {'retail_type_id': '0xad92bc14', 'preview_candidates': []}
+        self.assertEqual(admitted_candidates(row), ['TParalize1_NAMED_NO_TARGET'])
+        partial, reason = candidate_metadata(row, 'TParalize1_NAMED_NO_TARGET')
+        self.assertTrue(partial)
+        self.assertIn('enormous full trajectory', reason)
+        self.assertNotIn('TParalize1_NAMED_NO_TARGET', admitted_candidates({
+            'retail_type_id': '0xad92bc15', 'preview_candidates': []}))
+
     def test_smoke_exact_quality_controller(self):
         row={"retail_type_id":"0x224a5ccc","preview_candidates":[]}
         self.assertEqual(admitted_candidates(row),["Smoke_ORIGINAL_QUALITY"])
@@ -94,7 +103,7 @@ TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
             row = {'retail_type_id': retail_id, 'preview_candidates': [name]}
             # Exact authored replacements precede retained partial previews.
             exact = [SOURCE_MAPPINGS[retail_id]] if retail_id in SOURCE_MAPPINGS else []
-            self.assertEqual(admitted_candidates(row), exact + [name])
+            self.assertEqual(admitted_candidates(row), list(dict.fromkeys(exact + [name])))
             partial, description = candidate_metadata(row, name)
             self.assertTrue(partial)
             self.assertIn(reason, description)

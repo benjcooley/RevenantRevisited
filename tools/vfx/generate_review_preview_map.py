@@ -56,6 +56,7 @@ TWaterEffect_BESPOKE__StillWater TWaterEffect_BESPOKE__FlowWater TWaterEffect_BE
 # Spawn/TickAndSubmit and each factory's own asset binding were audited in
 # effect.cpp/vfxtest.cpp against the shipped class identity, 2026-10-10.
 PARTIAL = {
+    '0xad92bc14': ('TParalize1_NAMED_NO_TARGET', 'actual named no-target branch; target-bound behavior and enormous full trajectory unreviewed'),
     '0xc24b2a85': ('TFogEffect_BESPOKE', 'authored animated grid; original post-blend RGB565 quantization incomplete'),
     '0x00ab1d1d': ('TAuraEffect_BESPOKE', 'billboard preview; original character bones and attachment missing'),
     '0x0ea34fa3': ('TBlastEffect_BESPOKE', 'authored 56-part animation; original oversized-triangle clipping differs'),
@@ -130,6 +131,7 @@ SOURCE_MAPPINGS = {
     '0xad92bd23': 'TKinSecretDoor_NATIVE_STILL',
     '0xdcc4011d': 'TLabback_AUTHORED_TAGS',
     '0xbecffeda': 'TSwamp_AUTHORED_TAGS',
+    '0xad92bc14': 'TParalize1_NAMED_NO_TARGET',
     '0x42e0fcd0': 'TOgrestrength_AUTHORED_TAGS',
     '0xad92bd39': 'TTrollblood_AUTHORED_TAGS',
     '0x10ac03de': 'TRegeneration_AUTHORED_TAGS',
@@ -142,7 +144,9 @@ SOURCE_MAPPINGS = {
     '0xad92bd36': 'TSpeed_AUTHORED_TAGS',
     '0xad92bd35': 'TQuicksilver_AUTHORED_TAGS',
 }
-IMPLEMENTED.update(dict.fromkeys(SOURCE_MAPPINGS.values(),
+IMPLEMENTED.update(dict.fromkeys(
+    (name for name in SOURCE_MAPPINGS.values()
+     if name not in {partial[0] for partial in PARTIAL.values()}),
     'vfxtest.cpp: explicit retail ID passed to exact owner/profile factory'))
 
 

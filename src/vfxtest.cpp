@@ -69,6 +69,7 @@
 #include "effects/essencedrainpreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/swamppreview.h"
+#include "effects/paralizepreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
 #include "effects/restorelifepreview.h"
@@ -7044,6 +7045,17 @@ struct SVfxTestBootstrap {
         // *   load the I3D asset and draw sub-object 0 as a billboard.         *
         // *   Awaiting user video A/B for forensics + kinematic tuning.        *
         // =====================================================================
+        {
+            VfxTest::SEffect e = {};
+            e.id = "TParalize1_NAMED_NO_TARGET";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return paralize_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){paralize_preview::Advance(static_cast<paralize_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){paralize_preview::SubmitWorld(static_cast<paralize_preview::State*>(c));};
+            e.is_alive=[](void* c){return paralize_preview::Alive(static_cast<paralize_preview::State*>(c));};
+            e.destroy=[](void* c){paralize_preview::Destroy(static_cast<paralize_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
         {
             VfxTest::SEffect e = {};
             e.id = "TSwamp_AUTHORED_TAGS";e.family="ambient";e.pipeline="IM";

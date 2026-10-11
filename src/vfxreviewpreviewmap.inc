@@ -73,6 +73,7 @@
 {0xacabfadau, "TIcedsparks_AUTHORED_STILL", false, "Implemented preview controller; map caller not certified"}, // Icedsparks
 {0xad92bc11u, "TPuke_BESPOKE_NULLSPELL", false, "Implemented preview controller; map caller not certified"}, // puke
 {0xad92bc12u, "TShriek_BESPOKE_NULLSPELL", false, "Implemented preview controller; map caller not certified"}, // shriek
+{0xad92bc14u, "TParalize1_NAMED_NO_TARGET", true, "Partial preview: actual named no-target branch; target-bound behavior and enormous full trajectory unreviewed; not complete original implementation"}, // paralize1
 {0xad92bc15u, "TSetVortexEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // setvortex
 {0xad92bc16u, "TInvisibleEffect_Bespoke_BESPOKE", true, "Partial preview: tinted asset billboard; original invisibility controller incomplete; not complete original implementation"}, // invisible
 {0xad92bc17u, "Funnel_ORIGINAL", false, "Implemented preview controller; map caller not certified"}, // funnel
