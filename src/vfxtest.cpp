@@ -51,6 +51,7 @@
 #include "effects/quickpreview.h"
 #include "effects/restorelifepreview.h"
 #include "effects/dexteritypreview.h"
+#include "effects/antimagicpreview.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -7287,6 +7288,19 @@ struct SVfxTestBootstrap {
             e.submit_world=[](void* c,EFxDebugMode){dexterity_preview::SubmitWorld(static_cast<dexterity_preview::State*>(c));};
             e.is_alive=[](void* c){return dexterity_preview::Alive(static_cast<dexterity_preview::State*>(c));};
             e.destroy=[](void* c){dexterity_preview::Destroy(static_cast<dexterity_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TAntimagic_AUTHORED_TAGS";
+            e.family        = "magic";
+            e.pipeline      = "IM";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return antimagic_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){antimagic_preview::Advance(static_cast<antimagic_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){antimagic_preview::SubmitWorld(static_cast<antimagic_preview::State*>(c));};
+            e.is_alive=[](void* c){return antimagic_preview::Alive(static_cast<antimagic_preview::State*>(c));};
+            e.destroy=[](void* c){antimagic_preview::Destroy(static_cast<antimagic_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
