@@ -84,3 +84,9 @@ configured factories retain the live seed(`seeded=0`); intrinsic original index
 reseeds remain. This is a translated current-gallery lifecycle check, separate
 from native-domain appearance and natural mapped damage. Approval is reserved
 for independent root review; this package does not write approval metadata.
+
+## Root independent approval
+
+Exact StrikeEffect 0xad92bd32 named Meteor Storm, genuine Acolytes/four delayed real owners with strict Comet imagery override, source3185/3185/16 and empty ground0. Full original manager/owner cadence and intrinsic8 index reseeds retained; compiled3638 owner fields,1523846 particle fields/RNG,3240 keys/4400 matrices pass; actual33127 runtime checks pass. Initial identity emitter origin and first5-frame previous0/frame0 transition verified; ordinary Comet control unchanged. All16 lifecycle phases and six additional whole-trajectory phases/seven fixed1920x1080 views independently reviewed. Root101+66 phase PNGs byte-identical to frozen port; all45 review panels byte-identical after memory-bounded assembly. Gallery746ticks,24/32 visible samples,8 genuine completions at tick87/manager93 and ninth partial50, live RNG, health102/102 and clean exit. Original fixed-view overlap2696pixel differences retained versus port0; no exact pixel equality. Natural populated-map damage/scheduler/moving actors/audio/hardware and other variants remain open. Initial giant-canvas reviewer timed out, retained; bounded equivalent panels passed without rerunning simulations.
+
+Report: `recon/retail_asm/runtime/effects/current-strike-meteor-20261011/root-approval.json`. Scoped visual passes:165/176. Source-only integration retains private binaries/assets/images outside Git.

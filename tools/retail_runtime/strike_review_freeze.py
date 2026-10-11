@@ -12,7 +12,8 @@ def pair(a,b,label,path):
 def contact(panels,path,width=1920,columns=2):
  tiles=[]
  for p in panels:
-  p=p.copy();p.thumbnail((width//columns,800));tiles.append(p)
+  with Image.open(p) as source:
+   tile=source.convert("RGB");tile.thumbnail((width//columns,800));tiles.append(tile)
  h=max(p.height for p in tiles);result=Image.new('RGB',(width,h*((len(tiles)+columns-1)//columns)))
  for i,p in enumerate(tiles):result.paste(p,((i%columns)*(width//columns),(i//columns)*h))
  result.save(path)
@@ -24,10 +25,10 @@ def run(base,out):
   if 'image'not in row:continue
   t=row['tick'];assert m['sample_simulation_ticks'][t-1]==t
   a=Image.open(row['image']).convert('RGB');p=m['frames'][t-1]['path'];b=Image.open(p).convert('RGB');assert a.size==b.size==(1920,1080);pin(row['image']);pin(p)
-  panel=pair(a,b,f'Tick {t}: original | Metal',out/f'pair-{t:03}.png');panels.append(panel);pairs.append(dict(tick=t,native=row['image'],metal=p))
+  panel=pair(a,b,f'Tick {t}: original | Metal',out/f'pair-{t:03}.png');panels.append(out/f'pair-{t:03}.png');panel.close();pairs.append(dict(tick=t,native=row['image'],metal=p))
   box=ImageChops.lighter(a,b).getbbox()
   if box:
-   x0,y0,x1,y1=box;box=(max(0,x0-12),max(0,y0-12),min(1920,x1+12),min(1080,y1+12));details.append(pair(a.crop(box),b.crop(box),f'Tick {t}: same-pixel crop',out/f'detail-{t:03}.png'))
+   x0,y0,x1,y1=box;box=(max(0,x0-12),max(0,y0-12),min(1920,x1+12),min(1080,y1+12));detail_path=out/f'detail-{t:03}.png';pair(a.crop(box),b.crop(box),f'Tick {t}: same-pixel crop',detail_path).close();details.append(detail_path)
  contact(panels,out/'contact.png');contact(details,out/'detail.png',1600)
  views={};whole=[];tiles=[];overlap=[]
  for y in CENTERS:
@@ -43,8 +44,9 @@ def run(base,out):
    for canvas,image in zip(canvases,(a,b)):canvas.paste(image,(0,6460-y))
    box=ImageChops.lighter(a,b).getbbox()
    if box:
-    x0,y0,x1,y1=box;box=max(0,x0-12),max(0,y0-12),min(1920,x1+12),min(1080,y1+12);tiles.append(pair(a.crop(box),b.crop(box),f'Tick {t}, centerY {y}: original | Metal',out/f'wide-detail-{t:03}-y{y}.png'))
-  whole.append(pair(*canvases,f'Tick {t}: seven fixed views, original | Metal',out/f'whole-{t:03}.png'))
+    x0,y0,x1,y1=box;box=max(0,x0-12),max(0,y0-12),min(1920,x1+12),min(1080,y1+12);detail_path=out/f'wide-detail-{t:03}-y{y}.png';pair(a.crop(box),b.crop(box),f'Tick {t}, centerY {y}: original | Metal',detail_path).close();tiles.append(detail_path)
+  whole_path=out/f'whole-{t:03}.png';pair(*canvases,f'Tick {t}: seven fixed views, original | Metal',whole_path).close();whole.append(whole_path)
+  for canvas in canvases:canvas.close()
  contact(whole,out/'whole-contact.png',2400,3);contact(tiles,out/'whole-detail.png',1920,2)
  # Conservative all100-phase submitted-geometry coverage. Constants are the
  # independently executed original view/projection, not measured image fits.
