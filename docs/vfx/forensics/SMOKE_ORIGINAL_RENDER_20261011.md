@@ -77,3 +77,5 @@ residual remains open; this is not exact pixels or ordinary-mode visual parity.
 The frozen `smoke-review-quant/root-approval.json` pins the final comparison,
 original repeat, state/key/parser/lifecycle controls, both600-frame films,
 quality0/1 blank GPU controls and300-frame translated gallery to the binary above.
+
+Root independently passed the512 literal alpha controls and300-frame translated gallery. A24-PNG repeat rendered all600ticks at24Hz and matched every sampled lane PNG byte-for-byte. The first dense root capture rendered600ticks but exceeded180s while writing376PNGs; it is retained as failed evidence. Final root approval SHA256: `df5fb292d2fabf2ae85ebededbbc645979cb2792a5b4869671a194b520950994`. Destination rounding and the other stated limits remain open.

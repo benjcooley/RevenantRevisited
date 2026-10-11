@@ -28,6 +28,10 @@ TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertEqual(admitted_candidates(row),["YTelekinesis_ORIGINAL"])
         self.assertFalse(candidate_metadata(row,"YTelekinesis_ORIGINAL")[0])
 
+    def test_essencedrain_uses_all_root_default_controller(self):
+        row={"retail_type_id":"0xdefeca7e","preview_candidates":[]}
+        self.assertEqual(admitted_candidates(row),["EssenceDrain_AUTHORED"])
+
     def test_smoke_exact_quality_controller(self):
         row={"retail_type_id":"0x224a5ccc","preview_candidates":[]}
         self.assertEqual(admitted_candidates(row),["Smoke_ORIGINAL_QUALITY"])

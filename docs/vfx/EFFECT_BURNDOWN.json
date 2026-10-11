@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "9360b326198adf8ed3208ecfce0d33cef9aedd0dac9cd7c8c92fd32176d59fbb",
+    "harness_sha256": "2b6539e74ae0b0e4a930df04cd959605cb0eee16abb476e1c5c4a3d0dcff3654",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 149,
+    "retail_rows_with_source_fixes_recorded": 150,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 137,
+    "visual_fidelity_confirmed_rows": 138,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 137,
-    "remaining_visual_review_rows": 39
+    "reviewed_visual_pass_rows": 138,
+    "remaining_visual_review_rows": 38
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -11504,25 +11504,27 @@
       "retail_type_id": "0x224a5ccc",
       "asset": "Misc\\smoke.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact quality-gated50-puff controller, strict own legacy keys and native ARGB4444 source-contribution floor; whole appearance/lifecycle independently reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Return later with actual shipped setting/controller and stable background; bounded standalone probe is diagnostic only. Advance easy retail A/B.",
+      "next_action": "Preserve scoped quality3 appearance and genuine low-quality kill; resolve destination rounding and natural map/audio/device limits.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "2026-10-05: No useful animated visible reference in bounded standalone recipe. No accurate-reference or visual-acceptance credit.",
@@ -11542,7 +11544,17 @@
         "restored_ground_mean_error": 0.0,
         "reason": "No useful animated visible reference in bounded standalone recipe"
       },
-      "work_queue_status": "deferred_no_useful_visible_reference"
+      "work_queue_status": "deferred_no_useful_visible_reference",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole contact and actual-size detail inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Ten whole original/actual Metal native-domain quality3 phases through600ticks: exact50puffs, expansion/shrink/reset and center bounce. Literal512 original ARGB4444 texel controls restore green edges via existing source-floor policy.917727statefields, exactRNG,601native repeat states/30050draws/11PNGs; root24same-phase PNGs over600ticks identical and translatedgallery300/300 visible/distinct. Quality below3 legitimately kills. Destination overlap brightness/edge quantization, ordinary common output, natural caller/audio/device/exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-smoke-original-20261011/root-approval.json",
+        "sha256": "df5fb292d2fabf2ae85ebededbbc645979cb2792a5b4869671a194b520950994",
+        "note": "docs/vfx/forensics/SMOKE_ORIGINAL_RENDER_20261011.md"
+      }
     },
     {
       "index": 41,
