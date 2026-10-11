@@ -45,12 +45,15 @@ from rec import BUTTON_RIGHT
 from jev import Choice, Jev, Router, tool
 from knowledge import Knowledge
 from nav import DEFAULT_RADIUS, LevelMaps, farthest_clear
-from walk import CLICK_HEIGHT, USE_REACH, Destination, Walker, WalkGrid, in_rect
+from walk import CLICK_HEIGHT, USE_REACH, Destination, Walker, WalkGrid, game_distance, in_rect
 from waypoints import Catalogue, Waypoint, story_states, wrong_states
 from world import Place, World
 
 ENGAGE_RADIUS = 500                  # a living enemy this close means a fight
 WALKGRID_RADIUS = 480
+STUCK_LEGS = 3                       # stalls on one spot that make it a dead end
+IDLE_LEGS = 8                        # legs walked without getting 100 nearer that make it one too
+DEAD_ENDS_BEFORE_LOOKING = 5         # dead ends with no progress before the router looks at the screen
 WIDE_WALKGRID_RADIUS = 2400          # once per stop, when the way to it isn't in the map yet
 DIGITS = '123456'
 # Each direction straight after its opposite, so calibrating ends where it began.
@@ -101,6 +104,8 @@ class Director:
     wide_looks: set = field(default_factory=set)               # (level, stop) a wide walk grid was fetched for
     no_walkgrid: bool = False                                  # the host offers no walk grid (an older emulator host)
     best_gap: float = math.inf                                 # the nearest he has been to the next stop
+    idle_legs: int = 0                                         # travel legs since he last got nearer
+    travel_stop: str = ''                                      # the stop those are measured against
 
     def __post_init__(self) -> None:
         self.walker = Walker(self.jev, self.bindings, under=self.object_under)
@@ -303,9 +308,11 @@ class Director:
         stop_name, stop_pos = (route[0].name, route[0].pos) if route else (goal, place.pos)
         if route and route[0].name.lower() in self.blocked_exits:
             return False                                             # that exit wouldn't open: explore instead
+        if stop_name != self.travel_stop:                      # a new stop: progress is measured afresh
+            self.travel_stop, self.best_gap, self.idle_legs, self.dead_ends = stop_name, math.inf, 0, 0
         stop = named.get(stop_name.lower())
         words = f"'{stop_name}'" + (f", on the way to '{goal}'" if route else '')
-        if stop and stop.get('screen') and distance(stop['pos'], pos) <= USE_REACH:
+        if stop and stop.get('screen') and game_distance(stop['pos'], pos) <= USE_REACH:
             person = stop.get('class') == 'character'
             spot = self.clickable(stop)
             if not spot:
@@ -334,7 +341,7 @@ class Director:
         self.maps.merge(level, grid)
         radius = player.get('radius') or DEFAULT_RADIUS
         path = self.maps.plan(level, pos, stop_pos, radius)
-        if path and distance(path[-1], stop_pos) > USE_REACH and (level, tuple(stop_pos)) not in self.wide_looks:
+        if path and game_distance(path[-1], stop_pos) > USE_REACH and (level, tuple(stop_pos)) not in self.wide_looks:
             # the way isn't in the map yet: look wider once (the host holds the whole level)
             self.wide_looks.add((level, tuple(stop_pos)))
             wide = self.observe(walkgrid=WIDE_WALKGRID_RADIUS)
@@ -360,21 +367,25 @@ class Director:
         here = after['player']['pos']
         gap = distance(here, stop_pos)
         if gap < self.best_gap - 100:
-            self.best_gap, self.dead_ends = gap, 0               # getting closer: the dead ends did their job
+            self.best_gap, self.dead_ends, self.idle_legs = gap, 0, 0   # getting closer: the dead ends did their job
+        else:
+            self.idle_legs += 1
         if result in ('stalled', 'refused'):
             self.stuck = (self.stuck + 1) if self.stuck_at and distance(here, self.stuck_at) < 24 else 1
             self.stuck_at = here
-            if self.stuck >= 3:                                  # this spot is a dead end: aim elsewhere
-                self.stuck = 0
-                self.maps.dead_end(level, here)
-                self.dead_ends += 1
-                self.note('dead end', at=list(here[:2]), toward=stop_name)
-                if self.dead_ends >= 5:                          # no nearer after five: a look at the screen
-                    self.dead_ends = 0
-                    self.unknown(after, why=f"Locke can't find the way toward {words}; pick a point on "
-                                            f"open ground, stairs or a door to click that leads on")
         else:
             self.stuck = 0
+        # Stalling on one spot, or walking without getting nearer (shuttling
+        # between two points), makes where he stands a dead end.
+        if self.stuck >= STUCK_LEGS or self.idle_legs >= IDLE_LEGS:
+            self.stuck = self.idle_legs = 0
+            self.maps.dead_end(level, here)
+            self.dead_ends += 1
+            self.note('dead end', at=list(here[:2]), toward=stop_name)
+            if self.dead_ends >= DEAD_ENDS_BEFORE_LOOKING:      # no nearer after these: a look at the screen
+                self.dead_ends = 0
+                self.unknown(after, why=f"Locke can't find the way toward {words}; pick a point on "
+                                        f"open ground, stairs or a door to click that leads on")
         return result != 'refused'
 
     def clickable(self, obj: dict) -> tuple[int, int] | None:
