@@ -596,9 +596,11 @@ struct TMapRenderer::Impl
         // the physical render target so changing resolution does not widen the
         // world camera view.
         //
-        // The cameraWorld.z * iso_cos30 term keeps a world point at
-        // (cam.x, cam.y, cam.z) projecting to HEIGHT/2 -- i.e. Locke
-        // stays vertically centered on screen as he climbs. The scene
+        // The camera's height term keeps a world point at (cam.x, cam.y,
+        // cam.z) projecting to HEIGHT/2 -- retail's scroll origin is
+        // WorldToScreen(center) less half the pane (0x004539d0) -- as
+        // WorldToScreen rounds it: how far it lifts the camera above its
+        // ground point, about cam.z * cos30. The scene
         // render uses cam_ox/cam_oy (this value) as a screen-space
         // shift for tiles, meshes, and the deferred ortho projection
         // (maprenderer.cpp:418/990/1031/1165/546-549), so overlays must
@@ -611,7 +613,10 @@ struct TMapRenderer::Impl
         WorldToScreen(sectorWorldCenter, sx, sy);
         sx += sectorCenterOx;
         sy += sectorCenterOy;
-        sy += int32_t((int64_t(sectorCameraWorld.z) * 867) / 1000);
+        int32_t ground_x = 0, ground_y = 0, camera_x = 0, camera_y = 0;
+        WorldToScreen(S3DPoint(sectorCameraWorld.x, sectorCameraWorld.y, 0), ground_x, ground_y);
+        WorldToScreen(sectorCameraWorld, camera_x, camera_y);
+        sy += ground_y - camera_y;
     }
     S3DPoint sectorLightPos(const SSectorLight& L) const
     {
