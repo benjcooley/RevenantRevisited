@@ -138,3 +138,25 @@ Raw tile pairs and all overlap counts remain in the manifest. These results
 establish whole coverage, not exact framebuffer equality. The root reviewer has
 the complete panel; appearance approval is recorded separately. Natural caller,
 other lighting/device behavior and common full-geometry policy remain separate.
+
+## Scoped appearance approval (2026-10-11)
+
+Root independently reviewed the final whole60/90 contact and approved the
+native-domain/software appearance: complete rings, flares and spikes align.
+Together with the previously reviewed eight640x480 lifecycle phases and120
+unchanged ordinary frames, this resolves the earlier whole-coverage hold for
+this explicit configuration. It does not promote natural-caller, device or
+exact-pixel gates.
+
+The immutable approval is `blast-whole-final3/root-approval.json`, SHA256
+`08a9554447c09f4164893e2cc0b13137f50f5a254c7fc07ea679a5ad151bd9ee`.
+It pins whole manifest
+`68f79ef8a26394ed3bb0ef7d2c0dafdb9867a7484ca47955a0bf0fd7553f804d`,
+lifecycle review manifest
+`8a696e72dbe80fa1dbc3b0f34dc07a74ae0d92ac216dbf074addd7ebee6c795f`,
+both capture binaries, every reviewed sample hash and all six tile manifests.
+All referenced reviewed image hashes were revalidated before freezing it.
+Original1245/Metal5 overlap residuals, sampling/interpolation, RGB565 destination
+rounding, declared resource/owner-clock boundaries and natural caller/audio/device
+limits remain open. Earlier held and misframed manifests remain historical;
+this separate approval does not rewrite them. No readback changes are included.
