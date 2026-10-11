@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 166,
+    "retail_rows_with_source_fixes_recorded": 167,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 162,
+    "visual_fidelity_confirmed_rows": 163,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 162,
-    "remaining_visual_review_rows": 14
+    "reviewed_visual_pass_rows": 163,
+    "remaining_visual_review_rows": 13
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1960,6 +1960,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Exact Burn0x55471bff/own legacyBurnbabyburn twoRGB565quads, genuine Acolyte22bone APIs/state14frame0/facing96/publicSet4e2fa0, integer/no-transition reference control, explicit shared post-actor seed2. OriginalwholePreRender/ownerDamage/controller/render/raster execute, realHP102\u219297 atsame5damage ticks. Source correctedparentdependency mirrors and original nonlinearparticleZ used; no fakebones/pose/stat returns. Core108750state/90240matrix/90RNGfields max1.58e-5, strictownresource4positive815rejects, actualABSPOS22560vertices5640draws pass; rootthreeunitsPASS17.990s,27mappingtests/compiledbridge pass. Fourteenwholephasepairs/fixedcrop/allfive2xnearest detailstrips independentlyreviewed,31imagepins+8freezepinsverified; finite ramp/fire/smoke/fade/kill76/blank90 align. Integrated90PNGbyte-identical/cleanexit; gallery100frames89visible90distinct/twofinitecreations/liveRNG withoutfactoryreseed/cleanexit. Ordinarygalleryfractionalpose is liveness only; isolatedinteger control suppliesappearance. NaturalBurn map/poster/reignite, moving/animated/otheractors/defaultcachedtransition, spells/audio/lighting/hardware andfloat/edge/RGB565/exactpixel residualsremainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-nakrnoth-full-20261011/root-approval.json": {
+      "sha256": "d3fe4d231ee6c384d2744899577700d8e481bd2eb9185f704f06cdd2b09695fb",
+      "retail_row": "Nakrnoth:0xad92bd21",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact Nakrnoth0xad92bd21 genuine loaded nullspell/fixedowner/defaultanimator, own63objects/775frame nonloop clip/tenemitter260slotPartSys, unchanged shippedterminal-vector omission parsedasnative. Source645775definedparticlefields/RNGexact within declaredworldfloat0.0021(max.0019525),187840ordinarymatrixchannels max1.33e-5; prototype0 Render mutation excludedfrom ordinarymatrixproof. Originalhidden*paths omitted; exactgeometry/material/keys/profile130rejectcontrols andsoftware640/480span guard preserved onlynative mode, commongeometrycomplete. All49675actualterrainqueriesreturn0 and790owner/RNGstatesmatch; sourceemptygroundexplicit. Correctedone-light native reference (actual23\u219231\u219223 duplicate-lightpositive/removalcontrol) matches unchangedport. Fortyretainedmainphasepairs and36rawlatepairs/sixfixedsupported1920x1080windows, wholecontacts/all5detailpages/late641+681coverageMAXunions independentlyreviewed,257pinsverified. MAXunions arecoveragecontacts, notgiantframebuffers; allsoftwareadmitted authoredtrianglescovered. Rootmain40stride20PNGsbyteidentical through78124Hzupdates/render/kill775/blanktail; lateview2 six601..701PNGsbyteidentical/cleanexit. Rootconfiguredgallery40frames36visible/two finitecreations through938renderframes/cleanexit; no actualnaturalboss/mapgroundcredit. Mainlateclip, overlap/raster/RGB565precision,worldfloatdrift, naturalboss/actor/spell/map/audio/device/exactpixels remainopen. Olddouble-light/warmup25/unguarded/widened-limit controls retained; nofit orportbrightnesschange."
     }
   }
 }

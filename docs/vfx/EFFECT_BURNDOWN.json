@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "b9e5e4b727ea9528946fecd881459af81314145983ea21c162735bfae1fd40e2",
+    "harness_sha256": "329e9dee0c45f14de3bf2feb2458ea849fb1bb7d8df06774654758537a116268",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 166,
+    "retail_rows_with_source_fixes_recorded": 167,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 162,
+    "visual_fidelity_confirmed_rows": 163,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 162,
-    "remaining_visual_review_rows": 14
+    "reviewed_visual_pass_rows": 163,
+    "remaining_visual_review_rows": 13
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -18993,29 +18993,42 @@
       "retail_type_id": "0xad92bd21",
       "asset": "magic\\Nakrnoth.I3D",
       "preview_candidates": [
+        "Nakrnoth_ORIGINAL",
         "TNakrnothEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact63object/tenemitter complete775frame Nakrnoth adapter/sourcecontroller/geometry/spanguard/hiddenpaths proven; correctedone-light fullsixview appearance independentlyapproved, rootmain+laterepeat andfinitegallery pass. Naturalboss/map/device limitsopen."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Complete loaded775frame/63object Nakrnoth controller/visibility and tiled full-size render comparison; shipped terminal-vector parser semantics proven.",
+      "next_action": "Preserve approved nullspell complete775frame/fixedemptyground control; verify actualboss/spell/map/actor/audio/device and retained raster/overlap/worldfloat residuals.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent corrected wholelife/sixview inspection and integratedrepeat/gallery",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Exact Nakrnoth0xad92bd21 genuine loaded nullspell/fixedowner/defaultanimator, own63objects/775frame nonloop clip/tenemitter260slotPartSys, unchanged shippedterminal-vector omission parsedasnative. Source645775definedparticlefields/RNGexact within declaredworldfloat0.0021(max.0019525),187840ordinarymatrixchannels max1.33e-5; prototype0 Render mutation excludedfrom ordinarymatrixproof. Originalhidden*paths omitted; exactgeometry/material/keys/profile130rejectcontrols andsoftware640/480span guard preserved onlynative mode, commongeometrycomplete. All49675actualterrainqueriesreturn0 and790owner/RNGstatesmatch; sourceemptygroundexplicit. Correctedone-light native reference (actual23\u219231\u219223 duplicate-lightpositive/removalcontrol) matches unchangedport. Fortyretainedmainphasepairs and36rawlatepairs/sixfixedsupported1920x1080windows, wholecontacts/all5detailpages/late641+681coverageMAXunions independentlyreviewed,257pinsverified. MAXunions arecoveragecontacts, notgiantframebuffers; allsoftwareadmitted authoredtrianglescovered. Rootmain40stride20PNGsbyteidentical through78124Hzupdates/render/kill775/blanktail; lateview2 six601..701PNGsbyteidentical/cleanexit. Rootconfiguredgallery40frames36visible/two finitecreations through938renderframes/cleanexit; no actualnaturalboss/mapgroundcredit. Mainlateclip, overlap/raster/RGB565precision,worldfloatdrift, naturalboss/actor/spell/map/audio/device/exactpixels remainopen. Olddouble-light/warmup25/unguarded/widened-limit controls retained; nofit orportbrightnesschange.",
+        "report": "recon/retail_asm/runtime/effects/current-nakrnoth-full-20261011/root-approval.json",
+        "sha256": "d3fe4d231ee6c384d2744899577700d8e481bd2eb9185f704f06cdd2b09695fb",
+        "note": "docs/vfx/forensics/NAKRNOTH_AUTHENTIC_20261011.md"
+      }
     },
     {
       "index": 126,
@@ -19902,10 +19915,11 @@
         "accepted": false
       },
       "runtime_dispatch": "unsupported_retail_partsys_and_blendcont_tag_path",
-      "next_action": "Implement/recover the actual retail partsys frame/controller subset, authored emitter/template poses, PPS/state/RNG/quality scaling and blendcont semantics; resolve steam filename vapor. Then exercise exact TRAP-to-EFFECT spawn and saved map setting. No guessed ballistic preview or default-mesh pixels establish coverage.",
+      "next_action": "Port/prove complete valid inline steam controller and normal burst mesh against genuine120-phase original; preserve failed optional vapor tag and45-tick lifetime. Actual TRAP/map scheduling/device/audio remainopen.",
       "notes": [
         "Retail CavFGeyser/CavSGeyser TRAP builds exact EFFECT via MapPane.NewObject at trap position; actual animation comes from authored partsys tags, not the preceding PoisonCloud 100-particle initializer.",
-        "partsys/blendcont/litadd handlers remain unsupported. Source-behavior audit, render smoke, natural trigger and visual acceptance remain false despite fail-closed validation."
+        "partsys/blendcont/litadd handlers remain unsupported. Source-behavior audit, render smoke, natural trigger and visual acceptance remain false despite fail-closed validation.",
+        "2026-10-11: Genuine loaded original retains inline104-slot steam controller despite missing optionalvapor file;120phase reference37visible/kill45/blanktail atactualserializedcoordinates. Mainmodule1433placements. Sourceport/visualreview remainopen."
       ],
       "batch": "3 \u2014 Environment, water, signs and simple reusable variants",
       "runtime_audit": "docs/vfx/forensics/W03_GEYSER_RUNTIME.md",
