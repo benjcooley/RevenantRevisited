@@ -41,6 +41,7 @@ from typing import Callable
 from combat import DIRECTIONS, Tactician, distance
 from host import Host, HostError
 from inputs import Bindings, InputState, Plan, chord
+from rec import BUTTON_RIGHT
 from jev import Choice, Jev, Router, tool
 from knowledge import Knowledge
 from walk import Walker, WalkGrid
@@ -82,6 +83,7 @@ class Director:
     messages: list[str] = field(default_factory=list)
     choices_taken: dict[str, set[str]] = field(default_factory=dict)
     talked: set[str] = field(default_factory=set)              # people Locke has talked to (names)
+    equip_tried: set[int] = field(default_factory=set)         # pack slots right-clicked to equip
 
     def __post_init__(self) -> None:
         self.walker = Walker(self.jev, self.bindings)
@@ -106,6 +108,8 @@ class Director:
             self.walker.memory.note(obs)
             if self.milestone.done(obs, self):
                 self._reached(obs)
+                continue
+            if self.equip(obs):
                 continue
             mode = self.mode(obs)
             self.note('mode', mode=mode)
@@ -155,6 +159,33 @@ class Director:
         return [o for o in obs.get('objects', [])
                 if o.get('class') == 'character' and o.get('enemy') and (o.get('health') or [1])[0] > 0
                 and distance(o['pos'], player['pos']) < ENGAGE_RADIUS]
+
+    # -- equipment --
+    def equip(self, obs: dict) -> bool:
+        """Wear and wield what the pack holds for an empty equipment slot:
+        right-click it, as a player does (PLAYER_INPUT.md §6: the item goes
+        to its own slot). One item a turn, each slot tried once, and only
+        while control is Locke's and no enemy is close enough to strike."""
+        player = obs.get('player') or {}
+        if not obs.get('control') or obs.get('screen') != 'play' or (obs.get('dialog') or {}).get('choices'):
+            return False
+        if any(distance(o['pos'], player['pos']) < 160 for o in self.threats(obs)):
+            return False
+        worn = {int(k) for k in (player.get('equipped') or {})}
+        for item in player.get('pack') or []:
+            if (item.get('eqslot', -1) >= 0 and item['eqslot'] not in worn and item.get('screen')
+                    and item['slot'] not in self.equip_tried):
+                self.equip_tried.add(item['slot'])
+                self.caption('equip', f"putting on {item['name']}")
+                plan = Plan(self.state)
+                end = plan.click(0, *item['screen'], button=BUTTON_RIGHT)
+                self.host.step(plan.ticks(end + 4), plan.events())
+                self.state = plan.state
+                after = self.observe()['player'].get('equipped') or {}
+                self.note('equip', item=item['name'], eqslot=item['eqslot'],
+                          worn=str(item['eqslot']) in after)
+                return True
+        return False
 
     # -- modes --
     def wait(self, obs: dict) -> None:

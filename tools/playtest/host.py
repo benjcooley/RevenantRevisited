@@ -18,6 +18,7 @@ import queue
 import shutil
 import subprocess
 import threading
+import uuid
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -208,7 +209,9 @@ class PortHost(Host):
         save = run_dir / 'save'
         save.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ini, save / 'Revenant.ini')
-        copy = Path(binary).with_name(f'{Path(binary).name}.{name}')
+        # A private copy per run: a rebuild, or another run, never writes
+        # the file a running game is executing.
+        copy = binary.with_name(f'{binary.name}.{name}-{uuid.uuid4().hex[:8]}')
         shutil.copy2(binary, copy)
         env = dict(os.environ, REVENANT_SAVE_PATH=str(save))
         if data:

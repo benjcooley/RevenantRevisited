@@ -8,6 +8,7 @@
 #include "cinematicscreen.h"
 #include "death.h"
 #include "dialog.h"
+#include "inventory.h"
 #include "gameflow.h"
 #include "jsonout.h"
 #include "loadscreen.h"
@@ -97,6 +98,48 @@ void QuickSpell(JsonOut& out, TPlayer& p, int32_t slot)
         out.Null();
 }
 
+// The items the side panel's inventory shows of the player's pack, each with
+// its slot, class, own equipment slot (its EqSlot stat, -1 for none) and the
+// screen centre of its cell, null while the pane is hidden. A right click on
+// a pack item equips it in its own slot (docs/gameplay/forensics/
+// PLAYER_INPUT.md §6), so a director equips by input, as a player does. Only
+// the twelve cells in view: the pane pages by column, and so would a player.
+void WritePack(JsonOut& out, TPlayer& p)
+{
+    out.Key("pack").Begin('[');
+    if (Inventory.GetContainer() == &p)
+        for (int32_t index = 0; index < TInventory::kColumns * TInventory::kRows; ++index)
+        {
+            const int32_t slot = Inventory.FirstSlot() + index;
+            TObjectInstance* item = p.GetInventorySlot(slot);
+            if (!item)
+                continue;
+            out.Begin('{');
+            out.Field("slot", slot);
+            out.FieldString("name", ToUtf8(DialogList.DisplayName(item->GetName()).c_str()));
+            out.FieldString("class", Lower(item->GetClassName()));
+            out.Field("eqslot", item->FindStat("EqSlot") < 0 ? -1 : item->GetStat("EqSlot"));
+            out.Key("screen");
+            int32_t x = 0, y = 0;
+            if (Inventory.CellCenter(slot, x, y))
+                out.Begin('[').Value(x).Value(y).End(']');
+            else
+                out.Null();
+            out.End('}');
+        }
+    out.End(']');
+}
+
+// What is worn and wielded, by equipment slot number (player.h EQ_*).
+void WriteEquipped(JsonOut& out, TPlayer& p)
+{
+    out.Key("equipped").Begin('{');
+    for (int32_t slot = 0; slot < NUM_EQ_SLOTS; ++slot)
+        if (TObjectInstance* item = p.GetInventorySlot(kInvSlotEquipFirst + slot))
+            out.FieldString(std::to_string(slot).c_str(), ToUtf8(DialogList.DisplayName(item->GetName()).c_str()));
+    out.End('}');
+}
+
 void WritePlayer(JsonOut& out, TPlayer& p)
 {
     out.Key("player").Begin('{');
@@ -148,6 +191,8 @@ void WritePlayer(JsonOut& out, TPlayer& p)
             out.Null();
     }
     out.End(']');
+    WritePack(out, p);
+    WriteEquipped(out, p);
     out.End('}');
 }
 

@@ -182,7 +182,9 @@ a NUL byte, the file's bytes and a NUL byte.
             "skills": {"attack": 4, "defense": 3, "invoke": 1, "weapon": 2},
             "weapon": {"name": "Short Sword", "mask": 2},
             "quick_spells": ["Fire Flash", null, null, null],
-            "belt": ["Healing Potion", null, null, null, null]},
+            "belt": ["Healing Potion", null, null, null, null],
+            "pack": [{"slot": 5, "name": "Short Sword", "class": "weapon", "eqslot": 4, "screen": [505, 392]}],
+            "equipped": {"2": "Red Cloth Shirt"}},
  "dialog": {"speaker": "Sardok", "choices": ["Who are you people?", "Who am I?"]},
  "messages": ["Locke entered The Keep"],
  "objects": [{"id": 1712, "name": "Rahul", "type": "Rahul", "class": "character",
@@ -206,6 +208,12 @@ a NUL byte, the file's bytes and a NUL byte.
   mask bit for the weapon in hand (`WM_*`), `0` bare-handed.
 - `quick_spells`, `belt`: what the four quick-spell slots (F1-F4) and the
   five belt slots (F5-F9) hold, by name, `null` when empty.
+- `pack`: the player's items in the inventory pane's twelve cells in view:
+  slot, name, class (lower case), `eqslot` (the item's own equipment slot,
+  its EqSlot stat; -1 for none) and the cell's screen centre (`null` while
+  the pane is hidden). A right click there equips the item in its own slot
+  (PLAYER_INPUT.md §6). `equipped`: equipment slot (player.h `EQ_*`) to the
+  item worn or wielded there.
 - `xp`: character level, experience, experience for the next level.
 - `messages`: text-bar lines added since the previous `observe`.
 - `objects`: within the radius, nearest first: characters, items,

@@ -60,6 +60,11 @@ class TInventory final : public TButtonPane
     // (0x00537520); the arrows' functions.
     void Scroll(int32_t columns);
 
+    // The screen centre of the cell showing `slot`; false when the slot is
+    // not among the twelve in view or the pane is hidden. For the playtest
+    // director, which right-clicks an item to equip it as a player does.
+    [[nodiscard]] bool CellCenter(int32_t slot, int32_t& x, int32_t& y);
+
     // The slot an item is being dragged from, for the panes it is dropped
     // on; -1 while nothing is (retail +0x180, set by its drag, P4).
     [[nodiscard]] int32_t GetHeldSlot() const { return -1; }
