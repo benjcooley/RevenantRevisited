@@ -4201,7 +4201,7 @@ T3DAnimator::SAuthoredPartSysStats T3DAnimator::PartSysStats() const
 }
 
 int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
-                                  int32_t texture_slot, const hmm_vec3& render_scale, bool native_software)
+                                  int32_t texture_slot, const hmm_vec3& render_scale, bool native_software, bool submit_geometry)
 {
     if (!partsys_controllers || partsys_controllers->unsupported) return 0;
     const bool comet=inst->ObjId()==0xf32bcfacu && inst->GetState()==0 && Get3DImagery()->HasRetailCometProfile();
@@ -4313,6 +4313,8 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                 item.uv[c][0] = vertex.tu;
                 item.uv[c][1] = vertex.tv;
             }
+            // Component diagnostics retain sampling and prototype bookkeeping.
+            if (!submit_geometry) continue;
             renderer.SubmitFxQuad(item);
             ++submitted;
             ++partsys_controllers->quads;

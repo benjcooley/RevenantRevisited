@@ -83,7 +83,7 @@ struct T3DAnimator{struct SPartSysControllers{
  Imagery*Get3DImagery(){return &im;}
  void NoteJhagaAttackPrototypeSample(){}
  void NoteHeadFireBallPrototypeSample(){}
- int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&,bool=false);};
+ int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&,bool=false,bool=true);};
 constexpr float WORLD3D_Z_SCALE=1.5f;
 '''
 MAIN = r'''
@@ -101,7 +101,12 @@ int main(int argc,char**argv){if(argc!=4)return 2;type_id=std::strtoul(argv[1],n
  if(tick==0&&!c.simulation.Initialize(d,in,0,diag))return 4;
  if(tick==60)in.owner_position={16,-8,4};TTime::frame=tick;renderer.quads.clear();
  c.simulation.Advance(in,[](int a,int b){return random(a,b);});
+ T3DAnimator suppressed;suppressed.inst=&owner;suppressed.partsys_controllers=std::make_unique<T3DAnimator::SPartSysControllers>(*a.partsys_controllers);
+ const auto before_rng=random_state;
  int n=a.SubmitPartSys(renderer,c.track.prototype,1,{1,1,1});if(n!=int(renderer.quads.size()))return 5;
+ const auto after_rng=random_state;TRenderer hidden;random_state=before_rng;
+ if(suppressed.SubmitPartSys(hidden,c.track.prototype,1,{1,1,1},false,false)!=0 || !hidden.quads.empty() || random_state!=after_rng)return 10;
+ random_state=after_rng;
  size_t q=0;for(size_t slot=0;slot<c.simulation.Capacity();++slot){const auto&p=c.simulation.Particles()[slot];if(!p.alive||p.scale<=9.999999747378752e-6f)continue;
  const auto&item=renderer.quads[q++];if(item.retail_rgb565_additive!=(d.blendmode==16))return 9;printf("%d %zu %.9g %d %d %d",tick,slot,p.position[2],int(item.key.blend),int(item.key.depth_mode),item.retail_texture);
  for(float v:item.color_rgba)printf(" %.9g",v);

@@ -24,6 +24,7 @@ struct State
     S3DMaterial flare_material{};
     double accumulated = 0;
     uint64_t ticks = 0;
+    bool show_particles=true, show_base=true;
 
     ~State()
     {
@@ -31,7 +32,7 @@ struct State
     }
 };
 
-State* Spawn(const S3DPoint& origin)
+State* Spawn(const S3DPoint& origin, bool show_particles, bool show_base)
 {
     if (!Renderer) return nullptr;
     auto context = std::make_unique<State>();
@@ -47,6 +48,7 @@ State* Spawn(const S3DPoint& origin)
     if (!owner || owner->ObjId() != 0xad92bd29u || owner->GetState() != 0 || owner->GetMapIndex() <= 0 ||
         !dynamic_cast<TEffect*>(owner)) return nullptr;
     context->identity = owner;
+    context->show_particles=show_particles; context->show_base=show_base;
     owner->OnScreen();
     auto* imagery = dynamic_cast<T3DImagery*>(owner->GetImagery());
     auto* animator = dynamic_cast<T3DAnimator*>(owner->GetAnimator());
@@ -113,7 +115,8 @@ void SubmitWorld(State* context, EFxDebugMode)
     auto* animator = dynamic_cast<T3DAnimator*>(owner->GetAnimator());
     if (!animator || animator->PartSysUnsupported()) return;
     const hmm_vec3 render_scale = {1, 1, 1};
-    animator->SubmitPartSys(*Renderer, 0, 1, render_scale, StartupVfxNativeDomain);
+    animator->SubmitPartSys(*Renderer, 0, 1, render_scale, StartupVfxNativeDomain, context->show_particles);
+    if (!context->show_base) return;
     uint32_t blend = 0;
     S3DAnimObj* bone = animator->GetObject(2);
     if (!bone || !animator->CombatFlashStart1BaseMeshBlend(2, blend) || blend != 16) return;

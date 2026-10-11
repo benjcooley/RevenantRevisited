@@ -7610,6 +7610,13 @@ struct SVfxTestBootstrap {
             e.destroy = [](void* context) { combatflash_start1_preview::Destroy(static_cast<combatflash_start1_preview::State*>(context)); };
             e.is_alive=[](void* c){return combatflash_start1_preview::Alive(static_cast<combatflash_start1_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
+            // Isolated render components; simulation and render RNG still execute.
+            e.id="CombatFlash_START1_BASE_ONLY";
+            e.factory=[](const S3DPoint&o)->void*{return combatflash_start1_preview::Spawn(o,false,true);};
+            VfxTest::DeferredRegister(e);
+            e.id="CombatFlash_START1_PARTICLES_ONLY";
+            e.factory=[](const S3DPoint&o)->void*{return combatflash_start1_preview::Spawn(o,true,false);};
+            VfxTest::DeferredRegister(e);
         }
         {
             VfxTest::SEffect e = {};

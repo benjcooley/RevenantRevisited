@@ -107,3 +107,23 @@ through the existing additive no-cull helper flag. A20-frame real GPU control
 (`cull-none-control/manifest.json`) exits cleanly and all20 PNGs are byte-identical
 to the inclusive-key capture. This corrects the declared draw state but does not
 explain or improve the visible residual; it grants no new appearance credit.
+
+## Component isolation
+
+The registered diagnostics `CombatFlash_START1_BASE_ONLY` and
+`CombatFlash_START1_PARTICLES_ONLY` retain the actual controller update and
+render-time random samples. `SubmitPartSys` now accepts a default-true geometry
+submission flag; suppression occurs after prototype bookkeeping and packet
+construction. The compiled90-tick suppression control proves identical RNG and
+zero geometry for the hidden branch. Existing three-profile/native-state/raster
+regressions pass in98.212seconds; the final focused production-body proof passes.
+All20 full-effect GPU PNGs remain byte-identical after the final change, and both
+component captures exit cleanly. The isolated base visibly retains a small
+sampling/coverage difference; there is no geometry/color fit or appearance credit.
+
+Full native20-tick observation and independent normal-packet replay cover all
+18liveframes. All162 normal draws execute with literal owntextures/matrices/states;
+all144 nonbase draws individually contributezero pixels. This establishes the
+bounded blank extra-object contribution, without claiming complete compositing or
+other CombatFlash states. Reports remain under `full-normal-observation`,
+`normal-sweep-final`, `suppression-final` and `component-{base,particles,full-final}`.

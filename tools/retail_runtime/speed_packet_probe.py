@@ -77,7 +77,7 @@ struct T3DAnimator{struct SPartSysControllers{
  Imagery*Get3DImagery(){return &im;}
  void NoteJhagaAttackPrototypeSample(){}
  void NoteHeadFireBallPrototypeSample(){}
- int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&,bool=false);};
+ int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&,bool=false,bool=true);};
 constexpr float WORLD3D_Z_SCALE=1.5f;
 '''
 MAIN = r'''

@@ -6,7 +6,7 @@ enum class EFxDebugMode : unsigned char;
 // Matched-backdrop adapter only: actual CombatFlash/start1 owner, default animator and tags.
 namespace combatflash_start1_preview {
 struct State;
-State* Spawn(const S3DPoint& origin);
+State* Spawn(const S3DPoint& origin, bool show_particles=true, bool show_base=true);
 void Advance(State*, double seconds);
 void SubmitWorld(State*, EFxDebugMode);
 bool Alive(State*);
