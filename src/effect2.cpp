@@ -2320,7 +2320,7 @@ void TFunnelAnimator::RefreshZBuffer()
 // *    Invisible Effect   *
 // *************************
 
-#define INVIS_MAX_LIFE 300
+#define INVIS_MAX_LIFE 500
 #define INVIS_RING_MAX_LIFE 30
 #define INVIS_RING_MAX_NUM 6
 #define INVIS_STATE_HIDE 1
@@ -2350,6 +2350,7 @@ void TInvisibleEffect::Initialize()
 {
     SetCommandDone( false);
     life = 0;
+    SetFlags(GetFlags() | OF_NONMAP); // Retail 4fd890.
 }
 
 void TInvisibleEffect::Pulse()
