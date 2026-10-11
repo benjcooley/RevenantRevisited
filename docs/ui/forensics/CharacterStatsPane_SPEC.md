@@ -1,3 +1,5 @@
+> **Superseded** by [StatPane_RETAIL.md](StatPane_RETAIL.md) (disassembly + emulator, 2026-10-10). Kept for history; its text roles, colours, coordinates and modifiers are wrong in places (see that file's corrections section).
+
 # CharacterStatsPane (TStatPane) — Reconstruction SPEC
 
 Sidebar **Stats** content panel: the parchment scroll shown in the right

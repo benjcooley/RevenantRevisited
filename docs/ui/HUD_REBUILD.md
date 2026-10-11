@@ -503,6 +503,62 @@ main player's record (`0x0052c3d0`) and the player's save folds the shown
 level in first (`0x0052c5c0`). `hud_ab.py automap` compares the frame with
 the buttons released and held.
 
+## 6e. P4 design: the spell book
+
+**What retail draws and does** (`docs/ui/forensics/SpellBookPane_RETAIL.md`,
+from the disassembly; the paint confirmed with `slots/hud/spellbook.py`,
+2026-10-10). The spell book (`0x0065a9d8`, vtable `0x005a5ae8`) is a
+TButtonPane in the side panel's upper slot, (452, 0), 188×306: the main
+player's known spells (player +0x2ec, talisman codes, in the order
+learned), down a scroll of parchment. Its art is SpellScroll.dat
+(`0x00666640`); the circles and rings are SpellIcons.dat (`0x0065bc3c`).
+
+- The paint (`0x005452d0`): `Scroll` at (0, 0), unkeyed. The rows go to a
+  148×229 surface cleared to the key, blitted keyed to (18, 47): first the
+  80 px `ScrollPaper` tiles from −(scroll mod 80), then each visible row.
+  Then `ScrlTop` at (79, 45) and `ScrlBottom` at (75, 261), keyed.
+- A row is `lines × 12 + 91` px tall, `lines` the description's word-wrap
+  count in "Small" across 132 px (the rebuild, `0x00546830`). From its top:
+  the spell's circle (ICONNAME, else "Aura"; magenta-keyed) and its ring at
+  (12, 0), the ring RingU while the player holds the talismans and has the
+  mana, RingD when the circle is also pressed (both shifted −2, −2), else
+  RingG; the variant's name split at its first space, each part over 10
+  characters cut to 8 and "..", in "SpellTitle", white, centred in
+  (54, 4 / 16, 85, 86) (a one-word name at y 10); the description, the
+  dialog line `SPELL<code>`, at (10, 44, 132, desc h) in RGB(242, 231,
+  255); "Skill: n" / "Mana: n" (the variant's skill level and cost) at
+  (10 / 90, desc h + 44), cyan and yellow-green; the talisman glyphs
+  `S<Talisman>` 16 px apart from (12, desc h + 61), DM_ALPHA. Each part is
+  drawn only while it can reach the window. Every text is a 0x004be2b0
+  compose with the 3-pass shadow; SpellTitle's starts at (2, 1).
+- The arrows (169, 150) / (169, 174), 24×24, overhanging the pane by 5 px,
+  DM_USEDEFAULT | DM_ALPHA, step one row to the window's top (`0x00544f00`).
+  The scroll moves toward its target at most 40 px a pulse, and not again
+  until the book has been painted (`0x00546620`); dragging the parchment
+  adds to the target. A press on a circle and the release on it casts the
+  spell (fizzling with SPLMISTAL / SPLCASTFAIL, SPLCASTOK on success); a move
+  with the button held picks the spell up for the quick-spell rings at
+  once, its circle under the pointer at (20, 20); a spell let go on the book
+  scrolls to its row. Casting in the spell pane learns the spell and scrolls
+  to it (`0x00544fb0`), as does `abracadabra` for every spell.
+- Retail repainted only the strip a scroll step exposed (the rows' surface
+  wraps), so rings elsewhere went stale. The port recomposes the window.
+
+**Port.** `TSpellBookPane` (`src/spellbook.*`, global `SpellBook`) is
+retail's pane on the GPU: the window is a scissor rect over the pane's
+layer, so the keyed rows surface isn't needed. Its rows are a cache of the
+main player's list, rebuilt when the player or the list's version
+(`TPlayer::KnownSpellsVersion`) changes; a ring that changes recomposes the
+book. Spell drags carry the code (`SUIDragState::spell`,
+`UIDragState::BeginSpellDrag`); the rings take it. `TPlayScreen` hosts the
+book in the upper slot for the book tab. SpellIcons.dat is shared with the
+rings (`AcquireSpellIcons`). `hud_ab.py spellbook` over
+`--test=ab-spellbook`: empty and grey books, castable, mana-short and
+pressed rings, truncated names, scroll positions and the clamp. Its text is
+compared structurally: every compose's string, font, rect, alignment,
+colour, shadow and wrapped lines against the port's recorded draws
+(`SetTextDrawRecorder`).
+
 ## 7. Status
 
 - 2026-10-07: survey done; retail pipeline verified (§3); P0 started.
@@ -682,3 +738,28 @@ the buttons released and held.
   - Open: the map body's A/B needs a level in the fixture (the visgrid,
     the module's tiles, characters to mark) and OverlayRaster scaled quads
     and triangles; the mosaic texture's format (565 or 4444) is part of it.
+- 2026-10-10: **P4: the spell book done** (it was harness code: the wrong
+  circles, no rings by castability, the text roles swapped).
+  - `TSpellBookPane` is retail's pane (§6e), hosted by `TPlayScreen` in the
+    upper slot for the book tab; `--test=ui-spellbook` / `ab-spellbook` are
+    thin hosts; the 874-line harness is gone. Casting in the spell pane and
+    `abracadabra` learn spells through it; a circle dragged to a quick-spell
+    ring sets that ring.
+  - `hud_ab.py spellbook`: 15/15 cases, every opaque pixel exact, blends
+    within 17, and every text compose structurally identical (string, font,
+    rect, alignment, colour, shadow, line breaks). The rest of the HUD A/B
+    still clean.
+  - Text, P6 in part: the port's GDI stand-ins now take GDI's cell for each
+    FONT.DEF WINFONT (the largest em size whose VDMX cell fits the height:
+    "Small" is a 9 px em, 9 + 3; `TFontTable::Atlas`), with linear advance
+    widths (Arimo and Tinos share Arial's and Times's). The wrapped
+    descriptions now break where the emulator's GDI breaks them, so the
+    book's rows are retail's heights. The shadow follows the font
+    (`RetailTextShadow`: SpellTitle's starts at (2, 1)). Still open: the
+    glyph shapes against Win98 captures, and the bold faces (drawn regular).
+  - Found on the way: the save directory's Revenant.ini had the old CD
+    install's paths (ClassDefPath "."), so the dialog list's base table
+    resolved to the module's file and every SPELL / SPANE line was missing;
+    it now has the GOG install's `.\Resources`. The port mounts the module
+    before `InitGlobals`, which retail doesn't: a base file named bare can
+    resolve into the module (gameflow's to settle).

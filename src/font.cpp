@@ -161,6 +161,7 @@ const SFontAtlas* BuildFontAtlas(TFont* font, const char* face)
     // hangs from it.
     atlas->cellBaseline = ('A' >= first && 'A' < first + count) ? (float)font->StartHeight('A') : atlas->ascent;
     atlas->lineStep = atlas->ascent + atlas->descent;
+    atlas->shadow = RetailTextShadow(atlas->lineStep);
     if (face)
         atlas->face = face;
     atlas->height = shelf_y + shelf_h;
@@ -465,15 +466,17 @@ void DrawShadowedRun(const SFontAtlas* atlas, const char* text, ETextEncoding en
                      float penX, float baselineY, float r, float g, float b,
                      int32_t target_w, int32_t target_h)
 {
-    // Retail FUN_004be2b0 with font flag 0x400 draws the string black at
-    // (+1,+1), (+2,+1) and (+1,+2), then in its colour at the pen: a drop
-    // shadow down and to the right, two pixels wide. Measured from retail's
-    // own DrawTextA calls in the emulator (tools/retail_runtime/slots/hud,
-    // docs/ui/HUD_REBUILD.md P1b).
-    constexpr float kShadowPasses[3][2] = { { 1.0f, 1.0f }, { 2.0f, 1.0f }, { 1.0f, 2.0f } };
-    for (const auto& offset : kShadowPasses)
-        DrawGlyphRun(atlas, text, encoding, penX + offset[0], baselineY + offset[1],
-                     0, 0, 0, target_w, target_h);
+    // Retail 0x004be2b0 with flag 0x400 draws the string black at (dx, dy),
+    // (dx + 1, dy) and (dx, dy + 1) -- (1, 1) for a 12 px font -- then in its
+    // colour at the pen (STextShadow; measured from retail's own DrawTextA
+    // calls in the emulator, docs/ui/HUD_REBUILD.md P1b).
+    const float dx = atlas->shadow.dx, dy = atlas->shadow.dy;
+    DrawGlyphRun(atlas, text, encoding, penX + dx, baselineY + dy, 0, 0, 0, target_w, target_h);
+    if (!atlas->shadow.single)
+    {
+        DrawGlyphRun(atlas, text, encoding, penX + dx + 1.0f, baselineY + dy, 0, 0, 0, target_w, target_h);
+        DrawGlyphRun(atlas, text, encoding, penX + dx, baselineY + dy + 1.0f, 0, 0, 0, target_w, target_h);
+    }
     DrawColouredRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
 }
 

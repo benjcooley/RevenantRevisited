@@ -372,7 +372,7 @@ def run_port_pane(port, mode, spec, name, workdir):
     return json.loads(shown.read_text()), frame
 
 
-DT_CENTER, DT_RIGHT, DT_VCENTER, DT_BOTTOM = 0x1, 0x2, 0x4, 0x8
+DT_CENTER, DT_RIGHT, DT_VCENTER, DT_BOTTOM, DT_CALCRECT = 0x1, 0x2, 0x4, 0x8, 0x400
 
 
 def text_cell(call):
@@ -403,6 +403,8 @@ def gdi_text_cells(text_calls):
     band = np.zeros_like(mask)
     cells = []
     for call in text_calls:
+        if call['format'] & DT_CALCRECT and call['function'] != 'TextOutA':
+            continue                    # a measure draws nothing
         left, top, right, bottom = text_cell(call)
         if [left, top, right, bottom] in cells:
             continue
@@ -454,6 +456,8 @@ def text_draws(result):
             gdi = next(calls, None)
         if gdi is None or gdi['text'] != p['text']:
             raise RuntimeError(f'retail text {p["text"]!r} has no GDI calls of its own')
+        if gdi['format'] & DT_CALCRECT:
+            continue                    # a measure: it lays nothing out
         dx, dy, clip = origins.get(p['dst'], (None, None, None))
         if dx is None:
             raise RuntimeError(f'retail text {p["text"]!r} lands on {p["dst"]}, never shown')
@@ -468,18 +472,26 @@ def text_draws(result):
     return draws
 
 
+def text_shadow_reach(height):
+    """How far right and down 0x004be2b0's shadow reaches past the text for
+    a font of cell height `height` (0x004be716): passes at (dx, dy), (dx + 1,
+    dy), (dx, dy + 1) with (dx, dy) = (1, 1) to 14 px, (2, 1) to 25; one pass
+    at (2, 2) above."""
+    return (2, 2) if height <= 14 else (3, 2) if height <= 25 else (2, 2)
+
+
 def text_draw_mask(draws, pane):
     """The screen pixels retail's text can touch -> (mask, band): each line's
     cell (its width, the font's height) and its shadow, inside the surface's
     visible rect."""
     mask = np.zeros((SCREEN[1], SCREEN[0]), dtype=bool)
     band = np.zeros_like(mask)
-    shadow = TEXT_SHADOW
     for draw in draws:
         l, t, r, b = draw['clip']
+        reach_x, reach_y = text_shadow_reach(draw['cell']) if draw['shadowed'] else (0, 0)
         for x, y, _line, width in draw['lines']:
             x0, y0 = max(x, l) + pane[0], max(y, t) + pane[1]
-            x1, y1 = min(x + width + shadow, r) + pane[0], min(y + draw['cell'] + shadow, b) + pane[1]
+            x1, y1 = min(x + width + reach_x, r) + pane[0], min(y + draw['cell'] + reach_y, b) + pane[1]
             if x1 > x0 and y1 > y0:
                 mask[y0:y1, x0:x1] = True
                 band[max(0, y0 - TEXT_BAND):y1 + TEXT_BAND, max(0, x0 - TEXT_BAND):x1 + TEXT_BAND] = True
@@ -709,8 +721,49 @@ def target_automap(args, workdir):
                        masks=(('screen', SCREEN_TOLERANCE),))
 
 
+# =====================================================================
+# spellbook
+# =====================================================================
+
+# Talisman codes A..L are TalismanClass's types in order: Sun, Life, Ocean,
+# Law, Soul, Stars, Death, Chaos, Sky, Earth, Ward, Moon.
+BOOK = ['DEB', 'KJL', 'LI', 'BJ', 'MAL', 'FL']    # Advanced healing, IronSkin, Fire Flash, Regeneration, ...
+FIRE_POUCH = (0, ('Spell Pouch', None, [('Moon', None, None), ('Sky', None, None)]))      # casts LI
+HEAL_POUCH = (0, ('Spell Pouch', None, [('Law', None, None), ('Soul', None, None), ('Life', None, None)]))
+SPELLBOOK_CASES = [
+    dict(name='empty'),
+    dict(name='one-grey', spells=['DEB']),
+    dict(name='sample', spells=BOOK[:3], items=[HEAL_POUCH], mana=400),
+    dict(name='mana-short', spells=['DEB', 'LI'], items=[HEAL_POUCH], mana=100),
+    dict(name='castable', spells=['LI', 'DEB'], items=[FIRE_POUCH], mana=100),
+    dict(name='pressed-castable', spells=['LI', 'DEB'], items=[FIRE_POUCH], mana=100, pressed=0),
+    dict(name='pressed-grey', spells=['DEB', 'LI'], pressed=0),
+    dict(name='long-names', spells=['BJ', 'MAL', 'FL']),
+    *[dict(name=f'scroll-{pos}', spells=BOOK, items=[FIRE_POUCH], mana=100, scroll=pos)
+      for pos in (20, 40, 77, 151, 163, 300)],
+    dict(name='scroll-end', spells=BOOK, scroll=10000),
+]
+
+
+def target_spellbook(args, workdir):
+    def run_port(case):
+        items = '|'.join(f'{port_item(item)}@{slot}' for slot, item in case.get('items', []))
+        spec = (f'spells={",".join(case.get("spells", []))};items={items};mana={case.get("mana", 100)};'
+                f'scroll={case.get("scroll", 0)};pressed={case.get("pressed", -1)}')
+        return run_port_pane(args.port, 'ab-spellbook', spec, case['name'], workdir)
+
+    def retail_case(case, shown):
+        items = [dict(retail_item(item), slot=slot) for slot, item in case.get('items', [])]
+        return dict(spells=shown['spells'], items=items, player=dict(stats=dict(mana=shown['mana'])),
+                    fields={'0x17c': shown['scroll'], '0x1c8': shown['pressed']})
+
+    return pane_target(args, workdir, SPELLBOOK_CASES, 'spellbook.py', run_port, retail_case,
+                       lambda shown: dict(spells=shown['spells'], scroll=shown['scroll'], pressed=shown['pressed']),
+                       composed_text=True)
+
+
 TARGETS = {'statusbar': target_statusbar, 'bottombar': target_bottombar, 'inventory': target_inventory,
-           'spellpane': target_spellpane, 'automap': target_automap}
+           'spellpane': target_spellpane, 'automap': target_automap, 'spellbook': target_spellbook}
 
 
 def main():

@@ -10,6 +10,7 @@
 #include "potion.h"
 #include "revenant.h"
 #include "spell.h"
+#include "spellbook.h"
 #include "talisman.h"
 
 #include <algorithm>
@@ -50,8 +51,8 @@ void TopUp(const TObjectClass& cl)
 
 // abracadabra: one of every talisman, gathered into a spell pouch (added
 // when missing; the player himself when none can be had), and every spell
-// variant learned. Retail learns through the spellbook pane (0x00544fb0 on
-// 0x0065a9d8); the port's spellbook reads the player's known spells.
+// variant the spell book takes learned through it (0x00544fb0 from
+// 0x0054dac4: a spell with a circle and a description).
 void GiveAllMagic()
 {
     TObjectInstance* pouch = Player->FindObjInventory(kSpellPouch);
@@ -82,7 +83,7 @@ void GiveAllMagic()
     {
         SSpellData* spell = SpellList.GetSpellData(s);
         for (int32_t v = 0; spell && v < spell->variants.NumItems(); ++v)
-            Player->LearnSpell(spell->variants[v].talismans);
+            SpellBook.Reveal(spell->variants[v].talismans);
     }
 }
 

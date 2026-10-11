@@ -30,7 +30,9 @@ Per case, from the booted world's checkpoint:
     spellbook.py EXE --serve                          JSONL: {"id","case","out"}
 
 Case: {"name": "...", "spells": ["DEB", "KJL", "LI"], "items": [{"type":
-"Spell Pouch", "contents": [{"type": "Law"}]}], "fields": {}, "frames": 1}.
+"Spell Pouch", "contents": [{"type": "Law"}]}], "player": {"stats":
+{"mana": 40}}, "fields": {"0x17c": scroll, "0x1c8": pressed row},
+"frames": 1}.
 """
 from __future__ import annotations
 
@@ -43,7 +45,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[1]))
-from hudscene import HudScene  # noqa: E402
+from hudscene import HudScene, Stats  # noqa: E402
 from hudworld import HudWorld  # noqa: E402
 from itempanes import ItemPaneKit, save_capture, serve  # noqa: E402
 from primitives import PrimitiveTap, s32  # noqa: E402
@@ -56,6 +58,7 @@ REBUILD = 0x00546830                             # the list's rows, as SetMainPl
 DRAW = 0x00544eb0                                # slot 20: the paint when dirty, then the buttons
 PTR_ARRAY_ADD = 0x0041c840                       # thiscall (item)
 KNOWN_SPELLS, ARRAY_GROWBY = 0x2ec, 0xc          # player: the known spells' pointer array
+CONTENT, CONTENT_RECT = 0x180, (18, 47, 166, 276)  # the rows' surface, where it shows in the pane
 DIRTY = 0x50                                     # TPane
 VT_SET_CLIP_RECT = 0x24
 PANE_RECT = (452, 0, 188, 306)                   # the side panel's upper slot
@@ -84,7 +87,8 @@ class SpellBookFixture:
 
     def _player(self, case):
         world, vm = self.world, self.vm
-        player = self.scene.character(case.get('player', {}).get('name', 'Locke'), player=True)
+        spec = case.get('player', {})
+        player = self.scene.character(spec.get('name', 'Locke'), player=True, stats=Stats(**spec.get('stats', {})))
         known = player.address + KNOWN_SPELLS
         vm.put_u32(known + ARRAY_GROWBY, 4)
         for talismans in case.get('spells', []):
@@ -112,7 +116,7 @@ class SpellBookFixture:
             if frame == frames - 1:
                 scene.clear()
                 self.tap.start()
-                kit.record(PANE_RECT[:2])
+                kit.record(PANE_RECT[:2], {vm.u32(SPELL_BOOK + CONTENT): (*CONTENT_RECT[:2], CONTENT_RECT)})
                 text_start = len(world.gdi.text_calls)
             vm.put_u32(SPELL_BOOK + DIRTY, 1)
             world.call(vm.u32(vm.u32(SPELL_BOOK) + VT_SET_CLIP_RECT), (0,), this=SPELL_BOOK)

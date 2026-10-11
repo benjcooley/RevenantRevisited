@@ -6,12 +6,17 @@
 
 #include "fonttable.h"
 
+#include "logging.h"
+
 #include "parse.h"
 #include "resource.h"
 #include "revutils.h"
 
 #include <stdio.h>
 #include <string.h>
+
+#include <string>
+#include <unordered_set>
 
 TFontTable* FontTable = nullptr;
 
@@ -92,10 +97,43 @@ TFont* TFontTable::Bitmap(const char* nm)
     return f ? f->primary : nullptr;
 }
 
-// Retail creates a WINFONT with CreateFontA(height = the FONT.DEF size), a
-// cell height, which is the pixel height BuildTTFAtlas rasterizes at. The
-// faces map to their metric-compatible open fonts (project-ui-text-rendering).
-// No bold or italic files ship, so those styles draw regular.
+namespace {
+
+// GDI's cell for each FONT.DEF WINFONT. Retail makes them with
+// CreateFontA(+size): a cell height, which GDI maps to the largest em size
+// whose cell, from the face's VDMX table, fits it ("Arial" 12: a 9 px em, 9
+// above the baseline and 3 below). Measured from the Windows faces' VDMX by
+// the HUD emulator (tools/retail_runtime/slots/hud/ttf.py), whose text
+// layout the A/B compares with the port's.
+struct SGdiCellEntry
+{
+    const char* face;
+    int32_t height;
+    bool bold;
+    SGdiFontCell cell;
+};
+constexpr SGdiCellEntry kGdiCells[] = {
+    { "Arial", 12, false, { 9, 9, 3 } },                // Small, Numbers, Version
+    { "Arial", 16, true, { 14, 13, 3 } },               // Med
+    { "Times New Roman", 18, false, { 15, 13, 4 } },    // SpellTitle
+    { "Times New Roman", 20, false, { 18, 16, 4 } },    // Dialog
+    { "Times New Roman", 20, true, { 18, 16, 4 } },     // Large
+};
+
+const SGdiFontCell* GdiCellFor(const TGenericFont& f)
+{
+    for (const SGdiCellEntry& e : kGdiCells)
+        if (!stricmp(e.face, f.facename) && e.height == f.height && e.bold == f.bold)
+            return &e.cell;
+    return nullptr;
+}
+
+}  // namespace
+
+// A WINFONT draws through its metric-compatible open face
+// (project-ui-text-rendering) in GDI's cell for it; a face and size the cell
+// table doesn't know draws at its FONT.DEF size as a pixel height. No bold or
+// italic files ship, so those styles draw regular.
 const SFontAtlas* TFontTable::Atlas(const char* nm)
 {
     const TGenericFont* f = nm ? FindFont(nm) : nullptr;
@@ -109,6 +147,11 @@ const SFontAtlas* TFontTable::Atlas(const char* nm)
     // The label the A/B matches against retail's CreateFontA arguments.
     char face[64];
     snprintf(face, sizeof(face), "%s %d%s", f->facename, f->height, f->bold ? " bold" : "");
+    if (const SGdiFontCell* cell = GdiCellFor(*f))
+        return BuildTTFAtlas(TTFFilePath(file).c_str(), *cell, face);
+    static std::unordered_set<std::string> warned;
+    if (warned.insert(f->name).second)
+        log_warn("[font] no GDI cell for \"%s\" (%s): drawn at %d px", f->name, face, f->height);
     return BuildTTFAtlas(TTFFilePath(file).c_str(), f->height, face);
 }
 
