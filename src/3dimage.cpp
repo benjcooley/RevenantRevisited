@@ -355,7 +355,7 @@ bool T3DImagery::ValidateRetailTeleportationProfile()
 
 bool T3DImagery::ValidateRetailMightPartSysProfile()
 {
-    if (!GetResFilename() || version!=3 || flags!=0xdc ||
+    if (!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
         GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=2 || NumMaterials()!=2 ||
         NumTextures()!=1 || NumTags()!=1 || numverts!=4 || numfaces!=2) return false;
     std::string path(GetResFilename());
@@ -386,7 +386,7 @@ bool T3DImagery::ValidateRetailMightPartSysProfile()
 
 bool T3DImagery::ValidateRetailImmortalmightPartSysProfile()
 {
-    if (!GetResFilename() || version!=3 || flags!=0xdc ||
+    if (!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
         GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=3 || NumMaterials()!=2 ||
         NumTextures()!=1 || NumTags()!=1 || numverts!=8 || numfaces!=4) return false;
     std::string path(GetResFilename());
@@ -426,7 +426,7 @@ bool T3DImagery::HasRetailWarpProfile(uint32_t type_id)
     const char* expected = retail_warp::AssetPath(type_id);
     if (!expected) return false;
     // NumObjects loads the immutable imagery before inspecting its metadata.
-    if (NumObjects()!=1 || version!=3 || flags!=0xdc ||
+    if (NumObjects()!=1 || version!=3 || flags!=0xdc || NumStates()!=1 ||
         GetAniLength(0)!=1 || GetAniFlags(0)!=0x2001 || NumTags()!=0 ||
         NumMaterials()!=1 || NumTextures()!=1 || numverts!=4 || numfaces!=3 ||
         !GetResFilename()) return false;
@@ -469,7 +469,7 @@ bool T3DImagery::HasRetailWarpProfile(uint32_t type_id)
 
 bool T3DImagery::ValidateRetailFmasteryPartSysProfile()
 {
-    if (!GetResFilename() || version!=3 || flags!=0xdc ||
+    if (!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
         GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=3 || NumMaterials()!=2 ||
         NumTextures()!=1 || NumTags()!=1 || numverts!=8 || numfaces!=4) return false;
     std::string path(GetResFilename());
@@ -506,7 +506,7 @@ bool T3DImagery::ValidateRetailFmasteryPartSysProfile()
 
 bool T3DImagery::ValidateRetailSpeedPartSysProfile()
 {
-    if(!GetResFilename() || version!=3 || flags!=0xdc ||
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
        GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=3 ||
        NumMaterials()!=3 || NumTextures()!=2 || NumTags()!=2 || numverts!=8 || numfaces!=4) return false;
     std::string path(GetResFilename());
@@ -548,7 +548,7 @@ bool T3DImagery::ValidateRetailSpeedPartSysProfile()
 
 bool T3DImagery::ValidateRetailQuicksilverPartSysProfile()
 {
-    if(!GetResFilename() || version!=3 || flags!=0xdc ||
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=1 ||
        GetAniLength(0)!=30 || GetAniFlags(0)!=0x2001 || NumObjects()!=3 ||
        NumMaterials()!=3 || NumTextures()!=2 || NumTags()!=2 || numverts!=8 || numfaces!=4) return false;
     std::string path(GetResFilename());
