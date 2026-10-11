@@ -43,6 +43,11 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
 bool HandleMouseMoveUISidebarModeConsumed(int32_t button, int32_t x, int32_t y);
 void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y);
 
+// The side tab button (0..5, strip order) whose rect holds screen point
+// (x, y), or -1: a press there is the tabs', anywhere else in the strip it
+// is the map's (TMapPane::MouseClick 0x0044f146..0x0044f182).
+[[nodiscard]] int32_t UISideTabButtonAt(int32_t x, int32_t y);
+
 // Keyboard dispatch — same end effect as the mouse click handler, but
 // driven by retail-identified DispatchCommand IDs (cases 7/8/9/0xb/0xc)
 // plus V (sidebar toggle) and B (bottom-bar toggle). Default bindings:

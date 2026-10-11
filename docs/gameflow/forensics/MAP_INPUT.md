@@ -224,6 +224,33 @@ Before anything: a point over one of the side tabs' controls
 the editor every click sends `Notify(4, player)` (`0x00499ff0`) first.
 [C]
 
+**The side tabs hold only their buttons' rects** (2026-10-11) [C]:
+
+- `0x0044f146..0x0044f182`: the point goes into the tabs' frame
+  (`pane.x - tabs.x + x`, the same for y) and `0x004364d0` is asked; true
+  returns at once (`0x004504b8`, `clicked` untouched). Every button value
+  takes this test, presses and releases alike.
+- `0x004364d0` (`TButtonPane`, vtable slot `0x88`): the point inside the
+  pane (`0 <= x < w`, `0 <= y < h`), then any button's slot `0x54`.
+- The button test (`TButton` `0x0042d0d0`): not hidden (flag 2) and owned,
+  then the rect (`+0x60..+0x6c`); a pixel test only with flag `0x20000`.
+  The tabs' buttons are `0x180010` (pressed: `| 0x10000`, `0x0053cc30`), so
+  plain rects: the six 36×35 at (3, 2 + 37n) in the 52×232 strip, round
+  art's corners included, the selected (pressed) tab too. The 2-pixel gaps
+  between buttons and the strip's margins (3 left, 13 right, 2 top, 10
+  bottom) are the map's: a press there uses, walks, attacks as anywhere.
+- The strip is flush in the play field's lower-right corner (Pulse
+  `0x0047bc1a..0x0047bc3d`: `x = display_w − tabs.w − side panel w`,
+  `y = play field bottom − tabs.h`): (400, 188) with the side panel and the
+  bottom bar open. Measured in the emulator (play slot, `opening`): presses
+  at x 403..438 and y 190..224, 227..261, … 375..409 stay with the tabs.
+- Moves and the cursor don't look at the tabs: `TScreen::MouseMove`
+  (`0x00490530`) gives every pane every move, with no rect test, and the
+  map's move (`0x004504d0`) and hover cursor (`Animate`, the map pane's
+  rect only, `0x004544f6..0x00454527`) never ask `0x004364d0`. Over a
+  tab button the map still shows the object cursor and the right-button
+  walk still steers.
+
 ### 4.1 Right button
 
 - **Down** (2): outside the stats pane's info mode (`0x0065c9e0`),
@@ -377,6 +404,18 @@ The port's design and state: §7.
   pointer was a frame or two ago; a click still reads exactly at its
   point. Over the level-46 gate: door cursor, nothing, door cursor again
   as the pointer leaves and returns, and the click on it as before.
+- **Presses around the side tabs reach the map** (2026-10-11).
+  `TPlayScreen::ClickRoute` gave the HUD a 64×240 box in the play field's
+  corner; it now gives it a press only on a tab button
+  (`UISideTabButtonAt`, the strip's own geometry, `src/uisidebartest.cpp`),
+  and moves and the hover cursor stay the map's over the whole strip
+  (§4). The strip was also drawn 4 px left and 2 px up of retail's corner.
+  `crosscheck.py --from port:opening`: the 32 tab-area cells where only
+  retail reached the world are gone; probed pixel by pixel through x = 421
+  and four rows, the port's world / HUD runs are retail's exactly. Through
+  the port host (`--clickwalk`) a click in the gap at (421, 300) and in the
+  margin at (445, 250) each walks Locke; the map tab (421, 392) and the
+  inventory tab (421, 355) switch the lower pane and don't.
 
 Open:
 - Input-simulator note: `move X Y` glides for `kDefaultMoveMs`; sweeps

@@ -149,9 +149,14 @@ param_1[6] (+0x18) = iVar3                                     ; pane y
   bodies read the pane rect from `param_1+4`/`+8`/`+0xc`/`+0x10` — see below.)
 - `*(int*)(PTR_DAT_005d79e0 + 4)` = the display surface width. So the pane x is
   **right-anchored**: `pane_x = display_w − DAT_0066614c − DAT_0065be5c`
-  (two layout constants — the sidebar chrome width + an inset). **UNCONFIRMED-A:**
-  exact decimal of `DAT_0066614c`/`DAT_0065be5c`/`DAT_00667c60`/`DAT_0065be60`
-  (BSS layout constants, not literals in the body).
+  (two layout constants — the sidebar chrome width + an inset). **Resolved
+  (2026-10-11), was UNCONFIRMED-A:** `DAT_0065be5c` / `DAT_0065be60` are the
+  pane's own width and height (`0x0065be50 + 0xc / + 0x10`), so there is no
+  inset. Pulse lays the strip out the same way each time the chrome changes
+  (`0x0047bc1a..0x0047bc3d`: `x = display_w − w − side panel w`, `y = play
+  field bottom − h`): flush in the play field's lower-right corner, (400,
+  188) with the side panel and the bottom bar open (measured in the
+  emulator, MAP_INPUT.md §4).
 - The paint bodies read the **pane rect** as `screen:(x,y,w,h) =
   (*(param_1+4), *(param_1+8), *(param_1+0xc), *(param_1+0x10))`
   (DrawBackground:14, Draw:35-36/80-81). `+0xc` = live width, `+0x10` = live
@@ -488,7 +493,12 @@ built once, read per-frame; resolve by extracting `FUN_004bb5c0` / vtable slot 8
 
 The six button hit rects equal their dst rects (§4): `(3, y, 36, 35)` for
 y∈{2,39,76,113,150,187}. Hit-testing is done by the TButtonPane base
-(`FUN_00436530`, the per-button callback pump), not by TSideTabsPane.
+(`FUN_00436530`, the per-button callback pump), not by TSideTabsPane. The
+button test (`0x0042d0d0`) is the plain rect: the tabs' flags (`0x180010`)
+lack the pixel-test bit `0x20000`. The map pane leaves a press to the tabs
+only when one of these rects holds it (`0x004364d0`, asked at
+`0x0044f17b`); the gaps and margins of the strip are the map's
+(MAP_INPUT.md §4).
 
 ### MouseClick (slot 25) — dirty relay, NOT the dispatch
 
@@ -644,12 +654,9 @@ RGB555 `notex` strips for Classic-faithful rendering.
 
 ## §14 — UNCONFIRMED / open questions
 
-- **UNCONFIRMED-A — pane screen position constants.** `pane_x = display_w −
-  DAT_0066614c − DAT_0065be5c`; `pane_y = DAT_00667c60 − DAT_0065be60`
-  (Initialize:217-219). These are BSS layout constants, not body literals.
-  *Impact:* the strip lands at the wrong screen offset if guessed. *Resolve:*
-  `FindImmRefs.java` / read the init that populates `0x6614c / 0x65be5c /
-  0x667c60 / 0x65be60`, or visual-verify against `sample_screen_1.jpg`.
+- ~~**UNCONFIRMED-A — pane screen position constants.**~~ Resolved
+  2026-10-11 (§3): the strip sits flush in the play field's lower-right
+  corner, (400, 188) with the side panel and the bottom bar open.
 - **UNCONFIRMED-B — mosaic build cadence.** Whether mosaics B/C are composited
   once (Init slot-8 call, Init:220) or rebuilt per frame. *Impact:* perf only —
   visual result identical. *Resolve:* extract vtable slot 8 (`FUN_00444f90`
