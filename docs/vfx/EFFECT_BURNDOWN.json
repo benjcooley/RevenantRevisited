@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "3428171b03093fa8c5a572d3b38553aedab775c81e6fc13b3cc90ab54c99ddef",
+    "harness_sha256": "7a47cb33e3c597e16bb3276230863bdf6c722407f2de0c915ca6d05e4afd305c",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 111,
+    "visual_fidelity_confirmed_rows": 112,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 111,
-    "remaining_visual_review_rows": 65
+    "reviewed_visual_pass_rows": 112,
+    "remaining_visual_review_rows": 64
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -20490,7 +20490,8 @@
         "TMPAppear_AUTHORED_START"
       ],
       "source_fixes": [
-        "Exact MPAppear0xad99fdf2 actual generic owner/default90-frame nonlooping start, seven authored RGB565 meshes/materials/normals/UV/sourcecull and guarded inclusive integer poses. Immediate all-object blendcont litaddz mode80, source hidden-scale guard and source transform order; helper correction preserves original defaultCW first pass, opt-in single source-positive-face submission. Corrected9 live file hashes match staged manifest and build0; staged/model27contracts/630poses5670channels oracle passes atmax1.36193e-7, extracted current live production profile/selector/decoder then matches unmodified actualretail630poses5670channels atmax4.999999987e-7\u22643e-6 underASan/UBSan,4accepts128rejects2boundaries. Full loader/interpolation/livebuffers/GPU/audio/context/cadence remain open."
+        "Exact MPAppear0xad99fdf2 actual generic owner/default90-frame nonlooping start, seven authored RGB565 meshes/materials/normals/UV/sourcecull and guarded inclusive integer poses. Immediate all-object blendcont litaddz mode80, source hidden-scale guard and source transform order; helper correction preserves original defaultCW first pass, opt-in single source-positive-face submission. Corrected9 live file hashes match staged manifest and build0; staged/model27contracts/630poses5670channels oracle passes atmax1.36193e-7, extracted current live production profile/selector/decoder then matches unmodified actualretail630poses5670channels atmax4.999999987e-7\u22643e-6 underASan/UBSan,4accepts128rejects2boundaries. Full loader/interpolation/livebuffers/GPU/audio/context/cadence remain open.",
+        "2026-10-10: Complete seven-mesh MPAppear owner/key/normal-light lifecycle replaces first-pose-only preview. Actual rotating/growing blue-white base and column through89-frame completion, native guard control no rejection and independent whole GPU review."
       ],
       "port_smoke_ids": [
         "TMPAppear_AUTHORED_START"
@@ -20505,17 +20506,17 @@
       "acceptance": {
         "catalogued": true,
         "animator_and_asset_mapping": true,
-        "source_behavior_audited": false,
+        "source_behavior_audited": true,
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_generic_mpappear_start_guarded7mesh_create_natural_cleanup_move_delete",
-      "next_action": "Review source logical-frame/native software-load cadence and shared raster in own inconclusive300-frame pair, without phase/scale/color fitting. Preserve bounded compiled integer decoder proof separately from fractional/live-buffer and GPU acceptance. Verify frame1 appear sound, actual multiplayer/caller/network route and authored character/context; no visual or natural caller acceptance yet.",
+      "next_action": "Preserve approved full column/base sequence; verify natural multiplayer/network caller/audio and targeted device behavior.",
       "notes": [
         "Earlier146-ID harness scan had no MPAppear candidate. New TMPAppear_AUTHORED_START exact actual-owner mapping is implemented; historical absence is superseded.",
         "Clean10-second defaultstart visible lifecycle has49 derivative/raw distinct images, background/delete/restore0 and RGB565 preflight. Actor support[32,12,609,306] requires ROI[24,12,616,320], with independent left/right/bottom background strips. Initial narrow-ROI preparation failed legitimately; no raw media was deleted or appearance fitted.",
@@ -20691,18 +20692,14 @@
         }
       },
       "visual_review": {
-        "reviewer": "root",
-        "date": "2026-10-05",
-        "result": "inconclusive",
-        "scope": "Default state0/start MPAppear, actual authored owner, seven source meshes; fixed elapsed-time retail/port comparison.",
-        "findings": [
-          "Both show the blue-white vertical beam and additive radial base.",
-          "Port clears earlier in elapsed wall time; retail software rendering is heavily load-limited, so these frames do not establish matching authored phases.",
-          "No phase, geometry, brightness or RNG fitting applied. Native logical-frame cadence and raster review remain open."
-        ],
-        "comparison_manifest_sha256": "b731c9ab74bfb680dd0707f90871d8c0713c48565234677706bd64ce6e223af4",
-        "binary_sha256": "de1c1d7833055aa6cc7e9e683febe12dfa2ad28a7188cb44e0ca1d6705bf5229",
-        "visual_pass": false
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Eighteen full1280x960 original normal-lit software/actual Metal native-domain blue/white column and expanding/turning base phases, contraction and realtick89 kill/blank90/100/110.5,670 keys/8,592 matrices, strict own profile and complete fresh replay. Silent play/audio and natural multiplayer/network caller, device/exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-mpappear-authored-20261010/root-approval.json",
+        "sha256": "4d6a6f71455a36c7309270cfc10ebafdbe464407e6bb76b9518e38e04bca2060",
+        "note": "docs/vfx/forensics/MPAPPEAR_NATIVE_VISUAL.md"
       },
       "source_integer_pose_validation": {
         "poses": 630,

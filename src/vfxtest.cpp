@@ -5385,6 +5385,7 @@ struct SVfxTestBootstrap {
             original.factory=[](const S3DPoint& o)->void*{return mpappear_original::Spawn(o);};
             original.submit=[](void* c,EFxDebugMode){mpappear_original::Advance(static_cast<mpappear_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){mpappear_original::SubmitWorld(static_cast<mpappear_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return mpappear_original::IsAlive(static_cast<mpappear_original::State*>(c));};
             original.destroy=[](void* c){mpappear_original::Destroy(static_cast<mpappear_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }

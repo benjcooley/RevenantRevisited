@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 111,
+    "visual_fidelity_confirmed_rows": 112,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 111,
-    "remaining_visual_review_rows": 65
+    "reviewed_visual_pass_rows": 112,
+    "remaining_visual_review_rows": 64
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1603,6 +1603,13 @@
       "check": "independent_native_software_actual_metal_appearance",
       "status": "pass_for_recorded_configuration",
       "scope": "Fifteen complete original software/actual Metal native-domain green starburst phases through real45-frame owner/blanktail.15,795 keys/28,080 matrices, strict own profile and fresh complete replay. Proven software-only640/480 primitive guard retains short native rays; commonlongray13edgeframes diagnostic, natural caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-mpappear-authored-20261010/root-approval.json": {
+      "sha256": "4d6a6f71455a36c7309270cfc10ebafdbe464407e6bb76b9518e38e04bca2060",
+      "retail_row": "MPAppear:0xad99fdf2",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Eighteen full1280x960 original normal-lit software/actual Metal native-domain blue/white column and expanding/turning base phases, contraction and realtick89 kill/blank90/100/110.5,670 keys/8,592 matrices, strict own profile and complete fresh replay. Silent play/audio and natural multiplayer/network caller, device/exactpixels remain open."
     }
   }
 }
