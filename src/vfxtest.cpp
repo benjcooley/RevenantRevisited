@@ -2821,6 +2821,7 @@ void* WaterFallBespokeSpawn(const S3DPoint& origin)
 {
     auto* c = new SWaterFallBespokeCtx();
     c->wf = TWaterFallEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (c->wf) c->wf->SetNativeDomain(StartupVfxNativeDomain);
     if (!c->wf)
         log_warn("[vfx] TWaterFallEffect_Bespoke::SpawnForTest_BESPOKE returned"
                  " null; H02 entry will draw nothing");
@@ -2838,7 +2839,13 @@ void WaterFallBespokeSubmit(void* cp, EFxDebugMode dbg)
 {
     auto* c = static_cast<SWaterFallBespokeCtx*>(cp);
     if (!c || !c->wf) return;
-    c->wf->TickAndSubmitForTest_BESPOKE(dbg);
+    c->wf->Advance(TTime::DeltaTime());
+}
+
+void WaterFallBespokeSubmitWorld(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SWaterFallBespokeCtx*>(cp);
+    if (c && c->wf) c->wf->Submit(dbg);
 }
 
 // --- FB: TWaterEffect_Bespoke (H01 first-pass faithful port) ------------
@@ -2854,6 +2861,7 @@ void* WaterBespokeSpawn(const S3DPoint& origin)
 {
     auto* c = new SWaterBespokeCtx();
     c->w = TWaterEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if (c->w) c->w->SetNativeDomain(StartupVfxNativeDomain);
     if (!c->w)
         log_warn("[vfx] TWaterEffect_Bespoke::SpawnForTest_BESPOKE returned"
                  " null; H01 entry will draw nothing");
@@ -2871,7 +2879,13 @@ void WaterBespokeSubmit(void* cp, EFxDebugMode dbg)
 {
     auto* c = static_cast<SWaterBespokeCtx*>(cp);
     if (!c || !c->w) return;
-    c->w->TickAndSubmitForTest_BESPOKE(dbg);
+    c->w->Advance(TTime::DeltaTime());
+}
+
+void WaterBespokeSubmitWorld(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SWaterBespokeCtx*>(cp);
+    if (c && c->w) c->w->Submit(dbg);
 }
 
 // --- FB+LS: real THaloEffect (procedural radial-gradient texture, L02) --
@@ -4439,6 +4453,7 @@ void* WaterFallBespokeVariantSpawn(const S3DPoint& origin)
 {
     auto* c = new SWaterFallBespokeCtx();
     c->wf = TWaterFallEffect_Bespoke::SpawnForTest_BESPOKE(origin, kPath);
+    if (c->wf) c->wf->SetNativeDomain(StartupVfxNativeDomain);
     if (!c->wf)
         log_warn("[vfx] TWaterFallEffect_Bespoke::SpawnForTest_BESPOKE('%s') returned null",
                  kPath);
@@ -4450,6 +4465,7 @@ void* WaterBespokeVariantSpawn(const S3DPoint& origin)
 {
     auto* c = new SWaterBespokeCtx();
     c->w = TWaterEffect_Bespoke::SpawnForTest_BESPOKE(origin, kPath);
+    if (c->w) c->w->SetNativeDomain(StartupVfxNativeDomain);
     if (!c->w)
         log_warn("[vfx] TWaterEffect_Bespoke::SpawnForTest_BESPOKE('%s') returned null",
                  kPath);
@@ -5374,6 +5390,7 @@ struct SVfxTestBootstrap {
         waterfall_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
         waterfall_bespoke.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeSpawn(o); };
         waterfall_bespoke.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+        waterfall_bespoke.submit_world = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmitWorld(c, d); };
         waterfall_bespoke.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
         VfxTest::DeferredRegister(waterfall_bespoke);
 
@@ -5388,6 +5405,7 @@ struct SVfxTestBootstrap {
         water_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
         water_bespoke.factory       = [](const S3DPoint& o) -> void* { return WaterBespokeSpawn(o); };
         water_bespoke.submit        = [](void* c, EFxDebugMode d) { WaterBespokeSubmit(c, d); };
+        water_bespoke.submit_world = [](void* c, EFxDebugMode d) { WaterBespokeSubmitWorld(c, d); };
         water_bespoke.destroy       = [](void* c) { WaterBespokeDestroy(c); };
         VfxTest::DeferredRegister(water_bespoke);
 
@@ -6311,6 +6329,7 @@ struct SVfxTestBootstrap {
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeVariantSpawn<kVariantWater_I3D>(o); };
             e.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+            e.submit_world  = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmitWorld(c, d); };
             e.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
@@ -6322,6 +6341,7 @@ struct SVfxTestBootstrap {
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeVariantSpawn<kVariantWFall_I3D>(o); };
             e.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+            e.submit_world  = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmitWorld(c, d); };
             e.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
@@ -6333,6 +6353,7 @@ struct SVfxTestBootstrap {
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeVariantSpawn<kVariantWFall2_I3D>(o); };
             e.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+            e.submit_world  = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmitWorld(c, d); };
             e.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
@@ -6344,6 +6365,7 @@ struct SVfxTestBootstrap {
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeVariantSpawn<kVariantWCap_I3D>(o); };
             e.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+            e.submit_world  = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmitWorld(c, d); };
             e.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
@@ -6355,6 +6377,7 @@ struct SVfxTestBootstrap {
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeVariantSpawn<kVariantWCap2_I3D>(o); };
             e.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+            e.submit_world  = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmitWorld(c, d); };
             e.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
@@ -6366,6 +6389,7 @@ struct SVfxTestBootstrap {
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory       = [](const S3DPoint& o) -> void* { return WaterFallBespokeVariantSpawn<kVariantRiverfall_I3D>(o); };
             e.submit        = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmit(c, d); };
+            e.submit_world  = [](void* c, EFxDebugMode d) { WaterFallBespokeSubmitWorld(c, d); };
             e.destroy       = [](void* c) { WaterFallBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }

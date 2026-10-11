@@ -38,8 +38,8 @@ class NativeGenericMeshScene(NativeScrollScene):
    pixel=rel(rel(p+108));raw=data[pixel:pixel+w*h*2];assert len(raw)==w*h*2;surface=v.surface('generic-texture-'+str(i),w,h);v.write(surface.address,raw);obj=v.allocate(4);v.put_u32(obj,vt);self.surfaces[obj]=dict(index=i,width=w,height=h,address=surface.address,pixel_format=pf,references=1,locked=False)
    node=v.allocate(0xa0);v.put_u32(node+0x7c,1);v.put_u32(node+0x90,obj);v.put_u32(node+0x94,i+1);nodes.append(node);self.texture_contract.append(dict(index=i,width=w,height=h,pixel_format=masks,raw_sha256=sha(raw)))
   v.put_u32(self.imagery+0x4c,len(nodes));v.put_u32(self.imagery+0x5c,self.bytes(struct.pack('<'+'I'*len(nodes),*nodes)));v.put_u32(self.imagery+0x10,1)
- def __init__(self,exe,data,name,width=1280,height=960):
-  super().__init__(exe,data,name,width,height);self.return_address=None;self.clear_color=0
+ def __init__(self,exe,data,name,width=1280,height=960,native_binding=None,eager_pose=True):
+  super().__init__(exe,data,name,width,height,native_binding=native_binding,eager_pose=eager_pose);self.return_address=None;self.clear_color=0
   # Every supplied node declares one real resident frame. Execute the original
   # one-frame selector instead of inheriting the scroll fixture's boundary.
   self.vm.uc.hook_del(self.texture_frame_hook);self.texture_selector_calls=0

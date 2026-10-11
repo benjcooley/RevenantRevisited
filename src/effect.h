@@ -3971,6 +3971,7 @@ class TWaterFallEffect_Bespoke : public TEffect
     [[nodiscard]] static TWaterFallEffect_Bespoke* SpawnForTest_BESPOKE(
         const S3DPoint& origin, const char* asset_override = nullptr);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled);
     [[nodiscard]] bool IsAlive() const { return true; }
   private:
     void InitParticle(int32_t i);
@@ -3985,6 +3986,9 @@ class TWaterFallEffect_Bespoke : public TEffect
     bool initialized_ = false;
     bool logged_tick_ = false;
     uint32_t runtime_id_ = 0; // previews have no class/type identity
+    mutable MeshHandle software_mesh_ = 0;
+    bool exact_water_mesh_ = false, native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
 };
 
 // *************************************************************************
@@ -4020,6 +4024,7 @@ class TWaterEffect_Bespoke : public TEffect
     void Advance(double seconds);
     void Submit(EFxDebugMode debug_mode) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled);
     [[nodiscard]] bool IsAlive() const { return true; }   // persistent
 
   private:
@@ -4040,6 +4045,9 @@ class TWaterEffect_Bespoke : public TEffect
     float           material_diffuse_[4] = {1,1,1,1};
     double          sim_accum_seconds_ = 0.0;
     int64_t         ticks_ = 0;
+    mutable MeshHandle software_mesh_ = 0;
+    bool exact_water_mesh_ = false, native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
 };
 
 // *****************

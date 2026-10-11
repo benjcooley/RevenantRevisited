@@ -56,6 +56,7 @@
 //   REGISTER_3DANIMATOR("Speaker", TAmbSoundAnimator)
 
 #include "retailmeshlighting.h"
+#include "literalwatermesh.h"
 #include "revenant.h"
 #include "effect.h"
 #include "fireballquad.h"
@@ -10522,6 +10523,7 @@ TLiteralWaterfallAnimatorBuilder g_literal_waterfall_animator_builder;
 
 TWaterFallEffect_Bespoke::~TWaterFallEffect_Bespoke()
 {
+    if (Renderer && software_mesh_) Renderer->ReleaseMeshAssetRef(software_mesh_);
     delete[] drops_;
     drops_ = nullptr;
 }
@@ -10583,6 +10585,7 @@ void TWaterFallEffect_Bespoke::Initialize(bool attach_runtime_component)
     auto* imagery = dynamic_cast<T3DImagery*>(GetImagery());
     // Retry lazily without RNG draws until final owner imagery is uploaded.
     if (!LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    exact_water_mesh_ = literal_water_mesh::Matches(imagery);
     S3DObj object = {};
     imagery->GetObject(0, &object);
     if (object.material >= 0 && object.material < imagery->NumMaterials())
@@ -10656,7 +10659,9 @@ void TWaterFallEffect_Bespoke::Advance(double seconds)
 void TWaterFallEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
 {
     if (!Renderer || !initialized_ || (Flags() & OF_KILL)) return;
-    const hmm_mat4& world = Transform().Matrix();
+    const hmm_mat4& world = native_domain_ ? native_owner_ : Transform().Matrix();
+    const bool normal_mesh = exact_water_mesh_ && Renderer->UsesRetailSoftwareMeshLighting() && debug_mode == EFxDebugMode::Normal;
+    if (normal_mesh && !software_mesh_) software_mesh_ = literal_water_mesh::Cache(*Renderer, dynamic_cast<T3DImagery*>(GetImagery()), texture_);
     for (int32_t i = 0; i < numdrops_; ++i)
     {
         // Source Render skips delayed and reset drops before any lighting.
@@ -10669,6 +10674,10 @@ void TWaterFallEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         const int32_t face_degrees = -(GetFace() * 360) / 256;
         MtxRotateZ(&local, float(double(face_degrees) * TORADIAN));
         MtxTranslate(&local, &drops_[i].pos);
+        if (normal_mesh) {
+            if (software_mesh_) { hmm_mat4 composed={}; MtxMultiply(&composed,&local,&world); literal_water_mesh::Submit(*Renderer,software_mesh_,composed,native_domain_); }
+            continue;
+        }
         SQuadDrawItem item = {};
         for (int32_t corner = 0; corner < 4; ++corner)
         {
@@ -10695,6 +10704,13 @@ void TWaterFallEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         item.debug_mode = debug_mode;
         Renderer->SubmitFxQuad(item);
     }
+}
+
+void TWaterFallEffect_Bespoke::SetNativeDomain(bool enabled)
+{
+    native_domain_ = enabled && exact_water_mesh_ && runtime_id_ == 0;
+    if (native_domain_) { const auto p=Pos(); BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(GetFace())); }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Waterfall",int(native_domain_));
 }
 
 void TWaterFallEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
@@ -10743,6 +10759,7 @@ TLiteralWaterAnimatorBuilder g_literal_water_animator_builder;
 
 TWaterEffect_Bespoke::~TWaterEffect_Bespoke()
 {
+    if (Renderer && software_mesh_) Renderer->ReleaseMeshAssetRef(software_mesh_);
     delete[] drops_;
     drops_ = nullptr;
 }
@@ -10798,6 +10815,7 @@ void TWaterEffect_Bespoke::Initialize(bool attach_runtime_component)
     auto* imagery = dynamic_cast<T3DImagery*>(GetImagery());
     // Do not allocate or consume RNG while the final imagery is unavailable.
     if (!LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    exact_water_mesh_ = literal_water_mesh::Matches(imagery);
     S3DObj object = {};
     imagery->GetObject(0, &object);
     if (object.material >= 0 && object.material < imagery->NumMaterials())
@@ -10898,7 +10916,9 @@ void TWaterEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     if (!Renderer || !literal_geometry_ || !drops_ ||
         texture_ == kInvalidTexture || authored_vertices_.size() != 4 ||
         (Flags() & OF_KILL)) return;
-    const hmm_mat4& world = Transform().Matrix();
+    const hmm_mat4& world = native_domain_ ? native_owner_ : Transform().Matrix();
+    const bool normal_mesh = exact_water_mesh_ && Renderer->UsesRetailSoftwareMeshLighting() && debug_mode == EFxDebugMode::Normal;
+    if (normal_mesh && !software_mesh_) software_mesh_ = literal_water_mesh::Cache(*Renderer, dynamic_cast<T3DImagery*>(GetImagery()), texture_);
     const float fraction = float(std::clamp(sim_accum_seconds_ / TTime::LegacyFrameSeconds,
                                           0.0, 1.0));
     for (int32_t i = 0; i < numdrops_; ++i)
@@ -10912,6 +10932,10 @@ void TWaterEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
                                    drops_[i].pos.Y + drops_[i].vel.Y * fraction,
                                    drops_[i].pos.Z + drops_[i].vel.Z * fraction};
         MtxTranslate(&local, &position);
+        if (normal_mesh) {
+            if (software_mesh_) { hmm_mat4 composed={}; MtxMultiply(&composed,&local,&world); literal_water_mesh::Submit(*Renderer,software_mesh_,composed,native_domain_); }
+            continue;
+        }
         SQuadDrawItem item = {};
         for (int32_t corner = 0; corner < 4; ++corner)
         {
@@ -10935,6 +10959,15 @@ void TWaterEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         item.debug_mode = debug_mode;
         Renderer->SubmitFxQuad(item);
     }
+}
+
+void TWaterEffect_Bespoke::SetNativeDomain(bool enabled)
+{
+    // Only the isolated preview calls this opt-in; live map components stay
+    // in the common world domain and use the ordinary scene camera.
+    native_domain_ = enabled && exact_water_mesh_ && !GetComponent<TFlipbookBillboardComponent>();
+    if (native_domain_) { const auto p=Pos(); BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(GetFace())); }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Water",int(native_domain_));
 }
 
 void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
