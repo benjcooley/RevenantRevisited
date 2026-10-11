@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "932f632b88a83b40ce288400a4ec63b5fad45fab84159bb7bbcbd13c21afa4b9",
+    "harness_sha256": "3e0437979f1c8dc8d45fc073fe1ab7ff8ce83c582035d31ae1e2111e56748491",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
