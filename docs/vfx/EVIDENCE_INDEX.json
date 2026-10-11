@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 84,
-    "visual_fidelity_confirmed_rows": 46,
+    "visual_fidelity_confirmed_rows": 49,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 71,
-    "reviewed_visual_pass_rows": 46,
-    "remaining_visual_review_rows": 130
+    "reviewed_visual_pass_rows": 49,
+    "remaining_visual_review_rows": 127
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -973,6 +973,27 @@
       "check": "fireflash_current_whole_lifecycle_visual_review",
       "status": "scoped_visual_pass",
       "scope": "Null-spell isolated source-light full sampled rise/annulus/collapse/greenfade. Original Init/Animate/RenderObject/normalIlluminate/raster versus actual512squareMetal, fixed24Hz phase mapping verified6CRT callcounts, nofit. Pixel equality/naturalcaller/ABSPOS/device remain separate."
+    },
+    "recon/retail_asm/runtime/effects/buff-current-visual-speed-20261010/review-approved.json": {
+      "sha256": "3e9c29f0be08cfa13a07c00c3f0d684aa6bf6623f4d09a3aea63987e7d516c9d",
+      "retail_row": "speed:0xad92bd36",
+      "check": "native_domain_buff_actual_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Explicit native-domain isolated preview: original software versus actual Metal; six fixed sampled frames, matching RNG counts and source lighting. Overall form, color family and size pass. Exact framebuffer parity, ordinary map projection, natural attachment and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/buff-current-visual-quicksilver-20261010/review-approved.json": {
+      "sha256": "837788e86ab8e36af2fb63896c62a5cb01aaf345d7451ab5bb1db9f61bd6a8b2",
+      "retail_row": "quicksilver:0xad92bd35",
+      "check": "native_domain_buff_actual_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Explicit native-domain isolated preview: original software versus actual Metal; six fixed sampled frames, matching RNG counts and source lighting. Overall form, color family and size pass. Exact framebuffer parity, ordinary map projection, natural attachment and other configurations remain open."
+    },
+    "recon/retail_asm/runtime/effects/buff-current-visual-fmastery-20261010/review-approved.json": {
+      "sha256": "119ef337dccafb9d5e8cd52859fc38b5cbc0200ce7b346d5a5755a77b1eb1bf6",
+      "retail_row": "Fmastery:0xb0e024df",
+      "check": "native_domain_buff_actual_visual_review",
+      "status": "scoped_visual_pass",
+      "scope": "Explicit native-domain isolated preview: original software versus actual Metal; six fixed sampled frames, matching RNG counts and source lighting. Overall form, color family and size pass. Exact framebuffer parity, ordinary map projection, natural attachment and other configurations remain open."
     }
   }
 }

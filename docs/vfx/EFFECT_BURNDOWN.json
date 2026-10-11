@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 84,
-    "visual_fidelity_confirmed_rows": 46,
+    "visual_fidelity_confirmed_rows": 49,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 71,
-    "reviewed_visual_pass_rows": 46,
-    "remaining_visual_review_rows": 130
+    "reviewed_visual_pass_rows": 49,
+    "remaining_visual_review_rows": 127
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -7480,13 +7480,13 @@
         "port_smoke": true,
         "accurate_software_reference": true,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "corrected_nonuniform_hash_camera_authored_fmastery_actual_loop_move_delete_verified",
-      "next_action": "Preserve correctsourcealpha1/particle11414/nonuniform#S\u2192R matrix and13maprows/450/50tail. Own240pair visualpalerwhitercore MISMATCHdeferred; sharednormalRGB565raster/modulation/lighting ormatchedsceneinputs needsboundedproof. Atlaswhitecore/normals/freshlighting valid, no inheritedparticle tint/alphaFade/forcedblend justification; no fittedscalar/color/geometry. Guestloan/userflow ownsDOSBox, hostonly. Naturalcontext/cadence/raster/full open.",
+      "next_action": "Preserve isolated native-domain visual pass; verify ordinary map projection, natural caster attachment and exact framebuffer rounding separately.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "NativeOct6 os09831.168248s/2182frames/jobs278\u2013280terminal0:195distinct8secondpersistentexcerpt afterfixed2secondwarmup/background-cleanup0. Read-only277 Q1/SW1/SRC2DST2/Zwrite0test1/requested16 beforeADD. Frozen03055b1 candidate stagedonly; nonuniform#flare not equivalent to uniformImight matrixproof. No source/runtime/pair/visual credit.",
@@ -7638,32 +7638,14 @@
         }
       },
       "visual_review": {
-        "date": "2026-10-06",
+        "date": "2026-10-10",
         "reviewer": "root",
-        "result": "mismatch",
-        "visual_pass": false,
-        "scope": "ExactFmastery state0/start generic authored-tag appearance on actualnineplate map versusactualretailsoftware,Q1/incoming16. IndependentRNG accepted; six fixedelapsedcrops plusall240activity/ownfloorcolourdiagnostics. Naturalcaster/callercontext/preciseraster/logicalcadence/fullacceptance separate.",
-        "finding": "Short-lived red particles and nonuniform animated flare geometry broadly match, but portbasecore is paler/whiter thanretail acrossretainedsamples. Portfloorisbrighter; each-own-floor positive-delta statistics alsoretainblue/red0.162portvs0.090retail (diagnostic, notpixel/RNG acceptance criterion). Sourceactualnormalbasecontainsnear-white texels; neitherfakealpha fade,inheritedred tint,norforcedblendchange is justified. No visualcredit; exactnormalRGB565shading/modulation/blend or unmatchedlightinginputs requiresseparateevidence.",
-        "geometry_source_proof": "30originalposes/120corners proveS\u2192R\u2192camera;R\u2192S8.8unitfailurepreserved,neverapplied.",
-        "alpha": "Source/compiledlivealpha1 proved, no fade invented.",
-        "sample_frames": [
-          0,
-          48,
-          96,
-          143,
-          191,
-          239
-        ],
-        "phase_search": false,
-        "position_or_scale_fitted": false,
-        "random_streams_synchronized": false,
-        "requires_pixel_identity": false,
-        "comparison_manifest_sha256": "87551fc744553c8af15b5022b16dfb3d46aa3ea03fe230cded1fc77525b6f74d",
-        "contact": "active-zoom.png",
-        "contact_sha256": "68d4ab3abbb59e4235ee64526d065c6097211399df3b3638c2c4300fbcc92521",
-        "activity_summary_sha256": "649f734ac79713434fb773f24d45a958a6183906437acea419e99b3cef7c7da0",
-        "color_diagnostic_sha256": "d2d879cb4c2cd5eeda58af59281ae43d9b14b6695e7415e76759cd229eaa300b",
-        "work_queue": "bounded_deferred_colour_raster_or_lighting_input_gate"
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Explicit native-domain isolated preview: original software versus actual Metal; six fixed sampled frames, matching RNG counts and source lighting. Overall form, color family and size pass. Exact framebuffer parity, ordinary map projection, natural attachment and other configurations remain open.",
+        "report": "recon/retail_asm/runtime/effects/buff-current-visual-fmastery-20261010/review-approved.json",
+        "sha256": "119ef337dccafb9d5e8cd52859fc38b5cbc0200ce7b346d5a5755a77b1eb1bf6",
+        "note": "docs/vfx/forensics/NATIVE_SOFTWARE_DOMAIN_20261010.md"
       },
       "cold_parser_revalidation": {
         "date": "2026-10-09",
@@ -7679,7 +7661,37 @@
           }
         ],
         "scope": "Actual full native literal parser/Initialize/Pulse/live sample versus corrected compiled parser/State, fresh repeats. Declared resource/emitter-pose interfaces; no renewed current GPU/visual/context credit."
-      }
+      },
+      "visual_review_history": [
+        {
+          "date": "2026-10-06",
+          "reviewer": "root",
+          "result": "mismatch",
+          "visual_pass": false,
+          "scope": "ExactFmastery state0/start generic authored-tag appearance on actualnineplate map versusactualretailsoftware,Q1/incoming16. IndependentRNG accepted; six fixedelapsedcrops plusall240activity/ownfloorcolourdiagnostics. Naturalcaster/callercontext/preciseraster/logicalcadence/fullacceptance separate.",
+          "finding": "Short-lived red particles and nonuniform animated flare geometry broadly match, but portbasecore is paler/whiter thanretail acrossretainedsamples. Portfloorisbrighter; each-own-floor positive-delta statistics alsoretainblue/red0.162portvs0.090retail (diagnostic, notpixel/RNG acceptance criterion). Sourceactualnormalbasecontainsnear-white texels; neitherfakealpha fade,inheritedred tint,norforcedblendchange is justified. No visualcredit; exactnormalRGB565shading/modulation/blend or unmatchedlightinginputs requiresseparateevidence.",
+          "geometry_source_proof": "30originalposes/120corners proveS\u2192R\u2192camera;R\u2192S8.8unitfailurepreserved,neverapplied.",
+          "alpha": "Source/compiledlivealpha1 proved, no fade invented.",
+          "sample_frames": [
+            0,
+            48,
+            96,
+            143,
+            191,
+            239
+          ],
+          "phase_search": false,
+          "position_or_scale_fitted": false,
+          "random_streams_synchronized": false,
+          "requires_pixel_identity": false,
+          "comparison_manifest_sha256": "87551fc744553c8af15b5022b16dfb3d46aa3ea03fe230cded1fc77525b6f74d",
+          "contact": "active-zoom.png",
+          "contact_sha256": "68d4ab3abbb59e4235ee64526d065c6097211399df3b3638c2c4300fbcc92521",
+          "activity_summary_sha256": "649f734ac79713434fb773f24d45a958a6183906437acea419e99b3cef7c7da0",
+          "color_diagnostic_sha256": "d2d879cb4c2cd5eeda58af59281ae43d9b14b6695e7415e76759cd229eaa300b",
+          "work_queue": "bounded_deferred_colour_raster_or_lighting_input_gate"
+        }
+      ]
     },
     {
       "index": 9,
@@ -19101,13 +19113,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_quicksilver_partsysemittance_and_animated_base_profile_verified_map_lifecycle",
-      "next_action": "Retain particle-only and controlled map passes; verify independent production emitter/base matrix submission, full base lighting/raster and actual-port/native visual pair. Natural caster/context/device remain separate.",
+      "next_action": "Preserve isolated native-domain visual pass; verify ordinary map projection, natural caster attachment and exact framebuffer rounding separately.",
       "notes": [
         "2026-10-10: particle-only shared original software raster comparison with native-decoded authored emitter matrices as common inputs; no full-effect appearance acceptance."
       ],
@@ -19146,7 +19158,17 @@
         "quality": 0,
         "binary_sha256": "52748e34f6bc58b6454b17a0996bb8ae35354df3c79d0ef1125cce3b1136d8ff"
       },
-      "work_queue_status": "bounded_particle_frontend_and_controller_map_pass_base_visual_open"
+      "work_queue_status": "bounded_particle_frontend_and_controller_map_pass_base_visual_open",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Explicit native-domain isolated preview: original software versus actual Metal; six fixed sampled frames, matching RNG counts and source lighting. Overall form, color family and size pass. Exact framebuffer parity, ordinary map projection, natural attachment and other configurations remain open.",
+        "report": "recon/retail_asm/runtime/effects/buff-current-visual-quicksilver-20261010/review-approved.json",
+        "sha256": "837788e86ab8e36af2fb63896c62a5cb01aaf345d7451ab5bb1db9f61bd6a8b2",
+        "note": "docs/vfx/forensics/NATIVE_SOFTWARE_DOMAIN_20261010.md"
+      }
     },
     {
       "index": 138,
@@ -19171,13 +19193,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "exact_speed_partsysemittance_and_animated_base_profile_verified_map_lifecycle",
-      "next_action": "Retain bounded particle/cold-state and actual map proof; verify animated baseflare lighting/material/raster, independent original device/Metal projection and natural caster/attachment before full acceptance.",
+      "next_action": "Preserve isolated native-domain visual pass; verify ordinary map projection, natural caster attachment and exact framebuffer rounding separately.",
       "notes": [
         "2026-10-09: particle-only shared-software comparison is bridge-relative, not fullbase output. Native nearzero admission preserves all48 map pixelhashes while restoring draw counts and RNG."
       ],
@@ -19226,6 +19248,16 @@
           }
         ],
         "scope": "Whole native literal parser with authored emitter poses versus corrected source. Rendering/caster bounds separate."
+      },
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Explicit native-domain isolated preview: original software versus actual Metal; six fixed sampled frames, matching RNG counts and source lighting. Overall form, color family and size pass. Exact framebuffer parity, ordinary map projection, natural attachment and other configurations remain open.",
+        "report": "recon/retail_asm/runtime/effects/buff-current-visual-speed-20261010/review-approved.json",
+        "sha256": "3e9c29f0be08cfa13a07c00c3f0d684aa6bf6623f4d09a3aea63987e7d516c9d",
+        "note": "docs/vfx/forensics/NATIVE_SOFTWARE_DOMAIN_20261010.md"
       }
     },
     {
