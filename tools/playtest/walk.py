@@ -55,8 +55,9 @@ class Destination:
     screen: tuple[int, int]
     world: tuple[int, int, int] | None
     object_id: int | None = None
-    talk: bool = False               # a click on a person in reach: talk, no walk
+    use: bool = False                # a click on an object in reach: use it (talk to a person), no walk
     name: str = ''                   # the object's name, for objects
+    person: bool = False
 
 
 @dataclass
@@ -142,7 +143,7 @@ class Walker:
                     key = f"talk:{o['id']}"
                     if key not in self.recent:
                         found.append(Destination(key, f"talk to '{name}', beside Locke", tuple(screen), None,
-                                                 o['id'], talk=True, name=name))
+                                                 o['id'], use=True, name=name, person=True))
                     continue
                 key = f"near:{o['id']}"
                 f = BESIDE / gap
@@ -153,6 +154,11 @@ class Walker:
                         or (grid and not grid.open_line(player['pos'], spot))):
                     continue
                 found.append(Destination(key, f"walk up to '{name}', {way}", tuple(shown), spot, name=name))
+                continue
+            if gap <= USE_REACH and o['class'] not in ('item',) and f"use:{o['id']}" not in self.recent:
+                # in reach: a click uses it (an exit takes Locke through, a chest opens)
+                found.append(Destination(f"use:{o['id']}", f"use {o['class']} '{name}', beside Locke",
+                                         tuple(screen), None, o['id'], use=True, name=name))
                 continue
             key = f"obj:{o['id']}"
             if key in self.shunned or (gap <= USE_REACH and key in self.recent):
@@ -200,12 +206,12 @@ class Walker:
         reach the game uses it from (MAP_INPUT.md §4: 96). `observe`, when
         given, is called in place of the host's (the director's logs)."""
         observe = observe or host.observe
-        if dest.talk:
+        if dest.use:
             plan = Plan(state)
             end = plan.click(0, *dest.screen)
             host.step(plan.ticks(end + 12), plan.events())
             self.recent = [k for k in self.recent if k != dest.key][-4:] + [dest.key]
-            return 'talked', observe(), plan.state
+            return ('talked' if dest.person else 'used'), observe(), plan.state
         arrive = USE_REACH if dest.object_id is not None else ARRIVE
         plan = Plan(state)
         if run:

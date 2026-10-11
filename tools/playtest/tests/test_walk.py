@@ -118,6 +118,7 @@ class WithTheReferenceHost(unittest.TestCase):
         self.assertEqual(result, 'arrived')
         self.assertLessEqual(abs(obs['player']['pos'][1] - 1860), 8)                # beside him
         talk = next(d for d in w.destinations(self.host, obs, None) if d.key == 'talk:5')
+        self.assertTrue(talk.use and talk.person)
         result, obs, _ = w.walk(self.host, state, talk)
         self.assertEqual(result, 'talked')
         self.assertIn('Sardok says: Welcome, Revenant.', obs['messages'])

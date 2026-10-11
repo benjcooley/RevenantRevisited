@@ -44,8 +44,10 @@ from inputs import Bindings, InputState, Plan, chord
 from rec import BUTTON_RIGHT
 from jev import Choice, Jev, Router, tool
 from knowledge import Knowledge
-from walk import Walker, WalkGrid
+from nav import LevelMaps, farthest_clear
+from walk import USE_REACH, Destination, Walker, WalkGrid, in_rect
 from waypoints import Catalogue, Waypoint
+from world import Place, World
 
 ENGAGE_RADIUS = 500                  # a living enemy this close means a fight
 WALKGRID_RADIUS = 480
@@ -60,6 +62,7 @@ class Milestone:
     objective: str                   # what Jev is told to make progress on
     done: Callable[[dict, 'Director'], bool]
     save: bool = False
+    goal: str | None = None          # an object to travel to (instance name): code finds the way
 
 
 @dataclass
@@ -77,6 +80,7 @@ class Director:
     parent: str = 'newgame'          # the waypoint the session starts from
     game: str = 'port'
     frame_every: int = 48            # ticks between kept frames
+    world: World | None = None       # where things are and where exits lead (world.py)
     watch: Path | None = None        # where a watcher's page reads state.json (watch.py)
     state: InputState = field(default_factory=InputState)
     log: list[dict] = field(default_factory=list)
@@ -84,9 +88,16 @@ class Director:
     choices_taken: dict[str, set[str]] = field(default_factory=dict)
     talked: set[str] = field(default_factory=set)              # people Locke has talked to (names)
     equip_tried: set[int] = field(default_factory=set)         # pack slots right-clicked to equip
+    exit_tries: dict[str, int] = field(default_factory=dict)   # uses of an exit that left Locke where he was
+    blocked_exits: set[str] = field(default_factory=set)       # exits that wouldn't take him: explore instead
+    stuck: int = 0                                             # stalls in a row at one spot while travelling
+    stuck_at: list | None = None
+    dead_ends: int = 0                                         # dead ends since Locke last got nearer
+    best_gap: float = math.inf                                 # the nearest he has been to the next stop
 
     def __post_init__(self) -> None:
         self.walker = Walker(self.jev, self.bindings)
+        self.maps = LevelMaps()                                 # walk heights seen so far, per level
         self.tactician = Tactician(self.jev, self.kb, self.bindings, messages=self.messages)
         self.current = self.start
         self.created: list[tuple[Waypoint, int]] = []           # waypoints made, and the tick of their mark
@@ -237,6 +248,8 @@ class Director:
         if obs['player'].get('mode') == 'combat':                    # a click in combat attacks
             self.press(self.bindings['CombatMode'], then=6)
             return
+        if self.milestone.goal and self.world and self.travel(obs, self.milestone.goal):
+            return
         full = self.observe(walkgrid=WALKGRID_RADIUS)
         grid = WalkGrid(full['walkgrid']) if full.get('walkgrid') else None
         candidates = self.walker.destinations(self.host, full, grid)
@@ -251,6 +264,79 @@ class Director:
             self.talked.add(dest.name)
         if result != 'arrived':
             self.observe(frame=True)
+
+    def travel(self, obs: dict, goal: str) -> bool:
+        """One leg toward `goal`: find it (in view, else in the map data),
+        route through the exits that get there, then use or talk to the
+        next stop once in reach, or walk the path toward it. False when
+        there is no way to tell where to go, so exploring takes over."""
+        player = obs['player']
+        level, pos = player.get('level'), player['pos']
+        named = {(o.get('name') or '').lower(): o for o in obs.get('objects', [])}
+        live = named.get(goal.lower())
+        if live:
+            place = Place(level, tuple(live['pos']), goal, live.get('type', ''), live.get('class', ''))
+        else:
+            places = self.world.find(goal)
+            place = next((p for p in places if p.level == level), places[0] if places else None)
+        if not place:
+            return False
+        route = self.world.route(level, pos, place)
+        if route is None:
+            return False
+        stop_name, stop_pos = (route[0].name, route[0].pos) if route else (goal, place.pos)
+        if route and route[0].name.lower() in self.blocked_exits:
+            return False                                             # that exit wouldn't open: explore instead
+        stop = named.get(stop_name.lower())
+        words = f"'{stop_name}'" + (f", on the way to '{goal}'" if route else '')
+        if stop and stop.get('screen') and distance(stop['pos'], pos) <= USE_REACH:
+            person = stop.get('class') == 'character'
+            self.caption('travel', ('talking to ' if person else 'using ') + words)
+            dest = Destination(f"use:{stop['id']}", words, tuple(stop['screen']), None, stop['id'], use=True,
+                               name=stop_name, person=person)
+            result, after, self.state = self.walker.walk(self.host, self.state, dest, observe=self.observe)
+            self.note('travel', to=stop_name, goal=goal, result=result)
+            if person:
+                self.talked.add(stop_name)
+            elif distance(after['player']['pos'], pos) < 2 and after['player'].get('level') == level:
+                tries = self.exit_tries[stop_name.lower()] = self.exit_tries.get(stop_name.lower(), 0) + 1
+                if tries >= 3:
+                    self.blocked_exits.add(stop_name.lower())        # locked, or a script's turn first
+            return True
+        full = self.observe(walkgrid=WALKGRID_RADIUS)
+        if not full.get('walkgrid'):
+            return False
+        grid = WalkGrid(full['walkgrid'])
+        self.maps.merge(level, grid)
+        path = self.maps.plan(level, pos, stop_pos)
+        shown = dict(zip(path, self.host.project([[x, y, pos[2]] for x, y in path]) if path else []))
+        field_rect = full.get('playfield', self.walker.playfield)
+        point = farthest_clear(grid, pos, path, lambda p: bool(shown.get(p)) and in_rect(shown[p], field_rect))
+        if not point:
+            return False
+        self.caption('travel', f'walking toward {words}')
+        dest = Destination(f'nav:{point[0]}:{point[1]}', f'toward {words}', tuple(shown[point]), (*point, pos[2]))
+        result, after, self.state = self.walker.walk(self.host, self.state, dest, observe=self.observe)
+        self.note('travel', to=stop_name, goal=goal, result=result, point=list(point))
+        here = after['player']['pos']
+        gap = distance(here, stop_pos)
+        if gap < self.best_gap - 100:
+            self.best_gap, self.dead_ends = gap, 0               # getting closer: the dead ends did their job
+        if result in ('stalled', 'refused'):
+            self.stuck = (self.stuck + 1) if self.stuck_at and distance(here, self.stuck_at) < 24 else 1
+            self.stuck_at = here
+            if self.stuck >= 3:                                  # this spot is a dead end: aim elsewhere
+                self.stuck = 0
+                self.maps.dead_end(level, here)
+                self.dead_ends += 1
+                self.note('dead end', at=list(here[:2]), toward=stop_name)
+                if self.dead_ends >= 5:                          # no nearer after five: a look at the screen
+                    self.dead_ends = 0
+                    self.unknown(after, why=f"Locke can't find the way toward {words}; pick a point on "
+                                            f"open ground, stairs or a door to click that leads on")
+        else:
+            self.stuck = 0
+        return result != 'refused'
 
     def dead(self, obs: dict) -> None:
         self.observe(frame=True)
@@ -377,6 +463,31 @@ def character_dead(name: str) -> Callable[[dict, Director], bool]:
         o = next((o for o in obs.get('objects', []) if (o.get('name') or '').lower() == name.lower()), None)
         return o is not None and (o.get('health') or [1])[0] <= 0
     return check
+
+
+def after_scene(check: Callable[[dict, Director], bool], settle: int = 48,
+                give_up: int = 24 * 60) -> Callable[[dict, Director], bool]:
+    """`check`, then the scene it sets off: done once `check` has held and
+    a scene (control off) has played and given control back for `settle`
+    ticks, or `give_up` ticks after `check` first held when no scene comes.
+    A waypoint saved there is past the scene, which also keeps saves out of
+    the half-settled moment just after a death (FINDINGS.md F1)."""
+    seen = {'since': None, 'off': False, 'on_since': None}
+
+    def done(obs: dict, d: Director) -> bool:
+        if seen['since'] is None:
+            if not check(obs, d):
+                return False
+            seen['since'] = d.host.tick
+        if not obs.get('control'):
+            seen['off'], seen['on_since'] = True, None
+            return False
+        if seen['on_since'] is None:
+            seen['on_since'] = d.host.tick
+        if seen['off'] and d.host.tick - seen['on_since'] >= settle:
+            return True
+        return d.host.tick - seen['since'] >= give_up
+    return done
 
 
 def talked_to(name: str) -> Callable[[dict, Director], bool]:

@@ -45,6 +45,7 @@ from jev import Jev, Ledger, Router  # noqa: E402
 from knowledge import Knowledge  # noqa: E402
 from milestones import LISTS  # noqa: E402
 from waypoints import ROOT, Catalogue  # noqa: E402
+from world import World  # noqa: E402
 
 REPO = HERE.parents[1]
 RETAIL_INI = Path('/Users/benjamincooley/RevenantRetailLab/retail-cd/REVENANT/revenant.ini')
@@ -118,7 +119,8 @@ def main() -> int:
                    ini=args.ini if args.game == 'port' else None, timeout=1800)
         director = Director(host, jev, router, Knowledge.load(args.data), bindings, bundle, list(LISTS[story]),
                             waypoints=catalogue, story=story, start=start, parent=parent, game=args.game,
-                            watch=run / 'watch' if args.watch else None)
+                            watch=run / 'watch' if args.watch else None,
+                            world=World(args.data, slot) if args.game != 'fake' else None)
         summary = director.run(max_ticks=round(args.minutes * 60 * 24))
     finally:
         host.close()
