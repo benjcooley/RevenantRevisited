@@ -239,5 +239,5 @@ class RetailHost(Host):
     @classmethod
     def launch(cls, run_dir: Path, build: Path | None = None, args: Sequence[str] = (),
                python: Path = EMULATOR_PYTHON, server: Path | None = None) -> RetailHost:
-        command = [python, server or cls.SERVER, *(['--build', build] if build else []), *args]
-        return cls(command, run_dir)
+        command = [python, server or cls.SERVER, *(['--build', Path(build).resolve()] if build else []), *args]
+        return cls(command, Path(run_dir).resolve())
