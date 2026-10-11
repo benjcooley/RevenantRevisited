@@ -65,3 +65,14 @@ Frozen final evidence (2026-10-10):
 - All 120 final native/common/native-domain image hashes equal the previously
   independently reviewed panel inputs. Final map run exits0; 33/40 nonempty,
   34 distinct images, actual component attachment, simulation and reaping logged.
+
+Root independently reviewed eight lifecycle phases and explicitly approved
+the native-domain isolated appearance (birth, growth, spin, flicker, decay and
+blank tail). All 120 final image hashes match the reviewed inputs. This adds
+one scoped primary appearance pass; common-world/full-map, natural quickspell
+player/light/FAIL audio, resource dispatch and exact pixels remain open.
+
+Approval record: `root-approval.json`, SHA256
+`ff72f20ca93f1ec8c7d61f105c99cff66d16568844308dad4a9599f7b2c2da75`. It pins the final review, binary, all
+forty three-way frame hashes, RNG/light logs, and separate live-map state/smoke
+proof. The map smoke is explicitly not retail map visual parity.
