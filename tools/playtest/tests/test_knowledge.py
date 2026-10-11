@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from knowledge import Knowledge, parse_characters, parse_spells  # noqa: E402
+from knowledge import WM_HAND, Knowledge, parse_characters, parse_spells  # noqa: E402
 
 DATA = Path(__file__).resolve().parents[3] / 'data'
 
@@ -66,11 +66,20 @@ class ShippedData(unittest.TestCase):
         cls.kb = Knowledge.load(DATA)
 
     def test_known_facts(self):
-        self.assertIn('freeze', self.kb.monster_brief('White Dragon')['resists'])
-        self.assertIn('burn', self.kb.monster_brief('White Dragon')['takes_extra_damage_from'])
-        self.assertIn('burn', self.kb.monster_brief('Cinderate')['resists'])
+        # DAMAGEMODS are resistances, (100 - mod)% (CalculateDamage, GRIND.md §2.4)
+        self.assertIn('freeze', self.kb.monster_brief('White Dragon')['takes_extra_damage_from'])   # -100
+        self.assertIn('burn', self.kb.monster_brief('White Dragon')['resists'])                     # 25
+        self.assertIn('burn', self.kb.monster_brief('Cinderate')['takes_extra_damage_from'])        # -100
+        self.assertEqual(self.kb.monster_brief('Wraith')['fists_do_percent'], 200)                 # hand -100
+        self.assertEqual(self.kb.monster_brief('Ogrok')['weapons_do_percent'], 100)                # misc 0
         self.assertEqual(self.kb.spells['Quicksand'].talismans, ('Earth', 'Ocean'))
         self.assertFalse(self.kb.monster_brief('Nobody')['known'])
+
+    def test_grapples_work_barehanded(self):
+        grapples = self.kb.locke_grapples(WM_HAND)
+        self.assertEqual(sorted(grapples), [4, 5])                               # Ctrl+A, Ctrl+S
+        self.assertIn('aikidothrower', [a.name for a in grapples[4]])
+        self.assertNotIn('legbreaker', [a.name for g in grapples.values() for a in g])   # a finisher
 
     def test_combos_need_skill(self):
         unskilled = {a.button for a in self.kb.locke_attacks(0x1e, attackskill=0, weaponskill=0)}

@@ -12,7 +12,7 @@ from knowledge import Attack, Character, Knowledge, Spell  # noqa: E402
 
 KEYS_8 = ('RIGHT', 'PGUP', 'UP', 'HOME', 'LEFT', 'END', 'DOWN', 'PGDN')
 KEYS = {'CombatSwing': 'A', 'CombatThrust': 'S', 'CombatChop': 'D', 'CombatCombo7': 'Q',
-        'CombatBlock': 'F', 'Invoke1': 'F1', 'BeltUse2': 'F6',
+        'CombatBlock': 'F', 'Invoke1': 'F1', 'BeltUse2': 'F6', 'CombatCombo1': 'CTRL-A',
         **dict(zip(combat.DIRECTIONS, KEYS_8)),
         **{'Dodge' + name: 'CTRL-' + key for name, key in zip(combat.DIRECTIONS, KEYS_8)}}
 
@@ -27,7 +27,8 @@ def kb() -> Knowledge:
         attack('elbow', 1, (0, 20), impact=3), attack('thrust', 1), attack('swing', 2), attack('chop', 3, impact=5),
         attack('chargethrust', 1, (79, 300), impact=14), attack('spinswing', 2, (79, 300), impact=13),
         attack('anychop', 3, (0, 10000)), attack('comboa1', 10, (0, 0), skill=9), attack('comboa2', 10, (0, 0), skill=9),
-        attack('finisher', 4, (0, 40), flags=0x1)])
+        attack('finisher', 4, (0, 40), flags=0x1),
+        attack('aikidothrower', 4, (0, 10000), flags=0x2200081, mask=0x1f)])
     ogrok = Character('Ogrok', damagemods={'burn': 0, 'freeze': 25, 'cut': -10},
                       attacks=[attack('atkchop', 3, (0, 90), impact=10, block=4), attack('throw', 4, (0, 10000), flags=0x1)])
     return Knowledge({'Locke': locke, 'Ogrok': ogrok},
@@ -116,8 +117,36 @@ class Situations(unittest.TestCase):
         state = t.state(obs, t.assess(obs))
         self.assertEqual(state['target']['doing'], 'about to strike')
         self.assertEqual(state['target']['distance'], 'close: both can strike')
-        self.assertEqual(state['target']['takes_extra_damage_from'], ['freeze'])
+        self.assertEqual(state['target']['takes_extra_damage_from'], ['cut'])    # cut -10: 110%
+        self.assertEqual(state['target']['resists'], ['freeze'])                 # freeze 25: 75%
         self.assertEqual(state['locke']['health'], 'healthy')
+
+
+class Retail_rules(unittest.TestCase):
+    def test_a_button_pressed_twice_running_is_not_offered_a_third_time(self):
+        t = tactician()
+        obs = observation()
+        plan = Plan()
+        for _ in range(2):
+            t.plan(Tactic('attack:2', 'test'), obs, plan)
+        options = t.options(obs, t.assess(obs))
+        self.assertNotIn('attack:2', options['attack'])
+        self.assertIn('attack:1', options['attack'])
+        t.plan(Tactic('attack:1', 'test'), obs, plan)                       # another button breaks the run
+        self.assertIn('attack:2', t.options(obs, t.assess(obs))['attack'])
+
+    def test_a_grapple_refused_against_a_kind_is_not_offered_again(self):
+        t = tactician()
+        obs = observation(d=30)
+        self.assertIn('grapple:4', t.options(obs, t.assess(obs))['attack'])
+        t.plan(Tactic('grapple:4', 'test'), obs, Plan())
+        t.learn(observation(d=30))                                           # Locke didn't go into a throw
+        self.assertNotIn('grapple:4', t.options(obs, t.assess(obs))['attack'])
+
+    def test_a_grapple_needs_contact(self):
+        t = tactician()
+        obs = observation(d=60)
+        self.assertNotIn('grapple:4', t.options(obs, t.assess(obs))['attack'])
 
 
 class Deciding(unittest.TestCase):

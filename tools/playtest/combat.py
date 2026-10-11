@@ -18,6 +18,14 @@ up, about to strike, striking, recovering). Directions become keys through
 each direction control's step measured in the world at the first fight
 (the director's calibration), so an enemy off the screen is steered toward
 as surely as one on it.
+
+Two of retail's rules shape the options (docs/playtest/GRIND.md §2.4-2.5):
+the third press in a row of the same attack button on one target gets the
+worst hit roll and risks an instant counter (ButtonAttack 0x4d2480), so a
+button pressed twice running isn't offered a third time; and barehanded
+Locke has grapples (throws on Ctrl+A, Ctrl+S) that only some monsters can
+be thrown with, so a grapple the game refuses against a kind of monster
+isn't offered against that kind again.
 """
 from __future__ import annotations
 
@@ -33,6 +41,8 @@ from knowledge import WM_HAND, Attack, Knowledge
 # step that way, and with "Dodge" in front, leap (Revenant.ini [Controls]).
 DIRECTIONS = ('Right', 'UpRight', 'Up', 'UpLeft', 'Left', 'DownLeft', 'Down', 'DownRight')
 LUNGE = 70                           # an attack chosen only beyond this is a charge
+SAME_BUTTON_LIMIT = 2                # presses in a row of one button before the third is penalised
+GRAPPLE_REACH = 40                   # a grapple is offered within this (the finishers' band, GRIND §2.5)
 
 INTENTS = {
     'attack': 'Strike the target now.',
@@ -166,6 +176,9 @@ class Tactician:
     confidence_floor: float = 0.25
     history: list[str] = field(default_factory=list)
     messages: list[str] = field(default_factory=list)        # the game's text-bar lines, the director's
+    presses: list[tuple[int, int]] = field(default_factory=list)   # (target id, attack button), in order
+    refused: set[tuple[str, int]] = field(default_factory=set)     # (monster kind, grapple button) refused
+    pending: tuple[str, int, frozenset[str]] | None = None         # a grapple pressed: kind, button, its moves
 
     def target_of(self, obs: dict) -> dict | None:
         player = obs['player']
@@ -192,14 +205,40 @@ class Tactician:
                          action_phase(self.kb, 'Locke', player.get('action_name'), player.get('action_tick')))
 
     # -- what Jev is asked --
+    def worn_out(self, target: dict) -> int | None:
+        """The button pressed SAME_BUTTON_LIMIT times running on `target`:
+        a third press would get the worst roll."""
+        run = [b for t, b in self.presses[-SAME_BUTTON_LIMIT:] if t == target['id']]
+        return run[0] if len(run) == SAME_BUTTON_LIMIT and len(set(run)) == 1 else None
+
+    def grapples(self, obs: dict, s: Situation) -> dict[str, str]:
+        """The grapples Locke can try on the target now: close in, fatigue
+        enough, and not refused against its kind before."""
+        player = obs['player']
+        if s.d > GRAPPLE_REACH or s.mine.word not in ('ready', 'moving'):    # a busy Locke drops the press
+            return {}
+        fatigue = (player.get('fatigue') or [0, 0])[0]
+        kind = s.target.get('type') or s.target.get('name', '')
+        mask = (player.get('weapon') or {}).get('mask', 0) or WM_HAND
+        options = {}
+        for button, moves in self.kb.locke_grapples(mask).items():
+            control = moves[0].control
+            if (kind, button) in self.refused or control not in self.bindings or fatigue < min(m.fatigue for m in moves):
+                continue
+            options[f'grapple:{button}'] = (f'{self.bindings[control]}: grab and throw it ({", ".join(m.name for m in moves)}); '
+                                            f'damage {moves[0].damagemod:+d}%, fatigue {moves[0].fatigue}. '
+                                            f'Only some monsters can be thrown.')
+        return options
+
     def options(self, obs: dict, s: Situation) -> dict[str, dict[str, str]]:
         """Each intent's available options, by name, with what they mean."""
         player = obs['player']
         attacks = {}
+        worn = self.worn_out(s.target)
         if s.reach != 'far':
             for button in sorted({a.button for a in s.attacks}):
                 v = s.variant(button)
-                if not v or v.control not in self.bindings or (button > 3 and s.reach != 'close'):
+                if not v or v.control not in self.bindings or (button > 3 and s.reach != 'close') or button == worn:
                     continue
                 key = str(self.bindings[v.control])
                 if button > 3:
@@ -207,6 +246,7 @@ class Tactician:
                     attacks[f'attack:{button}'] = f'{key}: a learned combination of {blows} blows.'
                 else:
                     attacks[f'attack:{button}'] = describe(v, key)
+            attacks.update(self.grapples(obs, s))
         mana = (player.get('mana') or [0, 0])[0]
         spells = {}
         for slot, name in enumerate(player.get('quick_spells') or [], start=1):
@@ -241,6 +281,7 @@ class Tactician:
 
     # -- deciding --
     def decide(self, obs: dict) -> Tactic | None:
+        self.learn(obs)
         s = self.assess(obs)
         if not s:
             return None
@@ -270,6 +311,15 @@ class Tactician:
             name = 'attack:2' if 'attack:2' in options['attack'] else next(iter(options['attack']))
             return Tactic(name, 'rule: strike when in reach')
         return Tactic('close_in', 'rule: close the distance')
+
+    def learn(self, obs: dict) -> None:
+        """After a grapple press: did Locke go into one of its moves? If
+        not, the game refused it against that kind of monster."""
+        if self.pending:
+            kind, button, moves = self.pending
+            if (obs['player'].get('action_name') or '').lower() not in moves:
+                self.refused.add((kind, button))
+            self.pending = None
 
     def _chose(self, tactic: Tactic) -> Tactic:
         self.history.append(tactic.name)
@@ -304,7 +354,16 @@ class Tactician:
         if kind == 'attack':
             v = s.variant(int(arg))
             plan.press(0, self.bindings[v.control], hold=2)
+            self.presses.append((s.target['id'], v.button))
             return max(6, v.impacttime + 2)
+        if kind == 'grapple':
+            mask = (obs['player'].get('weapon') or {}).get('mask', 0) or WM_HAND
+            moves = self.kb.locke_grapples(mask)[int(arg)]
+            plan.press(0, self.bindings[moves[0].control], hold=2)
+            self.presses.append((s.target['id'], int(arg)))
+            self.pending = (s.target.get('type') or s.target.get('name', ''), int(arg),
+                            frozenset(m.name.lower() for m in moves))
+            return 6
         if kind == 'cast':
             plan.press(0, self.bindings[f'Invoke{arg}'], hold=2)
             return 12

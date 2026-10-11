@@ -20,6 +20,8 @@ from pathlib import Path
 
 WM_HAND = 0x0001                     # char.def's weapon mask for bare hands
 CA_SPECIAL = 0x0001                  # char.def: a scripted special (finishers, throws)
+CA_DEATH = 0x0008                    # fires only when the blow would kill: a finisher (src/rules.h)
+CA_INTERACTIVE = 0x2000000           # a grapple: both play synced impacts (src/rules.h)
 CATCH_ALL = 1000                     # attacks with maxdist past this are fallbacks at any distance
 DAMAGE_TYPES = ('misc', 'hand', 'puncture', 'cut', 'chop', 'bludgeon', 'magical', 'burn', 'freeze', 'poison')
 # spell.def's talisman letters (its header comment; class.def Codes 65-76).
@@ -218,22 +220,42 @@ class Knowledge:
 
     def monster_brief(self, name: str) -> dict:
         """What a fighter should know about `name`, in words: the damage it
-        resists or takes extra from, and how far its ordinary attacks reach."""
+        resists or takes extra from, what Locke's fists and weapons do to
+        it, and how far its ordinary attacks reach. DAMAGEMODS are
+        resistances: a blow does (100 - mod)% (CalculateDamage, GRIND.md
+        §2.4). Fists deal `hand` damage; every weapon deals `misc`."""
         c = self.character(name)
         if not c:
             return {'kind': name, 'known': False}
-        weak = [t for t, v in c.damagemods.items() if v > 0]
-        resists = [t for t, v in c.damagemods.items() if v < 0]
+        resists = [t for t, v in c.damagemods.items() if v > 0]
+        weak = [t for t, v in c.damagemods.items() if v < 0]
         reach = max((a.maxdist for a in c.attacks if a.ranged and not a.special), default=0)
         return {'kind': name, 'known': True,
                 'takes_extra_damage_from': weak or ['nothing in particular'],
                 'resists': resists or ['nothing in particular'],
+                'fists_do_percent': 100 - c.damagemods.get('hand', 0),
+                'weapons_do_percent': 100 - c.damagemods.get('misc', 0),
                 'attack_reach': 'long' if reach > 150 else 'medium' if reach > 60 else 'short'}
 
     def attacks(self, kind: str) -> list[Attack]:
         """`kind`'s ordinary attacks: not scripted specials."""
         c = self.character(kind)
         return [a for a in c.attacks if not a.special] if c else []
+
+    def locke_grapples(self, weaponmask: int) -> dict[int, list[Attack]]:
+        """Locke's grapples usable with the weapon in hand, by button: the
+        interactive specials, tried before the plain attacks of their key
+        (FindButtonAttack: RESPONSE, SPECIAL, then plain; GRIND.md §2.5).
+        Finishers (CA_DEATH) are left out: the game fires them itself when
+        a blow would kill. Each needs the target to have the matching
+        impact animation, or the game refuses it."""
+        c = self.character('Locke')
+        grapples: dict[int, list[Attack]] = {}
+        for a in c.attacks if c else ():
+            if (a.flags & CA_INTERACTIVE and a.special and not a.flags & CA_DEATH
+                    and a.weaponmask & weaponmask and a.control):
+                grapples.setdefault(a.button, []).append(a)
+        return grapples
 
     def locke_attacks(self, weaponmask: int, attackskill: int, weaponskill: int) -> list[Attack]:
         """Locke's ordinary attacks usable with the weapon in hand and his
