@@ -106,3 +106,29 @@ fragment float4 _main(vs_out in [[stage_in]],
     return float4((mean * steps + floor(mean / (levels / steps))) / 255.0, 1.0) * p.color_tint;
 }
 )MSL";
+
+// The coloured triangles (TRenderer::DrawColoredTrianglesToTarget): vertex
+// positions in pixels of the active target, whose size is `target.xy`; each
+// vertex's colour (straight alpha) interpolated across its triangles.
+inline constexpr const char* kColorMeshVsMetal = R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+struct params { float4 target; };
+struct vs_in  { float2 pos [[attribute(0)]]; float4 color [[attribute(1)]]; };
+struct vs_out { float4 pos [[position]]; float4 color; };
+vertex vs_out _main(vs_in in [[stage_in]], constant params& p [[buffer(0)]]) {
+    vs_out o;
+    o.pos = float4(in.pos.x * 2.0 / p.target.x - 1.0, 1.0 - in.pos.y * 2.0 / p.target.y, 0.0, 1.0);
+    o.color = in.color;
+    return o;
+}
+)MSL";
+
+inline constexpr const char* kColorMeshFsMetal = R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+struct vs_out { float4 pos [[position]]; float4 color; };
+fragment float4 _main(vs_out in [[stage_in]]) {
+    return in.color;
+}
+)MSL";

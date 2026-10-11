@@ -1632,10 +1632,61 @@ void TRenderer::InitCompositePipeline()
     pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     pip.label = "renderer.composite.reduce.pipeline.rt";
     composite_pip_reduce_rt = sg_make_pipeline(&pip);
+
+    // The coloured triangles (DrawColoredTrianglesToTarget): pixel positions
+    // and UBYTE4N colours, streamed; straight alpha into an RGBA8 target.
+    sg_shader_desc mesh = {};
+    mesh.attrs[0].name      = "pos";
+    mesh.attrs[0].sem_name  = "POSITION";
+    mesh.attrs[0].sem_index = 0;
+    mesh.attrs[1].name      = "color";
+    mesh.attrs[1].sem_name  = "COLOR";
+    mesh.attrs[1].sem_index = 0;
+    mesh.vs.source = kColorMeshVs;
+    mesh.vs.entry  = kShaderVsEntry;
+    mesh.vs.uniform_blocks[0].size = sizeof(float) * 4;
+    mesh.vs.uniform_blocks[0].uniforms[0].name = "target";
+    mesh.vs.uniform_blocks[0].uniforms[0].type = SG_UNIFORMTYPE_FLOAT4;
+    mesh.fs.source = kColorMeshFs;
+    mesh.fs.entry  = kShaderFsEntry;
+    mesh.label = "renderer.colormesh.shader";
+    color_mesh_shader = sg_make_shader(&mesh);
+
+    sg_pipeline_desc mesh_pip = {};
+    mesh_pip.shader = color_mesh_shader;
+    mesh_pip.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
+    mesh_pip.layout.attrs[1].format = SG_VERTEXFORMAT_UBYTE4N;
+    mesh_pip.index_type = SG_INDEXTYPE_UINT16;
+    mesh_pip.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+    mesh_pip.colors[0].blend.enabled = true;
+    mesh_pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
+    mesh_pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    mesh_pip.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+    mesh_pip.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    mesh_pip.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+    mesh_pip.depth.pixel_format     = SG_PIXELFORMAT_NONE;
+    mesh_pip.label = "renderer.colormesh.pipeline.rt";
+    color_mesh_pip_rt = sg_make_pipeline(&mesh_pip);
+
+    sg_buffer_desc mesh_vb = {};
+    mesh_vb.size  = size_t(kMaxColorMeshVertices) * sizeof(SColorVertex2D);
+    mesh_vb.usage = SG_USAGE_STREAM;
+    mesh_vb.label = "renderer.colormesh.vbuf";
+    color_mesh_vbuf = sg_make_buffer(&mesh_vb);
+    sg_buffer_desc mesh_ib = {};
+    mesh_ib.type  = SG_BUFFERTYPE_INDEXBUFFER;
+    mesh_ib.size  = size_t(kMaxColorMeshIndices) * sizeof(uint16_t);
+    mesh_ib.usage = SG_USAGE_STREAM;
+    mesh_ib.label = "renderer.colormesh.ibuf";
+    color_mesh_ibuf = sg_make_buffer(&mesh_ib);
 }
 
 void TRenderer::ShutdownCompositePipeline()
 {
+    if (color_mesh_ibuf.id)   { sg_destroy_buffer(color_mesh_ibuf);     color_mesh_ibuf   = {}; }
+    if (color_mesh_vbuf.id)   { sg_destroy_buffer(color_mesh_vbuf);     color_mesh_vbuf   = {}; }
+    if (color_mesh_pip_rt.id) { sg_destroy_pipeline(color_mesh_pip_rt); color_mesh_pip_rt = {}; }
+    if (color_mesh_shader.id) { sg_destroy_shader(color_mesh_shader);   color_mesh_shader = {}; }
     if (composite_pip_reduce_rt.id) { sg_destroy_pipeline(composite_pip_reduce_rt); composite_pip_reduce_rt = {}; }
     if (composite_reduce_shader.id) { sg_destroy_shader(composite_reduce_shader);   composite_reduce_shader = {}; }
     if (composite_pip_premul_rt.id)   { sg_destroy_pipeline(composite_pip_premul_rt);   composite_pip_premul_rt   = {}; }
@@ -4823,6 +4874,80 @@ void TRenderer::DrawSurfaceSubrectToTarget(TSurface* surf,
               src_x, src_y, src_w, src_h,
               surf->Width(), surf->Height(),
               false, false, nullptr, ECompositeAlpha::Premultiplied);
+}
+
+void TRenderer::DrawSurfaceStretchedToTarget(TSurface* surf,
+                                             float dst_x, float dst_y, float dst_w, float dst_h,
+                                             int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                                             int32_t target_w, int32_t target_h)
+{
+    if (!surf || src_w <= 0 || src_h <= 0 || dst_w <= 0.0f || dst_h <= 0.0f) return;
+    if (target_w <= 0 || target_h <= 0 || surf->Width() <= 0 || surf->Height() <= 0) return;
+    const sg_image img = surf->GetSGImage();
+    if (!img.id || !composite_pip_premul_rt.id) return;
+
+    sg_apply_pipeline(composite_pip_premul_rt);
+    sg_bindings bind = {};
+    bind.vertex_buffers[0] = composite_vbuf;
+    bind.fs_images[0]      = img;
+    sg_apply_bindings(&bind);
+
+    const float tex_w = float(surf->Width());
+    const float tex_h = float(surf->Height());
+    const float uniforms[16] = {
+        (2.0f * dst_x / target_w) - 1.0f,                       // rect
+        1.0f - (2.0f * (dst_y + dst_h) / target_h),
+        (2.0f * dst_w) / target_w,
+        (2.0f * dst_h) / target_h,
+        float(src_x) / tex_w, float(src_y) / tex_h,              // uv_rect
+        float(src_w) / tex_w, float(src_h) / tex_h,
+        0.0f, 0.0f, 0.0f, 0.0f,                                  // chroma_key
+        1.0f, 1.0f, 1.0f, 1.0f,                                  // color_tint
+    };
+    const sg_range u_range = { uniforms, sizeof(uniforms) };
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
+    sg_apply_uniforms(SG_SHADERSTAGE_FS, 0, &u_range);
+    sg_draw(0, 6, 1);
+}
+
+void TRenderer::SetTargetClip(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    sg_apply_scissor_rect(x, y, (std::max)(w, 0), (std::max)(h, 0), true);
+}
+
+void TRenderer::ResetTargetClip(int32_t target_w, int32_t target_h)
+{
+    sg_apply_scissor_rect(0, 0, target_w, target_h, true);
+}
+
+void TRenderer::DrawColoredTrianglesToTarget(const SColorVertex2D* vertices, int32_t vertex_count,
+                                             const uint16_t* indices, int32_t index_count,
+                                             int32_t target_w, int32_t target_h)
+{
+    if (!vertices || !indices || vertex_count <= 0 || index_count <= 0) return;
+    if (target_w <= 0 || target_h <= 0 || !color_mesh_pip_rt.id) return;
+    const sg_range vertex_range = { vertices, size_t(vertex_count) * sizeof(SColorVertex2D) };
+    const sg_range index_range = { indices, size_t(index_count) * sizeof(uint16_t) };
+    const int32_t vertex_offset = sg_append_buffer(color_mesh_vbuf, &vertex_range);
+    const int32_t index_offset = sg_append_buffer(color_mesh_ibuf, &index_range);
+    if (sg_query_buffer_overflow(color_mesh_vbuf) || sg_query_buffer_overflow(color_mesh_ibuf))
+    {
+        log_warn("[renderer] coloured triangles over the frame's %d vertices / %d indices",
+                 kMaxColorMeshVertices, kMaxColorMeshIndices);
+        return;
+    }
+
+    sg_apply_pipeline(color_mesh_pip_rt);
+    sg_bindings bind = {};
+    bind.vertex_buffers[0]        = color_mesh_vbuf;
+    bind.vertex_buffer_offsets[0] = vertex_offset;
+    bind.index_buffer             = color_mesh_ibuf;
+    bind.index_buffer_offset      = index_offset;
+    sg_apply_bindings(&bind);
+    const float uniforms[4] = { float(target_w), float(target_h), 0.0f, 0.0f };
+    const sg_range u_range = { uniforms, sizeof(uniforms) };
+    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &u_range);
+    sg_draw(0, index_count, 1);
 }
 
 void TRenderer::DrawBitmapShadowed(PTBitmap bm, int32_t x, int32_t y,

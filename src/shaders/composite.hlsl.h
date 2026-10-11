@@ -90,3 +90,25 @@ float4 main_ps(vs_out i) : SV_Target0 {
     return float4((mean * steps + floor(mean / (levels / steps))) / 255.0, 1.0) * color_tint;
 }
 )HLSL";
+
+// The coloured triangles; see kColorMeshVsMetal.
+inline constexpr const char* kColorMeshVsHlsl = R"HLSL(
+cbuffer params : register(b0) {
+    float4 target;
+};
+struct vs_in  { float2 pos : POSITION; float4 color : COLOR0; };
+struct vs_out { float4 pos : SV_Position; float4 color : COLOR0; };
+vs_out main_vs(vs_in i) {
+    vs_out o;
+    o.pos = float4(i.pos.x * 2.0 / target.x - 1.0, 1.0 - i.pos.y * 2.0 / target.y, 0.0, 1.0);
+    o.color = i.color;
+    return o;
+}
+)HLSL";
+
+inline constexpr const char* kColorMeshFsHlsl = R"HLSL(
+struct vs_out { float4 pos : SV_Position; float4 color : COLOR0; };
+float4 main_ps(vs_out i) : SV_Target0 {
+    return i.color;
+}
+)HLSL";

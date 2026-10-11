@@ -1018,6 +1018,17 @@ public:
                                     int32_t src_x, int32_t src_y,
                                     int32_t src_w, int32_t src_h,
                                     int32_t target_w, int32_t target_h);
+    // A surface's subrect stretched over (dst_x, dst_y, dst_w, dst_h), in
+    // pixels of the active target, sampled with the surface's own filter (a
+    // surface made with SG_FILTER_NEAREST draws point-sampled).
+    void DrawSurfaceStretchedToTarget(TSurface* surf,
+                                      float dst_x, float dst_y, float dst_w, float dst_h,
+                                      int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                                      int32_t target_w, int32_t target_h);
+    // Clips the draws that follow in the active target pass to (x, y, w, h)
+    // until ResetTargetClip (retail's viewport clip, T3DScene 0x00412150).
+    void SetTargetClip(int32_t x, int32_t y, int32_t w, int32_t h);
+    void ResetTargetClip(int32_t target_w, int32_t target_h);
 
     // Dropshadow convenience — draws a darkened silhouette of `bm` at
     // (x + off_x, y + off_y), then the normal bitmap on top. The shadow
@@ -1093,6 +1104,22 @@ public:
     void DrawSolidRectToTarget(int32_t x, int32_t y, int32_t w, int32_t h,
                                int32_t target_w, int32_t target_h,
                                uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+
+    // Indexed triangles of coloured vertices, each vertex's colour (straight
+    // alpha) interpolated across its triangles and blended over the active
+    // target: retail's untextured Gouraud draws (the automap's fog mesh).
+    // Positions are in pixels of the target. At most kMaxColorMeshVertices
+    // vertices and kMaxColorMeshIndices indices a frame, all draws together.
+    struct SColorVertex2D
+    {
+        float x = 0.0f, y = 0.0f;
+        uint8_t r = 0, g = 0, b = 0, a = 0;
+    };
+    static constexpr int32_t kMaxColorMeshVertices = 4096;
+    static constexpr int32_t kMaxColorMeshIndices = 16384;
+    void DrawColoredTrianglesToTarget(const SColorVertex2D* vertices, int32_t vertex_count,
+                                      const uint16_t* indices, int32_t index_count,
+                                      int32_t target_w, int32_t target_h);
 
     // 9-slice blit (A.2d). Treats `bm` as a stretchable panel: the four
     // corner pieces render verbatim at their source size; the four edges
@@ -1287,6 +1314,10 @@ private:
     sg_pipeline composite_pip_premul_swap = {};   // Swapchain, premultiplied source
     sg_shader   composite_reduce_shader = {};     // the 2:1 reduction
     sg_pipeline composite_pip_reduce_rt = {};     // RGBA8 RT, the 2:1 reduction
+    sg_shader   color_mesh_shader = {};           // DrawColoredTrianglesToTarget
+    sg_pipeline color_mesh_pip_rt = {};           // RGBA8 RT, straight alpha
+    sg_buffer   color_mesh_vbuf = {};             // streamed, appended per draw
+    sg_buffer   color_mesh_ibuf = {};
 
     // ---- Passes ---------------------------------------------------------
     sg_pass default_pass = {};   // G-buffer MRT fill
