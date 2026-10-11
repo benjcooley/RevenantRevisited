@@ -98,9 +98,11 @@ class TPlaytest
     // ---- the control channel ----
     void Serve();
     void Request(const std::string& line);
-    void Respond(const JsonValue& id, bool ok, const std::string& members, const std::string& error = {});
+    [[nodiscard]] static JsonOut Answer(const JsonValue& id);
+    static void Send(JsonOut& answer);
+    static void Refuse(const JsonValue& id, const std::string& error);
     bool CmdHello(JsonOut& out);
-    bool CmdStart(const JsonValue& req, std::string& error);
+    bool CmdStart(const JsonValue& req, JsonOut& out, std::string& error);
     bool CmdStep(const JsonValue& req, std::string& error);
     bool CmdObserve(const JsonValue& req, JsonOut& out, std::string& error);
     bool CmdProject(const JsonValue& req, JsonOut& out, std::string& error);

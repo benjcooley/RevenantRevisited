@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 // The files of a bundle (PROTOCOL.md §4).
@@ -89,8 +90,9 @@ class TRecordingWriter
     void Frame(int64_t f, double dt);
     // A check line (PROTOCOL.md §3), `fields` a JSON object. One a tick.
     void Check(int64_t t, const std::string& fields);
-    // A mark; `extra` holds its other fields (a JSON object, or empty).
-    void Mark(int64_t t, const std::string& kind, const JsonValue& extra);
+    // A mark and its other fields (name, value as JSON).
+    void Mark(int64_t t, const std::string& kind,
+              const std::vector<std::pair<std::string, std::string>>& fields);
     // The end line; closes the file.
     void End(int64_t t);
     void Close();

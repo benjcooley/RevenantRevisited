@@ -496,10 +496,9 @@ void TPlaytest::FinishStep()
     stepping = false;
     stepEvents.clear();
     stepNext = 0;
-    JsonOut out;
-    out.Begin('{').Key("id").Raw(stepId.Serialize()).FieldBool("ok", true);
-    out.Field("t", Tick()).End('}');
-    rev_platform::WriteStdioPipeLine(out.str());
+    JsonOut out = Answer(stepId);
+    out.Field("t", Tick());
+    Send(out);
 }
 
 void TPlaytest::FinishReplay()
@@ -514,8 +513,7 @@ void TPlaytest::FinishReplay()
 
     if (replayAnswer)
     {
-        JsonOut out;
-        out.Begin('{').Key("id").Raw(replayId.Serialize()).FieldBool("ok", true);
+        JsonOut out = Answer(replayId);
         out.Field("t", t);
         if (verify)
         {
@@ -525,8 +523,7 @@ void TPlaytest::FinishReplay()
             else
                 out.Null();
         }
-        out.End('}');
-        rev_platform::WriteStdioPipeLine(out.str());
+        Send(out);
         replayAnswer = false;
         return;
     }
@@ -614,17 +611,27 @@ void TPlaytest::Serve()
     }
 }
 
-void TPlaytest::Respond(const JsonValue& id, bool ok, const std::string& members, const std::string& error)
+// An answer under way: {"id": <the request's>, "ok": true, ... -- the
+// command adds its fields, Send closes and writes it.
+JsonOut TPlaytest::Answer(const JsonValue& id)
 {
     JsonOut out;
-    out.Begin('{').Key("id").Raw(id.Serialize()).FieldBool("ok", ok);
-    if (!ok)
-        out.FieldString("error", error);
-    out.End('}');
-    std::string text = out.str();
-    if (ok && !members.empty())
-        text.insert(text.size() - 1, "," + members);
-    rev_platform::WriteStdioPipeLine(text);
+    out.Begin('{').Key("id").Raw(id.Serialize()).FieldBool("ok", true);
+    return out;
+}
+
+void TPlaytest::Send(JsonOut& answer)
+{
+    answer.End('}');
+    rev_platform::WriteStdioPipeLine(answer.str());
+}
+
+void TPlaytest::Refuse(const JsonValue& id, const std::string& error)
+{
+    JsonOut out;
+    out.Begin('{').Key("id").Raw(id.Serialize()).FieldBool("ok", false);
+    out.FieldString("error", error).End('}');
+    rev_platform::WriteStdioPipeLine(out.str());
 }
 
 void TPlaytest::Request(const std::string& line)
@@ -634,7 +641,7 @@ void TPlaytest::Request(const std::string& line)
     if (!JsonValue::Parse(line, req, error) || !req.IsObject())
     {
         log_warn("[playtest] not a request: %s", line.c_str());
-        Respond(JsonValue(), false, {}, "not a JSON object: " + error);
+        Refuse(JsonValue(), "not a JSON object: " + error);
         return;
     }
     const JsonValue& id = req["id"];
@@ -642,14 +649,12 @@ void TPlaytest::Request(const std::string& line)
     log_info("[control] t=%lld %s %s", (long long)(started ? Tick() : 0), cmd.c_str(),
              line.size() > 300 ? (line.substr(0, 300) + "...").c_str() : line.c_str());
 
-    // The members of the answer, written without the braces.
-    JsonOut out;
-    out.Begin('{');
+    JsonOut out = Answer(id);
     bool ok = false;
     if (cmd == "hello")
         ok = CmdHello(out);
     else if (cmd == "start")
-        ok = CmdStart(req, error);
+        ok = CmdStart(req, out, error);
     else if (cmd == "step")
     {
         if (CmdStep(req, error))
@@ -678,7 +683,7 @@ void TPlaytest::Request(const std::string& line)
         ok = CmdCaption(req, error);
     else if (cmd == "quit")
     {
-        Respond(id, true, {});
+        Send(out);
         CmdQuit();
         return;
     }
@@ -687,12 +692,10 @@ void TPlaytest::Request(const std::string& line)
     else
         error = "unknown command '" + cmd + "'";
 
-    if (cmd == "start" && ok)
-        out.Field("t", Tick());
-    out.End('}');
-    std::string members = out.str();
-    members = members.substr(1, members.size() - 2);
-    Respond(id, ok, ok ? members : std::string(), error);
+    if (ok)
+        Send(out);
+    else
+        Refuse(id, error);
 }
 
 bool TPlaytest::CmdHello(JsonOut& out)
@@ -716,7 +719,7 @@ bool TPlaytest::CmdHello(JsonOut& out)
     return true;
 }
 
-bool TPlaytest::CmdStart(const JsonValue& req, std::string& error)
+bool TPlaytest::CmdStart(const JsonValue& req, JsonOut& out, std::string& error)
 {
     if (booted)
     {
@@ -763,7 +766,10 @@ bool TPlaytest::CmdStart(const JsonValue& req, std::string& error)
     if (req.Has("record"))
         bundleDir = req["record"].Str();
     by = req.Has("by") ? req["by"].Str() : std::string("director");
-    return Boot(error);
+    if (!Boot(error))
+        return false;
+    out.Field("t", Tick());
+    return true;
 }
 
 bool TPlaytest::CmdStep(const JsonValue& req, std::string& error)
@@ -907,15 +913,10 @@ bool TPlaytest::CmdMark(const JsonValue& req, JsonOut& out, std::string& error)
     if (writer.IsOpen())
     {
         // The request's other fields go with the mark.
-        JsonOut extra;
-        extra.Begin('{');
+        std::vector<std::pair<std::string, std::string>> fields;
         for (const auto& [key, value] : req.Members())
             if (key != "id" && key != "cmd" && key != "kind")
-                extra.Key(key.c_str()).Raw(value.Serialize());
-        extra.End('}');
-        JsonValue fields;
-        if (!JsonValue::Parse(extra.str(), fields, error))
-            return false;
+                fields.emplace_back(key, value.Serialize());
         writer.Mark(Tick(), kind, fields);
         writer.Check(Tick(), Observation::CheckFields(drawsBase));
     }

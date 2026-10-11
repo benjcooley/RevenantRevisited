@@ -384,13 +384,14 @@ void TRecordingWriter::Check(int64_t t, const std::string& fields)
     Line(out.str());
 }
 
-void TRecordingWriter::Mark(int64_t t, const std::string& kind, const JsonValue& extra)
+void TRecordingWriter::Mark(int64_t t, const std::string& kind,
+                            const std::vector<std::pair<std::string, std::string>>& fields)
 {
     JsonOut out;
     out.Begin('{').Field("t", t).FieldString("mark", kind);
-    for (const auto& [key, value] : extra.Members())
+    for (const auto& [key, value] : fields)
         if (key != "t" && key != "mark")
-            out.Key(key.c_str()).Raw(value.Serialize());
+            out.Key(key.c_str()).Raw(value);
     out.End('}');
     Line(out.str());
 }
