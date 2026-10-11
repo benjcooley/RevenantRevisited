@@ -50,6 +50,7 @@ struct S3DVertex{hmm_vec3 pos,normal;float tu,tv;};
 struct Owner{uint32_t ObjId()const{return 0xad92bd35u;}int GetState()const{return 0;}};
 struct Imagery{bool HasRetailStaticParticleProfile(uint32_t)const{return false;}
  bool HasRetailLightStripProfile()const{return false;}
+ bool HasRetailFunnelProfile()const{return false;}
  bool HasRetailCometProfile()const{return false;}
  bool HasRetailFGeyserProfile()const{return false;}
  bool HasRetailDustProfile()const{return false;}

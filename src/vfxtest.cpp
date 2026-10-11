@@ -13,6 +13,7 @@
 #include "effects/cataclysmoriginal.h"
 #include "effects/rockstormoriginal.h"
 #include "effects/lightstriporiginal.h"
+#include "effects/funneloriginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
@@ -5315,6 +5316,16 @@ struct SVfxTestBootstrap {
             original.submit=[](void* c,EFxDebugMode){lightstrip_original::Advance(static_cast<lightstrip_original::State*>(c),TTime::DeltaTime());};
             original.submit_world=[](void* c,EFxDebugMode mode){lightstrip_original::SubmitWorld(static_cast<lightstrip_original::State*>(c),mode);};
             original.destroy=[](void* c){lightstrip_original::Destroy(static_cast<lightstrip_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="Funnel_ORIGINAL";
+            original.family="strip";original.pipeline="IM+QUAD";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{S3DPoint source={o.x-180,o.y,o.z+78},target={o.x+180,o.y,o.z+78};return funnel_original::Spawn(source,target);};
+            original.submit=[](void* c,EFxDebugMode){funnel_original::Advance(static_cast<funnel_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){funnel_original::SubmitWorld(static_cast<funnel_original::State*>(c),mode);};
+            original.is_alive=[](void* c){return funnel_original::IsAlive(static_cast<funnel_original::State*>(c));};
+            original.destroy=[](void* c){funnel_original::Destroy(static_cast<funnel_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
         {
