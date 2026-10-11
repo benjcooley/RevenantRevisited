@@ -239,6 +239,9 @@ class TMapRenderer
     // linear and only approximates.
     [[nodiscard]] bool ScreenToMapScreen(int32_t screen_x, int32_t screen_y,
                                          int32_t& map_x, int32_t& map_y) const;
+    // Its inverse: the viewport pixel a map-screen point lands on in the last
+    // drawn frame (it may lie outside the viewport). False with no view.
+    [[nodiscard]] bool MapScreenToScreen(float map_x, float map_y, float& screen_x, float& screen_y) const;
     // The map view's size in viewport pixels (the last frame's).
     void GetViewportSize(int32_t& w, int32_t& h) const;
 

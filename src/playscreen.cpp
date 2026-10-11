@@ -58,6 +58,7 @@
 #include "mapmanager.h"
 #include "mappane.h"
 #include "maprenderer.h"
+#include "risingnumbers.h"
 #include "player.h"
 #include "savegame.h"
 #include "revisited_settings.h"
@@ -296,6 +297,9 @@ bool TPlayScreen::Initialize()
     mapRenderer = std::make_unique<TMapRenderer>();
     mapRenderer->Initialize();
     MapPane.SetMapView(mapRenderer.get());
+    risingNumbers = std::make_unique<TRisingNumberLayer>();
+    if (Renderer)
+        Renderer->AddHud(risingNumbers.get(), TRisingNumberLayer::kHudZ);
     BindWorld();
     mapListener = MapManager.AddListener([this](EMapManagerEvent, TMapManager*) { BindWorld(); });
     // Push global Revisited point-light multipliers now that MapRenderer
@@ -766,6 +770,12 @@ void TPlayScreen::Close()
     {
         MapManager.RemoveListener(mapListener);
         mapListener = 0;
+    }
+    if (risingNumbers)
+    {
+        if (Renderer)
+            Renderer->RemoveHud(risingNumbers.get());
+        risingNumbers.reset();
     }
     if (mapRenderer)
     {
@@ -1252,6 +1262,8 @@ void TPlayScreen::RenderFrame()
     // View panel keeps displaying the previously rendered frame.
     if (!EditorShouldRenderWorld()) return;
     mapRenderer->RenderFrame();
+    if (risingNumbers)
+        risingNumbers->Compose(*mapRenderer);
 }
 
 // Diagnostic overlay: prints Locke's world position, walkmap height

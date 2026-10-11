@@ -181,6 +181,11 @@ SET_POS = 0x46ed70                               # slot 8, thiscall (pos*, level
 # TMapPane::MouseClick (thiscall (button, x, y), ret 0xc): what the player's
 # Stop calls to let go of the right-button walk (button 5), recorded.
 PLAY_MOUSE_CLICK = 0x44f140
+# TCharAnimator's rising number (thiscall (amount, SPoint* point, colour
+# 0xRRGGBB), ret 0xc): what Damage shows on the struck character's animator
+# -- a direct call, so the stand-in animator answers it here, recorded as
+# its other calls are.
+SHOW_NUMBER = 0x4da3b0
 SLOT_MOVE = 0x114                                # TCharacter::Move 0x4c46d0, TPlayer::Move 0x518df0
 
 
@@ -295,6 +300,7 @@ class CombatWorld:
         b.add(ITER_NEXT, 'MapIterator.Next', 0, self._iter_next)
         b.add(SET_POS, 'SetPos', 0xc, self._set_pos)
         b.add(PLAY_MOUSE_CLICK, 'PlayMouseClick', 0xc, self._play_mouse_click)
+        b.add(SHOW_NUMBER, 'animator.ShowNumber', 0xc, self._show_number)
         self.animators = {}        # stand-in animator address -> character
         self.imagery = {}
         self._imagery_stubs()
@@ -392,6 +398,12 @@ class CombatWorld:
         self.vm.write(ecx + O_POS, struct.pack('<3i', *pos))
         self.seams.append(dict(seam='SetPos', who=self._name(ecx), pos=pos))
         return 1
+
+    def _show_number(self, args, ecx):
+        x, y = struct.unpack('<2i', self.vm.uc.mem_read(args[1], 8))
+        self.seams.append(dict(seam='animator.ShowNumber', who=self._name(self.animators.get(ecx, ecx)),
+                               args=[s32(args[0]), x, y, args[2] & 0xffffff], result=0))
+        return 0
 
     def _play_mouse_click(self, args, ecx):
         self.seams.append(dict(seam='PlayMouseClick', button=s32(args[0]), x=s32(args[1]), y=s32(args[2])))
