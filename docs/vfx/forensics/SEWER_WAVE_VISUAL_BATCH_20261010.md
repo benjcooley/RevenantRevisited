@@ -74,3 +74,33 @@ natural scene placement/caller/device/depth interactions remain open. These
 fixed nullspell/native-domain and synthetic-floor runs do not close those gates.
 Central ledger, coverage and review mode files are owned by root and unchanged
 by this batch.
+
+## Whole-wave framing follow-up
+
+Root independently approved SewerWater's plane form, texture and constant color
+over all six phases. Its individual `review-frozen/SewerWater-root-approval.json`
+pins the unchanged initial samples, binary and source. Root found the initial
+640x340 wave tails clipped; those initial wave panels do not establish whole
+effect coverage or primary visual closure.
+
+`wave-whole/native/manifest.json` supplies eighteen fresh whole original frames
+at 1280x960, each with an identical warm RGB565/depth replay. The exact same
+capture binary supplies `wave-whole/metal/{name}/manifest.json`, sixty frames
+per wave. Origin0, authored scale, owner matrix, global clock and source light
+are unchanged. The viewport is enlarged with its normal center at640,480;
+both implementations use the same explicit camera/framing, with no alignment
+fitting or geometry scale change.
+
+The native probe observes every original transformed vertex after complete
+RenderObject, including transparent vertices. Wave's whole projected bounds
+are536.54,234.33..1131.34,531.73; WaveS's are518.97,211.12..1179.63,538.79;
+WaveM's are510.83,180.32..1238.81,544.31. These all fit strictly inside1280x960
+at all six phases. `wave-whole/review/manifest.json` passes `--require-unclipped`
+for the executed full geometry and both nonzero-image bounds, plus the same
+clock, native controller-rate and every-vertex UV checks. The full six-phase
+panels retain all pixels and existing software/GPU differences. Earlier real
+map proofs remain pinned to the same unchanged engine binary. Python compile
+checks and `git diff --check` pass for the probe-only follow-up.
+
+Whole-wave independent review remains separate from the automated comparison
+checks; exact pixels and natural scene/device/depth acceptance stay open.
