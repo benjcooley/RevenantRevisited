@@ -49,6 +49,7 @@
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
 #include "effects/restorelifepreview.h"
+#include "effects/dexteritypreview.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -7261,6 +7262,19 @@ struct SVfxTestBootstrap {
             e.submit_world=[](void* c,EFxDebugMode){restorelife_preview::SubmitWorld(static_cast<restorelife_preview::State*>(c));};
             e.is_alive=[](void* c){return restorelife_preview::Alive(static_cast<restorelife_preview::State*>(c));};
             e.destroy=[](void* c){restorelife_preview::Destroy(static_cast<restorelife_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "TDexterity_AUTHORED_TAGS";
+            e.family        = "magic";
+            e.pipeline      = "IM";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return dexterity_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){dexterity_preview::Advance(static_cast<dexterity_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){dexterity_preview::SubmitWorld(static_cast<dexterity_preview::State*>(c));};
+            e.is_alive=[](void* c){return dexterity_preview::Alive(static_cast<dexterity_preview::State*>(c));};
+            e.destroy=[](void* c){dexterity_preview::Destroy(static_cast<dexterity_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {

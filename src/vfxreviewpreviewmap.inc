@@ -52,6 +52,7 @@
 {0x63fd382au, "TFireBallEffect", false, "Implemented preview controller; map caller not certified"}, // FireBall
 {0x82aeb30fu, "TImmortalmight_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Immortalmight
 {0x89abcde1u, "TPixieEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Pixie
+{0x8cd3ea0fu, "TDexterity_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Dexterity
 {0x98974ea7u, "TFireWindEffect_Bespoke__YFireWind_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // YFireWind
 {0x98974eabu, "TFireWindEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // FireWind
 {0x9de2a0feu, "TWarriorborn_AUTHORED_OWNER", false, "Implemented preview controller; map caller not certified"}, // Warriorborn
