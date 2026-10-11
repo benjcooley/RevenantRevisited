@@ -537,6 +537,7 @@ struct SHelperMeshSubmit
     bool       retail_prelit_color_uniform = false;
     uint32_t   retail_prelit_color = 0;
     bool       retail_additive_cull_none = false; // explicit Scene8 full native draw-state proof
+    bool       retail_opaque = false; // audited Scene1: ONE/ZERO, depth test/write, selected face cull
     bool       retail_source_alpha = false; // audited source mode2: cull-none; mode4 writes Z as the native untextured kernel
     bool       retail_alpha_source_quantize = false; // opt-in original ARGB4444 source contribution floor; destination precision remains GPU
     // Undo an explicit geometry-only Z bridge before source normal lighting.
@@ -1408,6 +1409,8 @@ private:
     sg_shader   helper_mesh_shader        = {};
     sg_pipeline helper_mesh_back_pipeline = {};
     sg_pipeline helper_mesh_front_pipeline = {};
+    sg_pipeline helper_opaque_back_pipeline = {};
+    sg_pipeline helper_opaque_front_pipeline = {};
     sg_pipeline helper_source_alpha_pipeline = {};
     sg_pipeline helper_untextured_software_pipeline = {};
     sg_pipeline helper_additive_cull_none_pipeline{};

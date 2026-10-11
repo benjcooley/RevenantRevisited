@@ -7,7 +7,7 @@ state, geometry, animation, motion and comparisons stay in this fast loop.
 Existing guest recordings remain evidence. Unsupported fixtures stay queued
 while the next easy effect moves forward.
 
-Latest bounded rendered coverage is 77/176;136 configured visual passes are recorded separately. StillWater and all active watcher
+Latest bounded rendered coverage is 77/176;143 configured visual passes are recorded separately. StillWater and all active watcher
 texture frames pass original-selector/matrix/raster comparisons; CharUtility
 and SewerWater pass all-part static comparisons and actual native animator
 lookup. Use `static_texture_probe.py` and `default_static_probe.py`.
@@ -42,9 +42,8 @@ state/order/RNG now matches after local arithmetic fixes; use
 remaining original illumination/render/combat/audio checks.
 
 The complete scope remains the 176 retail type rows in
-[`EFFECT_BURNDOWN.json`](../../docs/vfx/EFFECT_BURNDOWN.json). As audited for this
-work, 14 rows retain a current bounded visual appearance check and zero have every runtime
-and context acceptance gate. These probes add retained evidence; they do not
+[`EFFECT_BURNDOWN.json`](../../docs/vfx/EFFECT_BURNDOWN.json). The current configured visual-pass count is stated above and in the ledger;
+zero rows have every natural runtime and context acceptance gate. These probes add retained evidence; they do not
 silently mark any effect fully accepted or replace the ledger.
 
 The [Speed/native curve destination audit](../../docs/vfx/forensics/SPEED_CONTROLLER_PREFLIGHT_20261009.md)

@@ -15,6 +15,8 @@
 #include "effects/lightstriporiginal.h"
 #include "effects/funneloriginal.h"
 #include "effects/arroworiginal.h"
+#include "effects/ytelekinesisoriginal.h"
+#include "effects/jhagaattackoriginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
@@ -64,7 +66,9 @@
 #include "effects/vortexpreview.h"
 #include "effects/jtelepreview.h"
 #include "effects/irisflarepreview.h"
+#include "effects/essencedrainpreview.h"
 #include "effects/labbackpreview.h"
+#include "effects/swamppreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
 #include "effects/restorelifepreview.h"
@@ -72,6 +76,8 @@
 #include "effects/antimagicpreview.h"
 #include "effects/skinpreview.h"
 #include "effects/pukepreview.h"
+#include "effects/smokepreview.h"
+#include "effects/barrierpreview.h"
 #include "effects/shriekpreview.h"
 #include "effects/energyspraypreview.h"
 #include "effects/argbsourcecontrol.h"
@@ -5322,6 +5328,26 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(original);
         }
         {
+            VfxTest::SEffect original{};original.id="JhagaAttack_ORIGINAL";
+            original.family="projectile";original.pipeline="IM+QUAD";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return jhagaattack_original::Spawn({o.x,o.y+60,o.z+78});};
+            original.submit=[](void* c,EFxDebugMode){jhagaattack_original::Advance(static_cast<jhagaattack_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode d){jhagaattack_original::SubmitWorld(static_cast<jhagaattack_original::State*>(c),d);};
+            original.is_alive=[](void* c){return jhagaattack_original::IsAlive(static_cast<jhagaattack_original::State*>(c));};
+            original.destroy=[](void* c){jhagaattack_original::Destroy(static_cast<jhagaattack_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="YTelekinesis_ORIGINAL";
+            original.family="projectile";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return ytelekinesis_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){ytelekinesis_original::Advance(static_cast<ytelekinesis_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode d){ytelekinesis_original::SubmitWorld(static_cast<ytelekinesis_original::State*>(c),d);};
+            original.is_alive=[](void* c){return ytelekinesis_original::IsAlive(static_cast<ytelekinesis_original::State*>(c));};
+            original.destroy=[](void* c){ytelekinesis_original::Destroy(static_cast<ytelekinesis_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
             VfxTest::SEffect original{};original.id="ArrowEffect_ORIGINAL";
             original.family="projectile";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
             original.factory=[](const S3DPoint& o)->void*{return arrow_original::SpawnArrow({o.x-180,o.y,o.z+78},{o.x+180,o.y,o.z+78});};
@@ -6074,6 +6100,11 @@ struct SVfxTestBootstrap {
         {
             VfxTest::SEffect e={};e.id="IrisFlare_AUTHORED";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
             e.factory=[](const S3DPoint&o)->void*{return irisflare_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){irisflare_preview::Advance(static_cast<irisflare_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){irisflare_preview::SubmitWorld(static_cast<irisflare_preview::State*>(c));};e.is_alive=[](void*c){return irisflare_preview::Alive(static_cast<irisflare_preview::State*>(c));};e.destroy=[](void*c){irisflare_preview::Destroy(static_cast<irisflare_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+
+        {
+            VfxTest::SEffect e={};e.id="EssenceDrain_AUTHORED";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return essencedrain_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){essencedrain_preview::Advance(static_cast<essencedrain_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){essencedrain_preview::SubmitWorld(static_cast<essencedrain_preview::State*>(c));};e.is_alive=[](void*c){return essencedrain_preview::Alive(static_cast<essencedrain_preview::State*>(c));};e.destroy=[](void*c){essencedrain_preview::Destroy(static_cast<essencedrain_preview::State*>(c));};VfxTest::DeferredRegister(e);
         }
 
         // Shipped literal Vortex resolves the default animator and three legacy roots.
@@ -7015,6 +7046,17 @@ struct SVfxTestBootstrap {
         // =====================================================================
         {
             VfxTest::SEffect e = {};
+            e.id = "TSwamp_AUTHORED_TAGS";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return swamp_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){swamp_preview::Advance(static_cast<swamp_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){swamp_preview::SubmitWorld(static_cast<swamp_preview::State*>(c));};
+            e.is_alive=[](void* c){return swamp_preview::Alive(static_cast<swamp_preview::State*>(c));};
+            e.destroy=[](void* c){swamp_preview::Destroy(static_cast<swamp_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
             e.id = "TLabback_AUTHORED_TAGS";e.family="ambient";e.pipeline="IM";
             e.preview_style=VfxTest::EVfxPreviewStyle::Static;
             e.factory=[](const S3DPoint& o)->void*{return labback_preview::Spawn(o);};
@@ -7574,6 +7616,30 @@ struct SVfxTestBootstrap {
             e.submit_world=[](void* c,EFxDebugMode){shriek_preview::SubmitWorld(static_cast<shriek_preview::State*>(c));};
             e.is_alive=[](void* c){return shriek_preview::Alive(static_cast<shriek_preview::State*>(c));};
             e.destroy=[](void* c){shriek_preview::Destroy(static_cast<shriek_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        for(uint32_t id:{0x224a5adfu,0x224b5adcu}) {
+            VfxTest::SEffect e={};
+            e.id=id==0x224a5adfu?"BarrierEW_ORIGINAL":"BarrierNS_ORIGINAL";
+            e.family="map";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[id](const S3DPoint& o)->void*{return barrier_preview::Spawn(id,o);};
+            e.submit=[](void* c,EFxDebugMode){barrier_preview::Advance(static_cast<barrier_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){barrier_preview::SubmitWorld(static_cast<barrier_preview::State*>(c));};
+            e.is_alive=[](void* c){return barrier_preview::Alive(static_cast<barrier_preview::State*>(c));};
+            e.destroy=[](void* c){barrier_preview::Destroy(static_cast<barrier_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id            = "Smoke_ORIGINAL_QUALITY";
+            e.family        = "magic";
+            e.pipeline      = "IM";
+            e.preview_style = VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return smoke_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){smoke_preview::Advance(static_cast<smoke_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){smoke_preview::SubmitWorld(static_cast<smoke_preview::State*>(c));};
+            e.is_alive=[](void* c){return smoke_preview::Alive(static_cast<smoke_preview::State*>(c));};
+            e.destroy=[](void* c){smoke_preview::Destroy(static_cast<smoke_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {

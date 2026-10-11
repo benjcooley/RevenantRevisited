@@ -1836,10 +1836,11 @@ void GetParameters(int argc, char **argv)
             if (p == "0") StartupPartSysQuality = 0;
             else if (p == "1") StartupPartSysQuality = 1;
             else if (p == "2") StartupPartSysQuality = 2;
-            else FatalError("Invalid --partsys-quality: expected 0, 1 or 2", nullptr);
+            else if (p == "3") StartupPartSysQuality = 3;
+            else FatalError("Invalid --partsys-quality: expected 0, 1, 2 or 3", nullptr);
         }
         else if (arg_flag(cmd, "partsys-quality"))
-            FatalError("Missing --partsys-quality value; expected 0, 1 or 2", nullptr);
+            FatalError("Missing --partsys-quality value; expected 0, 1, 2 or 3", nullptr);
     }
 
     {

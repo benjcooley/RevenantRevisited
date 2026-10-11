@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -240,8 +241,10 @@ class T3DImagery : public TObjectImagery
     bool speed_partsys_profile = false;
     bool quicksilver_partsys_profile = false;
     bool lightstrip_partsys_profile = false;
+    bool jhagaattack_partsys_profile = false;
     bool funnel_partsys_profile = false;
     bool ValidateRetailLightStripProfile();
+    bool ValidateRetailJhagaAttackProfile();
     bool ValidateRetailFunnelProfile();
     bool comet_partsys_profile=false;
     bool fgeyser_partsys_profile=false;
@@ -347,6 +350,7 @@ class T3DImagery : public TObjectImagery
     bool HasRetailDustProfile() const { return dust_partsys_profile; }
     bool HasRetailPoisonProfile() const { return poison_partsys_profile; }
     bool HasRetailLightStripProfile() const { return lightstrip_partsys_profile; }
+    bool HasRetailJhagaAttackProfile() const { return jhagaattack_partsys_profile; }
     bool HasRetailFunnelProfile() const { return funnel_partsys_profile; }
     bool HasGoldPartSysProfile() const { return gold_partsys_profile; }
     bool HasRetailMightPartSysProfile() const { return might_partsys_profile; }
@@ -535,6 +539,8 @@ class T3DAnimator : public TObjectAnimator
     retail_warp::State retail_warp_state;
     struct SPartSysControllers;
     std::unique_ptr<SPartSysControllers> partsys_controllers;
+    bool jhagaattack_object_zero_sampled=false;
+    hmm_vec3 jhagaattack_object_zero_origin{}; // outgoing-flight origin consumed by controller initialization
     std::function<int(int,int,int)> lightstrip_ground;
     void RefreshPartSysControllers();
     void AdvancePartSysControllers();
@@ -549,6 +555,10 @@ class T3DAnimator : public TObjectAnimator
     int64_t          pose_update_render_frame = -1;
     int32_t          pose_update_state = -1;
     int32_t          pose_update_frame = -1;
+    int32_t          parents_state = -1;      // state the object parents are wired for; -1 = not
+                                              // wired from the imagery (a custom SetupObjects)
+    int32_t          parents_count = 0;       // objects when they were wired
+    std::array<uint8_t, MAX3DANIMOBJECTS> parent_order{}; // object indices, each after its parent
     int32_t          pose_update_next_state = -1;
     int32_t          pose_update_next_frame = -1;
     int32_t          pose_update_prev_state = -1;
@@ -597,6 +607,10 @@ class T3DAnimator : public TObjectAnimator
 
     // True for the hidden particle prototype, or every mesh when an authored
     // controller is unsupported. The caller must not submit a static substitute.
+    hmm_vec3 JhagaAttackObjectZeroOrigin() const { return jhagaattack_object_zero_origin; }
+    void SetJhagaAttackObjectZeroOrigin(const hmm_vec3& origin);
+    void NoteJhagaAttackPrototypeSample();
+    void SetJhagaAttackGround(std::function<int(int,int,int)> query);
     void SetLightStripGround(std::function<int(int,int,int)> query);
     void SetFunnelGround(std::function<int(int,int,int)> query);
     void SetCometGround(std::function<int(int,int,int)> query);
@@ -660,6 +674,12 @@ class T3DAnimator : public TObjectAnimator
 
   // Object Functions
     virtual void SetupObjects();
+    void ResolveObjectParents(int32_t state);
+      // Points each object (and its transform) at its parent object in the
+      // imagery for this state; a root hangs off the instance's transform.
+      // An I3D object can change parent from state to state (a sword sits in
+      // the hand in one, on the back in another). OBJ3D_PARENT keeps the
+      // parent a caller set.
     void GetVerts(S3DAnimObj* obj, ERender3DVertex verttype = ERender3DVertex::Vertex);
     void FreeVerts(S3DAnimObj* obj);
     void GetFaces(S3DAnimObj* obj);

@@ -84,6 +84,12 @@ PARTIAL = {
 # their owner constructors. These newer implementations predate their ledger
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
+    '0xaeaeeb32': 'JhagaAttack_ORIGINAL',
+    '0x224a5adf': 'BarrierEW_ORIGINAL',
+    '0x224b5adc': 'BarrierNS_ORIGINAL',
+    '0xdefeca7e': 'EssenceDrain_AUTHORED',
+    '0xaeaeeb28': 'YTelekinesis_ORIGINAL',
+    '0x224a5ccc': 'Smoke_ORIGINAL_QUALITY',
     '0xad92bd1f': 'ArrowEffect_ORIGINAL',
     '0x120054d1': 'IrisFlare_AUTHORED',
     '0xad92bd1e': 'QueenArrow_ORIGINAL',
@@ -123,6 +129,7 @@ SOURCE_MAPPINGS = {
     '0xadbcef13': 'TCharUtility_AUTHORED_STILL',
     '0xad92bd23': 'TKinSecretDoor_NATIVE_STILL',
     '0xdcc4011d': 'TLabback_AUTHORED_TAGS',
+    '0xbecffeda': 'TSwamp_AUTHORED_TAGS',
     '0x42e0fcd0': 'TOgrestrength_AUTHORED_TAGS',
     '0xad92bd39': 'TTrollblood_AUTHORED_TAGS',
     '0x10ac03de': 'TRegeneration_AUTHORED_TAGS',

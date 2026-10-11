@@ -43,7 +43,7 @@ void sg_draw(int offset,int count,int instances){assert((count==9||count==3)&&in
 '''
 context=r'''
 struct TRenderer{
- sg_pipeline helper_mesh_back_pipeline{1},helper_mesh_front_pipeline{2},
+ sg_pipeline helper_mesh_back_pipeline{1},helper_mesh_front_pipeline{2},helper_opaque_back_pipeline{10},helper_opaque_front_pipeline{11},
  helper_additive_cull_none_pipeline{9},helper_mesh_add_back_pipeline{3},helper_mesh_add_front_pipeline{4},
  helper_gold_no_depth_back_pipeline{5},helper_gold_no_depth_front_pipeline{6},helper_source_alpha_pipeline{7},helper_untextured_software_pipeline{8};
  struct SMeshEntry{Resource vbuf,ibuf;uint32_t albedo=77;int num_indices=9;};
@@ -107,12 +107,22 @@ int main(){
  draw.retail_lighting=1;draw.retail_source_alpha=false;draw.additive_blend=true;draw.retail_additive_cull_none=true;draws=0;
  renderer.EmitTransparentHelper(draw);assert(draws==1&&pipeline==9);
  draw.retail_additive_cull_none=false;draws=0;renderer.EmitTransparentHelper(draw);assert(draws==2&&pipeline==4);
+ draw=SHelperMeshSubmit{};draw.mesh=1;draw.retail_opaque=true;draw.retail_positive_face_cull=true;draws=0;
+ renderer.EmitTransparentHelper(draw);assert(draws==1&&pipeline==11);
+ draw.retail_positive_face_cull=false;draws=0;renderer.EmitTransparentHelper(draw);assert(draws==2&&pipeline==11);
+ draw.retail_opaque=false;draws=0;renderer.EmitTransparentHelper(draw);assert(draws==2&&pipeline==2);
+ draw.retail_opaque=true;draw.retail_source_alpha=true;renderer.software_lighting=true;draw.retail_lighting=3;draws=0;
+ renderer.EmitTransparentHelper(draw);assert(draws==1&&pipeline==7);
+ draw.retail_source_alpha=false;draw.additive_blend=true;draws=0;renderer.EmitTransparentHelper(draw);assert(draws==2&&pipeline==4);
  std::puts("PASS: actual helper UV uniform ABI, alpha path, all9 indices and immutable albedo");
 }
 '''
 for snippet in ('o.uv = in.uv + p.uv_shift.xy','v_uv = uv + uv_shift.xy','o.uv = i.uv + uv_shift.xy',
                 'hsh.vs.uniform_blocks[0].size = 11 * sizeof(float) * 4;'):
     assert snippet in source,snippet
+opaque=source[source.index('    hpip.colors[0].blend.enabled = false;', source.index('helper_mesh_front_pipeline = sg_make_pipeline')):source.index('    hpip.label = "renderer.helper.source-alpha.pipeline";')]
+assert 'hpip.depth.write_enabled = true;' in opaque and 'hpip.colors[0].blend.enabled = true;' in opaque and 'hpip.depth.write_enabled = false;' in opaque
+assert 'helper_opaque_front_pipeline = sg_make_pipeline' in opaque and 'helper_opaque_back_pipeline = sg_make_pipeline' in opaque
 with tempfile.TemporaryDirectory(prefix='revenant-helper-uv-')as temp:
     cpp=Path(temp)/'test.cpp';binary=Path(temp)/'test'
     cpp.write_text(prelude+record+context[:context.index('int main()')]+emit+'\n'+context[context.index('int main()'):])

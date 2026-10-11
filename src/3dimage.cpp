@@ -13,6 +13,8 @@
 
 #include "ribbonlegacykeys.h"
 #include "vortexlegacykeys.h"
+#include "smokelegacykeys.h"
+#include "barrierlegacykeys.h"
 #include "i3dtexturealpha.h"
 #include "3dimage.h"
 
@@ -31,6 +33,7 @@
 #include "speedauthoredmatrix.h"
 #include "staticpartsysprofiles.h"
 #include "lightstripprofile.h"
+#include "jhagaattackprofile.h"
 #include "funnelprofile.h"
 #include "cometprofile.h"
 #include "cometmatrix.h"
@@ -689,6 +692,42 @@ bool T3DImagery::ValidateRetailLightStripProfile()
     return true;
 }
 
+bool T3DImagery::ValidateRetailJhagaAttackProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=3 ||
+       NumObjects()!=5 || NumTextures()!=1 || NumMaterials()!=2 ||
+       NumTags()!=4 || numverts!=12 || numfaces!=6)return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    const std::string suffix="magic/jattack.i3d";
+    if(path.size()<suffix.size() || path.compare(path.size()-suffix.size(),suffix.size(),suffix) ||
+       (path.size()!=suffix.size() && path[path.size()-suffix.size()-1]!='/'))return false;
+    const auto hash=[](const void* data,size_t n){uint64_t h=1469598103934665603ull;
+        const auto* b=static_cast<const uint8_t*>(data);for(size_t i=0;i<n;++i){h^=b[i];h*=1099511628211ull;}return h;};
+    for(int state=0;state<3;++state)
+        if(GetAniLength(state)!=retail_jhagaattack_profile::frames[state] || GetAniFlags(state)!=retail_jhagaattack_profile::flags[state])return false;
+    for(int i=0;i<5;++i){const auto& o=objects[i];const auto& p=retail_jhagaattack_profile::objects[i];
+        if(std::strcmp(o.name,p.name) || o.material!=p.material || o.numverts!=p.vertices || o.numfaces!=p.faces)return false;
+        for(int state=0;state<3;++state)
+            if(o.parent[state]!=-1 || !o.anikeys[state] || o.numanikeys[state]!=p.keys[state] ||
+               hash(o.anikeys[state],p.keys[state]*sizeof(SAniKey32))!=p.key_hash[state])return false;
+        for(int slot=0;slot<2;++slot)if(o.numtexfaces[slot]!=p.face_counts[slot])return false;
+        std::vector<S3DVertex> vertices(size_t(p.vertices));std::vector<S3DFace> faces(size_t(p.faces));
+        if(p.vertices)GetObjVerts(i,vertices.data(),0,0);
+        if(p.faces)GetObjFaces(i,faces.data());
+        if(hash(vertices.data(),vertices.size()*sizeof(S3DVertex))!=p.vertex_hash ||
+           hash(faces.data(),faces.size()*sizeof(S3DFace))!=p.face_hash)return false;
+    }
+    for(int i=0;i<4;++i){const auto& t=*GetTag(i);const auto& p=retail_jhagaattack_profile::tags[i];
+        if(t.state!=p.state || t.frame!=p.frame || !t.name || !t.str || std::strcmp(t.name,p.name) || std::strcmp(t.str,p.parameters))return false;}
+    for(int i=0;i<1;++i){const auto& t=textures[i];const auto& f=t.desc.pixelFormat;
+        if(t.numframes!=1 || t.desc.width!=retail_jhagaattack_profile::widths[i] || t.desc.height!=retail_jhagaattack_profile::heights[i] ||
+           f.dwRGBBitCount!=16 || f.dwRBitMask!=0xf800 || f.dwGBitMask!=0x7e0 || f.dwBBitMask!=31 || f.dwRGBAlphaBitMask ||
+           materials[i].texture!=i || hash(&materials[i].matdesc.diffuse,17*sizeof(float))!=retail_jhagaattack_profile::materials[i])return false;}
+    for(int i=0;i<2;++i)if(hash(&materials[i].matdesc.diffuse,17*sizeof(float))!=retail_jhagaattack_profile::materials[i])return false;
+    return true;
+}
+
 bool T3DImagery::ValidateRetailFunnelProfile()
 {
     if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=3 ||
@@ -877,6 +916,7 @@ void T3DImagery::InitializePartSysTracks()
     quicksilver_partsys_profile = ValidateRetailQuicksilverPartSysProfile();
     static_particles_profile = ValidateRetailStaticParticleProfile();
     lightstrip_partsys_profile = ValidateRetailLightStripProfile();
+    jhagaattack_partsys_profile = ValidateRetailJhagaAttackProfile();
     funnel_partsys_profile = ValidateRetailFunnelProfile();
     comet_partsys_profile = ValidateRetailCometProfile();
     fgeyser_partsys_profile = ValidateRetailFGeyserProfile();
@@ -948,7 +988,7 @@ void T3DImagery::InitializePartSysTracks()
         for (int32_t j = 0; j < NumTags() && track.supported; ++j)
         {
             const char* name = GetTag(j)->name;
-            if ((gold_partsys_profile || combatflash_start1_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || static_particles_profile || lightstrip_partsys_profile || funnel_partsys_profile || comet_partsys_profile || fgeyser_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
+            if ((gold_partsys_profile || combatflash_start1_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || static_particles_profile || jhagaattack_partsys_profile || lightstrip_partsys_profile || funnel_partsys_profile || comet_partsys_profile || fgeyser_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
             if (name && stricmp(name, "partsys") && stricmp(name, "scrolltex") &&
                 stricmp(name, "play") && stricmp(name, "beg") && stricmp(name, "end"))
             {
@@ -1248,6 +1288,10 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
         GetResSize(),NumStates(),GetAniLength(0),GetAniFlags(0));
     const bool vortex_keys=vortex_legacy::Matches(GetResFilename(),mesh,
         GetResSize(),NumStates(),GetAniLength(0),GetAniFlags(0));
+    const bool smoke_keys=NumStates()==3 && smoke_legacy::Matches(GetResFilename(),mesh,
+        GetResSize(),NumStates(),GetAniLength(0),GetAniLength(1),GetAniLength(2),GetAniFlags(0));
+    const bool barrier_keys=barrier_legacy::Matches(GetResFilename(),mesh,
+        GetResSize(),NumStates(),GetAniLength(0),GetAniFlags(0));
 
     // ---- morph vertex lists ----
     numverts = mesh->numverts;
@@ -1348,6 +1392,15 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
                     std::memcpy(obj.anikeys[d],raw+size_t(c)*8,8);
                 }
                 if (vortex_keys && d==0) {
+                    static_assert(sizeof(SAniKey)==8);
+                    const auto* raw=static_cast<const uint8_t*>(mesh->anikeys[0].ptr());
+                    std::memcpy(obj.anikeys[d],raw+size_t(c)*8,8);
+                }
+                if (smoke_keys) {
+                    static_assert(sizeof(SAniKey)==8);
+                    std::memcpy(obj.anikeys[d],mesh->anikeys[d].ptr(),size_t(GetAniLength(d))*8);
+                }
+                if (barrier_keys && d==0) {
                     static_assert(sizeof(SAniKey)==8);
                     const auto* raw=static_cast<const uint8_t*>(mesh->anikeys[0].ptr());
                     std::memcpy(obj.anikeys[d],raw+size_t(c)*8,8);
@@ -2367,11 +2420,13 @@ bool T3DImagery::GetAniKey(int32_t objnum, int32_t state, int32_t frame,
         !stricmp(endstate, begstate))
         return true;
 
+    // REVSYNC: GetAniKey @ 0x00409950 also leaves a state shorter than the
+    // blend unblended.
     int32_t iframes = kLegacyTransitionBlendFrames;
 
     float i = 1.0f;
     hmm_vec3 ipos, irot, iscl;
-    if (prevstate >= 0 && frame < iframes)
+    if (prevstate >= 0 && frame < iframes && GetAniLength(state) >= iframes)
     {
         i = (float)(frame + 1) / (float)iframes;
         GetUninterpolatedAniKey(objnum, prevstate, prevframe, ipos, irot, iscl);
@@ -3396,6 +3451,7 @@ struct T3DAnimator::SPartSysControllers
                            TObjectInstance& owner)
     {
         const bool funnel_pose=(owner.ObjId()==0xad92bc17u && animator.Get3DImagery()->HasRetailFunnelProfile());
+        const bool jhaga_pose=(owner.ObjId()==0xaeaeeb32u && animator.Get3DImagery()->HasRetailJhagaAttackProfile());
         const bool lightstrip_pose=(owner.ObjId()==0x10da54d0u && animator.Get3DImagery()->HasRetailLightStripProfile());
         const bool comet_pose=(owner.ObjId()==0xf32bcfacu && animator.Get3DImagery()->HasRetailCometProfile());
         const bool fgeyser_pose=(owner.ObjId()==0xad92bd31u && animator.Get3DImagery()->HasRetailFGeyserProfile());
@@ -3407,7 +3463,7 @@ struct T3DAnimator::SPartSysControllers
         inputs.owner_face = static_cast<unsigned char>(owner.GetFace());
         // Retail 403771 reads animator+14; Animate copies owner frame later.
         // Gold's transient PPS curve must see initial cached0, not owner1.
-        inputs.animation_frame = ((lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose) || owner.ObjId() == 0xd0c0f035u ||
+        inputs.animation_frame = ((jhaga_pose || lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose) || owner.ObjId() == 0xd0c0f035u ||
             (owner.ObjId()==0x5be39ae0u && owner.GetState()==0 && animator.Get3DImagery()->HasRetailMightPartSysProfile()) ||
             (owner.ObjId()==0x82aeb30fu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailImmortalmightPartSysProfile()) ||
             (owner.ObjId()==0xb0e024dfu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailFmasteryPartSysProfile()) ||
@@ -3421,6 +3477,14 @@ struct T3DAnimator::SPartSysControllers
         if (inputs.has_object_zero_origin)
             inputs.object_zero_origin = {object_zero.Elements[3][0],
                                          object_zero.Elements[3][1], object_zero.Elements[3][2]};
+        if(jhaga_pose){
+            // Original4033db/40efc0 reads the cached prototype matrix. Outgoing
+            // flight Render leaves its origin zero; eager authored-key resampling here
+            // would add a false37.824-unit relative-velocity kick at state2.
+            const auto origin=animator.JhagaAttackObjectZeroOrigin();
+            inputs.has_object_zero_origin=true;
+            inputs.object_zero_origin={origin.X,origin.Y,origin.Z};
+        }
         for (size_t i = 0; i < controller.track.emitters.size(); ++i)
         {
             const int32_t object = controller.track.emitters[i];
@@ -3434,12 +3498,12 @@ struct T3DAnimator::SPartSysControllers
             // copies the advanced owner frame. GetObjectMatrix above refreshes
             // modern bones at the owner frame, so exact static PartSys assets
             // must sample their verified root-emitter keys at the cached frame.
-            if ((lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose) || (owner.GetState()==0 &&
+            if ((jhaga_pose || lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose) || (owner.GetState()==0 &&
                 animator.Get3DImagery()->HasRetailStaticParticleProfile(owner.ObjId())))
             {
                 hmm_vec3 rotation{};
                 if (!animator.Get3DImagery()->GetUninterpolatedAniKey(object, owner.GetState(),
-                    inputs.animation_frame, emitter_position, rotation, emitter_scale, (lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose))) continue;
+                    inputs.animation_frame, emitter_position, rotation, emitter_scale, (jhaga_pose || lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose))) continue;
                 MtxClear(&matrix);
                 if(poison_pose)
                     BuildRetailPoisonMatrix(matrix,object,emitter_position,rotation,emitter_scale);
@@ -3495,9 +3559,10 @@ void T3DAnimator::RefreshPartSysControllers()
     const bool poison=id==0xe0a3bc42u && imagery->HasRetailPoisonProfile() && current_state==0;
     const bool dust=id==0x0c052637u && imagery->HasRetailDustProfile() && current_state==0;
     const bool funnel=id==0xad92bc17u && imagery->HasRetailFunnelProfile() && current_state>=0 && current_state<3;
+    const bool jhaga=id==0xaeaeeb32u && imagery->HasRetailJhagaAttackProfile() && current_state>=0 && current_state<3;
     const bool lightstrip=id==0x10da54d0u && imagery->HasRetailLightStripProfile() && current_state>=0 && current_state<3;
     const bool static_particles=imagery->HasRetailStaticParticleProfile(id) && current_state==0;
-    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && !speed && !static_particles && !lightstrip && !funnel && !comet && !fgeyser && !dust && !poison)
+    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && !speed && !static_particles && !jhaga && !lightstrip && !funnel && !comet && !fgeyser && !dust && !poison)
     {
         if (!state.initialized)
             log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only exact audited particle profiles are enabled",
@@ -3517,7 +3582,7 @@ void T3DAnimator::RefreshPartSysControllers()
             return controller.track.state != -1 && controller.track.state != current_state;
         }), controllers.end());
     state.unsupported = false;
-    if(static_particles || lightstrip || funnel || comet || fgeyser || dust || poison)
+    if(static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison)
         for(int object=0;object<NumObjects();++object)
             if(S3DAnimObj* bone=GetObject(object)){
                 const char* name=imagery->GetObjectName(object);
@@ -3525,7 +3590,7 @@ void T3DAnimator::RefreshPartSysControllers()
                 if(name && name[0]=='*')bone->flags|=OBJ3D_HIDE;
             }
     const bool static_litaddz=(static_particles && imagery->NumTags()==2) || (lightstrip && current_state==0) || comet;
-    if (gold || combat_start1 || speed || static_litaddz || fgeyser || funnel)
+    if (gold || combat_start1 || speed || static_litaddz || fgeyser || funnel || (jhaga && current_state==0))
     {
         // Retail blendcont Initialize 405940: immediate state-entry writes to
         // every animator object, preserving the prior no-depth-test bit. Its
@@ -3568,7 +3633,7 @@ void T3DAnimator::RefreshPartSysControllers()
             S3DPoint position = {x, y, z};
             return MapPane.GetWalkHeight(position);
         };
-        if((lightstrip || funnel || comet || fgeyser || dust || poison) && lightstrip_ground)controller.inputs.ground_height=lightstrip_ground;
+        if((jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) && lightstrip_ground)controller.inputs.ground_height=lightstrip_ground;
         SPartSysControllers::FillInputs(controller, *this, *inst);
         std::string diagnostic;
         // Default quality0 retains full emission. Explicit capture overrides
@@ -3618,6 +3683,27 @@ void T3DAnimator::AdvancePartSysControllers()
 void T3DAnimator::SetLightStripGround(std::function<int(int,int,int)> query)
 {
     if(!inst || inst->ObjId()!=0x10da54d0u || !Get3DImagery()->HasRetailLightStripProfile())return;
+    lightstrip_ground=std::move(query);
+    if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
+}
+void T3DAnimator::SetJhagaAttackObjectZeroOrigin(const hmm_vec3& origin)
+{
+    if(inst && inst->ObjId()==0xaeaeeb32u && Get3DImagery()->HasRetailJhagaAttackProfile() && !jhagaattack_object_zero_sampled)
+        jhagaattack_object_zero_origin=origin;
+}
+void T3DAnimator::NoteJhagaAttackPrototypeSample()
+{
+    if(inst && inst->ObjId()==0xaeaeeb32u && Get3DImagery()->HasRetailJhagaAttackProfile() && inst->GetState()==1){
+        // Original4026e1 marks the outgoing flight prototype for manual transforms.
+        // Its cached origin at the next Initialize is zero after sampling. Later
+        // teardown matrices are not another initialization input in this finite owner.
+        jhagaattack_object_zero_sampled=true;
+        jhagaattack_object_zero_origin={0,0,0};
+    }
+}
+void T3DAnimator::SetJhagaAttackGround(std::function<int(int,int,int)> query)
+{
+    if(!inst || inst->ObjId()!=0xaeaeeb32u || !Get3DImagery()->HasRetailJhagaAttackProfile())return;
     lightstrip_ground=std::move(query);
     if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
 }
@@ -4031,6 +4117,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
     const bool poison=inst->ObjId()==0xe0a3bc42u && inst->GetState()==0 && Get3DImagery()->HasRetailPoisonProfile();
     const bool dust=inst->ObjId()==0x0c052637u && inst->GetState()==0 && Get3DImagery()->HasRetailDustProfile();
     const bool funnel=inst->ObjId()==0xad92bc17u && Get3DImagery()->HasRetailFunnelProfile();
+    const bool jhaga=inst->ObjId()==0xaeaeeb32u && Get3DImagery()->HasRetailJhagaAttackProfile();
     const bool lightstrip=inst->ObjId()==0x10da54d0u && Get3DImagery()->HasRetailLightStripProfile();
     int32_t submitted = 0;
     const authored_partsys::RandomRange rng = [](int minimum, int maximum) {
@@ -4053,10 +4140,11 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // The retail helper samples three rotation ranges during Render.
             // Keep those calls here; Submit never advances simulation state.
             const auto sample = controller.simulation.SampleRender(slot, rng);
+            if(jhaga && object==0)NoteJhagaAttackPrototypeSample();
             // Native Speed RenderObject40a9e7..9f3 skips geometry when its
             // CalcObjectMatrix scale gate40a591..5c1 returns0. Sampling still
             // happens first, preserving its three render-time RNG calls.
-            if((lightstrip || funnel || comet || fgeyser || dust || poison || (inst->GetState()==0 &&
+            if((jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || (inst->GetState()==0 &&
                ((Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2) ||
                 Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId())))) &&
                sample.scale<=9.999999747378752e-6f)continue;
@@ -4077,7 +4165,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                 Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2;
             const bool static_particles=inst->GetState()==0 &&
                 Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId());
-            if (might || immortalmight || fmastery || speed || static_particles || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u ||
+            if (might || immortalmight || fmastery || speed || static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u ||
                 (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0 &&
                  Get3DImagery()->HasCombatFlashStart1PartSysProfile() && track.prototype == 0))
                 ApplyRetailGoldCameraOrientation(matrix); // actual '#' flag retained on both audited prototypes
@@ -4093,16 +4181,16 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             item.key.blend = uint8_t(sample.blendmode == 2 ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
             // Preserve source packed prelit vertex color. Combat particles are
             // RGB565 with litadd16, not normal-lit material meshes or alpha coins.
-            item.retail_texture = (might || immortalmight || fmastery || speed || static_particles || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u ||
+            item.retail_texture = (might || immortalmight || fmastery || speed || static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u ||
                 (inst->ObjId() == 0xad92bd29u && inst->GetState() == 0)) ? 1 : 0;
             // Strict static profile admission pins RGB565 masks and literal
             // particle prototype. The queue applies this only to software
             // lighting and ONE/ONE; modern/hardware and alpha retain fallback.
-            item.retail_rgb565_additive = (static_particles || lightstrip || funnel || comet || fgeyser || dust || poison) && sample.blendmode == 16;
+            item.retail_rgb565_additive = (static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) && sample.blendmode == 16;
             item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
             item.light_mode = EFxLightMode::Unlit;
             for (int c = 0; c < 3; ++c)
-                item.color_rgba[c] = (might || immortalmight || fmastery || speed || static_particles || lightstrip || funnel || comet || fgeyser || dust || poison) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
+                item.color_rgba[c] = (might || immortalmight || fmastery || speed || static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
             // Actual SW LV prelit channels are5bit; canonicalDEST_ONE ignores
             // alpha in its8wordXYZ/UV/RGB packet. Keep literal alpha metadata,
             // no premultiplication/alternateblend. PixelLSB-table raster gate open.
@@ -4249,6 +4337,7 @@ void T3DAnimator::Close()
     pose_update_render_frame = -1;
     pose_update_state = -1;
     pose_update_frame = -1;
+    parents_state = -1;
     pose_update_next_state = -1;
     pose_update_next_frame = -1;
     pose_update_prev_state = -1;
@@ -4569,22 +4658,19 @@ void T3DAnimator::UpdateBoneTransforms()
             pose_current.Count(), &pose) || !pose)
         return;
 
+    // The keys are relative to this state's parents.
+    if (parents_state >= 0 && (parents_state != s || parents_count != animobjs.NumItems()))
+        ResolveObjectParents(s);
+
+    auto layers_over_animation = [](const S3DAnimObj* obj) {
+        return (obj->flags & (OBJ3D_ROTMASK | OBJ3D_POSMASK | OBJ3D_SCLMASK | OBJ3D_ADDTOANI)) != 0;
+    };
+
     for (int32_t c = 0; c < animobjs.NumItems(); c++)
     {
         S3DAnimObj* obj = animobjs[c];
-        if (!obj) continue;
-
-        const bool hastrans =
-            (obj->flags & (OBJ3D_ROTMASK | OBJ3D_POSMASK | OBJ3D_SCLMASK)) != 0;
-        if (hastrans || (obj->flags & OBJ3D_ADDTOANI))
-        {
-            // Quarantined legacy matrix path for the small set of objects that
-            // layer authored masks/transforms over animation. The ordinary bone
-            // path below is fixed-buffer pose data only.
-            img->SetPrevState(sample_prevstate, sample_prevframe);
-            img->CalcObjectMatrix(obj, s, f, /*pos*/nullptr, /*calcparents*/false);
+        if (!obj || layers_over_animation(obj))
             continue;
-        }
 
         const int32_t target = (obj->flags & OBJ3D_ANIMTRACK)
             ? obj->animtrack
@@ -4612,10 +4698,25 @@ void T3DAnimator::UpdateBoneTransforms()
         obj->transform.SetLocalPos(obj->pos);
         obj->transform.SetLocalRot(q);
         obj->transform.SetLocalScl(obj->scl);
+    }
 
-        // Keep the old per-bone matrix mirror alive for attachment/render
-        // paths that have not moved to TTransform yet. This is composition of
-        // already-written local transforms, not another legacy key sample.
+    // The character-local object matrices (retail S3DAnimObj +0x58) that
+    // attachment and effect callers read, each composed onto its parent's
+    // after the parent's (CalcObjectMatrix 0x0040a420 chains to the parent).
+    // Objects that layer authored transforms over the animation keep the
+    // legacy matrix path.
+    const bool ordered = parents_state >= 0 && parents_count == animobjs.NumItems();
+    for (int32_t i = 0; i < animobjs.NumItems(); i++)
+    {
+        S3DAnimObj* obj = animobjs[ordered ? parent_order[size_t(i)] : i];
+        if (!obj)
+            continue;
+        if (layers_over_animation(obj))
+        {
+            img->SetPrevState(sample_prevstate, sample_prevframe);
+            img->CalcObjectMatrix(obj, s, f, /*pos*/nullptr, /*calcparents*/false);
+            continue;
+        }
         obj->matrix = obj->transform.LocalMatrix();
         if (obj->parent)
             MtxMultiply(&obj->matrix, &obj->matrix, &obj->parent->matrix);
@@ -4710,18 +4811,7 @@ bool T3DAnimator::Render()
     int32_t stackpos;
     int32_t c;
 
-    for (c = 0; c < animobjs.NumItems(); c++)
-    {
-        if (!(animobjs[c]->flags & OBJ3D_PARENT))
-        {
-            int32_t parent = ((T3DImagery*)image)->GetObjectParent(animobjs[c]->objnum, state);
-            if ((uint32_t)parent < (uint32_t)animobjs.NumItems() &&
-                animobjs[parent]->objnum == parent)
-                animobjs[c]->parent = animobjs[parent];
-            else
-                animobjs[c]->parent = nullptr;
-        }
-    }
+    ResolveObjectParents(state);
 
     for (int32_t t = 0; t < Get3DImagery()->NumTextures() + 1; t++)
     {
@@ -4775,6 +4865,9 @@ void T3DAnimator::PostRender()
 // * Animator Object Functions *
 // *****************************
 
+// REVSYNC: T3DAnimator::SetupObjects @ 0x0040ebd0 -- one object per imagery
+// object, parented as in state 0. Render (0x0040e8d0) re-parents them for the
+// drawn state; UpdateBoneTransforms does that here.
 void T3DAnimator::SetupObjects()
 {
     for (int32_t c = 0; c < Get3DImagery()->NumObjects(); c++)
@@ -4782,37 +4875,68 @@ void T3DAnimator::SetupObjects()
         S3DAnimObj* o = NewObject(c);
         AddObject(o);
     }
+    ResolveObjectParents(0);
+}
 
-    // Wire the bone hierarchy. Both linkages are established:
-    //   * Legacy `parent` raw pointer (still consumed by
-    //     CalcObjectMatrix's manual parent-chain compose) -- stays
-    //     nullptr at the imagery's roots so the legacy chain
-    //     terminates correctly.
-    //   * TTransform parent linkage. In-tree parents go to the
-    //     parent bone's transform; root bones (no in-tree parent)
-    //     are parented under the OWNING object's transform_ so
-    //     bone.transform.Matrix() yields a world-space matrix
-    //     directly. Lifetime is safe: bones live in the animator
-    //     component, which is destroyed before the instance's own
-    //     transform_ member, so each bone's dtor runs while
-    //     inst->Transform() is still alive and detaches itself
-    //     from the children list cleanly.
-    for (int32_t c = 0; c < animobjs.NumItems(); c++)
+// REVSYNC: T3DAnimator::Render @ 0x0040e8d0, the head -- an object without
+// OBJ3D_PARENT takes the imagery's parent for the animator's state (the
+// object's parent table, +0x20, indexed by +0xc), when that parent is an
+// object of this animator; otherwise it is a root.
+//
+// Both links are kept: the raw `parent` (CalcObjectMatrix's chain) and the
+// TTransform parent, which the renderer reads. A root hangs off the
+// instance's transform, so bone.transform.Matrix() is world space. Bones
+// live in the animator component, destroyed before the instance's own
+// transform, so each bone detaches itself cleanly.
+//
+// Retail walks a parent chain at most 64 deep, so a parent loop in the
+// data never hangs it. A transform loop would recurse forever, so an object
+// whose chain comes back to itself is made a root instead.
+void T3DAnimator::ResolveObjectParents(int32_t state)
+{
+    T3DImagery* img = Get3DImagery();
+    const int32_t count = animobjs.NumItems();
+    if (!img || state < 0 || state >= img->NumStates() || count > MAX3DANIMOBJECTS)
+        return;
+
+    for (int32_t c = 0; c < count; c++)
     {
-        const int32_t parent = ((T3DImagery*)image)
-                               ->GetObjectParent(animobjs[c]->objnum, 0);
-        if ((uint32_t)parent < (uint32_t)animobjs.NumItems() &&
-            animobjs[parent]->objnum == parent)
-        {
-            animobjs[c]->parent = animobjs[parent];
-            animobjs[c]->transform.SetParent(&animobjs[parent]->transform);
-        }
-        else
-        {
-            animobjs[c]->parent = nullptr;
-            animobjs[c]->transform.SetParent(inst ? &inst->Transform() : nullptr);
-        }
+        S3DAnimObj* obj = animobjs[c];
+        if (!obj || (obj->flags & OBJ3D_PARENT))
+            continue;
+        const int32_t parent = img->GetObjectParent(obj->objnum, state);
+        obj->parent = ((uint32_t)parent < (uint32_t)count && animobjs[parent] &&
+                       animobjs[parent]->objnum == parent) ? animobjs[parent] : nullptr;
     }
+
+    std::array<uint8_t, MAX3DANIMOBJECTS> depths{};
+    for (int32_t c = 0; c < count; c++)
+    {
+        S3DAnimObj* obj = animobjs[c];
+        if (!obj)
+            continue;
+        int32_t depth = 0;
+        for (const S3DAnimObj* up = obj->parent; up; up = up->parent)
+            if (up == obj || ++depth >= count)
+            {
+                obj->parent = nullptr;
+                depth = 0;
+                break;
+            }
+        depths[size_t(c)] = uint8_t(depth);
+        obj->transform.SetParent(obj->parent ? &obj->parent->transform
+                                             : (inst ? &inst->Transform() : nullptr));
+    }
+
+    // Each object after its parent (a parent is one link nearer the root),
+    // so the object matrices compose in one pass.
+    int32_t next = 0;
+    for (int32_t depth = 0; next < count && depth < count; depth++)
+        for (int32_t c = 0; c < count; c++)
+            if (depths[size_t(c)] == depth)
+                parent_order[size_t(next++)] = uint8_t(c);
+    parents_state = state;
+    parents_count = count;
 }
 
 S3DAnimObj* T3DAnimator::NewObject(int32_t objnum, int32_t newflags)

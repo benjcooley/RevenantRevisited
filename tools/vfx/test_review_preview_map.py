@@ -23,6 +23,24 @@ TWaterFallEffect_BESPOKE__WaterFlft TWaterFallEffect_BESPOKE__RiverFall
 TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertEqual(admitted_candidates({'preview_candidates': candidates}), [])
 
+    def test_ytelekinesis_uses_exact_moving_chunk_controller(self):
+        row={"retail_type_id":"0xaeaeeb28","preview_candidates":[]}
+        self.assertEqual(admitted_candidates(row),["YTelekinesis_ORIGINAL"])
+        self.assertFalse(candidate_metadata(row,"YTelekinesis_ORIGINAL")[0])
+
+    def test_essencedrain_uses_all_root_default_controller(self):
+        row={"retail_type_id":"0xdefeca7e","preview_candidates":[]}
+        self.assertEqual(admitted_candidates(row),["EssenceDrain_AUTHORED"])
+
+    def test_barriers_and_jhaga_exact_controllers(self):
+        for type_id,name in [('0x224a5adf','BarrierEW_ORIGINAL'),('0x224b5adc','BarrierNS_ORIGINAL'),('0xaeaeeb32','JhagaAttack_ORIGINAL')]:
+            self.assertEqual(admitted_candidates({'retail_type_id':type_id,'preview_candidates':[]}),[name])
+
+    def test_smoke_exact_quality_controller(self):
+        row={"retail_type_id":"0x224a5ccc","preview_candidates":[]}
+        self.assertEqual(admitted_candidates(row),["Smoke_ORIGINAL_QUALITY"])
+        self.assertFalse(candidate_metadata(row,"Smoke_ORIGINAL_QUALITY")[0])
+
     def test_icedsparks_uses_its_verified_default_factory(self):
         row={'retail_type_id':'0xacabfada','preview_candidates':['TIcedEffect_BESPOKE__Icedsparks']}
         self.assertEqual(admitted_candidates(row),['TIcedsparks_AUTHORED_STILL'])

@@ -28,6 +28,7 @@ $P tools/retaillab/retail.py start ShowDialog=Yes AutoCombat=No   # closes the e
 $P tools/retaillab/retail.py record start                         # lossless AVI with audio, 60 fps
 $P tools/retaillab/retail.py newgame                              # title screen → New Game
 $P tools/retaillab/retail.py key 3                                # a dialog choice
+$P tools/retaillab/retail.py click 400,100 226,421                # left clicks in order (a save, Load Game)
 $P tools/retaillab/retail.py capture shot.png
 $P tools/retaillab/retail.py prompt alreadydead --scratch <dir>
 $P tools/retaillab/retail.py record stop                          # prints the AVI path (lab captures/)

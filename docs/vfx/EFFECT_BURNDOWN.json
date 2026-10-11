@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "ce4560ba662fb6449ab4af3b0a5844a3c83072d963655afabafc86190bedd4a5",
+    "harness_sha256": "a081aa27d31e329c20d3d5067c438cce4cfeda36e509d3408e9d9c28af5756f1",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 148,
+    "retail_rows_with_source_fixes_recorded": 155,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 136,
+    "visual_fidelity_confirmed_rows": 143,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 136,
-    "remaining_visual_review_rows": 40
+    "reviewed_visual_pass_rows": 143,
+    "remaining_visual_review_rows": 33
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -9212,29 +9212,41 @@
       "retail_type_id": "0xdefeca7e",
       "asset": "magic\\Worm.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact default29-root authored controller/poses/UV and finite lifetime, visible26zero-key auxiliaries, strict own profile; full appearance independently reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve exact default owner appearance; verify source/destination gameplay and recorded genericAPI/UV/device limits.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect/crop review and integrated repeats",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Twelve complete original/actual Metal native-domain exact default-owner phases through201ticks, all29authored roots. Three keyed cylinders scale-reject after first phase;26zero-key identity auxiliaries stay visible until realkill200/blank200\u2013201.5400key channels/83296accepted matrixfields/5200identity matrices/594scale rejects;57312liveUV fields and3768translated vertices checked. Full201native replay and12rasters exact. Root21same-phase PNGs identical through201 andgallery100/100visible/restarts. Not a source/destination gameplay proof; generic unused zero-key API/cache discrepancy,5pxfirst-tick thin-cylinder bounds, tinyUV/edge/lightquantization, natural caller/audio/device/exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-essencedrain-default-20261011/root-approval.json",
+        "sha256": "a50aee4ff546d37a0b99b8e2838d5c56a0c99dc5b265e37f4f9258ea250eed8e",
+        "note": "docs/vfx/forensics/ESSENCEDRAIN_DEFAULT_RENDER_20261011.md"
+      }
     },
     {
       "index": 15,
@@ -11381,25 +11393,27 @@
       "retail_type_id": "0x224a5adf",
       "asset": "Misc\\BarrierEW.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact30-slot custom controller, strict own legacy keys and complete animated wall; preserve original zero-Y flare rejection. Whole appearance independently reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Defer caller/device investigation: bounded standalone probe is invisible. Retain diagnostic and correct asset dump; advance other retail comparisons.",
+      "next_action": "Preserve configured complete wall; verify natural map/spell/audio and recorded UV/device limits.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "2026-10-05: five-second exact-name software probe produced one unchanged floor image and exact cleanup. Halo context was absent after spawn; Barrier contexts retained. Actual assets dumped: Halo12verts/36indices, Barriers5objects/2textures. No accurate-reference credit."
@@ -11416,7 +11430,17 @@
         "distinct_roi_frames": 1,
         "restored_ground_mean_error": 0
       },
-      "work_queue_status": "deferred_no_useful_visible_reference"
+      "work_queue_status": "deferred_no_useful_visible_reference",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole31-phase comparison and actual-size detail",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Complete original/actual Metal native-domain blue wall at31 exact phases through91ticks, both texture scroll axes and all12faces. All30flare slots run; actual zero-Y flare matrices reject, leaving exactly1original wall draw each tick.149649statefields perresource, exactRNG and90combined legacy posechannels; strict25253negative bodies each and otheroldkey regressions pass. Fresh91state replay/3PNGs exact perresource; translatedgallery80/80visible/80distinct. Nullowner script/COM residency boundaries declared. One-pixel edge, per-vertex versus uniform UV float rounding, destinationprecision/naturalcaller/audio/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-barrierew-original-20261011/root-approval.json",
+        "sha256": "5a2612eb6d4c6129132f5bc52d064742a0e14d591a9bc236b1fa74235af029a1",
+        "note": "docs/vfx/forensics/BARRIER_CONTROLLER_20261011.md"
+      }
     },
     {
       "index": 38,
@@ -11425,25 +11449,27 @@
       "retail_type_id": "0x224b5adc",
       "asset": "Misc\\BarrierNS.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact30-slot custom controller, strict own legacy keys and complete animated wall; preserve original zero-Y flare rejection. Whole appearance independently reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Defer caller/device investigation: bounded standalone probe is invisible. Retain diagnostic and correct asset dump; advance other retail comparisons.",
+      "next_action": "Preserve configured complete wall; verify natural map/spell/audio and recorded UV/device limits.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "2026-10-05: five-second exact-name software probe produced one unchanged floor image and exact cleanup. Halo context was absent after spawn; Barrier contexts retained. Actual assets dumped: Halo12verts/36indices, Barriers5objects/2textures. No accurate-reference credit."
@@ -11460,7 +11486,17 @@
         "distinct_roi_frames": 1,
         "restored_ground_mean_error": 0
       },
-      "work_queue_status": "deferred_no_useful_visible_reference"
+      "work_queue_status": "deferred_no_useful_visible_reference",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole31-phase comparison and actual-size detail",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Complete original/actual Metal native-domain blue wall at31 exact phases through91ticks, both texture scroll axes and all12faces. All30flare slots run; actual zero-Y flare matrices reject, leaving exactly1original wall draw each tick.149649statefields perresource, exactRNG and90combined legacy posechannels; strict25253negative bodies each and otheroldkey regressions pass. Fresh91state replay/3PNGs exact perresource; translatedgallery80/80visible/80distinct. Nullowner script/COM residency boundaries declared. One-pixel edge, per-vertex versus uniform UV float rounding, destinationprecision/naturalcaller/audio/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-barrierns-original-20261011/root-approval.json",
+        "sha256": "67f4b4157174a01ba808edc7b5a9fbcaaf470c66435c984215d9fa9adeaf82fd",
+        "note": "docs/vfx/forensics/BARRIER_CONTROLLER_20261011.md"
+      }
     },
     {
       "index": 39,
@@ -11504,25 +11540,27 @@
       "retail_type_id": "0x224a5ccc",
       "asset": "Misc\\smoke.I3D",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact quality-gated50-puff controller, strict own legacy keys and native ARGB4444 source-contribution floor; whole appearance/lifecycle independently reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Return later with actual shipped setting/controller and stable background; bounded standalone probe is diagnostic only. Advance easy retail A/B.",
+      "next_action": "Preserve scoped quality3 appearance and genuine low-quality kill; resolve destination rounding and natural map/audio/device limits.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "2026-10-05: No useful animated visible reference in bounded standalone recipe. No accurate-reference or visual-acceptance credit.",
@@ -11542,7 +11580,17 @@
         "restored_ground_mean_error": 0.0,
         "reason": "No useful animated visible reference in bounded standalone recipe"
       },
-      "work_queue_status": "deferred_no_useful_visible_reference"
+      "work_queue_status": "deferred_no_useful_visible_reference",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole contact and actual-size detail inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Ten whole original/actual Metal native-domain quality3 phases through600ticks: exact50puffs, expansion/shrink/reset and center bounce. Literal512 original ARGB4444 texel controls restore green edges via existing source-floor policy.917727statefields, exactRNG,601native repeat states/30050draws/11PNGs; root24same-phase PNGs over600ticks identical and translatedgallery300/300 visible/distinct. Quality below3 legitimately kills. Destination overlap brightness/edge quantization, ordinary common output, natural caller/audio/device/exactpixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-smoke-original-20261011/root-approval.json",
+        "sha256": "df5fb292d2fabf2ae85ebededbbc645979cb2792a5b4869671a194b520950994",
+        "note": "docs/vfx/forensics/SMOKE_ORIGINAL_RENDER_20261011.md"
+      }
     },
     {
       "index": 41,
@@ -13447,29 +13495,41 @@
       "retail_type_id": "0xbecffeda",
       "asset": "Magic\\Swamp.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact own authored Swamp meshes/controller/cached poses/final56tick update and realkill; whole appearance independently reviewed and root60GPUframes repeat identically."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve scoped whole default Swamp; verify natural spell/terrain/actors/audio and documented raster/device limits.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites"
+      "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole/detail review and integrated repeat",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Eleven complete original/actual Metal native-domain Swamp phases through real56tick ownerkill/blanktail:31slot fgeys downward sparks, nine ground cards and18bubble meshes with source texture-major order.15120keys/15008matrixfields and38172normal/38104stride3pool fields agree, everyRNG seed exact. Root60same-phase PNGs identical, lifecycle negativecontrol and translatedgallery118/120visible/114distinct with realrestart/cleanexit. Quality0, flatground1, nullspell own defaultowner. Naturalcaller/terrain/actors/audio/device/destinationrounding/edge/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-swamp-original-20261011/root-approval.json",
+        "sha256": "ed8e4d40dac131c1c9510634153bfdf5e1a4b980fcd711ca28677849688ff2ea",
+        "note": "docs/vfx/forensics/SWAMP_ORIGINAL_RENDER_20261011.md"
+      }
     },
     {
       "index": 62,
@@ -24091,29 +24151,41 @@
       "retail_type_id": "0xaeaeeb28",
       "asset": "misc\\chunk.i3d",
       "preview_candidates": [],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact original four-chunk moving controller, strict profile/opaque depth, frozen expiration and real lifetime; full fixed-grid appearance independently approved. Corrected missing exact-ID review mapping."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve scoped full trajectory; verify natural moving player/spell actors/audio and recorded device/quantization limits.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase and actual-size detail inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Whole original/actual Metal native-domain appearance of four moving, accelerating, rotating chunks with stationary player/owner origin and null spell, seed1. 24 exact phases across six fixed supported1920x1080 windows; all39600 triangles covered. Frozen expired chunks and real owner kill165/blank169+ agree. Native raw overlap differences0\u2013441pixels and Metal0\u201311 retained; common narrow-depth output is diagnostic. Natural moving player, actors/spell damage, audio/map dispatch, resource/base-init boundaries, UV/light quantization, device and exact pixels remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-ytelekinesis-original-20261011/root-approval.json",
+        "sha256": "639e31264658a7805c377924c69d25d7197e06e14204209590bd016f577748db",
+        "note": "docs/vfx/forensics/YTELEKINESIS_ORIGINAL.md"
+      }
     },
     {
       "index": 176,
@@ -24124,27 +24196,39 @@
       "preview_candidates": [
         "TJhagaAttackEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Exact timed moving owner, strict own Jattack profile and real Render-dependent cached origin for controller transitions. Whole supported-viewport appearance independently reviewed; integrated25GPUframes identical."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve scoped charge/flight/decay; verify actual boss/invoker collision/damage/audio and stated device/resource boundaries.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent five detail pages/whole contact and integrated repeat",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Twenty-five complete original/actual Metal native-domain phases through100ticks: nullspell timed charge20/flight15/teardown55, self-movement from(0,60,78)to(0,-60,78), purple head/trail/sparks/decay and realkill87/blanktail. Allsubmitted100tick bounds fit supported1920x1080 atfixed960,485.847268normal/848298stride3poolfields, exactRNG796,315cached-origin controls and strictpose/profile checks; original100state/5PNG replay exact. Root25samephase PNGs identical; translatedgallery84/100visible withrealrestart/cleanexit. Nullinvoker equals emptyquery, so collision/damage isnotclaimed. Naturalboss/invoker/audio, genericEffect/script/resource/COM/map boundaries, sampling/RGB565destinationrounding/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-jhagaattack-original-20261011/root-approval.json",
+        "sha256": "c4cecea20e4ce5deea6ae1de189f4239c548c67c029d5489d82e27fec1004ae9",
+        "note": "docs/vfx/forensics/JHAGAATTACK_ORIGINAL.md"
+      }
     }
   ],
   "preview_catalogue": [

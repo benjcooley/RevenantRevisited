@@ -2265,6 +2265,15 @@ void TRenderer::InitMeshPipeline()
     hpip.label = "renderer.helper.front.pipeline";
     helper_mesh_front_pipeline = sg_make_pipeline(&hpip);
 
+    hpip.colors[0].blend.enabled = false;
+    hpip.depth.write_enabled = true;
+    hpip.label = "renderer.helper.opaque-front.pipeline";
+    helper_opaque_front_pipeline = sg_make_pipeline(&hpip);
+    hpip.cull_mode = SG_CULLMODE_FRONT;
+    hpip.label = "renderer.helper.opaque-back.pipeline";
+    helper_opaque_back_pipeline = sg_make_pipeline(&hpip);
+    hpip.colors[0].blend.enabled = true;
+    hpip.depth.write_enabled = false;
     hpip.cull_mode = SG_CULLMODE_NONE;
     hpip.label = "renderer.helper.source-alpha.pipeline";
     helper_source_alpha_pipeline = sg_make_pipeline(&hpip);
@@ -2327,6 +2336,8 @@ void TRenderer::ShutdownMeshPipeline()
     mesh_instance_vb_cursor = 0;
     if (helper_untextured_software_pipeline.id) { sg_destroy_pipeline(helper_untextured_software_pipeline); helper_untextured_software_pipeline = {}; }
     if (helper_source_alpha_pipeline.id) { sg_destroy_pipeline(helper_source_alpha_pipeline); helper_source_alpha_pipeline = {}; }
+    if (helper_opaque_back_pipeline.id) { sg_destroy_pipeline(helper_opaque_back_pipeline); helper_opaque_back_pipeline = {}; }
+    if (helper_opaque_front_pipeline.id) { sg_destroy_pipeline(helper_opaque_front_pipeline); helper_opaque_front_pipeline = {}; }
     if (helper_mesh_back_pipeline.id) { sg_destroy_pipeline(helper_mesh_back_pipeline); helper_mesh_back_pipeline = {}; }
     if (helper_mesh_front_pipeline.id) { sg_destroy_pipeline(helper_mesh_front_pipeline); helper_mesh_front_pipeline = {}; }
     if (helper_additive_cull_none_pipeline.id) { sg_destroy_pipeline(helper_additive_cull_none_pipeline); helper_additive_cull_none_pipeline = {}; }
@@ -3242,6 +3253,10 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     if (s.additive_blend && s.retail_additive_cull_none) back_pipeline = front_pipeline = helper_additive_cull_none_pipeline;
     if (source_alpha) back_pipeline = front_pipeline = s.retail_lighting == 4
         ? helper_untextured_software_pipeline : helper_source_alpha_pipeline;
+    if (s.retail_opaque && !s.additive_blend && !s.retail_source_alpha) {
+        back_pipeline = helper_opaque_back_pipeline;
+        front_pipeline = helper_opaque_front_pipeline;
+    }
     if (!back_pipeline.id || !front_pipeline.id) return;
 
     const float view_dir[4] = { -0.5f, -0.5f, 1.0f, 1.0f };

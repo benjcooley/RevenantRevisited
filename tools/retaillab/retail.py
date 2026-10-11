@@ -231,9 +231,8 @@ def main():
     s.add_argument('slot', type=Path)
     s = sub.add_parser('load', help='title screen -> Load Game -> the slot on --row -> load')
     s.add_argument('--row', type=int, default=0)
-    s = sub.add_parser('click', help='left-click the game window at x y (640x480)')
-    s.add_argument('x', type=int)
-    s.add_argument('y', type=int)
+    s = sub.add_parser('click', help='left-click guest pixels (640x480), in order: X,Y ...')
+    s.add_argument('points', nargs='+', help='X,Y')
     s = sub.add_parser('key', help='press keys one at a time (keyboard-map.json names)')
     s.add_argument('keys', nargs='+')
     s = sub.add_parser('prompt', help="type a line into retail's Enter prompt (cheats, @script)")
@@ -261,11 +260,16 @@ def main():
         run_lua(LUA_CLICK, {'x': LOAD_LIST_X, 'y': LOAD_ROW0_Y + a.row * LOAD_ROW_H}, 'gf_click')
         time.sleep(1)
         run_lua(LUA_CLICK, {'x': LOAD_CONFIRM[0], 'y': LOAD_CONFIRM[1]}, 'gf_click')
-    elif a.cmd == 'click':
-        run_lua(LUA_CLICK, {'x': a.x, 'y': a.y}, 'gf_click')
     elif a.cmd == 'newgame':
         x, y = NEW_GAME_BUTTON
         run_lua(LUA_CLICK, {'x': x, 'y': y}, 'gf_click')
+    elif a.cmd == 'click':
+        # An inventory item is picked up by one click and put down by the
+        # next (an equip slot equips it): `click 523,455 479,126`.
+        for point in a.points:
+            x, y = (int(v) for v in point.split(','))
+            run_lua(LUA_CLICK, {'x': x, 'y': y}, 'gf_click')
+            time.sleep(0.3)
     else:
         with Control() as c:
             if a.cmd == 'key':
