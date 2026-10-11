@@ -2,10 +2,11 @@
 #include <cstdint>
 // Literal shipped identities; only exact named records enter this adapter.
 namespace retail_static_particles {
-struct Object {const char* name;int material,key_count;uint64_t keys;int vertices,faces;};
+struct Object {const char* name;int material,key_count;uint64_t keys;int vertices,faces;uint64_t mesh_vertices=0,mesh_faces=0;};
 struct Profile {uint32_t id;const char* suffix;int frames,objects,materials,texture_size,tag_frame;
  const Object* object;const uint64_t* material;uint64_t vertices;const char* parameters;
- int ani_flags,total_vertices,total_faces,prototype,partsys_tag,blend_tag,blend_frame;};
+ int ani_flags,total_vertices,total_faces,prototype,partsys_tag,blend_tag,blend_frame;
+ int states=1;bool camera_emitters=false;};
 inline constexpr Object regeneration_objects[]={
 {"#particle",0,6,0x3825b2a582bb7cd1ull,4,2},
 {"regen01",1,9,0x0d90e605c542d570ull,0,0},
@@ -142,12 +143,32 @@ inline constexpr Object nullifier_objects[]={
 {"*line08",0,9,0xcf88625cae9d195dull,46,0},
 };
 inline constexpr uint64_t nullifier_materials[]={0x8237bf10191e1de0ull,0x49ab2bff2e73c095ull};
+inline constexpr Object ogrestrength_objects[]={
+{"#trail",0,6,0x4ba6648400430bafull,4,2,0x0000000000000000ull,0x0000000000000000ull},
+{"*ogreloop",1,9,0x0c2b7ebdf6ec02bbull,601,0,0x0000000000000000ull,0x0000000000000000ull},
+{"#ogre01",0,208,0xcd458dd2b574396bull,4,2,0x24b5b08e801111a2ull,0x8de70ea438f81391ull},
+{"#ogre02",0,208,0x6db79b31c5b7ac0aull,4,2,0x96c8115277220961ull,0x8de70ea438f81391ull},
+{"#ogre03",0,208,0x105ca84dc2311887ull,4,2,0x66f248b3097f3e9dull,0x8de70ea438f81391ull}
+};
+inline constexpr uint64_t ogrestrength_materials[]={0xaa234e3981f0b7b3ull,0x8237bf10191e1de0ull};
+inline constexpr Object trollblood_objects[]={
+{"#drop",0,9,0x786a5015816f788cull,4,2,0x0000000000000000ull,0x0000000000000000ull},
+{"#blood2",0,115,0xe3b85169dcd632f0ull,4,2,0x5232658b014862beull,0x8de70ea438f81391ull},
+{"#blood1",0,122,0x5cffbc8f9985f966ull,4,2,0x8e65d58b9681233full,0x8de70ea438f81391ull},
+{"#blood3",0,124,0xe7fb794cb6675514ull,4,2,0x08c7ed79c9bfbd2full,0x8de70ea438f81391ull},
+{"*path3",0,9,0x058619952657f2f8ull,28,26,0x0000000000000000ull,0x0000000000000000ull},
+{"*path1",0,9,0x058619952657f2f8ull,28,26,0x0000000000000000ull,0x0000000000000000ull},
+{"*path2",0,9,0x058619952657f2f8ull,28,26,0x0000000000000000ull,0x0000000000000000ull}
+};
+inline constexpr uint64_t trollblood_materials[]={0xaa234e3981f0b7b3ull};
 inline constexpr Profile profiles[]={{0x10ac03deu,"magic/regen.i3d",60,34,3,32,7,regeneration_objects,regeneration_materials,0x3c1a6c9954839ed7ull,"obj=(regen01,regen02,regen03,regen04,regen05,regen06,regen07,regen08,regen09,regen10,regen11,regen12,regen13,regen14,regen15,regen16,regen17,regen18,regen19,regen20,regen21,regen22,regen23,regen24,regen25,regen26,regen27,regen28,regen29,regen30,regen31,regen32),particle=#particle,pps=50,lifespan=18:18,initialvelocity=2:5,scale=[0:0.5,65:1,100:2],localrotation=[0:(0,0,0),100:(0,360,0)],color=[0:(50,50,50),100:(150,125,120)],friction=0.0",8193,4,2,0,0,-1,-1},
 {0xe0a3bc43u,"magic/swiftstrike.i3d",60,33,2,32,7,swiftstrike_objects,swiftstrike_materials,0x3c1a6c9954839ed7ull,"obj=(regen01,regen02,regen03,regen04,regen05,regen06,regen07,regen08,regen09,regen10,regen11,regen12,regen13,regen14,regen15,regen16,regen17,regen18,regen19,regen20,regen21,regen22,regen23,regen24,regen25,regen26,regen27,regen28,regen29,regen30,regen31,regen32),particle=#particle,pps=50,lifespan=18:18,initialvelocity=2:5,scale=[0:0.5,65:1,100:2],localrotation=[0:(0,0,0),100:(0,360,0)],color=[0:(50,50,50),100:(150,125,120)]",8193,4,2,0,0,-1,-1},
 {0x0c052638u,"misc/fspray.i3d",15,2,2,16,5,fspray_objects,fspray_materials,0x91b7cef666f68607ull,"obj=(spray),particle=#particle,pps=55,initialvelocity=16:19,lifespan=15:35,localrotation=[0:(0,0,0),100:(0,0,0)],friction=0,gravity=0.5,color=[0:(106,126,155),80:(32,85,55),100:(0,0,0)],relvel=0,spread=12,azimuth=12,scale=[0:0.25,20:1,100:0]",8193,4,2,0,0,-1,-1},
 {0xaeaeeb30u,"magic/yenergy.i3d",30,2,2,64,2,yenergy_objects,yenergy_materials,0x470f987cb4d08e27ull,"obj=\"emitter\",particle=\"#particle\",emittertype=\"sphere\",emittersize=0.25,pps=45,initialvelocity=1:3,lifespan=50:60,color=[0:(255,255,255),35:(255,255,255),50:(0,0,0)],azimuth=180,spread=180,rlocalrotation=[0:(0,0,0),30:(0,5,0)],gravity=-0.3,scale=[0:0.5,10:3,40:2.5,60:0.5]",8193,4,2,0,0,1,2},
 {0xaeaeeb33u,"magic/yenergylose.i3d",80,2,2,64,2,yenergylose_objects,yenergylose_materials,0x470f987cb4d08e27ull,"obj=\"emitter\",particle=\"#particle\",emittertype=\"sphere\",emittersize=0.25,pps=[0:45,7:45,10:0],initialvelocity=1:3,lifespan=50:60,color=[0:(255,255,255),35:(255,255,255),50:(0,0,0)],azimuth=180,spread=180,rlocalrotation=[0:(0,0,0),30:(0,5,0)],gravity=-0.3,scale=[0:0.5,10:3,40:2.5,60:0.5]",8192,4,2,0,1,0,2},
 {0xaeaeeb29u,"magic/yabsorb.i3d",120,25,2,64,2,yabsorb_objects,yabsorb_materials,0x754ca8b49706dca3ull,"obj=(\"emitter01\",\"emitter02\",\"emitter03\",\"emitter04\",\"emitter05\",\"emitter06\",\"emitter07\",\"emitter08\",\"emitter09\",\"emitter10\",\"emitter11\",\"emitter12\",\"emitter13\",\"emitter14\",\"emitter15\",\"emitter16\",\"emitter17\",\"emitter18\",\"emitter19\",\"emitter20\",\"emitter21\",\"emitter22\",\"emitter23\",\"emitter24\"),particle=\"#particle\",emittertype=\"sphere\",emittersize=5,scale=[0:0,50:2,60:0],pps=[0:15,30:25,65:0],initialvelocity=2:4,lifespan=40:40,color=[0:(255,255,255)]",8192,4,2,0,1,0,2},
-{0xad92bd38u,"magic/nullifier.i3d",25,17,2,64,2,nullifier_objects,nullifier_materials,0xdff5eac4de952848ull,"obj=(emitter01,emitter02,emitter03,emitter04,emitter05,emitter06,emitter07,emitter08),particle=#particle,pps=[0:75,17:150,25:300],initialvelocity=2:5,lifespan=5:10,friction=[0:0.3],gravity=[0:-2],color=[0:(125,185,20),100:(0,0,0)],scale=[0:0.5,100:0]",8193,372,2,1,0,-1,-1}};
+{0xad92bd38u,"magic/nullifier.i3d",25,17,2,64,2,nullifier_objects,nullifier_materials,0xdff5eac4de952848ull,"obj=(emitter01,emitter02,emitter03,emitter04,emitter05,emitter06,emitter07,emitter08),particle=#particle,pps=[0:75,17:150,25:300],initialvelocity=2:5,lifespan=5:10,friction=[0:0.3],gravity=[0:-2],color=[0:(125,185,20),100:(0,0,0)],scale=[0:0.5,100:0]",8193,372,2,1,0,-1,-1},
+{0x42e0fcd0u,"magic/ogre.i3d",200,5,2,64,19,ogrestrength_objects,ogrestrength_materials,0x225133db1a5157efull,"obj=(#ogre01,#ogre02,#ogre03),particle=#trail,pps=75,lifespan=10:15,initialvelocity=0:0,scale=[0:0.5,100:0],localrotation=[0:(0,0,0),100:(0,15,0)],color=[0:(255,255,255),5:(175,255,50),50:(25,255,1),100:(1,1,1)],spread=1,alpha=[0:1,100:0]",8193,617,8,0,0,-1,-1,1,true},
+{0xad92bd39u,"magic/trollblood.i3d",60,7,1,8,1,trollblood_objects,trollblood_materials,0x08d6ad739a973e46ull,"obj=(#blood1,#blood2,#blood3),particle=#drop,emittersize=0,pps=20,initialvelocity=1:1,lifespan=40:50,localrotation=[0:(0,0,0),100:(0,540,0)],friction=[0:0.05],gravity=[0:0.07],color=[0:(25,150,1),100:(0,0,0)],spread=60,azimuth=60,scale=[0:0.1,50:0.5,80:0.1,100:0],relvel=0.04",8193,100,86,0,0,-1,-1,2,true}};
 inline bool IsType(uint32_t id){for(const auto& p:profiles)if(p.id==id)return true;return false;}
 }
