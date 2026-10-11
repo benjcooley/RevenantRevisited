@@ -426,8 +426,21 @@ void TCharacter::Pulse()
         if (script)
             script->Trigger(TRIGGER_DEAD);
 
+      // REVSYNC: 0x004c246a..0x004c24e8 -- the corpse goes. On its 240th
+      // dead pulse it shows in full and fades out, 1 a pulse (SetFade(100,
+      // 1, 0)); once unseen it is KILLed, and the next PulseObjects deletes
+      // it: 340 pulses, about 14 s, after death (GRIND.md §3.1). The player
+      // fades and is KILLed too, but never deleted.
+        constexpr int32_t kCorpseTicks = 240;
+        if (++deadticks >= kCorpseTicks)
+        {
+            if (fade < 1)
+                SetFlags(flags | OF_KILL);
+            else if (fade_direction == 0)
+                SetFade(100, 1, 0);
+        }
         return;
-    } 
+    }
     
     // ****************** all processing below is for alive characters only *****************
     // ********************************************************************************************

@@ -792,6 +792,9 @@ class TCharacter : public TComplexObject
   // combatflash delay
     int32_t combatflashticks = 0;     // retail +0x224 (a blow sets 5; Pulse counts it down)
 
+  // The corpse
+    int32_t deadticks = 0;            // retail +0x228: pulses spent dead (Pulse); at 240 the corpse fades
+
   // Diagnostic counters. ai_pulse_count increments at every Pulse()
   // entry, ai_ai_count at every AI() entry. The overlay reads these
   // to confirm whether monsters are being ticked at all (and if so,

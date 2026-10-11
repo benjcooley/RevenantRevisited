@@ -3822,9 +3822,12 @@ void TMapPane::PulseObjects()
     if (NoPulseObjs)
         return;
 
+  // REVSYNC: PulseObjects @ 0x004580f0 -- a KILLed object goes before it
+  // pulses, but a player: a dead one is KILLed when his corpse has faded
+  // (TCharacter::Pulse) and pulses on.
     for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_PULSE); i; i++)
     {
-        if (i->GetFlags() & OF_KILL)
+        if ((i->GetFlags() & OF_KILL) && i->ObjClass() != OBJCLASS_PLAYER)
             i.Nuke();
         else
             i->Pulse();
