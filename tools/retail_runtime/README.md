@@ -199,6 +199,29 @@ the core changes it needed (`api_dlls`, mutexes, `ERROR_NEGATIVE_SEEK`,
 `CreateThread` flags, `call_sp`) are listed in
 [slots/hud/README.md](slots/hud/README.md).
 
+## Playing on (play slot)
+
+`slots/play` continues that boot into play and runs the shipped game one
+24 Hz tick at a time under a control channel ([slots/play/README.md](slots/play/README.md),
+docs/playtest/PROTOCOL.md). The core additions it needed are opt-in and
+leave fixtures unchanged:
+
+- `Scheduler.resume(limit, until)`: continue every thread from where it
+  was left, the blocked main thread of a never-returning WinMain included,
+  until `until()` holds (tested after each wake-up pass).
+- `Scheduler.solo`: the only runnable thread runs without Unicorn's
+  instruction count (Unicorn counts with a hook on every instruction)
+  until an API call blocks it or releases another thread
+  (`api_returned`, `wakes`); released threads run first. Switches stay at
+  API boundaries and quantum ends, so runs stay deterministic. About 4x
+  faster on game frames.
+- `Runtime.disable_checkpoints()`: no write hook (about 2x on store-heavy
+  frames) for a Runtime saved only as disk images; `api_calls` counts
+  every API call and `trace_apis = False` skips the per-call records.
+- `Heaps.reuse`: freed heap blocks are handed out again, first fit by
+  address, merged with free neighbours, stored with the heap. Without it
+  a played game's heap grows about 9 KB a tick until it runs out.
+
 ## Checkpoint restore: native dirty pages
 
 `checkpoint()` records the CPU, heap, clock, files and virtual APIs; after
