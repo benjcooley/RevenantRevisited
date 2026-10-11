@@ -66,6 +66,7 @@
 {0xab8800ddu, "TFizzleEffect", false, "Implemented preview controller; map caller not certified"}, // Fizzle
 {0xab8800ddu, "TFizzleEffect_SINGLE_BURST", false, "Implemented preview controller; map caller not certified"}, // Fizzle
 {0xab92cd01u, "TFireConeEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // FireCone
+{0xacabfadau, "TIcedsparks_AUTHORED_STILL", false, "Implemented preview controller; map caller not certified"}, // Icedsparks
 {0xad92bc11u, "TPuke_BESPOKE_NULLSPELL", false, "Implemented preview controller; map caller not certified"}, // puke
 {0xad92bc12u, "TShriek_BESPOKE_NULLSPELL", false, "Implemented preview controller; map caller not certified"}, // shriek
 {0xad92bc15u, "TSetVortexEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // setvortex

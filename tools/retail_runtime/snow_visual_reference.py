@@ -14,8 +14,8 @@ class NativeSnow(NativeGenericMeshScene):
   # prototype slots before Initialize; Snow lets original SetupObjects allocate
   # every real draw object instead, avoiding duplicate pre-populated slots.
   original=bytes(self.vm.uc.mem_read(self.animator+0x30,40));super().setup_resources();self.vm.write(self.animator+0x30,original)
- def __init__(self,exe,data):
-  assert sha(data)==ASSET_SHA;super().__init__(exe,data,'Snow',1280,960);v=self.vm
+ def __init__(self,exe,data,name="Snow"):
+  assert name in ("Snow","Icedsparks") and sha(data)==ASSET_SHA;super().__init__(exe,data,name,1280,960,native_binding=(0x40dc00,0x5e8508,0x5a370c) if name=='Icedsparks' else None);v=self.vm
   flags=v.allocate(16);v.write_code(flags,b'\x8b\x44\x24\x04\x89\x41\x08\xc2\x04\x00');v.put_u32(v.u32(self.owner)+0x40,flags);v.put_u32(self.owner+0x4c,self.imagery);done=v.allocate(16);v.write_code(done,b'\x31\xc0\xc2\x04\x00');v.put_u32(v.u32(self.owner)+0x158,done)
   v.call(0x40dd60,this=self.animator,instruction_limit=100000000);assert v.u32(self.animator)==0x5a370c
  def render_whole(self,tick,frame):

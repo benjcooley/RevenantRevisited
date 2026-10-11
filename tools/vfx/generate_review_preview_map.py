@@ -84,6 +84,7 @@ PARTIAL = {
 # their owner constructors. These newer implementations predate their ledger
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
+    '0xacabfada': 'TIcedsparks_AUTHORED_STILL',
     '0xad92bc17': 'Funnel_ORIGINAL',
     '0x0c05263b': 'Jtele_AUTHORED',
     '0x0c05263c': 'Jteled_AUTHORED',

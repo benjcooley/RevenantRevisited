@@ -31,7 +31,10 @@ State* Spawn(const S3DPoint& origin,uint32_t id){
 }
 void Advance(State*state,double seconds){
  if(!state||!state->owner||!std::isfinite(seconds)||seconds<=0)return;state->accumulated+=seconds;
- while(state->accumulated+1e-10>=TTime::LegacyFrameSeconds){state->accumulated-=TTime::LegacyFrameSeconds;auto*owner=state->identity.Get();if(!owner||owner!=state->owner.get()||!generic_static_profile::Matches(owner,dynamic_cast<T3DImagery*>(owner->GetImagery())))return;owner->NextFrame();owner->Pulse();}
+ while(state->accumulated+1e-10>=TTime::LegacyFrameSeconds){state->accumulated-=TTime::LegacyFrameSeconds;auto*owner=state->identity.Get();if(!owner||owner!=state->owner.get()||!generic_static_profile::Matches(owner,dynamic_cast<T3DImagery*>(owner->GetImagery())))return;owner->NextFrame();owner->Pulse();
+  if(owner->ObjId()==0xacabfadau && (owner->GetFrame()==99 || owner->GetFrame()==0))
+   log_info("[icedsparks-owner] frame=%d flags=%08x",owner->GetFrame(),owner->GetFlags());
+ }
 }
 void SubmitWorld(State*state,EFxDebugMode mode){
  if(!state||!Renderer||!state->owner||mode!=EFxDebugMode::Normal)return;auto*owner=state->identity.Get();auto*im=owner?dynamic_cast<T3DImagery*>(owner->GetImagery()):nullptr;if(!generic_static_profile::Matches(owner,im))return;owner->Animate(false);auto*animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());if(!animator)return;

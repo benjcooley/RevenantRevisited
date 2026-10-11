@@ -79,7 +79,9 @@ inline constexpr Texture snow_textures[]={{128,128,{0x10,0xf00,0xf0,0xf,0xf000}}
 inline constexpr uint64_t snow_materials[]={0xabd68d398362b740ull,0xaa234e3981f0b7b3ull};
 inline constexpr Profile profiles[]={{0xadbcef13u,"misc/charutility.i3d",1,100,5,5,5,charutility_objects,charutility_textures,charutility_materials},
 {0xad92bd23u,"misc/secretdoor.i3d",3,2,1,2,2,kinsecretdoor_objects,kinsecretdoor_textures,kinsecretdoor_materials},
-{0xfacedbedu,"magic/iced.i3d",1,100,50,2,2,snow_objects,snow_textures,snow_materials,8}};
+{0xfacedbedu,"magic/iced.i3d",1,100,50,2,2,snow_objects,snow_textures,snow_materials,8},
+// Icedsparks independently resolves the same default animator and exact asset.
+{0xacabfadau,"magic/iced.i3d",1,100,50,2,2,snow_objects,snow_textures,snow_materials,8}};
 inline const Profile*Find(uint32_t id){for(const auto&p:profiles)if(p.id==id)return &p;return nullptr;}
 inline uint64_t Hash(const void*ptr,size_t size){uint64_t h=1469598103934665603ull;const auto*b=static_cast<const uint8_t*>(ptr);for(size_t i=0;i<size;++i){h^=b[i];h*=1099511628211ull;}return h;}
 inline bool Matches(const TObjectInstance*owner,T3DImagery*im){

@@ -23,6 +23,13 @@ TWaterFallEffect_BESPOKE__WaterFlft TWaterFallEffect_BESPOKE__RiverFall
 TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertEqual(admitted_candidates({'preview_candidates': candidates}), [])
 
+    def test_icedsparks_uses_its_verified_default_factory(self):
+        row={'retail_type_id':'0xacabfada','preview_candidates':['TIcedEffect_BESPOKE__Icedsparks']}
+        self.assertEqual(admitted_candidates(row),['TIcedsparks_AUTHORED_STILL'])
+        self.assertFalse(candidate_metadata(row,'TIcedsparks_AUTHORED_STILL')[0])
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff',
+            'preview_candidates':['TIcedEffect_BESPOKE__Icedsparks']}),[])
+
     def test_replacement_bodies_survive_stale_stub_banners(self):
         candidates = '''TBloodEffect_BESPOKE TSparksEffect_BESPOKE
 TFireConeEffect_BESPOKE TFireFlashEffect_BESPOKE TFireWindEffect_BESPOKE TFairyEffect_BESPOKE
