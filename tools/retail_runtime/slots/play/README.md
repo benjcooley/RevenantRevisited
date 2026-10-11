@@ -94,6 +94,15 @@ joystick) stays absent, as in the HUD machine.
 
 - Frames (`frames.py`): the primary surface, which retail presents to by
   blitting its back buffer; RGB565 to RGB888 by bit replication, PNG.
+- Text (`gditext.py`): the HUD machine's GDI records TextOutA / DrawTextA
+  and draws nothing, so retail's own text compose (`0x004be2b0`: a work
+  surface keyed 0x7f7f, three black DrawTextA passes for the shadow, one
+  in colour, then a keyed blit) had empty pixels. The play slot also draws
+  the glyphs into the DC's surface: FreeType's (Pillow) hinted monochrome
+  shapes from the same font files, placed by gdi.py's GDI metrics (the
+  advances and ascent retail laid the text out with). Approximate, not
+  Windows 98's rasterizer; it shows the dialog, the choices, the text bar
+  and the status numbers as retail composes them.
 - Files (`overlay.py`): writes land in memory over the read-only install,
   only under `Save\`, `CurMap\`, `ss.bmp` and INI files (anything else fails
   by name); they persist across steps and in images. `export_slot` copies
@@ -152,8 +161,7 @@ See the commit that adds the evidence; numbers there.
 
 ## Gaps
 
-- GDI text has no glyphs (HUD machine): frames show no text-bar or dialog
-  text; the observation and the log carry it.
+- Text glyphs are approximate (gditext.py): FreeType, not Win98 GDI.
 - `pick` without the object; `gold`, `quick_spells`, `walkgrid` not read;
   `action_tick` for attacks only.
 - The guest heap is 64 MB (`Runtime.HEAP_SIZE`); with block reuse a long

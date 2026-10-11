@@ -59,7 +59,9 @@ dialog entry constructor 0x00533f10 (thiscall: mode 3 is the third
 argument, the count the tenth, the texts the eleventh; DIALOG.md §4.2).
 They collect in `game_text` as (tick, kind, text); the server logs them
 and the observation reports the text bar's.
-Frames: `front_buffer` / `write_frame` (frames.py).
+Frames: `front_buffer` / `write_frame` (frames.py). The HUD machine's GDI
+records text without drawing it; `gditext.py` draws approximate glyphs so
+retail's own text compose has pixels to work on.
 """
 from __future__ import annotations
 
@@ -80,6 +82,7 @@ from machine import PlayMachine  # noqa: E402
 from mmtimer import TimerThread  # noqa: E402
 from overlay import SaveOverlay  # noqa: E402
 from userinput import UserInput  # noqa: E402
+from gditext import GdiText  # noqa: E402
 import frames  # noqa: E402
 
 QUICKSTART_FLAG = 0x00668184
@@ -156,6 +159,7 @@ class PlayWorld:
         self.vm = vm = hud.vm
         self.hwnd = hud.windows.created[0][0]
         self.machine = PlayMachine(vm)
+        self.text = GdiText(vm, hud.gdi, hud.ddraw)      # glyphs for GDI text (approximate; gditext.py)
         # A played game moves on and is saved as disk images: no in-place
         # checkpoints (their write hook halves guest speed), and the only
         # runnable thread runs without per-instruction counting (threads.py).

@@ -17,6 +17,9 @@ sys.path.insert(0, str(HERE.parents[1]))
 from runtime import Runtime  # noqa: E402
 from build_contract import BASELINE  # noqa: E402
 from winfs import WinFileSystem  # noqa: E402
+from ddraw import DirectDraw, RGB565  # noqa: E402
+from gdi import Gdi  # noqa: E402
+from gditext import GdiText  # noqa: E402
 import frames  # noqa: E402
 from overlay import OverlayError, SaveOverlay  # noqa: E402
 from playworld import machine_ini  # noqa: E402
@@ -138,6 +141,41 @@ class FrameTests(unittest.TestCase):
     def test_rgb565_widens_by_bit_replication(self):
         pixels = struct.pack('<4H', 0xf800, 0x07e0, 0x8410, 0xffff)
         self.assertEqual(frames.rgb888(pixels), bytes([255, 0, 0, 0, 255, 0, 132, 130, 132, 255, 255, 255]))
+
+
+class GlyphTests(unittest.TestCase):
+    def test_draw_text_puts_glyphs_in_the_dc_surface_inside_its_rect(self):
+        vm = Runtime(BASELINE)
+        gdi, ddraw = Gdi(vm), DirectDraw(vm)
+        ddraw.gdi = gdi
+        text = GdiText(vm, gdi, ddraw)
+        surface = ddraw._new_surface(200, 40, 0, RGB565)
+        dc = gdi.create_dc(surface)
+        face = vm.allocate(16)
+        vm.write(face, b'Arial\0')
+        font = gdi._create_font((0xfffffff4, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 0, 0, face))   # -12: 12 ppem
+        gdi._select((dc, font))
+        gdi._swap((dc, 0x0000ff), 'text_color')                                            # red
+        gdi._swap((dc, 1), 'back_mode')                                                    # TRANSPARENT
+        call = vm.api_address('user32.dll', 'DrawTextA')
+        string, rect = vm.allocate(16), vm.allocate(16)
+        vm.write(string, b'Hi there\0')
+        vm.write(rect, struct.pack('<4i', 20, 5, 180, 30))
+        vm.call(call, (dc, string, 0xffffffff, rect, 0x2811))           # centred, word break
+        s = ddraw.surface(surface)
+        pixels = struct.unpack(f'<{s.pitch // 2 * s.height}H', vm.uc.mem_read(s.memory, s.pitch * s.height))
+        lit = [(i % (s.pitch // 2), i // (s.pitch // 2)) for i, v in enumerate(pixels) if v]
+        self.assertTrue(lit)
+        self.assertEqual({pixels[y * (s.pitch // 2) + x] for x, y in lit}, {0xf800})
+        xs, ys = [p[0] for p in lit], [p[1] for p in lit]
+        self.assertTrue(20 <= min(xs) and max(xs) < 180 and 5 <= min(ys) and max(ys) < 30)
+        self.assertLess(abs((min(xs) + max(xs)) / 2 - 100), 4)         # centred in 20..180
+        self.assertEqual(len(gdi.text_calls), 1)                         # still recorded
+        vm.write(rect, struct.pack('<4i', 20, 5, 180, 30))
+        before = bytes(vm.uc.mem_read(s.memory, s.pitch * s.height))
+        vm.call(call, (dc, string, 0xffffffff, rect, 0x400))            # DT_CALCRECT draws nothing
+        self.assertEqual(bytes(vm.uc.mem_read(s.memory, s.pitch * s.height)), before)
+        self.assertEqual(text.drawn, 1)
 
 
 class MachineTests(unittest.TestCase):
