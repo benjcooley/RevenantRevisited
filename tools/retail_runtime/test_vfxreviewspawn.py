@@ -45,7 +45,7 @@ MAIN=r'''
 int main(){
  assert(!DescribeVfxReviewSpawn(1).safe_factory);TObjectClass c;TObjectClass::catalog=&c;
  TObjectBuilder generic{"EFFECT"},fire{"FireBall"},unknown{"Unknown"},wave{"Wave"};
- c.entries={{1,&generic},{0x63fd382a,&fire},{0x63fd3827,&generic},{0x113803f4,&generic},{0xb1c4c90f,&generic},{0xad92bd1f,&generic},{2,&unknown},{3,nullptr},{4,&generic,-1},{0x10ac03de,&generic},{5,&wave},{0xad92bc37,&generic}};
+ c.entries={{1,&generic},{0x63fd382a,&fire},{0x63fd3827,&generic},{0x113803f4,&generic},{0xb1c4c90f,&generic},{0xad92bd1f,&generic},{2,&unknown},{3,nullptr},{4,&generic,-1},{0x10ac03de,&generic},{5,&wave},{0xad92bc37,&generic},{0xadbcef19,&generic}};
  assert(!DescribeVfxReviewSpawn(42).safe_factory);assert(DescribeVfxReviewSpawn(1).safe_factory);
  assert(DescribeVfxReviewSpawn(5).safe_factory&&!DescribeVfxReviewSpawn(5).uses_effect_runtime);
  assert(!DescribeVfxReviewSpawn(2).safe_factory);assert(!DescribeVfxReviewSpawn(3).safe_factory);assert(!DescribeVfxReviewSpawn(4).safe_factory);
@@ -66,6 +66,9 @@ int main(){
  owner.id=0xad92bc37;image.textures=0;image.path="Misc\\IBarrier1.I3D";
  assert(ConfigureVfxReviewSpawn(owner,source,destination).uses_effect_runtime);
  image.path="Misc\\Other.I3D";assert(!ConfigureVfxReviewSpawn(owner,source,destination).uses_effect_runtime);
+ owner.id=0xadbcef19;image.textures=1;image.path="Misc\\SewerW.I3D";
+ assert(ConfigureVfxReviewSpawn(owner,source,destination).uses_effect_runtime);
+ image.textures=0;assert(!ConfigureVfxReviewSpawn(owner,source,destination).uses_effect_runtime);
  owner.id=1;image.textures=1;
  image.names={"mesh"};image.faces={0};assert(!ConfigureVfxReviewSpawn(owner,source,destination).renderer_supported);
  owner.component=true;d=ConfigureVfxReviewSpawn(owner,source,destination);assert(d.renderer_supported&&d.uses_effect_runtime);

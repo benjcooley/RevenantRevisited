@@ -237,7 +237,7 @@ bool UpdateFloor(const S3DPoint& camera) {
         TSector* sector=map->SectorAt(def.pos);
         if(!tile || !sector) return false;
         const int index=MapPane.MakeIndex(); tile->SetMapIndex(index); sector->AddObject(tile.get());
-        TGameMap::StampTileWalkmap(tile.get(),WALK_TRANSFER,[](int sx,int sy){return map->FindSector(sx,sy);});
+        TGameMap::StampWalkmap(tile.get(),WALK_TRANSFER,[](int sx,int sy){return map->FindSector(sx,sy);});
         tile.release(); ground_objects.push_back(index);
     }
     return true;
@@ -250,7 +250,8 @@ S3DPoint PathEndpoint(size_t index,bool target) {
 }
 void Spawn(Entry& e, size_t index) {
     const auto support=DescribeVfxReviewSpawn(e.id);
-    if (!support.safe_factory) {
+    const bool authored_yfireball = e.id==0x63fd3827u;
+    if (!support.safe_factory && !authored_yfireball) {
         e.status=support.description; e.failed=true;
         log_info("[vfx-review] unavailable name=%s type=%08x status=%s",e.name.c_str(),e.id,e.status.c_str());
         return;
@@ -260,18 +261,20 @@ void Spawn(Entry& e, size_t index) {
         source=PathEndpoint(index,false);
         target=PathEndpoint(index,true);
     }
-    if(e.id==0x63fd382au) {
+    if(e.id==0x63fd382au || authored_yfireball) {
         // Map factory construction does not bind or submit the bespoke
         // FireBall renderer. Use the working full initializer and its two
         // render hooks, with one owner of the 24Hz simulation.
-        e.projectile.reset(TFireBallEffect::SpawnForTest(source));
+        e.projectile.reset(authored_yfireball ?
+            TFireBallEffect_Bespoke__YFireBall::SpawnForTest_BESPOKE(source) :
+            TFireBallEffect::SpawnForTest(source));
         if(!e.projectile || !e.projectile->SetProjectileEndpoints(source,target)) {
             e.projectile.reset(); e.failed=true; e.missing_visual=true;
-            e.status="FireBall runtime initialization failed"; return;
+            e.status="Projectile runtime initialization failed"; return;
         }
         e.projectile->SetPreviewTargetCollision(true);
         e.projectile_state=-1;
-        e.missing_visual=false; e.status="FireBall complete projectile runtime"; ++e.cycles;
+        e.missing_visual=false; e.status="Complete authored projectile runtime"; ++e.cycles;
         log_info("[vfx-review] projectile name=%s cycle=%u source=%d,%d,%d target=%d,%d,%d",
             e.name.c_str(),e.cycles,source.x,source.y,source.z,target.x,target.y,target.z);
         return;

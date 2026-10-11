@@ -71,13 +71,15 @@ bool ReviewGenericBuilder(const char* name)
 bool ReviewStaticMapDrawable(T3DImagery& image,uint32_t id)
 {
     const char* expected=nullptr;
+    int textures=0;
     switch(id) {
         case 0xad92bc10u: expected="misc/speaker.i3d"; break;
         case 0xad92bc37u: expected="misc/ibarrier1.i3d"; break;
         case 0xad92bc38u: expected="misc/ibarrier2.i3d"; break;
+        case 0xadbcef19u: expected="misc/sewerw.i3d"; textures=1; break;
         default:return false;
     }
-    if(image.NumTextures()!=0 || !image.GetResFilename())return false;
+    if(image.NumTextures()!=textures || !image.GetResFilename())return false;
     std::string path=image.GetResFilename();
     for(char& c:path)c=c=='\\'?'/' : char(std::tolower(static_cast<unsigned char>(c)));
     const size_t length=std::strlen(expected);
