@@ -31,7 +31,41 @@ controller/Render/normal-light/software raster is executed independently.
 
 Private evidence is under RevenantRetailLab
 `research/vfx-wide-20261010/hard-alpha/headfireball-{preflight,native-state,owner-core,state-first}`.
-This checkpoint does not grant actual Metal appearance acceptance. Natural trap
+The initial checkpoint alone does not grant appearance acceptance. Natural trap
 stat arming, target selection/damage, audio, generic Effect/script pulse,
 resource/COM and map notifications, other orientations, device and exact
 framebuffer equality remain open.
+
+## Source and full-film evidence
+
+`HeadFireBall_ORIGINAL` uses the exact typed factory and a real owner `IsAlive`
+callback. The default controller admission is restricted to type `0xd000f005`
+and the independently pinned Hfire profile. It preserves the head depth test,
+three states, original trap velocity, frame wrap, collision transition and
+owner kill flag. No renderer or parser changes are required.
+
+The source controller proof matches 517,990 fields over 110 ticks, with maximum
+float error 0.000121831 and all 892 RNG calls exact. Skipping Render on two out
+of three ticks separately matches 521,320 fields and all 891 calls. Cached
+prototype origins match 306 fields across normal, stride-three and early-only
+Render controls. Pose extraction matches 4,050 key and 5,568 matrix channels;
+170 mutated profiles are rejected and 450 default decoder cases are unchanged.
+
+The frozen full original/default-controller/normal-lit software reference and
+two actual Metal policies have 25 identical phases, with 24 Hz Pulse and Render
+throughout. Every one of 172 active Metal log records agrees with original
+state, frame, position and RNG. The fresh original replay has all 110 states
+and six PNGs byte-identical. All submitted triangles over all 110 ticks fit
+inside the supported 1280x960 viewport: bounds (369.556,224.801)-(1012.244,613.634).
+Camera center is (640,560), world camera zero, original light 38 white with
+directional intensity 1. Native depth is 0..65535; ordinary depth 2238..3262
+is retained as a diagnostic. No geometry, tint, timing or seed is fitted.
+
+Evidence root: `research/vfx-wide-20261010/hard-alpha/` in RevenantRetailLab.
+Review panels and pair manifest are in `headfireball-review-final/`;
+full films are `headfireball-native-final/` and `headfireball-metal-final/`.
+The root reviewer independently decides scoped appearance acceptance.
+
+- Pair manifest SHA256: `432fae291cca0eeae65b4d92ea9df5bc457a40b744dcfc13ac49ea5172ccbba8`.
+- Captured binary SHA256: `31169faeebb3ae705a44c93592491814bc6b22dd00f655ddd75333ce7a55d321`.
+- Fresh replay report SHA256: `d19682dfe499e1964213966858b0c0d487c0d16b44c41314665e2244a6675ee0`.

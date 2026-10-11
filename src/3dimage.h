@@ -241,9 +241,11 @@ class T3DImagery : public TObjectImagery
     bool quicksilver_partsys_profile = false;
     bool lightstrip_partsys_profile = false;
     bool jhagaattack_partsys_profile = false;
+    bool headfireball_partsys_profile = false;
     bool funnel_partsys_profile = false;
     bool ValidateRetailLightStripProfile();
     bool ValidateRetailJhagaAttackProfile();
+    bool ValidateRetailHeadFireBallProfile();
     bool ValidateRetailFunnelProfile();
     bool comet_partsys_profile=false;
     bool fgeyser_partsys_profile=false;
@@ -350,6 +352,7 @@ class T3DImagery : public TObjectImagery
     bool HasRetailPoisonProfile() const { return poison_partsys_profile; }
     bool HasRetailLightStripProfile() const { return lightstrip_partsys_profile; }
     bool HasRetailJhagaAttackProfile() const { return jhagaattack_partsys_profile; }
+    bool HasRetailHeadFireBallProfile() const { return headfireball_partsys_profile; }
     bool HasRetailFunnelProfile() const { return funnel_partsys_profile; }
     bool HasGoldPartSysProfile() const { return gold_partsys_profile; }
     bool HasRetailMightPartSysProfile() const { return might_partsys_profile; }
@@ -538,6 +541,8 @@ class T3DAnimator : public TObjectAnimator
     retail_warp::State retail_warp_state;
     struct SPartSysControllers;
     std::unique_ptr<SPartSysControllers> partsys_controllers;
+    bool headfireball_object_zero_sampled=false;
+    hmm_vec3 headfireball_object_zero_origin{}; // original outgoing-flight initialization input
     bool jhagaattack_object_zero_sampled=false;
     hmm_vec3 jhagaattack_object_zero_origin{}; // outgoing-flight origin consumed by controller initialization
     std::function<int(int,int,int)> lightstrip_ground;
@@ -606,6 +611,10 @@ class T3DAnimator : public TObjectAnimator
     void SetJhagaAttackObjectZeroOrigin(const hmm_vec3& origin);
     void NoteJhagaAttackPrototypeSample();
     void SetJhagaAttackGround(std::function<int(int,int,int)> query);
+    hmm_vec3 HeadFireBallObjectZeroOrigin() const { return headfireball_object_zero_origin; }
+    void SetHeadFireBallObjectZeroOrigin(const hmm_vec3& origin);
+    void NoteHeadFireBallPrototypeSample();
+    void SetHeadFireBallGround(std::function<int(int,int,int)> query);
     void SetLightStripGround(std::function<int(int,int,int)> query);
     void SetFunnelGround(std::function<int(int,int,int)> query);
     void SetCometGround(std::function<int(int,int,int)> query);

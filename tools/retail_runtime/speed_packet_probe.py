@@ -50,6 +50,7 @@ struct Owner{uint32_t ObjId()const{return 0xad92bd36u;}int GetState()const{retur
 struct Imagery{bool HasRetailStaticParticleProfile(uint32_t)const{return false;}
  bool HasRetailLightStripProfile()const{return false;}
  bool HasRetailJhagaAttackProfile()const{return false;}
+ bool HasRetailHeadFireBallProfile()const{return false;}
  bool HasRetailFunnelProfile()const{return false;}
  bool HasRetailCometProfile()const{return false;}
  bool HasRetailFGeyserProfile()const{return false;}
@@ -73,6 +74,7 @@ struct T3DAnimator{struct SPartSysControllers{
  std::unique_ptr<SPartSysControllers>partsys_controllers;Owner*inst;Imagery im;
  Imagery*Get3DImagery(){return &im;}
  void NoteJhagaAttackPrototypeSample(){}
+ void NoteHeadFireBallPrototypeSample(){}
  int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&,bool=false);};
 constexpr float WORLD3D_Z_SCALE=1.5f;
 '''

@@ -17,6 +17,7 @@
 #include "effects/arroworiginal.h"
 #include "effects/ytelekinesisoriginal.h"
 #include "effects/jhagaattackoriginal.h"
+#include "effects/headfireballoriginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
@@ -5336,6 +5337,16 @@ struct SVfxTestBootstrap {
             original.submit_world=[](void* c,EFxDebugMode d){jhagaattack_original::SubmitWorld(static_cast<jhagaattack_original::State*>(c),d);};
             original.is_alive=[](void* c){return jhagaattack_original::IsAlive(static_cast<jhagaattack_original::State*>(c));};
             original.destroy=[](void* c){jhagaattack_original::Destroy(static_cast<jhagaattack_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="HeadFireBall_ORIGINAL";
+            original.family="projectile";original.pipeline="IM+QUAD";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return headfireball_original::Spawn({o.x,o.y+60,o.z+78});};
+            original.submit=[](void* c,EFxDebugMode){headfireball_original::Advance(static_cast<headfireball_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode d){headfireball_original::SubmitWorld(static_cast<headfireball_original::State*>(c),d);};
+            original.is_alive=[](void* c){return headfireball_original::IsAlive(static_cast<headfireball_original::State*>(c));};
+            original.destroy=[](void* c){headfireball_original::Destroy(static_cast<headfireball_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
         {
