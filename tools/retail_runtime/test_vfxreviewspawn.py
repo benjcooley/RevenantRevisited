@@ -9,6 +9,7 @@ STUB=r'''
 #include <cstring>
 #include <strings.h>
 #include <vector>
+#include <initializer_list>
 #define stricmp strcasecmp
 #include "vfxreviewspawn.h"
 struct S3DPoint{int x=0,y=0,z=0;};
@@ -18,6 +19,7 @@ struct TObjectImagery{virtual ~TObjectImagery()=default;};
 struct Tag{int state=0;const char*name;};
 struct T3DImagery:TObjectImagery{bool admitted=false;std::vector<Tag>tags;std::vector<const char*>names{"mesh"};std::vector<int>faces{2};
  int NumObjects(){return names.size();}const char*GetObjectName(int i){return names[i];}int NumObjFaces(int i){return faces[i];}
+ void AttachAnimatorComponents(void*){}
  int NumTags(){return tags.size();}Tag*GetTag(int i){return &tags[i];}
  bool HasGoldPartSysProfile(){return admitted;}bool HasCombatFlashStart1PartSysProfile(){return admitted;}
  bool HasRetailMightPartSysProfile(){return admitted;}bool HasRetailImmortalmightPartSysProfile(){return admitted;}
@@ -37,9 +39,10 @@ struct TObjectClass{bool present=true;std::vector<SObjectInfo>entries;static TOb
 MAIN=r'''
 int main(){
  assert(!DescribeVfxReviewSpawn(1).safe_factory);TObjectClass c;TObjectClass::catalog=&c;
- TObjectBuilder generic{"EFFECT"},fire{"FireBall"},unknown{"Unknown"};
- c.entries={{1,&generic},{0x63fd382a,&fire},{0x63fd3827,&generic},{0x113803f4,&generic},{0xb1c4c90f,&generic},{0xad92bd1f,&generic},{2,&unknown},{3,nullptr},{4,&generic,-1},{0x10ac03de,&generic}};
+ TObjectBuilder generic{"EFFECT"},fire{"FireBall"},unknown{"Unknown"},wave{"Wave"};
+ c.entries={{1,&generic},{0x63fd382a,&fire},{0x63fd3827,&generic},{0x113803f4,&generic},{0xb1c4c90f,&generic},{0xad92bd1f,&generic},{2,&unknown},{3,nullptr},{4,&generic,-1},{0x10ac03de,&generic},{5,&wave}};
  assert(!DescribeVfxReviewSpawn(42).safe_factory);assert(DescribeVfxReviewSpawn(1).safe_factory);
+ assert(DescribeVfxReviewSpawn(5).safe_factory&&!DescribeVfxReviewSpawn(5).uses_effect_runtime);
  assert(!DescribeVfxReviewSpawn(2).safe_factory);assert(!DescribeVfxReviewSpawn(3).safe_factory);assert(!DescribeVfxReviewSpawn(4).safe_factory);
  for(uint32_t id:{0x63fd3827u,0x113803f4u,0xb1c4c90fu,0xad92bd1fu}){auto d=DescribeVfxReviewSpawn(id);assert(d.projectile&&!d.safe_factory&&!d.supports_endpoints);}
  c.present=false;assert(!DescribeVfxReviewSpawn(1).safe_factory);c.present=true;

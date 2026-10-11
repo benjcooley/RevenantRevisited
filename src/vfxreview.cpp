@@ -4,6 +4,7 @@
 #include "vfxreviewlayout.h"
 #include "vfxreviewspawn.h"
 #include "vfxreviewpreview.h"
+#include "effect.h"
 #include "gamemap.h"
 #include "mapmanager.h"
 #include "mappane.h"
@@ -49,6 +50,8 @@ struct Entry {
     bool failed = false;
     bool missing_visual = false;
     std::unique_ptr<VfxReviewPreview> preview;
+    std::unique_ptr<TFireBallEffect> projectile;
+    int projectile_state = -1;
 };
 TMapRenderer renderer;
 TGameMap* map = nullptr;
@@ -81,6 +84,7 @@ TObjectInstance* Resolve(Entry& e) {
 }
 void Remove(Entry& e) {
     e.preview.reset();
+    e.projectile.reset();
     if (auto* object = Resolve(e)) MapPane.DeleteObject(object);
     e.map_index = -1;
 }
@@ -256,6 +260,22 @@ void Spawn(Entry& e, size_t index) {
         source=PathEndpoint(index,false);
         target=PathEndpoint(index,true);
     }
+    if(e.id==0x63fd382au) {
+        // Map factory construction does not bind or submit the bespoke
+        // FireBall renderer. Use the working full initializer and its two
+        // render hooks, with one owner of the 24Hz simulation.
+        e.projectile.reset(TFireBallEffect::SpawnForTest(source));
+        if(!e.projectile || !e.projectile->SetProjectileEndpoints(source,target)) {
+            e.projectile.reset(); e.failed=true; e.missing_visual=true;
+            e.status="FireBall runtime initialization failed"; return;
+        }
+        e.projectile->SetPreviewTargetCollision(true);
+        e.projectile_state=-1;
+        e.missing_visual=false; e.status="FireBall complete projectile runtime"; ++e.cycles;
+        log_info("[vfx-review] projectile name=%s cycle=%u source=%d,%d,%d target=%d,%d,%d",
+            e.name.c_str(),e.cycles,source.x,source.y,source.z,target.x,target.y,target.z);
+        return;
+    }
     SObjectDef def{}; def.objclass=EffectClass.ClassId(); def.objtype=e.type;
     def.level=kLevel; def.pos=source;
     e.map_index=MapPane.NewObject(&def);
@@ -337,8 +357,26 @@ bool Initialize() {
     if (!BuildFloor()) { Close(); return false; }
     renderer.Initialize(); renderer.SetMap(map,false,origin.x>>SECTORWSHIFT,origin.y>>SECTORHSHIFT);
     renderer.SetReviewSubmissionCallbacks(
-        [] { for(auto& e:entries) if(e.preview) e.preview->Submit(); },
-        [] { for(auto& e:entries) if(e.preview) e.preview->SubmitWorld(); });
+        [] { for(auto& e:entries) {
+            if(e.preview) e.preview->Submit();
+            if(e.projectile) {
+                if(!e.projectile->IsAlive()) {
+                    e.projectile.reset(); e.next_spawn=ticks/24.0+1.5;
+                } else {
+                    e.projectile->TickAndSubmit(EFxDebugMode::Normal);
+                    const auto& state=e.projectile->ProjectileState();
+                    if(state.state!=e.projectile_state) {
+                        e.projectile_state=state.state;
+                        log_info("[vfx-review] projectile-state name=%s cycle=%u state=%d pos=%d,%d,%d",
+                            e.name.c_str(),e.cycles,state.state,state.position.x,state.position.y,state.position.z);
+                    }
+                }
+            }
+        } },
+        [] { for(auto& e:entries) {
+            if(e.preview) e.preview->SubmitWorld();
+            if(e.projectile) e.projectile->SubmitWorldRing(EFxDebugMode::Normal);
+        } });
     renderer.SetDaylightCycle(false); renderer.SetSunShadowEnabled(false);
     renderer.SetGroundTilesVisible(false);
     renderer.SetLightingMode(StartupVfxLightingMode>=0?StartupVfxLightingMode:0);
@@ -387,7 +425,7 @@ void Render() {
     for (size_t i=0;i<entries.size();++i) {
         auto& e=entries[i];
         if (std::abs(schedule.SlotDistance(i)-distance)>650) { Remove(e); continue; }
-        if (!e.preview && !Resolve(e) && !e.failed && ticks/24.0>=e.next_spawn) {
+        if (!e.preview && !e.projectile && !Resolve(e) && !e.failed && ticks/24.0>=e.next_spawn) {
             Spawn(e,i); e.next_spawn=ticks/24.0+.35;
         }
     }

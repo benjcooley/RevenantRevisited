@@ -65,7 +65,9 @@ two clearances. End padding grows enough to clear the first/last footprint,
 without inheriting the entire large-effect isolation gap.
 Spacing changes layout only, never effect geometry or physics.
 Dedicated map effects and admitted authored controllers use the normal map
-factory. Other implemented effects use exact-type registered preview
+factory. FireBall uses its complete standalone initializer, 24Hz simulation,
+billboard submission and world-ring submission; it does not also receive map
+Pulses. Other implemented effects use exact-type registered preview
 initializers/controllers through the same world render pass. Bare asset geometry
 is not presented as an implemented effect. Effects advance at their existing
 24 Hz/runtime cadence and draw through the normal renderer. A completed one-shot is recreated
@@ -73,8 +75,10 @@ after cleanup; a looping effect continues its authored animation. Fallbacks reta
 
 Endpoint-enabled effects launch mostly vertically from a lower-left source
 toward an upper-right target, independently of the review row. Unavailable
-endpoint/runtime entries retain their names. The destination is an aim point; normal
-projectile physics and collision determine where the projectile ends.
+endpoint/runtime entries retain their names. FireBall uses the destination as an
+explicit synthetic target collision (original 32-unit hit radius), then plays
+its impact, finishes its tail and waits 1.5 seconds before the next cast. The
+ordinary standalone preview and natural map collision paths remain unchanged.
 
 Authored animation sound tags use the normal sound system and the listener
 tracks the camera. Run visibly for audio: the existing headless mode silences

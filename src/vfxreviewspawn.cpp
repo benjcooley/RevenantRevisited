@@ -5,6 +5,7 @@
 #include "3dimage.h"
 
 #include <cstring>
+#include <initializer_list>
 
 namespace {
 bool ReviewProjectileType(uint32_t id)
@@ -55,6 +56,15 @@ bool ReviewParticleRenderer(T3DImagery& image, uint32_t id)
            image.HasRetailStaticParticleProfile(id) ||
            (id >= 0xd0c0f036u && id <= 0xd0c0f039u);
 }
+
+bool ReviewGenericBuilder(const char* name)
+{
+    // These aliases all construct TEffect, without a custom visual runtime.
+    for(const char* alias : {"EFFECT", "StillWater", "FlowWater", "BendWater1",
+        "BendWater2", "SewerWater", "Wave", "WaveS", "WaveM", "speaker"})
+        if(stricmp(name,alias)==0)return true;
+    return false;
+}
 }
 
 VfxReviewSpawnInfo DescribeVfxReviewSpawn(uint32_t type_id)
@@ -84,7 +94,7 @@ VfxReviewSpawnInfo DescribeVfxReviewSpawn(uint32_t type_id)
     info.safe_factory = true;
     info.supports_endpoints = type_id == 0x63fd382au &&
                              stricmp(info.builder_name, "FireBall") == 0;
-    info.renderer_supported = stricmp(info.builder_name, "EFFECT") != 0;
+    info.renderer_supported = !ReviewGenericBuilder(info.builder_name);
     info.uses_effect_runtime = info.renderer_supported;
     if (info.projectile && !info.supports_endpoints) {
         info.safe_factory = false;
@@ -129,9 +139,10 @@ VfxReviewSpawnInfo ConfigureVfxReviewSpawn(TObjectInstance& effect,
         info.description = "No current 3D effect drawable";
         return info;
     }
-    // Real construction/animator attachment owns simulation and sound. This
-    // lazy read only diagnoses the actual resource; it never replaces it.
+    // Complete lazy animator/component attachment before testing readiness.
+    // Asset faces alone do not establish a working effect runtime.
     const int objects = image->NumObjects();
+    image->AttachAnimatorComponents(&effect);
     bool faces = false, particles = false, unknown_controller = false;
     for (int i = 0; i < objects; ++i) {
         const char* name = image->GetObjectName(i);
@@ -149,7 +160,7 @@ VfxReviewSpawnInfo ConfigureVfxReviewSpawn(TObjectInstance& effect,
     }
     const bool particle_renderer = particles && ReviewParticleRenderer(*image, effect.ObjId());
     const bool replacing_component = effect.GetComponent<TFlipbookBillboardComponent>() != nullptr;
-    info.uses_effect_runtime = info.uses_effect_runtime || particle_renderer || replacing_component;
+    info.uses_effect_runtime = particle_renderer || replacing_component;
     if (particles && !particle_renderer && !replacing_component) {
         info.renderer_supported = false;
         info.description = "Unsupported authored particle controller; generic geometry may be visible";
