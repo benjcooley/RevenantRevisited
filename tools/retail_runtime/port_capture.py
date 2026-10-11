@@ -34,6 +34,10 @@ def capture(scenario,output):
         f'--filmstrip={count},{1/fps:.16f}',f'--snapstep={1/fps:.16f}',
         '--snapseed='+str(scenario.get('seed',1)),'--snapwarmup='+str(scenario.get('warmup',1)),
         '--snaprect='+','.join(map(str,rectangle)),'--snapprefix='+str(output/'frame-')]
+    if 'resolution' in scenario:
+        width,height=map(int,scenario['resolution'])
+        if width<1 or height<1:raise ValueError('Positive resolution required')
+        command += [f'--resolution={width}x{height}']
     if scenario.get('native_domain',False):
         command += ['--vfx-native-domain']
     if 'ambient' in scenario:

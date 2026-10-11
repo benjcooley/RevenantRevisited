@@ -3191,6 +3191,20 @@ struct T3DAnimator::SPartSysControllers
             // This is the source owner-local matrix, NOT the render bone's
             // stretched world matrix. The simulation adds live owner XYZ itself.
             if (!bone || !animator.GetObjectMatrix(object, &matrix)) continue;
+            hmm_vec3 emitter_position=bone->pos, emitter_scale=bone->scl;
+            // Original 40efc0 reads the cached emitter matrix, before Animate
+            // copies the advanced owner frame. GetObjectMatrix above refreshes
+            // modern bones at the owner frame, so exact static PartSys assets
+            // must sample their verified root-emitter keys at the cached frame.
+            if (owner.GetState()==0 &&
+                animator.Get3DImagery()->HasRetailStaticParticleProfile(owner.ObjId()))
+            {
+                hmm_vec3 rotation{};
+                if (!animator.Get3DImagery()->GetUninterpolatedAniKey(object, 0,
+                    inputs.animation_frame, emitter_position, rotation, emitter_scale)) continue;
+                MtxClear(&matrix);
+                ::MakeMatrix(matrix, emitter_position, rotation, emitter_scale);
+            }
             hmm_vec3 speed_position{},speed_scale{};
             const bool speed_pose=owner.GetState()==0 &&
                 animator.Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(owner.ObjId()) && object==1;
@@ -3198,8 +3212,8 @@ struct T3DAnimator::SPartSysControllers
             auto& pose = inputs.emitters[i];
             std::memcpy(pose.matrix.data(), matrix.Elements, sizeof(matrix));
             pose.origin = {matrix.Elements[3][0], matrix.Elements[3][1], matrix.Elements[3][2]};
-            pose.position = {bone->pos.X, bone->pos.Y, bone->pos.Z};
-            pose.scale = {bone->scl.X, bone->scl.Y, bone->scl.Z};
+            pose.position = {emitter_position.X, emitter_position.Y, emitter_position.Z};
+            pose.scale = {emitter_scale.X, emitter_scale.Y, emitter_scale.Z};
             if(speed_pose){pose.position={speed_position.X,speed_position.Y,speed_position.Z};
                 pose.scale={speed_scale.X,speed_scale.Y,speed_scale.Z};}
         }
