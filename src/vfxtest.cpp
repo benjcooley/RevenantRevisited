@@ -1,3 +1,4 @@
+#include "effects/dragonfirepreview.h"
 #include "effects/cometoriginal.h"
 #include "effects/fgeyseroriginal.h"
 #include "effects/dustoriginal.h"
@@ -7809,6 +7810,14 @@ struct SVfxTestBootstrap {
             e.submit_world=[](void* c,EFxDebugMode){energyspray_preview::SubmitWorld(static_cast<energyspray_preview::State*>(c));};
             e.is_alive=[](void* c){return energyspray_preview::Alive(static_cast<energyspray_preview::State*>(c));};
             e.destroy=[](void* c){energyspray_preview::Destroy(static_cast<energyspray_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TDragonFire_BESPOKE_NULLSPELL";e.family="magic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return dragonfire_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){dragonfire_preview::Advance(static_cast<dragonfire_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){dragonfire_preview::SubmitWorld(static_cast<dragonfire_preview::State*>(c));};
+            e.is_alive=[](void* c){return dragonfire_preview::Alive(static_cast<dragonfire_preview::State*>(c));};
+            e.destroy=[](void* c){dragonfire_preview::Destroy(static_cast<dragonfire_preview::State*>(c));};VfxTest::DeferredRegister(e);
         }
         {
             VfxTest::SEffect e = {};

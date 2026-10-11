@@ -80,6 +80,7 @@ std::vector<SEffect> ReviewCatalogue() {
     auto manadrain=paralize;manadrain.id="TManaDrain_CONFIGURED_TARGET";
     auto ymanadrain=manadrain;ymanadrain.id="TYManaDrain_CONFIGURED_TARGET";
     auto tornado=ymanadrain;tornado.id="TTornado_CONFIGURED_TARGET";
+    auto dragonfire=finite;dragonfire.id="TDragonFire_BESPOKE_NULLSPELL";
     auto pulp=Row("TPulp_CONFIGURED_ACTOR",EVfxPreviewStyle::Static);
     pulp.is_alive=[](void*){return true;};
     auto teleporter=Row("Teleporter_ORIGINAL_NULL",EVfxPreviewStyle::Static);
@@ -88,7 +89,7 @@ std::vector<SEffect> ReviewCatalogue() {
     auto food=Row("Createfood_ORIGINAL_CONTEXT",EVfxPreviewStyle::Static);
     food.is_alive=[](void*c){return *static_cast<int*>(c)<2;};
     food.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
-    return {pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    return {dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -137,6 +138,8 @@ int main(int argc,char** argv) {
         std::cout<<"Dragon invalid route rejected\n";return 0;
     }
     assert(!DescribeVfxReviewPreview(0xffffffff).supported);
+    assert(DescribeVfxReviewPreview(0xad92bc1a).supported);
+    assert(!DescribeVfxReviewPreview(0xad92bc1a).partial);
     assert(DescribeVfxReviewPreview(0x63fd382a).requires_endpoints);
     assert(!CreateVfxReviewPreview(0x63fd382a,origin));
     assert(DescribeVfxReviewPreview(0x152dafef).requires_attachment);

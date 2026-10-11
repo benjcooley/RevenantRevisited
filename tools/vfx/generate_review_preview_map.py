@@ -122,6 +122,7 @@ SOURCE_MAPPINGS = {
     '0xaeaeeb34': 'YAttack_AUTHORED',
     '0xad92bd26': 'TFairy2_AUTHORED',
     '0xad92bc12': 'TShriek_BESPOKE_NULLSPELL',
+    '0xad92bc1a': 'TDragonFire_BESPOKE_NULLSPELL',
     '0xad92bc11': 'TPuke_BESPOKE_NULLSPELL',
     '0xaeaefb27': 'PowerUp_AUTHORED',
     '0xaeaeeb27': 'YPowerUp_AUTHORED',
