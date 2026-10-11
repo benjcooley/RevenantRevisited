@@ -70,6 +70,7 @@
 #include "effects/jtelepreview.h"
 #include "effects/irisflarepreview.h"
 #include "effects/teleporteroriginal.h"
+#include "effects/createfoodoriginal.h"
 #include "effects/essencedrainpreview.h"
 #include "effects/invisiblepreview.h"
 #include "effects/bloodpreview.h"
@@ -6193,6 +6194,10 @@ struct SVfxTestBootstrap {
         {
             VfxTest::SEffect e={};e.id="Teleporter_ORIGINAL_NULL";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
             e.factory=[](const S3DPoint&o)->void*{return teleporter_original::Spawn(o);};e.submit=[](void*c,EFxDebugMode){teleporter_original::Advance(static_cast<teleporter_original::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){teleporter_original::SubmitWorld(static_cast<teleporter_original::State*>(c));};e.is_alive=[](void*c){return teleporter_original::Alive(static_cast<teleporter_original::State*>(c));};e.destroy=[](void*c){teleporter_original::Destroy(static_cast<teleporter_original::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Createfood_ORIGINAL_CONTEXT";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return createfood_original::Spawn(o);};e.submit=[](void*c,EFxDebugMode){createfood_original::Advance(static_cast<createfood_original::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){createfood_original::SubmitWorld(static_cast<createfood_original::State*>(c));};e.is_alive=[](void*c){return createfood_original::Alive(static_cast<createfood_original::State*>(c));};e.destroy=[](void*c){createfood_original::Destroy(static_cast<createfood_original::State*>(c));};VfxTest::DeferredRegister(e);
         }
 
         {

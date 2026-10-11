@@ -31,3 +31,26 @@ full BeginScene/PreRender followed by explicit RAM target binding, Post/EndScene
 Nonselected final raster calls may be omitted; full controller/render producers execute.
 Actual natural scene lights, map insertion/food, audio/device and exact pixels remain open.
 No appearance approval at this checkpoint.
+
+## Source adapter and matched appearance submission
+
+`Createfood_ORIGINAL_CONTEXT` owns the exact typed factory, two admitted RGB565
+quad meshes, the150-slot core, declared lookup context, and failed-food index
+service. It uses existing normal-lit additive rendering and actual OF_KILL,
+including batched-update guards; no shared renderer/decoder/global index changes.
+Exact viewer mapping excludes unintended aliases and reports the context limits.
+
+Private `createfood-review-final/pair-manifest.json` SHA256
+ ec06f2efcdcb0f22a913424eb99e355fc747fa9024aa14795fdd5c63ef4be7df
+pins21 same-tick1280x960 full pairs and six actual-size detail pages. Captured
+binary SHA256 cdaae0dcddcaec829a6c680ead527e9ffa09a8161dfd8f9f7232e290dcb02af8.
+The85-frame Metal film and85-tick original cover glow growth, moving swirls,
+smoke buildup, food-request transition, decay, kill80 and blanktail85.
+Early glow/particle placement closely agrees; Metal smoke has somewhat smoother
+and stronger low-intensity haze from sampling/overlap/RGB565 quantization.
+Exact pixels are not claimed. `createfood-metal-common` is a separate22-sample
+ordinary-projection diagnostic rendered at24Hz with stride4, not a reference fit.
+
+Validation: build PASS; retained genuine full native/source regression PASS
+(14.1s), fresh85-tick state/full-draw replay exact; source preview-map21 tests PASS.
+Independent root visual approval and integrated gallery witness remain pending.

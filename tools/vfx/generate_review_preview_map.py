@@ -101,6 +101,7 @@ SOURCE_MAPPINGS = {
     '0xad92bd1f': 'ArrowEffect_ORIGINAL',
     '0x120054d1': 'IrisFlare_AUTHORED',
     '0x369a5d2e': 'Teleporter_ORIGINAL_NULL',
+    '0x838cffba': 'Createfood_ORIGINAL_CONTEXT',
     '0xad92bd1e': 'QueenArrow_ORIGINAL',
     '0xacabfada': 'TIcedsparks_AUTHORED_STILL',
     '0xad92bc17': 'Funnel_ORIGINAL',
@@ -165,12 +166,14 @@ def admitted_candidates(row):
     row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if not n.startswith('Halo_AUTHORED_PUBLIC')])
     if row.get('retail_type_id','').lower()!='0xddc4042e':
         row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n!='Blood_AUTHORED'])
+    if row.get('retail_type_id','').lower()=='0x838cffba':
+        return ['Createfood_ORIGINAL_CONTEXT']
     if row.get('retail_type_id','').lower()=='0x369a5d2e':
         return ['Teleporter_ORIGINAL_NULL']
     if row.get('retail_type_id','').lower()=='0x5975abde':
         return ['TDripEffect_LINKED_NO_SPLASH']
     candidates = [name for name in row['preview_candidates'] if name in IMPLEMENTED
-                  and name not in ('TDripEffect_LINKED_NO_SPLASH','Teleporter_ORIGINAL_NULL')]
+                  and name not in ('TDripEffect_LINKED_NO_SPLASH','Teleporter_ORIGINAL_NULL','Createfood_ORIGINAL_CONTEXT')]
     explicit = SOURCE_MAPPINGS.get(row.get('retail_type_id', '').lower())
     if explicit: candidates.insert(0, explicit)
     candidates.sort(key=lambda name: (0 if name == explicit else 1 if '_AUTHORED_' in name else 2 if '_BESPOKE' in name.upper() else 3))
@@ -185,6 +188,8 @@ def candidate_metadata(row, name):
         return False, 'Exact Halo authored mesh/public InitParams(60,0.04), explicit test inputs; natural retail caller not certified'
     if row.get('retail_type_id','').lower()=='0xddc4042e' and name=='Blood_AUTHORED':
         return False, 'Exact Blood public SetParams(40,224,3,5,5,1) spray, live global RNG without reseed; natural actor damage/map insertion not certified'
+    if row.get('retail_type_id','').lower()=='0x838cffba' and name=='Createfood_ORIGINAL_CONTEXT':
+        return False, 'Createfood quality3 white-light0/ambient32 lookup context, failed food insertion clock0, real kill80; natural lights, food/map service and actors not certified'
     if row.get('retail_type_id','').lower()=='0x369a5d2e' and name=='Teleporter_ORIGINAL_NULL':
         return False, 'Original null-spell Teleporter portal, five cylinders and real kill51; successful teleport, actors and other spell variants not certified'
     if row.get('retail_type_id','').lower()=='0xbabeface' and name=='Quicksand_ORIGINAL_TARGET':

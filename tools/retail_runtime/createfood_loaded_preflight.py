@@ -17,7 +17,6 @@ class CreatefoodLoadedScene(AuthenticCharacters):
  observe_object=DragonAttackScene.observe_object
  observe_draw=DragonAttackScene.observe_draw
  draw_bounds=DragonAttackScene.draw_bounds
- draw_bounds=DragonAttackScene.draw_bounds
  def __init__(self,executable,boot_image,initialize_lighting=False):
   super().__init__(executable,boot_image);self.select_screen_prefix()
   self.owner=self.new_object('Createfood',(3185,3185,16),25,0x5a8b08)

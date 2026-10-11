@@ -61,6 +61,7 @@
 {0x5be39ae0u, "TMight_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Might
 {0x63fd382au, "TFireBallEffect", false, "Implemented preview controller; map caller not certified"}, // FireBall
 {0x82aeb30fu, "TImmortalmight_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Immortalmight
+{0x838cffbau, "Createfood_ORIGINAL_CONTEXT", false, "Createfood quality3 white-light0/ambient32 lookup context, failed food insertion clock0, real kill80; natural lights, food/map service and actors not certified"}, // Createfood
 {0x89abcde1u, "TPixieEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // Pixie
 {0x8cd3ea0fu, "TDexterity_AUTHORED_TAGS", false, "Implemented preview controller; map caller not certified"}, // Dexterity
 {0x98974ea7u, "TFireWindEffect_Bespoke__YFireWind_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // YFireWind

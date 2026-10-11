@@ -83,7 +83,10 @@ std::vector<SEffect> ReviewCatalogue() {
     auto teleporter=Row("Teleporter_ORIGINAL_NULL",EVfxPreviewStyle::Static);
     teleporter.is_alive=[](void*c){return *static_cast<int*>(c)<2;};
     teleporter.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
-    return {halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    auto food=Row("Createfood_ORIGINAL_CONTEXT",EVfxPreviewStyle::Static);
+    food.is_alive=[](void*c){return *static_cast<int*>(c)<2;};
+    food.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
+    return {food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -315,6 +318,17 @@ int main(int argc,char** argv) {
         assert(halo && halo->Id()=="Halo_AUTHORED_PUBLIC60" && halo->RestartInterval()==0);
         const int initial=creates;halo->Submit();halo->Submit();assert(halo->Alive()==false);
         halo->Submit();assert(halo->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0x838cffbau);
+        assert(info.supported && !info.partial && info.lifetime_known && !info.requires_endpoints);
+        assert(std::strstr(info.description,"white-light0/ambient32"));
+        auto portal=CreateVfxReviewPreview(0x838cffbau,origin);
+        assert(portal && portal->Id()=="Createfood_ORIGINAL_CONTEXT" && portal->RestartInterval()==0);
+        const int initial=creates;
+        portal->Submit();portal->Submit();assert(portal->Alive()==false && creates==initial);
+        portal->Submit();assert(portal->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";
