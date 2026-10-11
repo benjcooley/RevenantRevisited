@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Load one save in both games and list where they differ.
 
-    crosscheck.py --from GAME:WAYPOINT [--ticks 24] [--out DIR]
+    crosscheck.py --from GAME:WAYPOINT [--ticks 24] [--objects 800] [--out DIR]
     crosscheck.py --slot SLOT_DIR [--out DIR]
 
 The port and the shipped game (in the emulator) load the same save format,
@@ -9,13 +9,19 @@ so the same slot, played the same number of ticks with no input, should
 give the same observation. Each host is started from the slot with seed 1,
 stepped, then asked the same questions:
 
-- the player: level, position, facing, the stats, mode, radius, weapon,
-  what's equipped, in the pack (with each cell's screen centre), on the belt
-  and in the quick-spell slots;
+- the player: level, position, facing, the vitals, mode, radius, weapon,
+  experience, attributes, skills, level-up markers, offense / defense /
+  armour / damage, the stat effect, what's equipped, in the pack (with each
+  cell's screen centre), on the belt and in the quick-spell slots, and every
+  item carried with its numbers (each read as the game reads it, so a number
+  the port takes from elsewhere than retail -- class.def rather than
+  weapon.def / armor.def -- shows here);
 - the objects that don't move by themselves (items, exits, containers, ...):
-  the same ones, at the same place, drawn at the same screen pixel;
-  characters only by who is there, since their AI draws from each game's
-  own random numbers;
+  the same ones, at the same place, drawn at the same screen pixel, with an
+  item's numbers and a container's state and contents; characters by who is
+  there, their class Value and whether they are dead, not by place, since
+  their AI draws from each game's own random numbers;
+- the screen centres of the equip pane's cells and the belt's boxes;
 - where a left click reaches the world (`pick` over a grid of the screen),
   and the map point each pixel picks;
 - the walk grid round the player, where both games know the cells.
@@ -43,11 +49,16 @@ from waypoints import ROOT, Catalogue  # noqa: E402
 GRID_STEP = 16                       # the click grid's spacing, in screen pixels
 SCREEN = (640, 480)
 WALKGRID_RADIUS = 640
+OBJECTS_RADIUS = 800                 # the observation's default
 PICK_TOLERANCE = 2                   # world units a picked map point may differ by (rounding)
 MOVING = {'character', 'player'}     # classes whose places the games' AI and random numbers decide
 
 PLAYER_FIELDS = ('level', 'pos', 'facing', 'health', 'mana', 'fatigue', 'mode', 'radius', 'gold',
-                 'xp', 'skills', 'weapon', 'belt', 'quick_spells', 'equipped')
+                 'xp', 'attacklevel', 'stats', 'skills', 'levelup', 'combat', 'effect', 'weapon', 'belt',
+                 'quick_spells', 'equipped')
+OBJECT_FIELDS = ('name', 'type', 'class', 'enemy', 'value', 'dead')            # every object
+THING_FIELDS = ('amount', 'item', 'open', 'openable', 'locked', 'contents')     # what doesn't move
+SCREEN_FIELDS = ('equip_slots', 'belt_boxes')
 
 # By design: the port loads a level's whole map, so it knows cells retail's
 # streaming hasn't loaded (retail -1, the port their real height).
@@ -70,11 +81,21 @@ def start(host: Host, slot: Path, ticks: int) -> None:
     host.step(ticks)
 
 
+def compare_values(report: Report, kind: str, what: str, port, retail) -> None:
+    """A difference as a variance, record by record: inside two records each
+    field is compared by itself (`what.field`), so one changed number is one
+    variance."""
+    if isinstance(port, dict) and isinstance(retail, dict):
+        for key in sorted(set(port) | set(retail)):
+            compare_values(report, kind, f'{what}.{key}', port.get(key), retail.get(key))
+    elif port != retail:
+        report.add(kind, what, port, retail)
+
+
 def compare_player(report: Report, port: dict, retail: dict) -> None:
     a, b = port.get('player') or {}, retail.get('player') or {}
     for name in PLAYER_FIELDS:
-        if a.get(name) != b.get(name):
-            report.add('player', name, a.get(name), b.get(name))
+        compare_values(report, 'player', name, a.get(name), b.get(name))
     if a.get('screen') != b.get('screen'):
         report.add('screen', 'player', a.get('screen'), b.get('screen'))
     pack_a = {i['slot']: i for i in a.get('pack') or []}
@@ -82,9 +103,27 @@ def compare_player(report: Report, port: dict, retail: dict) -> None:
     for slot in sorted(set(pack_a) | set(pack_b)):
         if pack_a.get(slot) != pack_b.get(slot):
             report.add('pack', f'slot {slot}', pack_a.get(slot), pack_b.get(slot))
+    compare_items(report, a.get('items') or [], b.get('items') or [])
     for name in ('screen', 'control'):
         if port.get(name) != retail.get(name):
             report.add('game', name, port.get(name), retail.get(name))
+    for name in SCREEN_FIELDS:
+        if port.get(name) != retail.get(name):
+            report.add('screen', name, port.get(name), retail.get(name))
+
+
+def compare_items(report: Report, port: list, retail: list) -> None:
+    """Every item carried, by where it is (the bags it is in, its slot)."""
+    def keyed(items):
+        return {(*item.get('bag', ()), item['slot']): item for item in items}
+    a, b = keyed(port), keyed(retail)
+    for where in sorted(set(a) | set(b)):
+        x, y = a.get(where), b.get(where)
+        name = f"{(x or y).get('name')} (slot {'/'.join(map(str, where))})"
+        if x is None or y is None:
+            report.add('item', f'{name} present', x is not None, y is not None)
+        else:
+            compare_values(report, 'item', name, x, y)
 
 
 def compare_objects(report: Report, port: dict, retail: dict) -> None:
@@ -97,11 +136,13 @@ def compare_objects(report: Report, port: dict, retail: dict) -> None:
         if x is None or y is None:
             report.add('object', f'{name} ({oid}) present', x is not None, y is not None)
             continue
-        for key in ('name', 'type', 'class', 'enemy'):
+        for key in OBJECT_FIELDS:
             if x.get(key) != y.get(key):
                 report.add('object', f'{name} {key}', x.get(key), y.get(key))
         if x.get('class') in MOVING:
             continue
+        for key in THING_FIELDS:
+            compare_values(report, 'object', f'{name} {key}', x.get(key), y.get(key))
         if x.get('pos') != y.get('pos'):
             report.add('object', f'{name} pos', x.get('pos'), y.get('pos'))
         elif x.get('screen') != y.get('screen'):
@@ -150,14 +191,14 @@ def compare_walkgrid(report: Report, port: dict, retail: dict) -> None:
         report.add('walkgrid unknown on retail', 'cells', 0, unknown)
 
 
-def crosscheck(slot: Path, run: Path, ticks: int) -> Report:
+def crosscheck(slot: Path, run: Path, ticks: int, objects: int = OBJECTS_RADIUS) -> Report:
     report = Report()
     with PortHost.launch(PORT_BINARY, run / 'port', PORT_INI, name='crosscheck') as port, \
             RetailHost.launch(run / 'retail', build=clickwalk_build()) as retail:
         start(port, slot, ticks)
         start(retail, slot, ticks)
-        a = port.observe(objects=800, walkgrid=WALKGRID_RADIUS, frame=run / 'port.png')
-        b = retail.observe(objects=800, walkgrid=WALKGRID_RADIUS, frame=run / 'retail.png')
+        a = port.observe(objects=objects, walkgrid=WALKGRID_RADIUS, frame=run / 'port.png')
+        b = retail.observe(objects=objects, walkgrid=WALKGRID_RADIUS, frame=run / 'retail.png')
         (run / 'port.json').write_text(json.dumps(a))
         (run / 'retail.json').write_text(json.dumps(b))
         compare_player(report, a, b)
@@ -173,6 +214,7 @@ def main() -> int:
     source.add_argument('--from', dest='waypoint', help='GAME:NAME, a waypoint')
     source.add_argument('--slot', type=Path, help='a save slot directory')
     parser.add_argument('--ticks', type=int, default=24)
+    parser.add_argument('--objects', type=int, default=OBJECTS_RADIUS, help='object radius, world units')
     parser.add_argument('--out', type=Path, default=Path(tempfile.mkdtemp(prefix='crosscheck-')))
     parser.add_argument('--waypoints', type=Path, default=ROOT)
     args = parser.parse_args()
@@ -183,7 +225,7 @@ def main() -> int:
         slot = args.slot
     run = args.out.resolve()
     run.mkdir(parents=True, exist_ok=True)
-    report = crosscheck(slot, run, args.ticks)
+    report = crosscheck(slot, run, args.ticks, args.objects)
     (run / 'crosscheck.json').write_text(json.dumps(dict(slot=str(slot), ticks=args.ticks,
                                                          variances=report.variances,
                                                          expected=report.expected), indent=1))
