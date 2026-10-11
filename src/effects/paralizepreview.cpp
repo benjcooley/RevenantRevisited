@@ -1,5 +1,7 @@
 #include "paralizepreview.h"
 #include "../effect.h"
+#include "../character.h"
+#include "../framesnap.h"
 #include "../paralizecore.h"
 #include "../meshextract.h"
 #include "../retailsoftwaretransform.h"
@@ -14,11 +16,14 @@ struct State {
  std::unique_ptr<TObjectInstance> owner;
  paralize_core::State core;
  paralize_core::Vec origin;
- MeshHandle mesh=0;
+ std::unique_ptr<TCharacter> invoker,target;
+ MeshHandle mesh=0,egg=0;
+ float egg_uv=0;
+ S3DPoint display_origin={};
  double accumulator=0;
  int ticks=0;
  int64_t rendered=-1;
- ~State(){if(mesh && Renderer)Renderer->ReleaseMeshAssetRef(mesh);}
+ ~State(){if(target){target->SetParalize(false);target->ClearFlag(OF_DISABLED);}if(Renderer){if(mesh)Renderer->ReleaseMeshAssetRef(mesh);if(egg)Renderer->ReleaseMeshAssetRef(egg);}}
 };
 State* Spawn(const S3DPoint& origin)
 {
@@ -38,22 +43,51 @@ State* Spawn(const S3DPoint& origin)
  log_info("[native-domain] enabled=%d camera_z=0 owner=absolute_SCL1_POS2 Paralize1",int(StartupVfxNativeDomain));
  log_info("[paralize] typed_id=ad92bc14 spell=Physical_Paralysis invoker=null targets=0 native_domain=%d",int(StartupVfxNativeDomain));return s.release();
 }
+State* SpawnTargetFixture(const S3DPoint& origin)
+{
+ const uint64_t setup_draws=RandomDraws();
+ auto s=std::unique_ptr<State>(Spawn(origin));if(!s)return nullptr;
+ auto* cl=TObjectClass::GetClass(OBJCLASS_CHARACTER);const int type=cl?cl->FindObjType("Acolyte"):-1;if(type<0)return nullptr;
+ auto make=[&](S3DPoint p){SObjectDef def={};def.objclass=OBJCLASS_CHARACTER;def.objtype=short(type);def.pos=p;return std::unique_ptr<TCharacter>(dynamic_cast<TCharacter*>(cl->NewObject(&def)));};
+ s->invoker=make({3185,3185,16});s->target=make({3281,3185,16});
+ if(!s->invoker || !s->target || s->target->Radius()!=16 || !s->invoker->BeginFighting(s->target.get()) || s->invoker->Fighting()!=s->target.get())return nullptr;
+ auto* img=dynamic_cast<T3DImagery*>(s->owner->GetImagery());std::vector<SMeshVertex> vertices;std::vector<uint16_t> indices;
+ if(!ExtractSubMeshTextureSlot(img,1,2,vertices,indices) || vertices.size()!=151 || indices.empty())return nullptr;
+ s->egg=Renderer->RegisterMeshAsset(0x5041524145474731ull,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()),img->GetTextureHandle(1));if(!s->egg)return nullptr;Renderer->AddMeshAssetRef(s->egg);
+ s->origin={3185,3185,float(int(RetailSoftwareOwnerZ(16)))};s->display_origin=origin;
+ // Explicit isolated-fixture seed is applied after authentic actor setup,
+ // matching actual native srand after the same context construction.
+ const auto& snap=FrameSnap::GetConfig();if(snap.seed_set)SeedRandom(snap.seed);
+ log_info("[paralize-target-rng] actor_setup_draws=%llu seeded=%d seed=%u",static_cast<unsigned long long>(RandomDraws()-setup_draws),int(snap.seed_set),snap.seed);
+ log_info("[paralize-target] fixture=real_Acolytes invoker=(3185,3185,16) target=(3281,3185,16) radius=%d display=(%d,%d,%d)",s->target->Radius(),origin.x,origin.y,origin.z);
+ return s.release();
+}
 bool Alive(State* s){return s && s->core.alive;}
 void Advance(State* s,double dt)
 {
  if(!s || !std::isfinite(dt) || dt<=0)return;s->accumulator+=dt;
- while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;if(!Alive(s))return;s->core.Tick([](int a,int b){return random(a,b);},s->origin);++s->ticks;
+ while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;if(!Alive(s))return;if(s->target){
+   S3DPoint t;s->target->GetPos(t);s->target->Disable();s->target->Stop();s->target->SetParalize(true);
+   s->core.TickTarget([](int a,int b){return random(a,b);},s->origin,{t.x,t.y,int(RetailSoftwareOwnerZ(t.z))},s->target->Radius(),1);
+   if(!s->core.alive){s->owner->SetFlag(OF_KILL);s->target->SetParalize(false);s->target->ClearFlag(OF_DISABLED);}
+  }else s->core.Tick([](int a,int b){return random(a,b);},s->origin);++s->ticks;
   const auto& p=s->core.position[0];log_info("[paralize-phase] tick=%d variant=%d phase=%d count=%d scale=%.9g knot=%.9g first=(%.9g,%.9g,%.9g) alive=%d",s->ticks,s->core.variant,s->core.phase,s->core.count,s->core.scale,s->core.knot,p.x,p.y,p.z,int(s->core.alive));}
 }
 void SubmitWorld(State* s)
 {
  if(!Alive(s) || !Renderer || s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();
- // Original scale gate rejects <=1e-5 before RenderObject. No actor means the
- // three sphere passes have zero targets; they must not be invented here.
- if(s->core.scale<=1e-5f)return;
- for(const auto& p:s->core.position){SHelperMeshSubmit item={};item.mesh=s->mesh;
-  item.world[15]=1;item.world[0]=item.world[5]=item.world[10]=s->core.scale;item.world[3]=p.x;item.world[7]=p.y;item.world[11]=p.z;
-  item.additive_blend=true;item.retail_lighting=1;item.retail_positive_face_cull=false;item.retail_software_projection=StartupVfxNativeDomain;Renderer->SubmitGoldFlareAfterFx(item);}
+ // Render owns the UV cadence, including frames when the sphere is scale0.
+ if(s->target)s->egg_uv-=s->core.uv;
+ paralize_core::ForEachDraw(s->core,s->egg_uv,[&](const paralize_core::Draw& d){
+  SHelperMeshSubmit item={};item.mesh=d.object?s->egg:s->mesh;
+  item.world[15]=1;item.world[0]=item.world[5]=item.world[10]=d.scale;
+  item.world[3]=d.position.x;item.world[7]=d.position.y;item.world[11]=d.position.z;
+  if(s->target){item.world[3]+=s->display_origin.x-3185;item.world[7]+=s->display_origin.y-3185;item.world[11]+=RetailSoftwareOwnerZ(s->display_origin.z)-RetailSoftwareOwnerZ(16);}
+  item.additive_blend=true;item.retail_lighting=d.object?6:1;
+  if(d.object){item.retail_additive_cull_none=true;for(float& c:item.diffuse)c=31.f;item.uv_offset[0]=item.uv_offset[1]=d.uv;}
+  item.retail_software_projection=StartupVfxNativeDomain;
+  if(s->target)Renderer->SubmitHelperMesh(item);else Renderer->SubmitGoldFlareAfterFx(item);
+ });
 }
 void Destroy(State* s){delete s;}
 }
