@@ -7773,7 +7773,11 @@ struct SVfxTestBootstrap {
             e.submit = [](void* cp, EFxDebugMode dbg) {
                 auto* c = static_cast<SMistFogBespokeCtx_W3C*>(cp);
                 if (c && c->eff)
-                    c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+                    c->eff->Advance(TTime::DeltaTime());
+            };
+            e.submit_world = [](void* cp, EFxDebugMode dbg) {
+                auto* c=static_cast<SMistFogBespokeCtx_W3C*>(cp);
+                if(c && c->eff) c->eff->Submit(dbg);
             };
             e.destroy = [](void* cp) {
                 auto* c = static_cast<SMistFogBespokeCtx_W3C*>(cp);

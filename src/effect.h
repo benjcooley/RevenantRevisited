@@ -6873,7 +6873,7 @@ class TFogEffect_Bespoke__MistFog : public TEffect
     TFogEffect_Bespoke__MistFog(TObjectImagery* newim) : TEffect(newim) {}
     TFogEffect_Bespoke__MistFog(SObjectDef* def, TObjectImagery* newim)
         : TEffect(def, newim) {}
-    ~TFogEffect_Bespoke__MistFog() override = default;
+    ~TFogEffect_Bespoke__MistFog() override;
 
     void OffScreen() override { /* persistent ambient map effect */ }
     void Initialize(bool attach_runtime_component = true);
@@ -6903,6 +6903,8 @@ class TFogEffect_Bespoke__MistFog : public TEffect
     TTextureHandle texture_ = kInvalidTexture;
     std::vector<S3DVertex> authored_vertices_;
     float diffuse_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    mutable uint32_t software_mesh_ = 0;
+    bool SubmitSoftware(EFxDebugMode debug_mode) const;
     void ResetBall_(int32_t b);
 };
 

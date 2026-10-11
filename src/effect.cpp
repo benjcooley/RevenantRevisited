@@ -18883,6 +18883,50 @@ TWaterReferenceBuilder<TFogEffect_Bespoke__MistFog> g_mistfog_reference_builder(
 TWaterReferenceAnimatorBuilder<TFogEffect_Bespoke__MistFog> g_mistfog_reference_animator_builder("MistFog");
 } // namespace
 
+TFogEffect_Bespoke__MistFog::~TFogEffect_Bespoke__MistFog()
+{
+    if (Renderer && software_mesh_) Renderer->ReleaseMeshAssetRef(software_mesh_);
+}
+
+bool TFogEffect_Bespoke__MistFog::SubmitSoftware(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !Renderer->UsesRetailSoftwareMeshLighting() ||
+        debug_mode != EFxDebugMode::Normal) return false;
+    if (!software_mesh_) {
+        if (!GetImagery() || authored_vertices_.size()!=4) return true;
+        SMeshVertex vertices[4] = {};
+        for (int i=0;i<4;++i) {
+            const auto& v=authored_vertices_[i];
+            std::memcpy(vertices[i].pos,&v.pos,3*sizeof(float));
+            std::memcpy(vertices[i].normal,&v.normal,3*sizeof(float));
+            vertices[i].uv[0]=v.tu; vertices[i].uv[1]=v.tv;
+        }
+        const uint16_t indices[]={0,1,3,3,2,0};
+        const uint64_t key=0x4d464f4700000000ull ^ uint32_t(GetImagery()->ImageryId());
+        software_mesh_=Renderer->RegisterMeshAsset(key,vertices,4,indices,6,texture_);
+        if (!software_mesh_) return true;
+        Renderer->AddMeshAssetRef(software_mesh_);
+    }
+    for (const auto& puff:smoke_) {
+        hmm_mat4 local={},world={}; MtxClear(&local);
+        const hmm_vec3 scale={puff.size,puff.size,puff.size};
+        const hmm_vec3 position={puff.x,puff.y,puff.z};
+        MtxScale(&local,&scale); MtxTranslate(&local,&position);
+        MtxMultiply(&world,&local,&Transform().Matrix());
+        SHelperMeshSubmit submit={};
+        submit.mesh=software_mesh_; submit.additive_blend=true;
+        submit.retail_lighting=1; submit.retail_positive_face_cull=true;
+        // Common-world Z stretch bridges geometry; original Illuminate's
+        // owner normal matrix has no corresponding axis stretch.
+        submit.retail_normal_z_scale=1.0f/WORLD3D_Z_SCALE;
+        for(int row=0;row<4;++row) for(int col=0;col<4;++col)
+            submit.world[row*4+col]=world.Elements[col][row];
+        submit.sort_depth=world.Elements[3][2];
+        Renderer->SubmitHelperMesh(submit);
+    }
+    return true;
+}
+
 void TFogEffect_Bespoke__MistFog::ResetBall_(int32_t b)
 {
     // Keep exact draw order: random X, rand VX/VY/VZ, random life, rand size.
@@ -18894,12 +18938,14 @@ void TFogEffect_Bespoke__MistFog::ResetBall_(int32_t b)
     // Retail 4f28a7..4f2932 multiplies a float reciprocal and keeps the
     // x87 intermediate until the final float store. Preserve that rounding
     // on hosts whose float expressions otherwise round at each operation.
-    const double inverse_rand_max = double(1.0f / float(RAND_MAX));
-    s.vx = float(double(rand()) * inverse_rand_max * 0.5 - 0.25);
-    s.vy = float(double(rand()) * inverse_rand_max * 0.5 - 0.25);
-    s.vz = float(double(rand()) * inverse_rand_max * 0.5);
+    // All six original draws share the MSVC CRT stream, including raw rand.
+    // Host libc rand/RAND_MAX would split that stream and change live resets.
+    const double inverse_rand_max = double(1.0f / 32767.0f);
+    s.vx = float(double(GameRand()) * inverse_rand_max * 0.5 - 0.25);
+    s.vy = float(double(GameRand()) * inverse_rand_max * 0.5 - 0.25);
+    s.vz = float(double(GameRand()) * inverse_rand_max * 0.5);
     s.life = random(0, 200);
-    s.size = float(double(rand()) * inverse_rand_max * double(2.7f) + double(0.1f));
+    s.size = float(double(GameRand()) * inverse_rand_max * double(2.7f) + double(0.1f));
 }
 
 void TFogEffect_Bespoke__MistFog::Initialize(bool attach_runtime_component)
@@ -18990,6 +19036,7 @@ void TFogEffect_Bespoke__MistFog::Advance(double elapsed_seconds)
 void TFogEffect_Bespoke__MistFog::Submit(EFxDebugMode debug_mode) const
 {
     if (!Renderer || !initialized_ || texture_ == kInvalidTexture) return;
+    if (SubmitSoftware(debug_mode)) return;
     SQuadDrawItem item = {};
     item.key.texture = texture_;
     // SetAddBlendState: DECALALPHA + ONE/ONE, depth test without writes.
