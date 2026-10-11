@@ -35,6 +35,7 @@
 #include "effects/immortalmightpreview.h"
 #include "effects/fmasterypreview.h"
 #include "effects/speedpreview.h"
+#include "effects/staticparticlespreview.h"
 #include "effects/kinsecretdoorpreview.h"
 #include "effects/combatflashpreview.h"
 #include "i3danimpose.h" // SampleI3DAnimPose (rig render)
@@ -6649,6 +6650,70 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){immortalmight_authored_preview::Advance(static_cast<immortalmight_authored_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){immortalmight_authored_preview::SubmitWorld(static_cast<immortalmight_authored_preview::State*>(c),d);};
             e.destroy=[](void*c){immortalmight_authored_preview::Destroy(static_cast<immortalmight_authored_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+
+        {
+            VfxTest::SEffect e={};e.id="TRegeneration_AUTHORED_TAGS";e.family="spell";e.pipeline="partsys";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return static_particles_preview::Spawn(o, 0x10ac03deu);};
+            e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
+            e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TSwiftStrike_AUTHORED_TAGS";e.family="spell";e.pipeline="partsys";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return static_particles_preview::Spawn(o, 0xe0a3bc43u);};
+            e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
+            e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Tfspray_AUTHORED_TAGS";e.family="spell";e.pipeline="partsys";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return static_particles_preview::Spawn(o, 0x0c052638u);};
+            e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
+            e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TYEnergy_AUTHORED_TAGS";e.family="spell";e.pipeline="partsys";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return static_particles_preview::Spawn(o, 0xaeaeeb30u);};
+            e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
+            e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TYEnergyLose_AUTHORED_TAGS";e.family="spell";e.pipeline="partsys";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return static_particles_preview::Spawn(o, 0xaeaeeb33u);};
+            e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
+            e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TYAbsorb_AUTHORED_TAGS";e.family="spell";e.pipeline="partsys";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return static_particles_preview::Spawn(o, 0xaeaeeb29u);};
+            e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
+            e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Tnullifier_AUTHORED_TAGS";e.family="spell";e.pipeline="partsys";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return static_particles_preview::Spawn(o, 0xad92bd38u);};
+            e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
+            e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
 

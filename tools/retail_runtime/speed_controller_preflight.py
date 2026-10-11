@@ -63,8 +63,8 @@ def read_asset(data):
 
 
 class NativeSpeed:
-    def __init__(self, executable, asset, width=512, height=512):
-        self.software = SoftwareFixture(executable, width, height)
+    def __init__(self, executable, asset, width=512, height=512, software_factory=SoftwareFixture):
+        self.software = software_factory(executable, width, height)
         self.vm = self.software.vm
         v = self.vm
         if sha(v.image) != RETAIL_SHA:
