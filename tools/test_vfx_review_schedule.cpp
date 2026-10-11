@@ -85,10 +85,64 @@ int main()
         assert(Near(Length(motion), 16.0)); assert(Near(-motion.x/motion.y, ratio));
         Equal(schedule.CameraScreenOffset(schedule.Duration()+123.25), schedule.CameraScreenOffset(123.25));
     }
+    // Per-station gaps 420, 720 and 1100 retain one constant-speed path.
+    for (double ratio : {2.0, 2.5, 3.0}) {
+        VfxReviewSchedule mixed; mixed.count = 4; mixed.ratio = ratio;
+        mixed.station_distances = {0.0, 420.0, 1140.0, 2240.0};
+        assert(mixed.IsValid()); assert(mixed.PathLength() == 3680.0);
+        assert(mixed.Duration() == 230.0);
+        assert(mixed.NearestSlot(0.0) == 0);
+        assert(mixed.NearestSlot(std::nextafter(mixed.Duration(), 0.0)) == 3);
+        for (std::size_t index = 0; index < mixed.count; ++index) {
+            const double distance = mixed.SlotDistance(index);
+            const double centerTime = (mixed.gap+distance)/mixed.speed;
+            const Vec2 center = mixed.SlotScreenOffset(index);
+            Equal(center, mixed.CameraScreenOffset(centerTime));
+            Equal(Project(VfxReviewSchedule::ScreenToWorld(center)), center);
+            assert(mixed.NearestSlot(centerTime) == index);
+            const auto ends = mixed.SlotEndpoints(index, 220.0);
+            assert(ends.source.x < center.x && ends.source.y > center.y);
+            assert(ends.target.x > center.x && ends.target.y < center.y);
+            assert(Near(Length(Subtract(ends.target, ends.source)), 220.0));
+            Equal(Project(VfxReviewSchedule::ScreenToWorld(ends.target)), ends.target);
+            if (index) {
+                assert(Near(Length(Subtract(center,mixed.SlotScreenOffset(index-1))),
+                            distance-mixed.SlotDistance(index-1)));
+                const double midpoint = (distance+mixed.SlotDistance(index-1))*0.5;
+                assert(mixed.NearestSlot((mixed.gap+midpoint-0.01)/mixed.speed) == index-1);
+                assert(mixed.NearestSlot((mixed.gap+midpoint)/mixed.speed) == index);
+                assert(mixed.NearestSlot((mixed.gap+midpoint+0.01)/mixed.speed) == index);
+            }
+        }
+        const Vec2 motion=Subtract(mixed.CameraScreenOffset(11.0),mixed.CameraScreenOffset(10.0));
+        assert(Near(Length(motion),mixed.speed)); assert(Near(motion.x/-motion.y,ratio));
+        for (unsigned loops : {1u, 2u, 10u}) {
+            const double time=loops*mixed.Duration();
+            assert(mixed.LoopCount(time)==loops && mixed.Progress(time)==0.0);
+            assert(mixed.NearestSlot(time)==0);
+            Equal(mixed.CameraScreenOffset(time),mixed.CameraScreenOffset(0.0));
+        }
+        Equal(mixed.CameraScreenOffset(mixed.Duration()+55.0),mixed.CameraScreenOffset(55.0));
+    }
+    VfxReviewSchedule malformed; malformed.count=4;
+    for (const std::vector<double>& distances : {
+            std::vector<double>{0,420,1140}, {1,420,1140,2240}, {0,420,420,2240},
+            {0,420,300,2240}, {0,420,1140,std::numeric_limits<double>::infinity()},
+            {0,420,1140,std::numeric_limits<double>::quiet_NaN()}}) {
+        malformed.station_distances=distances;
+        assert(!malformed.IsValid()); assert(malformed.NearestSlot(50.0)==0);
+        Equal(malformed.CameraScreenOffset(50.0),{});
+    }
+    VfxReviewSchedule uniform; uniform.count=4;
+    assert(uniform.SlotDistance(3)==1260.0);
+    assert(uniform.NearestSlot((uniform.gap+210.0)/uniform.speed)==1);
+    assert(uniform.NearestSlot((uniform.gap+1250.0)/uniform.speed)==3);
     VfxReviewSchedule empty;
     assert(!empty.IsValid() && empty.Duration() == 0.0 && empty.LoopCount(100.0) == 0);
     Equal(empty.CameraScreenOffset(100.0), {});
     VfxReviewSchedule single; single.count = 1;
+    single.station_distances={0.0};
+    assert(single.NearestSlot(50.0)==0);
     assert(single.Duration() == 90.0); Equal(single.CameraScreenOffset(45.0), {});
     Equal(single.CameraScreenOffset(-10.0), single.CameraScreenOffset(0.0));
     for (double bad : {0.0, -1.0, std::numeric_limits<double>::infinity(),
