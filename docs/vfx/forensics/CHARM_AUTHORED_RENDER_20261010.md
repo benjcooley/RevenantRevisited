@@ -67,5 +67,10 @@ uses 48 Hz simulation steps with one warmup frame: the first two images both
 show tick 1, before any valid particle, and have identical pixels. All 122
 active native-domain pixel hashes are unchanged after the cold submission fix.
 
-Appearance is awaiting independent review; no natural caller or exact-pixel
-acceptance is inferred from these probes.
+Root independently reviewed the eleven active phases and corrected cold-star
+pair and approved scoped state 0 native-domain appearance. The moving
+green/white spiral, persistent trail and both loop boundaries agree.
+Cold depth, natural caller and exact-pixel limits above remain open.
+
+Approval: `charm-review-complete/root-approval.json`, SHA256
+`c97fe361a74af1464133adf9cbbd9ca6ec7a4f10e843eddb67b3c0dbfd7b0615`.
