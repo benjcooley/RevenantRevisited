@@ -23,6 +23,7 @@ class CachedParticlePoseTests(unittest.TestCase):
 #include "cometmatrix.h"
 #include "fgeysermatrix.h"
 #include "dustmatrix.h"
+#include "poisonmatrix.h"
 struct S3DPoint { int x=0,y=0,z=0; };
 struct V { float x=0,y=0,z=0; };
 struct Pose { std::array<float,16> matrix{}; V origin,position,scale; };
@@ -30,11 +31,12 @@ struct Inputs { V owner_position,object_zero_origin; int owner_face=0,animation_
 struct Controller { Inputs inputs; struct {std::vector<int> emitters{1};} track; };
 struct S3DAnimObj { hmm_vec3 pos{},scl{}; };
 struct Imagery {
- int sampled=-1,expected_state=0;bool lightstrip=false,comet=false,fgeyser=false,dust=false;
+ int sampled=-1,expected_state=0;bool lightstrip=false,comet=false,fgeyser=false,dust=false,poison=false;
  bool HasRetailLightStripProfile(){return lightstrip;}
  bool HasRetailCometProfile(){return comet;}
  bool HasRetailFGeyserProfile(){return fgeyser;}
  bool HasRetailDustProfile(){return dust;}
+ bool HasRetailPoisonProfile(){return poison;}
  bool HasRetailMightPartSysProfile(){return false;}
  bool HasRetailImmortalmightPartSysProfile(){return false;}
  bool HasRetailFmasteryPartSysProfile(){return false;}
@@ -42,7 +44,7 @@ struct Imagery {
  bool HasRetailCameraParticleProfile(uint32_t){return false;}
  bool HasRetailStaticParticleProfile(uint32_t id){return id==0xad92bd38u;}
  bool GetUninterpolatedAniKey(int object,int state,int frame,hmm_vec3& p,hmm_vec3& r,hmm_vec3& s,bool inclusive=false){
-  assert(object==1 && state==expected_state && inclusive==(lightstrip||comet||fgeyser||dust));sampled=frame;p={float(frame),0,0};r={0,0,0};s={float(frame+1),1,1};return true;
+  assert(object==1 && state==expected_state && inclusive==(lightstrip||comet||fgeyser||dust||poison));sampled=frame;p={float(frame),0,0};r={0,0,0};s={float(frame+1),1,1};return true;
  }
 };
 struct TObjectInstance { uint32_t id=0xad92bd38u;int state=0,frame=8;S3DPoint Pos(){return {};};int GetFace(){return 0;}uint32_t ObjId(){return id;}int GetState(){return state;}int GetFrame(){return frame;} };
@@ -84,6 +86,9 @@ int main(){
   for(owner.frame=8;owner.frame<=10;++owner.frame){Extracted::FillInputs(c,animator,owner);
    assert(c.inputs.animation_frame==7 && c.inputs.emitters[0].position.x==7);}}
  {TObjectInstance owner;owner.id=0x0c052637u;T3DAnimator animator;animator.imagery.dust=true;Controller c;
+  for(owner.frame=8;owner.frame<=10;++owner.frame){Extracted::FillInputs(c,animator,owner);
+   assert(c.inputs.animation_frame==7 && c.inputs.emitters[0].position.x==7);}}
+ {TObjectInstance owner;owner.id=0xe0a3bc42u;T3DAnimator animator;animator.imagery.poison=true;Controller c;
   for(owner.frame=8;owner.frame<=10;++owner.frame){Extracted::FillInputs(c,animator,owner);
    assert(c.inputs.animation_frame==7 && c.inputs.emitters[0].position.x==7);}}
  // Three authoritative Pulses before Animate retain its cached pose.

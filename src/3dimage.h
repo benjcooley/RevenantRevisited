@@ -244,9 +244,11 @@ class T3DImagery : public TObjectImagery
     bool comet_partsys_profile=false;
     bool fgeyser_partsys_profile=false;
     bool dust_partsys_profile=false;
+    bool poison_partsys_profile=false;
     bool ValidateRetailCometProfile();
     bool ValidateRetailFGeyserProfile();
     bool ValidateRetailDustProfile();
+    bool ValidateRetailPoisonProfile();
     uint32_t static_particles_profile = 0;
     uint32_t ValidateRetailStaticParticleProfile();
     bool ValidateRetailSpeedPartSysProfile();
@@ -341,6 +343,7 @@ class T3DImagery : public TObjectImagery
     bool HasRetailCometProfile() const { return comet_partsys_profile; }
     bool HasRetailFGeyserProfile() const { return fgeyser_partsys_profile; }
     bool HasRetailDustProfile() const { return dust_partsys_profile; }
+    bool HasRetailPoisonProfile() const { return poison_partsys_profile; }
     bool HasRetailLightStripProfile() const { return lightstrip_partsys_profile; }
     bool HasGoldPartSysProfile() const { return gold_partsys_profile; }
     bool HasRetailMightPartSysProfile() const { return might_partsys_profile; }
@@ -595,6 +598,7 @@ class T3DAnimator : public TObjectAnimator
     void SetCometGround(std::function<int(int,int,int)> query);
     void SetFGeyserGround(std::function<int(int,int,int)> query);
     void SetDustGround(std::function<int(int,int,int)> query);
+    void SetPoisonGround(std::function<int(int,int,int)> query);
     bool PartSysOwnsObject(int32_t object) const;
     // Narrow retail Goldp base-mesh route. Particle draws retain their own mode.
     bool TeleportationMeshBlend(int32_t object, uint32_t& blend) const;

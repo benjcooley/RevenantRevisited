@@ -1,6 +1,7 @@
 #include "effects/cometoriginal.h"
 #include "effects/fgeyseroriginal.h"
 #include "effects/dustoriginal.h"
+#include "effects/poisonoriginal.h"
 #include "effects/lightstriporiginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
@@ -5316,6 +5317,15 @@ struct SVfxTestBootstrap {
             original.submit_world=[](void* c,EFxDebugMode mode){dust_original::SubmitWorld(static_cast<dust_original::State*>(c),mode);};
             original.is_alive=[](void* c){return dust_original::IsAlive(static_cast<dust_original::State*>(c));};
             original.destroy=[](void* c){dust_original::Destroy(static_cast<dust_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="Poison_AUTHORED";
+            original.family="environment";original.pipeline="QUAD";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return poison_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){poison_original::Advance(static_cast<poison_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){poison_original::SubmitWorld(static_cast<poison_original::State*>(c),mode);};
+            original.destroy=[](void* c){poison_original::Destroy(static_cast<poison_original::State*>(c));};
             VfxTest::DeferredRegister(original);
         }
 

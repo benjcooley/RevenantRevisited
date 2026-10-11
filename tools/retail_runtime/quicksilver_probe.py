@@ -53,6 +53,7 @@ struct Imagery{bool HasRetailStaticParticleProfile(uint32_t)const{return false;}
  bool HasRetailCometProfile()const{return false;}
  bool HasRetailFGeyserProfile()const{return false;}
  bool HasRetailDustProfile()const{return false;}
+ bool HasRetailPoisonProfile()const{return false;}
  bool HasRetailMightPartSysProfile()const{return false;}
  bool HasRetailImmortalmightPartSysProfile()const{return false;}
  bool HasRetailFmasteryPartSysProfile()const{return false;}
