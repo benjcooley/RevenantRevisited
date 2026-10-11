@@ -6768,6 +6768,18 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(e);
         }
 
+        for(const auto& entry:std::array<std::pair<const char*,uint32_t>,4>{{
+            {"TWaterFlft_AUTHORED_TAGS",0xd0c0f036u},{"TWaterFrt_AUTHORED_TAGS",0xd0c0f037u},
+            {"TWaterClft_AUTHORED_TAGS",0xd0c0f038u},{"TWaterCrt_AUTHORED_TAGS",0xd0c0f039u}}})
+        {
+            VfxTest::SEffect e={};e.id=entry.first;e.family="water";e.pipeline="IM+partsys";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;const uint32_t type=entry.second;
+            e.factory=[type](const S3DPoint&o)->void*{return static_particles_preview::Spawn(o,type);};
+            e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
+            e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
         {
             VfxTest::SEffect e={};e.id="TRegeneration_AUTHORED_TAGS";e.family="spell";e.pipeline="partsys";
             e.preview_style=VfxTest::EVfxPreviewStyle::Static;

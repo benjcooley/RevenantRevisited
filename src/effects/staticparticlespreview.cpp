@@ -21,7 +21,9 @@ State* Spawn(const S3DPoint& origin, uint32_t id)
 {
     if (!Renderer || (id != 0xaeaeeb30u && id != 0xaeaeeb33u &&
                       id != 0xaeaeeb29u && id != 0xad92bd38u && id != 0x10ac03deu &&
-                      id != 0xe0a3bc43u && id != 0x0c052638u)) return nullptr;
+                      id != 0xe0a3bc43u && id != 0x0c052638u &&
+                      id != 0xd0c0f036u && id != 0xd0c0f037u &&
+                      id != 0xd0c0f038u && id != 0xd0c0f039u)) return nullptr;
     auto context = std::make_unique<State>();
     auto* effect_class = TObjectClass::GetClass(OBJCLASS_EFFECT);
     const int type = effect_class ? effect_class->FindObjType(id) : -1;

@@ -3218,7 +3218,7 @@ void T3DAnimator::RefreshPartSysControllers()
     const bool fmastery=id==0xb0e024dfu && imagery->fmastery_partsys_profile && current_state==0;
     const bool speed=imagery->HasRetailSpeedFamilyPartSysProfile(id) && current_state==0;
     const bool static_particles=imagery->HasRetailStaticParticleProfile(id) && current_state==0;
-    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && !speed && !static_particles && (id < 0xd0c0f036u || id > 0xd0c0f039u))
+    if (!gold && !combat_start1 && !might && !immortalmight && !fmastery && !speed && !static_particles)
     {
         if (!state.initialized)
             log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only exact audited particle profiles are enabled",

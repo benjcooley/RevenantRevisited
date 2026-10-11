@@ -338,6 +338,10 @@ class T3DImagery : public TObjectImagery
     bool HasRetailQuicksilverPartSysProfile() const { return quicksilver_partsys_profile; }
     bool HasRetailStaticParticleProfile(uint32_t type_id) const
     { return static_particles_profile!=0 && static_particles_profile==type_id; }
+    bool HasRetailAuthoredWaterProfile(uint32_t type_id) const
+    { return HasRetailStaticParticleProfile(type_id) &&
+             (type_id==0xd0c0f036u || type_id==0xd0c0f037u ||
+              type_id==0xd0c0f038u || type_id==0xd0c0f039u); }
     bool HasRetailCameraParticleProfile(uint32_t type_id) const
     { return HasRetailStaticParticleProfile(type_id) &&
              (type_id==0x42e0fcd0u || type_id==0xad92bd39u); }
