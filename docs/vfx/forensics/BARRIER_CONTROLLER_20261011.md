@@ -28,6 +28,14 @@ They still consume random values and advance their pool state. Only the wall
 draw reaches the original software raster. Do not make these flares visible
 by replacing their scale.
 
-This is a source/state checkpoint. Strict legacy-key admission, actual port
+The independent strict predicate in `src/barrierlegacykeys.h` admits only the
+two complete immutable retail bodies. Each resource passes four path forms
+and rejects every byte mutation plus nine header/path/null/cross-resource
+controls (25,253 rejections per resource) under ASan/UBSan. The full-body
+fingerprint includes all five keys, parents, geometry, materials and textures.
+`barrier_profile_probe.py` reproduces this contract; private results are in
+`profile-first`. The predicate is not yet connected to the shared loader.
+
+This is a source/state checkpoint. Actual loader key-copy/pose controls, port
 wall UV/render ordering, matched Metal captures and natural caller/audio/device
 checks remain to do. It adds no visual pass.
