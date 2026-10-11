@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-10)
 
-**75 / 176 effects have reviewed visual passes for their recorded test configuration; 101 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they are not 71 completed effects. These counts overlap and must not be added.
+**76 / 176 effects have reviewed visual passes for their recorded test configuration; 100 still need a current visual pass.** This is the primary VFX progress measure. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they are not 71 completed effects. These counts overlap and must not be added.
 
 Passed appearance cases: CyanFont, RedFont, GreenFont, BlueFont, base Flame, Ripple emitted by Drip, Globe, Sparks editor defaults, isolated Cure, isolated Pixie, Shadowfist, Warriorborn, teleportation, goldeffect, Might, Immortalmight and blue TeleportDoorInsideB. The additional passes are all12 town signs, the other6 Warp colors, Speaker and both LabGate barriers. Their per-row visual reviews record the configuration and remaining limitations. Fresh Might/Immortalmight footage passes after the parser correction. Blue Warp retains an open seven-pixel apex/projection discrepancy despite its scoped overall appearance pass.
 
@@ -30,6 +30,8 @@ historical evidence; this migration alone grants no additional acceptance.
 **RGB565 correction (2026-10-10):** fspray now passes its twelve-sample original/Metal appearance review after exact software RGB5 modulation replaces normalized multiplication. Fresh films preserve the other eight affected scoped passes. The gallery also retains all62 previously verified types in a label-free centered draw audit; normal scroll-in lifetime controls are separate. [Source and measured scope](forensics/RGB565_PARTICLE_MODULATION.md).
 
 **Six further passes (2026-10-10):** Faultfire, Streamer, YEnergy, YEnergyLose, YAbsorb and nullifier pass actual native/Metal appearance for their declared configurations. Original cached-emitter sampling fixes nullifier's phase. FireSwarm late phases improve, but its early software rejection remains held for a device reference.
+
+**Photon closed (2026-10-10):** original moving controller, five texture frames, charge/flight/impact/decay and blank tail pass independent native-domain actual-Metal review for two declared caller orderings. The gallery runs the real charged projectile with an explicit target collision fixture. Natural caller/audio/map draw dispatch remains open. [Evidence](forensics/PHOTON_NATIVE_VISUAL.md).
 
 **Current closure (2026-10-10):** Mist, SymGlow and native-domain FireCone pass independent actual-port/retail fixed-sample appearance review. Four Y/nullifier rows add independent emitter/render proofs and real map lifecycles: coverage is75 rendered frontends,88 controlled runtime rows and99 source-fix rows; their whole visual reviews remain open.
 

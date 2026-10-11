@@ -4735,6 +4735,7 @@ class TPhotonEffect_Bespoke : public TEffect
     void Pulse() override;
     uint32_t Move() override { return GetMoveBits(); }
     bool SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination);
+    void SetPreviewTargetCollision(bool enabled) { preview_target_collision_=enabled; }
     void SetNativeDomain(bool enabled) { native_domain_=enabled; }
     void PrimeLaunchForTest(); // Explicit alternate original Animate-before-Pulse sequencing.
     const missile_state::State& ProjectileState() const { return missile_; }
@@ -4750,6 +4751,7 @@ class TPhotonEffect_Bespoke : public TEffect
     missile_state::State missile_;
     S3DPoint destination_{};
     bool has_destination_=false,preview_mode_=false,native_domain_=false;
+    bool preview_target_collision_=false;
     std::array<S3DVertex,4> authored_{};
     std::vector<TTextureHandle> texture_frames_;
     bool argb4444_=false;

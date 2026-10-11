@@ -9512,7 +9512,12 @@ void TPhotonEffect_Bespoke::AdvanceTick()
         S3DPoint v{};ConvertToVector(facing,speed,v);return missile_state::Point{v.x,v.y,v.z};
     };
     input.character_hit=[this](const missile_state::Point& p) {
-        if(preview_mode_)return false; // Explicit range-impact fixture.
+        if(preview_mode_) {
+            // Explicit gallery target boundary; range-only fixtures retain false.
+            if(!preview_target_collision_ || !has_destination_)return false;
+            const S3DPoint query{p.x,p.y,p.z};
+            return ::Distance(query,destination_)<=32;
+        }
         TObjectInstance* invoker_object=spell?spell->GetInvokerRef().Get():nullptr;
         auto* invoker=dynamic_cast<TCharacter*>(invoker_object);const S3DPoint query{p.x,p.y,p.z};
         std::vector<TCharacter*> around;

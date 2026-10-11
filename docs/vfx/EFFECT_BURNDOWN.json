@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "a091e753d2c6d8f7059aaeece3d6df80f9ed716dfb701320526bf2fbadd1373d",
+    "harness_sha256": "a35647ee891145570e2ef4086817bcd771a1988fdf49e1ed0d7c6c3f13796c20",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 101,
+    "retail_rows_with_source_fixes_recorded": 102,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 75,
+    "visual_fidelity_confirmed_rows": 76,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 75,
-    "remaining_visual_review_rows": 101
+    "reviewed_visual_pass_rows": 76,
+    "remaining_visual_review_rows": 100
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -6811,7 +6811,9 @@
       "preview_candidates": [
         "TPhotonEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-10: replaced stationary guessed Photon preview with original shared moving missile, 32 authored slots, real five-frame texture selection, 24 Hz charge/flight/impact controller and original geometry. Registered builder; gallery explicitly owns submission and a fixture target."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [
         "captures/runs/sw-fps-photon-20261005"
@@ -6820,18 +6822,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Retain short default ground-level blue burst without full missile reference credit. Audit actual retail mapping and launch/flight/impact fixture later; prioritize clean Cure/FireCone source corrections.",
+      "next_action": "Preserve approved isolated appearance and gallery moving lifecycle; natural spell scheduling/audio/reaping and ordinary map dispatch remain open.",
       "notes": [
         "Healthy FPS-enabled default ground-level Photon editor spawn:11 distinct images and0.4seconds of blue-burst activity, followed by exact ground. Full launch/flight/impact choreography and natural spell caller are not established; do not certify a complete missile reference or fit source timing to this burst."
       ],
@@ -6862,7 +6864,29 @@
         "accurate_reference": false,
         "scope": "Healthy FPS-enabled default ground-level Photon editor spawn:11 distinct images and0.4seconds of blue-burst activity, followed by exact ground. Full launch/flight/impact choreography and natural spell caller are not established; do not certify a complete missile reference or fit source timing to this burst."
       },
-      "work_queue_status": "deferred_short_ground_level_recipe"
+      "work_queue_status": "scoped_visual_pass_natural_context_open",
+      "visual_review": {
+        "date": "2026-10-10",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Original software versus actual Metal native-domain charge/flight/impact/decay/empty tail, two declared caller orderings. Natural caller/audio/reaper/map dispatch and exact framebuffer remain open.",
+        "report": "recon/retail_asm/runtime/effects/current-photon-full-visual-20261010/root-approval.json",
+        "sha256": "291e955402f63774cb9bd54e93cf6bf7e6ca306ece2f4cf2ed51c5a3f60c22e7",
+        "note": "docs/vfx/forensics/PHOTON_NATIVE_VISUAL.md"
+      },
+      "thin_emulator_checks": [
+        {
+          "name": "photon_native_moving_state_and_render",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/current-photon-full-visual-20261010/root-approval.json",
+          "state_checks": 53244,
+          "geometry_checks": 4264,
+          "original_draw_packets": 328,
+          "scope": "Original registered leaf and authored normal-lit software render versus actual production moving controller; two explicit ordering conditions. Actual Metal separately reviewed.",
+          "full_acceptance_granted": false
+        }
+      ]
     },
     {
       "index": 5,

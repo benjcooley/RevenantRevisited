@@ -51,6 +51,7 @@ struct Entry {
     bool missing_visual = false;
     std::unique_ptr<VfxReviewPreview> preview;
     std::unique_ptr<TFireBallEffect> projectile;
+    std::unique_ptr<TPhotonEffect_Bespoke> photon;
     int projectile_state = -1;
 };
 TMapRenderer renderer;
@@ -85,6 +86,7 @@ TObjectInstance* Resolve(Entry& e) {
 void Remove(Entry& e) {
     e.preview.reset();
     e.projectile.reset();
+    e.photon.reset();
     if (auto* object = Resolve(e)) MapPane.DeleteObject(object);
     e.map_index = -1;
 }
@@ -251,7 +253,8 @@ S3DPoint PathEndpoint(size_t index,bool target) {
 void Spawn(Entry& e, size_t index) {
     const auto support=DescribeVfxReviewSpawn(e.id);
     const bool authored_yfireball = e.id==0x63fd3827u;
-    if (!support.safe_factory && !authored_yfireball) {
+    const bool authored_photon = e.id==0x113803f4u;
+    if (!support.safe_factory && !authored_yfireball && !authored_photon) {
         e.status=support.description; e.failed=true;
         log_info("[vfx-review] unavailable name=%s type=%08x status=%s",e.name.c_str(),e.id,e.status.c_str());
         return;
@@ -260,6 +263,20 @@ void Spawn(Entry& e, size_t index) {
     if (support.projectile || support.supports_endpoints) {
         source=PathEndpoint(index,false);
         target=PathEndpoint(index,true);
+    }
+    if(authored_photon) {
+        e.photon.reset(TPhotonEffect_Bespoke::SpawnForTest_BESPOKE(source));
+        if(!e.photon || !e.photon->SetProjectileEndpoints(source,target)) {
+            e.photon.reset(); e.failed=true; e.missing_visual=true;
+            e.status="Projectile runtime initialization failed"; return;
+        }
+        e.photon->SetPreviewTargetCollision(true);
+        e.photon->PrimeLaunchForTest(); // Declared Animate-before-Pulse charge sequence.
+        e.projectile_state=-1;
+        e.missing_visual=false; e.status="Authored Photon charge, flight and target impact"; ++e.cycles;
+        log_info("[vfx-review] projectile name=%s cycle=%u source=%d,%d,%d target=%d,%d,%d target_fixture=1 charge=1",
+            e.name.c_str(),e.cycles,source.x,source.y,source.z,target.x,target.y,target.z);
+        return;
     }
     if(e.id==0x63fd382au || authored_yfireball) {
         // Map factory construction does not bind or submit the bespoke
@@ -362,6 +379,19 @@ bool Initialize() {
     renderer.SetReviewSubmissionCallbacks(
         [] { for(auto& e:entries) {
             if(e.preview) e.preview->Submit();
+            if(e.photon) {
+                if(!e.photon->IsAlive()) {
+                    e.photon.reset(); e.next_spawn=ticks/24.0+1.5;
+                } else {
+                    e.photon->TickAndSubmitForTest_BESPOKE(EFxDebugMode::Normal);
+                    const auto& state=e.photon->ProjectileState();
+                    if(state.state!=e.projectile_state) {
+                        e.projectile_state=state.state;
+                        log_info("[vfx-review] projectile-state name=%s cycle=%u state=%d pos=%d,%d,%d",
+                            e.name.c_str(),e.cycles,state.state,state.position.x,state.position.y,state.position.z);
+                    }
+                }
+            }
             if(e.projectile) {
                 if(!e.projectile->IsAlive()) {
                     e.projectile.reset(); e.next_spawn=ticks/24.0+1.5;
@@ -428,7 +458,7 @@ void Render() {
     for (size_t i=0;i<entries.size();++i) {
         auto& e=entries[i];
         if (std::abs(schedule.SlotDistance(i)-distance)>650) { Remove(e); continue; }
-        if (!e.preview && !e.projectile && !Resolve(e) && !e.failed && ticks/24.0>=e.next_spawn) {
+        if (!e.preview && !e.projectile && !e.photon && !Resolve(e) && !e.failed && ticks/24.0>=e.next_spawn) {
             Spawn(e,i); e.next_spawn=ticks/24.0+.35;
         }
     }

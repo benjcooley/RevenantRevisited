@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 101,
+    "retail_rows_with_source_fixes_recorded": 102,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 75,
+    "visual_fidelity_confirmed_rows": 76,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 75,
-    "remaining_visual_review_rows": 101
+    "reviewed_visual_pass_rows": 76,
+    "remaining_visual_review_rows": 100
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1316,6 +1316,13 @@
       "check": "current_own_original_actual_metal_visual_review",
       "status": "scoped_primary_visual_pass",
       "scope": "Independent root review of six original whole-renderer/actual-Metal water phases: entire authored plane/strip, texture/color and source scrolling pass. Waves use1280x960 and allvertices/imagebounds remain inside; Sewer staysconstant. No scale/phase fitting; natural map/device/depth interactions and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-photon-full-visual-20261010/root-approval.json": {
+      "sha256": "291e955402f63774cb9bd54e93cf6bf7e6ca306ece2f4cf2ed51c5a3f60c22e7",
+      "retail_row": "Photon:0x113803f4",
+      "check": "photon_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Original software versus actual Metal native-domain charge/flight/impact/decay/empty tail, two declared caller orderings. Natural caller/audio/reaper/map dispatch and exact framebuffer remain open."
     }
   }
 }
