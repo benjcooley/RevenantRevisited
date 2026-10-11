@@ -16,6 +16,12 @@ class NakrnothScene(FireScene):
         self.fast = fast
         super().__init__(executable, boot_image)
         if (width,height)!=(self.width,self.height):
+            # Directional lights belong to the original scene, not the Python
+            # fixture. Remove its registered light before replacing RAM targets;
+            # otherwise the new fixture adds a second directional contribution.
+            if self.software.directional is not None:
+                self.vm.call(0x56d120, (self.software.directional,))
+                self.software.directional = None
             self.width,self.height=width,height
             self.software=LitSoftwareFixture(executable,width,height,camera=(3185,3185,0),vm=self.vm)
             self.software.lighting((38,38,38),(1,1,1))

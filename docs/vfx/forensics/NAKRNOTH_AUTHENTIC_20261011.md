@@ -63,3 +63,35 @@ Single-original-triangle isolation still reaches `(30,62,30)`, ruling out
 opposite-facing duplicate geometry as the cause. The downstream raster/state
 boundary is under investigation; no light, tint or geometry correction is
 inferred from these images.
+
+## Larger-reference lighting correction
+
+The held late-ring brightness was caused by the native viewport fixture, not
+the portable renderer. The default 1280×960 `FireScene` registered one original
+directional light. Nakrnoth's larger-viewport constructor then created another
+`LitSoftwareFixture` and registered another light without removing the first.
+The directional registration belongs to the original scene; replacing the
+Python fixture does not remove it. The corrected constructor executes original
+`56d120` for the old fixture's directional registration before replacement.
+No engine, geometry, color, material, shader, binary or Metal capture changes
+accompany this correction.
+
+`nakrnoth_lighting_probe.py` runs actual loaded full Animate/PreRender/Render at
+the declared diagnostic pose 641 for both supported viewport sizes. At
+`56f10f`, original transformed ring colors are `(23,23,23)` with one light.
+Explicitly adding a second original directional registration (`56cf00`) changes
+them to `(31,31,31)`; removing it (`56d120`) restores `(23,23,23)` exactly.
+All authored draw packets and owner matrices, flags, frame and RNG remain equal
+across these controls. This proves the brighter single-triangle raster did not
+require duplicated geometry. Normalization of the scaled authored normals was
+correct throughout. The retained control manifest SHA256 is
+`a9af349bca855840a4985177100e64c7a26052b86f9813e31ad8e95f2b2382db`.
+
+The prior `nakrnoth-native-tiles`, `nakrnoth-native-middle` and
+`nakrnoth-review-final` artifacts are explicitly superseded duplicate-light
+negative controls. Corrected full-lifecycle references use
+`nakrnoth-native-tiles-single-light` and `nakrnoth-native-middle-single-light`;
+review output uses `nakrnoth-review-single-light`. The original 790-tick pool,
+1280×960 main native film, terrain proof, source comparison and all actual Metal
+films remain unchanged. Only the corrected independent-review pins can be
+considered for appearance acceptance.
