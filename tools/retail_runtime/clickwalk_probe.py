@@ -5,7 +5,9 @@ recon/retail_asm/patches/clickwalk).
 
 The fixture drives the original TMapPane::MouseClick `0x0044f140` (thiscall
 (button, x, y), ret 0xc) on the map pane `0x006668d8`: a press (1) and a
-release (4), or the right button's press (2) for the walk it already had.
+release (4), or the right button's press (2) for the walk it already had;
+a case with `ticks` then runs game ticks in retail's order (UpdateMove,
+Pulse, Move, SetObjectMotion, NextFrame) over a flat walk-grid seam.
 Locke is a TPlayer built by the combat slot's CombatWorld
 (`slots/combat/guest.py`: the real vtable, action blocks by the original
 constructor, his states and stats from the case), so Goto `0x004cedb0` and
@@ -65,8 +67,9 @@ from runtime import Runtime  # noqa: E402
 from unicorn import UC_HOOK_CODE  # noqa: E402
 import guest  # noqa: E402
 from guest import CombatWorld, O_CHARDATA, PLAY_MOUSE_CLICK, call, write_fields  # noqa: E402
-from combat_call import (CAN_SEE, FIND_CHARACTERS, FIND_CLEAR_PATH, LINE_OF_SIGHT,  # noqa: E402
-                         SET_PLAYER_STATE, CallFixture)
+from combat_call import (CAN_SEE, COMPLEX_PULSE, FIND_CHARACTERS, FIND_CLEAR_PATH, G_CMDCHANGED,  # noqa: E402
+                         G_CMDSTATE, G_DEBUGCAMERA, LINE_OF_SIGHT, NEXT_FRAME, SET_OBJECT_MOTION,
+                         SET_PLAYER_STATE, SLOT_MOVE, UPDATE_MOVE, CallFixture)
 from data_parse import CHAR_FIELDS  # noqa: E402
 
 SCHEMA = 'clickwalk.v1'
@@ -234,6 +237,8 @@ class ClickFixture(CallFixture):
         world.reset()
         self.bitmaps = {}
         self.case = case
+        # Ticks after the click: the animation layer as original (combat kata M8).
+        world.real_setstate = bool(case.get('ticks'))
         world.set_globals(case.get('globals', {}))
         world.set_rng(case)
         world.set_ground(case)
@@ -270,10 +275,36 @@ class ClickFixture(CallFixture):
             steps.append(dict(button=button, x=x, y=y, seams=world.seams[first:],
                               clickwalk_code=self.cave_entries - entries,
                               pane={k: s32(vm.u32(MAP_PANE + MP[k])) for k in ('onobject', 'clicked', 'walking')}))
+        ticks = self._ticks(me, case) if case.get('ticks') else []
         new_blocks = []
         return dict(schema=SCHEMA, case=case['name'], build=self.record['name'], sha=self.sha,
-                    pre=[s for s in world.seams if s['seam'] == 'pre'], steps=steps,
+                    pre=[s for s in world.seams if s['seam'] == 'pre'], steps=steps, ticks=ticks,
                     self=world.character_dump(me, new_blocks), draws=list(world.draws))
+
+    def _ticks(self, me, case):
+        """Game ticks after the click, in retail's order: UpdateMove `0x0047de30`
+        with nothing held (the case's `changed`: a control was used before), then
+        Pulse (UpdateAction: ResolveMove), Move, SetObjectMotion, the game frame,
+        NextFrame (combat_call's sequence). One record a tick."""
+        vm, world = self.vm, self.world
+        out = []
+        for t in range(case['ticks']):
+            vm.put_u32(G_CMDSTATE, 0)
+            vm.put_u32(G_CMDCHANGED, case.get('changed', 0x100))
+            vm.put_u32(G_DEBUGCAMERA, 0)
+            call(vm, UPDATE_MOVE, (), this=0x0065caf0)
+            call(vm, COMPLEX_PULSE, (), this=me)
+            bits = call(vm, vm.u32(vm.u32(me) + SLOT_MOVE), (), this=me) & 0xffffffff
+            vm.put_u32(me + 0xbc, bits)
+            call(vm, SET_OBJECT_MOTION, (), this=me)
+            vm.put_u32(0x0065caf0 + 0x680, vm.u32(0x0065caf0 + 0x680) + 1)
+            call(vm, NEXT_FRAME, (), this=me)
+            doing = world.block_dump(vm.u32(me + 0xd8), [])
+            out.append(dict(tick=t, pos=list(struct.unpack('<3i', vm.uc.mem_read(me + 0x10, 12))),
+                            state=struct.unpack('<h', vm.uc.mem_read(me + 0x0c, 2))[0],
+                            facing=vm.uc.mem_read(me + 0x36, 1)[0], bits=bits,
+                            doing=dict(name=doing['name'], angle=doing['angle'], target=doing['target'])))
+        return out
 
 
 # ---- the standard cases --------------------------------------------------
@@ -283,6 +314,12 @@ WALK_STATES = ['walk', 'walkf', 'walkl', 'walkr', 'walk to walkf', 'pivotl', 'pi
 RUN_STATES = ['run', 'runf', 'runl', 'runr', 'run to runf', 'walk to run', 'run to walk']
 COMBAT_STATES = ['combat', 'combatf', 'combat to combatf']
 BOW_STATES = ['bow', 'bowf']
+# A synthetic walk cycle for game ticks (the combat slot's kata M8 shape):
+# 5 world units a frame (SMotionData dist 0x500), looping root.
+WALK_MOTION_STATES = [dict(name='walk', frames=12, aniflags=0x401, motion=[[0, 0, 0, 0, 0, 0]] * 12),
+                      *(dict(name=n, frames=8, motion=[[0x500, 0, 0, 0, 0, 0]] * 8) for n in ('walkf', 'walkl', 'walkr')),
+                      *(dict(name=n, frames=4, motion=[[0x280, 0, 0, 0, 0, 0]] * 4)
+                        for n in ('walk to walkf', 'walkf to walk')), 'pivotl', 'pivotr']
 
 
 def scroll_for(pos, at=(320, 240)):
@@ -326,6 +363,12 @@ def cases():
     case('open-ground-turn', [locke(walk_root, WALK_STATES)], click(*behind))
     # Run: the run key held is SetRunMode (Command 0x4a), then the click.
     case('open-ground-run', [locke(walk_root, WALK_STATES + RUN_STATES)], click(*ahead), pre=['SetRunMode'])
+    # The walk itself over game ticks on flat ground: Locke turns to the
+    # point's angle and stops on it (ResolveMove's within 8).
+    out.append(dict(name='open-ground-walk', self='Locke', clicks=click(*ahead), pane=dict(pane), ticks=60,
+                    ground=dict(z=LOCKE_AT[2]), globals=dict(combatface=1, frame=0x40),
+                    chars=[locke(walk_root, WALK_MOTION_STATES, stats=dict(health=100, sleeping=0), animator=1,
+                                 doing='root', desired='root', state=0)]))
     # Unchanged paths, both builds alike.
     case('right-button', [locke(walk_root, WALK_STATES)], [['right_down', *ahead]])
     case('press-object-release-ground', [locke(walk_root, WALK_STATES), npc()], click(*ahead), on=['Tendrick', None])
@@ -364,7 +407,19 @@ def compare(baseline, clickwalk):
         row = dict(case=name, clickwalk_code=sum(s['clickwalk_code'] for s in result['steps']))
         if any(s['clickwalk_code'] for s in base['steps']):
             failures.append(f'{name}: the baseline ran code at {CAVE:#x}')
-        if name in WALKS:
+        if name == 'open-ground-walk':
+            gotos = [s for s in result['steps'][-1]['seams'] if s['seam'] == 'Goto']
+            goal = [gotos[0]['x'], gotos[0]['y']] if gotos else None
+            arrived = next((tk['tick'] for tk in result['ticks'] if tk['pos'][:2] == goal), None)
+            row.update(goal=goal, arrived_tick=arrived, end=result['ticks'][-1]['pos'],
+                       facings=sorted({tk['facing'] for tk in result['ticks'][1:arrived or 0]}))
+            if any(tk['pos'] != base['ticks'][0]['pos'] for tk in base['ticks']):
+                failures.append(f'{name}: the baseline moved')
+            if arrived is None:
+                failures.append(f'{name}: Locke never stood on the Goto point {goal}')
+            elif any(tk['doing']['target'][:2] != goal for tk in result['ticks'][:arrived]):
+                failures.append(f'{name}: the walk lost its target before arriving')
+        elif name in WALKS:
             release = result['steps'][-1]['seams']
             gotos = [s for s in release if s['seam'] == 'Goto']
             points = [s for s in release if s['seam'] == 'ScreenToWorld']

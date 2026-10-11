@@ -81,7 +81,7 @@ class ClickwalkTests(unittest.TestCase):
         entered = {row['case'] for row in rows if row['clickwalk_code']}
         # The cave ran for each release on open ground; in combat and bow mode
         # it declined (their traces equal the baseline's).
-        self.assertEqual(entered, {'open-ground', 'open-ground-turn', 'open-ground-run',
+        self.assertEqual(entered, {'open-ground', 'open-ground-turn', 'open-ground-run', 'open-ground-walk',
                                    'combat-stale-door-cursor', 'bow-not-drawn'})
 
     def test_open_ground_goes_to_the_point_under_the_click(self):
@@ -99,6 +99,19 @@ class ClickwalkTests(unittest.TestCase):
         self.assertEqual((doing['name'], doing['target'][:2]), ('walkf', point[:2]))
         self.assertIn('walkto', doing['flags'])
         self.assertEqual(self.results['baseline']['open-ground']['self']['doing']['name'], 'walk')
+
+    def test_the_walk_steers_to_the_point_and_stops_on_it(self):
+        # Game ticks of retail's own UpdateMove / ResolveMove / Move on flat
+        # ground: the facing follows the point's angle (35) and Locke stands
+        # on the point itself, then the stop transition plays.
+        ticks = self.results['clickwalk']['open-ground-walk']['ticks']
+        goal = [6323, 4301]
+        arrived = next(tk['tick'] for tk in ticks if tk['pos'][:2] == goal)
+        self.assertLess(arrived, 20)
+        self.assertTrue(all(abs(tk['facing'] - 35) <= 1 for tk in ticks[1:arrived]))
+        self.assertEqual(ticks[-1]['doing']['name'], 'walk')
+        base = self.results['baseline']['open-ground-walk']['ticks']
+        self.assertTrue(all(tk['pos'] == base[0]['pos'] for tk in base))
 
     def test_run_key_runs(self):
         doing = self.results['clickwalk']['open-ground-run']['self']['doing']
