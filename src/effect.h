@@ -3647,6 +3647,8 @@ class TFireBallEffect : public TEffect
     // reads its last result instead of moving the same projectile twice.
     uint32_t Move() override { return GetMoveBits(); }
     bool SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination);
+    // Standalone fixtures can supply a target collision without a character.
+    void SetPreviewTargetCollision(bool enabled) { preview_target_collision_=enabled; }
     const missile_state::State& ProjectileState() const { return missile_motion_; }
     [[nodiscard]] bool DamageArmed() const { return damage_armed_; }
 
@@ -3692,6 +3694,7 @@ class TFireBallEffect : public TEffect
     S3DPoint projectile_destination_{};
     bool has_projectile_destination_=false;
     bool preview_mode_=false;
+    bool preview_target_collision_=false;
 
     // Per-tick velocity in world wu/tick (set on LAUNCH→FLY transition).
     hmm_vec3 vel_       = {0.0f, 0.0f, 0.0f};

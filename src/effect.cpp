@@ -6560,7 +6560,11 @@ void TFireBallEffect::StepMissilePulse()
     // within 32 and the caster's enemy (anyone, with no caster) explodes it.
     input.character_hit=[this](const missile_state::Point& point)
     {
-        if(preview_mode_)return false;
+        if(preview_mode_) {
+            if(!preview_target_collision_ || !has_projectile_destination_)return false;
+            const S3DPoint query{point.x,point.y,point.z};
+            return ::Distance(query,projectile_destination_)<=32;
+        }
         TObjectInstance* invoker_object=spell?spell->GetInvokerRef().Get():nullptr;
         TCharacter* invoker=dynamic_cast<TCharacter*>(invoker_object);
         const S3DPoint query{point.x,point.y,point.z};
