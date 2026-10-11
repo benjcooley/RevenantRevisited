@@ -4870,10 +4870,14 @@ class TFlyEffect_Bespoke : public TEffect
     TFlyEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TFlyEffect_Bespoke() override = default;
 
-    void OffScreen() override { KillThisEffect(); }
+    void OffScreen() override { if(runtime_owned_)TObjectInstance::OffScreen();else KillThisEffect(); }
 
     [[nodiscard]] static TFlyEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void Initialize(bool attach_runtime_component=true);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
+    void SetNativeDomainForTest(bool enabled);
     [[nodiscard]] bool IsAlive() const { return true; }   // ambient swarm — never dies
 
   private:
@@ -4882,6 +4886,11 @@ class TFlyEffect_Bespoke : public TEffect
     float               uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
     float               size_wu_      = kFlyBespokeBaseSizeWu;
     double              sim_accum_ms_ = 0.0;
+    S3DVertex           vertices_[4] = {};
+    double              tick_seconds_ = 0.0;
+    int64_t             ticks_ = 0;
+    bool                initialized_=false,runtime_owned_=false,native_domain_=false;
+    hmm_mat4            native_owner_ = {};
 };
 
 // ----- B04 TPulpEffect (Bespoke) — STUBBED -------------------------------

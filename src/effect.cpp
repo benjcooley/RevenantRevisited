@@ -57,6 +57,7 @@
 
 #include "retailmeshlighting.h"
 #include "literalwatermesh.h"
+#include "fliesprofile.h"
 #include "revenant.h"
 #include "effect.h"
 #include "fireballquad.h"
@@ -11375,165 +11376,89 @@ constexpr const char* kFlyBespokeImageryPath = "Misc\\Flies.I3D";
 // hard-bounce-back (pos -= velocity*2) when over the cube edge. Render is
 // SetBlendState() (Alpha) with cull=NONE — billboards already no-cull.
 
+namespace {
+TWaterReferenceBuilder<TFlyEffect_Bespoke> g_flies_reference_builder("Flies");
+TWaterReferenceAnimatorBuilder<TFlyEffect_Bespoke> g_flies_reference_animator_builder("Flies");
+}
+
+void TFlyEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if(initialized_)return;
+    if(attach_runtime_component && (ObjClass()!=OBJCLASS_EFFECT || ObjId()!=retail_flies::Id || GetMapIndex()<=0 || (Flags()&OF_KILL)))return;
+    auto* imagery=dynamic_cast<T3DImagery*>(GetImagery());
+    if(!retail_flies::Matches(imagery))return;
+    S3DTex texture={};imagery->GetTexture(0,&texture);
+    if(texture.htexture==kInvalidTexture)return;
+    texture_=texture.htexture;imagery->GetObjVerts(0,vertices_,0,0);
+    // Actual4e8180: all20 records are seeded, including dormant particles.
+    for(auto&fly:flies_) {
+        fly.pos={float(random(-30,30)),float(random(-30,30)),float(random(-30,30))};
+        fly.scl={.3f,.3f,.3f};fly.rot={0,0,0};fly.used=false;
+    }
+    initialized_=true;runtime_owned_=attach_runtime_component;
+    if(attach_runtime_component) {
+        auto component=std::make_unique<TWaterReferenceComponent<TFlyEffect_Bespoke>>();
+        component->Configure(texture_,8,8,1,1,1,1.0f,1.0f,false,true);
+        AddComponent(std::move(component));
+    }
+    log_info("[flies-runtime] initialized id=%08x map_index=%d particles=20 texture=%u runtime=%d exact_profile=1",attach_runtime_component?ObjId():0u,GetMapIndex(),texture_,int(attach_runtime_component));
+}
+
 TFlyEffect_Bespoke* TFlyEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    SLoadedImagery loaded = SparkleLoadImagery(kFlyBespokeImageryPath, "fly");
-    if (!loaded.img3d)
-        return nullptr;
+    auto* imagery=LoadWaterImagery(kFlyBespokeImageryPath,"flies");
+    if(!imagery)return nullptr;
+    auto* fly=new TFlyEffect_Bespoke(imagery);fly->ForcePos(origin);fly->SetMapIndex(MapPane.MakeIndex());
+    fly->Initialize(false);if(!fly->initialized_){delete fly;return nullptr;}return fly;
+}
 
-    auto* fly = new TFlyEffect_Bespoke(loaded.base);
-    fly->ForcePos(origin);
-    fly->SetMapIndex(MapPane.MakeIndex());
-    fly->ActivateComponents();
-
-    const int32_t num_obj = loaded.img3d->NumObjects();
-    const int32_t num_tex = loaded.img3d->NumTextures();
-    if (num_obj < 1 || num_tex <= 0)
-    {
-        log_error("[fly] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
-                  num_obj, num_tex);
-        delete fly;
-        return nullptr;
+void TFlyEffect_Bespoke::Advance(double seconds)
+{
+    if(!initialized_ || (Flags()&OF_KILL) || !std::isfinite(seconds) || seconds<=0)return;
+    tick_seconds_+=seconds;
+    while(tick_seconds_+1e-12>=TTime::LegacyFrameSeconds) {
+        tick_seconds_-=TTime::LegacyFrameSeconds;SetCommandDone(false);
+        int32_t chance=random(0,1);
+        // Actual4e8280 keeps moving dormant particles and consumes all60
+        // velocity draws each tick, before or after a staged activation.
+        for(auto&fly:flies_) {
+            if(!fly.used && chance){fly.used=true;chance=0;}
+            const hmm_vec3 velocity={float(random(-2,2)),float(random(-2,2)),float(random(-2,2))};
+            fly.pos+=velocity;
+            for(int axis=0;axis<3;++axis)if(fly.pos.Elements[axis]>30.0f || fly.pos.Elements[axis]<-30.0f)fly.pos.Elements[axis]-=velocity.Elements[axis]+velocity.Elements[axis];
+        }
+        ++ticks_;
     }
+}
 
-    // Snapshot TParticleSystem uses GetObject(0) (the single fly sprite).
-    const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, 0);
-    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
-    S3DTex tex = {};
-    loaded.img3d->GetTexture(slot, &tex);
-    fly->texture_ = tex.htexture;
-    SparkleResolveSubObjUv(loaded.img3d, 0, fly->uv_rect_);
-    fly->size_wu_ = kFlyBespokeBaseSizeWu;
-    if (fly->texture_ == kInvalidTexture)
-    {
-        log_error("[fly] SpawnForTest: sub-object 0 texture unresolved");
-        delete fly;
-        return nullptr;
+void TFlyEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if(!Renderer || !initialized_ || texture_==kInvalidTexture || (Flags()&OF_KILL))return;
+    const auto&owner=native_domain_?native_owner_:Transform().Matrix();
+    SQuadDrawItem item={};item.key.texture=texture_;item.key.blend=uint8_t(EFxBlend::Alpha);item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);item.light_mode=EFxLightMode::Unlit;item.retail_argb4444=true;item.retail_software_projection=native_domain_;item.debug_mode=debug_mode;
+    for(const auto&fly:flies_) {
+        if(!fly.used)continue;
+        // Whole original TParticleSystem::Render(false,false): local rotations,
+        // fixed tip/spin, scale, raw relative translation, then real owner.
+        hmm_mat4 local={};MtxClear(&local);MtxRotateX(&local,float(fly.rot.X*TORADIAN));MtxRotateY(&local,float(fly.rot.Y*TORADIAN));MtxRotateZ(&local,float(fly.rot.Z*TORADIAN));MtxRotateX(&local,-float(M_PI/2.0));MtxRotateZ(&local,-float(M_PI/4.0));MtxScale(&local,&fly.scl);MtxTranslate(&local,&fly.pos);
+        for(int corner=0;corner<4;++corner) {
+            hmm_vec3 p={},world={};MtxTransform(&local,&vertices_[corner].pos,&p);MtxTransform(&owner,&p,&world);
+            std::memcpy(item.world_pos[corner],world.Elements,3*sizeof(float));item.uv[corner][0]=vertices_[corner].tu;item.uv[corner][1]=vertices_[corner].tv;
+        }
+        Renderer->SubmitFxQuad(item);
     }
+}
 
-    // --- Port of TFlyAnimator::Initialize (effect_old.cpp:6525-6550).
-    // size.x = size.y = 10 (fly->size_wu_ above). Then per-fly:
-    //   pos = random(-RANGE,RANGE) per axis, used=false, scl=.3, rot=0.
-    for (int32_t i = 0; i < kFlyBespokeCount; ++i)
-    {
-        fly->flies_[i].pos.X = float(random(-kFlyBespokeRangeX, kFlyBespokeRangeX));
-        fly->flies_[i].pos.Y = float(random(-kFlyBespokeRangeY, kFlyBespokeRangeY));
-        fly->flies_[i].pos.Z = float(random(-kFlyBespokeRangeZ, kFlyBespokeRangeZ));
-        fly->flies_[i].used  = false;
-        fly->flies_[i].scl.X = kFlyBespokeScale;
-        fly->flies_[i].scl.Y = kFlyBespokeScale;
-        fly->flies_[i].scl.Z = kFlyBespokeScale;
-        fly->flies_[i].rot.X = 0.0f;
-        fly->flies_[i].rot.Y = 0.0f;
-        fly->flies_[i].rot.Z = 0.0f;
-    }
-    fly->sim_accum_ms_ = 0.0;
-
-    log_info("[fly] SpawnForTest_BESPOKE: '%s' map_index=%d origin=(%d,%d,%d) "
-             "count=%d texture=%u uv=(%.3f,%.3f,%.3f,%.3f)",
-             kFlyBespokeImageryPath, fly->GetMapIndex(),
-             origin.x, origin.y, origin.z,
-             kFlyBespokeCount, fly->texture_,
-             fly->uv_rect_[0], fly->uv_rect_[1],
-             fly->uv_rect_[2], fly->uv_rect_[3]);
-    return fly;
+void TFlyEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_=enabled && initialized_ && !runtime_owned_;
+    if(native_domain_){const auto p=Pos();BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(GetFace()));}
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Flies",int(native_domain_));
 }
 
 void TFlyEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
-    if (!Renderer)
-        return;
-
-    static const bool s_logged_first_submit = []{
-        log_info("[fly] first submit (TickAndSubmit running)");
-        return true;
-    }();
-    (void)s_logged_first_submit;
-
-    // --- Port of TFlyAnimator::Animate (effect_old.cpp:6552-6585).
-    // 24 Hz sim tick — same family pattern as M08/H02/B01.
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kFlyBespokeSimTickMs))
-    {
-        sim_accum_ms_ -= double(kFlyBespokeSimTickMs);
-
-        // Stage one new fly per tick on a coin-flip (effect_old.cpp:6557).
-        // The original walks the array and consumes the 'chance' on the
-        // first dormant fly it finds — exactly one stage-on per tick.
-        int32_t chance = random(0, 1);
-
-        for (int32_t i = 0; i < kFlyBespokeCount; ++i)
-        {
-            SFlyParticleBespoke& f = flies_[i];
-
-            if (f.used == false && chance)
-            {
-                f.used  = true;
-                chance  = 0;
-            }
-
-            hmm_vec3 velocity;
-            velocity.X = float(random(-2, 2));
-            velocity.Y = float(random(-2, 2));
-            velocity.Z = float(random(-2, 2));
-
-            f.pos.X += velocity.X;
-            f.pos.Y += velocity.Y;
-            f.pos.Z += velocity.Z;
-
-            // Hard reflect-back: if out of cube, undo 2x velocity (so the
-            // net step on this tick is -velocity, pushing back into the
-            // box). Snapshot: `pos -= velocity + velocity`.
-            if (f.pos.X > float(kFlyBespokeRangeX) || f.pos.X < float(-kFlyBespokeRangeX))
-                f.pos.X -= velocity.X + velocity.X;
-            if (f.pos.Y > float(kFlyBespokeRangeY) || f.pos.Y < float(-kFlyBespokeRangeY))
-                f.pos.Y -= velocity.Y + velocity.Y;
-            if (f.pos.Z > float(kFlyBespokeRangeZ) || f.pos.Z < float(-kFlyBespokeRangeZ))
-                f.pos.Z -= velocity.Z + velocity.Z;
-        }
-    }
-
-    // --- Port of TFlyAnimator::Render (effect_old.cpp:6587-6603).
-    // SetBlendState() (no args) = Alpha (the alpha-keyed dark fly sprite,
-    // chroma-keyed black quad). Cull=NONE in snapshot — billboards are
-    // already two-sided so no extra state needed.
-    if (texture_ == kInvalidTexture)
-        return;
-
-    const S3DPoint& base = Pos();
-    for (int32_t i = 0; i < kFlyBespokeCount; ++i)
-    {
-        if (!flies_[i].used)
-            continue;   // staged-off; faithful to snapshot — TParticleSystem skips !used
-
-        const float wx = float(base.x) + flies_[i].pos.X;
-        const float wy = float(base.y) + flies_[i].pos.Y;
-        const float wz = float(base.z) + flies_[i].pos.Z;
-
-        SBillboardDrawItem item = {};
-        // size.x = size.y = 10 (FLY_SIZE), scaled per-particle by .3.
-        item.size_wu[0]      = size_wu_ * flies_[i].scl.X;
-        item.size_wu[1]      = size_wu_ * flies_[i].scl.Y;
-        item.color_rgba[0]   = 1.0f;
-        item.color_rgba[1]   = 1.0f;
-        item.color_rgba[2]   = 1.0f;
-        item.color_rgba[3]   = 1.0f;
-        item.uv_rect[0]      = uv_rect_[0];
-        item.uv_rect[1]      = uv_rect_[1];
-        item.uv_rect[2]      = uv_rect_[2];
-        item.uv_rect[3]      = uv_rect_[3];
-        item.key.texture     = texture_;
-        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-        item.key.blend       = uint8_t(EFxBlend::Alpha);
-        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        item.light_mode      = EFxLightMode::Unlit;
-        item.orientation     = EFxBillboardOrientation::ScreenAligned;
-        item.debug_mode      = debug_mode;
-        item.world_pos[0]    = wx;
-        item.world_pos[1]    = wy;
-        item.world_pos[2]    = wz;
-        Renderer->SubmitFxBillboard(item);
-    }
+    Advance(TTime::DeltaTime());Submit(debug_mode);
 }
 
 // *************************************************************************

@@ -3787,6 +3787,7 @@ void* FlyBespokeSpawn(const S3DPoint& origin)
 {
     auto* c = new SFlyBespokeCtx();
     c->fly = TFlyEffect_Bespoke::SpawnForTest_BESPOKE(origin);
+    if(c->fly)c->fly->SetNativeDomainForTest(StartupVfxNativeDomain);
     if (!c->fly)
         log_warn("[vfx] TFlyEffect_Bespoke::SpawnForTest_BESPOKE returned null;"
                  " X01 bespoke entry will draw nothing");
