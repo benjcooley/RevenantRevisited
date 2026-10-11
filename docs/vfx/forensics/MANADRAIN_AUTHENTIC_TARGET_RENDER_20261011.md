@@ -88,3 +88,20 @@ destroyed at tick16. All four factories log `seeded=0`.
 `d73973f6c9c6987b27801f596366d43e9225bb6fdc35ef2df3eb600a26b3e5ef`.
 This is a current translated gallery runtime/cleanup check, not natural gameplay
 actor scheduling or a claim of ordinary-world pixel parity.
+
+## Independent scoped approval
+
+Root verified28 original/Metal paired image hashes and independently inspected
+four full-resolution fixed-crop pages covering all14 phases. The combined build
+repeats all100 numbered PNGs byte-identically and exits cleanly. A separate
+24Hz gallery run completes four91-tick lifecycles, preserves Health102/102,
+target position/flags and spell timer0 at completion, never reseeds its shared
+RNG, shows31/32 saved samples and exits cleanly.
+
+Approval is pinned at
+`recon/retail_asm/runtime/effects/current-manadrain-target-20261011/root-approval.json`,
+SHA256 `cfe8f2aec5e5523b984d502f7deca39fd1dcf7c61d7f938eedf72ca23db296bb`.
+Root captures remain outside Git under
+`/Users/benjamincooley/RevenantRetailLab/research/vfx-manadrain-root-20261011/`.
+The reviewed total advances to148/176, with28 remaining. Natural gameplay,
+other variants, moving attachment, audio/device and exact pixels remain open.

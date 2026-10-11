@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 157,
+    "retail_rows_with_source_fixes_recorded": 158,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 147,
+    "visual_fidelity_confirmed_rows": 148,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 147,
-    "remaining_visual_review_rows": 29
+    "reviewed_visual_pass_rows": 148,
+    "remaining_visual_review_rows": 28
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1855,6 +1855,13 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Complete declared Sid Dragon Attack/Fighting configuration, genuine nonresident Acolytes source3185/3185/16 and target+280X/ground0, face96 muzzle14/14/+100. Nineteen actual original/Metal active pairs plus4blank controls; all110ticks submitted triangles covered by immutable16view1920x1080 grid,6active films/5676witness fields. Same pre-Render VM/CRT replay keeps all110 canonical before/after states exact and5extraRender controls exact. Root25same-phase PNG repeat byte-identical and946actuallive witnesses pass; incomplete witness rejected. Root real gallery58/100visible,5factorycreations through flight/impact/lifetime andcleanexit. OriginalbasePulse precedes custom movement; cached prototype preserves distant impact. Scoped appearance passes with explicitly broader/brighter Metal headglow at13/25/29; overlap/framebufferquantization causal and exactpixel gates remain open. Naturaldragon/bones/mapcollision/combat/audio/device and arbitraryendpoints remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-manadrain-target-20261011/root-approval.json": {
+      "sha256": "cfe8f2aec5e5523b984d502f7deca39fd1dcf7c61d7f938eedf72ca23db296bb",
+      "retail_row": "manadrain:0xad92bc13",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Full declared Mana Drain variant with genuine stationary Acolyte caster/fighting target atoffset96. Fourteen whole original/actualMetal phasepairs5..100 cover cone/glow,15movingstreams, actual62mana transfer21, shrink andkill91/blanktail100; allsampled geometry fitsfixed1280x960. Native100ticks,10495definedstate/RNG/mana fields and19680matrixchannels pass;704640authoredvertexbytes/97560indices exact. ActualGPU90render RNGcounts/firstpositions exact, maxphaseerror4.56e-8. Root28pairedimagehashes and4fullresolutiondetailpages independentlyreviewed; integrated100samephasePNGs byteidentical andcleanexit. Rootgallery24Hz completes91ticksfourtimes withreal60..62mana transfer, health102, targetposition/flags retained, spellTimer0 and no sharedRNGreseed; 31/32samplesvisible. Standalone originalowner/spelllist association and base/pre matrix fragments aredeclaredboundaries; naturalmap/cast scheduling, movingactors/attachment, healthdrainvariants,audio/device/quantization/exactpixels remainopen."
     }
   }
 }

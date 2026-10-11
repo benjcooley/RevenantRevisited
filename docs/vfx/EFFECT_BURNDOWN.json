@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "6805c457d49e0994b72624eedf8c13eb34c874c4215712d22fe7183e5878041e",
+    "harness_sha256": "dcf5e2c9b65b828891d2b2f4667d3bdd0f389766d75dbff05da8c52ca295dad3",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 157,
+    "retail_rows_with_source_fixes_recorded": 158,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 147,
+    "visual_fidelity_confirmed_rows": 148,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 147,
-    "remaining_visual_review_rows": 29
+    "reviewed_visual_pass_rows": 148,
+    "remaining_visual_review_rows": 28
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -15915,30 +15915,45 @@
       "retail_name": "manadrain",
       "retail_type_id": "0xad92bc13",
       "asset": "Magic\\Manadrain.I3D",
-      "preview_candidates": [],
-      "source_fixes": [],
+      "preview_candidates": [
+        "TManaDrain_CONFIGURED_TARGET",
+        "TManaDrain_AUTHENTIC_TARGET_FIXTURE"
+      ],
+      "source_fixes": [
+        "2026-10-11: Actual named Mana Drain realAcolyte/fighting target context, original20/50/20 lifecycle, damageRNG andmovingstreams7..13/offset40/reset40; original62mana transfer21 andkill91. ExistingstrictARGB4444/nativeprojection policies; no globalrenderer change. Whole14pair review and100PNG repeat pass."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Locate retail animator/caller and runtime dispatch; build missing fixture/port, capture software reference, then verify natural trigger.",
+      "next_action": "Preserve approved configured Mana Drain; verify naturalcast/map/actor motion, othervariants and audio/device.",
       "notes": [
-        "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
+        "Approved stationary genuine Acolyte configuration; Ymanadrain is a separate controller and remains unreviewed. Natural actor/cast scheduling and moving attachment are not certified."
       ],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole/detail review and integrated film/gallery repeat",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Full declared Mana Drain variant with genuine stationary Acolyte caster/fighting target atoffset96. Fourteen whole original/actualMetal phasepairs5..100 cover cone/glow,15movingstreams, actual62mana transfer21, shrink andkill91/blanktail100; allsampled geometry fitsfixed1280x960. Native100ticks,10495definedstate/RNG/mana fields and19680matrixchannels pass;704640authoredvertexbytes/97560indices exact. ActualGPU90render RNGcounts/firstpositions exact, maxphaseerror4.56e-8. Root28pairedimagehashes and4fullresolutiondetailpages independentlyreviewed; integrated100samephasePNGs byteidentical andcleanexit. Rootgallery24Hz completes91ticksfourtimes withreal60..62mana transfer, health102, targetposition/flags retained, spellTimer0 and no sharedRNGreseed; 31/32samplesvisible. Standalone originalowner/spelllist association and base/pre matrix fragments aredeclaredboundaries; naturalmap/cast scheduling, movingactors/attachment, healthdrainvariants,audio/device/quantization/exactpixels remainopen.",
+        "report": "recon/retail_asm/runtime/effects/current-manadrain-target-20261011/root-approval.json",
+        "sha256": "cfe8f2aec5e5523b984d502f7deca39fd1dcf7c61d7f938eedf72ca23db296bb",
+        "note": "docs/vfx/forensics/MANADRAIN_AUTHENTIC_TARGET_RENDER_20261011.md"
+      }
     },
     {
       "index": 87,
