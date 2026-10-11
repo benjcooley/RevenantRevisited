@@ -3,1619 +3,744 @@
 // *                    Copyright (C) 1998 Cinematix                       *
 // *                 automap.cpp  - EXILE Automapper File                  *
 // *************************************************************************
+//
+// Retail's automap pane (TAutoMap, d:\revenant\AutoMap.cpp). The 1998
+// snapshot's pane -- a CPU merge of before/after map bitmaps -- is in
+// attic/src/automap.cpp; retail replaced it with this one.
+//
+// Retail drew the pane through T3DScene's overlay quads on a D3D7 device,
+// which puts pixel centres on integer coordinates; the GPU puts them half a
+// pixel in. The map's scaled quads and the fog's vertices move half a pixel
+// right and down (kD3DPixelCentre) so the same pixels are covered and the
+// same texels sampled. Quads drawn 1:1 cover and sample alike either way.
+//
+// *************************************************************************
 
-#include "revenant.h"
-#include "bitmap.h"
-#include "mappane.h"
 #include "automap.h"
-#include "display.h"
-#include "playscreen.h"
+
+#include "bitmap.h"
+#include "character.h"
+#include "logging.h"
+#include "mappane.h"
+#include "module.h"
 #include "multi.h"
-#include "cursor.h"
+#include "object.h"
 #include "player.h"
+#include "revutils.h"
+#include "sector.h"
+#include "surface.h"
 
-#define FILTER_SIZE 5
-#define FILTER_PERCENT 90
-#define FILTER_CUTOFF FILTER_SIZE * FILTER_SIZE * FILTER_PERCENT / 100
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
 
+namespace {
 
-extern PTBitmap PointerCursor;
-extern PTBitmap HandCursor;
-extern uint8_t  ColorTableUpperHi[32 * 256];
-extern uint8_t  ColorTableUpperLo[32 * 256];
-extern uint8_t  ColorTableLower[32 * 256];
+// REVSYNC: 0x0052a830 / 0x0052b520 -- the map's window, 144 x 144 at (20, 18)
+// inside the frame.
+constexpr int32_t kWindowLeft = 0x14;
+constexpr int32_t kWindowTop = 0x12;
+constexpr int32_t kWindowSize = 0x90;
 
+// REVSYNC: 0x00529970 / 0x0052aa70 -- a 320 x 320 mosaic of 64 x 64 tiles, the
+// 5 x 5 ring around the window's top-left tile, each in its slot of the torus.
+constexpr int32_t kMosaicSize = 0x140;
+constexpr int32_t kTileSize = 0x40;
+constexpr int32_t kRing = 5;
+constexpr int32_t kTileShift = 6;               // mosaic px -> tile
+constexpr int32_t kMosaicShift = 3;             // map-screen px -> mosaic px
 
-//============================================================================
-// Function : Initialize.
-//----------------------------------------------------------------------------
-//     Desc : This will load all the maps needed and create a bitmap to
-//            draw the map to be shown.
-//
-//  Returns : Returns true if successful, false if not.
-//
-//============================================================================
+// REVSYNC: 0x0052a280 -- ten points a pulse while held, from 100 to 300.
+constexpr int32_t kZoomMin = 100;
+constexpr int32_t kZoomMax = 300;
+constexpr int32_t kZoomStep = 10;
 
-bool TAutoMap::Initialize()
+// REVSYNC: 0x0052c1a0 / 0x0052bdb0 -- "+" at (8, 3) and "-" at (144, 3), the
+// size of PlusSel both (strictly inside); the ring about (90, 87), radius 69.
+constexpr int32_t kPlusLeft = 8;
+constexpr int32_t kMinusLeft = 0x90;
+constexpr int32_t kButtonTop = 3;
+constexpr int32_t kRingX = 0x5a;
+constexpr int32_t kRingY = 0x57;
+constexpr int32_t kRingRadiusSquared = 0x1299;
+
+// REVSYNC: 0x0052a620 -- a marker is 4 x 4 of the Marker sheet: its frame
+// across (a frame every five pulses, four frames), its kind down: the player,
+// an enemy of the player, anyone else. Its top-left at the character's place,
+// when that is inside (20..163, 18..161).
+constexpr int32_t kMarkerSize = 4;
+constexpr int32_t kMarkerFrames = 4;
+constexpr int32_t kPulsesPerMarkerFrame = 5;
+constexpr int32_t kMarkerPlayerRow = 0;
+constexpr int32_t kMarkerEnemyRow = 8;
+constexpr int32_t kMarkerOtherRow = 0xc;
+constexpr int32_t kMarkerRight = 0xa4;
+constexpr int32_t kMarkerBottom = 0xa2;
+constexpr int32_t kNearRange = 0x200;
+
+// REVSYNC: 0x0052b9f0 -- the player explores 512 map-screen px around, a
+// 128 px cell at a time.
+constexpr int32_t kExploreReach = 0x200;
+constexpr int32_t kExploreStep = 0x80;
+
+// REVSYNC: 0x0052c3d0 -- the record's module with none current.
+constexpr const char* kNoModule = "Revenant";
+
+constexpr float kD3DPixelCentre = 0.5f;
+
+// v mod m in 0..m-1.
+int32_t Wrap(int32_t v, int32_t m)
 {
-    TPane::Initialize();
-
-    bool Success = false;
-
-    // Flag that there is no current map
-    CurrentMap = 0xFFFF;
-
-    // Set the position variables
-    ScrollX = ScrollY = 0;
-    OldPlayerX = OldPlayerY = 0xFFFF;
-    OldScrollX = OldScrollY = 0xFFFF;
-    DraggingMap = false;
-    ScrollToTarget = false;
-
-    // Initialize all the pointers for the graphics
-    MapGrfx = nullptr;
-    DisplayMap = nullptr;
-    ActiveBuf = nullptr;
-
-    // Load the map list
-    MapList = (PTAutoMapList)LoadResource("AutoMap.DAT", -1);
-
-    // Make sure the map list loaded correctly
-    if (MapList != nullptr)
-    {
-        // Create the arrays to hold which colors are Active in the MaskMaps
-        ActiveBuf = (uint8_t *)calloc(MapList->NumMaps, 256);
-        if (ActiveBuf != nullptr)
-        {
-            // Read the Active information from the saved game
-
-            Success = true;
-        }
-    }
-
-    SetDirty(true);
-
-    return Success;
+    const int32_t r = v % m;
+    return r < 0 ? r + m : r;
 }
 
-
-
-//============================================================================
-// Function : Close.
-//----------------------------------------------------------------------------
-//     Desc : This will perform any cleanup needed.
-//
-//============================================================================
-
-void TAutoMap::Close()
+// REVSYNC: 0x0052a830 -- retail's offset of the scroll into the mosaic: a
+// negative multiple of the size gives the size, not 0 (the same picture).
+int32_t MosaicOffset(int32_t v, int32_t m)
 {
-    free(MapList);
-    MapList = nullptr;
-
-    free(ActiveBuf);
-    ActiveBuf = nullptr;
-
-    FreeMapGraphics();
+    return v % m + (v < 0 ? m : 0);
 }
 
-
-
-//============================================================================
-// Function : DrawBackground.
-//----------------------------------------------------------------------------
-//     Desc : This will draw the current set of maps merged appropriately
-//            showning the discovered areas pulled from the aftermap on the
-//            beforemap background.
-//
-//============================================================================
-
-void TAutoMap::DrawBackground()
+// REVSYNC: 0x0052b526 -- the fog's triangles: two a cell, clockwise on screen.
+constexpr int32_t kFogCells = 9;
+constexpr int32_t kFogIndices = kFogCells * kFogCells * 6;
+constexpr std::array<uint16_t, kFogIndices> MakeFogIndices()
 {
-    int32_t d;
-    int32_t PaneWidth = GetWidth();
-    int32_t PaneHeight = GetHeight();
-    int32_t PlayerX;
-    int32_t PlayerY;
-    bool Update = false;
+    std::array<uint16_t, kFogIndices> indices{};
+    int32_t n = 0;
+    for (int32_t row = 0; row < kFogCells; ++row)
+        for (int32_t col = 0; col < kFogCells; ++col)
+        {
+            const uint16_t v = static_cast<uint16_t>(row * 10 + col);
+            for (const uint16_t i : { v, uint16_t(v + 1), uint16_t(v + 10), uint16_t(v + 1), uint16_t(v + 11),
+                                      uint16_t(v + 10) })
+                indices[n++] = i;
+        }
+    return indices;
+}
+constexpr std::array<uint16_t, kFogIndices> kFogIndexList = MakeFogIndices();
 
-    if (!DisplayMap)
-        return;
-
-    // Make sure that the maps are loaded
-    if (MapGrfx == nullptr)
-        CheckMaps();
-
-    GetPlayerOnAutoMap(PlayerX, PlayerY);
-
-    // See if the map is automatically scrolling to show the player
-    if (ScrollToTarget)
-    {
-        d = abs(TargetScrollX - ScrollX);
-        if (d < abs(MapScrollDx))
-            ScrollX = TargetScrollX;
-        else
-            ScrollX += MapScrollDx;
-
-        d = abs(TargetScrollY - ScrollY);
-        if (d < abs(MapScrollDy))
-            ScrollY = TargetScrollY;
-        else
-            ScrollY += MapScrollDy;
-
-        // See if we've reached the target scroll position
-        if ((ScrollX == TargetScrollX) && (ScrollY == TargetScrollY))
-            ScrollToTarget = false;
-    }
-
-    // Make sure we don't scroll negative
-    if (ScrollX < 0)
-        ScrollX = 0;
-    if (ScrollY < 0)
-        ScrollY = 0;
-
-    // Make sure we don't scroll past the right / bottom of the map
-    if (ScrollX + PaneWidth > DisplayMap->width)
-        ScrollX = DisplayMap->width - PaneWidth;
-    if (ScrollY + PaneHeight > DisplayMap->height)
-        ScrollY = DisplayMap->height - PaneHeight;
-
-    // Check if the entire pane is dirty or if the player has moved
-    if ((IsDirty()) || (PlayerX != OldPlayerX) || (PlayerY != OldPlayerY))
-    {
-        // Restore the pixel where he was
-        RestorePlayerMarker();
-
-        // Draw the Marker where the player is
-        DrawPlayerMarker(PlayerX, PlayerY);
-        Update = true;
-    }
-    else
-    // Check if the pane has scrolled
-    if ((ScrollX != OldScrollX) || (ScrollY != OldScrollY))
-        Update = true;
-
-    // See if we need to update the pane to the screen
-    if (Update)
-    {
-        Display.Put(0, 0, DisplayMap, ScrollX, ScrollY, DisplayMap->width, DisplayMap->height, DM_BACKGROUND);
-        OldScrollX = ScrollX;
-        OldScrollY = ScrollY;
-        OldPlayerX = PlayerX;
-        OldPlayerY = PlayerY;
-        SetDirty(false);
-        PlayScreen.MultiUpdate();
-    }
+uint64_t PathKey(const std::string& path)
+{
+    uint64_t hash = 1469598103934665603ull;     // FNV-1a
+    for (const char c : path)
+        hash = (hash ^ static_cast<uint8_t>(c)) * 1099511628211ull;
+    return hash ? hash : 1;
 }
 
-
-
-//============================================================================
-// Function : DrawPlayerMarker.
-//----------------------------------------------------------------------------
-//     Desc : This will draw the marker on the DisplayMap signifying where
-//            the player is on the map. This will also save the area under
-//            the players marker so it can be restored by RestorePlayerMarker.
-//
-//    Entry : PlayerX = x coordinate of the player relative to DisplayMap
-//            PlayerY = y coordinate of the player relative to DisplayMap
-//
-//============================================================================
-
-void TAutoMap::DrawPlayerMarker(int32_t PlayerX, int32_t PlayerY)
+// REVSYNC: TBitmap::LoadBMP @ 0x004a2ce0 as the automap uses it -- a 64 x 64
+// 8-bit Windows bitmap, uncompressed, rows bottom up (or top down with a
+// negative height), into RGBA8. Retail draws an 8-bit bitmap through its
+// 15-bit palette, so a colour keeps 5 bits a channel.
+bool ReadTile(const std::vector<uint8_t>& file, std::vector<uint8_t>& rgba)
 {
-    int32_t Offset = PlayerX + PlayerY * DisplayMap->width;
-
-    MarkerX = PlayerX;
-    MarkerY = PlayerY;
-
-    // Set the pixel where he is
-    SavePlayerPixel = DisplayMap->data16[Offset];
-    DisplayMap->data16[Offset] = 0xFFFF;
-}
-
-
-
-//============================================================================
-// Function : RestorePlayerMarker.
-//----------------------------------------------------------------------------
-//     Desc : This will restore the graphics underneath the players marker.
-//
-//============================================================================
-
-void TAutoMap::RestorePlayerMarker()
-{
-    // Restore the pixel where he was
-    if (MarkerX != 0xFFFF)
-        DisplayMap->data16[MarkerX + MarkerY * DisplayMap->width] = SavePlayerPixel;
-}
-
-
-
-//============================================================================
-// Function : DrawAutoMap.
-//----------------------------------------------------------------------------
-//     Desc : This will draw the DisplayMap by laying down the beforemap
-//            first and then pulling pixels from the aftermap depending on
-//            if the area has been discovered or not.
-//
-//============================================================================
-
-void TAutoMap::DrawAutoMap()
-{
-    int32_t Filter[FILTER_SIZE];
-    int32_t *EndFilter = Filter + FILTER_SIZE;
-    int32_t *c;
-    int32_t FilterTotal;
-    int32_t x, y;
-    int32_t Width = MapGrfx->Background->width;
-    int32_t Height = MapGrfx->Background->height;
-    int32_t RightClip = Width - FILTER_SIZE / 2 - 1;
-    uint16_t *b = MapGrfx->Background->data16;
-    uint16_t *o = MapGrfx->OverlayMap->data16;
-    uint8_t *m = MapGrfx->MaskMap->data8;
-    uint16_t *d = DisplayMap->data16;
-
-    // See if we're can display the background or not depending on if the
-    // player has the map in his inventory or not
-    if (HasMap)
-    {
-        //--------------------------------------------------------------------
-        //                    Top & Right Clipping Version
-        //--------------------------------------------------------------------
-
-        for (y = 0; y < FILTER_SIZE / 2; y++)
-        {
-            // Keep track of the total number of pixels set in FilterTotal
-            FilterTotal = 0;
-
-            // Set up the initial state of the Filter
-            memset(Filter, 0, FILTER_SIZE);
-
-            for (c = Filter + FILTER_SIZE / 2; c < EndFilter; c++, m++)
-            {
-                if (y > 1)
-                    *c += Active[*(m - (Width << 1))];
-                if (y > 0)
-                    *c += Active[*(m - Width)];
-                *c += Active[*m];
-                *c += Active[*(m + Width)];
-                *c += Active[*(m + (Width << 1))];
-
-                // Add the column total to the FilterTotal
-                FilterTotal += *c;
-            }
-
-            // Reset the column total pointer to the beginning of the filter
-            c = Filter;
-
-            // Do all the pixels until we would need to right clip
-            for (x = 0; x < RightClip; x++, b++, o++, d++, m++)
-            {
-                // See if any of the pixels are set
-                if (FilterTotal)
-                {
-                    // See if the total number of pixels set is above the
-                    // visible cutoff
-                    if (FilterTotal < FILTER_CUTOFF)
-                    {
-                        // The total number of pixels set was below the
-                        // cutoff for it to be completely visible, so set
-                        // the pixel as a percentage based on how many
-                        // pixels were set
-                        *d = MergePixel(b, o, FilterTotal, FILTER_CUTOFF);
-                    }
-                    else
-                        *d = *o;
-                }
-
-
-                // Subtract the previous contents of the column total from
-                // the FilterTotal
-                FilterTotal -= *c;
-
-                // Reset the column total
-                *c = 0;
-
-                // Calculate the new column total
-                if (y > 1)
-                    *c += Active[*(m - (Width << 1))];
-                if (y > 0)
-                    *c += Active[*(m - Width)];
-                *c += Active[*m];
-                *c += Active[*(m + Width)];
-                *c += Active[*(m + (Width << 1))];
-
-                // Add the column total to the FilterTotal
-                FilterTotal += *c;
-
-                // Get the next column to work on
-                c++;
-                if (c == EndFilter)
-                    c = Filter;
-            }
-
-            // Finish off the line, but just clear the column totals since
-            // they are off the right side of the image
-            for (; x < Width; x++, b++, o++, d++)
-            {
-                // See if any of the pixels are set
-                if (FilterTotal)
-                {
-                    // See if the total number of pixels set is above the
-                    // visible cutoff
-                    if (FilterTotal < FILTER_CUTOFF)
-                    {
-                        // The total number of pixels set was below the
-                        // cutoff for it to be completely visible, so set
-                        // the pixel as a percentage based on how many
-                        // pixels were set
-                        *d = MergePixel(b, o, FilterTotal, FILTER_CUTOFF);
-                    }
-                    else
-                        *d = *o;
-                }
-
-                // Subtract the previous contents of the column total from
-                // the FilterTotal
-                FilterTotal -= *c;
-
-                // Get the next column to work on
-                c++;
-                if (c == EndFilter)
-                    c = Filter;
-            }
-        }
-
-
-        //--------------------------------------------------------------------
-        //                     Only Right Clipping Version
-        //--------------------------------------------------------------------
-
-        for (; y < Height - FILTER_SIZE / 2; y++)
-        {
-            // Keep track of the total number of pixels set in FilterTotal
-            FilterTotal = 0;
-
-            // Set up the initial state of the Filter
-            memset(Filter, 0, FILTER_SIZE);
-
-            for (c = Filter + FILTER_SIZE / 2; c < EndFilter; c++, m++)
-            {
-                *c += Active[*(m - (Width << 1))];
-                *c += Active[*(m - Width)];
-                *c += Active[*m];
-                *c += Active[*(m + Width)];
-                *c += Active[*(m + (Width << 1))];
-
-                // Add the column total to the FilterTotal
-                FilterTotal += *c;
-            }
-
-            // Reset the column total pointer to the beginning of the filter
-            c = Filter;
-
-            // Do all the pixels until we would need to right clip
-            for (x = 0; x < RightClip; x++, b++, o++, d++, m++)
-            {
-                // See if any of the pixels are set
-                if (FilterTotal)
-                {
-                    // See if the total number of pixels set is above the
-                    // visible cutoff
-                    if (FilterTotal < FILTER_CUTOFF)
-                    {
-                        // The total number of pixels set was below the
-                        // cutoff for it to be completely visible, so set
-                        // the pixel as a percentage based on how many
-                        // pixels were set
-                        *d = MergePixel(b, o, FilterTotal, FILTER_CUTOFF);
-                    }
-                    else
-                        *d = *o;
-                }
-
-
-                // Subtract the previous contents of the column total from
-                // the FilterTotal
-                FilterTotal -= *c;
-
-                // Reset the column total
-                *c = 0;
-
-                // Calculate the new column total
-                *c += Active[*(m - (Width << 1))];
-                *c += Active[*(m - Width)];
-                *c += Active[*m];
-                *c += Active[*(m + Width)];
-                *c += Active[*(m + (Width << 1))];
-
-                // Add the column total to the FilterTotal
-                FilterTotal += *c;
-
-                // Get the next column to work on
-                c++;
-                if (c == EndFilter)
-                    c = Filter;
-            }
-
-            // Finish off the line, but just clear the column totals since
-            // they are off the right side of the image
-            for (; x < Width; x++, b++, o++, d++)
-            {
-                // See if any of the pixels are set
-                if (FilterTotal)
-                {
-                    // See if the total number of pixels set is above the
-                    // visible cutoff
-                    if (FilterTotal < FILTER_CUTOFF)
-                    {
-                        // The total number of pixels set was below the
-                        // cutoff for it to be completely visible, so set
-                        // the pixel as a percentage based on how many
-                        // pixels were set
-                        *d = MergePixel(b, o, FilterTotal, FILTER_CUTOFF);
-                    }
-                    else
-                        *d = *o;
-                }
-
-                // Subtract the previous contents of the column total from
-                // the FilterTotal
-                FilterTotal -= *c;
-
-                // Get the next column to work on
-                c++;
-                if (c == EndFilter)
-                    c = Filter;
-            }
-        }
-
-
-        //--------------------------------------------------------------------
-        //                  Bottom & Right Clipping Version
-        //--------------------------------------------------------------------
-
-        for (; y < Height; y++)
-        {
-
-            // Set up the initial state of the Filter
-            memset(Filter, 0, FILTER_SIZE);
-
-            for (c = Filter + FILTER_SIZE / 2; c < EndFilter; c++, m++)
-            {
-                *c += Active[*(m - (Width << 1))];
-                *c += Active[*(m - Width)];
-                *c += Active[*m];
-                if (y < Height - 1)
-                    *c += Active[*(m + Width)];
-                if (y < Height - 2)
-                    *c += Active[*(m + (Width << 1))];
-
-                // Add the column total to the FilterTotal
-                FilterTotal += *c;
-            }
-
-            // Reset the column total pointer to the beginning of the filter
-            c = Filter;
-
-            // Do all the pixels until we would need to right clip
-            for (x = 0; x < RightClip; x++, b++, o++, d++, m++)
-            {
-                // See if any of the pixels are set
-                if (FilterTotal)
-                {
-                    // See if the total number of pixels set is above the
-                    // visible cutoff
-                    if (FilterTotal < FILTER_CUTOFF)
-                    {
-                        // The total number of pixels set was below the
-                        // cutoff for it to be completely visible, so set
-                        // the pixel as a percentage based on how many
-                        // pixels were set
-                        *d = MergePixel(b, o, FilterTotal, FILTER_CUTOFF);
-                    }
-                    else
-                        *d = *o;
-                }
-
-                // Subtract the previous contents of the column total from
-                // the FilterTotal
-                FilterTotal -= *c;
-
-                // Reset the column total
-                *c = 0;
-
-                // Calculate the new column total
-                *c += Active[*(m - (Width << 1))];
-                *c += Active[*(m - Width)];
-                *c += Active[*m];
-                if (y < Height - 1)
-                    *c += Active[*(m + Width)];
-                if (y < Height - 2)
-                    *c += Active[*(m + (Width << 1))];
-
-                // Add the column total to the FilterTotal
-                FilterTotal += *c;
-
-                // Get the next column to work on
-                c++;
-                if (c == EndFilter)
-                    c = Filter;
-            }
-
-            // Finish off the line, but just clear the column totals since
-            // they are off the right side of the image
-            for (; x < Width; x++, b++, o++, d++)
-            {
-                // See if any of the pixels are set
-                if (FilterTotal)
-                {
-                    // See if the total number of pixels set is above the
-                    // visible cutoff
-                    if (FilterTotal < FILTER_CUTOFF)
-                    {
-                        // The total number of pixels set was below the
-                        // cutoff for it to be completely visible, so set
-                        // the pixel as a percentage based on how many
-                        // pixels were set
-                        *d = MergePixel(b, o, FilterTotal, FILTER_CUTOFF);
-                    }
-                    else
-                        *d = *o;
-                }
-
-
-                // Subtract the previous contents of the column total from
-                // the FilterTotal
-                FilterTotal -= *c;
-
-                // Get the next column to work on
-                c++;
-                if (c == EndFilter)
-                    c = Filter;
-            }
-        }
-    }
-    else
-    {
-        //--------------------------------------------------------------------
-        //                  No Map Top & Right Clipping Version
-        //--------------------------------------------------------------------
-
-        for (y = 0; y < FILTER_SIZE / 2; y++)
-        {
-            // Keep track of the total number of pixels set in FilterTotal
-            FilterTotal = 0;
-
-            // Set up the initial state of the Filter
-            memset(Filter, 0, FILTER_SIZE);
-
-            for (c = Filter + FILTER_SIZE / 2; c < EndFilter; c++, m++)
-            {
-                if (y > 1)
-                    *c += Active[*(m - (Width << 1))];
-                if (y > 0)
-                    *c += Active[*(m - Width)];
-                *c += Active[*m];
-                *c += Active[*(m + Width)];
-                *c += Active[*(m + (Width << 1))];
-
-                // Add the column total to the FilterTotal
-                FilterTotal += *c;
-            }
-
-            // Reset the column total pointer to the beginning of the filter
-            c = Filter;
-
-            // Do all the pixels until we would need to right clip
-            for (x = 0; x < RightClip; x++, b++, o++, d++, m++)
-            {
-                // See if any of the pixels are set
-                if (FilterTotal)
-                {
-                    // See if the total number of pixels set is above the
-                    // visible cutoff
-                    if (FilterTotal < FILTER_CUTOFF)
-                    {
-                        // The total number of pixels set was below the
-                        // cutoff for it to be completely visible, so set
-                        // the pixel as a percentage based on how many
-                        // pixels were set
-                        *d = MergePixelToBlack(o, FilterTotal, FILTER_CUTOFF);
-                    }
-                    else
-                        *d = *o;
-                }
-
-
-                // Subtract the previous contents of the column total from
-                // the FilterTotal
-                FilterTotal -= *c;
-
-                // Reset the column total
-                *c = 0;
-
-                // Calculate the new column total
-                if (y > 1)
-                    *c += Active[*(m - (Width << 1))];
-                if (y > 0)
-                    *c += Active[*(m - Width)];
-                *c += Active[*m];
-                *c += Active[*(m + Width)];
-                *c += Active[*(m + (Width << 1))];
-
-                // Add the column total to the FilterTotal
-                FilterTotal += *c;
-
-                // Get the next column to work on
-                c++;
-                if (c == EndFilter)
-                    c = Filter;
-            }
-
-            // Finish off the line, but just clear the column totals since
-            // they are off the right side of the image
-            for (; x < Width; x++, b++, o++, d++)
-            {
-                // See if any of the pixels are set
-                if (FilterTotal)
-                {
-                    // See if the total number of pixels set is above the
-                    // visible cutoff
-                    if (FilterTotal < FILTER_CUTOFF)
-                    {
-                        // The total number of pixels set was below the
-                        // cutoff for it to be completely visible, so set
-                        // the pixel as a percentage based on how many
-                        // pixels were set
-                        *d = MergePixelToBlack(o, FilterTotal, FILTER_CUTOFF);
-                    }
-                    else
-                        *d = *o;
-                }
-
-                // Subtract the previous contents of the column total from
-                // the FilterTotal
-                FilterTotal -= *c;
-
-                // Get the next column to work on
-                c++;
-                if (c == EndFilter)
-                    c = Filter;
-            }
-        }
-
-
-        //--------------------------------------------------------------------
-        //                  No Map Only Right Clipping Version
-        //--------------------------------------------------------------------
-
-        for (; y < Height - FILTER_SIZE / 2; y++)
-        {
-            // Keep track of the total number of pixels set in FilterTotal
-            FilterTotal = 0;
-
-            // Set up the initial state of the Filter
-            memset(Filter, 0, FILTER_SIZE);
-
-            for (c = Filter + FILTER_SIZE / 2; c < EndFilter; c++, m++)
-            {
-                *c += Active[*(m - (Width << 1))];
-                *c += Active[*(m - Width)];
-                *c += Active[*m];
-                *c += Active[*(m + Width)];
-                *c += Active[*(m + (Width << 1))];
-
-                // Add the column total to the FilterTotal
-                FilterTotal += *c;
-            }
-
-            // Reset the column total pointer to the beginning of the filter
-            c = Filter;
-
-            // Do all the pixels until we would need to right clip
-            for (x = 0; x < RightClip; x++, b++, o++, d++, m++)
-            {
-                // See if any of the pixels are set
-                if (FilterTotal)
-                {
-                    // See if the total number of pixels set is above the
-                    // visible cutoff
-                    if (FilterTotal < FILTER_CUTOFF)
-                    {
-                        // The total number of pixels set was below the
-                        // cutoff for it to be completely visible, so set
-                        // the pixel as a percentage based on how many
-                        // pixels were set
-                        *d = MergePixelToBlack(o, FilterTotal, FILTER_CUTOFF);
-                    }
-                    else
-                        *d = *o;
-                }
-
-
-                // Subtract the previous contents of the column total from
-                // the FilterTotal
-                FilterTotal -= *c;
-
-                // Reset the column total
-                *c = 0;
-
-                // Calculate the new column total
-                *c += Active[*(m - (Width << 1))];
-                *c += Active[*(m - Width)];
-                *c += Active[*m];
-                *c += Active[*(m + Width)];
-                *c += Active[*(m + (Width << 1))];
-
-                // Add the column total to the FilterTotal
-                FilterTotal += *c;
-
-                // Get the next column to work on
-                c++;
-                if (c == EndFilter)
-                    c = Filter;
-            }
-
-            // Finish off the line, but just clear the column totals since
-            // they are off the right side of the image
-            for (; x < Width; x++, b++, o++, d++)
-            {
-                // See if any of the pixels are set
-                if (FilterTotal)
-                {
-                    // See if the total number of pixels set is above the
-                    // visible cutoff
-                    if (FilterTotal < FILTER_CUTOFF)
-                    {
-                        // The total number of pixels set was below the
-                        // cutoff for it to be completely visible, so set
-                        // the pixel as a percentage based on how many
-                        // pixels were set
-                        *d = MergePixelToBlack(o, FilterTotal, FILTER_CUTOFF);
-                    }
-                    else
-                        *d = *o;
-                }
-
-                // Subtract the previous contents of the column total from
-                // the FilterTotal
-                FilterTotal -= *c;
-
-                // Get the next column to work on
-                c++;
-                if (c == EndFilter)
-                    c = Filter;
-            }
-        }
-
-
-        //--------------------------------------------------------------------
-        //                No Map Bottom & Right Clipping Version
-        //--------------------------------------------------------------------
-
-        for (; y < Height; y++)
-        {
-
-            // Set up the initial state of the Filter
-            memset(Filter, 0, FILTER_SIZE);
-
-            for (c = Filter + FILTER_SIZE / 2; c < EndFilter; c++, m++)
-            {
-                *c += Active[*(m - (Width << 1))];
-                *c += Active[*(m - Width)];
-                *c += Active[*m];
-                if (y < Height - 1)
-                    *c += Active[*(m + Width)];
-                if (y < Height - 2)
-                    *c += Active[*(m + (Width << 1))];
-
-                // Add the column total to the FilterTotal
-                FilterTotal += *c;
-            }
-
-            // Reset the column total pointer to the beginning of the filter
-            c = Filter;
-
-            // Do all the pixels until we would need to right clip
-            for (x = 0; x < RightClip; x++, b++, o++, d++, m++)
-            {
-                // See if any of the pixels are set
-                if (FilterTotal)
-                {
-                    // See if the total number of pixels set is above the
-                    // visible cutoff
-                    if (FilterTotal < FILTER_CUTOFF)
-                    {
-                        // The total number of pixels set was below the
-                        // cutoff for it to be completely visible, so set
-                        // the pixel as a percentage based on how many
-                        // pixels were set
-                        *d = MergePixelToBlack(o, FilterTotal, FILTER_CUTOFF);
-                    }
-                    else
-                        *d = *o;
-                }
-
-                // Subtract the previous contents of the column total from
-                // the FilterTotal
-                FilterTotal -= *c;
-
-                // Reset the column total
-                *c = 0;
-
-                // Calculate the new column total
-                *c += Active[*(m - (Width << 1))];
-                *c += Active[*(m - Width)];
-                *c += Active[*m];
-                if (y < Height - 1)
-                    *c += Active[*(m + Width)];
-                if (y < Height - 2)
-                    *c += Active[*(m + (Width << 1))];
-
-                // Add the column total to the FilterTotal
-                FilterTotal += *c;
-
-                // Get the next column to work on
-                c++;
-                if (c == EndFilter)
-                    c = Filter;
-            }
-
-            // Finish off the line, but just clear the column totals since
-            // they are off the right side of the image
-            for (; x < Width; x++, b++, o++, d++)
-            {
-                // See if any of the pixels are set
-                if (FilterTotal)
-                {
-                    // See if the total number of pixels set is above the
-                    // visible cutoff
-                    if (FilterTotal < FILTER_CUTOFF)
-                    {
-                        // The total number of pixels set was below the
-                        // cutoff for it to be completely visible, so set
-                        // the pixel as a percentage based on how many
-                        // pixels were set
-                        *d = MergePixelToBlack(o, FilterTotal, FILTER_CUTOFF);
-                    }
-                    else
-                        *d = *o;
-                }
-
-
-                // Subtract the previous contents of the column total from
-                // the FilterTotal
-                FilterTotal -= *c;
-
-                // Get the next column to work on
-                c++;
-                if (c == EndFilter)
-                    c = Filter;
-            }
-        }
-    }
-
-    // Draw any graphics that are Overlayed on the map
-    for (x = 0; x < MapGrfx->NumOverlays; x++)
-    {
-        if (Active[MapGrfx->Overlays[x].ActiveColor])
-        {
-            DisplayMap->Put(MapGrfx->Overlays[x].XOffset, MapGrfx->Overlays[x].YOffset,
-                MapGrfx->Overlays[x].Image);
-        }
-    }
-}
-
-
-
-
-//============================================================================
-// Function : MergePixel.
-//----------------------------------------------------------------------------
-//     Desc : This will return the Overlay pixel faded onto the Background
-//            pixel with the translucent percentage defined by Mul / Div.
-//
-//============================================================================
-
-inline uint16_t TAutoMap::MergePixel(uint16_t *Background, uint16_t *Overlay, int32_t Mul, int32_t Div)
-{
-    uint8_t Alpha = (uint8_t)((Mul << 5) / Div);
-
-    const uint32_t A = Alpha;
-    const uint32_t IA = 31u - A;
-    const uint16_t o = *Overlay;
-    const uint16_t b = *Background;
-    const uint32_t or_ = (o >> 11) & 0x1F;
-    const uint32_t og  = (o >> 5)  & 0x3F;
-    const uint32_t ob  =  o        & 0x1F;
-    const uint32_t br_ = (b >> 11) & 0x1F;
-    const uint32_t bg  = (b >> 5)  & 0x3F;
-    const uint32_t bb  =  b        & 0x1F;
-    const uint32_t rr = (or_ * A + br_ * IA) >> 5;
-    const uint32_t rg = (og  * A + bg  * IA) >> 5;
-    const uint32_t rb = (ob  * A + bb  * IA) >> 5;
-    return static_cast<uint16_t>((rr << 11) | (rg << 5) | rb);
-}
-
-
-
-//============================================================================
-// Function : MergePixelToBlack.
-//----------------------------------------------------------------------------
-//     Desc : This is the same as MergePixel except that the Overlayed pixel
-//            is faded to black depending on the Mul / Div.
-//
-//============================================================================
-
-inline uint16_t TAutoMap::MergePixelToBlack(uint16_t *Overlay, int32_t Mul, int32_t Div)
-{
-    const uint32_t A = (uint32_t)((Mul << 5) / Div);
-    const uint16_t o = *Overlay;
-    const uint32_t or_ = (o >> 11) & 0x1F;
-    const uint32_t og  = (o >> 5)  & 0x3F;
-    const uint32_t ob  =  o        & 0x1F;
-    const uint32_t rr = (or_ * A) >> 5;
-    const uint32_t rg = (og  * A) >> 5;
-    const uint32_t rb = (ob  * A) >> 5;
-    return static_cast<uint16_t>((rr << 11) | (rg << 5) | rb);
-}
-
-
-
-//============================================================================
-// Function : LoadMapGraphics.
-//----------------------------------------------------------------------------
-//     Desc : This will load the map graphics needed to display the automap
-//            for the map specified.
-//
-//    Entry : MapNum = number of the automap to load.
-//
-//  Returns : Returns true if successful, false if not.
-//
-//============================================================================
-
-bool TAutoMap::LoadMapGraphics(int32_t MapNum)
-{
-    // If they are trying to load the map that's already loaded, return immediately
-    if (MapNum == CurrentMap)
-        return true;
-
-    // Make sure the MapNum is valid
-    if ((MapNum < 0) || (MapNum >= MapList->NumMaps))
-       return false;
-
-    // Clear out the old map graphics
-    FreeMapGraphics();
-
-    // Load all the graphics for the map from the specified AUTOMAP resource
-    int32_t ResID = MapList->MapList[MapNum].ResID;
-    MapGrfx = (PTAutoMapGraphics)LoadResource("AUTOMAP", ResID);
-    if (MapGrfx == nullptr)
+    const auto u16 = [&](size_t at) { return uint32_t(file[at] | file[at + 1] << 8); };
+    const auto u32 = [&](size_t at) { return u16(at) | u16(at + 2) << 16; };
+    constexpr size_t kFileHeader = 14, kInfoHeader = 40;
+    if (file.size() < kFileHeader + kInfoHeader || file[0] != 'B' || file[1] != 'M')
         return false;
-
-    // Create another bitmap to draw the map that's going to be displayed
-    DisplayMap = TBitmap::NewBitmap(MapGrfx->Background->width,
-        MapGrfx->Background->height, MapGrfx->Background->flags);
-    if (DisplayMap == nullptr)
+    const size_t info = u32(kFileHeader);
+    const int32_t width = int32_t(u32(kFileHeader + 4));
+    const int32_t height = int32_t(u32(kFileHeader + 8));
+    if (info < kInfoHeader || width != kTileSize || (height != kTileSize && height != -kTileSize)
+        || u16(kFileHeader + 14) != 8 || u32(kFileHeader + 16) != 0)
         return false;
-
-    // Point the Active pointer to the correct section of the ActiveBuf to
-    // correspond to the map we've just loaded
-    Active = ActiveBuf + MapNum * 256;
-
-    // Reset the position variables
-    ScrollX = ScrollY = 0;
-    OldPlayerX = OldPlayerY = 0xFFFF;
-    OldScrollX = OldScrollY = 0xFFFF;
-
-    // Keep track of the map we just loaded
-    CurrentMap = MapNum;
-
-    // Draw the initial state of the map
-
-    // Clear the DisplayMap to the Background or black if the player doesn't
-    // have the appropriate map in his inventory
-    if (HasMap)
-        DisplayMap->Put(0, 0, MapGrfx->Background);
-    else
+    const size_t colours = u32(kFileHeader + 32) ? u32(kFileHeader + 32) : 256;
+    const size_t palette = kFileHeader + info;
+    const size_t pixels = u32(10);
+    const size_t stride = (size_t(width) + 3) & ~size_t(3);
+    if (colours > 256 || palette + colours * 4 > file.size() || pixels + stride * kTileSize > file.size())
+        return false;
+    rgba.assign(size_t(kTileSize) * kTileSize * 4, 0);
+    for (int32_t row = 0; row < kTileSize; ++row)
     {
-        SColor black = { 0, 0, 0 };
-        DisplayMap->Clear(black);
+        const uint8_t* src = &file[pixels + stride * size_t(height > 0 ? kTileSize - 1 - row : row)];
+        uint8_t* dst = &rgba[size_t(row) * kTileSize * 4];
+        for (int32_t col = 0; col < kTileSize; ++col, dst += 4)
+        {
+            const size_t index = src[col] < colours ? src[col] : 0;
+            const uint8_t* bgr = &file[palette + index * 4];
+            dst[0] = bgr[2] & 0xf8;
+            dst[1] = bgr[1] & 0xf8;
+            dst[2] = bgr[0] & 0xf8;
+            dst[3] = 0xff;
+        }
     }
-
-    DrawAutoMap();
-
-    SetDirty(true);
-
     return true;
 }
 
-
-
-//============================================================================
-// Function : FreeMapGraphics.
-//----------------------------------------------------------------------------
-//     Desc : This will free up the memory allocated for graphics used by
-//            the current automap.
-//
-//============================================================================
-
-void TAutoMap::FreeMapGraphics()
+// REVSYNC: 0x0052aa70 -- the module's automap tile for (level, x, y),
+// "<module>\automaps\<level>_<x>_<y>.bmp". None when the file is missing.
+TTextureHandle LoadTile(int32_t level, int32_t x, int32_t y)
 {
-    free(MapGrfx);
-    MapGrfx = nullptr;
-
-    delete DisplayMap;
-    DisplayMap = nullptr;
+    char name[64];
+    std::snprintf(name, sizeof(name), "automaps\\%d_%d_%d.bmp", level, x, y);
+    const std::string path = ModuleManager.ModuleFilePath(name);
+    if (path.empty() || !rev_file_exists(path.c_str()) || !Renderer)
+        return kInvalidTexture;
+    FILE* file = rev_fopen(path.c_str(), "rb");
+    if (!file)
+        return kInvalidTexture;
+    std::vector<uint8_t> bytes;
+    uint8_t chunk[4096];
+    for (size_t got; (got = std::fread(chunk, 1, sizeof(chunk), file)) > 0;)
+        bytes.insert(bytes.end(), chunk, chunk + got);
+    std::fclose(file);
+    std::vector<uint8_t> rgba;
+    if (!ReadTile(bytes, rgba))
+    {
+        log_warn("[automap] %s is not a %d x %d 8-bit bitmap", path.c_str(), kTileSize, kTileSize);
+        return kInvalidTexture;
+    }
+    const TTextureHandle texture = Renderer->RegisterTextureAsset(PathKey(path), rgba.data(), rgba.size(), kTileSize,
+                                                                  kTileSize, ERendererTextureFormat::RGBA8,
+                                                                  rgba.size(), ERendererTextureFilter::Nearest);
+    if (texture != kInvalidTexture)
+        Renderer->AddTextureAssetRef(texture);
+    return texture;
 }
 
+}  // namespace
 
+// ****************
+// * TAutoMapGrid *
+// ****************
 
-//============================================================================
-// Function : RecordTravels.
-//----------------------------------------------------------------------------
-//     Desc : This checks the players position against the MaskMap and
-//            sets the area underneath him as active.
-//
-//============================================================================
+// REVSYNC: 0x00529300 / 0x005293f0 -- the word of the 512 px tile, the bit
+// of the 128 px cell in it.
+bool TAutoMapGrid::Address(int32_t x, int32_t y, int32_t& word, int32_t& bit)
+{
+    int32_t column = x >> 9;
+    int32_t row = y >> 9;
+    if (column > 0x3f || column < -0x3f || row < 0 || row > 0x3f)
+        return false;
+    if (column < 0)
+    {
+        column += 0x41;
+        row = row <= 0x1f ? row + 0x20 : row - 0x20;
+    }
+    word = column * 64 + row;
+    bit = (Wrap(y, 512) >> 7) * 4 + (Wrap(x, 512) >> 7);
+    return true;
+}
+
+bool TAutoMapGrid::Explored(int32_t x, int32_t y) const
+{
+    int32_t word = 0, bit = 0;
+    return Address(x, y, word, bit) && (words[word] >> bit) & 1;
+}
+
+void TAutoMapGrid::Explore(int32_t x, int32_t y)
+{
+    int32_t word = 0, bit = 0;
+    if (Address(x, y, word, bit))
+        words[word] = static_cast<uint16_t>(words[word] | (1u << bit));
+}
+
+std::vector<int16_t> TAutoMapGrid::Encode() const
+{
+    std::vector<int16_t> stream;
+    for (size_t i = 0; i < words.size();)
+    {
+        size_t run = 1;
+        while (i + run < words.size() && words[i + run] == words[i] && run < 0x8000)
+            ++run;
+        stream.push_back(static_cast<int16_t>(run > 1 ? 0x8000 | (run - 1) : 0));
+        stream.push_back(static_cast<int16_t>(words[i]));
+        i += run;
+    }
+    return stream;
+}
+
+// REVSYNC: 0x00529150 -- (control, value) pairs: with 0x8000 set the value
+// repeats control & 0x7fff more times.
+bool TAutoMapGrid::Decode(const std::vector<int16_t>& stream)
+{
+    size_t n = 0;
+    for (size_t i = 0; i + 1 < stream.size(); i += 2)
+    {
+        const uint16_t control = static_cast<uint16_t>(stream[i]);
+        const size_t count = control & 0x8000 ? (control & 0x7fffu) + 1 : 1;
+        if (n + count > words.size())
+            return false;
+        std::fill_n(words.begin() + n, count, static_cast<uint16_t>(stream[i + 1]));
+        n += count;
+    }
+    return n == words.size();
+}
+
+// ************
+// * TAutoMap *
+// ************
+
+TAutoMap::TAutoMap() : TPane(0, 0, kWidth, kHeight) {}
+TAutoMap::~TAutoMap() = default;
+
+// REVSYNC: 0x00529970. Its host places it in the side panel's lower slot.
+bool TAutoMap::Initialize()
+{
+    if (IsOpen())
+        return true;
+    archive.reset(TMulti::LoadMulti("AutoMap.dat"));
+    marker = archive ? archive->Bitmap("Marker") : nullptr;
+    frame = archive ? archive->Bitmap("Amap") : nullptr;
+    plussel = archive ? archive->Bitmap("PlusSel") : nullptr;
+    minussel = archive ? archive->Bitmap("MinusSel") : nullptr;
+    if (!marker || !frame || !plussel || !minussel)
+    {
+        log_error("[automap] AutoMap.dat or its Marker / Amap / PlusSel / MinusSel is missing");
+        archive.reset();
+        return false;
+    }
+    if (!TPane::Initialize())
+        return false;
+    mosaic = std::make_unique<TSurface>(kMosaicSize, kMosaicSize, SG_PIXELFORMAT_RGBA8, SG_FILTER_NEAREST);
+    mosaicfresh = true;
+    pending.clear();
+    tiles = {};
+    travels = nullptr;
+    grid.reset();
+    tilex = tiley = prevtilex = prevtiley = 0;
+    cachelevel = 0;
+    scrollx = scrolly = 0;
+    zoom = kZoomMin;
+    fogofwar = true;
+    markerframe = 0;
+    lastmousex = lastmousey = 0;
+    zoomin = zoomout = freescroll = false;
+    if (Player)
+    {
+        BindTravels(*Player);
+        LoadGrid(MapPane.GetMapLevel());
+        Player->GetScreenPos(playerx, playery);
+        for (int32_t dx = -kExploreReach; dx <= kExploreReach; dx += kExploreStep)
+            for (int32_t dy = -kExploreReach; dy <= kExploreReach; dy += kExploreStep)
+                grid->Explore(playerx + dx, playery + dy);
+    }
+    SetDirty(true);
+    return true;
+}
+
+void TAutoMap::Close()
+{
+    if (!IsOpen())
+        return;
+    TPane::Close();
+    for (STile& tile : tiles)
+        if (tile.texture != kInvalidTexture && Renderer)
+            Renderer->ReleaseTextureAssetRef(tile.texture);
+    tiles = {};
+    pending.clear();
+    mosaic.reset();
+    layer.reset();
+    grid.reset();
+    travels = nullptr;
+    marker = frame = plussel = minussel = nullptr;
+    archive.reset();
+}
+
+// REVSYNC: 0x00529970 / 0x0052c3d0 -- the player's record, for the current
+// module: another module's levels are dropped.
+void TAutoMap::BindTravels(TPlayer& player)
+{
+    travels = &player.AutoMapRecord();
+    const TModule* module = ModuleManager.Active();
+    const std::string name = module ? module->dirname : kNoModule;
+    if (travels->module != name)
+    {
+        travels->module = name;
+        travels->levels.clear();
+    }
+}
+
+// The record's level `level` (the last one, as retail reads them), else a
+// level nothing of is explored.
+void TAutoMap::LoadGrid(int32_t level)
+{
+    grid.emplace(level);
+    if (!travels)
+        return;
+    for (const SAutoMapLevel& entry : travels->levels)
+    {
+        if (entry.level != level)
+            continue;
+        TAutoMapGrid loaded(level);
+        if (loaded.Decode(entry.mask))
+            grid = loaded;
+        else
+            log_warn("[automap] error decompressing level visgrid for level %d", level);
+    }
+}
+
+// REVSYNC: 0x0052c5c0 -- the grid replaces the record's first entry for its
+// level, at the end.
+void TAutoMap::StoreGrid()
+{
+    if (!grid || !travels)
+        return;
+    std::vector<SAutoMapLevel>& levels = travels->levels;
+    const auto same = std::find_if(levels.begin(), levels.end(),
+                                   [&](const SAutoMapLevel& entry) { return entry.level == grid->Level(); });
+    if (same != levels.end())
+        levels.erase(same);
+    levels.push_back({ grid->Level(), grid->Encode() });
+}
+
+void TAutoMap::FlushGrid()
+{
+    StoreGrid();
+}
+
+// REVSYNC: 0x0052c3d0 -- the grid is dropped unsaved and the new player's
+// loaded.
+void TAutoMap::BindPlayer(TPlayer* player)
+{
+    travels = nullptr;
+    if (!player || !IsOpen())
+        return;
+    grid.reset();
+    BindTravels(*player);
+    LoadGrid(MapPane.GetMapLevel());
+    SetDirty(true);
+}
 
 void TAutoMap::RecordTravels()
 {
-    int32_t PlayerX;
-    int32_t PlayerY;
-    int32_t Width;
-    int32_t Height;
-    int32_t Offset;
-    int32_t Color;
-
-    // Make sure that the maps are loaded
-    if (MapGrfx == nullptr)
-        CheckMaps();
-
-    if (MapGrfx == nullptr)
+    if (!Player || !IsOpen())
         return;
-
-    GetPlayerOnAutoMap(PlayerX, PlayerY);
-
-    if ((PlayerX != OldPlayerX) || (PlayerY != OldPlayerY))
+    const int32_t level = MapPane.GetMapLevel();
+    prevtilex = tilex;
+    prevtiley = tiley;
+    tilex = scrollx >> kTileShift;
+    tiley = scrolly >> kTileShift;
+    prevplayerx = playerx;
+    prevplayery = playery;
+    Player->GetScreenPos(playerx, playery);
+    if (!travels)
+        BindTravels(*Player);
+    if (grid && grid->Level() != level)
     {
-        int32_t Left   = PlayerX - AUTOMAP_VIEW_WIDTH / 2;
-        int32_t Top    = PlayerY - AUTOMAP_VIEW_HEIGHT / 2;
-        int32_t Right  = Left + AUTOMAP_VIEW_WIDTH;
-        int32_t Bottom = Top + AUTOMAP_VIEW_HEIGHT;
-
-        CheckMaps();
-
-        if (MapGrfx == nullptr)
-            return;
-
-        Width = MapGrfx->Background->width;
-        Height = MapGrfx->Background->height;
-
-        // Make sure that the players coordinates are in the map
-        if (Left < 0)
-            Left = 0;
-        if (Top < 0)
-            Top = 0;
-        if (Right >= Width)
-            Right = Width - 1;
-        if (Bottom >= Height)
-            Bottom = Height - 1;
-
-        for (int32_t y = Top; y < Bottom; y++)
-        {
-            for (int32_t x = Left; x < Right; x++)
-            {
-                // Check if this area of the map is active or not
-                Offset = x + y * Width;
-                Color = MapGrfx->MaskMap->data8[Offset];
-                if (!Active[Color])
-                {
-                    // The player has just revealed this area.
-                    Active[Color] = 1;
-
-                    DrawAutoMap();
-
-                    // Draw the Marker where the player is
-                    DrawPlayerMarker(PlayerX, PlayerY);
-
-                    SetDirty(true);
-
-                    // If there are any scripting things to be done, do them here
-                }
-            }
-        }
-
-        // If the player has started moving and the map is not centered
-        // on the player and the player is not dragging the map around
-        // then we can start moving the map to show the player
-        if ((!DraggingMap) && (!ScrollToTarget))
-        {
-            int32_t PaneWidth = GetWidth();
-            int32_t PaneHeight = GetHeight();
-
-            TargetScrollX = PlayerX - PaneWidth / 2;
-            TargetScrollY = PlayerY - PaneHeight / 2;
-
-            // Make sure we don't scroll negative
-            if (TargetScrollX < 0)
-                TargetScrollX = 0;
-            if (TargetScrollY < 0)
-                TargetScrollY = 0;
-
-            // Make sure we don't scroll past the right / bottom of the map
-            if (TargetScrollX + PaneWidth > DisplayMap->width)
-                TargetScrollX = DisplayMap->width - PaneWidth;
-            if (TargetScrollY + PaneHeight > DisplayMap->height)
-                TargetScrollY = DisplayMap->height - PaneHeight;
-
-            if ((TargetScrollX != ScrollX) || (TargetScrollY != ScrollY))
-            {
-                // Calculate the distance each axis must move
-                MapScrollDx = TargetScrollX - ScrollX;
-                MapScrollDy = TargetScrollY - ScrollY;
-
-                // Determine which is larger and set the Deltas accordingly
-                if (abs(MapScrollDx) > abs(MapScrollDy))
-                {
-                    if (abs(MapScrollDx) >= MAX_AUTOMAP_SCROLL_SPEED)
-                    {
-                        MapScrollDy /= abs(MapScrollDx / MAX_AUTOMAP_SCROLL_SPEED);
-                        MapScrollDx = MAX_AUTOMAP_SCROLL_SPEED * MapScrollDx / abs(MapScrollDx);
-                    }
-                }
-                else
-                {
-                    if (abs(MapScrollDy) >= MAX_AUTOMAP_SCROLL_SPEED)
-                    {
-                        MapScrollDx /= abs(MapScrollDy / MAX_AUTOMAP_SCROLL_SPEED);
-                        MapScrollDy = MAX_AUTOMAP_SCROLL_SPEED * MapScrollDy / abs(MapScrollDy);
-                    }
-                }
-
-                ScrollToTarget = true;
-            }
-        }
+        StoreGrid();
+        grid.reset();
     }
-}
-
-
-
-//============================================================================
-// Function : CheckMaps.
-//----------------------------------------------------------------------------
-//     Desc : This sees which set of before and after maps are needed for
-//            the map section that we're currently tracking and loads them
-//            if necessary.
-//
-//============================================================================
-
-void TAutoMap::CheckMaps()
-{
-    S3DPoint Pos;
-    MapPane.GetMapPos(Pos);
-    int32_t PlayerX;
-    int32_t PlayerY;
-    int32_t Level = MapPane.GetMapLevel();
-    int32_t MapNum = 0;
-    int32_t n;
-    bool Found = false;
-    SAutoMapData *ml = MapList->MapList;
-
-    // Look for which auto map to use
-    for (n = 0; n < MapList->NumMaps; n++, ml++)
-    {
-        // Check the map level
-        if (ml->Level == Level)
-        {
-            // Check if the Right & Bottom are both 0 (this signifies the
-            // entire level is used for the map)
-            if ((ml->Right == 0) && (ml->Bottom == 0))
-            {
-                MapArea.left   = 0;
-                MapArea.top    = 0;
-                MapArea.right  = MAXMAPWIDTH - 1;
-                MapArea.bottom = MAXMAPHEIGHT - 1;
-
-                Found = true;
-            }
-            else
-            // See if the player is in the map area (in World coords.)
-            if ((Pos.x >= ml->Left) && (Pos.x <= ml->Right) &&
-                (Pos.y >= ml->Top) && (Pos.y <= ml->Bottom))
-            {
-                MapArea.left   = ml->Left;
-                MapArea.top    = ml->Top;
-                MapArea.right  = ml->Right;
-                MapArea.bottom = ml->Bottom;
-
-                Found = true;
-            }
-
-            if (Found)
-            {
-                MapNum = n;
-
-                // See if the MapNum has changed
-                if (MapNum != CurrentMap)
-                {
-                    // Check to see if the player has the appropriate map in his
-                    // inventory or not
-                    if (Player && Player->FindObjInventory(ml->MapName))
-                        HasMap = true;
-                    else
-                        HasMap = false;
-                    HasMap = true;
-
-                    // Load the graphics for the map we're going to display
-                    LoadMapGraphics(MapNum);
-
-                    GetPlayerOnAutoMap(PlayerX, PlayerY);
-
-                    // Draw the Marker where the player is
-                    DrawPlayerMarker(PlayerX, PlayerY);
-                }
-
-                return;
-            }
-        }
-    }
-
-}
-
-
-
-//============================================================================
-// Function : GetMapNumber.
-//----------------------------------------------------------------------------
-//     Desc : This will return which MapNumber in the MapList matches the
-//            map specified by MapName.
-//
-//    Entry : MapName = Name of the map whose mask info we're getting.
-//
-//  Returns : Returns which MapNumber in the MapList matches MapName
-//            or -1 if the MapName was not found in the list.
-//
-//============================================================================
-
-int32_t TAutoMap::GetMapNumber(char *MapName)
-{
-    // Find the MapNum by checking the MapName against the MapList
-    for (int32_t n = 0; n < MapList->NumMaps; n++)
-        if (!stricmp(MapList->MapList[n].MapName, MapName))
-            return n;
-
-    return -1;
-}
-
-
-
-//============================================================================
-// Function : GetMaskColorActive.
-//----------------------------------------------------------------------------
-//     Desc : This will return whether a specific color in a specific map
-//            has been activated or not.
-//
-//    Entry : MapNum = Number of the map whose mask info we're getting.
-//            Color  = Index of the color we wish to check.
-//
-//  Returns : Returns true if the color is active, false if not.
-//
-//============================================================================
-
-bool TAutoMap::GetMaskColorActive(int32_t MapNum, int32_t Color)
-{
-    // Make sure the MapNum & Color are valid
-    if ((MapNum < 0) || (MapNum >= MapList->NumMaps) ||
-        (Color < 0) || (Color > 255))
-        return false;
-
-    return (ActiveBuf[MapNum * 256 + Color]);
-}
-
-
-
-//============================================================================
-// Function : GetMaskColorActive.
-//----------------------------------------------------------------------------
-//     Desc : This will return whether a specific color in a specific map
-//            has been activated or not.
-//
-//    Entry : MapName = Name of the map whose mask info we're getting.
-//            Color   = Index of the color we wish to check.
-//
-//  Returns : Returns true if the color is active, false if not.
-//
-//============================================================================
-
-bool TAutoMap::GetMaskColorActive(char *MapName, int32_t Color)
-{
-    return GetMaskColorActive(GetMapNumber(MapName), Color);
-}
-
-
-
-//============================================================================
-// Function : SetMaskColorActive.
-//----------------------------------------------------------------------------
-//     Desc : This will set a specific color in a specific map to be active
-//            or not.
-//
-//    Entry : MapNum = Number of the map whose mask info we're setting.
-//            Color  = Index of the color we wish to set.
-//            Active = State to set the color to.
-//
-//============================================================================
-
-void TAutoMap::SetMaskColorActive(int32_t MapNum, int32_t Color, uint8_t Active)
-{
-    // Make sure the MapNum & Color are valid
-    if ((MapNum < 0) || (MapNum >= MapList->NumMaps) ||
-        (Color < 0) || (Color > 255))
+    if (!grid)
+        LoadGrid(level);
+    if (playerx == prevplayerx && playery == prevplayery)
         return;
-
-    int32_t Index = MapNum * 256 + Color;
-
-    // See if the new active state is different than the current state
-    if (ActiveBuf[Index] != Active)
-    {
-        ActiveBuf[Index] = Active;
-
-        // If the map that's being affected is the current map, redraw the
-        // automap pane
-        if (MapNum == CurrentMap)
-            SetDirty(true);
-
-        // If there are any scripting things to be done, do them here
-    }
+    for (int32_t dx = -kExploreReach; dx <= kExploreReach; dx += kExploreStep)
+        for (int32_t dy = -kExploreReach; dy <= kExploreReach; dy += kExploreStep)
+            grid->Explore(playerx + dx, playery + dy);
 }
 
-
-
-//============================================================================
-// Function : SetMaskColorActive.
-//----------------------------------------------------------------------------
-//     Desc : This will set a specific color in a specific map to be active
-//            or not.
-//
-//    Entry : MapName = Name of the map whose mask info we're setting.
-//            Color   = Index of the color we wish to set.
-//            Active  = State to set the color to.
-//
-//============================================================================
-
-void TAutoMap::SetMaskColorActive(char *MapName, int32_t Color, uint8_t Active)
+// Mosaic px to window px at the zoom (retail's integer arithmetic).
+int32_t TAutoMap::ToScreen(int32_t mosaicpx) const
 {
-    SetMaskColorActive(GetMapNumber(MapName), Color, Active);
+    return mosaicpx * zoom * kWindowSize / ((kMosaicSize - kTileSize) * 100);
 }
 
+// Half the window, in mosaic px, at the zoom.
+int32_t TAutoMap::HalfSpan() const
+{
+    return (kMosaicSize - kTileSize) * 100 * kWindowSize / (zoom * kWindowSize) / 2;
+}
 
+// REVSYNC: 0x0052a280 -- following the camera, the window centres on the map
+// view's centre every pulse; dragged off it, it keeps its centre through a
+// zoom. Then the tiles and the fog catch up.
+void TAutoMap::Pulse()
+{
+    if (++pulses >= kPulsesPerMarkerFrame)
+    {
+        pulses = 0;
+        markerframe = (markerframe + 1) % kMarkerFrames;
+    }
+    int32_t centrex = 0, centrey = 0;
+    if (freescroll)
+    {
+        centrex = scrollx + HalfSpan();
+        centrey = scrolly + HalfSpan();
+    }
+    const int32_t oldzoom = zoom;
+    if (zoomin)
+        zoom = (std::min)(zoom + kZoomStep, kZoomMax);
+    else if (zoomout)
+        zoom = (std::max)(zoom - kZoomStep, kZoomMin);
+    if (!freescroll)
+    {
+        int32_t viewx = 0, viewy = 0;
+        MapPane.GetViewCentre(viewx, viewy);
+        scrollx = (viewx >> kMosaicShift) - HalfSpan();
+        scrolly = (viewy >> kMosaicShift) - HalfSpan();
+    }
+    else if (zoom != oldzoom)
+    {
+        scrollx = centrex - HalfSpan();
+        scrolly = centrey - HalfSpan();
+    }
+    RebuildTileCache();
+    BuildFog();
+    SetDirty(true);
+}
 
-//============================================================================
-// Function : MouseClick.
-//----------------------------------------------------------------------------
-//     Desc : This handles any mouse clicks over the automap pane.
-//
-//    Entry : button = state of the mouse buttons
-//            x      = mouse x coordinate
-//            y      = mouse y coordinate
-//
-//============================================================================
+// REVSYNC: 0x0052aa70 -- when the ring moved or the level changed: tiles still
+// in the ring stay (a missing one isn't looked for again), the rest go, and
+// the new ones are loaded and stamped -- a missing tile black.
+void TAutoMap::RebuildTileCache()
+{
+    const int32_t level = MapPane.GetMapLevel();
+    if (tilex == prevtilex && tiley == prevtiley && level == cachelevel)
+        return;
+    std::array<STile, kRing * kRing> kept{};
+    for (int32_t i = 0; i < kRing; ++i)
+        for (int32_t j = 0; j < kRing; ++j)
+        {
+            STile& tile = tiles[i * kRing + j];
+            const int32_t ni = prevtilex - tilex + i;
+            const int32_t nj = prevtiley - tiley + j;
+            if (cachelevel == level && ni >= 0 && ni < kRing && nj >= 0 && nj < kRing)
+                kept[ni * kRing + nj] = { tile.texture, true };
+            else if (tile.texture != kInvalidTexture && Renderer)
+                Renderer->ReleaseTextureAssetRef(tile.texture);
+            tile = {};
+        }
+    tiles = kept;
+    for (int32_t i = 0; i < kRing; ++i)
+        for (int32_t j = 0; j < kRing; ++j)
+        {
+            STile& tile = tiles[i * kRing + j];
+            if (tile.texture != kInvalidTexture || tile.kept)
+                continue;
+            const int32_t x = tilex + i, y = tiley + j;
+            tile.texture = LoadTile(level, x, y);
+            pending.push_back({ Wrap(x * kTileSize, kMosaicSize), Wrap(y * kTileSize, kMosaicSize), tile.texture });
+        }
+    cachelevel = level;
+}
+
+void TAutoMap::StampPendingTiles()
+{
+    if (!mosaicfresh && pending.empty())
+        return;
+    if (mosaicfresh)
+        mosaic->StartPass(0.0f, 0.0f, 0.0f, 1.0f);
+    else
+        mosaic->ContinuePass();
+    mosaicfresh = false;
+    for (const SStamp& stamp : pending)
+        if (stamp.texture != kInvalidTexture)
+            Renderer->Composite(stamp.texture, stamp.x, stamp.y, kTileSize, kTileSize, kMosaicSize, kMosaicSize, 0, 0,
+                                kTileSize, kTileSize, kTileSize, kTileSize);
+        else
+            Renderer->DrawSolidRectToTarget(stamp.x, stamp.y, kTileSize, kTileSize, kMosaicSize, kMosaicSize, 0, 0, 0);
+    pending.clear();
+    mosaic->EndPass();
+}
+
+// REVSYNC: 0x0052af00 -- a vertex every N 128 px cells (N to fit ten across
+// the window), black, as opaque as the share of unexplored cells it samples:
+// at N = 1 the cell to its lower right, at N = 2 the four meeting at it (N 3
+// and 4 need a zoom under 100). Recounted when the zoom, the snapped origin
+// or the player moved; placed every pulse.
+void TAutoMap::BuildFog()
+{
+    const int32_t denom = (kMosaicSize - kTileSize) * 100;
+    const int32_t span = (kMosaicSize - kTileSize) * 100 * kWindowSize / (zoom * kWindowSize);
+    const int32_t cells = (((span * 8 + 0x78) >> 7) + 7) / 8;
+    const int32_t step = cells << 7;
+    const int32_t pitch = ((step >> kMosaicShift) * zoom * kWindowSize) / denom;
+    const int32_t x8 = scrollx << kMosaicShift, y8 = scrolly << kMosaicShift;
+    const int32_t modx = MosaicOffset(x8, step), mody = MosaicOffset(y8, step);
+    const int32_t x0 = x8 - modx, y0 = y8 - mody;
+    const bool recount = zoom != fogzoom || (std::llabs(int64_t(fogx) - x0) >> 7) >= cells
+                      || (std::llabs(int64_t(fogy) - y0) >> 7) >= cells || playerx != prevplayerx
+                      || playery != prevplayery;
+    const int32_t offx = (((modx >> kMosaicShift) * zoom * kWindowSize) / denom);
+    const int32_t offy = (((mody >> kMosaicShift) * zoom * kWindowSize) / denom);
+    const auto unexplored = [this](int32_t x, int32_t y) { return grid && grid->Explored(x, y) ? 0 : 1; };
+    for (int32_t row = 0; row < kFogSide; ++row)
+    {
+        const int32_t y = y0 + row * step, ym = y - 0x80;
+        for (int32_t col = 0; col < kFogSide; ++col)
+        {
+            const int32_t x = x0 + col * step, xm = x - 0x80;
+            float& f = fog[col * kFogSide + row];
+            if (recount)
+            {
+                fogx = x0;
+                fogy = y0;
+                switch (cells)
+                {
+                case 2:
+                    f = 0.25f * float(unexplored(xm, ym) + unexplored(x, y) + unexplored(xm, y) + unexplored(x, ym));
+                    break;
+                case 3:
+                {
+                    int32_t count = 0;
+                    for (const int32_t sx : { xm, x, xm + 0x100 })
+                        for (const int32_t sy : { ym, y, ym + 0x100 })
+                            count += unexplored(sx, sy);
+                    f = float(count) / 9.0f;
+                    break;
+                }
+                case 4:
+                {
+                    int32_t count = 0;
+                    for (const int32_t sx : { xm - 0x80, xm, x, xm + 0x100 })
+                        for (const int32_t sy : { ym - 0x80, ym, y, ym + 0x100 })
+                            count += unexplored(sx, sy);
+                    f = float(count) / 16.0f;
+                    break;
+                }
+                default:
+                    f = float(unexplored(x, y));
+                    break;
+                }
+            }
+            TRenderer::SColorVertex2D& v = fogvertices[row * kFogSide + col];
+            v.x = float(kWindowLeft - offx + col * pitch) + kD3DPixelCentre;
+            v.y = float(kWindowTop - offy + row * pitch) + kD3DPixelCentre;
+            v.r = v.g = v.b = 0;
+            v.a = static_cast<uint8_t>(static_cast<int32_t>(f * 255.0f));
+        }
+    }
+    fogzoom = zoom;
+}
+
+// REVSYNC: 0x0052a5f0 -- the map, then (with the fog of war) the markers and
+// the fog over them, then the frame.
+void TAutoMap::Compose()
+{
+    if (!IsDirty() || !Renderer || !mosaic)
+        return;
+    SetDirty(false);
+    StampPendingTiles();
+    if (!layer)
+        layer = std::make_unique<TSurface>(kWidth, kHeight, SG_PIXELFORMAT_RGBA8);
+    layer->StartPass(0.0f, 0.0f, 0.0f, 0.0f);
+    ComposeBody(kWidth, kHeight);
+    if (fogofwar)
+    {
+        ComposeMarkers(kWidth, kHeight);
+        ComposeFog(kWidth, kHeight);
+    }
+    ComposeFrame(kWidth, kHeight);
+    layer->EndPass();
+}
+
+void TAutoMap::Draw()
+{
+    if (layer && Renderer)
+        Renderer->DrawSurface(layer.get(), GetPosX(), GetPosY());
+}
+
+// REVSYNC: 0x0052a830 -- the mosaic, scaled, four times over so the torus
+// fills the window wherever the scroll is.
+void TAutoMap::ComposeBody(int32_t target_w, int32_t target_h)
+{
+    const int32_t size = ToScreen(kMosaicSize);
+    const int32_t left = kWindowLeft - ToScreen(MosaicOffset(scrollx, kMosaicSize));
+    const int32_t top = kWindowTop - ToScreen(MosaicOffset(scrolly, kMosaicSize));
+    Renderer->SetTargetClip(kWindowLeft, kWindowTop, kWindowSize, kWindowSize);
+    for (const int32_t x : { left, left + size })
+        for (const int32_t y : { top, top + size })
+            Renderer->DrawSurfaceStretchedToTarget(mosaic.get(), float(x) + kD3DPixelCentre,
+                                                   float(y) + kD3DPixelCentre, float(size), float(size), 0, 0,
+                                                   kMosaicSize, kMosaicSize, target_w, target_h);
+    Renderer->ResetTargetClip(target_w, target_h);
+}
+
+// REVSYNC: 0x0052a620 -- the living, visible characters near the player.
+void TAutoMap::ComposeMarkers(int32_t target_w, int32_t target_h)
+{
+    if (!Player)
+        return;
+    S3DPoint pos;
+    Player->GetPos(pos);
+    Renderer->SetTargetClip(kWindowLeft, kWindowTop, kWindowSize, kWindowSize);
+    for (TMapIterator i(pos, kNearRange, CHECK_NOINVENT | CHECK_MAPRECT, OBJSET_CHARACTER); i.Item(); i++)
+    {
+        TObjectInstance* object = i.Item();
+        if (!object->IsCharacter() || static_cast<TCharacter*>(object)->IsDead()
+            || (object->GetFlags() & OF_INVISIBLE))
+            continue;
+        int32_t sx = 0, sy = 0;
+        object->GetScreenPos(sx, sy);
+        const int32_t x = ToScreen((sx >> kMosaicShift) - scrollx) + kWindowLeft;
+        const int32_t y = ToScreen((sy >> kMosaicShift) - scrolly) + kWindowTop;
+        if (x < kWindowLeft || x >= kMarkerRight || y < kWindowTop || y >= kMarkerBottom)
+            continue;
+        const int32_t row = object == Player ? kMarkerPlayerRow
+                          : static_cast<TCharacter*>(object)->IsEnemy(Player) ? kMarkerEnemyRow
+                                                                              : kMarkerOtherRow;
+        Renderer->DrawBitmapSubrectToTarget(marker, x, y, markerframe * kMarkerSize, row, kMarkerSize, kMarkerSize,
+                                            target_w, target_h);
+    }
+    Renderer->ResetTargetClip(target_w, target_h);
+}
+
+// REVSYNC: 0x0052b520 -- the fog's triangles, blended by their alpha.
+void TAutoMap::ComposeFog(int32_t target_w, int32_t target_h)
+{
+    Renderer->SetTargetClip(kWindowLeft, kWindowTop, kWindowSize, kWindowSize);
+    Renderer->DrawColoredTrianglesToTarget(fogvertices.data(), static_cast<int32_t>(fogvertices.size()),
+                                           kFogIndexList.data(), kFogIndices, target_w, target_h);
+    Renderer->ResetTargetClip(target_w, target_h);
+}
+
+// REVSYNC: 0x0052bdb0 -- the frame; PlusSel and MinusSel while held.
+void TAutoMap::ComposeFrame(int32_t target_w, int32_t target_h)
+{
+    Renderer->DrawBitmapToTarget(frame, 0, 0, target_w, target_h);
+    if (zoomin)
+        Renderer->DrawBitmapToTarget(plussel, kPlusLeft, kButtonTop, target_w, target_h);
+    if (zoomout)
+        Renderer->DrawBitmapToTarget(minussel, kMinusLeft, kButtonTop, target_w, target_h);
+}
 
 void TAutoMap::MouseClick(int32_t button, int32_t x, int32_t y)
 {
-    // See if we need tp turn of the dragging of the mouse
-    if ((button == MB_RIGHTUP) && (DraggingMap))
+    const auto on = [&](int32_t left) {
+        return x > left && x < left + plussel->width && y > kButtonTop && y < kButtonTop + plussel->height;
+    };
+    const bool inring = (y - kRingY) * (y - kRingY) + (x - kRingX) * (x - kRingX) < kRingRadiusSquared;
+    if (button == MB_LEFTDOWN)
     {
-        DraggingMap = false;
-        SetMouseBitmap(PointerCursor);
+        if (on(kPlusLeft))
+            zoomin = true;
+        else if (on(kMinusLeft))
+            zoomout = true;
+        else if (inring)
+        {
+            lastmousex = x;
+            lastmousey = y;
+            freescroll = true;
+        }
     }
-
-    // See if they are beginning to drag the map
-    if ((button == MB_RIGHTDOWN) && (!DraggingMap) && (InPane(x, y)))
+    else if (button == MB_LEFTUP)
     {
-        // The right mouse button is down and over the automap pane, so we
-        // can start dragging the map around
-        DragMouseX = x;
-        DragMouseY = y;
-        DragScrollX = ScrollX;
-        DragScrollY = ScrollY;
-        DraggingMap = true;
-        SetMouseBitmap(HandCursor);
-        ScrollToTarget = false;
+        zoomin = zoomout = false;
+        lastmousex = x;
+        lastmousey = y;
     }
-
-    // See if they are trying to bring up a menu
-    if (button == MB_LEFTUP)
-    {
-
-    }
+    else if (button == MB_RIGHTUP)
+        freescroll = false;
+    SetDirty(true);
 }
 
-
-
-//============================================================================
-// Function : MouseMove.
-//----------------------------------------------------------------------------
-//     Desc : This handles any mouse movement over the automap pane.
-//
-//    Entry : button = state of the mouse buttons
-//            x      = mouse x coordinate
-//            y      = mouse y coordinate
-//
-//============================================================================
-
+// REVSYNC: 0x0052c2c0 -- dragging inside the ring moves the map a mosaic px
+// a pointer px, whatever the zoom.
 void TAutoMap::MouseMove(int32_t button, int32_t x, int32_t y)
 {
-    // See if the right mouse button is down
-    if (button == MB_RIGHTDOWN)
-    {
-        // Check if we have already started dragging it
-        if (DraggingMap)
-        {
-            // Get the offset of the mouse from where it began
-            int32_t dx = x - DragMouseX;
-            int32_t dy = y - DragMouseY;
-
-            // Update the scroll position and redraw the pane
-            ScrollX = DragScrollX - dx;
-            ScrollY = DragScrollY - dy;
-        }
-        else
-        // Check if the mouse is over the automap pane
-        if (InPane(x, y))
-        {
-            // The right mouse button is down and over the automap pane, so we
-            // can start dragging the map around
-            DragMouseX = x;
-            DragMouseY = y;
-            DragScrollX = ScrollX;
-            DragScrollY = ScrollY;
-            DraggingMap = true;
-            SetMouseBitmap(HandCursor);
-            ScrollToTarget = false;
-        }
-    }
-    else
-    {
-        // If they were dragging the map around and just let go, reset our variables
-        if (DraggingMap)
-        {
-            DraggingMap = false;
-            SetMouseBitmap(PointerCursor);
-        }
-    }
-}
-
-
-
-//============================================================================
-// Function : WriteAutoMapData.
-//----------------------------------------------------------------------------
-//     Desc : This will compact the ActiveBuf to a bit array and write it
-//            out to the file passed in.
-//
-//    Entry : File = File to write the data out to
-//
-//  Returns : Returns how many bytes were written to the file
-//            or -1 if it fails.
-//
-//============================================================================
-
-size_t TAutoMap::WriteAutoMapData(FILE *fp)
-{
-    uint8_t *Buf;
-    uint8_t *s = ActiveBuf;
-    uint8_t *d;
-    size_t Size = MapList->NumMaps * 32;
-
-    // Allocate the bit array
-    if ((Buf = (uint8_t *)malloc(Size)) == nullptr)
-        return -1;
-
-    // Pack the ActiveBuf into a bit array for storage
-    d = Buf;
-    for (size_t n = 0; n < Size; n++, s += 8, d++)
-    {
-        *d  = *s;
-        *d |= *(s + 1) << 1;
-        *d |= *(s + 2) << 2;
-        *d |= *(s + 3) << 3;
-        *d |= *(s + 4) << 4;
-        *d |= *(s + 5) << 5;
-        *d |= *(s + 6) << 6;
-        *d |= *(s + 7) << 7;
-    }
-
-    // Write it out
-    if (fwrite(Buf, 1, Size, fp) != Size)
-        Size = -1;
-
-    free(Buf);
-
-    return Size;
-}
-
-
-
-//============================================================================
-// Function : ReadAutoMapData.
-//----------------------------------------------------------------------------
-//     Desc : This will load the compacted ActiveBuf from the file passed in
-//            and then uncompress the bit array back to ActiveBuf.
-//
-//    Entry : File = File to read the data from.
-//
-//  Returns : Returns how many bytes were read from the file
-//            or -1 if it fails.
-//
-//============================================================================
-
-size_t TAutoMap::ReadAutoMapData(FILE *fp)
-{
-    uint8_t *Buf;
-    uint8_t *d = ActiveBuf;
-    uint8_t *s;
-    size_t Size = MapList->NumMaps * 32;
-
-    // Allocate the bit array
-    if ((Buf = (uint8_t *)malloc(Size)) == nullptr)
-        return -1;
-
-    // Try to read the packed ActiveBuf into the temp buffer
-    if (fread(Buf, 1, Size, fp) != Size)
-        Size = -1;
-    else
-    {
-        // Unpack the bit array back into the ActiveBuf
-        s = Buf;
-        for (size_t n = 0; n < Size; n++, s++)
-        {
-            *d = (*s) & 1;
-            d++;
-            *d = (*s >> 1) & 1;
-            d++;
-            *d = (*s >> 2) & 1;
-            d++;
-            *d = (*s >> 3) & 1;
-            d++;
-            *d = (*s >> 4) & 1;
-            d++;
-            *d = (*s >> 5) & 1;
-            d++;
-            *d = (*s >> 6) & 1;
-            d++;
-            *d = *s >> 7;
-            d++;
-        }
-    }
-
-    free(Buf);
-
-    return Size;
-}
-
-
-
-//============================================================================
-// Function : GetPlayerOnAutoMap.
-//----------------------------------------------------------------------------
-//     Desc : This will convert from the players current position in World
-//            coordinates to the (x, y) position on the AutoMap graphic.
-//
-//    Entry : PlayerX = Ref. to the variable to recieve the players x coord.
-//            PlayerY = Ref. to the variable to recieve the players y coord.
-//
-//============================================================================
-
-void TAutoMap::GetPlayerOnAutoMap(int32_t &PlayerX, int32_t &PlayerY)
-{
-    S3DPoint Pos;
-    MapPane.GetMapPos(Pos);
-
-    PlayerX = (Pos.x - MapArea.left) * DisplayMap->width / (MapArea.right - MapArea.left + 1);
-    PlayerX = max(0, min(PlayerX, DisplayMap->width));
-    PlayerY = (Pos.y - MapArea.top) * DisplayMap->height / (MapArea.bottom - MapArea.top + 1);
-    PlayerY = max(0, min(PlayerY, DisplayMap->height));
+    if (x < 0 || y < 0 || x >= GetWidth() || y >= GetHeight() || button != MB_LEFTDOWN)
+        return;
+    if ((y - kRingY) * (y - kRingY) + (x - kRingX) * (x - kRingX) >= kRingRadiusSquared)
+        return;
+    scrollx += lastmousex - x;
+    lastmousex = x;
+    scrolly += lastmousey - y;
+    lastmousey = y;
+    SetDirty(true);
 }

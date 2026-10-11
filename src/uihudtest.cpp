@@ -7,8 +7,8 @@
 // existing per-panel test modes. The sidebar owns only tab selection state in
 // composed mode; each selected content pane owns and refreshes its own render
 // texture. The rebuilt panes are the play screen's own (the status bar, the
-// bottom bar, the inventory, the spell pane); --test=ui-hud hosts them
-// beside this
+// bottom bar, the inventory, the spell pane, the automap); --test=ui-hud
+// hosts them beside this
 // (testmodes.cpp).
 //
 // The live Equip paperdoll is embedded when the upper sidebar slot is Equip.
@@ -27,7 +27,6 @@
 #include "surface.h"
 
 #include "uiequiptest.h"
-#include "uimaptest.h"
 #include "uisidebartest.h"
 #include "uispellbooktest.h"
 #include "uistatstest.h"
@@ -35,7 +34,6 @@
 namespace {
 
 bool g_initSidebar   = false;
-bool g_initMap       = false;
 bool g_initStats     = false;
 bool g_initBook      = false;
 bool g_initEquip     = false;
@@ -81,7 +79,6 @@ bool InitializeUIHudMode()
     // by SHudState, matching the retail upper/lower region selectors.
     SafeInit("Stats",         g_initStats,     &InitializeUIStatsMode);
     SafeInit("Spellbook",     g_initBook,      &InitializeUISpellbookMode);
-    SafeInit("Map",           g_initMap,       &InitializeUIMapMode);
 
     // Equip pane — live 3D paperdoll + equipment slots.
     SafeInit("Equip",         g_initEquip,     &InitializeUIEquipMode);
@@ -125,7 +122,6 @@ void RenderUIHudModeEmbedded()
     if (g_initSidebar)   RenderUISidebarModeEmbedded();
     const SHudState& s = GetHudState();
     const bool upperVisible = (s.sidebarState == HUD_SIDEBAR_OPEN);
-    const bool lowerVisible = (s.sidebarState == HUD_SIDEBAR_OPEN);
     if (g_initStats)
     {
         SetUIStatsModeVisible(upperVisible && s.topSlot == HUD_TOP_STATS);
@@ -135,11 +131,6 @@ void RenderUIHudModeEmbedded()
     {
         SetUISpellbookModeVisible(upperVisible && s.topSlot == HUD_TOP_BOOK);
         RenderUISpellbookModeEmbedded();
-    }
-    if (g_initMap)
-    {
-        SetUIMapModeVisible(lowerVisible && s.bottomSlot == HUD_BOT_MAP);
-        RenderUIMapModeEmbedded();
     }
     if (g_initEquip)
     {
@@ -157,7 +148,6 @@ void CloseUIHudMode()
         g_cursorOverlayRegistered = false;
     }
     SafeClose("Equip",         g_initEquip,     &CloseUIEquipMode);
-    SafeClose("Map",           g_initMap,       &CloseUIMapMode);
     SafeClose("Spellbook",     g_initBook,      &CloseUISpellbookMode);
     SafeClose("Stats",         g_initStats,     &CloseUIStatsMode);
     SafeClose("Sidebar",       g_initSidebar,   &CloseUISidebarMode);

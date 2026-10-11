@@ -296,6 +296,8 @@ class TPlayer : public TCharacter
     void SetTeam(const SPlayerTeamRecord& record) { team = record; }
         // The multiplayer team record, set as a whole (0x0051e4d0 compares it)
     [[nodiscard]] const SPlayerHudWords& HudWords() const { return hudwords; }
+    // The explored automap (retail +0x314), which the automap pane shows and adds to.
+    [[nodiscard]] SAutoMapRecord& AutoMapRecord() { return automap; }
     void SetHudWords(const SPlayerHudWords& words) { hudwords = words; }
         // The HUD state written into a save
     [[nodiscard]] int32_t NumKnownSpells() const { return (int32_t)knownspells.size(); }

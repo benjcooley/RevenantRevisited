@@ -3580,12 +3580,14 @@ bool Initialize(const char* mode)
         return InitializeABInventoryMode();
     if (strcmp(mode, "ab-spellpane") == 0)
         return InitializeABSpellPaneMode();
+    if (strcmp(mode, "ab-automap") == 0)
+        return InitializeABAutoMapMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         SetUISidebarSyntheticStateEnabled(true);
         SetUIHudCursorOverlayEnabled(true);
         return InitializeUIHudMode() && InitializeUIBottomBarModeEmbedded() && InitializeUIInventoryModeEmbedded()
-            && InitializeUISpellCreateModeEmbedded();
+            && InitializeUISpellCreateModeEmbedded() && InitializeUIMapModeEmbedded();
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
@@ -3657,8 +3659,11 @@ void Close(const char* mode)
         CloseABInventoryMode();
     if (strcmp(mode, "ab-spellpane") == 0)
         CloseABSpellPaneMode();
+    if (strcmp(mode, "ab-automap") == 0)
+        CloseABAutoMapMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
+        CloseUIMapMode();
         CloseUISpellCreateMode();
         CloseUIInventoryMode();
         CloseUIBottomBarMode();
@@ -3747,12 +3752,15 @@ void Render(const char* mode)
         return RenderABInventoryMode();
     if (strcmp(mode, "ab-spellpane") == 0)
         return RenderABSpellPaneMode();
+    if (strcmp(mode, "ab-automap") == 0)
+        return RenderABAutoMapMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         RenderUIHudMode();
         RenderUIBottomBarMode();
         RenderUIInventoryMode();
         RenderUISpellCreateMode();
+        RenderUIMapMode();
         return;
     }
     if (strcmp(mode, "ui-loadscreen") == 0)

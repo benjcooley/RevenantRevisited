@@ -356,6 +356,10 @@ class TMapPane : public TPane
   // World position functions
     void SetMapPos(S3DPoint& newpos);
     void GetMapPos(S3DPoint& retpos) { retpos = center; }
+    // The map-screen point at the centre of the view (retail: half the pane's
+    // size plus its scroll, MapPane +0x1c / +0x20 and +0x2c / +0x30; the
+    // port's camera keeps the centre itself).
+    void GetViewCentre(int32_t& sx, int32_t& sy) const { WorldToScreen(center, sx, sy); }
     void SetMapLevel(int32_t newlev) { newlevel = newlev; if (newlev != level) RedrawAll(); }
     int32_t GetMapLevel() { return level; }
 

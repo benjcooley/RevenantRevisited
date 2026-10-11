@@ -34,6 +34,7 @@ static inline char *strlwr(char *s)
 #include "dls.h"
 #include "chunkcache.h"
 #include "playscreen.h"
+#include "automap.h"
 #include "inventory.h"
 #include "multictrl.h"
 #include "command.h"
@@ -4462,7 +4463,13 @@ COMMAND(CmdFadeScreenIn)
     return CMD_WAIT;
 }
 
-COMMAND(CmdFogOfWar) { return CmdNotPorted("fow", 0x00425440, t); }
+// REVSYNC: 0x00425440 -- the automap's fog of war, and with it its markers,
+// on or off.
+COMMAND(CmdFogOfWar)
+{
+    AutoMap.ToggleFogOfWar();
+    return 0;
+}
 // REVSYNC: playmovie @ 0x00427d80 -- `playmovie "<file>"`: MoviePath and the
 // name (a backslash between them when MoviePath lacks one), played on the
 // PlayScreen (TPlayScreen::PlayMovie). Not in the editor. Retail returned 0

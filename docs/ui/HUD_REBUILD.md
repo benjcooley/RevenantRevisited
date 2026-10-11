@@ -455,6 +455,54 @@ the lower slot while the side panel shows the spell tab. The A/B is
 a few talismans and all twelve with names on and off, first lines, spells
 of 0..5 talismans, a pressed talisman and a pressed "spell".
 
+## 6d. P4 design: the automap
+
+**What retail draws and does** (`docs/ui/forensics/AutoMapPane_RETAIL.md`,
+read from the disassembly; the frame confirmed with `slots/hud/automap.py`,
+2026-10-10). TAutoMap (`0x0065b4f0`, vtable `0x005a5658`) is a TPane in the
+side panel's lower slot, (452, 306), 188×174, drawn entirely through
+T3DScene's overlay quads (`0x00414d70`, point-sampled: TEXTUREMAG/MIN
+NEAREST at `0x00414ab0`) in the texture pass (slot 7, `0x0052a5f0`):
+
+1. The map body (`0x0052a830`): a 320×320 mosaic holding the 5×5 ring of
+   64×64 module tiles (`<module>\automaps\<level>_<x>_<y>.bmp`, each in its
+   slot of the torus, a missing one black), scaled by zoom · 144 / 256 and
+   drawn four times over, clipped to the 144×144 window at (20, 18).
+2. With fog of war on (`0x005d7a6c`, toggled by `fow`): the living, visible
+   characters within 512 px of the player as 4×4 markers from the Marker
+   sheet (frame across, every five pulses; player / enemy / other down),
+   then the fog (`0x0052b520`): a 10×10 grid of black vertices, alpha the
+   share of unexplored 128 px cells each samples, drawn as Gouraud
+   triangles blended by alpha.
+3. The frame (`0x0052bdb0`): `Amap` at (0, 0); `PlusSel` at (8, 3) while
+   "+" is held, `MinusSel` at (144, 3) while "−" is. (The forensics'
+   "−0x70" was 0x90 read as a signed char; the harness drew both always,
+   "−" at x −112.)
+
+Each pulse (`0x0052a280`): ±10 zoom while a button is held, 100..300; the
+window follows the camera (the map view's centre ÷ 8), or keeps its centre
+through a zoom once dragged off it; the tile ring and the fog catch up.
+After the panes pulse, RecordTravels (`0x0052b9f0`) moves the ring with
+the scroll and, when the player moved, explores ±512 px around the player
+in the level's visgrid, which lives in the player's automap record
+(TPlayer::automap, saved with the player). Input (`0x0052c1a0`,
+`0x0052c2c0`): "+" / "−" held to zoom; a press in the ring and a drag
+scroll the map a mosaic px a pointer px; a right release returns to the
+camera.
+
+**Port.** `TAutoMap` (`src/automap.*`; the 1998 pane is in
+`attic/src/automap.*`) is retail's pane on the GPU: the mosaic is a
+nearest-filtered render target stamped a tile at a time
+(`TSurface::ContinuePass`), the body four stretched quads under a target
+clip (`TRenderer::DrawSurfaceStretchedToTarget`, `SetTargetClip`), the fog
+coloured triangles (`DrawColoredTrianglesToTarget`), all moved half a pixel
+for D3D7's integer pixel centres. `TAutoMapGrid` is the visgrid with its RLE
+codec. `TPlayScreen` hosts the pane in the lower slot for the map tab and
+calls RecordTravels after its pane pass; `BindMainPlayerToScreen` binds the
+main player's record (`0x0052c3d0`) and the player's save folds the shown
+level in first (`0x0052c5c0`). `hud_ab.py automap` compares the frame with
+the buttons released and held.
+
 ## 7. Status
 
 - 2026-10-07: survey done; retail pipeline verified (§3); P0 started.
@@ -618,3 +666,19 @@ of 0..5 talismans, a pressed talisman and a pressed "spell".
     `SetQuickSpell`, `HasTalismans`).
   - Open: casting has the spellbook find the spell (`0x00544fb0`), with the
     spellbook pane (P4).
+- 2026-10-10: **P4: the automap done** (its buttons and layout had long been
+  broken, its map never shown).
+  - `TAutoMap` is retail's pane (§6d), hosted by `TPlayScreen` in the lower
+    slot for the map tab: the module's tiles around the camera, the fog
+    over the unexplored area, the markers, the frame; hold-to-zoom, drag to
+    scroll, right-click back to the camera; the explored area recorded into
+    the player's save. The `fow` console command works. `--test=ui-map` /
+    `ab-automap` are thin hosts; the 409-line harness is gone.
+  - `hud_ab.py automap`: 4/4 cases, every pixel exact (the frame, "+" and
+    "−" released and held). The rest of the HUD A/B still clean.
+  - Found on the way: the play screen kept pointer moves over the HUD from
+    the screen's panes (clicks reached them), so the side panes never saw a
+    drag; it routes them now.
+  - Open: the map body's A/B needs a level in the fixture (the visgrid,
+    the module's tiles, characters to mark) and OverlayRaster scaled quads
+    and triangles; the mosaic texture's format (565 or 4444) is part of it.
