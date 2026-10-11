@@ -72,7 +72,8 @@ std::vector<SEffect> ReviewCatalogue() {
     paralize.submit=[](void* c,EFxDebugMode){++*static_cast<int*>(c);};
     auto manadrain=paralize;manadrain.id="TManaDrain_CONFIGURED_TARGET";
     auto ymanadrain=manadrain;ymanadrain.id="TYManaDrain_CONFIGURED_TARGET";
-    return {authored_blood,drip,dragon,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    auto tornado=ymanadrain;tornado.id="TTornado_CONFIGURED_TARGET";
+    return {authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -122,7 +123,7 @@ int main(int argc,char** argv) {
     assert(!CreateVfxReviewPreview(0x12309867,origin));
     // A registered, callable factory is insufficient: the implementation audit
     // must reject null bodies and invalid animator aliases before spawning.
-    for (uint32_t id : {0x2784abdeu,0xd0c0f03au}) {
+    for (uint32_t id : {0xd0c0f03au}) {
         assert(!DescribeVfxReviewPreview(id).supported);
         assert(!CreateVfxReviewPreview(id,origin));
     }
@@ -266,6 +267,17 @@ int main(int argc,char** argv) {
         assert(spray && spray->Id()=="Blood_AUTHORED" && spray->RestartInterval()==0);
         const int initial=creates;TTime::BeginFixedFrame();spray->Submit();TTime::BeginFixedFrame();spray->Submit();assert(spray->Alive()==false);
         TTime::BeginFixedFrame();spray->Submit();assert(spray->Alive()==true && creates==initial+1);
+    }
+    assert(creates==destroys);
+    {
+        const auto info=DescribeVfxReviewPreview(0x2784abdeu);
+        assert(info.supported && !info.partial && !info.requires_endpoints && info.lifetime_known);
+        assert(std::strstr(info.description,"natural variant selects Funnel"));
+        assert(!CreateVfxReviewPreview(0x2784abdeu,origin,{80,-120,128}));
+        auto target=CreateVfxReviewPreview(0x2784abdeu,origin);
+        assert(target && target->Id()=="TTornado_CONFIGURED_TARGET" && target->RestartInterval()==0);
+        const int initial=creates;target->Submit();target->Submit();assert(target->Alive()==false && creates==initial);
+        target->Submit();assert(target->Alive()==true && creates==initial+1);
     }
     assert(creates==destroys);
     std::cout<<"review preview mapping/lifecycle/callback tests passed\n";

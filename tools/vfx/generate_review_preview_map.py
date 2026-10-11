@@ -75,7 +75,7 @@ PARTIAL = {
     '0xae92bc14': ('TManadrainEffect_Bespoke__YManadrain_BESPOKE', 'own YManadrain asset billboard; original controller incomplete'),
     '0xae5eeb26': ('TMaelstromEffect_Bespoke__ymaelstrom_BESPOKE', 'own ymaelstrom asset billboard; original controller incomplete'),
 }
-# Still absent: Tornado/Vortex/Pulp/Dust/geyser/cfire null bodies; Strike has no
+# Legacy absent bodies include Vortex/Pulp/Dust/geyser/cfire; Strike has no
 # draw submission. Icedsparks/Snow, IrisFlare/Teleporter, WFall/WCap/RiverFall
 # and rejected dragon overrides do not establish the correct animator binding.
 # Better authored replacements retain preference over old placeholder bodies.
@@ -140,6 +140,7 @@ SOURCE_MAPPINGS = {
     '0xad92bc14': 'TParalize1_CONFIGURED_TARGET',
     '0xad92bc13': 'TManaDrain_CONFIGURED_TARGET',
     '0xae92bc14': 'TYManaDrain_CONFIGURED_TARGET',
+    '0x2784abde': 'TTornado_CONFIGURED_TARGET',
     '0x42e0fcd0': 'TOgrestrength_AUTHORED_TAGS',
     '0xad92bd39': 'TTrollblood_AUTHORED_TAGS',
     '0x10ac03de': 'TRegeneration_AUTHORED_TAGS',
@@ -183,6 +184,8 @@ def candidate_metadata(row, name):
         return False, 'Persistent Drip SetParams(20,128,1), managed no-splash Ripple children; natural map residency and audio not certified'
     if row.get('retail_type_id','').lower()=='0xba09fead' and name=='Dragonattack_ORIGINAL':
         return False, 'Declared Fighting caller: target offset(280,0), ground0, face96 muzzle(14,14,+100); arbitrary endpoints and natural dragon actors not certified'
+    if row.get('retail_type_id','').lower()=='0x2784abde' and name=='TTornado_CONFIGURED_TARGET':
+        return False, 'Exact Tornado owner with explicit genuine Acolytes and loaded Tornado variant; natural variant selects Funnel, so no natural-cast or successful-damage claim'
     if row.get('retail_type_id','').lower()=='0xae92bc14' and name=='TYManaDrain_CONFIGURED_TARGET':
         return False, 'Configured genuine Acolyte fighting target: offset(96,0,0), YManaDrain variant; original uncapped mana transfer and finite completion; arbitrary moving actors not certified'
     if row.get('retail_type_id','').lower()=='0xad92bc13' and name=='TManaDrain_CONFIGURED_TARGET':

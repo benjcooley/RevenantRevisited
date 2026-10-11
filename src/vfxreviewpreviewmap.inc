@@ -31,6 +31,7 @@
 {0x224a5adfu, "BarrierEW_ORIGINAL", false, "Implemented preview controller; map caller not certified"}, // BarrierEW
 {0x224a5cccu, "Smoke_ORIGINAL_QUALITY", false, "Implemented preview controller; map caller not certified"}, // Smoke
 {0x224b5adcu, "BarrierNS_ORIGINAL", false, "Implemented preview controller; map caller not certified"}, // BarrierNS
+{0x2784abdeu, "TTornado_CONFIGURED_TARGET", false, "Exact Tornado owner with explicit genuine Acolytes and loaded Tornado variant; natural variant selects Funnel, so no natural-cast or successful-damage claim"}, // Tornado
 {0x27df45beu, "TSymGlowAnimator_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // SymGlow
 {0x335a2516u, "TRedFountainAnimator_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // RedFont
 {0x37780ae2u, "TFireFlashEffect_BESPOKE", false, "Implemented preview controller; map caller not certified"}, // FireFlash

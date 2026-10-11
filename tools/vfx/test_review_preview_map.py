@@ -55,6 +55,13 @@ TNewUnreviewedEffect_BESPOKE'''.split()
         for type_id,name in [('0x224a5adf','BarrierEW_ORIGINAL'),('0x224b5adc','BarrierNS_ORIGINAL'),('0xaeaeeb32','JhagaAttack_ORIGINAL')]:
             self.assertEqual(admitted_candidates({'retail_type_id':type_id,'preview_candidates':[]}),[name])
 
+    def test_tornado_keeps_distinct_owner_and_caller_scope(self):
+        row={'retail_type_id':'0x2784abde','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['TTornado_CONFIGURED_TARGET'])
+        partial,description=candidate_metadata(row,'TTornado_CONFIGURED_TARGET')
+        self.assertFalse(partial)
+        self.assertIn('natural variant selects Funnel',description)
+
     def test_ymanadrain_distinct_configured_target(self):
         row={'retail_type_id':'0xae92bc14','preview_candidates':[]}
         self.assertEqual(admitted_candidates(row),['TYManaDrain_CONFIGURED_TARGET'])

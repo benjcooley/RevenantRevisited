@@ -77,6 +77,7 @@
 #include "effects/paralizepreview.h"
 #include "effects/manadrainpreview.h"
 #include "effects/ymanadrainpreview.h"
+#include "effects/tornadopreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
 #include "effects/restorelifepreview.h"
@@ -7163,6 +7164,19 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(e);
             e.id="TYManaDrain_CONFIGURED_TARGET";
             e.factory=[](const S3DPoint& o)->void*{return ymanadrain_preview::SpawnConfiguredTarget(o);};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TTornado_AUTHENTIC_TARGET_FIXTURE";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return tornado_preview::SpawnTargetFixture(o);};
+            e.submit=[](void* c,EFxDebugMode){tornado_preview::Advance(static_cast<tornado_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){tornado_preview::SubmitWorld(static_cast<tornado_preview::State*>(c));};
+            e.is_alive=[](void* c){return tornado_preview::Alive(static_cast<tornado_preview::State*>(c));};
+            e.destroy=[](void* c){tornado_preview::Destroy(static_cast<tornado_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+            e.id="TTornado_CONFIGURED_TARGET";
+            e.factory=[](const S3DPoint& o)->void*{return tornado_preview::SpawnConfiguredTarget(o);};
             VfxTest::DeferredRegister(e);
         }
         {
