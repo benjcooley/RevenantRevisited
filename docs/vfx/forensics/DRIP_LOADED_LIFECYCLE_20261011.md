@@ -148,3 +148,13 @@ Root captures remain outside Git under
 `/Users/benjamincooley/RevenantRetailLab/research/vfx-drip-root-20261011/`.
 The reviewed total advances to149/176, with27 remaining. The recorded hue,
 edge, audio/RNG, natural sector, arbitrary period and splash limits remain open.
+
+The exact gallery mapping alone did not override its existing drawable map
+factory: root's first gallery audit honestly exercised default(64,128,48).
+A separate viewer-only preference now selects only exact0x5975abde plus
+`TDripEffect_LINKED_NO_SPLASH` with supported/nonpartial/known-lifetime metadata.
+The bridge still validates Static style, actual is_alive and world submission.
+No ordinary map/gameplay factory changes. Private build passes; actual40-frame
+label-free gallery selects the exact controlled route,40visible/36distinct,
+one persistent creation and clean exit. Evidence:
+`hard-alpha/drip-gallery-preferred/0x5975abde-Drip/manifest.json`.
