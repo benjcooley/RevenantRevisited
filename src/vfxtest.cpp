@@ -70,6 +70,7 @@
 #include "effects/irisflarepreview.h"
 #include "effects/essencedrainpreview.h"
 #include "effects/invisiblepreview.h"
+#include "effects/bloodpreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/swamppreview.h"
 #include "effects/paralizepreview.h"
@@ -6185,6 +6186,11 @@ struct SVfxTestBootstrap {
         {
             VfxTest::SEffect e={};e.id="Invisible_AUTHORED";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
             e.factory=[](const S3DPoint&o)->void*{return invisible_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){invisible_preview::Advance(static_cast<invisible_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){invisible_preview::SubmitWorld(static_cast<invisible_preview::State*>(c));};e.is_alive=[](void*c){return invisible_preview::Alive(static_cast<invisible_preview::State*>(c));};e.destroy=[](void*c){invisible_preview::Destroy(static_cast<invisible_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+
+        {
+            VfxTest::SEffect e={};e.id="Blood_AUTHORED";e.family="blood";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return blood_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){blood_preview::Advance(static_cast<blood_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){blood_preview::SubmitWorld(static_cast<blood_preview::State*>(c));};e.is_alive=[](void*c){return blood_preview::Alive(static_cast<blood_preview::State*>(c));};e.destroy=[](void*c){blood_preview::Destroy(static_cast<blood_preview::State*>(c));};VfxTest::DeferredRegister(e);
         }
 
         // Shipped literal Vortex resolves the default animator and three legacy roots.
