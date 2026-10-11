@@ -235,15 +235,16 @@ the editor every click sends `Notify(4, player)` (`0x00499ff0`) first.
 
 ### 4.2 Left button down (1)
 
-Only with a player and inside the pane. With `doing` the player's
-current action block (`+0xe0`) and the hover type (`+0x12c`) none or
-"swords" [C]:
+Only with a player and inside the pane. With `root` the player's root
+action block (`+0xe0`: his mode; `doing` is `+0xd8`, see
+[CLICKWALK.md](../../playtest/CLICKWALK.md) §1.2) and the hover type
+(`+0x12c`) none or "swords" [C]:
 
-- **Combat** (`doing` is `ACTION_COMBAT` 3): `on = OnObject(x, y, null)`;
+- **Combat** (`root` is `ACTION_COMBAT` 3): `on = OnObject(x, y, null)`;
   a character (class 12) that isn't Locke's target and that he may fight
   (`0x004c89c0`) becomes his target (`0x004d4790`); otherwise
   `ButtonAttack(random(1, 3))` (`0x004d2480`). Done.
-- **Bow** (`doing` is 0x19): if the bow isn't drawn, `DrawBow`
+- **Bow** (`root` is 0x19): if the bow isn't drawn, `DrawBow`
   (`0x004d0aa0`) and `AimBow` at the pointer (`0x004d0c70`); `clicked` set.
 - **Otherwise**: `on = OnObject(x, y, null)`; `onobject` (`+0xf8`) = its
   map index or −1; `clicked` (`+0x120`) set; an inventory item also goes
@@ -276,7 +277,9 @@ With a live player (slot `0x1c0` ≥ 1) and inside the pane [C]:
     units (`0x004c6155`, `0x004c7fc3`: `Pickup(obj)`, only for a block
     `Goto` marked, `+0x60` bit `0x1000`), which does nothing for a
     non-item: a far door takes a second click.
-  - A press and release on the floor (no object) does nothing.
+  - A press and release on the floor (no object) does nothing
+    (`0x0044ff51`; the playtest build `clickwalk` walks there instead:
+    [CLICKWALK.md](../../playtest/CLICKWALK.md)).
 - **No click** (a drag from the inventory/belt/equipment let go over the
   map): `with` used on the object under it (`on->Use(player, with)`), else
   dropped on the floor at the pointer (`FULLSINGDROP` / `FULLMULTDROP`
