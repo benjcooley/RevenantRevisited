@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 138,
+    "retail_rows_with_source_fixes_recorded": 140,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 125,
+    "visual_fidelity_confirmed_rows": 127,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 125,
-    "remaining_visual_review_rows": 51
+    "reviewed_visual_pass_rows": 127,
+    "remaining_visual_review_rows": 49
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -1701,6 +1701,20 @@
       "check": "root_scoped_whole_effect_appearance",
       "status": "approved_scoped_appearance",
       "scope": "Fourteen full original/actual Metal native-domain software phases2..80 in supported1920x1080 with whole visible geometry. Early2/15/25blank, partial27, full28onward, flatten75 and kill76/blank80. Native-only actualARGB640/480edgeguard proven by2304authored decisions/20kernel boundary controls/constants-only differential;79state source proof. Ordinarycommon80images unchanged; translatedtypedgalleryvisible/dynamic. Commonearly geometry/device, integer-edge/interpolation/naturalcaller/audio/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-cataclysm-original-20261011/root-approval.json": {
+      "sha256": "80c10aa098e941db8ec4db51e0aa8e7aaff716ce339bc2d74d2e6372c5b5e070",
+      "retail_row": "cataclysm:0xad92bc19",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Sixteen full original/actual Metal native-domain null-spell variant0 phases1..89: falling rocky head/trail, impact torus, fragments/glows/dust and blanktail; whole visible bounds inside1280x960. Thirty pieces/seventy dust/fifty glows,110565 state fields exact/826RNG, original life80 kill. Explicit prelit RGB565/RGBA5 and additive cull-none/order policies separately proven. Original base nonlinear local-height policy; red torus/glows and own five-mesh asset. Common launch brightness/clipping, natural actors/other spell variant/damage/audio, interpolation/destination/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-ycataclysm-original-20261011/root-approval.json": {
+      "sha256": "a4d92475bf5da149ac28997aa7a7264b63f146accbf9a1ce41298f79c99159df",
+      "retail_row": "Ycataclysm:0xad92fc13",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Sixteen full original/actual Metal native-domain null-spell variant0 phases1..89: falling rocky head/trail, impact torus, fragments/glows/dust and blanktail; whole visible bounds inside1280x960. Thirty pieces/seventy dust/fifty glows,110565 state fields exact/826RNG, original life80 kill. Explicit prelit RGB565/RGBA5 and additive cull-none/order policies separately proven. Own Y raw local-height policy and green textures; independent named factory and asset. Common launch brightness/clipping, natural actors/other spell variant/damage/audio, interpolation/destination/device/exactpixels open."
     }
   }
 }

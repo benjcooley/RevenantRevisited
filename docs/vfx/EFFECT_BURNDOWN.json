@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "dcf1d0c155d378583dd7e291a9c97c8c17128e4bde5c0fdd53e522a625e6868e",
+    "harness_sha256": "78803b2a665172922df4983d5760ab35bd54fb2ad18cc364dbb4c57d0a81349e",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 138,
+    "retail_rows_with_source_fixes_recorded": 140,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 125,
+    "visual_fidelity_confirmed_rows": 127,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 125,
-    "remaining_visual_review_rows": 51
+    "reviewed_visual_pass_rows": 127,
+    "remaining_visual_review_rows": 49
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -16174,27 +16174,39 @@
       "preview_candidates": [
         "TCataclysmEffect_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Complete original null-spell variant0 pool/caller/RNG/lifetime and ordered five-mesh renderer replace billboard preview. Original base nonlinear local-height policy; red torus/glows and own five-mesh asset. Sixteen whole phases independently reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved original null-spell variant0 lifecycle; verify natural actors/other spell variant/damage/audio and renderer/device residuals.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Sixteen full original/actual Metal native-domain null-spell variant0 phases1..89: falling rocky head/trail, impact torus, fragments/glows/dust and blanktail; whole visible bounds inside1280x960. Thirty pieces/seventy dust/fifty glows,110565 state fields exact/826RNG, original life80 kill. Explicit prelit RGB565/RGBA5 and additive cull-none/order policies separately proven. Original base nonlinear local-height policy; red torus/glows and own five-mesh asset. Common launch brightness/clipping, natural actors/other spell variant/damage/audio, interpolation/destination/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-cataclysm-original-20261011/root-approval.json",
+        "sha256": "80c10aa098e941db8ec4db51e0aa8e7aaff716ce339bc2d74d2e6372c5b5e070",
+        "note": "docs/vfx/forensics/CATACLYSM_ORIGINAL.md"
+      }
     },
     {
       "index": 95,
@@ -16205,27 +16217,39 @@
       "preview_candidates": [
         "TCataclysmEffect_Bespoke__YCataclysm_BESPOKE"
       ],
-      "source_fixes": [],
+      "source_fixes": [
+        "2026-10-11: Complete original null-spell variant0 pool/caller/RNG/lifetime and ordered five-mesh renderer replace billboard preview. Own Y raw local-height policy and green textures; independent named factory and asset. Sixteen whole phases independently reviewed."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Audit candidate factory/animator and actual asset, capture software reference, fix parity, then exercise real runtime trigger.",
+      "next_action": "Preserve approved original null-spell variant0 lifecycle; verify natural actors/other spell variant/damage/audio and renderer/device residuals.",
       "notes": [],
-      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types"
+      "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent whole-effect phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Sixteen full original/actual Metal native-domain null-spell variant0 phases1..89: falling rocky head/trail, impact torus, fragments/glows/dust and blanktail; whole visible bounds inside1280x960. Thirty pieces/seventy dust/fifty glows,110565 state fields exact/826RNG, original life80 kill. Explicit prelit RGB565/RGBA5 and additive cull-none/order policies separately proven. Own Y raw local-height policy and green textures; independent named factory and asset. Common launch brightness/clipping, natural actors/other spell variant/damage/audio, interpolation/destination/device/exactpixels open.",
+        "report": "recon/retail_asm/runtime/effects/current-ycataclysm-original-20261011/root-approval.json",
+        "sha256": "a4d92475bf5da149ac28997aa7a7264b63f146accbf9a1ce41298f79c99159df",
+        "note": "docs/vfx/forensics/YCATACLYSM_ORIGINAL.md"
+      }
     },
     {
       "index": 96,
