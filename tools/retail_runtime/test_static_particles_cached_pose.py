@@ -27,15 +27,16 @@ struct Inputs { V owner_position,object_zero_origin; int owner_face=0,animation_
 struct Controller { Inputs inputs; struct {std::vector<int> emitters{1};} track; };
 struct S3DAnimObj { hmm_vec3 pos{},scl{}; };
 struct Imagery {
- int sampled=-1;
+ int sampled=-1,expected_state=0;bool lightstrip=false;
+ bool HasRetailLightStripProfile(){return lightstrip;}
  bool HasRetailMightPartSysProfile(){return false;}
  bool HasRetailImmortalmightPartSysProfile(){return false;}
  bool HasRetailFmasteryPartSysProfile(){return false;}
  bool HasRetailSpeedFamilyPartSysProfile(uint32_t){return false;}
  bool HasRetailCameraParticleProfile(uint32_t){return false;}
  bool HasRetailStaticParticleProfile(uint32_t id){return id==0xad92bd38u;}
- bool GetUninterpolatedAniKey(int object,int state,int frame,hmm_vec3& p,hmm_vec3& r,hmm_vec3& s){
-  assert(object==1 && state==0);sampled=frame;p={float(frame),0,0};r={0,0,0};s={float(frame+1),1,1};return true;
+ bool GetUninterpolatedAniKey(int object,int state,int frame,hmm_vec3& p,hmm_vec3& r,hmm_vec3& s,bool inclusive=false){
+  assert(object==1 && state==expected_state && inclusive==lightstrip);sampled=frame;p={float(frame),0,0};r={0,0,0};s={float(frame+1),1,1};return true;
  }
 };
 struct TObjectInstance { uint32_t id=0xad92bd38u;int state=0,frame=8;S3DPoint Pos(){return {};};int GetFace(){return 0;}uint32_t ObjId(){return id;}int GetState(){return state;}int GetFrame(){return frame;} };
@@ -63,6 +64,11 @@ int main(){
   assert(p.origin.x==expected && p.matrix[12]==expected);
   assert(animator.imagery.sampled==(variant==0?7:-1));
  }
+ // Exact LightStrip uses the same cached pose in all three authored states.
+ for(int state=0;state<3;++state){TObjectInstance owner;owner.id=0x10da54d0u;owner.state=state;
+  T3DAnimator animator;animator.imagery.lightstrip=true;animator.imagery.expected_state=state;Controller c;
+  for(owner.frame=8;owner.frame<=10;++owner.frame){Extracted::FillInputs(c,animator,owner);
+   assert(c.inputs.animation_frame==7 && c.inputs.emitters[0].position.x==7);}}
  // Three authoritative Pulses before Animate retain its cached pose.
  TObjectInstance owner;T3DAnimator animator;Controller c;
  for(owner.frame=8;owner.frame<=10;++owner.frame){

@@ -1,3 +1,4 @@
+#include "effects/lightstriporiginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
@@ -5250,6 +5251,16 @@ struct SVfxTestBootstrap {
         lightstrip.submit        = [](void* c, EFxDebugMode d) { LightStripShimSubmit(c, d); };
         lightstrip.destroy       = [](void* c) { LightStripShimDestroy(c); };
         VfxTest::DeferredRegister(lightstrip);
+        {
+            VfxTest::SEffect original{};original.id="LightStrip_AUTHORED_TERRAIN";
+            original.family="strip";original.pipeline="IM+QUAD";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{S3DPoint source={o.x-180,o.y,o.z+78},target={o.x+180,o.y,o.z+78};return lightstrip_original::Spawn(source,target);};
+            original.submit=[](void* c,EFxDebugMode){lightstrip_original::Advance(static_cast<lightstrip_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode mode){lightstrip_original::SubmitWorld(static_cast<lightstrip_original::State*>(c),mode);};
+            original.destroy=[](void* c){lightstrip_original::Destroy(static_cast<lightstrip_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+
 
         VfxTest::SEffect shock_bespoke = {};
         shock_bespoke.id            = "TShockAnimator_BESPOKE";
