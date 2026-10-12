@@ -71,7 +71,7 @@ struct Imagery{uint32_t static_particles_profile=type_id;
  SPEED_FAMILY_METHOD
  bool HasCombatFlashStart1PartSysProfile()const{return false;}
  TTextureHandle GetTextureHandle(int index){if(index!=0)std::abort();return 1;}};
-struct TRenderer{std::vector<SQuadDrawItem>quads;void SubmitFxQuad(const SQuadDrawItem&q){quads.push_back(q);}};
+struct TRenderer{std::vector<SQuadDrawItem>quads;bool UsesRetailSoftwareMeshLighting()const{return true;}void SubmitFxQuad(const SQuadDrawItem&q){quads.push_back(q);}};
 struct TTime{static int frame;static int FrameCount(){return frame;}};int TTime::frame=0;
 unsigned random_state=1;int random(int a,int b){random_state=random_state*214013u+2531011u;return a+((random_state>>16)&32767u)%(b-a+1);}
 struct T3DAnimator{struct SPartSysControllers{
