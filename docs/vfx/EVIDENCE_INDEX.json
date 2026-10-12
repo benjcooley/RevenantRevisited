@@ -2111,6 +2111,13 @@
       "check": "qualified_labyrinth_full_controller_visual_review",
       "status": "pass",
       "scope": "Qualified original initializer selector upper4-to3 only, unchanged own Starfield asset; full150-star/trail controller, original 24Hz Render/RNG, camera-follow and100frame owner loop across170ticks. Original software background extent rejection matched only in explicit native/software policy; ordinary background retained. Root reviewed nine whole/fixed phases1/6/16/30/60/99/100/101/170 and fresh repeat; sampling/depth/quantization/device/natural caller remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-map-qualified-20261011/manifest.json": {
+      "sha256": "dd6bb7de697b96252230fccd8ddf4fba658a4b58084497a0402ab779948e0e00",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "qualified_actual_map_runtime",
+      "status": "pass",
+      "scope": "Actual realmap/NewObject/query/actors/GameRand parent/particle/Quicksand/spelltimer comparison with declared Sparksdependency and monotonicRNGneutral allocatorcontrol. Native310rows exact; source310PNGdecoded/fileexact,282100poolfields/5942packets/236Quicksand rows exact. No intendedSandappearance credit."
     }
   }
 }

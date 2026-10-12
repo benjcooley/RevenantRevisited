@@ -111,3 +111,12 @@ The complete runner self-check passed in the private checkout: all 310 original
 records and 310 decoded/PNG frames repeat exactly, with all focused tests and
 runtime checks passing. `sandswirl-map-repro-selfcheck/reproduction-manifest.json`
 SHA-256: `cf13fbdd9b7b75f83a8493386e539da66cc8b0a0335870ecb204525f66d4ee3e`. Root reproduction and approval remain separate.
+
+Root combined-source verification passed in `research/vfx-sandswirl-root-20261011/
+map-integrated/finish-traced-repeat/manifest.json`: all310 original records,
+310 decoded/file-identical GPU images,282100 pool fields/5942 packets/236
+Quicksand rows and spell completion agree. Source exits0 with clean actor/map
+cleanup. A240-second export timeout and a subsequent clean but untraced image
+repeat are retained separately; final traced scenario embeds its environment
+and uses600seconds. This remains qualified Sparks runtime evidence, not Sand
+appearance credit.
