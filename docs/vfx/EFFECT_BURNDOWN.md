@@ -16,14 +16,11 @@ Work proceeds in parallel: close current visual reviews, convert and compare new
 
 The dated sections below retain historical checkpoint counts. Use this summary and the JSON ledger for current status.
 
-**Workflow change (2026-10-07):** most new VFX validation uses the thin retail
-emulator and its original software renderer. DOSBox-X with the emulated 3D device
-is reserved for targeted software-rendering diagnostics, not the routine loop.
-Use [the active workflow](../RETAIL_AB_TESTING.md).
-Each agent can run independent sessions and private named retail variants.
-Prioritize speed and repeatability, with known renderer limits recorded
-separately from VFX defects. The counts and earlier captures below are retained
-historical evidence; this migration alone grants no additional acceptance.
+**Active workflow (2026-10-11):** all new VFX validation uses the in-process
+retail emulator and independently owned local processes. The active goal
+excludes DOSBox-X. Use [the agent handoff](../RETAIL_AB_TESTING.md), direct test
+controls, named private retail variants and explicit renderer qualifications.
+Earlier DOSBox references remain historical evidence only.
 
 **Viewer audit (2026-10-10):** a complete catalogue capture sweep finds108 visible entries,64 unavailable and4 empty short samples. Drip becomes visible in a longer run; Fog and both jtele rows expose incomplete preview/controller admissions now corrected. Presence is separate from retail fidelity. [Reproduction and scope](forensics/GALLERY_RUNTIME_AUDIT_20261010.md).
 
@@ -452,6 +449,10 @@ Audited 2026-10-05. This file and [EFFECT_BURNDOWN.json](EFFECT_BURNDOWN.json) a
 
 ## Historical scope and checkpoint (superseded by current summary)
 
+The checkboxes and counts in this historical section record their dated state.
+They are not the current work queue. Current per-row reviews and remaining
+configuration gaps are in [EFFECT_BURNDOWN.json](EFFECT_BURNDOWN.json).
+
 The current `data/imagery.rvi` → `class.def` contains **176 retail EFFECT type rows**, **174 distinct case-insensitive names**, and **166 distinct case-insensitive asset paths**. Preserve all 176 type IDs. Three rows are literally named `Flame`, with assets `Flame.I3D`, `FlameB.I3D` and `FlameG.I3D` and IDs `0x50ba373b`, `0x50ba373c`, `0x50ba373d`. The colored harness aliases do not prove that `add FlameB`/`add FlameG` dispatches in retail. This corrects the older inventory's claim of 174 entries/164 assets.
 
 **Historical retail visual checks passed: 16 / 176 (four Fountain colors, Ripple emitted by Drip, Globe on an actual map floor, base Flame, isolated Pixie, isolated Cure, Sparks editor defaults and teleportation/Shadowfist/Warriorborn on a neutral real-depth floor and Gold default appearance against two independent references measured-quality Might and corrected incoming-state Immortalmight). Full retail/runtime acceptance: 0 / 176; 176 remain.** Fifty retail rows now have software references (base Flame, Mist, all four Fountain colors, Fizzle, Drip, static Globe, all twelve town signs and all seven colored Ribbons and SymGlow, Faultfire, FireSwarm, Streamer, setvortex, Pixie, FireFlash, FireCone, MeteorStorm, Cure, goldeffect, combatflash state0/start1, Sparks editor defaults and KinSecretDoor still/state0, PunchAndJudy loop excerpt and MPAppear defaultstart, Shadowfist, Warriorborn, teleportation, Might, Immortalmight and Fmastery steady start excerpts), with saved paired previews for49 rows. These prove the capture/comparison workflow, not final visual or runtime acceptance. A successful build, plausible preview or `status: complete` capture alone does not establish visual fidelity; a retained retail pair and visual review can establish it with independent random seeds. The historical all-gates completion rule included the effect's real map, spell, combat or character trigger, beyond `SpawnForTest`; these are now separate follow-up gates for the primary scoped visual measure.
@@ -524,7 +525,7 @@ The project finish line is **all 176 retail VFX entries converted and tested aga
 
 Different random seeds do not block visual acceptance. Review geometry, size, color/blending, atlas animation, lifetime/cadence and particle distribution across the clip. Matching individual random particles or exact pixels is not required. Retain the pair and reviewer decision; track type dispatch and natural runtime/context separately. Ripple appearance is confirmed by the user in the steady-state Drip comparison.
 
-## Current work order — easy retail A/B first
+## Historical work order — easy retail A/B first
 
 User direction, 2026-10-05: defer effects that are hard to duplicate. Reuse the valid hashed Flame, Mist, four Fountain-color and Fizzle software references for quick port comparisons. Try simple Drip/Ripple editor fixtures with one bounded attempt each; invisible or unstable references move to the deferred queue.
 
@@ -577,7 +578,7 @@ MistFog, literal Waterfall, four WFall/WCap variants, RiverFall and geysers are 
 
 - [x] Photon bounded ground-level probe retains11 distinct blue-burst images over0.4seconds with exact background/cleanup. Full launch/flight/impact is not established, so this limited recipe is diagnostic and adds no accurate-reference, source, runtime or visual credit. Cure/FireCone corrections are recorded below; advance simple editor references and revisit a real missile fixture later.
 
-## Current Cure / FireFlash / FireCone validation
+## Historical Cure / FireFlash / FireCone validation
 
 Final binary `e829e8dbd53c8d4d26f7c82f21159147137d0905181d2591bf9cde7670764870` builds with the Metal software-helper path. All eight serial capture jobs finish successfully: two new A/B pairs and six actual runtime captures; the FireFlash pair was already complete. The [hash audit](/Users/benjamincooley/RevenantRetailLab/research/ledger-reconciliation-20261005/cure-firecone-final-integrity.json) checks 720 preview frames, 12 paired media files, 360 runtime frames, fixture/module/commands/log/timing hashes, native manifest hashes and the 33 passing command rows. The three pairs use their own retained native software references with zero background drift on both sides below the recorded FPS band, without position/scale/color/phase fitting. Root also passes 16 particle, 108 transform and 25 capture tests, plus 625 separate Cure SpellData policy cases.
 
