@@ -140,6 +140,14 @@ sides tick by tick).
 ticks between blows: retail's two runs give hits 7-10, glances 1-4, 8 of 15
 glances, 7 and 9 blows, 66 ticks. A match within what two runs can show.
 
+**A1b after W1's fixes and the tag sounds (port seeds 1-12, 2026-10-11).**
+Hits 6-10 (a few 11-15: doubles), glances 1-5, 43% of the blows glances,
+7.6 blows to kill Locke (5-10), 58 ticks between blows (median 43), the
+first blow at tick 59-191 (median 95); Locke falls into combat at tick 31
+every seed. Retail's two lab runs: hits 7-10, glances 1-4, 8 of 15
+glances, 7 and 9 blows, 66 ticks: still a match within what two runs show.
+The opening is the emulator's to settle, and W1 does (below).
+
 **A1b in the emulator (kata W1, 2026-10-11).** Retail's own tick over
 A1b's world, run in the emulator against the port's
 ([forensics/SCENARIO_KATA.md](forensics/SCENARIO_KATA.md)): they agree
@@ -150,7 +158,4 @@ the option on retail's Locke does fall into combat; the lab's, still in
 his walk stance after ~100 ticks, most likely had it off (the lab's INI
 wasn't read).
 
-Open from A1b:
-- **The statistics after W1's fixes.** BeginFighting, the player's damage
-  type and the rest changed the port's fights after the 12-seed sweep
-  above (seed 1: Locke falls at tick 478, not 586): sweep again.
+Open from A1b: none.
