@@ -15,6 +15,7 @@
 #include "retailab_json.h"
 
 #include "3dimage.h"
+#include "armor.h"
 #include "character.h"
 #include "imagery.h"
 #include "imageres.h"
@@ -300,6 +301,34 @@ inline bool seamAI = false;
 // OF_PARALIZE, OF_ICED, OF_VIRGIN (melee_attack.py PULSE_OBJFLAGS).
 constexpr uint32_t kPulseObjFlags = OF_KILL | OF_ONEXIT | OF_PARALIZE | OF_ICED | OF_VIRGIN;
 
+// A worn item of a fixture player (`equipment`: {slot, class, protection};
+// kata C3's targ.armor.*): an object of the case's class (its first type,
+// a bare imagery) whose Protection the case gives, as the retail fixture's
+// item vtable answers TPlayer::ArmorValue (0x519850).
+class TFixtureItem : public TArmor
+{
+  public:
+    explicit TFixtureItem(const JsonValue& spec)
+        : TArmor(Def(spec).get(), new TFixtureImagery(TFixtureImagery::Register({}), "item", {}, false)),
+          protection((int32_t)spec["protection"].Int())
+    {
+    }
+    int32_t Protection() override { return protection; }
+
+  private:
+    static std::unique_ptr<SObjectDef> Def(const JsonValue& spec)
+    {
+        auto def = std::make_unique<SObjectDef>();
+        memset(def.get(), 0, sizeof(SObjectDef));
+        def->objclass = (short)spec["class"].Int(OBJCLASS_ARMOR);
+        if (!TObjectClass::GetClass(def->objclass))
+            throw std::runtime_error("no class " + std::to_string(def->objclass) + " loaded");
+        return def;
+    }
+
+    int32_t protection = 0;
+};
+
 // A TCharacter or TPlayer built from the case, without a class record or
 // loaded imagery: it answers the seams itself.
 template <typename Base>
@@ -412,6 +441,11 @@ class TFixtureChar : public Base, public IFixtureChar
             if (spec.Has("levelup"))
                 this->SetLevelUpPicks({(int32_t)spec["levelup"][0].Int(), (int32_t)spec["levelup"][1].Int(),
                                        (int32_t)spec["levelup"][2].Int()});
+            for (const JsonValue& e : spec["equipment"].Items())
+            {
+                items.push_back(std::make_unique<TFixtureItem>(e));
+                Base::SetFixtureEquipment((int32_t)e["slot"].Int(), items.back().get());
+            }
         }
         if (spec["noai"].Bool())
             this->flags &= ~OF_AI;
@@ -777,6 +811,14 @@ class TFixtureChar : public Base, public IFixtureChar
         WriteMotion(j);
     }
 
+    ~TFixtureChar() override
+    {
+      // The worn items go before the player does: no slot left pointing at one.
+        if constexpr (std::is_base_of_v<TPlayer, Base>)
+            for (int32_t slot = 0; slot < NUM_EQ_SLOTS; ++slot)
+                Base::SetFixtureEquipment(slot, nullptr);
+    }
+
     // The index of an attack record in this character's table, -1 if none.
     int32_t AttackIndex(const SCharAttackData* ad) const
     {
@@ -879,6 +921,7 @@ class TFixtureChar : public Base, public IFixtureChar
     mutable std::map<std::string, int32_t> stats;
     std::map<std::string, int32_t> classstats;
     std::unique_ptr<SCharData> cd;
+    std::vector<std::unique_ptr<TFixtureItem>> items;   // a player's worn items (`equipment`)
 };
 
 // ---- The fixture world ------------------------------------------------------

@@ -212,6 +212,9 @@ P_FRAGS = 0x650                                 # TPlayer kills / deaths, 4 ints
 # TPlayer's modified stat copy (PLAYER_STATS.md §1): count +0x34c (short),
 # {id, value} pairs at +0x350. Resist reads entry type + 6.
 P_MODCOUNT, P_MODSTATS, RESIST_FIRST = 0x34c, 0x350, 6
+# TPlayer's equipment, 11 slots from +0x2a0; ArmorValue (0x519850) adds the
+# item's slot 0x1f0 (TArmor's Protection) for each of class 2 but the ammo's.
+P_EQUIPMENT, ITEM_PROTECTION = 0x2a0, 0x1f0
 
 
 class MeleeFixture:
@@ -258,6 +261,11 @@ class MeleeFixture:
             b.add(address, seam, 0, lambda a, c, seam=seam, key=key: self._player_max(seam, key, c))
         self.made_vtable = self.vm.allocate(0x400)
         self.vm.put_u32(self.made_vtable + 0x200, b.add_stub('blood.SetParams', 0x18, self._blood_params))
+        # Worn items: one vtable, whose Protection answers by the item.
+        self.item_vtable = self.vm.allocate(0x400)
+        self.vm.put_u32(self.item_vtable + ITEM_PROTECTION,
+                        b.add_stub('item.Protection', 0, lambda a, c: self.protections.get(c, 0) & 0xffffffff))
+        self.protections = {}
         self._conditional(DAMAGE, 0x14, self._damage, lambda: self.case.get('seam_damage', True))
         self._conditional(BLOCK, 4, self._block, lambda: self.case.get('seam_block', True))
         self._emulator_fixes()
@@ -656,6 +664,19 @@ class MeleeFixture:
         vm.write(obj + P_MODCOUNT, struct.pack('<h', count))
         vm.put_u32(obj + P_MODSTATS, pairs)
 
+    def _equipment(self, obj, spec):
+        """A player's worn items (`equipment`: {slot, class, protection}),
+        as ArmorValue reads them: the class at +0x04, Protection through the
+        item vtable."""
+        vm = self.vm
+        self.protections = {}
+        for item in spec.get('equipment', []):
+            o = vm.allocate(0x100)
+            vm.put_u32(o, self.item_vtable)
+            vm.write(o + 4, struct.pack('<h', item['class']))
+            self.protections[o] = item['protection']
+            vm.put_u32(obj + P_EQUIPMENT + 4 * item['slot'], o)
+
     def _rules(self, rules):
         vm = self.vm
         for name, off in RULES_TOHIT:
@@ -804,6 +825,7 @@ class MeleeFixture:
             self._chardata(obj, spec)
             if spec.get('class', 12) == 11:
                 self._resists(obj, spec)
+                self._equipment(obj, spec)
         for spec in case['chars']:
             obj = world.by_name[spec['name']]
             world.set_blocks(obj, spec)

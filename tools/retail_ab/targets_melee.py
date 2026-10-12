@@ -751,6 +751,17 @@ def attack_choice_cases(data: Path, workdir: Path) -> list[dict]:
         if tplayer:
             variants['targ.resists'] = dict(target_resists=[5, 10, 20, -10, 30, 50, 0, 0, 0, 0],
                                             target_stats=dict(acbonus=4))
+            # The armour worn (TPlayer::ArmorValue 0x519850): ACBonus plus
+            # each armor item's Protection in slots 0-10 but the ammo's (8).
+            cloth = [dict(slot=2, protection=1), dict(slot=9, protection=1)]
+            every = [dict(slot=s, protection=s + 1) for s in range(11) if s != 4]
+            for label, worn, acbonus in (('cloth', cloth, 0), ('cloth.ac', cloth, 3),
+                                         ('every', every, 0), ('ammo', [dict(slot=8, protection=9)], 0),
+                                         ('weaponclass', [dict(slot=2, protection=7, **{'class': 1})], 0),
+                                         ('heavy', [dict(slot=s, protection=10) for s in (0, 2, 3, 9, 10)], 5),
+                                         ('negative', cloth, -4)):
+                variants[f'targ.armor.{label}'] = dict(target_equipment=[dict({'class': 2}, **w) for w in worn],
+                                                       target_stats=dict(acbonus=acbonus))
         for fat in thresholds(mcd):
             variants[f'fatigue{fat}'] = dict(me_stats=dict(fatigue=fat))
         if mplayer:
@@ -800,7 +811,10 @@ def attack_choice_cases(data: Path, workdir: Path) -> list[dict]:
             nk = v.pop('nahkranoth', 0)
             away = v.pop('target_facing_away', False)
             resists = v.pop('target_resists', None)
+            equipment = v.pop('target_equipment', None)
             chars, rules = world(**v)
+            if equipment is not None:
+                chars[1]['equipment'] = equipment
             if away:
                 chars[1]['facing'] = chars[1]['moveangle'] = chars[0]['facing']
             if resists is not None:

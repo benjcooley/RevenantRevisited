@@ -326,6 +326,9 @@ class TPlayer : public TCharacter
         // pick 2 is which of them was made last
     void SetLevelUpPicks(const std::array<int32_t, 3> &picks) { levelupstats = picks; }
         // All three, as a save holds them
+    void SetFixtureEquipment(int32_t slot, TObjectInstance *item) { equipment[slot] = item; }
+        // Retail A/B fixtures only: an item in an equipment slot, without
+        // Equip's inventory moves and stat refresh
     struct SClockState
     {
         int32_t frames = 0;             // +0x374

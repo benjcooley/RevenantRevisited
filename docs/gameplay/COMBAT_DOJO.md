@@ -73,20 +73,20 @@ only).
 | M8 | orbit sequence: N ticks of Go → Pulse (UpdateAction) → Move → SetObjectMotion → frame → NextFrame, with SetState / ResetState / T3DImagery::SetObjectMotion / NextFrame as original over motion tables; walking, strafing round a target, a monster curving, walls, loop / ping-pong / reverse roots | `0x490bd0` order; `0x46f250` `0x46f1e0` `0x40cd20` `0x40cc40` `0x470cc0` | the tick, `TObjectInstance::SetState` / `NextFrame`, `T3DImagery::SetObjectMotion` | [~] 32/32 sequences, ~1,500 ticks (`combat-sequence`); motion tables synthetic, real I3D motion next |
 | M9 | AI combat movement: approach, combat range, retreat, wander | `0x4c8b60`, `0x4c9790` | `TCharacter::AI` | [ ] |
 | M9b | perception: IsEnemy, CanSeeCharacter, FindCharacters (hearing inlined), Hearing, Sight, HasSeenMe / SetHasSeen, the map iterator's characters | `0x4c89c0` `0x4cd540` `0x4cd690` `0x4cda80` `0x4cdb30` `0x4c58f0` `0x4c5940` | same | [x] 1007/1007 (`combat-perceive`; nine mutations caught); the line of sight `0x4533d0` is the case's on both sides (its own kata open) |
-| M10 | leap, side step, knock back, pivot, stop | `0x4d2be0` `0x4d6220` `0x4d3750` `0x4c8470` `0x4cee70` | same | [~] SideStep, Leap, StartRetreat `0x4d5fc0`, KnockBack: 482/482 (`combat-steps`; five mutations caught); Stop in M6; Pivot `0x4c8470` open |
+| M10 | leap, side step, knock back, pivot, stop | `0x4d2be0` `0x4d6220` `0x4d3750` `0x4c8470` `0x4cee70` | same | [~] SideStep, Leap, StartRetreat `0x4d5fc0`, KnockBack: 482/482 (`combat-steps`; five mutations caught); Stop in M6; ResolvePivot `0x4c8470` in M1u |
 
 ### C — melee
 
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
-| C1 | CalculateDamage | `0x4c4860` | `TCharacter::CalculateDamage` | [x] 40 cases x 594 inputs (characters; the player's resist/armour slots open) |
-| C2 | Damage (impact / death choice), TObjectInstance::Damage, TPlayer Killed / Died | `0x4c4950` `0x46e970` `0x518ed0` `0x518f90` | `TCharacter::Damage` and its parts | [x] 1137/1137 (`melee-damage`); the rising damage number ported (TCharAnimator, TRisingNumberLayer; COMBAT_HIT.md §9.2), its kata cases (an animator on the struck) to add |
-| C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [x] 5143/5143 (`melee-attack-choice`) |
+| C1 | CalculateDamage | `0x4c4860` | `TCharacter::CalculateDamage` | [x] 40 cases x 594 inputs (characters); the player's: Resist `0x5208d0` and ArmorValue `0x519850` (ACBonus plus worn armour, slots 0-10 but the ammo's) through C3's `targ.resists` / `targ.armor.*` (63 cases; the ammo slot counted and ACBonus dropped both caught) |
+| C2 | Damage (impact / death choice), TObjectInstance::Damage, TPlayer Killed / Died | `0x4c4950` `0x46e970` `0x518ed0` `0x518f90` | `TCharacter::Damage` and its parts | [x] 1137/1137 (`melee-damage`); the rising damage number ported (TCharAnimator, TRisingNumberLayer; COMBAT_HIT.md §9.2), 88 number cases (amount, colour thresholds, on and off the ground) in the kata |
+| C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [x] 5206/5206 (`melee-attack-choice`) |
 | C4 | hit resolution: ResolveAttack → ResolveHit (to-hit, tiers), OnAttacked | `0x4c6dd0` `0x4c62b0` | same | [x] 7855/7855 (`melee-hit`) |
-| C5 | block / dodge / impact / dead resolvers, EffectCombatFlash | `0x4d2e30` `0x4d30f0` `0x4d3150` `0x4c74b0` `0x4c7810` `0x4c77a0` `0x4c8500` | same | [x] 2100/2100 (`melee-resolvers`); the eight dodge controls (commands 0x30-0x37) are input work |
+| C5 | block / dodge / impact / dead resolvers, EffectCombatFlash | `0x4d2e30` `0x4d30f0` `0x4d3150` `0x4c74b0` `0x4c7810` `0x4c77a0` `0x4c8500` | same | [x] 2100/2100 (`melee-resolvers`); retail's eight dodge controls (commands 0x30-0x37) in the control table |
 | C3b | the AI as a whole: acquisition, the attack branch, the move branch, the waypoint, AI_PerMonster (non-boss) | `0x4c8b60` `0x4c9b70` | `TCharacter::AI`, `AIAttack`, `AIMove`, `NearestWaypoint`, `AIPerMonster` | [x] 925/925 (`melee-ai`); bosses (Baez, Solifuge, Jhaga, Yhagoro) are BURNDOWN phase H; Wander `0x4c9790` open (M9) |
-| C6 | Pulse: regen, fatigue, poison, chains, death | `0x4c1bb0`, TPlayer `0x518aa0` | `TCharacter::Pulse`, `TPlayer::Pulse` | [ ] |
-| C7 | experience and level-up | `0x51a630` | `AwardKillExp` / `AwardSkillExp` | [ ] |
+| C6 | Pulse: regen, fatigue, poison, chains, death | `0x4c1bb0`, TPlayer `0x518aa0` | `TCharacter::Pulse`, `TPlayer::Pulse` | [x] 1364/1364 (`melee-pulse`; 14 of 15 mutations caught, the survivor a no-op; CHARACTER_PULSE.md) |
+| C7 | experience and level-up | `0x51a630` | `AwardKillExp` / `AwardSkillExp` | [x] 285/285 (`melee-exp`; five mutations caught; EXPERIENCE.md) |
 
 ### S — spells
 
