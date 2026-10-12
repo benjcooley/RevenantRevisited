@@ -6811,7 +6811,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Trace real Fire binding/initializer/render geometry/texture clock and compare actual animated behavior; avoid guessed quad orientation/size/count.",
+      "next_action": "Omit unused prototype from normal review; retain exact-ID diagnostic and its scope limitations. Legacy animated restoration remains unverified and receives no visual credit.",
       "notes": [
         "VFS collision corrected. Earlier port evidence must be checked against the requested asset before certifying visual fidelity; old bytes differ.",
         "2026-10-05: No useful animated visible reference in bounded standalone recipe. No accurate-reference or visual-acceptance credit.",
@@ -6862,7 +6862,15 @@
         "visual_pass": false,
         "configuration": "Fire legacy animated station",
         "finding": "Looks broken; no retail match established.",
-        "next_action": "Trace real Fire binding/initializer/render geometry/texture clock and compare actual animated behavior; avoid guessed quad orientation/size/count."
+        "next_action": "Omit unused prototype from normal review; retain exact-ID diagnostic and its scope limitations. Legacy animated restoration remains unverified and receives no visual credit."
+      },
+      "review_list_policy": {
+        "default_visible": false,
+        "diagnostic_selector": "0x119f01e3",
+        "classification": "unused shipped prototype in audited inventory",
+        "basis": "No exact literal executable caller, no spawn/attachment command among73 archived text files, and no placement across5307 sectors/seven modules. Genuine default owner remains frame0/texture0 with no controller; archived legacy animated preview is not verified as this shipped binding.",
+        "note": "docs/vfx/forensics/REVIEW_PROTOTYPE_POLICY_20261011.md",
+        "limits": "Computed/dynamic or externally supplied callers remain unproven; omission does not constitute complete-effect acceptance."
       }
     },
     {
@@ -11876,7 +11884,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Capture ordinary translated viewer and equivalent actual original inputs; determine projection/owner/material/lifetime/caller mismatch and fix before gallery reapproval.",
+      "next_action": "Omit unused prototype from normal review; retain exact-ID diagnostic and its scope limitations. Natural Teleporter/VortexM scenario remains separate.",
       "notes": [],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "visual_review": {
@@ -11896,7 +11904,15 @@
         "visual_pass": false,
         "configuration": "Visible full reviewer, ordinary projection/native_domain=false, translated map stations, source lighting enabled",
         "finding": "User reports Essence Drain and Vortex obviously wrong. Earlier isolated native-domain approvals do not certify this configuration.",
-        "next_action": "Capture ordinary translated viewer and equivalent actual original inputs; determine projection/owner/material/lifetime/caller mismatch and fix before gallery reapproval."
+        "next_action": "Omit unused prototype from normal review; retain exact-ID diagnostic and its scope limitations. Natural Teleporter/VortexM scenario remains separate."
+      },
+      "review_list_policy": {
+        "default_visible": false,
+        "diagnostic_selector": "0x452dade0",
+        "classification": "unused shipped prototype in audited inventory",
+        "basis": "No exact literal executable caller, no spawn/attachment command among73 archived text files, and no placement across5307 sectors/seven modules. Snapshot procedural animator and registration are commented out; shipped VortexM selects Teleporter. Genuine default animator is static.",
+        "note": "docs/vfx/forensics/REVIEW_PROTOTYPE_POLICY_20261011.md",
+        "limits": "Computed/dynamic or externally supplied callers remain unproven; omission does not constitute complete-effect acceptance."
       }
     },
     {

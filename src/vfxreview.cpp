@@ -118,11 +118,13 @@ bool SelectCatalogue() {
     for (int type=0; type<EffectClass.NumTypes(); ++type) {
         const auto* info = EffectClass.GetObjType(type);
         if (!info || !info->name) continue;
-        // Worm is a static diagnostic, separate from the genuine named spell.
-        // cfire's only shipped attachment callers are commented out and its
-        // required presets are absent. Keep exact selection for forensic work.
+        // Audited unused shipped prototypes remain explicit diagnostics:
+        // Worm is separate from the named spell, cfire has disabled callers
+        // and missing presets, Vortex's old animator is commented out, and
+        // Fire has no discovered caller and only a static default binding.
         bool selected = selectors.empty() && info->uniqueid!=0xdefeca7eu &&
-            info->uniqueid!=0xad92bd27u;
+            info->uniqueid!=0xad92bd27u && info->uniqueid!=0x452dade0u &&
+            info->uniqueid!=0x119f01e3u;
         for (size_t i=0; i<selectors.size(); ++i) {
             char* end = nullptr; const auto id = strtoul(selectors[i].c_str(), &end, 0);
             if (Lower(info->name)==selectors[i] ||
@@ -133,7 +135,8 @@ bool SelectCatalogue() {
         Entry entry; entry.type=type; entry.id=info->uniqueid; entry.name=info->name;
         if(entry.id==0xdefeca7eu) entry.name="Worm (static prototype)";
         if(entry.id==0xad92bd27u) entry.name="cfire (unused prototype)";
-        if(entry.id==0x119f01e3u) entry.name="Fire (retail default)";
+        if(entry.id==0x452dade0u) entry.name="Vortex (unused static prototype)";
+        if(entry.id==0x119f01e3u) entry.name="Fire (unused retail default)";
         if (auto* imagery = TObjectImagery::GetImageryEntry(info->imageryid))
             entry.asset = imagery->filename;
         entries.push_back(std::move(entry));

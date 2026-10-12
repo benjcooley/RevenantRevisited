@@ -28,9 +28,9 @@ Filter entries accept case-insensitive full names or hexadecimal retail type
 IDs, separated by commas. Duplicate names retain separate type-ID entries.
 Unknown entries are rejected so typos cannot silently change the review.
 
-The unused `Essencedrain`/Worm and `cfire` prototypes are omitted from the normal
-list; their exact diagnostics remain selectable with
-`--vfx-review-effects=0xdefeca7e,0xad92bd27`.
+The audited unused Worm, cfire, Vortex and Fire prototypes are omitted from
+the normal list; their exact diagnostics remain selectable with
+`--vfx-review-effects=0xdefeca7e,0xad92bd27,0x452dade0,0x119f01e3`.
 The normal list instead shows the genuine named **Essence Drain (spell)** recipe.
 Missing or invisible effects, including Dust under software lighting, remain
 in the list. See the [exclusion evidence and Dust policy](forensics/REVIEW_PROTOTYPE_POLICY_20261011.md).

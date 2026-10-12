@@ -39,6 +39,45 @@ callers remain unproven. Private evidence is in
 - `placements.json`: SHA256 `361860e7efa99e4aef8d7205a9be7a838178af1ec99709d3132462e95b8c4c29`.
 - `presets.json`: SHA256 `c08f3d66182dbcc4029c0fa822fc6c83f020cadf3877c079e5e00da5a7139939`.
 
+Two further exact types are omitted on the same bounded inventory basis:
+
+- **Vortex** `0x452dade0`: its procedural animator and registration occur
+  inside the commented `Ye Old Vortex` block in the source snapshot. All93
+  genuine retail registrations resolve this type to the default animator,
+  with no controllers and a static one-frame cone. The shipped `VortexM`
+  spell selects **Teleporter**, not this type. The archive scan finds only
+  the class declaration, no literal executable caller and no map placement.
+  Diagnostic label: **Vortex (unused static prototype)**.
+- **Fire** `0x119f01e3`: genuine default-owner execution stays at frame0 and
+  texture0, with no controller; archived animated `TFireEffect` remains
+  a separate unverified implementation. The archive scan finds its class
+  declaration and an unrelated spell-description sentence, no spawn/attachment
+  command, literal executable caller or map placement. Diagnostic label:
+  **Fire (unused retail default)**. The animated legacy diagnostic receives
+  no appearance credit; Fire's reopened coverage status remains unchanged.
+
+Both scans cover all73 archived text files and5,307 sectors across seven
+modules with zero decoder errors. Named Flame, Teleporter, setvortex and
+gvortex stay in normal review. No similarly named type is substituted for an
+excluded exact ID. Computed/dynamic/external callers remain unproven.
+
+Private evidence: `research/vfx-prototype-caller-root-20261011/`:
+
+- `vortex-caller.json`: SHA256 `d1d8e5abb0170403000dbe0906eaaeb3af9e2190f0b798c807808963e739304c`.
+- `vortex-placements.json`: SHA256 `acd4da3436d41003bca08651de7e83752a7c6e2bdc1731c54dc5ea22161659e0`.
+- `fire-caller.json`: SHA256 `f9b984731c50c94153a730ecaeb031fdb0f88775f1132cd31b95fec7d17d3baa`.
+- `fire-placements.json`: SHA256 `22b7bb01a57033ebbc21b6a81140208ef18cf80d53472ffba1108ac1681949ba`.
+
+The existing [Vortex binding audit](VORTEX_GALLERY_CONTEXT_20261011.md) and
+[Fire cardinal/caller audit](FIRE_DUST_CALLER_AUDIT_20261011.md) retain the
+original execution and device limitations. All four prototype diagnostics
+remain selectable together:
+
+```sh
+./build-merge/Revenant --test=vfx-review --vfx-review-first \
+  --vfx-review-effects=0xdefeca7e,0xad92bd27,0x452dade0,0x119f01e3
+```
+
 Private read-only evidence is in
 `/Users/benjamincooley/RevenantRetailLab/research/vfx-full-visible-review-20261011/`:
 `worm-caller-audit-v2.json` (SHA256
@@ -66,3 +105,9 @@ Inspect that separate policy with:
 
 The qualified device scope and software blank control remain documented in
 [DUST_QUALIFIED_DEVICE_20261011.md](DUST_QUALIFIED_DEVICE_20261011.md).
+
+Actual compiled-runtime selection checks pass: the default list has173 slots
+(176 catalogue types minus four diagnostics plus the named Essence Drain spell).
+Explicit selection of all four diagnostics yields four slots and clean shutdown.
+Both two-frame runs used a frozen binary. `selection-check.json` SHA256:
+`f422c7133e4a40c325368b2d56d61f921206d143444c7291d205a17d31889963`. This is selection/liveness evidence, not new visual acceptance.
