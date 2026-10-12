@@ -764,3 +764,18 @@ Scenarios may set `"lighting_mode": "auto" | "classic" | "modern"` independently
 The `environment` mapping now reaches the owned capture process, for example `"environment": {"REV_SANDSWIRL_QUALIFIED_TRACE": "1"}`. Names and values must be strings; explicit structured data/assets/save roots remain authoritative. The scenario is retained in the manifest, so trace setup no longer depends on shell exports.
 
 All21 process/cadence/argument tests pass. A real three-frame qualified Sandswirl capture produced255 pool trace rows using only its scenario environment; decoded pixels exactly match the earlier full-run prefix. Private evidence: `/Users/benjamincooley/RevenantRetailLab/research/vfx-sandswirl-root-20261011/self-contained-trace/manifest.json`.
+
+### Capture export compilation
+
+`REVENANT_OPTIMIZE_CAPTURE` defaults to ON for Clang/GCC non-Debug builds.
+It compiles only `framesnap.cpp` with `-O2`, accelerating PNG encoding, composite
+resizing and captured-byte buffer destruction. Game/controller/renderer flags
+are unchanged; Debug builds retain their normal flags. Configure with
+`-DREVENANT_OPTIMIZE_CAPTURE=OFF` to compare the baseline.
+
+A traced 310-frame, 1280×960 moved-target Sand capture completed in23.03seconds
+versus129.33seconds for the previous unoptimized capture (observed5.62× under
+that machine load). All310 decoded RGBA images are identical, the full runtime
+pool/packet/query/spell review passes, and both captures exit cleanly. Private
+proof: `research/vfx-sandswirl-root-20261011/capture-optimized-proof.json`.
+This is a measured run, not a universal performance claim.
