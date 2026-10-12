@@ -19,6 +19,9 @@ extern char StartupLevelId[32];
 // captures through --test=sector, in the retail editor's 640x340 viewport.
 extern int32_t StartupSceneCamera[4];
 extern bool StartupSceneCameraSet;
+// Optional test-only measured viewport; default retains legacy640x340.
+extern int32_t StartupSceneViewport[2];
+extern bool StartupSceneViewportSet;
 extern char StartupSceneModule[64];
 // Optional sector-only timeline of real engine commands, in legacy 24Hz ticks.
 extern char StartupSceneCommandFile[MAXPATHLEN];

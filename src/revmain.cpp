@@ -49,6 +49,7 @@
 #include "i3dgltf.h"
 #include "testmodes.h"
 #include "testconfig.h"
+#include "sceneviewport.h"
 #include "time.h"
 #include "combattrace.h"
 #include "mappane.h"
@@ -1564,7 +1565,7 @@ void GetParameters(int argc, char **argv)
         "vfx-review-speed", "vfx-review-ratio", "vfx-review-spacing",
         "vfx-review-gap", "vfx-review-offset", "vfx-review-effects",
         "vfx-review-spacing-overrides",
-        "vfx-review-path-tilt", "vfx-review-path-length",
+        "vfx-review-path-tilt", "vfx-review-path-length", "scene-viewport",
     });
     cmd.parse(argc, argv);
 
@@ -1914,6 +1915,12 @@ void GetParameters(int argc, char **argv)
         if (arg_param(cmd, "scene-camera", p))
             StartupSceneCameraSet = sscanf(p.c_str(), "%d,%d,%d,%d", &StartupSceneCamera[0],
                 &StartupSceneCamera[1], &StartupSceneCamera[2], &StartupSceneCamera[3]) == 4;
+        if (arg_param(cmd, "scene-viewport", p)) {
+            if (!scene_viewport::Parse(p.c_str(),StartupSceneViewport))
+                FatalError("Invalid --scene-viewport: expected positive W,H within1920x1080",nullptr);
+            StartupSceneViewportSet=true;
+        } else if (arg_flag(cmd,"scene-viewport"))
+            FatalError("Missing --scene-viewport W,H",nullptr);
         if (arg_param(cmd, "scene-module", p))
             strncpyz(StartupSceneModule, p.c_str(), sizeof(StartupSceneModule));
         if (arg_param(cmd, "scene-command-file", p))
