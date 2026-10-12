@@ -122,6 +122,7 @@ from data_parse import (A_IMPACTS, A_NUMIMPACTS, ATTACK_BODY, ATTACK_HEAD, ATTAC
 
 SCHEMA = 'combat.melee.v1'
 TEXT = 'cp1252'
+TAG_SOUND = 0x40af50                             # thiscall (object, name, out, &volume), ret 0x10
 
 IS_VALID_ATTACK = 0x4d1120
 FIND_BUTTON, FIND_PCNT, FIND_INTERACTIVE = 0x4d1dd0, 0x4d1eb0, 0x4d1ff0
@@ -1006,6 +1007,18 @@ class MeleeFixture:
         elif kind == 'add-skill-exp':
             call(vm, ADD_SKILL_EXP, (a['skill'] & 0xffffffff, a['exp'] & 0xffffffff), this=me)
             result['returned'] = 0
+        elif kind == 'tag-sound':
+            # The sample each name plays (0x40af50: object, name, out, &volume),
+            # empty for none.
+            out, vol, name = vm.allocate(96), vm.allocate(4), vm.allocate(64)
+            samples = []
+            for text in a['names']:
+                vm.write(name, text.encode(TEXT) + b'\0')
+                vm.write(out, bytes(96))
+                vm.put_u32(vol, 0x7f)
+                call(vm, TAG_SOUND, (me, name, out, vol), this=0)
+                samples.append(vm.string(out))
+            result['returned'] = samples
         elif kind == 'damage':
             ab = 0
             attacker = self._obj(a.get('attacker'))

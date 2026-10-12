@@ -2342,6 +2342,44 @@ def exp_victim(data, *, typ='Araknid', health=0, value=5, level=None, memory=Non
     return v
 
 
+# ---- The tag sounds' samples ---------------------------------------------------
+
+TAG_NAMES = ['impact1', 'impact2', 'Impact3', 'IMPACT1', 'impact', 'imp', 'imp7', 'impx9', 'imp9x', 'Impact1h',
+             'block1', 'Block', 'blockimpact2', 'swing2', 'roar', 'whoosh1']
+
+
+def tagsound_cases(data: Path, workdir: Path) -> list[dict]:
+    """The sample a tag sound plays (0x40af50): an IMP name ending in other
+    than a letter takes the weapon kind of the one fought (the combat or
+    bow root's object), "bigsword" or one time in six "sword" for a sword;
+    BLOCK names play nothing; the rest as they are. STEP names are left
+    out (their terrain is the port's divergence: no terrain bits)."""
+    shipped(data, workdir)
+    cases = []
+    tape = [0, 5, 12, 3, 6, 1, 2, 0, 4, 7, 9, 11, 18, 23, 30, 8]
+
+    def add(name, chars, rules):
+        cases.append(case(name, 'tag-sound', chars, rules, args=dict(names=TAG_NAMES), tape=tape,
+                          seed=len(cases) * 13 + 5))
+
+    for wt in range(9):
+        # Locke fights an Araknid of that weapon kind; an Araknid fights Locke
+        # holding one.
+        chars, rules = duel(data, 'Locke', 'Araknid')
+        chars[1]['chardata'] = dict(chars[1]['chardata'], weapontype=wt)
+        add(f'tag.locke.foe{wt}', chars, rules)
+        chars, rules = duel(data, 'Araknid', 'Locke')
+        chars[1]['weapon'] = dict(type=wt, damage=13)
+        add(f'tag.araknid.foe{wt}', chars, rules)
+    # Not fighting: a walk root; a combat root with no one; a bow root on him.
+    for label, root in (('walk', dict(name='walk', action=1)), ('combat.none', dict(name='combat', action=3)),
+                        ('bow', dict(name='bow', action=0x19, obj='Target'))):
+        chars, rules = duel(data, 'Locke', 'Araknid', me_root=root)
+        chars[1]['chardata'] = dict(chars[1]['chardata'], weapontype=2)
+        add(f'tag.locke.{label}', chars, rules)
+    return finish(cases)
+
+
 def exp_cases(data: Path, workdir: Path) -> list[dict]:
     s = shipped(data, workdir)
     rules = s['rules']
@@ -2432,4 +2470,6 @@ TARGETS = {
                         port_fields=port_fields, unit=lambda r: 1),
     'melee-exp': dict(fixture='slots/combat/melee_attack.py', cases=exp_cases, compare=compare,
                       port_fields=port_fields, unit=lambda r: 1),
+    'melee-tagsound': dict(fixture='slots/combat/melee_attack.py', cases=tagsound_cases, compare=compare,
+                           port_fields=port_fields, unit=lambda r: len(r['returned'])),
 }

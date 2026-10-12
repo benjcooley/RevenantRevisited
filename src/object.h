@@ -1186,6 +1186,9 @@ class TObjectInstance : protected SObjectDef
 
   // Sound playing functions
     bool PlayWave(char *soundname, int32_t nr = -1, int32_t volume = -1, int32_t freq = -1);
+    virtual int32_t CombatTargetWeaponType() { return -1; }
+        // The weapon kind (WT_*) of the one this object fights, -1 if none:
+        // what an IMP tag sound names its sample by (T3DImagery::PlaySound)
       // Plays the given sound at this objects current 3D x,y,z pos
       // If 'nr' is not -1, the number in nr is added to end of soundname (i.e. "sound1")
       // Volume and freq are DirectSound volume and frequency values (-1 is default)

@@ -15,6 +15,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "revenant.h"
@@ -192,6 +193,10 @@ struct S3DAnimObj
     uint32_t      blend     = 0;                       // Retail blendcont / particle draw mode
 };
 typedef TPointerArray<S3DAnimObj, 16, 16> T3DAnimObjArray;
+
+// The sample a tag sound of `inst` plays for `name` (retail 0x0040af50):
+// false for none. T3DImagery::PlaySound's; public for the combat kata.
+bool ResolveTagSound(TObjectInstance& inst, const char* name, std::string& sample);
 
 class T3DImagery : public TObjectImagery
 {

@@ -12,6 +12,7 @@
 
 #include "retailab_melee.h"
 
+#include "3dimage.h"              // ResolveTagSound
 #include "effect.h"               // TBloodEffect
 #include "gameflow.h"             // TGameFlow::playerDiedSeam
 #include "gameoptions.h"          // NoCombatResults
@@ -855,6 +856,17 @@ std::string MeleeCall(const Case& c, std::string& error)
                 player->AddSkillExp((int32_t)a["skill"].Int(), (int32_t)a["exp"].Int());
             j.Field("returned", 0);
         }
+        else if (call == "tag-sound")
+        {
+          // The sample each name plays, empty for none (retail 0x0040af50).
+            j.Key("returned").Begin('[');
+            for (const JsonValue& n : a["names"].Items())
+            {
+                std::string sample;
+                j.String(ResolveTagSound(*me, n.Str().c_str(), sample) ? sample : std::string());
+            }
+            j.End(']');
+        }
         else if (call == "damage")
         {
           // The given block's attack and impact are the attacker's by default.
@@ -971,6 +983,7 @@ static const bool registered = RegisterTarget("melee-attack-choice", MeleeCall) 
                                RegisterTarget("melee-resolvers", MeleeCall) &&
                                RegisterTarget("melee-ai", MeleeCall) &&
                                RegisterTarget("melee-pulse", MeleeCall) &&
-                               RegisterTarget("melee-exp", MeleeCall);
+                               RegisterTarget("melee-exp", MeleeCall) &&
+                               RegisterTarget("melee-tagsound", MeleeCall);
 
 }  // namespace RetailAB

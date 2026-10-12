@@ -595,6 +595,9 @@ class TCharacter : public TComplexObject
     virtual int32_t DamageModifier(int32_t damagetype) { return chardata->damagemods[damagetype]; }
       // Returns percentage of damage
     virtual int32_t WeaponType() { return chardata->weapontype; }
+    int32_t CombatTargetWeaponType() override { return Fighting() ? Fighting()->WeaponType() : -1; }
+      // REVSYNC: 0x0040b133..0x0040b174 -- a combat or bow root's object, its
+      // WeaponType (slot 0x2cc)
       // Returns the type of weapon being used
     virtual int32_t WeaponDamage() { return chardata->weapondamage; }
       // Returns current weapon damage

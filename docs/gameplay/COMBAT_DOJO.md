@@ -87,6 +87,7 @@ only).
 | C3b | the AI as a whole: acquisition, the attack branch, the move branch, the waypoint, AI_PerMonster (non-boss) | `0x4c8b60` `0x4c9b70` | `TCharacter::AI`, `AIAttack`, `AIMove`, `NearestWaypoint`, `AIPerMonster` | [x] 925/925 (`melee-ai`); bosses (Baez, Solifuge, Jhaga, Yhagoro) are BURNDOWN phase H; Wander `0x4c9790` open (M9) |
 | C6 | Pulse: regen, fatigue, poison, chains, death | `0x4c1bb0`, TPlayer `0x518aa0` | `TCharacter::Pulse`, `TPlayer::Pulse` | [x] 1364/1364 (`melee-pulse`; 14 of 15 mutations caught, the survivor a no-op; CHARACTER_PULSE.md) |
 | C7 | experience and level-up | `0x51a630` | `AwardKillExp` / `AwardSkillExp` | [x] 285/285 (`melee-exp`; five mutations caught; EXPERIENCE.md) |
+| T1 | the sample a tag sound plays: an IMP name ending in other than a letter takes the weapon kind of the one fought (hand, sword, bigsword / sword by random(0,5), staff, bow), BLOCK none | `0x40af50` | `ResolveTagSound` (3dimage.cpp), `CombatTargetWeaponType` | [x] 21/21 (`melee-tagsound`; the letter test inverted caught: 18 cases); STEP's terrain and volumes the port's divergence |
 
 ### S — spells
 
@@ -501,6 +502,7 @@ python3 tools/retail_ab/retail_ab.py combat-input       # M6
 python3 tools/retail_ab/retail_ab.py combat-steps       # M10
 python3 tools/retail_ab/retail_ab.py combat-perceive    # M9b
 python3 tools/retail_ab/retail_ab.py combat-go-world    # M4
+python3 tools/retail_ab/retail_ab.py melee-tagsound     # T1, the tag sounds' samples
 python3 tools/retail_ab/retail_ab.py melee-attack-choice   # C3 (melee-hit C4, melee-damage C2,
                                                            # melee-resolvers C5, melee-ai C3b)
 python3 tools/retail_ab/retail_ab.py spell-cast         # S2 (spell-data D1s; spell-lookup, -talismans,

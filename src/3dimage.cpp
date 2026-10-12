@@ -2729,30 +2729,47 @@ void T3DImagery::EndRender()
     Scene3D.EndScene();
 }
 
-namespace {
-
-// REVSYNC: 0x0040af50 -- the sample an object's tag sound plays. Retail
-// upper-cases the name and then:
+// REVSYNC: 0x0040af50 -- the sample an object's tag sound plays, false for
+// none. Retail upper-cases the name to match it, then:
 //   * a name with "STEP" in it, on a character or the player, gets the
 //     terrain under it appended ("wood", "stone", "carpet", "grass", else
 //     "dirt": walkmap bits 10-15 at its position, 0x00452ea0) and plays at
 //     volume 0x5c (0x40 while sneaking);
-//   * a name starting "IMP" and not ending in a digit gets the struck
-//     character's weapon kind appended ("sword", "bigsword" one time in
-//     five for two-handers, "staff", "bow", "hand");
+//   * a name starting "IMP" and ending in other than a letter (isalpha,
+//     0x0058ae9c) gets the weapon kind of the one the object fights
+//     appended (CombatTargetWeaponType): hand "hand", knife and axe
+//     "sword", sword "bigsword" -- "sword" one time in six (random(0, 5) ==
+//     0, 0x0040b1da) -- bludgeon and staff "staff", bow and crossbow "bow";
+//     so impact1 plays impact1sword. With no one fought, or a kind past 7,
+//     it plays as it is;
 //   * a name starting "BLOCK" plays nothing;
 //   * any other name plays as it is.
-// REVSYNC-DIVERGENCE: only the BLOCK rule is ported. The port's walkmap
-// keeps heights alone (no terrain bits), so STEP names play as they are:
-// the plain step samples are the dirt recordings (step1r.wav ==
-// step1rdirt.wav), what retail plays on terrain 0. The IMP weapon suffix
-// waits on the combat port's weapon kinds.
-bool ResolveTagSound(const char* name)
+// REVSYNC-DIVERGENCE: the port's walkmap keeps heights alone (no terrain
+// bits), so STEP names play as they are: the plain step samples are the
+// dirt recordings (step1r.wav == step1rdirt.wav), what retail plays on
+// terrain 0. The STEP volumes (0x5c, 0x40 of Miles' 0x7f) aren't passed:
+// the port's sample volumes are on another scale (sound.h).
+bool ResolveTagSound(TObjectInstance& inst, const char* name, std::string& sample)
 {
-    return strnicmp(name, "BLOCK", 5) != 0;
+    sample = name;
+    if (strnicmp(name, "BLOCK", 5) == 0)
+        return false;
+    if (strnicmp(name, "IMP", 3) != 0 || sample.empty() || isalpha((unsigned char)sample.back()))
+        return true;
+    switch (inst.CombatTargetWeaponType())
+    {
+        case 0:  sample += "hand"; break;
+        case 1:
+        case 4:  sample += "sword"; break;
+        case 2:  sample += random(0, 5) == 0 ? "sword" : "bigsword"; break;
+        case 3:
+        case 5:  sample += "staff"; break;
+        case 6:
+        case 7:  sample += "bow"; break;
+        default: break;
+    }
+    return true;
 }
-
-} // namespace
 
 // REVSYNC: the "blendcont" tag. T3DAnimator::RefreshControllers (0x0040df90)
 // builds a controller for every tag of the state the animator enters (and
@@ -2878,12 +2895,14 @@ void T3DImagery::PlaySound(TObjectInstance* inst, int32_t state, int32_t frame)
             continue;
 
         char* sound = listrnd(tag.str);
-        if (!ResolveTagSound(sound))
-            continue;
         if (!inst)
-            PLAY(sound);
-        else
-            inst->PlayWave(sound);
+        {
+            PLAY(sound);            // no object: the name as it is (0x0040b3ea)
+            continue;
+        }
+        std::string sample;
+        if (ResolveTagSound(*inst, sound, sample))
+            inst->PlayWave(sample.data());
     }
 }
 
