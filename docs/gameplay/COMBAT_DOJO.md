@@ -355,6 +355,23 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
       player.
     The port had the 1998 versions throughout (ten-second memory, scaled
     senses, line of sight for hearing, the dead marked as seen).
+14. **Item stats from the .DEF files (arena A1b, 2026-10-11).** Retail's
+    BindTypes writes every WEAPON.DEF / ARMOR.DEF entry's BASICMODS into
+    its type's class stats (`0x48c7f0` → `0x48af30` / `0x48b4a0`), over
+    class.def's. The port skipped it: cloth armour kept Protection 0 and
+    Locke took an Araknid's bite whole. Kata D1 now dumps all 275 weapon
+    and armor types (COMBAT_DATA.md §8).
+15. **The game's frame count (arena A1b, 2026-10-11).** Retail's frame
+    count goes on from the saved game time: GameFrame = `[+0x688] -
+    [+0x684] + [+0x680]`, SetGameTime (`0x47e950`) sets `+0x688` to
+    time × 24 / 100, and each tick the game time is GameFrame × 100 / 24
+    (`0x47c36b`). The port counted frames from the play screen's start, so
+    after a load every check staggered on the frame (auto-combat every 32,
+    `(frame ^ id) & 0x1f`) ran at another phase than retail's, and frame
+    stamps a character keeps were measured from the wrong zero. Fixed in
+    TPlayScreen (the fixtures set the game time apart: SetFixtureGameTime).
+    Retail's time of day is (game time × 1440 / DAYLENGTH) mod 1440
+    (`+0x690`); the port's is a stand-in (the gameflow / lighting track's).
 
 ## 6. Layouts used by the fixtures
 

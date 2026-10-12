@@ -213,11 +213,17 @@ class TPlayScreen : public TScreen
 
     // ---- Game time -----------------------------------------------------
     [[nodiscard]] int32_t GameFrame()    const;
+      // Frames of play in this game, its earlier sessions' included (retail
+      // +0x688 - +0x684 + +0x680): what the staggered checks and the frame
+      // stamps a character keeps are measured in
     void SetFixtureState(int32_t frame, bool control, bool demo)
-        { gameframes = frame; controlon = control; demomode = demo; }
+        { gameframes = frame; sessionstart = 0; sessionframes = 0; controlon = control; demomode = demo; }
       // Retail A/B fixtures only (retailab_combat.cpp): the frame count and
       // the control / demo flags as a case sets them, without
       // SetControlOn(false)'s input release
+    void SetFixtureGameTime(int32_t t) { gametime = t; }
+      // Retail A/B fixtures only: the game time as a case sets it (retail
+      // +0x68c), apart from the frame count
     void SetFixtureScreenFrames(int32_t frames) { screenframes = frames; }
       // Retail A/B fixtures only: the screen's frame count (retail
       // CurrentScreen +0x48, the clock the exit mark wears off on)
@@ -307,10 +313,10 @@ class TPlayScreen : public TScreen
     bool multidirty   = false;
 
     // Game time
-    int32_t gameframes        = 0;  // frames since this PlayScreen started
-    int32_t sessionstart      = 0;  // frame count at last SetGameTime
-    int32_t lastsessionframes = 0;  // total frames in previous game session
-    int32_t gametime          = 0;  // hundredths of a second, in-game
+    int32_t gameframes        = 0;  // +0x680: frames since this PlayScreen started
+    int32_t sessionstart      = 0;  // +0x684: gameframes at the last SetGameTime
+    int32_t sessionframes     = 0;  // +0x688: the game's frames before it (the saved time's)
+    int32_t gametime          = 0;  // +0x68c: hundredths of a second, GameFrame() * 100 / 24
     int32_t timeofday         = 0;  // game minutes
 
     // Pane plumbing

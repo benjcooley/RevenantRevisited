@@ -219,8 +219,22 @@ def first_difference(a: Path, b: Path) -> str | None:
 
 def cmd_run(a) -> int:
     scn = json.loads(Path(a.scenario).read_text())
+    if a.seed is not None:
+        scn['seed'] = a.seed
     port = Path(a.port).resolve()
     base = Path(a.out).resolve() / scn['name']
+    if a.seeds:
+        # A sweep: one run a seed, for measures over the random stream
+        # (cadence, damage, outcome rates) rather than one trace.
+        lo, hi = (int(v) for v in a.seeds.split('-'))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=a.jobs) as pool:
+            results = list(pool.map(lambda n: run_once(dict(scn, seed=n), port, base / f'seed{n}', extra=a.extra),
+                                    range(lo, hi + 1)))
+        for n, r in zip(range(lo, hi + 1), results):
+            s = r['summary']
+            print(f"seed {n}: {r['stop']}, tick {r['last_tick']}, deaths {s.get('deaths', [])}, "
+                  f"events {s.get('events', {})}")
+        return 0
     if a.watch:
         r = run_once(scn, port, base / 'watch', watch=True, extra=a.extra)
         print(json.dumps(r, indent=1))
@@ -260,6 +274,9 @@ def main() -> int:
     r.add_argument('--out', default=str(REPO / 'build' / 'arena'))
     r.add_argument('--repeat', type=int, default=2)
     r.add_argument('--watch', action='store_true')
+    r.add_argument('--seed', type=int, help="the random seed, over the scenario's")
+    r.add_argument('--seeds', help='a sweep, one run a seed: A-B')
+    r.add_argument('--jobs', type=int, default=4, help='runs at once in a sweep')
     r.add_argument('--port', default=str(REPO / 'build' / 'Revenant'))
     r.add_argument('--extra', action='append', default=[], help='an extra port argument (repeatable), '
                    'e.g. --extra=--combattrace-rng=89:90')

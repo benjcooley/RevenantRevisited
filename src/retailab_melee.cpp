@@ -540,7 +540,7 @@ class SPulseScope
         if (ticking)
         {
             CurrentScreen = &PlayScreen;
-            PlayScreen.SetGameTime((int32_t)g["gametime"].Int(0));
+            PlayScreen.SetFixtureGameTime((int32_t)g["gametime"].Int(0));
             PlayScreen.SetFixtureScreenFrames((int32_t)g["screenframe"].Int(0));
             AutoBeginCombat = g["autobegincombat"].Bool(true);
             for (const SRecoveryRule& r : kRecovery)
@@ -559,7 +559,7 @@ class SPulseScope
     ~SPulseScope()
     {
         CurrentScreen = savedScreen;
-        PlayScreen.SetGameTime(savedGameTime);
+        PlayScreen.SetFixtureGameTime(savedGameTime);
         PlayScreen.SetFixtureScreenFrames(savedScreenFrames);
         AutoBeginCombat = savedAutoBegin;
         for (size_t i = 0; i < kRecovery.size(); ++i)
@@ -829,7 +829,7 @@ std::string MeleeCall(const Case& c, std::string& error)
             for (int32_t k = 0; k < (int32_t)a["ticks"].Int(1); ++k)
             {
                 PlayScreen.SetFixtureState(frame + k, g["control"].Bool(true), g["ps_5d8"].Bool(false));
-                PlayScreen.SetGameTime(gametime + k * 100 / 24);
+                PlayScreen.SetFixtureGameTime(gametime + k * 100 / 24);
                 PlayScreen.SetFixtureScreenFrames(screenframe + k);
                 me->Pulse();
                 JsonOut t;
