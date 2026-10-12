@@ -4677,8 +4677,13 @@ void GlobeBespokeDestroy(void* cp) { auto* c = static_cast<SGlobeBespokeCtx*>(cp
 void GlobeBespokeSubmit(void* cp, EFxDebugMode dbg)
 {
     auto* c = static_cast<SGlobeBespokeCtx*>(cp);
-    if (c && c->eff)
+    if (c && c->eff) {
+        const int before=c->eff->GetFrame();
         c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+        if(std::getenv("REV_VFX_REVIEW_CLOCK_TRACE") && before!=c->eff->GetFrame())
+            log_info("[authored-texture-clock] render=%lld dt=%.9f frame=%d next=%d",
+                static_cast<long long>(TTime::FrameCount()),TTime::DeltaTime(),before,c->eff->GetFrame());
+    }
 }
 
 void GlobeBespokeSubmitWorld(void* cp, EFxDebugMode dbg)

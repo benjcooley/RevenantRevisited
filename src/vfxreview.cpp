@@ -25,6 +25,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 #include <memory>
 #include <set>
 #include <string>
@@ -583,6 +584,17 @@ void Close() {
 }
 void Render() {
     if (!map) return;
+    if (std::getenv("REV_VFX_REVIEW_CLOCK_TRACE")) {
+        static auto start=std::chrono::steady_clock::now();
+        static double last=-1.0;
+        const double wall=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+        if (wall-last>=1.0) {
+            log_info("[vfx-review-clock] wall=%.6f simulation=%.6f delta=%.9f render=%lld legacy=%lld scale=%.3f",
+                wall,TTime::Time(),TTime::DeltaTime(),static_cast<long long>(TTime::FrameCount()),
+                static_cast<long long>(TTime::LegacyFrameCount()),TTime::TimeScale());
+            last=wall;
+        }
+    }
     elapsed+=paused?0.0:TTime::DeltaTime(); ticks+=TTime::DeltaTime()*24;
     const auto current_loop=schedule.LoopCount(elapsed);
     if (current_loop!=loop) { loop=current_loop; ResetObjects(); log_info("[vfx-review] loop=%llu",static_cast<unsigned long long>(loop+1)); }
