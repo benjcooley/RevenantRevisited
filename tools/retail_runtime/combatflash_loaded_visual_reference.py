@@ -10,7 +10,7 @@ from unicorn import UC_HOOK_CODE
 from unicorn.x86_const import UC_X86_REG_ESP
 
 
-def run(boot, output, ticks=64, samples=None):
+def run(boot, output, ticks=64, samples=None, state=None, trace_pools=False):
     output.mkdir(parents=True, exist_ok=False)
     executable = ROOT / 'recon/retail_asm/baseline/Revenant.rebuilt.exe'
     context = AuthenticCharacters(executable, boot)
@@ -22,6 +22,9 @@ def run(boot, output, ticks=64, samples=None):
     software = LitSoftwareFixture(executable, 640, 480, vm=vm)
     software.lighting((38, 38, 38), (1, 1, 1))
     owner = context.new_object('combatflash', (0, 0, 0), 25, 0x5a85ac)
+    if state is not None:
+        assert 0 <= state < 18
+        assert world.call(0x46f250, (state,), this=owner) == 1
     world.call(0x58c575, (1,))
     assert world.call(0x46e8b0, this=owner, instruction_limit=100000000) == 1
     animator = vm.u32(owner + 0x58)
@@ -162,15 +165,30 @@ def run(boot, output, ticks=64, samples=None):
             draws=list(draws), keys=list(key_calls), matrices=list(matrix_calls),
             previous_state_frame=list(struct.unpack('<2h', vm.uc.mem_read(owner + 0x60, 4))),
             nonblack_pixels=sum(x != (0,) for x in struct.iter_unpack('<H', pixels))))
+        if trace_pools:
+            pools=[]
+            for i in range(vm.u32(animator+0x58)):
+                c=vm.u32(vm.u32(animator+0x68)+4*i)
+                if vm.u32(c)!=0x5a3544:continue
+                count=vm.u32(c+0xf8);pool=vm.u32(c+0x2c)
+                pools.append(dict(address=c,capacity=count,credit=struct.unpack('<f',vm.uc.mem_read(c+0x16c,4))[0],
+                    prototype=vm.u32(vm.u32(c+0x164)+4),origin=list(struct.unpack('<3f',vm.uc.mem_read(c+0x170,12))),
+                    pool_hex=bytes(vm.uc.mem_read(pool,count*252)).hex()))
+            rows[-1]['pools']=pools
+            rows[-1]['owner_state']=vm.u32(owner+0xc)&0xffff
+            rows[-1]['cached_frame']=vm.u32(animator+0x14)
         if image.is_file():
             rows[-1].update(image=str(image), image_sha256=sha(image))
         print(tick, rows[-1]['frame'], len(draws), rows[-1]['nonblack_pixels'], flush=True)
     report = dict(status='native_loaded_reference_complete', accepted=False,
-        type_id='0xad92bd29', state=0, seed=1, rows=rows,
+        type_id='0xad92bd29', state=0 if state is None else state, explicit_setstate=state, seed=1, rows=rows,
         constructor_state=initial, animator_state=entered,
         executable_sha256=sha(executable), boot_image_sha256=sha(boot),
         probe_sha256=sha(Path(__file__)),
         scope='Genuine loaded combatflash/class/default animator, nullspell state0/start1; original NextFrame/whole owner Pulse/controller Pulse/Animate/PreRender/Render/PostRender/normal producer/software raster. Explicit24Hz framecounter/isolated640x480 RAM framebuffer/camera0/sourceambient38+dir1, materialhandle COM get/set. No owner Pulse, mesh/texture/color/RNG/raster substitution. Other17states/naturalcombat/audio/device and port comparison remain open.')
+    if state is not None:
+        report['scope'] = report['scope'].replace('nullspell state0/start1;', f'nullspell explicit original SetState({state}) before animator;')
+        report['scope'] += ' State selection is a public-API control; natural combat selector is a separate proof.'
     (output / 'manifest.json').write_text(json.dumps(report, indent=2)+'\n')
 
 
@@ -178,9 +196,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--boot-image', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--state', type=int, choices=range(18))
+    parser.add_argument('--trace-pools', action='store_true')
     parser.add_argument('--ticks', type=int, default=64)
     parser.add_argument('--samples', type=int, nargs='+')
     args = parser.parse_args()
     if args.ticks < 1:
         parser.error('ticks must be positive')
-    run(args.boot_image, args.output, args.ticks, args.samples)
+    run(args.boot_image, args.output, args.ticks, args.samples, args.state, args.trace_pools)
