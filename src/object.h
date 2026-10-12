@@ -1224,6 +1224,10 @@ class TObjectInstance : protected SObjectDef
       // Gets the light flags
     PSLightDef GetLightDef() { return &lightdef; }
       // Returns light data for object
+    int32_t AcquireLightId();
+      // The light's light-table id (0-3), allocated when it is first drawn
+    void ReleaseLightId();
+      // Gives the light-table id back (off screen, out of the sector window, deleted)
     int32_t GetIllumination(TObjectInstance* oi);
       // Get the amount of illumination from this light to this particular object
     int32_t GetShadow() { return shadow; }

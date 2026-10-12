@@ -242,6 +242,54 @@ wash. A retail bug; the port adds the offset to the fade target too
 The S1 capture confirms the offset is in effect at area entry: the ambient
 bytes it shows, (3, 3, 4), need `A` in 13–15 (§8).
 
+### 2.6 Four light colours on screen
+
+The light byte's 2-bit id (§2.2) picks one of **four** light-table
+entries, so the map shows at most four light colours at a time. Retail
+allocates them in `NewLightIndex` (`FUN_0041d890`, 1998
+`colortable.cpp:204`, instruction for instruction):
+
+```
+best = the id i in 0..3 (i = 0 always; 1..3 only while in use) with the
+       smallest |Δr| + |Δg| + |Δb| + (mult > 0 ? |mult - LightMultipliers[i]| : 0)
+free = the first id in 1..3 with use count < 1
+if best's difference >= 3 and a free id exists:
+    SetLightColor(free, colour, mult > 0 ? mult : 28); use[free] = 1; return free
+use[best]++; return best
+```
+
+- Id 0 is fixed: white, multiplier 35 (map pane init, `FUN_0044d5c0`
+  `0x0044d694`; 1998 `mappane.cpp:346`). Ids 1-3 go to the first three
+  colours (with multiplier) that aren't within 3 of an id in use; every
+  later light takes the nearest id, colour **and multiplier**.
+- `TObjectInstance::DrawLight` (`FUN_00471930`) asks for an id when the
+  light has none, or on every light when the pass is a full redraw
+  (`resetid` = the pane's dirty flag `+0x50`, both call sites
+  `0x004569e5` / `0x004571e4`).
+- `TMapPane::RedrawAll` (`FUN_004546a0`) sets the pane dirty and calls
+  `ClearLights` (`FUN_0041d9f0`: use counts of ids 1-3 to 0). So a full
+  redraw re-allocates every light on screen in draw order.
+- Leaving the screen frees a light's id (`FreeLightIndex` `FUN_0041d9e0`,
+  1998 `object.cpp` `OffScreen`).
+- Draw order is `GetUpdateObjs` (`FUN_0045f800`): `TMapIterator` over the
+  update rect with `CHECK_RECT | CHECK_LIGHT | CHECK_MOVING | CHECK_INVIS |
+  CHECK_NOINVENT`: the pane's 3×3 sector window row by row, each sector's
+  objects in order; a light is in when its light rect (screen position ±
+  intensity) meets the rect, and moving objects are out.
+
+Per pixel, the light block (§2.2) writes the id of every light whose pool
+covers the pixel (`normd <= 255`, `dz <= intensity`), even where that
+light adds no intensity, and the saturating add keeps the id bits
+(`or bl, 0FCh` leaves the low two bits). **The last light drawn over a
+pixel picks its colour and multiplier**; the intensities of all of them
+add.
+
+So where lights of more than three colours share the screen, the later
+colours are drawn in the nearest of the first three (or white): in the
+Caverns the orange fires draw lilac. The port's first Classic model
+averaged every light's own colour, which is the same only when every
+light on screen has one of at most three colours (§6).
+
 ## 3. Retail 3D-object path (characters and meshes)
 
 Meshes are lit per vertex in `T3DScene` (1998 `3dscene.cpp`). The retail

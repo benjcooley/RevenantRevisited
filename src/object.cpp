@@ -744,11 +744,7 @@ TObjectInstance::~TObjectInstance()
         lightdef.lightindex = -1;
     }
 
-    if (lightdef.lightid != -1)
-    {
-        FreeLightIndex(lightdef.lightid);
-        lightdef.lightid = -1;
-    }
+    ReleaseLightId();
 
     if (objclass == -1)
         return;
@@ -1884,6 +1880,28 @@ void TObjectInstance::NextFrame()
         anim->SetNewState(false);
 }
 
+// REVSYNC: TObjectInstance::DrawLight @ 0x00471930 (0x004719af..0x004719cf)
+// -- a light drawn without a light-table id gets one from NewLightIndex
+// (0x0041d890): one of the four colours the DLS light byte can name
+// (docs/LIGHTING_FIDELITY.md §2.6). Retail also re-asked on a full redraw
+// (the pane's dirty flag), after RedrawAll had cleared every id's use.
+int32_t TObjectInstance::AcquireLightId()
+{
+    if (lightdef.lightid == -1)
+        lightdef.lightid = NewLightIndex(lightdef.color, lightdef.multiplier);
+    return lightdef.lightid;
+}
+
+// REVSYNC: FreeLightIndex @ 0x0041d9e0, from OffScreen and the destructor.
+void TObjectInstance::ReleaseLightId()
+{
+    if (lightdef.lightid != -1)
+    {
+        FreeLightIndex(lightdef.lightid);
+        lightdef.lightid = -1;
+    }
+}
+
 void TObjectInstance::OnScreen()
 {
     if (NeedsAnimator())
@@ -1915,11 +1933,7 @@ void TObjectInstance::OffScreen()
         Scene3D.DeleteLight(lightdef.lightindex);
         lightdef.lightindex = -1;
     }
-    if (lightdef.lightid != -1)
-    {
-        FreeLightIndex(lightdef.lightid);
-        lightdef.lightid = -1;
-    }
+    ReleaseLightId();
 }
 
 // Retail-faithful inventory-image lookup.
