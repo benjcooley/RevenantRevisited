@@ -76,3 +76,5 @@ rounding stay explicit. No further sampling change is inferred from this audit.
 Natural caller/spell/map-animator inputs, other lighting, original hardware and
 exact pixels remain open. Root independently reviews and repeats the new
 scoped primary capture; this document does not create an approval.
+
+Root independent integrated reproduction passes under `research/vfx-halo-integer-root-20261011/first`: fullnative100frames/936packets/14040integerchannels,40literaltexelcontrols, compiledsource/ownerguards, bothcasesfourpolicies/default/common,200currentdefault/commondecodedrepeat and1312phasefields. Rootreviewedall24whole/fixedphase sets andapprovescurrentscopedappearance; common100images unchanged. Noexactpixel/naturalcaller credit.

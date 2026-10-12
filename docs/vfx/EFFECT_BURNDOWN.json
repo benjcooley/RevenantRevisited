@@ -13816,7 +13816,8 @@
         "THaloEffect"
       ],
       "source_fixes": [
-        "2026-10-11: ExactTHaloEffect builder/publicInitParams envelope/authoredmesh replacesproceduralpreview fordeclared60/.04and20/.08 controls. Originalstate/pose/bodyadmission/submission and24phase appearance pass; integrated100PNG repeat/gallery match. Naturalcaller remainsopen."
+        "2026-10-11: ExactTHaloEffect builder/publicInitParams envelope/authoredmesh replacesproceduralpreview fordeclared60/.04and20/.08 controls. Originalstate/pose/bodyadmission/submission and24phase appearance pass; integrated100PNG repeat/gallery match. Naturalcaller remainsopen.",
+        "2026-10-11: originalintegerXYZ/sourcefloor onlyexactnativeSW Halo;rootpublic60/20controls andcurrentappearance reapproved,common100unchanged."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -13835,7 +13836,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Preserve approved publicparameter Halo controls; verify actualnaturalcaller, mapanimator, lighting/audio/hardwareblend andpixelresiduals.",
+      "next_action": "Preservepublic60/20nativeSWappearance; nearoneUV/fixedpointdestination/exactpixels/naturalcaller remainopen.",
       "notes": [
         "2026-10-05: five-second exact-name software probe produced one unchanged floor image and exact cleanup. Halo context was absent after spawn; Barrier contexts retained. Actual assets dumped: Halo12verts/36indices, Barriers5objects/2textures. No accurate-reference credit."
       ],
@@ -13854,14 +13855,26 @@
       "work_queue_status": "deferred_no_useful_visible_reference",
       "visual_review": {
         "date": "2026-10-11",
-        "reviewer": "root independent two-parameter whole/detail review and integratedrepeat/gallery",
+        "reviewer": "root independent integration review",
         "result": "pass",
         "visual_pass": true,
-        "scope": "ExactHalo ownMagic/Halo.I3D12authoredvertices/12faces, genuineowner/publicInitParams/animator/fullselectedoriginalraster; explicittestinputs(60,.04)and(20,.08), notdiscoverednaturalcallerconstants. Grow/shrink/actualkill61/21/blanktails; genuine0/0defaultblanknegative. Source412state/1248matrices<=4.77e-9,4resourcepositive/1058mutationrejects,1872submittedvertex/156drawchecks pass. Fifteen+ninewhole original/actualMetal phasepairs independentlyreviewed,48pairedimagehashes verified and7fixed4x detailpages inspected. Integrated70+30samephasePNGs byte-identical/cleanexit,3nativeunitsPASS12.5s. Actualmappedgallery100frames96visible/30distinct,2finitefactorylogs exactHalo_AUTHORED_PUBLIC60/cleanexit. Genericoriginalmap/worldPulse boundary andsilentdevicehandoff retained. Onepixelcoverage/nearzero/destinationprecision, naturalcaller/spell/mapanimator/audio/hardwareblend/lighting/exactpixels remainopen; no proceduraltexture orfit.",
-        "report": "recon/retail_asm/runtime/effects/current-halo-public-20261011/root-approval.json",
-        "sha256": "00ad18c2eb3a89ecdd48b22f76775b14e836e15ff0fce3dc94b7656d014ce0a3",
-        "note": "docs/vfx/forensics/HALO_PUBLIC_PARAMETERS_RENDER_20261011.md"
-      }
+        "scope": "ExactauthoredHalo public60/.04 and20/.08 controls; originalowner/state/RNG/936drawpackets/14040integerchannels and40owntexelalpha controls. Rootfreshnative100 +fourpolicies/default/commonfilms,200default/commondecodedrepeat,1312loggedstatefields and24fixedwhole/detailphases verified. ExistingnativeSWhelperintegerXYZ+sourceflooroptin improvesform/rasterappearance; common100imagesunchanged. NearoneUV\u00d7128 trunc127/fixedpointscanconversion/destination precision/naturalcaller/exactpixels remainopen. Nofittedgeometry/color/phase.",
+        "report": "recon/retail_asm/runtime/effects/current-halo-integer-raster-20261011/root-approval.json",
+        "sha256": "198f36d1cd1478deaa04e2199c3ae9e434d47c72ce787567aa8c062ba901b765",
+        "note": "docs/vfx/forensics/HALO_INTEGER_RASTER_CONTROL_20261011.md"
+      },
+      "historical_visual_reviews": [
+        {
+          "date": "2026-10-11",
+          "reviewer": "root independent two-parameter whole/detail review and integratedrepeat/gallery",
+          "result": "pass",
+          "visual_pass": true,
+          "scope": "ExactHalo ownMagic/Halo.I3D12authoredvertices/12faces, genuineowner/publicInitParams/animator/fullselectedoriginalraster; explicittestinputs(60,.04)and(20,.08), notdiscoverednaturalcallerconstants. Grow/shrink/actualkill61/21/blanktails; genuine0/0defaultblanknegative. Source412state/1248matrices<=4.77e-9,4resourcepositive/1058mutationrejects,1872submittedvertex/156drawchecks pass. Fifteen+ninewhole original/actualMetal phasepairs independentlyreviewed,48pairedimagehashes verified and7fixed4x detailpages inspected. Integrated70+30samephasePNGs byte-identical/cleanexit,3nativeunitsPASS12.5s. Actualmappedgallery100frames96visible/30distinct,2finitefactorylogs exactHalo_AUTHORED_PUBLIC60/cleanexit. Genericoriginalmap/worldPulse boundary andsilentdevicehandoff retained. Onepixelcoverage/nearzero/destinationprecision, naturalcaller/spell/mapanimator/audio/hardwareblend/lighting/exactpixels remainopen; no proceduraltexture orfit.",
+          "report": "recon/retail_asm/runtime/effects/current-halo-public-20261011/root-approval.json",
+          "sha256": "00ad18c2eb3a89ecdd48b22f76775b14e836e15ff0fce3dc94b7656d014ce0a3",
+          "note": "docs/vfx/forensics/HALO_PUBLIC_PARAMETERS_RENDER_20261011.md"
+        }
+      ]
     },
     {
       "index": 65,

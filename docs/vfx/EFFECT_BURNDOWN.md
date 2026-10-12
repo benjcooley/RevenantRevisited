@@ -1168,3 +1168,5 @@ Audited `class.def`: 233,484 bytes; SHA-256 `bf46eaa4e25a43fa9828e1e8737114d63b9
 **Puke integration review (superseded pending status):** exactoriginalintegerinputcorrection nowintegrated; priorappearancepass retainedhistorically. Nullifier remainsreapproved. IndependentcurrentPukecomparisonwillclose thisbehaviorfix before restoring176currentpasses.
 
 **Puke current re-review passed (2026-10-11):** exactoriginalintegerinputproof andfresh4policy/default/common captures supportgrid-only nativeSW correction. Rootreviewed15phases; common32images unchanged, tick24native1/GPU0pixelresidual remains. All176scopedvisualrows currentagain. [Evidence](forensics/PUKE_INTEGER_RASTER_CONTROL_20261011.md).
+
+**Halo current re-review passed (2026-10-11):** bothpublicparameter controls independentlyrepeat afterexactnativeSWintegerXYZ/sourcefloor optin; root24phase reviewpreservesform/size/color/expansion/drain, common100imagesunchanged. UV/fixedpoint/destination/naturalcaller residuals explicit. [Evidence](forensics/HALO_INTEGER_RASTER_CONTROL_20261011.md).

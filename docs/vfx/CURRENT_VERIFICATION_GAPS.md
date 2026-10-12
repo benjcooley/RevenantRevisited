@@ -26,10 +26,9 @@ licensed resources and private evidence stay outside Git.
   correlate original particle packets with the saved owners, then compare
   bounded phases with unchanged surrounding geometry/lights. Native wall
   lighting noise still needs a causal check; residency alone is not appearance.
-- [ ] Halo raster control. Both genuine public configurations have original
-  and actual GPU2×2 integer-grid/source-contribution controls. Any source change
-  needs strict admission, unchanged ordinary-mode controls and fresh visual
-  review. Remaining fixed-point/one-pixel differences remain explicit.
+- [x] Halo raster control. Both genuine public configurations have original
+  and actual GPU2×2 integer-grid/source-contribution controls. The strict native/software opt-in now passes independent full native,
+  current GPU, unchanged ordinary-mode controls and scoped visual review. Remaining fixed-point/one-pixel differences remain explicit.
 
 ## Concrete next behavior gaps
 
