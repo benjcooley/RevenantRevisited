@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "0282e9cb46031987605e84a5cd325bc61ce524a6778561870b1ad8629697707e",
+    "harness_sha256": "04d73412498d9672d012e4f49213e2faa0d172dcc682d08606d9df69f442db67",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24051,7 +24051,7 @@
         "accepted": false
       },
       "runtime_dispatch": "retail_default_animator_lookup_verified_generic_mesh_map_texture_lifecycle_verified",
-      "next_action": "Verify natural map/ownerPulse/fullanimation and other device branches; preserve explicitly modified1555 reference qualification and unmodifiedrenderer failure diagnostics.",
+      "next_action": "Verifyfulloriginalowner/defaulttexturelooprate thenviewer24Hzclock/framehold; correctmeasuredcadence mismatch withoutarbitraryslowdown.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "Source-format diagnostic shared by three watcher types: native neon multicolor differs from authored darkpurple ARGB1555; interpreting the same packed words as4444 resembles that fingerprint. Source Blue alpha-format selection is a hypothesis, not proved retail transfer. Only watcher1 was captured; no accepted reference or implementation credit.",
@@ -24141,6 +24141,13 @@
         "report": "recon/retail_asm/runtime/effects/current-watchers-qualified-20261011/root-approval.json",
         "sha256": "34c55eec6137ee7d1624ef397915fd70c2ed8d8f9ac5910c05069f9ce161d4ad",
         "note": "docs/vfx/forensics/WATCHER_PATCHED_1555_REFERENCE_20261011.md"
+      },
+      "gallery_cadence_review": {
+        "date": "2026-10-11",
+        "reviewer": "user",
+        "result": "mismatch_reported",
+        "configuration": "Visible full reviewer ordinary-world animation",
+        "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate."
       }
     },
     {
@@ -24173,7 +24180,7 @@
         "accepted": false
       },
       "runtime_dispatch": "retail_default_animator_lookup_verified_generic_mesh_map_texture_lifecycle_verified",
-      "next_action": "Verify natural map/ownerPulse/fullanimation and other device branches; preserve explicitly modified1555 reference qualification and unmodifiedrenderer failure diagnostics.",
+      "next_action": "Verifyfulloriginalowner/defaulttexturelooprate thenviewer24Hzclock/framehold; correctmeasuredcadence mismatch withoutarbitraryslowdown.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "Source-format diagnostic shared by three watcher types: native neon multicolor differs from authored darkpurple ARGB1555; interpreting the same packed words as4444 resembles that fingerprint. Source Blue alpha-format selection is a hypothesis, not proved retail transfer. Only watcher1 was captured; no accepted reference or implementation credit.",
@@ -24220,6 +24227,13 @@
         "report": "recon/retail_asm/runtime/effects/current-watchers-qualified-20261011/root-approval.json",
         "sha256": "34c55eec6137ee7d1624ef397915fd70c2ed8d8f9ac5910c05069f9ce161d4ad",
         "note": "docs/vfx/forensics/WATCHER_PATCHED_1555_REFERENCE_20261011.md"
+      },
+      "gallery_cadence_review": {
+        "date": "2026-10-11",
+        "reviewer": "user",
+        "result": "mismatch_reported",
+        "configuration": "Visible full reviewer ordinary-world animation",
+        "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate."
       }
     },
     {
@@ -24252,7 +24266,7 @@
         "accepted": false
       },
       "runtime_dispatch": "retail_default_animator_lookup_verified_generic_mesh_map_texture_lifecycle_verified",
-      "next_action": "Verify natural map/ownerPulse/fullanimation and other device branches; preserve explicitly modified1555 reference qualification and unmodifiedrenderer failure diagnostics.",
+      "next_action": "Verifyfulloriginalowner/defaulttexturelooprate thenviewer24Hzclock/framehold; correctmeasuredcadence mismatch withoutarbitraryslowdown.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "Source-format diagnostic shared by three watcher types: native neon multicolor differs from authored darkpurple ARGB1555; interpreting the same packed words as4444 resembles that fingerprint. Source Blue alpha-format selection is a hypothesis, not proved retail transfer. Only watcher1 was captured; no accepted reference or implementation credit.",
@@ -24299,6 +24313,13 @@
         "report": "recon/retail_asm/runtime/effects/current-watchers-qualified-20261011/root-approval.json",
         "sha256": "34c55eec6137ee7d1624ef397915fd70c2ed8d8f9ac5910c05069f9ce161d4ad",
         "note": "docs/vfx/forensics/WATCHER_PATCHED_1555_REFERENCE_20261011.md"
+      },
+      "gallery_cadence_review": {
+        "date": "2026-10-11",
+        "reviewer": "user",
+        "result": "mismatch_reported",
+        "configuration": "Visible full reviewer ordinary-world animation",
+        "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate."
       }
     },
     {

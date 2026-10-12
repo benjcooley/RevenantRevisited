@@ -12,6 +12,12 @@ licensed resources and private evidence stay outside Git.
 
 ## Active behavior and context work
 
+- [ ] Reviewer animation rate. User reports all three Ogrok bystanders and
+  several other effects run dramatically too fast. The explicit watcher
+  adapter measures about24frame advances/second and the live clock is close
+  to wall time; compare full original owner/texture loop pacing before choosing
+  a correction. Earlier selected-frame reviews do not establish natural rate.
+
 - [ ] Essence Drain and Vortex ordinary gallery output. User reports both
   obviously wrong in the visible reviewer. Their existing isolated
   native-domain approvals do not certify translated ordinary projection.
