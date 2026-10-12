@@ -61,6 +61,19 @@ class CoverageTests(unittest.TestCase):
             if not row['ledger_acceptance']['visual_fidelity']:
                 self.assertEqual(row['gates']['visual_review']['status'],'pending')
 
+    def test_qualified_reference_does_not_claim_unchanged_device_or_full_acceptance(self):
+        for type_id,kind in [('0xaeaeeb23','modified_retail'),('0xadbcef18','modified_retail'),('0x0c052637','semantic_device_reference'),('0x119f01e3','semantic_device_reference')]:
+            row=self.coverage['types'][type_id]
+            review=row['gates']['visual_review']
+            self.assertEqual(review['status'],'pass_for_tested_configuration')
+            self.assertTrue(review['qualified_reference'])
+            self.assertTrue(review[kind])
+            self.assertIs(review['device_identical'],False)
+            self.assertEqual(row['gates']['full_acceptance']['status'],'open')
+            self.assertFalse(row['gates']['runtime']['natural_context_verified'])
+        self.assertGreaterEqual(self.coverage['counts']['qualified_modified_reference_visual_rows'],4)
+        self.assertGreaterEqual(self.coverage['counts']['qualified_semantic_device_visual_rows'],2)
+
     def test_fireball_route_requires_actual_moving_distinct_endpoint_scenario(self):
         control=self.coverage['types']['0x63fd382a']['control']
         self.assertEqual(control['profile'],'fireball_head')
