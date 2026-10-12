@@ -101,3 +101,5 @@ Residual destination rounding, approximately one-pixel sampling/edge
 variation, common-world projection, natural Sandswirl spell/actor scheduling,
 stack initialization, audio and device behavior remain open. No exact-pixel
 or unmodified-shipped appearance claim is made. Root owns review/approval.
+
+Root independent integrated reproduction passed under `research/vfx-sandswirl-root-20261011/restored-sand-integrated/`: all310native records/images pinned,283030 compiled core fields/6042packets, resourceguards/literal56controls, current310tracedGPUimages byteidenticaltofinalcandidate and cleanexit, full282100runtimepoolfields/6042packets/236Quicksandrows. Root reviewedall18whole/fixedphases and grantsqualifiedappearance credit for thisexplicitrestoration only. All limits above remain open.

@@ -32,14 +32,14 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 175,
+    "visual_fidelity_confirmed_rows": 176,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 175,
-    "remaining_visual_review_rows": 1,
-    "qualified_modified_reference_visual_rows": 5,
+    "reviewed_visual_pass_rows": 176,
+    "remaining_visual_review_rows": 0,
+    "qualified_modified_reference_visual_rows": 6,
     "qualified_semantic_device_visual_rows": 2,
-    "qualified_reference_visual_rows": 7
+    "qualified_reference_visual_rows": 8
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -13671,7 +13671,8 @@
       "source_fixes": [
         "2026-10-11: Parent-only Sandswirl schedule/target contract independentlymatches4340fields/310ticks from explicitly modifiedSparkschild+realQuicksandspell control. No runtimeadmission or intendedsandimagery/particleparity/appearancecredit.",
         "2026-10-11: Unbound seekingparticlecore matches264430pool/RNG/killfields and5697orderedrenderpackets bitexact through310qualifiedrealactor ticks; rootindependentproof/guardsPASS. No Sandimagery/defaultfactory/appearanceclaim.",
-        "2026-10-11: actual map parent/seeking child/target query/nullspell Quicksand/spell completion runtime verified against explicit modified Sparks+allocator policy control; root310original+310source fullstate and images repeat exactly. Intended Sand appearance remains open."
+        "2026-10-11: actual map parent/seeking child/target query/nullspell Quicksand/spell completion runtime verified against explicit modified Sparks+allocator policy control; root310original+310source fullstate and images repeat exactly. Intended Sand appearance remains open.",
+        "2026-10-11: evidenced legacy Sand ownasset restoration explicitfixture, exact oneobject particle/runtime/RNG and literal sourcealpha policy; root310sourceimage/fullstate repeat and18phase appearance review passed."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -13679,18 +13680,18 @@
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
-      "runtime_dispatch": "audit_pending",
-      "next_action": "Verify restored legacy Sand ownasset modified-retail/source appearance; real map Sparks control now independently verified, natural Sandswirl variant/AI/device remain open.",
+      "runtime_dispatch": "qualified_legacy_sand_restoration_actual_map_runtime",
+      "next_action": "Preserve qualified restored-ownSand appearance. Finish realmovingtarget followup; shippedmissingbinding, naturalSandswirlvariant/AI/audio/device remain separate.",
       "notes": [],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "thin_emulator_checks": [
@@ -13703,7 +13704,20 @@
           "full_acceptance_granted": false,
           "scope": "Actual realmap/NewObject/query/actors/GameRand parent/particle/Quicksand/spelltimer comparison with declared Sparksdependency and monotonicRNGneutral allocatorcontrol. Native310rows exact; source310PNGdecoded/fileexact,282100poolfields/5942packets/236Quicksand rows exact. No intendedSandappearance credit."
         }
-      ]
+      ],
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent integration review",
+        "result": "pass",
+        "visual_pass": true,
+        "qualified_reference": true,
+        "modified_retail": true,
+        "device_identical": false,
+        "scope": "Explicit restoration of evidenced legacy Sand class/type+actual original Particle3D animator using byteidentical shipped Sand ownquad/texture. Genuine realmap objects, twoactors, namedQuicksand spellcontrol and declared monotonicRNGneutral allocatorboundary; native/source310ticks, parent/child/targetquery/Quicksand/spellcompletion and all18whole/fixedvisualphases pass. Native-domain source-term RGB565 quantization reproduces literal56alpha controls, unchangedcommonpolicy310images. Shipped missingbinding negative retained; no shippedenabled/naturalSandswirl/device/exactpixel claim.",
+        "report": "recon/retail_asm/runtime/effects/current-sandswirl-restored-sand-20261011/root-approval.json",
+        "sha256": "d5ba079fed3d6eb0bcb1dc4c9c9d9ea8f682f5c2e45df537249dd83a60e3050c",
+        "note": "docs/vfx/forensics/SANDSWIRL_LEGACY_SAND_RESTORATION_20261011.md"
+      }
     },
     {
       "index": 63,

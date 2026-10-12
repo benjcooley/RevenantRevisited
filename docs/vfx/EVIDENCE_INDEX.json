@@ -17,14 +17,14 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 175,
+    "visual_fidelity_confirmed_rows": 176,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 175,
-    "remaining_visual_review_rows": 1,
-    "qualified_modified_reference_visual_rows": 5,
+    "reviewed_visual_pass_rows": 176,
+    "remaining_visual_review_rows": 0,
+    "qualified_modified_reference_visual_rows": 6,
     "qualified_semantic_device_visual_rows": 2,
-    "qualified_reference_visual_rows": 7
+    "qualified_reference_visual_rows": 8
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -2129,6 +2129,13 @@
       "check": "additional_qualified_hardware_color_policy",
       "status": "pass_color_policy_geometry_open_nullifier",
       "scope": "Root repeated3x77 original hardware/software states/pools/RNG and450 source images, preserving225 software-policy frames. Reviewed39 fixed whole/detail phases. Packed hardwareRGB8 correction passes for allthree exactIDs. Regeneration/SwiftStrike scoped hardware appearance pass; nullifier color-policy only with visible core geometry mismatch from missing original key transition, hardware appearance remains open. No change to headlinecounts or previousSWprimaryevidence."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-restored-sand-20261011/root-approval.json": {
+      "sha256": "d5ba079fed3d6eb0bcb1dc4c9c9d9ea8f682f5c2e45df537249dd83a60e3050c",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "qualified_restored_sand_actual_map_visual",
+      "status": "pass",
+      "scope": "Explicit restoration of evidenced legacy Sand class/type+actual original Particle3D animator using byteidentical shipped Sand ownquad/texture. Genuine realmap objects, twoactors, namedQuicksand spellcontrol and declared monotonicRNGneutral allocatorboundary; native/source310ticks, parent/child/targetquery/Quicksand/spellcompletion and all18whole/fixedvisualphases pass. Native-domain source-term RGB565 quantization reproduces literal56alpha controls, unchangedcommonpolicy310images. Shipped missingbinding negative retained; no shippedenabled/naturalSandswirl/device/exactpixel claim."
     }
   }
 }
