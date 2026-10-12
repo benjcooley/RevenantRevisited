@@ -24167,7 +24167,7 @@
         "result": "mismatch_reported",
         "configuration": "Visible full reviewer ordinary-world animation",
         "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate.",
-        "presentation_change": "Reviewerdefault0.25speed;--vfx-review-watcher-rate=1retainsretail24Hz. Sourceclocktestand18advances/72ticksverified; userreviewpending."
+        "presentation_change": "Userprefersretailspecifiedtiming; reviewerdefaultrestored1.0/24Hz. Lastquarter-speedexample seemedreasonable, retainedoptional--vfx-review-watcher-rate=.25. No arbitraryratefidelityclaim."
       }
     },
     {
@@ -24254,7 +24254,7 @@
         "result": "mismatch_reported",
         "configuration": "Visible full reviewer ordinary-world animation",
         "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate.",
-        "presentation_change": "Reviewerdefault0.25speed;--vfx-review-watcher-rate=1retainsretail24Hz. Sourceclocktestand18advances/72ticksverified; userreviewpending."
+        "presentation_change": "Userprefersretailspecifiedtiming; reviewerdefaultrestored1.0/24Hz. Lastquarter-speedexample seemedreasonable, retainedoptional--vfx-review-watcher-rate=.25. No arbitraryratefidelityclaim."
       }
     },
     {
@@ -24341,7 +24341,7 @@
         "result": "mismatch_reported",
         "configuration": "Visible full reviewer ordinary-world animation",
         "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate.",
-        "presentation_change": "Reviewerdefault0.25speed;--vfx-review-watcher-rate=1retainsretail24Hz. Sourceclocktestand18advances/72ticksverified; userreviewpending."
+        "presentation_change": "Userprefersretailspecifiedtiming; reviewerdefaultrestored1.0/24Hz. Lastquarter-speedexample seemedreasonable, retainedoptional--vfx-review-watcher-rate=.25. No arbitraryratefidelityclaim."
       }
     },
     {

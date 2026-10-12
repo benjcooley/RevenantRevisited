@@ -43,8 +43,9 @@ per-tick calls/state plus negative controls. Existing watcher pixel/format
 approvals are unchanged; other effects require their own cadence diagnosis.
 
 The reviewer now supports `--vfx-review-watcher-rate=0.05..1.0` for visual
-inspection. Its working default is0.25 (six texture-frame advances/sec), pending
-user rate preference after reporting excessively fast bystanders. This scales
+inspection. Its default is1.0, following the user preference for retail timing.
+The earlier0.25 review demonstration remains available explicitly (six
+texture-frame advances/sec). This scales
 only the animated-texture preview in `vfx-review`; isolated VFX references and
 gameplay retain24Hz. `=1` restores measured retail pacing. This is an explicit
 presentation choice, not a new retail timing or fidelity claim. The extracted
