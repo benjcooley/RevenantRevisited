@@ -41,3 +41,12 @@ SHA256 `054b0ac21ba62b2a20fa7f6bbe1cc83fc0fde6838068a74bdfd16a2755e29b12`.
 It pins the original executable, startup image, probe source and all observed
 per-tick calls/state plus negative controls. Existing watcher pixel/format
 approvals are unchanged; other effects require their own cadence diagnosis.
+
+The reviewer now supports `--vfx-review-watcher-rate=0.05..1.0` for visual
+inspection. Its working default is0.25 (six texture-frame advances/sec), pending
+user rate preference after reporting excessively fast bystanders. This scales
+only the animated-texture preview in `vfx-review`; isolated VFX references and
+gameplay retain24Hz. `=1` restores measured retail pacing. This is an explicit
+presentation choice, not a new retail timing or fidelity claim. The extracted
+actual clock test verifies quarter/half/full rates at60Hz and unchanged24Hz
+reference pacing under sanitizers.

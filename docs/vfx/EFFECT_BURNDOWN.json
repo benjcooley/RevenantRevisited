@@ -9326,7 +9326,16 @@
         "configuration": "Visible full reviewer, ordinary projection/native_domain=false, translated map stations, source lighting enabled",
         "finding": "User reports Essence Drain and Vortex obviously wrong. Earlier isolated native-domain approvals do not certify this configuration.",
         "next_action": "StaticWormprototype nowexplicitlylabeled; genuineanimatedEssenceDrainspell addedseparately usingManaDrain0xad92bc13. Prototypeordinaryappearance/callerlimitations remainopen."
-      }
+      },
+      "user_visual_confirmations": [
+        {
+          "date": "2026-10-11",
+          "configuration": "Separate genuine Essence Drain spell station (ManaDrain recipe)",
+          "result": "pass",
+          "basis": "User: Essence drain seems fine now.",
+          "scope": "Named spell station confirmed; not an approval of static Worm prototype or all spell/caller configurations."
+        }
+      ]
     },
     {
       "index": 15,
@@ -24157,7 +24166,8 @@
         "reviewer": "user",
         "result": "mismatch_reported",
         "configuration": "Visible full reviewer ordinary-world animation",
-        "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate."
+        "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate.",
+        "presentation_change": "Reviewerdefault0.25speed;--vfx-review-watcher-rate=1retainsretail24Hz. Sourceclocktestand18advances/72ticksverified; userreviewpending."
       }
     },
     {
@@ -24243,7 +24253,8 @@
         "reviewer": "user",
         "result": "mismatch_reported",
         "configuration": "Visible full reviewer ordinary-world animation",
-        "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate."
+        "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate.",
+        "presentation_change": "Reviewerdefault0.25speed;--vfx-review-watcher-rate=1retainsretail24Hz. Sourceclocktestand18advances/72ticksverified; userreviewpending."
       }
     },
     {
@@ -24329,7 +24340,8 @@
         "reviewer": "user",
         "result": "mismatch_reported",
         "configuration": "Visible full reviewer ordinary-world animation",
-        "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate."
+        "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate.",
+        "presentation_change": "Reviewerdefault0.25speed;--vfx-review-watcher-rate=1retainsretail24Hz. Sourceclocktestand18advances/72ticksverified; userreviewpending."
       }
     },
     {

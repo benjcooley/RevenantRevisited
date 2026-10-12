@@ -19,3 +19,11 @@ Final exact-size guard build repeats the three facing192 images byte-identically
 `fire_cardinal_raster_probe.py` replays each unchanged original draw through the complete transform/illumination/integer-span/ARGB4444 raster. Read-only texture hooks reproduce every pixel: facing64 reads the nonzero word0x4410 at texel38/6, yieldingRGB5650x1020 at631/462; facing192 reads0x4420 at35/7, yielding0x1040 at647/469. Facing0/128 sample only zero texels. The source uses the same vertices, matrices, endpoints and literal first texture; its fixed-point span versus GPU interpolation difference remains visible at this tiny scale. Changing brightness, texture coordinates, size or atlas timing would conceal that mismatch, so these inputs remain authored. No appearance credit is added.
 
 Root private manifest: `/Users/benjamincooley/RevenantRetailLab/research/vfx-fire-root-20261011/cardinal-raster/manifest.json`.
+
+The scrolling reviewer also exposes `Fire (legacy animated)` using the existing
+TFireEffect scatter implementation and labels the installed path
+`Fire (retail default)`. The legacy entry is supplementary and has no unchanged
+retail appearance approval. It restores visibility of the animated conversion
+for inspection without replacing the installed static/default reference. Filter
+`--vfx-review-effects=Fire` includes both; `Fire (legacy animated)` selects the
+animated recipe alone, while the exact retail ID selects the installed path.

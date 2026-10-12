@@ -1562,7 +1562,7 @@ void GetParameters(int argc, char **argv)
         "loadmap", "lang", "test", "level", "resolution", "res",
         "cinematic", "menu", "exec", "vfx-lighting-mode", "partsys-quality", "partsys-incoming-blend",
         "seed", "combattrace", "combattrace-rng",
-        "vfx-review-speed", "vfx-review-ratio", "vfx-review-spacing",
+        "vfx-review-speed", "vfx-review-watcher-rate", "vfx-review-ratio", "vfx-review-spacing",
         "vfx-review-gap", "vfx-review-offset", "vfx-review-effects",
         "vfx-review-spacing-overrides",
         "vfx-review-path-tilt", "vfx-review-path-length", "scene-viewport",
@@ -1716,6 +1716,7 @@ void GetParameters(int argc, char **argv)
         struct ReviewArg { const char* name; float* value; double minimum; double maximum; };
         const ReviewArg args[] = {
             {"vfx-review-speed", &StartupVfxReviewSpeed, 0.1, 240.0},
+            {"vfx-review-watcher-rate", &StartupVfxReviewWatcherRate, 0.05, 1.0},
             {"vfx-review-ratio", &StartupVfxReviewRatio, 2.0f, 3.0f},
             {"vfx-review-spacing", &StartupVfxReviewSpacing, 64.0f, 800.0f},
             {"vfx-review-gap", &StartupVfxReviewGap, 640.0f, 1600.0f},

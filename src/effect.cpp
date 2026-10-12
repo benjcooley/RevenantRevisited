@@ -14228,7 +14228,10 @@ void TAuthoredStaticMeshEffect::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debu
     // advances the existing object animation frame from the actual header.
     if(!animate_textures_)return;
     constexpr double tick_seconds=1.0/24.0;
-    texture_tick_seconds_+=TTime::DeltaTime();
+    // The reviewer's four-pose bystanders use a slower inspection rate.
+    // Isolated retail comparisons retain the original 24 Hz clock.
+    const double rate=!stricmp(StartupTestMode,"vfx-review") ? StartupVfxReviewWatcherRate : 1.0;
+    texture_tick_seconds_+=TTime::DeltaTime()*rate;
     while(texture_tick_seconds_+1e-9>=tick_seconds) {
         texture_tick_seconds_-=tick_seconds;NextFrame();
     }

@@ -70,6 +70,7 @@ extern int32_t StartupVfxLightingMode;
 extern bool StartupVfxNativeDomain;
 // --test=vfx-review: scrolling real-map catalogue, logical screen units/sec.
 extern float StartupVfxReviewSpeed;
+extern float StartupVfxReviewWatcherRate;
 extern float StartupVfxReviewRatio;
 extern float StartupVfxReviewSpacing;
 extern float StartupVfxReviewGap;
