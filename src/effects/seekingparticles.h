@@ -25,7 +25,7 @@ struct Random {
 class State {
 public:
     Params params; std::vector<Particle> pool; bool killed=false,done=false;
-    bool Init(const Params& p,unsigned objects,Random& rng) {
+    template<class Rng> bool Init(const Params& p,unsigned objects,Rng& rng) {
         if(p.count<=0 || p.count>4096 || p.target_count<0 || p.target_count>5 ||
            objects==0 || objects>32 || p.minlife>p.maxlife || p.minstart>p.maxstart)return false;
         params=p;pool.assign(p.count,{});killed=done=false;
@@ -40,7 +40,7 @@ public:
             if(p.target_count)q.target=rng.Range(0,p.target_count-1);
         }return true;
     }
-    bool ResetTargets(const Params& p,Random& rng) {
+    template<class Rng> bool ResetTargets(const Params& p,Rng& rng) {
         // Original allocates using the OLD target count. Do not admit its
         // null-array write when changing an initially targetless pool to seeking.
         if(p.target_count<0 || p.target_count>5 || (!params.target_count && p.target_count))return false;
@@ -71,7 +71,7 @@ public:
                 double currentz=std::atan2(double(q.vel.z),std::sqrt(double(q.vel.x)*q.vel.x+double(q.vel.y)*q.vel.y));
                 float left=float(double(desired)-current);if(left<0)left=float(double(left)+two_pi_float);if(left>two_pi)left=float(double(left)-two_pi_float);
                 const double right=wrap(double(current)-desired);
-                const double angle=left<right?double(current)+std::min(params.turn,left):double(current)-std::min(double(params.turn),right);
+                const double angle=left<right?double(current)+(std::min)(params.turn,left):double(current)-(std::min)(double(params.turn),right);
                 if(params.seekz)currentz+=wrap(double(desiredz)-currentz)<wrap(currentz-desiredz)?params.turn:-double(params.turn);
                 q.vel.x=float(params.speed*std::cos(angle));const double vy=params.speed*std::sin(angle);q.vel.y=float(vy);
                 q.vel.z=float(std::sqrt(double(q.vel.x)*q.vel.x+vy*vy)*std::sin(currentz));

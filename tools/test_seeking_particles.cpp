@@ -20,5 +20,15 @@ int main() {
     p.target_count=1;p.bounce=1;p.seeking=0;p.pos={0,0,-2};p.dir={0,0,-2};p.gravity=0;p.trails=8;
     assert(s.Init(p,4,r));draws=0;s.Render([&](int,Vec){++draws;});assert(draws==1);
     s.Advance();assert(s.pool[0].life==0);s.Advance();assert(s.killed);
+    // Runtime adapters may use the engine RNG without changing stream order.
+    struct EngineStream { Random inner{19,0}; int Range(int a,int b){return inner.Range(a,b);} } stream;
+    Random independent{19,0};State direct,adapted;
+    p.count=17;p.bounce=0;p.target_count=2;p.targets[1]={-20,10,100};p.objflags=15;p.pspread={2,3,4};p.spread={1,2,3};
+    assert(direct.Init(p,4,independent) && adapted.Init(p,4,stream));
+    assert(independent.seed==stream.inner.seed && independent.calls==stream.inner.calls);
+    assert(std::memcmp(direct.pool.data(),adapted.pool.data(),direct.pool.size()*sizeof(Particle))==0);
+    p.target_count=1;assert(direct.ResetTargets(p,independent) && adapted.ResetTargets(p,stream));
+    assert(independent.seed==stream.inner.seed && independent.calls==stream.inner.calls);
+    for(int tick=0;tick<10;++tick){direct.Advance();adapted.Advance();assert(std::memcmp(direct.pool.data(),adapted.pool.data(),direct.pool.size()*sizeof(Particle))==0);}
     std::puts("PASS: render immutability/order/bounce, equal-range RNG, target reset/seekz, completion and invalid allocation guards");
 }

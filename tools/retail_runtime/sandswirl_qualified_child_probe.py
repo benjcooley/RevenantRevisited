@@ -15,12 +15,13 @@ from character_native_preflight import AuthenticCharacters, ROOT, sha
 from lit_software_probe import LitSoftwareFixture
 from software_probe import save_rgb565_png
 from unicorn import UC_HOOK_CODE
-from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_ESP
+from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_ESP, UC_X86_REG_EDI
 
 SAMPLES = (1, 2, 5, 10, 20, 35, 50, 65, 74)
 
 
-def run(executable, boot, output, substitute=False, spell_control=False, move_target=False):
+def run(executable, boot, output, substitute=False, spell_control=False, move_target=False, source_map_control=False):
+    assert not source_map_control or spell_control
     assert not move_target or spell_control
     assert not spell_control or substitute
     output.mkdir(parents=True, exist_ok=False)
@@ -152,7 +153,38 @@ def run(executable, boot, output, substitute=False, spell_control=False, move_ta
         v.uc.hook_add(UC_HOOK_CODE,observe,begin=address,end=address)
     call(0x58c575,(1,))
     tls=call(0x58fbf1)
-    owner=f.new_object('Sandswirl',(3185,3185,16),25,0x5ab72c)
+    allocation_controls=[]
+    if source_map_control:
+        # Explicit modified-retail diagnostic: preserve actual map allocation,
+        # lookup and registration, but make index generation monotonic/RNG-neutral
+        # to match the modern monotonic-ID allocator. No effect seed injection.
+        pending=[]
+        next_index=[0x10000000]
+        def allocator_rng(uc,address,size,user):
+            if address in (0x44ce30,0x451154):
+                pending.append((address,v.u32(tls+0x14),rng[0]))
+            else:
+                if not pending:return # AddObject may already have an index
+                start,seed,calls=pending.pop()
+                assert (start,address) in ((0x44ce30,0x44cea6),(0x451154,0x4511c7))
+                allocation_controls.append(dict(start=hex(start),end=hex(address),
+                    incoming_seed=seed,outgoing_seed=v.u32(tls+0x14),
+                    suppressed_rng_calls=rng[0]-calls,actual_result=uc.reg_read(UC_X86_REG_EAX)))
+                v.put_u32(tls+0x14,seed);rng[0]=calls
+                new_id=next_index[0];next_index[0]+=1
+                if address==0x44cea6:uc.reg_write(UC_X86_REG_EAX,new_id)
+                else:v.put_u32(uc.reg_read(UC_X86_REG_EDI)+0x40,new_id)
+                allocation_controls[-1]['source_monotonic_id']=new_id
+        for pc in (0x44ce30,0x44cea6,0x451154,0x4511c7):
+            v.uc.hook_add(UC_HOOK_CODE,allocator_rng,begin=pc,end=pc)
+        definition=v.allocate(52);v.write(definition,struct.pack('<HH',25,61))
+        v.write(definition+12,struct.pack('<3i',3185,3185,16))
+        owner_index=call(0x450e40,(definition,0xffffffff),this=0x6668d8)
+        assert owner_index!=0xffffffff
+        owner=call(0x452690,(owner_index,0),this=0x6668d8)
+        assert owner and v.u32(owner)==0x5ab72c
+    else:
+        owner=f.new_object('Sandswirl',(3185,3185,16),25,0x5ab72c)
     if spell_control:
         v.put_u32(owner+0xd8,spell) # Original inline public TEffect::SetSpell.
     assert call(0x46e8b0,this=owner)==1
@@ -223,7 +255,7 @@ def run(executable, boot, output, substitute=False, spell_control=False, move_ta
                      draws_sha256=hashlib.sha256(json.dumps(draws,sort_keys=True).encode()).hexdigest(),
                      rgb565_sha256=hashlib.sha256(raw).hexdigest(),
                      nonzero_pixels=sum(x[0]!=0 for x in struct.iter_unpack('<H',raw)))
-            row.update(actors=[f.dump(a) for a in actors],quicksands=[dict(pointer=hex(q),flags=v.u32(q+8),spell=v.u32(q+0xd8),frame=v.u32(v.u32(q+0x58)+0xfc)) for q in quicksands])
+            row.update(spell_timer=v.u32(spell+0x110) if spell else None,actors=[f.dump(a) for a in actors],quicksands=[dict(pointer=hex(q),flags=v.u32(q+8),spell=v.u32(q+0xd8),frame=v.u32(v.u32(q+0x58)+0xfc)) for q in quicksands])
             if tick in SAMPLES or spell_control and tick in (75,76,90,120,150,200,299,300,310):
                 name=f'diagnostic-{tick:03}.png'
                 save_rgb565_png(output/name,raw,1280,960)
@@ -268,11 +300,12 @@ def run(executable, boot, output, substitute=False, spell_control=False, move_ta
                 named_spell_control="Quicksand" if spell_control else None,
                 loaded_spell_variants=spell_inventory,queries=queries,actors_before=actors_before,
                 particle_calls=particle_calls,actor_moves=actor_moves,
+                source_map_allocation_control=source_map_control,allocation_rng_controls=allocation_controls,
                 actors_after=[f.dump(a) for a in actors],
                 actor_map_indices=[v.u32(a+0x40) for a in actors],
                 viewport=[1280,960],center=[640,480],source=[3185,3185,16],camera=[3185,3185,0],
                 executable_sha256=sha(executable),boot_image_sha256=sha(boot),probe_sha256=sha(__file__),
-                scope=__doc__,limits='Explicit isolated parent-before-child tick order; newly spawned Quicksand first pulses next tick. Original stack-derived seekz is retained and recorded, not normalized. Sparks imagery is a declared substitute, not inferred sand identity. No production admission. '+('Real Quicksand named spell is only a public SetSpell control, not an authentic Sandswirl variant; genuine actors are map-resident but character/world scheduler and effect destruction remain outside this tick fixture.' if spell_control else 'Null spell stops at75.'))
+                scope=__doc__,limits=('Modified allocator control: map-resident parent; actual index generation executes, then its IDs are replaced by a unique monotonic sequence and only its RNG seed/counter side effects are discarded. No per-effect seed injection. ' if source_map_control else '')+'Explicit isolated parent-before-child tick order; newly spawned Quicksand first pulses next tick. Original stack-derived seekz is retained and recorded, not normalized. Sparks imagery is a declared substitute, not inferred sand identity. No production admission. '+('Real Quicksand named spell is only a public SetSpell control, not an authentic Sandswirl variant; genuine actors are map-resident but character/world scheduler and effect destruction remain outside this tick fixture.' if spell_control else 'Null spell stops at75.'))
     (output/'manifest.json').write_text(json.dumps(result,indent=2)+'\n')
     return result
 
@@ -285,5 +318,6 @@ if __name__=='__main__':
     p.add_argument('--substitute-sparks',action='store_true')
     p.add_argument('--quicksand-spell-control',action='store_true')
     p.add_argument('--move-target',action='store_true',help='Public actual actor SetPos at60 and85; explicit caller control')
+    p.add_argument('--source-map-allocation-control',action='store_true',help='Modified-retail control: map-resident parent and RNG-neutral map ID allocation; no effect-seed injection')
     a=p.parse_args()
-    run(a.executable,a.boot_image,a.output,a.substitute_sparks,a.quicksand_spell_control,a.move_target)
+    run(a.executable,a.boot_image,a.output,a.substitute_sparks,a.quicksand_spell_control,a.move_target,a.source_map_allocation_control)
