@@ -82,7 +82,9 @@ bool LoadRevisitedSettings()
     s.sun_color_g = (uint8_t)ini.GetLongValue(kSection, "SunColorG", s.sun_color_g);
     s.sun_color_b = (uint8_t)ini.GetLongValue(kSection, "SunColorB", s.sun_color_b);
     s.sun_intensity = ini.GetDoubleValue(kSection, "SunIntensity", s.sun_intensity);
+    s.sun_share     = ini.GetDoubleValue(kSection, "SunShare", s.sun_share);
     s.light_ceiling = ini.GetDoubleValue(kSection, "LightCeiling", s.light_ceiling);
+    s.ambient_scale = ini.GetDoubleValue(kSection, "AmbientScale", s.ambient_scale);
 
     s.sun_shadow_enable    = ini.GetBoolValue(kSection, "SunShadow", s.sun_shadow_enable);
     s.sun_shadow_step_wu   = ini.GetDoubleValue(kSection, "SunShadowStep", s.sun_shadow_step_wu);
@@ -160,6 +162,7 @@ void ApplyRevisitedSettingsToMapRenderer(TMapRenderer *mr)
     mr->SetLightingMode(s.lighting_mode);
     mr->SetPointLightMultipliers(float(s.point_light_int_mul),
                                  float(s.point_light_range_mul));
+    mr->ApplyLightingSettings(s);
 }
 
 bool SaveRevisitedSettings(char *out_path, int32_t out_len)
@@ -197,9 +200,14 @@ bool SaveRevisitedSettings(char *out_path, int32_t out_len)
         "; Sun color, 0-255 per channel", true);
     ini.SetLongValue(kSection, "SunColorG", s.sun_color_g, nullptr, true);
     ini.SetLongValue(kSection, "SunColorB", s.sun_color_b, nullptr, true);
-    ini.SetDoubleValue(kSection, "SunIntensity", s.sun_intensity, nullptr, true);
+    ini.SetDoubleValue(kSection, "SunIntensity", s.sun_intensity,
+        "; The sun's level relative to the ambient it takes over (1 = retail's daylight on sunlit faces)", true);
+    ini.SetDoubleValue(kSection, "SunShare", s.sun_share,
+        "; Share of the area ambient the full-day sun takes over (areas with day and night)", true);
     ini.SetDoubleValue(kSection, "LightCeiling", s.light_ceiling,
-        "; Tone-mapping ceiling on summed deferred light (1.5 is the engine default)", true);
+        "; Cap on a 3D mesh's summed light (modern); tiles saturate per channel as retail's", true);
+    ini.SetDoubleValue(kSection, "AmbientScale", s.ambient_scale,
+        "; Modern ambient: retail's tile ambient (AMBLIGHT, AMBCOLOR) times this", true);
 
     ini.SetBoolValue  (kSection, "SunShadow", s.sun_shadow_enable, nullptr, true);
     ini.SetDoubleValue(kSection, "SunShadowStep", s.sun_shadow_step_wu, nullptr, true);

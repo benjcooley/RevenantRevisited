@@ -11,8 +11,10 @@
 //     on 5-bit colour. Meshes use T3DScene's
 //     vertex lighting: split ambient + key light, linear per-light
 //     brightness, N.L. docs/LIGHTING_FIDELITY.md.
-//   1 modern -- ambient * AO, directional sun with the blurred sun-shadow
-//     mask, world-space pow falloff with tunable N.L.
+//   1 modern -- retail's light levels with modern form: the tile ambient
+//     (untruncated) * AO, the directional sun with the blurred sun-shadow
+//     mask, authored lights at retail's gain, reach and falloff shaped by
+//     N.L; tiles saturate per channel, meshes are capped.
 // Point lights 0..point_model.x-1 are authored map lights (retail radius,
 // colour, multiplier); the rest are direct (VFX) lights, the same in both
 // models.
@@ -37,7 +39,7 @@ inline constexpr const char* kLightModelMetal = R"MSL(
 using namespace metal;
 #define ISO_COS30 0.867
 #define ISO_WZ_DENOM 2.003378
-#define KPL 16
+#define KPL 128
 struct params {
     float4 vp; float4 recon; float4 light_dir; float4 light_col;
     float4 ambient_col; float4 settings;
@@ -87,29 +89,43 @@ static float3 pow_point_light(float3 W, float3 N, float hardness, float3 pos, fl
     float  pterm = mix(1.0, max(dot(N, Lp), 0.0), hardness);
     return col * intensity * retail_brightness(dist * 254.0 / rad) * pterm;
 }
+// An authored light in the modern model: retail's reach and falloff (the
+// iso metric and pow curve of the light table), its colour scaled to a
+// largest channel of 1, retail's gain per unit of multiplier (`gain`
+// carries it), shaped by N.L. docs/lighting/LIGHTING_AB.md §6.4.
+static float3 modern_retail_light(float3 W, float3 N, float hardness, float3 pos, float rad,
+                                  float3 col, float gain) {
+    float3 delta = pos - W;
+    float d = retail_iso_distance(delta);
+    if (rad <= 0.0 || d >= rad) return float3(0.0);
+    float3 Lp = delta / max(length(delta), 1e-5);
+    float pterm = mix(1.0, max(dot(N, Lp), 0.0), hardness);
+    return max_normalized(col) * gain * retail_brightness(d * 254.0 / rad) * pterm;
+}
 // Classic tiles: DLS through retail's MMX transfer. Each authored light
 // adds int(63*B) to a 6-bit intensity I that saturates at 63. The light
 // byte picks per-channel multiplier bytes M = int(min(255, ambient byte +
 // light term)), and each 5-bit colour channel becomes min(255, c5*M) >> 3;
 // green then doubles into the 6-bit field. CM_TILE carries M/8 gains.
-// Retail keeps one colour per pixel (the light drawn last); the I-weighted
-// average is the same for one light or same-coloured lights.
+// The light drawn last over a pixel picks its colour and multiplier (the
+// DLS light byte's id); the authored lights come in retail's draw order
+// with their light-table id's colour (LIGHTING_FIDELITY.md §2.6).
 // light_gain receives M/8 for the diagnostic view.
 static float3 classic_tile_lit(float3 alb, float3 W, int n_retail, constant params& p,
                                thread float3& light_gain) {
     float  sum_i = 0.0;
-    float3 sum_c = float3(0.0);
+    int    last  = -1;
     for (int i = 0; i < KPL; ++i) {
         if (i >= n_retail) break;
         float r = p.plight_pos[i].w;
         if (r <= 0.0) continue;
         float d = retail_iso_distance(p.plight_pos[i].xyz - W);
         if (d >= r) continue;
-        float i6 = floor(63.0 * retail_brightness(d * 254.0 / r));
-        sum_i += i6;
-        sum_c += i6 * max_normalized(p.plight_col[i].rgb) * p.plight_col[i].w;
+        sum_i += floor(63.0 * retail_brightness(d * 254.0 / r));
+        last = i;
     }
-    float3 color_mult = (sum_i > 0.0) ? sum_c / sum_i : float3(0.0);
+    float3 color_mult = (last >= 0) ? max_normalized(p.plight_col[last].rgb) * p.plight_col[last].w
+                                 : float3(0.0);
     float3 m  = floor(min(8.0 * p.classic_model[CM_TILE].rgb +
                           8.0 * p.classic_model[CM_TILE].w * (min(sum_i, 63.0) / 63.0) * color_mult,
                           255.0));
@@ -181,11 +197,13 @@ static surface_light shade_surface(float3 alb, float3 W, float3 N, bool is_mesh,
         points = float3(0.0);
         for (int i = 0; i < KPL; ++i) {
             if (i >= n_retail) break;
-            points += pow_point_light(W, N, normal_hardness, p.plight_pos[i].xyz,
-                                      p.plight_pos[i].w * p.point_model.z,
-                                      p.plight_col[i].rgb, p.plight_col[i].w * p.point_model.y);
+            points += modern_retail_light(W, N, normal_hardness, p.plight_pos[i].xyz,
+                                          p.plight_pos[i].w * p.point_model.z,
+                                          p.plight_col[i].rgb, p.plight_col[i].w * p.point_model.y);
         }
-        ceiling = max(p.ambient_col.w, 1e-3);
+        // Tiles saturate per channel as retail's light table does (a byte of
+        // 255 is a gain of 255/8); a mesh's light is capped (LightCeiling).
+        ceiling = is_mesh ? max(p.ambient_col.w, 1e-3) : 31.875;
     }
     float3 direct = float3(0.0);
     for (int i = 0; i < KPL; ++i) {

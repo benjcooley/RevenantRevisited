@@ -355,6 +355,8 @@ void TMapRenderer::DrawDebugTab()
                 rs.sun_color_b          = (uint8_t)std::clamp(int(s.color[2] * 255.0f + 0.5f), 0, 255);
                 rs.sun_intensity        = s.intensity;
                 rs.light_ceiling        = s.light_ceiling;
+                rs.ambient_scale        = s.ambient_scale;
+                rs.sun_share            = s.sun_share;
                 rs.sun_shadow_enable    = s.sun_shadow;
                 rs.sun_shadow_step_wu   = s.sun_shadow_step;
                 rs.sun_shadow_soft_px   = s.sun_shadow_soft;
@@ -401,6 +403,8 @@ void TMapRenderer::DrawDebugTab()
                 rs.sun_color_b          = (uint8_t)std::clamp(int(s.color[2] * 255.0f + 0.5f), 0, 255);
                 rs.sun_intensity        = s.intensity;
                 rs.light_ceiling        = s.light_ceiling;
+                rs.ambient_scale        = s.ambient_scale;
+                rs.sun_share            = s.sun_share;
                 rs.sun_shadow_enable    = s.sun_shadow;
                 rs.sun_shadow_step_wu   = s.sun_shadow_step;
                 rs.sun_shadow_soft_px   = s.sun_shadow_soft;
@@ -472,18 +476,18 @@ void TMapRenderer::DrawDebugTab()
             ImGui::SliderFloat("ambient (live)", &s.ambient, 0.0f, 1.0f);
             ImGui::EndDisabled();
             ImGui::BeginDisabled(s.lighting_mode == 0);
-            ImGui::SliderFloat("ambient divisor", &s.ambient_divisor,
-                               10.0f, 100.0f, "%.1f");
+            ImGui::SliderFloat("ambient scale", &s.ambient_scale,
+                               0.25f, 4.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+            ImGui::SliderFloat("sun share", &s.sun_share, 0.0f, 1.0f, "%.2f");
             ImGui::EndDisabled();
             ImGui::SameLine();
             ImGui::TextDisabled("(?)");
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip(
-                    "Modern mode only:\n"
-                    "ambient = AMBLIGHT * Ambient3D / (divisor * 100)\n"
-                    "Lower = brighter ambient. Classic uses retail's\n"
-                    "light-table mapping, 8 * AMBLIGHT / 255 with the\n"
-                    "colour scaled to a max channel of 1\n"
+                    "Modern mode only ([Revisited] AmbientScale):\n"
+                    "ambient = retail's tile ambient gain, 10 * AMBLIGHT / 255\n"
+                    "with the colour scaled to a max channel of 1, times\n"
+                    "this. Classic uses retail's light table exactly\n"
                     "(docs/LIGHTING_FIDELITY.md).");
 
             ImGui::BeginDisabled(s.lighting_mode == 0);

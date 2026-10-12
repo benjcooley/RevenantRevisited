@@ -29,8 +29,12 @@ struct SRevisitedSettings {
     uint8_t sun_color_r = 255;
     uint8_t sun_color_g = 240;
     uint8_t sun_color_b = 210;
-    double  sun_intensity = 1.0;
-    double  light_ceiling = 1.5;
+    double  sun_intensity = 1.0;    // the sun's level relative to the share of ambient it takes
+    double  sun_share     = 0.5;    // the share of the area ambient the full-day sun takes over
+    double  light_ceiling = 1.5;    // cap on a 3D mesh's summed light (tiles saturate as retail's)
+
+    // ---- Ambient: retail's tile ambient (AMBLIGHT, AMBCOLOR) times this --
+    double  ambient_scale = 1.0;
 
     // ---- Sun shadows -------------------------------------------------------
     bool    sun_shadow_enable      = true;
@@ -83,7 +87,9 @@ bool LoadRevisitedSettings();
 // can be called when its respective owner becomes live (TRenderer in
 // display init, TMapRenderer in PlayScreen init). Both are null-safe and
 // idempotent — always call to push current settings, even without
-// --revisited (the defaults still matter).
+// --revisited (the defaults still matter). The map renderer re-sends its
+// lighting state to TRenderer every frame, so the lighting settings (sun,
+// ambient scale, ceiling, AO, sun shadows, normals) must reach it too.
 void ApplyRevisitedSettingsToRenderer(TRenderer *r);
 void ApplyRevisitedSettingsToMapRenderer(TMapRenderer *mr);
 

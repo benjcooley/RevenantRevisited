@@ -115,6 +115,7 @@ struct SClassicLightModel {
     // ambient byte / 8, so 8 * tile_ambient is an integer.
     float tile_ambient[3]        = {};    // ambient gain per channel
     float tile_gain_per_mult     = 0.0f;  // full-intensity light gain per unit of light multiplier
+    float tile_ambient_linear[3] = {};    // the ambient gain before the byte truncation (the modern ambient)
     // 3D meshes (T3DScene). Light values are in effective units, after the
     // EnhancedLighting MODULATEnX scale; mesh_overbright is that scale.
     float mesh_ambient[3]        = {};
@@ -605,7 +606,7 @@ public:
 
     // Max simultaneous point lights per deferred light pass. Extras are
     // silently dropped by AddPointLight.
-    static constexpr int32_t kMaxPointLights = 16;
+    static constexpr int32_t kMaxPointLights = 128;
 
     TRenderer();
     ~TRenderer();
