@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 172,
+    "retail_rows_with_source_fixes_recorded": 173,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,14 +17,14 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 174,
+    "visual_fidelity_confirmed_rows": 175,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 174,
-    "remaining_visual_review_rows": 2,
-    "qualified_modified_reference_visual_rows": 4,
+    "reviewed_visual_pass_rows": 175,
+    "remaining_visual_review_rows": 1,
+    "qualified_modified_reference_visual_rows": 5,
     "qualified_semantic_device_visual_rows": 2,
-    "qualified_reference_visual_rows": 6
+    "qualified_reference_visual_rows": 7
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -2104,6 +2104,13 @@
       "check": "additional_qualified_hardware_color_review",
       "status": "pass",
       "scope": "Additional qualified fspray hardware RGB8 appearance pass: root repeated original61 full state/RNG/pools/packets and actual120 Metal images, reviewed all nine fixed whole/detail triples, corrected packed RGB8 color matches qualified point/linear controls with residual raster differences. Existing primary software review and 174 effect count remain unchanged."
+    },
+    "recon/retail_asm/runtime/effects/current-labyrinth-qualified-20261011/root-approval.json": {
+      "sha256": "b1025b69ca3b22b13eca4649d86efeb74b20db79e47863209594e90d24fe430c",
+      "retail_row": "LabyrinthEffect:0xad92bd20",
+      "check": "qualified_labyrinth_full_controller_visual_review",
+      "status": "pass",
+      "scope": "Qualified original initializer selector upper4-to3 only, unchanged own Starfield asset; full150-star/trail controller, original 24Hz Render/RNG, camera-follow and100frame owner loop across170ticks. Original software background extent rejection matched only in explicit native/software policy; ordinary background retained. Root reviewed nine whole/fixed phases1/6/16/30/60/99/100/101/170 and fresh repeat; sampling/depth/quantization/device/natural caller remain open."
     }
   }
 }

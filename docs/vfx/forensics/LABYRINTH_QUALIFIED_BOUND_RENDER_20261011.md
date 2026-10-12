@@ -12,4 +12,11 @@ Nine complete original/actualMetal pairs use the same1920×1080 center960,600 an
 
 Actual exact `Labyrinth_QUALIFIED_BOUND` gallery route is80/80 visible,80 distinct frames, clean exit, with no effect-local reseed. Three native contract tests pass in9.303s,31 mapping admission tests and the compiled lifecycle bridge pass. Initial double-Animate30-step references, incorrectY-translation source contract and blank strict flags2000 capture are preserved as superseded negatives; the correct reference invokes exactly one custom animator through owner Pulse. Initial bridge checks used stale generated mapping and are superseded by the regenerated exact route.
 
-Evidence root: `/Users/benjamincooley/RevenantRetailLab/research/vfx-next-labyrinth-20261011`. Frozen checkpoint `qualified-checkpoint-freeze.json` SHA256 `e72b444b375a40ecdbe5e7e6e34b1a431c32ac0e30e47d74cc1b55bb9ee8e428`; complete per-image and source pins are inside. `review-final` contains nine separate whole/fixed-ROI panels without a giant canvas. Captured and gallery binary hashes are separately recorded; the latter adds only exact generated review mapping. Parent independent appearance approval is pending. This is never an unmodified retail appearance claim. Natural Labyrinth caller/background context, hardware raster, other lighting, internal face-depth/sampling/quantization and exact pixels remain open.
+Evidence root: `/Users/benjamincooley/RevenantRetailLab/research/vfx-next-labyrinth-20261011`. Frozen checkpoint `qualified-checkpoint-freeze.json` SHA256 `e72b444b375a40ecdbe5e7e6e34b1a431c32ac0e30e47d74cc1b55bb9ee8e428`; complete per-image and source pins are inside. `review-final` contains nine separate whole/fixed-ROI panels without a giant canvas. Captured and gallery binary hashes are separately recorded; the latter adds only exact generated review mapping. Parent independent appearance review passed. This is never an unmodified retail appearance claim. Natural Labyrinth caller/background context, hardware raster, other lighting, internal face-depth/sampling/quantization and exact pixels remain open.
+
+Root independent reproduction `research/vfx-labyrinth-root-20261011/integrated/`
+passed three contracts, all170 native semantic rows and nine PNGs, nine decoded
+GPU phases exactly matching the frozen candidate, all170 geometry bounds and
+2,915 phase fields, plus80 visible/distinct gallery frames with clean exit.
+Root reviewed all nine complete/fixed phase pairs. Qualified visual credit175
+preserves every unmodified/device/natural-caller limitation stated above.

@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-11)
 
-**174 / 176 effects have reviewed visual passes for their recorded test configuration; 2 still need a current visual pass.** This is the primary VFX progress measure. Three Watchers and Rift use explicitly modified retail code to repair demonstrated renderer/parser errors; Dust and static Fire use qualified semantic-device fixtures. These six do not establish unchanged-device fidelity. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
+**175 / 176 effects have reviewed visual passes for their recorded test configuration; 1 still needs a current visual pass.** This is the primary VFX progress measure. Three Watchers, Rift and Labyrinth use explicitly modified retail code to repair demonstrated renderer/parser/selector errors; Dust and static Fire use qualified semantic-device fixtures. These seven do not establish unchanged-device fidelity. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
 **YTelekinesis (2026-10-11):** four moving/rotating chunks match through actual owner completion across six fixed supported capture views; all 39,600 triangles covered and 24 root-repeated Metal frames identical. Corrected exact-ID mapping displays and restarts it in the gallery. Natural actor/spell/audio and raster overlap limits remain open. [Evidence and scope](forensics/YTELEKINESIS_ORIGINAL.md).
 
@@ -1151,3 +1151,5 @@ Audited `class.def`: 233,484 bytes; SHA-256 `bf46eaa4e25a43fa9828e1e8737114d63b9
 - [x] **Fire** `0x119f01e3` — installedstaticquad/selector0 fourcardinal appearance approvedagainstqualifiedmoderncenter/pointdevice;268updates/12exactRGBpairs pass. Animatedexpectations/originalsoftware/perioddevice remainopen. [Evidence](forensics/FIRE_QUALIFIED_DEVICE_20261011.md).
 
 - [x] **Rift1** `0xadbcef18` — qualifiedoriginal onebyteparserrepair/fullatlasarithmetic+kill100 approved;104repeat andfinitegallery pass. Unpatchedfault/naturalcaller/device remainopen. [Evidence](forensics/RIFT_QUALIFIED_PARSER_RENDER_20261011.md).
+
+**LabyrinthEffect (2026-10-11):** qualified selector upper4→3 uses the unchanged own Starfield resource. Root repeated170 native updates/nine GPU phases, reviewed full star/trail evolution through100framewrap/respawns, and passed80-frame gallery. Original fourth-prototype failure and device/natural-context limits remain explicit. [Evidence](forensics/LABYRINTH_QUALIFIED_BOUND_RENDER_20261011.md).
