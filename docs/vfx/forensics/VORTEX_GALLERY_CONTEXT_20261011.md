@@ -74,3 +74,10 @@ The combined private `review-manifest.json` SHA256 is
 `material-contact.png` and `context-contact.png` show these separate findings.
 This is a modern visibility fix, not a claim that the user's auto-mode static
 cone or inherited-state behavior has been changed or accepted.
+
+Root integrated build/four focused tests pass. Fresh root auto and modern
+8-frame gallery captures repeat the candidate pixels exactly (139,567 nonblack
+pixels in their first frames). Auto remains unchanged; modern recovers visibility.
+Evidence: `research/vfx-vortex-gallery-root-20261011/{auto,modern}/manifest.json`.
+The user's static/clipped auto-gallery complaint remains open and receives no
+appearance approval from this modern-material correction.
