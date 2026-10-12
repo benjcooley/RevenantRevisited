@@ -1167,8 +1167,8 @@ bool ObjectMapOffset(TObjectInstance* target, const char* name, S3DPoint& offset
 //  6. RANGEDAMAGE: at its frame, the blast around the effect;
 //  7. without a spell, a state that doesn't loop removes it once played out;
 //  8. SetCommandDone(false).
-// Retail's spell LIGHT fade in and out (0x004de860..0x004de9c4) is the
-// effect's light, the VFX track's: not here.
+// Between 2 and 3, the spell's LIGHT (0x004de860..0x004de9c4): lit and
+// ramped in, faded out from the kill (SetEffectFlags, SEffectLightRamp).
 void TEffect::Pulse()
 {
     if (startwait > 0)
