@@ -66,7 +66,7 @@ only).
 | M1u | the action tick: UpdateAction (stealth reset, sleep, ResolveAction dispatch, the done rule, the fall, TryCommand), ResolveMove, ResolvePivot, ResolveSay, ResetStealthValues, Visibility | `0x4c3260` `0x4c3490` `0x4c5e90` `0x4c8470` `0x4c8400` `0x4cdbb0` `0x4c5aa0` | `TCharacter::UpdateAction` and the resolvers | [x] 259/259 (`combat-update`; six mutations caught; `say.noroot.*`: a root the model lacks, 2026-10-10) |
 | M2 | angle/distance kernels: AngleDiff, ConvertToFacing, Distance, ConvertToVector, object Distance/AngleTo, the screen point | `0x46ded0` `0x46dc60` `0x46de60` `0x46db20` `0x46ea20` `0x46ea90` `0x46eb40` `0x46ec50` | `AngleDiff`, `ConvertToFacing`, `Distance`, `ConvertToVector`, `TObjectInstance::Distance/AngleTo/GetScreenPos` | [x] 37 batches, every angle pair, ~28k vectors, 23k screen points |
 | M3 | combat walking: Go(angle), empty world | `0x4ce350` | `TCharacter::Go(int)` | [x] 762/762 |
-| M4 | combat walking with retargeting (world + sight/hearing seams) | `0x4ce350`, FindCharacters `0x4cd690` | same | [ ] |
+| M4 | combat walking with retargeting (world + sight/hearing seams) | `0x4ce350`, FindCharacters `0x4cd690` | same | [x] 892/892 (`combat-go-world`; perception as original: the newcomer round the direction held at the cone's edges and Go's 47 (edge to edge), the target valid at 100 or 60, dead, none; not an enemy, quiet, invisible. Retail switches in 74+ cases; three mutations caught) |
 | M5 | combat resolve tick: ResolveCombat / ResolveCombatMove (+ SetFighting `0x4d4790`) | `0x4c7980` `0x4c7f80` | `ResolveCombat`, `ResolveCombatMove` | [x] 654/654 |
 | M6 | player input per tick: UpdateMove → Go / Stop / Leap (Block and the bow aim seamed: their tracks), and Stop | `0x47de30`, `0x4cee70` | `TPlayScreen::UpdateMove`, `TCharacter::Stop` | [x] 280/280 (`combat-input`; two mutations caught) |
 | M7 | displacement: Move / MoveStep (velocity, blocking, shove), FindClearPath, CharBlocking, GetWalkHeight / GetWalkHeightRadius | `0x4c46d0` `0x4c3bc0`, TPlayer `0x518df0`, `0x4c39d0` `0x4d4db0` `0x452e10` `0x4530a0` | `TCharacter::Move`, `MoveStep`, `Blocked`, `CharBlocking`, `TMapPane::GetWalkHeight*` | [x] 786/786 (`combat-move`; six mutations caught) |
@@ -461,6 +461,7 @@ python3 tools/retail_ab/retail_ab.py combat-sequence    # M8
 python3 tools/retail_ab/retail_ab.py combat-input       # M6
 python3 tools/retail_ab/retail_ab.py combat-steps       # M10
 python3 tools/retail_ab/retail_ab.py combat-perceive    # M9b
+python3 tools/retail_ab/retail_ab.py combat-go-world    # M4
 python3 tools/retail_ab/retail_ab.py melee-attack-choice   # C3 (melee-hit C4, melee-damage C2,
                                                            # melee-resolvers C5, melee-ai C3b)
 python3 tools/retail_ab/retail_ab.py spell-cast         # S2 (spell-data D1s; spell-lookup, -talismans,
