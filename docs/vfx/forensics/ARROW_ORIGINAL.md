@@ -122,3 +122,35 @@ This verifies the declared adapter cadence and preserves the isolated 24 Hz
 appearance. The user's ordinary moving-gallery appearance report remains open;
 shared RNG ordering among simultaneous effects, natural actors, audio, skipped
 native Render calls and device/raster limits are not certified by this check.
+
+
+## Actual reviewer direction control, 2026-10-11
+
+`arrow_attached_visual_reference.py --gallery-direction` now uses the actual
+logged path delta(-170,-219), sourceZ144 and facing229. XY is algebraically
+relocated to source(0,0); no per-tick positions are supplied. Original startup
+builds the facing tables. Their literal velocity input is(-803840,-1034240,0)
+in16.16; original Move470920 computes the trajectory. The declared terrain
+boundary is a stationary plane through the target, rather than the old+X wall.
+Original Notify handles the explicit source-deletion event after Move blocks.
+
+Two independent24-tick original replays match every state/RNG/event and ordered
+draw matrix. The actual source core matches240 state fields and3,648 matrix
+channels; maximum matrix residual4.960937474152161e-7. The first position is
+(-12,-15,144); deletion starts at zero-based tick14. All existing horizontal
+and sparse-render controls remain passing; five arrow tests pass.
+
+The first source checker compared9-digit decimal velocity output against exact
+native float values and failed on decimal rounding alone. Its attempt is
+retained under `source-first`; velocities now print as hex floats and compare
+exactly, without widening a state tolerance. Matrix printing retains the existing
+declared error bound. `source-exact-velocity` records the corrected check.
+
+Private evidence: `research/vfx-arrow-gallery-direction-root-20261011/`.
+`direction-proof.json` SHA256:
+`061500c77a5b371d130bdf4bb31fb117470c04a181299a9a5d7f32d86b345de4`.
+This extends motion/controller coverage to the review direction; it is not
+rendered ordinary-gallery approval. The physical source/bow object is an
+upstream fixture and is not drawn, so the comparison covers the trail itself.
+Natural parent rendering, camera/raster/lighting and scene interaction remain
+open. No effect-production code changed in this direction audit.
