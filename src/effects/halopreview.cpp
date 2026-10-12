@@ -8,12 +8,17 @@
 #include "../time.h"
 #include "../logging.h"
 #include <cmath>
+#include <cstdlib>
+#include "../revutils.h"
 #include <memory>
 #include <vector>
 // Restore the shipped exact owner factory; rendering remains explicitly controlled.
 DEFINE_BUILDER("Halo", THaloEffect)
 REGISTER_BUILDER(THaloEffect)
 namespace halo_preview {
+// Both source raster inputs are independently proven for this exact asset.
+// Keep the four-policy diagnostic explicit; ordinary defaults select both.
+static int RasterPolicy(){const char* p=std::getenv("REV_HALO_RASTER_DIAGNOSTIC");return p && p[0]>='0' && p[0]<='3' && !p[1]?p[0]-'0':3;}
 struct State {
     State(int total,float step):core(total,step){}
     std::unique_ptr<TObjectInstance> owner;
@@ -21,8 +26,15 @@ struct State {
     MeshHandle mesh{};
     double accumulator=0;
     int64_t rendered=-1;
+    bool diagnostic=std::getenv("REV_HALO_RASTER_DIAGNOSTIC")!=nullptr;
+    int raster_policy=RasterPolicy();
     ~State(){if(Renderer && mesh)Renderer->ReleaseMeshAssetRef(mesh);}
 };
+static void ConfigureRaster(SHelperMeshSubmit& draw,const State* s){
+ draw.retail_software_projection=StartupVfxNativeDomain;
+ draw.retail_software_pixel_grid=StartupVfxNativeDomain && (s->raster_policy&1);
+ draw.retail_alpha_source_quantize=StartupVfxNativeDomain && (s->raster_policy&2);
+}
 State* Spawn(const S3DPoint& origin,int totalframes,float step) {
     if(!Renderer || totalframes<=0 || !std::isfinite(step) || step<=0)return nullptr;
     auto s=std::make_unique<State>(totalframes,step);
@@ -51,6 +63,7 @@ void Advance(State* s,double seconds) {
     while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds) {
         s->accumulator-=TTime::LegacyFrameSeconds;s->owner->NextFrame();s->owner->Pulse();
         if(!Alive(s))return;s->core.Advance();
+        if(s->diagnostic)log_info("[halo-state] frame=%d scale=%.9g done=%d rng=%llu policy=%d",s->core.frame,s->core.scale,int(s->core.done),(unsigned long long)RandomDraws(),s->raster_policy);
         if(s->core.done){s->owner->SetFlags(s->owner->GetFlags()|OF_KILL);return;}
     }
 }
@@ -63,7 +76,7 @@ void SubmitWorld(State* s) {
     MtxMultiply(&world,&local,&root);
     SHelperMeshSubmit draw={};draw.mesh=s->mesh;draw.retail_lighting=3;
     draw.retail_source_alpha=true;draw.additive_blend=false;
-    draw.retail_software_projection=StartupVfxNativeDomain;
+    ConfigureRaster(draw,s);
     for(int r=0;r<4;++r)for(int c=0;c<4;++c)draw.world[r*4+c]=world.Elements[c][r];
     Renderer->SubmitHelperMesh(draw);
 }
