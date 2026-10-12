@@ -2220,6 +2220,8 @@ bool TCharacter::ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAtta
                      defense, def, offense, off);
         }
         TextBar.Print("%s", line);
+        if (CombatTrace::Enabled())
+            CombatTrace::Event(this, "result", "text=%s", line);
     }
 
   // The damage: a blocking player takes none from a glance. Damage keeps

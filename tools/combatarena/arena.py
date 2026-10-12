@@ -58,11 +58,13 @@ DEFAULT_ZIP = REPO / 'docs' / 'gameflow' / 'SAVE_INTEROP_SLOTS.zip'
 sys.path.insert(0, str(HERE))
 from make_arena import add_arena  # noqa: E402
 
-# The INI a run starts from: the shipped game's options, and paths that
-# resolve every rules file through the install's archives (the retail lab's
-# loose Resources/ holds port files; COMBAT_DATA.md D0).
+# The INI a run starts from: the shipped game's options and paths. The
+# rules files come from the install's archives even where loose copies sit
+# beside them (the retail lab's Resources/), the archive being looked in
+# first, as retail's open does (COMBAT_DATA.md D0); and the game's messages
+# (the combat results' "Hit vs. ...") come from resources.rvr's english.def.
 BASE_INI = {
-    'Paths': {'ClassDefPath': '"."', 'ExileRCPath': '"."', 'ResourcePath': '"."', 'CurMapPath': '"."',
+    'Paths': {'ClassDefPath': '".\\Resources"', 'ExileRCPath': '"."', 'ResourcePath': '".\\Resources"', 'CurMapPath': '"."',
               'BaseMapPath': '"."', 'MoviePath': '".\\Disk2"', 'SaveGamePath': '".\\Save"',
               'ImageryPath': '".\\Imagery"', 'ModulesPath': '".\\Modules"'},
     'Options': {'CombatFace': 'Yes', 'AutoCombat': 'Yes', 'ShowDialog': 'Yes', 'PlaySpeech': 'No',

@@ -110,6 +110,17 @@ piece: Locke's shirt and pants are armour 2, an Araknid's 8 is taken as 6,
 and a hit lands 6-12 (doubles to 24), as in retail. Ported as
 `TRules::ApplyItemData`; kata D1 checks every weapon and armor type.
 
+**The combat results' text (fixed 2026-10-11).** The port printed raw
+tags ("[BASEHIT] Locke [BASEDMG]:12 ...") because the arena's INI set
+ClassDefPath to "." (to keep the lab's loose Resources/ files out of the
+rules, from before the port's open looked in the archives first): the
+game's message table, `ClassDefPath` + english.def, then resolved to the
+module's dialog file. The arena now runs with the shipped paths
+(`.\Resources`; the rules still come from resources.rvr, the traces are
+unchanged) and the lines read as retail's: "Hit vs. Locke Dmg:8 Def:10
+Off:12". The trace records each (event `result`), to set beside the lab's
+combat log.
+
 **Reading retail's blows.** The lab captures at ~35 frames a second
 (`Control.capture`, 29 ms); each drop of Locke's health bar (y 22, x 68 +
 health × 116 / 100) is a blow, and the combat log (the last five lines)
@@ -135,6 +146,3 @@ Open from A1b:
   his walk stance after ~100 ticks (the lab's INI may have AutoCombat off:
   its copy wasn't read) and the Araknid started within ~1.2-2.3 s. Needs
   the emulator.
-- **The port's combat results print raw tags** ("[BASEHIT] Locke [BASEDMG]:12
-  [BASEDEF]:10 [BASEOFF]:12") where retail prints "Hit vs. Locke Dmg:7
-  Def:10 Off:12": the text lookup for those lines fails.
