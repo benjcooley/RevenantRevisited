@@ -70,3 +70,9 @@ existing helper/software edge, sampling and framebuffer differences retained.
 No exact pixel equality, original Sand asset identity, or full retail Sandswirl
 acceptance is asserted. Moving-target original/core proof is separately frozen
 in `SANDSWIRL_SEEKING_CORE_20261011.md`; this GPU run uses its fixed-target control.
+
+## Root integrated verification
+
+Explicitly named SANDSWIRL_QUALIFIED_SPARKS only; no retail-ID admission or intendedsandappearancecredit. Full310actualrootGPUframes clean,95visible/96distinct andall310decodedpixels repeatfrozenfilm exactly.263500actualpool fieldsbitexact,1240RNG/parentfieldsexact,310globalRNGinvariance checks,5697orderedsubmissions and599originalworldmatricesbitexact. Root18whole/detail phasesindependentlyinspected; identicalcontact/detail toagentreview, nofit. Commonprojection100repeat exact/clean, state/parity only. Fourunchanged licensedSparks meshes/ARGB4444atlas, originalqualifiedsand→sparks childliteral plusactualQuicksandspellcontrol. Sourcefixedtarget/particleentryseed2383791448 andmapallocation75seed2697382707 observedboundaries explicit; no realactors/Quicksand allocation inGPUadapter. Missingintendedsandresource, undefinedseekz41, naturalcaller/map/targetmotionGPU/damage/audio/device andexactoriginalpixelsremainopen. ExistingSparks regressionpasses; sourcehelper/rasteredge differencesretained.
+
+Retained root report: `recon/retail_asm/runtime/effects/current-sandswirl-parent-20261011/qualified-root-check.json`. These diagnostics do not increase the retail visual count.

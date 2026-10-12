@@ -52,7 +52,8 @@ struct SQuadDrawItem{bool retail_rgb565_additive=false;float world_pos[4][3]{},u
  uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
 struct S3DVertex{hmm_vec3 pos,normal;float tu,tv;};
 uint32_t type_id=0;
-struct Owner{uint32_t ObjId()const{return type_id;}int GetState()const{return 0;}};
+template<class... Args> void log_info(const char*,Args...){std::abort();}
+struct Owner{struct Position{int x,y,z;};Position Pos()const{std::abort();}int GetFrame()const{std::abort();}uint32_t ObjId()const{return type_id;}int GetState()const{return 0;}};
 struct Imagery{uint32_t static_particles_profile=type_id;
  STATIC_PROFILE_METHOD
  bool HasRetailLightStripProfile()const{return false;}

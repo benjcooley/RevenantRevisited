@@ -47,7 +47,8 @@ struct SFxBatchKey{TTextureHandle texture=0;uint16_t pipeline_id=1;uint8_t blend
 struct SQuadDrawItem{bool retail_rgb565_additive=false;float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};SFxBatchKey key;
  bool retail_software_projection=false;uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
 struct S3DVertex{hmm_vec3 pos,normal;float tu,tv;};
-struct Owner{uint32_t ObjId()const{return 0xad92bd36u;}int GetState()const{return 0;}};
+template<class... Args> void log_info(const char*,Args...){std::abort();}
+struct Owner{struct Position{int x,y,z;};Position Pos()const{std::abort();}int GetFrame()const{std::abort();}uint32_t ObjId()const{return 0xad92bd36u;}int GetState()const{return 0;}};
 struct Imagery{bool HasRetailStaticParticleProfile(uint32_t)const{return false;}
  bool HasRetailLightStripProfile()const{return false;}
  bool HasRetailJhagaAttackProfile()const{return false;}
