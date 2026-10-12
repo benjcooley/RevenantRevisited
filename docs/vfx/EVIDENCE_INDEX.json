@@ -945,30 +945,30 @@
     "recon/retail_asm/runtime/effects/accepted-helper-shadowfist-20261010/review.json": {
       "sha256": "678068386ecb9a3857548ef77f89eb215d1ebf0822c9b10f509ba5b152fdfbdd",
       "retail_row": "Shadowfist:0x550decaf",
-      "check": "current_renderer_visual_regression",
-      "status": "pass_for_existing_isolated_scope",
-      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+      "check": "current_renderer_visual_recheck",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
     },
     "recon/retail_asm/runtime/effects/accepted-helper-warriorborn-20261010/review.json": {
       "sha256": "2c888ff432cea49da3410b24b1f2342cb1e1ede9a0558602e5eb5e1ee2bc188d",
       "retail_row": "Warriorborn:0x9de2a0fe",
-      "check": "current_renderer_visual_regression",
-      "status": "pass_for_existing_isolated_scope",
-      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+      "check": "current_renderer_visual_recheck",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
     },
     "recon/retail_asm/runtime/effects/accepted-helper-teleportation-20261010/review.json": {
       "sha256": "0454dbad0c7b5f10ccdec609d1e954b4cf6285def84da667eda156438e0ee120",
       "retail_row": "teleportation:0xad92bd40",
-      "check": "current_renderer_visual_regression",
-      "status": "pass_for_existing_isolated_scope",
-      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+      "check": "current_renderer_visual_recheck",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
     },
     "recon/retail_asm/runtime/effects/accepted-helper-goldeffect-20261010/review.json": {
       "sha256": "5c9dee8a692fcf9842d94c9b71146e9e0852d65ea8f332c6708c731434eab52d",
       "retail_row": "goldeffect:0xd0c0f035",
-      "check": "current_renderer_visual_regression",
-      "status": "pass_for_existing_isolated_scope",
-      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+      "check": "current_renderer_visual_recheck",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
     },
     "recon/retail_asm/runtime/effects/fireflash-current-visual-20261010/review-approved.json": {
       "sha256": "b51a6244eae867b3b636e44f532d1e87bda31441601fc93bb632dad9a5ab30ad",
@@ -2150,6 +2150,76 @@
       "check": "restored_sand_real_moved_target",
       "status": "pass",
       "scope": "Rootcurrent310GPUimagesbyteexact/fullmapquery+cachedtarget+6004packets+282100poolfields+Quicksand/spellcompletion through actualSetPos60/85. Original310controlretained, firstchangedimage76afterquery75; no RNG/time/trajectoryfitting. Qualifiedlegacybinding/allocatorcontrol, naturalAI/device remainopen."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-steady-02-cyanfont-20261005/manifest.json": {
+      "sha256": "4103db21d8d4d57e29a8b0d3ee15117c4900a957435dccad80eaf004952dfc8f",
+      "retail_row": "CyanFont:0x22491405",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-steady-03-redfont-20261005/manifest.json": {
+      "sha256": "0771425327a0c6f722f7380e6393f7ee6a6ca2a786f99770e5360d600ee5fa8f",
+      "retail_row": "RedFont:0x335a2516",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-steady-04-greenfont-20261005/manifest.json": {
+      "sha256": "cb189a0f0d8953f8da0c9990e0285c28013ac7318096f9789865716316cfc324",
+      "retail_row": "GreenFont:0x446b3627",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-steady-05-bluefont-20261005/manifest.json": {
+      "sha256": "29f359e0f85d66ee4282d0c3b4fc004bedfff17ace542b5273a4f98c726814c4",
+      "retail_row": "BlueFont:0x557c4738",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-flame-steady-authored-20261005/manifest.json": {
+      "sha256": "01464f26b04ee0a9cbe648afa8deea074907e36fa4a6d3cf81070df950974825",
+      "retail_row": "Flame:0x50ba373b",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fps-sparks-editor-default-20261005/manifest.json": {
+      "sha256": "129a5d5a26dae0097b48b9d0b2cc8eeda27d908be76352ff92a8a3592bc70ae1",
+      "retail_row": "Sparks:0x14db0f2e",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fps-cure-software-helper-final-20261005/manifest.json": {
+      "sha256": "9e27c0c43987ba1c490139ac47bf1a021abc873a8f67e80ebc9922185e0d651d",
+      "retail_row": "Cure:0x152dafef",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fps-pixie-authored-20261005/manifest.json": {
+      "sha256": "7db040256121fd13a7d02185e4da2f871a1e59c81803738d08316a7a28d79b29",
+      "retail_row": "Pixie:0x89abcde1",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-quick-globe-actual-map-20261005/manifest.json": {
+      "sha256": "bf5e6786f949953d841f913cebed6a89e4782ec71fd15aa2125b7f9aea725722",
+      "retail_row": "Globe:0xad92bd24",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-quick-drip-steady-20261005/ripple-appearance-review.json": {
+      "sha256": "26ed9fd803abaac517c193665547ee4d33e25da5367834ebd1e879475300a62b",
+      "retail_row": "Ripple:0x12309867",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
     }
   }
 }

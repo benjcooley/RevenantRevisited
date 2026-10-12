@@ -8559,7 +8559,13 @@
         "position_or_scale_fitted": false,
         "comparison_manifest_sha256": "e295f9735639a2bca57253a1e567683cbf920638b421f182cf2295b1de2d2eaa",
         "raw_crop_contact": "active-zoom.png",
-        "raw_crop_contact_sha256": "8ea4b4d4274ed05accc62e6d7bfaed96fcc253d628c3869c84579b188c2cf094"
+        "raw_crop_contact_sha256": "8ea4b4d4274ed05accc62e6d7bfaed96fcc253d628c3869c84579b188c2cf094",
+        "evidence_recheck": {
+          "report": "recon/retail_asm/runtime/effects/accepted-helper-shadowfist-20261010/review.json",
+          "sha256": "678068386ecb9a3857548ef77f89eb215d1ebf0822c9b10f509ba5b152fdfbdd",
+          "date": "2026-10-10",
+          "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+        }
       },
       "source_integer_pose_validation": {
         "effect": "Shadowfist",
@@ -9031,7 +9037,13 @@
         "position_or_scale_fitted": false,
         "comparison_manifest_sha256": "eb22a5e5d7206ef6c32d0b4758671653913da47768c6ca61ba8439345c6eb642",
         "raw_crop_contact": "active-zoom.png",
-        "raw_crop_contact_sha256": "bf90c75420c515cecfcccdaf0ddcbe46d8b85bf391e440042ca0f6da55550fd9"
+        "raw_crop_contact_sha256": "bf90c75420c515cecfcccdaf0ddcbe46d8b85bf391e440042ca0f6da55550fd9",
+        "evidence_recheck": {
+          "report": "recon/retail_asm/runtime/effects/accepted-helper-warriorborn-20261010/review.json",
+          "sha256": "2c888ff432cea49da3410b24b1f2342cb1e1ede9a0558602e5eb5e1ee2bc188d",
+          "date": "2026-10-10",
+          "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+        }
       },
       "source_integer_pose_validation": {
         "effect": "Warriorborn",
@@ -9419,7 +9431,10 @@
         "finding": "Matching authored sparkle shape, color selection, scale range, rise/shrink/respawn behavior and overall coverage. Different random particle positions are expected; no actionable effect-specific visual mismatch observed.",
         "reviewed_artifact": "comparison.png",
         "random_streams_synchronized": false,
-        "warmup_seconds": 3
+        "warmup_seconds": 3,
+        "report": "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-steady-02-cyanfont-20261005/manifest.json",
+        "sha256": "4103db21d8d4d57e29a8b0d3ee15117c4900a957435dccad80eaf004952dfc8f",
+        "evidence_link_kind": "historical_review_evidence"
       },
       "visual_fidelity_scope": "Isolated steady-state color variant on identical baked retail floor; independent RNG, not pixel identity or natural story/context acceptance.",
       "work_queue_status": "isolated_visual_pass_runtime_context_pending",
@@ -9513,7 +9528,10 @@
         "finding": "Matching authored sparkle shape, color selection, scale range, rise/shrink/respawn behavior and overall coverage. Different random particle positions are expected; no actionable effect-specific visual mismatch observed.",
         "reviewed_artifact": "comparison.png",
         "random_streams_synchronized": false,
-        "warmup_seconds": 3
+        "warmup_seconds": 3,
+        "report": "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-steady-03-redfont-20261005/manifest.json",
+        "sha256": "0771425327a0c6f722f7380e6393f7ee6a6ca2a786f99770e5360d600ee5fa8f",
+        "evidence_link_kind": "historical_review_evidence"
       },
       "visual_fidelity_scope": "Isolated steady-state color variant on identical baked retail floor; independent RNG, not pixel identity or natural story/context acceptance.",
       "work_queue_status": "isolated_visual_pass_runtime_context_pending",
@@ -9607,7 +9625,10 @@
         "finding": "Matching authored sparkle shape, color selection, scale range, rise/shrink/respawn behavior and overall coverage. Different random particle positions are expected; no actionable effect-specific visual mismatch observed.",
         "reviewed_artifact": "comparison.png",
         "random_streams_synchronized": false,
-        "warmup_seconds": 3
+        "warmup_seconds": 3,
+        "report": "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-steady-04-greenfont-20261005/manifest.json",
+        "sha256": "cb189a0f0d8953f8da0c9990e0285c28013ac7318096f9789865716316cfc324",
+        "evidence_link_kind": "historical_review_evidence"
       },
       "visual_fidelity_scope": "Isolated steady-state color variant on identical baked retail floor; independent RNG, not pixel identity or natural story/context acceptance.",
       "work_queue_status": "isolated_visual_pass_runtime_context_pending",
@@ -9715,7 +9736,10 @@
         "finding": "Matching authored sparkle shape, color selection, scale range, rise/shrink/respawn behavior and overall coverage. Different random particle positions are expected; no actionable effect-specific visual mismatch observed.",
         "reviewed_artifact": "comparison.png",
         "random_streams_synchronized": false,
-        "warmup_seconds": 3
+        "warmup_seconds": 3,
+        "report": "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-steady-05-bluefont-20261005/manifest.json",
+        "sha256": "29f359e0f85d66ee4282d0c3b4fc004bedfff17ace542b5273a4f98c726814c4",
+        "evidence_link_kind": "historical_review_evidence"
       },
       "visual_fidelity_scope": "Isolated steady-state color variant on identical baked retail floor; independent RNG, not pixel identity or natural story/context acceptance.",
       "work_queue_status": "isolated_visual_pass_runtime_context_pending",
@@ -10572,7 +10596,10 @@
         "finding": "Six elapsed samples show matching narrow yellow/white flame cores, orange upper flicker, scale/anchor and atlas-driven loop appearance. Port filtering is smoother than the native16-bit software raster. No brightness, scale, position or phase fitting used.",
         "scope": "Isolated base Flame overall appearance; exact texel raster, precise native cadence, repeatability and natural shipped-map acceptance remain separate.",
         "requires_pixel_identity": false,
-        "phase_synchronized": false
+        "phase_synchronized": false,
+        "report": "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-flame-steady-authored-20261005/manifest.json",
+        "sha256": "01464f26b04ee0a9cbe648afa8deea074907e36fa4a6d3cf81070df950974825",
+        "evidence_link_kind": "historical_review_evidence"
       },
       "visual_fidelity_scope": "Isolated base Flame overall appearance; exact texel raster, precise native cadence, repeatability and natural shipped-map acceptance remain separate.",
       "runtime_regression": {
@@ -11348,7 +11375,10 @@
         "finding": "Clean actual retail editor-default and port show comparable small mixed pink/blue/green glints, authored shape/size, spread, travel/fall and one-shot visibility across six raw active-time samples, with independent RNG. Both end on exact stable ground. No position/scale/color/time/seed fitting.",
         "scope": "Overall isolated editor-default Sparks only; real blocked-combat parameters15..25/singlevariant/trails/bounce and natural actor integration are separate.",
         "random_streams_synchronized": false,
-        "requires_pixel_identity": false
+        "requires_pixel_identity": false,
+        "report": "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fps-sparks-editor-default-20261005/manifest.json",
+        "sha256": "129a5d5a26dae0097b48b9d0b2cc8eeda27d908be76352ff92a8a3592bc70ae1",
+        "evidence_link_kind": "historical_review_evidence"
       },
       "thin_emulator_checks": [
         {
@@ -12136,7 +12166,10 @@
         "finding": "Overall isolated blue glows, authored shape/size, spread and motion match across independent random seeds after source RGB565 software-helper lighting. Final240 preview files are byte-identical to the prior root-reviewed software-helper pair; the hashed240-frame GPU zero-red proof transfers. No position, scale, color or phase fitting.",
         "scope": "Isolated null-spell editor appearance only. Linked-character execution, actual shipped spell/target behavior, point lights, full original setting and complete effect acceptance remain open.",
         "random_streams_synchronized": false,
-        "requires_pixel_identity": false
+        "requires_pixel_identity": false,
+        "report": "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fps-cure-software-helper-final-20261005/manifest.json",
+        "sha256": "9e27c0c43987ba1c490139ac47bf1a021abc873a8f67e80ebc9922185e0d651d",
+        "evidence_link_kind": "historical_review_evidence"
       },
       "source_preflight": {
         "implementation_complete": true,
@@ -14814,7 +14847,10 @@
         "finding": "Overall isolated steady-state Pixie appearance matches: small yellow glints, comparable shape/size/color, alternating particle objects, bounded spread and continuous motion with independent RNG. Six raw elapsed samples reviewed at native scale and3x nearest enlargement; native122 versus port120 distinct images across5seconds. Minor sampling-edge differences remain, as in other isolated passes; no fitted scale, color, position, time or RNG.",
         "scope": "Overall steady-state isolated appearance only. Nearby-character response, original setting and full runtime/context acceptance are separate.",
         "random_streams_synchronized": false,
-        "requires_pixel_identity": false
+        "requires_pixel_identity": false,
+        "report": "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fps-pixie-authored-20261005/manifest.json",
+        "sha256": "7db040256121fd13a7d02185e4da2f871a1e59c81803738d08316a7a28d79b29",
+        "evidence_link_kind": "historical_review_evidence"
       },
       "runtime_regression": {
         "manifest": "captures/runtime-fixtures/pixie-typed-20261005/command-capture/manifest.json",
@@ -19480,7 +19516,10 @@
         "reviewer": "root",
         "result": "pass",
         "finding": "Two matching fixed pink/yellow glow forms, comparable placement and size, with lower geometry hidden by real ground. Overall static appearance pass retained after source lighting/sampling correction. Shared software versus GPU raster softness remains visible.",
-        "scope": "Overall Globe appearance on actual loaded neutral map floor; natural shipped placements and exact software pixels remain separate."
+        "scope": "Overall Globe appearance on actual loaded neutral map floor; natural shipped placements and exact software pixels remain separate.",
+        "report": "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-quick-globe-actual-map-20261005/manifest.json",
+        "sha256": "bf5e6786f949953d841f913cebed6a89e4782ec71fd15aa2125b7f9aea725722",
+        "evidence_link_kind": "historical_review_evidence"
       },
       "visual_fidelity_scope": "Actual named Globe on matching nine-tile map floor; fixed authored pose and ground occlusion, not baked-depth-free preview or exact software raster pixels.",
       "runtime_regression": {
@@ -20900,7 +20939,13 @@
         "position_or_scale_fitted": false,
         "comparison_manifest_sha256": "5726a56d135e2ff02e1d72c64168a5ed250fc3aa4fe9838c4353c10c977f5bcb",
         "raw_crop_contact": "active-zoom.png",
-        "raw_crop_contact_sha256": "477528521c27c4f66718552e47dc7335997662fb8a3f8672fee04d2ffd0defed"
+        "raw_crop_contact_sha256": "477528521c27c4f66718552e47dc7335997662fb8a3f8672fee04d2ffd0defed",
+        "evidence_recheck": {
+          "report": "recon/retail_asm/runtime/effects/accepted-helper-teleportation-20261010/review.json",
+          "sha256": "0454dbad0c7b5f10ccdec609d1e954b4cf6285def84da667eda156438e0ee120",
+          "date": "2026-10-10",
+          "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+        }
       },
       "source_integer_pose_validation": {
         "poses": 600,
@@ -21425,7 +21470,10 @@
         "basis": "User confirms ripple port and retail look identical despite different random seeds. Judge ring shape, scale, atlas progression, expansion/fade, blending and overall splash behavior across animation; do not require matching random positions or frame-by-frame pixels.",
         "comparison": "captures/ab/sw-quick-drip-steady-20261005",
         "random_streams_synchronized": false,
-        "requires_pixel_identity": false
+        "requires_pixel_identity": false,
+        "report": "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-quick-drip-steady-20261005/ripple-appearance-review.json",
+        "sha256": "26ed9fd803abaac517c193665547ee4d33e25da5367834ebd1e879475300a62b",
+        "evidence_link_kind": "historical_review_evidence"
       },
       "work_queue_status": "visual_pass_runtime_pending",
       "user_visual_confirmations": [
@@ -21898,6 +21946,12 @@
             "last_visible_frame": 45
           },
           "scope": "Raw elapsed images, mask intensity>8 relative to unchanged retail floor, top FPS12 rows excluded; no phase/height/RNG matching."
+        },
+        "evidence_recheck": {
+          "report": "recon/retail_asm/runtime/effects/accepted-helper-goldeffect-20261010/review.json",
+          "sha256": "5c9dee8a692fcf9842d94c9b71146e9e0852d65ea8f332c6708c731434eab52d",
+          "date": "2026-10-10",
+          "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
         }
       },
       "software_reference_repeat_validation": {
