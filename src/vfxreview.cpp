@@ -149,7 +149,7 @@ bool SelectCatalogue() {
             spell.spell_preview=recipe->id;entries.push_back(std::move(spell));
         }
     }
-    bool select_legacy_fire=selectors.empty();
+    bool select_legacy_fire=false;
     for(size_t i=0;i<selectors.size();++i)
         if(selectors[i]=="fire" || selectors[i]=="fire (legacy animated)")
             select_legacy_fire=found[i]=true;
@@ -157,7 +157,7 @@ bool SelectCatalogue() {
         const auto recipes=VfxTest::ReviewCatalogue();
         const auto recipe=std::find_if(recipes.begin(),recipes.end(),[](const auto& r){return r.id=="TFireEffect";});
         if(recipe!=recipes.end()) {
-            Entry fire;fire.name="Fire (legacy animated)";fire.id=0x119f01e3u;
+            Entry fire;fire.name="Fire (legacy preview — unverified)";fire.id=0x119f01e3u;
             fire.type=EffectClass.FindObjType(fire.id);fire.asset="Misc/Fire.I3D: legacy animated recipe";
             fire.spell_preview=recipe->id;entries.push_back(std::move(fire));
         }

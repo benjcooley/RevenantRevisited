@@ -27,3 +27,5 @@ retail appearance approval. It restores visibility of the animated conversion
 for inspection without replacing the installed static/default reference. Filter
 `--vfx-review-effects=Fire` includes both; `Fire (legacy animated)` selects the
 animated recipe alone, while the exact retail ID selects the installed path.
+
+User review2026-10-11 rejects the animated legacy viewer output asbroken. It was not a verifiedretailmatch and is excludedfrom the fullreviewer until corrected. Explicitdiagnostic selection remainsavailablewithanunverifiedlabel. PrimaryFireverification isreopened; oldstaticquad/texture0deviceproof is supporting evidence only, not completeanimatedFireacceptance.

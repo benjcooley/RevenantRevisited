@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-11)
 
-**176 / 176 effects have reviewed visual passes for their recorded test configuration; 0 remain without a scoped visual pass.** This is the primary VFX progress measure. Three Watchers, Rift, Labyrinth and restored Sandswirl use explicitly modified retail code to repair demonstrated renderer/parser/selector or missing legacy binding issues; Dust and static Fire use qualified semantic-device fixtures. These eight do not establish unchanged-device fidelity. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
+**175 / 176 effects have reviewed visual passes for their recorded test configuration; Fire is reopened after the user found its animated viewer recipe broken.** This is the primary VFX progress measure. Three Watchers, Rift, Labyrinth and restored Sandswirl use explicitly modified retail code to repair demonstrated renderer/parser/selector or missing legacy binding issues; Dust uses a qualified semantic-device fixture; static Fire’s earlier qualified fixture is retained historically after reopening. These seven do not establish unchanged-device fidelity. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
 **YTelekinesis (2026-10-11):** four moving/rotating chunks match through actual owner completion across six fixed supported capture views; all 39,600 triangles covered and 24 root-repeated Metal frames identical. Corrected exact-ID mapping displays and restarts it in the gallery. Natural actor/spell/audio and raster overlap limits remain open. [Evidence and scope](forensics/YTELEKINESIS_ORIGINAL.md).
 
@@ -1170,3 +1170,5 @@ Audited `class.def`: 233,484 bytes; SHA-256 `bf46eaa4e25a43fa9828e1e8737114d63b9
 **Puke current re-review passed (2026-10-11):** exactoriginalintegerinputproof andfresh4policy/default/common captures supportgrid-only nativeSW correction. Rootreviewed15phases; common32images unchanged, tick24native1/GPU0pixelresidual remains. All176scopedvisualrows currentagain. [Evidence](forensics/PUKE_INTEGER_RASTER_CONTROL_20261011.md).
 
 **Halo current re-review passed (2026-10-11):** bothpublicparameter controls independentlyrepeat afterexactnativeSWintegerXYZ/sourcefloor optin; root24phase reviewpreservesform/size/color/expansion/drain, common100imagesunchanged. UV/fixedpoint/destination/naturalcaller residuals explicit. [Evidence](forensics/HALO_INTEGER_RASTER_CONTROL_20261011.md).
+
+**Fire reopened (2026-10-11):** legacy animated recipe is not a verified retail match and the user reports it broken. Historical qualified staticquad/texture0 evidence does not close intended animated behavior. No scale/orientation/clock repair without original evidence.

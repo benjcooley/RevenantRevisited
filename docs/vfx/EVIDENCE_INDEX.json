@@ -17,14 +17,14 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 176,
+    "visual_fidelity_confirmed_rows": 175,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 176,
-    "remaining_visual_review_rows": 0,
+    "reviewed_visual_pass_rows": 175,
+    "remaining_visual_review_rows": 1,
     "qualified_modified_reference_visual_rows": 6,
-    "qualified_semantic_device_visual_rows": 2,
-    "qualified_reference_visual_rows": 8
+    "qualified_semantic_device_visual_rows": 1,
+    "qualified_reference_visual_rows": 7
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
