@@ -9,6 +9,13 @@ class ReviewPreviewAdmission(unittest.TestCase):
         self.assertEqual(admitted_candidates(row),["Fire_INSTALLED_FACE0"])
         self.assertTrue(candidate_metadata(row,"Fire_INSTALLED_FACE0")[0])
 
+    def test_rift_qualified_exact_id(self):
+        row={'retail_type_id':'0xadbcef18','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['Rift1_QUALIFIED_PARSER'])
+        partial,reason=candidate_metadata(row,'Rift1_QUALIFIED_PARSER')
+        self.assertFalse(partial);self.assertIn('Qualified',reason)
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Rift1_QUALIFIED_PARSER']}),[])
+
     def test_magicshield_exact_control(self):
         row={'retail_type_id':'0xad92bc1b','preview_candidates':['TMagicShieldEffect_BESPOKE']}
         self.assertEqual(admitted_candidates(row)[0],'MagicShield_PUBLIC_AURA')

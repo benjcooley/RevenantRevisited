@@ -84,6 +84,7 @@ PARTIAL = {
 # their owner constructors. These newer implementations predate their ledger
 # preview_candidates updates; they never authorize asset/name association.
 SOURCE_MAPPINGS = {
+    '0xadbcef18': 'Rift1_QUALIFIED_PARSER',
     '0xad92bc1b': 'MagicShield_PUBLIC_AURA',
     '0x00ab1d1d': 'Aura_AUTHENTIC_ACOLYTE_INTEGER',
     '0x55471bff': 'Burn_AUTHENTIC_ACOLYTE_INTEGER',
@@ -176,7 +177,7 @@ def admitted_candidates(row):
         return ["Fire_INSTALLED_FACE0"]
     if row.get("retail_type_id", "").lower()=="0xad92bd27":
         return ["CFire_INSTALLED_NO_PRESETS"]
-    row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n not in ('Burn_AUTHENTIC_ACOLYTE_INTEGER','Aura_AUTHENTIC_ACOLYTE_INTEGER') and not n.startswith('MagicShield_PUBLIC_')])
+    row=dict(row,preview_candidates=[n for n in row.get('preview_candidates',[]) if n not in ('Burn_AUTHENTIC_ACOLYTE_INTEGER','Aura_AUTHENTIC_ACOLYTE_INTEGER') and not n.startswith('MagicShield_PUBLIC_') and n!='Rift1_QUALIFIED_PARSER'])
     if row.get("retail_type_id", "").lower()=="0xad92bd30":
         return ["SGeyser_LOADED_INLINE"]
     if row.get('retail_type_id','').lower()=='0xad92bd32':
@@ -209,6 +210,9 @@ def candidate_metadata(row, name):
         return True, "Shipped default Fire: exact static quad/frame0, blank facing0; legacy procedural scatter is not this retail implementation, pixel sampling and natural caller remain open"
     if row.get("retail_type_id", "").lower()=="0xad92bd27" and name=="CFire_INSTALLED_NO_PRESETS":
         return False, "Exact installed Misc/cfire authored base sprites after genuine missing cfire/csparks presets; real kill30, intended particle definitions and natural caller remain open"
+
+    if row.get('retail_type_id','').lower()=='0xadbcef18' and name=='Rift1_QUALIFIED_PARSER':
+        return False, 'Qualified Rift1 malformed animtex d-as-V repair; actual own quad/row arithmetic/kill100, original unpatched failure retained; natural caller/device not certified'
     if row.get('retail_type_id','').lower()=='0xad92bc1b' and name=='MagicShield_PUBLIC_AURA':
         return False, 'Exact MagicShield public SetSpell(real Acolyte/named Aura), unmatched-name constructor-storage0 control; natural MagicShield tiers/caller/audio not certified'
     if row.get('retail_type_id','').lower()=='0x00ab1d1d' and name=='Aura_AUTHENTIC_ACOLYTE_INTEGER':

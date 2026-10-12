@@ -138,6 +138,7 @@
 {0xadbcef13u, "TCharUtility_AUTHORED_STILL", false, "Implemented preview controller; map caller not certified"}, // CharUtility
 {0xadbcef14u, "TWaterEffect_BESPOKE__StillWater", false, "Implemented preview controller; map caller not certified"}, // StillWater
 {0xadbcef15u, "TWaterEffect_BESPOKE__FlowWater", false, "Implemented preview controller; map caller not certified"}, // FlowWater
+{0xadbcef18u, "Rift1_QUALIFIED_PARSER", false, "Qualified Rift1 malformed animtex d-as-V repair; actual own quad/row arithmetic/kill100, original unpatched failure retained; natural caller/device not certified"}, // Rift1
 {0xadbcef19u, "TWaterEffect_BESPOKE__SewerWater", false, "Implemented preview controller; map caller not certified"}, // SewerWater
 {0xae5eeb26u, "YMaelstrom_ORIGINAL", false, "Implemented preview controller; map caller not certified"}, // ymaelstrom
 {0xae5eeb26u, "TMaelstromEffect_Bespoke__ymaelstrom_BESPOKE", true, "Partial preview: own ymaelstrom asset billboard; original controller incomplete; not complete original implementation"}, // ymaelstrom

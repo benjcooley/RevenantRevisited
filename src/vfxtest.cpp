@@ -84,6 +84,7 @@
 #include "effects/burnpublicpreview.h"
 #include "effects/aurapublicpreview.h"
 #include "effects/magicshieldpreview.h"
+#include "effects/riftqualifiedpreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/swamppreview.h"
 #include "effects/paralizepreview.h"
@@ -6261,6 +6262,9 @@ struct SVfxTestBootstrap {
         {
             VfxTest::SEffect e={};e.id="Aura_AUTHENTIC_ACOLYTE_INTEGER";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
             e.factory=[](const S3DPoint&o)->void*{return aura_public_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){aura_public_preview::Advance(static_cast<aura_public_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){aura_public_preview::SubmitWorld(static_cast<aura_public_preview::State*>(c));};e.is_alive=[](void*c){return aura_public_preview::Alive(static_cast<aura_public_preview::State*>(c));};e.destroy=[](void*c){aura_public_preview::Destroy(static_cast<aura_public_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Rift1_QUALIFIED_PARSER";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;e.factory=[](const S3DPoint&o)->void*{return rift_qualified_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){rift_qualified_preview::Advance(static_cast<rift_qualified_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){rift_qualified_preview::SubmitWorld(static_cast<rift_qualified_preview::State*>(c));};e.is_alive=[](void*c){return rift_qualified_preview::Alive(static_cast<rift_qualified_preview::State*>(c));};e.destroy=[](void*c){rift_qualified_preview::Destroy(static_cast<rift_qualified_preview::State*>(c));};VfxTest::DeferredRegister(e);
         }
         for(int variant=0;variant<2;++variant){
             VfxTest::SEffect e={};e.id=variant?"MagicShield_PUBLIC_FIRE_FLASH":"MagicShield_PUBLIC_AURA";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;

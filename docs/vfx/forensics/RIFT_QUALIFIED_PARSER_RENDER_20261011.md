@@ -1,0 +1,24 @@
+# Rift1: qualified malformed-tag repair and full finite appearance
+
+This is a **qualified modified-original comparison**, not an unmodified retail appearance pass. The unchanged shipped Rift1 `0xadbcef18`, `Misc/Rift1.I3D`, SHA256 `58fbb47a8d293744458363f73996e971223118a53e3c4abc76ddc9de17b1263f`, still fails original animtex initialization/deletion as recorded in [the unpatched gate](RIFT1_FAILED_ANIMTEX.md). No asset or caller is invented or edited.
+
+The authorized original diagnostic changes exactly one mapped-image byte: parser parameter literal `5c59b4` from `v` (`76`) to `d` (`64`). Actual full original parser/Init then accepts the existing `obj=rift,u=4,d=4`, sets grid4x4/delay1, allocates the real saved UV array and executes the complete controller/normal ARGB4444 renderer. The on-disk executable and resource remain unchanged. This diagnostic changes the accepted V spelling in its isolated VM; it is not a general backwards-compatible parser patch.
+
+The source adapter applies the interpretation only to the exact own Rift profile (33329-byte body, FNV64 `2e10d5f8f21ad4a7`, one four-vertex/two-triangle quad, one texture/material and one tag). Runtime cached header flags are2000/frame100; the standalone disk state header differs, so the actual runtime header is guarded. The genuine generic effect/NewObject/CreateAnimator/NextFrame/Pulse APIs preserve first1..99 and death100/frame99. Empty tails100/101/104 are compared.
+
+Original `401cb4..401cf1` uses global screen counter modulo16, `column=cell%4`, `row=cell−4*column`, then quarter-cell offsets. The source deliberately preserves the resulting negative/>1 V values and four wrapped diagonal appearances. It does not silently replace the row formula with a conventional division. Original saved UVs, all four positions/normals, both triangles and source material inputs remain unchanged.
+
+The explicit native-domain24Hz comparison feeds the source controller's real counted Advance steps1..104. Ordinary runtime continues using its legacy24Hz counter, avoiding atlas acceleration at60Hz rendering. `metal-runtime-header104`/`review-qualified-first` retain31 clock errors beginning69 caused by floored legacy time lag; this negative is superseded by scoped explicit input, not phase fitting or a shared clock change.
+
+Evidence root `/Users/benjamincooley/RevenantRetailLab/research/vfx-next-rift-caller-20261011`:
+
+- `modified-parser-d-first104` and `modified-parser-d-repeat104`: fresh genuine loaded original replays, complete state/draw/RNG/sampled PNGs identical; only the declared one-byte parser spelling differs from retail. Sixteen raw UV offsets/four distinct wrapped visible image hashes,953 visible pixels, genuine100 death.
+- `source-uv-first`: actual compiled production offset,3168 authored vertex/normal/UV channels and real kill100; zero errors, max UV1.34e-9, ASan/UBSan.
+- `profile-first`: actual production whole-body/path/runtime-header guard, four accepts/74 mutated path/header/body-region rejects, ASan/UBSan.
+- `metal-qualified-clock104` and `review-qualified-clock`: real Metal104/ticks1..104,15 complete whole1280x960 source/qualified-original pairs plus fixed `(595,450,685,510)` ROI/nearest4x display;495 actual source frame/UV/lifetime checks, zero errors. All nonempty bboxes are interior, camera640/480 and owner0/0/0 explicit. No geometry/color/phase/placement fitting.
+- `metal-qualified-final104` and `source-final-repeat.json`: all104PNG hashes identical to the reviewed capture under final routing binary `536c43637cd73de09564527ad5d6ec623c6371c3894f738683886bf04565fe4b`, clean exit.
+- `gallery-qualified-first`: exact qualified route,100 frames/99 visible/nine distinct, multiple real finite creations, no reseed, clean exit. Ordinary legacy24Hz scheduling; this is translated route/lifecycle evidence, not natural gameplay appearance approval.
+
+Two focused tests pass2.847s;30 exact-ID/admission cases and compiled callback/lifecycle bridge pass; private target builds pass. Independent root visual approval is pending at this source checkpoint. Source callback labels explicitly say qualified parser repair; no central ledger changes are included.
+
+Retain the first missing-animator/profile-header setup failures and unmodified controller rejection. Sampling/one-pixel left-edge/color quantization, other lighting/device, ordinary caller/motion/map insertion, alternate revisions and exact pixel equality remain open. Root may review and record only the qualified scope.

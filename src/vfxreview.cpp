@@ -258,6 +258,15 @@ S3DPoint PathEndpoint(size_t index,bool target) {
 void Spawn(Entry& e, size_t index) {
     const auto support=DescribeVfxReviewSpawn(e.id);
     const auto controlled=DescribeVfxReviewPreview(e.id);
+    if(e.id==0xadbcef18u && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Rift1_QUALIFIED_PARSER")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Qualified Rift parser initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
     if(e.id==0xad92bc1bu && controlled.supported && controlled.lifetime_known &&
        !controlled.partial && std::strcmp(controlled.preview_id,"MagicShield_PUBLIC_AURA")==0) {
         e.preview=CreateVfxReviewPreview(e.id,e.station);
