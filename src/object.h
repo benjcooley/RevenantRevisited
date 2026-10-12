@@ -1000,6 +1000,12 @@ class TObjectInstance : protected SObjectDef
         // TFood (so TPotion) merge; everything else never does.
     virtual void SignalAddedToInventory();
         // Called to signal object that it was added to a new inventory
+    virtual bool CanTrade() { return Value() != -1; }
+        // REVSYNC: vtable 0x5c (0x0046fad0) -- the object can change hands:
+        // it has a value. A dead character drops only these (DEATH_LOOT.md §2)
+    void PlayItemSound();
+        // REVSYNC: 0x00473a10 -- the sound of this kind of thing being
+        // handled: dropped, picked up, equipped (DEATH_LOOT.md §3)
     virtual TObjectInstance* FindObjInventory(const char *name) const;
         // Find an object by name in inventory, bags included
     virtual TObjectInstance* FindObjInventory(int32_t objclass, int32_t type = -1) const;
@@ -1015,13 +1021,6 @@ class TObjectInstance : protected SObjectDef
     virtual void UseRange(int32_t &mindist, int32_t &maxdist, int32_t &minang, int32_t &maxang)
         { mindist = 20; maxdist = 50; minang = 0; maxang = 255; }
         // Valid locations character can be standing in order to use the object
-    virtual bool CanTrade() { return Value() != -1; }
-        // REVSYNC: 0x0046fad0 (vtable 0x5c) -- whether the item can change
-        // hands; a Value of -1 keeps it where it is (a dead character's drop
-        // leaves it on the corpse). Containers override it.
-    bool PlayClassSound();
-        // REVSYNC: 0x00473a10 -- the sound of the item's class (dropped,
-        // picked up, equipped); false for a class that has none
 
   // Rotation and velocity and scale functions
     void SetRotateX(int32_t ang) { rotatex = uint8_t(ang); SyncTransformRot(); }
@@ -1055,6 +1054,8 @@ class TObjectInstance : protected SObjectDef
         // Finds a stat and returns its stat id or -1 if not found
     const char *ObjStatName(int32_t statid) const { return cl->ObjStatName(statid); }
         // Returns a statistic for an class
+    int32_t NumObjStats() const { return cl->NumObjStats(); }
+        // How many object statistics the class defines
     virtual int32_t GetObjStat(int32_t statid) const { if ((uint32_t)statid < (uint32_t)stats.NumItems()) return stats[statid]; else return 0; }
         // Returns a statistic for an object (retail vtable +0xdc; a player
         // answers from its equipment- and spell-modified copy)

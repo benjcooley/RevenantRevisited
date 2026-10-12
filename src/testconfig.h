@@ -19,6 +19,9 @@ extern char StartupLevelId[32];
 // captures through --test=sector, in the retail editor's 640x340 viewport.
 extern int32_t StartupSceneCamera[4];
 extern bool StartupSceneCameraSet;
+// Optional test-only measured viewport; default retains legacy640x340.
+extern int32_t StartupSceneViewport[2];
+extern bool StartupSceneViewportSet;
 extern char StartupSceneModule[64];
 // Optional sector-only timeline of real engine commands, in legacy 24Hz ticks.
 extern char StartupSceneCommandFile[MAXPATHLEN];
@@ -67,6 +70,7 @@ extern int32_t StartupVfxLightingMode;
 extern bool StartupVfxNativeDomain;
 // --test=vfx-review: scrolling real-map catalogue, logical screen units/sec.
 extern float StartupVfxReviewSpeed;
+extern float StartupVfxReviewWatcherRate;
 extern float StartupVfxReviewRatio;
 extern float StartupVfxReviewSpacing;
 extern float StartupVfxReviewGap;
@@ -107,8 +111,13 @@ extern char StartupVfxBackground[16];
 // in screen pixels, and an explicit world-space effect origin (no auto-fit).
 extern char StartupVfxBackdrop[MAXPATHLEN];
 extern float StartupVfxCamera[2];
+extern bool StartupVfxCameraExplicit; // Signed screen origin supplied by --vfx-camera.
 extern int32_t StartupVfxOrigin[3];
 extern bool StartupVfxOriginSet;
+// --vfx-target=x,y,z: explicit destination for a registered endpoint factory.
+// Requires --test=vfx and an explicit --vfx-origin source.
+extern int32_t StartupVfxTarget[3];
+extern bool StartupVfxTargetSet;
 
 // --input-script="..." (alias: --mouse-script) — a scripted synthetic input
 // sequence (mouse + keyboard) replayed into the active --test mode's input

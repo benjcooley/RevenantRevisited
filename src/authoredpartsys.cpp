@@ -72,6 +72,14 @@ void Apply(const Expression& expression, int percent, Vec3& field)
 {
     if (expression.IsCurve()) field = expression.Evaluate(percent);
 }
+Vec3 RenderPosition(Vec3 position)
+{
+    position[2]=static_cast<float>(static_cast<long double>(position[2])
+        /(static_cast<long double>(1.460000038146973f)
+           -static_cast<long double>(position[2])*.0033333334140479565f*.009999999776482582f)
+        *1.037999987602234f);
+    return position;
+}
 float TowardZero(float value, float amount)
 {
     if (value > 0) return std::max(0.0f, value-amount);
@@ -88,12 +96,18 @@ bool State::Initialize(const Definition& definition, const TickInputs& inputs,
         diagnostic = "partsys requires resolved prototype and ordered emitter poses";
         return false;
     }
-    if (definition.relvel.IsCurve() || definition.charvel.IsCurve()) {
-        diagnostic = "partsys relvel/charvel curves are outside the recovered constant subset";
+    if (definition.relvel.IsCurve() || definition.charvel.IsCurve() || definition.scljitter.IsCurve()) {
+        diagnostic = "partsys relvel/charvel/scljitter curves are outside the recovered constant subset";
         return false;
     }
     if (definition.relvel.constant[0] != 0 && !inputs.has_object_zero_origin) {
         diagnostic = "partsys relvel requires the original object-zero initialization origin";
+        return false;
+    }
+    const auto trails=definition.numtrails.constant;
+    if(definition.numtrails.IsCurve() || !std::isfinite(trails[0]) || trails[0]!=trails[1]
+        || trails[0]!=std::trunc(trails[0]) || trails[0]<0 || trails[0]>64) {
+        diagnostic="partsys numtrails requires bounded constant equal integer endpoints";
         return false;
     }
     float rate = Maximum(definition.pps, 0);
@@ -204,6 +218,10 @@ void State::Spawn(Particle& particle, const TickInputs& inputs, const RandomRang
     particle.gravity = Initial(d.gravity);
     particle.bounce_min = Initial(d.bounce);
     particle.bounce_max = Initial(d.bounce,1);
+    // Original403275..4032e7 initializes every history entry to the
+    // corrected spawn position. Constant endpoints consume no RNG.
+    const int trails=static_cast<int>(d.numtrails.constant[0]);
+    if(trails)particle.trail_positions.assign(trails,RenderPosition(position));
     particle.alive = true;
 }
 
@@ -228,8 +246,13 @@ void State::Update(Particle& particle, const TickInputs& inputs, const RandomRan
     // Zero-width random alpha, scale and XYZ positional jitters are calls in
     // retail but do not consume rand(); unsupported fields remain absent.
     (void)Draw(random,0,0);
-    particle.scale = static_cast<float>(static_cast<long double>(particle.scale)+particle.scale_delta);
-    (void)Draw(random,0,0);
+    // Original 402c6b..402ca8: integer tenths, sampled before adding
+    // the spawn delta and current scale. Zero endpoints preserve old RNG.
+    const auto jitter=d.scljitter.constant;
+    const int scale_jitter=Draw(random,Integer(static_cast<long double>(jitter[0])*10.0f),
+        Integer(static_cast<long double>(jitter[1])*10.0f));
+    particle.scale = static_cast<float>(static_cast<long double>(scale_jitter)*.10000000149011612f
+        +particle.scale_delta+particle.scale);
     for(int i=0;i<3;++i) (void)Draw(random,0,0);
     Vec3 rotation{};
     for(int i=0;i<3;++i) rotation[i] = static_cast<float>(
@@ -274,12 +297,8 @@ RenderSample State::SampleRender(std::size_t slot, const RandomRange& random) co
 {
     const auto& particle=particles_.at(slot);
     RenderSample sample;
-    sample.position=particle.position;
-    // Retail .rdata 5a351c..28: z/(1.46-z/30000)*1.038.
-    sample.position[2]=static_cast<float>(static_cast<long double>(sample.position[2])
-        /(static_cast<long double>(1.460000038146973f)
-           -static_cast<long double>(sample.position[2])*.0033333334140479565f*.009999999776482582f)
-        *1.037999987602234f);
+    // Original .rdata5a351c..28, shared with trail initialization.
+    sample.position=RenderPosition(particle.position);
     for(int i=0;i<3;++i) sample.rotation[i]=Angle(
         static_cast<long double>(Draw(random,Integer(particle.local_rotation[i]),
         Integer(static_cast<long double>(particle.local_rotation[i])+particle.random_local_rotation[i])))
@@ -290,4 +309,15 @@ RenderSample State::SampleRender(std::size_t slot, const RandomRange& random) co
     sample.blendmode=definition_.blendmode;
     return sample;
 }
+std::vector<Vec3> State::SampleTrailPositions(std::size_t slot)
+{
+    auto& particle=particles_.at(slot);auto& history=particle.trail_positions;
+    if(history.empty())return {};
+    // Original402925..402a0b shifts at each Render, not Pulse. All trail
+    // draws reuse current color/scale/rotation; the last duplicates current.
+    for(std::size_t i=0;i+1<history.size();++i)history[i]=history[i+1];
+    history.back()=RenderPosition(particle.position);
+    return history;
+}
+
 }

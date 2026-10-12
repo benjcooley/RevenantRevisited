@@ -13,6 +13,12 @@ by explicit fixture inputs where the game would supply live state.
   at `+4` (0x0b player / 0x0c character), name pointer at `+0x38`, the
   current action at `+0xe0` (a target is `action[0x11]` when the action
   type is 3 or 0x19). Any other slot runs retail's own method.
+- `give_stat_sheet(character, sheet)`: what the stat pane reads beyond
+  that (`StatSheet`): the class record at `+0x48` (its OBJSTATS names the
+  stats), GetObjStat(i) / GetStat(name) at vtable `+0xdc` / `+0xd4`
+  answered by stat name, the type name `[+0x4c][0]`, the character class
+  shown `[+0xfc]+0x190`, the level-up picks `+0x360 / +0x364 / +0x368`,
+  and the combat figures' vtable slots.
 - `frame(pane)`: one frame of a pane the way the screen drives it -- slot 19
   (state tick), slot 20 (compose), slot 7 inside T3DScene BeginScene /
   EndScene (texture pass), slot 23 (2D pass).
@@ -54,6 +60,15 @@ ACTION_SIZE, ACTION_COMBAT, ACTION_TARGET = 0x64, 3, 0x44
 STAT_SLOTS = {0x1c0: 'health', 0x1c8: 'fatigue', 0x1d0: 'mana',
               0x1d8: 'max_health', 0x1e0: 'max_fatigue', 0x1e8: 'max_mana', 0x354: 'level'}
 PORTRAIT_SLOT = 0x130
+# The stat sheet: GetObjStat(i) / GetStat(name), each one stack argument.
+SLOT_GET_OBJSTAT, SLOT_GET_STAT = 0xdc, 0xd4
+O_OBJCLASS, O_OBJTYPE, O_CHARDATA = 0x48, 0x4c, 0xfc
+CHARDATA_SIZE, CHARDATA_CLASS_NAME = 0x200, 0x190
+O_LEVELUP = 0x360                            # the two stats picked to raise, then the slot written last
+OBJCLASS_STAT_COUNT, OBJCLASS_STAT_NAMES, OBJCLASS_STAT_STRIDE = 0x1c, 0x20, 0x50
+# The no-argument slots the stat pane's armor / damage / attack / defense
+# figures sum (docs/ui/forensics/StatPane_RETAIL.md).
+COMBAT_SLOTS = (0x260, 0x2b0, 0x2bc, 0x2c0, 0x2c4, 0x2cc, 0x2d0, 0x2e8, 0x2ec, 0x3d4)
 SLOT_STATE, SLOT_COMPOSE, SLOT_TEXTURE_PASS, SLOT_2D_PASS = 19, 20, 7, 23
 
 
@@ -69,11 +84,22 @@ class Stats:
 
 
 @dataclass
+class StatSheet:
+    """What the stat pane reads of a player beyond `Stats`."""
+    objstats: dict = field(default_factory=dict)    # OBJSTATS name (any case) -> value
+    class_name: str = ''                            # the character class shown ("class")
+    levelup: tuple = (-1, -1, 0)                    # +0x360 / +0x364 picks (0..5: Strn..Luck), +0x368
+    combat: dict = field(default_factory=dict)      # COMBAT_SLOTS offset -> value (unset: 0)
+
+
+@dataclass
 class Character:
     address: int
     name: str
     stats: Stats = field(default_factory=Stats)
     portrait: int = 0                        # guest TBitmap*, 0 = none
+    sheet: StatSheet | None = None
+    stat_names: list = field(default_factory=list)  # the class's OBJSTATS, by index
 
 
 class HudScene:
@@ -86,11 +112,15 @@ class HudScene:
         for offset, stat in STAT_SLOTS.items():
             self._stub(f'character+0x{offset:x}', lambda args, s=stat: self._stat(s))
         self._stub(f'character+0x{PORTRAIT_SLOT:x}', lambda args: self._this().portrait)
+        self._stub(f'character+0x{SLOT_GET_OBJSTAT:x}', self._get_objstat, argc=1)
+        self._stub(f'character+0x{SLOT_GET_STAT:x}', self._get_stat, argc=1)
+        for slot in COMBAT_SLOTS:
+            self._stub(f'character+0x{slot:x}', lambda args, o=slot: self._this().sheet.combat.get(o, 0) & 0xffffffff)
 
     # ---- plumbing ------------------------------------------------------
 
-    def _stub(self, name, handler):
-        self.vm.handlers[name] = (0, handler)             # thiscall, no stack arguments
+    def _stub(self, name, handler, argc=0):
+        self.vm.handlers[name] = (argc, handler)          # thiscall: the callee pops `argc`
         self.vm.api_dlls[name] = {'hud.fixture'}
         return self.vm.api_address('hud.fixture', name)
 
@@ -99,6 +129,18 @@ class HudScene:
 
     def _stat(self, stat):
         return getattr(self._this().stats, stat) & 0xffffffff
+
+    def _sheet_value(self, character, name):
+        return {k.lower(): v for k, v in character.sheet.objstats.items()}.get(name.lower(), 0) & 0xffffffff
+
+    def _get_objstat(self, args):
+        character = self._this()
+        index = args[0]
+        name = character.stat_names[index] if index < len(character.stat_names) else ''
+        return self._sheet_value(character, name)
+
+    def _get_stat(self, args):
+        return self._sheet_value(self._this(), self.vm.string(args[0]))
 
     def string(self, text):
         address = self.vm.allocate(len(text) + 1)
@@ -199,6 +241,32 @@ class HudScene:
         self.vm.put_u32(address + O_INVENTORY_SLOT, NO_INVENTORY_SLOT)
         self.characters[address] = Character(address, name, stats or Stats(), portrait)
         return self.characters[address]
+
+    def give_stat_sheet(self, character, sheet):
+        """The character answers the stat pane from `sheet` (StatSheet): its
+        class's record (the class table's entry for its class id) names the
+        OBJSTATS GetObjStat indexes."""
+        vm, address = self.vm, character.address
+        class_id = struct.unpack('<H', vm.uc.mem_read(address + O_CLASS, 2))[0]
+        record = vm.u32(G_CLASS_TABLE + 4 * class_id)
+        vm.put_u32(address + O_OBJCLASS, record)
+        count = struct.unpack('<h', vm.uc.mem_read(record + OBJCLASS_STAT_COUNT, 2))[0]
+        names = vm.u32(record + OBJCLASS_STAT_NAMES)
+        character.stat_names = [vm.string(names + OBJCLASS_STAT_STRIDE * i) for i in range(count)]
+        objtype = vm.allocate(4)
+        vm.put_u32(objtype, self.string(character.name))
+        vm.put_u32(address + O_OBJTYPE, objtype)
+        chardata = vm.allocate(CHARDATA_SIZE)
+        vm.put_u32(chardata + CHARDATA_CLASS_NAME, self.string(sheet.class_name))
+        vm.put_u32(address + O_CHARDATA, chardata)
+        for i, value in enumerate(sheet.levelup):
+            vm.put_u32(address + O_LEVELUP + 4 * i, value & 0xffffffff)
+        vtable = vm.u32(address)
+        for slot in (SLOT_GET_OBJSTAT, SLOT_GET_STAT):
+            vm.put_u32(vtable + slot, vm.api_address('hud.fixture', f'character+0x{slot:x}'))
+        for slot in COMBAT_SLOTS:
+            vm.put_u32(vtable + slot, vm.api_address('hud.fixture', f'character+0x{slot:x}'))
+        character.sheet = sheet
 
     def set_player(self, character):
         self.vm.put_u32(G_PLAYER, character.address if character else 0)

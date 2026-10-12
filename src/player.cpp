@@ -172,6 +172,7 @@ void TPlayer::ClearPlayer()
   // is never VIRGIN: its stats are its own.
     flags &= ~OF_VIRGIN;
     knownspells.clear();
+    ++knownspellsversion;
     hudwords = {};
     levelupstats = {};
     team = {};
@@ -1342,6 +1343,7 @@ void TPlayer::Load(RTInputStream is, int32_t version, int32_t objversion)
         knownspells.clear();
         for (int32_t i = 0; i < count && !is.Overrun(); i++)
             is.ReadBytes(knownspells.emplace_back().data(), kSpellCodeBytes);
+        ++knownspellsversion;
         if (objversion >= 6 && objversion <= 8)
             is.MovePos(count * 4);  // a per-spell int those versions had
     }
@@ -1475,6 +1477,29 @@ bool TPlayer::LearnSpell(const char* talismans)
     }
     TSpellCode& code = knownspells.emplace_back();
     strncpy(code.data(), talismans, kSpellCodeBytes);
+    ++knownspellsversion;
+    return true;
+}
+
+void TPlayer::ForgetSpell(int32_t i)
+{
+    if (i >= 0 && i < NumKnownSpells())
+    {
+        knownspells.erase(knownspells.begin() + i);
+        ++knownspellsversion;
+    }
+}
+
+bool TPlayer::TrainStat(int32_t attribute)
+{
+    if (attribute < 0 || attribute >= NUM_PLRSTATS)
+        return false;
+    const int32_t value = GetObjStat(PLRSTAT_FIRST + attribute);
+    int32_t &last = levelupstats[2];                // the pick made last (+0x368)
+    if (value >= 30 || (attribute == levelupstats[last != 0] && value >= 29))
+        return false;
+    last = last == 0 ? 1 : 0;
+    levelupstats[last] = attribute;
     return true;
 }
 

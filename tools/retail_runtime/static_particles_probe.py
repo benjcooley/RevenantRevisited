@@ -34,6 +34,7 @@ PRELUDE = r'''
 #include "authoredpartsys.h"
 #include "math3d.h"
 #include "goldauthoredmatrix.h"
+#include "dragonattackcache.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -47,13 +48,22 @@ enum class EFxDebugMode:uint8_t{Normal=0};enum class EFxLightMode:uint8_t{Unlit=
 enum class EFxPipeline:uint16_t{Billboard=1,Particle=2,Strip=3};
 struct SFxBatchKey{TTextureHandle texture=0;uint16_t pipeline_id=1;uint8_t blend=0,depth_mode=0;};
 struct SQuadDrawItem{bool retail_rgb565_additive=false;float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};SFxBatchKey key;
- bool retail_software_projection=false;
+ bool retail_software_projection=false,retail_software_pixel_grid=false;
  uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
 struct S3DVertex{hmm_vec3 pos,normal;float tu,tv;};
 uint32_t type_id=0;
-struct Owner{uint32_t ObjId()const{return type_id;}int GetState()const{return 0;}};
+template<class... Args> void log_info(const char*,Args...){std::abort();}
+struct Owner{struct Position{int x,y,z;};Position Pos()const{std::abort();}int GetFrame()const{std::abort();}uint32_t ObjId()const{return type_id;}int GetState()const{return 0;}};
 struct Imagery{uint32_t static_particles_profile=type_id;
  STATIC_PROFILE_METHOD
+ bool HasRetailLightStripProfile()const{return false;}
+ bool HasRetailJhagaAttackProfile()const{return false;}
+ bool HasRetailHeadFireBallProfile()const{return false;}
+ bool HasRetailFunnelProfile()const{return false;}
+ bool HasRetailCometProfile()const{return false;}
+ bool HasRetailFGeyserProfile()const{return false;}
+ bool HasRetailDustProfile()const{return false;}
+ bool HasRetailPoisonProfile()const{return false;}
  bool HasRetailMightPartSysProfile()const{return false;}
  bool HasRetailImmortalmightPartSysProfile()const{return false;}
  bool HasRetailFmasteryPartSysProfile()const{return false;}
@@ -62,7 +72,7 @@ struct Imagery{uint32_t static_particles_profile=type_id;
  SPEED_FAMILY_METHOD
  bool HasCombatFlashStart1PartSysProfile()const{return false;}
  TTextureHandle GetTextureHandle(int index){if(index!=0)std::abort();return 1;}};
-struct TRenderer{std::vector<SQuadDrawItem>quads;void SubmitFxQuad(const SQuadDrawItem&q){quads.push_back(q);}};
+struct TRenderer{std::vector<SQuadDrawItem>quads;bool UsesRetailSoftwareMeshLighting()const{return true;}void SubmitFxQuad(const SQuadDrawItem&q){quads.push_back(q);}};
 struct TTime{static int frame;static int FrameCount(){return frame;}};int TTime::frame=0;
 unsigned random_state=1;int random(int a,int b){random_state=random_state*214013u+2531011u;return a+((random_state>>16)&32767u)%(b-a+1);}
 struct T3DAnimator{struct SPartSysControllers{
@@ -70,8 +80,11 @@ struct T3DAnimator{struct SPartSysControllers{
  struct Controller{Track track;authored_partsys::State simulation;int64_t last_render_frame=-1;};
  std::vector<Controller>controllers;bool unsupported=false;uint64_t renders=0,quads=0;};
  std::unique_ptr<SPartSysControllers>partsys_controllers;Owner*inst;Imagery im;
+ retail_dragonattack::PrototypeOrigin dragonattack_object_zero;
  Imagery*Get3DImagery(){return &im;}
- int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&,bool=false);};
+ void NoteJhagaAttackPrototypeSample(){}
+ void NoteHeadFireBallPrototypeSample(){}
+ int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&,bool=false,bool=true);};
 constexpr float WORLD3D_Z_SCALE=1.5f;
 '''
 MAIN = r'''
@@ -89,7 +102,12 @@ int main(int argc,char**argv){if(argc!=4)return 2;type_id=std::strtoul(argv[1],n
  if(tick==0&&!c.simulation.Initialize(d,in,0,diag))return 4;
  if(tick==60)in.owner_position={16,-8,4};TTime::frame=tick;renderer.quads.clear();
  c.simulation.Advance(in,[](int a,int b){return random(a,b);});
+ T3DAnimator suppressed;suppressed.inst=&owner;suppressed.partsys_controllers=std::make_unique<T3DAnimator::SPartSysControllers>(*a.partsys_controllers);
+ const auto before_rng=random_state;
  int n=a.SubmitPartSys(renderer,c.track.prototype,1,{1,1,1});if(n!=int(renderer.quads.size()))return 5;
+ const auto after_rng=random_state;TRenderer hidden;random_state=before_rng;
+ if(suppressed.SubmitPartSys(hidden,c.track.prototype,1,{1,1,1},false,false)!=0 || !hidden.quads.empty() || random_state!=after_rng)return 10;
+ random_state=after_rng;
  size_t q=0;for(size_t slot=0;slot<c.simulation.Capacity();++slot){const auto&p=c.simulation.Particles()[slot];if(!p.alive||p.scale<=9.999999747378752e-6f)continue;
  const auto&item=renderer.quads[q++];if(item.retail_rgb565_additive!=(d.blendmode==16))return 9;printf("%d %zu %.9g %d %d %d",tick,slot,p.position[2],int(item.key.blend),int(item.key.depth_mode),item.retail_texture);
  for(float v:item.color_rgba)printf(" %.9g",v);

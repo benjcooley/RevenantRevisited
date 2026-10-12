@@ -214,9 +214,9 @@ class TCharacter : public TComplexObject
       // Causes character to follow another character.
     bool Pickup(TObjectInstance* inst, TObjectInstance* to = nullptr);
       // Causes character to move to and pickup object.
-    void DropInventory();
-      // A dead character's things go to the floor around it, all at once
-      // (retail 0x004d6570)
+    void DropLoot();
+      // REVSYNC: 0x004d6570 -- a dead character's things burst out of it:
+      // gold at its feet, the rest thrown out around it (DEATH_LOOT.md §2)
     bool Pull(TObjectInstance* inst);
       // Causes character to pull lever
     bool TryUse();
@@ -552,7 +552,8 @@ class TCharacter : public TComplexObject
 
   // Damage resistances and modifier (the shipped game's code-defined stats;
   // their values come from class.def and saves, nothing in the port reads them yet)
-    OBJSTAT(DmgResMisc)
+    OBJSTATFUNC(DmgResMisc)
+      // REVSYNC: slot 0x260, 0x004d6f90 (setter 0x264)
     OBJSTAT(DmgResHand)
     OBJSTAT(DmgResPuncture)
     OBJSTAT(DmgResCut)

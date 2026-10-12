@@ -372,7 +372,7 @@ def run_port_pane(port, mode, spec, name, workdir):
     return json.loads(shown.read_text()), frame
 
 
-DT_CENTER, DT_RIGHT, DT_VCENTER, DT_BOTTOM = 0x1, 0x2, 0x4, 0x8
+DT_CENTER, DT_RIGHT, DT_VCENTER, DT_BOTTOM, DT_CALCRECT = 0x1, 0x2, 0x4, 0x8, 0x400
 
 
 def text_cell(call):
@@ -403,6 +403,8 @@ def gdi_text_cells(text_calls):
     band = np.zeros_like(mask)
     cells = []
     for call in text_calls:
+        if call['format'] & DT_CALCRECT and call['function'] != 'TextOutA':
+            continue                    # a measure draws nothing
         left, top, right, bottom = text_cell(call)
         if [left, top, right, bottom] in cells:
             continue
@@ -412,14 +414,164 @@ def gdi_text_cells(text_calls):
     return mask, band & ~mask, cells
 
 
+# 0x004be2b0's flags: the alignment in the low bits, a drop shadow (black
+# passes at (1, 1), (2, 1), (1, 2) under the colour) at 0x400.
+TEXT_ALIGN = {1: 'left', 2: 'center', 4: 'right'}
+TEXT_SHADOWED = 0x400
+# FONT.DEF in order (0x004be2b0's font is 1-based): the names the port
+# records for a bitmap font; a GDI font is named as the emulator names it.
+FONT_DEF = [None, 'System', 'Dialog', 'Scroll', 'Book', 'Numbers', 'Small', 'Med', 'Large', 'Gold', 'GoldMed',
+            'SpellTitle', 'Version']
+
+
+def surface_origins(primitives, pane):
+    """Where each surface a pane composes lands in it: {name: (dx, dy, clip)}
+    -- the display at the pane's origin, an offscreen surface where it is
+    blitted to the display (clip: that blit's rect), all pane-local."""
+    whole = (0, 0, pane[2], pane[3])
+    origins = {'display': (0, 0, whole)}
+    for p in primitives:
+        if p['primitive'] == 'ParamBlit' and p['dst'] == 'display' and p['src'] and p['src'] not in origins:
+            d = p['drawparam']
+            x, y, w, h, sx, sy = d[10:16]
+            origins[p['src']] = (x - sx, y - sy, (x, y, x + w, y + h))
+    return origins
+
+
+def text_draws(result):
+    """Retail's text composes (0x004be2b0), pane-local, each with the lines
+    its GDI colour pass laid out: [{text, face, rect, align, color,
+    shadowed, wrapped, lines: [[x, y, line]], clip}]. A compose draws its
+    string into the text surface at (0, 0) -- three black passes first when
+    shadowed -- then blits it to `rect` on its surface."""
+    origins = surface_origins(result['primitives'], result['pane'])
+    calls = iter(result['text_calls'])
+    draws = []
+    for p in result['primitives']:
+        if p['primitive'] != 'Text':
+            continue
+        shadowed = bool(p['format'] & TEXT_SHADOWED)
+        gdi = None
+        for _ in range(4 if shadowed else 1):
+            gdi = next(calls, None)
+        if gdi is None or gdi['text'] != p['text']:
+            raise RuntimeError(f'retail text {p["text"]!r} has no GDI calls of its own')
+        if gdi['format'] & DT_CALCRECT:
+            continue                    # a measure: it lays nothing out
+        dx, dy, clip = origins.get(p['dst'], (None, None, None))
+        if dx is None:
+            raise RuntimeError(f'retail text {p["text"]!r} lands on {p["dst"]}, never shown')
+        x, y, w, h = p['rect']
+        color = 0xffffff if p['color'] == 0xffffffff else p['color']
+        draws.append(dict(text=p['text'], face=gdi['font'], rect=[x + dx, y + dy, w, h],
+                          align=TEXT_ALIGN.get(p['format'] & 7, hex(p['format'] & 7)),
+                          color=[color >> 16 & 0xff, color >> 8 & 0xff, color & 0xff], shadowed=shadowed,
+                          wrapped=bool(gdi['format'] & 0x10),
+                          lines=[[lx + x + dx, ly + y + dy, line, width] for lx, ly, line, width in gdi['layout']],
+                          clip=list(clip), cell=int(gdi['font'].rsplit(' ', 1)[-1])))
+    return draws
+
+
+def gdi_draws(result):
+    """Retail's text drawn straight with GDI (TextOutA, DrawTextA), as draws
+    like text_draws', pane-local (the DC's viewport origin is the pane's):
+    three black passes at (1, 1), (2, 1), (1, 2) and the colour pass are one
+    shadowed draw. Measures and empty strings draw nothing."""
+    pane = result['pane']
+    calls = [c for c in result['text_calls'] if c['function'] == 'TextOutA' or not c['format'] & DT_CALCRECT]
+    whole = [-pane[0], -pane[1], SCREEN[0] - pane[0], SCREEN[1] - pane[1]]
+    draws, i = [], 0
+    while i < len(calls):
+        group = calls[i:i + 4]
+        shadowed = (len(group) == 4 and all(g['text'] == group[0]['text'] and g['function'] == group[0]['function']
+                                            for g in group) and all(g['color'] == 0 for g in group[:3]))
+        call = group[3] if shadowed else group[0]
+        i += 4 if shadowed else 1
+        if not call['text']:
+            continue
+        lines = [[x - pane[0], y - pane[1], line, width] for x, y, line, width in call['layout']]
+        if call['function'] == 'TextOutA':
+            x, y, _line, width = lines[0]
+            rect, align, wrapped = [x, y, width, call['cell']], 'left', False
+        else:
+            left, top, right, bottom = call['rect']
+            rect = [left - pane[0], top - pane[1], right - left, bottom - top]
+            align = 'center' if call['format'] & DT_CENTER else 'right' if call['format'] & DT_RIGHT else 'left'
+            wrapped = bool(call['format'] & 0x10)
+        color = call['color']
+        draws.append(dict(text=call['text'], face=call['font'], rect=rect, align=align,
+                          color=[color & 0xff, color >> 8 & 0xff, color >> 16 & 0xff], shadowed=shadowed,
+                          wrapped=wrapped, lines=lines, clip=whole, cell=call['cell']))
+    return draws
+
+
+def text_shadow_reach(height):
+    """How far right and down 0x004be2b0's shadow reaches past the text for
+    a font of cell height `height` (0x004be716): passes at (dx, dy), (dx + 1,
+    dy), (dx, dy + 1) with (dx, dy) = (1, 1) to 14 px, (2, 1) to 25; one pass
+    at (2, 2) above."""
+    return (2, 2) if height <= 14 else (3, 2) if height <= 25 else (2, 2)
+
+
+def text_draw_mask(draws, pane):
+    """The screen pixels retail's text can touch -> (mask, band): each line's
+    cell (its width, the font's height) and its shadow, inside the surface's
+    visible rect."""
+    mask = np.zeros((SCREEN[1], SCREEN[0]), dtype=bool)
+    band = np.zeros_like(mask)
+    for draw in draws:
+        l, t, r, b = draw['clip']
+        reach_x, reach_y = text_shadow_reach(draw['cell']) if draw['shadowed'] else (0, 0)
+        for x, y, _line, width in draw['lines']:
+            x0, y0 = max(x, l) + pane[0], max(y, t) + pane[1]
+            x1, y1 = min(x + width + reach_x, r) + pane[0], min(y + draw['cell'] + reach_y, b) + pane[1]
+            if x1 > x0 and y1 > y0:
+                mask[y0:y1, x0:x1] = True
+                band[max(0, y0 - TEXT_BAND):y1 + TEXT_BAND, max(0, x0 - TEXT_BAND):x1 + TEXT_BAND] = True
+    return mask, band & ~mask
+
+
+def compare_text(retail, port):
+    """Retail's text composes against the port's text draws (the A/B host's
+    `text`, STextDraw): each must be there, the same font, place, colour and
+    lines. -> {matched, missing, extra, mismatched: [{text, field: [retail,
+    port]}]}"""
+    unmatched = list(port)
+    result = dict(matched=0, missing=[], extra=[], mismatched=[])
+    for draw in retail:
+        same = [d for d in unmatched if d['text'] == draw['text']]
+        if not same:
+            result['missing'].append(draw['text'])
+            continue
+        mine = min(same, key=lambda d: abs(d['x'] - draw['rect'][0]) + abs(d['y'] - draw['rect'][1]))
+        unmatched.remove(mine)
+        fields = dict(face=(draw['face'], mine['face']),
+                      rect=(draw['rect'], [mine['x'], mine['y'], mine['w'], mine['h']]),
+                      align=(draw['align'], mine['align']), color=(draw['color'], mine['color']),
+                      shadowed=(draw['shadowed'], mine['shadowed']), wrapped=(draw['wrapped'], mine['wrapped']))
+        if draw['wrapped']:
+            fields['lines'] = ([line for _x, _y, line, _w in draw['lines']], mine.get('lines', []))
+        wrong = {k: list(v) for k, v in fields.items() if v[0] != v[1]}
+        if wrong:
+            result['mismatched'].append(dict(text=draw['text'][:40], **wrong))
+        else:
+            result['matched'] += 1
+    result['extra'] = [d['text'] for d in unmatched]
+    return result
+
+
 def pane_target(args, workdir, cases, fixture, run_port, retail_case, report,
-                masks=(('alpha', ALPHA_TOLERANCE),)):
+                masks=(('alpha', ALPHA_TOLERANCE),), text=None):
     """A pane's A/B over `cases`: run_port(case) -> (shown, frame);
     retail_case(case, shown) -> the fixture's case; report(shown) -> what the
     case's result records of it. Every pixel outside its GDI text must match
     exactly, but for the ones the fixture's blend `masks` mark: the 2D panes'
     `alpha` (ALPHA_TOLERANCE), the overlay panes' `screen`
-    (SCREEN_TOLERANCE)."""
+    (SCREEN_TOLERANCE). A pane whose text the A/B compares structurally --
+    `text` 'compose' (retail's 0x004be2b0 composes, text_draws) or 'gdi' (its
+    straight GDI calls, gdi_draws) -- masks where that text can draw and
+    compares it with the port's text draws (compare_text): a mismatch is a
+    defect."""
     cases = [c for c in cases if not args.only or c['name'] in args.only]
     retail = Fixture(SLOT / fixture, '--serve')
     results, timing = [], dict(port_seconds=0.0, retail_seconds=0.0)
@@ -439,7 +591,13 @@ def pane_target(args, workdir, cases, fixture, run_port, retail_case, report,
             pane = result['pane']
             if pane != shown['pane']:
                 raise RuntimeError(f'pane {shown["pane"]} in the port, {pane} in retail')
-            mask, band, cells = gdi_text_cells(result['text_calls'])
+            if text:
+                draws = text_draws(result) if text == 'compose' else gdi_draws(result)
+                mask, band = text_draw_mask(draws, pane)
+                cells = [d['rect'] for d in draws]
+                entry['text'] = compare_text(draws, shown.get('text', []))
+            else:
+                mask, band, cells = gdi_text_cells(result['text_calls'])
             retail_rgb = retail_frame(workdir / 'retail' / f'{name}.rgb565')
             port_rgb = port_frame(port_png)
             tolerance = np.zeros((SCREEN[1], SCREEN[0]), dtype=np.int32)
@@ -598,8 +756,93 @@ def target_automap(args, workdir):
                        masks=(('screen', SCREEN_TOLERANCE),))
 
 
+# =====================================================================
+# spellbook
+# =====================================================================
+
+# Talisman codes A..L are TalismanClass's types in order: Sun, Life, Ocean,
+# Law, Soul, Stars, Death, Chaos, Sky, Earth, Ward, Moon.
+BOOK = ['DEB', 'KJL', 'LI', 'BJ', 'MAL', 'FL']    # Advanced healing, IronSkin, Fire Flash, Regeneration, ...
+FIRE_POUCH = (0, ('Spell Pouch', None, [('Moon', None, None), ('Sky', None, None)]))      # casts LI
+HEAL_POUCH = (0, ('Spell Pouch', None, [('Law', None, None), ('Soul', None, None), ('Life', None, None)]))
+SPELLBOOK_CASES = [
+    dict(name='empty'),
+    dict(name='one-grey', spells=['DEB']),
+    dict(name='sample', spells=BOOK[:3], items=[HEAL_POUCH], mana=400),
+    dict(name='mana-short', spells=['DEB', 'LI'], items=[HEAL_POUCH], mana=100),
+    dict(name='castable', spells=['LI', 'DEB'], items=[FIRE_POUCH], mana=100),
+    dict(name='pressed-castable', spells=['LI', 'DEB'], items=[FIRE_POUCH], mana=100, pressed=0),
+    dict(name='pressed-grey', spells=['DEB', 'LI'], pressed=0),
+    dict(name='long-names', spells=['BJ', 'MAL', 'FL']),
+    *[dict(name=f'scroll-{pos}', spells=BOOK, items=[FIRE_POUCH], mana=100, scroll=pos)
+      for pos in (20, 40, 77, 151, 163, 300)],
+    dict(name='scroll-end', spells=BOOK, scroll=10000),
+]
+
+
+def target_spellbook(args, workdir):
+    def run_port(case):
+        items = '|'.join(f'{port_item(item)}@{slot}' for slot, item in case.get('items', []))
+        spec = (f'spells={",".join(case.get("spells", []))};items={items};mana={case.get("mana", 100)};'
+                f'scroll={case.get("scroll", 0)};pressed={case.get("pressed", -1)}')
+        return run_port_pane(args.port, 'ab-spellbook', spec, case['name'], workdir)
+
+    def retail_case(case, shown):
+        items = [dict(retail_item(item), slot=slot) for slot, item in case.get('items', [])]
+        return dict(spells=shown['spells'], items=items, player=dict(stats=dict(mana=shown['mana'])),
+                    fields={'0x17c': shown['scroll'], '0x1c8': shown['pressed']})
+
+    return pane_target(args, workdir, SPELLBOOK_CASES, 'spellbook.py', run_port, retail_case,
+                       lambda shown: dict(spells=shown['spells'], scroll=shown['scroll'], pressed=shown['pressed']),
+                       text='compose')
+
+
+# =====================================================================
+# statpane
+# =====================================================================
+
+STATS = {'Strn': 16, 'Cons': 15, 'Agil': 14, 'Rflx': 13, 'Mind': 12, 'Luck': 11, 'Level': 3, 'Exp': 1234,
+         'NextExp': 2500, 'Health': 87, 'Mana': 42}
+SKILLS = {'Attack': 21, 'AttackExp': 121, 'AttackNxtExp': 221, 'Defense': 22, 'DefenseExp': 122,
+          'DefenseNxtExp': 222, 'Invoke': 5, 'Sword': 7, 'SwordExp': 107, 'SwordNxtExp': 207, 'Bows': 10}
+STATPANE_CASES = [
+    dict(name='page1', stats=STATS, levelup=(0, 4, 1)),
+    dict(name='page1-same-pick', stats=STATS, levelup=(2, 2, 0)),
+    dict(name='page1-level-15', stats=dict(STATS, Level=15, Exp=99999, NextExp=123456), levelup=(1, 5, 1)),
+    dict(name='page1-wide', stats=dict(STATS, Strn=30, Cons=29, Luck=1, Health=1234, Mana=0, Exp=0),
+         levelup=(5, 3, 0)),
+    dict(name='page2', stats=dict(STATS, **SKILLS), format='page2'),
+    dict(name='page2-zero', stats={k: 0 for k in SKILLS}, format='page2'),
+    # The hot spots, clicked in the port; retail paints what they leave.
+    dict(name='click-page2', stats=dict(STATS, **SKILLS), click=[(103, 115)]),
+    dict(name='click-page2-page1', stats=STATS, click=[(103, 115), (75, 115)]),
+    dict(name='click-train', stats=STATS, levelup=(0, 4, 1), click=[(50, 150), (50, 186)]),
+]
+
+
+def target_statpane(args, workdir):
+    def run_port(case):
+        stats = ','.join(f'{k}:{v}' for k, v in case.get('stats', {}).items())
+        levelup = ','.join(str(v) for v in case.get('levelup', (0, 0, 0)))
+        spec = f'stats={stats};levelup={levelup};format={case.get("format", "page1")}'
+        if case.get('click'):
+            spec += ';click=' + '|'.join(f'{x},{y}' for x, y in case['click'])
+        return run_port_pane(args.port, 'ab-statpane', spec, case['name'], workdir)
+
+    def retail_case(case, shown):
+        return dict(format=shown['format'],
+                    player=dict(name=shown['name'], objstats=shown['objstats'], **{'class': shown['class']},
+                                levelup=shown['levelup'], combat=shown['combat'],
+                                stats=dict(max_health=shown['max_health'], max_fatigue=shown['max_fatigue'],
+                                           max_mana=shown['max_mana'], level=shown['objstats'].get('Level', 1))))
+
+    return pane_target(args, workdir, STATPANE_CASES, 'statpane.py', run_port, retail_case,
+                       lambda shown: dict(format=shown['format'], levelup=shown['levelup']), text='gdi')
+
+
 TARGETS = {'statusbar': target_statusbar, 'bottombar': target_bottombar, 'inventory': target_inventory,
-           'spellpane': target_spellpane, 'automap': target_automap}
+           'spellpane': target_spellpane, 'automap': target_automap, 'spellbook': target_spellbook,
+           'statpane': target_statpane}
 
 
 def main():
@@ -615,7 +858,9 @@ def main():
     report.update(target=args.target, port_sha256=sha256(args.port))
     (workdir / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     results = report['results']
-    failing = [r for r in results if r.get('error') or r.get('defects')]
+    text_wrong = lambda r: bool(r.get('text') and (r['text']['missing'] or r['text']['extra']  # noqa: E731
+                                                  or r['text']['mismatched']))
+    failing = [r for r in results if r.get('error') or r.get('defects') or text_wrong(r)]
     print(f'{args.target}: {len(results) - len(failing)}/{len(results)} cases match '
           f'(port {report["timing"]["port_seconds"]}s, retail {report["timing"]["retail_seconds"]}s); '
           f'report {workdir / "report.json"}')
@@ -629,6 +874,12 @@ def main():
                   f'screen {worst["screen"]}, composed {worst["composed"]}, alpha {worst["alpha"]}), '
                   f'{r["text_overflow"]} text overflow'
                   + (f', defects in {r["defect_bbox"]}' if r.get('defect_bbox') else ''))
+            if r.get('text'):
+                t = r['text']
+                print(f'    text: {t["matched"]} match' + (f', missing {t["missing"]}' if t['missing'] else '')
+                      + (f', extra {t["extra"]}' if t['extra'] else ''))
+                for wrong in t['mismatched']:
+                    print(f'      {json.dumps(wrong)}')
     sys.exit(1 if failing else 0)
 
 

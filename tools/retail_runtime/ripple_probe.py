@@ -50,20 +50,21 @@ def build_port(output,asset):
 #include <stdexcept>
 #include "particlefx.h"
 #include "math3d.h"
+#include "retailsoftwaretransform.h"
 #undef min
 #undef max
 enum class EFxBlend:uint8_t {Alpha,Additive};
 enum class EFxDepthMode:uint8_t {TestNoWrite};
 enum class EFxDebugMode:uint8_t {Normal,SolidColor,FullTexture};
 enum class EFxLightMode:uint8_t {Lit,Unlit};
-struct SQuadDrawItem {float world_pos[4][3]{};float uv[4][2]{};
+struct SQuadDrawItem {bool retail_software_projection=false,retail_argb4444=false;float world_pos[4][3]{};float uv[4][2]{};
  struct {TTextureHandle texture{};uint8_t blend{},depth_mode{};} key;
  EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 struct TRenderer {std::vector<SQuadDrawItem> draws;void SubmitFxQuad(const SQuadDrawItem& i){draws.push_back(i);}};
 TRenderer renderer;TRenderer* Renderer=&renderer;
 struct TObjectImagery {};struct SObjectDef {};
 struct World {hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4& Matrix()const{return m;}};
-struct TObjectInstance {World world;S3DPoint pos;virtual ~TObjectInstance()=default;
+struct TObjectInstance {int GetFace()const{return 0;}World world;S3DPoint pos;virtual ~TObjectInstance()=default;
  const World& Transform()const{return world;}const S3DPoint& Pos()const{return pos;}};
 struct TEffect:TObjectInstance {TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};
  virtual void Pulse(){};};

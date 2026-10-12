@@ -22,7 +22,8 @@ VfxReviewPreviewInfo DescribeVfxReviewPreview(uint32_t type_id);
 class VfxReviewPreview
 {
   public:
-    VfxReviewPreview(const VfxTest::SEffect& effect, void* context, const S3DPoint& origin);
+    VfxReviewPreview(const VfxTest::SEffect& effect, void* context, const S3DPoint& origin,
+                     const S3DPoint* destination=nullptr);
     ~VfxReviewPreview();
     VfxReviewPreview(const VfxReviewPreview&) = delete;
     VfxReviewPreview& operator=(const VfxReviewPreview&) = delete;
@@ -36,6 +37,9 @@ class VfxReviewPreview
     VfxTest::SEffect effect_;
     void* context_ = nullptr;
     S3DPoint origin_{};
+    S3DPoint destination_{};
+    bool endpoints_ = false;
+    void* Recreate();
     float restart_remaining_ = 0;
 };
 
@@ -43,3 +47,6 @@ class VfxReviewPreview
 // rejected factory. Destroy before shutting down the map/renderer resources.
 std::unique_ptr<VfxReviewPreview> CreateVfxReviewPreview(uint32_t type_id,
                                                        const S3DPoint& origin);
+std::unique_ptr<VfxReviewPreview> CreateVfxReviewPreview(uint32_t type_id,
+                                                       const S3DPoint& source,
+                                                       const S3DPoint& destination);

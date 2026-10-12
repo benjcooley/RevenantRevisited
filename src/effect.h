@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "effects/fog_grid.h"
 #include "revenant.h"
 
 #include <memory>
@@ -37,7 +38,9 @@ _CLASSDEF(TSpellBlock)
 
 #include "particlefx.h"
 #include "photoncore.h"
+#include "effectownercore.h"
 #include "iceboltcore.h"
+#include "firewindcore.h"
 #include "missilestate.h"
 #include "renderer.h"   // EFxDebugMode, SBillboardDrawItem, TRenderer
 
@@ -54,17 +57,28 @@ class TEffect : public TObjectInstance
 
     virtual void Pulse();
 
-    void SetSpell(PTSpell sp) { spell = sp; }    
+    void SetSpell(PTSpell sp) { spell = sp; retail_owner.ResetLight(); }
     PTSpell GetSpell() { return spell; }
 
     void SetSubSpell(int32_t sp) { subspell = sp; }    
     int32_t GetSubSpell() { return subspell; }
 
+    // Declared direct FOLLOW/no-bone path from original4def90 and Strike Timer.
+    void ConfigureRetailSpellOwner(TObjectInstance* followed, int32_t duration,
+                                   int32_t blink_ticks, int32_t start_delay);
+    void KillRetailSpellOwner();
+    const retail_effect_owner::State& RetailOwnerState() const { return retail_owner; }
+    void Notify(int32_t notify, void* ptr) override;
     void KillThisEffect();  // Call when effect is finished
 
     int32_t GetAngle();         // Returns aiming angle
 
   protected:
+    retail_effect_owner::State retail_owner;
+    TSafeRef<> retail_follow;
+    void SetRetailOwnerFlags(uint32_t value);
+    bool BeginRetailOwnerPulse();
+    void AdvanceRetailOwnerPulse();
     PTSpell spell;      // Spellblock which spawned this effect
     int32_t subspell;           // TEMP TEMP TEMP subspell (psuedo-talisman)
     int32_t angle;              // The direction we are cast
@@ -2296,9 +2310,12 @@ class TRippleEffect : public TEffect
     // submission never advances the child's simulation a second time.
     void Advance(double seconds);
     void Submit(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
     [[nodiscard]] bool IsAlive() const { return alive_ || !spawned_ripples_.empty(); }
 
   private:
+    bool native_domain_ = false;
+    bool ring_argb4444_ = false, splash_argb4444_ = false;
     struct SWaterDrop
     {
         hmm_vec3 pos = {};
@@ -2387,8 +2404,11 @@ class TDripEffect : public TEffect
     void TickAndSubmitForTest(EFxDebugMode debug_mode);
     void Advance(double seconds);
     void Submit(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
 
   private:
+    bool native_domain_ = false;
+    bool drop_argb4444_ = false;
     int32_t ripplesize = 64;
     int32_t height = 128;
     int32_t period = 48;
@@ -3969,6 +3989,7 @@ class TWaterFallEffect_Bespoke : public TEffect
     [[nodiscard]] static TWaterFallEffect_Bespoke* SpawnForTest_BESPOKE(
         const S3DPoint& origin, const char* asset_override = nullptr);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled);
     [[nodiscard]] bool IsAlive() const { return true; }
   private:
     void InitParticle(int32_t i);
@@ -3983,6 +4004,9 @@ class TWaterFallEffect_Bespoke : public TEffect
     bool initialized_ = false;
     bool logged_tick_ = false;
     uint32_t runtime_id_ = 0; // previews have no class/type identity
+    mutable MeshHandle software_mesh_ = 0;
+    bool exact_water_mesh_ = false, native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
 };
 
 // *************************************************************************
@@ -4018,6 +4042,7 @@ class TWaterEffect_Bespoke : public TEffect
     void Advance(double seconds);
     void Submit(EFxDebugMode debug_mode) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled);
     [[nodiscard]] bool IsAlive() const { return true; }   // persistent
 
   private:
@@ -4038,6 +4063,9 @@ class TWaterEffect_Bespoke : public TEffect
     float           material_diffuse_[4] = {1,1,1,1};
     double          sim_accum_seconds_ = 0.0;
     int64_t         ticks_ = 0;
+    mutable MeshHandle software_mesh_ = 0;
+    bool exact_water_mesh_ = false, native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
 };
 
 // *****************
@@ -4860,10 +4888,14 @@ class TFlyEffect_Bespoke : public TEffect
     TFlyEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TFlyEffect_Bespoke() override = default;
 
-    void OffScreen() override { KillThisEffect(); }
+    void OffScreen() override { if(runtime_owned_)TObjectInstance::OffScreen();else KillThisEffect(); }
 
     [[nodiscard]] static TFlyEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void Initialize(bool attach_runtime_component=true);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
+    void SetNativeDomainForTest(bool enabled);
     [[nodiscard]] bool IsAlive() const { return true; }   // ambient swarm — never dies
 
   private:
@@ -4872,6 +4904,11 @@ class TFlyEffect_Bespoke : public TEffect
     float               uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
     float               size_wu_      = kFlyBespokeBaseSizeWu;
     double              sim_accum_ms_ = 0.0;
+    S3DVertex           vertices_[4] = {};
+    double              tick_seconds_ = 0.0;
+    int64_t             ticks_ = 0;
+    bool                initialized_=false,runtime_owned_=false,native_domain_=false;
+    hmm_mat4            native_owner_ = {};
 };
 
 // ----- B04 TPulpEffect (Bespoke) — STUBBED -------------------------------
@@ -5284,56 +5321,24 @@ class TVortexEffect_Bespoke : public TEffect
 
 _CLASSDEF(TFogEffect_Bespoke)
 
-// W06: ambient ground fog overlay. Snapshot:
-// src/effect_old.cpp:6621-6750 (TFogAnimator). 36-vertex flat grid (6x6)
-// over a scl=7.475 quad, with per-vertex random color/alpha brightness
-// drift on 20 "anchored" border verts (frozen at c=.7/a=.125) and the
-// other 16 inner verts drifting through random color_velocity /
-// alpha_velocity / position-delta walks. SetBlendState -> Alpha (verbatim,
-// preserved AS WRITTEN — no AdditiveStraight reinterpretation).
-//
-// First-pass bespoke: collapse the 36-vertex animated grid down to a
-// single ground-aligned (WorldXY) Alpha billboard whose color/alpha is
-// the mean of the inner verts. Preserves the snapshot's brightness/alpha
-// random walk shape (same min/max/velocity bounds) so the visual breathes
-// at the same cadence; the per-vertex gradient is a follow-up upgrade
-// once the engine has a triangulated-quad-with-vertex-color render path.
+// Original Fog: 36 authored prelit vertices, 50 triangles, no textures.
 class TFogEffect_Bespoke : public TEffect
 {
   public:
     TFogEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
     TFogEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
-    ~TFogEffect_Bespoke() override = default;
-
     void OffScreen() override { KillThisEffect(); }
-
-    [[nodiscard]] static TFogEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    static TFogEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void SetNativeDomainForTest(bool enabled);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
-
-    [[nodiscard]] bool IsAlive() const { return true; }   // ambient overlay — never dies
-
+    bool IsAlive() const { return true; }
   private:
-    // Snapshot constants (effect_old.cpp:6621-6750).
-    static constexpr int32_t kFogVertex      = 36;   // FOG_VERTEX
-    static constexpr float   kFogScale       = 7.475f;
-    static constexpr int32_t kFogSimTickMs   = 1000 / 24;
-    static constexpr float   kFogBaseSizeWu  = 96.0f * kFogScale;  // grid quad ~ 96 wu base * 7.475
-
-    struct SFogVert
-    {
-        float c   = 0.7f;
-        float a   = 0.125f;
-        float cv  = 0.0f;     // color_velocity
-        float av  = 0.0f;     // alpha_velocity
-        hmm_vec3 dpos     = {0.0f, 0.0f, 0.0f};
-        hmm_vec3 velocity = {0.0f, 0.0f, 0.0f};
-        bool  anchored    = false;   // border vert (frozen) vs inner vert (drifting)
-    };
-
-    SFogVert       verts_[kFogVertex] {};
-    double         sim_accum_ms_  = 0.0;
-    TTextureHandle texture_       = kInvalidTexture;
-    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+    retail_fog::State state_;
+    S3DVertex vertices_[retail_fog::Count]{};
+    S3DFace faces_[50]{};
+    bool native_domain_=false;
 };
 
 _CLASSDEF(TSandswirlEffect_Bespoke)
@@ -5686,6 +5691,7 @@ class TAuthoredStaticMeshEffect : public TEffect
                                                                   bool scroll_textures = false);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     void SubmitWorldMeshForTest_BESPOKE(EFxDebugMode debug_mode);
+    void SubmitNativeWorldMeshForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return true; }
 
   private:
@@ -6176,35 +6182,6 @@ class TFireBallEffect_Bespoke__YFireBall : public TFireBallEffect
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
 };
 
-// W3-D YFireWind — boss-variant firewind. No dedicated class candidate; only
-// string XREFs in spell-handler area. Asset Magic\YFirewind.I3D.
-// Minimal placeholder — single ScreenAligned Alpha billboard.
-_CLASSDEF(TFireWindEffect_Bespoke__YFireWind)
-class TFireWindEffect_Bespoke__YFireWind : public TEffect
-{
-  public:
-    TFireWindEffect_Bespoke__YFireWind(TObjectImagery* newim) : TEffect(newim) {}
-    TFireWindEffect_Bespoke__YFireWind(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
-    ~TFireWindEffect_Bespoke__YFireWind() override = default;
-
-    void OffScreen() override { KillThisEffect(); }
-
-    [[nodiscard]] static TFireWindEffect_Bespoke__YFireWind* SpawnForTest_BESPOKE(const S3DPoint& origin);
-    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
-    [[nodiscard]] bool IsAlive() const { return alive_; }
-
-  private:
-    static constexpr int32_t kStubLifetimeMs   = 3000;
-    static constexpr float   kStubBaseSizeWu   = 32.0f;
-    static constexpr int32_t kStubSimTickMs    = 1000 / 24;
-
-    int32_t  age_ms_       = 0;
-    bool     alive_        = true;
-    double   sim_accum_ms_ = 0.0;
-    TTextureHandle texture_    = kInvalidTexture;
-    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
-};
-
 // W3-D YCataclysm — boss-variant cataclysm. Ghidra XREF for s_YCataclysm_
 // at 0x005e1520 lives in virt_meth_0x507530 (spell handler), no dedicated
 // class. Base Cataclysm is similarly spell-only (no class). Asset
@@ -6389,29 +6366,37 @@ class TFireFlashEffect_Bespoke : public TEffect
 
 _CLASSDEF(TFireWindEffect_Bespoke)
 
-class TFireWindEffect_Bespoke : public TEffect
+class TFireWindEffect_Bespoke : public TEffect, private firewind_core::State
 {
   public:
-    TFireWindEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFireWindEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
-    ~TFireWindEffect_Bespoke() override = default;
-
-    void OffScreen() override { KillThisEffect(); }
-
-    // asset_override supports the YFireWind sibling variant (Magic\YFirewind.I3D)
-    // — Y-prefix in the snapshot is the "yellow" tint variant; same animator.
-    [[nodiscard]] static TFireWindEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
-                                                                       const char*     asset_override = nullptr);
-    void                                          TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
-    [[nodiscard]] bool IsAlive() const { return alive_; }
-
+    TFireWindEffect_Bespoke(TObjectImagery* image):TEffect(image){}
+    TFireWindEffect_Bespoke(SObjectDef* def,TObjectImagery* image):TEffect(def,image){}
+    ~TFireWindEffect_Bespoke() override;
+    void OffScreen() override {}
+    void Pulse() override;
+    static TFireWindEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,const char* asset_override=nullptr);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode mode);
+    void SubmitWorldMeshes_BESPOKE(EFxDebugMode mode);
+    void SetNativeDomain(bool enabled){native_domain_=enabled;}
+    bool IsAlive()const{return alive_;}
+  protected:
+    bool InitializeVisual(const S3DPoint& origin);
   private:
-    static constexpr float   kFireWindBaseSizeWu = 40.0f;
-    static constexpr int32_t kFireWindLifetimeMs = 2000;
+    bool BindMeshes();void Simulate();
+    struct Part {MeshHandle mesh=0;S3DMat material{};};
+    std::array<Part,2> parts_{};
+    bool alive_=true,native_domain_=false;
+    double sim_accum_=0;
+};
 
-    TTextureHandle texture_      = kInvalidTexture;
-    float          age_ms_       = 0.0f;
-    bool           alive_        = true;
+// Own native Y registrations5066a0/5067b0; visual core compatibility is
+// checked against its full original400-slot state and authored draw matrices.
+_CLASSDEF(TFireWindEffect_Bespoke__YFireWind)
+class TFireWindEffect_Bespoke__YFireWind : public TFireWindEffect_Bespoke
+{
+  public:
+    using TFireWindEffect_Bespoke::TFireWindEffect_Bespoke;
+    static TFireWindEffect_Bespoke__YFireWind* SpawnForTest_BESPOKE(const S3DPoint& origin);
 };
 
 _CLASSDEF(TFireConeEffect_Bespoke)
@@ -6894,7 +6879,7 @@ class TSetVortexEffect_Bespoke : public TEffect
     void Submit(EFxDebugMode debug_mode = EFxDebugMode::Normal) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] static TSetVortexEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
-    [[nodiscard]] bool IsAlive() const { return true; }
+    [[nodiscard]] bool IsAlive() const { return !(GetFlags() & OF_KILL); }
 
   private:
     std::vector<SMeshVertex> vertices_;

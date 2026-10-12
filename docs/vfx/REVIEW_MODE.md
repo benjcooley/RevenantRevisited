@@ -7,16 +7,14 @@ An invisible disposable floor supplies normal walk-height/collision queries.
 
 The camera follows the row toward the upper right, so effects scroll toward
 the lower left. The default slope is 2.5 horizontal units per vertical unit.
-The default minimum clearance is 240 logical screen pixels: about three small
-station centers per view, with partial neighbors at the edges. An absolute
-240-pixel floor prevents dense rows even when a smaller override is requested.
-Padded stored culling bounds contribute at most a quarter of a viewport to layout.
-Known broad-emitter hints and explicit overrides increase clearance as needed. Automatic spacing is capped at 1.15 viewport lengths, including large effects.
-Explicit per-effect overrides can reserve more room.
-Scrolling runs at 48 pixels/sec.
-There are 720 pixels of empty lead-in and tail before the view loops.
-Effects stay in view for roughly 14 seconds at the default viewport. A full
-176-entry pass takes over an hour; select a smaller group while fixing it.
+The default minimum clearance is 96 logical screen pixels, bounded by viewport
+width so several small effects can be visible together. Stored culling bounds
+contribute at most a quarter of a viewport to layout. Automatic clearance uses
+40% of the padded footprint and is capped at 0.46 viewport lengths; explicit
+per-effect overrides can reserve more room.
+Scrolling runs at 96 pixels/sec, with720 pixels of empty lead-in and tail.
+Effects stay in view for roughly7 seconds at the default viewport. Full-loop
+duration depends on admitted entries and footprints; the startup log reports it.
 
 ```sh
 ./build-merge/Revenant --test=vfx-review \
@@ -30,12 +28,32 @@ Filter entries accept case-insensitive full names or hexadecimal retail type
 IDs, separated by commas. Duplicate names retain separate type-ID entries.
 Unknown entries are rejected so typos cannot silently change the review.
 
+The list also includes **TwnBrazier**, the large animated sconce fire from
+`Town/TwnBrazier.I2D`. It is an original TILE map object, outside the176 EFFECT
+rows. Select it with `--vfx-review-effects=TwnBrazier` or `0x70dc006a`; the normal
+TILE factory draws its still/base plus authored15-frame animation. Ground stays
+black while this explicitly selected decoration remains visible.
+
+The audited unused Worm, cfire, Vortex and Fire prototypes are omitted from
+the normal list; their exact diagnostics remain selectable with
+`--vfx-review-effects=0xdefeca7e,0xad92bd27,0x452dade0,0x119f01e3`.
+The normal list instead shows the genuine named **Essence Drain (spell)** recipe.
+Missing or invisible effects, including Dust under software lighting, remain
+in the list. See the [exclusion evidence and Dust policy](forensics/REVIEW_PROTOTYPE_POLICY_20261011.md).
+
+Exact moving preview adapters may supply a source/destination initializer.
+QueenArrow and Funnel use that API to travel along the configured review path,
+mostly upward with the requested slight rightward tilt. Their original movement
+and completion drive animation and repetition; the viewer does not substitute
+a projectile restart timer. Standalone origin-only A/B fixtures keep their
+declared source/target inputs.
+
 Options:
 
-- `--vfx-review-speed=48`: logical pixels/sec, range 0.1–240.
+- `--vfx-review-speed=96`: logical pixels/sec, range 0.1–240.
 - `--vfx-review-ratio=2.5`: horizontal/vertical slope, range 2–3.
-- `--vfx-review-spacing=240`: requested minimum, range 180–800; effective
-  clearance respects the 240-pixel floor and viewport density limit.
+- `--vfx-review-spacing=96`: requested minimum, range64–800; effective
+  clearance respects the96-pixel floor and viewport density limit.
 - `--vfx-review-spacing-overrides=FireCone:1200,FireBall:900`: per-effect
   requested clearance in pixels, range 180–2400; names or hexadecimal type IDs.
   Overrides can increase spacing; they cannot bypass minimum/footprint clearance.
@@ -148,3 +166,8 @@ and this check grants no retail fidelity credit. Longer effects need additional
 samples. The first root survey confirms all 62 previously reviewed types produce
 label-free pixels in the centered configuration. Frozen evidence:
 `/Users/benjamincooley/RevenantRetailLab/research/vfx-review-survey-20261010/reviewed-centered-current/manifest.json`.
+
+
+Ogrok texture previews default to the user-confirmed quarter inspection rate.
+`--vfx-review-watcher-rate=1` restores the raw24Hz test clock; it is not a proven
+natural-arena cadence. See [the reopened arena timing investigation](forensics/WATCHER_MAP_CADENCE_20261011.md).

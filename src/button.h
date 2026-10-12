@@ -170,6 +170,8 @@ class TButtonPane : public TPane
         // Shortcut for normal buttons
     bool DeleteButton(TButton *b);
         // Remove the button from the list and delete it (retail 0x004367d0)
+    void ClearButtons();
+        // Delete every button; the pane repaints (retail 0x00436890)
 
     PTButton Button(int32_t b) { return Buttons[b]; }
 

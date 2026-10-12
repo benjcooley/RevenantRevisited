@@ -17,15 +17,19 @@ prelude=r'''
 #include <vector>
 #include <cstdio>
 #include <utility>
+#include <cmath>
+#include <algorithm>
 enum class EFxDebugMode:uint8_t{Normal};enum class EFxLightMode:uint8_t{Unlit};
 struct SFxBatchKey{uint16_t pipeline_id{};uint8_t blend{},depth_mode{};uint32_t texture{};};
 struct SStripSegment{float world_a[3]{},world_b[3]{1,0,0};float width_a_wu=1,width_b_wu=1;
  float color_a[4]{1,1,1,1},color_b[4]{1,1,1,1};float u_a=0,u_b=1,v_left=0,v_right=1;bool uv_swapped=false;};
 struct Entry{std::vector<SStripSegment>segments;SFxBatchKey key{};EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 struct SQuadDrawItem{bool per_corner_color=false;float corner_color_rgba[4][4]{};bool retail_rgb565_additive=false;float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{1,1,1,1};SFxBatchKey key{};
- bool retail_software_projection=false;float retail_camera_z=0;int corner_count=4,retail_texture=0;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
+ bool retail_software_projection=false,retail_software_pixel_grid=false,retail_prelit_rgba5=false;float retail_camera_z=0;int corner_count=4,retail_texture=0;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 constexpr int kFxStripVertexFloats=18,kMaxFxStripVerts=8192;
 void log_warn(const char*,...){}
+bool software=false;bool UsesRetailSoftwareMeshLighting(){return software;}
+struct{float center_wx=0,center_wy=0,kcam_forward=2750;}recon;
 struct Result{int vertices,spans,drawn,dropped;std::vector<float> packed;};
 '''
 body=r'''
@@ -38,6 +42,8 @@ UPLOAD {for(const auto&s:spans){assert(s.first>=0&&s.first+s.count<=int(scratch.
 Entry Strip(int n){Entry e;e.segments.resize(n);return e;}
 SQuadDrawItem Tri(){SQuadDrawItem q;q.corner_count=3;return q;}
 int main(){
+ SQuadDrawItem grid;
+ for(int sw=0;sw<2;++sw)for(int native=0;native<2;++native)for(int enabled=0;enabled<2;++enabled){software=bool(sw);grid.retail_software_projection=bool(native);grid.retail_software_pixel_grid=bool(enabled);auto p=Pack({},{grid});for(int i=0;i<6;++i)assert(p.packed[i*18+16]==(native?(sw&&enabled?2.f:1.f):0.f));}
  SQuadDrawItem colored;colored.per_corner_color=true;
  for(int c=0;c<4;++c)for(int k=0;k<4;++k)colored.corner_color_rgba[c][k]=float(c*4+k)/16;
  auto vertices=Pack({},{colored});const int corners[6]={2,0,3,1,3,0};

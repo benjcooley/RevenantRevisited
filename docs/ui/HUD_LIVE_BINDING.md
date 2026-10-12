@@ -74,10 +74,9 @@ game frame when its state has one, else `InventoryImage` (`invslot.h`).
 
 **Objects answer the stat sheet.** The retail field resolver is an object
 virtual; the port gains `TObjectInstance::GetFieldText` with the
-TCharacter / TPlayer overrides, ported from the decompiles. Branches whose
-inputs the port's object model does not have yet (`statmod`,
-`attackpct`, `defensepct`, `damage`, `stealth`) return "not resolved", which is what retail does for an unknown
-field; each is listed in §6.
+TCharacter / TPlayer overrides, ported from the decompiles. `statmod`
+(the equipped-modifier list) returns "not resolved", which is what retail
+does for an unknown field; it is listed in §6.
 
 ## 4. Order of work
 
@@ -123,10 +122,8 @@ Also in the commit messages.
   plays.
 - **Armor.** `armor` is `ArmorValue()` (the player's: ACBonus plus the
   Protection of the armor worn, `0x00519850`), plus the main player's
-  DmgResMisc (vtable `+0x260`); the armor of the effects on the character
-  (`FUN_005407d0`, a list at `+0x170` the port doesn't have) is not
-  ported. The other unported resolver branches are in §6; they draw
-  nothing, as retail does for an unknown field.
+  DmgResMisc (vtable `+0x260`) and his spells' defense (the SpellManager
+  at `+0x170`, `0x005407d0`).
 - **Spell lookup.** A talisman code is matched to its spell.def variant
   exactly. `TSpellList::GetVariantDataByTalismans` compares talisman
   counts, not order, so it maps DEB ("Advanced healing") to BED ("Restore
@@ -167,12 +164,12 @@ the panes changed:
 
 | Field | Retail | Port |
 |---|---|---|
-| `train<stat>` | `"+"` when the stat is a pending level-up choice (`player[0xd8/0xd9]`, Level < 15) | `""` — the port has no level-up choice state |
-| `objdesc`, weapon type, `stmod<stat><n>` | pane-level strings / stat modifier | not ported (Page1 does not use them) |
+| `train<stat>` | `"+"` for the first level-up pick (`player+0x360`), another for the second below level 15 (`+0x364`) | `TStatPane::Resolve`, `TPlayer::LevelUpPick` |
+| `objdesc`, weapon type, `stmod<stat><n>` | pane-level strings / stat modifier | `TStatPane::Resolve` |
 | `class` | class name | `chardata->classdata->name` |
 | `maxhealth`, `maxfatigue`, `maxmana` | `+0x1d8/+0x1e0/+0x1e8` | `MaxHealth()` / `MaxFatigue()` / `MaxMana()` |
-| `armor` | `+0x2bc` plus two player bonuses (`FUN_005407d0`, `+0x260`) | `ArmorValue()` + DmgResMisc; `FUN_005407d0` not ported |
-| `damage`, `attackpct`, `defensepct`, `stealth` | combat formulas | not ported (inputs unidentified) |
+| `armor` | `+0x2bc` plus two player bonuses (`0x005407d0`, `+0x260`) | `ArmorValue()` + DmgResMisc + `SpellManager.GetDefense()` |
+| `damage`, `attackpct`, `defensepct`, `stealth` | combat formulas (`0x004d5260`) | `TCharacter::GetFieldText` (docs/ui/forensics/StatPane_RETAIL.md §5.2) |
 | `name` | localized name (dialog tag of the name's letters/digits, else the name) | same |
 | `objtype`, `objclass` | localized class name | same |
 | `statmod` | modifier list | not ported |

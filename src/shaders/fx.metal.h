@@ -391,11 +391,19 @@ vertex vs_out _main(vs_in in [[stage_in]],
         T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
         scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
     }
-    float scene_z_n  = (scene_z_wu - p.camz.x) / max(p.camz.y, 1e-6);
+    bool prelit_rgba5 = in.retail_metadata.x > 4.5;
+    float scene_z_n  = ((prelit_rgba5 ? in.uv.x : scene_z_wu) - p.camz.x) / max(p.camz.y, 1e-6);
     float zoom = max(p.camw.z, 0.0001);
     float persp_scale = ((!native_projection && p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = p.vp.x + S * persp_scale;
     float spy = p.vp.y + T * persp_scale;
+    // Native software RGB565 packets truncate XYZ before rasterization.
+    // +0.5 maps their integer sample lattice to GPU half-integer centers.
+    if ((prelit_rgba5 && native_projection) || in.retail_metadata.y > 1.5) {
+        spx = trunc(spx) + 0.5; spy = trunc(spy) + 0.5;
+    }
+    if (in.retail_metadata.y > 1.5)
+        scene_z_n = (trunc(scene_z_wu) - p.camz.x) / max(p.camz.y, 1e-6);
 
     int lmode = int(in.light_mode + 0.5);
     float3 lit = float3(1.0, 1.0, 1.0);
@@ -432,6 +440,14 @@ fragment float4 _main(vs_out in [[stage_in]],
                       texture2d<float> atlas [[texture(0)]],
                       sampler smp [[sampler(0)]]) {
     int mode = int(in.debug_mode + 0.5);
+    if (in.retail_texture > 4.5) {
+        // Original dynamic untextured RGBA5: interpolate, truncate, lookup.
+        float a5 = floor(clamp(in.color.a, 0.0, 31.0) + 0.00001);
+        float alpha = (a5 + 1.0) / 32.0;
+        float3 channels = floor(clamp(in.color.rgb, 0.0, 31.0) + 0.00001) * float3(1.0, 2.0, 1.0);
+        float3 source = floor(channels * alpha) / (alpha * float3(31.0, 63.0, 31.0));
+        return float4(source, alpha);
+    }
     float4 texel = atlas.sample(smp, in.uv);
     if (in.retail_texture > 0.5) {
         uint2 size = uint2(atlas.get_width(), atlas.get_height());

@@ -102,24 +102,27 @@ def build_port(output,asset,definitions):
 #include <stdexcept>
 #include "particlefx.h"
 #include "math3d.h"
+#include "retailsoftwaretransform.h"
 #undef min
 #undef max
 enum class EFxBlend:uint8_t {Alpha,Additive};
 enum class EFxDepthMode:uint8_t {TestNoWrite};
 enum class EFxDebugMode:uint8_t {Normal,SolidColor,FullTexture};
-struct SQuadDrawItem {float world_pos[4][3]{};float uv[4][2]{};
+struct SQuadDrawItem {bool retail_software_projection=false,retail_argb4444=false;uint8_t retail_texture=0;float world_pos[4][3]{};float uv[4][2]{};
     struct {TTextureHandle texture{};uint8_t blend{},depth_mode{};} key;
     EFxDebugMode debug_mode{};};
 struct TRenderer {SQuadDrawItem last;void SubmitFxQuad(const SQuadDrawItem& i){last=i;}};
 struct World {hmm_mat4 m;const hmm_mat4& Matrix()const{return m;}};
-struct TObjectInstance {World world;const World& Transform()const{return world;}};
+constexpr int OBJCLASS_EFFECT=25;bool StartupVfxNativeDomain=false;
+struct TObjectInstance {World world;S3DPoint position;int ObjClass()const{return -1;}uint32_t ObjId()const{return 0;}int GetFace()const{return 0;}const S3DPoint& Pos()const{return position;}const World& Transform()const{return world;}};
 struct TObjectComponent {
     virtual const char* ComponentName()const{return "fixture";}
     virtual void OnAttach(){};virtual void OnDetach(){};
     void RegisterUpdate(void(TObjectComponent::*)()){};void UnregisterUpdate(void(TObjectComponent::*)()){};
     void Update(){OnUpdate();}protected:virtual void OnUpdate(){}
 };
-struct TTime {static float DeltaTime(){return 1.0f/24.0f;}};
+struct TTime {static float DeltaTime(){return 1.0f/24.0f;}static int FrameCount(){return 100;}};
+#define log_info(...) ((void)0)
 void ParticleFatal(const std::string& error){throw std::runtime_error(error);}
 struct T3DImagery {S3DVertex vertices[4];int NumObjVerts(int)const{return 4;}
     void GetObjVerts(int,S3DVertex* dest,int,int,ERender3DVertex){std::memcpy(dest,vertices,sizeof(vertices));}};

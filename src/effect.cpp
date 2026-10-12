@@ -56,8 +56,11 @@
 //   REGISTER_3DANIMATOR("Speaker", TAmbSoundAnimator)
 
 #include "retailmeshlighting.h"
+#include "literalwatermesh.h"
+#include "fliesprofile.h"
 #include "revenant.h"
 #include "effect.h"
+#include "gameoptions.h"
 #include "fireballquad.h"
 #include "fireballring.h"
 #include "fireballcore.h"
@@ -69,6 +72,9 @@
 #include "mappane.h"
 #include "math3d.h"
 #include "retailsoftwaretransform.h"
+#include "cometsoftwarebounds.h"
+#include "testconfig.h"
+#include "effects/flamevariantspreview.h"
 #include "meshextract.h"   // M09b: ExtractSubMesh for I3D cylinder mesh
 #include "revutils.h"
 #include "logging.h"
@@ -1137,22 +1143,80 @@ static TGenericEffectBuilder g_effect_wavem_builder("WaveM");
 static TGenericEffectBuilder g_effect_speaker_builder("speaker");
 static TGenericEffectBuilder g_effect_speaker_caps_builder("Speaker");
 
-// REVSYNC: TEffect::Pulse @ 0x004de800 (vtable 0x005a85ac slot 0x110), the
-// part every effect runs: the object pulse (animator: tag sounds; script),
-// then an effect whose imagery state doesn't loop removes itself once that
-// animation has played out (CommandDone, which NextFrame sets at its last
-// frame). A script-added effect such as the opening's gvortex lives exactly
-// one run of its animation this way. The 1998 body's SetFrame(0) is gone in
-// retail.
-// REVSYNC-DIVERGENCE: the rest of 0x004de800 isn't ported here: the start
-// delay (+0x138: animation held until it counts down), a spell effect
-// following its invoker or target (+0xe4 spell), the light fade of effects
-// with a light definition (+0xd8, whose presence also skips the removal
-// above) and the timed life (+0x130: a countdown, +0x12c, that blinks the
-// effect out over its last +0x134 ticks). Script-added effects use none.
+// Original4de800: delayed animation gate precedes basePulse; direct FOLLOW,
+// light ramp and timed blinking follow it. Only the independently proved
+// Regeneration Strike binding enables these controls. Bone/polar attachment,
+// poison/ranged damage and other spell configurations remain unselected.
+void TEffect::ConfigureRetailSpellOwner(TObjectInstance* followed,int32_t duration,int32_t blink_ticks,int32_t start_delay)
+{
+    retail_follow=followed;retail_owner.Configure(duration,blink_ticks,start_delay);
+    if(followed)SetNotify(N_DELETING);
+}
+void TEffect::SetRetailOwnerFlags(uint32_t value)
+{
+    if(!(Flags()&OF_KILL) && (value&OF_KILL) && spell && spell->SpellData()) {
+        const auto& light=spell->SpellData()->light;
+        if(light.intensity>0 && light.fadeout>0)retail_owner.light_out=light.fadeout;
+    }
+    const bool was_light=IsLight();
+    ResetFlags(value);
+    // Original ResetFlags472e90 dispatches these callbacks on OF_LIGHT edges.
+    // Keep the restoration local to the selected owner path.
+    if(!was_light && IsLight())OnScreen();
+    else if(was_light && !IsLight())OffScreen();
+}
+void TEffect::KillRetailSpellOwner()
+{
+    SetRetailOwnerFlags(Flags()|OF_KILL);SetSpell(nullptr);
+}
+void TEffect::Notify(int32_t notify,void* ptr)
+{
+    TObjectInstance::Notify(notify,ptr);
+    if(!retail_owner.enabled)return;
+    auto* followed=retail_follow.Get();
+    if(followed && NOTIFY_DELETED(ptr,followed)) {
+        retail_follow.Clear();SetRetailOwnerFlags(Flags()|OF_KILL|OF_PULSE);
+    }
+}
+bool TEffect::BeginRetailOwnerPulse()
+{
+    uint32_t value=Flags();
+    if(retail_owner.Begin(value))return true;
+    ResetFlags(value);return false;
+}
+void TEffect::AdvanceRetailOwnerPulse()
+{
+    const auto* data=spell?spell->SpellData():nullptr;
+    const bool light_eligible=data && data->light.intensity>0;
+    if(RealTimeLight && !IsLight() && light_eligible) {
+        // Preserve the actual call order, including the original setters'
+        // OF_LIGHT early-outs before first activation. Do not invent a tint.
+        SColor color{};color.red=data->light.color[0];color.green=data->light.color[1];color.blue=data->light.color[2];
+        SetLightColor(color);SetLightIntensity(uint8_t(retail_owner.light_value));
+        SetLightMultiplier(uint8_t(data->light.mult));
+        S3DPoint offset={data->light.pos[0],data->light.pos[1],data->light.pos[2]};SetLightPos(offset);
+        SetRetailOwnerFlags(Flags()|OF_LIGHT);
+    } else if(!RealTimeLight && IsLight())SetRetailOwnerFlags(Flags()&~OF_LIGHT);
+    if(light_eligible)
+        SetLightIntensity(uint8_t(retail_owner.Light(data->light.intensity,data->light.fadein,data->light.fadeout)));
+    if(auto* followed=retail_follow.Get()) {
+        S3DPoint position=followed->Pos();
+        const auto* variant=spell?spell->VariantData():nullptr;
+        if(variant && variant->controldata) {
+            const auto* control=variant->controldata;
+            position.x+=control->pos[0];position.y+=control->pos[1];position.z+=control->pos[2];
+        }
+        SetPos(position,followed->GetLevel(),false);
+        uint32_t value=Flags();retail_owner.FollowTick(value);SetRetailOwnerFlags(value);
+    }
+    uint32_t value=Flags();retail_owner.LifetimeTick(value);SetRetailOwnerFlags(value);
+
+}
 void TEffect::Pulse()
 {
+    if(retail_owner.enabled && !BeginRetailOwnerPulse())return;
     TObjectInstance::Pulse();
+    if(retail_owner.enabled)AdvanceRetailOwnerPulse();
 
     // Retail preserves the owner's normal animation frames for all effects;
     // the old per-type whitelist kept the snapshot reset for other types.
@@ -1239,6 +1303,8 @@ void TFlipbookBillboardComponent::Submit(TRenderer& renderer, const TObjectInsta
 class TFlameQuadComponent final : public TFlipbookBillboardComponent
 {
   public:
+    void ConfigureRetailTexture(bool argb4444) { retail_argb4444_ = argb4444; }
+
     void ConfigureAuthoredQuad(T3DImagery& imagery, float scale)
     {
         if (imagery.NumObjVerts(0) != 4)
@@ -1266,9 +1332,19 @@ class TFlameQuadComponent final : public TFlipbookBillboardComponent
         if (Texture() == kInvalidTexture)
             return;
         SQuadDrawItem item = {};
-        const hmm_mat4& world = inst.Transform().Matrix();
+        // Base Flame uses the same authored ARGB4444 atlas as its colored
+        // variants. Select the source-format kernel from the loaded texture,
+        // including sector-less previews that have no retail type record.
+        const bool native = StartupVfxNativeDomain;
+        item.retail_texture = retail_argb4444_ ? 1 : 0;
+        item.retail_argb4444 = retail_argb4444_;
+        hmm_mat4 native_owner;
+        if(native){const auto& p=inst.Pos();BuildRetailSoftwareOwner(native_owner,p.x,p.y,p.z,uint8_t(inst.GetFace()));}
+        const hmm_mat4& world = native?native_owner:inst.Transform().Matrix();
+        item.retail_software_projection=native;
         float rect[4] = {};
         UvRect(rect);
+        if(native && TTime::FrameCount()<=40)log_info("[flame-phase] tick=%lld uv=%.9g,%.9g,%.9g,%.9g",(long long)TTime::FrameCount(),rect[0],rect[1],rect[2],rect[3]);
         if (DebugMode() == EFxDebugMode::FullTexture)
         {
             rect[0] = rect[1] = 0.0f;
@@ -1295,6 +1371,7 @@ class TFlameQuadComponent final : public TFlipbookBillboardComponent
 
   private:
     hmm_vec3 local_corners_[4] = {};
+    bool retail_argb4444_ = false;
 };
 
 DEFINE_BUILDER("FLAME", TFlameEffect)
@@ -1333,6 +1410,14 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
         return;
     }
 
+    // Imagery-only preview constructors do not have a CLASS type record.
+    const uint32_t flame_id = inst->ObjClass() == OBJCLASS_EFFECT ? inst->ObjId() : 0;
+    if ((flame_id==0x50ba373cu || flame_id==0x50ba373du) &&
+        !flame_variants_preview::Matches(inst,img3d)) {
+        log_warn("[flame] rejected exact colored variant resource id=%08x",flame_id);
+        return;
+    }
+
     S3DTex primary_tex = {};
     img3d->GetTexture(primary_bucket.texture_slot, &primary_tex);
     if (primary_tex.htexture == kInvalidTexture)
@@ -1361,6 +1446,7 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
                             primary_bucket.height * primary_bucket.scale,
                             primary_bucket.additive, true);
         flipbook->ConfigureAuthoredQuad(*img3d, primary_bucket.scale);
+        flipbook->ConfigureRetailTexture(RetailMeshTextureLighting(primary_tex.desc.pixelFormat) == 3);
         std::string expr_error;
         if (!flipbook->SetFrameExpression(primary_bucket.frame_expr.c_str(), &expr_error))
             ParticleFatal("[particle] FLAME frame expression compile failed: " + expr_error);
@@ -3607,7 +3693,7 @@ T3DImagery* LoadWaterImagery(const char* path, const char* tag)
 }
 
 bool LoadWaterQuad(T3DImagery* img, int32_t object,
-                   std::vector<S3DVertex>& vertices, TTextureHandle& texture)
+                   std::vector<S3DVertex>& vertices, TTextureHandle& texture, bool* argb4444=nullptr)
 {
     if (!img || object >= img->NumObjects() || img->NumObjVerts(object) != 4)
         return false;
@@ -3622,6 +3708,11 @@ bool LoadWaterQuad(T3DImagery* img, int32_t object,
         S3DTex tex = {};
         img->GetTexture(slot - 1, &tex);
         texture = tex.htexture;
+        if(argb4444) {
+            const auto& f=tex.desc.pixelFormat;
+            *argb4444=f.dwRGBBitCount==16 && f.dwRBitMask==0x0f00 &&
+                f.dwGBitMask==0x00f0 && f.dwBBitMask==0x000f && f.dwRGBAlphaBitMask==0xf000;
+        }
         return texture != kInvalidTexture;
     }
     return false;
@@ -3629,12 +3720,20 @@ bool LoadWaterQuad(T3DImagery* img, int32_t object,
 
 void SubmitWaterQuad(TObjectInstance& owner, const std::vector<S3DVertex>& vertices,
                      TTextureHandle texture, const hmm_vec3& local_pos,
-                     const hmm_vec3& scale, EFxDebugMode debug_mode, int32_t atlas_cell = -1)
+                     const hmm_vec3& scale, EFxDebugMode debug_mode, int32_t atlas_cell = -1,
+                     bool native_domain=false, bool argb4444=false)
 {
     if (!Renderer || texture == kInvalidTexture || vertices.size() != 4)
         return;
     SQuadDrawItem item = {};
-    const hmm_mat4& world = owner.Transform().Matrix();
+    hmm_mat4 native_owner;
+    if(native_domain) {
+        const auto& p=owner.Pos();
+        BuildRetailSoftwareOwner(native_owner,p.x,p.y,p.z,uint8_t(owner.GetFace()));
+    }
+    const hmm_mat4& world = native_domain?native_owner:owner.Transform().Matrix();
+    item.retail_software_projection=native_domain;
+    item.retail_argb4444=native_domain && argb4444;
     for (int32_t i = 0; i < 4; ++i)
     {
         const hmm_vec3& v = vertices[size_t(i)].pos;
@@ -3721,8 +3820,8 @@ void TRippleEffect::Initialize()
 {
     if (GetComponent<TFlipbookBillboardComponent>()) return;
     auto* img = dynamic_cast<T3DImagery*>(GetImagery());
-    if (!LoadWaterQuad(img, 0, ring_vertices_, ring_texture_) ||
-        !LoadWaterQuad(img, 1, splash_vertices_, splash_texture_))
+    if (!LoadWaterQuad(img, 0, ring_vertices_, ring_texture_, &ring_argb4444_) ||
+        !LoadWaterQuad(img, 1, splash_vertices_, splash_texture_, &splash_argb4444_))
     {
         log_error("[ripple] map instance lacks required authored ring/splash asset");
         return;
@@ -3747,8 +3846,8 @@ TRippleEffect* TRippleEffect::SpawnForTest(const S3DPoint& origin)
     ripple->SetMapIndex(MapPane.MakeIndex());
     ripple->SetLength(96);
     ripple->ActivateComponents();
-    if (!LoadWaterQuad(img, 0, ripple->ring_vertices_, ripple->ring_texture_) ||
-        !LoadWaterQuad(img, 1, ripple->splash_vertices_, ripple->splash_texture_))
+    if (!LoadWaterQuad(img, 0, ripple->ring_vertices_, ripple->ring_texture_, &ripple->ring_argb4444_) ||
+        !LoadWaterQuad(img, 1, ripple->splash_vertices_, ripple->splash_texture_, &ripple->splash_argb4444_))
     {
         log_error("[ripple] required ring/splash quad or texture unavailable");
         delete ripple;
@@ -3802,6 +3901,7 @@ void TRippleEffect::Advance(double seconds)
                     if (auto* child = SpawnForTest(landing))
                     {
                         child->SetLength(len / 2);
+                        child->SetNativeDomain(native_domain_);
                         spawned_ripples_.emplace_back(child);
                     }
                     drop.dead = true;
@@ -3819,12 +3919,12 @@ void TRippleEffect::Submit(EFxDebugMode debug_mode)
         const float scale = .5f + float(double(frameon_) + tick_fraction_) / 16.0f;
         const int32_t cell = kRippleFrameOf[std::clamp(15 - ripframe_, 0, 15)];
         SubmitWaterQuad(*this, ring_vertices_, ring_texture_, hmm_vec3{},
-                        hmm_vec3{scale, scale, 1.0f}, debug_mode, cell);
+                        hmm_vec3{scale, scale, 1.0f}, debug_mode, cell, native_domain_, ring_argb4444_);
         for (const auto& drop : splash_drops_)
             if (!drop.dead)
                 SubmitWaterQuad(*this, splash_vertices_, splash_texture_,
                                 WaterDropPosition(drop.pos, drop.vel, tick_fraction_),
-                                hmm_vec3{.25f,.25f,.25f}, debug_mode);
+                                hmm_vec3{.25f,.25f,.25f}, debug_mode, -1, native_domain_, splash_argb4444_);
     }
     for (auto& child : spawned_ripples_) child->Submit(debug_mode);
 }
@@ -4275,7 +4375,7 @@ TDripEffect::~TDripEffect() = default;
 void TDripEffect::Initialize()
 {
     if (GetComponent<TFlipbookBillboardComponent>()) return;
-    if (!LoadWaterQuad(dynamic_cast<T3DImagery*>(GetImagery()), 0, drop_vertices_, drop_texture_))
+    if (!LoadWaterQuad(dynamic_cast<T3DImagery*>(GetImagery()), 0, drop_vertices_, drop_texture_, &drop_argb4444_))
     {
         log_error("[drip] map instance lacks required authored droplet asset");
         return;
@@ -4307,7 +4407,7 @@ TDripEffect* TDripEffect::SpawnForTest(const S3DPoint& origin)
     drip->ForcePos(origin);
     drip->SetMapIndex(MapPane.MakeIndex());
     drip->ActivateComponents();
-    if (!LoadWaterQuad(img, 0, drip->drop_vertices_, drip->drop_texture_))
+    if (!LoadWaterQuad(img, 0, drip->drop_vertices_, drip->drop_texture_, &drip->drop_argb4444_))
     {
         log_error("[drip] required authored droplet quad or texture unavailable");
         delete drip;
@@ -4351,6 +4451,7 @@ void TDripEffect::Advance(double seconds)
                     if (auto* ripple = TRippleEffect::SpawnForTest(landing))
                     {
                         ripple->SetLength(ripplesize);
+                        ripple->SetNativeDomain(native_domain_);
                         spawned_ripples_.emplace_back(ripple);
                     }
                     dead_ = true;
@@ -4369,7 +4470,7 @@ void TDripEffect::Submit(EFxDebugMode debug_mode)
     if (!dead_)
         SubmitWaterQuad(*this, drop_vertices_, drop_texture_,
                         WaterDropPosition(drop_pos_, drop_vel_, tick_fraction_),
-                        hmm_vec3{.3f,.3f,.3f}, debug_mode);
+                        hmm_vec3{.3f,.3f,.3f}, debug_mode, -1, native_domain_, drop_argb4444_);
     for (auto& ripple : spawned_ripples_) ripple->Submit(debug_mode);
 }
 
@@ -8818,7 +8919,16 @@ TPhotonEffect_Bespoke* TPhotonEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoin
 void TPhotonEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
     constexpr double step=1.0/24.0;sim_accum_+=TTime::DeltaTime();
-    while(sim_accum_+1e-9>=step) {sim_accum_-=step;if(IsAlive())AdvanceTick();}
+    while(sim_accum_+1e-9>=step) {
+        sim_accum_-=step;
+        if(IsAlive()) {
+            AdvanceTick();
+            if(getenv("REV_VFX_REVIEW_CLOCK_TRACE") && !stricmp(StartupTestMode,"vfx-review"))
+                log_info("[vfx-photon-clock] object=%d time=%.9f render=%lld state=%d frame0=%d active=%d ready=%d",
+                    GetMapIndex(),TTime::Time(),(long long)TTime::FrameCount(),missile_.state,
+                    particles_.frame[0],particles_.active,int(particles_.ready));
+        }
+    }
     Submit(debug_mode);
 }
 
@@ -10522,6 +10632,7 @@ TLiteralWaterfallAnimatorBuilder g_literal_waterfall_animator_builder;
 
 TWaterFallEffect_Bespoke::~TWaterFallEffect_Bespoke()
 {
+    if (Renderer && software_mesh_) Renderer->ReleaseMeshAssetRef(software_mesh_);
     delete[] drops_;
     drops_ = nullptr;
 }
@@ -10583,6 +10694,7 @@ void TWaterFallEffect_Bespoke::Initialize(bool attach_runtime_component)
     auto* imagery = dynamic_cast<T3DImagery*>(GetImagery());
     // Retry lazily without RNG draws until final owner imagery is uploaded.
     if (!LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    exact_water_mesh_ = literal_water_mesh::Matches(imagery);
     S3DObj object = {};
     imagery->GetObject(0, &object);
     if (object.material >= 0 && object.material < imagery->NumMaterials())
@@ -10656,7 +10768,9 @@ void TWaterFallEffect_Bespoke::Advance(double seconds)
 void TWaterFallEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
 {
     if (!Renderer || !initialized_ || (Flags() & OF_KILL)) return;
-    const hmm_mat4& world = Transform().Matrix();
+    const hmm_mat4& world = native_domain_ ? native_owner_ : Transform().Matrix();
+    const bool normal_mesh = exact_water_mesh_ && Renderer->UsesRetailSoftwareMeshLighting() && debug_mode == EFxDebugMode::Normal;
+    if (normal_mesh && !software_mesh_) software_mesh_ = literal_water_mesh::Cache(*Renderer, dynamic_cast<T3DImagery*>(GetImagery()), texture_);
     for (int32_t i = 0; i < numdrops_; ++i)
     {
         // Source Render skips delayed and reset drops before any lighting.
@@ -10669,6 +10783,10 @@ void TWaterFallEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         const int32_t face_degrees = -(GetFace() * 360) / 256;
         MtxRotateZ(&local, float(double(face_degrees) * TORADIAN));
         MtxTranslate(&local, &drops_[i].pos);
+        if (normal_mesh) {
+            if (software_mesh_) { hmm_mat4 composed={}; MtxMultiply(&composed,&local,&world); literal_water_mesh::Submit(*Renderer,software_mesh_,composed,native_domain_); }
+            continue;
+        }
         SQuadDrawItem item = {};
         for (int32_t corner = 0; corner < 4; ++corner)
         {
@@ -10695,6 +10813,13 @@ void TWaterFallEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         item.debug_mode = debug_mode;
         Renderer->SubmitFxQuad(item);
     }
+}
+
+void TWaterFallEffect_Bespoke::SetNativeDomain(bool enabled)
+{
+    native_domain_ = enabled && exact_water_mesh_ && runtime_id_ == 0;
+    if (native_domain_) { const auto p=Pos(); BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(GetFace())); }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Waterfall",int(native_domain_));
 }
 
 void TWaterFallEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
@@ -10743,6 +10868,7 @@ TLiteralWaterAnimatorBuilder g_literal_water_animator_builder;
 
 TWaterEffect_Bespoke::~TWaterEffect_Bespoke()
 {
+    if (Renderer && software_mesh_) Renderer->ReleaseMeshAssetRef(software_mesh_);
     delete[] drops_;
     drops_ = nullptr;
 }
@@ -10798,6 +10924,7 @@ void TWaterEffect_Bespoke::Initialize(bool attach_runtime_component)
     auto* imagery = dynamic_cast<T3DImagery*>(GetImagery());
     // Do not allocate or consume RNG while the final imagery is unavailable.
     if (!LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    exact_water_mesh_ = literal_water_mesh::Matches(imagery);
     S3DObj object = {};
     imagery->GetObject(0, &object);
     if (object.material >= 0 && object.material < imagery->NumMaterials())
@@ -10898,7 +11025,9 @@ void TWaterEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     if (!Renderer || !literal_geometry_ || !drops_ ||
         texture_ == kInvalidTexture || authored_vertices_.size() != 4 ||
         (Flags() & OF_KILL)) return;
-    const hmm_mat4& world = Transform().Matrix();
+    const hmm_mat4& world = native_domain_ ? native_owner_ : Transform().Matrix();
+    const bool normal_mesh = exact_water_mesh_ && Renderer->UsesRetailSoftwareMeshLighting() && debug_mode == EFxDebugMode::Normal;
+    if (normal_mesh && !software_mesh_) software_mesh_ = literal_water_mesh::Cache(*Renderer, dynamic_cast<T3DImagery*>(GetImagery()), texture_);
     const float fraction = float(std::clamp(sim_accum_seconds_ / TTime::LegacyFrameSeconds,
                                           0.0, 1.0));
     for (int32_t i = 0; i < numdrops_; ++i)
@@ -10912,6 +11041,10 @@ void TWaterEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
                                    drops_[i].pos.Y + drops_[i].vel.Y * fraction,
                                    drops_[i].pos.Z + drops_[i].vel.Z * fraction};
         MtxTranslate(&local, &position);
+        if (normal_mesh) {
+            if (software_mesh_) { hmm_mat4 composed={}; MtxMultiply(&composed,&local,&world); literal_water_mesh::Submit(*Renderer,software_mesh_,composed,native_domain_); }
+            continue;
+        }
         SQuadDrawItem item = {};
         for (int32_t corner = 0; corner < 4; ++corner)
         {
@@ -10935,6 +11068,15 @@ void TWaterEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
         item.debug_mode = debug_mode;
         Renderer->SubmitFxQuad(item);
     }
+}
+
+void TWaterEffect_Bespoke::SetNativeDomain(bool enabled)
+{
+    // Only the isolated preview calls this opt-in; live map components stay
+    // in the common world domain and use the ordinary scene camera.
+    native_domain_ = enabled && exact_water_mesh_ && !GetComponent<TFlipbookBillboardComponent>();
+    if (native_domain_) { const auto p=Pos(); BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(GetFace())); }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Water",int(native_domain_));
 }
 
 void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
@@ -11025,234 +11167,87 @@ void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 // Constants are snapshot-only (no retail recon for any of W06/W04/W05).
 
 // =========================================================================
-// W06 — TFogEffect_Bespoke
+// Fog: original4e84c0/4e86f0/4e8b10 prelit animated authored grid.
 // =========================================================================
-//
-// Faithful direct port of TFogAnimator::Initialize/Animate/Render
-// (src/effect_old.cpp:6621-6750). Snapshot uses a 36-vertex grid (6x6)
-// over a scl=7.475 quad; 20 "anchored" border vertices are frozen at
-// (c=0.7, a=0.125) and the remaining 16 inner vertices random-walk both
-// brightness/alpha and position with bounded velocity envelopes.
-// SetBlendState -> Alpha (preserved AS WRITTEN; sister atmospheric
-// overlays use Alpha per W2A batch gotcha).
-//
-// First-pass bespoke collapses the 36-vertex grid into a single ground-
-// aligned (WorldXY) Alpha billboard whose color/alpha is the mean of
-// the inner-vert random walk. The per-vertex random walks (color/alpha
-// drift, velocity bounds, anchored-vs-free distinction) are preserved
-// verbatim — the visual breathes at the same cadence. Full triangulated
-// grid is a follow-up upgrade.
-
 TFogEffect_Bespoke* TFogEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    static const char* kFogCandidates[] = {
-        "Misc\\Fog.I3D",     // the only fog.i3d on disk lives here
-        "Misc\\fog.i3d",
-        "Magic\\fog.i3d",    // batch task spec; not present in the snapshot data
-    };
-
-    auto* fog = new TFogEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
-    fog->ForcePos(origin);
-    fog->SetMapIndex(MapPane.MakeIndex());
-    fog->ActivateComponents();
-
-    fog->texture_ = TryLoadMagicTexture(kFogCandidates,
-                                        int32_t(sizeof(kFogCandidates) / sizeof(*kFogCandidates)),
-                                        fog->uv_rect_, "fog");
-
-    // Fog isn't auto-loaded by Class.Def the way Mist is (Class.Def has
-    // "Fog" "Misc\Fog.I3D" but no spell calls Fog at boot in this build),
-    // so TryLoadMagicTexture's FindImagery-only path returns -1. Fall
-    // back to RegisterImagery (resource pack lookup) for each candidate,
-    // matching the TFlameEffect_Bespoke / TFireSwarm pattern.
-    if (fog->texture_ == kInvalidTexture)
-    {
-        for (size_t i = 0; i < sizeof(kFogCandidates) / sizeof(*kFogCandidates); ++i)
-        {
-            int32_t img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFogCandidates[i]));
-            if (img_id < 0)
-                continue;
-            TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
-            if (!base)
-                continue;
-            T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
-            if (!img3d)
-            {
-                TObjectImagery::FreeImagery(base);
-                continue;
-            }
-            (void)img3d->NumObjects();
-            if (img3d->NumTextures() <= 0)
-                continue;
-            S3DTex tex = {};
-            img3d->GetTexture(0, &tex);
-            if (tex.htexture == kInvalidTexture)
-                continue;
-            fog->uv_rect_[0] = 0.0f;
-            fog->uv_rect_[1] = 0.0f;
-            fog->uv_rect_[2] = 1.0f;
-            fog->uv_rect_[3] = 1.0f;
-            fog->texture_ = tex.htexture;
-            log_info("[fog] resolved imagery='%s' via RegisterImagery tex=%u",
-                     kFogCandidates[i], tex.htexture);
-            break;
-        }
-    }
-
-    // Snapshot effect_old.cpp:6628-6657 — Initialize each of FOG_VERTEX
-    // verts. The 20 "anchored" indices are frozen at (c=0.7, a=0.125,
-    // dpos=0). The remaining 16 inner verts get random c, a, dpos in
-    // their snapshot envelopes.
-    static const int32_t anchored_ids[] = {
-        0, 4, 6, 8, 10, 3, 13, 19, 25,
-        31, 30, 32, 33, 34, 35, 29, 23,
-        17, 11, 1
-    };
-    constexpr int32_t kNumAnchored = int32_t(sizeof(anchored_ids) / sizeof(*anchored_ids));
-    for (int32_t i = 0; i < kFogVertex; ++i)
-    {
-        SFogVert& v = fog->verts_[i];
-        v.anchored = false;
-        for (int32_t a = 0; a < kNumAnchored; ++a)
-        {
-            if (anchored_ids[a] == i)
-            {
-                v.anchored = true;
-                break;
-            }
-        }
-        if (v.anchored)
-        {
-            v.c        = 0.7f;
-            v.a        = 0.125f;
-            v.dpos.X   = 0.0f;
-            v.dpos.Y   = 0.0f;
-            v.dpos.Z   = 0.0f;
-        }
-        else
-        {
-            v.c        = float(random(400, 1000)) / 1000.0f;
-            v.a        = float(random(100, 400)) / 1000.0f;
-            v.dpos.X   = float(random(-50, 50)) / 100.0f;
-            v.dpos.Y   = float(random(-50, 50)) / 100.0f;
-            v.dpos.Z   = float(random(-50, 50)) / 100.0f;
-        }
-        v.velocity.X = 0.0f;
-        v.velocity.Y = 0.0f;
-        v.velocity.Z = 0.0f;
-        v.cv = 0.0f;
-        v.av = 0.0f;
-    }
-
-    log_info("[fog-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
-             "tex=%u verts=%d (anchored=%d, drifting=%d)",
-             fog->GetMapIndex(), origin.x, origin.y, origin.z,
-             fog->texture_, kFogVertex, kNumAnchored, kFogVertex - kNumAnchored);
+    auto* img=LoadWaterImagery("Misc\\Fog.I3D","Fog");
+    if (!img || img->NumObjects()!=1 || img->NumVerts()!=36 ||
+        img->NumFaces()!=50 || img->NumTextures()!=0) return nullptr;
+    auto* fog=new TFogEffect_Bespoke(img);
+    fog->ForcePos(origin); fog->SetMapIndex(MapPane.MakeIndex()); fog->ActivateComponents();
+    img->GetObjVerts(0,fog->vertices_);
+    img->GetObjFaces(0,fog->faces_);
+    const auto* indices=reinterpret_cast<const uint16_t*>(fog->faces_);
+    for(int i=0;i<150;++i) if(indices[i]>=36) {delete fog;return nullptr;}
+    fog->state_.Initialize([](int low,int high){return random(low,high);});
+    log_info("[fog-asset] objectverts=%d objectfaces=%d p0=(%.9g,%.9g,%.9g) firstface=(%u,%u,%u)",
+        img->NumObjVerts(0),img->NumObjFaces(0),fog->vertices_[0].pos.X,fog->vertices_[0].pos.Y,fog->vertices_[0].pos.Z,
+        unsigned(indices[0]),unsigned(indices[1]),unsigned(indices[2]));
+    log_info("[fog] authored36-vertex/50-triangle prelit grid, no texture; origin=(%d,%d,%d) rng_draws=%llu",
+             origin.x,origin.y,origin.z,static_cast<unsigned long long>(RandomDraws()));
     return fog;
 }
-
+void TFogEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_=enabled;
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Fog",int(enabled));
+}
+void TFogEffect_Bespoke::Advance(double seconds)
+{
+    if(!std::isfinite(seconds)||seconds<=0) return;
+    state_.Advance(seconds,[](int low,int high){return random(low,high);});
+}
+void TFogEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if(!Renderer) return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) {const auto p=Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace()));}
+    const bool native_prelit = native_domain_ && Renderer->UsesRetailSoftwareMeshLighting();
+    hmm_vec3 points[36];
+    float colors[36][4];
+    for(int i=0;i<36;++i) {
+        const auto& v=state_.vertices[i];
+        const auto& original=vertices_[i];
+        hmm_vec3 local{{(original.pos.X+v.offset[0])*retail_fog::Scale,
+                       (original.pos.Y+v.offset[1])*retail_fog::Scale,original.pos.Z+v.offset[2]}};
+        MtxTransform(&owner,&local,&points[i]);
+        // Original Render packs8-bit color, FVF_LVERTEX converts to RGB5/A5.
+        // The untextured alpha lookup uses (A5+1)/32 and writes depth even
+        // though Scene mode2 requests ZWRITE=false. GPU interpolation remains
+        // higher precision than the original scanline/RGB565 framebuffer.
+        // The explicit native policy carries raw RGBA5 to its quantized fragment path.
+        const int color=int(double(v.c)*255.0)>>3;
+        const int alpha=int(double(v.a)*255.0)>>3;
+        colors[i][0]=colors[i][2]=native_prelit?float(color):float(color)/31.0f;
+        colors[i][1]=native_prelit?float(color):float(color*2)/63.0f;
+        colors[i][3]=native_prelit?float(alpha):float(alpha+1)/32.0f;
+    }
+    const auto* indices=reinterpret_cast<const uint16_t*>(faces_);
+    if(state_.ticks==2) log_info("[fog-draw] firstworld=(%.9g,%.9g,%.9g) lastworld=(%.9g,%.9g,%.9g) rgba0=(%.9g,%.9g,%.9g,%.9g)",
+        points[0].X,points[0].Y,points[0].Z,points[35].X,points[35].Y,points[35].Z,
+        colors[0][0],colors[0][1],colors[0][2],colors[0][3]);
+    for(int face=0;face<50;++face) {
+        SQuadDrawItem draw{};draw.corner_count=3;draw.per_corner_color=true;
+        draw.key.texture=Renderer->WhiteTextureHandle(); // identity carrier for untextured vertex color
+        draw.key.blend=uint8_t(EFxBlend::Alpha);draw.key.depth_mode=uint8_t(EFxDepthMode::TestWrite);
+        draw.retail_software_projection=native_domain_;draw.retail_prelit_rgba5=native_prelit;draw.debug_mode=debug_mode;
+        for(int c=0;c<3;++c) {
+            const int i=indices[face*3+c];
+            std::memcpy(draw.world_pos[c],points[i].Elements,3*sizeof(float));
+            std::memcpy(draw.corner_color_rgba[c],colors[i],4*sizeof(float));
+        }
+        Renderer->SubmitFxQuad(draw);
+    }
+}
 void TFogEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
-    if (!Renderer)
-        return;
-
-    // 24Hz sim-tick gate (snapshot was ungated; modern fix per
-    // feedback_framerate_independent_anim).
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kFogSimTickMs))
-    {
-        sim_accum_ms_ -= double(kFogSimTickMs);
-
-        // Snapshot effect_old.cpp:6664-6698 — per-vert Animate. Anchored
-        // verts skip; drifting verts random-walk color/alpha/position.
-        for (int32_t i = 0; i < kFogVertex; ++i)
-        {
-            SFogVert& v = verts_[i];
-            if (v.anchored)
-                continue;
-            v.cv += float(random(-10, 10)) / 1000.0f;
-            v.av += float(random(-10, 10)) / 1000.0f;
-
-            v.c += v.cv;
-            if (v.cv > 1.0f || v.cv < 0.4f)
-                v.cv = 0.0f;
-            v.c = min(1.0f, max(0.4f, v.c));
-            v.a += v.av;
-            if (v.av > 0.4f || v.av < 0.1f)
-                v.av = 0.0f;
-            v.a = min(0.4f, max(0.1f, v.a));
-
-            v.velocity.X += float(random(-10, 10)) / 1000.0f;
-            v.velocity.Y += float(random(-10, 10)) / 1000.0f;
-            v.velocity.Z += float(random(-10, 10)) / 1000.0f;
-
-            v.dpos.X += v.velocity.X;
-            if (v.dpos.X < -0.5f || v.dpos.X > 0.5f)
-                v.velocity.X = 0.0f;
-            v.dpos.X = min(0.5f, max(-0.5f, v.dpos.X));
-            v.dpos.Y += v.velocity.Y;
-            if (v.dpos.Y < -0.5f || v.dpos.Y > 0.5f)
-                v.velocity.Y = 0.0f;
-            v.dpos.Y = min(0.5f, max(-0.5f, v.dpos.Y));
-            v.dpos.Z += v.velocity.Z;
-            if (v.dpos.Z < -0.5f || v.dpos.Z > 0.5f)
-                v.velocity.Z = 0.0f;
-            v.dpos.Z = min(0.5f, max(-0.5f, v.dpos.Z));
-        }
-    }
-
-    // --- Render port (effect_old.cpp:6701-6736). SetBlendState -> Alpha
-    // (preserved AS WRITTEN). Snapshot sets per-vert color = D3DRGBA(c,c,c,a)
-    // and renders the 36-vert grid at scl=7.475. First-pass collapses
-    // to a single billboard at the mean inner-vert color.
-    if (texture_ == kInvalidTexture)
-        return;
-
-    static const bool s_fog_logged_first_submit = []{
-        log_info("[fog-bespoke] first submit (TickAndSubmit running)");
-        return true;
-    }();
-    (void)s_fog_logged_first_submit;
-
-    // Mean of the 16 inner (drifting) verts — captures the animated
-    // brightness/alpha breathing.
-    float sum_c = 0.0f;
-    float sum_a = 0.0f;
-    int32_t n = 0;
-    for (int32_t i = 0; i < kFogVertex; ++i)
-    {
-        if (verts_[i].anchored)
-            continue;
-        sum_c += verts_[i].c;
-        sum_a += verts_[i].a;
-        ++n;
-    }
-    const float mean_c = (n > 0) ? sum_c / float(n) : 0.7f;
-    const float mean_a = (n > 0) ? sum_a / float(n) : 0.125f;
-
-    const S3DPoint& base = Pos();
-    SBillboardDrawItem item = {};
-    item.size_wu[0] = kFogBaseSizeWu;   // snapshot scl=7.475 along X/Y
-    item.size_wu[1] = kFogBaseSizeWu;
-    item.color_rgba[0] = mean_c;        // D3DRGBA(c, c, c, a) -- gray
-    item.color_rgba[1] = mean_c;
-    item.color_rgba[2] = mean_c;
-    item.color_rgba[3] = mean_a;
-    item.uv_rect[0] = uv_rect_[0];
-    item.uv_rect[1] = uv_rect_[1];
-    item.uv_rect[2] = uv_rect_[2];
-    item.uv_rect[3] = uv_rect_[3];
-    item.key.texture     = texture_;
-    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-    item.key.blend       = uint8_t(EFxBlend::Alpha);   // SetBlendState -> Alpha
-    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-    item.light_mode      = EFxLightMode::Unlit;
-    item.orientation     = EFxBillboardOrientation::WorldXY;   // ground-pinned overlay
-    item.debug_mode      = debug_mode;
-    item.world_pos[0]    = float(base.x);
-    item.world_pos[1]    = float(base.y);
-    item.world_pos[2]    = float(base.z);
-    Renderer->SubmitFxBillboard(item);
+    Advance(TTime::DeltaTime());
+    if(state_.ticks==2 || state_.ticks==30 || state_.ticks==120)
+        log_info("[fog-phase] tick=%d rng_draws=%llu c2=%.9g a2=%.9g offset2=(%.9g,%.9g,%.9g)",
+            state_.ticks,static_cast<unsigned long long>(RandomDraws()),state_.vertices[2].c,state_.vertices[2].a,
+            state_.vertices[2].offset[0],state_.vertices[2].offset[1],state_.vertices[2].offset[2]);
+    Submit(debug_mode);
 }
 
 // =========================================================================
@@ -11491,165 +11486,89 @@ constexpr const char* kFlyBespokeImageryPath = "Misc\\Flies.I3D";
 // hard-bounce-back (pos -= velocity*2) when over the cube edge. Render is
 // SetBlendState() (Alpha) with cull=NONE — billboards already no-cull.
 
+namespace {
+TWaterReferenceBuilder<TFlyEffect_Bespoke> g_flies_reference_builder("Flies");
+TWaterReferenceAnimatorBuilder<TFlyEffect_Bespoke> g_flies_reference_animator_builder("Flies");
+}
+
+void TFlyEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if(initialized_)return;
+    if(attach_runtime_component && (ObjClass()!=OBJCLASS_EFFECT || ObjId()!=retail_flies::Id || GetMapIndex()<=0 || (Flags()&OF_KILL)))return;
+    auto* imagery=dynamic_cast<T3DImagery*>(GetImagery());
+    if(!retail_flies::Matches(imagery))return;
+    S3DTex texture={};imagery->GetTexture(0,&texture);
+    if(texture.htexture==kInvalidTexture)return;
+    texture_=texture.htexture;imagery->GetObjVerts(0,vertices_,0,0);
+    // Actual4e8180: all20 records are seeded, including dormant particles.
+    for(auto&fly:flies_) {
+        fly.pos={float(random(-30,30)),float(random(-30,30)),float(random(-30,30))};
+        fly.scl={.3f,.3f,.3f};fly.rot={0,0,0};fly.used=false;
+    }
+    initialized_=true;runtime_owned_=attach_runtime_component;
+    if(attach_runtime_component) {
+        auto component=std::make_unique<TWaterReferenceComponent<TFlyEffect_Bespoke>>();
+        component->Configure(texture_,8,8,1,1,1,1.0f,1.0f,false,true);
+        AddComponent(std::move(component));
+    }
+    log_info("[flies-runtime] initialized id=%08x map_index=%d particles=20 texture=%u runtime=%d exact_profile=1",attach_runtime_component?ObjId():0u,GetMapIndex(),texture_,int(attach_runtime_component));
+}
+
 TFlyEffect_Bespoke* TFlyEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    SLoadedImagery loaded = SparkleLoadImagery(kFlyBespokeImageryPath, "fly");
-    if (!loaded.img3d)
-        return nullptr;
+    auto* imagery=LoadWaterImagery(kFlyBespokeImageryPath,"flies");
+    if(!imagery)return nullptr;
+    auto* fly=new TFlyEffect_Bespoke(imagery);fly->ForcePos(origin);fly->SetMapIndex(MapPane.MakeIndex());
+    fly->Initialize(false);if(!fly->initialized_){delete fly;return nullptr;}return fly;
+}
 
-    auto* fly = new TFlyEffect_Bespoke(loaded.base);
-    fly->ForcePos(origin);
-    fly->SetMapIndex(MapPane.MakeIndex());
-    fly->ActivateComponents();
-
-    const int32_t num_obj = loaded.img3d->NumObjects();
-    const int32_t num_tex = loaded.img3d->NumTextures();
-    if (num_obj < 1 || num_tex <= 0)
-    {
-        log_error("[fly] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
-                  num_obj, num_tex);
-        delete fly;
-        return nullptr;
+void TFlyEffect_Bespoke::Advance(double seconds)
+{
+    if(!initialized_ || (Flags()&OF_KILL) || !std::isfinite(seconds) || seconds<=0)return;
+    tick_seconds_+=seconds;
+    while(tick_seconds_+1e-12>=TTime::LegacyFrameSeconds) {
+        tick_seconds_-=TTime::LegacyFrameSeconds;SetCommandDone(false);
+        int32_t chance=random(0,1);
+        // Actual4e8280 keeps moving dormant particles and consumes all60
+        // velocity draws each tick, before or after a staged activation.
+        for(auto&fly:flies_) {
+            if(!fly.used && chance){fly.used=true;chance=0;}
+            const hmm_vec3 velocity={float(random(-2,2)),float(random(-2,2)),float(random(-2,2))};
+            fly.pos+=velocity;
+            for(int axis=0;axis<3;++axis)if(fly.pos.Elements[axis]>30.0f || fly.pos.Elements[axis]<-30.0f)fly.pos.Elements[axis]-=velocity.Elements[axis]+velocity.Elements[axis];
+        }
+        ++ticks_;
     }
+}
 
-    // Snapshot TParticleSystem uses GetObject(0) (the single fly sprite).
-    const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, 0);
-    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
-    S3DTex tex = {};
-    loaded.img3d->GetTexture(slot, &tex);
-    fly->texture_ = tex.htexture;
-    SparkleResolveSubObjUv(loaded.img3d, 0, fly->uv_rect_);
-    fly->size_wu_ = kFlyBespokeBaseSizeWu;
-    if (fly->texture_ == kInvalidTexture)
-    {
-        log_error("[fly] SpawnForTest: sub-object 0 texture unresolved");
-        delete fly;
-        return nullptr;
+void TFlyEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if(!Renderer || !initialized_ || texture_==kInvalidTexture || (Flags()&OF_KILL))return;
+    const auto&owner=native_domain_?native_owner_:Transform().Matrix();
+    SQuadDrawItem item={};item.key.texture=texture_;item.key.blend=uint8_t(EFxBlend::Alpha);item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);item.light_mode=EFxLightMode::Unlit;item.retail_argb4444=true;item.retail_software_projection=native_domain_;item.debug_mode=debug_mode;
+    for(const auto&fly:flies_) {
+        if(!fly.used)continue;
+        // Whole original TParticleSystem::Render(false,false): local rotations,
+        // fixed tip/spin, scale, raw relative translation, then real owner.
+        hmm_mat4 local={};MtxClear(&local);MtxRotateX(&local,float(fly.rot.X*TORADIAN));MtxRotateY(&local,float(fly.rot.Y*TORADIAN));MtxRotateZ(&local,float(fly.rot.Z*TORADIAN));MtxRotateX(&local,-float(M_PI/2.0));MtxRotateZ(&local,-float(M_PI/4.0));MtxScale(&local,&fly.scl);MtxTranslate(&local,&fly.pos);
+        for(int corner=0;corner<4;++corner) {
+            hmm_vec3 p={},world={};MtxTransform(&local,&vertices_[corner].pos,&p);MtxTransform(&owner,&p,&world);
+            std::memcpy(item.world_pos[corner],world.Elements,3*sizeof(float));item.uv[corner][0]=vertices_[corner].tu;item.uv[corner][1]=vertices_[corner].tv;
+        }
+        Renderer->SubmitFxQuad(item);
     }
+}
 
-    // --- Port of TFlyAnimator::Initialize (effect_old.cpp:6525-6550).
-    // size.x = size.y = 10 (fly->size_wu_ above). Then per-fly:
-    //   pos = random(-RANGE,RANGE) per axis, used=false, scl=.3, rot=0.
-    for (int32_t i = 0; i < kFlyBespokeCount; ++i)
-    {
-        fly->flies_[i].pos.X = float(random(-kFlyBespokeRangeX, kFlyBespokeRangeX));
-        fly->flies_[i].pos.Y = float(random(-kFlyBespokeRangeY, kFlyBespokeRangeY));
-        fly->flies_[i].pos.Z = float(random(-kFlyBespokeRangeZ, kFlyBespokeRangeZ));
-        fly->flies_[i].used  = false;
-        fly->flies_[i].scl.X = kFlyBespokeScale;
-        fly->flies_[i].scl.Y = kFlyBespokeScale;
-        fly->flies_[i].scl.Z = kFlyBespokeScale;
-        fly->flies_[i].rot.X = 0.0f;
-        fly->flies_[i].rot.Y = 0.0f;
-        fly->flies_[i].rot.Z = 0.0f;
-    }
-    fly->sim_accum_ms_ = 0.0;
-
-    log_info("[fly] SpawnForTest_BESPOKE: '%s' map_index=%d origin=(%d,%d,%d) "
-             "count=%d texture=%u uv=(%.3f,%.3f,%.3f,%.3f)",
-             kFlyBespokeImageryPath, fly->GetMapIndex(),
-             origin.x, origin.y, origin.z,
-             kFlyBespokeCount, fly->texture_,
-             fly->uv_rect_[0], fly->uv_rect_[1],
-             fly->uv_rect_[2], fly->uv_rect_[3]);
-    return fly;
+void TFlyEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_=enabled && initialized_ && !runtime_owned_;
+    if(native_domain_){const auto p=Pos();BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(GetFace()));}
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Flies",int(native_domain_));
 }
 
 void TFlyEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
-    if (!Renderer)
-        return;
-
-    static const bool s_logged_first_submit = []{
-        log_info("[fly] first submit (TickAndSubmit running)");
-        return true;
-    }();
-    (void)s_logged_first_submit;
-
-    // --- Port of TFlyAnimator::Animate (effect_old.cpp:6552-6585).
-    // 24 Hz sim tick — same family pattern as M08/H02/B01.
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kFlyBespokeSimTickMs))
-    {
-        sim_accum_ms_ -= double(kFlyBespokeSimTickMs);
-
-        // Stage one new fly per tick on a coin-flip (effect_old.cpp:6557).
-        // The original walks the array and consumes the 'chance' on the
-        // first dormant fly it finds — exactly one stage-on per tick.
-        int32_t chance = random(0, 1);
-
-        for (int32_t i = 0; i < kFlyBespokeCount; ++i)
-        {
-            SFlyParticleBespoke& f = flies_[i];
-
-            if (f.used == false && chance)
-            {
-                f.used  = true;
-                chance  = 0;
-            }
-
-            hmm_vec3 velocity;
-            velocity.X = float(random(-2, 2));
-            velocity.Y = float(random(-2, 2));
-            velocity.Z = float(random(-2, 2));
-
-            f.pos.X += velocity.X;
-            f.pos.Y += velocity.Y;
-            f.pos.Z += velocity.Z;
-
-            // Hard reflect-back: if out of cube, undo 2x velocity (so the
-            // net step on this tick is -velocity, pushing back into the
-            // box). Snapshot: `pos -= velocity + velocity`.
-            if (f.pos.X > float(kFlyBespokeRangeX) || f.pos.X < float(-kFlyBespokeRangeX))
-                f.pos.X -= velocity.X + velocity.X;
-            if (f.pos.Y > float(kFlyBespokeRangeY) || f.pos.Y < float(-kFlyBespokeRangeY))
-                f.pos.Y -= velocity.Y + velocity.Y;
-            if (f.pos.Z > float(kFlyBespokeRangeZ) || f.pos.Z < float(-kFlyBespokeRangeZ))
-                f.pos.Z -= velocity.Z + velocity.Z;
-        }
-    }
-
-    // --- Port of TFlyAnimator::Render (effect_old.cpp:6587-6603).
-    // SetBlendState() (no args) = Alpha (the alpha-keyed dark fly sprite,
-    // chroma-keyed black quad). Cull=NONE in snapshot — billboards are
-    // already two-sided so no extra state needed.
-    if (texture_ == kInvalidTexture)
-        return;
-
-    const S3DPoint& base = Pos();
-    for (int32_t i = 0; i < kFlyBespokeCount; ++i)
-    {
-        if (!flies_[i].used)
-            continue;   // staged-off; faithful to snapshot — TParticleSystem skips !used
-
-        const float wx = float(base.x) + flies_[i].pos.X;
-        const float wy = float(base.y) + flies_[i].pos.Y;
-        const float wz = float(base.z) + flies_[i].pos.Z;
-
-        SBillboardDrawItem item = {};
-        // size.x = size.y = 10 (FLY_SIZE), scaled per-particle by .3.
-        item.size_wu[0]      = size_wu_ * flies_[i].scl.X;
-        item.size_wu[1]      = size_wu_ * flies_[i].scl.Y;
-        item.color_rgba[0]   = 1.0f;
-        item.color_rgba[1]   = 1.0f;
-        item.color_rgba[2]   = 1.0f;
-        item.color_rgba[3]   = 1.0f;
-        item.uv_rect[0]      = uv_rect_[0];
-        item.uv_rect[1]      = uv_rect_[1];
-        item.uv_rect[2]      = uv_rect_[2];
-        item.uv_rect[3]      = uv_rect_[3];
-        item.key.texture     = texture_;
-        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
-        item.key.blend       = uint8_t(EFxBlend::Alpha);
-        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
-        item.light_mode      = EFxLightMode::Unlit;
-        item.orientation     = EFxBillboardOrientation::ScreenAligned;
-        item.debug_mode      = debug_mode;
-        item.world_pos[0]    = wx;
-        item.world_pos[1]    = wy;
-        item.world_pos[2]    = wz;
-        Renderer->SubmitFxBillboard(item);
-    }
+    Advance(TTime::DeltaTime());Submit(debug_mode);
 }
 
 // *************************************************************************
@@ -14207,6 +14126,22 @@ TAuthoredStaticMeshEffect::~TAuthoredStaticMeshEffect()
             }
 }
 
+// These immutable buffers are shared across preview owners. Include the exact
+// source asset, object, texture slot and texture frame; owner position/time do
+// not change vertex/index data. Keep this domain separate from map mesh keys.
+static uint64_t AuthoredStaticMeshKey(uint64_t asset, int32_t object, int32_t slot, int32_t frame)
+{
+    uint64_t hash = 1469598103934665603ull;
+    const uint64_t fields[] = {0x4155544853544154ull, asset, uint64_t(uint32_t(object)),
+                               uint64_t(uint32_t(slot)), uint64_t(uint32_t(frame))};
+    for (uint64_t value : fields)
+        for (int byte = 0; byte < 8; ++byte) {
+            hash ^= (value >> (byte * 8)) & 255u;
+            hash *= 1099511628211ull;
+        }
+    return hash ? hash : 1ull;
+}
+
 TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const S3DPoint& origin,
                                                                     const char* asset_override,bool animate_textures,bool scroll_textures)
 {
@@ -14268,20 +14203,27 @@ TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const
                 if(desc.numframes>1) {
                     if(!desc.framehtexs)return nullptr;
                     for(int32_t frame=0;frame<desc.numframes;++frame) {
-                        const MeshHandle frame_mesh=Renderer->RegisterMesh(vertices.data(),int32_t(vertices.size()),
+                        const MeshHandle frame_mesh=Renderer->RegisterMeshAsset(
+                            AuthoredStaticMeshKey(img->AssetId(),object,slot,frame),vertices.data(),int32_t(vertices.size()),
                             indices.data(),int32_t(indices.size()),desc.framehtexs[frame]);
                         if(!frame_mesh) {
                             for(MeshHandle retained:part.frame_meshes)Renderer->ReleaseMeshAssetRef(retained);
                             return nullptr;
                         }
+                        Renderer->AddMeshAssetRef(frame_mesh);
                         part.frame_meshes.push_back(frame_mesh);
                     }
                     part.mesh=part.frame_meshes.front();
                 }
             }
-            if(!part.mesh)part.mesh = Renderer->RegisterMesh(vertices.data(), int32_t(vertices.size()),
-                indices.data(), int32_t(indices.size()), texture);
-            if (!part.mesh) return nullptr;
+            if(!part.mesh) {
+                part.mesh = Renderer->RegisterMeshAsset(
+                    AuthoredStaticMeshKey(img->AssetId(),object,slot,
+                        slot>0 ? img->GetTextureFrame(slot-1) : 0),vertices.data(),int32_t(vertices.size()),
+                    indices.data(),int32_t(indices.size()),texture);
+                if (!part.mesh) return nullptr;
+                Renderer->AddMeshAssetRef(part.mesh);
+            }
             BuildStaticObjectMatrix(img, object, 0, 0, part.local_matrix);
             eff->parts_.push_back(part);
             total_vertices += vertices.size();
@@ -14302,9 +14244,44 @@ void TAuthoredStaticMeshEffect::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debu
     // advances the existing object animation frame from the actual header.
     if(!animate_textures_)return;
     constexpr double tick_seconds=1.0/24.0;
-    texture_tick_seconds_+=TTime::DeltaTime();
+    // The reviewer's four-pose bystanders use a slower inspection rate.
+    // Isolated retail comparisons retain the original 24 Hz clock.
+    const double rate=!stricmp(StartupTestMode,"vfx-review") ? StartupVfxReviewWatcherRate : 1.0;
+    texture_tick_seconds_+=TTime::DeltaTime()*rate;
     while(texture_tick_seconds_+1e-9>=tick_seconds) {
         texture_tick_seconds_-=tick_seconds;NextFrame();
+        if(getenv("REV_VFX_REVIEW_CLOCK_TRACE") && !stricmp(StartupTestMode,"vfx-review"))
+            log_info("[vfx-watcher-clock] object=%d time=%.9f render=%lld frame=%d rate=%.3f",
+                GetMapIndex(),TTime::Time(),(long long)TTime::FrameCount(),GetFrame(),rate);
+    }
+}
+
+// Explicit watcher comparison route only. Original loaded RenderObject draws
+// FVF112 with SRCALPHA/INVSRCALPHA, CULL_NONE and no depth writes.
+void TAuthoredStaticMeshEffect::SubmitNativeWorldMeshForTest_BESPOKE(EFxDebugMode /*debug_mode*/)
+{
+    if (!Renderer) return;
+    hmm_mat4 root;
+    const auto& position = Pos();
+    BuildRetailSoftwareOwner(root, position.x, position.y, position.z, uint8_t(GetFace()));
+    for (const auto& part : parts_)
+    {
+        SHelperMeshSubmit item = {};
+        item.mesh = part.mesh;
+        if (!part.frame_meshes.empty())
+        {
+            const int32_t frame = GetFrame();
+            if (frame < 0) continue;
+            item.mesh = part.frame_meshes[size_t(frame) % part.frame_meshes.size()];
+        }
+        item.retail_lighting = part.retail_lighting;
+        item.retail_software_projection = true;
+        item.retail_source_alpha = true;
+        for (int32_t r = 0; r < 4; ++r)
+            for (int32_t c = 0; c < 4; ++c)
+                for (int32_t k = 0; k < 4; ++k)
+                    item.world[r*4+c] += root.Elements[k][r] * part.local_matrix[k*4+c];
+        Renderer->SubmitHelperMesh(item);
     }
 }
 
@@ -15491,62 +15468,15 @@ void TFireBallEffect_Bespoke__YFireBall::TickAndSubmitForTest_BESPOKE(EFxDebugMo
     TickAndSubmit(debug_mode);
 }
 
-// ----- YFireWind ----------------------------------------------------------
-
+// ----- YFireWind: own authored asset and null-spell original owner ---------
 TFireWindEffect_Bespoke__YFireWind*
 TFireWindEffect_Bespoke__YFireWind::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    static const char* kYFireWindCandidates[] = {
-        "Magic\\YFirewind.I3D",
-        "Magic\\yfirewind.i3d",
-    };
-
-    auto* eff = new TFireWindEffect_Bespoke__YFireWind(static_cast<TObjectImagery*>(nullptr));
-    eff->ForcePos(origin);
-    eff->SetMapIndex(MapPane.MakeIndex());
-    eff->ActivateComponents();
-
-    eff->texture_ = TryLoadMagicTexture(
-        kYFireWindCandidates,
-        int32_t(sizeof(kYFireWindCandidates) / sizeof(*kYFireWindCandidates)),
-        eff->uv_rect_, "yfirewind");
-
-    eff->age_ms_       = 0;
-    eff->alive_        = true;
-    eff->sim_accum_ms_ = 0.0;
-
-    log_info("[yfirewind-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
-             "tex=%u (no class candidate, stubbed)",
-             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
-    return eff;
-}
-
-void TFireWindEffect_Bespoke__YFireWind::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
-{
-    if (!Renderer)
-        return;
-
-    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
-    while (sim_accum_ms_ >= double(kStubSimTickMs))
-    {
-        sim_accum_ms_ -= double(kStubSimTickMs);
-        age_ms_ += kStubSimTickMs;
-        if (age_ms_ >= kStubLifetimeMs)
-            alive_ = false;
-    }
-    if (!alive_)
-        return;
-
-    static const bool s_logged_first_submit = []{
-        log_info("[yfirewind-bespoke] first submit (TickAndSubmit running)");
-        return true;
-    }();
-    (void)s_logged_first_submit;
-
-    const float fade01 =
-        1.0f - float(age_ms_) / float(kStubLifetimeMs);
-    W3DStubSubmitBillboard(Pos(), texture_, uv_rect_,
-                           kStubBaseSizeWu, fade01, debug_mode);
+    auto* image=LoadWaterImagery("Magic\\YFirewind.I3D","yfirewind");if(!image)return nullptr;
+    auto* effect=new TFireWindEffect_Bespoke__YFireWind(image);
+    if(!effect->InitializeVisual(origin)){delete effect;return nullptr;}
+    log_info("[yfirewind] own original400-slot null-spell leaf, source=%d,%d,%d",origin.x,origin.y,origin.z);
+    return effect;
 }
 
 // ----- YCataclysm ---------------------------------------------------------
@@ -16216,56 +16146,89 @@ void TFireFlashEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_m
 }
 
 // -------------------------------------------------------------------------
-// TFireWindEffect_Bespoke — STUBBED placeholder
+// FireWind: original400-slot owner/animator leaf, two authored RGB565 quads.
 // -------------------------------------------------------------------------
-TFireWindEffect_Bespoke* TFireWindEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
-                                                                       const char* asset_override)
+TFireWindEffect_Bespoke::~TFireWindEffect_Bespoke()
 {
-    const char* asset_path = asset_override ? asset_override : kFireWindBespokeImageryPath;
-    TObjectImagery* base = nullptr;
-    TTextureHandle  tex  = Wave3a_LoadFirstTexture(asset_path, "firewind-bespoke", base);
-    if (!base)
-        return nullptr;
-
-    auto* eff = new TFireWindEffect_Bespoke(base);
-    eff->ForcePos(origin);
-    eff->SetMapIndex(MapPane.MakeIndex());
-    eff->ActivateComponents();
-    eff->texture_ = tex;
-    eff->age_ms_  = 0.0f;
-    eff->alive_   = true;
-    log_info("[firewind-bespoke] STUBBED placeholder spawned at map_index=%d origin=(%d,%d,%d)"
-             " asset='%s' — snapshot TFireWindAnimator depends on PTSpell/PTCharacter rig",
-             eff->GetMapIndex(), origin.x, origin.y, origin.z, asset_path);
-    return eff;
+    if(Renderer)for(const auto& part:parts_)if(part.mesh)Renderer->ReleaseMeshAssetRef(part.mesh);
 }
 
-void TFireWindEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+bool TFireWindEffect_Bespoke::BindMeshes()
 {
-    if (!alive_ || !Renderer || texture_ == kInvalidTexture)
-        return;
-
-    age_ms_ += float(TTime::DeltaTime() * 1000.0);
-    if (age_ms_ >= float(kFireWindLifetimeMs))
-    {
-        alive_ = false;
-        return;
+    auto* image=dynamic_cast<T3DImagery*>(imagery);
+    if(!Renderer||!image||image->NumObjects()!=2||image->NumTextures()!=2)return false;
+    for(int i=0;i<2;++i) {
+        auto& part=parts_[i];if(part.mesh)continue;
+        const int slot=i==0?1:2;
+        std::vector<SMeshVertex> vertices;std::vector<uint16_t> indices;
+        if(!ExtractSubMeshTextureSlot(image,i,slot,vertices,indices)||vertices.size()!=4||indices.size()!=6)return false;
+        S3DObj object{};image->GetObject(i,&object);image->GetMaterial(object.material,&part.material);
+        S3DTex texture{};image->GetTexture(slot-1,&texture);
+        if(texture.htexture==kInvalidTexture||texture.numframes!=1||RetailMeshTextureLighting(texture.desc.pixelFormat)!=1)return false;
+        const uint64_t key=0x4657494e00000000ull^(uint64_t(uint32_t(image->ImageryId()))<<16)^uint64_t(i);
+        part.mesh=Renderer->RegisterMeshAsset(key,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()),texture.htexture);
+        if(!part.mesh)return false;Renderer->AddMeshAssetRef(part.mesh);
     }
+    return true;
+}
 
-    static const bool s_firewind_first = []{
-        log_info("[firewind-bespoke] first submit (placeholder draw)");
-        return true;
-    }();
-    (void)s_firewind_first;
+TFireWindEffect_Bespoke* TFireWindEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,const char* asset_override)
+{
+    // YFireWind dispatches through its own factory, never an arbitrary asset
+    // override of this base registration.
+    if(asset_override)return nullptr;
+    auto* image=LoadWaterImagery(kFireWindBespokeImageryPath,"firewind");if(!image)return nullptr;
+    auto* effect=new TFireWindEffect_Bespoke(image);
+    if(!effect->InitializeVisual(origin)){delete effect;return nullptr;}
+    log_info("[firewind] original400-slot null-spell leaf, source=%d,%d,%d",origin.x,origin.y,origin.z);
+    return effect;
+}
 
-    // Wind-like elongating tongue — stretch along the asset's natural
-    // aspect, hold mid-life, fade out tail. Single-billboard collapse.
-    const float t   = age_ms_ / float(kFireWindLifetimeMs);
-    const float scl = 0.6f + 1.4f * std::sin(float(M_PI) * t);   // 0.6 → 2.0 → 0.6
-    const float alpha = (t < 0.8f) ? 1.0f : (1.0f - (t - 0.8f) / 0.2f);
-    Wave3a_SubmitBillboard(Pos(), texture_, kFireWindBaseSizeWu * scl,
-                           EFxBillboardOrientation::ScreenAligned, debug_mode,
-                           1.0f, 0.9f, 0.6f, alpha);
+bool TFireWindEffect_Bespoke::InitializeVisual(const S3DPoint& origin)
+{
+    ForcePos(origin);SetMapIndex(MapPane.MakeIndex());ActivateComponents();
+    // Both controlled null-spell native initializers produce facing0. Natural
+    // invoker/target-derived facing and damage dispatch remain separate.
+    firewind_core::State::Initialize([](int lo,int hi){return random(lo,hi);});
+    return BindMeshes();
+}
+
+void TFireWindEffect_Bespoke::Simulate()
+{
+    if(!alive_)return;
+    firewind_core::State::Pulse([](int lo,int hi){return random(lo,hi);},[](int angle,int distance) {
+        S3DPoint p;ConvertToVector(angle,distance,p);return hmm_vec3{float(p.x),float(p.y),float(p.z)};
+    });
+    // Original owner Pulse4e2290 kills after140; animator Pulse never does.
+    alive_=firewind_core::State::frame<=140;
+}
+
+void TFireWindEffect_Bespoke::Pulse()
+{
+    Simulate();SetCommandDone(false);if(!alive_)KillThisEffect();TEffect::Pulse();
+}
+
+void TFireWindEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode)
+{
+    constexpr double step=1.0/24.0;sim_accum_+=TTime::DeltaTime();
+    while(alive_&&sim_accum_+1e-9>=step){sim_accum_-=step;Simulate();}
+}
+
+void TFireWindEffect_Bespoke::SubmitWorldMeshes_BESPOKE(EFxDebugMode)
+{
+    if(!alive_||!BindMeshes())return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_){const auto p=Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(GetFace()));}
+    firewind_core::State::Render([&](int object,const hmm_mat4& local) {
+        const auto& part=parts_[object];hmm_mat4 world;MtxMultiply(&world,&local,&owner);
+        SHelperMeshSubmit submit{};submit.mesh=part.mesh;submit.additive_blend=true;submit.retail_lighting=1;
+        submit.retail_software_projection=native_domain_;submit.retail_normal_z_scale=native_domain_?1.0f:1.0f/WORLD3D_Z_SCALE;
+        for(int row=0;row<4;++row)for(int col=0;col<4;++col)submit.world[row*4+col]=world.Elements[col][row];
+        const auto& m=part.material.matdesc;std::memcpy(submit.diffuse,&m.diffuse,4*sizeof(float));
+        std::memcpy(submit.ambient,&m.ambient,4*sizeof(float));std::memcpy(submit.specular,&m.specular,4*sizeof(float));
+        std::memcpy(submit.emissive,&m.emissive,4*sizeof(float));submit.power=m.power;
+        submit.sort_depth=float(Pos().z);Renderer->SubmitHelperMesh(submit);
+    });
 }
 
 // -------------------------------------------------------------------------
@@ -17107,6 +17070,9 @@ void TFireSwarmEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     const hmm_vec3 scale={cylhscl_,cylhscl_,cylvscl_};
     MtxScale(&local,&scale); MtxRotateZ(&local,cylth_);
     const auto& world=native_domain_ ? native_owner_ : Transform().Matrix();
+    const bool software_bounds = native_domain_ && Renderer->UsesRetailSoftwareMeshLighting();
+    hmm_mat4 native_world={};
+    if (software_bounds) MtxMultiply(&native_world,&local,&world);
     SQuadDrawItem item={}; item.corner_count=3; item.retail_texture=1;
     item.retail_argb4444=true;
     item.retail_software_projection=native_domain_;
@@ -17114,6 +17080,16 @@ void TFireSwarmEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
     item.debug_mode=debug_mode;
     for (size_t face=0;face+2<indices_.size();face+=3) {
+        if (software_bounds) {
+            hmm_vec3 authored[3];
+            for (int c=0;c<3;++c) {
+                const auto& v=vertices_[indices_[face+c]];
+                authored[c]={v.pos[0],v.pos[1],v.pos[2]};
+            }
+            // Actual ARGB branch56e006/36/5c/82 uses the same literal
+            // edge0->1/2 span guard. Ordinary geometry remains complete.
+            if (!RetailCometTriangleAllowed(authored,native_world)) continue;
+        }
         for (int corner=0;corner<3;++corner) {
             const auto& v=vertices_[indices_[face+corner]];
             const hmm_vec3 authored={v.pos[0],v.pos[1],v.pos[2]};
@@ -18249,6 +18225,10 @@ void TSetVortexEffect_Bespoke::Initialize(bool attach_runtime_component)
     img->GetMaterial(object.material, &material);
     if (material.texture != 0) return;
     img->GetTexture(material.texture, &tex);
+    const auto& format = tex.desc.pixelFormat;
+    if (tex.desc.width != 32 || tex.desc.height != 32 || format.dwRGBBitCount != 16 ||
+        format.dwRBitMask != 0xf00 || format.dwGBitMask != 0xf0 ||
+        format.dwBBitMask != 0xf || format.dwRGBAlphaBitMask != 0xf000) return;
     if (tex.htexture == kInvalidTexture || tex.numframes != 1 ||
         !ExtractSubMeshTextureSlot(img, 0, material.texture + 1, vertices_, indices_) ||
         vertices_.size() != 12 || indices_.size() != 36) return;
@@ -18260,7 +18240,7 @@ void TSetVortexEffect_Bespoke::Initialize(bool attach_runtime_component)
 
     // These are animator-owned absolute coordinates, NOT an owner offset.
     const auto origin = Pos();
-    cached_d3d_position_ = {float(origin.x), float(origin.y), FIX_Z_VALUE(float(origin.z) + 30.0f)};
+    cached_d3d_position_ = {float(origin.x), float(origin.y), RetailSoftwareOwnerZ(origin.z + 30)};
     current_height_ = 30.0f; direction_ = 1; sim_accum_ms_ = 0.0;
     SetCommandDone(false);
     initialized_ = true;
@@ -18284,6 +18264,7 @@ void TSetVortexEffect_Bespoke::Initialize(bool attach_runtime_component)
             }
         }
     }
+    log_info("[native-domain] enabled=%d camera_z=0 exact SetVortex cached absolute position", int(StartupVfxNativeDomain));
     log_info("[setvortex-runtime] initialized id=%08x map_index=%d origin=(%d,%d,%d) runtime=%d vertices=%zu triangles=%zu cached_d3d_z=%.6f",
              attach_runtime_component ? ObjId() : 0xad92bc15u, GetMapIndex(),
              origin.x, origin.y, origin.z, int(attach_runtime_component),
@@ -18325,7 +18306,8 @@ void TSetVortexEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
 {
     if (!Renderer || !initialized_) return;
     SQuadDrawItem item = {};
-    item.corner_count = 3; item.retail_texture = 1;
+    item.corner_count = 3; item.retail_texture = 3;
+    item.retail_software_projection = StartupVfxNativeDomain;
     item.key.texture = texture_;
     item.key.blend = uint8_t(EFxBlend::Alpha);
     item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
@@ -18333,22 +18315,18 @@ void TSetVortexEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     // The existing FX path cannot establish normal/material illumination
     // parity. Keep authored diffuse, with this gate explicit in the forensic doc.
     for (int channel = 0; channel < 4; ++channel) item.color_rgba[channel] = diffuse_[channel];
-    const float cached_world_z = REV_FIX_Z_VALUE(cached_d3d_position_.Z);
+    const float cached_world_z = StartupVfxNativeDomain ? cached_d3d_position_.Z : REV_FIX_Z_VALUE(cached_d3d_position_.Z);
+    const float local_z_scale = StartupVfxNativeDomain ? 1.0f : WORLD3D_Z_SCALE;
     for (size_t face = 0; face + 2 < indices_.size(); face += 3) {
         for (int corner = 0; corner < 3; ++corner) {
             const auto& v = vertices_[indices_[face + corner]];
             item.world_pos[corner][0] = cached_d3d_position_.X + v.pos[0] * 0.5f;
             item.world_pos[corner][1] = cached_d3d_position_.Y + v.pos[1] * 0.5f;
-            item.world_pos[corner][2] = cached_world_z + v.pos[2] * 0.5f * WORLD3D_Z_SCALE;
+            item.world_pos[corner][2] = cached_world_z + v.pos[2] * 0.5f * local_z_scale;
             item.uv[corner][0] = v.uv[0]; item.uv[corner][1] = v.uv[1];
         }
-        // Blue culling tests Y-up before its rasterizer negates Y.
-        float sx[3], sy[3];
-        for (int corner = 0; corner < 3; ++corner) {
-            const auto* p = item.world_pos[corner];
-            sx[corner] = p[0] - p[1]; sy[corner] = 0.5f * (p[0] + p[1]) - 0.867f * p[2];
-        }
-        if ((sx[1]-sx[0])*(sy[2]-sy[0]) < (sx[2]-sx[0])*(sy[1]-sy[0])) continue;
+        // Original 4e6920 selects Scene mode2: CULL_NONE. Both authored
+        // coincident opposite-facing quads contribute in source order.
         Renderer->SubmitFxQuad(item);
     }
 }

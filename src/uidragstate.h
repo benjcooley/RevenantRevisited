@@ -41,7 +41,8 @@
 //   Inventory  carried slot number (page + column*3 + row)
 //   BarInv     belt position n (slot 0x10b + n)
 //   Equip      EQ_* index (slot 0x100 + index)
-//   SpellPane  spell-book row
+//   SpellPane  spell-book row (the spell itself is `spell`: retail's drag
+//              payload 0x00656398, the talisman code)
 //   QuickSpell quick-spell ring 1..4 (a destination only: spells drop there)
 //
 // The manager is the one place a drop mutates the inventory and plays the
@@ -57,6 +58,7 @@
 #include "saferef.h"
 
 #include <cstdint>
+#include <string>
 
 class TObjectInstance;
 
@@ -80,6 +82,7 @@ struct SUIDragState
     int32_t          start_y    = 0;
     int32_t          grab_x     = 0;    // cursor offset within source slot/icon
     int32_t          grab_y     = 0;
+    std::string      spell;             // a spell-book drag's talisman code
     PTBitmap         icon       = nullptr;
     SDragBitmapLayer layers[kMaxDragBitmapLayers] = {};
     int32_t          layer_count = 0;
@@ -105,6 +108,12 @@ bool BeginDragLayers(EDragSource src, int32_t slot_idx,
                      int32_t mouse_x, int32_t mouse_y,
                      const SDragBitmapLayer* layers, int32_t layer_count,
                      int32_t grab_x = 0, int32_t grab_y = 0);
+
+// A spell picked up from spell-book row `row`: a drag at once, with no
+// threshold (retail 0x00546390 starts it on the first move), carrying the
+// talisman code; `icon` follows the pointer at its point (grab_x, grab_y).
+bool BeginSpellDrag(int32_t row, const char* talismans, PTBitmap icon,
+                    int32_t mouse_x, int32_t mouse_y, int32_t grab_x, int32_t grab_y);
 
 // Promote the pending grab to a real drag once the cursor moves far enough.
 // Returns true when the manager is tracking this pointer sequence.

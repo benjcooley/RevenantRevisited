@@ -226,6 +226,7 @@ class TSpell
     // Functions to return current spell values
     TObjectInstance* GetInvoker() { return invoker; }
     TSafeRef<TObjectInstance> GetInvokerRef() const { return invoker_ref; }
+    TSafeRef<TObjectInstance> GetEffectRef() const { return effect; }
       // Returns the character that invoked the spell
     TObjectInstance* GetTarget(int32_t numtarg = 0)
         { if (numtarg >= targetnum) return nullptr; else return targets[numtarg]; }
@@ -304,8 +305,9 @@ class TSpell
 
 // The CONTROLDATA "Strike" class (retail 0x154 bytes, vtable 0x005b9bdc,
 // built by 0x00542290): a TSpell plus the target it strikes (+0x150).
-// REVSYNC: its Timer 0x00540eb0, Pulse 0x00540d70 and Kill 0x00542340 are
-// not ported yet; TSpell's run.
+// Original Timer540eb0/Pulse540d70/Kill542340 are admitted for the exact
+// shipped Regeneration direct-follow configuration; other controls retain
+// their previous base path until independently reconstructed.
 class TStrikeSpell : public TSpell
 {
   public:
@@ -315,6 +317,11 @@ class TStrikeSpell : public TSpell
 
     [[nodiscard]] const char* ClassName() const override { return "Strike"; }
     [[nodiscard]] TObjectInstance* StrikeTarget() const { return striketarget; }
+    bool HasRetailRegenerationControl() const;
+    using TSpell::Timer; // Preserve the public Timer(value) overload.
+    void Pulse() override;
+    bool Timer() override;
+    void Kill() override;
 
   protected:
     TObjectInstance* striketarget = nullptr;    // +0x150 the target struck

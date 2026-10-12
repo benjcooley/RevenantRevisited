@@ -174,6 +174,14 @@ bool ParseArgs(int argc, char** argv, SConfig& cfg)
                 cfg.seed_set = true;
             }
         }
+        else if (const char* compression = GetFlagValue(argv[i], "snapcompression"))
+        {
+            char* end = nullptr;
+            const long level = std::strtol(compression, &end, 10);
+            if (*compression >= '0' && *compression <= '9' && end && !*end && level >= 5 && level <= 9)
+                cfg.png_compression = int32_t(level);
+            else log_warn("[framesnap] --snapcompression needs an integer5..9 (got '%s')", compression);
+        }
         else if (const char* v4 = GetFlagValue(argv[i], "snapwarmup"))
         {
             cfg.warmup_frames = std::atoi(v4);
@@ -243,6 +251,8 @@ bool WritePngRGBA(const char* path, int32_t w, int32_t h, const uint8_t* pixels,
     if (!path || !pixels || w <= 0 || h <= 0) return false;
     EnsureParentDir(path);
     const int stride = w * 4;
+    if (compression == kConfiguredCompression)
+        compression = g_cfg.png_compression;
     int ok = 0;
     if (compression <= 1)
     {

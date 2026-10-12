@@ -22,6 +22,7 @@ bool ReviewProjectileType(uint32_t id)
         case 0xad92bd1eu: // queenarrow
         case 0xad92bd1fu: // arroweffect
         case 0xd000f005u: // headfireball
+        case 0xba09feadu: // dragonattack: declared self-moving preview only
             return true;
         default: return false;
     }
@@ -140,6 +141,15 @@ VfxReviewSpawnInfo ConfigureVfxReviewSpawn(TObjectInstance& effect,
     }
     VfxReviewSpawnInfo info = DescribeVfxReviewSpawn(effect.ObjId());
     if (!info.safe_factory) return info;
+    if (effect.ObjId() == 0xaeaeeb26u || effect.ObjId() == 0xae5eeb26u) {
+        // Generic scrolltex admission does not reproduce Maelstrom's original
+        // camera objects, inclusive keys and texture-major draw policy. Select
+        // the exact registered adapter through the existing preview fallback.
+        info.uses_effect_runtime = false;
+        info.renderer_supported = false;
+        info.description = "Maelstrom requires its original authored leaf adapter";
+        return info;
+    }
     auto* fireball = dynamic_cast<TFireBallEffect*>(&effect);
     if (info.supports_endpoints && !fireball) {
         info.safe_factory = false;

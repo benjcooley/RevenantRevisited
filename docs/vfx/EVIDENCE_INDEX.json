@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 105,
+    "retail_rows_with_source_fixes_recorded": 173,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,11 +17,14 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 84,
+    "visual_fidelity_confirmed_rows": 175,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 84,
-    "remaining_visual_review_rows": 92
+    "reviewed_visual_pass_rows": 175,
+    "remaining_visual_review_rows": 1,
+    "qualified_modified_reference_visual_rows": 6,
+    "qualified_semantic_device_visual_rows": 1,
+    "qualified_reference_visual_rows": 7
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -942,30 +945,30 @@
     "recon/retail_asm/runtime/effects/accepted-helper-shadowfist-20261010/review.json": {
       "sha256": "678068386ecb9a3857548ef77f89eb215d1ebf0822c9b10f509ba5b152fdfbdd",
       "retail_row": "Shadowfist:0x550decaf",
-      "check": "current_renderer_visual_regression",
-      "status": "pass_for_existing_isolated_scope",
-      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+      "check": "current_renderer_visual_recheck",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
     },
     "recon/retail_asm/runtime/effects/accepted-helper-warriorborn-20261010/review.json": {
       "sha256": "2c888ff432cea49da3410b24b1f2342cb1e1ede9a0558602e5eb5e1ee2bc188d",
       "retail_row": "Warriorborn:0x9de2a0fe",
-      "check": "current_renderer_visual_regression",
-      "status": "pass_for_existing_isolated_scope",
-      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+      "check": "current_renderer_visual_recheck",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
     },
     "recon/retail_asm/runtime/effects/accepted-helper-teleportation-20261010/review.json": {
       "sha256": "0454dbad0c7b5f10ccdec609d1e954b4cf6285def84da667eda156438e0ee120",
       "retail_row": "teleportation:0xad92bd40",
-      "check": "current_renderer_visual_regression",
-      "status": "pass_for_existing_isolated_scope",
-      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+      "check": "current_renderer_visual_recheck",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
     },
     "recon/retail_asm/runtime/effects/accepted-helper-goldeffect-20261010/review.json": {
       "sha256": "5c9dee8a692fcf9842d94c9b71146e9e0852d65ea8f332c6708c731434eab52d",
       "retail_row": "goldeffect:0xd0c0f035",
-      "check": "current_renderer_visual_regression",
-      "status": "pass_for_existing_isolated_scope",
-      "scope": "Existing form/palette/overall appearance preserved after source raster change. Portal brightness/edges and Gold trajectory/timing remain open; no new full/pixel/repeat credit."
+      "check": "current_renderer_visual_recheck",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
     },
     "recon/retail_asm/runtime/effects/fireflash-current-visual-20261010/review-approved.json": {
       "sha256": "b51a6244eae867b3b636e44f532d1e87bda31441601fc93bb632dad9a5ab30ad",
@@ -1400,6 +1403,851 @@
       "check": "icebolt_full_native_actual_metal_visual",
       "status": "pass",
       "scope": "Fourteen original full software versus actual Metal native-domain stationary beam/rings/spirals/endpoint glows, moving frost, decay and blank tail. Explicit endpoint/world interfaces; natural live victim/Iced/audio/caller and exactpixels/device remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-firewind-full-visual-20261010/root-approval.json": {
+      "sha256": "66746b71116589814f6524cc2d54f37c013b157cf4bcbb542ba2e708534ccfe1",
+      "retail_row": "FireWind:0x98974eab",
+      "check": "firewind_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Base null-spell original full software and actual Metal native-domain18 phases: plume/sphere/annulus/expanding rings/decay/empty tail. All bounds unclipped. Natural caller/audio/device and separate Y variant remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-charutility-full-visual-20261010/root-approval.json": {
+      "sha256": "f42a39a254f9322ad787c884a584d9bc9008479c61179d8f435123d6cd887308",
+      "retail_row": "CharUtility:0xadbcef13",
+      "check": "charutility_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Complete five authored parts/textures, black and light-gray scenes, all whole1280x960 bounds fit. Scoped static native-domain appearance including shadow. Internal depth/face edges, natural context and exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-kinsecretdoor-full-visual-20261010/root-approval.json": {
+      "sha256": "5af3166202a9a8a6f043d3be0821cf282272e0805599cf608bad918569f9ea6d",
+      "retail_row": "KinSecretDoor:0xad92bd23",
+      "check": "kinsecretdoor_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Closed still/state0 complete231vertices/260triangles and both texture slots, six whole original/software versus actual Metal native-domain samples. Opening states, depth/internal face edges, natural context and exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-yfirewind-full-visual-20261010/root-approval.json": {
+      "sha256": "d8db2f3ab03c6b373cd8539120ebab0c2a5ba4ef353080e3b7d6d7ed48b61b5b",
+      "retail_row": "YFireWind:0x98974ea7",
+      "check": "yfirewind_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Eighteen own Y leaf original software and actual Metal native-domain green/yellow plume/sphere/annulus/rings/decay/empty tail, null-spell facing0. All native/image bounds fit. Natural Y radius/damage/facing/audio and exactpixels/device remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-blast-authored-20261010/manifest.json": {
+      "sha256": "3b5a97fa994d9b9096c8dfb3a06ca69feea715b7dab82b5e09a7a69ba76d061e",
+      "retail_row": "Blast:0x0ea34fa3",
+      "check": "blast_authored_whole_visual",
+      "status": "held_renderer_residual",
+      "scope": "Authored rotating lobes align early; actual Metal displays correct oversized outer geometry rejected by original software at60/90. Complete animation/state/geometry proven; literal whole-frame appearance remains held."
+    },
+    "recon/retail_asm/runtime/effects/current-fairy-authored-20261010/root-approval.json": {
+      "sha256": "8c076a620de9218cdb9780efe9dc52c6f9c4f74f97281acdebecb763508ac9e3",
+      "retail_row": "Fairy:0xad92bd25",
+      "check": "fairy_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Ten original full software/common/native-domain actual Metal phases: moving authored sprite, colored dust, persistent trail and199\u21920 wrap. Scoped state0 loop; natural caller/end-state trigger/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-lightstrip-authored-20261010/root-approval.json": {
+      "sha256": "7f2159573ae6aaee3860a394427326a2e7a97fa1d8d26519096fb190309a8a50",
+      "retail_row": "LightStrip:0x10da54d0",
+      "check": "lightstrip_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Eighteen in-viewport original full software/actual Metal native-domain phases: three-state launch/travel, explicit terrain wall impact with original20-unit overshoot, end sparks/blank tail. Some long branches and outer sparks touch the fixed viewport; off-screen/arbitrary-camera/actor appearance and natural caller/audio remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-waterfall-authored-20261010/root-approval.json": {
+      "sha256": "f91470427ebd5a874a87bb88a9b4d1fb37fe9d316b9cb8973b9d473583d59037",
+      "retail_row": "Waterfall:0xa907dabf",
+      "check": "waterfall_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Six complete original full factory/normal-lit software and actual Metal native-domain phases at corrected declared tick=capture, all bounds unclipped; exact authored normals and blue streaks. Controlled map lifecycle separate; natural context/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-water-authored-20261010/root-approval.json": {
+      "sha256": "480c4d62274deef3fc24d7fff5253c2800ad249f14e855b33ae2eaa6b3555e16",
+      "retail_row": "Water:0x1903abcd",
+      "check": "water_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Six complete original full factory/normal-lit software and actual Metal native-domain phases at corrected declared tick=capture, all bounds unclipped; blue authored moving particles. Controlled map lifecycle separate; natural context/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-labback-authored-20261010/root-approval.json": {
+      "sha256": "b6baf91637cef7dcd2af557bf1b3bdda6df24064787feb7ffbb94d761121cb1b",
+      "retail_row": "Labback:0xdcc4011d",
+      "check": "labback_full_native_actual_metal_visual",
+      "status": "pass",
+      "scope": "Nine original full software/actual Metal native-domain sphere/spark phases through399\u21920 loop. Common projection, bounded accumulatedfloat residual,camera/caller/audio/device/exactpixel limits retained."
+    },
+    "recon/retail_asm/runtime/effects/current-charm-authored-20261010/root-approval.json": {
+      "sha256": "c97fe361a74af1464133adf9cbbd9ca6ec7a4f10e843eddb67b3c0dbfd7b0615",
+      "retail_row": "charm:0xad92bd37",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Eleven original full-software/actual Metal native-domain moving star and clover phases, both loop boundaries and corrected cold normal-star pair. Natural buff caller, cold shared depth, audio and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-meteorstorm-authored-20261010/root-approval.json": {
+      "sha256": "98c068ad2b5b4940d57a711ec64f024bc08450bb3531ccf127578f008f0fcaf2",
+      "retail_row": "MeteorStorm:0xf32bcfac",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Seventeen whole-effect original software/actual Metal native-domain launch, descent, impact and decay phases. Explicit native software primitive-span policy and16-bit depth range; common full impact ring remains diagnostic. Natural Strike caller, audio/device and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-fgeyser-authored-20261010/root-approval.json": {
+      "sha256": "e7256c919e66d31539c039d6a47ffb2c8c52eef726700b41f9466bbb066d24a4",
+      "retail_row": "fgeyser:0xad92bd31",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Sixteen full original software/actual Metal native-domain growth, flame/glow, separate sparks, decay and blank-tail phases. Exact90-frame owner lifetime and two PartSys pools. Natural trap caller/audio, common projection and device/exactpixel limits remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-quick-authored-20261010/root-approval.json": {
+      "sha256": "01d06766e5aa999abecb8d4a479e3e23aa71f9a4b3e1afd286b529cb59686992",
+      "retail_row": "Quick:0xbabfface",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Ten original full-software/actual Metal native-domain six-layer swirl/sparks phases including shrink55 and blank56/60. Common projection tick56 stale prior image explicitly open; natural caller, audio, device and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-restorelife-authored-20261010/root-approval.json": {
+      "sha256": "000793f60a5bfc3107de116511e5f23939ae1478688686b2cb5ae8ea4ea0d297",
+      "retail_row": "Restorelife:0xb3ae0fed",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Ten full original software/actual Metal native-domain eight-emitter blue burst phases through real tick60 owner completion. Exact RNG and75,400 live fields within declared0.0002 accumulated float tolerance. Natural caller/attachment/audio, other states, device and exact pixels remain open."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/research/vfx-wide-20261010/hard-alpha/dust-freeze.json": {
+      "sha256": "99fecb485a4da3479f9ba3fed11cff96342cdf20648cf426a0a363bf657ca80f",
+      "retail_row": "Dust:0x0c052637",
+      "check": "dust_exact_controller_blank_software_modulation",
+      "status": "diagnostic_no_visual_credit",
+      "scope": "Exact state/RNG and whole blank software quantization; visible modern policy is diagnostic only."
+    },
+    "recon/retail_asm/runtime/effects/current-snow-authored-20261010/Snow-root-approval.json": {
+      "sha256": "300c8ee7f1e7b95222a15e6aeffcd39a0a7bfa34a80c44446b7c2eebdb3c0633",
+      "retail_row": "Snow:0xfacedbed",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Six original default-render50-root/actual Metal static ice-geometry phases,60-frame unchanged film and actual map presence/cleanup.45,000 native legacy key channels exact; original Snow static leaf, not Iced victim/shatter. Natural caller, other states, device/depth and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-dexterity-authored-20261010/root-approval.json": {
+      "sha256": "7e3aa095ae364471f765670661c92eb87b3970c8a8734a49711be014d2e5ecdf",
+      "retail_row": "Dexterity:0x8cd3ea0f",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Twelve full original software/actual Metal native-domain four moving star/trail phases through two60-frame wraps plus corrected cold tick1 pair.57,785 state fields/RNG exact within float tolerance. Cold depth, natural buff/endstate/audio/device and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-poison-authored-20261010/root-approval.json": {
+      "sha256": "c84ca757727ce73d872cf1fc94949e924ebd71acb99a104cdec3bc85fa0f88e5",
+      "retail_row": "poison:0xe0a3bc42",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Nineteen whole original software/actual Metal native-domain green cloud and bubble phases across130ticks/two60-frame loops.86,700 state fields/RNG,360 poses and fresh native replay exact within bounded float residual. Natural caller/map/audio/device and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-flies-authored-20261010/Flies-root-approval.json": {
+      "sha256": "1b95c0fc63f39c95d23e8a0ea7be838559bb87437dd735052646cb132d9c7a92",
+      "retail_row": "Flies:0xa21d9d00",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Six original full software/actual Metal active swarm phases on declared gray background. Positions/motion and overall tiny authored-plane appearance pass;0/1px extent, sparse darker/warm pixels and background123vs128 quantization residual remain open.91 native states/RNG, real map and five clockrates checked. Black visibility/natural caller/device/exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-antimagic-authored-20261010/root-approval.json": {
+      "sha256": "021d8bccc79da8749a4ae8673bbe328c69355ed0147099595eeed95f57376e92",
+      "retail_row": "Antimagic:0xd3ae043a",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Fifteen original full-software/actual Metal native-domain three gold sphere/fire-trail phases through300-tick owner kill.134,966 fields/RNG and1,800 poses checked. Four unsampled stale capture frames are retained explicitly; natural caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-powerup-authored-20261010/root-approval.json": {
+      "sha256": "63f9f20979d8dd7c43d3d5daae288e4c7ae21d375bac25410b92538e4774d946",
+      "retail_row": "PowerUp:0xaeaefb27",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Seventeen whole original normal-lit software/actual Metal native-domain keyed ring/cone/trail phases through real tick89 owner kill and blanktail.12,285 keys/7,696 accepted matrices, strict profile and fresh native replay. Natural caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-ypowerup-authored-20261010/root-approval.json": {
+      "sha256": "3b44b9d4709384dd31b41d19f630242457ea041e9e2d183daae37a528240b01d",
+      "retail_row": "YPowerUp:0xaeaeeb27",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Twenty whole original software/actual Metal native-domain green/yellow sphere phases including short last-live fan, real tick72 kill and blanktail. Native-only proven640/480 primitive-span rule; common/hardware full rays retained.36,135 keys/64,240 matrices and original winding controls. Natural caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-ironskin-authored-20261010/root-approval.json": {
+      "sha256": "fefbaaf7307fa709220958d3526cd88d00a8d1c7442d5614ed5ffe7748c6b6b7",
+      "retail_row": "ironskin:0xad92bd34",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Thirteen original full software/actual Metal native-domain purple flare/trail phases across three30-frame loops. Exact three-position history/current duplication, stride1/3 state/RNG and malformed zero-vector native semantics. Natural buff/endstate/audio/depth/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-stoneskin-authored-20261010/root-approval.json": {
+      "sha256": "975aa865305dc3aabebb6e45c42f983edee0afd2a0a63befcf52aa7543f5273b",
+      "retail_row": "stoneskin:0xad92bd33",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Thirteen original full software/actual Metal native-domain gold flare/trail phases across three30-frame loops. Exact three-position history/current duplication, stride1/3 state/RNG and malformed zero-vector native semantics. Natural buff/endstate/audio/depth/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-fairy2-authored-20261010/Fairy2-root-approval.json": {
+      "sha256": "e6d4fb88024763922872f2d8479a111d2830748b173f0eadfa5d288a697ffa09",
+      "retail_row": "Fairy2:0xad92bd26",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Nine unchanged whole original software/actual Metal native-domain moving multicolor star/dust phases through finite399-frame owner completion and blank399/400. RNG/lifecycle/alive/count/credit pass; strict state proof retains800 numerical residuals/max0.0003658 without equality claim. Natural map renderer unsupported; caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-ylose-authored-20261010/root-approval.json": {
+      "sha256": "5d4ac39b6c4351db3e98d2ef2d244c1915dd908767fd7f54bcff7e066d290b8a",
+      "retail_row": "YLose:0xaeaeeb31",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Fifteen complete original software/actual Metal native-domain phases in supported1280x960 through real14-frame fade/owner completion. Correct ONE/ONE AdditiveStraight selects proven RGB565 integer path;15,522 carrier fields and4,200 Render-cached color fields checked. Whole final expansion unclipped. Old normalized/clipped references rejected; common full geometry/natural caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-puke-authored-20261010/root-approval.json": {
+      "sha256": "845b0444f045482cd034d7d8204febba5521ce7a153fe0f1bc05806eff0e351b",
+      "retail_row": "puke:0xad92bc11",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Fifteen full original factory/owner/software versus actual Metal native-domain null-spell zero-height spray phases.25 moving slots/three ARGB meshes, startup16 and realkill26/blank30;5,940 state/RNG fields match. Late native1/0 versus Metal15/7 pixels at24/25 remain explicit sampling/quantization mismatch. Actor-mouth/caller/audio/device/exactpixel behavior remains open."
+    },
+    "recon/retail_asm/runtime/effects/current-yattack-authored-20261010/root-approval.json": {
+      "sha256": "cbeeaf834fb6def5b23a1e375222b0ed192c4b75097d673a5358509312179383",
+      "retail_row": "YAttack:0xaeaeeb34",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Fifteen complete original software/actual Metal native-domain green starburst phases through real45-frame owner/blanktail.15,795 keys/28,080 matrices, strict own profile and fresh complete replay. Proven software-only640/480 primitive guard retains short native rays; commonlongray13edgeframes diagnostic, natural caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-mpappear-authored-20261010/root-approval.json": {
+      "sha256": "4d6a6f71455a36c7309270cfc10ebafdbe464407e6bb76b9518e38e04bca2060",
+      "retail_row": "MPAppear:0xad99fdf2",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Eighteen full1280x960 original normal-lit software/actual Metal native-domain blue/white column and expanding/turning base phases, contraction and realtick89 kill/blank90/100/110.5,670 keys/8,592 matrices, strict own profile and complete fresh replay. Silent play/audio and natural multiplayer/network caller, device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-shriek-authored-20261010/root-approval.json": {
+      "sha256": "46facc58e0e4813731fd03442320ff6a6da0c9c20fc107d79b3d88ad0d803420",
+      "retail_row": "shriek:0xad92bc12",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Fifteen complete original owner/software versus actual Metal native-domain eight-ring purple phases through startup16 and actualkill46/blank50.1,836 state/RNG fields and literal GPU controls; exact opt-in source RGB565 contribution floor removes spurious skirt. Common50frame byteidentity, destination rounding/naturalactor/damage/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-flameb-authored-20261010/FlameB-root-approval.json": {
+      "sha256": "7e7e354f512f16713c8acb85048a2397f6c5526e82ae74832e9854b3b43ee2a5",
+      "retail_row": "Flame:0x50ba373c",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Eleven full original custom Initialize/CopyVertices/Animate/RenderObject/software versus actual Metal native-domain blue Flame phases. All eight atlas cells and18tick wraps; normal real-map40/40visible/8distinct. Literal own asset/prelit colors and existingARGB4444/point flags. Darktextureplate presentboth;1pxsampling/quantization/naturalotherlighting/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-flameg-authored-20261010/FlameG-root-approval.json": {
+      "sha256": "f4195943d883bf8b1a25704fd14d6acd55062872ef2e99f2f5eb9afdcebcd579",
+      "retail_row": "Flame:0x50ba373d",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Eleven full original custom Initialize/CopyVertices/Animate/RenderObject/software versus actual Metal native-domain green Flame phases. All eight atlas cells and18tick wraps; normal real-map40/40visible/8distinct. Literal own asset/prelit colors and existingARGB4444/point flags. Darktextureplate presentboth;1pxsampling/quantization/naturalotherlighting/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-ceyes-authored-20261010/root-approval.json": {
+      "sha256": "7cde501dcdcc08eb7f21e430399de2de93340e30028a717a79784771289d42fd",
+      "retail_row": "ceyes:0x0c052639",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Nineteen complete original software/actual Metal native-domain tiny gold-eye phases across two120-frame loops. Proven integerXYZ/UV and sample-lattice mapping recovers width/glints;430 original packets/10,320fields. Common245frame byteidentity retained.1\u20135pixel scanline/quantization/naturalattachment/otherstates/device/exactpixels remain open; realend1kill separate."
+    },
+    "recon/retail_asm/runtime/effects/current-gvortex-authored-20261010/root-approval.json": {
+      "sha256": "111317505a78eb3e653aaabb85b24d8b160c2ddd7d6e4f46b15085536c06ddbb",
+      "retail_row": "gvortex:0xad99bd33",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Twenty full original software/actual Metal native-domain greenpillar/coiledband/risingflare phases across real240-frame owner/blanktail. Two fixed1920x1080 views cover authored1920x1780 extents without scaling; native overlap0\u20132125 differing pixels remains viewport/raster limit, rawwindows retained.33 sparse/full actual pixelmatches preserve24Hz Render;25,920 keys/22,560 matrices. Naturalcaller/audio/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-energyspray-authored-20261010/root-approval.json": {
+      "sha256": "9e455d84008037c7c39757ceea0a339eb58b08f1f8fdd1f32d5bdcf943c87220",
+      "retail_row": "energyspray:0xad92bc1c",
+      "check": "independent_native_software_actual_metal_appearance",
+      "status": "pass_for_recorded_configuration",
+      "scope": "Fifteen full original software/actual Metal native-domain null-spell composite phases through realkill136/blank140, plus three wholefan70/90/110 comparisons using four fixedsupported1920x1080 views.25radialcards/core/20prelittriangles,87,984state/RNG fields,82,096matrices/2,220colors. ExplicitRGBA5 alpha/flat-depth andsource-contribution controls, native-only textured/untextured primitiveguard. Common140frames/defaultdiagnostics unchanged. Naturalactor-hand/facing/damage/audio, viewportoverlap/destination/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-ribbon-authored-20261011/Ribbon-root-approval.json": {
+      "sha256": "e96e80f5f325d22a3e0880de380b10636207a77e88473f99e0a35300a5fb7466",
+      "retail_row": "Ribbon:0x562c7439",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Seven full original/actual Metal native-domain null-target phases2/6/16/20/30/60/90: blue three-tube growth, animated five-frame floor and thirty spark cycles.22,230 state/RNG fields,18 pose channels, guarded original legacy keys; translated gallery40/40 visible and2,232 owner-geometry controls. All90 origin-zero RGB frames unchanged after placement correction. Natural revive actor/target/decay/spell, sampling/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-maelstrom-authored-20261011/root-approval.json": {
+      "sha256": "0d699dee126ac687c7ed863796ba0594837247d722dad43ad413728006b12881",
+      "retail_row": "maelstrom:0xaeaeeb26",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Seventeen original/actual Metal native-domain full authored phases through245END, with three fixed supported1920x1080 views covering all whole triangles. Own51objects/4textures,45visibleobjects,7cameraobjects,3actualscrolltexcontrollers;112455keys/77504matrices/2304UV fields verified. Full260tick schedules/freshpixels repeat; ordinary gallery70/70visible with real ownerkill/restart. Raw viewportoverlap, raster/destination/device and naturalboss/spell/map/audio/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-windstrip-authored-20261011/root-approval.json": {
+      "sha256": "8b3796f49a093ea1adf5c36d98b269ff10f27868ac45b6c82719a411071d8fab",
+      "retail_row": "WindStrip:0xded3dbed",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Sixteen full original/actual Metal native-domain null-spell phases2..255: twenty moving strips, falling drops, own normal-lit halo growth/shrink and realkill252.2,030,592 state/RNG fields plus505,168 strip/UV/halo matrix fields; actual Pulse-before-NextFrame ordering and incoming-stack-width boundary proven. All510 final common/native images unchanged; translated gallery60frames53visible54distinct. Natural live-spell orbit/damage/audio, raster/depth/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-ymaelstrom-authored-20261011/root-approval.json": {
+      "sha256": "2be2f4388611fa3541f68b9f01b444fa7a0806947673fe0b662a3b70daa976b8",
+      "retail_row": "ymaelstrom:0xae5eeb26",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Seventeen full original/actual Metal native-domain own green pillar, flares, expanding rings and blanktail phases through245END, three supported fixedviews covering whole geometry. Own asset/keys/matrices/three scrollcontrollers, sixfreshpixel replays, all260schedules; ordinarygallery70/70distinct with actualownerrestart. Rawoverlap/raster/device/naturalboss/spell/map/audio/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-fog-quantized-20261011/root-approval.json": {
+      "sha256": "d4daffbf144998a9762c9f009c3657880541063abac20b10ac62068df005a098",
+      "retail_row": "Fog:0xc24b2a85",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Nine whole original/actual Metal native-domain corrected36vertex50triangle moving grid phases2..120. Literal dynamicRGBA5 sourcequantization/flatmaxdepth/integerlattice controls;22/24varyingGPU samples exact,2fixed8-vs-affine residuals causally explained,3depth controls pass. Defaultcommon andsiblings retained, actualtranslatedgallery70/70visible. Common fractionalbrightness, destinationrounding/interpolation/naturalmap/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-vortex-default-20261011/Vortex-root-approval.json": {
+      "sha256": "5742ac72cf255807ced76b25dbeb13fc258a622a2ea03e120fec37d2fe004608",
+      "retail_row": "Vortex:0x452dade0",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Six full original/actual Metal native-domain static default-leaf phases2/6/16/30/46/60. Own205vertices/304triangles/3roots/24legacykeybytes and fullARGBglow; exactfactorydefault binding,27posechannels,148positivefaces/cull/depthcontrols,2460ownergeometrychecks. Actualtranslatedgallery70/70visible. SnapshotproceduralVortex is a different binding;2pxedge/color/floatdepth/device/naturalmap/otherlighting/exactpixels remainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-fireswarm-authored-20261011/root-approval.json": {
+      "sha256": "f3d0d869fcaa44fd8773a66d953297f2dcf9965d98a352a207230e8f66d911c0",
+      "retail_row": "FireSwarm:0x582c1e78",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Fourteen full original/actual Metal native-domain software phases2..80 in supported1920x1080 with whole visible geometry. Early2/15/25blank, partial27, full28onward, flatten75 and kill76/blank80. Native-only actualARGB640/480edgeguard proven by2304authored decisions/20kernel boundary controls/constants-only differential;79state source proof. Ordinarycommon80images unchanged; translatedtypedgalleryvisible/dynamic. Commonearly geometry/device, integer-edge/interpolation/naturalcaller/audio/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-cataclysm-original-20261011/root-approval.json": {
+      "sha256": "80c10aa098e941db8ec4db51e0aa8e7aaff716ce339bc2d74d2e6372c5b5e070",
+      "retail_row": "cataclysm:0xad92bc19",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Sixteen full original/actual Metal native-domain null-spell variant0 phases1..89: falling rocky head/trail, impact torus, fragments/glows/dust and blanktail; whole visible bounds inside1280x960. Thirty pieces/seventy dust/fifty glows,110565 state fields exact/826RNG, original life80 kill. Explicit prelit RGB565/RGBA5 and additive cull-none/order policies separately proven. Original base nonlinear local-height policy; red torus/glows and own five-mesh asset. Common launch brightness/clipping, natural actors/other spell variant/damage/audio, interpolation/destination/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-ycataclysm-original-20261011/root-approval.json": {
+      "sha256": "a4d92475bf5da149ac28997aa7a7264b63f146accbf9a1ce41298f79c99159df",
+      "retail_row": "Ycataclysm:0xad92fc13",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Sixteen full original/actual Metal native-domain null-spell variant0 phases1..89: falling rocky head/trail, impact torus, fragments/glows/dust and blanktail; whole visible bounds inside1280x960. Thirty pieces/seventy dust/fifty glows,110565 state fields exact/826RNG, original life80 kill. Explicit prelit RGB565/RGBA5 and additive cull-none/order policies separately proven. Own Y raw local-height policy and green textures; independent named factory and asset. Common launch brightness/clipping, natural actors/other spell variant/damage/audio, interpolation/destination/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-rockstorm-original-20261011/root-approval.json": {
+      "sha256": "797073d8a470a749af89514109693c5def569b7fcffc3a60c538f53b6c24c1a0",
+      "retail_row": "RockStorm:0xad92bd22",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Sixteen original/actual Metal native-domain phases1..89, whole visible bounds inside1280x960: five growing/orbiting/converging blue-glow rocks, impact/recovery/fade and realkill77/blanktail. Named Rock Storm level1, stationary targetorigin/radius24 and invokerFighting identity;12489state fields exact/1600matrix fields max2.4e-7,26initialRNG. Own authoredglowRY retained; translatedtypedgallery69/70visible with repeatedownerexpiry. Damage/reaction observedboundaries; naturalactors/otherlevels/targets/audio/device/quant/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-blast-whole-20261011/root-approval.json": {
+      "sha256": "08a9554447c09f4164893e2cc0b13137f50f5a254c7fc07ea679a5ad151bd9ee",
+      "retail_row": "Blast:0x0ea34fa3",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Eight original/actual Metal native-domain lifecycle phases plus complete phase60/90 six-view2560x2600 geometry coverage across all56roots. Fixed1920x1080 tiles/signedorigins verified; literal640/480span guard justified by18rejects/constants-only231887\u2192303854pixels. Common120frames unchanged; source60480key/25680matrix fields and actualgallery70/70visible with ownercycles. Original1245/Metal5tile-overlap pixels, quantization/naturalcaller/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-funnel-original-20261011/root-approval.json": {
+      "sha256": "38ab6a80ecdc8387fbd2da7fdec8ed10a59248eb8a0e3bbfceb0e585b9c3a60c",
+      "retail_row": "funnel:0xad92bc17",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Nineteen timestamp-matched original/actual Metal native-domain moving coil/wisps/sparks phases throughterraintransition101/state2at130/real140kill/blanktail. Ownthree-state/twoParticleSys profiles, source(-180,0,78), targetvoidplane180, declaredspell/ground1\u21920;108490pool fields and stride3 proof,3600keys/6304matrices/5808particle render fields. Full1280x960visiblebounds, freshpixel replay, actualtranslatedgallery70/70visible. Naturalterrain/actors/damage/audio/device/interpolation/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-jtele-authored-20261011/Jtele-root-approval.json": {
+      "sha256": "050328c0ab069e0d1230fbb3a27a2beb8202e22eede2a062fe2c4f4ecc581715",
+      "retail_row": "jtele:0x0c05263b",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Nine full original/actual Metal native-domain own-blue core/three stars/trails phases2/6/16/25/40/48/49 and realkill50/blank50/53. Actual finite defaultfactory/owner/controller cadence; own profiles4positive2871negative,3600pose/5920matrix fields. Native-only beamspan admission independently proven byconstants-only widening, ordinarybeam geometry retained. Both53mergedRGBframes unchanged; exact translatedgallery67/70visible68distinct andcleanexit. Jtele17628state fields pass. Gallery beamtopclipping is liveness-only; naturalcaller/ordinarybeamdevice/audio/destinationquant/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-jteled-authored-20261011/Jteled-root-approval.json": {
+      "sha256": "033ba595a9b00c3f47c090b585f0bb07685f319a26b2424c54439b84224baab9",
+      "retail_row": "jteled:0x0c05263c",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Nine full original/actual Metal native-domain own-blue core/three stars/trails phases2/6/16/25/40/48/49 and realkill50/blank50/53. Actual finite defaultfactory/owner/controller cadence; own profiles4positive2871negative,3600pose/5920matrix fields. Native-only beamspan admission independently proven byconstants-only widening, ordinarybeam geometry retained. Both53mergedRGBframes unchanged; exact translatedgallery67/70visible68distinct andcleanexit. Jteled three strictZresiduals max4.58e-5 retained, no numeric-equality claim. Gallery beamtopclipping is liveness-only; naturalcaller/ordinarybeamdevice/audio/destinationquant/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-icedsparks-default-20261011/root-approval.json": {
+      "sha256": "b520cbd96b93d252aa992ccf2fdcc0454d2324f4d56b56ebadc7fe174bd9275b",
+      "retail_row": "Icedsparks:0xacabfada",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Ten whole original/actual Metal native-domain exactdefault crystal/cube phases through200tickstwo99\u21920wraps. Own50root/5000constantkeys,45000compiled channels exact, completefactory/baseInitialize/SetupObjects/RenderObject;200/200visibleconstantframes. Actual translatedmapcreate/move/delete10checks andgallery220/220visible;root100/100visible. DistinctIcedvictim/shatter behavior notclaimed;1pxedge/sampling/naturalcaller/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-queenarrow-original-20261011/root-approval.json": {
+      "sha256": "5d7ec006a594db826d78997689ce53b54c234c2c77fcfa68f3a8a419b05f7ee9",
+      "retail_row": "queenarrow:0xad92bd1e",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Nineteen full original/actual Metal native-domain moving QueenArrow phases: source(-180,0,38),target(180,0,78),literal+40launch/velocity23,growing3\u219220mesh trail,targetcollision/countdown/kill andblanktail.440state/RNG fields and1312drawmatrices max4.742e-7, freshnative replay/selectedpixels exact. Nativeuntexturedgraypolicy retained; actual endpointgallery75/100visible/repeats followsconfiguredpath. Naturalactors/damage/audio,quantizededge/interpolation/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-irisflare-authored-20261011/IrisFlare-root-approval.json": {
+      "sha256": "a27093c74bb2570eef11756274d939bf3d2a6de502ba52423d52faa6f905665f",
+      "retail_row": "IrisFlare:0x120054d1",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Fourteen complete original/actual Metal native-domain own five morphingflares/cylinders/earlyexpandingring phases1..205 includingblank201/restart202. Exactcustomfactory/legacyasset, actualcachedangle semantics retained,4715state/23264matrix fields, strict4positive10401negative/18legacychannels/2232ownergeometry checks. Wholebounds1280x960,205GPUframes204visible205distinct; translatedgallery100/100visible/100distinct andcleanexit. NotTeleporter;1pxedge/interpolation/naturalcaller/audio/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-arrow-attached-20261011/root-approval.json": {
+      "sha256": "5e54c04e9e8ce980633379430dd106884da99f222bae5712b077803adf9e6f3a",
+      "retail_row": "arroweffect:0xad92bd1f",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Nineteen full original/actual Metal native-domain moving attached graytrail phases andblanktail. Source(-180,0,78), originalweightlessMove20/tick, targetterrainplane180, matching originalNotify deletion/followerkill19.26native state/RNG rows and4928drawmatrices max4.633e-8, unrelatedNotify negativecontrol, full/stride3 tests,freshpixels exact. Queen24frames unchanged; actualendpointgallery93/100visible/repeats followsconfiguredpath. Naturalphysicalarrow/bow/actors/damage/audio/device/edge/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-ytelekinesis-original-20261011/root-approval.json": {
+      "sha256": "639e31264658a7805c377924c69d25d7197e06e14204209590bd016f577748db",
+      "retail_row": "YTelekinesis:0xaeaeeb28",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Whole original/actual Metal native-domain appearance of four moving, accelerating, rotating chunks with stationary player/owner origin and null spell, seed1. 24 exact phases across six fixed supported1920x1080 windows; all39600 triangles covered. Frozen expired chunks and real owner kill165/blank169+ agree. Native raw overlap differences0\u2013441pixels and Metal0\u201311 retained; common narrow-depth output is diagnostic. Natural moving player, actors/spell damage, audio/map dispatch, resource/base-init boundaries, UV/light quantization, device and exact pixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-smoke-original-20261011/root-approval.json": {
+      "sha256": "df5fb292d2fabf2ae85ebededbbc645979cb2792a5b4869671a194b520950994",
+      "retail_row": "Smoke:0x224a5ccc",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Ten whole original/actual Metal native-domain quality3 phases through600ticks: exact50puffs, expansion/shrink/reset and center bounce. Literal512 original ARGB4444 texel controls restore green edges via existing source-floor policy.917727statefields, exactRNG,601native repeat states/30050draws/11PNGs; root24same-phase PNGs over600ticks identical and translatedgallery300/300 visible/distinct. Quality below3 legitimately kills. Destination overlap brightness/edge quantization, ordinary common output, natural caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-essencedrain-default-20261011/root-approval.json": {
+      "sha256": "a50aee4ff546d37a0b99b8e2838d5c56a0c99dc5b265e37f4f9258ea250eed8e",
+      "retail_row": "Essencedrain:0xdefeca7e",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Twelve complete original/actual Metal native-domain exact default-owner phases through201ticks, all29authored roots. Three keyed cylinders scale-reject after first phase;26zero-key identity auxiliaries stay visible until realkill200/blank200\u2013201.5400key channels/83296accepted matrixfields/5200identity matrices/594scale rejects;57312liveUV fields and3768translated vertices checked. Full201native replay and12rasters exact. Root21same-phase PNGs identical through201 andgallery100/100visible/restarts. Not a source/destination gameplay proof; generic unused zero-key API/cache discrepancy,5pxfirst-tick thin-cylinder bounds, tinyUV/edge/lightquantization, natural caller/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-swamp-original-20261011/root-approval.json": {
+      "sha256": "ed8e4d40dac131c1c9510634153bfdf5e1a4b980fcd711ca28677849688ff2ea",
+      "retail_row": "Swamp:0xbecffeda",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Eleven complete original/actual Metal native-domain Swamp phases through real56tick ownerkill/blanktail:31slot fgeys downward sparks, nine ground cards and18bubble meshes with source texture-major order.15120keys/15008matrixfields and38172normal/38104stride3pool fields agree, everyRNG seed exact. Root60same-phase PNGs identical, lifecycle negativecontrol and translatedgallery118/120visible/114distinct with realrestart/cleanexit. Quality0, flatground1, nullspell own defaultowner. Naturalcaller/terrain/actors/audio/device/destinationrounding/edge/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-barrierew-original-20261011/root-approval.json": {
+      "sha256": "5a2612eb6d4c6129132f5bc52d064742a0e14d591a9bc236b1fa74235af029a1",
+      "retail_row": "BarrierEW:0x224a5adf",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Complete original/actual Metal native-domain blue wall at31 exact phases through91ticks, both texture scroll axes and all12faces. All30flare slots run; actual zero-Y flare matrices reject, leaving exactly1original wall draw each tick.149649statefields perresource, exactRNG and90combined legacy posechannels; strict25253negative bodies each and otheroldkey regressions pass. Fresh91state replay/3PNGs exact perresource; translatedgallery80/80visible/80distinct. Nullowner script/COM residency boundaries declared. One-pixel edge, per-vertex versus uniform UV float rounding, destinationprecision/naturalcaller/audio/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-barrierns-original-20261011/root-approval.json": {
+      "sha256": "67f4b4157174a01ba808edc7b5a9fbcaaf470c66435c984215d9fa9adeaf82fd",
+      "retail_row": "BarrierNS:0x224b5adc",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Complete original/actual Metal native-domain blue wall at31 exact phases through91ticks, both texture scroll axes and all12faces. All30flare slots run; actual zero-Y flare matrices reject, leaving exactly1original wall draw each tick.149649statefields perresource, exactRNG and90combined legacy posechannels; strict25253negative bodies each and otheroldkey regressions pass. Fresh91state replay/3PNGs exact perresource; translatedgallery80/80visible/80distinct. Nullowner script/COM residency boundaries declared. One-pixel edge, per-vertex versus uniform UV float rounding, destinationprecision/naturalcaller/audio/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-jhagaattack-original-20261011/root-approval.json": {
+      "sha256": "c4cecea20e4ce5deea6ae1de189f4239c548c67c029d5489d82e27fec1004ae9",
+      "retail_row": "JhagaAttack:0xaeaeeb32",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Twenty-five complete original/actual Metal native-domain phases through100ticks: nullspell timed charge20/flight15/teardown55, self-movement from(0,60,78)to(0,-60,78), purple head/trail/sparks/decay and realkill87/blanktail. Allsubmitted100tick bounds fit supported1920x1080 atfixed960,485.847268normal/848298stride3poolfields, exactRNG796,315cached-origin controls and strictpose/profile checks; original100state/5PNG replay exact. Root25samephase PNGs identical; translatedgallery84/100visible withrealrestart/cleanexit. Nullinvoker equals emptyquery, so collision/damage isnotclaimed. Naturalboss/invoker/audio, genericEffect/script/resource/COM/map boundaries, sampling/RGB565destinationrounding/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-headfireball-original-20261011/root-approval.json": {
+      "sha256": "f74c1e73c3c41cbe72e78f53ad788eb1eb4e9001445abb4fce7544fd78054f60",
+      "retail_row": "headfireball:0xd000f005",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Twenty-five complete original/actual Metal native-domain phases of exactRunFireHeadN single-child trap: source(0,60,78), fixedfacing0/8-unit movement,targetplaneY=-60, launch18/impact32/kill86, goldenhead/orangetrail/sparks/decay/blanktail. All110tick bounds fit1280x960.1100caller fields,517990normal/521320stride3particlefields, exactRNG892 and306cached-origin controls;4050keys/5568matrixchannels andstrict170mutations/450defaultcontrols pass. Fresh110states/6PNGs exact; root25samephase PNGs identical/gallery68of100visible/69distinct withrealrestart. Exactself-moving routeexception preservesendpoint/alias guards elsewhere. Naturaltrap scheduling/otherfacings/targetquery/damage/audio, resource/COM/map boundaries, sampling/RGB565destinationrounding/device/exactpixels open."
+    },
+    "recon/retail_asm/runtime/effects/current-invisible-null-20261011/root-approval.json": {
+      "sha256": "c8203463753496b88ccb0ae30da3d7bd1f7ba6eea494d22852c496364ea49c28",
+      "retail_row": "invisible:0xad92bc16",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Sixteen complete original/actual Metal phases of the null-invoker Invisible configuration at owner origin zero: 70 particles, six rings, hide/wait/show after430 and real kill500/blank501. Full501 native records and5112 draw packets; 221884 source state/cache fields and81792 emitted matrix fields agree below5e-8. Strict4positive/271negative profile and6112 translated vertices/21120 original world fields pass. Root51 same-phase PNGs identical through501; fixed24Hz gallery602ticks witnesses real owner recreation. Translated null-invoker rings double owner translation while particles useABSPOS, so ordinary map gallery is partial; preserve this original behavior. One-pixel edge, natural invoker/fade/map/audio/device/exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-paralize-target-20261011/root-approval.json": {
+      "sha256": "117c9c6abbe685fb26a08c04e90989b452f6fd1d9842c8dcb9538b624c900d39",
+      "retail_row": "paralize1:0xad92bc14",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Sixteen whole original/actual Metal phases of Physical Paralysis variant1 with genuine stationary Acolyte invoker/target, offset96 and radius16: sprites converge/orbit, three purple egg passes, shrink/kill260 and blanktail280. Original280tick owner/RNG and complete custom Render/RenderObject/software execute; sampled submitted geometry fits fixed1280x960. Exact integer/RNG/draw counts,13392 authoredXYZ/17388 indices; retained22 float diagnostics max0.006254world/0.003663matrix and UV9.35e-5. Integrated70 same-phase PNGs repeat byte-identically at24Hz through278 with clean exit. Actual configured gallery completes260twice, recreates without reseeding shared RNG, restores target flags/Health102/position and cleans early shutdown. Null-invoker branch stayspartial. Natural spell/map selection, animated attachment, othervariants/radii/endpoints, audio/device/framebuffer precision and exactpixels remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-dragonattack-original-20261011/root-approval.json": {
+      "sha256": "e90a110c8d539283e42fc4ba01faeccab690dafffedb38b9e0dc87db9a8d484d",
+      "retail_row": "dragonattack:0xba09fead",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Complete declared Sid Dragon Attack/Fighting configuration, genuine nonresident Acolytes source3185/3185/16 and target+280X/ground0, face96 muzzle14/14/+100. Nineteen actual original/Metal active pairs plus4blank controls; all110ticks submitted triangles covered by immutable16view1920x1080 grid,6active films/5676witness fields. Same pre-Render VM/CRT replay keeps all110 canonical before/after states exact and5extraRender controls exact. Root25same-phase PNG repeat byte-identical and946actuallive witnesses pass; incomplete witness rejected. Root real gallery58/100visible,5factorycreations through flight/impact/lifetime andcleanexit. OriginalbasePulse precedes custom movement; cached prototype preserves distant impact. Scoped appearance passes with explicitly broader/brighter Metal headglow at13/25/29; overlap/framebufferquantization causal and exactpixel gates remain open. Naturaldragon/bones/mapcollision/combat/audio/device and arbitraryendpoints remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-manadrain-target-20261011/root-approval.json": {
+      "sha256": "cfe8f2aec5e5523b984d502f7deca39fd1dcf7c61d7f938eedf72ca23db296bb",
+      "retail_row": "manadrain:0xad92bc13",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Full declared Mana Drain variant with genuine stationary Acolyte caster/fighting target atoffset96. Fourteen whole original/actualMetal phasepairs5..100 cover cone/glow,15movingstreams, actual62mana transfer21, shrink andkill91/blanktail100; allsampled geometry fitsfixed1280x960. Native100ticks,10495definedstate/RNG/mana fields and19680matrixchannels pass;704640authoredvertexbytes/97560indices exact. ActualGPU90render RNGcounts/firstpositions exact, maxphaseerror4.56e-8. Root28pairedimagehashes and4fullresolutiondetailpages independentlyreviewed; integrated100samephasePNGs byteidentical andcleanexit. Rootgallery24Hz completes91ticksfourtimes withreal60..62mana transfer, health102, targetposition/flags retained, spellTimer0 and no sharedRNGreseed; 31/32samplesvisible. Standalone originalowner/spelllist association and base/pre matrix fragments aredeclaredboundaries; naturalmap/cast scheduling, movingactors/attachment, healthdrainvariants,audio/device/quantization/exactpixels remainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-drip-loaded-20261011/root-approval.json": {
+      "sha256": "0d776d56dbd85d7dba27cf581fc196e72d66bffac4b00ba2e30b8aa01b8a0956",
+      "retail_row": "Drip:0x5975abde",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Complete declared Drip20/128/1 no-splash composite atorigin0, publicperiod1000000 before121 drainslastchild. Genuine loaded originalparent plus originalclass-factory standaloneRipple children after unchanged\u22121map allocations; managed scheduler declared. ActualownerPulse once/baseAnimate40e460/fullparent+childraster,5births24/48/72/96/120 andkills45/69/93/117/141, true ambientparent retained. 1825statefields exact,900submittedgeometrychannels<=2.999e-6, indices/UVs exact; fresh144record native replay exact. Fourteen complete original/Metal phasepairs independently reviewed,42pairedimage hashes checked. Root36samephasePNGs byte-identical through141,24Hzupdates/render/cleanexit. Ordinary36image path unchanged privately; rootlinked4/recursive4/ASanpolicy1/19map/bridge plus4invalidroute controls pass. Rootgallerydefaultmapfactory(64,128,48) supportingliveness66/100visible/397ticks/cleanexit; it doesnot certify controlledpreview routing. Onepixel edges, lowintensitynativegreen-vsMetalgray/framebufferquantization, naturalsector residency, arbitraryrandomperiods, splashappearance/audio/globalRNG/device/exactpixels remainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-blood-spray-20261011/root-approval.json": {
+      "sha256": "5c7b353ffa6f3e75cb32b34ad805d66cfdcb3dd8bc059cd47813ebae45706396",
+      "retail_row": "Blood:0xddc4042e",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Complete declared Blood publicspray40/224/3/5/5/1, detail4, explicitcommonInitseed2; genuine originalAcolyte/publicSetParams/typedowner/animator andownMisc/Blood.I3D68716bytebody. Full90native lifecycle/selectedwhole rasters, fly\u2192splat\u2192shrink/kill60/blank90; source32760definedfields exact,11104localmatrixchannels<5e-8,2776prelitcolors/91RNGvalues exact,4positive/2156profile negatives and5552vertex/1388drawchecks pass. Twelve original/actualMetal whole/detailphases independentlyreviewed,24pairedimagehashes verified; root90samephasePNGs byte-identical/cleanexit withthreefocusedtests PASS. Two interleavedRGBA4444 alpha-over/RGB565 ONEONE passes retainall8authoredquads. Genericoriginalmap/worldPulse explicitlyisolated andoriginalmapinsertion\u22121 retained; sourcefixturefixedseed2 isnot a livegallery/globalRNG proof. Onepixelbounds/sampling andtick58nativeblank/Metal1pixel remainopen; naturalcombat/map/damage/caster, alternatelights, audio/device/exactpixels andactualnewgalleryroute remainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-ymanadrain-target-20261011/root-approval.json": {
+      "sha256": "ae6753011a44b238b671ef6453de96860c0d7f3c10f8d922de4f81bf05ad62f3",
+      "retail_row": "Ymanadrain:0xae92bc14",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Distinct YManaDrain ae92bc14/genuine stationaryAcolyte Fighting targetoffset96/loadedYManaDrain160..260, own greencone/glow/15movingstreams. OriginalcustomanimatorPulse precedes ownerphase; coldblank1, real201 transfer21(caster252\u2192453/victim252\u219251), shrink/kill91/blank100. Native100ticks/source10490definedfields and19680matrices pass;704640ownvertexbytes/97560indices exact, wrongdoublePulse/cadence/castercap negativesreject. Fourteen whole original/actualMetal pairsindependently reviewed in4fullresolutiondetailpages,28pairedimagehashesverified; actualGPU90render RNGcounts/positions exact/maxphase4.56e-8. Root100samephasePNGs byte-identical/cleanexit. Rootgallery24Hz four91completions, realuncappedcastermana>252, health102/102,targetflags/position/spelltimer0 retained;4+unreseededfactories/31of32visible/cleanexit. Standaloneowner/spelllist association/basepre matrices/camera/materialCOM aredeclaredboundaries. Naturalmap/cast scheduling,movingactors/attachment,healthvariants,audio/device/quantization/exactpixels remainopen; invaliddoublePulse datasetsretained."
+    },
+    "recon/retail_asm/runtime/effects/current-quicksand-target-20261011/root-approval.json": {
+      "sha256": "1acefeb1241db19fa3050d3b44030afe56a4816d4567ecf8a173a5976912f81a",
+      "retail_row": "Quicksand:0xbabeface",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Declared stationary Quicksand targetoffset96/own4root meshes/3frame staticposes; genuine originalAcolytes/namedspell/owner/target/fulloriginalraster1..55, realkill56/blank60 andnullspell60zero-draw control. Native damage/reaction health102\u219216 observed butportactor damage NOTimplemented. Source3520matrixchannels<=5e-8/180lifecyclefields andfresh60state/draw/bound replay pass. Fourteen original/Metal whole/detailphases independently reviewed,42imagehashes verified; root60samephasePNGs byteidentical/cleanexit andretained native/sourceunit PASS23.633s. Rootmappedgallery40/40visible/3creations/cleanexit. Staticnative appearance isintentional;1\u20132pxedges/framebufferquantization, arbitrarytargets/variants, portdamage/naturalmap/actor/audio/device/exactpixels remainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-tornado-target-20261011/root-approval.json": {
+      "sha256": "dfee3066737a7604ff7dc765c1c72b20cff433d638d3cae025bec8ba01d93f96",
+      "retail_row": "Tornado:0x2784abde",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "ExactTornado ownerexplicitlyassociatedwith genuineAcolytes/loadedTornado variant(naturalvariantcreatesFunnel, notclaimingnaturalTornado cast). Full100swirls/30ice/15flame controller/Render packets through380; seed1kill360/blanktail. Native/source660207definedpoolfields/RNG bitexact,664688matrixchannels<=5e-6,6493728ownvertexbytes/301062indices exact. Original20selectedcompletepixelphases; unselectedlighting/raster skippedonlyunderfirst10fullcontrols preservingpools/RNG/orderedpackets. Nineteen wholeoriginal/Metal pairs reviewed,38imagehashes verified/allgeometrycontained. Root38samephasePNGsexactatstride10/all24Hzupdates/render through372/cleanexit; independentfull380stateproofpass. Rootgallery3unseededcycles301/301/306/15realemptyqueries/actorhealth102+flagsunchanged/completedtimer0/cleanexit. Sourcefailsclosedonnonemptyloadedsectorqueries. No successfuldamage/naturalcast/map/otheractors/audio/device/exactpixels claim; destinationquantization/sampling residualsopen."
+    },
+    "recon/retail_asm/runtime/effects/current-halo-public-20261011/root-approval.json": {
+      "sha256": "00ad18c2eb3a89ecdd48b22f76775b14e836e15ff0fce3dc94b7656d014ce0a3",
+      "retail_row": "Halo:0xdedbdbed",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "ExactHalo ownMagic/Halo.I3D12authoredvertices/12faces, genuineowner/publicInitParams/animator/fullselectedoriginalraster; explicittestinputs(60,.04)and(20,.08), notdiscoverednaturalcallerconstants. Grow/shrink/actualkill61/21/blanktails; genuine0/0defaultblanknegative. Source412state/1248matrices<=4.77e-9,4resourcepositive/1058mutationrejects,1872submittedvertex/156drawchecks pass. Fifteen+ninewhole original/actualMetal phasepairs independentlyreviewed,48pairedimagehashes verified and7fixed4x detailpages inspected. Integrated70+30samephasePNGs byte-identical/cleanexit,3nativeunitsPASS12.5s. Actualmappedgallery100frames96visible/30distinct,2finitefactorylogs exactHalo_AUTHORED_PUBLIC60/cleanexit. Genericoriginalmap/worldPulse boundary andsilentdevicehandoff retained. Onepixelcoverage/nearzero/destinationprecision, naturalcaller/spell/mapanimator/audio/hardwareblend/lighting/exactpixels remainopen; no proceduraltexture orfit."
+    },
+    "recon/retail_asm/runtime/effects/current-teleporter-null-20261011/root-approval.json": {
+      "sha256": "0ae9756f777b8b7097ed97fbeb924048e4c3992981fbf06bb0a95ae9fe2410f3",
+      "retail_row": "Teleporter:0x369a5d2e",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "ExactTeleporter nullspellportal/distinctfromIrisFlare; genuine cachedoriginalowner/oldbodyresources/customPulse+2c/baseAnimate/fullscene/raster. Five rotating/scaledcylinders, phase2\u21924 at25,symmetricreturn, fourdraws50, actualkill51/blank60; fresh60state/draw/bounds replay exact. Source249draws/3984matrices<=2.4324e-7/360lifecyclefields pass; batched3sec stops51 underASan. Eighteen original/actualMetal whole/detailphases reviewed,54imagehashes verified; root60samephasePNGs byteidentical/cleanexit andretained native/sourceunitPASS4.925s. Rootexactgallery59/60visible,5creations/realfiniterecreation/cleanexit. NamedTeleportgenuineactor/emptymapfailurekill21 isseparatecontrol, NOT successfulteleport/motion/actorfade. Edge/overlapbrightness,destinationprecision,naturalmap/actor/spellvariants/audio/device/exactpixels remainopen; nofittedgeometry/phase/color."
+    },
+    "recon/retail_asm/runtime/effects/current-createfood-context-20261011/root-approval.json": {
+      "sha256": "d48c608f59cd723581904fb2b6d27a99ff8d8d8685f5d32605279536c0acede9",
+      "retail_row": "Createfood:0x838cffba",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact Createfood quality3 150-slot controller and own two RGB565 meshes, genuine loaded original owner/Pulse/defaultAnimate/full render packets with selected native software raster. Declared white light0 multiplier28/ambient32 generated1024-word adjacent lookup context; failed FOOD60 service observes original clock0/epoch946598400/prefix0 intrinsic RNG reseed, no item insertion credit. Full85ticks:255000 pool fields and1024lookupwords exact,61168 matrix channels max3.428e-7, RNG counts/seeds exact. Twenty-one same-tick whole original/Metal pairs and six actual-size detail pages independently reviewed;63 paired image hashes and12 other pins verified. Integrated85PNG repeat byte-identical,79visible,cleanexit; native/source unitPASS15.554s,26 mapping tests and compiled gallery lifecycle pass. Actual mapped gallery100frames99visible/99distinct/two real finite creations/cleanexit. Smoother stronger low-intensity Metal haze, edge/RGB565 quantization retained. Natural lighting/spells/actors, food/map insertion, audio/device/exact pixels remain open; no fitted geometry/color or shared renderer changes."
+    },
+    "recon/retail_asm/runtime/effects/current-pulp-public-20261011/root-approval.json": {
+      "sha256": "9666ad39e0110b32f049f82af47a3cb19ec0858f8eac6205f8606d7022dc67e2",
+      "retail_row": "Pulp:0x152dafdd",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Genuine loaded Acolyte/animator and Pulp public Set velocity(0,0,8),counts5/5/5 at declared unresident source(10000,10000,16); full original80ticks plus cold0. Scene1 opaque cull/depth mode and complete own chunk/blood meshes, no procedural body. Source11340poolfields/81RNGrows exact,7120matrixchannels max5.96e-8,386144vertexbytes/22110indices exact. All86 consumed XY terrain queries/result0 and10 real Blood/BloodS allocation failures checked; nine unused native stackZ words retained as differences. Clock0 intrinsic MakeIndex rand/srand/rand reseeds preserved. Wrongclock/missingreseed/doublePulse negatives reject. Ten original/actualMetal whole/detail phases independently reviewed,27pins verified; root81active plus1cold PNGs byte-identical/cleanexit. Roottranslatedgallery20/20visible through458updates, one unreseeded persistent factory,10 intrinsic reseeds, restoredactorflags406c028/health102/cleanexit. Natural death caller/mapped tile success/liveclock/audio/device/light context and1-2pixel coverage/surface quantization remainopen; settledchunks persist, no inventedkill."
+    },
+    "recon/retail_asm/runtime/effects/current-setvortex-loaded-20261011/root-approval.json": {
+      "sha256": "be346f066bcb25f35b461998cca9fc9c6a74b661124e0196d89c636910e8d16d",
+      "retail_row": "setvortex:0xad92bc15",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact persistent nullspell SetVortex genuine loaded owner/customAnimate/fullRender, original nonlinear FIX(+30) cachedheight, complete12authored triangles/CULL_NONE and strictARGB4444 decode. Full10524Hzupdates/render; source315bobfields max4.89e-8,1260triangles/18900XYZUVchannels checked, oldlinearZnegative differs0.79544. Rootnative/sourceunitPASS35.165s;27exacttick original/actualMetal wholepairs and nine4x detailpages independentlyreviewed,96pinsverified. Integrated27PNGsatstride4/all105renders byte-identical/cleanexit. Realruntime map gallery100/100visible52distinct/onepersistentfactory/cleanexit is liveness only, not standaloneappearance certification; initialcopiedvalidator incorrectly expectedpreviewruntime0/log retained and corrected againstactualruntime1 route. Initialcapture duringbuild rejectedchangedbinary, finalstablebinaryrepeatused. Spellteleportmarking/previousmarkerremoval,naturalmapcaller/skippedrenders/ordinaryprojection/audio/device/exactpixels andnearest/alphaRGB565overlap residualsremainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-dragonfire-null-20261011/root-approval.json": {
+      "sha256": "78f3bc3ad8378617f31efd70ab8a3634dd44a79f934c526871ae49bd1f7c0b64",
+      "retail_row": "dragonfire:0xad92bc1a",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact Dragonfire0xad92bc1a genuine loaded nullspell/facing0 owner/custom two300-slot fire/smoke pools, own meshes. Actual executable births random(-4,4)XYZ, no snapshot+18/-50/+15 offsets. Full100originalupdates/render/raster,34emissionticks, realkill93/blanktail. Rootindependent453120definedstatefields/RNG exact and19626orderedmatrices/314016channels bitexact; snapshotbirthoffset/doubleAnimate negativesreject. Fourteen whole original/actualMetal phases, five fullresolutiondetailstrips and four actualsizeimages independentlyreviewed,35pinsverified/allgeometrycontained. Integrated101PNGs byteidentical92visible/cleanexit; sourcebuild/compiledmapping/lifecycle pass. Roottranslatedgallery20/20visible through458updates, fourunreseededcompletions93/95/96/96+partial78cleanup. Uninitializedflicker/deadstorage ignored asunused byRender(false,false). Commonprojection/live-spell/casterfacing/naturalactor/map/audio/device/exactpixels andsampling/RGB565overlap residualsremainopen; noFireConecontrolleralias orfit."
+    },
+    "recon/retail_asm/runtime/effects/current-punch-full-20261011/root-approval.json": {
+      "sha256": "acc53ed394ff463941d0b79bd49d18e9837847e612a732491bbd40e4f44a67e2",
+      "retail_row": "PunchAndJudy:0x0c05263a",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact genuine loaded PunchAndJudy0x0c05263a/defaultowner/animator, eightroots/twoRGB565textures, complete600Pulse/Animate/PreRender/Render/Post/raster updates and581framewrap580\u21920\u21921, zeroRNG/controllers. NativeScene1/CULL3/depthtest/write/ONEZERO, existingopaquehelper/nativeownerprojector. Leaf passes actualowner previousstate0/frame0 toGetAniKey first5frames includingwrap; missingcallernegative26matrices fails. Rootall600\u00d78\u00d716=76800GPUmatrixchannels matchmax9.55e-7. Eighteenwholephasepairs/fivefullresolutiondetailstrips/fiveactualsizeimages independentlyreviewed,46pinsverified/allgeometrycontained. Integrated31stride20PNGsexact/all60124Hzupdates/render retained/cleanexit. Rootmappedgallery32/32visible, onepersistentowner,746modulo581framescorrect/cleanteardown. Ordinary31PNGs unchanged agentcontrol. Nativecaller/fractionalstate scheduling/terrain/light/audio/device/exactpixels andedge/surfacequantization remainopen; no fittedcamera/time/geometry or inventedlifetime."
+    },
+    "recon/retail_asm/runtime/effects/current-combatflash-state0-20261011/root-approval.json": {
+      "sha256": "1dcc5e3bd57ef3c132092a0c56fbbda6549a7b166b6ba0a920cccc88ca582467",
+      "retail_row": "combatflash:0xad92bd29",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact CombatFlash0xad92bd29 state0/start1 only, genuine loaded generic owner/default animator/nullspell and full64original NextFrame/wholePulse/controllerPulse/Animate/PreRender/Render/Post/raster; seed1/camera0/sourceambient38/dir1. Inclusiveobject2 keys/fiveframetransition18matrices288channels max2.42e-7; strengthenedactualsourceowner1.5scale negative1.64 exposes nativeowner correction. Twelve projectedvertices/36channels formula error1.06e-4; original324normaltriangles/7776integerfields truncateXYZ/UV64, all144extraobjectdraws blank across18liveframes. Exactnativeowner/intgridUV mesh removes flarestretch; originalRGB5normal21 preserved. Elevenwholephasepairs and sixactualsizedetailpanels independentlyreviewed,39imagepins; moving15particles/baseflare/growth/fade andkill19/blanktail align. Root64GPUrepeat byteidentical17visible/blank19+, coldtick1blankcontrolpass; renderOF_KILLguardfix preventsformerextraframe. Componentcontrol20fullPNGunchanged/noRNGsuppression90tickproofPASS, existingdefaultstatic regressionPASS5.565s. Realmapgallery100frames95visible92distinct/six exactstate0creations/cleanexit is liveness only; initialcopiedadaptervalidator mismatchretained/correctedagainstactualnormalmaproute. Smallscanline/RGB565destinationquantizationresiduals remain. Other17states/impactselector/naturalcombat/catchupcadence/audio/device/exactpixels remainopen; noallvariants/fullacceptanceclaim."
+    },
+    "recon/retail_asm/runtime/effects/current-burn-public-20261011/root-approval.json": {
+      "sha256": "16e0966268aa84b62860f6a43bd8b56b4663328b9303e9fee80d34a76ce126d4",
+      "retail_row": "Burn:0x55471bff",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact Burn0x55471bff/own legacyBurnbabyburn twoRGB565quads, genuine Acolyte22bone APIs/state14frame0/facing96/publicSet4e2fa0, integer/no-transition reference control, explicit shared post-actor seed2. OriginalwholePreRender/ownerDamage/controller/render/raster execute, realHP102\u219297 atsame5damage ticks. Source correctedparentdependency mirrors and original nonlinearparticleZ used; no fakebones/pose/stat returns. Core108750state/90240matrix/90RNGfields max1.58e-5, strictownresource4positive815rejects, actualABSPOS22560vertices5640draws pass; rootthreeunitsPASS17.990s,27mappingtests/compiledbridge pass. Fourteenwholephasepairs/fixedcrop/allfive2xnearest detailstrips independentlyreviewed,31imagepins+8freezepinsverified; finite ramp/fire/smoke/fade/kill76/blank90 align. Integrated90PNGbyte-identical/cleanexit; gallery100frames89visible90distinct/twofinitecreations/liveRNG withoutfactoryreseed/cleanexit. Ordinarygalleryfractionalpose is liveness only; isolatedinteger control suppliesappearance. NaturalBurn map/poster/reignite, moving/animated/otheractors/defaultcachedtransition, spells/audio/lighting/hardware andfloat/edge/RGB565/exactpixel residualsremainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-nakrnoth-full-20261011/root-approval.json": {
+      "sha256": "d3fe4d231ee6c384d2744899577700d8e481bd2eb9185f704f06cdd2b09695fb",
+      "retail_row": "Nakrnoth:0xad92bd21",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact Nakrnoth0xad92bd21 genuine loaded nullspell/fixedowner/defaultanimator, own63objects/775frame nonloop clip/tenemitter260slotPartSys, unchanged shippedterminal-vector omission parsedasnative. Source645775definedparticlefields/RNGexact within declaredworldfloat0.0021(max.0019525),187840ordinarymatrixchannels max1.33e-5; prototype0 Render mutation excludedfrom ordinarymatrixproof. Originalhidden*paths omitted; exactgeometry/material/keys/profile130rejectcontrols andsoftware640/480span guard preserved onlynative mode, commongeometrycomplete. All49675actualterrainqueriesreturn0 and790owner/RNGstatesmatch; sourceemptygroundexplicit. Correctedone-light native reference (actual23\u219231\u219223 duplicate-lightpositive/removalcontrol) matches unchangedport. Fortyretainedmainphasepairs and36rawlatepairs/sixfixedsupported1920x1080windows, wholecontacts/all5detailpages/late641+681coverageMAXunions independentlyreviewed,257pinsverified. MAXunions arecoveragecontacts, notgiantframebuffers; allsoftwareadmitted authoredtrianglescovered. Rootmain40stride20PNGsbyteidentical through78124Hzupdates/render/kill775/blanktail; lateview2 six601..701PNGsbyteidentical/cleanexit. Rootconfiguredgallery40frames36visible/two finitecreations through938renderframes/cleanexit; no actualnaturalboss/mapgroundcredit. Mainlateclip, overlap/raster/RGB565precision,worldfloatdrift, naturalboss/actor/spell/map/audio/device/exactpixels remainopen. Olddouble-light/warmup25/unguarded/widened-limit controls retained; nofit orportbrightnesschange."
+    },
+    "recon/retail_asm/runtime/effects/current-aura-public-20261011/root-approval.json": {
+      "sha256": "54941edc026bfcb05344e90bf7d2f3cd0cdaa6f8ea023d0bd9de5aa9aa3fdb38",
+      "retail_row": "Aura:0x00ab1d1d",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact Aura 0x00ab1d1d, own 9484-byte RGB565 resource, genuine named Aura spell and Acolyte state14/frame0/facing96, declared selector storage0 and integer/no-transition bone query. Full750-tick original and source state/RNG match:375719 state fields,280912 matrices; actual integrated122899 slot fields max4.825e-8, zero errors. Real CalcObjectMatrix hierarchy queries with temporary interpolation disable restored; no recorded bone matrices. All15 whole/fixed-crop/detail phases independently reviewed, emission stops721, kill744, blanktail through750. Integrated750 PNGs repeat byte-identically;100 gallery samples visible/distinct with two unreseeded finite creations and clean exit. Original cached zero selector is a fixture control, not universal allocator initialization. Natural moving actor/transition/spell/map/audio/device and exact pixel equality remain open; raster edge/quantization differences retained."
+    },
+    "recon/retail_asm/runtime/effects/current-strike-meteor-20261011/root-approval.json": {
+      "sha256": "d08f4805063c7015e2e1a7175be5e10eb952acdd9b83f28982f58ffd7b97f900",
+      "retail_row": "StrikeEffect:0xad92bd32",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact StrikeEffect 0xad92bd32 named Meteor Storm, genuine Acolytes/four delayed real owners with strict Comet imagery override, source3185/3185/16 and empty ground0. Full original manager/owner cadence and intrinsic8 index reseeds retained; compiled3638 owner fields,1523846 particle fields/RNG,3240 keys/4400 matrices pass; actual33127 runtime checks pass. Initial identity emitter origin and first5-frame previous0/frame0 transition verified; ordinary Comet control unchanged. All16 lifecycle phases and six additional whole-trajectory phases/seven fixed1920x1080 views independently reviewed. Root101+66 phase PNGs byte-identical to frozen port; all45 review panels byte-identical after memory-bounded assembly. Gallery746ticks,24/32 visible samples,8 genuine completions at tick87/manager93 and ninth partial50, live RNG, health102/102 and clean exit. Original fixed-view overlap2696pixel differences retained versus port0; no exact pixel equality. Natural populated-map damage/scheduler/moving actors/audio/hardware and other variants remain open. Initial giant-canvas reviewer timed out, retained; bounded equivalent panels passed without rerunning simulations."
+    },
+    "recon/retail_asm/runtime/effects/current-sgeyser-inline-20261011/root-approval.json": {
+      "sha256": "8a3de11be188ddc509d8ae8f59efc52da756672501597075f5624dbf2568b4fb",
+      "retail_row": "sgeyser:0xad92bd30",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact sgeyser 0xad92bd30 genuine generic owner and loaded CavSGeyser resource at declared saved position1019/11935/289; one104-slot inline controller and authored #blast, original failed optional vapor preset retained. Full120-tick original state/pool/RNG/draw evidence; current243672 particle fields,1215 keys/2160 matrices pass; actual10560 runtime/ground fields pass,1745 terrain queries return0. Initial zero emitter cache and previous-owner origin, original material mode0 then16 preserved. All15 whole/detail phases independently reviewed with complete submitted bounds in1280x960 center640/640; all25 root review panels byte-identical. Independent120native+60common phase PNGs identical to frozen port with clean exits; source state/runtime matches in both projections. Real kill45/frame44,37 visible lifecycle ticks and blanktail retained. Gallery746ticks,16 genuine45-tick completion cycles plus26-tick teardown, live RNG/no factory reseed, clean exit. Declared empty ground only: actual natural trap/map layers/audio/device and exact raster pixel equality remain open; optional missing vapor definition not invented."
+    },
+    "recon/retail_asm/runtime/effects/current-cfire-installed-20261011/root-approval.json": {
+      "sha256": "ad37ac0af1319ca578947793a8f3f1f488302eeba6889e3bd4c46e909b2b2133",
+      "retail_row": "cfire:0xad92bd27",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact cfire 0xad92bd27 Misc/cfire resource, genuine factory/default animator and installed missing cfire/csparks presets: zero controllers, two authored ARGB4444 base sprites. Original64tick repeat/state/draws/requests identical; source1856 matrix/key fields max5e-8 and13 guard negatives pass, zero RNG,29 visible ticks, real kill30 and blanktail through64. Root independent native regression passes; actual64 source frames pixel-identical to frozen port and all13 review panels byte-identical,37 pins verified. Root inspected active detail phases1/2/9/15/29 and blank30/31/45/60/64. Exact finite viewer mapping and8 callback/style/alias negative controls pass; root gallery746ticks,24 genuine30tick completions plus26 partial teardown, clean exit. Missing intended particle definitions remain open, approximately one-pixel sampling residual retained. No invented presets, intended complete-particle effect/natural caller/audio/device/exact-pixel claim."
+    },
+    "recon/retail_asm/runtime/effects/current-watchers-qualified-20261011/root-approval.json": {
+      "sha256": "34c55eec6137ee7d1624ef397915fd70c2ed8d8f9ac5910c05069f9ce161d4ad",
+      "retail_rows": [
+        "ogrokwatcher1:0xaeaeeb23",
+        "ogrokwatcher2:0xaeaeeb24",
+        "ogrokwatcher3:0xaeaeeb25"
+      ],
+      "check": "root_qualified_modified_original_appearance",
+      "status": "approved_qualified_scoped_appearance",
+      "modified_retail": true,
+      "device_identical": false,
+      "scope": "Exact three installed ogrokwatcher1/2/3 assets, genuine owner/controller and eight24Hz frames each covering four authored poses. Explicit modified original PE e3e5fa7ef5841e70dc6855e492595ca47cda03cc414a832eb4c1c6be697f76fa repairs exact1555 decode at two observed54ff60 depth-tested scan halves; unchanged resident texture bytes/fullRGB5, geometry/UV/scan conversion/blend arithmetic. Independent524288 assembledx86 channel assertions, fiveformat negatives, eightactualraster binaryalpha literals pass; original4444/565color/depth unchanged. Fresh original24frames repeat exactly; currentroot24sourceframes repeat frozen correctport exactly, all6rootwhole/detail panels byte-identical,66pins verified and independentlyinspected. Source correct1555decoder/nativeowner projection unchanged. Approx1\u20132pixel sampling/edge/filter/precision residuals retained; no phase/color/geometry fit. Qualified modified-renderer appearance only, device_identical=false; unmodifiedrainbow/alpha8 controls retained as rejectedreferences. Startupcache replay before mappedpatch, no fullgamepatched boot claim; natural map/ownerPulse, other primitive/blendbranches, fullanimation variants and exactpixels remainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-magicshield-public-20261011/root-approval.json": {
+      "sha256": "a1ce4803b00db379c8419db2054a6915a264e2f409e052c65817148760db9b01",
+      "retail_row": "magicshield:0xad92bc1b",
+      "check": "root_scoped_whole_effect_appearance",
+      "status": "approved_scoped_appearance",
+      "scope": "Exact magicshield 0xad92bc1b own448228-byte Mshield resource, real Acolyte and licensed Aura/Fire Flash TSpell/publicSetSpell, explicitly unmatched names/constructor-storage0 basic branch only. Whole sphere402vertices/690faces and10dotquads use actual ARGB4444 textures/materials; no synthetic actor/variant or recorded pose. Two genuine170tick references versus currentproduction:9010 state/stat/RNG and21376 drawmatrix fields pervariant pass,max9.87e-7;59074 authoredvertex transformations/1336draws pervariant; strictprofile4accepts/884rejects. Actual2400 phase/countdown/angle/scale/resistance/draw fields passmax4.94e-8;300logged RNGincrements agree with original random-range counts (inherited globalcounteroffset1 explicit). Root340GPUframes repeat frozenport pixel-identically;36whole phasepairs and18detail strips/fixedcrops independentlyinspected, rootpanels byte-identical. RealFireFlash minimum50 yields resistance0.5 at26..125, clears126; original masked sphere scale rejection136, zeroXYdot MATRIX submissions preserved; realkill151 before animator/Render, blanktail170. Rootgallery100samples82visible83distinct,two unreseeded creations, onecompleted151cycle then42tickpartial, cleanexit. No natural MagicShield namedtiers/allocator initialization/movingactor/spellscheduler/map/audio/hardware/damage mitigation/fulltiers/exactpixel claim;1\u20133pixel sampling/fringe/color differences retained."
+    },
+    "recon/retail_asm/runtime/effects/current-fire-installed-source-20261011/source-checkpoint.json": {
+      "sha256": "d2fdba9b91cfab1757faacfb5de7ead2b5622d1f89ac778bd6506033ca2c9f0a",
+      "retail_row": "Fire:0x119f01e3",
+      "check": "exact_fire_legacy_source_and_cardinal_raster_gate",
+      "status": "source_pose_pass_raster_gate_open",
+      "scope": "Exact shipped Fire defaultowner/resource/staticframe0/33residenttextureframes, strictwhole277496bytebody andactual8bytekeycopy. Source9posefields and192actualGPUmatrixfields match genuinecardinaloriginalmax1e-6;551guardrejectsASan/UBSan andadjacentlegacyregressionspass. Fourcardinalsourcecapturesframe0/RNG0cleanexit; originalface64/192onepixel, sourceintegergridface64blank/face192onepixel same647,469 butRGB8,4,0 versusoriginal16,8,0. Unsnappedsourceface64onepixel632,462 differentcolor; retaineddiagnostic. Noatlasclock/brightness/scale/assetfit. Exactdefaultface0viewerpartialreplacesunrelatedpre-releaseproceduralscatter; naturalcaller/raster/exactpixel fidelityremainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-parent-20261011/parent-source/manifest.json": {
+      "sha256": "2a2d3fce953e4f37a94092bda3e24dca3665dc85a47852fcf819303a08df1b61",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "qualified_sandswirl_parent_only_source",
+      "status": "pass",
+      "scope": "4340 parent schedule/target fields across310 genuineactor/publicSetSpell ticks with explicitmodifiedSparkschild andQuicksandspellcontrol; no intendedsandasset/particle/fullruntime/visualcredit. Missingchild/caller failsclosed."
+    },
+    "recon/retail_asm/runtime/effects/current-fire-cardinal-raster-20261011/manifest.json": {
+      "sha256": "ac2093ae4e953eb3ebb3231e8fe128ccebfc4f114ec41931d075f5e41ffa4fb8",
+      "retail_row": "Fire:0x119f01e3",
+      "check": "original_cardinal_texel_sampling",
+      "status": "pass",
+      "scope": "Fourliteralpacket replays through completeoriginalsoftwarekernel reproduce everyoriginalpixel; read-onlytexel observations identifyUVspan sampling difference. No sourcebrightness/UV/geometry/clockfit or visualcredit."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-parent-20261011/seeking-source/manifest.json": {
+      "sha256": "27fb37a268bef72cb96826ffe952f745b614acf4b9ca7c26091ede5610d803ad",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "qualified_seeking_pool_render_source",
+      "status": "pass",
+      "scope": "264430pool/RNG/kill fields and5697renderpackets bitexact through310ticks, newobserver preservesbaseline state/pixels18PNGs; qualifiedmodifiedSparkschild/Quicksandspell, externalmapallocation75, no intendedSandimagery/runtimefactory/appearancecredit."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-parent-20261011/parent-moving-source/manifest.json": {
+      "sha256": "dc0dc2eeaf6056efca6982a3cd3981468693ad8afaa0d8d3069eb2336e5b8cca",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "parent-moving-source",
+      "status": "pass",
+      "scope": "Actual SetPos targetmoves at60/85; originalquery75 samples80/48/-32, no latercontinuous retarget. QualifiedSparkschild+realQuicksandspellcontrol, currentcore matchesoriginal310ticks. Missingintendedimagery/runtimeGPU remainsopen."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-parent-20261011/seeking-moving-source/manifest.json": {
+      "sha256": "44460b7f98dc0aa06928f36e66a88501d116a9a9aacc4c195b636073cfb8e009",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "seeking-moving-source",
+      "status": "pass",
+      "scope": "Actual SetPos targetmoves at60/85; originalquery75 samples80/48/-32, no latercontinuous retarget. QualifiedSparkschild+realQuicksandspellcontrol, currentcore matchesoriginal310ticks. Missingintendedimagery/runtimeGPU remainsopen."
+    },
+    "recon/retail_asm/runtime/effects/current-dust-qualified-device-20261011/root-approval.json": {
+      "sha256": "a669e964d981fa2b9f31bfbfb47e99794e47db92354de2896f1e586b071d4ed3",
+      "retail_row": "Dust:0x0c052637",
+      "check": "root_qualified_semantic_device_appearance",
+      "status": "approved_qualified_scoped_appearance",
+      "qualified_reference": true,
+      "semantic_device_reference": true,
+      "device_identical": false,
+      "scope": "Exact Dust 0x0c052637 own Dustcloud resource/controller and original hardwareFVF1e2 packets, RGB8 diffuse, RGB565 COM texture, MODULATE/ONE-ONE/cullnone/Ztest/noZwrite. Explicit independentsemanticdevice raster uses originalsoftwaretransform positions with declared integer-center/top-left coverage, RGB8linearUNORM target/round-nearest perfragment and point+linear sampler alternatives; not periodGPU/unmodifieddevice fidelity. Dust-only modernRGB8 sourcecorrection, softwareRGB5 andallotherprofiles includingCombatFlash unchanged; root23040 compiledpolicycontrols+3arithmetic/raster controls pass. Fresh25originaldeviceframes state/RNG/pool/orderedpackets/bothsamplerimages exact; original25software state/pool/RNG equal andallblank. Actualroot25modern frames decodedpixelidentical to frozenport,18visible;25softwarepolicy sourceframes blank andclean. All23matchedphases2..24/28whole-detail panels byteidentical,129pins verified, independentlyreviewed; directsimulation_seconds*24 phase pairing, extra blanktail retained, originalkill20. Root40gallerysamples visible andclean using explicitmodernpolicy; galleryliveness only. No seed/color/geometry/UV/phasefit. Naturalcaller/map/audio/hardwareinitialization/samplerselection/coverage/interpolation/targetrounding/perioddevice/exactpixels remainopen. qualified_reference=true, semantic_device_reference=true, device_identical=false; no originalsoftwarekernel patch."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-parent-20261011/qualified-root-check.json": {
+      "sha256": "71ce30aa0477c2a3487d304476d39f8ce0959a7ebe7623c851d61917c5a4c0d6",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "qualified_substituted_child_gpu_diagnostic",
+      "status": "verified_qualified_diagnostic",
+      "scope": "Explicitly named SANDSWIRL_QUALIFIED_SPARKS only; no retail-ID admission or intendedsandappearancecredit. Full310actualrootGPUframes clean,95visible/96distinct andall310decodedpixels repeatfrozenfilm exactly.263500actualpool fieldsbitexact,1240RNG/parentfieldsexact,310globalRNGinvariance checks,5697orderedsubmissions and599originalworldmatricesbitexact. Root18whole/detail phasesindependentlyinspected; identicalcontact/detail toagentreview, nofit. Commonprojection100repeat exact/clean, state/parity only. Fourunchanged licensedSparks meshes/ARGB4444atlas, originalqualifiedsand\u2192sparks childliteral plusactualQuicksandspellcontrol. Sourcefixedtarget/particleentryseed2383791448 andmapallocation75seed2697382707 observedboundaries explicit; no realactors/Quicksand allocation inGPUadapter. Missingintendedsandresource, undefinedseekz41, naturalcaller/map/targetmotionGPU/damage/audio/device andexactoriginalpixelsremainopen. ExistingSparks regressionpasses; sourcehelper/rasteredge differencesretained."
+    },
+    "recon/retail_asm/runtime/effects/current-fire-qualified-device-20261011/root-approval.json": {
+      "sha256": "6e66e0d1af88cbe834085eb72f8a564f1fb6e5f1539be941fe5425d9af8933c5",
+      "retail_row": "Fire:0x119f01e3",
+      "check": "root_qualified_static_device_appearance",
+      "status": "approved_qualified_static_appearance",
+      "qualified_reference": true,
+      "semantic_device_reference": true,
+      "device_identical": false,
+      "scope": "Exact Fire 0x119f01e3 installed oldbody staticquad/key/defaultowner/textureselector0, no invented33frame clock. Fourgenuine constructionfacings0/64/128/192 execute268originalupdates/actualhardwareDrawIndexedPrimitive FVF112/COMmaterial+ARGB4444texture0, allframe0/selector0/RNG0. Captured all-white diffuse/ambient/specular/emissive material proves fixedfunctiondiffuse saturation; strictmaterial rejects unrelated lighting inputs. IndependentRGBA4444 MODULATE/SRCALPHA-INVSRCALPHA qualifiedRGB8linearUNORM device uses explicitlydeclaredmodernhalfcenters/pointfilter; legacyinteger/point andbothlinear controls retained, no periodGPUclaim. Foursemanticunits pass786432blendchannels, materials/zeroalpha/sharededge/centertranslation controls. Rootfreshoriginal12packets/state/48samplerimages repeatexact, source268renderedupdates/4288worldmatrixfields max1.825e-8, all12sampledRGBframes exact toqualifieddevice. All13whole/detailpanels byteidentical,88pins verified, independentlyinspected. Actualsource unchanged fromexactFireadapter, no color/geometry/UV/phasefit. Originalsoftware span/UVdiffers, naturalscene/caller/audio/animated-fire expectations/generalmateriallighting/filter/perioddevice/exactunchanged-retailfidelity remainopen. qualified_reference=true,semantic_device_reference=true,device_identical=false; exactRGBclaim onlydeclaredmoderncenter/point device configuration."
+    },
+    "recon/retail_asm/runtime/effects/current-rift-qualified-20261011/root-approval.json": {
+      "sha256": "3c9b415a5c8108e29e39127260f5926695653dc3cfebe451e4ff0dfe2408f6f2",
+      "retail_row": "Rift1:0xadbcef18",
+      "check": "root_qualified_parser_effect_appearance",
+      "status": "approved_qualified_scoped_appearance",
+      "qualified_reference": true,
+      "modified_retail": true,
+      "device_identical": false,
+      "scope": "Exact Rift1 0xadbcef18 own33329bytebody/quad/material/ARGB4444atlas andgenuinegeneric owner. Qualifiedoriginal changes one mappedparserliteral byte5c59b4v\u2192d toadmit unchangedauthored obj=rift,u=4,d=4; fulloriginalInit/UVallocation/ownerPulse/Animate/Render/raster execute, unmodifiedInit/destructorfailure retained. Rootfresh104state/RNG/orderedpackets repeat priornative exact; source3168authoredvertex/normal/UVchannels ASanpassmax1.34e-9, strictprofile4accept74rejects. Originalcolumn=cell%4,row=cell\u22124*column retained,16rawUVcycle/fourwrappeddiagonalappearances/negativeand>1V; no conventional-row correction or phasefit. Actualroot104decodedimages repeatexact tofinalport/cleanexit,99visible;495sourceframe/UV/lifetime fields pass,15whole/fixedcrop/4xdetail phases independentlyreviewed at actual1280x960/source0/camera640,480, allnonemptyboundsinterior. Realowner kills100/frame99, blank100..104; gallery100samples99visible9distinct/twounreseeded creations (onecompletionthenpartial), cleanexit, livenessonly. Explicit24Hz native-vfxfixturecontroller feeds realcountedAdvanceticks; ordinarygame keepsLegacyFrameCount toavoid60Hzacceleration. Tick69 firstclocklag31errorsretainednegative. Qualifiedmodifiedoriginal only/device_identical=false; noasset/caller/geometry/color/UValignmentfit. Naturalcaller/mapmovement/otherrevisions/lighting/device/onepixel samplingfringe/colorquantization/exactpixels and unmodifiedretailappearance remainopen."
+    },
+    "recon/retail_asm/runtime/effects/current-fspray-qualified-device-20261011/root-approval.json": {
+      "sha256": "a1d0d585ddd1b787214e2a2ce9f27303023f284c115025a65492a3d0d4ac9b2e",
+      "retail_row": "fspray:0x0c052638",
+      "check": "additional_qualified_hardware_color_review",
+      "status": "pass",
+      "scope": "Additional qualified fspray hardware RGB8 appearance pass: root repeated original61 full state/RNG/pools/packets and actual120 Metal images, reviewed all nine fixed whole/detail triples, corrected packed RGB8 color matches qualified point/linear controls with residual raster differences. Existing primary software review and 174 effect count remain unchanged."
+    },
+    "recon/retail_asm/runtime/effects/current-labyrinth-qualified-20261011/root-approval.json": {
+      "sha256": "b1025b69ca3b22b13eca4649d86efeb74b20db79e47863209594e90d24fe430c",
+      "retail_row": "LabyrinthEffect:0xad92bd20",
+      "check": "qualified_labyrinth_full_controller_visual_review",
+      "status": "pass",
+      "scope": "Qualified original initializer selector upper4-to3 only, unchanged own Starfield asset; full150-star/trail controller, original 24Hz Render/RNG, camera-follow and100frame owner loop across170ticks. Original software background extent rejection matched only in explicit native/software policy; ordinary background retained. Root reviewed nine whole/fixed phases1/6/16/30/60/99/100/101/170 and fresh repeat; sampling/depth/quantization/device/natural caller remain open."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-map-qualified-20261011/manifest.json": {
+      "sha256": "dd6bb7de697b96252230fccd8ddf4fba658a4b58084497a0402ab779948e0e00",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "qualified_actual_map_runtime",
+      "status": "pass",
+      "scope": "Actual realmap/NewObject/query/actors/GameRand parent/particle/Quicksand/spelltimer comparison with declared Sparksdependency and monotonicRNGneutral allocatorcontrol. Native310rows exact; source310PNGdecoded/fileexact,282100poolfields/5942packets/236Quicksand rows exact. No intendedSandappearance credit."
+    },
+    "recon/retail_asm/runtime/effects/current-static-rgb8-qualified-20261011/root-review.json": {
+      "sha256": "dcc00fd46b2e712929a0f3999366d60a49983384ebf9e6b9ab2286e2b15b98a8",
+      "retail_rows": [
+        "Regeneration:0x10ac03de",
+        "SwiftStrike:0xe0a3bc43",
+        "nullifier:0xad92bd38"
+      ],
+      "check": "additional_qualified_hardware_color_policy",
+      "status": "pass_color_policy_geometry_open_nullifier",
+      "scope": "Root repeated3x77 original hardware/software states/pools/RNG and450 source images, preserving225 software-policy frames. Reviewed39 fixed whole/detail phases. Packed hardwareRGB8 correction passes for allthree exactIDs. Regeneration/SwiftStrike scoped hardware appearance pass; nullifier color-policy only with visible core geometry mismatch from missing original key transition, hardware appearance remains open. No change to headlinecounts or previousSWprimaryevidence."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-restored-sand-20261011/root-approval.json": {
+      "sha256": "d5ba079fed3d6eb0bcb1dc4c9c9d9ea8f682f5c2e45df537249dd83a60e3050c",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "qualified_restored_sand_actual_map_visual",
+      "status": "pass",
+      "scope": "Explicit restoration of evidenced legacy Sand class/type+actual original Particle3D animator using byteidentical shipped Sand ownquad/texture. Genuine realmap objects, twoactors, namedQuicksand spellcontrol and declared monotonicRNGneutral allocatorboundary; native/source310ticks, parent/child/targetquery/Quicksand/spellcompletion and all18whole/fixedvisualphases pass. Native-domain source-term RGB565 quantization reproduces literal56alpha controls, unchangedcommonpolicy310images. Shipped missingbinding negative retained; no shippedenabled/naturalSandswirl/device/exactpixel claim."
+    },
+    "recon/retail_asm/runtime/effects/current-nullifier-transition-20261011/root-check.json": {
+      "sha256": "9b1f4bd7eaa99fa9559ee815a649aef6f9ae677c96e026631f79db1e445089af",
+      "retail_row": "nullifier:0xad92bd38",
+      "check": "nullifier_original_emitter_transition",
+      "status": "pass_transition_hardware_shape_software_brightness_open",
+      "scope": "Independent fresh77original fullstate/pools/RNG/keys/packets,150sourceimagesexactrepeat and2773 actualsubmittedquads validate omittedfiveframe emittertransition correction. Qualifiedhardwarecore notchremoved andgeometrymatches; originalSWreference remains visiblydimmer than bothprior/currentMetalSWpolicy. Primarycurrentsoftwareappearance remainsopen pendingcausalcolorarithmeticaudit. Historicalprimaryreviewretained; no neweffectcredit."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-moving-target-20261011/reproduction-manifest.json": {
+      "sha256": "00adf3cdf3fc9efa72d933d0ac5fbbee742159fe5fc4500444bd47d69b9b3f1e",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "restored_sand_real_moved_target",
+      "status": "pass",
+      "scope": "Rootcurrent310GPUimagesbyteexact/fullmapquery+cachedtarget+6004packets+282100poolfields+Quicksand/spellcompletion through actualSetPos60/85. Original310controlretained, firstchangedimage76afterquery75; no RNG/time/trajectoryfitting. Qualifiedlegacybinding/allocatorcontrol, naturalAI/device remainopen."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-steady-02-cyanfont-20261005/manifest.json": {
+      "sha256": "4103db21d8d4d57e29a8b0d3ee15117c4900a957435dccad80eaf004952dfc8f",
+      "retail_row": "CyanFont:0x22491405",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-steady-03-redfont-20261005/manifest.json": {
+      "sha256": "0771425327a0c6f722f7380e6393f7ee6a6ca2a786f99770e5360d600ee5fa8f",
+      "retail_row": "RedFont:0x335a2516",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-steady-04-greenfont-20261005/manifest.json": {
+      "sha256": "cb189a0f0d8953f8da0c9990e0285c28013ac7318096f9789865716316cfc324",
+      "retail_row": "GreenFont:0x446b3627",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-steady-05-bluefont-20261005/manifest.json": {
+      "sha256": "29f359e0f85d66ee4282d0c3b4fc004bedfff17ace542b5273a4f98c726814c4",
+      "retail_row": "BlueFont:0x557c4738",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-flame-steady-authored-20261005/manifest.json": {
+      "sha256": "01464f26b04ee0a9cbe648afa8deea074907e36fa4a6d3cf81070df950974825",
+      "retail_row": "Flame:0x50ba373b",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fps-sparks-editor-default-20261005/manifest.json": {
+      "sha256": "129a5d5a26dae0097b48b9d0b2cc8eeda27d908be76352ff92a8a3592bc70ae1",
+      "retail_row": "Sparks:0x14db0f2e",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fps-cure-software-helper-final-20261005/manifest.json": {
+      "sha256": "9e27c0c43987ba1c490139ac47bf1a021abc873a8f67e80ebc9922185e0d651d",
+      "retail_row": "Cure:0x152dafef",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-fps-pixie-authored-20261005/manifest.json": {
+      "sha256": "7db040256121fd13a7d02185e4da2f871a1e59c81803738d08316a7a28d79b29",
+      "retail_row": "Pixie:0x89abcde1",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-quick-globe-actual-map-20261005/manifest.json": {
+      "sha256": "bf5e6786f949953d841f913cebed6a89e4782ec71fd15aa2125b7f9aea725722",
+      "retail_row": "Globe:0xad92bd24",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "/Users/benjamincooley/RevenantRetailLab/captures/ab/sw-quick-drip-steady-20261005/ripple-appearance-review.json": {
+      "sha256": "26ed9fd803abaac517c193665547ee4d33e25da5367834ebd1e879475300a62b",
+      "retail_row": "Ripple:0x12309867",
+      "check": "historical_review_evidence",
+      "status": "verified_existing_pin",
+      "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "recon/retail_asm/runtime/effects/current-nullifier-software-grid-20261011/root-approval.json": {
+      "sha256": "457dc956b952fe803d60c0127e23543f4c3f2b8b23acd927f06c94afc2a477b9",
+      "retail_row": "nullifier:0xad92bd38",
+      "check": "current_nullifier_software_raster_visual",
+      "status": "pass",
+      "scope": "Exactnullifier state0/seed1/source0,0,16/full24Hzowner anddefaultRender: correctedfiveframe cachedemittertransition andexecutedoriginalintegerXYZ/UV rasterinputs. Root77original states/selectedPNGs/5546triangles/44368RGBA5channels repeatexact;225currentGPUimages repeatcandidate,75hardware+75common unchanged. All13whole/fixed phases reviewed forauthoredform/core distribution/color/evolution/25frameloop. CurrentSWscopedappearance passes; originalfixedpointscanconversion/destination rounding/texels/device/naturalcaller remainopen. No position/color/scale/timefit."
+    },
+    "recon/retail_asm/runtime/effects/current-puke-integer-raster-20261011/root-approval.json": {
+      "sha256": "ff0a4b8895c687c710525553543915afb262d547051d877c2a9d7f82faecf21e",
+      "retail_row": "puke:0xad92bc11",
+      "check": "puke_original_integer_raster_visual",
+      "status": "pass",
+      "scope": "ExactPuke nullspell ownasset controller, native24Hz state/frame lifecycle andoriginalintegerXYZ/UV inputs. Rootfresh33native state/raster/3000triangles/45000channels, compiledcore/policy controls and4policyfilms/default/common reproduce. Fixed15phase original/default/grid/quant/both panels reviewed forform/motion/color/drain;gridonly followsnativecausally, all32commonmodeimages unchanged. Tick24native1/GPU0 pixel andfixedpointscanconversion/destination precision remainopen; nofitting/exactpixels/naturalcaller credit."
+    },
+    "recon/retail_asm/runtime/effects/current-halo-integer-raster-20261011/root-approval.json": {
+      "sha256": "198f36d1cd1478deaa04e2199c3ae9e434d47c72ce787567aa8c062ba901b765",
+      "retail_row": "Halo:0xdedbdbed",
+      "check": "halo_native_integer_source_raster_visual",
+      "status": "pass",
+      "scope": "ExactauthoredHalo public60/.04 and20/.08 controls; originalowner/state/RNG/936drawpackets/14040integerchannels and40owntexelalpha controls. Rootfreshnative100 +fourpolicies/default/commonfilms,200default/commondecodedrepeat,1312loggedstatefields and24fixedwhole/detailphases verified. ExistingnativeSWhelperintegerXYZ+sourceflooroptin improvesform/rasterappearance; common100imagesunchanged. NearoneUV\u00d7128 trunc127/fixedpointscanconversion/destination precision/naturalcaller/exactpixels remainopen. Nofittedgeometry/color/phase."
+    },
+    "recon/retail_asm/runtime/effects/current-regeneration-spell-owner-20261011/engine-comparison.json": {
+      "sha256": "87ea139a70448787e33580baab0c4893f6be247c6a2b0153b5d32433a862c8fe",
+      "retail_row": "Regeneration:0x10ac03de",
+      "check": "real_regeneration_spell_owner",
+      "status": "pass",
+      "scope": "Real source loaded classes, resident transient map, shipped Strike creator, production Timer/Pulse/Kill, generic animator/SubmitPartSys and actor SetPos. Explicit fixture scheduling; no actor AI, natural cast, particles/device visual equivalence or broader spell-control claim."
     }
   }
 }

@@ -122,33 +122,23 @@ struct SAniKey32
 _STRUCTDEF(SAniKey)
 struct SAniKey
 {
-    union
-    {
-        int32_t data[2];
-        struct
-        {
-            unsigned int x : 12;    // Use macros below!!
-            unsigned int y : 12;
-            unsigned int z : 12;
-            unsigned int rx : 9;
-            unsigned int ry : 9;
-            unsigned int rz : 9;
-            unsigned int dummy : 1; // So equals 64 bits
-        };
-    };
+    // Serialized/native words, not compiler-dependent bitfield allocation.
+    // Z crosses the word boundary: low8 bits in word0, high4 in word1.
+    int32_t data[2];
 };
+static_assert(sizeof(SAniKey) == 8, "Legacy I3D keys contain two32-bit words");
 
-#define ak_x(ak)  ((int32_t)((ak).x) - 0x800)
-#define ak_y(ak)  ((int32_t)((ak).y) - 0x800)
-#define ak_z(ak)  ((int32_t)((ak).z) - 0x800)
-#define ak_rx(ak) ((int32_t)((ak).rx) - 0x100)
-#define ak_ry(ak) ((int32_t)((ak).ry) - 0x100)
-#define ak_rz(ak) ((int32_t)((ak).rz) - 0x100)
+#define ak_x(ak)  ((int32_t)((uint32_t)(ak).data[0] & 0xFFFu) - 0x800)
+#define ak_y(ak)  ((int32_t)(((uint32_t)(ak).data[0] >> 12) & 0xFFFu) - 0x800)
+#define ak_z(ak)  ((int32_t)((((uint32_t)(ak).data[0] >> 24) & 0xFFu) | (((uint32_t)(ak).data[1] & 0xFu) << 8)) - 0x800)
+#define ak_rx(ak) ((int32_t)(((uint32_t)(ak).data[1] >> 4) & 0x1FFu) - 0x100)
+#define ak_ry(ak) ((int32_t)(((uint32_t)(ak).data[1] >> 13) & 0x1FFu) - 0x100)
+#define ak_rz(ak) ((int32_t)(((uint32_t)(ak).data[1] >> 22) & 0x1FFu) - 0x100)
 
 #define ak_setx(ak, d)  (ak).data[0] = (((ak).data[0] & 0xFFFFF000) | ((((int32_t)(d) + 0x800) & 0xFFF) << 0))
 #define ak_sety(ak, d)  (ak).data[0] = (((ak).data[0] & 0xFF000FFF) | ((((int32_t)(d) + 0x800) & 0xFFF) << 12))
-#define ak_setz(ak, d)  (ak).data[0] = (((ak).data[0] & 0x00FFFFFF) | ((((int32_t)(d) + 0x800) & 0x0FF) << 24));\
-                        (ak).data[1] = (((ak).data[1] & 0xFFFFFFF0) | ((((int32_t)(d) + 0x800) & 0xF00) >> 8))
+#define ak_setz(ak, d)  do { (ak).data[0] = (((uint32_t)(ak).data[0] & 0x00FFFFFFu) | ((((uint32_t)(d) + 0x800u) & 0x0FFu) << 24));\
+                        (ak).data[1] = (((uint32_t)(ak).data[1] & 0xFFFFFFF0u) | ((((uint32_t)(d) + 0x800u) & 0xF00u) >> 8)); } while (0)
 #define ak_setrx(ak, d) (ak).data[1] = (((ak).data[1] & 0xFFFFE00F) | ((((int32_t)(d) + 0x100) & 0x1FF) << 4))
 #define ak_setry(ak, d) (ak).data[1] = (((ak).data[1] & 0xFFC01FFF) | ((((int32_t)(d) + 0x100) & 0x1FF) << 13))
 #define ak_setrz(ak, d) (ak).data[1] = (((ak).data[1] & 0x003FFFFF) | ((((int32_t)(d) + 0x100) & 0x1FF) << 22))

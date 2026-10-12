@@ -34,7 +34,7 @@ constexpr unsigned OF_KILL=0x1000,AF_LOOPING=1;
 struct TFlipbookBillboardComponent{bool replacing;bool ReplacesDefaultVisual()const{return replacing;}};
 struct Image{int flags{};int GetAniFlags(int)const{return flags;}};
 struct TObjectInstance{int pulses{};std::function<void()> script;void Pulse(){++pulses;if(script)script();}};
-struct TEffect:TObjectInstance{void*spell{};bool animator=true,done=true;Image*imagery{};unsigned flags=0x40004;TFlipbookBillboardComponent*visual{};int frame=7;
+struct TEffect:TObjectInstance{struct{bool enabled=false;}retail_owner;bool BeginRetailOwnerPulse(){std::abort();}void AdvanceRetailOwnerPulse(){std::abort();}void*spell{};bool animator=true,done=true;Image*imagery{};unsigned flags=0x40004;TFlipbookBillboardComponent*visual{};int frame=7;
  template<class T>T*GetComponent()const{return static_cast<T*>(visual);}bool HasAnimator()const{return animator;}
  bool CommandDone()const{return done;}void SetCommandDone(bool x){done=x;}void SetFrame(int x){frame=x;}
  int GetState()const{return 0;}const char*GetName()const{return "fixture";}

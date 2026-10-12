@@ -13,8 +13,9 @@ its own shadow / color pass over the result (`0x004be2b0`). This module:
   a capture of real GDI (docs/ui/HUD_REBUILD.md P6); until then these are
   the font file's own device metrics.
 - Records TextOutA / DrawTextA (`text_calls`: DC surface, string, position
-  or rect, format, font, color, background mode) and draws NO glyphs yet:
-  the HUD A/B compares text calls structurally until the glyph shim lands.
+  or rect, format, font, color, background mode, and the lines GDI lays the
+  string out in: `layout`) and draws NO glyphs yet: the HUD A/B compares
+  text calls structurally until the glyph shim lands.
 """
 from __future__ import annotations
 
@@ -30,6 +31,9 @@ FACES = {('arial', False): '/System/Library/Fonts/Supplemental/Arial.ttf',
          ('times new roman', False): '/System/Library/Fonts/Supplemental/Times New Roman.ttf',
          ('times new roman', True): '/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf'}
 TRANSPARENT, OPAQUE = 1, 2
+DT_CENTER, DT_RIGHT, DT_VCENTER, DT_BOTTOM = 0x1, 0x2, 0x4, 0x8
+DT_WORDBREAK, DT_SINGLELINE, DT_CALCRECT, DT_EDITCONTROL = 0x10, 0x20, 0x400, 0x2000
+TA_UPDATECP, TA_RIGHT, TA_CENTER, TA_BOTTOM, TA_BASELINE = 0x1, 0x2, 0x6, 0x8, 0x18
 STOCK_BASE = 0x80000000
 SYSTEM_FONT = STOCK_BASE | 13         # what a new DC has selected
 
@@ -58,6 +62,7 @@ class DeviceContext:
     align: int = 0
     char_extra: int = 0               # SetTextCharacterExtra: added after every character
     position: tuple = (0, 0)          # MoveToEx current position
+    viewport: tuple = (0, 0)          # SetViewportOrgEx: device = logical + this (MM_TEXT)
 
 
 @dataclass
@@ -72,6 +77,8 @@ class TextCall:
     font: str
     color: int
     back_mode: int
+    layout: list = field(default_factory=list)      # [[x, y, line, width]]: where each line's cell starts
+    cell: int = 0                                   # the font's cell height (tmHeight): a line's height
 
 
 class Gdi:
@@ -97,10 +104,13 @@ class Gdi:
                 ('GetDeviceCaps', 2, self._device_caps, gdi32),
                 ('GetCurrentPositionEx', 2, self._current_position, gdi32),
                 ('MoveToEx', 4, self._move_to, gdi32),
+                ('SetViewportOrgEx', 4, self._set_viewport_origin, gdi32),
                 ('GetTextMetricsA', 2, self._text_metrics, gdi32),
                 ('GetTextExtentPoint32A', 4, self._text_extent, gdi32),
+                ('GetTextExtentExPointA', 7, self._text_extent_ex, gdi32),
                 ('TextOutA', 5, self._text_out, gdi32),
                 ('DrawTextA', 5, self._draw_text, user32),
+                ('DrawTextExA', 6, self._draw_text_ex, user32),
                 ('GetDC', 1, lambda a: self.create_dc(0), user32),
                 ('GetWindowDC', 1, lambda a: self.create_dc(0), user32),
                 ('CreateCompatibleDC', 1, lambda a: self.create_dc(0), gdi32),
@@ -185,6 +195,13 @@ class Gdi:
         dc.position = struct.unpack('<ii', struct.pack('<II', args[1], args[2]))
         return 1
 
+    def _set_viewport_origin(self, args):
+        dc = self._dc(args[0])
+        if args[3]:
+            self.vm.write(args[3], struct.pack('<ii', *dc.viewport))
+        dc.viewport = struct.unpack('<ii', struct.pack('<II', args[1], args[2]))
+        return 1
+
     def _font(self, dc):
         font = self.fonts.get(dc.font)
         if font is None:
@@ -218,35 +235,149 @@ class Gdi:
         self.vm.write(size, struct.pack('<ii', self.width(dc, data), self._font(dc).metrics.height))
         return 1
 
-    # ---- text ----------------------------------------------------------
-
-    def _record(self, function, dc_handle, text, x, y, rect, fmt):
-        dc = self._dc(dc_handle)
-        font = self._font(dc)
-        self.text_calls.append(TextCall(function, dc.surface, text, x, y, rect, fmt,
-                                        f'{font.face} {font.height}{" bold" if font.bold else ""}',
-                                        dc.text_color, dc.back_mode))
-
-    def _text_out(self, args):
-        dc, x, y, text, count = args
-        string = bytes(self.vm.uc.mem_read(text, count)).decode('cp1252')
-        self._record('TextOutA', dc, string, struct.unpack('<i', struct.pack('<I', x))[0],
-                     struct.unpack('<i', struct.pack('<I', y))[0], None, 0)
+    def _text_extent_ex(self, args):
+        """How many characters fit in a width, and the extent after each."""
+        dc, text, count, max_extent, fit, dx, size = args
+        dc = self._dc(dc)
+        data = bytes(self.vm.uc.mem_read(text, count))
+        extents, total = [], 0
+        for byte in data:
+            total += self._font(dc).metrics.advance(byte) + dc.char_extra
+            extents.append(total)
+        if fit:
+            self.vm.write(fit, struct.pack('<i', sum(1 for e in extents if e <= max_extent)))
+        if dx:
+            self.vm.write(dx, struct.pack(f'<{len(extents)}i', *extents))
+        self.vm.write(size, struct.pack('<ii', total, self._font(dc).metrics.height))
         return 1
 
-    def _draw_text(self, args):
+    # ---- text ----------------------------------------------------------
+
+    def _record(self, function, dc_handle, text, x, y, rect, fmt, layout=None):
+        dc = self._dc(dc_handle)
+        font = self._font(dc)
+        if layout is None:
+            layout = self.layout(dc, text, rect, fmt)
+        # Recorded where the glyphs land on the surface: device coordinates.
+        ox, oy = dc.viewport
+        x, y = x + ox, y + oy
+        rect = None if rect is None else (rect[0] + ox, rect[1] + oy, rect[2] + ox, rect[3] + oy)
+        layout = [[lx + ox, ly + oy, line, width] for lx, ly, line, width in layout]
+        self.text_calls.append(TextCall(function, dc.surface, text, x, y, rect, fmt,
+                                        f'{font.face} {font.height}{" bold" if font.bold else ""}',
+                                        dc.text_color, dc.back_mode, layout, font.metrics.height))
+
+    def layout(self, dc, text, rect, fmt):
+        """DrawTextA's lines in `rect`: [[x, y, line, width]], each line one
+        cell height (tmHeight) under the last. DT_WORDBREAK breaks a line
+        before the word that would cross the rect's right edge, dropping the
+        spaces at the break (they neither draw nor count for the alignment);
+        DT_EDITCONTROL drops a last line the rect would cut. Vertical
+        centring is a single line's (GDI ignores DT_VCENTER / DT_BOTTOM
+        otherwise)."""
+        left, top, right, bottom = rect
+        height = self._font(dc).metrics.height
+        measure = lambda line: self.width(dc, line.encode('cp1252'))     # noqa: E731
+        paragraphs = [text.replace('\n', ' ')] if fmt & DT_SINGLELINE else text.replace('\r\n', '\n').split('\n')
+        lines = []
+        for paragraph in paragraphs:
+            if not fmt & DT_WORDBREAK:
+                lines.append(paragraph)
+                continue
+            line = ''
+            for word in paragraph.split(' '):
+                trial = f'{line} {word}' if line else word
+                if line and measure(trial) > right - left:
+                    lines.append(line)
+                    line = word
+                else:
+                    line = trial
+            lines.append(line)
+        y = top
+        if fmt & DT_SINGLELINE and fmt & DT_VCENTER:
+            y = top + (bottom - top - height) // 2
+        elif fmt & DT_SINGLELINE and fmt & DT_BOTTOM:
+            y = bottom - height
+        result = []
+        for index, line in enumerate(lines):
+            line_top = y + index * height
+            if fmt & DT_EDITCONTROL and line_top + height > bottom and index:
+                break
+            line = line.rstrip(' ')
+            width = measure(line)
+            x = left
+            if fmt & DT_CENTER:
+                x = left + (right - left - width) // 2
+            elif fmt & DT_RIGHT:
+                x = right - width
+            result.append([x, line_top, line, width])
+        return result
+
+    def _text_out(self, args):
+        """TextOutA at (x, y), or at the current position under TA_UPDATECP
+        (which then moves past the string: right for left-aligned text,
+        left for right-aligned), aligned by SetTextAlign. Recorded at the
+        reference point; the layout holds where the cell lands."""
+        handle, x, y, text, count = args
+        dc = self._dc(handle)
+        string = bytes(self.vm.uc.mem_read(text, count)).decode('cp1252')
+        x, y = struct.unpack('<ii', struct.pack('<II', x, y))
+        if dc.align & TA_UPDATECP:
+            x, y = dc.position
+        width = self.width(dc, string.encode('cp1252'))
+        horizontal = dc.align & TA_CENTER
+        left = x - width if horizontal == TA_RIGHT else x - width // 2 if horizontal == TA_CENTER else x
+        metrics = self._font(dc).metrics
+        vertical = dc.align & TA_BASELINE
+        top = y - metrics.ascent if vertical == TA_BASELINE else y - metrics.height if vertical == TA_BOTTOM else y
+        if dc.align & TA_UPDATECP:
+            if horizontal == 0:
+                dc.position = (x + width, y)
+            elif horizontal == TA_RIGHT:
+                dc.position = (x - width, y)
+        self._record('TextOutA', handle, string, x, y, None, 0, layout=[[left, top, string, width]])
+        return 1
+
+    def _draw_text_ex(self, args):
+        """DrawTextExA: DrawTextA, and the characters it drew in the
+        DRAWTEXTPARAMS (uiLengthDrawn, +16) -- through the last whole line
+        and the break after it -- for a caller that pages the rest."""
+        handle, text, count, rect, fmt, params = args
+        height = self._draw_text((handle, text, count, rect, fmt), 'DrawTextExA')
+        if params:
+            call = self.text_calls[-1] if not fmt & DT_CALCRECT else None
+            string = call.text if call else ''
+            drawn = 0
+            for _x, _y, line, _width in (call.layout if call else []):
+                drawn = string.index(line, drawn) + len(line) if line else drawn
+            while drawn < len(string) and string[drawn] in ' \r\n':
+                drawn += 1
+            self.vm.write(params + 16, struct.pack('<I', drawn if call else len(string)))
+        return height
+
+    def _draw_text(self, args, function='DrawTextA'):
         dc, text, count, rect, fmt = args
         if count == 0xffffffff:
             string = self.vm.string(text)
         else:
             string = bytes(self.vm.uc.mem_read(text, count)).decode('cp1252')
         box = struct.unpack('<4i', bytes(self.vm.uc.mem_read(rect, 16)))
-        self._record('DrawTextA', dc, string, box[0], box[1], box, fmt)
-        if fmt & 0x400:                               # DT_CALCRECT: report the bounding box
-            m = self._font(self._dc(dc)).metrics
-            width = self.width(self._dc(dc), string.encode('cp1252'))
-            self.vm.write(rect, struct.pack('<4i', box[0], box[1], box[0] + width, box[1] + m.height))
-        return self._font(self._dc(dc)).metrics.height
+        height = self._font(self._dc(dc)).metrics.height
+        if fmt & DT_CALCRECT:
+            # Draws nothing (an empty layout): the box the lines need, as
+            # wide as the widest line, a cell height for each; laid out in
+            # the rect's width (DT_WORDBREAK), not limited by its height.
+            lines = self.layout(self._dc(dc), string, (box[0], box[1], box[2], 0x7fffffff),
+                                fmt & ~DT_EDITCONTROL)
+            width = max(w for _x, _y, _line, w in lines)
+            height *= len(lines)
+            self._record(function, dc, string, box[0], box[1], box, fmt, layout=[])
+            self.vm.write(rect, struct.pack('<4i', box[0], box[1], box[0] + width, box[1] + height))
+            return height
+        self._record(function, dc, string, box[0], box[1], box, fmt)
+        layout = self.text_calls[-1].layout
+        # The height of the text: to the last line's bottom from the rect's top.
+        return layout[-1][1] - self.text_calls[-1].rect[1] + height if layout else 0
 
     STATE = ('fonts', 'dcs', 'text_calls', 'next_handle')
 

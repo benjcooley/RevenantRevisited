@@ -34,11 +34,9 @@ namespace {
 // DestroyAllTTFAtlases (called from the same place as the bitmap variant).
 std::unordered_map<std::string, SFontAtlas*> g_ttfAtlases;
 
-std::string MakeKey(const char* path, int pixel_height)
+std::string MakeKey(const char* path, const char* size, const char* face)
 {
-    char buf[512];
-    snprintf(buf, sizeof(buf), "%s|%d", path ? path : "", pixel_height);
-    return std::string(buf);
+    return std::string(path ? path : "") + "|" + size + "|" + (face ? face : "");
 }
 
 // The file's bytes; empty when it can't be read.
@@ -104,6 +102,16 @@ size_t PackedArea(const stbtt_fontinfo& info, const std::vector<int>& codepoints
     return area;
 }
 
+// How a face is sized: by its pixel height (ascent less descent, stb's
+// ScaleForPixelHeight), or as a GDI cell.
+struct SSizing
+{
+    int pixelHeight = 0;
+    const SGdiFontCell* cell = nullptr;
+};
+
+const SFontAtlas* Build(const char* path, const std::string& key, const SSizing& sizing, const char* face);
+
 } // namespace
 
 std::string TTFFilePath(const char* file)
@@ -116,13 +124,30 @@ std::string TTFFilePath(const char* file)
     return fonts_dir + "/" + file;
 }
 
-const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
+const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height, const char* face)
 {
     if (!path || pixel_height <= 0) return nullptr;
+    return Build(path, MakeKey(path, std::to_string(pixel_height).c_str(), face), { pixel_height, nullptr }, face);
+}
 
-    const std::string key = MakeKey(path, pixel_height);
+const SFontAtlas* BuildTTFAtlas(const char* path, const SGdiFontCell& cell, const char* face)
+{
+    if (!path || cell.ppem <= 0 || cell.ascent + cell.descent <= 0) return nullptr;
+    char size[48];
+    snprintf(size, sizeof(size), "gdi %d/%d/%d", cell.ppem, cell.ascent, cell.descent);
+    return Build(path, MakeKey(path, size, face), { 0, &cell }, face);
+}
+
+namespace {
+
+// Labelled faces keep their own atlas: "Arial 16" and "Arial 16 bold"
+// rasterize the same file today but are different retail fonts.
+const SFontAtlas* Build(const char* path, const std::string& key, const SSizing& sizing, const char* face)
+{
     if (auto it = g_ttfAtlases.find(key); it != g_ttfAtlases.end())
         return it->second;
+    const SGdiFontCell* const cell = sizing.cell;
+    const int pixel_height = cell ? cell->ascent + cell->descent : sizing.pixelHeight;
 
     // A face that fails once fails every time: remember the failure, so a
     // draw that asks for it each frame doesn't retry and log again.
@@ -158,7 +183,9 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
     // packer fills 60-70% of an atlas; at 1.6 Arimo and Tinos pack first time
     // at every size from 8 to 64 px. Should stb still not fit every glyph,
     // grow and pack again.
-    const float scale = stbtt_ScaleForPixelHeight(&info, float(pixel_height));
+    // A GDI cell sizes the em; a pixel height, the ascent less descent.
+    const float scale = cell ? stbtt_ScaleForMappingEmToPixels(&info, float(cell->ppem))
+                             : stbtt_ScaleForPixelHeight(&info, float(pixel_height));
     const size_t needed = PackedArea(info, codepoints, scale) * 8 / 5;
     int atlas_w = 512;
     while (size_t(atlas_w) * atlas_w < needed && atlas_w < kMaxAtlasDim)
@@ -181,7 +208,7 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
         }
         stbtt_PackSetOversampling(&spc, kOversample, kOversample);
         stbtt_pack_range range = {};
-        range.font_size = float(pixel_height);
+        range.font_size = cell ? STBTT_POINT_SIZE(float(cell->ppem)) : float(pixel_height);
         range.array_of_unicode_codepoints = codepoints.data();
         range.num_chars = int(codepoints.size());
         range.chardata_for_range = chardata.data();
@@ -255,6 +282,14 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
         r.xoff2    = roundf(pc.xoff2);
         r.yoff2    = roundf(pc.yoff2);
         r.xadvance = roundf(pc.xadvance);
+        if (cell)
+        {
+            // The advance width at the em size, rounded half to even, from
+            // the face's own integer units (the division is exact).
+            int advance = 0, bearing = 0;
+            stbtt_GetCodepointHMetrics(&info, codepoints[i], &advance, &bearing);
+            r.xadvance = float(std::nearbyint(double(advance) * double(scale)));
+        }
 
         const char32_t cp = char32_t(codepoints[i]);
         if (cp >= 0x20 && cp <= 0x7E && r.w > 0 && r.h > 0)
@@ -267,12 +302,25 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
         atlas->glyphs.push_back(r);
     }
 
-    // Retail drew this text with GDI DrawTextA (DT_TOP), which hangs a line
-    // from the cell top by the font's ascent less its internal leading: the
-    // visible strokes sit about 2 px above a `cellTop + ascent` baseline
-    // (HUD_REBUILD.md P6 settles it against Win98 GDI captures).
-    constexpr float kGdiTopLeading = 2.0f;
-    atlas->cellBaseline = atlas->ascent - kGdiTopLeading;
+    if (cell)
+    {
+        // GDI's cell: the baseline tmAscent under the cell's top, lines
+        // tmHeight apart.
+        atlas->ascent = float(cell->ascent);
+        atlas->descent = float(cell->descent);
+        atlas->cellBaseline = atlas->ascent;
+    }
+    else
+    {
+        // A pixel-height face hangs its strokes about 2 px above a
+        // `cellTop + ascent` baseline, close to GDI's look at that size.
+        constexpr float kGdiTopLeading = 2.0f;
+        atlas->cellBaseline = atlas->ascent - kGdiTopLeading;
+    }
+    atlas->lineStep = float(pixel_height);
+    atlas->shadow = RetailTextShadow(atlas->lineStep);
+    if (face)
+        atlas->face = face;
     // GDI's glyphs read heavier than one pass of the oversampled coverage.
     atlas->doubleStrike = true;
 
@@ -304,6 +352,8 @@ const SFontAtlas* BuildTTFAtlas(const char* path, int pixel_height)
     g_ttfAtlases.emplace(key, raw);
     return raw;
 }
+
+} // namespace
 
 void DestroyAllTTFAtlases()
 {

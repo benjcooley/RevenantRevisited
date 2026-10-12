@@ -7,7 +7,7 @@ state, geometry, animation, motion and comparisons stay in this fast loop.
 Existing guest recordings remain evidence. Unsupported fixtures stay queued
 while the next easy effect moves forward.
 
-Latest bounded rendered coverage is 77/176;84 configured visual passes are recorded separately. StillWater and all active watcher
+Latest bounded rendered coverage is 77/176;145 configured visual passes are recorded separately. StillWater and all active watcher
 texture frames pass original-selector/matrix/raster comparisons; CharUtility
 and SewerWater pass all-part static comparisons and actual native animator
 lookup. Use `static_texture_probe.py` and `default_static_probe.py`.
@@ -42,9 +42,8 @@ state/order/RNG now matches after local arithmetic fixes; use
 remaining original illumination/render/combat/audio checks.
 
 The complete scope remains the 176 retail type rows in
-[`EFFECT_BURNDOWN.json`](../../docs/vfx/EFFECT_BURNDOWN.json). As audited for this
-work, 14 rows retain a current bounded visual appearance check and zero have every runtime
-and context acceptance gate. These probes add retained evidence; they do not
+[`EFFECT_BURNDOWN.json`](../../docs/vfx/EFFECT_BURNDOWN.json). The current configured visual-pass count is stated above and in the ledger;
+zero rows have every natural runtime and context acceptance gate. These probes add retained evidence; they do not
 silently mark any effect fully accepted or replace the ledger.
 
 The [Speed/native curve destination audit](../../docs/vfx/forensics/SPEED_CONTROLLER_PREFLIGHT_20261009.md)
@@ -751,3 +750,32 @@ isolated runs reproduce both the stop-before-delete and unmodified fault traces.
 and [report](../../recon/retail_asm/runtime/effects/rift-failed-animtex-preflight/manifest.json)
 grant no animation/static-render acceptance and make no whole-game crash claim.
 Do not repair d→v or execute Render on the failed controller to invent fidelity.
+
+### Faster lossless capture output
+
+Explicit scenarios may set `"png_compression": 5`, passed to `--snapcompression=5`. The accepted range is5..9 (the encoder itself clamps lower values to5); the default remains8, preserving existing PNG encoding. Lower effort trades file size for faster output and does not change simulation, rendering or decoded pixels. Compare `pixel_summary.pixel_sha256` across encoding levels; PNG file hashes may differ. Keep the selected compression in the scenario/build manifest.
+
+A fresh32-frame1280x960 MagicShield control produced identical decoded pixels at default8 and5, both clean exits. On this machine the end-to-end runs took22.27s and17.43s (1.28×); timings include startup/render and are not a general performance guarantee. All19 capture exit/argument/cadence tests pass. Private evidence: `/Users/benjamincooley/RevenantRetailLab/research/vfx-fire-root-20261011/compression-benchmark/comparison.json`.
+
+### Self-contained capture policies and traces
+
+Scenarios may set `"lighting_mode": "auto" | "classic" | "modern"` independently of `native_domain`. Projection and color/device policy are separate choices. Existing scenarios keep their prior behavior when this field is absent.
+
+The `environment` mapping now reaches the owned capture process, for example `"environment": {"REV_SANDSWIRL_QUALIFIED_TRACE": "1"}`. Names and values must be strings; explicit structured data/assets/save roots remain authoritative. The scenario is retained in the manifest, so trace setup no longer depends on shell exports.
+
+All21 process/cadence/argument tests pass. A real three-frame qualified Sandswirl capture produced255 pool trace rows using only its scenario environment; decoded pixels exactly match the earlier full-run prefix. Private evidence: `/Users/benjamincooley/RevenantRetailLab/research/vfx-sandswirl-root-20261011/self-contained-trace/manifest.json`.
+
+### Capture export compilation
+
+`REVENANT_OPTIMIZE_CAPTURE` defaults to ON for Clang/GCC non-Debug builds.
+It compiles only `framesnap.cpp` with `-O2`, accelerating PNG encoding, composite
+resizing and captured-byte buffer destruction. Game/controller/renderer flags
+are unchanged; Debug builds retain their normal flags. Configure with
+`-DREVENANT_OPTIMIZE_CAPTURE=OFF` to compare the baseline.
+
+A traced 310-frame, 1280×960 moved-target Sand capture completed in23.03seconds
+versus129.33seconds for the previous unoptimized capture (observed5.62× under
+that machine load). All310 decoded RGBA images are identical, the full runtime
+pool/packet/query/spell review passes, and both captures exit cleanly. Private
+proof: `research/vfx-sandswirl-root-20261011/capture-optimized-proof.json`.
+This is a measured run, not a universal performance claim.

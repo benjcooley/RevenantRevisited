@@ -1,3 +1,5 @@
+> **Superseded** by [SpellBookPane_RETAIL.md](SpellBookPane_RETAIL.md) (disassembly + emulator, 2026-10-10). Kept for history; its text roles, colours, coordinates and modifiers are wrong in places (see that file's corrections section).
+
 # SpellbookSidebarPane — Reconstruction SPEC
 
 Panel: the player's **Spell Book** sidebar content pane (UI label "**Book**",

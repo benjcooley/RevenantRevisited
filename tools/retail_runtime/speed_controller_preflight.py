@@ -44,10 +44,18 @@ def read_asset(data):
         states = r(p+44)
         tracks = []
         for state in range(u(24)):
-            st = states + state*12
-            parent, n = struct.unpack_from('<2i', data, st)
-            keys = list(struct.unpack_from('<'+'I'*n, data, r(st+8)))
-            tracks.append(dict(parent=parent, keys=keys))
+            if result['flags']&0x80:
+                st=states+state*12
+                parent,n=struct.unpack_from('<2i',data,st)
+                keys=list(struct.unpack_from('<'+'I'*n,data,r(st+8)))
+                track=dict(parent=parent,keys=keys)
+            else:
+                st=states+state*8;parent=struct.unpack_from('<i',data,st)[0]
+                n=struct.unpack_from('<h',data,28+state*76+42)[0]if u(st+4)else 0
+                raw=data[r(st+4):r(st+4)+n*8]
+                if len(raw)!=n*8:raise ValueError('Truncated legacy eight-byte keys')
+                track=dict(parent=parent,keys=list(struct.unpack_from('<'+'I'*n,raw)),legacy_key_hex=raw.hex())
+            tracks.append(track)
         runs = list(struct.unpack_from('<'+'H'*(2*(result['textures']+1)), data, r(p+40)))
         result['objects'].append(dict(index=i, name=string(p), material=material,
             vertex_start=start, vertex_count=count, states=tracks, texture_runs=runs,
@@ -63,16 +71,19 @@ def read_asset(data):
 
 
 class NativeSpeed:
-    def __init__(self, executable, asset, width=512, height=512, software_factory=SoftwareFixture, particle_required=True):
+    def __init__(self, executable, asset, width=512, height=512, software_factory=SoftwareFixture, particle_required=True, native_binding=None, eager_pose=True):
         self.software = software_factory(executable, width, height)
         self.vm = self.software.vm
         v = self.vm
         if sha(v.image) != RETAIL_SHA:
             raise ValueError('Requires pinned original retail executable')
         self.asset = asset
+        self.eager_pose=eager_pose
         particles = [t for t in asset['tags'] if t['name']=='partsys' and t['state']==0]
         if not particle_required:
-            if particles:raise ValueError('Generic resource adapter requires no particle tags')
+            # Explicit None allows the whole original multiple-controller initializer.
+            # Existing True/False callers keep their prototype contracts.
+            if particles and particle_required is not None:raise ValueError('Generic resource adapter requires no particle tags')
             self.prototype_index=-1
             self.required_pose_indices={o['index']for o in asset['objects']}
         else:
@@ -91,20 +102,33 @@ class NativeSpeed:
         self.boundaries = {}
         self.owner = v.allocate(0x200)
         self.imagery = v.allocate(0x200)
-        self.dispatch = original_registry(v, (asset.get('name','speed'),))
+        self.dispatch = original_registry(v, () if native_binding else (asset.get('name','speed'),))
         self.put_string = lambda s: self.bytes(s.encode('latin1')+b'\0')
+        factory,builder,expected_vtable=0x40dc00,0x5e8508,0x5a370c
+        if native_binding:
+            # Registration calls alone do not install custom builder vtables.
+            # Execute every complete original static constructor first.
+            v.put_u32(0x5e872c,0);v.call(0x406160)
+            for row in self.dispatch['registrations']:v.call(int(row['call'],16)-10)
+            if v.u32(0x5e872c)!=93:raise AssertionError('Custom binding requires all original constructors')
+            factory,builder,expected_vtable=native_binding
+            actual=v.call(0x40dca0,(self.put_string(asset['name']),))
+            if actual!=builder or v.u32(v.u32(actual))!=factory:
+                raise AssertionError('Exact custom factory differs from executed original registry')
+            self.dispatch['lookup'][asset['name']]=hex(actual)
         # Immutable resource identity boundary. The actual animator factory,
         # TObjectAnimator constructor and dynamic-array constructors execute.
         h = v.uc.hook_add(UC_HOOK_CODE, self.imagery_lookup, begin=0x46e8a0, end=0x46e8a0)
         try:
-            self.animator = v.call(0x40dc00, (self.owner,), this=0x5e8508)
+            self.animator = v.call(factory, (self.owner,), this=builder)
         finally:
             v.uc.hook_del(h)
-        if v.u32(self.animator) != 0x5a370c or v.u32(self.animator+8) != self.imagery:
-            raise AssertionError('Complete native default factory returned wrong animator')
-        self.constructor = dict(factory='0x40dc00', base_constructor='0x445940',
+        if v.u32(self.animator) != expected_vtable or v.u32(self.animator+8) != self.imagery:
+            raise AssertionError('Complete native factory returned wrong animator')
+        self.constructor = dict(factory=hex(factory), base_constructor='0x445940',
             array_constructor='0x41c7f0', actual_vtable=hex(v.u32(self.animator)),
             resource_boundary='0x46e8a0 returns exact decoded imagery provider; no owner replaced')
+        if native_binding:self.constructor.update(exact_builder=hex(builder),eager_resource_pose=eager_pose)
         self.setup_resources()
         for address in (0x40df90, 0x403320, 0x405940, 0x40d750, 0x4042e0, 0x4010d0,
                         0x405e20, 0x4059e0, 0x403760, 0x4031c0, 0x402a20):
@@ -175,8 +199,12 @@ class NativeSpeed:
             resource = v.allocate(0x48)
             v.write(resource, o['name'].encode()+b'\0')
             track = o['states'][0]
+            # Original SetupObjects reads the immutable parent array through
+            # image object+20, independently of the key walker below.
+            v.put_u32(resource+0x20,self.bytes(struct.pack('<'+'i'*len(o['states']),*(s['parent']for s in o['states']))))
             v.put_u32(resource+0x40, self.bytes(struct.pack('<I', len(track['keys']))))
-            v.put_u32(resource+0x44, self.bytes(struct.pack('<I', self.bytes(struct.pack('<'+'I'*len(track['keys']), *track['keys'])))))
+            raw_keys=bytes.fromhex(track['legacy_key_hex'])if 'legacy_key_hex'in track else struct.pack('<'+'I'*len(track['keys']),*track['keys'])
+            v.put_u32(resource+0x44, self.bytes(struct.pack('<I', self.bytes(raw_keys))))
             v.put_u32(objects+i*4, resource)
             obj = v.allocate(0x34c)
             v.put_u32(obj+4, i)
@@ -187,7 +215,7 @@ class NativeSpeed:
             self.animobjs.append(obj)
             if track['parent']!=-1:
                 raise ValueError('Parented authored fixture requires its actual hierarchy; no fallback')
-            if track['keys'] and v.call(0x40a420, (obj, 0, 0, 0, 0), this=self.imagery) != 1:
+            if getattr(self,'eager_pose',True) and track['keys'] and v.call(0x40a420, (obj, 0, 0, 0, 0), this=self.imagery) != 1:
                 if i in self.required_pose_indices:
                     raise AssertionError(f'Original required asset key/matrix decode failed for {i}:{o["name"]}')
                 # Record the native rejection of an unused state0 track. Do

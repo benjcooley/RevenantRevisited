@@ -31,6 +31,7 @@ PRELUDE = r'''
 #include "authoredpartsys.h"
 #include "math3d.h"
 #include "goldauthoredmatrix.h"
+#include "dragonattackcache.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -46,8 +47,17 @@ struct SFxBatchKey{TTextureHandle texture=0;uint16_t pipeline_id=1;uint8_t blend
 struct SQuadDrawItem{bool retail_rgb565_additive=false;float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};SFxBatchKey key;
  bool retail_software_projection=false;uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
 struct S3DVertex{hmm_vec3 pos,normal;float tu,tv;};
-struct Owner{uint32_t ObjId()const{return 0xad92bd36u;}int GetState()const{return 0;}};
+template<class... Args> void log_info(const char*,Args...){std::abort();}
+struct Owner{struct Position{int x,y,z;};Position Pos()const{std::abort();}int GetFrame()const{std::abort();}uint32_t ObjId()const{return 0xad92bd36u;}int GetState()const{return 0;}};
 struct Imagery{bool HasRetailStaticParticleProfile(uint32_t)const{return false;}
+ bool HasRetailLightStripProfile()const{return false;}
+ bool HasRetailJhagaAttackProfile()const{return false;}
+ bool HasRetailHeadFireBallProfile()const{return false;}
+ bool HasRetailFunnelProfile()const{return false;}
+ bool HasRetailCometProfile()const{return false;}
+ bool HasRetailFGeyserProfile()const{return false;}
+ bool HasRetailDustProfile()const{return false;}
+ bool HasRetailPoisonProfile()const{return false;}
  bool HasRetailMightPartSysProfile()const{return false;}
  bool HasRetailImmortalmightPartSysProfile()const{return false;}
  bool HasRetailFmasteryPartSysProfile()const{return false;}
@@ -56,7 +66,7 @@ struct Imagery{bool HasRetailStaticParticleProfile(uint32_t)const{return false;}
  SPEED_FAMILY_METHOD
  bool HasCombatFlashStart1PartSysProfile()const{return false;}
  TTextureHandle GetTextureHandle(int index){if(index!=1)std::abort();return 1;}};
-struct TRenderer{std::vector<SQuadDrawItem>quads;void SubmitFxQuad(const SQuadDrawItem&q){quads.push_back(q);}};
+struct TRenderer{std::vector<SQuadDrawItem>quads;bool UsesRetailSoftwareMeshLighting()const{return true;}void SubmitFxQuad(const SQuadDrawItem&q){quads.push_back(q);}};
 struct TTime{static int frame;static int FrameCount(){return frame;}};int TTime::frame=0;
 unsigned random_state=1;int random(int a,int b){random_state=random_state*214013u+2531011u;return a+((random_state>>16)&32767u)%(b-a+1);}
 struct T3DAnimator{struct SPartSysControllers{
@@ -64,8 +74,11 @@ struct T3DAnimator{struct SPartSysControllers{
  struct Controller{Track track;authored_partsys::State simulation;int64_t last_render_frame=-1;};
  std::vector<Controller>controllers;bool unsupported=false;uint64_t renders=0,quads=0;};
  std::unique_ptr<SPartSysControllers>partsys_controllers;Owner*inst;Imagery im;
+ retail_dragonattack::PrototypeOrigin dragonattack_object_zero;
  Imagery*Get3DImagery(){return &im;}
- int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&,bool=false);};
+ void NoteJhagaAttackPrototypeSample(){}
+ void NoteHeadFireBallPrototypeSample(){}
+ int32_t SubmitPartSys(TRenderer&,int32_t,int32_t,const hmm_vec3&,bool=false,bool=true);};
 constexpr float WORLD3D_Z_SCALE=1.5f;
 '''
 MAIN = r'''

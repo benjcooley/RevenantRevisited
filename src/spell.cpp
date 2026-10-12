@@ -584,6 +584,64 @@ bool TSpell::Timer()
     return timer == 0; 
 }
 
+// Exact shipped direct FOLLOW case: no bone/pattern/multi-target, damage,
+// poison, sound or imagery override is admitted by this bounded port.
+bool TStrikeSpell::HasRetailRegenerationControl() const
+{
+    if(!spell || !variant || stricmp(variant->name,"Regeneration") ||
+       stricmp(variant->effect,"Regeneration") || !variant->controldata)return false;
+    const auto& c=*variant->controldata;
+    return !stricmp(c.name,"Strike") && c.flags==0 && c.radius==0 && c.hits==1 &&
+        c.duration==2880 && c.duration2==24 && c.wait==0 && c.pattern==SPAT_NONE &&
+        c.shake==0 && c.repeatdamage==0 && c.rangedamage[0]==0 && c.rangedamage[1]==0 &&
+        c.attach[0]==0 && c.attachmultiple==nullptr && c.sound[0]==0 && c.imagery==-1 &&
+        c.hittarget==0 && c.oncaster==0 && c.attachset==0 && c.follow==1 && c.posset==1 &&
+        c.repeatset==0 && c.multipletargets==0 && c.pos[0]==0 && c.pos[1]==0 && c.pos[2]==0 &&
+        spell->poisonchance==0;
+}
+void TStrikeSpell::Pulse()
+{
+    if(!HasRetailRegenerationControl() || Editor)return;
+    // Original base53f800 pulses/moves only nonresident owned effects;
+    // resident owners are advanced once by MapPane, not twice by the spell.
+    if(auto* owner=effect.Get();owner && !owner->GetSector()) {owner->Pulse();owner->Move();}
+    ++frame;
+    if(frame>=variant->controldata->duration)Kill();
+}
+bool TStrikeSpell::Timer()
+{
+    if(!HasRetailRegenerationControl())return TSpell::Timer();
+    if(timer>0)--timer;
+    if(wait>0){--wait;return timer==0;}
+    if(wait!=0)return timer==0;
+    wait=-1;
+    TObjectInstance* followed=invoker_ref.Get();
+    if(!followed){timer=0;return true;} // Safe identity in place of retail null dereference.
+    SObjectDef def={};def.objclass=OBJCLASS_EFFECT;def.level=MapPane.GetMapLevel();
+    def.pos=followed->Pos();
+    const auto& c=*variant->controldata;
+    def.pos.x+=c.pos[0];def.pos.y+=c.pos[1];def.pos.z+=c.pos[2];
+    def.facing=variant->facing?followed->GetFace():0;
+    def.objtype=EffectClass.FindObjType(variant->effect);
+    auto* character=dynamic_cast<TCharacter*>(followed);
+    striketarget=character?character->Fighting():nullptr;
+    targets[0]=striketarget;target_refs[0]=striketarget;
+    effect=MapPane.GetInstance(MapPane.NewObject(&def));
+    if(auto* owner=dynamic_cast<TEffect*>(effect.Get())) {
+        owner->SetSpell(this);
+        // Original483300 consumes its inclusive random range even for WAIT0.
+        owner->ConfigureRetailSpellOwner(followed,c.duration,c.duration2,random(0,c.wait));
+    }
+    return timer==0;
+}
+void TStrikeSpell::Kill()
+{
+    if(!HasRetailRegenerationControl()){TSpell::Kill();return;}
+    timer=0;
+    if(auto* owner=dynamic_cast<TEffect*>(effect.Get()))owner->KillRetailSpellOwner();
+    effect.Clear();
+}
+
 // REVSYNC: TSpell::Damage @ 0x0053f560 -- the variant's damage range, each
 // end cut by the target's magic resistance, rolled; a player caster's
 // SpellDamageInc adds its percent, a player target's DmgResMagical takes

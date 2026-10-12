@@ -151,7 +151,7 @@ int32_t TContainer::NumObjects()
 
 bool TContainer::CanTrade()
 {
-    return ObjClass() != OBJCLASS_INVCONTAINER || stricmp(GetName(), "Swag Bag") != 0;
+    return !(ObjClass() == OBJCLASS_INVCONTAINER && !stricmp(GetName(), "Swag Bag"));
 }
 
 // REVSYNC: TContainer::Load @ 0x004dd3e0 (SAVE_GAME.md §11.3).

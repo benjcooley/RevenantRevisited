@@ -92,6 +92,7 @@ struct T3DImagery {
  bool retail_punch_keys=false,retail_mpappear_start_profile=false,retail_shadowfist_profile=false,retail_warriorborn_profile=false,
  retail_teleportation_profile=false,might_partsys_profile=false,immortalmight_partsys_profile=false,fmastery_partsys_profile=false,speed_partsys_profile=false,quicksilver_partsys_profile=false;
  uint32_t static_particles_profile=0;
+ bool HasCombatFlashStart1PartSysProfile()const{return false;}
  int prevstate=-1,prevframe=0;StubHeader header;
  int NumObjects()const{return 1;}int NumStates()const{return 1;}int GetAniLength(int)const{return frame_count;}
  int NumTextures()const{return 1;}int NumObjVerts(int)const{return int(vertices.size());}int NumObjFaces(int)const{return int(faces.size());}
@@ -100,7 +101,7 @@ struct T3DImagery {
  void* GetBody(){throw std::runtime_error("Unexpected body load");}void InitializeMesh(S3DImageryBody*){throw std::runtime_error("Unexpected mesh load");}
  StubHeader*GetHeader(){return &header;}char*FindTag(char*,int){return nullptr;}
  int GetObjectParent(int,int)const{return -1;}void SetPrevState(int s,int f){prevstate=s;prevframe=f;}
- bool GetUninterpolatedAniKey(int,int,int,hmm_vec3&,hmm_vec3&,hmm_vec3&);
+ bool GetUninterpolatedAniKey(int,int,int,hmm_vec3&,hmm_vec3&,hmm_vec3&,bool=false);
  bool GetAniKey(int,int,int,hmm_vec3&,hmm_vec3&,hmm_vec3&);
  bool CalcObjectMatrix(S3DAnimObj*,int,int,hmm_mat4*,bool);
  bool ScrollTexOffset(int,int,int,int64_t,float*)const{throw std::runtime_error("Unexpected scroll in static fixture");}

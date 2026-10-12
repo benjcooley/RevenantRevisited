@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <math.h>
 #include <string.h>
+#include <vector>
 
 #define GRIDSNAPSIZE    48
 
@@ -416,7 +417,7 @@ void TCharacter::Pulse()
     if (IsDead() && !(charflags & kCharFlagUnkillable))
     {
         if (ObjClass() != OBJCLASS_PLAYER && NumInventoryItems() > 0)
-            DropInventory();
+            DropLoot();
 
       // When we're dead, we're dead!
         if (!IsDoing(ACTION_DEAD))
@@ -1437,24 +1438,37 @@ void TCharacter::RestoreHealth()
     SetHealth(MaxHealth());
 }
 
-// REVSYNC: TCharacter::GetFieldText = retail 0x004d5260 (vtable +0xc8).
-// "armor" is ArmorValue(), plus for the main player its DmgResMisc (vtable
-// +0x260; spells such as STATLINE DmgResMisc 4 raise it) and the armor of
-// the effects on it (0x005407d0, the +0x134 of each object in the
-// character's list at +0x170) -- that list isn't in the port yet.
-// "attackpct", "defensepct", "damage" and "stealth" are combat formulas
-// over getters not yet identified in the port; they answer "no such field".
+// REVSYNC: TCharacter::GetFieldText = retail 0x004d5260 (vtable +0xc8). The
+// stat sheet's character figures, over this character's spells
+// (SpellManager, retail +0x170: GetDefense 0x005407d0, GetOffense
+// 0x00540820):
+//   armor       ArmorValue; the main player adds his DmgResMisc and his
+//               spells' defense
+//   attackpct   the player: his spells' offense + LuckMod + Offense (Offense
+//               counts the spells again). Anyone else: his Offense + LuckMod
+//               less the player's Defense, LuckMod and DmgResMisc and --
+//               retail's slip -- his own spells' defense, not the player's
+//   defensepct  the player: his spells' defense + LuckMod + Defense +
+//               DmgResMisc. Anyone else: his Defense + LuckMod less the
+//               player's Offense, LuckMod and (the same slip) his own spells'
+//               offense
+//   damage      WeaponDamage scaled by DamageMod %, then for a player's knife,
+//               sword or axe by EdgeBonus % (retail calls the player-only slot
+//               0x3d4 on any character; the port asks only a player)
+//   stealth     StealthMod
+// Without a main player, attackpct and defensepct take the player's formula.
 bool TCharacter::GetFieldText(const char *field, char *buf, int32_t buflen)
 {
     if (!field || !buf || buflen <= 0)
         return false;
 
+    const bool versusplayer = Player && this != Player;
     int32_t value = 0;
     if (stricmp(field, "armor") == 0)
     {
         value = ArmorValue();
         if (this == Player)
-            value += GetObjStat(CHRRESIST_FIRST + CHRRESIST_MISC);
+            value += Player->DmgResMisc() + SpellManager.GetDefense();
     }
     else if (stricmp(field, "maxhealth") == 0)
         value = MaxHealth();
@@ -1462,9 +1476,22 @@ bool TCharacter::GetFieldText(const char *field, char *buf, int32_t buflen)
         value = MaxFatigue();
     else if (stricmp(field, "maxmana") == 0)
         value = MaxMana();
-    else if (stricmp(field, "attackpct") == 0 || stricmp(field, "defensepct") == 0 ||
-             stricmp(field, "damage") == 0 || stricmp(field, "stealth") == 0)
-        return false;
+    else if (stricmp(field, "attackpct") == 0)
+        value = versusplayer ? Offense() + LuckMod() - Player->Defense() - Player->LuckMod() - Player->DmgResMisc()
+                                   - SpellManager.GetDefense()
+                             : SpellManager.GetOffense() + LuckMod() + Offense();
+    else if (stricmp(field, "defensepct") == 0)
+        value = versusplayer ? Defense() + LuckMod() - Player->Offense() - Player->LuckMod() - SpellManager.GetOffense()
+                             : SpellManager.GetDefense() + LuckMod() + Defense() + DmgResMisc();
+    else if (stricmp(field, "damage") == 0)
+    {
+        value = (DamageMod() + 100) * WeaponDamage() / 100;
+        const int32_t weapon = WeaponType();
+        if (ObjClass() == OBJCLASS_PLAYER && (weapon == WT_KNIFE || weapon == WT_SWORD || weapon == WT_AXE))
+            value = (static_cast<TPlayer *>(this)->EdgeBonus() + 100) * value / 100;
+    }
+    else if (stricmp(field, "stealth") == 0)
+        value = StealthMod();
     else
         return TComplexObject::GetFieldText(field, buf, buflen);
 
@@ -3795,7 +3822,7 @@ static std::string PickupLine(TObjectInstance* inst)
 // pile it could join doesn't help, GRIND.md §4.3), "CARRYFULL2" shows and
 // the item is lost: retail leaves it off the map and in no inventory, the
 // port deletes it. Not ported: the multiplayer request (0x005845c0 /
-// 0x00584500).
+// 0x00584500) and the item's vtable 0x144 hook (empty in the base).
 bool TCharacter::Pickup(TObjectInstance* inst, TObjectInstance* to)
 {
     if (!inst || !inst->IsInventoryItem() || inst == this)
@@ -3804,10 +3831,8 @@ bool TCharacter::Pickup(TObjectInstance* inst, TObjectInstance* to)
         to = this;
 
     if (this == Player)
-    {
         TextBar.Print("%s", PickupLine(inst).c_str());
-        inst->PlayClassSound();
-    }
+    inst->PlayItemSound();                  // 0x004d0176
 
     inst->RemoveFromMap();
     if (!to->AddToInventory(inst))
@@ -3819,125 +3844,107 @@ bool TCharacter::Pickup(TObjectInstance* inst, TObjectInstance* to)
     return true;
 }
 
-namespace {
-
-// Where DropInventory throws an item (0x004d67ab..0x004d6949): from the
-// corpse in steps of 16 along a random direction (random(0, 256) 256ths of
-// a turn), at most 2 * (Radius / 16) + 1 steps. Each step tests the spot it
-// leaves, not the one it reaches (GetWalkHeightRadius within 16: a rise over
-// 32 or a hole fails it), and the next spot takes that spot's walk height. A
-// failure within the first Radius / 16 steps starts again from the corpse in
-// a new direction (another draw); a later one keeps the spot reached. So the
-// item lies a step past the last spot that passed.
-S3DPoint DropSpot(TCharacter* corpse)
+// REVSYNC: DropLoot @ 0x004d6570 (docs/gameflow/forensics/DEATH_LOOT.md §2).
+// A bag named "Swag Bag" comes out to the top of the inventory (it stays with
+// the body: it can't be traded); the "gold" sound plays; then each thing at
+// the top of the inventory that can be traded leaves it. Gold lands at the
+// body's feet, (30, 30) off. Anything else walks out from the body in steps
+// of 16 along a random heading, as far as about twice the body's radius
+// while the steps stay walkable; a step that isn't, within the body's own
+// radius, starts again along another heading. It is thrown there from the
+// body (60 up but for armor) by its animator (TObjectAnimator::Toss) and
+// makes its own sound. Deviations (DEATH_LOOT.md §8): retail tests each step
+// a step late, at the last spot it accepted, so a thing could come to rest
+// a step into a wall or over a ledge -- the port tests the step itself;
+// retail tried headings without end where every one is walled in close by
+// -- the port gives up after kHeadingTries and leaves it at the body; and
+// retail ran (and played the sound) every pulse while a dead body held
+// anything at all -- the port only when it holds something to drop.
+void TCharacter::DropLoot()
 {
-    constexpr double kTwoPi = 6.283185308;      // 0x005a3a68
-    constexpr int32_t kStep = 16;
+    constexpr int32_t kGoldOffset   = 30;
+    constexpr int32_t kStep         = 16;
+    constexpr int32_t kMaxWalkStep  = 0x20;
+    constexpr int32_t kThrowHeight  = 60;
+    constexpr int32_t kHeadingTries = 32;
 
-    S3DPoint origin;
-    corpse->GetPos(origin);
-    const int32_t steps = corpse->Radius() / kStep;
-
-    float x = 0.0f, y = 0.0f, z = 0.0f, dx = 0.0f, dy = 0.0f;
-    S3DPoint spot;
-    const auto start = [&] {
-        x = float(origin.x);
-        y = float(origin.y);
-        z = float(origin.z);
-        spot = origin;
-        const double angle = double(random(0, 256)) * kTwoPi * (1.0 / 256.0);
-        dx = float(cos(angle) * kStep);
-        dy = float(sin(angle) * kStep);
-    };
-
-    start();
-    int32_t taken = 0;
-    bool blocked = false;
-    do
-    {
-        x += dx;
-        y += dy;
-        int32_t rise = 0, height = 0;
-        bool hole = false;
-        MapPane.GetWalkHeightRadius(spot, kStep, rise, height, hole);
-        z = float(height);
-        if (abs(rise) > 32 || hole)
-        {
-          // REVSYNC-DIVERGENCE: when the corpse's own spot fails, retail
-          // starts again for ever (Radius / 16 of 2 or more: every new start
-          // tests that spot again); the port leaves the item at the corpse.
-            if (taken >= steps || (taken > 0 && spot == origin))
-                blocked = true;
-            else
-            {
-                start();
-                taken = 0;
-            }
-        }
-        if (!blocked)
-            spot = S3DPoint(int32_t(x), int32_t(y), int32_t(z));
-        taken++;
-    } while (taken <= steps * 2 && !blocked);
-    return spot;
-}
-
-} // namespace
-
-// REVSYNC: TCharacter::DropInventory @ 0x004d6570. Pulse calls it on every
-// pulse a dead character (not the player) holds anything (GRIND.md §4.1):
-//   - the "gold" sound plays, once a call;
-//   - every item it can trade (CanTrade, vtable 0x5c) leaves its inventory
-//     for the floor: gold (type "gold") at the corpse's x + 30, y + 30, with
-//     no walk test; anything else at a DropSpot, thrown there from the corpse
-//     (from 60 up but armour, TObjectAnimator::Toss), then its class sound.
-// Bags go whole, with what they hold. An item it can't trade stays, so Pulse
-// calls again next pulse and the "gold" sound plays every pulse (no placed
-// monster carries one). Not ported, multiplayer only: the Swag Bag brought
-// up to the top first, a dead player's things put in a new Pouch, and the
-// network message after (0x0046ff80).
-void TCharacter::DropInventory()
-{
-    if (NumInventoryItems() <= 0)
+    std::vector<TObjectInstance*> loot;
+    for (TInventoryIterator i(this); i; i++)
+        if (i.Item()->CanTrade())
+            loot.push_back(i.Item());
+    if (loot.empty())
         return;
+    log_info("[loot] %s drops %zu thing(s) at (%d,%d,%d)", GetName(), loot.size(), pos.x, pos.y, pos.z);
+
+    if (TObjectInstance* swag = FindObjInventory("Swag Bag"))
+        AddToInventory(swag);
 
     const int32_t sound = SoundPlayer.FindSound("gold");
     if (sound >= 0 && SoundPlayer.Mount(sound))
         SoundPlayer.Play(sound);
 
-    S3DPoint corpse;
-    GetPos(corpse);
-    for (TInventoryIterator i(this); i; i++)
+    const S3DPoint body = pos;
+    const int32_t radiussteps = Radius() / kStep;
+    for (TObjectInstance* item : loot)
     {
-        TObjectInstance* item = i.Item();
-        if (!item->CanTrade())
-            continue;
-
         if (!stricmp(item->GetTypeName(), "gold"))
         {
+            item->SetPos(S3DPoint{ body.x + kGoldOffset, body.y + kGoldOffset, body.z }, level);
             item->RemoveFromInventory();
-            item->SetPos(S3DPoint(corpse.x + 30, corpse.y + 30, corpse.z), GetLevel());
             item->AddToMap();
+            log_info("[loot] %s at its feet", item->GetName());
             continue;
         }
 
-        const S3DPoint spot = DropSpot(this);
+        S3DPoint drop = body;
+        float x = float(body.x), y = float(body.y);
+        float dx = 0.0f, dy = 0.0f;
+        auto heading = [&]() {
+            const double a = double(random(0, 0x100)) * 6.283185307179586 * 0.00390625;
+            dx = float(std::cos(a) * kStep);
+            dy = float(std::sin(a) * kStep);
+        };
+        heading();
+        int32_t tries = 1;
+        for (int32_t n = 0; n <= radiussteps * 2; ++n)
+        {
+            x += dx;
+            y += dy;
+            const S3DPoint step{ int32_t(x), int32_t(y), drop.z };
+            int32_t maxdelta = 0, height = 0;
+            bool hole = false;
+            MapPane.GetWalkHeightRadius(step, kStep, maxdelta, height, hole);
+            if (std::abs(maxdelta) <= kMaxWalkStep && !hole)
+                drop = S3DPoint{ int32_t(x), int32_t(y), height };
+            else if (n < radiussteps && tries < kHeadingTries)
+            {
+                x = float(body.x);
+                y = float(body.y);
+                drop = body;
+                heading();
+                ++tries;
+                n = 0;                  // retail counts the restart as a step
+            }
+            else
+                break;
+        }
+
+        item->SetPos(drop, level);
         item->RemoveFromInventory();
-        item->SetPos(spot, GetLevel());
         item->AddToMap();
         if (item->NeedsAnimator())
             item->CreateAnimator();
-        log_debug("[inv] %s drops %s at (%d,%d,%d)", GetName(), item->GetName(), spot.x, spot.y, spot.z);
-        if (TObjectAnimator* animator = item->GetAnimator())
-        {
-            S3DPoint from = corpse;
-            if (item->ObjClass() != OBJCLASS_ARMOR)
-                from.z += 60;
-            animator->Toss(from, spot);
-        }
-        item->PlayClassSound();
+        S3DPoint from = body;
+        if (stricmp(item->GetClassName(), "Armor") != 0)
+            from.z += kThrowHeight;
+        TObjectAnimator* animator = item->GetAnimator();
+        if (animator)
+            animator->Toss(from, drop);
+        log_info("[loot] %s to (%d,%d,%d)%s", item->GetName(), drop.x, drop.y, drop.z,
+                 animator && animator->GetToss() ? ", thrown" : "");
+        item->PlayItemSound();
     }
 }
-
 
 bool TCharacter::Pull(TObjectInstance* inst)
 {
@@ -4039,16 +4046,14 @@ bool TCharacter::TryUse()
     return true;
 }
 
-// REVSYNC: TCharacter::Get @ 0x004d0430 (Command 0xf, the Get and Combat Get
-// controls: GRIND.md §4.2) -- the nearest thing 40 ahead, within 80 of that
-// point, that shows a cursor or goes in an inventory; not this character,
-// nothing flagged invisible. The main player reads "Get <name>" (FULLGET,
-// else BASEGET), or GETNOTHING; then Pickup, which takes only an item, so a
-// nearer door, chest or character silently blocks it. A dead character does
-// nothing.
+// REVSYNC: Get @ 0x004d0430, the Get key (DEATH_LOOT.md §7): the nearest of
+// the first ten objects within 80 of the point 40 ahead that offer a cursor
+// or can be picked up and aren't invisible, picked up. The main player is
+// told "There is nothing to get" (GETNOTHING), or what it takes (FULLGET
+// with the name, else BASEGET and the name: "Get Short Sword").
 bool TCharacter::TryGet()
 {
-    if (Health() < 1)
+    if (Health() <= 0)
         return false;
 
     int32_t list[10];
@@ -4058,13 +4063,10 @@ bool TCharacter::TryGet()
     for (int32_t i = 0; i < n; i++)
     {
         TObjectInstance* oi = MapPane.GetInstance(list[i]);
-        if (!oi || oi == this)
+        if (!oi || oi == this || (oi->GetFlags() & OF_INVISIBLE))
             continue;
         if (oi->CursorType() == CURSOR_NONE && !oi->IsInventoryItem())
             continue;
-        if (oi->GetFlags() & OF_INVISIBLE)
-            continue;
-
         const int32_t dist = Distance(oi);
         if (!best || dist <= bestdist)
         {
@@ -4082,11 +4084,11 @@ bool TCharacter::TryGet()
 
     if (this == Player)
     {
-        const std::string name = ShownName(best->GetName());
+        const char* name = best->GetName();
         if (DialogList.FindLine("FULLGET") >= 0)
-            TextBar.Print(DialogList.GetLine("FULLGET"), name.c_str());
+            TextBar.Print(DialogList.GetLine("FULLGET"), name);
         else
-            TextBar.Print("%s %s", DialogList.GetLine("BASEGET"), name.c_str());
+            TextBar.Print("%s %s", DialogList.GetLine("BASEGET"), name);
     }
     Pickup(best);
     return true;

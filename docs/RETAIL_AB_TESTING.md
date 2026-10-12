@@ -4,21 +4,32 @@
 Improve the test system when it enables faster VFX work, then use it to find and
 fix port defects. This document is the handoff for agents using the tool.
 
-Updated 2026-10-07. **The in-process retail emulator is the primary tool for
-VFX validation.** Use DOSBox-X with the emulated 3D device only for targeted
-checks of software-rendering issues. Most state, animation, geometry, motion,
-instrumentation and A/B work stays in the fast emulator. Coordinate ownership
-before operating a DOSBox guest used by another project.
+Updated 2026-10-11. **All new VFX validation uses the in-process emulator;
+the active goal excludes DOSBox-X.** State, animation, geometry, motion,
+instrumentation and A/B captures run in independently owned local processes.
 
-Run the thin comparison first. Escalate a specific case to the 3D guest when
-matching state, geometry and materials still leave a suspected software-device
-artifact. Keep that capture as a separate diagnostic with its device and scene
-settings recorded; it does not become a dependency for routine batches.
+Use the unchanged retail reference first. When a demonstrated original renderer
+or resource defect prevents a useful reference, create a private named modified
+build or qualified device fixture. Pin every changed instruction, selected
+format/branch and assumption; verify unaffected controls, repeat the captures,
+and mark its approval `modified_retail`/`qualified_reference` with
+`device_identical=false`. Never silently repair assets or tune the port to the
+known defect. [The Watcher semantic1555 repair](vfx/forensics/WATCHER_PATCHED_1555_REFERENCE_20261011.md)
+is an exercised example. A substituted child asset, such as the Sandswirl
+Sparks diagnostic, proves controller behavior only and does not establish the
+missing intended effect's appearance.
 
 Use the original retail software renderer. Prioritize fast, repeatable scenarios
 and real assets. Known software-renderer limits are recorded separately from
 VFX simulation, geometry, animation, material and integration defects. Rendering
 perfection is not a prerequisite for progressing through the effects catalogue.
+
+For natural maps, use the original `SOFTWARE3D` startup via
+[`software_scene_boot.py`](../tools/retail_runtime/software_scene_boot.py), then
+load a map with preflight `--boot-image` and keep its warm checkpoint. This
+selects retail's genuine NoTexOverlay composition and corrects the corrupted
+backdrop seen in the separate hybrid HUD fixture. See the
+[natural scene instructions](vfx/forensics/NATURAL_ARENA_AND_FLAME_20261011.md).
 
 ## Locations
 
@@ -223,9 +234,9 @@ output. Do not tune effect colors or geometry to hide a renderer discrepancy.
 A documented rendering limit need not halt other state/animation tests or the
 whole VFX queue. Missing thin-emulator support stays open or gets implemented;
 it does not send routine work back through the DOSBox/editor capture workflow.
-When a discrepancy may specifically come from software rendering, a focused
-DOSBox-X/3D-device comparison is allowed. Record the device, fixture and result,
-then bring that finding back into the thin-emulator tests.
+For device-specific discrepancies, extend a declared device fixture inside the
+thin emulator and prove its format/blend/coverage contract independently. Keep
+qualified device output distinct from unchanged original-device evidence.
 
 ## Instrumenting an effect when needed
 
@@ -277,8 +288,8 @@ references. Show the change and retain its log; preserve the unmodified control.
 Warm replay reliability, CPU-state parity, rendered appearance, map/combat/spell
 integration and full acceptance are distinct gates. Preserve all 176 type IDs.
 Existing DOSBox-era references and prior visual reviews remain research evidence.
-New validation primarily uses this emulator; targeted 3D-device diagnostics may
-clarify software-renderer differences without replacing the fast VFX workflow.
+All new validation uses this emulator. Qualified private-build/device diagnostics
+may clarify reference defects; their narrower scope remains explicit in the ledger.
 
 Full retail startup is still incomplete; targeted original subsystem fixtures
 already work. Current API coverage and remaining gaps are in the
