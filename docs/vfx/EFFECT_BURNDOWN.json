@@ -9293,7 +9293,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Preserve exact default owner appearance; verify source/destination gameplay and recorded genericAPI/UV/device limits.",
+      "next_action": "Capture ordinary translated viewer and equivalent actual original inputs; determine projection/owner/material/lifetime/caller mismatch and fix before gallery reapproval.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -9307,6 +9307,15 @@
         "report": "recon/retail_asm/runtime/effects/current-essencedrain-default-20261011/root-approval.json",
         "sha256": "a50aee4ff546d37a0b99b8e2838d5c56a0c99dc5b265e37f4f9258ea250eed8e",
         "note": "docs/vfx/forensics/ESSENCEDRAIN_DEFAULT_RENDER_20261011.md"
+      },
+      "gallery_visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "user",
+        "result": "mismatch",
+        "visual_pass": false,
+        "configuration": "Visible full reviewer, ordinary projection/native_domain=false, translated map stations, source lighting enabled",
+        "finding": "User reports Essence Drain and Vortex obviously wrong. Earlier isolated native-domain approvals do not certify this configuration.",
+        "next_action": "Capture ordinary translated viewer and equivalent actual original inputs; determine projection/owner/material/lifetime/caller mismatch and fix before gallery reapproval."
       }
     },
     {
@@ -11823,7 +11832,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Preserve approved exact shipped default leaf; verify natural map/other context/lighting and retained raster/device residuals.",
+      "next_action": "Capture ordinary translated viewer and equivalent actual original inputs; determine projection/owner/material/lifetime/caller mismatch and fix before gallery reapproval.",
       "notes": [],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "visual_review": {
@@ -11835,6 +11844,15 @@
         "report": "recon/retail_asm/runtime/effects/current-vortex-default-20261011/Vortex-root-approval.json",
         "sha256": "5742ac72cf255807ced76b25dbeb13fc258a622a2ea03e120fec37d2fe004608",
         "note": "docs/vfx/forensics/VORTEX_SHIPPED_DEFAULT_RENDER_20261011.md"
+      },
+      "gallery_visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "user",
+        "result": "mismatch",
+        "visual_pass": false,
+        "configuration": "Visible full reviewer, ordinary projection/native_domain=false, translated map stations, source lighting enabled",
+        "finding": "User reports Essence Drain and Vortex obviously wrong. Earlier isolated native-domain approvals do not certify this configuration.",
+        "next_action": "Capture ordinary translated viewer and equivalent actual original inputs; determine projection/owner/material/lifetime/caller mismatch and fix before gallery reapproval."
       }
     },
     {

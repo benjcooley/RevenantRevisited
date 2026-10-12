@@ -12,6 +12,12 @@ licensed resources and private evidence stay outside Git.
 
 ## Active behavior and context work
 
+- [ ] Essence Drain and Vortex ordinary gallery output. User reports both
+  obviously wrong in the visible reviewer. Their existing isolated
+  native-domain approvals do not certify translated ordinary projection.
+  Reproduce the viewer output against equivalent original inputs and correct
+  measured owner/projection/material/lifetime or caller defects.
+
 - [ ] Generic effect owner and real Strike spell binding. Current
   `TEffect::Pulse` lacks retail follow-object, start-delay, attachment countdown,
   light and timed-life branches. `TStrikeSpell` also lacks the original Timer,
