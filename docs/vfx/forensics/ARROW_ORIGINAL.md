@@ -102,3 +102,23 @@ Captured binary SHA-256:
 `4f4307c7f75eb0ffbdfc0f5079849223ea2a02b66e11b9ce00eff926197a1240`.
 The three final runtime regressions pass in24.193s; the documented natural
 caller/device/raster limits are unchanged.
+
+## Display-cadence correction, 2026-10-11
+
+The review adapter previously called the trail's random jitter producer on
+every display Render. At 60 Hz that resampled jitter more often than the
+24 Hz legacy animation. It now samples and caches packets once per legacy
+update, then submits the cached geometry once per display frame.
+
+The compiled actual `Advance` span produces identical per-tick owner state,
+RNG state/count and every cached packet channel at 24, 60 and 120 Hz for both
+QueenArrow and attached ArrowEffect. Four native/adapter tests pass under the
+existing controls. Fresh 24-frame native-domain captures of each effect match
+all 48 prior approved decoded images exactly, including blank tails. Evidence:
+private `research/vfx-arrow-cache-root-20261011/baseline-comparison.json` and
+the two capture manifests. The full game build passes.
+
+This verifies the declared adapter cadence and preserves the isolated 24 Hz
+appearance. The user's ordinary moving-gallery appearance report remains open;
+shared RNG ordering among simultaneous effects, natural actors, audio, skipped
+native Render calls and device/raster limits are not certified by this check.
