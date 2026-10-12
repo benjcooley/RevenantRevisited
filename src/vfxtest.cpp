@@ -1942,6 +1942,8 @@ void* FlameSpawn(const S3DPoint& origin)
     c->flame = TFlameEffect::SpawnForTest(origin);
     if (!c->flame)
         log_warn("[vfx] TFlameEffect::SpawnForTest returned null; F01 entry will draw nothing");
+    else
+        log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Flame authored quad", int(StartupVfxNativeDomain));
     return c;
 }
 

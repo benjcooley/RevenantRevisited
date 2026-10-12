@@ -10616,7 +10616,8 @@
         "TFlameAnimator_SHIM"
       ],
       "source_fixes": [
-        "Authored atlas/quad/UV, source transforms and 24Hz; placed-map stable-owner activation repaired."
+        "Authored atlas/quad/UV, source transforms and 24Hz; placed-map stable-owner activation repaired.",
+        "2026-10-11: protect imagery-only preview owners without a CLASS record; derive source ARGB4444 texture policy from loaded Flame atlas; enable native-domain owner/projection for base Flame as well as colored variants."
       ],
       "port_smoke_ids": [],
       "reference_runs": [
@@ -10640,7 +10641,7 @@
         "accepted": false
       },
       "runtime_dispatch": "exact_flame_builder_authored_flipbook_component_verified",
-      "next_action": "Compare full original loaded Flame and unchanged level49 sconces, including saved Flame placements(10474,10410,100)/(10557,10413,100); check card orientation, anchor, atlas cadence and blend before natural-scene approval.",
+      "next_action": "Inspect normal reviewer base Flame after crash/texture fix; isolate original full-map backdrop corruption before natural Nakranoth chamber appearance acceptance. Full loaded/native-domain cycles and normal-map factory liveness now verified; keep ordinary-scene geometry/light/depth and exact pixels open.",
       "notes": [
         "2026-10-05: current authored-quad engine preview visually passes retained native base Flame; smoother filtering remains. Six raw elapsed samples reviewed, zero background drift. Exact0x50ba373b create/move/delete, one flipbook component, animation at both positions and exact17-frame deleted tail pass. Colored same-name IDs are separate."
       ],
@@ -10722,6 +10723,85 @@
         "configuration": "Natural large dungeon sconces, including Nakranoth chamber; reviewer base Flame",
         "finding": "User identifies a flipbook fire on a mostly vertical card and suspects current port is wrong.",
         "next_action": "Compare full original loaded Flame and unchanged level49 sconces, including saved Flame placements(10474,10410,100)/(10557,10413,100); check card orientation, anchor, atlas cadence and blend before natural-scene approval."
+      },
+      "loaded_base_flame_review": {
+        "date": "2026-10-11",
+        "result": "bounded_native_domain_appearance_pass",
+        "report": "/Users/benjamincooley/RevenantRetailLab/research/vfx-base-flame-loaded-root-20261011/review.json",
+        "sha256": "f593d09104fef72ece9a549112b24c114580992a62e10cccd2bab7037a2449f9",
+        "independent_native_frames": 37,
+        "complete_cycles": 2,
+        "exact_uv_phases": 37,
+        "metal_frames": 36,
+        "normal_map_factory_visible_frames": 40,
+        "normal_map_factory_distinct_frames": 8,
+        "natural_scene_accepted": false,
+        "exact_pixels_accepted": false,
+        "ordinary_projection_appearance_accepted": false,
+        "scope": "Whole actual loaded original owner/Pulse/Animate/PreRender/Render/PostRender with original imagery decoder/software raster; explicit native-domain Metal eight-phase appearance review. Brown low-alpha card/edge/quantization differences remain; no fitting. Natural/context and exact raster remain open."
+      },
+      "nakranoth_natural_scene": {
+        "date": "2026-10-11",
+        "level": 49,
+        "camera": [
+          10515,
+          10411,
+          72
+        ],
+        "report": "/Users/benjamincooley/RevenantRetailLab/research/vfx-nakra-flame-scene-root-20261011/native-drawn-clock/manifest.json",
+        "sha256": "3395f41a21ccef492c95da1a2b7b2f6719dc94bffe3d023a14274bda17f3dc43",
+        "owner_frames": [
+          {
+            "screen_frame": 3,
+            "flames": [
+              {
+                "index": 1142598354,
+                "position": [
+                  10474,
+                  10410,
+                  100
+                ],
+                "internal_frame": 2
+              },
+              {
+                "index": 1145189969,
+                "position": [
+                  10557,
+                  10413,
+                  100
+                ],
+                "internal_frame": 2
+              }
+            ]
+          },
+          {
+            "screen_frame": 4,
+            "flames": [
+              {
+                "index": 1142598354,
+                "position": [
+                  10474,
+                  10410,
+                  100
+                ],
+                "internal_frame": 3
+              },
+              {
+                "index": 1145189969,
+                "position": [
+                  10557,
+                  10413,
+                  100
+                ],
+                "internal_frame": 3
+              }
+            ]
+          }
+        ],
+        "authentic_sconce_asset": "Dungeon\\DunTorch4.I2D",
+        "accepted": false,
+        "declared_boundary": "Optional bitmap CacheImagery warming omitted; original lazy decoding, actors and rendering retained",
+        "display_limitation": "Unresolved colored backdrop corruption. Observed DD copies use matching masks, so a raw cross-format DD copy is not the demonstrated cause."
       }
     },
     {

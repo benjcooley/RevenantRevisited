@@ -1303,6 +1303,8 @@ void TFlipbookBillboardComponent::Submit(TRenderer& renderer, const TObjectInsta
 class TFlameQuadComponent final : public TFlipbookBillboardComponent
 {
   public:
+    void ConfigureRetailTexture(bool argb4444) { retail_argb4444_ = argb4444; }
+
     void ConfigureAuthoredQuad(T3DImagery& imagery, float scale)
     {
         if (imagery.NumObjVerts(0) != 4)
@@ -1330,10 +1332,12 @@ class TFlameQuadComponent final : public TFlipbookBillboardComponent
         if (Texture() == kInvalidTexture)
             return;
         SQuadDrawItem item = {};
-        const bool variant = inst.ObjClass()==OBJCLASS_EFFECT && (inst.ObjId()==0x50ba373cu || inst.ObjId()==0x50ba373du);
-        const bool native = StartupVfxNativeDomain && variant;
-        item.retail_texture=variant?1:0;
-        item.retail_argb4444=variant;
+        // Base Flame uses the same authored ARGB4444 atlas as its colored
+        // variants. Select the source-format kernel from the loaded texture,
+        // including sector-less previews that have no retail type record.
+        const bool native = StartupVfxNativeDomain;
+        item.retail_texture = retail_argb4444_ ? 1 : 0;
+        item.retail_argb4444 = retail_argb4444_;
         hmm_mat4 native_owner;
         if(native){const auto& p=inst.Pos();BuildRetailSoftwareOwner(native_owner,p.x,p.y,p.z,uint8_t(inst.GetFace()));}
         const hmm_mat4& world = native?native_owner:inst.Transform().Matrix();
@@ -1367,6 +1371,7 @@ class TFlameQuadComponent final : public TFlipbookBillboardComponent
 
   private:
     hmm_vec3 local_corners_[4] = {};
+    bool retail_argb4444_ = false;
 };
 
 DEFINE_BUILDER("FLAME", TFlameEffect)
@@ -1405,7 +1410,8 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
         return;
     }
 
-    const uint32_t flame_id=inst->ObjId();
+    // Imagery-only preview constructors do not have a CLASS type record.
+    const uint32_t flame_id = inst->ObjClass() == OBJCLASS_EFFECT ? inst->ObjId() : 0;
     if ((flame_id==0x50ba373cu || flame_id==0x50ba373du) &&
         !flame_variants_preview::Matches(inst,img3d)) {
         log_warn("[flame] rejected exact colored variant resource id=%08x",flame_id);
@@ -1440,6 +1446,7 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
                             primary_bucket.height * primary_bucket.scale,
                             primary_bucket.additive, true);
         flipbook->ConfigureAuthoredQuad(*img3d, primary_bucket.scale);
+        flipbook->ConfigureRetailTexture(RetailMeshTextureLighting(primary_tex.desc.pixelFormat) == 3);
         std::string expr_error;
         if (!flipbook->SetFrameExpression(primary_bucket.frame_expr.c_str(), &expr_error))
             ParticleFatal("[particle] FLAME frame expression compile failed: " + expr_error);
