@@ -4,6 +4,30 @@ from pathlib import Path
 from speed_profile_contract import function
 ROOT=Path(__file__).resolve().parents[2]
 class PukeLifecycleTests(unittest.TestCase):
+ def test_actual_raster_policy_is_native_only_and_default_grid(self):
+  source=(ROOT/'src/effects/pukepreview.cpp').read_text()
+  policy=function(source,'static int RasterPolicy()')
+  configure=function(source,'static void ConfigureRaster(SHelperMeshSubmit& draw,const State* s)')
+  code=r'''
+#include <cassert>
+#include <cstdlib>
+bool StartupVfxNativeDomain=false;
+struct State{int raster_policy;};
+struct SHelperMeshSubmit{bool retail_software_projection=false,retail_software_pixel_grid=false,retail_alpha_source_quantize=false;};
+'''+policy+'\n'+configure+r'''
+int main(){
+ unsetenv("REV_PUKE_RASTER_DIAGNOSTIC");assert(RasterPolicy()==1);
+ for(const char* invalid:{"","4","-1","12","false"}){setenv("REV_PUKE_RASTER_DIAGNOSTIC",invalid,1);assert(RasterPolicy()==1);}
+ for(int n=0;n<4;++n){char value[2]={char('0'+n),0};setenv("REV_PUKE_RASTER_DIAGNOSTIC",value,1);assert(RasterPolicy()==n);
+  for(int native=0;native<2;++native){StartupVfxNativeDomain=native;State s{RasterPolicy()};SHelperMeshSubmit draw;ConfigureRaster(draw,&s);
+   assert(draw.retail_software_projection==bool(native));assert(draw.retail_software_pixel_grid==bool(native&&(n&1)));assert(draw.retail_alpha_source_quantize==bool(native&&(n&2)));}}
+}
+'''
+  code='#include <initializer_list>\n'+code
+  with tempfile.TemporaryDirectory()as tmp:
+   p=Path(tmp);(p/'policy.cpp').write_text(code)
+   subprocess.run(['clang++','-std=c++17','-Wall','-Wextra','-Werror',str(p/'policy.cpp'),'-o',str(p/'policy')],check=True)
+   subprocess.run([str(p/'policy')],check=True)
  def test_actual_advance_guards_birth_rng_and_owner_completion(self):
   source=(ROOT/'src/effects/pukepreview.cpp').read_text();body=function(source,'void Advance(State* s,double seconds)');alive=function(source,'bool Alive(State* s)')
   marker='s->owner->Pulse();if(!Alive(s))return;';self.assertEqual(body.count(marker),1)
@@ -16,6 +40,7 @@ int rng_calls=0;
 int random(int a,int){++rng_calls;return a;}
 struct Owner{unsigned flags=0;bool kill=false;int frames=0;void NextFrame(){++frames;}void Pulse(){if(kill)flags|=OF_KILL;}unsigned GetFlags(){return flags;}void SetFlags(unsigned f){flags=f;}};
 struct State{Owner*owner;retail_puke::State core;double accumulator=0;int ticks=0;};
+void Trace(State*){}
 namespace TTime{constexpr double LegacyFrameSeconds=1./24.;}
 '''
   main=r'''
