@@ -31,12 +31,12 @@ static uint32_t Hash(const void*p,size_t n){uint32_t h=2166136261u;const auto*b=
 class SeekingVisual final : public TFlipbookBillboardComponent {
 public:
  MeshHandle meshes[4]{};
- int objects=0;
+ int objects=0;bool restored_sand=false;
  ~SeekingVisual() override {if(Renderer)for(auto m:meshes)if(m)Renderer->ReleaseMeshAssetRef(m);}
  void OnAttach() override {} // owner animator Pulse is the only simulation clock
  bool Initialize(TObjectInstance& owner,bool restored){
   if(!Renderer || owner.ObjId()!=(restored?0xfecafaceu:0x14db0f2eu))return false;
-  objects=restored?1:4;
+  objects=restored?1:4;restored_sand=restored;
   auto*im=dynamic_cast<T3DImagery*>(owner.GetImagery());if(!im || im->NumObjects()!=objects || im->NumTextures()!=1 || (restored && (im->NumStates()!=1 || im->GetAniLength(0)!=1)))return false;
   S3DTex tex{};im->GetTexture(0,&tex);const auto&pf=tex.desc.pixelFormat;
   if(tex.numframes!=1 || tex.desc.width!=64 || tex.desc.height!=64 || pf.dwRGBBitCount!=16 || pf.dwRBitMask!=0xf00 || pf.dwGBitMask!=0xf0 || pf.dwBBitMask!=0xf || pf.dwRGBAlphaBitMask!=0xf000 || im->GetTextureHandle(0)==kInvalidTexture)return false;
@@ -45,13 +45,13 @@ public:
    if(Hash(raw,sizeof raw)!=(restored?0x9fb5ee98u:hashes[i]) || !ExtractSubMeshTextureSlot(im,i,1,v,ix) || v.size()!=4 || ix.size()!=6 || Hash(ix.data(),12)!=0x4d2f57c6u)return false;
    if(restored && !LegacySandResourceAllowed(owner.ObjId(),objects,im->NumStates(),im->GetAniLength(0),Hash(raw,sizeof raw),Hash(ix.data(),12)))return false;
    meshes[i]=Renderer->RegisterMeshAsset((restored?0x53574d53414e4400ull:0x53574d4150504100ull)|uint64_t(i),v.data(),4,ix.data(),6,im->GetTextureHandle(0));if(!meshes[i])return false;Renderer->AddMeshAssetRef(meshes[i]);}
-  Configure(im->GetTextureHandle(0),64,64,1,1,1,0,0,false,true);return true;
+  Configure(im->GetTextureHandle(0),64,64,1,1,1,0,0,false,true);if(restored)log_info("[sandswirl-sand-raster] original_scene=2 argb4444=1 source_term_quantize=%d destination_rounding_open=1",int(StartupVfxNativeDomain));return true;
  }
  void Submit(TRenderer&r,const TObjectInstance&owner) const override {
   auto*a=owner.GetComponent<SeekingAnimator>();if(!a || owner.Flags()&OF_KILL)return;
   hmm_mat4 root;const auto&o=owner.Pos();if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,o.x,o.y,o.z,owner.GetFace());else root=owner.Transform().Matrix();
   a->core.Render([&](int object,retail_seeking_particles::Vec p){hmm_mat4 local,world;MtxClear(&local);const hmm_vec3 pos={p.x,p.y,p.z};MtxTranslate(&local,&pos);MtxMultiply(&world,&local,&root);
-   SHelperMeshSubmit q{};q.mesh=meshes[object];q.retail_lighting=3;q.retail_source_alpha=true;q.retail_software_projection=StartupVfxNativeDomain;q.retail_normal_z_scale=StartupVfxNativeDomain?1.f:1.f/WORLD3D_Z_SCALE;
+   SHelperMeshSubmit q{};q.mesh=meshes[object];q.retail_lighting=3;q.retail_source_alpha=true;q.retail_alpha_source_quantize=restored_sand && StartupVfxNativeDomain;q.retail_software_projection=StartupVfxNativeDomain;q.retail_normal_z_scale=StartupVfxNativeDomain?1.f:1.f/WORLD3D_Z_SCALE;
    for(int row=0;row<4;++row)for(int col=0;col<4;++col)q.world[row*4+col]=world.Elements[col][row];r.SubmitHelperMesh(q);});
  }
 };
