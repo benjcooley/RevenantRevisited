@@ -101,6 +101,8 @@ struct SMapRenderStats;
 
 struct SSectorDrawableInst {
     ESectorDrawableKind kind = ESectorDrawableKind::Tile;
+    // Separate authored I2D animation; the state still remains another record.
+    bool animation_layer = false;
     // Non-owning index into the map/level resident asset cache. A draw item
     // means "submit this instance"; it must not be treated as GPU residency
     // ownership, and destroying/rebuilding draw items must not evict assets.
@@ -367,6 +369,7 @@ struct TMapRenderer::Impl
     bool sectorShowGizmos = true;
     bool sectorShowTiles = true;
     bool sectorShowGroundTiles = true;
+    std::unordered_set<uint32_t> reviewVisibleTileTypes;
     bool sectorShowMeshes = true;
     bool sectorShowMeshLocators = false;
     bool sectorForceMeshPreviewPose = false;

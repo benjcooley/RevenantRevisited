@@ -154,3 +154,70 @@ rendered ordinary-gallery approval. The physical source/bow object is an
 upstream fixture and is not drawn, so the comparison covers the trail itself.
 Natural parent rendering, camera/raster/lighting and scene interaction remain
 open. No effect-production code changed in this direction audit.
+
+## Unclipped diagonal lifecycle, 2026-10-11
+
+The early 640x480 diagonal pictures clipped the trail while the owner was still
+alive. The attached-original tool now accepts `--resolution W H` and
+`--center X Y`, preserving its 640x480 / (320,320) defaults. The new comparison
+uses a declared 1280x960 surface and (640,640) center for both the original
+software raster and actual port renderer. The origin (0,0,144), destination
+(-170,-219,144), facing229, seed1 and 24Hz cadence remain unchanged. Nothing is
+fitted to the images, and no effect code or shared renderer policy changed.
+
+All24 original state/RNG/event records and ordered draw matrices are identical
+to the earlier 640x480 capture; pointer-valued draw arguments differ because the
+larger surfaces change fixture allocations. The source core still matches240
+state fields and3,648 matrix channels, with maximum matrix residual
+4.960937474152161e-7. All14 live frames fit inside the surface in the original,
+port native-domain and port common-domain captures. Deletion begins at zero-based
+tick14; all10 remaining frames are blank in allthree recordings. None of the
+full-frame effect bounds touches an edge.
+
+`arrow_fullcycle_review.py` checks those frame-pairing/lifecycle/bounds invariants,
+pins all72 full PNGs, checks the actual port phase/growth/RNG logs against the
+original live records, and packages a supplemental detail panel using the same
+fixed rectangle (600,240,760,480) without scaling or color changes. Its metrics
+are measurements, not appearance thresholds: native-domain support IoU is
+0.8767–0.9004(minimum/median), with at most one pixel of bounding-edge difference.
+Pixel equality is not claimed. The common projection remains a diagnostic.
+The independently viewed native-domain samples have closely corresponding
+shapes, growth, trajectory and deletion, while ordinary moving-gallery approval
+and natural physical-arrow/bow/map deletion dispatch remain open.
+
+Private evidence: `research/vfx-arrow-fullcycle-agent-20261011/` under
+`RevenantRetailLab`. Full package `review-final/manifest.json` SHA256:
+`7b6e54b85e79b84bbeb82000aafb36654c77f8261856daf918a9b0c1b38e1afa`.
+The frozen port binary SHA256 is
+`9875275ea0a1c820e1de8f63c1655dd7d259af70635714f8f8b8001bc3ed808a`.
+This comparison uses the same private endpoint-enabled source binary as the
+previous clipped attempt, rather than rebuilding during another agent's work.
+
+Reproduce the original frames from the worktree, with the retail-runtime Python
+environment and `PYTHONPATH=tools/retail_runtime:tools/retail_asm`:
+
+```sh
+python tools/retail_runtime/arrow_attached_visual_reference.py \
+  recon/retail_asm/baseline/Revenant.rebuilt.exe \
+  --output PRIVATE/native --gallery-direction --frames 24 \
+  --resolution 1280 960 --center 640 640 \
+  --samples 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23
+python tools/retail_runtime/arrow_core_probe.py PRIVATE/native/trace.json \
+  --output PRIVATE/source
+```
+
+Use `port_capture.py` twice with explicit scenarios matching those coordinates,
+24frames, fps24, warmup0, seed1, black background, resolution[1280,960],
+camera[640,640], rectangle[0,0,1280,960], ambient[32,255,255,255], and
+`ArrowEffect_ORIGINAL`; set `native_domain` true/false and write respectively to
+`PRIVATE/metal-native` and `PRIVATE/metal-common`. Pin an owned source binary and
+independent save directory in each scenario. Then package the unchanged frames:
+
+```sh
+python tools/retail_runtime/arrow_fullcycle_review.py \
+  --native PRIVATE/native --metal PRIVATE --output PRIVATE/review
+```
+
+These original fixtures still declare immutable resource/COM setup, base
+animator initialization, terrain plane and explicit source-deletion delivery;
+there is no newly certified natural scene, actor, audio or device result.

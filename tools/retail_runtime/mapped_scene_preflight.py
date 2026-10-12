@@ -12,12 +12,12 @@ from unicorn import UC_PROT_READ
 
 MAP, PLAY, MODULES = 0x6668d8, 0x65caf0, 0x65a768
 
-def run(output, camera, move_player=False, instruction_limit=100000000, accelerate_stores=False, resume=None, skip_precache=False):
+def run(output, camera, move_player=False, instruction_limit=100000000, accelerate_stores=False, resume=None, skip_precache=False, boot=BOOT):
     output.mkdir(parents=True, exist_ok=False)
     executable=ROOT/'recon/retail_asm/baseline/Revenant.rebuilt.exe'
     if resume:
         world=HudWorld(executable,image_path=resume);f=SimpleNamespace(world=world,vm=world.vm)
-    else:f=AuthenticCharacters(executable,BOOT)
+    else:f=AuthenticCharacters(executable,boot)
     v=f.vm;stages=[];checks=[];failure=None
     stores=None
     if accelerate_stores:
@@ -94,7 +94,7 @@ def run(output, camera, move_player=False, instruction_limit=100000000, accelera
         resumed_checkpoint_sha256=sha(resume)if resume else None,
         skipped_bitmap_precache=skip_precache,precache_calls=precache_calls,
         store_acceleration={k:value for k,value in stores.items()if not k.endswith('hook')}if stores else None,
-        executable_sha256=sha(executable),boot_sha256=sha(BOOT),probe_sha256=sha(__file__),
+        executable_sha256=sha(executable),boot_sha256=sha(boot),probe_sha256=sha(__file__),
         module_sha256=sha(ROOT/'data/Modules/Ahkuilon.rvm'),boundary_calls=f.world.boundary_calls,scope=__doc__)
     (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');return report
 
@@ -105,8 +105,9 @@ if __name__=='__main__':
     p.add_argument('--instruction-limit',type=int,default=100000000)
     p.add_argument('--accelerate-stores',action='store_true',help='Use independently checked instruction-equivalent bulk stores')
     p.add_argument('--resume',type=Path,help='Continue a preserved instruction-budget gate without restarting the native call')
+    p.add_argument('--boot-image',type=Path,default=BOOT,help='Explicit original startup checkpoint (e.g. original SOFTWARE3D configuration)')
     p.add_argument('--skip-bitmap-precache',action='store_true',help='Qualified diagnostic: omit optional all-state bitmap cache warming; original drawing/decompression remain')
     a=p.parse_args()
     if a.instruction_limit<1:p.error('--instruction-limit must be positive')
-    result=run(a.output,a.camera,a.move_player,a.instruction_limit,a.accelerate_stores,a.resume,a.skip_bitmap_precache)
+    result=run(a.output,a.camera,a.move_player,a.instruction_limit,a.accelerate_stores,a.resume,a.skip_bitmap_precache,a.boot_image)
     raise SystemExit(1 if result['failure'] else 0)

@@ -11,7 +11,8 @@ from unicorn import UC_PROT_READ,UC_HOOK_CODE
 from unicorn.x86_const import UC_X86_REG_ESP
 from software_probe import save_rgb565_png
 MAP=0x6668d8;PLAY=0x65caf0
-def run(checkpoint,out,ticks=1,draw=False):
+def run(checkpoint,out,ticks=1,draw=False,watch_assets=()):
+ watched={str(asset).replace('/','\\').lower()for asset in watch_assets}
  out.mkdir(parents=True,exist_ok=False);w=HudWorld(ROOT/'recon/retail_asm/baseline/Revenant.rebuilt.exe',image_path=checkpoint);v=w.vm;pointer_checks=[]
  from native_store_loop import install
  stores=install(v)
@@ -91,7 +92,8 @@ def run(checkpoint,out,ticks=1,draw=False):
     s=v.u32(v.u32(0x668588)+4*i)
     for slot in range(v.u32(s+0xb8)):
      o=v.u32(v.u32(s+0xc8)+4*slot)
-     if o and struct.unpack('<H',v.uc.mem_read(o+4,2))[0]in(11,12,17,25):
+     im=v.u32(o+0x54)if o else 0;asset=v.string(v.u32(im+4))if im else ''
+     if o and (struct.unpack('<H',v.uc.mem_read(o+4,2))[0]in(11,12,17,25) or asset.replace('/','\\').lower()in watched):
       state=struct.unpack('<H',v.uc.mem_read(o+12,2))[0];im=v.u32(o+0x54)
       animator=v.u32(o+0x58);animator_vtable=v.u32(animator)if animator else 0
       rows.append(dict(index=v.u32(o+0x40),owner=hex(o),position=list(struct.unpack('<3i',v.uc.mem_read(o+0x10,12))),state=state,frame=struct.unpack('<h',v.uc.mem_read(o+0x5c,2))[0],frame_increment=struct.unpack('<h',v.uc.mem_read(o+0x5e,2))[0],asset=v.string(v.u32(im+4)),clip_frames=w.call(v.u32(v.u32(im)+0x90),(state,),this=im),animator_vtable=hex(animator_vtable),flame_internal_frame=v.u32(animator+0xfc)if animator_vtable==0x5a9dec else None))
@@ -100,6 +102,6 @@ def run(checkpoint,out,ticks=1,draw=False):
  w.save(out/('screen-gate.image'if failure else'after-frame.image'))
  r=dict(controller_calls=controller_calls,function_calls=calls,map_core_hex=bytes(v.uc.mem_read(MAP,0x160)).hex(),multimedia_timers=w.system.timers,thread_waits={tid:dict(state=t.state,wait=t.wait,wake=str(t.wake))for tid,t in v.scheduler.threads.items()},ambient_hex=bytes(v.uc.mem_read(MAP+0x1b0,256)).hex(),scheduler_trace=v.scheduler.trace[-20:],cursor_control=[-32,-32],status='genuine_full_map_frame_gate'if failure else'genuine_full_map_frames',accepted=False,failure=failure,frames=frames,pointer_checks=pointer_checks,checkpoint_sha256=sha(checkpoint),probe_sha256=sha(__file__),device_calls=w.ddraw.device_calls,draw=draw,skipped_bitmap_precache=True,store_acceleration={k:value for k,value in stores.items()if not k.endswith('hook')},scope=__doc__);(out/'manifest.json').write_text(json.dumps(r,indent=2)+'\n');return r
 if __name__=='__main__':
- p=argparse.ArgumentParser();p.add_argument('--checkpoint',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--ticks',type=int,default=1);p.add_argument('--draw',action='store_true');a=p.parse_args()
+ p=argparse.ArgumentParser();p.add_argument('--checkpoint',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--ticks',type=int,default=1);p.add_argument('--draw',action='store_true');p.add_argument('--watch-asset',action='append',default=[],help='Also record named map imagery, e.g. Town/TwnBrazier.I2D');a=p.parse_args()
  if a.ticks<1:p.error('--ticks must be positive')
- result=run(a.checkpoint,a.output,a.ticks,a.draw);raise SystemExit(1 if result['failure'] else 0)
+ result=run(a.checkpoint,a.output,a.ticks,a.draw,a.watch_asset);raise SystemExit(1 if result['failure'] else 0)

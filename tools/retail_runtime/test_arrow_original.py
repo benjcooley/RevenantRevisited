@@ -41,6 +41,10 @@ int main(){for(bool queen:{false,true}){auto original=run(queen,24);assert(!orig
    out=Path(tmp);native=out/'native';self.invoke('arrow_attached_visual_reference.py',ROOT/'recon/retail_asm/baseline/Revenant.rebuilt.exe','--output',native,'--frames',24,'--state-only','--gallery-direction')
    d=json.loads((native/'trace.json').read_text());self.assertEqual(d['facing'],229);self.assertEqual(d['records'][0]['state']['position'],[-12,-15,144]);self.assertTrue(any(r['state']['deleted']for r in d['records']))
    self.invoke('arrow_core_probe.py',native/'trace.json','--output',out/'source');r=json.loads((out/'source/manifest.json').read_text());self.assertEqual(r['status'],'pass');self.assertEqual(r['matrix_fields'],3648);self.assertLess(r['max_matrix_error'],1e-6)
+   enlarged=out/'enlarged';self.invoke('arrow_attached_visual_reference.py',ROOT/'recon/retail_asm/baseline/Revenant.rebuilt.exe','--output',enlarged,'--frames',24,'--state-only','--gallery-direction','--resolution',1280,960,'--center',640,640)
+   e=json.loads((enlarged/'trace.json').read_text());self.assertEqual(e['viewport'],[1280,960]);self.assertEqual(e['center'],[640,640])
+   self.assertEqual([r['state']for r in e['records']],[r['state']for r in d['records']])
+   self.assertEqual([[x['matrix']for x in r['draws']]for r in e['records']],[[x['matrix']for x in r['draws']]for r in d['records']])
  def test_original_motion_collision_kill_and_render_rng_at_two_cadences(self):
   with tempfile.TemporaryDirectory(prefix='queen-arrow-')as tmp:
    for stride in(1,3):

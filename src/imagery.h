@@ -461,6 +461,7 @@ class TObjectAnimator : public TObjectComponent
 
     virtual void ResetState();
       // Restart the current state
+    bool IsComplete() const { return complete; }
     virtual void SetComplete(bool comp) { complete = comp; }
       // The animation is complete (set to false when ResetState() caled and true when anim is done)
     virtual void SetNewState(bool newst) { newstate = newst; }

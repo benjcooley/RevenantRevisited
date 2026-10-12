@@ -28,6 +28,12 @@ Filter entries accept case-insensitive full names or hexadecimal retail type
 IDs, separated by commas. Duplicate names retain separate type-ID entries.
 Unknown entries are rejected so typos cannot silently change the review.
 
+The list also includes **TwnBrazier**, the large animated sconce fire from
+`Town/TwnBrazier.I2D`. It is an original TILE map object, outside the176 EFFECT
+rows. Select it with `--vfx-review-effects=TwnBrazier` or `0x70dc006a`; the normal
+TILE factory draws its still/base plus authored15-frame animation. Ground stays
+black while this explicitly selected decoration remains visible.
+
 The audited unused Worm, cfire, Vortex and Fire prototypes are omitted from
 the normal list; their exact diagnostics remain selectable with
 `--vfx-review-effects=0xdefeca7e,0xad92bd27,0x452dade0,0x119f01e3`.

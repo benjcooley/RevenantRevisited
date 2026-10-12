@@ -12904,7 +12904,8 @@
       ],
       "source_fixes": [
         "2026-10-11: Genuine actor/publicSet Burn finitefire/smoke core/nativeZ/actualbones/realdamage independentlyverified and14phase appearance reviewed;90PNG integrated repeat/exactgallery pass. Naturalmovingactors/poster/reignite/transition/device remainopen.",
-        "2026-10-11: Integer fixture uses real CalcObjectMatrix(state14/frame0, parent composition) with scoped interpolation-off/restoration instead of live fractional GetObjectMatrix. Fresh original90tick state/RNG/matrix replay passes; all90 prior24Hz images unchanged and89 direct-time paired120Hz images identical. Ordinary moving-gallery appearance not certified."
+        "2026-10-11: Integer fixture uses real CalcObjectMatrix(state14/frame0, parent composition) with scoped interpolation-off/restoration instead of live fractional GetObjectMatrix. Fresh original90tick state/RNG/matrix replay passes; all90 prior24Hz images unchanged and89 direct-time paired120Hz images identical. Ordinary moving-gallery appearance not certified.",
+        "2026-10-11: Burn common-world submission converts native MODELZ to raw map center plus existing1.5 localZ, with inverse normal scale; native state/RNG/matrices and all90 native image buffers unchanged."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -12923,7 +12924,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Recheck ordinary viewer after fixed integer-bone fixture; native24Hz film unchanged, matched legacy phases at120Hz unchanged. Common projection and natural moving actor remain unverified.",
+      "next_action": "Preserve repaired common-world submission; verify natural moving/animated victim, other rigs, Burn() poster/map insertion and reignite/audio. Integer/native90 and ordinary fixed-actor lifecycle checks pass.",
       "notes": [],
       "batch": "2 \u2014 Close early parity and map/combat regressions",
       "visual_review": {
@@ -12944,6 +12945,25 @@
         "configuration": "Full ordinary-world scrolling reviewer",
         "finding": "User reports Arrow Effect, Burn and cfire look suspiciously inaccurate.",
         "next_action": "Recheck ordinary viewer after fixed integer-bone fixture; native24Hz film unchanged, matched legacy phases at120Hz unchanged. Common projection and natural moving actor remain unverified."
+      },
+      "common_world_bridge_review": {
+        "date": "2026-10-11",
+        "result": "bounded_appearance_reviewed",
+        "report": "/Users/benjamincooley/RevenantRetailLab/research/vfx-burn-common-agent-20261011/review/manifest.json",
+        "sha256": "76bf50f2d56572c5c4866d2e44d1142c32c70f2da06eda04aebc91c334a5855f",
+        "reviewer": "root",
+        "reviewed_phases": [
+          16,
+          50,
+          74
+        ],
+        "native_frames_unchanged": 90,
+        "production_native_vertices": 22560,
+        "production_common_vertices": 22560,
+        "common_gallery_frames": 100,
+        "natural_moving_actor_accepted": false,
+        "exact_pixels_accepted": false,
+        "scope": "Corrected rising plume height/location under canonical common-world contract; phase/RNG/health/native90 preserved. Fixed actualAcolyte14/0 fixture remains a bounded rig input, not a natural moving victim."
       }
     },
     {
@@ -19297,7 +19317,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Viewer diagonal direction(\u2212170,\u2212219), Z144/facing229 now matches full original physical Move/follower/Render state/RNG/matrices through deletion14. Compare ordinary-gallery raster/lighting and physical parent display before reapproval; no new visual credit.",
+      "next_action": "Full diagonal source/native-domain lifecycle now reviewed without clipping; pursue actual scrolling context and natural physical bow/projectile/trail integration. Keep original renderer/ownership/RNG boundaries declared.",
       "notes": [],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "visual_review": {
@@ -19318,6 +19338,35 @@
         "configuration": "Full ordinary-world scrolling reviewer",
         "finding": "User reports Arrow Effect, Burn and cfire look suspiciously inaccurate.",
         "next_action": "Viewer diagonal direction(\u2212170,\u2212219), Z144/facing229 now matches full original physical Move/follower/Render state/RNG/matrices through deletion14. Compare ordinary-gallery raster/lighting and physical parent display before reapproval; no new visual credit."
+      },
+      "unclipped_full_cycle_review": {
+        "date": "2026-10-11",
+        "report": "/Users/benjamincooley/RevenantRetailLab/research/vfx-arrow-fullcycle-agent-20261011/review-final/manifest.json",
+        "sha256": "7b6e54b85e79b84bbeb82000aafb36654c77f8261856daf918a9b0c1b38e1afa",
+        "viewport": [
+          1280,
+          960
+        ],
+        "center": [
+          640,
+          640
+        ],
+        "alive_ticks": 14,
+        "blank_tail_ticks": 10,
+        "source_state_rng_matrices_unchanged": true,
+        "result": "bounded_native_domain_appearance_pass",
+        "reviewer": "root",
+        "reviewed_phases": [
+          0,
+          3,
+          6,
+          10,
+          13,
+          14
+        ],
+        "ordinary_scrolling_scene_accepted": false,
+        "natural_bow_accepted": false,
+        "scope": "Root inspects unchanged full-cycle SW/native/common images. Native shapes align without clipping and tail blanks. Ordinary projection differs as declared; no framebuffer fitting or natural bow/context claim."
       }
     },
     {
@@ -24244,7 +24293,7 @@
         "accepted": false
       },
       "runtime_dispatch": "retail_default_animator_lookup_verified_generic_mesh_map_texture_lifecycle_verified",
-      "next_action": "Check original resident arena characters, animation clip length and real screen scheduler; keep inspection setting separate from fidelity proof.",
+      "next_action": "Keep four-frame helper appearance/presentation scope distinct from verified actual arena CHARACTER actions. Natural original full screen scheduling now recorded; native hardware wall cadence and actual helper runtime use remain unverified.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "Source-format diagnostic shared by three watcher types: native neon multicolor differs from authored darkpurple ARGB1555; interpreting the same packed words as4444 resembles that fingerprint. Source Blue alpha-format selection is a hypothesis, not proved retail transfer. Only watcher1 was captured; no accepted reference or implementation credit.",
@@ -24352,6 +24401,16 @@
         "confirmation": "That looks correct.",
         "correction": "User rejects24Hz wall-clock cadence and requests real Ogrok arena. Prior probe established one frame per manually driven tick on fresh helper EFFECTs, not natural scene cadence.",
         "next_action": "Check original resident arena characters, animation clip length and real screen scheduler; keep inspection setting separate from fidelity proof."
+      },
+      "natural_arena_clock_reference": {
+        "report": "/Users/benjamincooley/RevenantRetailLab/research/vfx-ogrok-arena-cadence-followup-20261011/cadence-final.json",
+        "sha256": "6b51f635f714b505bb9896a78eb3de472809dfcbe071e0c7f0c1f71e728dd21f",
+        "original_screen_ticks": 85,
+        "actual_spectators": 11,
+        "virtual_tick_ms": 41,
+        "hardware_wall_cadence_verified": false,
+        "helper_identity_equal": false,
+        "scope": "ActualArena CHARACTER watch clips15\u201377frames with terminal holds/weighted retriggers; sample615\u20131271ms controlled virtual cycles. Four-frameEFFECT helper clips have no shipped map/script/executable-literal use, but indirect creation not ruled out. Presentation rate0.25 is not a retail cadence measurement."
       }
     },
     {
@@ -24384,7 +24443,7 @@
         "accepted": false
       },
       "runtime_dispatch": "retail_default_animator_lookup_verified_generic_mesh_map_texture_lifecycle_verified",
-      "next_action": "Check original resident arena characters, animation clip length and real screen scheduler; keep inspection setting separate from fidelity proof.",
+      "next_action": "Keep four-frame helper appearance/presentation scope distinct from verified actual arena CHARACTER actions. Natural original full screen scheduling now recorded; native hardware wall cadence and actual helper runtime use remain unverified.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "Source-format diagnostic shared by three watcher types: native neon multicolor differs from authored darkpurple ARGB1555; interpreting the same packed words as4444 resembles that fingerprint. Source Blue alpha-format selection is a hypothesis, not proved retail transfer. Only watcher1 was captured; no accepted reference or implementation credit.",
@@ -24449,6 +24508,16 @@
         "confirmation": "That looks correct.",
         "correction": "User rejects24Hz wall-clock cadence and requests real Ogrok arena. Prior probe established one frame per manually driven tick on fresh helper EFFECTs, not natural scene cadence.",
         "next_action": "Check original resident arena characters, animation clip length and real screen scheduler; keep inspection setting separate from fidelity proof."
+      },
+      "natural_arena_clock_reference": {
+        "report": "/Users/benjamincooley/RevenantRetailLab/research/vfx-ogrok-arena-cadence-followup-20261011/cadence-final.json",
+        "sha256": "6b51f635f714b505bb9896a78eb3de472809dfcbe071e0c7f0c1f71e728dd21f",
+        "original_screen_ticks": 85,
+        "actual_spectators": 11,
+        "virtual_tick_ms": 41,
+        "hardware_wall_cadence_verified": false,
+        "helper_identity_equal": false,
+        "scope": "ActualArena CHARACTER watch clips15\u201377frames with terminal holds/weighted retriggers; sample615\u20131271ms controlled virtual cycles. Four-frameEFFECT helper clips have no shipped map/script/executable-literal use, but indirect creation not ruled out. Presentation rate0.25 is not a retail cadence measurement."
       }
     },
     {
@@ -24481,7 +24550,7 @@
         "accepted": false
       },
       "runtime_dispatch": "retail_default_animator_lookup_verified_generic_mesh_map_texture_lifecycle_verified",
-      "next_action": "Check original resident arena characters, animation clip length and real screen scheduler; keep inspection setting separate from fidelity proof.",
+      "next_action": "Keep four-frame helper appearance/presentation scope distinct from verified actual arena CHARACTER actions. Natural original full screen scheduling now recorded; native hardware wall cadence and actual helper runtime use remain unverified.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "Source-format diagnostic shared by three watcher types: native neon multicolor differs from authored darkpurple ARGB1555; interpreting the same packed words as4444 resembles that fingerprint. Source Blue alpha-format selection is a hypothesis, not proved retail transfer. Only watcher1 was captured; no accepted reference or implementation credit.",
@@ -24546,6 +24615,16 @@
         "confirmation": "That looks correct.",
         "correction": "User rejects24Hz wall-clock cadence and requests real Ogrok arena. Prior probe established one frame per manually driven tick on fresh helper EFFECTs, not natural scene cadence.",
         "next_action": "Check original resident arena characters, animation clip length and real screen scheduler; keep inspection setting separate from fidelity proof."
+      },
+      "natural_arena_clock_reference": {
+        "report": "/Users/benjamincooley/RevenantRetailLab/research/vfx-ogrok-arena-cadence-followup-20261011/cadence-final.json",
+        "sha256": "6b51f635f714b505bb9896a78eb3de472809dfcbe071e0c7f0c1f71e728dd21f",
+        "original_screen_ticks": 85,
+        "actual_spectators": 11,
+        "virtual_tick_ms": 41,
+        "hardware_wall_cadence_verified": false,
+        "helper_identity_equal": false,
+        "scope": "ActualArena CHARACTER watch clips15\u201377frames with terminal holds/weighted retriggers; sample615\u20131271ms controlled virtual cycles. Four-frameEFFECT helper clips have no shipped map/script/executable-literal use, but indirect creation not ruled out. Presentation rate0.25 is not a retail cadence measurement."
       }
     },
     {
@@ -27151,6 +27230,26 @@
       "finding": "User saw another effect animating too fast; initially thought Photon, then said the focused Photon was not the same effect and might have mistaken its name.",
       "resolved": false,
       "next_action": "Identify label/appearance during full review; no arbitrary Photon speed change."
+    }
+  ],
+  "related_map_vfx": [
+    {
+      "key": "TILE/TwnBrazier:0x70dc006a",
+      "name": "TwnBrazier",
+      "class_name": "TILE",
+      "type_id": "0x70dc006a",
+      "asset": "Town\\TwnBrazier.I2D",
+      "user_confirmation": "works",
+      "date": "2026-10-11",
+      "repair": "Restore separate authored animated I2D layer while keeping state still, registrations, depth/alpha and completion/cache behavior.",
+      "native_clip_frames": 15,
+      "native_scene": "level49 Nakranoth chamber",
+      "reviewer_report": "/Users/benjamincooley/RevenantRetailLab/research/vfx-twnbrazier-review-root-20261011/user-review.json",
+      "reviewer_sha256": "4dfefb7787d9d0242888f4ab359b47ce4e7e33bef49862ec9d227ad1f73348fa",
+      "map_proof": "/Users/benjamincooley/RevenantRetailLab/research/vfx-brazier-animation-agent-20261011/proof-final.json",
+      "map_proof_sha256": "7a99637e9bf346e420a6d359027122782b93be3de01b56b8bc903df8d0178ccd",
+      "full_acceptance": false,
+      "scope": "Confirmed ordinaryTILE fire animation; related map decoration outside176 EFFECT rows. User-visible namedreviewer and unchanged-map15frame loop work; full phase/pixel/device/audio parity separate."
     }
   ]
 }

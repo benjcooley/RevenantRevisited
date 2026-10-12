@@ -32,4 +32,5 @@ int main(){T3DAnimator a;hmm_mat4 m;assert(!IntegerBone(nullptr,0,m));assert(!In
  def test_all_authored_vertices_actual_absoluteposition_submission(self):
   with tempfile.TemporaryDirectory(prefix='burn-owner-')as t:r=owner(Path(t)/'proof',EVIDENCE/'burn-state-first/source.trace')
   self.assertEqual((r['status'],r['vertices'],r['draws']),('pass',22560,5640))
+  self.assertEqual(r['common_vertices'],22560)
 if __name__=='__main__':unittest.main()

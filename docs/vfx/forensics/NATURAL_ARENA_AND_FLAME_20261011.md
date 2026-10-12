@@ -3,9 +3,18 @@
 The in-process emulator now loads the original saved map objects through the
 original module, play-screen and map initialization. These scenes are diagnostic
 references, not full appearance approvals: their composited map backgrounds
-currently have corrupted colors. DirectDraw copy tracing showed matching source
+had corrupted colors in the original hybrid HUD configuration. DirectDraw copy tracing showed matching source
 and destination masks; a cross-format raw DD copy is **not** the demonstrated
 cause. Do not repair screenshots or change effect geometry to fit that defect.
+
+Follow-up: the original `SOFTWARE3D` WinMain switch selects NoTexOverlay and the
+genuine software map-composition path. The unchanged chamber now renders with
+correct backdrop colors. Use `software_scene_boot.py` and preflight's explicit
+`--boot-image` for natural map references; keep the separate hybrid HUD fixture
+for its declared hardware-style UI tests. No guest flags, formats or pixels
+were patched. The large chamber sconce fire is actually `TILE/TwnBrazier`,
+`0x70dc006a`, paired with `DunCrnTorch`; the Flame placements below are smaller
+nearby torches. See [the confirmed brazier repair](BRAZIER_MAP_ANIMATION_20261011.md).
 
 ## Locations
 
@@ -61,6 +70,25 @@ retained, and CLI failures exit nonzero. First full draw may fill scratch layers
 while the display is black; later full draws composite the scene. To continue,
 pass the previous `after-frame.image` to a new output folder. Do not restart an
 instruction-budget gate: preflight `--resume` continues its saved native stack.
+
+For the genuine software configuration:
+
+```sh
+python tools/retail_runtime/software_scene_boot.py --output PRIVATE/software-boot
+python tools/retail_runtime/mapped_scene_preflight.py \
+  --boot-image PRIVATE/software-boot/hud-boot-SOURCEFINGERPRINT.image \
+  --camera 49 9740 9740 272 --move-player \
+  --skip-bitmap-precache --accelerate-stores --output PRIVATE/nakra
+python tools/retail_runtime/mapped_scene_frame.py \
+  --checkpoint PRIVATE/nakra/resident-map.image --ticks 3 --draw \
+  --watch-asset Town/TwnBrazier.I2D --output PRIVATE/nakra-frames
+```
+
+Use the actual checkpoint filename printed by the boot tool. A retained warm
+scene skips future startup. `--watch-asset` adds readonly frame/clip records for
+map sprites without spawning, modifying or driving them individually. The20-tick
+original brazier capture observes frame11→12→13→14→0 and a15-frame cycle; its
+rendering uses the original whole screen/map/animator and bitmap blitters.
 
 Local natural-scene evidence lives under
 `/Users/benjamincooley/RevenantRetailLab/research/vfx-ogrok-arena-root-20261011/`
