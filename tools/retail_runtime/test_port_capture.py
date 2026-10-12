@@ -23,6 +23,7 @@ Image.new('RGB',(1,1),COLOR).save(prefix+'filmstrip.png')
 Path(prefix+'timing.csv').write_text('frame,simulation_seconds,relative_seconds\\n1,0.083333333,0\\n')
 print("--vfx='CaptureFixture' matched",flush=True)
 print('assets='+os.environ['REVENANT_ASSETS_PATH'],flush=True)
+print('trace='+os.environ.get('REV_CAPTURE_FIXTURE_TRACE',''),flush=True)
 '''.replace('COLOR',repr((255,255,255) if visible else (0,0,0)))+
             ("print('[authored-static] missing objects or unsupported controller tags',flush=True)\n" if rejected else '')+
             ("Path(prefix+'001-test.png').write_bytes(b'invalid PNG')\n" if corrupt else '')+
@@ -43,6 +44,22 @@ print('assets='+os.environ['REVENANT_ASSETS_PATH'],flush=True)
         self.assertIn('assets='+str(assets),(output/'run.log').read_text())
         self.assertEqual((output/'effects.def').read_bytes(),(assets/'effects.def').read_bytes())
         self.assertEqual(report['pixel_summary']['nonblack_frames'],1)
+
+    def test_scenario_trace_and_lighting_policy_are_self_contained(self):
+        scenario,output,assets=self.exercise()
+        scenario['environment']={'REV_CAPTURE_FIXTURE_TRACE':'1','REVENANT_ASSETS_PATH':'ignored-explicit-root'}
+        scenario['lighting_mode']='modern'
+        report=capture(scenario,output)
+        self.assertIn('--vfx-lighting-mode=modern',report['command'])
+        self.assertIn('trace=1',(output/'run.log').read_text())
+        self.assertIn('assets='+str(assets),(output/'run.log').read_text())
+
+    def test_invalid_scenario_environment_and_lighting_reject_before_launch(self):
+        for key,value in [('environment',[]),('environment',{'REV_TRACE':1}),('environment',{'BAD=KEY':'1'}),('lighting_mode','unknown')]:
+            scenario,output,_=self.exercise()
+            scenario[key]=value
+            with self.assertRaises(ValueError):capture(scenario,output)
+            self.assertFalse((output/'run.log').exists())
 
     def test_explicit_lossless_png_compression_reaches_command(self):
         scenario,output,_=self.exercise()

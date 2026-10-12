@@ -756,3 +756,11 @@ Do not repair d→v or execute Render on the failed controller to invent fidelit
 Explicit scenarios may set `"png_compression": 5`, passed to `--snapcompression=5`. The accepted range is5..9 (the encoder itself clamps lower values to5); the default remains8, preserving existing PNG encoding. Lower effort trades file size for faster output and does not change simulation, rendering or decoded pixels. Compare `pixel_summary.pixel_sha256` across encoding levels; PNG file hashes may differ. Keep the selected compression in the scenario/build manifest.
 
 A fresh32-frame1280x960 MagicShield control produced identical decoded pixels at default8 and5, both clean exits. On this machine the end-to-end runs took22.27s and17.43s (1.28×); timings include startup/render and are not a general performance guarantee. All19 capture exit/argument/cadence tests pass. Private evidence: `/Users/benjamincooley/RevenantRetailLab/research/vfx-fire-root-20261011/compression-benchmark/comparison.json`.
+
+### Self-contained capture policies and traces
+
+Scenarios may set `"lighting_mode": "auto" | "classic" | "modern"` independently of `native_domain`. Projection and color/device policy are separate choices. Existing scenarios keep their prior behavior when this field is absent.
+
+The `environment` mapping now reaches the owned capture process, for example `"environment": {"REV_SANDSWIRL_QUALIFIED_TRACE": "1"}`. Names and values must be strings; explicit structured data/assets/save roots remain authoritative. The scenario is retained in the manifest, so trace setup no longer depends on shell exports.
+
+All21 process/cadence/argument tests pass. A real three-frame qualified Sandswirl capture produced255 pool trace rows using only its scenario environment; decoded pixels exactly match the earlier full-run prefix. Private evidence: `/Users/benjamincooley/RevenantRetailLab/research/vfx-sandswirl-root-20261011/self-contained-trace/manifest.json`.
