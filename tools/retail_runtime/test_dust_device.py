@@ -31,6 +31,7 @@ class DustDeviceTests(unittest.TestCase):
   code='#include <cmath>\n#include <cstdio>\nint main(){ int checks=0; for(int profile=-1;profile<14;++profile)for(int sw=0;sw<2;++sw)for(int value=0;value<256;++value){\n'
   code+='struct {bool sw;bool UsesRetailSoftwareMeshLighting()const{return sw;}} renderer{bool(sw)};\n'
   code+=''.join(f'bool {name}=profile=={i};\n'for i,name in enumerate(names))
+  code+='bool fspray_rgb8=false;\n'
   code+='struct{float color[3];}sample{{float(value),float(value),float(value)}};struct{float color_rgba[4];}item{};\n'+body
   code+='float expected=profile<0 || (dust&&!sw)?float(value)/255.f:float(value>>3)/31.f;for(int c=0;c<3;++c){if(std::fabs(item.color_rgba[c]-expected)>1e-7f)return 1;++checks;}}std::printf("checks=%d\\n",checks);}'
   with tempfile.TemporaryDirectory()as tmp:

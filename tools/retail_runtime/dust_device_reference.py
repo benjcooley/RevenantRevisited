@@ -18,7 +18,7 @@ def digest(data): return hashlib.sha256(data).hexdigest()
 def rgb565(word): return ((word>>11)/31., ((word>>5)&63)/63., (word&31)/31.)
 def modulate(texel, diffuse): return tuple(t*d/255. for t,d in zip(rgb565(texel),diffuse))
 
-def raster(packets, filtering, width=640, height=480, legacy_color=False):
+def raster(packets, filtering, width=640, height=480, legacy_color=False, sample_center=0):
     """Independent affine orthographic triangle raster, integer-center top-left.
 
     Packed diffuse is interpolated in RGB8, texture is normalized from its actual
@@ -46,9 +46,9 @@ def raster(packets, filtering, width=640, height=480, legacy_color=False):
             if area<0:ids[1],ids[2]=ids[2],ids[1];pts[1],pts[2]=pts[2],pts[1];area=-area
             edges=[(pts[1],pts[2]),(pts[2],pts[0]),(pts[0],pts[1])]
             include=[b[1]<a[1] or (b[1]==a[1] and b[0]>a[0]) for a,b in edges]
-            for y in range(max(0,math.ceil(min(p[1]for p in pts))),min(height-1,math.floor(max(p[1]for p in pts)))+1):
-                for x in range(max(0,math.ceil(min(p[0]for p in pts))),min(width-1,math.floor(max(p[0]for p in pts)))+1):
-                    w=[edge(a,b,x,y)for a,b in edges]
+            for y in range(max(0,math.ceil(min(p[1]for p in pts)-sample_center)),min(height-1,math.floor(max(p[1]for p in pts)-sample_center))+1):
+                for x in range(max(0,math.ceil(min(p[0]for p in pts)-sample_center)),min(width-1,math.floor(max(p[0]for p in pts)-sample_center))+1):
+                    w=[edge(a,b,x+sample_center,y+sample_center)for a,b in edges]
                     if any(e<0 or(e==0 and not flag)for e,flag in zip(w,include)):continue
                     w=[e/area for e in w];z=sum(w[k]*vertices[ids[k]][2]for k in range(3))
                     if not 0<=z<=65535:continue # declared clear depth, no writes
@@ -59,8 +59,8 @@ def raster(packets, filtering, width=640, height=480, legacy_color=False):
     return bytes(framebuffer)
 
 class DustDevice(DustLoadedScene):
-    def __init__(self,exe,boot):
-        super().__init__(exe,boot,0,38,(10000,10000,16))
+    def __init__(self,exe,boot,name="Dust",source=(10000,10000,16)):
+        super().__init__(exe,boot,0,38,source,name=name)
         self.packets=[];self.device_states={};self.stage_states={};self.bound_textures={};self.matrix=None
         original=self.world.ddraw._device_method;v=self.vm
         def device(interface,method,args):

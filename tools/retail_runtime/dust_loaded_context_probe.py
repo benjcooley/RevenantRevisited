@@ -11,9 +11,9 @@ from lit_software_probe import LitSoftwareFixture
 from fireball_visual_reference import read_fireball
 from unicorn import UC_HOOK_CODE
 class DustLoadedScene:
- def __init__(self,exe,boot,quality,light,source):
+ def __init__(self,exe,boot,quality,light,source,name="Dust"):
   self.actors=AuthenticCharacters(exe,boot);self.actors.select_screen_prefix();self.world=self.actors.world;self.vm=v=self.actors.vm;call=self.world.call
-  v.put_u32(0x5d79e4,quality);self.owner=self.actors.new_object('Dust',source,25,0x5a85ac);assert v.u32(self.owner+0xe4)==0
+  v.put_u32(0x5d79e4,quality);self.owner=self.actors.new_object(name,source,25,0x5a85ac);assert v.u32(self.owner+0xe4)==0
   self.rng_calls=0;v.uc.hook_add(UC_HOOK_CODE,self.rand_entry,begin=0x58c582,end=0x58c582);call(0x58c575,(1,));self.tls=call(0x58fbf1)
   assert call(0x46e8b0,this=self.owner,instruction_limit=100000000)==1;self.animator=v.u32(self.owner+0x58);assert v.u32(self.animator)==0x5a370c
   self.material=0
