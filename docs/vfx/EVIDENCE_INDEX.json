@@ -2118,6 +2118,17 @@
       "check": "qualified_actual_map_runtime",
       "status": "pass",
       "scope": "Actual realmap/NewObject/query/actors/GameRand parent/particle/Quicksand/spelltimer comparison with declared Sparksdependency and monotonicRNGneutral allocatorcontrol. Native310rows exact; source310PNGdecoded/fileexact,282100poolfields/5942packets/236Quicksand rows exact. No intendedSandappearance credit."
+    },
+    "recon/retail_asm/runtime/effects/current-static-rgb8-qualified-20261011/root-review.json": {
+      "sha256": "dcc00fd46b2e712929a0f3999366d60a49983384ebf9e6b9ab2286e2b15b98a8",
+      "retail_rows": [
+        "Regeneration:0x10ac03de",
+        "SwiftStrike:0xe0a3bc43",
+        "nullifier:0xad92bd38"
+      ],
+      "check": "additional_qualified_hardware_color_policy",
+      "status": "pass_color_policy_geometry_open_nullifier",
+      "scope": "Root repeated3x77 original hardware/software states/pools/RNG and450 source images, preserving225 software-policy frames. Reviewed39 fixed whole/detail phases. Packed hardwareRGB8 correction passes for allthree exactIDs. Regeneration/SwiftStrike scoped hardware appearance pass; nullifier color-policy only with visible core geometry mismatch from missing original key transition, hardware appearance remains open. No change to headlinecounts or previousSWprimaryevidence."
     }
   }
 }

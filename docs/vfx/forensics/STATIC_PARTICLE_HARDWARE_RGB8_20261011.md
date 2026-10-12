@@ -71,3 +71,5 @@ Reproduction tools: `static_rgb8_device_reference.py --profile NAME --boot-image
 BOOT --output DIR` (add `--software` for the software control),
 `static_rgb8_device_review.py --help`, plus `test_fspray_device.py` and
 `test_dust_device.py`. The default fspray fixture/review APIs remain compatible.
+
+Root independent reproduction passed under `research/vfx-static-rgb8-root-20261011/first/`: sixunits,3×77 original hardware/software lifecycle rows and450 currentsource image repeats; all225software imagesunchanged. Root reviewed39fixedwhole/detail triples. Additionalqualifiedhardwareappearancepasses applytoRegeneration/SwiftStrike; nullifier receivescolor-policyproof onlybecause thecoretranslationresidualisvisible. Followonactualpacket audit locatesit toomittedoriginalfiveframekeytransition; thatbehaviorfix requiresnewsoftware/hardwarereviews. No headlineeffectcountadded.

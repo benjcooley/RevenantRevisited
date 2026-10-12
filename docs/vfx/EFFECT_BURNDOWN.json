@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "c00fe001bab0734050bd3265fae70675b4a68d580d2b8061f4975c2bce66afeb",
+    "harness_sha256": "0282e9cb46031987605e84a5cd325bc61ce524a6778561870b1ad8629697707e",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -8255,7 +8255,8 @@
       "asset": "magic\\Regen.i3d",
       "preview_candidates": [],
       "source_fixes": [
-        "2026-10-10: exact static-emitter particle profile, prototype0 camera/RGB5/zero-scale admission and controller integration; complete default factory and native literal tags verified."
+        "2026-10-10: exact static-emitter particle profile, prototype0 camera/RGB5/zero-scale admission and controller integration; complete default factory and native literal tags verified.",
+        "2026-10-11: exact admitted hardware RGB8 carrier correction independentlyverified original77HW/SW and150 sourceimages;75software imagesunchanged."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -8326,7 +8327,22 @@
         "report": "recon/retail_asm/runtime/effects/rgb565-regeneration-visual-20261010/review-approved.json",
         "sha256": "7c86451838b336be5e6b6f250178a03090f0b8d950696185e6b71da14a4db106",
         "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
-      }
+      },
+      "additional_visual_reviews": [
+        {
+          "date": "2026-10-11",
+          "reviewer": "root independent integration review",
+          "result": "pass",
+          "visual_pass": true,
+          "qualified_reference": true,
+          "semantic_device_reference": true,
+          "device_identical": false,
+          "report": "recon/retail_asm/runtime/effects/current-static-rgb8-qualified-20261011/root-review.json",
+          "sha256": "dcc00fd46b2e712929a0f3999366d60a49983384ebf9e6b9ab2286e2b15b98a8",
+          "note": "docs/vfx/forensics/STATIC_PARTICLE_HARDWARE_RGB8_20261011.md",
+          "scope": "Root repeated3x77 original hardware/software states/pools/RNG and450 source images, preserving225 software-policy frames. Reviewed39 fixed whole/detail phases. Packed hardwareRGB8 correction passes for allthree exactIDs. Regeneration/SwiftStrike scoped hardware appearance pass; nullifier color-policy only with visible core geometry mismatch from missing original key transition, hardware appearance remains open. No change to headlinecounts or previousSWprimaryevidence."
+        }
+      ]
     },
     {
       "index": 12,
@@ -20430,7 +20446,8 @@
       "preview_candidates": [],
       "source_fixes": [
         "2026-10-10: exact quoted authored particle profile; original numeric integer view, pinned prototype slot, independent compiled emitter matrices and runtime controller admission verified.",
-        "2026-10-10: exact admitted static emitter keys use actual cached animator frame; original full draw caller/cull/FVF and render-stride3 verified. No generic animation or shader changes."
+        "2026-10-10: exact admitted static emitter keys use actual cached animator frame; original full draw caller/cull/FVF and render-stride3 verified. No generic animation or shader changes.",
+        "2026-10-11: exact admitted hardware RGB8 carrier correction independentlyverified original77HW/SW and150 sourceimages;75software imagesunchanged."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -20489,7 +20506,22 @@
         "report": "recon/retail_asm/runtime/effects/rgb565-nullifier-visual-20261010/review-approved.json",
         "sha256": "fc5eef8b2fceae38cbd7d58050c342e53830a8d0f4c09a1c4e0dcdc638b988b1",
         "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
-      }
+      },
+      "additional_visual_reviews": [
+        {
+          "date": "2026-10-11",
+          "reviewer": "root independent integration review",
+          "result": "color_policy_pass_geometry_open",
+          "visual_pass": false,
+          "qualified_reference": true,
+          "semantic_device_reference": true,
+          "device_identical": false,
+          "report": "recon/retail_asm/runtime/effects/current-static-rgb8-qualified-20261011/root-review.json",
+          "sha256": "dcc00fd46b2e712929a0f3999366d60a49983384ebf9e6b9ab2286e2b15b98a8",
+          "note": "docs/vfx/forensics/STATIC_PARTICLE_HARDWARE_RGB8_20261011.md",
+          "scope": "Root repeated3x77 original hardware/software states/pools/RNG and450 source images, preserving225 software-policy frames. Reviewed39 fixed whole/detail phases. Packed hardwareRGB8 correction passes for allthree exactIDs. Regeneration/SwiftStrike scoped hardware appearance pass; nullifier color-policy only with visible core geometry mismatch from missing original key transition, hardware appearance remains open. No change to headlinecounts or previousSWprimaryevidence."
+        }
+      ]
     },
     {
       "index": 141,
@@ -23750,7 +23782,8 @@
       "asset": "magic\\SwiftStrike.i3d",
       "preview_candidates": [],
       "source_fixes": [
-        "2026-10-10: exact static-emitter particle profile, prototype0 camera/RGB5/zero-scale admission and controller integration; complete default factory and native literal tags verified."
+        "2026-10-10: exact static-emitter particle profile, prototype0 camera/RGB5/zero-scale admission and controller integration; complete default factory and native literal tags verified.",
+        "2026-10-11: exact admitted hardware RGB8 carrier correction independentlyverified original77HW/SW and150 sourceimages;75software imagesunchanged."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -23821,7 +23854,22 @@
         "report": "recon/retail_asm/runtime/effects/rgb565-swiftstrike-visual-20261010/review-approved.json",
         "sha256": "f6ff802aab11950a641afc1bdde3ca5293c3ec76f2f8ff4775b53480e095b3ce",
         "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
-      }
+      },
+      "additional_visual_reviews": [
+        {
+          "date": "2026-10-11",
+          "reviewer": "root independent integration review",
+          "result": "pass",
+          "visual_pass": true,
+          "qualified_reference": true,
+          "semantic_device_reference": true,
+          "device_identical": false,
+          "report": "recon/retail_asm/runtime/effects/current-static-rgb8-qualified-20261011/root-review.json",
+          "sha256": "dcc00fd46b2e712929a0f3999366d60a49983384ebf9e6b9ab2286e2b15b98a8",
+          "note": "docs/vfx/forensics/STATIC_PARTICLE_HARDWARE_RGB8_20261011.md",
+          "scope": "Root repeated3x77 original hardware/software states/pools/RNG and450 source images, preserving225 software-policy frames. Reviewed39 fixed whole/detail phases. Packed hardwareRGB8 correction passes for allthree exactIDs. Regeneration/SwiftStrike scoped hardware appearance pass; nullifier color-policy only with visible core geometry mismatch from missing original key transition, hardware appearance remains open. No change to headlinecounts or previousSWprimaryevidence."
+        }
+      ]
     },
     {
       "index": 163,
