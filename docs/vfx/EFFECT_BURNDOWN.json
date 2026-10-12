@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 176,
+    "visual_fidelity_confirmed_rows": 175,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 176,
-    "remaining_visual_review_rows": 0,
+    "reviewed_visual_pass_rows": 175,
+    "remaining_visual_review_rows": 1,
     "qualified_modified_reference_visual_rows": 6,
     "qualified_semantic_device_visual_rows": 2,
     "qualified_reference_visual_rows": 8
@@ -20474,13 +20474,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": true,
+        "visual_fidelity": false,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Preserve scoped source RGB565/current Metal appearance pass; natural caster/scene/other states and exact framebuffer/device parity remain separate.",
+      "next_action": "Independentlyreproduce original75frame emittertransition, actualGPUcorners and bothpolicyfilms; reviewcurrentoutputs toclose reopensoftware/hardwareappearance.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -20512,14 +20512,10 @@
         "scope": "Exact typed create/controller/emitter/capacity/live draws/MOVE/DELETE/absence on synthetic FontRuntimeLab module. Real Metal image changes and clean restored floor, not native scene/device/character/caller visual acceptance."
       },
       "visual_review": {
-        "date": "2026-10-10",
-        "reviewer": "root independent integration review",
-        "result": "pass",
-        "visual_pass": true,
-        "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open.",
-        "report": "recon/retail_asm/runtime/effects/rgb565-nullifier-visual-20261010/review-approved.json",
-        "sha256": "fc5eef8b2fceae38cbd7d58050c342e53830a8d0f4c09a1c4e0dcdc638b988b1",
-        "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
+        "date": "2026-10-11",
+        "result": "pending_after_behavior_fix",
+        "visual_pass": false,
+        "scope": "Original fiveframe emitter key transition restored for exactnullifier. Previous software pass retainedhistorically; currentbothpolicy appearance requiresindependentrootreview."
       },
       "additional_visual_reviews": [
         {
@@ -20534,6 +20530,18 @@
           "sha256": "dcc00fd46b2e712929a0f3999366d60a49983384ebf9e6b9ab2286e2b15b98a8",
           "note": "docs/vfx/forensics/STATIC_PARTICLE_HARDWARE_RGB8_20261011.md",
           "scope": "Root repeated3x77 original hardware/software states/pools/RNG and450 source images, preserving225 software-policy frames. Reviewed39 fixed whole/detail phases. Packed hardwareRGB8 correction passes for allthree exactIDs. Regeneration/SwiftStrike scoped hardware appearance pass; nullifier color-policy only with visible core geometry mismatch from missing original key transition, hardware appearance remains open. No change to headlinecounts or previousSWprimaryevidence."
+        }
+      ],
+      "historical_visual_reviews": [
+        {
+          "date": "2026-10-10",
+          "reviewer": "root independent integration review",
+          "result": "pass",
+          "visual_pass": true,
+          "scope": "Root reviewed fixed complete original-software/actual-Metal samples after source-derived RGB565 additive modulation: form, emission/evolution, color and sampled lifetime pass for the declared native-domain configuration. No tint/pose/time fitting. Existing natural caller/scene/device and exact framebuffer gates remain open.",
+          "report": "recon/retail_asm/runtime/effects/rgb565-nullifier-visual-20261010/review-approved.json",
+          "sha256": "fc5eef8b2fceae38cbd7d58050c342e53830a8d0f4c09a1c4e0dcdc638b988b1",
+          "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
         }
       ]
     },
