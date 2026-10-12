@@ -135,3 +135,25 @@ Mouse: ImGui handles its own. Camera is fixed — no orbit / pan in v1
 - No retail-side rendering — the test harness only drives our engine. Retail
   comparison is done out-of-band (video / screenshot).
 - No automated visual diff. Human verification per [AGENT_GUIDE.md §4.2](AGENT_GUIDE.md).
+
+
+## Explicit endpoint captures
+
+For a registered `factory_endpoints` effect, `--vfx-origin=X,Y,Z` supplies the
+source and `--vfx-target=X,Y,Z` supplies the destination. Both are exact signed
+world coordinates. The isolated test calls the same endpoint initializer as
+the scrolling reviewer. Restart and retrigger retain the supplied endpoints.
+Unsupported initializers, equal endpoints, malformed fields and overflow fail
+rather than silently using a default path. Existing origin-only captures keep
+their original factory behavior.
+
+```sh
+./build-merge/Revenant --test=vfx --vfx=ArrowEffect_ORIGINAL \
+  --vfx-origin=0,0,144 --vfx-target=-170,-219,144 --vfx-no-ui
+```
+
+`tools/retail_runtime/port_capture.py` accepts `origin` and `target` three-integer
+arrays in its scenario. It requires the runtime `[vfx-endpoints]` marker to
+confirm that both exact values reached the selected initializer. The current
+endpoint registrations include ArrowEffect, QueenArrow and Funnel; the flag
+does not manufacture endpoint support for other previews.

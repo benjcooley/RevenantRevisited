@@ -24,6 +24,10 @@ Path(prefix+'timing.csv').write_text('frame,simulation_seconds,relative_seconds\
 print("--vfx='CaptureFixture' matched",flush=True)
 print('assets='+os.environ['REVENANT_ASSETS_PATH'],flush=True)
 print('trace='+os.environ.get('REV_CAPTURE_FIXTURE_TRACE',''),flush=True)
+if any(a.startswith('--vfx-target=') for a in sys.argv):
+ source=next(a.split('=',1)[1]for a in sys.argv if a.startswith('--vfx-origin='))
+ target=next(a.split('=',1)[1]for a in sys.argv if a.startswith('--vfx-target='))
+ print('[vfx-endpoints] id=CaptureFixture source='+source+' target='+target,flush=True)
 '''.replace('COLOR',repr((255,255,255) if visible else (0,0,0)))+
             ("print('[authored-static] missing objects or unsupported controller tags',flush=True)\n" if rejected else '')+
             ("Path(prefix+'001-test.png').write_bytes(b'invalid PNG')\n" if corrupt else '')+
@@ -66,6 +70,17 @@ print('trace='+os.environ.get('REV_CAPTURE_FIXTURE_TRACE',''),flush=True)
         scenario['png_compression']=5
         report=capture(scenario,output)
         self.assertIn('--snapcompression=5',report['command'])
+
+    def test_explicit_endpoint_command_and_marker(self):
+        scenario,output,_=self.exercise();scenario.update(origin=[0,0,144],target=[-170,-219,144])
+        report=capture(scenario,output)
+        self.assertEqual(report['status'],'pass');self.assertIn('--vfx-target=-170,-219,144',report['command'])
+
+    def test_invalid_endpoint_coordinates_reject_before_launch(self):
+        for point in ([1,2], [1,2,True], [2147483648,0,0], '1,2,3'):
+            scenario,output,_=self.exercise();scenario.update(origin=[0,0,144],target=point)
+            with self.assertRaises(ValueError):capture(scenario,output)
+            self.assertFalse((output/'run.log').exists())
 
     def test_invalid_png_compression_rejects_before_launch(self):
         for level in [4,10,True,5.5,'5']:

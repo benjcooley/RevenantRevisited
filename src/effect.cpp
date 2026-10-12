@@ -8912,7 +8912,16 @@ TPhotonEffect_Bespoke* TPhotonEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoin
 void TPhotonEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
     constexpr double step=1.0/24.0;sim_accum_+=TTime::DeltaTime();
-    while(sim_accum_+1e-9>=step) {sim_accum_-=step;if(IsAlive())AdvanceTick();}
+    while(sim_accum_+1e-9>=step) {
+        sim_accum_-=step;
+        if(IsAlive()) {
+            AdvanceTick();
+            if(getenv("REV_VFX_REVIEW_CLOCK_TRACE") && !stricmp(StartupTestMode,"vfx-review"))
+                log_info("[vfx-photon-clock] object=%d time=%.9f render=%lld state=%d frame0=%d active=%d ready=%d",
+                    GetMapIndex(),TTime::Time(),(long long)TTime::FrameCount(),missile_.state,
+                    particles_.frame[0],particles_.active,int(particles_.ready));
+        }
+    }
     Submit(debug_mode);
 }
 
@@ -14234,6 +14243,9 @@ void TAuthoredStaticMeshEffect::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debu
     texture_tick_seconds_+=TTime::DeltaTime()*rate;
     while(texture_tick_seconds_+1e-9>=tick_seconds) {
         texture_tick_seconds_-=tick_seconds;NextFrame();
+        if(getenv("REV_VFX_REVIEW_CLOCK_TRACE") && !stricmp(StartupTestMode,"vfx-review"))
+            log_info("[vfx-watcher-clock] object=%d time=%.9f render=%lld frame=%d rate=%.3f",
+                GetMapIndex(),TTime::Time(),(long long)TTime::FrameCount(),GetFrame(),rate);
     }
 }
 

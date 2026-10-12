@@ -24,6 +24,7 @@
 #include <time.h>
 
 #include "argh.h"
+#include "vfxpointoption.h"
 
 #include "revenant.h"
 #include "assetcache.h"
@@ -1566,6 +1567,7 @@ void GetParameters(int argc, char **argv)
         "vfx-review-gap", "vfx-review-offset", "vfx-review-effects",
         "vfx-review-spacing-overrides",
         "vfx-review-path-tilt", "vfx-review-path-length", "scene-viewport",
+        "vfx-origin", "vfx-target", "vfx-camera",
     });
     cmd.parse(argc, argv);
 
@@ -1878,6 +1880,17 @@ void GetParameters(int argc, char **argv)
         if (arg_param(cmd, "vfx-origin", p))
             StartupVfxOriginSet = sscanf(p.c_str(), "%d,%d,%d", &StartupVfxOrigin[0],
                                         &StartupVfxOrigin[1], &StartupVfxOrigin[2]) == 3;
+        if (arg_param(cmd, "vfx-target", p)) {
+            if(!ParseVfxPointOption(p,StartupVfxTarget))
+                FatalError("Invalid --vfx-target: expected three signed integer coordinates",nullptr);
+            StartupVfxTargetSet=true;
+            if(std::strcmp(StartupTestMode,"vfx")!=0 || !StartupVfxOriginSet)
+                FatalError("--vfx-target requires --test=vfx and --vfx-origin",nullptr);
+            std::string source;
+            if(!arg_param(cmd,"vfx-origin",source) || !ParseVfxPointOption(source,StartupVfxOrigin))
+                FatalError("Invalid endpoint source --vfx-origin",nullptr);
+        } else if(arg_flag(cmd,"vfx-target"))
+            FatalError("Missing --vfx-target coordinates",nullptr);
     }
 
   // INPUT-SCRIPT="..." (alias --mouse-script) — replay a scripted synthetic

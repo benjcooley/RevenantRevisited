@@ -1,10 +1,16 @@
 # Ogrok watcher actual map cadence
 
-The three shipped Ogrok watchers advance through their four-frame loop on every
-original map tick. No frame-hold rule was found in their actual owner/default
-animator path. Under the original 24 Hz scheduler, this is six loops per second.
-The field called `framerate` is a signed frame increment (here +1), not frames
-per second. No production speed change is justified by this result.
+**Timing claim reopened after user review.** The earlier inference of six
+loops per wall-clock second in retail was too strong. The probe manually
+invoked the map stages on freshly created EFFECT helpers. It established one
+frame advance per supplied tick, not natural arena scheduling or texture pacing.
+The game-time formula `frames*100/24` does not establish those facts either.
+The signed `framerate` field is a frame increment, not a measured FPS.
+
+The user confirms the quarter-rate reviewer looks correct and requests the
+natural Ogrok arena as the authority. The saved arena contains full Ogrok
+characters around Baez; their animation clips and scheduling must be checked
+separately from the four-frame helper EFFECTs. That investigation is active.
 
 `tools/retail_runtime/watcher_map_cadence_probe.py` restores genuine original
 startup, loads each exact class25 registry identity (`aeaeeb23/24/25`), and uses
@@ -28,9 +34,9 @@ publishes the original SetMapPos scroll result into the map's rendered-scroll
 pair, so the screen rectangle admits the objects at declared (3185,3185,16).
 This viewport boundary is recorded; no clock/effect/geometry/rate is replaced.
 No pixels, OS timer, natural map placement, background worker or hardware pacing
-were executed. The 24 Hz rate comes from the independently traced original
-scheduler: PlayScreen `47c38d..47c39e` computes game hundredths as frames*100/24;
-TimerTick calls the map advance stage once after Animate. See
+were executed. PlayScreen `47c38d..47c39e` computes game hundredths as frames*100/24;
+TimerTick calls the map advance stage once after Animate. These facts do not
+prove the observed arena cadence. See
 `docs/gameplay/forensics/COMBAT_MOTION.md`, section 2. This is a per-tick cadence
 proof, not a claim that slow retail hardware always sustained 24 wall-clock FPS.
 `RealTimeLight` in the retail INI controls lighting, not an owner animation hold.
@@ -42,12 +48,10 @@ It pins the original executable, startup image, probe source and all observed
 per-tick calls/state plus negative controls. Existing watcher pixel/format
 approvals are unchanged; other effects require their own cadence diagnosis.
 
-The reviewer now supports `--vfx-review-watcher-rate=0.05..1.0` for visual
-inspection. Its default is1.0, following the user preference for retail timing.
-The earlier0.25 review demonstration remains available explicitly (six
-texture-frame advances/sec). This scales
-only the animated-texture preview in `vfx-review`; isolated VFX references and
-gameplay retain24Hz. `=1` restores measured retail pacing. This is an explicit
-presentation choice, not a new retail timing or fidelity claim. The extracted
-actual clock test verifies quarter/half/full rates at60Hz and unchanged24Hz
-reference pacing under sanitizers.
+The reviewer supports `--vfx-review-watcher-rate=0.05..1.0`. Its default is
+now0.25 after the user confirmed that demonstration. This is an explicit
+inspection setting, not a retail timing claim. `=1` selects the raw24Hz
+comparison control. Gameplay and isolated captures remain unchanged.
+The actual compiled clock test verifies quarter/half/full inspection rates and
+unchanged isolated controls. Read-only `REV_VFX_REVIEW_CLOCK_TRACE=1` logs actual
+texture advances and Photon updates alongside wall/simulation timestamps.

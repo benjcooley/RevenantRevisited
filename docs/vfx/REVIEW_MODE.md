@@ -160,3 +160,8 @@ and this check grants no retail fidelity credit. Longer effects need additional
 samples. The first root survey confirms all 62 previously reviewed types produce
 label-free pixels in the centered configuration. Frozen evidence:
 `/Users/benjamincooley/RevenantRetailLab/research/vfx-review-survey-20261010/reviewed-centered-current/manifest.json`.
+
+
+Ogrok texture previews default to the user-confirmed quarter inspection rate.
+`--vfx-review-watcher-rate=1` restores the raw24Hz test clock; it is not a proven
+natural-arena cadence. See [the reopened arena timing investigation](forensics/WATCHER_MAP_CADENCE_20261011.md).

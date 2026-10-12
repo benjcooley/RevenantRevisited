@@ -14,16 +14,19 @@ class WatcherClockTests(unittest.TestCase):
         actual = source[start:end]
         prefix = r'''
 #include <cassert>
+#include <cstdlib>
 #include <strings.h>
 #define stricmp strcasecmp
 enum class EFxDebugMode { Normal };
 char StartupTestMode[32]="vfx-review";
 float StartupVfxReviewWatcherRate=.25f;
-struct TTime {static double dt; static double DeltaTime(){return dt;}};
+struct TTime {static double dt; static double DeltaTime(){return dt;}static double Time(){return 0;}static long long FrameCount(){return 0;}};
+void log_info(const char*,...){}
 double TTime::dt=1.0/60;
 struct TAuthoredStaticMeshEffect {
  bool animate_textures_=true;double texture_tick_seconds_=0;int advances=0;
  void NextFrame(){++advances;}
+ int GetMapIndex(){return 0;}int GetFrame(){return advances%4;}
  void TickAndSubmitForTest_BESPOKE(EFxDebugMode);
 };
 '''

@@ -1137,6 +1137,21 @@ float RetriggerInterval(VfxTest::EVfxPreviewStyle style)
     return 0.0f;
 }
 
+void* CreatePreviewContext(const VfxTest::SEffect& effect,const S3DPoint& origin)
+{
+    if(!StartupVfxTargetSet) return effect.factory ? effect.factory(origin) : nullptr;
+    if(!effect.factory_endpoints)
+        FatalError("Selected VFX has no explicit endpoint initializer",nullptr);
+    const S3DPoint target{StartupVfxTarget[0],StartupVfxTarget[1],StartupVfxTarget[2]};
+    if(origin.x==target.x && origin.y==target.y && origin.z==target.z)
+        FatalError("VFX source and target must be distinct",nullptr);
+    void* context=effect.factory_endpoints(origin,target);
+    if(!context) FatalError("VFX endpoint initializer rejected the requested fixture",nullptr);
+    log_info("[vfx-endpoints] id=%s source=%d,%d,%d target=%d,%d,%d",
+        effect.id.c_str(),origin.x,origin.y,origin.z,target.x,target.y,target.z);
+    return context;
+}
+
 void SpawnActive()
 {
     if (g_state.active_idx < 0 || g_state.active_idx >= int32_t(g_state.catalogue.size()))
@@ -1155,8 +1170,7 @@ void SpawnActive()
             g_state.current_attach = {};
     }
 
-    if (e.factory)
-        g_state.active_ctx = e.factory(PickPreviewOrigin(e.preview_style));
+    g_state.active_ctx = CreatePreviewContext(e,PickPreviewOrigin(e.preview_style));
     g_state.first_submit_logged = false;
     g_state.retrigger_timer = RetriggerInterval(e.preview_style);
     log_info("[vfx] active='%s' family='%s' pipeline='%s' style=%d debug=%d",
@@ -1781,8 +1795,7 @@ void Render()
                 if (e.destroy && g_state.active_ctx)
                     e.destroy(g_state.active_ctx);
                 g_state.active_ctx = nullptr;
-                if (e.factory)
-                    g_state.active_ctx = e.factory(PickPreviewOrigin(e.preview_style));
+                g_state.active_ctx = CreatePreviewContext(e,PickPreviewOrigin(e.preview_style));
                 g_state.retrigger_timer = interval;
             }
         }

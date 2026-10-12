@@ -10640,7 +10640,7 @@
         "accepted": false
       },
       "runtime_dispatch": "exact_flame_builder_authored_flipbook_component_verified",
-      "next_action": "Locate/review natural shipped map placement and precise cadence separately. Isolated overall appearance and exact-type command runtime pass; no phase or appearance fitting required.",
+      "next_action": "Compare full original loaded Flame and unchanged level49 sconces, including saved Flame placements(10474,10410,100)/(10557,10413,100); check card orientation, anchor, atlas cadence and blend before natural-scene approval.",
       "notes": [
         "2026-10-05: current authored-quad engine preview visually passes retained native base Flame; smoother filtering remains. Six raw elapsed samples reviewed, zero background drift. Exact0x50ba373b create/move/delete, one flipbook component, animation at both positions and exact17-frame deleted tail pass. Colored same-name IDs are separate."
       ],
@@ -10713,6 +10713,15 @@
         "report": "recon/retail_asm/runtime/effects/flame-variants-runtime/verification.json",
         "scope": "Actual modern renderer changing frames and normal shutdown; canonical authored producer delegation. No originalhardware/Metal parity granted.",
         "modern_backend_matches_retail": false
+      },
+      "gallery_visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "user",
+        "result": "suspected_mismatch",
+        "visual_pass": false,
+        "configuration": "Natural large dungeon sconces, including Nakranoth chamber; reviewer base Flame",
+        "finding": "User identifies a flipbook fire on a mostly vertical card and suspects current port is wrong.",
+        "next_action": "Compare full original loaded Flame and unchanged level49 sconces, including saved Flame placements(10474,10410,100)/(10557,10413,100); check card orientation, anchor, atlas cadence and blend before natural-scene approval."
       }
     },
     {
@@ -24155,7 +24164,7 @@
         "accepted": false
       },
       "runtime_dispatch": "retail_default_animator_lookup_verified_generic_mesh_map_texture_lifecycle_verified",
-      "next_action": "Verifyfulloriginalowner/defaulttexturelooprate thenviewer24Hzclock/framehold; correctmeasuredcadence mismatch withoutarbitraryslowdown.",
+      "next_action": "Check original resident arena characters, animation clip length and real screen scheduler; keep inspection setting separate from fidelity proof.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "Source-format diagnostic shared by three watcher types: native neon multicolor differs from authored darkpurple ARGB1555; interpreting the same packed words as4444 resembles that fingerprint. Source Blue alpha-format selection is a hypothesis, not proved retail transfer. Only watcher1 was captured; no accepted reference or implementation credit.",
@@ -24253,6 +24262,16 @@
         "configuration": "Visible full reviewer ordinary-world animation",
         "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate.",
         "presentation_change": "Userprefersretailspecifiedtiming; reviewerdefaultrestored1.0/24Hz. Lastquarter-speedexample seemedreasonable, retainedoptional--vfx-review-watcher-rate=.25. No arbitraryratefidelityclaim."
+      },
+      "gallery_timing_review": {
+        "date": "2026-10-11",
+        "reviewer": "user",
+        "result": "inspection_looks_correct_retail_cadence_reopened",
+        "retail_timing_verified": false,
+        "inspection_rate": 0.25,
+        "confirmation": "That looks correct.",
+        "correction": "User rejects24Hz wall-clock cadence and requests real Ogrok arena. Prior probe established one frame per manually driven tick on fresh helper EFFECTs, not natural scene cadence.",
+        "next_action": "Check original resident arena characters, animation clip length and real screen scheduler; keep inspection setting separate from fidelity proof."
       }
     },
     {
@@ -24285,7 +24304,7 @@
         "accepted": false
       },
       "runtime_dispatch": "retail_default_animator_lookup_verified_generic_mesh_map_texture_lifecycle_verified",
-      "next_action": "Verifyfulloriginalowner/defaulttexturelooprate thenviewer24Hzclock/framehold; correctmeasuredcadence mismatch withoutarbitraryslowdown.",
+      "next_action": "Check original resident arena characters, animation clip length and real screen scheduler; keep inspection setting separate from fidelity proof.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "Source-format diagnostic shared by three watcher types: native neon multicolor differs from authored darkpurple ARGB1555; interpreting the same packed words as4444 resembles that fingerprint. Source Blue alpha-format selection is a hypothesis, not proved retail transfer. Only watcher1 was captured; no accepted reference or implementation credit.",
@@ -24340,6 +24359,16 @@
         "configuration": "Visible full reviewer ordinary-world animation",
         "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate.",
         "presentation_change": "Userprefersretailspecifiedtiming; reviewerdefaultrestored1.0/24Hz. Lastquarter-speedexample seemedreasonable, retainedoptional--vfx-review-watcher-rate=.25. No arbitraryratefidelityclaim."
+      },
+      "gallery_timing_review": {
+        "date": "2026-10-11",
+        "reviewer": "user",
+        "result": "inspection_looks_correct_retail_cadence_reopened",
+        "retail_timing_verified": false,
+        "inspection_rate": 0.25,
+        "confirmation": "That looks correct.",
+        "correction": "User rejects24Hz wall-clock cadence and requests real Ogrok arena. Prior probe established one frame per manually driven tick on fresh helper EFFECTs, not natural scene cadence.",
+        "next_action": "Check original resident arena characters, animation clip length and real screen scheduler; keep inspection setting separate from fidelity proof."
       }
     },
     {
@@ -24372,7 +24401,7 @@
         "accepted": false
       },
       "runtime_dispatch": "retail_default_animator_lookup_verified_generic_mesh_map_texture_lifecycle_verified",
-      "next_action": "Verifyfulloriginalowner/defaulttexturelooprate thenviewer24Hzclock/framehold; correctmeasuredcadence mismatch withoutarbitraryslowdown.",
+      "next_action": "Check original resident arena characters, animation clip length and real screen scheduler; keep inspection setting separate from fidelity proof.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "Source-format diagnostic shared by three watcher types: native neon multicolor differs from authored darkpurple ARGB1555; interpreting the same packed words as4444 resembles that fingerprint. Source Blue alpha-format selection is a hypothesis, not proved retail transfer. Only watcher1 was captured; no accepted reference or implementation credit.",
@@ -24427,6 +24456,16 @@
         "configuration": "Visible full reviewer ordinary-world animation",
         "finding": "UserreportsOgrokbystandersandseveralothereffectsanimate dramaticallytoofast. Rootliveclock/isolatedwatchermeasure24.4frameadvancespersecond; nativewholeownercadence auditpending. Existing8phaseexplicitownerreference provesframesonly, notnaturallooprate.",
         "presentation_change": "Userprefersretailspecifiedtiming; reviewerdefaultrestored1.0/24Hz. Lastquarter-speedexample seemedreasonable, retainedoptional--vfx-review-watcher-rate=.25. No arbitraryratefidelityclaim."
+      },
+      "gallery_timing_review": {
+        "date": "2026-10-11",
+        "reviewer": "user",
+        "result": "inspection_looks_correct_retail_cadence_reopened",
+        "retail_timing_verified": false,
+        "inspection_rate": 0.25,
+        "confirmation": "That looks correct.",
+        "correction": "User rejects24Hz wall-clock cadence and requests real Ogrok arena. Prior probe established one frame per manually driven tick on fresh helper EFFECTs, not natural scene cadence.",
+        "next_action": "Check original resident arena characters, animation clip length and real screen scheduler; keep inspection setting separate from fidelity proof."
       }
     },
     {
@@ -27025,5 +27064,13 @@
     "regression_policy": "Reopen the affected visual pass after a behavior-changing fix until current-code output is reviewed; preserve historical evidence.",
     "end_to_end_metric": "fully_accepted_rows retains the earlier all-gates definition; it is not the headline VFX progress measure.",
     "parallel_work": "Run visual closure, new effect conversion/comparisons and shared harness fixes concurrently, with independent sessions and coordinated shared-source changes."
-  }
+  },
+  "unidentified_gallery_timing_reports": [
+    {
+      "date": "2026-10-11",
+      "finding": "User saw another effect animating too fast; initially thought Photon, then said the focused Photon was not the same effect and might have mistaken its name.",
+      "resolved": false,
+      "next_action": "Identify label/appearance during full review; no arbitrary Photon speed change."
+    }
+  ]
 }

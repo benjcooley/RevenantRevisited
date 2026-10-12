@@ -96,8 +96,8 @@ def run(boot, output, ticks=240):
                   initial=initial, records=rows, no_next_frame=no_next, animation_paused=paused,
                   resumed=resumed, map_ticks=ticks, owner_next_frame_calls=ticks*3,
                   cycles_per_owner=ticks//4,
-                  conclusion='Each exact watcher advances one of four frames per original map tick. No owner frame hold; rate1 is frame increment. At independently documented original24Hz scheduler this is6loops/second.',
-                  limits='No wall-clock timer, drawing, background thread, natural map placement or device pacing executed; 24Hz is original scheduler contract, not measured emulator runtime.')
+                  conclusion='Each freshly created watcher advances one of four frames per manually driven original map tick. Rate1 is a signed frame increment. Natural arena and wall-clock cadence are not established.',
+                  limits='No wall-clock timer, drawing, background thread, natural arena placement or device pacing executed. Game-time frames*100/24 is not evidence of wall-clock or texture cadence.')
     (output/'manifest.json').write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps({k:report[k] for k in ('status','map_ticks','owner_next_frame_calls','cycles_per_owner','conclusion')}))
 
