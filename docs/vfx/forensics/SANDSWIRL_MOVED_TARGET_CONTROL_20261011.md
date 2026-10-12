@@ -77,3 +77,5 @@ This does not prove a natural Sandswirl caller, actor AI, arbitrary moving targe
 terrain interaction, intended shipped-enabled Sand registration, destination
 RGB565 rounding, pixel equality or other device paths. The later actor move is
 a negative control for retargeting; the original keeps the tick-75 target.
+
+Root independent integrated proof passed under `research/vfx-sandswirl-root-20261011/moving-target-integrated/`: all310currentGPUimages byteidenticalto frozenmovingcandidate, fullpool/packet/query/cachedtarget/Quicksand/spell checks, actualSetPos noRNG effects, cleanexit andunchangedactorhealth. Original310records/imagesverified beforecurrentcompiledchecks. Rootreviewedfixedquery/contraction/drain phases; qualifiedstationaryappearanceapproval remainsunchanged.

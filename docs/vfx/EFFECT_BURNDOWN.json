@@ -13691,7 +13691,7 @@
         "accepted": false
       },
       "runtime_dispatch": "qualified_legacy_sand_restoration_actual_map_runtime",
-      "next_action": "Preserve qualified restored-ownSand appearance. Finish realmovingtarget followup; shippedmissingbinding, naturalSandswirlvariant/AI/audio/device remain separate.",
+      "next_action": "Preserve stationary/movedtarget qualifiedSand passes; naturalvariant/AI/audio/device/stack initialization remainseparate.",
       "notes": [],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "thin_emulator_checks": [
@@ -13703,6 +13703,15 @@
           "modern_gpu_backend_compared": true,
           "full_acceptance_granted": false,
           "scope": "Actual realmap/NewObject/query/actors/GameRand parent/particle/Quicksand/spelltimer comparison with declared Sparksdependency and monotonicRNGneutral allocatorcontrol. Native310rows exact; source310PNGdecoded/fileexact,282100poolfields/5942packets/236Quicksand rows exact. No intendedSandappearance credit."
+        },
+        {
+          "name": "restored_sand_real_moved_target",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/current-sandswirl-moving-target-20261011/reproduction-manifest.json",
+          "sha256": "00adf3cdf3fc9efa72d933d0ac5fbbee742159fe5fc4500444bd47d69b9b3f1e",
+          "scope": "Rootcurrent310GPUimagesbyteexact/fullmapquery+cachedtarget+6004packets+282100poolfields+Quicksand/spellcompletion through actualSetPos60/85. Original310controlretained, firstchangedimage76afterquery75; no RNG/time/trajectoryfitting. Qualifiedlegacybinding/allocatorcontrol, naturalAI/device remainopen.",
+          "modern_gpu_backend_compared": true,
+          "full_acceptance_granted": false
         }
       ],
       "visual_review": {
