@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "c8fb3749cb897336a5fd945b4045c073a43225465e6fe48700fb76df9dbf45dd",
+    "harness_sha256": "70c0da2ee1c0de17d117a0ce8ff888d72b5b54e0cd5d542f20ff3a1c2c13d212",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -24,7 +24,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 171,
+    "retail_rows_with_source_fixes_recorded": 172,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -32,14 +32,14 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 173,
+    "visual_fidelity_confirmed_rows": 174,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 173,
-    "remaining_visual_review_rows": 3,
-    "qualified_modified_reference_visual_rows": 3,
+    "reviewed_visual_pass_rows": 174,
+    "remaining_visual_review_rows": 2,
+    "qualified_modified_reference_visual_rows": 4,
     "qualified_semantic_device_visual_rows": 2,
-    "qualified_reference_visual_rows": 5
+    "qualified_reference_visual_rows": 6
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -15644,26 +15644,30 @@
       "retail_name": "Rift1",
       "retail_type_id": "0xadbcef18",
       "asset": "Misc\\Rift1.I3D",
-      "preview_candidates": [],
-      "source_fixes": [],
+      "preview_candidates": [
+        "Rift1_QUALIFIED_PARSER"
+      ],
+      "source_fixes": [
+        "2026-10-11: ExactownRiftquad/UVcontroller/full100kill approvedagainstexplicitoriginalonebyteparser v\u2192drepair;104rootrepeat/495runtimefields/3168geometryUVchannels andgallery pass. UnpatchedInitfault/naturalcaller/deviceopen."
+      ],
       "port_smoke_ids": [],
       "reference_runs": [],
       "comparison_runs": [],
       "owner": null,
       "acceptance": {
         "catalogued": true,
-        "animator_and_asset_mapping": false,
-        "source_behavior_audited": false,
+        "animator_and_asset_mapping": true,
+        "source_behavior_audited": true,
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Defer malformed shipped animtex tag: original parser rejects d and native failed-init cleanup faults before a successful runtime reference. Preserve unmodified tag; resume only for a bounded static asset check or an evidenced original caller/variant.",
+      "next_action": "Preserve qualifiedparserrepair/unchangedasset/full100tickcontrol; verify ordinaryscreenclock/movement/naturalcaller/revisions/device, retain unmodifiedInitfault and onepixelquantization limits.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent.",
         "2026-10-09 native parser recognizes u/v/g, while shipped Rift1 tag is animtex obj=rift,u=4,d=4. RefreshControllers takes failed-Init delete branch, with no admitted controller; cold-heap destructor accesses unallocated old-UV storage. No animation repair or rendered credit. This is isolated cold-heap evidence, not a claim about every actual gameplay heap state."
@@ -15679,6 +15683,19 @@
         "admitted_controllers": 0,
         "exact_repeats": 2,
         "scope": "Isolated native controller rejection and cold-heap cleanup fault only; no full gameplay or animation acceptance."
+      },
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent modified-parser repeat and complete finite phase review",
+        "result": "pass",
+        "visual_pass": true,
+        "qualified_reference": true,
+        "modified_retail": true,
+        "device_identical": false,
+        "scope": "Exact Rift1 0xadbcef18 own33329bytebody/quad/material/ARGB4444atlas andgenuinegeneric owner. Qualifiedoriginal changes one mappedparserliteral byte5c59b4v\u2192d toadmit unchangedauthored obj=rift,u=4,d=4; fulloriginalInit/UVallocation/ownerPulse/Animate/Render/raster execute, unmodifiedInit/destructorfailure retained. Rootfresh104state/RNG/orderedpackets repeat priornative exact; source3168authoredvertex/normal/UVchannels ASanpassmax1.34e-9, strictprofile4accept74rejects. Originalcolumn=cell%4,row=cell\u22124*column retained,16rawUVcycle/fourwrappeddiagonalappearances/negativeand>1V; no conventional-row correction or phasefit. Actualroot104decodedimages repeatexact tofinalport/cleanexit,99visible;495sourceframe/UV/lifetime fields pass,15whole/fixedcrop/4xdetail phases independentlyreviewed at actual1280x960/source0/camera640,480, allnonemptyboundsinterior. Realowner kills100/frame99, blank100..104; gallery100samples99visible9distinct/twounreseeded creations (onecompletionthenpartial), cleanexit, livenessonly. Explicit24Hz native-vfxfixturecontroller feeds realcountedAdvanceticks; ordinarygame keepsLegacyFrameCount toavoid60Hzacceleration. Tick69 firstclocklag31errorsretainednegative. Qualifiedmodifiedoriginal only/device_identical=false; noasset/caller/geometry/color/UValignmentfit. Naturalcaller/mapmovement/otherrevisions/lighting/device/onepixel samplingfringe/colorquantization/exactpixels and unmodifiedretailappearance remainopen.",
+        "report": "recon/retail_asm/runtime/effects/current-rift-qualified-20261011/root-approval.json",
+        "sha256": "3c9b415a5c8108e29e39127260f5926695653dc3cfebe451e4ff0dfe2408f6f2",
+        "note": "docs/vfx/forensics/RIFT_QUALIFIED_PARSER_RENDER_20261011.md"
       }
     },
     {

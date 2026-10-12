@@ -9,7 +9,7 @@
     "retail_rows_with_preview_candidates": 123,
     "retail_rows_without_preview_candidates": 53,
     "unmapped_preview_ids": 8,
-    "retail_rows_with_source_fixes_recorded": 171,
+    "retail_rows_with_source_fixes_recorded": 172,
     "port_smoke_preview_ids": 36,
     "retail_rows_with_port_smoke": 31,
     "accurate_software_reference_rows": 50,
@@ -17,14 +17,14 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 173,
+    "visual_fidelity_confirmed_rows": 174,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 173,
-    "remaining_visual_review_rows": 3,
-    "qualified_modified_reference_visual_rows": 3,
+    "reviewed_visual_pass_rows": 174,
+    "remaining_visual_review_rows": 2,
+    "qualified_modified_reference_visual_rows": 4,
     "qualified_semantic_device_visual_rows": 2,
-    "qualified_reference_visual_rows": 5
+    "qualified_reference_visual_rows": 6
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -2087,6 +2087,16 @@
       "semantic_device_reference": true,
       "device_identical": false,
       "scope": "Exact Fire 0x119f01e3 installed oldbody staticquad/key/defaultowner/textureselector0, no invented33frame clock. Fourgenuine constructionfacings0/64/128/192 execute268originalupdates/actualhardwareDrawIndexedPrimitive FVF112/COMmaterial+ARGB4444texture0, allframe0/selector0/RNG0. Captured all-white diffuse/ambient/specular/emissive material proves fixedfunctiondiffuse saturation; strictmaterial rejects unrelated lighting inputs. IndependentRGBA4444 MODULATE/SRCALPHA-INVSRCALPHA qualifiedRGB8linearUNORM device uses explicitlydeclaredmodernhalfcenters/pointfilter; legacyinteger/point andbothlinear controls retained, no periodGPUclaim. Foursemanticunits pass786432blendchannels, materials/zeroalpha/sharededge/centertranslation controls. Rootfreshoriginal12packets/state/48samplerimages repeatexact, source268renderedupdates/4288worldmatrixfields max1.825e-8, all12sampledRGBframes exact toqualifieddevice. All13whole/detailpanels byteidentical,88pins verified, independentlyinspected. Actualsource unchanged fromexactFireadapter, no color/geometry/UV/phasefit. Originalsoftware span/UVdiffers, naturalscene/caller/audio/animated-fire expectations/generalmateriallighting/filter/perioddevice/exactunchanged-retailfidelity remainopen. qualified_reference=true,semantic_device_reference=true,device_identical=false; exactRGBclaim onlydeclaredmoderncenter/point device configuration."
+    },
+    "recon/retail_asm/runtime/effects/current-rift-qualified-20261011/root-approval.json": {
+      "sha256": "3c9b415a5c8108e29e39127260f5926695653dc3cfebe451e4ff0dfe2408f6f2",
+      "retail_row": "Rift1:0xadbcef18",
+      "check": "root_qualified_parser_effect_appearance",
+      "status": "approved_qualified_scoped_appearance",
+      "qualified_reference": true,
+      "modified_retail": true,
+      "device_identical": false,
+      "scope": "Exact Rift1 0xadbcef18 own33329bytebody/quad/material/ARGB4444atlas andgenuinegeneric owner. Qualifiedoriginal changes one mappedparserliteral byte5c59b4v\u2192d toadmit unchangedauthored obj=rift,u=4,d=4; fulloriginalInit/UVallocation/ownerPulse/Animate/Render/raster execute, unmodifiedInit/destructorfailure retained. Rootfresh104state/RNG/orderedpackets repeat priornative exact; source3168authoredvertex/normal/UVchannels ASanpassmax1.34e-9, strictprofile4accept74rejects. Originalcolumn=cell%4,row=cell\u22124*column retained,16rawUVcycle/fourwrappeddiagonalappearances/negativeand>1V; no conventional-row correction or phasefit. Actualroot104decodedimages repeatexact tofinalport/cleanexit,99visible;495sourceframe/UV/lifetime fields pass,15whole/fixedcrop/4xdetail phases independentlyreviewed at actual1280x960/source0/camera640,480, allnonemptyboundsinterior. Realowner kills100/frame99, blank100..104; gallery100samples99visible9distinct/twounreseeded creations (onecompletionthenpartial), cleanexit, livenessonly. Explicit24Hz native-vfxfixturecontroller feeds realcountedAdvanceticks; ordinarygame keepsLegacyFrameCount toavoid60Hzacceleration. Tick69 firstclocklag31errorsretainednegative. Qualifiedmodifiedoriginal only/device_identical=false; noasset/caller/geometry/color/UValignmentfit. Naturalcaller/mapmovement/otherrevisions/lighting/device/onepixel samplingfringe/colorquantization/exactpixels and unmodifiedretailappearance remainopen."
     }
   }
 }
