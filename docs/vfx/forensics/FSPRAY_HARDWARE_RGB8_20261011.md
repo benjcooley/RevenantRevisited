@@ -49,8 +49,7 @@ Frozen pair manifest SHA256:
 Both binary hashes and all reference/source image hashes are pinned there.
 Small remaining differences from texture realization, interpolation and target
 quantization are explicit; no exact framebuffer or natural game caller claim.
-This correction adds no effect count; its hardware appearance is submitted for
-independent review.
+This correction adds no effect count; its hardware appearance passed root independent review.
 
 Validation: build passes; six focused tests pass, including26112 actual compiled
 policy channels, all byte values, exact-type/admission negative controls,
@@ -64,3 +63,10 @@ module paths. `fspray_device_reference.py --boot-image BOOT --output DIR` emits
 hardware proof; add `--software` for the original software control.
 `fspray_device_review.py --help` gives all explicit film/reference arguments.
 No engine shader, texture decoder, sampling mode, timing or geometry changed.
+
+Root independent reproduction: `research/vfx-fspray-root-20261011/integrated/`
+contains fresh original61-frame hardware/software runs, actual120-frame Metal
+repeat, and regenerated nine-phase triples. Six tests pass; corrected-channel
+error repeats12115→4066 and all60 software images remain unchanged. Root reviewed
+all fixed whole/detail phases5/10/15/20/25/30/39/45/59. The additional hardware
+review preserves the primary software approval and adds no headline effect count.

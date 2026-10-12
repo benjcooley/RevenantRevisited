@@ -23204,7 +23204,8 @@
       "asset": "misc\\Fspray.i3d",
       "preview_candidates": [],
       "source_fixes": [
-        "2026-10-10: exact static-emitter particle profile, prototype0 camera/RGB5/zero-scale admission and controller integration; complete default factory and native literal tags verified."
+        "2026-10-10: exact static-emitter particle profile, prototype0 camera/RGB5/zero-scale admission and controller integration; complete default factory and native literal tags verified.",
+        "2026-10-11: exact admitted fspray retains hardware packed RGB8; original software RGB5 and all other profile policies unchanged."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -23275,7 +23276,22 @@
         "report": "recon/retail_asm/runtime/effects/rgb565-fspray-visual-20261010/review-approved.json",
         "sha256": "dab78140b139e4f47022c55e7e331aa6bc2b192e4859f2c6ce5f68592b864041",
         "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
-      }
+      },
+      "additional_visual_reviews": [
+        {
+          "date": "2026-10-11",
+          "reviewer": "root independent integration review",
+          "result": "pass",
+          "visual_pass": true,
+          "qualified_reference": true,
+          "semantic_device_reference": true,
+          "device_identical": false,
+          "report": "recon/retail_asm/runtime/effects/current-fspray-qualified-device-20261011/root-approval.json",
+          "sha256": "a1d0d585ddd1b787214e2a2ce9f27303023f284c115025a65492a3d0d4ac9b2e",
+          "note": "docs/vfx/forensics/FSPRAY_HARDWARE_RGB8_20261011.md",
+          "scope": "Additional qualified fspray hardware RGB8 appearance pass: root repeated original61 full state/RNG/pools/packets and actual120 Metal images, reviewed all nine fixed whole/detail triples, corrected packed RGB8 color matches qualified point/linear controls with residual raster differences. Existing primary software review and 174 effect count remain unchanged."
+        }
+      ]
     },
     {
       "index": 157,
