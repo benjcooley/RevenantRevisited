@@ -118,7 +118,10 @@ bool SelectCatalogue() {
     for (int type=0; type<EffectClass.NumTypes(); ++type) {
         const auto* info = EffectClass.GetObjType(type);
         if (!info || !info->name) continue;
-        bool selected = selectors.empty();
+        // This static authored Worm diagnostic is not the shipped named
+        // Essence Drain spell (which selects ManaDrain below). Keep exact
+        // name/ID selection for forensic work, outside the normal review.
+        bool selected = selectors.empty() && info->uniqueid!=0xdefeca7eu;
         for (size_t i=0; i<selectors.size(); ++i) {
             char* end = nullptr; const auto id = strtoul(selectors[i].c_str(), &end, 0);
             if (Lower(info->name)==selectors[i] ||
@@ -127,7 +130,7 @@ bool SelectCatalogue() {
         }
         if (!selected) continue;
         Entry entry; entry.type=type; entry.id=info->uniqueid; entry.name=info->name;
-        if(entry.id==0xdefeca7eu) entry.name="Essencedrain (Worm prototype)";
+        if(entry.id==0xdefeca7eu) entry.name="Worm (static prototype)";
         if(entry.id==0x119f01e3u) entry.name="Fire (retail default)";
         if (auto* imagery = TObjectImagery::GetImageryEntry(info->imageryid))
             entry.asset = imagery->filename;

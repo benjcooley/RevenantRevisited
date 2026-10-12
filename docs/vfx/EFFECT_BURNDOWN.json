@@ -9321,7 +9321,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "StaticWormprototype nowexplicitlylabeled; genuineanimatedEssenceDrainspell addedseparately usingManaDrain0xad92bc13. Prototypeordinaryappearance/callerlimitations remainopen.",
+      "next_action": "Worm static prototype omitted from normal review; exact-ID diagnostic retained. Review actual named Essence Drain spell station. Dynamic prototype callers remain unproven.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -9343,7 +9343,7 @@
         "visual_pass": false,
         "configuration": "Visible full reviewer, ordinary projection/native_domain=false, translated map stations, source lighting enabled",
         "finding": "User reports Essence Drain and Vortex obviously wrong. Earlier isolated native-domain approvals do not certify this configuration.",
-        "next_action": "StaticWormprototype nowexplicitlylabeled; genuineanimatedEssenceDrainspell addedseparately usingManaDrain0xad92bc13. Prototypeordinaryappearance/callerlimitations remainopen."
+        "next_action": "Worm static prototype omitted from normal review; exact-ID diagnostic retained. Review actual named Essence Drain spell station. Dynamic prototype callers remain unproven."
       },
       "user_visual_confirmations": [
         {
@@ -9353,7 +9353,14 @@
           "basis": "User: Essence drain seems fine now.",
           "scope": "Named spell station confirmed; not an approval of static Worm prototype or all spell/caller configurations."
         }
-      ]
+      ],
+      "review_list_policy": {
+        "default_visible": false,
+        "diagnostic_selector": "0xdefeca7e",
+        "classification": "unused shipped prototype in audited inventory",
+        "basis": "No exact name/type literal executable caller, no spawn/attachment references in 73 archived text files, no placements in 5307 sectors across all seven shipped modules. The genuine named Essence Drain spell selects ManaDrain. Computed/dynamic callers remain unproven.",
+        "note": "docs/vfx/forensics/REVIEW_PROTOTYPE_POLICY_20261011.md"
+      }
     },
     {
       "index": 15,
@@ -12810,7 +12817,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Preserve approved integer Acolyte/publicSet control; verify natural Burn poster/reignite/map, moving rigs/defaulttransition, spells/audio/device and retained pixel residuals.",
+      "next_action": "Reproduce current ordinary-gallery recipe against equivalent original caller/parameters/cadence; verify full intended components and attachment before reapproval.",
       "notes": [],
       "batch": "2 \u2014 Close early parity and map/combat regressions",
       "visual_review": {
@@ -12822,6 +12829,15 @@
         "report": "recon/retail_asm/runtime/effects/current-burn-public-20261011/root-approval.json",
         "sha256": "16e0966268aa84b62860f6a43bd8b56b4663328b9303e9fee80d34a76ce126d4",
         "note": "docs/vfx/forensics/BURN_AUTHENTIC_ACOLYTE_RENDER_20261011.md"
+      },
+      "gallery_visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "user",
+        "result": "suspected_mismatch",
+        "visual_pass": false,
+        "configuration": "Full ordinary-world scrolling reviewer",
+        "finding": "User reports Arrow Effect, Burn and cfire look suspiciously inaccurate.",
+        "next_action": "Reproduce current ordinary-gallery recipe against equivalent original caller/parameters/cadence; verify full intended components and attachment before reapproval."
       }
     },
     {
@@ -19175,7 +19191,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Preserve declared moving attached-owner visual and real deletion lifecycle; verify naturalbow/arrow/deletion-dispatch/actors/audio and renderer/device limits.",
+      "next_action": "Reproduce current ordinary-gallery recipe against equivalent original caller/parameters/cadence; verify full intended components and attachment before reapproval.",
       "notes": [],
       "batch": "4 \u2014 Projectiles, combat, attachments and spell composites",
       "visual_review": {
@@ -19187,6 +19203,15 @@
         "report": "recon/retail_asm/runtime/effects/current-arrow-attached-20261011/root-approval.json",
         "sha256": "5e54c04e9e8ce980633379430dd106884da99f222bae5712b077803adf9e6f3a",
         "note": "docs/vfx/forensics/ARROW_ORIGINAL.md"
+      },
+      "gallery_visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "user",
+        "result": "suspected_mismatch",
+        "visual_pass": false,
+        "configuration": "Full ordinary-world scrolling reviewer",
+        "finding": "User reports Arrow Effect, Burn and cfire look suspiciously inaccurate.",
+        "next_action": "Reproduce current ordinary-gallery recipe against equivalent original caller/parameters/cadence; verify full intended components and attachment before reapproval."
       }
     },
     {
@@ -19797,7 +19822,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Recover intended cfire/csparks presets or actual natural caller evidence; preserve approved installed-no-presets fallback and device/precision limitations.",
+      "next_action": "Reproduce current ordinary-gallery recipe against equivalent original caller/parameters/cadence; verify full intended components and attachment before reapproval.",
       "notes": [
         "VFS collision corrected. Earlier port evidence must be checked against the requested asset before certifying visual fidelity; old bytes differ.",
         "2026-10-05: exact Misc/Cfire asset exists with four subobjects,two textures,cfire/csparks tags. Corrected false no-asset stub diagnostic; factory remains explicitly unsupported, not accepted or silently replaced by Flame."
@@ -19814,6 +19839,15 @@
         "report": "recon/retail_asm/runtime/effects/current-cfire-installed-20261011/root-approval.json",
         "sha256": "ad37ac0af1319ca578947793a8f3f1f488302eeba6889e3bd4c46e909b2b2133",
         "note": "docs/vfx/forensics/CFIRE_INSTALLED_BASE_20261011.md"
+      },
+      "gallery_visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "user",
+        "result": "suspected_mismatch",
+        "visual_pass": false,
+        "configuration": "Full ordinary-world scrolling reviewer",
+        "finding": "User reports Arrow Effect, Burn and cfire look suspiciously inaccurate.",
+        "next_action": "Reproduce current ordinary-gallery recipe against equivalent original caller/parameters/cadence; verify full intended components and attachment before reapproval."
       }
     },
     {
@@ -23440,6 +23474,15 @@
         "report": "recon/retail_asm/runtime/effects/current-dust-qualified-device-20261011/root-approval.json",
         "sha256": "a669e964d981fa2b9f31bfbfb47e99794e47db92354de2896f1e586b071d4ed3",
         "note": "docs/vfx/forensics/DUST_QUALIFIED_DEVICE_20261011.md"
+      },
+      "gallery_visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "user",
+        "result": "not_visible",
+        "visual_pass": false,
+        "configuration": "Full reviewer with source/classic software lighting on black",
+        "finding": "User saw no Dust and suggested black-on-black. Genuine software RGB565 additive contributions quantize to zero; qualified modern/device capture is visible. Keep in review, not classified as abandoned.",
+        "next_action": "Keep explicit software/modern policies distinct; inspect Dust with --vfx-lighting-mode=modern. Do not boost colors to hide software quantization."
       }
     },
     {

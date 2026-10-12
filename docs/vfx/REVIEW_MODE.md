@@ -30,6 +30,12 @@ Filter entries accept case-insensitive full names or hexadecimal retail type
 IDs, separated by commas. Duplicate names retain separate type-ID entries.
 Unknown entries are rejected so typos cannot silently change the review.
 
+The unused static `Essencedrain`/Worm prototype is omitted from the normal list;
+its exact diagnostic remains selectable with `--vfx-review-effects=0xdefeca7e`.
+The normal list instead shows the genuine named **Essence Drain (spell)** recipe.
+Missing or invisible effects, including Dust under software lighting, remain
+in the list. See the [exclusion evidence and Dust policy](forensics/REVIEW_PROTOTYPE_POLICY_20261011.md).
+
 Exact moving preview adapters may supply a source/destination initializer.
 QueenArrow and Funnel use that API to travel along the configured review path,
 mostly upward with the requested slight rightward tilt. Their original movement

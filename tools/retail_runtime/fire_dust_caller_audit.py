@@ -13,7 +13,7 @@ from pathlib import Path
 from character_native_preflight import ROOT, sha
 
 
-def run(output):
+def run(output, names=('Fire', 'Dust'), type_ids=(0x119f01e3, 0x0c052637)):
     exe = ROOT / 'recon/retail_asm/baseline/Revenant.rebuilt.exe'
     data = exe.read_bytes()
     pe = struct.unpack_from('<I', data, 60)[0]
@@ -45,15 +45,16 @@ def run(output):
         return refs
     literals = []
     # Include suffix-pooled strings: a pointer may address Fire inside DragonFire.
-    for text in (b'Fire', b'fire', b'Dust', b'dust'):
-        for match in re.finditer(re.escape(text) + b'\0', data):
+    for name in dict.fromkeys(names):
+        for match in re.finditer(re.escape(name.encode('ascii')) + b'\0', data, re.IGNORECASE):
             at = address(match.start())
-            literals.append(dict(text=text.decode(), address=hex(at), code_refs=code_refs(at)))
+            literals.append(dict(text=match.group()[:-1].decode(), address=hex(at), code_refs=code_refs(at)))
     archives = [ROOT/'data/imagery.rvi', ROOT/'data/resources.rvr']
     archives += sorted((ROOT/'data/Modules').glob('*.rvm'))
     inventories = []
-    exact = re.compile(r'(?i)"(?:Fire|Dust)"')
-    command = re.compile(r'(?i)\b(?:new|create|effect|attacheffect|spawn)\b.*\b(?:Fire|Dust)\b')
+    alternatives = '|'.join(re.escape(name) for name in names)
+    exact = re.compile(r'(?i)"(?:' + alternatives + r')"')
+    command = re.compile(r'(?i)\b(?:new|create|effect|attacheffect|spawn)\b.*\b(?:' + alternatives + r')\b')
     for archive in archives:
         hits = []
         text_count = 0
@@ -70,7 +71,8 @@ def run(output):
     result = dict(status='literal_inventory_complete', accepted=False,
                   executable_sha256=sha(exe), probe_sha256=sha(__file__),
                   nul_terminated_strings_including_suffixes=literals,
-                  type_id_code_references={hex(x):code_refs(x) for x in (0x119f01e3, 0x0c052637)},
+                  selected_names=list(names),
+                  type_id_code_references={hex(x):code_refs(x) for x in type_ids},
                   archives=inventories, scope=__doc__)
     output.write_text(json.dumps(result, indent=2)+'\n')
     print(json.dumps(dict(strings=literals, ids=result['type_id_code_references'],
@@ -81,4 +83,8 @@ def run(output):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
-    run(parser.parse_args().output)
+    parser.add_argument('--name', action='append', help='Exact ASCII name; default Fire and Dust')
+    parser.add_argument('--type-id', action='append', type=lambda x:int(x,0), help='Exact type ID; default Fire and Dust')
+    args=parser.parse_args()
+    if bool(args.name)!=bool(args.type_id): parser.error('--name and --type-id must be supplied together')
+    run(args.output, args.name or ('Fire','Dust'), args.type_id or (0x119f01e3,0x0c052637))
