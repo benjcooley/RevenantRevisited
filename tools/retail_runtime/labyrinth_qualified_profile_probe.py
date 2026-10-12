@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the exact whole Aura resource matcher with ASan/UBSan."""
+"""Compile the exact whole Labyrinth resource matcher with ASan/UBSan."""
 import argparse,json,struct,subprocess,zipfile
 from pathlib import Path
 from speed_controller_preflight import ROOT,read_asset
