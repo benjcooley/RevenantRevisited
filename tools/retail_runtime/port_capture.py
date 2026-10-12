@@ -35,6 +35,10 @@ def capture(scenario,output):
         f'--filmstrip={count},{stride/fps:.16f}',f'--snapstep={1/fps:.16f}',
         '--snapseed='+str(scenario.get('seed',1)),'--snapwarmup='+str(scenario.get('warmup',1)),
         '--snaprect='+','.join(map(str,rectangle)),'--snapprefix='+str(output/'frame-')]
+    if 'png_compression' in scenario:
+        level=scenario['png_compression']
+        if type(level) is not int or not 5<=level<=9:raise ValueError('PNG compression must be an integer5..9')
+        command += [f'--snapcompression={level}']
     if 'resolution' in scenario:
         width,height=map(int,scenario['resolution'])
         if width<1 or height<1:raise ValueError('Positive resolution required')

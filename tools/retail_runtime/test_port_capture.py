@@ -44,6 +44,20 @@ print('assets='+os.environ['REVENANT_ASSETS_PATH'],flush=True)
         self.assertEqual((output/'effects.def').read_bytes(),(assets/'effects.def').read_bytes())
         self.assertEqual(report['pixel_summary']['nonblack_frames'],1)
 
+    def test_explicit_lossless_png_compression_reaches_command(self):
+        scenario,output,_=self.exercise()
+        scenario['png_compression']=5
+        report=capture(scenario,output)
+        self.assertIn('--snapcompression=5',report['command'])
+
+    def test_invalid_png_compression_rejects_before_launch(self):
+        for level in [4,10,True,5.5,'5']:
+            scenario,output,_=self.exercise()
+            scenario['png_compression']=level
+            with self.assertRaisesRegex(ValueError,'PNG compression'):
+                capture(scenario,output)
+            self.assertFalse((output/'run.log').exists())
+
     def test_sparse_output_preserves_simulation_step(self):
         scenario,output,_=self.exercise()
         scenario['capture_stride']=8

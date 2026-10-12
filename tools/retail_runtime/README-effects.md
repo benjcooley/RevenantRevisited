@@ -750,3 +750,9 @@ isolated runs reproduce both the stop-before-delete and unmodified fault traces.
 and [report](../../recon/retail_asm/runtime/effects/rift-failed-animtex-preflight/manifest.json)
 grant no animation/static-render acceptance and make no whole-game crash claim.
 Do not repair d→v or execute Render on the failed controller to invent fidelity.
+
+### Faster lossless capture output
+
+Explicit scenarios may set `"png_compression": 5`, passed to `--snapcompression=5`. The accepted range is5..9 (the encoder itself clamps lower values to5); the default remains8, preserving existing PNG encoding. Lower effort trades file size for faster output and does not change simulation, rendering or decoded pixels. Compare `pixel_summary.pixel_sha256` across encoding levels; PNG file hashes may differ. Keep the selected compression in the scenario/build manifest.
+
+A fresh32-frame1280x960 MagicShield control produced identical decoded pixels at default8 and5, both clean exits. On this machine the end-to-end runs took22.27s and17.43s (1.28×); timings include startup/render and are not a general performance guarantee. All19 capture exit/argument/cadence tests pass. Private evidence: `/Users/benjamincooley/RevenantRetailLab/research/vfx-fire-root-20261011/compression-benchmark/comparison.json`.

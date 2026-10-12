@@ -19,6 +19,9 @@
 //                                 batch starts (<prefix>filmstrip-002.png,
 //                                 <prefix>filmstrip-003.png, ...). Auto
 //                                 mode (DURATION>0) exits after one batch.
+//   --snapcompression=<5..9>    PNG encoding effort; default8 preserves existing
+//                                 captures. Lower levels trade larger files for
+//                                 faster lossless output; decoded pixels match.
 //   --snapprefix=<PREFIX>         prefix for filmstrip output files; lets
 //                                 parallel agents not stomp output, AND
 //                                 subfolder under filmstrips/ so the
@@ -59,6 +62,7 @@ struct SConfig {
     double      fixed_step_sec = 0.0;   // --snapstep; 0 keeps the live clock
     bool        seed_set = false;      // --snapseed; repeatable port captures
     uint32_t    seed = 0;
+    int32_t     png_compression = 8; // stb default; optional faster lossless encoding
 
     // --snaprect=x,y,w,h — capture only this subrect of the display.
     // (-1, -1, -1, -1) means "whole display".
