@@ -540,7 +540,6 @@ struct TMapRenderer::Impl
         sectorDrawInst.clear();
         ++drawListVersion;
         sectorDrawBins.clear();
-        sectorTileTexByBitmap.clear();
         frameDrawIndices.clear();
         sectorLights.clear();
         sectorLightBins.clear();
@@ -566,6 +565,7 @@ struct TMapRenderer::Impl
     void clearResidentAssetMetadataForShutdown()
     {
         sectorTileTex.clear();
+        sectorTileTexByBitmap.clear();
         // GPU resources are owned by TRenderer's asset registries and are
         // destroyed by TRenderer::Shutdown. These records are renderer-facing
         // metadata and non-owning handles.
