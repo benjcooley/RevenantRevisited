@@ -60,6 +60,7 @@
 #include "fliesprofile.h"
 #include "revenant.h"
 #include "effect.h"
+#include "gameoptions.h"
 #include "fireballquad.h"
 #include "fireballring.h"
 #include "fireballcore.h"
@@ -1142,22 +1143,80 @@ static TGenericEffectBuilder g_effect_wavem_builder("WaveM");
 static TGenericEffectBuilder g_effect_speaker_builder("speaker");
 static TGenericEffectBuilder g_effect_speaker_caps_builder("Speaker");
 
-// REVSYNC: TEffect::Pulse @ 0x004de800 (vtable 0x005a85ac slot 0x110), the
-// part every effect runs: the object pulse (animator: tag sounds; script),
-// then an effect whose imagery state doesn't loop removes itself once that
-// animation has played out (CommandDone, which NextFrame sets at its last
-// frame). A script-added effect such as the opening's gvortex lives exactly
-// one run of its animation this way. The 1998 body's SetFrame(0) is gone in
-// retail.
-// REVSYNC-DIVERGENCE: the rest of 0x004de800 isn't ported here: the start
-// delay (+0x138: animation held until it counts down), a spell effect
-// following its invoker or target (+0xe4 spell), the light fade of effects
-// with a light definition (+0xd8, whose presence also skips the removal
-// above) and the timed life (+0x130: a countdown, +0x12c, that blinks the
-// effect out over its last +0x134 ticks). Script-added effects use none.
+// Original4de800: delayed animation gate precedes basePulse; direct FOLLOW,
+// light ramp and timed blinking follow it. Only the independently proved
+// Regeneration Strike binding enables these controls. Bone/polar attachment,
+// poison/ranged damage and other spell configurations remain unselected.
+void TEffect::ConfigureRetailSpellOwner(TObjectInstance* followed,int32_t duration,int32_t blink_ticks,int32_t start_delay)
+{
+    retail_follow=followed;retail_owner.Configure(duration,blink_ticks,start_delay);
+    if(followed)SetNotify(N_DELETING);
+}
+void TEffect::SetRetailOwnerFlags(uint32_t value)
+{
+    if(!(Flags()&OF_KILL) && (value&OF_KILL) && spell && spell->SpellData()) {
+        const auto& light=spell->SpellData()->light;
+        if(light.intensity>0 && light.fadeout>0)retail_owner.light_out=light.fadeout;
+    }
+    const bool was_light=IsLight();
+    ResetFlags(value);
+    // Original ResetFlags472e90 dispatches these callbacks on OF_LIGHT edges.
+    // Keep the restoration local to the selected owner path.
+    if(!was_light && IsLight())OnScreen();
+    else if(was_light && !IsLight())OffScreen();
+}
+void TEffect::KillRetailSpellOwner()
+{
+    SetRetailOwnerFlags(Flags()|OF_KILL);SetSpell(nullptr);
+}
+void TEffect::Notify(int32_t notify,void* ptr)
+{
+    TObjectInstance::Notify(notify,ptr);
+    if(!retail_owner.enabled)return;
+    auto* followed=retail_follow.Get();
+    if(followed && NOTIFY_DELETED(ptr,followed)) {
+        retail_follow.Clear();SetRetailOwnerFlags(Flags()|OF_KILL|OF_PULSE);
+    }
+}
+bool TEffect::BeginRetailOwnerPulse()
+{
+    uint32_t value=Flags();
+    if(retail_owner.Begin(value))return true;
+    ResetFlags(value);return false;
+}
+void TEffect::AdvanceRetailOwnerPulse()
+{
+    const auto* data=spell?spell->SpellData():nullptr;
+    const bool light_eligible=data && data->light.intensity>0;
+    if(RealTimeLight && !IsLight() && light_eligible) {
+        // Preserve the actual call order, including the original setters'
+        // OF_LIGHT early-outs before first activation. Do not invent a tint.
+        SColor color{};color.red=data->light.color[0];color.green=data->light.color[1];color.blue=data->light.color[2];
+        SetLightColor(color);SetLightIntensity(uint8_t(retail_owner.light_value));
+        SetLightMultiplier(uint8_t(data->light.mult));
+        S3DPoint offset={data->light.pos[0],data->light.pos[1],data->light.pos[2]};SetLightPos(offset);
+        SetRetailOwnerFlags(Flags()|OF_LIGHT);
+    } else if(!RealTimeLight && IsLight())SetRetailOwnerFlags(Flags()&~OF_LIGHT);
+    if(light_eligible)
+        SetLightIntensity(uint8_t(retail_owner.Light(data->light.intensity,data->light.fadein,data->light.fadeout)));
+    if(auto* followed=retail_follow.Get()) {
+        S3DPoint position=followed->Pos();
+        const auto* variant=spell?spell->VariantData():nullptr;
+        if(variant && variant->controldata) {
+            const auto* control=variant->controldata;
+            position.x+=control->pos[0];position.y+=control->pos[1];position.z+=control->pos[2];
+        }
+        SetPos(position,followed->GetLevel(),false);
+        uint32_t value=Flags();retail_owner.FollowTick(value);SetRetailOwnerFlags(value);
+    }
+    uint32_t value=Flags();retail_owner.LifetimeTick(value);SetRetailOwnerFlags(value);
+
+}
 void TEffect::Pulse()
 {
+    if(retail_owner.enabled && !BeginRetailOwnerPulse())return;
     TObjectInstance::Pulse();
+    if(retail_owner.enabled)AdvanceRetailOwnerPulse();
 
     // Retail preserves the owner's normal animation frames for all effects;
     // the old per-type whitelist kept the snapshot reset for other types.

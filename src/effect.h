@@ -38,6 +38,7 @@ _CLASSDEF(TSpellBlock)
 
 #include "particlefx.h"
 #include "photoncore.h"
+#include "effectownercore.h"
 #include "iceboltcore.h"
 #include "firewindcore.h"
 #include "missilestate.h"
@@ -56,17 +57,28 @@ class TEffect : public TObjectInstance
 
     virtual void Pulse();
 
-    void SetSpell(PTSpell sp) { spell = sp; }    
+    void SetSpell(PTSpell sp) { spell = sp; retail_owner.ResetLight(); }
     PTSpell GetSpell() { return spell; }
 
     void SetSubSpell(int32_t sp) { subspell = sp; }    
     int32_t GetSubSpell() { return subspell; }
 
+    // Declared direct FOLLOW/no-bone path from original4def90 and Strike Timer.
+    void ConfigureRetailSpellOwner(TObjectInstance* followed, int32_t duration,
+                                   int32_t blink_ticks, int32_t start_delay);
+    void KillRetailSpellOwner();
+    const retail_effect_owner::State& RetailOwnerState() const { return retail_owner; }
+    void Notify(int32_t notify, void* ptr) override;
     void KillThisEffect();  // Call when effect is finished
 
     int32_t GetAngle();         // Returns aiming angle
 
   protected:
+    retail_effect_owner::State retail_owner;
+    TSafeRef<> retail_follow;
+    void SetRetailOwnerFlags(uint32_t value);
+    bool BeginRetailOwnerPulse();
+    void AdvanceRetailOwnerPulse();
     PTSpell spell;      // Spellblock which spawned this effect
     int32_t subspell;           // TEMP TEMP TEMP subspell (psuedo-talisman)
     int32_t angle;              // The direction we are cast
