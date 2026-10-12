@@ -260,6 +260,9 @@ int32_t TComplexObject::ResolveAction(int32_t bits)
     return 0;
 }
 
+// REVSYNC: SetRoot @ 0x004db2d0 -- not a `noroot` block (+0x60 & 0x400); the
+// old root freed unless doing or desired holds it; the root can always be
+// interrupted out of (nowaitdone) and interrupts nothing.
 void TComplexObject::SetRoot(PTActionBlock ab)
 {
     if (ab->noroot)
@@ -276,6 +279,8 @@ void TComplexObject::SetRoot(PTActionBlock ab)
     root->interrupt = false;    // We don't ever interrupt another state
 }
 
+// REVSYNC: SetDoing @ 0x004db340 -- the old doing block freed unless the root
+// or desired holds it; the root's interrupt mark cleared.
 void TComplexObject::SetDoing(PTActionBlock ab)
 {
     if (ab != doing)
@@ -321,7 +326,11 @@ bool TComplexObject::SetDesired(PTActionBlock ab, uint32_t flags)
     return true;
 }
 
-// Have object attempt to move into a new state
+// REVSYNC: TryCommand @ 0x004db450 -- `ab` (the root when null) is started
+// through ForceCommand (vtable +0x218) unless doing has priority and isn't
+// the desired block, and only when the command is done, doing may be cut
+// short (nowaitdone) for another block, or the desired block interrupts;
+// else it waits (COM_EXECUTING).
 int32_t TComplexObject::TryCommand(PTActionBlock ab, int32_t bits, uint32_t flags)
 {
   // Use root if desired is nullptr
