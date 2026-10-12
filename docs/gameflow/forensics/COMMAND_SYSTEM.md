@@ -313,8 +313,7 @@ debug level (`[console]`), so headless `--exec` runs can read it.
 - The interpreter's context syntax, the object resolver and the
   expression evaluator are retail (`src/scriptvalue.cpp`). Not ported:
   `setcurrent`, multiplayer parties,
-  and the members `maxslots`,
-  `lastattack` (needs the attack-impact result, `TCharacter +0x168`) and
+  and the members `maxslots` and
   `groupinrange` — those fail the expression and log once.
 - A command answering `CMD_WAIT` on a character holds the script until
   the character is back in its root state, or ends a loop of a looping

@@ -224,6 +224,33 @@ Before anything: a point over one of the side tabs' controls
 the editor every click sends `Notify(4, player)` (`0x00499ff0`) first.
 [C]
 
+**The side tabs hold only their buttons' rects** (2026-10-11) [C]:
+
+- `0x0044f146..0x0044f182`: the point goes into the tabs' frame
+  (`pane.x - tabs.x + x`, the same for y) and `0x004364d0` is asked; true
+  returns at once (`0x004504b8`, `clicked` untouched). Every button value
+  takes this test, presses and releases alike.
+- `0x004364d0` (`TButtonPane`, vtable slot `0x88`): the point inside the
+  pane (`0 <= x < w`, `0 <= y < h`), then any button's slot `0x54`.
+- The button test (`TButton` `0x0042d0d0`): not hidden (flag 2) and owned,
+  then the rect (`+0x60..+0x6c`); a pixel test only with flag `0x20000`.
+  The tabs' buttons are `0x180010` (pressed: `| 0x10000`, `0x0053cc30`), so
+  plain rects: the six 36×35 at (3, 2 + 37n) in the 52×232 strip, round
+  art's corners included, the selected (pressed) tab too. The 2-pixel gaps
+  between buttons and the strip's margins (3 left, 13 right, 2 top, 10
+  bottom) are the map's: a press there uses, walks, attacks as anywhere.
+- The strip is flush in the play field's lower-right corner (Pulse
+  `0x0047bc1a..0x0047bc3d`: `x = display_w − tabs.w − side panel w`,
+  `y = play field bottom − tabs.h`): (400, 188) with the side panel and the
+  bottom bar open. Measured in the emulator (play slot, `opening`): presses
+  at x 403..438 and y 190..224, 227..261, … 375..409 stay with the tabs.
+- Moves and the cursor don't look at the tabs: `TScreen::MouseMove`
+  (`0x00490530`) gives every pane every move, with no rect test, and the
+  map's move (`0x004504d0`) and hover cursor (`Animate`, the map pane's
+  rect only, `0x004544f6..0x00454527`) never ask `0x004364d0`. Over a
+  tab button the map still shows the object cursor and the right-button
+  walk still steers.
+
 ### 4.1 Right button
 
 - **Down** (2): outside the stats pane's info mode (`0x0065c9e0`),
@@ -235,15 +262,16 @@ the editor every click sends `Notify(4, player)` (`0x00499ff0`) first.
 
 ### 4.2 Left button down (1)
 
-Only with a player and inside the pane. With `doing` the player's
-current action block (`+0xe0`) and the hover type (`+0x12c`) none or
-"swords" [C]:
+Only with a player and inside the pane. With `root` the player's root
+action block (`+0xe0`: his mode; `doing` is `+0xd8`, see
+[CLICKWALK.md](../../playtest/CLICKWALK.md) §1.2) and the hover type
+(`+0x12c`) none or "swords" [C]:
 
-- **Combat** (`doing` is `ACTION_COMBAT` 3): `on = OnObject(x, y, null)`;
+- **Combat** (`root` is `ACTION_COMBAT` 3): `on = OnObject(x, y, null)`;
   a character (class 12) that isn't Locke's target and that he may fight
   (`0x004c89c0`) becomes his target (`0x004d4790`); otherwise
   `ButtonAttack(random(1, 3))` (`0x004d2480`). Done.
-- **Bow** (`doing` is 0x19): if the bow isn't drawn, `DrawBow`
+- **Bow** (`root` is 0x19): if the bow isn't drawn, `DrawBow`
   (`0x004d0aa0`) and `AimBow` at the pointer (`0x004d0c70`); `clicked` set.
 - **Otherwise**: `on = OnObject(x, y, null)`; `onobject` (`+0xf8`) = its
   map index or −1; `clicked` (`+0x120`) set; an inventory item also goes
@@ -276,7 +304,9 @@ With a live player (slot `0x1c0` ≥ 1) and inside the pane [C]:
     units (`0x004c6155`, `0x004c7fc3`: `Pickup(obj)`, only for a block
     `Goto` marked, `+0x60` bit `0x1000`), which does nothing for a
     non-item: a far door takes a second click.
-  - A press and release on the floor (no object) does nothing.
+  - A press and release on the floor (no object) does nothing
+    (`0x0044ff51`; the playtest build `clickwalk` walks there instead:
+    [CLICKWALK.md](../../playtest/CLICKWALK.md)).
 - **No click** (a drag from the inventory/belt/equipment let go over the
   map): `with` used on the object under it (`on->Use(player, with)`), else
   dropped on the floor at the pointer (`FULLSINGDROP` / `FULLMULTDROP`
@@ -374,6 +404,31 @@ The port's design and state: §7.
   pointer was a frame or two ago; a click still reads exactly at its
   point. Over the level-46 gate: door cursor, nothing, door cursor again
   as the pointer leaves and returns, and the click on it as before.
+- **Presses around the side tabs reach the map** (2026-10-11).
+  `TPlayScreen::ClickRoute` gave the HUD a 64×240 box in the play field's
+  corner; it now gives it a press only on a tab button
+  (`UISideTabButtonAt`, the strip's own geometry, `src/uisidebartest.cpp`),
+  and moves and the hover cursor stay the map's over the whole strip
+  (§4). The strip was also drawn 4 px left and 2 px up of retail's corner.
+  `crosscheck.py --from port:opening`: the 32 tab-area cells where only
+  retail reached the world are gone; probed pixel by pixel through x = 421
+  and four rows, the port's world / HUD runs are retail's exactly. Through
+  the port host (`--clickwalk`) a click in the gap at (421, 300) and in the
+  margin at (445, 250) each walks Locke; the map tab (421, 392) and the
+  inventory tab (421, 355) switch the lower pane and don't.
+- **Releases reach the map wherever they land** (2026-10-11), as
+  `TScreen::MouseClick` gives a release to every pane
+  (`0x004904ef..0x004904fc`). The exceptions are one on a side tab's
+  button and one that ends a HUD item drag. A right-button walk let go
+  over the side panel now stops; before, it walked on until the next
+  right click (playtest FINDINGS F4).
+- **Moves reach the map wherever the pointer is** (2026-10-11), as
+  `TScreen::MouseMove` gives every move to every pane (`0x00490530`).
+  A right-button walk steers over the side panel and a drawn bow aims
+  there. The pointer's map point holds past the view's edge, as
+  retail's `posx + x` does (`TMapRenderer::ScreenToMapScreen`). In both
+  games a pointer over the panel steers as one inside the view does
+  (playtest FINDINGS F5).
 
 Open:
 - Input-simulator note: `move X Y` glides for `kDefaultMoveMs`; sweeps

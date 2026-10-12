@@ -100,6 +100,17 @@ bool TInventory::Initialize()
     return true;
 }
 
+bool TInventory::CellCenter(int32_t slot, int32_t& x, int32_t& y)
+{
+    const int32_t index = slot - firstSlot;
+    if (IsHidden() || index < 0 || index >= kColumns * kRows)
+        return false;
+    const int32_t column = index / kRows, row = index % kRows;
+    PaneToScreen(kCellsLeft + column * kCellPitchX + INVITEMREALWIDTH / 2,
+                 kCellsTop + row * kCellPitchY + INVITEMREALHEIGHT / 2, x, y);
+    return true;
+}
+
 void TInventory::Close()
 {
     if (!IsOpen())

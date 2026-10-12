@@ -1,0 +1,304 @@
+"""What the director knows about the game, read from the game's own data.
+
+    kb = Knowledge.load(data_dir)            # the install: resources.rvr, imagery.rvi
+    kb.characters['Ogrok'].damagemods         # {'burn': 0, 'freeze': 25, ...}: % more damage taken
+    kb.characters['Locke'].attacks            # every attack: button, ranges, fatigue, skills
+    kb.spells['Ice Bolt'].talismans           # ('Ocean', 'Sky', ...)
+    kb.monster_brief('Ogrok')                 # plain words for a Jev state
+
+Sources: char.def (imagery.rvi), spell.def (resources.rvr), both zip
+archives the game reads (docs/gameplay/COMBAT_DATA.md). The `.def` grammar
+here is just what these two files use: `#define` constants, quoted names,
+`|` flag expressions, `\\` continued lines, `BEGIN`/`END` blocks.
+"""
+from __future__ import annotations
+
+import re
+import zipfile
+from dataclasses import dataclass, field
+from pathlib import Path
+
+WM_HAND = 0x0001                     # char.def's weapon mask for bare hands
+CA_SPECIAL = 0x0001                  # char.def: a scripted special (finishers, throws)
+CA_DEATH = 0x0008                    # fires only when the blow would kill: a finisher (src/rules.h)
+CA_INTERACTIVE = 0x2000000           # a grapple: both play synced impacts (src/rules.h)
+CATCH_ALL = 1000                     # attacks with maxdist past this are fallbacks at any distance
+DAMAGE_TYPES = ('misc', 'hand', 'puncture', 'cut', 'chop', 'bludgeon', 'magical', 'burn', 'freeze', 'poison')
+# spell.def's talisman letters (its header comment; class.def Codes 65-76).
+TALISMANS = dict(A='Sun', B='Life', C='Ocean', D='Law', E='Soul', F='Stars', G='Death', H='Chaos',
+                 I='Sky', J='Earth', K='Ward', L='Moon')
+# Attack buttons (char.def's ATTACK button; retail ButtonAttack 1..15,
+# docs/gameplay/forensics/PLAYER_INPUT.md §3) and the controls that press them.
+BUTTON_CONTROLS = {1: 'CombatSwing', 2: 'CombatThrust', 3: 'CombatChop',
+                   **{3 + n: f'CombatCombo{n}' for n in range(1, 13)}}
+
+
+def _archive_member(archive: Path, suffix: str) -> str:
+    with zipfile.ZipFile(archive) as z:
+        name = next(n for n in z.namelist() if n.lower().endswith(suffix))
+        return z.read(name).decode('cp1252')
+
+
+def _logical_lines(text: str) -> list[str]:
+    """Comments stripped, `\\` continuations joined, blanks dropped."""
+    lines, pending = [], ''
+    for raw in text.splitlines():
+        line = raw.split('//', 1)[0].rstrip()
+        if line.endswith('\\'):
+            pending += line[:-1] + ' '
+            continue
+        line = (pending + line).strip()
+        pending = ''
+        if line:
+            lines.append(line)
+    return lines
+
+
+def _defines(lines: list[str]) -> dict[str, int]:
+    out = {}
+    for line in lines:
+        m = re.match(r'#define\s+(\w+)\s+(-?(?:0x[0-9a-fA-F]+|\d+))', line)
+        if m:
+            out[m.group(1)] = int(m.group(2), 0)
+    return out
+
+
+def _args(text: str) -> list[str]:
+    """Comma-separated arguments, quotes kept intact."""
+    return [a.strip() for a in re.findall(r'"[^"]*"|[^,]+', text) if a.strip()]
+
+
+def _value(token: str, defines: dict[str, int]) -> int | str:
+    if token.startswith('"'):
+        return token.strip('"')
+    total = 0
+    for part in token.split('|'):
+        part = part.strip()
+        if re.fullmatch(r'-?(0x[0-9a-fA-F]+|\d+)', part):
+            total |= int(part, 0)
+        elif part in defines:
+            total |= defines[part]
+        else:
+            raise ValueError(f'unknown constant {part!r}')
+    return total
+
+
+# ---- characters --------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Attack:
+    name: str
+    flags: int
+    button: int
+    blocktime: int                   # ticks the opponent has to block or counter
+    impacttime: int                  # ticks from start to impact
+    nextwait: int
+    mindist: int                     # the distances it is chosen at
+    maxdist: int
+    hitmax: int                      # how far the blow lands
+    damagemod: int                   # % added to damage
+    fatigue: int
+    attackskill: int
+    weaponmask: int
+    weaponskill: int
+
+    @property
+    def control(self) -> str | None:
+        return BUTTON_CONTROLS.get(self.button)
+
+    @property
+    def special(self) -> bool:
+        return bool(self.flags & CA_SPECIAL)
+
+    @property
+    def ranged(self) -> bool:
+        """Chosen only within a distance band (not a fallback)."""
+        return self.maxdist < CATCH_ALL
+
+    def covers(self, d: float) -> bool:
+        return self.ranged and self.mindist <= d <= self.maxdist
+
+
+@dataclass
+class Character:
+    name: str
+    damagemods: dict[str, int] = field(default_factory=dict)
+    groups: str = ''
+    enemies: str = ''
+    attacks: list[Attack] = field(default_factory=list)
+
+
+def parse_characters(text: str) -> dict[str, Character]:
+    lines = _logical_lines(text)
+    defines = _defines(lines)
+    chars: dict[str, Character] = {}
+    current: Character | None = None
+    for line in lines:
+        m = re.match(r'CHARACTER\s+"([^"]+)"', line)
+        if m:
+            current = chars.setdefault(m.group(1).strip(), Character(m.group(1).strip()))
+            continue
+        if current is None:
+            continue
+        word, _, rest = line.partition(' ')
+        if word == 'END':
+            current = None
+        elif word == 'DAMAGEMODS':
+            current.damagemods = dict(zip(DAMAGE_TYPES, (int(v) for v in _args(rest))))
+        elif word == 'GROUPS':
+            current.groups = rest.strip().strip('"')
+        elif word == 'ENEMIES':
+            current.enemies = rest.strip().strip('"')
+        elif word == 'ATTACK':
+            a = [_value(t, defines) for t in _args(rest)]
+            # name, flags, button, response, block, miss, death, blocktime, impacttime,
+            # nextwait, chainexptime, mindist, maxdist, hitminrange, hitmaxrange, hitangle,
+            # damagemod, fatigue, attackskill, weaponmask, weaponskill, ...
+            if len(a) >= 21 and isinstance(a[0], str):
+                current.attacks.append(Attack(a[0], a[1], a[2], a[7], a[8], a[9], a[11], a[12],
+                                              a[14], a[16], a[17], a[18], a[19], a[20]))
+    return chars
+
+
+# ---- spells ------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Spell:
+    name: str
+    damagetype: str
+    talismans: tuple[str, ...]
+    mana: int
+    damage: tuple[int, int]
+    skill: int                       # Invoke skill needed
+    pattern: str                     # CONTROLDATA PATTERN, '' for none
+
+
+def parse_spells(text: str) -> dict[str, Spell]:
+    lines = _logical_lines(text)
+    defines = _defines(lines)
+    damage_names = {value: name.removeprefix('DT_').lower()
+                    for name, value in defines.items() if name.startswith('DT_')}
+    spells: dict[str, Spell] = {}
+    damagetype, pending = 'none', None
+    for line in lines:
+        word, _, rest = line.partition(' ')
+        if word == 'SPELL':
+            damagetype, pending = 'none', None
+        elif word == 'DAMAGETYPE':
+            damagetype = damage_names.get(_value(rest.strip(), defines), 'none')
+        elif word == 'VARIANT':
+            a = [_value(t, defines) for t in _args(rest)]
+            # NAME, TYPE, TALISMANS, EFFECT_NAME, MANA, WAIT_NEXT, MIN_D, MAX_D, SKILL, ...
+            codes = a[2]
+            if all(c in TALISMANS for c in codes):            # M-O are enemy-only spells
+                pending = Spell(a[0], damagetype, tuple(TALISMANS[c] for c in codes),
+                                a[4], (a[6], a[7]), a[8], '')
+                spells[pending.name] = pending
+            else:
+                pending = None
+        elif word == 'PATTERN' and pending:
+            spells[pending.name] = pending = Spell(**{**pending.__dict__, 'pattern': rest.strip().strip('"')})
+    return spells
+
+
+# ---- character types (class.def) ------------------------------------------------
+
+@dataclass(frozen=True)
+class CharType:
+    """A CHARACTER type's class.def TYPES line: its Value (Exp, to-hit and
+    defence all follow from it, GRIND.md §1.2, §2.4; townsfolk -1) and
+    whether it attacks on sight by default (OBJSTATS Aggressive)."""
+    name: str
+    radius: int
+    value: int
+    aggressive: bool
+
+
+TYPE_LINE = re.compile(r'^\s*"([^"]+)"\s+"[^"]*"\s+(0x[0-9a-fA-F]+|\d+)\s+\{([^}]*)\}\s+\{([^}]*)\}')
+
+
+def parse_character_types(text: str) -> dict[str, CharType]:
+    """class.def's CHARACTER class: STATS {Radius, Value}, OBJSTATS
+    {Aggressive, ...} per type; by name, lower case and stripped."""
+    types: dict[str, CharType] = {}
+    inside = False
+    for line in text.splitlines():
+        if re.match(r'\s*CLASS\s+"', line):
+            inside = bool(re.match(r'\s*CLASS\s+"CHARACTER"', line))
+            continue
+        m = TYPE_LINE.match(line) if inside else None
+        if m:
+            stats = [int(v) for v in m.group(3).split(',')]
+            objstats = [int(v) for v in m.group(4).split(',')]
+            types[m.group(1).strip().lower()] = CharType(m.group(1).strip(), stats[0], stats[1], bool(objstats[0]))
+    return types
+
+
+# ---- the knowledge base ------------------------------------------------------
+
+@dataclass
+class Knowledge:
+    characters: dict[str, Character]
+    spells: dict[str, Spell]
+    types: dict[str, CharType] = field(default_factory=dict)
+
+    @classmethod
+    def load(cls, data: Path) -> Knowledge:
+        data = Path(data)
+        return cls(parse_characters(_archive_member(data / 'imagery.rvi', 'char.def')),
+                   parse_spells(_archive_member(data / 'resources.rvr', 'spell.def')),
+                   parse_character_types(_archive_member(data / 'imagery.rvi', 'class.def')))
+
+    def char_type(self, name: str) -> CharType | None:
+        return self.types.get(name.strip().lower())
+
+    def character(self, name: str) -> Character | None:
+        """By type name; char.def has variants with trailing spaces."""
+        return self.characters.get(name) or self.characters.get(name.strip())
+
+    def monster_brief(self, name: str) -> dict:
+        """What a fighter should know about `name`, in words: the damage it
+        resists or takes extra from, what Locke's fists and weapons do to
+        it, and how far its ordinary attacks reach. DAMAGEMODS are
+        resistances: a blow does (100 - mod)% (CalculateDamage, GRIND.md
+        §2.4). Fists deal `hand` damage; every weapon deals `misc`."""
+        c = self.character(name)
+        if not c:
+            return {'kind': name, 'known': False}
+        resists = [t for t, v in c.damagemods.items() if v > 0]
+        weak = [t for t, v in c.damagemods.items() if v < 0]
+        reach = max((a.maxdist for a in c.attacks if a.ranged and not a.special), default=0)
+        return {'kind': name, 'known': True,
+                'takes_extra_damage_from': weak or ['nothing in particular'],
+                'resists': resists or ['nothing in particular'],
+                'fists_do_percent': 100 - c.damagemods.get('hand', 0),
+                'weapons_do_percent': 100 - c.damagemods.get('misc', 0),
+                'attack_reach': 'long' if reach > 150 else 'medium' if reach > 60 else 'short'}
+
+    def attacks(self, kind: str) -> list[Attack]:
+        """`kind`'s ordinary attacks: not scripted specials."""
+        c = self.character(kind)
+        return [a for a in c.attacks if not a.special] if c else []
+
+    def locke_grapples(self, weaponmask: int) -> dict[int, list[Attack]]:
+        """Locke's grapples usable with the weapon in hand, by button: the
+        interactive specials, tried before the plain attacks of their key
+        (FindButtonAttack: RESPONSE, SPECIAL, then plain; GRIND.md §2.5).
+        Finishers (CA_DEATH) are left out: the game fires them itself when
+        a blow would kill. Each needs the target to have the matching
+        impact animation, or the game refuses it."""
+        c = self.character('Locke')
+        grapples: dict[int, list[Attack]] = {}
+        for a in c.attacks if c else ():
+            if (a.flags & CA_INTERACTIVE and a.special and not a.flags & CA_DEATH
+                    and a.weaponmask & weaponmask and a.control):
+                grapples.setdefault(a.button, []).append(a)
+        return grapples
+
+    def locke_attacks(self, weaponmask: int, attackskill: int, weaponskill: int) -> list[Attack]:
+        """Locke's ordinary attacks usable with the weapon in hand and his
+        skills, every distance variant, in file order (the order the game
+        searches a button's variants)."""
+        return [a for a in self.attacks('Locke')
+                if a.control and a.weaponmask & weaponmask
+                and a.attackskill <= attackskill and a.weaponskill <= weaponskill]

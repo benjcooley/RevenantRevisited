@@ -76,12 +76,12 @@ run() {
 # ===== sidebar tab strip — 6 buttons, pairing logic ======================
 SIDETABS_PAIRING="\
 log baseline; moveto 100 100 0; pause 300; take_snapshot baseline; \
-moveto 601 43 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click upper Book; \
-moveto 601 80 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click upper Stats; \
-moveto 601 117 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click upper Equip; \
-moveto 601 154 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click lower Spell; \
-moveto 601 191 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click lower Inv; \
-moveto 601 228 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click lower Map; \
+moveto 421 207 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click upper Book; \
+moveto 421 244 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click upper Stats; \
+moveto 421 281 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click upper Equip; \
+moveto 421 318 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click lower Spell; \
+moveto 421 355 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click lower Inv; \
+moveto 421 392 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click lower Map; \
 pause 200; take_snapshot final"
 run ui-hud sidebar_tabs 8 "$SIDETABS_PAIRING"
 
@@ -120,7 +120,7 @@ run ui-hud inventory_cross_pane 8 "$INV_XPANE"
 
 # ===== spellbook scroll arrows ==========================================
 SPB_SCROLL="\
-log switch_to_book; moveto 601 43 200; pause 100; left_down; pause 80; left_up; pause 200; take_snapshot Book view scroll=0; \
+log switch_to_book; moveto 421 207 200; pause 100; left_down; pause 80; left_up; pause 200; take_snapshot Book view scroll=0; \
 moveto 631 187 200; pause 100; left_down; pause 80; left_up; pause 200; take_snapshot scroll down 1 = 40; \
 moveto 631 187 100; pause 100; left_down; pause 80; left_up; pause 200; take_snapshot scroll down 2 = 80; \
 moveto 631 187 100; pause 100; left_down; pause 80; left_up; pause 200; take_snapshot scroll down 3 = 120; \

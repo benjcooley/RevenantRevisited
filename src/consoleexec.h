@@ -11,4 +11,11 @@
 // headlessly while they are being ported and verified.
 #pragma once
 
+#include <cstdint>
+#include <string>
+
 void PulseStartupExec();
+
+// One console command, now, through the CommandInterpreter with the player
+// as its context (the playtest control channel's `exec`); its result code.
+int32_t RunConsoleCommand(const std::string& cmd);

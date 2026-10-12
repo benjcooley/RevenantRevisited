@@ -4688,6 +4688,8 @@ void T3DAnimator::AnimateResetBoundRect()
 
 void T3DAnimator::Pulse()
 {
+    TObjectAnimator::Pulse();
+
     // Map Pulse is authoritative: one call per 24Hz tick, including catch-up.
     // Each owner begins at (0,0), independently of the global animation clock.
     if (retail_warp_enabled && inst->GetState()==0) retail_warp_state.Step();

@@ -245,9 +245,10 @@ the order differs it searches every class stat. When object flag
   (`%sautomaps\%d_%d_%d.bmp`, `lev%dcomposite.bmp`, `0x0045f1e0`) are
   a render cache next to the working set.
 - **HUD state**: retail writes four HUD words into the player record
-  (§11.4: sidebar open flag, upper and lower sidebar mode, one
-  unidentified word) but never reads them back; loading leaves the HUD
-  as it was.
+  (§11.4: sidebar open flag, upper and lower sidebar mode, the bottom
+  drawer's open flag) but never reads them back. Entering play shows
+  Equip and Inventory; an in-game load leaves the side panel as it was
+  and closes the bottom bar (§11.4a).
 
 ## 9. Corrections to earlier notes
 
@@ -483,6 +484,33 @@ ObjVersion is 0 for every class except `TComplexObject` 1, `TCharacter`
 
 Retail never saves a MAPSCROLL (§11.1).
 
+**A character loaded dead** is removed. `TCharacter::Load` sets KILL
+(`0x1000`, through vtable `0x40`) when health (vtable `0x1c0`) is below 1.
+The next `TMapPane::PulseObjects` (`0x004580f0`) deletes it (`0x00451840`)
+instead of pulsing it. The iterator uses flags `0xa0` and objset 4, and an
+object is deleted when it has KILL, its vtable slot `0x3c` answers true, and
+its class is not PLAYER (11). Slot `0x3c` is `0x00477930`, which returns 1.
+It is the same entry in the vtables of TObjectInstance (`0x5a50e8`),
+TComplexObject, TCharacter, TPlayer, TExit and TWeapon. A second loop, gated
+on `0x0066829c`, removes a KILL player through the player manager, never the
+main player (`0x00667fcc`).
+
+So a corpse lasts only while its sector stays in memory. After a load, or
+after its sector streams out and back in, it is gone. A script that names
+it then fails. `<name>.` resolves to nothing, the evaluator (`0x0041f230`)
+skips the line with no value and returns 0, and `if` returns `0x84`
+(COMMAND_SYSTEM.md §2.4).
+
+This was confirmed in retail on 2026-10-10. The emulator's play slot loaded
+a port quick save made in the ~25 ticks between Rahul's death and
+TendrickR's `If Rahul.stat health = 0`. Rahul came in as `0x0006d028` and
+was deleted on the second tick. The `if` returned `0x84` on every pass, so
+Tendrick's scene never ran and `ressexit` stayed locked
+([../../playtest/FINDINGS.md](../../playtest/FINDINGS.md) F1). The port
+matches retail (`TCharacter::Load`, `TMapPane::PulseObjects`) except for
+the delete test. The port's loop tests KILL alone: it doesn't skip players
+and has no slot `0x3c` (open).
+
 ### 11.4 TPlayer, objversion 15
 
 After `uint8 4` (TCharacter's version) and the character body:
@@ -491,7 +519,7 @@ After `uint8 4` (TCharacter's version) and the character body:
 |---|---|---|---|
 | quickspells | stream string ×5 | `+0x2cc` char[6] ×5 | construct slot, then buttons 1–4 |
 | known spells | int32 count; count × char[6] | `+0x2ec` list | talisman codes the player has learned |
-| HUD words | int32 ×4 | — | Save writes `DAT_0065d190` (sidebar open), `DAT_0065d1b8` (upper sidebar mode), `DAT_0065d1bc` (lower sidebar mode) and `DAT_0065d19c` (unidentified); Load stores them at `+0x304..+0x310`, which nothing reads |
+| HUD words | int32 ×4 | — | Save writes PlayScreen's (`0x0065caf0`) `+0x6a0` = `DAT_0065d190` (sidebar open), `+0x6c8` = `DAT_0065d1b8` (upper sidebar mode), `+0x6cc` = `DAT_0065d1bc` (lower sidebar mode) and `+0x6ac` = `DAT_0065d19c` (the bottom drawer open, `0x0047ebc0`); Load stores them at `+0x304..+0x310`, which nothing reads (§11.4a) |
 | level-up stats | int32 ×3 | `+0x360..+0x368` | player-stat indices (from stat `0x22`) used by the level-up messages (`LUPBASE`, `STATCFG%s`) |
 | multiplayer identity | stream string `+0x494`, stream string `+0x4c6`, int32 `+0x4d8`, `+0x490`, `+0x4dc` | 0x60-byte record at `+0x490` | set and compared by `0x0051e4d0`; `+0x4dc` groups frag totals (`0x0051f6b0`); empty in single player |
 | module | stream string | `+0x4f0` | the active module's dirname |
@@ -511,6 +539,33 @@ strings and two frag counters; ≥ 15 the other two frag counters. Below
 `TPlayer::LoadInventory` (`0x0051bd20`) remembers health, fatigue and
 mana, loads the inventory, re-equips (`0x00519230`) and recomputes stats,
 then restores the three values (equipment changes the maxima).
+
+### 11.4a The HUD after a load (2026-10-11, emulator)
+
+The saved HUD words never come back. What the side panel shows:
+
+- **Entering play** (a new game, or a load from the title or death
+  screen, inside `TPlayScreen::Initialize` `0x0047a660`): the side pane
+  (`0x00666140`) is set to Equip and Inventory (`0x0047ae4c`,
+  `0x0047ae57`: `SetUpper(0)` `0x0053cab0`, `SetLower(0)` `0x0053cb40`),
+  the side panel opens (`0x0047ae7a`) and the bottom bar opens
+  (`0x0047ebc0(1)`). The tab globals `+0x6c8` / `+0x6cc` are not reset:
+  they keep the last tabs picked in the process (0 / 0 at boot).
+- **An in-game load** (the deferred request, run in the screen's pulse,
+  `0x0047bf01..0x0047bfd9`) leaves the side panel and its tabs as they
+  were; `LoadGame`'s reset closes the bottom bar (`0x0047ece0`).
+- Emulator (play slot): booted, the four HUD words are 0; set to Stats / Map
+  before a slot start or a new game, nothing writes them during the start
+  and 24 ticks, and the content shows Equip and Inventory anyway. From the
+  `forest` save (its words say Book / Map): Equip and Inventory. In play,
+  Map then an in-game load of the same slot: lower still 1 (Map), side
+  pane still Map, bottom bar closed; `LoadGame` and `CloseDrawer` ran, not
+  `Initialize` nor the side pane's setters.
+- **Retail bug, not reproduced:** after tabs were changed in a process,
+  entering play again (death, the title) shows Equip and Inventory with
+  the tab strip pressing the old tabs, which `TSideTabsPane::Initialize`
+  (`0x0053cc30`) reads from the unreset globals. The port keeps one state
+  for both, so the strip presses Equip and Inventory.
 
 ### 11.5 Automap record (player `+0x314`)
 

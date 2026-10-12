@@ -54,6 +54,7 @@
 #include "logging.h"
 #include "ctrlmap.h"
 #include "gamemap.h"
+#include "gameoptions.h"
 #include "gameflow.h"
 #include "hudstate.h"
 #include "mapmanager.h"
@@ -100,27 +101,17 @@ static void GetReconstructedPlayfieldRect(int32_t& x, int32_t& y,
     if (h < 1) h = 1;
 }
 
-static bool IsReconstructedHudPoint(int32_t x, int32_t y)
+// Whether (x, y) is off the map pane: over the side panel or the bottom
+// drawer beside it. Retail's map pane is the play field (Pulse 0x0047b4d0
+// sizes it to the display less both), and is offered a press only inside it
+// (TScreen::MouseClick 0x004904dd) and picks its hover cursor only there
+// (TMapPane::Animate 0x004544f6..0x00454527). The panes over the play field
+// (the side tabs, the status bar, the text bar) are inside it.
+static bool IsOffMapPane(int32_t x, int32_t y)
 {
-    const SHudState& s = GetHudState();
-    const int32_t dw = Display.Width()  > 0 ? Display.Width()  : WIDTH;
-    const int32_t dh = Display.Height() > 0 ? Display.Height() : HEIGHT;
-    constexpr int32_t kSidebarW = 188;
-    constexpr int32_t kBottomBarH = 60;
-    constexpr int32_t kTabW = 64;
-    constexpr int32_t kTabH = 240;
-
-    if (s.sidebarState == HUD_SIDEBAR_OPEN && x >= dw - kSidebarW)
-        return true;
-    if (s.bottomBarOpen && y >= dh - kBottomBarH)
-        return true;
-
-    int32_t playfieldX = 0, playfieldY = 0, playfieldW = 0, playfieldH = 0;
-    GetReconstructedPlayfieldRect(playfieldX, playfieldY, playfieldW, playfieldH);
-    const int32_t playfieldRight = playfieldX + playfieldW;
-    const int32_t playfieldBottom = playfieldY + playfieldH;
-    return x >= playfieldRight - kTabW && x < playfieldRight &&
-           y >= playfieldBottom - kTabH && y < playfieldBottom;
+    int32_t px = 0, py = 0, pw = 0, ph = 0;
+    GetReconstructedPlayfieldRect(px, py, pw, ph);
+    return x < px || y < py || x >= px + pw || y >= py + ph;
 }
 
 // Default game controls. Mirrors the retail table from
@@ -258,16 +249,16 @@ void InitDefaultControlMap()
     ControlMap.Load(const_cast<char*>("Controls"));
 }
 
-// One in-game day = 24 game-minutes of game time. The legacy clamp says
-// "morning starts at 6", "noon at 12", etc.; reuse the same buckets so
-// scripted lighting checks keep working.
-static int32_t TimeOfDayMinutes(int32_t gametime_centi_secs)
+// REVSYNC: TPlayScreen::Animate @ 0x0047c2c0 (0x0047c3a5..0x0047c3de) --
+// the minute of the day: game time (hundredths of a second) times 1440 over
+// rules.def's DAYLENGTH, modulo 1440, in 64 bits. DAYLENGTH 80000 makes a
+// day 800 seconds of play.
+static int32_t TimeOfDayMinutes(int32_t gametime)
 {
-    // gametime is in 1/100s of a second; convert to in-game minutes.
-    // Retail used a 60x scale (1 real second = 60 in-game seconds = 1
-    // in-game minute). Match that so saved games stay aligned.
-    const int32_t in_game_seconds = gametime_centi_secs / 100;
-    return in_game_seconds / 60;
+  // REVSYNC-DIVERGENCE: retail divides by zero before rules.def is loaded.
+    if (Rules.daylength <= 0)
+        return 0;
+    return int32_t(int64_t(gametime) * 1440 / Rules.daylength % 1440);
 }
 
 // The day clock: rules.def's DAYLENGTH units make one day of 1440 game
@@ -361,6 +352,18 @@ bool TPlayScreen::Initialize()
     if (!SpellList.Initialize())
         log_warn("[playscreen] spell.def failed to load; no spells");
 
+    // REVSYNC: 0x0047ae4c..0x0047ae7a, 0x0047ebc0(1) -- every entry into play
+    // (a new game, or a load from the title or death screen) shows the side
+    // panel open on Equip and Inventory, and the bottom bar. A save's HUD
+    // words never come back (TPlayer::Load keeps them at +0x304, unread), and
+    // an in-game load, which runs in the pulse (0x0047bf01..0x0047bfd9), leaves
+    // the HUD as it was.
+    SHudState& hud = GetHudState();
+    hud.topSlot       = HUD_TOP_EQUIP;
+    hud.bottomSlot    = HUD_BOT_INV;
+    hud.sidebarState  = HUD_SIDEBAR_OPEN;
+    hud.bottomBarOpen = 1;
+
     SetUIHudCursorOverlayEnabled(false);
     SetUISidebarSyntheticStateEnabled(false);
     g_playHudInitialized = InitializeUIHudMode();
@@ -451,10 +454,6 @@ bool TPlayScreen::Initialize()
     // The session made the main player under the loading screen: the panes
     // show it now that they exist.
     PlayerManager.BindMainPlayerToScreen();
-
-    // The HUD starts as the loaded game left it (building the HUD resets it).
-    if (Player)
-        TSaveGame::RestoreHud(Player->HudWords());
 
     // REVSYNC: 0x0047b10c -- the fader, starting black, outside the
     // editor. TScreen fades it in once Initialize returns.
@@ -1081,14 +1080,19 @@ int32_t TPlayScreen::DrawerHeight() const
     return GetHudState().bottomBarOpen ? kBottomBarH : 0;
 }
 
-// Retail's close request reaches whatever the drawer holds; only the shop is
-// closed here. The HUD's bottom bar (mode 2) belongs to the HUD, whose Lower
-// Panel toggle is SHudState::bottomBarOpen; retail's LoadGame (0x0047ece0)
-// and hideresponse would close it too (AUTHOR_QUESTIONS.md 81).
+// REVSYNC: 0x0047ecc0 / 0x0047ece0 -- a close request reaches whatever the
+// drawer holds: the shop, or the HUD's bottom bar (mode 2, the HUD's Lower
+// Panel, SHudState::bottomBarOpen), which stays closed until that command
+// opens it again. An in-game load closes the bar so (LoadGame's reset;
+// seen in the emulator, AUTHOR_QUESTIONS.md 81), as would `hideresponse`,
+// which no shipped script uses; entering play opens it (Initialize). The
+// camera and fadescreenout ask only in mode 3, for the shop.
 void TPlayScreen::CloseDrawer()
 {
     if (drawer == EDrawer::BuySell)
         drawerclose = true;
+    else if (drawer == EDrawer::Hud)
+        GetHudState().bottomBarOpen = 0;
 }
 
 // REVSYNC: the drawer half of Pulse 0x0047b4d0, mode 3. A shop request opens
@@ -1244,27 +1248,17 @@ void TPlayScreen::RenderFrame()
             Renderer->ResetPresentNDCRect();
     }
 
-    // Late camera update: gameplay has already moved the player for this
-    // fixed tick, so follow from the final transform immediately before
-    // rendering. The renderer compensates the camera origin by the followed
-    // height so Locke stays centered while walking up/down terrain.
-    // The camera shows the map pane's center (TMapPane::UpdateMapPos follows
-    // the centeron target, scrolling to it). While it simply follows the
-    // player, the player's final transform keeps walking smooth; otherwise
-    // the center is interpolated between ticks.
+    // The view is the map pane's center, which TMapPane::UpdateMapPos moves
+    // toward the centeron target each tick, as retail drew every frame from
+    // it (the scroll origin is WorldToScreen(center) less half the pane,
+    // 0x004539d0), a tick behind (TMapPane::CameraPos). Following the player
+    // it moves on the tick as he does, so he doesn't shake against it; a pan
+    // elsewhere glides between ticks.
     if (CurrentMode() == GameMode() && Player)
     {
-        if (MapPane.IsFollowingPlayer() && !MapPane.IsScrollCenterOn())
-        {
-            S3DPoint p;
-            Player->GetPos(p);
-            mapRenderer->SetCameraWorld(Player->GetLevel(), p.x, p.y, p.z);
-        }
-        else
-        {
-            const S3DPoint p = MapPane.CameraPos(TTime::LegacyFrameFraction());
-            mapRenderer->SetCameraWorld(MapPane.GetMapLevel(), p.x, p.y, p.z);
-        }
+        const double glide = MapPane.IsFollowingPlayer() ? 0.0 : TTime::LegacyFrameFraction();
+        const S3DPoint p = MapPane.CameraPos(glide);
+        mapRenderer->SetCameraWorld(MapPane.GetMapLevel(), p.x, p.y, p.z);
     }
 
     // While the editor is paused and nothing is dirty, skip the world
@@ -1766,7 +1760,9 @@ bool TPlayScreen::MapHasPointer(int32_t x, int32_t y) const
 {
     if (ModalHas(MODAL_MOUSE) || GameFlow.Session().Loading() || InBuySellDrawer(x, y))
         return false;
-    return !(g_playHudInitialized && (IsReconstructedHudPoint(x, y) || UIDragState::IsActive()));
+    // The side tabs over the play field don't take it: retail's hover
+    // cursor looks only at the map pane's rect (0x004544f6..0x00454527).
+    return !(g_playHudInitialized && (IsOffMapPane(x, y) || UIDragState::IsActive()));
 }
 
 uint32_t TPlayScreen::ControlModeMask() const
@@ -1783,50 +1779,78 @@ uint32_t TPlayScreen::ControlModeMask() const
     return CTRL_NORMALMODE;
 }
 
-void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
+TPlayScreen::EClickRoute TPlayScreen::ClickRoute(int32_t x, int32_t y)
 {
-    // REVSYNC: 0x00490530 -- a modal holding the mouse (MODAL_MOUSE) gets
-    // every click; the HUD and the world get none.
+    // REVSYNC: TScreen::MouseClick 0x004903b0 -- a modal holding the mouse
+    // (MODAL_MOUSE) gets every click (0x004903f0); the HUD and the world get
+    // none.
     if (ModalHas(MODAL_MOUSE))
-    {
-        TScreen::MouseClick(button, x, y);
-        return;
-    }
-
+        return EClickRoute::Modal;
     // A load is under way: the world takes no clicks.
     if (GameFlow.Session().Loading())
-        return;
-
+        return EClickRoute::Ignored;
     if (InBuySellDrawer(x, y))
+        return EClickRoute::BuySell;
+    // The HUD: a pane beside the map, a drag in flight, or one of the side
+    // tabs' buttons over the play field. TMapPane::MouseClick leaves a press
+    // to the tabs only when a button holds it (0x004364d0, 0x0044f146..
+    // 0x0044f182); around and between the buttons it is the map's.
+    if (g_playHudInitialized &&
+        (IsOffMapPane(x, y) || UIDragState::IsActive() || UISideTabButtonAt(x, y) >= 0))
+        return EClickRoute::Hud;
+    return EClickRoute::World;
+}
+
+static bool IsButtonRelease(int32_t button)
+{
+    return button == MB_LEFTUP || button == MB_RIGHTUP || button == MB_MIDDLEUP;
+}
+
+void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
+{
+    // REVSYNC: TScreen::MouseClick 0x004904ef..0x004904fc -- a release goes
+    // to every pane wherever it lands, the map's too, which leaves one on a
+    // side tab's button alone (0x0044f17b) and off its rect only forgets its
+    // press or ends the right-button walk (0x0044f917, 0x0044fbad). The HUD's
+    // item drag takes its own release (the drop).
+    const bool releaseToWorld = IsButtonRelease(button) && !UIDragState::IsActive() &&
+                                !(g_playHudInitialized && UISideTabButtonAt(x, y) >= 0);
+    switch (ClickRoute(x, y))
     {
+      case EClickRoute::Modal:
         TScreen::MouseClick(button, x, y);
         return;
-    }
-
-    if (g_playHudInitialized &&
-        (IsReconstructedHudPoint(x, y) || UIDragState::IsActive()))
-    {
-        const SHudState& s = GetHudState();
-        if (HandleMouseClickUISidebarModeConsumed(button, x, y))
-            return;
-        TScreen::MouseClick(button, x, y);      // the screen's panes: the bars, the side panes
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
-            HandleMouseClickUIEquipMode(button, x, y);
-        if (button == MB_LEFTUP)
-            UIDragState::ReleaseUnclaimed();    // a drag no pane took ends here
+      case EClickRoute::Ignored:
+        return;
+      case EClickRoute::BuySell:
+        TScreen::MouseClick(button, x, y);
+        break;
+      case EClickRoute::Hud:
+        if (!HandleMouseClickUISidebarModeConsumed(button, x, y))
+        {
+            const SHudState& s = GetHudState();
+            TScreen::MouseClick(button, x, y);  // the screen's panes: the bars, the side panes
+            if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+                HandleMouseClickUIEquipMode(button, x, y);
+            if (button == MB_LEFTUP)
+                UIDragState::ReleaseUnclaimed();    // a drag no pane took ends here
+        }
+        break;
+      case EClickRoute::World:
+        TScreen::MouseClick(button, x, y);
+        // Route to the active runtime mode; editor mode forwards to the
+        // renderer's gizmo / drag picker, game mode forwards to MapPane's
+        // gameplay click handler (movement / interact / combat).
+        CurrentMode()->HandleMouseClick(button, x, y);
         return;
     }
-
-    TScreen::MouseClick(button, x, y);
-    // Route to the active runtime mode; editor mode forwards to the
-    // renderer's gizmo / drag picker, game mode forwards to MapPane's
-    // gameplay click handler (movement / interact / combat).
-    CurrentMode()->HandleMouseClick(button, x, y);
+    if (releaseToWorld)
+        CurrentMode()->HandleMouseClick(button, x, y);
 }
 
 void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
 {
-    if (ModalHas(MODAL_MOUSE) || InBuySellDrawer(x, y))
+    if (ModalHas(MODAL_MOUSE))
     {
         TScreen::MouseMove(button, x, y);
         return;
@@ -1834,26 +1858,28 @@ void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
     if (GameFlow.Session().Loading())
         return;
 
-    if (g_playHudInitialized)
+    if (g_playHudInitialized && !InBuySellDrawer(x, y))
     {
-        const SHudState& s = GetHudState();
-        if (HandleMouseMoveUISidebarModeConsumed(button, x, y))
-            return;
+        // A HUD item drag follows the pointer; the paper doll and the
+        // screen's panes (the bars, the side panes) see the move.
         if (UIDragState::IsActive())
             UIDragState::UpdateDrag(x, y);
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
-            HandleMouseMoveUIEquipMode(button, x, y);
-        if (IsReconstructedHudPoint(x, y) || UIDragState::IsActive())
+        if (!HandleMouseMoveUISidebarModeConsumed(button, x, y))
         {
-            TScreen::MouseMove(button, x, y);   // the screen's panes, as clicks: the bottom bar, the side panes
-            return;
+            const SHudState& s = GetHudState();
+            if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+                HandleMouseMoveUIEquipMode(button, x, y);
+            TScreen::MouseMove(button, x, y);
         }
     }
+    else
+        TScreen::MouseMove(button, x, y);
 
-    TScreen::MouseMove(button, x, y);
-    // Game mode -> MapPane.MouseMove (drives wedge cursor while walking,
-    // bow aim, etc.). Editor mode default no-op until we wire its
-    // hover/drag overlays.
+    // REVSYNC: TScreen::MouseMove 0x00490530 -- every pane gets every move,
+    // with no rect test (0x004905b9..0x0049063d), so the map's comes wherever
+    // the pointer is: a right-button walk steers, and a drawn bow aims, over
+    // the HUD as over the play field (TMapPane::MouseMove 0x004504d0). Game
+    // mode -> MapPane.MouseMove; editor mode has no move handling yet.
     CurrentMode()->HandleMouseMove(button, x, y);
 }
 
@@ -1948,13 +1974,17 @@ void TPlayScreen::Command(GAMECOMMAND command)
         if (Player)         // 0x30-0x37 (0x0047d900): Dodge(0..7)
             Player->Dodge(command - GAMECMD_DODGELEFT);
         break;
-    case GAMECMD_JUMP:
+    case GAMECMD_USE:               // 0xe: Use 0x004d01e0
         if (Player)
-            Player->Jump();
+            Player->TryUse();
         break;
     case GAMECMD_GET:               // 0xf: Get 0x004d0430
         if (Player)
             Player->TryGet();
+        break;
+    case GAMECMD_JUMP:
+        if (Player)
+            Player->Jump();
         break;
     case GAMECMD_GAMEOPTIONS:       // 0x52: 0x0047e700
         ingamemenu->OpenOptions();
@@ -2133,7 +2163,7 @@ void TPlayScreen::ShowLowerPanes()
 // [+0x684] + [+0x680]`): a loaded game's frames go on from its saved time.
 int32_t TPlayScreen::GameFrame() const
 {
-    return sessionframes - sessionstart + gameframes;
+    return lastsessionframes - sessionstart + gameframes;
 }
 
 // REVSYNC: TPlayScreen::Animate @ 0x0047c2c0 -- the frame count, then game
@@ -2147,15 +2177,17 @@ void TPlayScreen::AdvanceGameFrame()
     timeofday = TimeOfDayMinutes(gametime);
 }
 
-// REVSYNC: TPlayScreen::SetGameTime @ 0x0047e950 -- a game's time (a load's
-// header, a new game's 0): its frames before now (t * 24 / 100) and the
-// time of day. The game time itself follows on the next tick, from the
-// frame count.
+// REVSYNC: TPlayScreen::SetGameTime @ 0x0047e950 -- the saved game time
+// becomes the frames before this session (t * 24 / 100), which GameFrame
+// goes on from, and the minute of the day is set at once, so the area
+// entered on load sees the saved time. The port also sets gametime at once;
+// retail left it to the next Animate.
 void TPlayScreen::SetGameTime(int32_t t)
 {
     sessionstart = gameframes;
-    sessionframes = (int32_t)((int64_t)t * 24 / 100);
-    timeofday = TimeOfDayMinutes((int32_t)((int64_t)sessionframes * 100 / 24));
+    lastsessionframes = int32_t(int64_t(t) * 24 / 100);
+    gametime = int32_t(int64_t(lastsessionframes) * 100 / 24);
+    timeofday = TimeOfDayMinutes(gametime);
 }
 
 int32_t TPlayScreen::TimeOfDay() const
@@ -2163,35 +2195,72 @@ int32_t TPlayScreen::TimeOfDay() const
     return timeofday;
 }
 
+// The bounds of the twilight ramps, TWILIGHT minutes centred on 06:00 and
+// 18:00 (retail Daylight and DayTimeFlag both compute them inline).
+namespace {
+struct STwilight
+{
+    int32_t morningbeg, morningend, eveningbeg, eveningend;
+};
+
+STwilight Twilight()
+{
+    const int32_t half = Rules.twilight >> 1;
+    STwilight t;
+    t.morningbeg = 6 * 60 - half;
+    t.morningend = t.morningbeg + Rules.twilight - 1;
+    t.eveningbeg = 18 * 60 - half;
+    t.eveningend = t.eveningbeg + Rules.twilight - 1;
+    return t;
+}
+}  // namespace
+
+// REVSYNC: TPlayScreen::Daylight @ 0x0047ea00 -- the daylight, 0 (night) to
+// 255 (day): 0 outside the twilights, 255 between them, a ramp across each.
+// With RealTimeLight on (0x0047ea46) the ramp is smooth; off, it moves in
+// TWILIGHT's step count (rules.def: 8 steps over 60 minutes).
 int32_t TPlayScreen::Daylight() const
 {
-    // Smooth 0..255 ambient curve as a function of in-game minutes.
-    // Mirrors the retail dawn/dusk fade without bothering with the
-    // legacy table-of-deltas. Tweakable in lighting/script systems.
-    const int32_t day_minutes = 24 * 60;
-    int32_t t = timeofday % day_minutes;
-    if (t < 0) t += day_minutes;
-    // Centered cosine on noon: 0 at midnight, 255 at noon.
-    const float frac  = float(t) / float(day_minutes);
-    const float angle = (frac - 0.5f) * 2.0f * 3.14159265f;
-    const float cosv  = std::cos(angle);
-    const float v     = (cosv * 0.5f + 0.5f) * 255.0f;
-    if (v < 0.0f)   return 0;
-    if (v > 255.0f) return 255;
-    return int32_t(v);
+    const STwilight tw = Twilight();
+    const int32_t time = timeofday;
+    if (time > tw.eveningend || time < tw.morningbeg)
+        return 0;
+    if (time > tw.morningend && time < tw.eveningbeg)
+        return 255;
+
+    // Minutes into the morning ramp, or left of the evening one.
+    const int32_t into = (time <= tw.morningend) ? time - tw.morningbeg
+                                                 : Rules.twilight - (time - tw.eveningbeg);
+    if (RealTimeLight)
+        return into * 255 / Rules.twilight;
+    const int32_t step = into * Rules.twilightsteps / Rules.twilight;
+    return step * 255 / Rules.twilightsteps;
 }
 
+// REVSYNC: TPlayScreen::DayTimeFlag @ 0x0047eab0 -- DAY_MIDNIGHT at minute 0,
+// DAY_NOON at 720, else night, day, morning or evening by the twilights.
 int32_t TPlayScreen::DayTimeFlag() const
 {
-    const int32_t mins = timeofday % (24 * 60);
-    const int32_t h = (mins < 0 ? mins + 24 * 60 : mins) / 60;
-    if (h < 5)  return DAY_MIDNIGHT;
-    if (h < 8)  return DAY_MORNING;
-    if (h < 12) return DAY_DAYTIME;
-    if (h < 14) return DAY_NOON;
-    if (h < 19) return DAY_DAYTIME;
-    if (h < 21) return DAY_EVENING;
-    return DAY_NIGHT;
+    const STwilight tw = Twilight();
+    const int32_t time = timeofday;
+    if (time == 0)
+        return DAY_MIDNIGHT;
+    if (time == 12 * 60)
+        return DAY_NOON;
+    if (time > tw.eveningend || time < tw.morningbeg)
+        return DAY_NIGHT;
+    if (time > tw.morningend && time < tw.eveningbeg)
+        return DAY_DAYTIME;
+    return (time <= tw.morningend) ? DAY_MORNING : DAY_EVENING;
+}
+
+// Debug: the same day's game time at `minutes` past midnight.
+void TPlayScreen::SetTimeOfDay(int32_t minutes)
+{
+    if (Rules.daylength <= 0)
+        return;
+    const int64_t day = int64_t(gametime) / Rules.daylength;
+    SetGameTime(int32_t(day * Rules.daylength + int64_t(minutes) * Rules.daylength / 1440));
 }
 
 // *************************************************************************

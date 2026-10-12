@@ -448,7 +448,9 @@ What this means for the Keep's opening (`keep.s`, `SardokR`):
 - `fadecharacterout player`: his fade runs 100 -> 0 unseen.
 - `player.toggle invisible` + `fadecharacterin player`: he shows with fade
   0, and the alpha follows the fade back to 1 over 0.83 s.
-- Rahul (`MUDOKON`) is OF_INVISIBLE until `RAHUL.TOGGLE INVISIBLE = 0`. Load
+- Rahul (type `Rahul`, base map `2_1_1`) is OF_INVISIBLE until
+  `RAHUL.TOGGLE INVISIBLE = 0`. (`MUDOKON`, in `2_0_0`, is another object:
+  a script holder that stays invisible.) Load
   leaves every character at fade 100 (`0x004d4eb0`), so
   `FADECHARACTERIN RAHUL` has nothing to do: he appears at full opacity as
   the door opens.

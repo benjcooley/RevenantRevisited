@@ -33,6 +33,10 @@ texture-capable device -- retail's `DAT_00669ad8 == 0` path.
   internal software rasterizer. A hardware player got the same composition
   rasterized by the D3D device.
 
+Other machines on the same boot (the play slot): a named build
+(`build=`, build_contract.py) and another Revenant.ini (`ini=`); each makes
+its own cached image.
+
 Boundaries (original entries answered by the host, recorded in
 `boundary_calls`): the boot log `0x004820b0` (format string kept, no file
 I/O) and network init `0x00575890` (DirectPlay: reports success with no
@@ -51,6 +55,7 @@ sys.path.insert(0, str(HERE.parents[1]))
 from unicorn import UC_HOOK_CODE, UC_HOOK_MEM_FETCH_UNMAPPED, UC_HOOK_MEM_READ_UNMAPPED, UC_HOOK_MEM_WRITE_UNMAPPED  # noqa: E402
 from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_EIP, UC_X86_REG_ESP  # noqa: E402
 from runtime import Runtime  # noqa: E402
+from build_contract import verify_build  # noqa: E402
 import image  # noqa: E402
 from ddraw import DirectDraw  # noqa: E402
 from gdi import Gdi  # noqa: E402
@@ -59,7 +64,6 @@ from system import SystemApis  # noqa: E402
 from window import Windows  # noqa: E402
 from winfs import WinFileSystem, mount_tree  # noqa: E402
 
-RETAIL_SHA = '28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5'
 CRT_INIT, CRT_INIT_STOP = 0x0058ed0d, 0x0058ed8e     # entry: heap + TLS, before _ioinit
 IOINIT, ENVIRONMENT, ENVIRONMENT_PTR = 0x0059299f, 0x00593c9c, 0x00676f58
 C_INIT = (0x005c58f0, 0x005c5908)
@@ -79,6 +83,7 @@ BOOT_SOURCES = [HERE / name for name in ('hudworld.py', 'system.py', 'winfs.py',
 BOOT_LOG = 0x004820b0                        # printf-style append to revboot.log, cdecl
 NETWORK_INIT = 0x00575890                    # DirectPlay provider enumeration, thiscall
 
+INI_KEY = 'c:/revenant/revenant.ini'          # retail reads Revenant.ini beside the exe (WinMain 0x004865a0)
 G_NOTEXOVERLAY = 0x006680c8
 G_INTERNAL_RASTER = 0x005d7a28
 
@@ -89,38 +94,46 @@ class HudWorld:
     boot)."""
 
     @classmethod
-    def open(cls, executable, install=RETAIL_INSTALL):
-        path = cls.image_path(executable)
+    def open(cls, executable, install=RETAIL_INSTALL, build=None, ini=None):
+        path = cls.image_path(executable, ini)
         if path.exists():
-            return cls(executable, install, image_path=path)
-        world = cls(executable, install)
+            return cls(executable, install, image_path=path, build=build, ini=ini)
+        world = cls(executable, install, build=build, ini=ini)
         world.save(path)
         return world
 
     @staticmethod
-    def image_path(executable):
+    def image_path(executable, ini=None):
         digest = hashlib.sha256(Path(executable).read_bytes())
         for source in BOOT_SOURCES:
             digest.update(source.read_bytes())
+        if ini is not None:
+            digest.update(b'ini\0' + ini)
         return IMAGE_DIR / f'hud-boot-{digest.hexdigest()[:16]}.image'
 
-    def __init__(self, executable, install=RETAIL_INSTALL, image_path=None):
+    def __init__(self, executable, install=RETAIL_INSTALL, image_path=None, build=None, ini=None):
+        """`build`: a named build's build.json (build_contract.py) when
+        `executable` is not the unchanged retail image; it must keep
+        retail's fixed addresses. `ini`: the bytes of a Revenant.ini to
+        boot with in place of the install's (another machine's settings;
+        part of the image's key). The HUD fixtures pass neither."""
         self.install = install
+        self.ini = ini
         self.boundary_calls = []               # (name, detail) in call order
         self._boundaries = {}
         self.last_fault = None
+        self.build = verify_build(executable, build)
+        self.image_extra = None                # a loaded image's `extra`, for slots built on this one
         if image_path is not None:
             self._load(executable, image_path)
             return
         self.vm = vm = Runtime(executable)
         self.sha = hashlib.sha256(vm.image).hexdigest()
-        if self.sha != RETAIL_SHA:
-            raise ValueError('HUD fixtures are verified for the unchanged retail image only')
         self._install_hooks()
         vm.call(CRT_INIT, stop_address=CRT_INIT_STOP)
         self.system = SystemApis(vm)
         self.fs = WinFileSystem(vm)
-        self.mounted = self.fs.mount_tree(install)
+        self.mounted = self._mount(vm)
         self.profile = PrivateProfile(vm, self.fs)
         self.call(IOINIT)
         vm.put_u32(ENVIRONMENT_PTR, self.call(ENVIRONMENT))
@@ -142,8 +155,15 @@ class HudWorld:
         # WinMain's frame stays live for the rest of the game in retail; host
         # calls from here on use the stack below it.
         vm.call_sp = (vm.uc.reg_read(UC_X86_REG_ESP) - FRAME_RESERVE) & ~0xf
-        if vm.u32(G_NOTEXOVERLAY) != 0 or vm.u32(G_INTERNAL_RASTER) != 1:
+        if self.ini is None and (vm.u32(G_NOTEXOVERLAY) != 0 or vm.u32(G_INTERNAL_RASTER) != 1):
             raise RuntimeError('Boot did not reach the texture-overlay / internal-raster mode')
+
+    def _mount(self, vm):
+        """The install, read-only; the INI given in place of its own."""
+        count = mount_tree(vm, self.install)
+        if self.ini is not None:
+            vm.files[INI_KEY] = bytes(self.ini)
+        return count
 
     def _install_hooks(self):
         self.vm.uc.hook_add(UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED
@@ -155,16 +175,19 @@ class HudWorld:
 
     MODULES = ('system', 'fs', 'profile', 'ddraw', 'windows', 'gdi')
 
-    def save(self, path):
-        """Write the booted world (`image.py` plus every module's state)."""
+    def save(self, path, more=None):
+        """Write the booted world (`image.py` plus every module's state).
+        `more`: a slot's own state, stored beside it (`image_extra` after
+        a load)."""
         path.parent.mkdir(parents=True, exist_ok=True)
         extra = dict(modules={name: getattr(self, name).state() for name in self.MODULES},
-                     boundary_calls=self.boundary_calls, mounted=self.mounted)
+                     boundary_calls=self.boundary_calls, mounted=self.mounted, **(more or {}))
         return image.save(self.vm, path, extra)
 
     def _load(self, executable, path):
         self.vm, extra = image.load(executable, path,
-                                    mount=lambda vm: mount_tree(vm, self.install))
+                                    mount=self._mount)
+        self.image_extra = extra
         vm = self.vm
         self.sha = hashlib.sha256(vm.image).hexdigest()
         states = extra['modules']

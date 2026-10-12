@@ -76,6 +76,11 @@ class TSaveGame
 
     [[nodiscard]] const std::vector<SSaveSlot>& Slots() const { return slots; }
 
+    // Where the single-player slots live: <SavePath>/<SaveGamePath>Single.
+    [[nodiscard]] static std::filesystem::path SlotsDir();
+    // The slot this run wrote last (empty: none yet).
+    [[nodiscard]] const std::string& LastSaved() const { return lastSaved; }
+
     // True while a load is replacing the world.
     [[nodiscard]] bool IsLoading() const { return loading; }
 
@@ -99,11 +104,6 @@ class TSaveGame
     // isn't one.
     [[nodiscard]] static bool ReadThumbnail(const std::filesystem::path& slot,
                                             std::vector<uint8_t>& rgba);
-
-    // Shows the HUD sidebar the way the saved HUD words in the player record
-    // say (SAVE_GAME.md §11.4). Called by a load and again by the PlayScreen
-    // once it has built the HUD.
-    static void RestoreHud(const SPlayerHudWords& words);
 
     // Merchant unique items already bought (SAVE_GAME.md §6).
     // REVSYNC: HasPair @ 0x0048e630 / AddPair @ 0x0048e670.
@@ -131,6 +131,7 @@ class TSaveGame
     void CopyThumbnailTo(const std::filesystem::path& slot);
 
     std::vector<SSaveSlot>   slots;
+    std::string              lastSaved;
     std::vector<SSoldUnique> soldUniques;
     bool                     loading = false;
     int32_t                  thumbnailVersion = 0;         // bumped by each thumbnail written

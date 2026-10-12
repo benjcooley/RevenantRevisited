@@ -143,10 +143,12 @@ class MapObject:
     y: int
     z: int
     source: str          # 'save' or 'base'
+    tail: str = ''       # the class's own record after the common fields, hex (revsave's .tail)
 
 
 def read_sector(data: bytes) -> list[dict]:
-    """Top-level objects of one sector file: name, class, type id, position."""
+    """Top-level objects of one sector file: name, class, type id, position,
+    and the class's own record (hex)."""
     d = revsave.Decoder(data)
     try:
         d.sector()
@@ -154,7 +156,7 @@ def read_sector(data: bytes) -> list[dict]:
         pass
     objs: dict[int, dict] = {}
     for f in d.fields:
-        m = re.match(r'obj\[(\d+)\]\.(name|pos\.[xyz]|objclass|uniqueid)$', f.path)
+        m = re.match(r'obj\[(\d+)\]\.(name|pos\.[xyz]|objclass|uniqueid|tail)$', f.path)
         if m:
             objs.setdefault(int(m.group(1)), {})[m.group(2)] = f.value
     return [o for _, o in sorted(objs.items()) if 'objclass' in o and 'pos.x' in o]
@@ -184,7 +186,7 @@ def scan_level(mod: ModuleData, level: int, slot: Path | None) -> list[MapObject
             out.append(MapObject(level, sector[:-4], name,
                                  types.get((o['objclass'], uid), ''),
                                  revsave.OBJCLASS_NAMES.get(o['objclass'], str(o['objclass'])),
-                                 o['pos.x'], o['pos.y'], o['pos.z'], source))
+                                 o['pos.x'], o['pos.y'], o['pos.z'], source, o.get('tail', '')))
     return out
 
 

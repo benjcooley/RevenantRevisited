@@ -267,7 +267,7 @@ Each pane goes through the same loop:
 | **P1a** ✓ | Pane A/B harness: the port renders a pane over black at 640×480 from a case (headless test mode + readback); the compare checks geometry exactly and colour within the stated blend tolerance, and writes a retail / port / diff triptych | the status bar's current port output measured against retail |
 | **P1b** ✓ | `TPlyrStatusBar` production class (compose recipe recorded from retail: see `slots/hud/plyrstatusbar.py`), fades, bars kernel `0x54a5d0` (slices verified against traces), player + target sides | zero non-text diff across stat sweeps × target present/absent × fade ticks |
 | **P2** ✓ | Bottom bar: quickspell row, potion shelf + counts, end cap | same |
-| **P3** | `TSideTabsPane` + the sidebar mode cascade (`DAT_0065d1b8/bc`) | same, plus hover/pressed states |
+| **P3** | `TSideTabsPane` + the sidebar mode cascade (`DAT_0065d1b8/bc`); the hover from pointer moves (TSideTabsPane_SPEC §9, not wired in play yet) | same, plus hover/pressed states |
 | **P4** | Sidebar panes: Stats, Equip, Spellbook, Inventory, Map, SpellCreate | same, per pane |
 | **P5** | `TTextBar` game log | text calls match; colors settled (pink fringe) |
 | **P6** | Text pixels: Win98 GDI glyph capture → emulator GDI shim; port Classic text strategy | zero diff including text |

@@ -49,9 +49,21 @@ class Scheduler:
     MAX_THREADS=120
     THREAD_RETURN=0x700ff010
     QUANTUM=10000
+    # Solo (opt-in, `solo = True`): the only runnable thread runs without
+    # Unicorn's instruction count -- which Unicorn implements as a hook on
+    # every instruction, several times slower -- until an API call blocks
+    # it, ends it, or lets another thread run (`api_returned`). Switches
+    # still happen only at API boundaries and quantum ends, both decided by
+    # guest state, so runs stay deterministic; the interleaving differs from
+    # quantum-only scheduling, and solo slices don't draw on the budget.
+    # SOLO_TIMEOUT bounds one solo slice in host time to report a guest
+    # spinning alone with no API call; reaching it is an error, not a switch.
+    SOLO_TIMEOUT=600_000_000
 
     def __init__(self,vm):
         self.vm=vm;self.current=1;self.next_tid=2;self.running=False
+        self.solo=False;self.alone=False;self.preempted=False
+        self.wakes=False                       # an API since the slice began may let another thread run
         self.ready=[];self.objects={};self.critical={};self.named_events={}
         self.trace=[];self.threads={}
         self.tls_slots=set()
@@ -151,7 +163,7 @@ class Scheduler:
             self.threads[tid]=Thread(tid,self.vm.uc.context_save(),low,high,
                 'suspended' if suspended else 'ready',suspend_count=int(suspended))
         finally:self.vm.uc.context_restore(parent)
-        if not suspended:self.ready.append(tid)
+        if not suspended:self.ready.append(tid);self.wakes=True
         if out_tid:self.vm.put_u32(out_tid,tid)
         return self.handle(dict(type='thread',tid=tid))
 
@@ -159,7 +171,7 @@ class Scheduler:
         thread=self.thread_handle(args[0]);previous=thread.suspend_count
         if previous:
             thread.suspend_count-=1
-            if not thread.suspend_count:thread.state='ready';self.ready.append(thread.tid)
+            if not thread.suspend_count:thread.state='ready';self.ready.append(thread.tid);self.wakes=True
         return previous
 
     def sleep(self,args):
@@ -200,7 +212,7 @@ class Scheduler:
         if obj is None or obj['type']!='event':raise ValueError('Invalid event handle')
         return obj
 
-    def set_event(self,args):self.event(args[0])['signaled']=True;return 1
+    def set_event(self,args):self.event(args[0])['signaled']=True;self.wakes=True;return 1
     def reset_event(self,args):self.event(args[0])['signaled']=False;return 1
 
     def pulse_event(self,args):
@@ -212,7 +224,7 @@ class Scheduler:
         waiters=[tid for tid,thread in self.threads.items() if thread.state=='waiting'
                  and thread.wait['kind']=='objects' and handle in thread.wait['handles']]
         obj['pulsed']=set(waiters if obj['manual'] else waiters[:1])
-        obj['signaled']=False
+        obj['signaled']=False;self.wakes=True
         return 1
 
     def create_mutex(self,args):
@@ -229,7 +241,7 @@ class Scheduler:
         if obj is None or obj['type']!='mutex':raise ValueError('Invalid mutex handle')
         if obj['owner']!=self.current:self.set_error((288,));return 0 # ERROR_NOT_OWNER
         obj['depth']-=1
-        if not obj['depth']:obj['owner']=None
+        if not obj['depth']:obj['owner']=None;self.wakes=True
         return 1
 
     def signaled(self,handle,tid=None):
@@ -286,35 +298,70 @@ class Scheduler:
         critical=self.critical[args[0]]
         if critical['owner']!=self.current or not critical['depth']:raise ValueError('Critical section not owned by this thread')
         critical['depth']-=1
-        if not critical['depth']:critical['owner']=None
+        if not critical['depth']:critical['owner']=None;self.wakes=True
         return 0
 
     def delete_critical(self,args):
         if self.critical[args[0]]['owner'] is not None:raise ValueError('Cannot delete an owned critical section')
         del self.critical[args[0]];return 0
 
+    def _wakeable(self,tid,thread):
+        if thread.state=='sleeping':return thread.wake is not None and thread.wake<=self.vm.elapsed_ms
+        if thread.state!='waiting':return False
+        wait=thread.wait
+        if wait['kind']=='critical':wake=self.critical[wait['address']]['owner'] is None
+        else:
+            states=[self.signaled(h,tid) for h in wait['handles']]
+            wake=all(states) if wait['all'] else any(states)
+        return wake or (wait['deadline'] is not None and wait['deadline']<=self.vm.elapsed_ms)
+
     def refresh(self):
         for tid,thread in self.threads.items():
-            wake=False
-            if thread.state=='sleeping':wake=thread.wake is not None and thread.wake<=self.vm.elapsed_ms
-            elif thread.state=='waiting':
-                wait=thread.wait
-                if wait['kind']=='critical':wake=self.critical[wait['address']]['owner'] is None
-                else:
-                    states=[self.signaled(h,tid) for h in wait['handles']]
-                    wake=all(states) if wait['all'] else any(states)
-                wake=wake or (wait['deadline'] is not None and wait['deadline']<=self.vm.elapsed_ms)
-            if wake:thread.state='ready';self.ready.append(tid)
+            if self._wakeable(tid,thread):thread.state='ready';self.ready.append(tid)
+
+    def others_runnable(self):
+        """Another thread is ready or would wake now."""
+        return any(tid!=self.current and (thread.state=='ready' or self._wakeable(tid,thread))
+                   for tid,thread in self.threads.items())
+
+    def api_returned(self):
+        """Runtime calls this after an API call that returned to its caller.
+        A thread running alone stops here once another can run (solo). Only
+        the calls that release objects or start threads (`wakes`) can make
+        one runnable: time does not move during a slice."""
+        if self.alone and self.wakes:
+            self.wakes=False
+            if self.others_runnable():self.preempted=True;self.vm.uc.emu_stop()
 
     def execute(self,address,instruction_limit):
         root=self.threads[1]
         root.context=self.vm.uc.context_save();root.state='ready';root.wait=None;root.wake=None
         self.vm.uc.reg_write(UC_X86_REG_EIP,address);root.context=self.vm.uc.context_save()
         self.ready=[1]+[tid for tid in self.ready if tid!=1]
-        self.running=True;remaining=instruction_limit
+        self._run(instruction_limit)
+        return self.vm.uc.reg_read(UC_X86_REG_EAX)
+
+    def resume(self,instruction_limit,until):
+        """Continue every guest thread from the state it was left in -- the
+        main thread too, blocked or not -- until `until()` holds. `until` is
+        tested after each wake-up pass, before a thread is chosen, so a wait
+        a release has satisfied never counts as blocked. A game whose main
+        thread never returns (a WinMain past its init) runs this way, a
+        slice at a time. Returns the instructions budgeted."""
+        root=self.threads[1]
+        if root.state=='running':raise RuntimeError('Main thread is already running')
+        if root.state in ('returned','exited'):raise RuntimeError(f'Main thread has {root.state}')
+        if root.state=='stopped':root.state='ready';self.ready=[1]+[tid for tid in self.ready if tid!=1]
+        return instruction_limit-self._run(instruction_limit,until)
+
+    def _run(self,instruction_limit,until=None):
+        """The scheduling loop; returns the instruction budget left."""
+        root=self.threads[1]
+        self.running=True;left=instruction_limit
         try:
             while root.state not in ('returned','exited','stopped'):
                 self.refresh()
+                if until is not None and until():break
                 if not self.ready:
                     deadlines=[t.wake for t in self.threads.values() if t.state=='sleeping' and t.wake is not None]
                     deadlines+=[t.wait['deadline'] for t in self.threads.values() if t.state=='waiting' and t.wait['deadline'] is not None]
@@ -324,14 +371,23 @@ class Scheduler:
                 tid=self.ready.pop(0);thread=self.threads[tid]
                 if thread.state!='ready':continue
                 self.current=tid;self.vm.uc.context_restore(thread.context);thread.state='running'
-                budget=min(self.QUANTUM,remaining)
-                if budget<=0:raise RuntimeError('Guest scheduler instruction-slice budget exhausted')
+                alone=self.solo and not any(self.threads[t].state=='ready' for t in self.ready)
+                budget=0 if alone else min(self.QUANTUM,left)
+                if not alone and budget<=0:raise RuntimeError('Guest scheduler instruction-slice budget exhausted')
                 self.trace.append(dict(tid=tid,clock=self.vm.milliseconds,pc=self.vm.uc.reg_read(UC_X86_REG_EIP)))
-                self.vm.uc.emu_start(self.vm.uc.reg_read(UC_X86_REG_EIP),0,count=budget)
-                remaining-=budget;thread.context=self.vm.uc.context_save()
+                self.alone,self.preempted,self.wakes=alone,False,False
+                try:self.vm.uc.emu_start(self.vm.uc.reg_read(UC_X86_REG_EIP),0,
+                                         timeout=self.SOLO_TIMEOUT if alone else 0,count=budget)
+                finally:self.alone=False
+                left-=budget;thread.context=self.vm.uc.context_save()
                 if self.vm.error:raise self.vm.error
+                if alone and thread.state=='running' and not self.preempted:
+                    raise RuntimeError(f'Thread {tid} ran alone for {self.SOLO_TIMEOUT//1000000} s without '
+                                       f'an API call (pc 0x{self.vm.uc.reg_read(UC_X86_REG_EIP):08x})')
                 if thread.state=='running':thread.state='ready'
-                if thread.state=='ready':self.ready.append(tid)
+                if thread.state=='ready':
+                    if self.preempted:self.refresh()   # the threads it let run go first
+                    self.ready.append(tid)
             self.current=1;self.vm.uc.context_restore(root.context)
-            return self.vm.uc.reg_read(UC_X86_REG_EAX)
+            return left
         finally:self.running=False

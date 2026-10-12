@@ -11,6 +11,7 @@
 #include "dialog.h"
 #include "equip.h"
 #include "gameflow.h"
+#include "gameoptions.h"
 #include "inventory.h"
 #include "logging.h"
 #include "mappane.h"
@@ -1393,7 +1394,7 @@ void TPlayer::Load(RTInputStream is, int32_t version, int32_t objversion)
     // Retail kept these in a member nothing reads; the port restores the HUD
     // from them (TSaveGame).
     if (objversion >= 7)
-        is >> hudwords.sidebarOpen >> hudwords.upperMode >> hudwords.lowerMode >> hudwords.unknown19c;
+        is >> hudwords.sidebarOpen >> hudwords.upperMode >> hudwords.lowerMode >> hudwords.drawerOpen;
 
     levelupstats = {};
     if (objversion >= 8)
@@ -1468,7 +1469,7 @@ void TPlayer::Save(RTOutputStream os)
     for (const TSpellCode& code : knownspells)
         os.WriteBytes(code.data(), kSpellCodeBytes);
 
-    os << hudwords.sidebarOpen << hudwords.upperMode << hudwords.lowerMode << hudwords.unknown19c;
+    os << hudwords.sidebarOpen << hudwords.upperMode << hudwords.lowerMode << hudwords.drawerOpen;
     os << levelupstats[0] << levelupstats[1] << levelupstats[2];
 
     os << team.name.c_str() << team.name2.c_str();
@@ -1631,6 +1632,10 @@ void TPlayerManager::SetMainPlayer(int32_t newplayernum)
 // SetMainPlayer, which ran inside TPlayScreen::Initialize (0x0047a660). The
 // port's session loads a game under the loading screen, so the play screen
 // calls this as it starts.
+//
+// REVSYNC: SetMainPlayerNum @ 0x0051eef0 -- the camera jumps to the player at
+// its next update, then follows it: scrolling to it with SquishyScroll on
+// (flags 12 at 0x0051efda), jumping to it each update with it off (8).
 void TPlayerManager::BindMainPlayerToScreen()
 {
     if (!Player)
@@ -1642,7 +1647,7 @@ void TPlayerManager::BindMainPlayerToScreen()
         AutoMap.BindPlayer(nullptr);            // REVSYNC: 0x0051ef84
         return;
     }
-    MapPane.CenterOnObj(Player);
+    MapPane.CenterOnObj(Player, SquishyScroll ? CENTERON_SCROLL | CENTERON_SNAP : CENTERON_SNAP);
     Player->RefreshEquip();
     Inventory.SetContainer(Player);
     AutoMap.BindPlayer(Player);                 // REVSYNC: 0x0051f03e

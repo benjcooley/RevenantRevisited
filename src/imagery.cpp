@@ -16,6 +16,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include <algorithm>
+#include <iterator>
+
 // Builder array for imagery builder class
 int32_t TImageryBuilder::numimagerytypes = 0;
 PTImageryBuilder TImageryBuilder::builders[MAXIMAGERYTYPES];

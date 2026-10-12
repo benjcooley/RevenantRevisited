@@ -35,6 +35,16 @@ int32_t flen(FILE* f);
 uint32_t tickcount();
   // Returns system ticks (in milliseconds) since system was turned on
 
+// Deterministic runs (--control, --record, --replay; docs/playtest/PLAN.md
+// §6.3): the game reads no wall clock and asks no other thread how it is
+// doing, so a run repeats exactly from its seed and its input.
+void SetDeterministicRun(bool on);
+[[nodiscard]] bool DeterministicRun();
+[[nodiscard]] uint32_t GameTickCount();
+  // The milliseconds game logic reads where retail read GetTickCount: the
+  // wall clock (tickcount), or in a deterministic run the simulation clock
+  // (as the retail emulator's virtual GetTickCount advances with its ticks)
+
 // Prints error, or fatal error message, and exits
 void Error(const char *error, const char *extra = nullptr);
 void FatalError(const char *error, const char *extra = nullptr);

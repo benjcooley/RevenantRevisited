@@ -148,6 +148,11 @@ class TPlayScreen : public TScreen
     void DrawBackground() override;
 
     // ---- Input ---------------------------------------------------------
+    // Who a click at (x, y) goes to, as MouseClick routes it: a modal that
+    // holds the mouse, nobody (a load is under way), the shop drawer, the
+    // HUD, or the world (the map pane, through the runtime mode).
+    enum class EClickRoute { Modal, Ignored, BuySell, Hud, World };
+    [[nodiscard]] EClickRoute ClickRoute(int32_t x, int32_t y);
     void MouseClick(int32_t button, int32_t x, int32_t y) override;
     void MouseMove (int32_t button, int32_t x, int32_t y) override;
     void KeyPress  (int32_t key, bool down)               override;
@@ -224,7 +229,7 @@ class TPlayScreen : public TScreen
       // The tick's frame: the count, the game time and the time of day that
       // follow it (retail's TPlayScreen::Animate; the scenario kata ticks it)
     void SetFixtureState(int32_t frame, bool control, bool demo)
-        { gameframes = frame; sessionstart = 0; sessionframes = 0; controlon = control; demomode = demo; }
+        { gameframes = frame; sessionstart = 0; lastsessionframes = 0; controlon = control; demomode = demo; }
       // Retail A/B fixtures only (retailab_combat.cpp): the frame count and
       // the control / demo flags as a case sets them, without
       // SetControlOn(false)'s input release
@@ -239,6 +244,8 @@ class TPlayScreen : public TScreen
     [[nodiscard]] int32_t TimeOfDay()    const;
     [[nodiscard]] int32_t Daylight()     const;
     [[nodiscard]] int32_t DayTimeFlag()  const;
+    void                   SetTimeOfDay(int32_t minutes);
+      // Debug: jumps the clock to that minute of the current day
 
     // ---- Post-character overlays --------------------------------------
     // Overlay primitives queued by gameplay code (spell sparkles, damage
@@ -258,11 +265,17 @@ class TPlayScreen : public TScreen
     // Borrowed pointer to the owned map renderer. Null before Initialize()
     // and after Close().
     [[nodiscard]] TMapRenderer* MapRenderer() const { return mapRenderer.get(); }
+    // The bottom bar (the belt's boxes, the quick-spell rings); null outside
+    // a game.
+    [[nodiscard]] TBottomBarPane* BottomBar() const { return bottombar.get(); }
 
     // ---- Map input ------------------------------------------------------
     // Whether the map has the pointer at (x, y): no modal holding the mouse,
-    // no load, not over the shop or a HUD panel, no HUD drag. The play
-    // field's clicks, moves and cursor go to the map pane only then.
+    // no load, not over the shop or a panel beside the play field, no HUD
+    // drag. The map's hover cursor and its presses go to it only then (the
+    // side tabs over it keep presses on their buttons, ClickRoute); its
+    // moves and button releases come wherever the pointer is, as retail's
+    // screen hands them to every pane (MouseMove, MouseClick).
     [[nodiscard]] bool MapHasPointer(int32_t x, int32_t y) const;
     // The control map's mode for the player's state (walk, combat, bow,
     // sneak): which binding a key's command comes from.
@@ -322,7 +335,7 @@ class TPlayScreen : public TScreen
     // Game time
     int32_t gameframes        = 0;  // +0x680: frames since this PlayScreen started
     int32_t sessionstart      = 0;  // +0x684: gameframes at the last SetGameTime
-    int32_t sessionframes     = 0;  // +0x688: the game's frames before it (the saved time's)
+    int32_t lastsessionframes = 0;  // +0x688: the game's frames before it (the saved time's)
     int32_t gametime          = 0;  // +0x68c: hundredths of a second, GameFrame() * 100 / 24
     int32_t timeofday         = 0;  // game minutes
 

@@ -108,7 +108,7 @@ ARMOR.DEF numbers over class.def's at load (BindTypeData `0x48c7f0`,
 COMBAT_DATA.md §8), which the port skipped. ARMOR.DEF's cloth is 1 a
 piece: Locke's shirt and pants are armour 2, an Araknid's 8 is taken as 6,
 and a hit lands 6-12 (doubles to 24), as in retail. Ported as
-`TRules::ApplyItemData`; kata D1 checks every weapon and armor type.
+`TRules::BindTypeData`; kata D1 checks every weapon and armor type.
 
 **The combat results' text (fixed 2026-10-11).** The port printed raw
 tags ("[BASEHIT] Locke [BASEDMG]:12 ...") because the arena's INI set

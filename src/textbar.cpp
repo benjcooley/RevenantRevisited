@@ -267,6 +267,20 @@ void TTextBar::AddLine(ELineType type, uint32_t color, const char *text)
     line.ticks = kLineTicks;
     line.text.assign(text, strnlen(text, kTextChars));
     RecomposeAll();
+
+    recent.push_back(line.text);
+    if ((int32_t)recent.size() > kRecentLines)
+        recent.pop_front();
+    ++linesadded;
+}
+
+std::vector<std::string> TTextBar::LinesSince(int64_t seen) const
+{
+    const int64_t first = linesadded - (int64_t)recent.size();
+    std::vector<std::string> out;
+    for (int64_t n = (std::max)(seen, first); n < linesadded; ++n)
+        out.push_back(recent[size_t(n - first)]);
+    return out;
 }
 
 // REVSYNC: CharPress @ 0x0054d4a0 (slot 28), a WM_CHAR code: Enter opens the

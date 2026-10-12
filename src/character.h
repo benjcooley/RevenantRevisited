@@ -244,9 +244,11 @@ class TCharacter : public TComplexObject
     bool Pull(TObjectInstance* inst);
       // Causes character to pull lever
     bool TryUse();
-      // Attempts to use something in the direction character is facing
+      // Uses the nearest container, exit or friendly character in front of
+      // the character (the Use control; retail 0x004d01e0)
     bool TryGet();
-      // Attempts to get something in the direction character is facing
+      // Picks up the nearest item in front of the character (the Get
+      // control; retail 0x004d0430)
     bool Say(const char *string, int32_t wait = -1, const char *anim = nullptr, const char *sound = nullptr);
       // Causes character to blather incessantly about something irrelevant
       // (anim is override for animation to play when saying, nullptr is "say")
@@ -379,6 +381,10 @@ class TCharacter : public TComplexObject
         int32_t tohit, int32_t roll);
       // REVSYNC: 0x004c62b0 -- one character struck by an attack at its impact frame
       // (ResolveAttack calls it for the target and each character in reach)
+    [[nodiscard]] const SCharAttackData *LastAttack() const { return lastattack; }
+      // The attack last started (retail +0x160; ResolveAttack's first tick); null before any
+    [[nodiscard]] bool LastAttackHit() const { return lasthit != 0; }
+      // Whether it struck its target at the impact frame (retail +0x168)
 
   // Info functions specific to characters
     bool IsFighting() { return IsCombat() || IsBowMode(); }
@@ -898,6 +904,8 @@ class TCharacter : public TComplexObject
 
   // combatflash delay
     int32_t combatflashticks = 0;     // retail +0x224 (a blow sets 5; Pulse counts it down)
+
+  // The corpse
 
   // Diagnostic counters. ai_pulse_count increments at every Pulse()
   // entry, ai_ai_count at every AI() entry. The overlay reads these

@@ -75,14 +75,15 @@ extern SSkill SkillTree[NUM_SKILLS];    // Master skill tree
 constexpr int32_t kSpellCodeBytes = 6;
 using TSpellCode = std::array<char, kSpellCodeBytes + 1>;
 
-// The HUD state retail writes into the player record: its globals at save
-// time (DAT_0065d190, DAT_0065d1b8, DAT_0065d1bc, DAT_0065d19c).
+// The HUD state retail writes into the player record: the play screen's
+// flags at save time (TPlayScreen 0x0065caf0 +0x6a0, +0x6c8, +0x6cc, +0x6ac).
+// Written, never read back.
 struct SPlayerHudWords
 {
     int32_t sidebarOpen = 0;    // DAT_0065d190: the sidebar is showing
     int32_t upperMode   = 0;    // DAT_0065d1b8: 0 equip, 1 stats, 2 spellbook
     int32_t lowerMode   = 0;    // DAT_0065d1bc: 0 inventory, 1 map, 2 spell composer
-    int32_t unknown19c  = 0;    // DAT_0065d19c: unidentified (written, never read)
+    int32_t drawerOpen  = 0;    // DAT_0065d19c: the bottom drawer is open (0x0047ebc0, 0x0047ece0)
 };
 
 // The multiplayer team record (retail +0x490, 0x60 bytes). Set from the
@@ -195,6 +196,20 @@ class TPlayer : public TCharacter
       // Rebuilds the modified stats (retail 0x0051c660)
     void AddStatEffect(const char *statline);
       // Starts a stat effect, a STATLINE that may last a TIME (retail 0x0051c2c0)
+
+    // A STATLINE in force (retail +0x358 count, +0x35c {line, expiry} pairs).
+    struct SStatEffect
+    {
+        std::string statline;                       // ends "INITIALIZE" until first applied
+        int32_t expires = -1;                       // play-clock time it ends; -1 never
+    };
+    [[nodiscard]] const std::vector<SStatEffect>& StatEffects() const { return stateffects; }
+    [[nodiscard]] int32_t PlayClock() const { return statetime; }
+      // The play clock the effects expire by (retail +0x370, vtable +0x314; 1/100 s)
+    [[nodiscard]] const std::array<int32_t, 3>& LevelUpStats() const { return levelupstats; }
+      // The two attributes the next level-up raises (0 Strn .. 5 Luck) and the
+      // cursor the Stats page's train buttons write through (retail +0x360,
+      // +0x364, +0x368; 0x0051fe50)
 
     // Experience
     [[nodiscard]] int32_t KillExp(int32_t value);
@@ -484,13 +499,6 @@ class TPlayer : public TCharacter
       // REVSYNC: 0x0051b3f0 -- "torch" with the light in hand (+0x2b8), else "walk"
 
   private:
-    // A STATLINE in force (retail +0x358 count, +0x35c {line, expiry} pairs).
-    struct SStatEffect
-    {
-        std::string statline;                       // ends "INITIALIZE" until first applied
-        int32_t expires = -1;                       // play-clock time it ends; -1 never
-    };
-
     void ApplyStatLine(const char *statline, int32_t effect);
       // Applies a STATLINE to the modified stats; 'effect' is its stat effect, or -1 (retail 0x0051cc40)
     void RemoveStatEffect(int32_t effect);

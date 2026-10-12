@@ -14,6 +14,8 @@
 #include "screen.h"
 #include "sector.h"
 
+#include <vector>
+
 class TMapRenderer;
 enum class EPickRead : uint8_t;
 
@@ -186,6 +188,8 @@ class TMapPane : public TPane
         // Object drag function for mouse
     void GetMouseMapPos(S3DPoint &p, int32_t zoffset = 50);
       // Gets the world position (given character's z pos) that mouse is hovering over
+    void ScreenToMapPos(int32_t x, int32_t y, S3DPoint &p, int32_t zoffset = 50);
+      // The same for any screen pixel: the point under (x, y) at Locke's height + zoffset
     int32_t GetMouseMapAngle();
       // Gets the angle of the mouse from the character's current position
     void UpdateMouseMovement(int32_t x, int32_t y);
@@ -197,8 +201,8 @@ class TMapPane : public TPane
         // last frame put things, for the pick and the pointer's map point
     bool PaneToMapScreen(int32_t x, int32_t y, int32_t& mapx, int32_t& mapy) const;
         // The map-screen point (WorldToScreen's space) under pane pixel
-        // (x, y) as the last frame drew it: retail's (x + posx, y + posy).
-        // False off the map view
+        // (x, y) as the last frame drew it: retail's (x + posx, y + posy),
+        // written past the view's edge too. False off the map view
 
   // Map management (retail Load/Save/ClearCurMap) lives on TMapManager,
   // which owns the loaded sectors in the port.
@@ -225,6 +229,9 @@ class TMapPane : public TPane
       // is true, in which case the value is set immediately.
     SColor &GetAmbientColor() { return ambcolor; }
       // Gets the ambient light color
+    void GetDrawLights(SRect &r, std::vector<TObjectInstance*> &lights);
+      // The lights retail's static light pass draws over screen rect r, in its
+      // order, each with its light-table id (docs/LIGHTING_FIDELITY.md §2.6)
     void SetAmbient(int32_t light, SColor &color, bool stopfade = true)
       { SetAmbientLight(light, stopfade); SetAmbientColor(color, stopfade); }
       // Sets total ambient environment in one shot
@@ -380,12 +387,12 @@ class TMapPane : public TPane
       // may add CENTERON_SCROLL (scroll rather than jump) and CENTERON_SNAP
       // (jump once first); `centeron` passes both, `scrollto` scroll.
     TObjectInstance* GetCenterOnObj() { return centeron.obj; }
+      // Gets centered object
     [[nodiscard]] uint32_t CenterOnFlags() const { return centeron.flags; }
     [[nodiscard]] bool IsFollowingPlayer() const;
       // The camera follows the player
     [[nodiscard]] S3DPoint CameraPos(double fraction) const;
-      // Where the camera looks between ticks: the center, `fraction` of the way from the last tick's
-      // Gets centered object
+      // Where the camera looks: the last tick's center, `fraction` of the way to this tick's
     void CenterOnPos(const S3DPoint& pos, int32_t level, uint32_t flags = 0);
       // Center on a point. REVSYNC: SetCameraPos @ 0x00453940 (flags as above)
     void GetCenterOnPos(S3DPoint& pos, int32_t &level) { pos = centeron.pos; level = centeron.level; }
@@ -501,6 +508,11 @@ class TMapPane : public TPane
         // Gets walk height for a given walk map
     int32_t GetWalkGridHeight(int32_t x, int32_t y);
         // Gets walk height given walk grid x and y
+    [[nodiscard]] bool WalkCellKnown(int32_t x, int32_t y);
+        // Whether GetWalkGridHeight's answer for the cell is the map's: the
+        // window holds its sector, or the current map is loaded (it holds
+        // every sector of the level, so a sector it lacks is no floor).
+        // False only with no map to ask. For the playtest director's map.
     using WalkGridSeam = int32_t (*)(int32_t x, int32_t y);
     static inline WalkGridSeam walkGridSeam = nullptr;
         // Retail A/B fixtures only: when set, it answers every walk cell's
@@ -562,6 +574,11 @@ class TMapPane : public TPane
 
     bool Clicked() { return clicked; }
         // Return whether mouse is clicked down in the mappane or not
+    void SetClickWalk(bool on) { clickwalk = on; }
+    [[nodiscard]] bool ClickWalk() const { return clickwalk; }
+        // Click to walk (docs/playtest/PLAN.md §10): a left click on open
+        // ground walks Locke to it. Not retail; off unless asked for
+        // (--clickwalk, the playtest patch "clickwalk").
 
   // Modes for editor
     void SetMode(void (*tfunc)(S3DPoint), void (*afunc)(), int32_t mode);
@@ -609,6 +626,8 @@ class TMapPane : public TPane
         // The left button's release: use, pick up, walk to, or let go of a held item
     void WalkToward(int32_t x, int32_t y, TObjectInstance* on);
         // An object out of reach: walk toward it, or "too far"
+    void ClickWalkTo(int32_t x, int32_t y);
+        // Click to walk: Locke to the point under (x, y)
     void HoldMoveKey(int32_t key);
         // The right-button walk's held direction (-1: none)
 
@@ -616,6 +635,7 @@ class TMapPane : public TPane
     bool command_window_borrowed = false;
     TSector* sectors[SECTORWINDOWX][SECTORWINDOWY] = {}; // Window borrowed from windowmap (see above)
     TSafeRef<TGameMap> windowmap;                        // Map the sector window borrows from
+    std::vector<TSafeRef<>> lightidholders;              // Lights given a light-table id (GetDrawLights)
     TGameMap::EventListenerId windowlistener = 0;        // Our Unloaded listener on windowmap
     int32_t oldsectorx, oldsectory;                 // Position of sector in last frame
     int32_t sectorx, sectory;                       // Position of sector in current frame
@@ -637,6 +657,7 @@ class TMapPane : public TPane
     int32_t mx, my;                                 // Mouse scrolling
     bool clicked = false;                           // Left press on the map, awaiting its release (retail +0x120)
     bool walking = false;                           // Right-button walk on (retail +0x11c)
+    bool clickwalk = false;                         // SetClickWalk
     int32_t hovercursor = CURSOR_NONE;              // Cursor type for what's under the pointer (retail +0x12c)
     int32_t hoverpickframe = -1;                    // Screen frame of the last pick for it
     int32_t hoverindex = -1;                        // Map index of that pick (-1: nothing), for the log

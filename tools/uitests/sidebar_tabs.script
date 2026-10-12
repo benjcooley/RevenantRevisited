@@ -17,29 +17,29 @@
 #   8. final
 #
 # Tab button screen coords with sidebar+bottom bar open:
-#   strip origin = (396,186); per-button at (399, 188+37*i); width 36, height 35
-#   centers x=417, y in {205, 242, 279, 316, 353, 390}
+#   strip origin = (400,188); per-button at (403, 190+37*i); width 36, height 35
+#   centers x=421, y in {207, 244, 281, 318, 355, 392}
 
 log baseline;
 moveto 100 100 0; pause 400; take_snapshot baseline;
 
 log click_upper_book;
-moveto 417 205 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click upper Book;
+moveto 421 207 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click upper Book;
 
 log click_upper_stats;
-moveto 417 242 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click upper Stats;
+moveto 421 244 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click upper Stats;
 
 log click_upper_equip;
-moveto 417 279 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click upper Equip;
+moveto 421 281 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click upper Equip;
 
 log click_lower_spell;
-moveto 417 316 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click lower Spell;
+moveto 421 318 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click lower Spell;
 
 log click_lower_inv;
-moveto 417 353 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click lower Inv;
+moveto 421 355 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click lower Inv;
 
 log click_lower_map;
-moveto 417 390 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click lower Map;
+moveto 421 392 200; pause 100; left_down; pause 80; left_up; pause 250; take_snapshot click lower Map;
 
 log final;
 pause 200; take_snapshot final

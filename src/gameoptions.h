@@ -25,6 +25,8 @@ extern int32_t GammaLevel;        // GammaLevel, 0..4: the map ambient offset (G
 extern bool    RealTimeLight;     // RealTimeLight: kept and saved; Classic renders the RealTimeLight=No image
 extern bool    CombatFace;        // CombatFace: face the target while moving in combat (TCharacter::Go, ResolveCombat)
 extern bool    NoCombatResults;   // NoCombatResults: kept and saved; combat results aren't printed yet
+extern bool    SquishyScroll;     // SquishyScroll: the camera follows the main player by scrolling to
+                                  // it, not by jumping (TPlayerManager::BindMainPlayerToScreen)
 extern bool    NoGameSpeedLimit;  // "Limit Game Speed" unchecked; this session only, never saved;
                                   // the port's simulation always runs on the 24 Hz tick
 

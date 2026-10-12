@@ -445,18 +445,24 @@ struct TMapRenderer::Impl
     float color[3]     = { 1.0f, 1.0f, 1.0f };
     float ambient_color[3] = { 1.0f, 1.0f, 1.0f };
     float ambient      = 0.15f;
-    // Modern lighting mode only: the scale from AMBLIGHT to the shader
-    // ambient, an art tunable in the Lighting tab (lower = brighter).
-    //   s.ambient = AMBLIGHT * Ambient3D / (ambient_divisor * 100)
-    // Classic mode uses retail's exact mapping instead (classiclighting.cpp,
-    // docs/LIGHTING_FIDELITY.md §2.4).
-    float ambient_divisor = 20.0f;
-    // Ceiling on the summed deferred light (ambient + per-point-lights).
-    // Originally 1.0 to prevent 3D-object white-out from stacked point
-    // lights, but that also caps ambient overbright. Bumped up so the
-    // dim base ambient * dark albedo combo can be pushed brighter
-    // without immediately burning where torches stack. Tunable.
-    float light_ceiling = 1.5f;
+    // Modern lighting mode only: the ambient is retail's tile ambient gain
+    // (AMBLIGHT with the gamma offset, AMBCOLOR scaled to a largest channel
+    // of 1, before the light table's byte truncation) times this
+    // ([Revisited] AmbientScale). docs/lighting/LIGHTING_AB.md §6.4.
+    float ambient_scale = 0.85f;
+    // Modern, areas with day and night: the share of the ambient the sun
+    // takes over at full daylight ([Revisited] SunShare). The sky keeps the
+    // rest; the sun gives it back on faces turned to it (intensity 1 = all
+    // of it), so a sunlit face keeps retail's daylight level.
+    float sun_share = 0.5f;
+    // Modern: the shared scale of tiles and 3D objects ([Revisited]
+    // TileBakedLevel, ToneShoulder, CharacterKeyLight, CharacterLightBoost).
+    float tile_baked_level      = 0.35f;
+    float tone_shoulder         = 0.8f;
+    float character_key_light   = 0.5f;
+    float character_light_boost = 0.25f;
+    float character_light_saturation = 0.5f;
+    float character_retail_light = 1.0f;
     // Retail had no synthesized AO; baked occlusion lived in the tile
     // depth maps. Off by default; on in modern mode.
     bool  ao_enable    = false;
@@ -485,6 +491,8 @@ struct TMapRenderer::Impl
     bool lights_on = true;
     float radius_mul = 1.0f;      // Revisited per-area POINTLIGHTRANGE (1 = authored)
     float intensity_mul = 1.0f;   // Revisited per-area POINTLIGHTINT (1 = authored)
+    std::vector<TObjectInstance*> retailDrawLights;   // Classic: the static light pass's lights, in draw order
+    bool  retailLightOverflowLogged = false;
     int32_t lighting_mode = 0;
     // Current area has a day/night cycle (AREA_DONIGHT); gates the modern sun.
     bool daylight_cycle = false;
@@ -613,9 +621,11 @@ struct TMapRenderer::Impl
         // the physical render target so changing resolution does not widen the
         // world camera view.
         //
-        // The cameraWorld.z * iso_cos30 term keeps a world point at
-        // (cam.x, cam.y, cam.z) projecting to HEIGHT/2 -- i.e. Locke
-        // stays vertically centered on screen as he climbs. The scene
+        // The camera's height term keeps a world point at (cam.x, cam.y,
+        // cam.z) projecting to HEIGHT/2 -- retail's scroll origin is
+        // WorldToScreen(center) less half the pane (0x004539d0) -- as
+        // WorldToScreen rounds it: how far it lifts the camera above its
+        // ground point, about cam.z * cos30. The scene
         // render uses cam_ox/cam_oy (this value) as a screen-space
         // shift for tiles, meshes, and the deferred ortho projection
         // (maprenderer.cpp:418/990/1031/1165/546-549), so overlays must
@@ -628,7 +638,10 @@ struct TMapRenderer::Impl
         WorldToScreen(sectorWorldCenter, sx, sy);
         sx += sectorCenterOx;
         sy += sectorCenterOy;
-        sy += int32_t((int64_t(sectorCameraWorld.z) * 867) / 1000);
+        int32_t ground_x = 0, ground_y = 0, camera_x = 0, camera_y = 0;
+        WorldToScreen(S3DPoint(sectorCameraWorld.x, sectorCameraWorld.y, 0), ground_x, ground_y);
+        WorldToScreen(sectorCameraWorld, camera_x, camera_y);
+        sy += ground_y - camera_y;
     }
     S3DPoint sectorLightPos(const SSectorLight& L) const
     {

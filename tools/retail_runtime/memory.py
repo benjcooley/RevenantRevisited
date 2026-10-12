@@ -69,8 +69,42 @@ class VirtualMemory:
                 self.vm.uc.mem_protect(page,4096,UC_PROT_NONE)
         return 1
 class Heaps:
+    """HeapCreate/Alloc/Free/ReAlloc/Size/Destroy over the runtime's bump
+    allocator. By default a freed block is never handed out again (fine for
+    fixtures). With `reuse` (opt-in: a game that runs on, e.g. the play
+    slot, frees and allocates without end) each heap keeps its freed blocks
+    (`free`: address -> capacity, adjacent ones merged) and an allocation
+    takes the lowest-addressed block that fits, splitting off the rest:
+    deterministic, first fit, stored with the heap so checkpoints and images
+    carry it. A reused block is zeroed only for HEAP_ZERO_MEMORY, as Windows."""
+    ALIGN=16
+
     def __init__(self,vm):
         self.vm=vm;self.heaps={vm.HEAP:dict(maximum=0,flags=0,used=0)};self.blocks={}
+        self.reuse=False
+
+    def _capacity(self,size):
+        return (max(size,1)+self.ALIGN-1)&~(self.ALIGN-1)
+
+    def _take(self,heap,size,zero):
+        free=self.heaps[heap].setdefault('free',{});need=self._capacity(size)
+        for address in sorted(free):
+            capacity=free[address]
+            if capacity<need:continue
+            del free[address]
+            if capacity-need>=self.ALIGN:free[address+need]=capacity-need
+            else:need=capacity
+            if zero:self.vm.write(address,bytes(size))
+            return address,need
+        return None,None
+
+    def _release(self,heap,address,capacity):
+        free=self.heaps[heap].setdefault('free',{})
+        following=address+capacity
+        if following in free:capacity+=free.pop(following)
+        for start,length in list(free.items()):
+            if start+length==address:del free[start];address,capacity=start,length+capacity;break
+        free[address]=capacity
 
     def create(self,args):
         flags,initial,maximum=args
@@ -83,9 +117,12 @@ class Heaps:
         heap,flags,size=args
         if heap not in self.heaps:raise ValueError('Invalid heap handle')
         if flags&~9:raise ValueError('Unsupported heap allocation flags')
-        try:address=self.vm.allocate(size,bool(flags&8))
-        except MemoryError:return 0
-        self.blocks[address]=dict(heap=heap,size=size)
+        address,capacity=self._take(heap,size,bool(flags&8)) if self.reuse else (None,None)
+        if address is None:
+            try:address=self.vm.allocate(size,bool(flags&8))
+            except MemoryError:return 0
+            capacity=self._capacity(size)
+        self.blocks[address]=dict(heap=heap,size=size,capacity=capacity)
         self.heaps[heap]['used']+=size;return address
 
     def free(self,args):
@@ -93,7 +130,9 @@ class Heaps:
         if flags&~1:raise ValueError('Unsupported HeapFree flags')
         block=self.blocks.get(address)
         if not block or block['heap']!=heap:return 0
-        self.heaps[heap]['used']-=block['size'];del self.blocks[address];return 1
+        self.heaps[heap]['used']-=block['size'];del self.blocks[address]
+        if self.reuse:self._release(heap,address,block.get('capacity',self._capacity(block['size'])))
+        return 1
 
     def size(self,args):
         heap,flags,address=args

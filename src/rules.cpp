@@ -792,9 +792,9 @@ bool TRules::LoadFile(const char* fname)
     return true;
 }
 
-// The first object class (by id) with a type of that name, whichever class
-// the caller's type came from; null if none (BindType, ApplyItemData).
-static TObjectClass *ClassOfTypeName(const char *name)
+// The class of a type name, as BindType and BindTypeData find it: the first
+// class (by id) with a type of that name, whichever class the name came from.
+static TObjectClass *TypeClass(const char *name)
 {
     for (int32_t c = 0; c < TObjectClass::NumClasses(); c++)
     {
@@ -808,9 +808,9 @@ static TObjectClass *ClassOfTypeName(const char *name)
 // REVSYNC: TRules::BindTypes @ 0x0048cab0
 // Every type of every object class, by name: a CHARACTER whose name is a
 // player or character type takes that type (BindType 0x0048c930), and a
-// weapon or armor type takes its WEAPON.DEF / ARMOR.DEF numbers
-// (ApplyItemData 0x0048c7f0). A name that is no type keeps -2 and is never
-// returned by GetCharData.
+// weapon or armor type takes its WEAPON.DEF / ARMOR.DEF numbers (BindTypeData
+// 0x0048c7f0). A name that is no type keeps -2 and is never returned by
+// GetCharData.
 void TRules::BindTypes()
 {
     for (int32_t c = 0; c < TObjectClass::NumClasses(); c++)
@@ -823,7 +823,7 @@ void TRules::BindTypes()
             if (const SObjectInfo *info = cl->GetObjType(type))
             {
                 BindType(info->name, type);
-                ApplyItemData(info->name, type);
+                BindTypeData(info->name, type);
             }
         }
     }
@@ -833,10 +833,10 @@ void TRules::BindTypes()
 // The class is the first one (by id) with a type of that name, whichever
 // class the type index came from. Weapons and armor bind too in retail
 // (+0xc4/+0xc8, +0xc0/+0xc4 of their records); the port finds those entries
-// by name instead (GetItemData, ApplyItemData).
+// by name instead (GetItemData).
 void TRules::BindType(const char *name, int32_t objtype)
 {
-    const TObjectClass *cl = ClassOfTypeName(name);
+    const TObjectClass *cl = TypeClass(name);
     const int32_t objclass = cl ? cl->ClassId() : -1;
     if (objclass != OBJCLASS_PLAYER && objclass != OBJCLASS_CHARACTER)
         return;
@@ -852,31 +852,36 @@ void TRules::BindType(const char *name, int32_t objtype)
     }
 }
 
-// REVSYNC: 0x0048c7f0, with TWeaponData 0x0048af30 / TArmorData 0x0048b4a0
-// -- the WEAPON.DEF or ARMOR.DEF entry of a type's name (any case) puts its
-// BASICMODS into the type's class stats, over class.def's: each into the
-// stat named below when the class has one. It's what gives the cloth
-// armor its Protection (class.def 0, ARMOR.DEF 1) and the weapons their
-// prices. The class is the first with a type of that name, as BindType's.
-void TRules::ApplyItemData(const char *name, int32_t objtype)
-{
-    static constexpr std::array<const char *, 8> kWeaponStats =
-        {"EqSlot", "Type", "Damage", "Combining", "Poison", "Value", "DamageType", "MinStrength"};
-    static constexpr std::array<const char *, 8> kArmorStats =
-        {"EqSlot", "Protection", "Combining", "ResistPoison", "Stealth", "Value", "MinStrength", "MinConstitution"};
+// REVSYNC: the class stat each BASICMODS column is written to, in file order:
+// weapons 0x0048af30, armor 0x0048b4a0 (whose loader 0x0048b1a0 stores
+// columns 5 and 6 swapped, and which writes them back by name). A stat the
+// class doesn't define is skipped.
+static constexpr std::array<const char *, SItemData::kNumBasicMods> kWeaponModStats =
+    { "EqSlot", "Type", "Damage", "Combining", "Poison", "Value", "DamageType", "MinStrength" };
+static constexpr std::array<const char *, SItemData::kNumBasicMods> kArmorModStats =
+    { "EqSlot", "Protection", "Combining", "ResistPoison", "Stealth", "Value", "MinStrength", "MinConstitution" };
 
-    TObjectClass *cl = ClassOfTypeName(name);
-    const int32_t objclass = cl ? cl->ClassId() : -1;
+// REVSYNC: TRules::BindTypeData @ 0x0048c7f0
+// A WEAPON or ARMOR type's numbers are its WEAPON.DEF / ARMOR.DEF entry's,
+// not class.def's: the entry of that name (case-blind) writes its BASICMODS
+// over the type's stats. The other stats (SaleType, SwipeFull) keep class.def's
+// values. Retail writes at the type index BindType has just stored in the
+// entry, which is this one.
+void TRules::BindTypeData(const char *name, int32_t objtype) const
+{
+    TObjectClass *cl = TypeClass(name);
+    if (!cl)
+        return;
+    const int32_t objclass = cl->ClassId();
+    if (objclass != OBJCLASS_WEAPON && objclass != OBJCLASS_ARMOR)
+        return;
     const SItemData *item = GetItemData(objclass, name);
     if (!item)
         return;
-    const auto &stats = objclass == OBJCLASS_WEAPON ? kWeaponStats : kArmorStats;
-    for (size_t i = 0; i < stats.size(); i++)
-    {
-        const int32_t statid = cl->FindStat(stats[i]);
-        if (statid >= 0)
-            cl->SetStat(objtype, statid, item->basicmods[i]);
-    }
+
+    const auto &stats = objclass == OBJCLASS_WEAPON ? kWeaponModStats : kArmorModStats;
+    for (size_t mod = 0; mod < stats.size(); mod++)
+        cl->SetStat(objtype, stats[mod], item->basicmods[mod]);
 }
 
 PSClassData TRules::GetClass(char *name)

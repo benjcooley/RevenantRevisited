@@ -36,6 +36,7 @@
 #include "meshextract.h"
 #include "multi.h"
 #include "render_metadata.h"
+#include "inputqueue.h"
 #include "renderer.h"
 #include "revenant.h"
 #include "revutils.h"
@@ -2956,14 +2957,14 @@ void RenderAudioMode()
 // mode's input dispatch, so UI behavior can be driven and verified headlessly
 // (no real input). The script is a timeline: `pause` advances a running clock;
 // `moveto`/`left_down`/`key_down`/etc. emit an event at the current clock +
-// cursor position. Each frame, InputSimTick() fires every event whose timestamp
-// has elapsed (measured against TTime), calling the same HandleMouseMove /
-// HandleMouseClick / HandleKeyPress path real input uses. Coordinates are in
+// cursor position. Each frame, InputSimTick() queues every event whose timestamp
+// has elapsed (measured against TTime) on the input queue, which dispatches it
+// the way it dispatches real input (inputqueue.h). Coordinates are in
 // Classic 640x480 content pixels (the UI test modes letterbox internally).
 // =====================================================================
 enum { MS_MOVE = 0, MS_CLICK, MS_KEY, MS_CHAR, MS_LOG, MS_SNAP };
 
-struct SInputEvent
+struct SScriptEvent
 {
     double      at_ms = 0.0;   // fire time, ms from script start
     int32_t     kind  = MS_MOVE;
@@ -3014,7 +3015,7 @@ int32_t InputSimKeyCode(const std::string& tokIn)
     return 0;
 }
 
-std::vector<SInputEvent> g_inputSimEvents;
+std::vector<SScriptEvent> g_inputSimEvents;
 size_t  g_inputSimNext   = 0;
 double  g_inputSimStartMs = 0.0;   // 0 until the first tick stamps it
 bool    g_inputSimActive = false;
@@ -3049,7 +3050,6 @@ void InputSimStart(const char* script)
     g_inputSimStartMs = 0.0;
     g_inputSimActive  = false;
     g_inputSimLoop    = false;
-    mousebutton       = 0;   // start with no buttons held (drag-state baseline)
     if (!script || !script[0]) return;
 
     // Default glide duration for `moveto` — the cursor animates from its
@@ -3378,9 +3378,9 @@ void SceneCommandsTick() {
 
 namespace TestModes {
 
-// Defined here (in the TestModes namespace) so it can call the dispatch
-// functions directly. Fires all synthetic input events whose timestamp has
-// elapsed since the script started.
+// Queues every synthetic input event whose timestamp has elapsed since the
+// script started; the frame's input drain (AppFrame) dispatches them with the
+// hardware's, the way real input goes.
 void InputSimTick(TScreen* screen)
 {
     if (!screen) return;
@@ -3392,41 +3392,33 @@ void InputSimTick(TScreen* screen)
     while (g_inputSimNext < g_inputSimEvents.size() &&
            g_inputSimEvents[g_inputSimNext].at_ms <= elapsed)
     {
-        const SInputEvent& e = g_inputSimEvents[g_inputSimNext++];
+        const SScriptEvent& e = g_inputSimEvents[g_inputSimNext++];
         switch (e.kind)
         {
         case MS_MOVE:
-            // Drive the shared cursor position so the in-frame game cursor
-            // (TCursorHud, when a mode disables the hardware cursor) follows
-            // the script. Same globals the real mouse handler writes. Pass the
-            // held-button mask so moves between down/up read as a drag.
-            cursorx = e.x; cursory = e.y;
-            screen->MouseMove(mousebutton, e.x, e.y);
+            // The pointer moves with whatever buttons the script holds, so
+            // moves between a down and an up read as a drag.
+            InputQueue.PushMove(e.x, e.y);
             break;
         case MS_CLICK:
-            cursorx = e.x; cursory = e.y;
-            // Mirror the real handler's mousebutton bookkeeping so a held
-            // press persists across subsequent moves (drag support).
             switch (e.button)
             {
-            case MB_LEFTDOWN:   mousebutton |= MB_LEFTDOWN;    break;
-            case MB_LEFTUP:     mousebutton &= ~MB_LEFTDOWN;   break;
-            case MB_RIGHTDOWN:  mousebutton |= MB_RIGHTDOWN;   break;
-            case MB_RIGHTUP:    mousebutton &= ~MB_RIGHTDOWN;  break;
-            case MB_MIDDLEDOWN: mousebutton |= MB_MIDDLEDOWN;  break;
-            case MB_MIDDLEUP:   mousebutton &= ~MB_MIDDLEDOWN; break;
+            case MB_LEFTDOWN:   InputQueue.PushButton(SInputEvent::kButtonLeft,   true,  e.x, e.y); break;
+            case MB_LEFTUP:     InputQueue.PushButton(SInputEvent::kButtonLeft,   false, e.x, e.y); break;
+            case MB_RIGHTDOWN:  InputQueue.PushButton(SInputEvent::kButtonRight,  true,  e.x, e.y); break;
+            case MB_RIGHTUP:    InputQueue.PushButton(SInputEvent::kButtonRight,  false, e.x, e.y); break;
+            case MB_MIDDLEDOWN: InputQueue.PushButton(SInputEvent::kButtonMiddle, true,  e.x, e.y); break;
+            case MB_MIDDLEUP:   InputQueue.PushButton(SInputEvent::kButtonMiddle, false, e.x, e.y); break;
             default: break;
             }
-            screen->MouseClick(e.button, e.x, e.y);
             break;
         case MS_KEY:
-            // e.button = VK code, e.x = 1 (down) / 0 (up). Same path real keys
-            // take; real keyboard is NOT gated, so synthetic + real coexist.
-            screen->KeyPress(e.button, e.x != 0);
+            // e.button = VK code, e.x = 1 (down) / 0 (up). Real keyboard is
+            // NOT gated, so synthetic + real coexist.
+            InputQueue.PushKey(e.button, e.x != 0);
             break;
         case MS_CHAR:
-            // The CHAR event path (revmain's SAPP_EVENTTYPE_CHAR).
-            screen->CharPress(e.button, true);
+            InputQueue.PushChar(e.button);
             break;
         case MS_SNAP:
             // Manual filmstrip capture (--filmstrip=N,0). Captures the LAST

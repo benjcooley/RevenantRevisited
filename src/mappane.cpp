@@ -45,6 +45,7 @@
 #include <time.h>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 extern TEditStatusPane StatusBar;
 extern TConsolePane Console;
@@ -792,12 +793,22 @@ char *Directions[] = { "ne", "e", "se", "s", "sw", "w", "nw", "n", "ne" };
 // Gets the world position (given character's z pos) that mouse is hovering over
 void TMapPane::GetMouseMapPos(S3DPoint &p, int32_t zoffset)
 {
+    ScreenToMapPos(cursorx, cursory, p, zoffset);
+}
+
+// The world point under the screen pixel (x, y) at Locke's height plus
+// `zoffset`: the pointer conversion the right-button walk uses
+// (UpdateMouseMovement @ 0x0044ee00, + 50).
+void TMapPane::ScreenToMapPos(int32_t x, int32_t y, S3DPoint &p, int32_t zoffset)
+{
     S3DPoint curpos;
     Player->GetPos(curpos);
 
-    // The map view sits at the screen's top left: the pointer is in its pixels.
+    // The map view sits at the screen's top left: the pointer is in its
+    // pixels. Retail's x + posx has no bounds: past the view (over the HUD)
+    // the point lies on beyond its edge.
     int32_t mapx = 0, mapy = 0;
-    PaneToMapScreen(cursorx, cursory, mapx, mapy);
+    (void)PaneToMapScreen(x, y, mapx, mapy);
     ScreenToWorld(mapx, mapy, p, curpos.z + zoffset);
 }
 
@@ -1025,8 +1036,10 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
 
 // REVSYNC: MouseClick @ 0x0044f140, outside the editor
 // (docs/gameflow/forensics/MAP_INPUT.md §4). Retail first left a point over
-// the side tabs' controls to them; the play screen's HUD routing does that in
-// the port. Not ported: the stats pane's info (the right button in its info
+// the side tabs' controls to them; the play screen's routing does that in
+// the port (TPlayScreen::ClickRoute). It hands the map every release, as
+// retail's screen did, wherever it lands: the right one ends the walk
+// anywhere, a left one off the view only forgets the press. Not ported: the stats pane's info (the right button in its info
 // mode, a left press on an item, 0x005496a0): the stats pane has no info mode.
 void TMapPane::PlayMouseClick(int32_t button, int32_t x, int32_t y)
 {
@@ -1156,6 +1169,8 @@ void TMapPane::PlayMouseRelease(int32_t x, int32_t y, bool attackcursor)
                 TakenObject = taken.Get();
             }
         }
+        if (!on && onobject == -1 && clickwalk && !Player->IsCombat() && !Player->IsBowMode())
+            ClickWalkTo(x, y);
         return;
     }
 
@@ -1195,6 +1210,24 @@ void TMapPane::PlayMouseRelease(int32_t x, int32_t y, bool attackcursor)
 
         DroppedObject = inst;
     }
+}
+
+// Click to walk (docs/playtest/PLAN.md §10), a patch both games carry for the
+// playtest (retail's named build "clickwalk" patches this release path of
+// MouseClick @ 0x0044f140; CLICKWALK.md §9): a press and release on open
+// ground -- nothing under either, Locke's root neither combat nor the bow,
+// as retail's gates read it -- sends Locke to the point under the release
+// by the right-button walk's conversion (UpdateMouseMovement @ 0x0044ee00:
+// the release's own x, y at Locke's height + 50), through Goto (0x004cedb0),
+// which turns to any of 256 angles and stops on the point. The walk mode is
+// the root's (the run key held: running).
+void TMapPane::ClickWalkTo(int32_t x, int32_t y)
+{
+    S3DPoint target;
+    ScreenToMapPos(x, y, target, 50);
+    const bool going = Player->Goto(target.x, target.y, nullptr);
+    log_info("[mapinput] click walk (%d, %d) to (%d,%d): %s", x, y, target.x, target.y,
+             going ? "going" : "refused");
 }
 
 // Retail 0x0044fd98..0x0044ff40: an object out of reach. Locke walks to the
@@ -1736,11 +1769,29 @@ int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width
     if (maxnum < 1)
         return 0;
 
-    S3DPoint itempos;
-    int32_t sqrwidth = sqr(width);
-    int32_t *dist = new int32_t[maxnum];
-    int32_t found = 0, d;
+  // REVSYNC: 0x00452060 -- the nearest `maxnum`, nearest first: one goes in
+  // before the first as far or farther, the ones after it moving up (retail
+  // memmoves the distances and the ids alike; the 1998 code copied bytes,
+  // not entries, and left the ids where they were).
+    std::vector<int32_t> dist(static_cast<size_t>(maxnum));
+    int32_t found = 0;
+    const auto keep = [&](int32_t d, int32_t id) {
+        int32_t j = 0;
+        while (j < found && d > dist[size_t(j)])
+            j++;
+        if (j >= maxnum)
+            return;
+        const int32_t last = (std::min)(found, maxnum - 1);
+        std::copy_backward(dist.begin() + j, dist.begin() + last, dist.begin() + last + 1);
+        std::copy_backward(array + j, array + last, array + last + 1);
+        dist[size_t(j)] = d;
+        array[j] = id;
+        if (found < maxnum)
+            found++;
+    };
 
+    const int32_t sqrwidth = sqr(width);
+    S3DPoint itempos;
     for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
     {
         TObjectInstance* inst = i;
@@ -1763,24 +1814,9 @@ int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width
                 r = (int32_t)(tr * tr);
             }
 
-            if ((d = (SQRDIST(pos, itempos) - r)) < sqrwidth)
-            {
-                int32_t j;
-                for (j = 0; j < found && d > dist[j]; j++)
-                    ;
-
-                if (j >= maxnum)
-                    continue;
-
-                if (j != found)
-                    memcpy(&(dist[j+1]), &(dist[j]), min(maxnum - 1, found) - j);
-
-                array[j] = inst->GetMapIndex();
-                dist[j] = d;
-
-                if (found < maxnum)
-                    found++;
-            }
+            const int32_t d = SQRDIST(pos, itempos) - r;
+            if (d < sqrwidth)
+                keep(d, inst->GetMapIndex());
         }
 
         else
@@ -1789,29 +1825,10 @@ int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width
             int32_t dy = absval(pos.y - itempos.y);
 
             if (dx <= (width >> 1) && dy <= (height >> 1))
-            {
-                d = sqr(dx) + sqr(dy);
-
-                int32_t j;
-                for (j = 0; j < found && d > dist[j]; j++)
-                    ;
-
-                if (j >= maxnum)
-                    continue;
-
-                if (j != found)
-                    memcpy(&(dist[j+1]), &(dist[j]), min(maxnum - 1, found) - j);
-
-                array[j] = inst->GetMapIndex();
-                dist[j] = d;
-
-                if (found < maxnum)
-                    found++;
-            }
+                keep(sqr(dx) + sqr(dy), inst->GetMapIndex());
         }
     }
 
-    delete dist;
     return found;
 }
 
@@ -1859,6 +1876,11 @@ TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectIns
 {
     if (!mapview)
         return nullptr;
+
+    // A deterministic run picks from the drawn frame, as retail did: what the
+    // hover and a click see then follows the frames, not the GPU's timing.
+    if (DeterministicRun())
+        read = EPickRead::Drawn;
 
     TMapRenderer::SPick pick;
     if (mapview->Pick(screenx, screeny, pick, read) && pick.mesh)
@@ -2115,6 +2137,20 @@ int32_t TMapPane::GetWalkGridHeight(int32_t x, int32_t y)
             return sec->ReturnWalkmap(wx, wy);
 
     return 0;
+}
+
+bool TMapPane::WalkCellKnown(int32_t x, int32_t y)
+{
+    if (walkGridSeam)
+        return true;
+    const int32_t world_sx = x >> (SECTORWSHIFT - WALKMAPSHIFT);
+    const int32_t world_sy = y >> (SECTORHSHIFT - WALKMAPSHIFT);
+    const int32_t sx = world_sx - sectorx;
+    const int32_t sy = world_sy - sectory;
+    if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
+        return true;
+    const TGameMap* m = MapManager.CurrentMap();
+    return m && m->IsLoaded();
 }
 
 // Returns the maximum walk height in the area bounded by 
@@ -3542,6 +3578,51 @@ void TMapPane::DrawUpdateRect(RSRect r, int32_t bgdraw)
         return;
 }
 
+// The static light pass, as the renderer needs it: every light retail's
+// DrawStaticLights would draw over screen rect r (the update rect), in
+// GetUpdateObjs order (REVSYNC: GetUpdateObjs @ 0x0045f800 -- the sector
+// window row by row, each sector's objects in order; a light is in when its
+// light rect meets r), each given its light-table id as it is drawn
+// (TObjectInstance::AcquireLightId, DrawLight 0x00471930). The order decides
+// both which colours take the four ids and, per pixel, which light's colour
+// shows: the last one drawn over it (docs/LIGHTING_FIDELITY.md §2.6).
+//
+// Retail gave an id back when its light's sector left the window
+// (DeleteSector -> OffScreen); the port's map manager keeps sectors past
+// the window, so a light holding an id outside the window gives it back here.
+void TMapPane::GetDrawLights(SRect &r, std::vector<TObjectInstance*> &lights)
+{
+    auto in_window = [this](const TSector* sector) {
+        for (int32_t y = 0; y < SECTORWINDOWY; ++y)
+            for (int32_t x = 0; x < SECTORWINDOWX; ++x)
+                if (sector && sectors[x][y] == sector)
+                    return true;
+        return false;
+    };
+    const auto left = std::remove_if(lightidholders.begin(), lightidholders.end(), [&](const TSafeRef<>& ref) {
+        TObjectInstance* inst = ref.Get();
+        if (!inst)
+            return true;                    // deleted: its destructor gave the id back
+        if (in_window(inst->GetSector()))
+            return false;
+        inst->ReleaseLightId();
+        return true;
+    });
+    lightidholders.erase(left, lightidholders.end());
+
+    lights.clear();
+    for (TMapIterator i(&r, CHECK_RECT|CHECK_LIGHT|CHECK_MOVING|CHECK_INVIS|CHECK_NOINVENT); i; i++)
+    {
+        TObjectInstance* inst = i.Item();
+        if (!inst->IsLight() || inst->GetLightIntensity() == 0)
+            continue;
+        if (inst->GetLightDef()->lightid == -1)
+            lightidholders.push_back(TSafeRef<>(inst));
+        inst->AcquireLightId();
+        lights.push_back(inst);
+    }
+}
+
 void TMapPane::GetUpdateObjs(SRect &r)
 {
     UpdateObjs.Clear();
@@ -3919,8 +4000,11 @@ void TMapPane::UpdateActiveWindow()
     BindWindow(map);
 }
 
-// Where the camera looks this frame: the center, moved `fraction` of the way
-// from the previous tick's (the center steps at 24 Hz).
+// Where the camera looks this frame: the previous tick's center, moved
+// `fraction` of the way to this tick's (the center steps at 24 Hz). At the
+// tick that is retail's view: TMapPane::Pulse (0x00454390) takes the pane's
+// current scroll as the frame's origin (+0x78) before the scroll this tick's
+// UpdateMapPos asked for comes in, so retail drew each tick one center behind.
 S3DPoint TMapPane::CameraPos(double fraction) const
 {
     const double f = std::clamp(fraction, 0.0, 1.0);
@@ -4011,7 +4095,9 @@ void TMapPane::Animate(bool draw)
 
     // Each frame copies back the ids around the pointer; the hover reads the
     // latest copy, taken where the pointer was a frame or two ago, rather
-    // than wait on the GPU for this frame's (a click reads it exactly).
+    // than wait on the GPU for this frame's (a click reads it exactly). A
+    // deterministic run reads the drawn frame at once (OnObject), retail's
+    // synchronous pick.
     mapview->SetPickPoint(x, y);
 
     const int32_t frame = CurrentScreen ? CurrentScreen->FrameCount() : 0;

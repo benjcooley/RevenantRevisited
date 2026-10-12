@@ -64,6 +64,7 @@ struct vs_out {
     float  scene_z;
     float3 retail_color;
     float retail_mode;
+    float height;          // above the instance's origin (its base), world units
 };
 vertex vs_out _main(vs_in in [[stage_in]],
                     constant mesh_params& p [[buffer(0)]]) {
@@ -104,6 +105,7 @@ vertex vs_out _main(vs_in in [[stage_in]],
         o.scene_z = scene_z_n;
         o.retail_color = retail_color;
         o.retail_mode = in.retail_mode;
+        o.height = 0.0;
         return o;
     }
 
@@ -134,6 +136,7 @@ vertex vs_out _main(vs_in in [[stage_in]],
     o.scene_z = scene_z_n;
     o.retail_color = retail_color;
     o.retail_mode = in.retail_mode;
+    o.height = wp.z - in.w2.w;
     return o;
 }
 )MSL";
@@ -151,6 +154,7 @@ struct vs_out {
     float  scene_z;
     float3 retail_color;
     float retail_mode;
+    float height;          // above the instance's origin (its base), world units
 };
 struct fs_out { float4 albedo  [[color(0)]];
                 float4 normal  [[color(1)]];
@@ -178,7 +182,10 @@ fragment fs_out _main(vs_out in [[stage_in]],
     float3 N = normalize(in.wnormal);
     fs_out o;
     o.albedo  = c;
-    o.normal  = float4(N * 0.5 + 0.5, in.retail_mode > 0.5 ? 2.0 : 0.0);
+    // Surface class in .a: 2 a retail-lit effect, else a mesh: 0 or below,
+    // minus its height above its base (the modern light pass lights a 3D
+    // object at its base).
+    o.normal  = float4(N * 0.5 + 0.5, in.retail_mode > 0.5 ? 2.0 : -max(in.height, 0.0));
     o.scene_z = float4(in.scene_z, 0.0, 0.0, 1.0);
     o.obj_id  = in.obj_id;
     return o;
@@ -200,6 +207,7 @@ struct vs_out {
     float  scene_z;
     float3 retail_color;
     float retail_mode;
+    float height;          // above the instance's origin (its base), world units
 };
 fragment void _main(vs_out in [[stage_in]],
                     texture2d<float> albedo_tex [[texture(0)]],
@@ -234,6 +242,7 @@ struct vs_out {
     float  scene_z;
     float3 retail_color;
     float retail_mode;
+    float height;          // above the instance's origin (its base), world units
 };
 fragment float4 _main(vs_out in [[stage_in]],
                       texture2d<float> albedo_tex [[texture(0)]],
@@ -258,7 +267,7 @@ fragment float4 _main(vs_out in [[stage_in]],
     int vm = int(p.settings.x);
     if (vm == 1) return float4(c.rgb, c.a);
     if (vm == 3) return float4(N * 0.5 + 0.5, c.a);
-    surface_light s = shade_surface(c.rgb, in.wpos, N, true, 1.0, 1.0, p);
+    surface_light s = shade_surface(c.rgb, in.wpos, N, true, max(in.height, 0.0), 1.0, 1.0, p);
     if (int(p.settings.z) == 0 && in.retail_mode > 0.5) s.lit = c.rgb;
     if (vm == 4) return float4(s.points, c.a);
     if (vm == 6) return float4(float3(s.sun_shadow), c.a);

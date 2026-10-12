@@ -516,7 +516,7 @@ every cloth piece Protection 0, ARMOR.DEF gives it 1, so Locke's starting
 shirt and pants are armour 2 (an Araknid's bite of 8 is taken as 6), and
 prices come from the .DEF files (a Short Sword: class.def 100, WEAPON.DEF
 195). The port skipped this step until 2026-10-11 (found by arena A1b:
-Locke took the full bite); it is `TRules::ApplyItemData`, and kata D1
+Locke took the full bite); it is `TRules::BindTypeData`, and kata D1
 dumps every weapon and armor type's stats after binding (`itemstats`, the
 original `0x48af30` / `0x48b4a0` running over stand-in class tables).
 

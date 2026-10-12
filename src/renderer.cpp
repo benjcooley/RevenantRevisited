@@ -90,7 +90,8 @@ constexpr int32_t kLightUniformVec4s =
     + 4                                 // shadow, shadow_dir, shadow_world_dir, normal_lighting
     + 1                                 // selected_obj_id
     + kClassicModelVec4s
-    + 1;                                // point_model
+    + 1                                 // point_model
+    + 1;                                // modern_model
 constexpr int32_t kLightUniformFloats = kLightUniformVec4s * 4;
 
 // Floats per mesh instance row: world rows w0..w3, tint, obj_id (RGBA8 as floats).
@@ -114,7 +115,7 @@ void DescribeLightUniformBlock(sg_shader_uniform_block_desc& ub)
         { "plight_pos", kPL }, { "plight_col", kPL },
         { "shadow", 1 }, { "shadow_dir", 1 }, { "shadow_world_dir", 1 },
         { "normal_lighting", 1 }, { "selected_obj_id", 1 },
-        { "classic_model", kClassicModelVec4s }, { "point_model", 1 },
+        { "classic_model", kClassicModelVec4s }, { "point_model", 1 }, { "modern_model", 1 },
     };
     ub.size = kLightUniformVec4s * 16;
     int32_t i = 0;
@@ -3638,6 +3639,9 @@ void TRenderer::InitShadowPipeline()
     sh.fs.images[1].name         = "depth_tex";
     sh.fs.images[1].image_type   = SG_IMAGETYPE_2D;
     sh.fs.images[1].sampler_type = SG_SAMPLERTYPE_FLOAT;
+    sh.fs.images[2].name         = "id_tex";
+    sh.fs.images[2].image_type   = SG_IMAGETYPE_2D;
+    sh.fs.images[2].sampler_type = SG_SAMPLERTYPE_FLOAT;
     sh.label = "renderer.shadow.shader";
     shadow_shader = sg_make_shader(&sh);
 
@@ -3737,6 +3741,7 @@ void TRenderer::RunShadowPass()
         bind.vertex_buffers[0] = composite_vbuf;
         bind.fs_images[0]      = color_target;
         bind.fs_images[1]      = scene_z_target;
+        bind.fs_images[2]      = id_target;      // kObjFlagNoShadow surfaces don't occlude
         sg_apply_bindings(&bind);
 
         float u[28] = {};
@@ -3892,7 +3897,7 @@ void TRenderer::PackLightUniforms(float* u) const
     u[o++] = light.dir[0]; u[o++] = light.dir[1]; u[o++] = light.dir[2]; u[o++] = light.intensity;
     u[o++] = light.color[0]; u[o++] = light.color[1]; u[o++] = light.color[2]; u[o++] = light.ambient;
     u[o++] = light.ambient_color[0]; u[o++] = light.ambient_color[1];
-    u[o++] = light.ambient_color[2]; u[o++] = light.light_ceiling;
+    u[o++] = light.ambient_color[2]; u[o++] = 0.0f;   // ambient_col.w: unused
     u[o++] = float(light.view_mode);
     u[o++] = float(light.plight_count);
     u[o++] = float(light.mode);
@@ -3925,8 +3930,8 @@ void TRenderer::PackLightUniforms(float* u) const
     u[o++] = 0.0f;
     u[o++] = light.normal_lighting_hardness;
     u[o++] = light.sun_shadow_bias_wu;
-    u[o++] = 0.0f;
-    u[o++] = 0.0f;
+    u[o++] = light.character_light_saturation;
+    u[o++] = light.character_retail_light;
     // selected_obj_id packed into RGBA8 channels for the outline shader.
     // 0 means "no selection -- skip outline".
     u[o++] = float((selected_obj_id >>  0) & 0xFFu) / 255.0f;
@@ -3946,6 +3951,8 @@ void TRenderer::PackLightUniforms(float* u) const
     u[o++] = light.retail_modern_gain_per_mult;
     u[o++] = light.retail_modern_range_scale;
     u[o++] = cl.mesh_map_lights ? 1.0f : 0.0f;
+    for (float v : light.modern_model)
+        u[o++] = v;
     assert(o == kLightUniformFloats);
 }
 
@@ -4459,10 +4466,6 @@ void TRenderer::SetAmbientColor(float r, float g, float b)
     light.ambient_color[2] = b;
 }
 
-void TRenderer::SetLightCeiling(float ceiling)
-{
-    light.light_ceiling = (ceiling > 0.0f) ? ceiling : 0.0f;
-}
 
 void TRenderer::SetAmbientOcclusion(bool enable, float radius_px, float strength,
                                     float bias, float max_dist_wu)
@@ -4563,6 +4566,25 @@ void TRenderer::SetRetailLightModernScale(float gain_per_mult, float range_scale
 {
     light.retail_modern_gain_per_mult = gain_per_mult;
     light.retail_modern_range_scale   = range_scale;
+}
+
+void TRenderer::SetModernModel(float tile_baked_level, float tone_shoulder,
+                               float character_key, float character_boost)
+{
+    light.modern_model[0] = tile_baked_level;
+    light.modern_model[1] = tone_shoulder;
+    light.modern_model[2] = character_key;
+    light.modern_model[3] = character_boost;
+}
+
+void TRenderer::SetCharacterRetailLight(float amount)
+{
+    light.character_retail_light = amount;
+}
+
+void TRenderer::SetCharacterLightSaturation(float saturation)
+{
+    light.character_light_saturation = saturation;
 }
 
 void TRenderer::SetClassicLightModel(const SClassicLightModel& model)

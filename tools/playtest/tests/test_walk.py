@@ -1,0 +1,158 @@
+import os
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(HERE))
+from host import Host  # noqa: E402
+from inputs import Bindings, InputState, Plan, chord  # noqa: E402
+from jev import Jev  # noqa: E402
+from walk import USE_REACH, Memory, WalkGrid, Walker, game_distance, screen_direction  # noqa: E402
+
+BINDINGS = Bindings({'Run': chord('R')})
+
+
+class Picks:
+    """A Decisions stub that picks a given option, else the first."""
+
+    def __init__(self, prefer=None):
+        self.prefer, self.bodies = prefer, []
+
+    def __call__(self, url, body, headers):
+        self.bodies.append(body)
+        options = list(body['questions']['where']['criteria'])
+        choice = next((o for o in options if self.prefer and o.startswith(self.prefer)), options[0])
+        return {'answers': {'where': {'type': 'choice', 'choice': choice, 'confidence': 0.9,
+                                      'probabilities': {o: float(o == choice) for o in options}}}}
+
+
+def walker(prefer=None) -> Walker:
+    os.environ.setdefault('OPEN_ROUTER_KEY', 'test-key')
+    return Walker(Jev(post=Picks(prefer)), BINDINGS)
+
+
+class Pieces(unittest.TestCase):
+    def test_screen_directions(self):
+        self.assertEqual(screen_direction(1, 0), 'right')
+        self.assertEqual(screen_direction(0, -5), 'up')
+        self.assertEqual(screen_direction(-3, 3), 'down and left')
+
+    def test_walk_grid_lines(self):
+        heights = [10] * 16
+        heights[1 * 4 + 2] = 0                       # a hole at cell (2, 1)
+        heights[3 * 4 + 1] = 60                      # a ledge at cell (1, 3)
+        grid = WalkGrid({'origin': [0, 0], 'cell': 16, 'w': 4, 'h': 4, 'heights': heights})
+        # cell (x, y) is centred on (16x, 16y), as the game's walk cells are
+        self.assertTrue(grid.open_line((0, 0), (0, 48)))
+        self.assertFalse(grid.open_line((0, 16), (48, 16)))     # through the hole at (2, 1)
+        self.assertFalse(grid.open_line((0, 48), (32, 48)))     # up the ledge at (1, 3)
+        self.assertFalse(grid.open_line((0, 0), (200, 0)))      # off the grid: unknown
+
+    def test_memory(self):
+        memory = Memory()
+        memory.note({'player': {'level': 2, 'pos': [600, 300, 0]}})
+        self.assertTrue(memory.seen(2, (700, 400)))
+        self.assertFalse(memory.seen(2, (900, 300)))
+        self.assertFalse(memory.seen(1, (600, 300)))
+
+
+class GameRules(unittest.TestCase):
+    def test_distance_is_the_games(self):
+        self.assertEqual(game_distance((6280, 4338), (6258, 4434)), 98)       # retail: "You are too far away."
+        self.assertGreater(game_distance((6280, 4338), (6258, 4434)), USE_REACH)
+        self.assertEqual(game_distance((0, 0), (300, 400)), 500)              # halved once to fit the table
+        self.assertEqual(game_distance((0, 0), (1001, 0)), 1000)              # and the low bits go
+
+    def test_a_ground_click_on_an_object_is_nudged_off_it(self):
+        walker = Walker(None, None, under=lambda x, y: 5 if abs(x - 100) < 6 and abs(y - 100) < 6 else None)
+        self.assertEqual(walker.uncovered((100, 100)), (100, 92))
+        walker = Walker(None, None, under=lambda x, y: 5)
+        self.assertIsNone(walker.uncovered((100, 100)))
+
+
+class WithTheReferenceHost(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.host = Host([sys.executable, HERE / 'fakehost.py'], Path(self.tmp.name), timeout=30)
+        self.host.hello()
+        self.host.start('newgame', seed=1)                     # player at (1001, 2000)
+
+    def tearDown(self):
+        self.host.close()
+        self.tmp.cleanup()
+
+    def to_the_wall(self) -> InputState:
+        plan = Plan()
+        plan.hold(0, chord('RIGHT'))
+        plan.release(140, chord('RIGHT'))
+        self.host.step(141, plan.events())                    # x = 1141, the wall at 1150
+        return plan.state
+
+    def test_destinations_include_people_and_open_ground_only(self):
+        w = walker()
+        obs = self.host.observe(walkgrid=320)
+        found = {d.key: d for d in w.destinations(self.host, obs, WalkGrid(obs['walkgrid']))}
+        self.assertIn('near:5', found)                          # a person: walked up to by the ground beside them
+        self.assertIn("walk up to 'Sardok'", found['near:5'].words)
+        self.assertNotIn('obj:5', found)
+        ground = [k for k in found if k.startswith('ground:')]
+        self.assertEqual(len(ground), 15)
+        self.assertNotIn('ground:0:far', ground)                # 160 right: past the wall at 1150
+        self.assertIsNone(self.host.pick(*found['near:5'].screen)['object'])     # ground, not Sardok
+        state = self.to_the_wall()
+        obs = self.host.observe(walkgrid=320)
+        found = {d.key for d in w.destinations(self.host, obs, WalkGrid(obs['walkgrid']))}
+        self.assertNotIn('ground:0:near', found)                # right, beyond the wall
+        self.assertIn('ground:4:near', found)                   # left, open
+        self.assertIsInstance(state, InputState)
+
+    def test_choose_and_walk_to_ground(self):
+        w = walker(prefer='ground:2:far')
+        obs = self.host.observe(walkgrid=320)
+        dest = w.choose('explore', obs, w.destinations(self.host, obs, WalkGrid(obs['walkgrid'])))
+        self.assertEqual(dest.key, 'ground:2:far')
+        result, obs, _ = w.walk(self.host, InputState(), dest)
+        self.assertEqual(result, 'arrived')
+        x, y = obs['player']['pos'][:2]
+        self.assertLessEqual(abs(x - 1001) + abs(y - 1840), 8)    # within Goto's snap
+
+    def test_walk_into_the_wall_stalls(self):
+        state = self.to_the_wall()
+        w = walker()
+        obs = self.host.observe()
+        result, obs, _ = w.walk(self.host, state, self._ground(obs, 520, 240))   # 200 units right, past the wall
+        self.assertEqual(result, 'stalled')
+        self.assertEqual(obs['player']['pos'][0], 1149)
+
+    def test_walk_up_to_a_person_then_talk(self):
+        w = walker()
+        approach = next(d for d in w.destinations(self.host, self.host.observe(), None) if d.key == 'near:5')
+        result, obs, state = w.walk(self.host, InputState(), approach)
+        self.assertEqual(result, 'arrived')
+        self.assertLessEqual(abs(obs['player']['pos'][1] - 1860), 8)                # beside him
+        talk = next(d for d in w.destinations(self.host, obs, None) if d.key == 'talk:5')
+        self.assertTrue(talk.use and talk.person)
+        result, obs, _ = w.walk(self.host, state, talk)
+        self.assertEqual(result, 'talked')
+        self.assertIn('Sardok says: Welcome, Revenant.', obs['messages'])
+        # just talked to: not offered again, so the director can't loop on him
+        self.assertNotIn('talk:5', {d.key for d in w.destinations(self.host, self.host.observe(), None)})
+
+    def test_a_refused_walk_sits_out(self):
+        state = self.to_the_wall()
+        w = walker()
+        dest = self._ground(self.host.observe(), 520, 240)
+        dest = type(dest)('ground:0:near', dest.words, dest.screen, dest.world)
+        self.assertIn(w.walk(self.host, state, dest)[0], ('refused', 'stalled'))   # 8 units, then the wall
+        self.assertNotIn('ground:0:near', {d.key for d in w.destinations(self.host, self.host.observe(), None)})
+
+    def _ground(self, obs, x, y):
+        from walk import Destination
+        picked = self.host.pick(x, y)
+        return Destination('ground:test', 'test', (x, y), tuple(picked['pos']))
+
+
+if __name__ == '__main__':
+    unittest.main()

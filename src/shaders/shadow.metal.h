@@ -76,9 +76,19 @@ static float sample_scene_depth(texture2d<float> depth_tex, float2 uv) {
                     uint(clamp(uv.y * float(h), 0.0, float(h - 1))));
     return depth_tex.read(p).r;
 }
+// The id target's flag bits (renderer.h kObjFlag*, in the alpha byte):
+// 0x10 is kObjFlagNoShadow.
+static bool casts_no_shadow(texture2d<float> id_tex, float2 uv) {
+    uint w = id_tex.get_width();
+    uint h = id_tex.get_height();
+    uint2 q = uint2(uint(clamp(uv.x * float(w), 0.0, float(w - 1))),
+                    uint(clamp(uv.y * float(h), 0.0, float(h - 1))));
+    return (uint(id_tex.read(q).a * 255.0 + 0.5) & 0x10u) != 0u;
+}
 fragment float _main(vs_out in [[stage_in]],
                      texture2d<float> albedo_tex [[texture(0)]],
                      texture2d<float> depth_tex  [[texture(1)]],
+                     texture2d<float> id_tex     [[texture(2)]],
                      sampler smp                [[sampler(0)]],
                      constant params& p         [[buffer(0)]]) {
     float4 alb = albedo_tex.sample(smp, in.uv);
@@ -113,6 +123,7 @@ fragment float _main(vs_out in [[stage_in]],
         if (suv.x < 0.0 || suv.x > 1.0 || suv.y < 0.0 || suv.y > 1.0) break;
         float drs = sample_scene_depth(depth_tex, suv);
         if (drs >= 0.9999) continue;
+        if (casts_no_shadow(id_tex, suv)) continue;      // kObjFlagNoShadow: effects
         float scene_z_wu = drs * p.vp.w + p.vp.z;
         float ray_z_wu = interpolate_ray_depth(ray_z0_wu, ray_z1_wu, a, p);
         float depth_delta_wu = scene_z_wu - ray_z_wu;

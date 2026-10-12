@@ -237,6 +237,86 @@ worker:
             self.assertEqual(wait(fresh),0);self.assertEqual(wait(fresh),258)
             self.assertEqual(close(fresh),1);self.assertEqual(close(fresh),0)
 
+    def test_resume_continues_a_blocked_main_thread_until_its_condition(self):
+        # A main thread that never returns (a game loop): stopped at its
+        # loop, then run a wait at a time; host-set events release it.
+        vm=Runtime(BASELINE);state=vm.allocate(8)
+        event=vm.call(api(vm,'CreateEventA'),(0,0,0,0));vm.put_u32(state,event)
+        code=assemble(vm,f'''
+main:
+    mov ebx,[esp+4]
+loop:
+    push 0xffffffff
+    push dword [ebx]
+    call [0x{slot(vm,'WaitForSingleObject'):x}]
+    inc dword [ebx+4]
+    jmp loop
+''')
+        vm.call(code,(state,),stop_address=code+4)   # at `loop`, past `mov ebx,[esp+4]`
+        main=vm.scheduler.threads[1]
+        self.assertEqual(main.state,'stopped')
+        blocked=lambda:main.state=='waiting' and main.wait['handles']==[event]
+        for expected in (0,1,2):
+            vm.scheduler.resume(1000000,blocked)
+            self.assertEqual((main.state,vm.u32(state+4)),('waiting',expected))
+            vm.scheduler.set_event((event,))
+
+    def test_solo_thread_yields_where_an_api_call_lets_another_run(self):
+        # main: SetEvent(worker's event), then count to 50000 and finish;
+        # the worker records main's count when it runs. Quantum scheduling
+        # lets main run on to the end of its slice; solo stops main at the
+        # SetEvent's return, so the worker sees 0. Each policy repeats.
+        seen={}
+        for solo in (False,True,True):
+            vm=Runtime(BASELINE);vm.scheduler.solo=solo;block=vm.allocate(16)
+            code=assemble(vm,f'''
+main:
+    push ebx
+    mov ebx,[esp+8]
+    push 0
+    push 0
+    push 0
+    push 0
+    call [0x{slot(vm,'CreateEventA'):x}]
+    mov [ebx],eax
+    push 0
+    push 0
+    push ebx
+    push worker
+    push 0x10000
+    push 0
+    call [0x{slot(vm,'CreateThread'):x}]
+    mov [ebx+12],eax
+    push 0
+    call [0x{slot(vm,'Sleep'):x}]
+    push dword [ebx]
+    call [0x{slot(vm,'SetEvent'):x}]
+count:
+    inc dword [ebx+4]
+    cmp dword [ebx+4],50000
+    jb count
+    push 0xffffffff
+    push dword [ebx+12]
+    call [0x{slot(vm,'WaitForSingleObject'):x}]
+    pop ebx
+    ret 4
+worker:
+    mov eax,[esp+4]
+    push eax
+    push 0xffffffff
+    push dword [eax]
+    call [0x{slot(vm,'WaitForSingleObject'):x}]
+    pop ecx
+    mov eax,[ecx+4]
+    mov [ecx+8],eax
+    ret 4
+''')
+            vm.call(code,(block,),instruction_limit=10000000)
+            seen.setdefault(solo,[]).append(vm.u32(block+8))
+            self.assertEqual(vm.u32(block+4),50000)
+        self.assertEqual(seen[True],[0,0])
+        self.assertGreater(seen[False][0],0)
+
     def test_deadlock_and_busy_worker_budget_are_explicit(self):
         vm=Runtime(BASELINE);event=vm.call(api(vm,'CreateEventA'),(0,0,0,0))
         with self.assertRaises(GuestDeadlock):vm.call(api(vm,'WaitForSingleObject'),(event,0xffffffff))

@@ -66,6 +66,7 @@ __pycache__/
 /recon/retail_asm/baseline
 /recon/retail_asm/experiments
 /recon/retail_asm/runtime
+/recon/retail_asm/variants
 /build-merge/
 .venv/
 *.pyc

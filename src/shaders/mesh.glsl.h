@@ -39,6 +39,7 @@ out vec4  v_tint;
 out float v_scene_z;
 out vec3 v_retail_color;
 out float v_retail_mode;
+out float v_height;        // above the instance's origin (its base), world units
 void main() {
     // w0..w3 are rows of a 4x4 world matrix (backend-neutral layout).
     vec4 ph = vec4(pos, 1.0);
@@ -68,6 +69,7 @@ void main() {
         v_scene_z = scene_z_n;
         v_retail_color = retail_color;
         v_retail_mode = retail_mode;
+        v_height = 0.0;
         return;
     }
 
@@ -96,6 +98,7 @@ void main() {
     v_scene_z = scene_z_n;
     v_retail_color = retail_color;
     v_retail_mode = retail_mode;
+    v_height = wp.z - w2.w;
 }
 )GLSL";
 
@@ -108,6 +111,7 @@ in vec4  v_tint;
 in float v_scene_z;
 in vec3 v_retail_color;
 in float v_retail_mode;
+in float v_height;
 uniform sampler2D albedo_tex;
 layout(location = 0) out vec4 o_albedo;
 layout(location = 1) out vec4 o_normal;
@@ -131,7 +135,10 @@ void main() {
     if (c.a < 0.01) discard;
     vec3 N = normalize(v_wnormal);
     o_albedo  = c;
-    o_normal  = vec4(N * 0.5 + 0.5, v_retail_mode > 0.5 ? 2.0 : 0.0);
+    // Surface class in .a: 2 a retail-lit effect, else a mesh: 0 or below,
+    // minus its height above its base (the modern light pass lights a 3D
+    // object at its base).
+    o_normal  = vec4(N * 0.5 + 0.5, v_retail_mode > 0.5 ? 2.0 : -max(v_height, 0.0));
     o_scene_z = vec4(v_scene_z, 0.0, 0.0, 1.0);
     o_obj_id  = vec4(0.0, 0.0, 0.0, 0.0);   // Phase 1: empty id
 }
@@ -148,6 +155,7 @@ in vec4  v_tint;
 in float v_scene_z;
 in vec3 v_retail_color;
 in float v_retail_mode;
+in float v_height;
 uniform sampler2D albedo_tex;
 void main() {
     vec4 texel = texture(albedo_tex, v_uv);
@@ -177,6 +185,7 @@ in vec4  v_tint;
 in float v_scene_z;
 in vec3 v_retail_color;
 in float v_retail_mode;
+in float v_height;
 uniform sampler2D albedo_tex;
 out vec4 frag_color;
 void main() {
@@ -199,7 +208,7 @@ void main() {
     int vm = int(settings.x);
     if (vm == 1) { frag_color = vec4(c.rgb, c.a); return; }
     if (vm == 3) { frag_color = vec4(N * 0.5 + 0.5, c.a); return; }
-    surface_light s = shade_surface(c.rgb, v_wpos, N, true, 1.0, 1.0);
+    surface_light s = shade_surface(c.rgb, v_wpos, N, true, max(v_height, 0.0), 1.0, 1.0);
     if (int(settings.z) == 0 && v_retail_mode > 0.5) s.lit = c.rgb;
     if (vm == 4) { frag_color = vec4(s.points, c.a); return; }
     if (vm == 6) { frag_color = vec4(vec3(s.sun_shadow), c.a); return; }

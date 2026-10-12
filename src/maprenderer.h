@@ -14,13 +14,16 @@
 #include "debugui.h"
 
 struct S3DPoint;
+struct SRevisitedSettings;
 class TGameMap;
 
 // How a pick reads the frame's ids (TMapRenderer::Pick). Exact: at the point,
 // waiting on the GPU when the last copy was taken elsewhere (a click).
 // Latest: the last copy wherever it was taken -- the pointer a frame or two
-// ago -- never waiting (the hover cursor).
-enum class EPickRead : uint8_t { Exact, Latest };
+// ago -- never waiting (the hover cursor). Drawn: the last drawn frame, read
+// at once, never a copy: which frame a copy holds depends on when the GPU
+// finished it, which a deterministic run can't depend on.
+enum class EPickRead : uint8_t { Exact, Latest, Drawn };
 
 class TMapRenderer
     : public IDebugTabContributor
@@ -115,6 +118,11 @@ class TMapRenderer
     // Lighting model pushed to the renderer every frame: 0 = Classic
     // (retail), 1 = modern. Seeded from [Revisited] LightingMode.
     void SetLightingMode(int32_t mode);
+
+    // The modern model's settings ([Revisited]: sun, ambient scale, ceiling,
+    // AO, sun shadows, normals). This renderer re-sends its lighting state
+    // to TRenderer every frame, so they are kept here.
+    void ApplyLightingSettings(const SRevisitedSettings& settings);
 
     // Whether the current area has a day/night cycle (AREA_DONIGHT: the area
     // defines night ambient values). The modern model's sun only exists in
@@ -232,11 +240,13 @@ class TMapRenderer
     void SetPickPoint(int32_t x, int32_t y);
     // The pick at (x, y): that copy when it was taken at (x, y) under the
     // current draw list, else a direct read of the last drawn frame. With
-    // EPickRead::Latest, the copy wherever it was taken, and false with none.
+    // EPickRead::Latest, the copy wherever it was taken, and false with none;
+    // with EPickRead::Drawn, always the direct read.
     [[nodiscard]] bool Pick(int32_t x, int32_t y, SPick& out, EPickRead read = EPickRead::Exact) const;
     // The map-screen point (WorldToScreen's space, TObjectInstance::
     // GetScreenPos's) under a viewport pixel, as the last frame drew it:
-    // retail's (x + posx, y + posy). False outside the viewport. Exact for
+    // retail's (x + posx, y + posy), which holds past the viewport's edge
+    // too (the pointer over the HUD). False outside the viewport. Exact for
     // the orthographic camera at any zoom; the perspective camera is not
     // linear and only approximates.
     [[nodiscard]] bool ScreenToMapScreen(int32_t screen_x, int32_t screen_y,
@@ -244,6 +254,10 @@ class TMapRenderer
     // Its inverse: the viewport pixel a map-screen point lands on in the last
     // drawn frame (it may lie outside the viewport). False with no view.
     [[nodiscard]] bool MapScreenToScreen(float map_x, float map_y, float& screen_x, float& screen_y) const;
+    // The same to the nearest whole pixel, false as well when that falls
+    // outside the viewport.
+    [[nodiscard]] bool MapScreenToScreen(int32_t map_x, int32_t map_y,
+                                         int32_t& screen_x, int32_t& screen_y) const;
     // The map view's size in viewport pixels (the last frame's).
     void GetViewportSize(int32_t& w, int32_t& h) const;
 

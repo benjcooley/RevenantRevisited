@@ -40,6 +40,8 @@ class TMoney : public TObjectInstance
     virtual void Save(RTOutputStream os);
         // Saves data to the sector
 
+    bool AddToMap() override;
+        // REVSYNC: 0x00516660 (vtable 0x8c). The pile's size in its state first
     bool MergeInto(TObjectInstance* newowner) override;
         // REVSYNC: 0x00515b50. Joins newowner's gold pile
     SInvIcon InventoryIcon() override;

@@ -205,7 +205,8 @@ typedef TPointerArray<SClassData, 16, 16> TClassDataArray;
 // REVSYNC: a WEAPON.DEF / ARMOR.DEF entry (retail records of 0xd0 / 0xcc
 // bytes, loaders 0x0048ac30 / 0x0048b1a0). Retail binds an entry to the
 // WEAPON or ARMOR object type of the same name (0x0048c930); the port looks
-// it up by that name.
+// it up by that name. TRules::BindTypes copies its BASICMODS over the type's
+// class.def stats (0x0048c7f0).
 struct SItemData
 {
     bool Load(const char *aname, TToken &t);
@@ -213,7 +214,8 @@ struct SItemData
 
     std::string name;
     std::string description;                // DESCRIPTION: a dialog tag
-    std::array<int32_t, 8> basicmods{};     // BASICMODS, in file order (the comment row above each)
+    static constexpr size_t kNumBasicMods = 8;
+    std::array<int32_t, kNumBasicMods> basicmods{};  // BASICMODS, in file order (the comment row above each)
     std::string statline;                   // STATLINE as retail stores it (PlayerStats::ReadStatLine); empty when none
 };
 
@@ -363,7 +365,7 @@ class TRules
       // Loads the six rules files (retail 0x0048b990)
     void BindTypes();
       // Binds every CHARACTER to the object type of its name, and gives every
-      // weapon and armor type its WEAPON.DEF / ARMOR.DEF numbers (retail 0x0048cab0)
+      // WEAPON and ARMOR type its WEAPON.DEF / ARMOR.DEF numbers (retail 0x0048cab0)
     bool LoadFile(const char* fname);
       // Internal: parses one .def through the shared tag loop
 
@@ -412,9 +414,8 @@ class TRules
   private:
     void BindType(const char *name, int32_t objtype);
       // One type of BindTypes: the CHARACTER of that name (retail 0x0048c930)
-    void ApplyItemData(const char *name, int32_t objtype);
-      // One type of BindTypes: its WEAPON.DEF / ARMOR.DEF BASICMODS into its
-      // class stats (retail 0x0048c7f0)
+    void BindTypeData(const char *name, int32_t objtype) const;
+      // One type of BindTypes: its BASICMODS over its class stats (retail 0x0048c7f0)
 
     PlayerStats::TStatLevels statlevels;    // STATLEVEL tables (rules.def)
     std::vector<SItemData> weapons;         // WEAPON.DEF entries

@@ -172,6 +172,39 @@ REVENANT_SAVE_PATH=/tmp/rev-save ASAN_OPTIONS=halt_on_error=0 \
   ./build-asan/Revenant --quickstart --headless --snapwarmup=120 --snap=/tmp/qs.png
 ```
 
+## Playtest sessions: control, record, replay
+
+The port as a playtest host (docs/playtest/PLAN.md §6, PROTOCOL.md;
+`src/playtest.h`). Every session is a deterministic run
+(`DeterministicRun()`): no wall clock, no GPU timing, area music as a
+NOSOUND retail, whole levels loaded in the tick they're needed.
+
+- `--control=stdio [--headless] [--clickwalk] [--control-pace=24]
+  [--watch-frames=DIR]`: JSON Lines on stdin/stdout, lockstep. The game
+  boots on the director's `start`; a frame runs only while a `step` has
+  ticks left. stdout carries the protocol alone (the console log is off;
+  `revenant.log` has everything, with `[control] t=N <cmd>` and
+  `[input] t=N {...}` lines). Without `--headless` the window shows each
+  stepped frame and keeps the last one up between steps, under the
+  director's `caption`.
+- `--record=<bundle> --seed=N --quickstart[=<slot>]`: records a session
+  played at the display's rate (`timing: frames`, each frame's exact time
+  step), or with `--fixedstep` in lockstep. Works with `--input-script`.
+- `--replay=<bundle> --verify --headless`: boots from the bundle's start
+  (slot, seed, INI, patches), replays, compares the check lines and prints
+  `replay: N ticks, no divergence, draws D` or `replay: diverged at t=T:
+  {field: [recorded, replayed]}`; exit 1 on a divergence, 2 when the
+  session can't start.
+
+To bisect a divergence, compare the per-tick `[playtest] t=... draws=...`
+debug lines of the recording's and the replay's logs for the first tick
+whose draw count differs, then run both with `--combattrace=<file>
+--combattrace-rng=FROM:TO` (game frames; the log's `gameframes`): every
+random draw in that window with the code address that asked for it.
+
+`tools/playtest/smoke/port_smoke.py` runs both kinds of recording and
+their verified replays.
+
 ## lldb
 
 On this machine `DevToolsSecurity -status` reports *Developer mode is

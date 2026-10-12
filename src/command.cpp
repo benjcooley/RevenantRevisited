@@ -4396,8 +4396,52 @@ COMMAND(CmdHideResponse)
 
 // ----- owner: savegame (load/save orchestration) -----
 
-COMMAND(CmdLoadGame) { return CmdNotPorted("loadgame", 0x00428540, t); }
-COMMAND(CmdSaveGame) { return CmdNotPorted("savegame", 0x004285b0, t); }
+// A save slot's name for loadgame / savegame: the token's text, quoted or
+// not, at most 127 characters (retail copies the token's text, then
+// WhiteGet 0x00479580). False without one.
+static bool SlotNameParam(TToken &t, char (&name)[128])
+{
+    if (t.Type() != TKN_TEXT && t.Type() != TKN_IDENT && t.Type() != TKN_NUMBER)
+        return false;
+    strncpyz(name, t.Text(), sizeof(name));
+    t.WhiteGet();
+    return name[0] != '\0';
+}
+
+// REVSYNC: loadgame @ 0x00428540 -- the slots rescanned (0x0048d260), the
+// named one found (0x0048d6d0); a name no slot has says "Invalid Game",
+// else "Loading game..." and the play screen loads it at the start of its
+// next frame (RequestLoad 0x0047e770, announced on the text bar).
+COMMAND(CmdLoadGame)
+{
+    char name[128];
+    if (!SlotNameParam(t, name))
+        return CMD_BADPARAMS;
+    ::SaveGame.RefreshSlots();
+    if (::SaveGame.FindSlot(name) < 0)
+    {
+        Output("Invalid Game\n");
+        return 0;
+    }
+    Output("Loading game...\n");
+    GameFlow.Session().RequestLoad(name);
+    return 0;
+}
+
+// REVSYNC: savegame @ 0x004285b0 -- the name (127 characters at most) is
+// saved to at the start of the play screen's next frame (RequestSave
+// 0x0047e810). Retail's editor wrote the module's newgame.sav for the name
+// "newgame"; the port has no such save and writes a slot of that name.
+COMMAND(CmdSaveGame)
+{
+    char name[128];
+    if (!SlotNameParam(t, name))
+        return CMD_BADPARAMS;
+    Output(stricmp(name, "newgame") == 0 ? "Saving \"newgame.sav\" file to current module\n"
+                                          : "Saving game...\n");
+    GameFlow.Session().RequestSave(name);
+    return 0;
+}
 
 // ----- owner: world + character (movement, combat, inventory, objects) -----
 
@@ -4498,7 +4542,13 @@ COMMAND(CmdPlayMovie)
 }
 COMMAND(CmdStopAutoMapGen) { return CmdNotPorted("samap", 0x00425420, t); }
 COMMAND(CmdSwapCDTrack) { return CmdNotPorted("swapcdtrack", 0x00428b90, t); }
-COMMAND(CmdTimeOfDay) { return CmdNotPorted("timeofday", 0x00427a80, t); }
+// REVSYNC: CmdTimeOfDay @ 0x00427a80 -- prints the minute of the day.
+COMMAND(CmdTimeOfDay)
+{
+    Output("At the tone, the time will be %d\n", PlayScreen.TimeOfDay());
+    t.WhiteGet();
+    return 0;
+}
 
 // ----- owner: deferred (multiplayer, editor tooling) -----
 // (The buy/sell family is in cmd_buysell.cpp.)

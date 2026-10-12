@@ -1148,9 +1148,8 @@ class TObjectInstance : protected SObjectDef
         // `invitem` (GetInvImage); when null, falls back to frame 0 of the inventory
         // animation (GetInvAnimation). Items shipped with only `invanim` (potions etc.)
         // were invisible in the port until this fallback landed.
-    virtual bool IsInventoryItem();
-        // Inventory-eligible iff InventoryImage() would return non-null (matches retail's
-        // semantics: a baked invitem OR an invanim with at least one frame).
+    virtual bool IsInventoryItem() const;
+        // An item: an object of an item class (OF_INVENTORY), carried or on the map
     virtual int32_t FindState(const char *name, int32_t pcnt = -1) const { return imagery ? imagery->FindState(name, pcnt) : -1; }
         // Find a state in the object's imagery ('pcnt' picks among "NN:" variants; -1 rolls one)
     virtual int32_t FindTransitionState(const char *from, const char *to, int32_t pcnt = -1) const { return imagery ? imagery->FindTransitionState(from, to, pcnt) : -1; }
@@ -1228,6 +1227,10 @@ class TObjectInstance : protected SObjectDef
       // Gets the light flags
     PSLightDef GetLightDef() { return &lightdef; }
       // Returns light data for object
+    int32_t AcquireLightId();
+      // The light's light-table id (0-3), allocated when it is first drawn
+    void ReleaseLightId();
+      // Gives the light-table id back (off screen, out of the sector window, deleted)
     int32_t GetIllumination(TObjectInstance* oi);
       // Get the amount of illumination from this light to this particular object
     int32_t GetShadow() { return shadow; }

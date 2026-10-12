@@ -291,8 +291,10 @@ Answer inline (or in chat) and the owning doc gets updated.
 81. Retail's drawer close (`0x0047ecc0` / `0x0047ece0`) closes whatever the
     bottom drawer holds. `LoadGame` calls it, so an in-game load would
     close the HUD's bottom bar (belt, quick spells) until the player opens
-    it again, and so would `hideresponse`. Was that seen in play? The port
-    closes only the shop there for now.
+    it again, and so would `hideresponse`. Was that seen in play? *Seen in
+    the emulator (2026-10-11): an in-game load leaves the bar closed and
+    the side panel's tabs as they were. The port does the same now; only
+    whether it was intended remains.*
 82. After a shop's Exit the drawer stays closed: the bottom bar does not
     come back until Lower Panel (B). Intended, or was the bar meant to
     return with the shop's close?
@@ -315,11 +317,16 @@ Answer inline (or in chat) and the owning doc gets updated.
     ever considered?
 88. Buying with a full pack does nothing and says nothing. Was a line
     planned (there is a no-gold line but no no-room line)?
-89. Hruthford stocks the Bracelet of Fortune and the Ivory Pendant for
+89. ~~Hruthford stocks the Bracelet of Fortune and the Ivory Pendant for
     0 gp: their class.def `Value` is 0 (most jewelry is, and is also
     SaleType 1). Were jewelry prices still to be filled in, or meant to
     come from ARMOR.DEF's BASICMODS value column (which the shop never
-    reads)?
+    reads)?~~ Settled from the code: at load, BindTypes writes every
+    ARMOR.DEF / WEAPON.DEF entry's BASICMODS over its type's class.def
+    stats (`0x0048c7f0`), Value included, so the shop reads ARMOR.DEF's
+    prices: 750 and 500 in the emulator. The 0 gp was the port's, which
+    hadn't made the copy ([../playtest/FINDINGS.md](../playtest/FINDINGS.md)
+    F6).
 123. The first shop visit of a game that goes straight to Sell lists
      nothing: `BuySellAddbuyitem` lists the customer's items, the customer
      is only set by `buysellscreen` (after the add lines), and the shop's

@@ -128,19 +128,31 @@ uint16_t UniqueTypeID;
 // * Map/Screen Conversion Utils *
 // *******************************
 
+// REVSYNC: WorldToScreen @ 0x0046d7a0 (also inlined in the object's screen
+// position, 0x0046eb40). Retail projects through the float matrix at
+// 0x005d4740: x - y across, x / 2 + y / 2 - 0.867f * z down, truncated once
+// (__ftol). The 1998 form truncated (x + y) / 2 and z * 867 / 1000 apart,
+// which put about half of all points a pixel off. 0.867f is exactly
+// 14545846 / 2^24, so the sum is exact in 64-bit integers, and truncating it
+// gives the x87 result: the same as 0x0046d7a0 over 7200 points in the
+// emulator (an FPU left at single precision, as a D3D device may set it,
+// would round about 1 point in 70 the other way).
+namespace {
+constexpr int64_t kScreenYOne = int64_t(1) << 24;
+constexpr int64_t kScreenYPerZ = 14545846;      // 0.867f * 2^24 (0x005d475c, negated)
+}
+
 void WorldToScreen(const S3DPoint& pos, int32_t &x, int32_t &y)
 {
     // 2:1
     x = pos.x - pos.y;
-    y = ((pos.x + pos.y) / 2) - (int32_t)((pos.z * MYSTERYVAL1) / MYSTERYVAL2);
+    y = (int32_t)(((int64_t(pos.x) + pos.y) * (kScreenYOne / 2) - pos.z * kScreenYPerZ) / kScreenYOne);
         // the screen z is actually pos.z * cos(30), cos(30) = .866
 }
 
 void WorldToScreen(const S3DPoint& pos, S3DPoint& spos)
 {
-    // 2:1
-    spos.x = pos.x - pos.y;
-    spos.y = ((pos.x + pos.y) / 2) - (int32_t)((pos.z * MYSTERYVAL1) / MYSTERYVAL2);
+    WorldToScreen(pos, spos.x, spos.y);
     spos.z = (uint16_t)(WORLDZOFFSET - (int32_t)(pos.z / 2) - (int32_t)((pos.x + pos.y) * MYSTERYVAL1 / MYSTERYVAL2));
     //spos.z = (uint16_t)(WORLDZOFFSET - (int32_t)(pos.z * 2560 / 5120) - (int32_t)((pos.x + pos.y) * 4434 / 5120));
         // Z must be figured out based on the plates being tilted at a 30 degree angle
@@ -750,11 +762,7 @@ TObjectInstance::~TObjectInstance()
         lightdef.lightindex = -1;
     }
 
-    if (lightdef.lightid != -1)
-    {
-        FreeLightIndex(lightdef.lightid);
-        lightdef.lightid = -1;
-    }
+    ReleaseLightId();
 
     if (objclass == -1)
         return;
@@ -1884,6 +1892,28 @@ void TObjectInstance::NextFrame()
         anim->SetNewState(false);
 }
 
+// REVSYNC: TObjectInstance::DrawLight @ 0x00471930 (0x004719af..0x004719cf)
+// -- a light drawn without a light-table id gets one from NewLightIndex
+// (0x0041d890): one of the four colours the DLS light byte can name
+// (docs/LIGHTING_FIDELITY.md §2.6). Retail also re-asked on a full redraw
+// (the pane's dirty flag), after RedrawAll had cleared every id's use.
+int32_t TObjectInstance::AcquireLightId()
+{
+    if (lightdef.lightid == -1)
+        lightdef.lightid = NewLightIndex(lightdef.color, lightdef.multiplier);
+    return lightdef.lightid;
+}
+
+// REVSYNC: FreeLightIndex @ 0x0041d9e0, from OffScreen and the destructor.
+void TObjectInstance::ReleaseLightId()
+{
+    if (lightdef.lightid != -1)
+    {
+        FreeLightIndex(lightdef.lightid);
+        lightdef.lightid = -1;
+    }
+}
+
 void TObjectInstance::OnScreen()
 {
     if (NeedsAnimator())
@@ -1915,11 +1945,7 @@ void TObjectInstance::OffScreen()
         Scene3D.DeleteLight(lightdef.lightindex);
         lightdef.lightindex = -1;
     }
-    if (lightdef.lightid != -1)
-    {
-        FreeLightIndex(lightdef.lightid);
-        lightdef.lightid = -1;
-    }
+    ReleaseLightId();
 }
 
 // Retail-faithful inventory-image lookup.
@@ -1965,7 +1991,7 @@ PTBitmap TObjectInstance::InventoryImage()
 // image" (1998). Characters have an icon in every state since the imagery's
 // icon falls back to state 0 (0x0040ce60), so the image test made every NPC
 // an item: the hand cursor, and a click picked them up instead of talking.
-bool TObjectInstance::IsInventoryItem()
+bool TObjectInstance::IsInventoryItem() const
 {
     return (flags & OF_INVENTORY) != 0;
 }
@@ -4205,7 +4231,7 @@ uint32_t GenerateUniqueID()
 {
     uint32_t UniqueID;
     uint32_t r = (uint32_t)random(0, 255);
-    uint32_t t = tickcount() & 255;
+    uint32_t t = GameTickCount() & 255;
 
     UniqueID = (r << 24) | (t << 16) | UniqueTypeID;
 
