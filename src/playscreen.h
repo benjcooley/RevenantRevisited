@@ -178,6 +178,10 @@ class TPlayScreen : public TScreen
     void PlayMovie(const char* path);
     [[nodiscard]] bool PlayingMovie() const { return movieplaying; }
     void               SetControlOn(bool on);
+    using ControlSeam = void (*)(bool on);
+    static inline ControlSeam controlSeam = nullptr;
+      // Retail A/B fixtures only: answers SetControlOn (retail 0x0047c580),
+      // which Baez's fall calls each tick
 
     void MultiUpdate() { multidirty = true; }
       // Marks the multipane-overhang region dirty so the next composite

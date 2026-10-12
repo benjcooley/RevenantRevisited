@@ -150,12 +150,12 @@ class TComplexObject : public TObjectInstance
         // else desired, not transitioning
         // Returns whether the object is in their root state or not
 
-    void Try(const char *state)
-        { PTActionBlock ab = new TActionBlock(state); ab->angle = GetFace(); SetDesired(ab); }
-        // Trys to change to the given state
-    int32_t Force(const char *state)
-        { PTActionBlock ab = new TActionBlock(state); ab->angle = GetFace(); return ForceCommand(ab); }
-        // Forces the given state
+    void Try(const char *state);
+        // REVSYNC: 0x004111a0 -- wants the given state (an ANIMATE block facing
+        // the facing); a refused one is dropped
+    int32_t Force(const char *state);
+        // REVSYNC: 0x00429990 -- forces the given state, unless the doing block
+        // holds priority over a desired one (COM_EXECUTING then)
     // this is a hack               ---v
     bool IsDoing(const char *state) const { return doing ? doing->Is(state) : false; }
         // Returns true if currently doing the given state

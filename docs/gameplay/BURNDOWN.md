@@ -89,12 +89,12 @@ UI side is in [../ui/BURNDOWN.md](../ui/BURNDOWN.md) B.6/B.7. Game-state side li
 
 Demo 1 only has Araknids. Boss work is for the full game.
 
-- `[ ]` **H.1 Solifuge AI** — TODO stub at [character.cpp:2435](../../src/character.cpp#L2435).
-- `[ ]` **H.2 Jhaga AI** — same stub.
-- `[ ]` **H.3 Baez AI** — same stub.
-- `[ ]` **H.4 Yhagoro AI** — same stub.
+- `[x]` **H.1 Solifuge AI** — 2026-10-11: the stun, the sky walk, the brood, the landing slam ([src/bossai.cpp](../../src/bossai.cpp), forensics [forensics/BOSS_AI.md](forensics/BOSS_AI.md) §3).
+- `[x]` **H.2 Jhaga AI** — 2026-10-11: the teleports round four waypoints, the fireballs and the fire wind (§4).
+- `[x]` **H.3 Baez AI** — 2026-10-11: the crowd, the stuns, the fake death, the walk to the table and the throw (§2).
+- `[x]` **H.4 Yhagoro AI** — 2026-10-11: walking or fighting by his health (§5).
 
-Each needs reading the retail behavior out of recon/. Defer until after Demo 1 is playable end-to-end.
+All four are retail's AI_PerMonster (`0x004c9b70`), held to it by kata C3c (`melee-boss`, [COMBAT_DOJO.md](COMBAT_DOJO.md)). Left: retail's EndFighting (`0x004d3fd0`; Baez's fall calls it on the player, the port's is 1998's, a seam in the kata), the blue tint's look in the renderer (TintMaterials sets the materials; the VFX track checks them drawn).
 
 ## Risks / unknowns
 

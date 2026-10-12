@@ -2090,6 +2090,11 @@ void TPlayScreen::SetDemoMode(bool on)
 // own handlers, so nothing held keeps the player moving into a cutscene.
 void TPlayScreen::SetControlOn(bool on)
 {
+    if (controlSeam)
+    {
+        controlSeam(on);
+        return;
+    }
     controlon = on;
     if (on)
     {

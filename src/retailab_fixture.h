@@ -314,7 +314,17 @@ class IFixtureChar
     // The tick's own state (kata C6, melee_attack.py PULSESTATE), the object
     // and character flags it sets, a player's clock and level-up picks.
     virtual void WritePulseState(JsonOut& j) = 0;
+    // The bosses (kata C3c): AI_PerMonster on this character, its kind and
+    // state (retail +0x280 / +0x284), where a MoveTo heads.
+    virtual void RunPerMonster() = 0;
+    virtual int32_t& MonsterKind() = 0;
+    virtual TBossState& Boss() = 0;
+    virtual void WriteMoveTo(JsonOut& j) const = 0;     // "movetopos", "movepos"
 };
+
+// Kata C3c: CreateAnimator recorded and answered with a fixture animator
+// (retail's seam at 0x0046e8b0 records it and puts a stand-in at +0x58).
+inline bool seamCreateAnimator = false;
 
 // When set, the fixture characters answer DeleteFromInventory as a seam.
 inline bool inventorySeams = false;
@@ -750,6 +760,26 @@ class TFixtureChar : public Base, public IFixtureChar
             j.Key("levelup").Begin('[').Value(this->LevelUpPick(0)).Value(this->LevelUpPick(1))
                 .Value(this->LevelUpPick(2)).End(']');
         j.End('}');
+    }
+
+    void RunPerMonster() override { this->AIPerMonster(); }
+    int32_t& MonsterKind() override { return this->monsterkind; }
+    TBossState& Boss() override { return this->bossstate; }
+    void WriteMoveTo(JsonOut& j) const override
+    {
+        j.Field("movetopos", this->movetopos ? 1 : 0);
+        j.Key("movepos").Begin('[').Value(this->movepos.x).Value(this->movepos.y).Value(this->movepos.z).End(']');
+    }
+
+    bool CreateAnimator() override
+    {
+        if (!seamCreateAnimator)
+            return Base::CreateAnimator();
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "CreateAnimator").FieldString("who", who).End('}');
+        Seam(j.str());
+        this->AddComponent(std::make_unique<TFixtureAnimator>(this, who));
+        return true;
     }
 
     void ResetStats(const JsonValue& spec) override

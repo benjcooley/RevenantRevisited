@@ -34,6 +34,22 @@ field names (data_parse.py's layouts) -- and their attack bookkeeping
 - `ai` AI `0x4c8b60` (one tick). A character's `aistate` gives its AI
   state: `lookat` (+0x234, a name), `lastpos` (+0x23c), `waypointticks`
   (+0x248); NetOwner reads 1 (`0x676838`, single player).
+- `per-monster` (kata C3c, BOSS_AI.md): `ticks` ticks of AI_PerMonster
+  `0x4c9b70` (tick k on game frame `frame` + k), each followed by a `Tick`
+  record. A character's `boss` gives its state (+0x284, by BOSS_FIELDS'
+  names; a buffer of the kind's size, the rest zero; Baez's `watchers` are
+  the global crowd `0x66caac`, names or null); the case's `props` are the
+  map's other objects ({name, type, class, pos, id, states}: a name at
+  +0x38, a type at +0x4c, SetState through the shared seam, ResetFlags
+  `0x472e90` as original); `paneobjects` the names the pane's walk gives
+  (`0x44cf80`, recorded `PaneObjects`); `made` the characters NewObject
+  hands out in turn (their ids; with none left an id no object has).
+  GetInstance `0x452690` answers the ids of the case's characters (but
+  `made` ones not yet handed out) and props. Seams recorded: EndFighting
+  `0x4d3fd0`, SetControl `0x47c580`, Tint / Untint `0x4d6a30` / `0x4d6b40`,
+  CreateAnimator `0x46e8b0` (a stand-in animator at +0x58). SetCameraObject
+  `0x4538d0` runs as original; the dump gives the camera (MapPane +0xdc,
+  +0xd8). A case's `bossworld` gives an `ai` call the same world.
 - `pulse` (kata C6, CHARACTER_PULSE.md): `ticks` ticks of the character's
   Pulse (TCharacter `0x4c1bb0`, TPlayer `0x518aa0`). Tick k runs on game
   frame `frame` + k, game time `gametime` + k * 100 / 24 (PlayScreen
@@ -115,7 +131,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from guest import (AB, G_PLAYSCREEN, LITERAL_OBJSTATS, OBJSTAT_IDS, Boundaries, CombatWorld, call,  # noqa: E402
+from guest import (AB, G_PLAYSCREEN, LITERAL_OBJSTATS, MALLOC, OBJSTAT_IDS, Boundaries, CombatWorld, call,  # noqa: E402
                    flag_names, s32, serve, start, write_fields, write_text)
 from data_parse import (A_IMPACTS, A_NUMIMPACTS, ATTACK_BODY, ATTACK_HEAD, ATTACK_MAGIC, C_ATTACKS,  # noqa: E402
                         C_IMPACTS, C_NUMIMPACTS, CA_MAGICATTACK, CHAR_FIELDS, IMPACT_FIELDS, IMPACT_SIZE)
@@ -187,6 +203,29 @@ EXP_CALLS = ('kill-exp', 'exp-kill', 'exp-skill', 'exp-stealth', 'add-skill-exp'
 TICKING_CALLS = ('pulse', 'scenario') + EXP_CALLS
 EYE_HEIGHT = 50                                  # LIGHTINGCHARHEIGHT (CanSeeCharacter's eyes)
 
+# Kata C3c, the bosses (BOSS_AI.md): AI_PerMonster and what it reaches.
+PER_MONSTER, PANE_ITER = 0x4c9b70, 0x44cf80      # thiscall (); iterator init thiscall, 5 args, ret 0x14
+END_FIGHTING, SET_CONTROL, CREATE_ANIMATOR = 0x4d3fd0, 0x47c580, 0x46e8b0
+TINT, UNTINT, SET_STATE, RESET_FLAGS = 0x4d6a30, 0x4d6b40, 0x46f250, 0x472e90
+G_WATCHERS, WATCHERS = 0x66caac, 11              # Baez's crowd: 11 pointers
+MAPPANE, MP_CAMERA_FLAGS, MP_CAMERA_OBJ = 0x6668d8, 0xd8, 0xdc
+O_BOSS, OF_NOWALK, MADE_INDEX = 0x284, 0x400000, 0x7200
+BOSS_SIZE = {1: 0x58, 2: 0x34, 3: 0x5c, 4: 0xc}
+# Each boss's state by the port's names (bossai.h): an offset (an int32),
+# ('pt', offset) a point, ('ints', offset, n) int32s; Jhaga's points keep x,
+# y and z in three arrays of five.
+BOSS_FIELDS = {
+    1: [('stunned', 0x00), ('stunticks', 0x04), ('stunlevel', 0x08), ('stage', 0x0c), ('baezspot', ('pt', 0x10)),
+        ('playerspot', ('pt', 0x1c)), ('table', 0x28), ('frame', 0x2c), ('throwlength', 0x30),
+        ('watchersfound', 0x34), ('playerhealth', 0x38), ('health', 0x3c), ('falling', 0x40),
+        ('firstspot', ('pt', 0x44)), ('playerarrived', 0x50), ('waitticks', 0x54)],
+    2: [('skytimer', 0x00), ('skyphase', 0x04), ('skyticks', 0x08), ('band', 0x0c), ('stunticks', 0x10),
+        ('stunned', 0x14), ('tinted', 0x18), ('brood', ('ints', 0x1c, 3)), ('landing', 0x28),
+        ('pissedoff', 0x2c), ('slam', 0x30)],
+    3: [('mode', 0x00), ('points', ('jhaga', 0x04)), ('resttimer', 0x40), ('draw', 0x44), ('hop', 0x48),
+        ('dest', ('pt', 0x4c)), ('frame', 0x58)],
+    4: [('mode', 0x00), ('towalk', 0x04), ('tocombat', 0x08)]}
+
 # The functions under test, for coverage: [start, end).
 COVERED = {'AnimPrefix': (0x4cdf60, 0x4ce1b0), 'CombatAnimName': (0x4ce1b0, 0x4ce290),
            'IsValidAttack': (0x4d1120, 0x4d1db8), 'FindButtonAttack': (0x4d1dd0, 0x4d1eab),
@@ -199,7 +238,9 @@ COVERED = {'AnimPrefix': (0x4cdf60, 0x4ce1b0), 'CombatAnimName': (0x4ce1b0, 0x4c
            'PlayerKilled': (0x518ed0, 0x518f8b), 'PlayerDied': (0x518f90, 0x518fda),
            'ResolveImpact': (0x4c74b0, 0x4c7798), 'ResolveBlock': (0x4c77a0, 0x4c7804),
            'ResolveDead': (0x4c7810, 0x4c7973), 'Block': (0x4d2e30, 0x4d30ec), 'StopBlock': (0x4d30f0, 0x4d3147),
-           'Dodge': (0x4d3150, 0x4d3471), 'AI': (0x4c8b60, 0x4c9453), 'AIPerMonster': (0x4c9b70, 0x4c9cd8),
+           'Dodge': (0x4d3150, 0x4d3471), 'AI': (0x4c8b60, 0x4c9453), 'AIPerMonster': (0x4c9b70, 0x4c9ce8),
+           'Baez': (0x4c9ce8, 0x4cbb1d), 'Solifuge': (0x4cbb1d, 0x4ccaa4), 'Jhaga': (0x4ccaa4, 0x4cd07d),
+           'Yhagoro': (0x4cd07d, 0x4cd4ac),
            'Pulse': (0x4c1bb0, 0x4c3256), 'PlayerPulse': (0x518aa0, 0x518dea),
            'TComplexObject::Pulse': (0x4db190, 0x4db1c5), 'KillExp': (0x51a5b0, 0x51a625),
            'AwardKillExp': (0x51a630, 0x51abdb), 'AwardSkillExp': (0x51abe0, 0x51ac8e),
@@ -268,8 +309,19 @@ class MeleeFixture:
         self._conditional(REFRESH_STATS, 0, self._refresh_stats, ticking)
         # A case's script (`script`): empty, as the port's -- no trigger matches.
         self._conditional(SCRIPT_TRIGGER, 0x1c, lambda a, c: 0, ticking)
-        self._conditional(FIND_OBJ_TYPE, 8, self._find_obj_type, ticking)
-        self._conditional(NEW_OBJECT, 8, self._new_object, ticking)
+        boss = self._boss_world
+        self._conditional(FIND_OBJ_TYPE, 8, self._find_obj_type, lambda: ticking() or boss())
+        self._conditional(NEW_OBJECT, 8, self._new_object, lambda: ticking() or boss())
+        # The bosses' (C3c).
+        self._conditional(PANE_ITER, 0x14, self._pane_objects, boss)
+        self._conditional(END_FIGHTING, 0, self._end_fighting, boss)
+        self._conditional(SET_CONTROL, 4, self._set_control, boss)
+        self._conditional(TINT, 0, lambda a, c: self._tint('Tint', c), boss)
+        self._conditional(UNTINT, 0, lambda a, c: self._tint('Untint', c), boss)
+        self._conditional(CREATE_ANIMATOR, 0, self._create_animator, boss)
+        self.prop_vtable = self.world._stub_table(0x80, {}, lambda ecx: ecx, 'prop')
+        self.vm.put_u32(self.prop_vtable + 0x18, SET_STATE)
+        self.vm.put_u32(self.prop_vtable + 0x40, RESET_FLAGS)
         for seam, (address, key) in PLAYER_MAX.items():
             b.add(address, seam, 0, lambda a, c, seam=seam, key=key: self._player_max(seam, key, c))
         self.made_vtable = self.vm.allocate(0x400)
@@ -289,6 +341,9 @@ class MeleeFixture:
         self.helpers = []
         self.types = []
         self.made = []
+        self.props = {}            # the bosses' map objects: name -> address
+        self.instances = {}        # GetInstance's answers in a boss case: id -> address
+        self.made_used = 0
 
     def _coverage(self):
         """With MELEE_COVERAGE=<dir>: the code reached in the melee functions
@@ -367,6 +422,8 @@ class MeleeFixture:
         return n
 
     def _get_instance(self, args, ecx):
+        if self._boss_world():
+            return self.instances.get(s32(args[0]), 0)
         if 0 <= s32(args[0]) - BLOOD_INDEX < len(self.made):
             return self.made[s32(args[0]) - BLOOD_INDEX]
         i = s32(args[0]) - HELPER_INDEX
@@ -545,11 +602,141 @@ class MeleeFixture:
                                      vel=list(struct.unpack('<3i', vm.uc.mem_read(d + 0x18, 12))),
                                      facing=vm.uc.mem_read(d + 0x32, 1)[0],
                                      imagery=struct.unpack('<i', struct.pack('<I', args[1]))[0]))
+        if self._boss_world():
+            return self._hand_out()
         made = vm.allocate(0x100)
         vm.put_u32(made, self.made_vtable)
         self.made.append(made)
         self.world.objects[made] = f'made {len(self.made)}'
         return BLOOD_INDEX + len(self.made) - 1
+
+    # -- the bosses (C3c) ------------------------------------------------------
+    def _boss_world(self):
+        """A boss case: `per-monster`, or another call (`ai`) on the case's
+        `bossworld`."""
+        return self.case.get('call') == 'per-monster' or bool(self.case.get('bossworld'))
+
+    def _hand_out(self):
+        """NewObject in a boss case: the case's next `made` character, now in
+        the map (GetInstance finds it); none left, an id no object has."""
+        made = self.case.get('made', [])
+        n = self.made_used
+        self.made_used += 1
+        if n >= len(made):
+            return MADE_INDEX + n
+        ident = self.specs[made[n]]['id']
+        self.instances[ident] = self.world.by_name[made[n]]
+        return ident
+
+    def _object(self, name):
+        return self.props.get(name) or self.world.by_name[name]
+
+    def _pane_objects(self, args, ecx):
+        """The walk of the pane's sectors (0x44cf80 with no rect): the case's
+        `paneobjects`, in order, through the shared Next 0x44d080."""
+        self.world.seams.append(dict(seam='PaneObjects', who=self.world._name(self._ai_self)))
+        self.world.iters[ecx] = [self._object(n) for n in self.case.get('paneobjects', [])]
+        self.world._iter_next(args, ecx)
+        return ecx
+
+    def _end_fighting(self, args, ecx):
+        self.world.seams.append(dict(seam='EndFighting', who=self.world._name(ecx)))
+        return 1
+
+    def _set_control(self, args, ecx):
+        self.world.seams.append(dict(seam='SetControl', on=s32(args[0])))
+        return 0
+
+    def _tint(self, kind, ecx):
+        self.world.seams.append(dict(seam=kind, who=self.world._name(ecx)))
+        return 0
+
+    def _create_animator(self, args, ecx):
+        """A stand-in animator at +0x58 (its calls recorded)."""
+        self.world.seams.append(dict(seam='CreateAnimator', who=self.world._name(ecx)))
+        self.vm.put_u32(ecx + 0x58, self.world.new_animator(ecx))
+        return 1
+
+    def _make_props(self, case):
+        """The case's `props`: objects of the map that aren't characters (the
+        ring wall, the table): class, flags, position, name, id, type, no
+        sector; SetState through the shared seam, ResetFlags as original."""
+        vm, world = self.vm, self.world
+        self.props = {}
+        for p in case.get('props', []):
+            obj = vm.allocate(0x100)
+            vm.put_u32(obj, self.prop_vtable)
+            vm.write(obj + 4, struct.pack('<h', p.get('class', 8)))
+            vm.put_u32(obj + 8, p.get('flags', 0))
+            vm.write(obj + 0x10, struct.pack('<3i', *p.get('pos', [0, 0, 0])))
+            name = vm.allocate(len(p['name']) + 1)
+            vm.write(name, p['name'].encode(TEXT) + b'\0')
+            vm.put_u32(obj + 0x38, name)
+            vm.put_u32(obj + 0x40, p.get('id', 0))
+            typename = vm.allocate(len(p['type']) + 1)
+            vm.write(typename, p['type'].encode(TEXT) + b'\0')
+            info = vm.allocate(16)
+            vm.put_u32(info, typename)
+            vm.put_u32(obj + 0x4c, info)
+            world.objects[obj] = p['name']
+            world.states[obj] = [dict(name=n, frames=10, aniflags=0) for n in p.get('states', [])]
+            self.props[p['name']] = obj
+
+    def _boss_state(self, obj, spec):
+        """A character's `boss`: its state buffer at +0x284 by BOSS_FIELDS
+        (the kind is `monsterkind`), Baez's crowd into the global."""
+        vm, world = self.vm, self.world
+        boss = spec.get('boss')
+        if boss is None:
+            return
+        kind = spec.get('monsterkind', 0)
+        state = vm.call(MALLOC, (BOSS_SIZE[kind],))
+        vm.write(state, bytes(BOSS_SIZE[kind]))
+        for name, at in BOSS_FIELDS[kind]:
+            if name not in boss:
+                continue
+            v = boss[name]
+            if isinstance(at, int):
+                vm.put_u32(state + at, v & 0xffffffff)
+            elif at[0] == 'pt':
+                vm.write(state + at[1], struct.pack('<3i', *v))
+            elif at[0] == 'ints':
+                vm.write(state + at[1], struct.pack(f'<{at[2]}i', *v))
+            else:                               # Jhaga's points: x[5], y[5], z[5]
+                for i, (x, y, z) in enumerate(v):
+                    for axis, value in enumerate((x, y, z)):
+                        vm.put_u32(state + at[1] + 0x14 * axis + 4 * i, value & 0xffffffff)
+        vm.put_u32(obj + O_BOSS, state)
+        if kind == 1:
+            for i, name in enumerate(boss.get('watchers', [None] * WATCHERS)):
+                vm.put_u32(G_WATCHERS + 4 * i, world.by_name[name] if name else 0)
+
+    def _boss_dump(self, obj):
+        """The boss as compared: its kind, its state by name (Baez's crowd
+        from the global), and where a MoveTo heads."""
+        vm, world = self.vm, self.world
+        kind = s32(vm.u32(obj + O_MONSTERKIND))
+        out = dict(kind=kind, movetopos=vm.u32(obj + 0xec),
+                   movepos=list(struct.unpack('<3i', vm.uc.mem_read(obj + 0xf0, 12))))
+        state = vm.u32(obj + O_BOSS)
+        if kind not in BOSS_FIELDS or not state:
+            return out
+        fields = {}
+        for name, at in BOSS_FIELDS[kind]:
+            if isinstance(at, int):
+                fields[name] = s32(vm.u32(state + at))
+            elif at[0] == 'pt':
+                fields[name] = list(struct.unpack('<3i', vm.uc.mem_read(state + at[1], 12)))
+            elif at[0] == 'ints':
+                fields[name] = list(struct.unpack(f'<{at[2]}i', vm.uc.mem_read(state + at[1], 4 * at[2])))
+            else:
+                fields[name] = [[s32(vm.u32(state + at[1] + 0x14 * axis + 4 * i)) for axis in range(3)]
+                                for i in range(5)]
+        if kind == 1:
+            fields['watchers'] = [world._name(vm.u32(G_WATCHERS + 4 * i)) if vm.u32(G_WATCHERS + 4 * i) else None
+                                  for i in range(WATCHERS)]
+        out['state'] = fields
+        return out
 
     def _blood_params(self, args, ecx):
         self.world.seams.append(dict(seam='blood.SetParams', who=self.world._name(ecx),
@@ -888,6 +1075,15 @@ class MeleeFixture:
             world.set_memory(obj, spec)
             self._pulse_state(obj, spec)
         self.types, self.made = [], []
+        self.props, self.instances, self.made_used = {}, {}, 0
+        if self._boss_world():
+            self._make_props(case)
+            made = set(case.get('made', []))
+            self.instances = {spec['id']: world.by_name[spec['name']] for spec in case['chars']
+                              if spec.get('id') and spec['name'] not in made}
+            self.instances.update({p['id']: self.props[p['name']] for p in case.get('props', []) if p.get('id')})
+            for spec in case['chars']:
+                self._boss_state(world.by_name[spec['name']], spec)
         ticking = self._ticking()
         if ticking:
             self._pulse_world(case)
@@ -969,6 +1165,13 @@ class MeleeFixture:
         elif kind == 'ai':
             call(vm, AI, (), this=me)
             result['returned'] = 0
+        elif kind == 'per-monster':
+            frame = int(case.get('globals', {}).get('frame', 0))
+            for k in range(a.get('ticks', 1)):
+                vm.put_u32(G_PLAYSCREEN + 0x680, frame + k)
+                call(vm, PER_MONSTER, (), this=me)
+                world.seams.append(dict(seam='Tick', n=k))
+            result['returned'] = 0
         elif kind == 'resolve-hit':
             cd = vm.u32(me + 0xfc)
             rec = vm.u32(vm.u32(cd + C_ATTACKS + 0x10) + 4 * a['attack'])
@@ -1033,6 +1236,13 @@ class MeleeFixture:
         # A block made in the call is `new N` per character, as the port numbers them.
         result['chars'] = {spec['name']: self._dump(world.by_name[spec['name']], []) for spec in case['chars']}
         result['ai'] = {spec['name']: self._ai_dump(world.by_name[spec['name']]) for spec in case['chars']}
+        if self._boss_world():
+            result['boss'] = {spec['name']: self._boss_dump(world.by_name[spec['name']]) for spec in case['chars']}
+            result['props'] = {name: dict(nowalk=int(bool(vm.u32(o + O_FLAGS) & OF_NOWALK)),
+                                          state=struct.unpack('<h', vm.uc.mem_read(o + 0x0c, 2))[0])
+                               for name, o in self.props.items()}
+            camera = vm.u32(MAPPANE + MP_CAMERA_OBJ)
+            result['camera'] = dict(obj=world._name(camera), flags=vm.u32(MAPPANE + MP_CAMERA_FLAGS)) if camera else None
         if ticking:
             result['pulse'] = {spec['name']: self._pulse_dump(world.by_name[spec['name']], spec)
                                for spec in case['chars'] if 'pulsestate' in spec}
