@@ -85,6 +85,7 @@
 #include "effects/aurapublicpreview.h"
 #include "effects/magicshieldpreview.h"
 #include "effects/riftqualifiedpreview.h"
+#include "effects/labyrinthqualifiedpreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/swamppreview.h"
 #include "effects/paralizepreview.h"
@@ -6265,6 +6266,9 @@ struct SVfxTestBootstrap {
         }
         {
             VfxTest::SEffect e={};e.id="Rift1_QUALIFIED_PARSER";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;e.factory=[](const S3DPoint&o)->void*{return rift_qualified_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){rift_qualified_preview::Advance(static_cast<rift_qualified_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){rift_qualified_preview::SubmitWorld(static_cast<rift_qualified_preview::State*>(c));};e.is_alive=[](void*c){return rift_qualified_preview::Alive(static_cast<rift_qualified_preview::State*>(c));};e.destroy=[](void*c){rift_qualified_preview::Destroy(static_cast<rift_qualified_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Labyrinth_QUALIFIED_BOUND";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;e.factory=[](const S3DPoint&o)->void*{return labyrinth_qualified_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){labyrinth_qualified_preview::Advance(static_cast<labyrinth_qualified_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){labyrinth_qualified_preview::SubmitWorld(static_cast<labyrinth_qualified_preview::State*>(c));};e.is_alive=[](void*c){return labyrinth_qualified_preview::Alive(static_cast<labyrinth_qualified_preview::State*>(c));};e.destroy=[](void*c){labyrinth_qualified_preview::Destroy(static_cast<labyrinth_qualified_preview::State*>(c));};VfxTest::DeferredRegister(e);
         }
         for(int variant=0;variant<2;++variant){
             VfxTest::SEffect e={};e.id=variant?"MagicShield_PUBLIC_FIRE_FLASH":"MagicShield_PUBLIC_AURA";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;

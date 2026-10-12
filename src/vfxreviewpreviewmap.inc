@@ -107,6 +107,7 @@
 {0xad92bc36u, "TFountainAnimator_BESPOKE__HavenSign", false, "Implemented preview controller; map caller not certified"}, // HavenSign
 {0xad92bd1eu, "QueenArrow_ORIGINAL", false, "Implemented preview controller; map caller not certified"}, // queenarrow
 {0xad92bd1fu, "ArrowEffect_ORIGINAL", false, "Implemented preview controller; map caller not certified"}, // arroweffect
+{0xad92bd20u, "Labyrinth_QUALIFIED_BOUND", false, "Qualified original initializer selector upper4-to3 repair; all150 authored stars/realcamera-follow/100frame loop; unmodified object4 null fault retained; natural caller/device not certified"}, // LabyrinthEffect
 {0xad92bd20u, "TLabyrinthEffect_BESPOKE", true, "Partial preview: single asset billboard; original controller incomplete; not complete original implementation"}, // LabyrinthEffect
 {0xad92bd21u, "Nakrnoth_ORIGINAL", false, "Original null-spell fixed-owner Nakrnoth,63 authored objects/ten-emitter controller and real kill775; natural boss/spell/audio/device and exact pixels not certified"}, // Nakrnoth
 {0xad92bd22u, "RockStorm_ORIGINAL", false, "Implemented preview controller; map caller not certified"}, // RockStorm

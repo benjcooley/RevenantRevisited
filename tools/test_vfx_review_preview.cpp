@@ -39,6 +39,7 @@ std::vector<SEffect> ReviewCatalogue() {
     if(halo_negative==2)halo.submit_world={};
     if(halo_negative==3)halo.preview_style=EVfxPreviewStyle::Combat;
     if(halo_negative==4)halo.id="Halo_AUTHORED_PUBLIC20";
+    auto labyrinth=Row("Labyrinth_QUALIFIED_BOUND",EVfxPreviewStyle::Static);labyrinth.is_alive=[](void*){return true;};
     auto rift=Row("Rift1_QUALIFIED_PARSER",EVfxPreviewStyle::Static);
     rift.is_alive=[](void*c){return *static_cast<int*>(c)<2;};rift.submit=[](void*c,EFxDebugMode){++*static_cast<int*>(c);};
     auto magicshield=Row("MagicShield_PUBLIC_AURA",EVfxPreviewStyle::Static);
@@ -116,7 +117,7 @@ std::vector<SEffect> ReviewCatalogue() {
     if(cfire_negative==2)cfire.submit_world={};
     if(cfire_negative==3)cfire.preview_style=EVfxPreviewStyle::Combat;
     if(cfire_negative==4)cfire.id="TCFireEffect_BESPOKE";
-    return {rift,fire,magicshield,cfire,sgeyser,strike,aura,burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
+    return {labyrinth,rift,fire,magicshield,cfire,sgeyser,strike,aura,burn,Row("TBurnEffect_BESPOKE",EVfxPreviewStyle::Combat),dragonfire,pulp,food,halo,Row("THaloEffect",EVfxPreviewStyle::Static),teleporter,authored_blood,drip,dragon,tornado,ymanadrain,manadrain,paralize,head,queen,finite,Row("TBloodEffect",EVfxPreviewStyle::Combat),blood,
             Row("TStreamerEffect_BESPOKE",EVfxPreviewStyle::Static),
             Row("TFireBallEffect",EVfxPreviewStyle::Projectile),flare,ripple,
             Row("TAuraEffect_BESPOKE",EVfxPreviewStyle::CharacterIdle),
@@ -396,6 +397,7 @@ int main(int argc,char** argv) {
     assert(creates==destroys);
     {
         const auto info=DescribeVfxReviewPreview(0xadbcef18u);assert(info.supported && !info.partial && info.lifetime_known);assert(std::strstr(info.description,"Qualified"));
+        auto labyrinth=CreateVfxReviewPreview(0xad92bd20u,origin);assert(labyrinth && labyrinth->Id()=="Labyrinth_QUALIFIED_BOUND" && labyrinth->RestartInterval()==0);
         auto burn=CreateVfxReviewPreview(0xadbcef18u,origin);assert(burn && burn->Id()=="Rift1_QUALIFIED_PARSER" && burn->RestartInterval()==0);
         const int initial=creates;burn->Submit();burn->Submit();assert(burn->Alive()==false);burn->Submit();assert(burn->Alive()==true && creates==initial+1);
     }

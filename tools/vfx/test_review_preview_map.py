@@ -16,6 +16,13 @@ class ReviewPreviewAdmission(unittest.TestCase):
         self.assertFalse(partial);self.assertIn('Qualified',reason)
         self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Rift1_QUALIFIED_PARSER']}),[])
 
+    def test_labyrinth_qualified_exact_id(self):
+        row={'retail_type_id':'0xad92bd20','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['Labyrinth_QUALIFIED_BOUND'])
+        partial,reason=candidate_metadata(row,'Labyrinth_QUALIFIED_BOUND')
+        self.assertFalse(partial);self.assertIn('Qualified',reason)
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Labyrinth_QUALIFIED_BOUND']}),[])
+
     def test_magicshield_exact_control(self):
         row={'retail_type_id':'0xad92bc1b','preview_candidates':['TMagicShieldEffect_BESPOKE']}
         self.assertEqual(admitted_candidates(row)[0],'MagicShield_PUBLIC_AURA')
