@@ -30,6 +30,7 @@ cbuffer params : register(b0) {
 };
 Texture2D    albedo_tex : register(t0);
 Texture2D    depth_tex  : register(t1);
+Texture2D    id_tex     : register(t2);
 SamplerState smp        : register(s0);
 struct vs_out { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
 float3 reconstruct_world(float2 uv, float d, float fbw, float fbh) {
@@ -81,6 +82,14 @@ float sample_scene_depth(float2 uv) {
                          float2(float(w - 1), float(h - 1))));
     return depth_tex.Load(int3(p, 0)).r;
 }
+// The id target's flag bits (renderer.h kObjFlag*, in the alpha byte):
+// 0x10 is kObjFlagNoShadow.
+bool casts_no_shadow(float2 uv) {
+    uint w, h;
+    id_tex.GetDimensions(w, h);
+    uint2 q = uint2(clamp(uv * float2(w, h), float2(0.0, 0.0), float2(w, h) - 1.0));
+    return (uint(id_tex.Load(int3(q, 0)).a * 255.0 + 0.5) & 0x10u) != 0u;
+}
 float main_ps(vs_out in_) : SV_Target0 {
     float4 alb = albedo_tex.Sample(smp, in_.uv);
     if (alb.a < 0.01 || shadow.w <= 0.5) return 1.0;
@@ -113,6 +122,7 @@ float main_ps(vs_out in_) : SV_Target0 {
         if (suv.x < 0.0 || suv.x > 1.0 || suv.y < 0.0 || suv.y > 1.0) break;
         float drs = sample_scene_depth(suv);
         if (drs >= 0.9999) continue;
+        if (casts_no_shadow(suv)) continue;      // kObjFlagNoShadow: effects
         float scene_z_wu = drs * vp.w + vp.z;
         float ray_z_wu = interpolate_ray_depth(ray_z0_wu, ray_z1_wu, a);
         float depth_delta_wu = scene_z_wu - ray_z_wu;

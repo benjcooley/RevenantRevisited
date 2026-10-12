@@ -354,9 +354,14 @@ void TMapRenderer::DrawDebugTab()
                 rs.sun_color_g          = (uint8_t)std::clamp(int(s.color[1] * 255.0f + 0.5f), 0, 255);
                 rs.sun_color_b          = (uint8_t)std::clamp(int(s.color[2] * 255.0f + 0.5f), 0, 255);
                 rs.sun_intensity        = s.intensity;
-                rs.light_ceiling        = s.light_ceiling;
                 rs.ambient_scale        = s.ambient_scale;
                 rs.sun_share            = s.sun_share;
+                rs.tile_baked_level     = s.tile_baked_level;
+                rs.tone_shoulder        = s.tone_shoulder;
+                rs.character_key_light  = s.character_key_light;
+                rs.character_light_boost= s.character_light_boost;
+                rs.character_light_saturation = s.character_light_saturation;
+                rs.character_retail_light = s.character_retail_light;
                 rs.sun_shadow_enable    = s.sun_shadow;
                 rs.sun_shadow_step_wu   = s.sun_shadow_step;
                 rs.sun_shadow_soft_px   = s.sun_shadow_soft;
@@ -402,9 +407,14 @@ void TMapRenderer::DrawDebugTab()
                 rs.sun_color_g          = (uint8_t)std::clamp(int(s.color[1] * 255.0f + 0.5f), 0, 255);
                 rs.sun_color_b          = (uint8_t)std::clamp(int(s.color[2] * 255.0f + 0.5f), 0, 255);
                 rs.sun_intensity        = s.intensity;
-                rs.light_ceiling        = s.light_ceiling;
                 rs.ambient_scale        = s.ambient_scale;
                 rs.sun_share            = s.sun_share;
+                rs.tile_baked_level     = s.tile_baked_level;
+                rs.tone_shoulder        = s.tone_shoulder;
+                rs.character_key_light  = s.character_key_light;
+                rs.character_light_boost= s.character_light_boost;
+                rs.character_light_saturation = s.character_light_saturation;
+                rs.character_retail_light = s.character_retail_light;
                 rs.sun_shadow_enable    = s.sun_shadow;
                 rs.sun_shadow_step_wu   = s.sun_shadow_step;
                 rs.sun_shadow_soft_px   = s.sun_shadow_soft;
@@ -479,6 +489,12 @@ void TMapRenderer::DrawDebugTab()
             ImGui::SliderFloat("ambient scale", &s.ambient_scale,
                                0.25f, 4.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
             ImGui::SliderFloat("sun share", &s.sun_share, 0.0f, 1.0f, "%.2f");
+            ImGui::SliderFloat("tile baked level", &s.tile_baked_level, 0.25f, 1.0f, "%.2f");
+            ImGui::SliderFloat("tone shoulder", &s.tone_shoulder, 0.5f, 1.0f, "%.2f");
+            ImGui::SliderFloat("character key light", &s.character_key_light, 0.0f, 1.0f, "%.2f");
+            ImGui::SliderFloat("character light boost", &s.character_light_boost, 0.5f, 2.0f, "%.2f");
+            ImGui::SliderFloat("character light colour", &s.character_light_saturation, 0.0f, 1.0f, "%.2f");
+            ImGui::SliderFloat("character retail light", &s.character_retail_light, 0.0f, 1.0f, "%.2f");
             ImGui::EndDisabled();
             ImGui::SameLine();
             ImGui::TextDisabled("(?)");
@@ -489,22 +505,6 @@ void TMapRenderer::DrawDebugTab()
                     "with the colour scaled to a max channel of 1, times\n"
                     "this. Classic uses retail's light table exactly\n"
                     "(docs/LIGHTING_FIDELITY.md).");
-
-            ImGui::BeginDisabled(s.lighting_mode == 0);
-            ImGui::SliderFloat("light ceiling", &s.light_ceiling,
-                               0.25f, 8.0f, "%.2f",
-                               ImGuiSliderFlags_Logarithmic);
-            ImGui::EndDisabled();
-            ImGui::SameLine();
-            ImGui::TextDisabled("(?)");
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip(
-                    "Modern mode only: per-channel clamp on summed\n"
-                    "light (ambient + point lights) before albedo\n"
-                    "multiply. > 1.0 allows overbright. Classic follows\n"
-                    "retail: tile light is uncapped (the colour\n"
-                    "saturates), mesh light caps at the\n"
-                    "EnhancedLighting overbright scale.");
 
             // ---- Time of day --------------------------------------------
             // Drives the day/night ambient blend in TArea::Pulse. The

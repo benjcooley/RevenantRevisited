@@ -42,6 +42,7 @@ struct vs_out {
     float  scene_z : TEXCOORD4;
     float3 retail_color : TEXCOORD5;
     float retail_mode : TEXCOORD6;
+    float height : TEXCOORD7;     // above the instance's origin (its base), world units
 };
 vs_out main_vs(vs_in i) {
     // w0..w3 are rows of a 4x4 world matrix (backend-neutral layout).
@@ -73,6 +74,7 @@ vs_out main_vs(vs_in i) {
         o.scene_z = scene_z_n;
         o.retail_color = retail_color;
         o.retail_mode = i.retail_mode;
+        o.height = 0.0;
         return o;
     }
 
@@ -102,6 +104,7 @@ vs_out main_vs(vs_in i) {
     o.scene_z = scene_z_n;
     o.retail_color = retail_color;
     o.retail_mode = i.retail_mode;
+    o.height = wp.z - i.w2.w;
     return o;
 }
 )HLSL";
@@ -118,6 +121,7 @@ struct vs_out {
     float  scene_z : TEXCOORD4;
     float3 retail_color : TEXCOORD5;
     float retail_mode : TEXCOORD6;
+    float height : TEXCOORD7;     // above the instance's origin (its base), world units
 };
 struct fs_out { float4 albedo  : SV_Target0;
                 float4 normal  : SV_Target1;
@@ -144,7 +148,10 @@ fs_out main_ps(vs_out in_) {
     float3 N = normalize(in_.wnormal);
     fs_out o;
     o.albedo  = c;
-    o.normal  = float4(N * 0.5 + 0.5, in_.retail_mode > 0.5 ? 2.0 : 0.0);
+    // Surface class in .a: 2 a retail-lit effect, else a mesh: 0 or below,
+    // minus its height above its base (the modern light pass lights a 3D
+    // object at its base).
+    o.normal  = float4(N * 0.5 + 0.5, in_.retail_mode > 0.5 ? 2.0 : -max(in_.height, 0.0));
     o.scene_z = float4(in_.scene_z, 0.0, 0.0, 1.0);
     o.obj_id  = float4(0.0, 0.0, 0.0, 0.0);   // Phase 1: empty id
     return o;
@@ -165,6 +172,7 @@ struct vs_out {
     float  scene_z : TEXCOORD4;
     float3 retail_color : TEXCOORD5;
     float retail_mode : TEXCOORD6;
+    float height : TEXCOORD7;     // above the instance's origin (its base), world units
 };
 void main_ps(vs_out in_) {
     float4 texel = albedo_tex.Sample(smp, in_.uv);
@@ -200,6 +208,7 @@ struct vs_out {
     float  scene_z : TEXCOORD4;
     float3 retail_color : TEXCOORD5;
     float retail_mode : TEXCOORD6;
+    float height : TEXCOORD7;     // above the instance's origin (its base), world units
 };
 float4 main_ps(vs_out in_) : SV_Target0 {
     float4 texel = albedo_tex.Sample(smp, in_.uv);
@@ -223,7 +232,7 @@ float4 main_ps(vs_out in_) : SV_Target0 {
     int vm = (int)settings.x;
     if (vm == 1) return float4(c.rgb, c.a);
     if (vm == 3) return float4(N * 0.5 + 0.5, c.a);
-    surface_light s = shade_surface(c.rgb, in_.wpos, N, true, 1.0, 1.0);
+    surface_light s = shade_surface(c.rgb, in_.wpos, N, true, max(in_.height, 0.0), 1.0, 1.0);
     if ((int)settings.z == 0 && in_.retail_mode > 0.5) s.lit = c.rgb;
     if (vm == 4) return float4(s.points, c.a);
     if (vm == 6) return float4(s.sun_shadow, s.sun_shadow, s.sun_shadow, c.a);

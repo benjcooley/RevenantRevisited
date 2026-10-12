@@ -1114,6 +1114,9 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         // DrawLit, 1998 animimage.cpp; a state with both ends up lit, one
         // with neither isn't drawn). The resurrection pit's Elevator
         // platform is ANIIM_LIT. Effects keep their own path.
+        // Effects (water, surf, magic) cast no sun shadow in the modern model.
+        if (oi->ObjClass() == OBJCLASS_EFFECT)
+            obj_id |= kObjFlagNoShadow;
         if (oi->ObjClass() != OBJCLASS_EFFECT)
             if (TObjectImagery* img = oi->GetImagery())
             {
@@ -1881,11 +1884,16 @@ void TMapRenderer::ApplyLightingSettings(const SRevisitedSettings& settings)
     Impl& s = *impl;
     s.intensity     = float(settings.sun_intensity);
     s.sun_share     = float(settings.sun_share);
+    s.tile_baked_level    = float(settings.tile_baked_level);
+    s.tone_shoulder       = float(settings.tone_shoulder);
+    s.character_key_light = float(settings.character_key_light);
+    s.character_light_boost = float(settings.character_light_boost);
+    s.character_light_saturation = float(settings.character_light_saturation);
+    s.character_retail_light = float(settings.character_retail_light);
     s.color[0]      = settings.sun_color_r / 255.0f;
     s.color[1]      = settings.sun_color_g / 255.0f;
     s.color[2]      = settings.sun_color_b / 255.0f;
     s.ambient_scale = float(settings.ambient_scale);
-    s.light_ceiling = float(settings.light_ceiling);
     s.ao_enable     = settings.ao_enable;
     s.ao_radius_px  = float(settings.ao_radius_px);
     s.ao_strength   = float(settings.ao_strength);
@@ -3453,6 +3461,10 @@ void TMapRenderer::RenderFrame()
                                                  model.tile_ambient_linear[2] });
         sun_level = s.intensity * s.ambient_scale * share * ambient_level;
         Renderer->SetRetailLightModernScale(model.tile_gain_per_mult, 1.0f);
+        Renderer->SetModernModel(s.tile_baked_level, s.tone_shoulder,
+                                 s.character_key_light, s.character_light_boost);
+        Renderer->SetCharacterLightSaturation(s.character_light_saturation);
+        Renderer->SetCharacterRetailLight(s.character_retail_light);
     }
 
     const SColor& mesh_color = MapPane.GetAmbientColor();
@@ -3476,7 +3488,6 @@ void TMapRenderer::RenderFrame()
                        sun_level,
                        s.color[0], s.color[1], s.color[2], s.ambient);
     Renderer->SetAmbientColor(s.ambient_color[0], s.ambient_color[1], s.ambient_color[2]);
-    Renderer->SetLightCeiling(s.light_ceiling);
     Renderer->SetAmbientOcclusion(s.ao_enable, s.ao_radius_px, s.ao_strength, s.ao_bias, s.ao_max_dist);
     Renderer->SetShadowWorldDir(s.light_dir[0], s.light_dir[1], s.light_dir[2]);
     Renderer->SetSunShadowRaycast(s.sun_shadow_samples, s.sun_shadow_depth_cutoff,

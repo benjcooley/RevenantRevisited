@@ -83,8 +83,13 @@ bool LoadRevisitedSettings()
     s.sun_color_b = (uint8_t)ini.GetLongValue(kSection, "SunColorB", s.sun_color_b);
     s.sun_intensity = ini.GetDoubleValue(kSection, "SunIntensity", s.sun_intensity);
     s.sun_share     = ini.GetDoubleValue(kSection, "SunShare", s.sun_share);
-    s.light_ceiling = ini.GetDoubleValue(kSection, "LightCeiling", s.light_ceiling);
     s.ambient_scale = ini.GetDoubleValue(kSection, "AmbientScale", s.ambient_scale);
+    s.tile_baked_level    = ini.GetDoubleValue(kSection, "TileBakedLevel", s.tile_baked_level);
+    s.tone_shoulder       = ini.GetDoubleValue(kSection, "ToneShoulder", s.tone_shoulder);
+    s.character_key_light = ini.GetDoubleValue(kSection, "CharacterKeyLight", s.character_key_light);
+    s.character_light_boost = ini.GetDoubleValue(kSection, "CharacterLightBoost", s.character_light_boost);
+    s.character_light_saturation = ini.GetDoubleValue(kSection, "CharacterLightSaturation", s.character_light_saturation);
+    s.character_retail_light = ini.GetDoubleValue(kSection, "CharacterRetailLight", s.character_retail_light);
 
     s.sun_shadow_enable    = ini.GetBoolValue(kSection, "SunShadow", s.sun_shadow_enable);
     s.sun_shadow_step_wu   = ini.GetDoubleValue(kSection, "SunShadowStep", s.sun_shadow_step_wu);
@@ -132,7 +137,6 @@ void ApplyRevisitedSettingsToRenderer(TRenderer *r)
     r->SetLight(float(s.sun_dir_x), float(s.sun_dir_y), float(s.sun_dir_z),
                 float(s.sun_intensity), sr, sg, sb, 0.3f);
     r->SetShadowWorldDir(float(s.sun_dir_x), float(s.sun_dir_y), float(s.sun_dir_z));
-    r->SetLightCeiling(float(s.light_ceiling));
 
     r->SetSunShadow(s.sun_shadow_enable,
                     float(s.sun_shadow_step_wu), float(s.sun_shadow_soft_px),
@@ -204,10 +208,20 @@ bool SaveRevisitedSettings(char *out_path, int32_t out_len)
         "; The sun's level relative to the ambient it takes over (1 = retail's daylight on sunlit faces)", true);
     ini.SetDoubleValue(kSection, "SunShare", s.sun_share,
         "; Share of the area ambient the full-day sun takes over (areas with day and night)", true);
-    ini.SetDoubleValue(kSection, "LightCeiling", s.light_ceiling,
-        "; Cap on a 3D mesh's summed light (modern); tiles saturate per channel as retail's", true);
     ini.SetDoubleValue(kSection, "AmbientScale", s.ambient_scale,
         "; Modern ambient: retail's tile ambient (AMBLIGHT, AMBCOLOR) times this", true);
+    ini.SetDoubleValue(kSection, "TileBakedLevel", s.tile_baked_level,
+        "; Modern: the light baked into the tile art (tile pixel = reflectance x this); 1 = none", true);
+    ini.SetDoubleValue(kSection, "ToneShoulder", s.tone_shoulder,
+        "; Modern: the tone curve's knee, shared by tiles and 3D objects; 1 = hard clip", true);
+    ini.SetDoubleValue(kSection, "CharacterKeyLight", s.character_key_light,
+        "; Modern: 3D objects get a tile's light at their place, shaped by retail's key light (0 = flat, 1 = full)", true);
+    ini.SetDoubleValue(kSection, "CharacterLightBoost", s.character_light_boost,
+        "; Modern: 3D objects' light over a tile's at the same place (1 = the same)", true);
+    ini.SetDoubleValue(kSection, "CharacterLightSaturation", s.character_light_saturation,
+        "; Modern: the local light's colour 3D objects keep (1 = all; lower = toward neutral, same luminance)", true);
+    ini.SetDoubleValue(kSection, "CharacterRetailLight", s.character_retail_light,
+        "; Modern: retail's own 3D lighting (ambient + key light) on 3D objects, on top of the local light's share", true);
 
     ini.SetBoolValue  (kSection, "SunShadow", s.sun_shadow_enable, nullptr, true);
     ini.SetDoubleValue(kSection, "SunShadowStep", s.sun_shadow_step_wu, nullptr, true);

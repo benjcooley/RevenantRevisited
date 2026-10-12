@@ -100,6 +100,9 @@ constexpr uint32_t kObjFlagHovered  = 1u << 30;
 // The surface shows its own colours, unlit: retail drew it after the light
 // transfer (a 2D imagery state with ANIIM_LIT). The light pass tests it.
 constexpr uint32_t kObjFlagSelfLit  = 1u << 29;
+// The surface casts no sun shadow (effects: water, surf, magic): the shadow
+// pass's ray march passes through it. It still receives shadow.
+constexpr uint32_t kObjFlagNoShadow = 1u << 28;
 constexpr uint32_t kObjIdMask       = 0x0FFFFFFFu;
 constexpr uint32_t kObjFlagMask     = 0xF0000000u;
 
@@ -728,12 +731,6 @@ public:
                   float r, float g, float b, float ambient);
     // Ambient floor color, applied independently of the sun's tint.
     void SetAmbientColor(float r, float g, float b);
-    // Ceiling on summed deferred light (ambient + per-point-lights),
-    // applied per-channel before multiplying albedo. Default 1.5 lets
-    // ambient push slightly overbright (helps the linear-space GPU
-    // path match retail's non-linear palette boost) while still capping
-    // stacked point-light blow-out. Range typical [0.5..4.0].
-    void SetLightCeiling(float ceiling);
     void SetRetailMeshLighting(const float ambient[3], const float directional[3], bool rgb_enabled);
     [[nodiscard]] bool UsesRetailSoftwareMeshLighting() const
     { return light.mode == 0 && retail_mesh_rgb_enabled; }
@@ -802,6 +799,19 @@ public:
     // Modern-mode reading of retail lights: intensity = multiplier *
     // gain_per_mult, world radius = radius * range_scale.
     void SetRetailLightModernScale(float gain_per_mult, float range_scale);
+    // The modern model's shared scale (lightmodel.*.h modern_model): the
+    // light baked into the tile art (tile pixel = reflectance x this), the
+    // tone curve's shoulder (1 = hard clip), and for 3D objects the form
+    // retail's key light gives the light a tile at their place would get,
+    // and that light's boost. docs/lighting/LIGHTING_AB.md §6.4.
+    void SetModernModel(float tile_baked_level, float tone_shoulder,
+                        float character_key, float character_boost);
+    // Modern: how much of the local light's colour a 3D object keeps (1 all
+    // of it; lower toward neutral at the same luminance).
+    void SetCharacterLightSaturation(float saturation);
+    // Modern: how much of retail's own 3D lighting (the 3D scene's ambient
+    // and key light) a 3D object gets on top of its share of the local light.
+    void SetCharacterRetailLight(float amount);
 
     // ---- Deferred reconstruction (pass [3]) -----------------------------
     // Packed per-frame params for the light shader's iso inverse. Call
@@ -1529,9 +1539,10 @@ private:
         float normal_radius    = 1.5f;    // texels
         float edge_threshold   = 0.001f;  // zraw units
         float normal_lighting_hardness = 0.5f;
+        float character_light_saturation = 1.0f;   // modern: the local light's colour kept on 3D objects
+        float character_retail_light = 0.0f;       // modern: retail's own 3D lighting on 3D objects
         int32_t view_mode      = 0;
         int32_t mode           = 1;       // 0 retail, 1 modern
-        float   light_ceiling  = 1.5f;    // max summed light per channel; uploaded as ambient_col.w
         bool    sun_shadow_enable     = true;
         // Interactive default: one correct low-res ray plus a cheap separable
         // mask blur. Softness never multiplies the ray-march cost.
@@ -1551,6 +1562,7 @@ private:
         SClassicLightModel classic;
         float   retail_modern_gain_per_mult = 0.0f;
         float   retail_modern_range_scale   = 1.0f;
+        float   modern_model[4] = { 1.0f, 1.0f, 0.0f, 1.0f };   // baked level, shoulder, character key, character boost
     } light;
 
     // ---- Reconstruction params (per frame) ------------------------------

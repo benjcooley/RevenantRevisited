@@ -433,15 +433,20 @@ struct TMapRenderer::Impl
     // (AMBLIGHT with the gamma offset, AMBCOLOR scaled to a largest channel
     // of 1, before the light table's byte truncation) times this
     // ([Revisited] AmbientScale). docs/lighting/LIGHTING_AB.md §6.4.
-    float ambient_scale = 1.0f;
+    float ambient_scale = 0.85f;
     // Modern, areas with day and night: the share of the ambient the sun
     // takes over at full daylight ([Revisited] SunShare). The sky keeps the
     // rest; the sun gives it back on faces turned to it (intensity 1 = all
     // of it), so a sunlit face keeps retail's daylight level.
     float sun_share = 0.5f;
-    // Modern: the cap on a 3D mesh's summed light, so a character by a
-    // torch doesn't burn out. Tiles saturate per channel as retail's do.
-    float light_ceiling = 1.5f;
+    // Modern: the shared scale of tiles and 3D objects ([Revisited]
+    // TileBakedLevel, ToneShoulder, CharacterKeyLight, CharacterLightBoost).
+    float tile_baked_level      = 0.35f;
+    float tone_shoulder         = 0.8f;
+    float character_key_light   = 0.5f;
+    float character_light_boost = 0.25f;
+    float character_light_saturation = 0.5f;
+    float character_retail_light = 1.0f;
     // Retail had no synthesized AO; baked occlusion lived in the tile
     // depth maps. Off by default; on in modern mode.
     bool  ao_enable    = false;

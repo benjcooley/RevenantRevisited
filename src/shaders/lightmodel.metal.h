@@ -47,7 +47,7 @@ struct params {
     float4 shadow;
     float4 shadow_dir;
     float4 shadow_world_dir;
-    float4 normal_lighting;
+    float4 normal_lighting;   // .x N.L hardness, .y sun-shadow bias, .z modern: a 3D object's light colour kept, .w its retail 3D lighting
     float4 selected_obj_id;
     // Classic model, indexed by CM_*:
     //   CM_TILE      .rgb tile ambient gain, .w light gain per multiplier
@@ -56,6 +56,7 @@ struct params {
     //   CM_MESH_KEY  .xyz key-light direction (to light), .w overbright ceiling
     float4 classic_model[4];
     float4 point_model;       // .x retail light count, .y modern gain/multiplier, .z modern range scale, .w Classic map lights on meshes
+    float4 modern_model;      // .x tile art's baked light level, .y tone shoulder, .z key-light form on 3D objects, .w their light boost
 };
 constant int CM_TILE = 0, CM_MESH_AMB = 1, CM_MESH_DIR = 2, CM_MESH_KEY = 3;
 constant float kMinPower   = 0.0022436;                  // pow(256, -1.1)
@@ -155,11 +156,21 @@ static float3 classic_mesh_points(float3 W, float3 N, int n_retail, constant par
 }
 // One lit surface sample. `points` and `sun_shadow` are kept for the light
 // pass's diagnostic view modes.
+// The modern model's tone curve, per channel: linear up to `shoulder`, then
+// a soft roll-off toward 1 (continuous in value and slope); a shoulder of
+// 1 or more is retail's hard clip. Tiles and 3D objects share it.
+static float3 modern_tone(float3 x, float shoulder) {
+    x = max(x, 0.0);
+    if (shoulder >= 1.0) return min(x, 1.0);
+    float span = 1.0 - shoulder;
+    return min(x, shoulder) + span * (1.0 - exp(-max(x - shoulder, 0.0) / span));
+}
 struct surface_light { float3 lit; float3 points; float sun_shadow; };
 // Lights albedo `alb` at world position W with world normal N. is_mesh picks
-// the Classic surface class (tile or mesh). ao and cast_shadow are the
+// the Classic surface class (tile or mesh); a mesh's `height` above its base
+// is where the modern model takes its light from. ao and cast_shadow are the
 // screen-space terms of the modern model; 1 where a pass has none.
-static surface_light shade_surface(float3 alb, float3 W, float3 N, bool is_mesh,
+static surface_light shade_surface(float3 alb, float3 W, float3 N, bool is_mesh, float height,
                                    float ao, float cast_shadow, constant params& p) {
     int    mode     = int(p.settings.z);
     int    nl       = min(int(p.settings.y), KPL);
@@ -171,6 +182,8 @@ static surface_light shade_surface(float3 alb, float3 W, float3 N, bool is_mesh,
     float  sun_shadow = 1.0;
     bool   table_lit = false;       // a Classic tile: lit by the light table
     float3 table_out = float3(0.0);
+    bool   modern    = false;
+    float3 retail_char = float3(0.0);   // modern: retail's own 3D lighting on a 3D object
     if (mode == 0) {
         if (is_mesh) {
             base    = p.classic_model[CM_MESH_AMB].rgb
@@ -184,26 +197,50 @@ static surface_light shade_surface(float3 alb, float3 W, float3 N, bool is_mesh,
         }
     } else {
         base = p.ambient_col.rgb * p.light_col.w * ao;
+        // A 3D object gets the light the tile under it gets -- the ambient,
+        // the sun and the map's lights at its base, summed without N.L --
+        // and takes its form from retail's key light (below).
+        float hardness = is_mesh ? 0.0 : normal_hardness;
+        float3 Wl = W - float3(0.0, 0.0, height);   // a 3D object: lit at its base
         float3 Ldir = normalize(p.light_dir.xyz);
         float  raw_sun_ndotl = dot(N, Ldir);
-        float  sun_term = mix(1.0, max(raw_sun_ndotl, 0.0), normal_hardness);
+        float  sun_term = mix(1.0, max(raw_sun_ndotl, 0.0), hardness);
         // Direct sun visibility is a composition of two intentionally separate
         // facts: normal-facing geometry and the blurred cast-shadow mask. The
         // lighting pass never ray-marches; the mask is produced once per frame by
         // the shadow pass, then blurred as an image operation.
-        float normal_visibility = (raw_sun_ndotl > 0.0) ? 1.0 : 0.0;
+        float normal_visibility = (is_mesh || raw_sun_ndotl > 0.0) ? 1.0 : 0.0;
         sun_shadow = normal_visibility * cast_shadow;
         base += p.light_col.rgb * p.light_dir.w * sun_term * sun_shadow;
         points = float3(0.0);
         for (int i = 0; i < KPL; ++i) {
             if (i >= n_retail) break;
-            points += modern_retail_light(W, N, normal_hardness, p.plight_pos[i].xyz,
+            points += modern_retail_light(Wl, N, hardness, p.plight_pos[i].xyz,
                                           p.plight_pos[i].w * p.point_model.z,
                                           p.plight_col[i].rgb, p.plight_col[i].w * p.point_model.y);
         }
-        // Tiles saturate per channel as retail's light table does (a byte of
-        // 255 is a gain of 255/8); a mesh's light is capped (LightCeiling).
-        ceiling = is_mesh ? max(p.ambient_col.w, 1e-3) : 31.875;
+        if (is_mesh) {
+            // Form from retail's key light (the 3D scene's direction), the
+            // total conserved: faces toward it get up to 1 + k of the light,
+            // faces away 1 - k (k is .z); then the character boost (.w).
+            float key_wrap = 0.5 + 0.5 * dot(N, p.classic_model[CM_MESH_KEY].xyz);
+            float form = max(1.0 + p.modern_model.z * (2.0 * key_wrap - 1.0), 0.0) * p.modern_model.w;
+            base   *= form;
+            points *= form;
+            // The local light's colour, toward neutral at the same luminance
+            // (normal_lighting.z: 1 keeps all of it).
+            float sat = p.normal_lighting.z;
+            float3 lw = float3(0.299, 0.587, 0.114);
+            base   = mix(float3(dot(base, lw)), base, sat);
+            points = mix(float3(dot(points, lw)), points, sat);
+            // Retail's own lighting of its 3D objects (the 3D scene's ambient
+            // and key light, untinted by the map's lights), at normal_lighting.w
+            // of its strength, on top of the local light's share above.
+            retail_char = (p.classic_model[CM_MESH_AMB].rgb
+                         + p.classic_model[CM_MESH_DIR].rgb * max(dot(N, p.classic_model[CM_MESH_KEY].xyz), 0.0))
+                        * p.normal_lighting.w;
+        }
+        modern = true;
     }
     float3 direct = float3(0.0);
     for (int i = 0; i < KPL; ++i) {
@@ -215,6 +252,16 @@ static surface_light shade_surface(float3 alb, float3 W, float3 N, bool is_mesh,
     surface_light s;
     if (table_lit) {
         s.lit = clamp(table_out + alb * direct, 0.0, 1.0);
+    } else if (modern) {
+        // One physical scale for tiles and 3D objects: a tile pixel is its
+        // surface's reflectance times the light baked into the art
+        // (.x), which is divided out, and the light is retail's tile gain
+        // times that level -- so a tile shows retail's level exactly and a
+        // 3D object gets the same light. docs/lighting/LIGHTING_AB.md §6.4.
+        points += direct;
+        float baked = max(p.modern_model.x, 1e-3);
+        float3 refl  = is_mesh ? alb : alb / baked;
+        s.lit = modern_tone(refl * ((base + points) * baked + retail_char), p.modern_model.y);
     } else {
         points += direct;
         s.lit = clamp(alb * min(base + points, float3(ceiling)), 0.0, 1.0);
