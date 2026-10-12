@@ -14308,6 +14308,7 @@ void TAuthoredStaticMeshEffect::SubmitWorldMeshForTest_BESPOKE(EFxDebugMode /*de
                 for (int32_t k = 0; k < 4; ++k)
                     item.world[r*4+c] += root.Elements[k][r] * part.local_matrix[k*4+c];
         item.tint[0] = item.tint[1] = item.tint[2] = item.tint[3] = 1.0f;
+        item.obj_id = kObjFlagNoShadow;        // effects cast no sun shadow
         Renderer->SubmitMesh(item);
     }
 }

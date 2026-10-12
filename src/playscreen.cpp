@@ -53,6 +53,7 @@
 #include "logging.h"
 #include "ctrlmap.h"
 #include "gamemap.h"
+#include "gameoptions.h"
 #include "gameflow.h"
 #include "hudstate.h"
 #include "mapmanager.h"
@@ -236,16 +237,16 @@ void InitDefaultControlMap()
     ControlMap.Load(const_cast<char*>("Controls"));
 }
 
-// One in-game day = 24 game-minutes of game time. The legacy clamp says
-// "morning starts at 6", "noon at 12", etc.; reuse the same buckets so
-// scripted lighting checks keep working.
-static int32_t TimeOfDayMinutes(int32_t gametime_centi_secs)
+// REVSYNC: TPlayScreen::Animate @ 0x0047c2c0 (0x0047c3a5..0x0047c3de) --
+// the minute of the day: game time (hundredths of a second) times 1440 over
+// rules.def's DAYLENGTH, modulo 1440, in 64 bits. DAYLENGTH 80000 makes a
+// day 800 seconds of play.
+static int32_t TimeOfDayMinutes(int32_t gametime)
 {
-    // gametime is in 1/100s of a second; convert to in-game minutes.
-    // Retail used a 60x scale (1 real second = 60 in-game seconds = 1
-    // in-game minute). Match that so saved games stay aligned.
-    const int32_t in_game_seconds = gametime_centi_secs / 100;
-    return in_game_seconds / 60;
+  // REVSYNC-DIVERGENCE: retail divides by zero before rules.def is loaded.
+    if (Rules.daylength <= 0)
+        return 0;
+    return int32_t(int64_t(gametime) * 1440 / Rules.daylength % 1440);
 }
 
 // The day clock: rules.def's DAYLENGTH units make one day of 1440 game
@@ -915,12 +916,11 @@ void TPlayScreen::Update()
     // Advance fixed-tick counters. CurrentMode()->Tick() owns gameplay frame
     // advancement; the renderer only samples/interpolates the current pose.
     // REVSYNC: TPlayScreen::Animate @ 0x0047c2c0 -- the frame count, then
-    // game time in hundredths of a second at 24 frames a second
-    // (frames * 100 / 24, 0x0047c38d..0x0047c39e; the regen, poison and
-    // recovery timers read it).
+    // game time in hundredths of a second at 24 frames a second: the frames
+    // since SetGameTime plus its base, * 100 / 24 (0x0047c371..0x0047c39e;
+    // the regen, poison and recovery timers read it).
     ++gameframes;
-    gametime = lastsessionframes
-             + (int32_t)((int64_t)(gameframes - sessionstart) * 100 / 24);
+    gametime = int32_t(int64_t(gameframes - sessionstart + lastsessionframes) * 100 / 24);
     timeofday = TimeOfDayMinutes(gametime);
 
     // REVSYNC: screen slot 0x24 (0x004902c0) -> NextFrameObjects 0x00457ef0:
@@ -2127,11 +2127,16 @@ int32_t TPlayScreen::GameFrame() const
     return gameframes;
 }
 
+// REVSYNC: TPlayScreen::SetGameTime @ 0x0047e950 -- the saved game time
+// becomes the session's base in frames (t * 24 / 100), and the minute of the
+// day is set at once, so the area entered on load sees the saved time.
+// The port also sets gametime at once; retail left it to the next Animate.
 void TPlayScreen::SetGameTime(int32_t t)
 {
-    gametime = t;
     sessionstart = gameframes;
-    lastsessionframes = t;
+    lastsessionframes = int32_t(int64_t(t) * 24 / 100);
+    gametime = int32_t(int64_t(lastsessionframes) * 100 / 24);
+    timeofday = TimeOfDayMinutes(gametime);
 }
 
 int32_t TPlayScreen::TimeOfDay() const
@@ -2139,35 +2144,72 @@ int32_t TPlayScreen::TimeOfDay() const
     return timeofday;
 }
 
+// The bounds of the twilight ramps, TWILIGHT minutes centred on 06:00 and
+// 18:00 (retail Daylight and DayTimeFlag both compute them inline).
+namespace {
+struct STwilight
+{
+    int32_t morningbeg, morningend, eveningbeg, eveningend;
+};
+
+STwilight Twilight()
+{
+    const int32_t half = Rules.twilight >> 1;
+    STwilight t;
+    t.morningbeg = 6 * 60 - half;
+    t.morningend = t.morningbeg + Rules.twilight - 1;
+    t.eveningbeg = 18 * 60 - half;
+    t.eveningend = t.eveningbeg + Rules.twilight - 1;
+    return t;
+}
+}  // namespace
+
+// REVSYNC: TPlayScreen::Daylight @ 0x0047ea00 -- the daylight, 0 (night) to
+// 255 (day): 0 outside the twilights, 255 between them, a ramp across each.
+// With RealTimeLight on (0x0047ea46) the ramp is smooth; off, it moves in
+// TWILIGHT's step count (rules.def: 8 steps over 60 minutes).
 int32_t TPlayScreen::Daylight() const
 {
-    // Smooth 0..255 ambient curve as a function of in-game minutes.
-    // Mirrors the retail dawn/dusk fade without bothering with the
-    // legacy table-of-deltas. Tweakable in lighting/script systems.
-    const int32_t day_minutes = 24 * 60;
-    int32_t t = timeofday % day_minutes;
-    if (t < 0) t += day_minutes;
-    // Centered cosine on noon: 0 at midnight, 255 at noon.
-    const float frac  = float(t) / float(day_minutes);
-    const float angle = (frac - 0.5f) * 2.0f * 3.14159265f;
-    const float cosv  = std::cos(angle);
-    const float v     = (cosv * 0.5f + 0.5f) * 255.0f;
-    if (v < 0.0f)   return 0;
-    if (v > 255.0f) return 255;
-    return int32_t(v);
+    const STwilight tw = Twilight();
+    const int32_t time = timeofday;
+    if (time > tw.eveningend || time < tw.morningbeg)
+        return 0;
+    if (time > tw.morningend && time < tw.eveningbeg)
+        return 255;
+
+    // Minutes into the morning ramp, or left of the evening one.
+    const int32_t into = (time <= tw.morningend) ? time - tw.morningbeg
+                                                 : Rules.twilight - (time - tw.eveningbeg);
+    if (RealTimeLight)
+        return into * 255 / Rules.twilight;
+    const int32_t step = into * Rules.twilightsteps / Rules.twilight;
+    return step * 255 / Rules.twilightsteps;
 }
 
+// REVSYNC: TPlayScreen::DayTimeFlag @ 0x0047eab0 -- DAY_MIDNIGHT at minute 0,
+// DAY_NOON at 720, else night, day, morning or evening by the twilights.
 int32_t TPlayScreen::DayTimeFlag() const
 {
-    const int32_t mins = timeofday % (24 * 60);
-    const int32_t h = (mins < 0 ? mins + 24 * 60 : mins) / 60;
-    if (h < 5)  return DAY_MIDNIGHT;
-    if (h < 8)  return DAY_MORNING;
-    if (h < 12) return DAY_DAYTIME;
-    if (h < 14) return DAY_NOON;
-    if (h < 19) return DAY_DAYTIME;
-    if (h < 21) return DAY_EVENING;
-    return DAY_NIGHT;
+    const STwilight tw = Twilight();
+    const int32_t time = timeofday;
+    if (time == 0)
+        return DAY_MIDNIGHT;
+    if (time == 12 * 60)
+        return DAY_NOON;
+    if (time > tw.eveningend || time < tw.morningbeg)
+        return DAY_NIGHT;
+    if (time > tw.morningend && time < tw.eveningbeg)
+        return DAY_DAYTIME;
+    return (time <= tw.morningend) ? DAY_MORNING : DAY_EVENING;
+}
+
+// Debug: the same day's game time at `minutes` past midnight.
+void TPlayScreen::SetTimeOfDay(int32_t minutes)
+{
+    if (Rules.daylength <= 0)
+        return;
+    const int64_t day = int64_t(gametime) / Rules.daylength;
+    SetGameTime(int32_t(day * Rules.daylength + int64_t(minutes) * Rules.daylength / 1440));
 }
 
 // *************************************************************************

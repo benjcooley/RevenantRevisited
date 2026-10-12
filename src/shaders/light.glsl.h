@@ -66,7 +66,8 @@ void main() {
     vec4  nrm = texture(normal_tex, v_uv);
     vec3  np  = nrm.xyz;
     vec3  N   = normalize(np * 2.0 - 1.0);
-    bool  is_mesh = (nrm.a < 0.5 || nrm.a > 1.5);     // G-buffer surface class: 1 tile, 0 mesh
+    bool  is_mesh = (nrm.a < 0.5 || nrm.a > 1.5);     // G-buffer surface class: 1 tile, 0 or below a mesh
+    float  height  = max(-nrm.a, 0.0);                  // a mesh: its height above its base
     float ao  = texture(ao_tex, v_uv).r;
     vec2  ts  = vec2(textureSize(albedo_tex, 0));
     float fbw = ts.x, fbh = ts.y;
@@ -111,7 +112,7 @@ void main() {
         return;
     }
     float cast_shadow = (shadow.w > 0.5) ? texture(shadow_tex, v_uv).r : 1.0;
-    surface_light s = shade_surface(alb.rgb, W, N, is_mesh, ao, cast_shadow);
+    surface_light s = shade_surface(alb.rgb, W, N, is_mesh, height, ao, cast_shadow);
     // kObjFlagSelfLit (bit 0x20 of the id's top byte): imagery retail drew
     // after the light transfer keeps its own colours.
     {

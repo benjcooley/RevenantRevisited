@@ -432,18 +432,24 @@ struct TMapRenderer::Impl
     float color[3]     = { 1.0f, 1.0f, 1.0f };
     float ambient_color[3] = { 1.0f, 1.0f, 1.0f };
     float ambient      = 0.15f;
-    // Modern lighting mode only: the scale from AMBLIGHT to the shader
-    // ambient, an art tunable in the Lighting tab (lower = brighter).
-    //   s.ambient = AMBLIGHT * Ambient3D / (ambient_divisor * 100)
-    // Classic mode uses retail's exact mapping instead (classiclighting.cpp,
-    // docs/LIGHTING_FIDELITY.md §2.4).
-    float ambient_divisor = 20.0f;
-    // Ceiling on the summed deferred light (ambient + per-point-lights).
-    // Originally 1.0 to prevent 3D-object white-out from stacked point
-    // lights, but that also caps ambient overbright. Bumped up so the
-    // dim base ambient * dark albedo combo can be pushed brighter
-    // without immediately burning where torches stack. Tunable.
-    float light_ceiling = 1.5f;
+    // Modern lighting mode only: the ambient is retail's tile ambient gain
+    // (AMBLIGHT with the gamma offset, AMBCOLOR scaled to a largest channel
+    // of 1, before the light table's byte truncation) times this
+    // ([Revisited] AmbientScale). docs/lighting/LIGHTING_AB.md §6.4.
+    float ambient_scale = 0.85f;
+    // Modern, areas with day and night: the share of the ambient the sun
+    // takes over at full daylight ([Revisited] SunShare). The sky keeps the
+    // rest; the sun gives it back on faces turned to it (intensity 1 = all
+    // of it), so a sunlit face keeps retail's daylight level.
+    float sun_share = 0.5f;
+    // Modern: the shared scale of tiles and 3D objects ([Revisited]
+    // TileBakedLevel, ToneShoulder, CharacterKeyLight, CharacterLightBoost).
+    float tile_baked_level      = 0.35f;
+    float tone_shoulder         = 0.8f;
+    float character_key_light   = 0.5f;
+    float character_light_boost = 0.25f;
+    float character_light_saturation = 0.5f;
+    float character_retail_light = 1.0f;
     // Retail had no synthesized AO; baked occlusion lived in the tile
     // depth maps. Off by default; on in modern mode.
     bool  ao_enable    = false;
@@ -472,6 +478,8 @@ struct TMapRenderer::Impl
     bool lights_on = true;
     float radius_mul = 1.0f;      // Revisited per-area POINTLIGHTRANGE (1 = authored)
     float intensity_mul = 1.0f;   // Revisited per-area POINTLIGHTINT (1 = authored)
+    std::vector<TObjectInstance*> retailDrawLights;   // Classic: the static light pass's lights, in draw order
+    bool  retailLightOverflowLogged = false;
     int32_t lighting_mode = 0;
     // Current area has a day/night cycle (AREA_DONIGHT); gates the modern sun.
     bool daylight_cycle = false;

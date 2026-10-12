@@ -226,6 +226,8 @@ class TPlayScreen : public TScreen
     [[nodiscard]] int32_t TimeOfDay()    const;
     [[nodiscard]] int32_t Daylight()     const;
     [[nodiscard]] int32_t DayTimeFlag()  const;
+    void                   SetTimeOfDay(int32_t minutes);
+      // Debug: jumps the clock to that minute of the current day
 
     // ---- Post-character overlays --------------------------------------
     // Overlay primitives queued by gameplay code (spell sparkles, damage
@@ -315,7 +317,7 @@ class TPlayScreen : public TScreen
     // Game time
     int32_t gameframes        = 0;  // frames since this PlayScreen started
     int32_t sessionstart      = 0;  // frame count at last SetGameTime
-    int32_t lastsessionframes = 0;  // total frames in previous game session
+    int32_t lastsessionframes = 0;  // the saved game time, in frames (SetGameTime)
     int32_t gametime          = 0;  // hundredths of a second, in-game
     int32_t timeofday         = 0;  // game minutes
 

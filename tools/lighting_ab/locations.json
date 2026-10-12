@@ -1,0 +1,707 @@
+{
+ "module": "Ahkuilon.rvm",
+ "locations": [
+  {
+   "id": "forest-waves-day",
+   "minute": 720,
+   "area": "The Forest",
+   "level": 0,
+   "pos": [
+    12595,
+    22275,
+    16
+   ],
+   "source": "surf on the forest coast",
+   "amb": 30,
+   "ambcolor": [
+    250,
+    250,
+    250
+   ]
+  },
+  {
+   "id": "forest-waves-night",
+   "minute": 60,
+   "area": "The Forest",
+   "level": 0,
+   "pos": [
+    12595,
+    22275,
+    16
+   ],
+   "source": "surf on the forest coast",
+   "amb": 35,
+   "ambcolor": [
+    75,
+    100,
+    255
+   ]
+  },
+  {
+   "id": "ruins-navarro-day",
+   "minute": 720,
+   "area": "The Ruins",
+   "level": 5,
+   "pos": [
+    21868,
+    13390,
+    0
+   ],
+   "source": "Navarro",
+   "amb": 30,
+   "ambcolor": [
+    250,
+    250,
+    250
+   ]
+  },
+  {
+   "id": "ruins-navarro-night",
+   "minute": 60,
+   "area": "The Ruins",
+   "level": 5,
+   "pos": [
+    21868,
+    13390,
+    0
+   ],
+   "source": "Navarro",
+   "amb": 35,
+   "ambcolor": [
+    75,
+    100,
+    255
+   ]
+  },
+  {
+   "id": "ruins-waves-day",
+   "minute": 720,
+   "area": "The Ruins",
+   "level": 5,
+   "pos": [
+    17734,
+    11500,
+    16
+   ],
+   "source": "surf by the ruins",
+   "amb": 30,
+   "ambcolor": [
+    250,
+    250,
+    250
+   ]
+  },
+  {
+   "id": "ruins-waves-night",
+   "minute": 60,
+   "area": "The Ruins",
+   "level": 5,
+   "pos": [
+    17734,
+    11500,
+    16
+   ],
+   "source": "surf by the ruins",
+   "amb": 35,
+   "ambcolor": [
+    75,
+    100,
+    255
+   ]
+  },
+  {
+   "id": "misthaven-puppets-day",
+   "minute": 720,
+   "area": "Misthaven",
+   "level": 0,
+   "pos": [
+    2377,
+    26883,
+    63
+   ],
+   "source": "Lucas's puppet show",
+   "amb": 30,
+   "ambcolor": [
+    250,
+    250,
+    250
+   ]
+  },
+  {
+   "id": "misthaven-puppets-night",
+   "minute": 60,
+   "area": "Misthaven",
+   "level": 0,
+   "pos": [
+    2377,
+    26883,
+    63
+   ],
+   "source": "Lucas's puppet show",
+   "amb": 35,
+   "ambcolor": [
+    75,
+    100,
+    255
+   ]
+  },
+  {
+   "id": "misthaven-bar",
+   "minute": null,
+   "area": "House Interior",
+   "level": 1,
+   "pos": [
+    4122,
+    20468,
+    0
+   ],
+   "source": "Gus's bar",
+   "amb": 4,
+   "ambcolor": [
+    250,
+    250,
+    250
+   ]
+  },
+  {
+   "id": "keep-pit",
+   "minute": null,
+   "area": "The Keep",
+   "level": 2,
+   "pos": [
+    1212,
+    545,
+    0
+   ],
+   "source": "the resurrection pit, shot S1",
+   "amb": 4,
+   "ambcolor": [
+    155,
+    155,
+    210
+   ]
+  },
+  {
+   "id": "keep-hall",
+   "minute": null,
+   "area": "The Keep",
+   "level": 2,
+   "pos": [
+    11952,
+    9170,
+    364
+   ],
+   "source": "Tendrick and Sardok upstairs",
+   "amb": 4,
+   "ambcolor": [
+    155,
+    155,
+    210
+   ]
+  },
+  {
+   "id": "keep-gow",
+   "minute": null,
+   "area": "The Keep",
+   "level": 6,
+   "pos": [
+    6347,
+    4185,
+    40
+   ],
+   "source": "Gow's council",
+   "amb": 4,
+   "ambcolor": [
+    155,
+    155,
+    210
+   ]
+  },
+  {
+   "id": "tower-harowen",
+   "minute": null,
+   "area": "The Ancient Tower",
+   "level": 3,
+   "pos": [
+    10400,
+    10000,
+    23
+   ],
+   "source": "Harowen",
+   "amb": 4,
+   "ambcolor": [
+    155,
+    155,
+    210
+   ]
+  },
+  {
+   "id": "arakna-gus",
+   "minute": null,
+   "area": "Arakna Island",
+   "level": 4,
+   "pos": [
+    10159,
+    10007,
+    5
+   ],
+   "source": "Gus on the island",
+   "amb": 40,
+   "ambcolor": [
+    55,
+    55,
+    255
+   ]
+  },
+  {
+   "id": "arakna-waves",
+   "minute": null,
+   "area": "Arakna Island",
+   "level": 4,
+   "pos": [
+    5881,
+    8795,
+    16
+   ],
+   "source": "surf round the island",
+   "amb": 40,
+   "ambcolor": [
+    55,
+    55,
+    255
+   ]
+  },
+  {
+   "id": "caverns-ollihoot",
+   "minute": null,
+   "area": "The Caverns",
+   "level": 30,
+   "pos": [
+    10458,
+    10554,
+    31
+   ],
+   "source": "Ollihoot",
+   "amb": 12,
+   "ambcolor": [
+    155,
+    155,
+    210
+   ]
+  },
+  {
+   "id": "kragg-mountain-32",
+   "minute": null,
+   "area": "Kragg Mountain",
+   "level": 32,
+   "pos": [
+    9262,
+    9748,
+    365
+   ],
+   "source": "best-lit spot, by light [9249, 9759, 378] [0, 40, 100]",
+   "amb": 12,
+   "ambcolor": [
+    155,
+    155,
+    210
+   ]
+  },
+  {
+   "id": "infested-swamp-39",
+   "minute": null,
+   "area": "The Infested Swamp",
+   "level": 39,
+   "pos": [
+    8757,
+    9797,
+    110
+   ],
+   "source": "best-lit spot, by light [8754, 9798, 164] [50, 100, 100]",
+   "amb": 12,
+   "ambcolor": [
+    155,
+    155,
+    210
+   ]
+  },
+  {
+   "id": "maze-recluse",
+   "minute": null,
+   "area": "The Maze of Darkness",
+   "level": 36,
+   "pos": [
+    4020,
+    12622,
+    0
+   ],
+   "source": "the Recluse",
+   "amb": 3,
+   "ambcolor": [
+    50,
+    0,
+    200
+   ]
+  },
+  {
+   "id": "spiral-solifuge",
+   "minute": null,
+   "area": "The Spiral Arm",
+   "level": 31,
+   "pos": [
+    1009,
+    8731,
+    423
+   ],
+   "source": "the Solifuge",
+   "amb": 15,
+   "ambcolor": [
+    155,
+    155,
+    210
+   ]
+  },
+  {
+   "id": "crypt-andria",
+   "minute": null,
+   "area": "The Queen's Crypt",
+   "level": 37,
+   "pos": [
+    10004,
+    10168,
+    104
+   ],
+   "source": "Andria",
+   "amb": 12,
+   "ambcolor": [
+    155,
+    155,
+    210
+   ]
+  },
+  {
+   "id": "pit-jhaga",
+   "minute": null,
+   "area": "The Pit",
+   "level": 48,
+   "pos": [
+    6934,
+    8934,
+    18
+   ],
+   "source": "Jhaga and Sabu",
+   "amb": 26,
+   "ambcolor": [
+    150,
+    150,
+    250
+   ]
+  },
+  {
+   "id": "children-druhg",
+   "minute": null,
+   "area": "The City of The Children",
+   "level": 41,
+   "pos": [
+    11163,
+    14983,
+    274
+   ],
+   "source": "the Blue Druhg",
+   "amb": 24,
+   "ambcolor": [
+    150,
+    150,
+    250
+   ]
+  },
+  {
+   "id": "horrors-torturer",
+   "minute": null,
+   "area": "The Chamber of Horrors",
+   "level": 42,
+   "pos": [
+    10192,
+    10472,
+    16
+   ],
+   "source": "the Ogrok Torturer",
+   "amb": 24,
+   "ambcolor": [
+    150,
+    150,
+    250
+   ]
+  },
+  {
+   "id": "interiors-chef",
+   "minute": null,
+   "area": "Interiors of The City of the Children",
+   "level": 43,
+   "pos": [
+    9843,
+    12395,
+    16
+   ],
+   "source": "the Ogrok Chef",
+   "amb": 24,
+   "ambcolor": [
+    150,
+    150,
+    250
+   ]
+  },
+  {
+   "id": "underground-pyramid-44",
+   "minute": null,
+   "area": "The Underground Pyramid",
+   "level": 44,
+   "pos": [
+    13130,
+    8190,
+    752
+   ],
+   "source": "best-lit spot, by light [13175, 8125, 800] [225, 90, 0]",
+   "amb": 24,
+   "ambcolor": [
+    150,
+    150,
+    250
+   ]
+  },
+  {
+   "id": "sabu-ogrok-arena",
+   "minute": null,
+   "area": "The Chase of Sabu",
+   "level": 45,
+   "pos": [
+    9052,
+    6240,
+    16
+   ],
+   "source": "the Ogrok arena: Slagg, Mort, Urgg",
+   "amb": 24,
+   "ambcolor": [
+    150,
+    150,
+    250
+   ]
+  },
+  {
+   "id": "slavecamp-shegra",
+   "minute": null,
+   "area": "The Slave Camp",
+   "level": 46,
+   "pos": [
+    8856,
+    5150,
+    17
+   ],
+   "source": "Shegra",
+   "amb": 24,
+   "ambcolor": [
+    150,
+    150,
+    250
+   ]
+  },
+  {
+   "id": "slavecamp-workers",
+   "minute": null,
+   "area": "The Slave Camp",
+   "level": 46,
+   "pos": [
+    6960,
+    7728,
+    23
+   ],
+   "source": "the Druhg workers",
+   "amb": 24,
+   "ambcolor": [
+    150,
+    150,
+    250
+   ]
+  },
+  {
+   "id": "lair-nahkranoth",
+   "minute": null,
+   "area": "The Nahkranoth Lair",
+   "level": 49,
+   "pos": [
+    9745,
+    9681,
+    272
+   ],
+   "source": "Nahkranoth",
+   "amb": 24,
+   "ambcolor": [
+    250,
+    150,
+    250
+   ]
+  },
+  {
+   "id": "nahkranoth-lair-47",
+   "minute": null,
+   "area": "The Nahkranoth Lair ",
+   "level": 47,
+   "pos": [
+    10208,
+    11008,
+    16
+   ],
+   "source": "no lights: a middle tile",
+   "amb": 24,
+   "ambcolor": [
+    50,
+    100,
+    250
+   ]
+  },
+  {
+   "id": "lab-red",
+   "minute": null,
+   "area": "The Labyrinth",
+   "level": 51,
+   "pos": [
+    11281,
+    9199,
+    292
+   ],
+   "source": "red marker",
+   "amb": 40,
+   "ambcolor": [
+    230,
+    50,
+    50
+   ]
+  },
+  {
+   "id": "lab-white",
+   "minute": null,
+   "area": "The Labyrinth",
+   "level": 52,
+   "pos": [
+    11280,
+    8496,
+    724
+   ],
+   "source": "white marker",
+   "amb": 40,
+   "ambcolor": [
+    255,
+    255,
+    255
+   ]
+  },
+  {
+   "id": "lab-green",
+   "minute": null,
+   "area": "The Labyrinth",
+   "level": 53,
+   "pos": [
+    10256,
+    8752,
+    288
+   ],
+   "source": "green marker",
+   "amb": 40,
+   "ambcolor": [
+    0,
+    250,
+    125
+   ]
+  },
+  {
+   "id": "lab-blue",
+   "minute": null,
+   "area": "The Labyrinth",
+   "level": 54,
+   "pos": [
+    10614,
+    9898,
+    720
+   ],
+   "source": "blue marker",
+   "amb": 40,
+   "ambcolor": [
+    50,
+    50,
+    250
+   ]
+  },
+  {
+   "id": "lab-orange",
+   "minute": null,
+   "area": "The Labyrinth",
+   "level": 55,
+   "pos": [
+    10621,
+    9903,
+    576
+   ],
+   "source": "orange marker",
+   "amb": 40,
+   "ambcolor": [
+    230,
+    100,
+    0
+   ]
+  },
+  {
+   "id": "lab-yellow",
+   "minute": null,
+   "area": "The Labyrinth",
+   "level": 56,
+   "pos": [
+    11094,
+    9234,
+    720
+   ],
+   "source": "yellow marker",
+   "amb": 40,
+   "ambcolor": [
+    225,
+    210,
+    0
+   ]
+  },
+  {
+   "id": "lab-purple",
+   "minute": null,
+   "area": "The Labyrinth",
+   "level": 57,
+   "pos": [
+    10632,
+    10154,
+    144
+   ],
+   "source": "purple marker",
+   "amb": 40,
+   "ambcolor": [
+    175,
+    0,
+    250
+   ]
+  },
+  {
+   "id": "lab-yhagoro",
+   "minute": null,
+   "area": "The Labyrinth",
+   "level": 58,
+   "pos": [
+    10188,
+    8406,
+    265
+   ],
+   "source": "Yhagoro",
+   "amb": 24,
+   "ambcolor": [
+    250,
+    150,
+    250
+   ]
+  }
+ ]
+}

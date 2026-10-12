@@ -4542,7 +4542,13 @@ COMMAND(CmdPlayMovie)
 }
 COMMAND(CmdStopAutoMapGen) { return CmdNotPorted("samap", 0x00425420, t); }
 COMMAND(CmdSwapCDTrack) { return CmdNotPorted("swapcdtrack", 0x00428b90, t); }
-COMMAND(CmdTimeOfDay) { return CmdNotPorted("timeofday", 0x00427a80, t); }
+// REVSYNC: CmdTimeOfDay @ 0x00427a80 -- prints the minute of the day.
+COMMAND(CmdTimeOfDay)
+{
+    Output("At the tone, the time will be %d\n", PlayScreen.TimeOfDay());
+    t.WhiteGet();
+    return 0;
+}
 
 // ----- owner: deferred (multiplayer, editor tooling) -----
 // (The buy/sell family is in cmd_buysell.cpp.)

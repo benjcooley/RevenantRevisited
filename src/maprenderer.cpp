@@ -29,6 +29,8 @@
 #include "gamemap.h"
 #include "logging.h"
 #include "mapmanager.h"
+#include "dls.h"
+#include "revisited_settings.h"
 #include "mappane.h"
 #include "playscreen.h"
 #include "math3d.h"
@@ -1150,6 +1152,9 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         // DrawLit, 1998 animimage.cpp; a state with both ends up lit, one
         // with neither isn't drawn). The resurrection pit's Elevator
         // platform is ANIIM_LIT. Effects keep their own path.
+        // Effects (water, surf, magic) cast no sun shadow in the modern model.
+        if (oi->ObjClass() == OBJCLASS_EFFECT)
+            obj_id |= kObjFlagNoShadow;
         if (!animation_layer && oi->ObjClass() != OBJCLASS_EFFECT)
             if (TObjectImagery* img = oi->GetImagery())
             {
@@ -1922,6 +1927,39 @@ void TMapRenderer::SetPointLightMultipliers(float intensity_mul, float range_mul
 }
 
 void TMapRenderer::SetLightingMode(int32_t mode) { if (impl) impl->lighting_mode = mode; }
+
+void TMapRenderer::ApplyLightingSettings(const SRevisitedSettings& settings)
+{
+    if (!impl) return;
+    Impl& s = *impl;
+    s.intensity     = float(settings.sun_intensity);
+    s.sun_share     = float(settings.sun_share);
+    s.tile_baked_level    = float(settings.tile_baked_level);
+    s.tone_shoulder       = float(settings.tone_shoulder);
+    s.character_key_light = float(settings.character_key_light);
+    s.character_light_boost = float(settings.character_light_boost);
+    s.character_light_saturation = float(settings.character_light_saturation);
+    s.character_retail_light = float(settings.character_retail_light);
+    s.color[0]      = settings.sun_color_r / 255.0f;
+    s.color[1]      = settings.sun_color_g / 255.0f;
+    s.color[2]      = settings.sun_color_b / 255.0f;
+    s.ambient_scale = float(settings.ambient_scale);
+    s.ao_enable     = settings.ao_enable;
+    s.ao_radius_px  = float(settings.ao_radius_px);
+    s.ao_strength   = float(settings.ao_strength);
+    s.ao_bias       = float(settings.ao_bias);
+    s.ao_max_dist   = float(settings.ao_max_dist_wu);
+    s.sun_shadow              = settings.sun_shadow_enable;
+    s.sun_shadow_step         = float(settings.sun_shadow_step_wu);
+    s.sun_shadow_soft         = float(settings.sun_shadow_soft_px);
+    s.sun_shadow_max          = settings.sun_shadow_max_steps;
+    s.sun_shadow_bias         = float(settings.sun_shadow_bias_wu);
+    s.sun_shadow_depth_cutoff = float(settings.sun_shadow_depth_cut);
+    s.normal_radius   = float(settings.normal_radius);
+    s.normal_hardness = float(settings.normal_hardness);
+    s.edge_thr        = float(settings.edge_threshold);
+    s.depth_mul       = float(settings.depth_mul);
+}
 void TMapRenderer::SetDaylightCycle(bool has_cycle) { if (impl) impl->daylight_cycle = has_cycle; }
 void TMapRenderer::SetGroundTilesVisible(bool visible) { if (impl) impl->sectorShowGroundTiles = visible; }
 void TMapRenderer::SetReviewVisibleTileTypes(const std::vector<uint32_t>& types)
@@ -3096,6 +3134,61 @@ void TMapRenderer::SetReviewSubmissionCallbacks(std::function<void()> before_wor
     review_inside_world_ = std::move(inside_world);
 }
 
+// Classic: the authored lights as retail's static light pass draws them
+// (docs/LIGHTING_FIDELITY.md §2.6). The update rect of a full redraw is the
+// pane's scroll position aligned down to the 64-pixel update grid and the
+// pane plus one update edge each way (UpdateEdges, 1998 mappane.cpp:2953;
+// SCROLLBUFWIDTH = MAPPANEWIDTH + 2 * UPDATEWIDTH), in retail screen
+// coordinates (WorldToScreen). TMapPane::GetDrawLights gives its lights in
+// draw order with their light-table ids; each goes up with its id's colour
+// and multiplier, which is what the DLS light byte shows, and the light pass
+// keeps the order (the last light over a pixel picks its colour). Returns
+// the number submitted.
+static int32_t SubmitRetailDrawLights(int32_t cam_ox, int32_t cam_oy, int32_t vw, int32_t vh, float zoom,
+                                      const S3DPoint& camera_world, float radius_mul, float intensity_mul,
+                                      std::vector<TObjectInstance*>& lights, bool& overflow_logged)
+{
+    constexpr int32_t kUpdateEdge = 64;                 // UPDATEWIDTH / UPDATEHEIGHT
+    const float scale = (std::max)(zoom, 0.0001f);
+    int32_t cam_sx = 0, cam_sy = 0;
+    WorldToScreen(S3DPoint{ camera_world.x, camera_world.y, 0 }, cam_sx, cam_sy);
+    const int32_t scrollx = cam_sx + int32_t(std::floor(float(-cam_ox) / scale));
+    const int32_t scrolly = cam_sy + int32_t(std::floor(float(-cam_oy) / scale));
+    const int32_t updatex = scrollx & ~(kUpdateEdge - 1);
+    const int32_t updatey = scrolly & ~(kUpdateEdge - 1);
+    SRect update(updatex, updatey,
+                 updatex + int32_t(std::ceil(float(vw) / scale)) + 2 * kUpdateEdge - 1,
+                 updatey + int32_t(std::ceil(float(vh) / scale)) + 2 * kUpdateEdge - 1);
+
+    MapPane.GetDrawLights(update, lights);
+    if (int32_t(lights.size()) > TRenderer::kMaxPointLights && !overflow_logged)
+    {
+        overflow_logged = true;
+        log_warn("[light] %zu retail lights over the update rect; the light pass takes %d",
+                 lights.size(), TRenderer::kMaxPointLights);
+    }
+
+    int32_t n = 0;
+    for (TObjectInstance* inst : lights)
+    {
+        if (n == TRenderer::kMaxPointLights)
+            break;
+        const SLightDef& ld = *inst->GetLightDef();
+        S3DPoint at;
+        inst->GetPos(at);
+        at += ld.pos;
+        SColor color;
+        int32_t multiplier = 0;
+        GetLightColor(ld.lightid, color, multiplier);
+        Renderer->AddRetailPointLight(float(at.x), float(at.y), float(at.z),
+                                      float(ld.intensity) * radius_mul,
+                                      color.red / 255.0f, color.green / 255.0f, color.blue / 255.0f,
+                                      float(multiplier) * intensity_mul);
+        ++n;
+    }
+    return n;
+}
+
 void TMapRenderer::RenderFrame()
 {
     Impl& s = *impl;
@@ -3385,12 +3478,16 @@ void TMapRenderer::RenderFrame()
     // only consumer that has to push it onward to the GPU.
     //
     // Classic maps it exactly as retail did (classiclighting.cpp). Modern
-    // maps it through the `s.ambient_divisor` art tunable, with
-    // [Lighting]Ambient3D as a percent on top. Both models also feed the
-    // scene ambient and sun to the FX LitFlat path, so Classic exposes its
-    // tile ambient there and no sun: retail had none.
+    // starts from the same retail light levels -- the tile ambient before
+    // the light table's byte truncation, and retail's light gain per unit of
+    // multiplier for the authored lights -- scaled by its art settings
+    // (AmbientScale, PointLightInt), and adds its own form: N.L, AO, the sun
+    // (docs/lighting/LIGHTING_AB.md §6.4). Both models also feed the scene
+    // ambient and sun to the FX LitFlat path, so Classic exposes its tile
+    // ambient there and no sun: retail had none.
     const bool classic = (s.lighting_mode == 0);
     const bool sun_active = !classic && s.daylight_cycle;
+    float sun_level = 0.0f;             // modern by day: the sun's light (below)
     {
         const int32_t mp_ambient = MapPane.GetAmbientLight();
         const SColor& mp_color   = MapPane.GetAmbientColor();
@@ -3403,20 +3500,21 @@ void TMapRenderer::RenderFrame()
         settings.dir_light_percent = DirLightPercent;
         const SClassicLightModel model = ComputeClassicLightModel(mp_ambient, mp_color, settings);
         Renderer->SetClassicLightModel(model);
-        if (classic)
-        {
-            s.ambient = 1.0f;
-            for (int32_t i = 0; i < 3; ++i)
-                s.ambient_color[i] = model.tile_ambient[i];
-        }
-        else
-        {
-            const float divisor = (s.ambient_divisor > 0.0f) ? s.ambient_divisor : 1.0f;
-            s.ambient          = float(mp_ambient) * float(Ambient3D) / (divisor * 100.0f);
-            s.ambient_color[0] = float(mp_color.red)   / 255.0f;
-            s.ambient_color[1] = float(mp_color.green) / 255.0f;
-            s.ambient_color[2] = float(mp_color.blue)  / 255.0f;
-        }
+        // Modern, by day: the sun takes its share of the ambient over and
+        // gives it back as directional light at the ambient's level.
+        const float daylight = sun_active ? float(PlayScreen.Daylight()) / 255.0f : 0.0f;
+        const float share    = s.sun_share * daylight;
+        s.ambient = classic ? 1.0f : s.ambient_scale * (1.0f - share);
+        for (int32_t i = 0; i < 3; ++i)
+            s.ambient_color[i] = classic ? model.tile_ambient[i] : model.tile_ambient_linear[i];
+        const float ambient_level = (std::max)({ model.tile_ambient_linear[0], model.tile_ambient_linear[1],
+                                                 model.tile_ambient_linear[2] });
+        sun_level = s.intensity * s.ambient_scale * share * ambient_level;
+        Renderer->SetRetailLightModernScale(model.tile_gain_per_mult, 1.0f);
+        Renderer->SetModernModel(s.tile_baked_level, s.tone_shoulder,
+                                 s.character_key_light, s.character_light_boost);
+        Renderer->SetCharacterLightSaturation(s.character_light_saturation);
+        Renderer->SetCharacterRetailLight(s.character_retail_light);
     }
 
     const SColor& mesh_color = MapPane.GetAmbientColor();
@@ -3437,10 +3535,9 @@ void TMapRenderer::RenderFrame()
     }
 
     Renderer->SetLight(s.light_dir[0], s.light_dir[1], s.light_dir[2],
-                       sun_active ? s.intensity : 0.0f,
+                       sun_level,
                        s.color[0], s.color[1], s.color[2], s.ambient);
     Renderer->SetAmbientColor(s.ambient_color[0], s.ambient_color[1], s.ambient_color[2]);
-    Renderer->SetLightCeiling(s.light_ceiling);
     Renderer->SetAmbientOcclusion(s.ao_enable, s.ao_radius_px, s.ao_strength, s.ao_bias, s.ao_max_dist);
     Renderer->SetShadowWorldDir(s.light_dir[0], s.light_dir[1], s.light_dir[2]);
     Renderer->SetSunShadowRaycast(s.sun_shadow_samples, s.sun_shadow_depth_cutoff,
@@ -3467,7 +3564,11 @@ void TMapRenderer::RenderFrame()
     SMapRenderStats stats = {};
 
     Renderer->ClearPointLights();
-    if (s.lights_on)
+    if (s.lights_on && classic)
+        stats.point_lights_submitted = SubmitRetailDrawLights(cam_ox, cam_oy, vw, vh, effective_camera_zoom,
+                                                              s.sectorCameraWorld, s.radius_mul, s.intensity_mul,
+                                                              s.retailDrawLights, s.retailLightOverflowLogged);
+    else if (s.lights_on)
     {
         S3DPoint vc_rel;
         ::ScreenToWorld(int32_t(std::lround(float(vw / 2 - cam_ox) / (std::max)(effective_camera_zoom, 0.0001f))),
@@ -3518,10 +3619,6 @@ void TMapRenderer::RenderFrame()
         }
         stats.point_lights_submitted = pick_n;
     }
-    // Modern reading of the authored lights: LightMult3D percent of a
-    // percent multiplier, radius stretched by LightRange3D.
-    Renderer->SetRetailLightModernScale(float(LightMult3D) / 10000.0f,
-                                        float(LightRange3D) / 100.0f);
     mark_phase(timings.point_lights_ms);
 
     const float zspan = s.z_far - s.z_near;

@@ -14,6 +14,8 @@
 #include "screen.h"
 #include "sector.h"
 
+#include <vector>
+
 class TMapRenderer;
 enum class EPickRead : uint8_t;
 
@@ -227,6 +229,9 @@ class TMapPane : public TPane
       // is true, in which case the value is set immediately.
     SColor &GetAmbientColor() { return ambcolor; }
       // Gets the ambient light color
+    void GetDrawLights(SRect &r, std::vector<TObjectInstance*> &lights);
+      // The lights retail's static light pass draws over screen rect r, in its
+      // order, each with its light-table id (docs/LIGHTING_FIDELITY.md §2.6)
     void SetAmbient(int32_t light, SColor &color, bool stopfade = true)
       { SetAmbientLight(light, stopfade); SetAmbientColor(color, stopfade); }
       // Sets total ambient environment in one shot
@@ -607,6 +612,7 @@ class TMapPane : public TPane
     bool command_window_borrowed = false;
     TSector* sectors[SECTORWINDOWX][SECTORWINDOWY] = {}; // Window borrowed from windowmap (see above)
     TSafeRef<TGameMap> windowmap;                        // Map the sector window borrows from
+    std::vector<TSafeRef<>> lightidholders;              // Lights given a light-table id (GetDrawLights)
     TGameMap::EventListenerId windowlistener = 0;        // Our Unloaded listener on windowmap
     int32_t oldsectorx, oldsectory;                 // Position of sector in last frame
     int32_t sectorx, sectory;                       // Position of sector in current frame

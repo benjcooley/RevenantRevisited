@@ -3576,6 +3576,51 @@ void TMapPane::DrawUpdateRect(RSRect r, int32_t bgdraw)
         return;
 }
 
+// The static light pass, as the renderer needs it: every light retail's
+// DrawStaticLights would draw over screen rect r (the update rect), in
+// GetUpdateObjs order (REVSYNC: GetUpdateObjs @ 0x0045f800 -- the sector
+// window row by row, each sector's objects in order; a light is in when its
+// light rect meets r), each given its light-table id as it is drawn
+// (TObjectInstance::AcquireLightId, DrawLight 0x00471930). The order decides
+// both which colours take the four ids and, per pixel, which light's colour
+// shows: the last one drawn over it (docs/LIGHTING_FIDELITY.md §2.6).
+//
+// Retail gave an id back when its light's sector left the window
+// (DeleteSector -> OffScreen); the port's map manager keeps sectors past
+// the window, so a light holding an id outside the window gives it back here.
+void TMapPane::GetDrawLights(SRect &r, std::vector<TObjectInstance*> &lights)
+{
+    auto in_window = [this](const TSector* sector) {
+        for (int32_t y = 0; y < SECTORWINDOWY; ++y)
+            for (int32_t x = 0; x < SECTORWINDOWX; ++x)
+                if (sector && sectors[x][y] == sector)
+                    return true;
+        return false;
+    };
+    const auto left = std::remove_if(lightidholders.begin(), lightidholders.end(), [&](const TSafeRef<>& ref) {
+        TObjectInstance* inst = ref.Get();
+        if (!inst)
+            return true;                    // deleted: its destructor gave the id back
+        if (in_window(inst->GetSector()))
+            return false;
+        inst->ReleaseLightId();
+        return true;
+    });
+    lightidholders.erase(left, lightidholders.end());
+
+    lights.clear();
+    for (TMapIterator i(&r, CHECK_RECT|CHECK_LIGHT|CHECK_MOVING|CHECK_INVIS|CHECK_NOINVENT); i; i++)
+    {
+        TObjectInstance* inst = i.Item();
+        if (!inst->IsLight() || inst->GetLightIntensity() == 0)
+            continue;
+        if (inst->GetLightDef()->lightid == -1)
+            lightidholders.push_back(TSafeRef<>(inst));
+        inst->AcquireLightId();
+        lights.push_back(inst);
+    }
+}
+
 void TMapPane::GetUpdateObjs(SRect &r)
 {
     UpdateObjs.Clear();

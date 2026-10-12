@@ -62,9 +62,10 @@ SClassicLightModel ComputeClassicLightModel(int32_t amblight, const SColor &ambc
     for (int32_t i = 0; i < 3; ++i)
     {
         const double a = chan_max > 0 ? double(chan_in[i]) / double(chan_max) : 0.0;
-        const double ambient_byte =
-            std::floor((std::min)(kMmxTableScale * a * ambient_fraction * kAmbientMultiplier, kMultiplierByteMax));
-        m.tile_ambient[i] = float(ambient_byte / kIdentityByte);
+        const double ambient_term =
+            (std::min)(kMmxTableScale * a * ambient_fraction * kAmbientMultiplier, kMultiplierByteMax);
+        m.tile_ambient[i]        = float(std::floor(ambient_term) / kIdentityByte);
+        m.tile_ambient_linear[i] = float(ambient_term / kIdentityByte);
     }
     m.tile_gain_per_mult = float(kMmxTableScale * (1.0 - ambient_fraction) / kMultiplierScale / kIdentityByte);
 

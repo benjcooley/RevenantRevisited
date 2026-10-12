@@ -14,6 +14,7 @@
 #include "debugui.h"
 
 struct S3DPoint;
+struct SRevisitedSettings;
 class TGameMap;
 
 // How a pick reads the frame's ids (TMapRenderer::Pick). Exact: at the point,
@@ -117,6 +118,11 @@ class TMapRenderer
     // Lighting model pushed to the renderer every frame: 0 = Classic
     // (retail), 1 = modern. Seeded from [Revisited] LightingMode.
     void SetLightingMode(int32_t mode);
+
+    // The modern model's settings ([Revisited]: sun, ambient scale, ceiling,
+    // AO, sun shadows, normals). This renderer re-sends its lighting state
+    // to TRenderer every frame, so they are kept here.
+    void ApplyLightingSettings(const SRevisitedSettings& settings);
 
     // Whether the current area has a day/night cycle (AREA_DONIGHT: the area
     // defines night ambient values). The modern model's sun only exists in

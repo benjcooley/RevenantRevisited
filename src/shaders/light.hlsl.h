@@ -69,7 +69,8 @@ float4 main_ps(vs_out in_) : SV_Target0 {
     float4 nrm = normal_tex.Sample(smp, in_.uv);
     float3 np  = nrm.xyz;
     float3 N   = normalize(np * 2.0 - 1.0);
-    bool   is_mesh = (nrm.a < 0.5 || nrm.a > 1.5);     // G-buffer surface class: 1 tile, 0 mesh
+    bool   is_mesh = (nrm.a < 0.5 || nrm.a > 1.5);     // G-buffer surface class: 1 tile, 0 or below a mesh
+    float  height  = max(-nrm.a, 0.0);                  // a mesh: its height above its base
     float  ao  = ao_tex.Sample(smp, in_.uv).r;
     float  fbw, fbh; albedo_tex.GetDimensions(fbw, fbh);
     float3 W = reconstruct_world(in_.uv, d, fbw, fbh);
@@ -109,7 +110,7 @@ float4 main_ps(vs_out in_) : SV_Target0 {
         return float4(max(norm_h, band), norm_h * (1.0 - 0.5 * band), 1.0 - norm_h, 1.0);
     }
     float cast_shadow = (shadow.w > 0.5) ? shadow_tex.Sample(smp, in_.uv).r : 1.0;
-    surface_light s = shade_surface(alb.rgb, W, N, is_mesh, ao, cast_shadow);
+    surface_light s = shade_surface(alb.rgb, W, N, is_mesh, height, ao, cast_shadow);
     // kObjFlagSelfLit (bit 0x20 of the id's top byte): imagery retail drew
     // after the light transfer keeps its own colours.
     {
