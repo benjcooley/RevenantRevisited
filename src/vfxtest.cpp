@@ -1,3 +1,4 @@
+#include "effects/sandswirlqualifiedpreview.h"
 #include "effects/strikemeteorpreview.h"
 #include "effects/sgeyserpreview.h"
 #include "effects/dragonfirepreview.h"
@@ -1712,7 +1713,8 @@ void Render()
         (g_state.catalogue[g_state.active_idx].id == "Dragonattack_ORIGINAL" ||
          g_state.catalogue[g_state.active_idx].id == "StrikeEffect_METEOR_CALLER" ||
          g_state.catalogue[g_state.active_idx].id == "SGeyser_LOADED_INLINE" ||
-         g_state.catalogue[g_state.active_idx].id.rfind("Fire_INSTALLED_FACE",0)==0);
+         g_state.catalogue[g_state.active_idx].id.rfind("Fire_INSTALLED_FACE",0)==0 ||
+         g_state.catalogue[g_state.active_idx].id == "SANDSWIRL_QUALIFIED_SPARKS");
     const float world_camera_x = dragon_world_camera ? float(StartupVfxOrigin[0]) : 0.0f;
     const float world_camera_y = dragon_world_camera ? float(StartupVfxOrigin[1]) : 0.0f;
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy),
@@ -8622,6 +8624,15 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(e);
         }
 
+        // Explicit modified-retail diagnostic: never a shipped-ID mapping.
+        {
+            VfxTest::SEffect e{};e.id="SANDSWIRL_QUALIFIED_SPARKS";e.family="diagnostic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return sandswirl_qualified_preview::Spawn(o);};
+            e.submit=[](void*c,EFxDebugMode){sandswirl_qualified_preview::Advance(static_cast<sandswirl_qualified_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode){sandswirl_qualified_preview::SubmitWorld(static_cast<sandswirl_qualified_preview::State*>(c));};
+            e.is_alive=[](void*c){return sandswirl_qualified_preview::Alive(static_cast<sandswirl_qualified_preview::State*>(c));};
+            e.destroy=[](void*c){sandswirl_qualified_preview::Destroy(static_cast<sandswirl_qualified_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
         // --- W3-C: Cave / environment ambient bespoke entries -----------
         // Localized-at-end pattern: structs + factory adapters + registration
         // all live in this block for clean diff-stack append.
