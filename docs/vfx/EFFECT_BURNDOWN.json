@@ -26840,10 +26840,10 @@
   },
   "visual_acceptance_policy": "For stochastic effects, assess visual behavior across animation with independent random seeds: geometry, scale, color/blending, atlas progression, lifetime/cadence and distribution. Pixel identity and coincident random particles are not required. Track isolated visual parity separately from type dispatch and natural runtime/context.",
   "validation_workflow": {
-    "updated_date": "2026-10-07",
+    "updated_date": "2026-10-11",
     "overall_goal": "Convert and verify all 176 shipped VFX rows.",
     "reference_runtime": "thin_in_process_retail_emulator_primary",
-    "dosbox_x_for_new_vfx_validation": "targeted_3d_device_checks_of_software_rendering_issues_only",
+    "dosbox_x_for_new_vfx_validation": "excluded_by_active_goal",
     "dosbox_fallback": false,
     "guide": "docs/RETAIL_AB_TESTING.md",
     "control": "Structured direct retail-function adapters; no editor-console object commands.",
@@ -26852,7 +26852,7 @@
     "projectile_requirement": "Every projectile fixture must move under original update code over fixed ticks; compare trajectory and relevant collision/impact/cleanup.",
     "point_to_point_requirement": "Every point-to-point fixture supplies source and destination endpoints; static one-point stand-ins do not satisfy acceptance.",
     "instrumentation": "Named variants may add effect logging; record exact build SHA, parent, patches and unmodified control.",
-    "user_amendment": "DOSBox-X with the emulated 3D device may check software-rendering issues; not for most work. Routine VFX comparisons and controls remain in the fast emulator.",
+    "user_amendment": "Active goal supersedes earlier targeted-device exception: all new VFX validation uses the fast in-process emulator, never DOSBox-X.",
     "current_direct_controls_report": "recon/retail_asm/runtime/controls-verification.json",
     "current_warm_batch_report": "recon/retail_asm/runtime/current-profiles-batch-verification.json"
   },
