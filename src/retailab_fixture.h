@@ -59,6 +59,17 @@ void WriteDraws(JsonOut& j);
 // something up with draws of its own before the call it compares.
 void ClearDraws();
 
+// The objects a map search (TMapPane::FindObjectsInRange) walks, in walk
+// order, each found on its level: answered at the map pane's iterator seam
+// and recorded ("MapIterator": the rect, objset and level it was given), as
+// the retail fixture's guest.py set_map_objects. SCaseScope takes it off.
+struct SMapObject
+{
+    TObjectInstance* object = nullptr;
+    int32_t level = 0;
+};
+void SetMapObjects(std::vector<SMapObject> objects);
+
 // Action block flags by meaning (the port's bits under retail's names).
 uint32_t FlagBits(const JsonValue& names);
 void WriteFlags(JsonOut& j, uint32_t bits);
@@ -261,9 +272,12 @@ class IFixtureChar
     virtual void WriteAttackState(JsonOut& j) = 0;
     // The AI's own state: its waypoint or look-at (retail +0x234), the
     // target's last place (+0x23c), the waypoint's ticks (+0x248), the boss
-    // kind (+0x280). The look-at is the caller's to name.
-    virtual void ReadAIState(const JsonValue& a, TObjectInstance* lookat) = 0;
+    // kind (+0x280), and Wander's: the previous waypoint (+0x238), the idle
+    // ticks (+0x24c), the run's ticks (+0x250). The two waypoints are the
+    // caller's to name.
+    virtual void ReadAIState(const JsonValue& a, TObjectInstance* lookat, TObjectInstance* previous) = 0;
     [[nodiscard]] virtual TObjectInstance* AILookAt() const = 0;
+    [[nodiscard]] virtual TObjectInstance* LastWaypoint() const = 0;
     virtual void WriteAIState(JsonOut& j) const = 0;
     // Another resolver on the doing block: "attack", "impact", "block",
     // "dead", "bow-aim", "bow-shoot" (ResolveAction's dispatch, retail
@@ -710,21 +724,26 @@ class TFixtureChar : public Base, public IFixtureChar
         throw std::runtime_error("no resolver '" + which + "'");
     }
 
-    void ReadAIState(const JsonValue& a, TObjectInstance* lookat) override
+    void ReadAIState(const JsonValue& a, TObjectInstance* lookat, TObjectInstance* previous) override
     {
         this->ai_lookat = lookat;
         if (a.Has("lastpos"))
             this->target_last_position = Point(a["lastpos"]);
         this->waypointticks = (int32_t)a["waypointticks"].Int(0);
+        this->lastwaypoint = previous;
+        this->wanderidle = (int32_t)a["wanderidle"].Int(0);
+        this->runticks = (int32_t)a["runticks"].Int(0);
     }
 
     TObjectInstance* AILookAt() const override { return this->ai_lookat; }
+    TObjectInstance* LastWaypoint() const override { return this->lastwaypoint.Get(); }
 
     void WriteAIState(JsonOut& j) const override
     {
         const S3DPoint& p = this->target_last_position;
         j.Key("lastpos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']');
         j.Field("waypointticks", this->waypointticks).Field("monsterkind", this->monsterkind);
+        j.Field("wanderidle", this->wanderidle).Field("runticks", this->runticks);
     }
 
     // A player's MaxMana, when the case gives `maxmana` (retail's seam at

@@ -42,11 +42,21 @@ Seams (each call recorded in `world.seams`, in order):
   each state's frame count. A state in the case is a name or
   {"name", "frames" (default 10), "aniflags" (default 0)}.
 - The ground (`set_ground`, a case's `ground`): the sector lookup `0x499e10`
-  answers a stand-in sector (or none, for the case's `nosector`), and
+  answers a stand-in sector (or none, for the case's `nosector`, and for a
+  level other than its `level` when it names one), and
   TSector::ReturnWalkmap `0x499720` the case's height for the walk cell --
   `z`, or the last of its `cells` boxes [gx0, gy0, gx1, gy1, height] that
-  holds it. Not recorded (a read of map data). GetWalkHeight `0x452e10`
-  and GetWalkHeightRadius `0x4530a0` run as original over it.
+  holds it. Not recorded (a read of map data) unless the ground says
+  `record`: then each cell read is a `Cell` record (level, and the cell and
+  its height, or the sector that wasn't there). GetWalkHeight `0x452e10`,
+  GetWalkHeightRadius `0x4530a0` and LineOfSight `0x4533d0` run as
+  original over it.
+- The objects a map search walks (`set_map_objects`): the rect iterator's
+  init `0x44cf80` (FindObjectsInRange's, flags `0x6e0`), recorded
+  (`MapIterator`: rect, objset, level), hands out the case's objects in
+  order, those on its level (any, below 0) whose position is in the rect,
+  faces included; next is `0x44d080` as below. Without map objects the
+  original iterator runs (over no loaded sectors).
 - The characters near a point: the map iterator CharBlocking walks
   (`0x44ceb0` init, `0x44d080` next; the item at +0x0c) gives the case's
   `nearby` names, else every character, in case order. Recorded
@@ -185,6 +195,8 @@ RANDOM, RAND = 0x483300, 0x58c582                 # random(lo, hi) cdecl; MSVC r
 GET_OBJSTAT = {CLASS_CHARACTER: 0x4d7520, CLASS_PLAYER: 0x51ae30}
 FIND_SECTOR, RETURN_WALKMAP = 0x499e10, 0x499720  # cdecl (level, sx, sy); thiscall (x, y) ret 8
 ITER_INIT, ITER_NEXT, ITER_ITEM = 0x44ceb0, 0x44d080, 0x0c   # init thiscall, 6 args, ret 0x18
+ITER_RECT_INIT = 0x44cf80                        # thiscall (SRect*, flags, objset, obj, level), ret 0x14
+ITER_RECT_FLAGS = 0x6e0                          # FindObjectsInRange's: a level's loaded sectors, the rect, no inventory
 SET_POS = 0x46ed70                               # slot 8, thiscall (pos*, level, override), ret 0xc
 # TMapPane::MouseClick (thiscall (button, x, y), ret 0xc): what the player's
 # Stop calls to let go of the right-button walk (button 5), recorded.
@@ -305,6 +317,7 @@ class CombatWorld:
         b.add(FIND_SECTOR, 'FindSector', 0, self._find_sector)
         b.add(RETURN_WALKMAP, 'ReturnWalkmap', 8, self._return_walkmap)
         b.add(ITER_INIT, 'MapIterator', 0x18, self._iter_init)
+        b.add(ITER_RECT_INIT, 'MapIterator', 0x14, self._iter_rect)
         b.add(ITER_NEXT, 'MapIterator.Next', 0, self._iter_next)
         b.add(SET_POS, 'SetPos', 0xc, self._set_pos)
         b.add(PLAY_MOUSE_CLICK, 'PlayMouseClick', 0xc, self._play_mouse_click)
@@ -335,7 +348,9 @@ class CombatWorld:
         self.tape = []
         self.vm.rng_seed = 1
         self.ground = None         # the case's walkmap, if it has one
+        self.sector_level = 0      # the level of the last sector looked up (a Cell record's)
         self.nearby = None         # names the map iterator gives, else every character
+        self.map_objects = None    # [(name, address, level)] a map search walks, in order
         self.sectors = {}          # (sx, sy) -> stand-in sector, and back
         self.sector_at = {}
         self.iters = {}            # iterator address -> characters still to give
@@ -372,12 +387,20 @@ class CombatWorld:
         self.ground = case.get('ground')
         self.nearby = case.get('nearby')
 
+    def set_map_objects(self, objects):
+        """What a map search walks (`_iter_rect`): (name, guest address,
+        level) in walk order."""
+        self.map_objects = list(objects)
+
     # -- seams ------------------------------------------------------------
     def _find_sector(self, args, ecx):
         if self.ground is None:
             raise RuntimeError('the walkmap was read, but the case has no ground')
-        key = (s32(args[1]), s32(args[2]))
-        if list(key) in self.ground.get('nosector', []):
+        level, key = s32(args[0]), (s32(args[1]), s32(args[2]))
+        self.sector_level = level
+        if list(key) in self.ground.get('nosector', []) or self.ground.get('level', level) != level:
+            if self.ground.get('record'):
+                self.seams.append(dict(seam='Cell', level=level, sector=list(key)))
             return 0
         if key not in self.sectors:
             sector = self.vm.allocate(0x10)
@@ -387,7 +410,28 @@ class CombatWorld:
 
     def _return_walkmap(self, args, ecx):
         sx, sy = self.sector_at[ecx]
-        return ground_height(self.ground, sx * 64 + s32(args[0]), sy * 64 + s32(args[1]))
+        gx, gy = sx * 64 + s32(args[0]), sy * 64 + s32(args[1])
+        height = ground_height(self.ground, gx, gy)
+        if self.ground.get('record'):
+            self.seams.append(dict(seam='Cell', level=self.sector_level, cell=[gx, gy], height=height))
+        return height
+
+    def _iter_rect(self, args, ecx):
+        if self.map_objects is None:
+            return Boundaries.ORIGINAL
+        if args[1] != ITER_RECT_FLAGS:
+            raise RuntimeError(f'a map search with iterator flags {args[1]:#x}, not {ITER_RECT_FLAGS:#x}')
+        left, top, right, bottom = struct.unpack('<4i', self.vm.uc.mem_read(args[0], 16))
+        objset, level = s32(args[2]), s32(args[4])
+        self.seams.append(dict(seam='MapIterator', rect=[left, top, right, bottom], objset=objset, level=level))
+        items = []
+        for name, obj, at_level in self.map_objects:
+            x, y = struct.unpack('<2i', self.vm.uc.mem_read(obj + O_POS, 8))
+            if (level < 0 or at_level == level) and left <= x <= right and top <= y <= bottom:
+                items.append(obj)
+        self.iters[ecx] = items
+        self._iter_next(args, ecx)
+        return 0
 
     def _iter_init(self, args, ecx):
         pos = list(struct.unpack('<3i', self.vm.uc.mem_read(args[0], 12)))

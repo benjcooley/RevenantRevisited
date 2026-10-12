@@ -111,6 +111,15 @@ void ForCharactersNear(int32_t level, const S3DPoint& pos, int32_t range, Visit&
             return;
 }
 
+// REVSYNC: WaypointReachable @ 0x00528850 (a helper's method, the
+// character its argument) -- the line of sight from the waypoint, at the
+// character's height, to the character, over the waypoint's level.
+bool WaypointReachable(const TObjectInstance* waypoint, const TObjectInstance* who)
+{
+    const S3DPoint from(waypoint->Pos().x, waypoint->Pos().y, who->Pos().z);
+    return MapPane.LineOfSight(from, who->Pos(), waypoint->GetLevel());
+}
+
 // Retail's three moving actions (walk, combat, bow steps).
 bool IsMoveAction(const TActionBlock* ab)
 {
@@ -515,11 +524,14 @@ void TCharacter::Pulse()
     if (charflags & kCharFlagImpaleRelease)
         PulseImpaleRelease();
 
-  // REVSYNC: 0x004c29a2 -- the AI, for a character with OF_AI and for one
-  // running the player AI (charflags 0x100000) whatever its flags. Retail
-  // runs Wander (slot 0x234) before the player AI's; Wander isn't ported
-  // (COMBAT_ATTACK_CHOICE.md §3.15).
-    if ((charflags & kCharFlagPlayerAI) || (flags & OF_AI))
+  // REVSYNC: 0x004c29a2 -- one AI-driven (charflags 0x100000) wanders, then
+  // runs the AI, whatever its flags; any other runs the AI with OF_AI.
+    if (charflags & kCharFlagPlayerAI)
+    {
+        Wander();
+        AI();
+    }
+    else if (flags & OF_AI)
         AI();
 
     PulseRecovery();
@@ -3267,7 +3279,8 @@ TObjectInstance* TCharacter::NearestWaypoint(const S3DPoint& centre)
     else
     {
         int32_t index[kMaxFound];
-        n = (std::min)(MapPane.FindObjectsInRange(centre, index, 250, 0, OBJCLASS_HELPER, kMaxFound), kMaxFound);
+        n = (std::min)(MapPane.FindObjectsInRange(centre, GetLevel(), index, 250, 0, OBJCLASS_HELPER, kMaxFound,
+                                                  OBJSET_ALL), kMaxFound);
         for (int32_t i = 0; i < n; ++i)
             found[i] = MapPane.GetInstance(index[i]);
     }
@@ -3277,11 +3290,7 @@ TObjectInstance* TCharacter::NearestWaypoint(const S3DPoint& centre)
     for (int32_t i = 0; i < n; ++i)
     {
         TObjectInstance* o = found[i];
-        if (!o || stricmp(o->GetTypeName(), "waypoint") != 0)
-            continue;
-        S3DPoint from = o->Pos();
-        from.z = pos.z;
-        if (MapPane.LineOfSight(from, pos))
+        if (o && !stricmp(o->GetTypeName(), "waypoint") && WaypointReachable(o, this))
             waypoints[count++] = o;
     }
     if (count == 0)
@@ -3314,6 +3323,177 @@ void TCharacter::AIPerMonster()
     for (int32_t k = 0; k < 4; ++k)
         if (!stricmp(GetTypeName(), kBosses[k]))
             monsterkind = k + 1;
+}
+
+// REVSYNC: Wander @ 0x004c9790 (slot 0x234; COMBAT_ATTACK_CHOICE.md §3.15).
+// Pulse runs it before the AI for a character with charflags 0x100000:
+// retail's automatic network player, the port's --playerai.
+void TCharacter::Wander()
+{
+    if (wanderidle)
+    {
+        --wanderidle;
+        return;
+    }
+
+  // A run in a fighting root becomes a walk, and the fight goes on in the
+  // combat root (action 3 even from a bow root, 0x004c9894).
+    if (root)
+    {
+        const bool fighting = IsRoot(ACTION_COMBAT) || IsRoot(ACTION_BOW);
+        const bool running = (IsRoot(ACTION_COMBAT) && (root->Is("combatrun") || root->Is("handrun"))) ||
+                             (IsRoot(ACTION_BOW) && root->Is("bowrun")) || root->Is("run");
+        if (running && fighting && root->obj)
+        {
+            SetWalkMode();
+            TObjectInstance* opponent = IsRoot(ACTION_COMBAT) || IsRoot(ACTION_BOW) ? root->obj : nullptr;
+            BeginFighting(static_cast<TCharacter*>(opponent), ACTION_COMBAT);
+        }
+    }
+
+  // In a combat root: with no one to fight, leave the fight and rest 100
+  // ticks; retreating, now and then a run of 800 to 2000 ticks.
+    if (IsRoot(ACTION_COMBAT))
+    {
+        if (!root->obj)
+        {
+            EndFighting();
+            wanderidle = 100;
+        }
+        else if (retreating)
+        {
+            if (!runticks)
+            {
+                if (random(1, 100) > 30)
+                {
+                    runticks = random(800, 2000);
+                    SetRunMode();
+                }
+            }
+            else if (!--runticks)
+                SetWalkMode();
+        }
+        return;
+    }
+    WanderRunning();
+    WanderPatrol();
+}
+
+// Wander out of a combat root (0x004c98ba..0x004c99a9): at full fatigue a
+// run burst one tick in a hundred, of 100 to 800 ticks; a run ends early
+// half the times it's tired (under half its fatigue), and most times in a
+// bow fight (the combat root was left above).
+void TCharacter::WanderRunning()
+{
+    if (!runticks)
+    {
+        const int32_t full = MaxFatigue();
+        if (Fatigue() == full && random(1, 100) == 100)
+        {
+            runticks = random(100, 800);
+            SetRunMode();
+        }
+        return;
+    }
+    --runticks;
+    const int32_t half = MaxFatigue() / 2;
+    if (Fatigue() < half && random(1, 100) > 50)
+        runticks = 0;
+    else if (IsRoot(ACTION_BOW) && root->obj && random(1, 100) > 15)
+        runticks = 0;
+    if (!runticks)
+        SetWalkMode();
+}
+
+// Wander's patrol (0x004c99ae..0x004c9a6e): with no waypoint, pick one and
+// walk there (none: rest 1000 ticks); with one, walk on, and within 25 of
+// it (the octagonal distance, height included) pick the next, the one
+// reached becoming the previous.
+void TCharacter::WanderPatrol()
+{
+    if (!ai_lookat)
+    {
+        ai_lookat = PickWanderWaypoint();
+        if (ai_lookat)
+            Goto(ai_lookat->Pos().x, ai_lookat->Pos().y);
+        else
+            wanderidle = 1000;
+        return;
+    }
+    Goto(ai_lookat->Pos().x, ai_lookat->Pos().y);
+    const S3DPoint at = ai_lookat->Pos();
+    if (dist(pos.x, pos.y, pos.z, at.x, at.y, at.z) < 25)
+    {
+        TObjectInstance* reached = ai_lookat;
+        ai_lookat = PickWanderWaypoint();       // passes over the one reached and the one before it
+        lastwaypoint = reached;
+    }
+}
+
+// REVSYNC: 0x004c95e0 -- of the first ten helpers within 2000, the
+// "waypoint"s that are neither this leg's nor the last one's, can see here
+// (WaypointReachable 0x00528850) and pass ProbeLedge; then the one most
+// nearly ahead (the first of equals, the first when none is within 0x80)
+// six times in ten, else any of them. None: the previous waypoint.
+TObjectInstance* TCharacter::PickWanderWaypoint()
+{
+    constexpr int32_t kMaxFound = 10;
+    int32_t index[kMaxFound];
+    const int32_t n = (std::min)(MapPane.FindObjectsInRange(pos, GetLevel(), index, 2000, 0, OBJCLASS_HELPER,
+                                                            kMaxFound, OBJSET_ALL), kMaxFound);
+    TObjectInstance* const previous = lastwaypoint.Get();
+    TObjectInstance* kept[kMaxFound];
+    int32_t count = 0;
+    for (int32_t i = 0; i < n; ++i)
+    {
+        TObjectInstance* o = MapPane.GetInstance(index[i]);
+        if (o && !stricmp(o->GetTypeName(), "waypoint") && o != previous && o != ai_lookat &&
+            WaypointReachable(o, this) && ProbeLedge(o->Pos()))
+            kept[count++] = o;
+    }
+    if (count == 0)
+        return previous;
+
+    int32_t best = 0;
+    for (int32_t i = 0, bestdiff = 0x80; i < count; ++i)
+    {
+        const int32_t diff = abs(FaceAngleTo(kept[i]));
+        if (diff < bestdiff)
+        {
+            bestdiff = diff;
+            best = i;
+        }
+    }
+    return random(1, 100) < 60 ? kept[best] : kept[random(0, count - 1)];
+}
+
+// REVSYNC: 0x004c9460 -- the walk heights (this level's) from here, a step
+// at a time AWAY from `to`, each step an eighth of the way between, as
+// many steps as the distance (octagonal) holds radii: true when two in a
+// row differ by 32 or more. PickWanderWaypoint keeps a waypoint only then:
+// on open ground none passes (as retail; the direction and the test read as
+// the reverse of what the source meant). A radius below 1 takes no step
+// (retail would divide by zero).
+bool TCharacter::ProbeLedge(const S3DPoint& to)
+{
+    constexpr int32_t kLedge = 32;
+    const int32_t stepx = (pos.x - to.x) / 8;
+    const int32_t stepy = (pos.y - to.y) / 8;
+    const int32_t radius = Radius();
+    int32_t steps = radius > 0 ? dist(pos.x, pos.y, to.x, to.y) / radius : 0;
+    S3DPoint next(pos.x + stepx, pos.y + stepy, pos.z);
+    int32_t h = MapPane.GetWalkHeight(pos, GetLevel());
+    int32_t hnext = MapPane.GetWalkHeight(next, GetLevel());
+    for (; steps > 0; --steps)
+    {
+        if (abs(h - hnext) >= kLedge)
+            return true;
+        h = hnext;
+        next.x += stepx;
+        next.y += stepy;
+        hnext = MapPane.GetWalkHeight(next, GetLevel());
+    }
+    return abs(h - hnext) >= kLedge;
 }
 
 bool TCharacter::CanHearCharacter(TCharacter* chr)
@@ -3351,8 +3531,8 @@ bool TCharacter::CanSeeCharacter(TCharacter* chr, int32_t angle)
     else if (chardata->flags & CF_LIGHTBLIND)
         glimpse = 100 - glimpse; // Reverse glimpse value so more light is less visible!
 
-    return dist <= chardata->sightrange && anglediff <= chardata->sightangle && MapPane.LineOfSight(from, to) &&
-           glimpse >= 100 - Sight(dist);
+    return dist <= chardata->sightrange && anglediff <= chardata->sightangle &&
+           MapPane.LineOfSight(from, to, GetLevel()) && glimpse >= 100 - Sight(dist);
 }
 
 // Finds characters in range, with closest guy at head of list
@@ -3817,6 +3997,8 @@ bool TCharacter::Jump()
 // Sets walk mode
 bool TCharacter::SetWalkMode()
 {
+    if (setWalkModeSeam)
+        return setWalkModeSeam(this);
     if (IsWalkMode())
         return true;
 
@@ -3878,6 +4060,8 @@ bool TCharacter::SetSneakMode()
 // Sets run mode
 bool TCharacter::SetRunMode()
 {
+    if (setRunModeSeam)
+        return setRunModeSeam(this);
     if (IsRunMode())
         return true;
 
@@ -5434,6 +5618,8 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
 
 bool TCharacter::EndFighting()
 {
+    if (endFightingSeam)
+        return endFightingSeam(this);
     if (!IsFighting())
         return true;
 

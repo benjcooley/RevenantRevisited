@@ -268,7 +268,7 @@ Not ported, and why:
   the 1998 build's did. Its call is the only part of the corpse's tick
   missing.
 - Wander (slot `0x234`, for `charflags & 0x100000`): COMBAT_ATTACK_CHOICE.md
-  §3.15.
+  §3.15; ported 2026-10-11, its kata `melee-wander` runs it in this tick.
 - The player's held light (`0x518bcc..0x518d95`): the torch at the left
   hand with its flicker (two to four random draws a tick while a torch is
   held), and a lit player's glow. No light code in the port drives it
