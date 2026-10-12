@@ -1875,15 +1875,24 @@ void TPlayScreen::Command(GAMECOMMAND command)
         return;
     switch (command)
     {
-    case GAMECMD_COMBAT:            // 1: BeginFighting(0, ACTION_COMBAT) / EndFighting
+    // REVSYNC: 0x0047d066 (case 1) -- in the combat root the key ends the
+    // fight and turns the player's auto-combat off (until it next finds no
+    // one); anywhere else, the bow root too, it starts one on whoever is
+    // ahead and turns auto-combat on. Whether the fight starts or ends or
+    // not, the switch follows the key.
+    case GAMECMD_COMBAT:
         if (Player)
         {
             if (Player->IsCombat())
-                Player->EndCombat();
+            {
+                Player->EndFighting();
+                Player->SetAutoCombat(false);
+            }
             else
             {
                 TextBar.CommitInput();      // 0x0047d0d5
-                Player->BeginCombat();
+                Player->BeginFighting(nullptr, ACTION_COMBAT);
+                Player->SetAutoCombat(true);
             }
         }
         break;

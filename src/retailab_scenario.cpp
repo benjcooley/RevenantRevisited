@@ -121,14 +121,25 @@ void Wield(const TFixtureWorld& world, const JsonValue& cs)
 // ---- The tick -------------------------------------------------------------------
 
 // The player's side of a tick (the case's `inputs`, merged by tick as the
-// retail fixture merges them): the held controls from then on, a key.
+// retail fixture merges them): the held controls from then on, a command
+// key, an attack key -- taken in that order.
 struct SInput
 {
     bool controls = false;
     uint32_t state = 0;                   // the control map's held mask
     uint32_t changed = 0;                 // ... and its changed mask
+    GAMECOMMAND command = GAMECMD_NONE;   // a command key
     int32_t attack = 0;                   // an attack key's button, 0 none
 };
+
+// The command keys a case presses, by the name the retail fixture gives
+// them (scenario.py COMMANDS: retail's Command numbers).
+GAMECOMMAND CommandNamed(const std::string& name)
+{
+    if (name == "combat")
+        return GAMECMD_COMBAT;
+    throw std::runtime_error("no command key '" + name + "'");
+}
 
 std::map<int64_t, SInput> ReadInputs(const JsonValue& events)
 {
@@ -142,6 +153,8 @@ std::map<int64_t, SInput> ReadInputs(const JsonValue& events)
             in.state = (uint32_t)event["controls"][0].Int();
             in.changed = (uint32_t)event["controls"][1].Int();
         }
+        if (event.Has("command"))
+            in.command = CommandNamed(event["command"].Str());
         if (event.Has("attack"))
             in.attack = (int32_t)event["attack"].Int();
     }
@@ -149,13 +162,16 @@ std::map<int64_t, SInput> ReadInputs(const JsonValue& events)
 }
 
 // One tick in retail's order (TScreen::TimerTick 0x00490bd0, as the retail
-// fixture runs it): the keys that came before it, UpdateMove while the player
-// has control, the map pane's PulseObjects and MoveObjects, the frame count
-// and game time, NextFrameObjects, the screen's frame.
+// fixture runs it): the keys that came before it (the message pump's,
+// 0x00491278), UpdateMove while the player has control, the map pane's
+// PulseObjects and MoveObjects, the frame count and game time,
+// NextFrameObjects, the screen's frame.
 void Tick(const SInput& in)
 {
     if (in.controls)
         ControlMap.SetCommandFlags(in.state, in.changed);
+    if (in.command != GAMECMD_NONE)
+        PlayScreen.Command(in.command);
     // TPlayScreen::Command (0x0047cf40): an attack key is the player's
     // ButtonAttack (cases 0x21..0x2f).
     if (in.attack && Player)

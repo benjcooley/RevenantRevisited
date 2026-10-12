@@ -9,10 +9,12 @@ the case's real imagery state tables (each state's name, frames, flags and
 motion a frame) and a flat floor (`ground`). One tick is TScreen::TimerTick
 `0x490bd0` as far as it plays the game (SCENARIO_KATA.md §2):
 
-1. the player's key presses that came in before the tick: an attack key is
-   TPlayScreen::Command `0x47cf40`'s ButtonAttack(n) `0x4d2480` on the
-   player (cases 0x21..0x2f); the held controls are the control map's
-   state and changed masks (`0x65a9c4` / `0x65a9c8`);
+1. the player's key presses that came in before the tick: the held
+   controls are the control map's state and changed masks (`0x65a9c4` /
+   `0x65a9c8`); a command key runs TPlayScreen::Command `0x47cf40` as
+   original (`command`: "combat", case 1: into or out of combat); an attack
+   key is Command's ButtonAttack(n) `0x4d2480` on the player (cases
+   0x21..0x2f);
 2. TPlayScreen::Pulse `0x47bd20`'s UpdateMove `0x47de30`, while the player
    has control (PlayScreen `+0x5e0`);
 3. TMapPane::Pulse `0x454390`'s PulseObjects `0x4580f0` (each object's
@@ -45,8 +47,9 @@ animator's Animate), drawing, the camera (`0x47e0f0`).
 Case: the melee fixture's (`chars`, `rules`, `globals` with `frame`,
 `gametime`, `screenframe`), `call` "scenario", `ticks`, `ground`,
 `perception` (true: the senses as original), `seam_ai` / `seam_update` /
-`seam_damage` / `seam_block` / `seam_begin` / `seam_path` false, and `inputs`: a list of
-{tick, controls: [state, changed]} / {tick, attack: button}. Out: `ticks`,
+`seam_damage` / `seam_block` / `seam_begin` / `seam_path` false, and
+`inputs`: a list of {tick, controls: [state, changed]} / {tick, command:
+name} / {tick, attack: button}, a tick's taken in that order. Out: `ticks`,
 one record a tick ({tick, frame, chars: each character's dump and vitals,
 seams, draws}), then each character's AI and tick state.
 
@@ -70,6 +73,8 @@ MAPPANE = 0x6668d8                               # the TMapPane global (static i
 UPDATE_MOVE = 0x47de30                           # TPlayScreen::UpdateMove (thiscall, PlayScreen)
 PULSE_OBJECTS, MOVE_OBJECTS, NEXT_FRAME_OBJECTS = 0x4580f0, 0x458390, 0x457ef0
 BUTTON_ATTACK = 0x4d2480                         # thiscall (button) ret 4
+COMMAND = 0x47cf40                               # TPlayScreen::Command, thiscall (command) ret 4
+COMMANDS = {'combat': 1}                         # the command keys a case presses, by retail's number
 G_CMDSTATE, G_CMDCHANGED, G_DEBUGCAMERA = 0x65a9c4, 0x65a9c8, 0x6671f0
 PS_FRAMES, PS_GAMETIME = 0x680, 0x68c
 PS_SESSIONSTART, PS_SESSIONFRAMES = 0x684, 0x688
@@ -163,6 +168,8 @@ class ScenarioFixture(MeleeFixture):
             state, changed = step['controls']
             vm.put_u32(G_CMDSTATE, state & 0xffffffff)
             vm.put_u32(G_CMDCHANGED, changed & 0xffffffff)
+        if 'command' in step:
+            call(vm, COMMAND, (COMMANDS[step['command']],), this=ps, instruction_limit=TICK_BUDGET)
         if 'attack' in step and player:
             call(vm, BUTTON_ATTACK, (step['attack'] & 0xffffffff,), this=player, instruction_limit=TICK_BUDGET)
         if vm.u32(G_PS_CONTROL):

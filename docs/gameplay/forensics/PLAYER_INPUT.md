@@ -48,7 +48,7 @@ needs (retail numbering; the port keeps the 1998 enum, `playscreen.h`):
 
 | Retail | Action | Port |
 |---|---|---|
-| 1 | combat mode: `BeginFighting(0, 3)` `0x004d3b90`, or `EndFighting` `0x004d3fd0` | `GAMECMD_COMBAT` |
+| 1 | combat mode: in the combat root `EndFighting` `0x004d3fd0` and the auto-combat switch (`+0xe8`) off; anywhere else, the bow root too, `BeginFighting(0, 3)` `0x004d3b90` and the switch on (`0x0047d066`; SCENARIO_KATA.md §4) | `GAMECMD_COMBAT` |
 | 2 | bow mode: `BeginFighting(0, 0x19)` / `EndFighting` | `GAMECMD_BOW` (not dispatched yet) |
 | 3 | sneak toggle: `StartSneak` `0x004cf2e0`, or `SetWalkMode` when the root is "sneak" | 1998 table: Sneak is held like Run (`GAMECMD_MOVEDOWN/UP`) |
 | 0x21–0x23 | `ButtonAttack(1..3)` `0x004d2480` | `GAMECMD_SWING/THRUST/CHOP` |

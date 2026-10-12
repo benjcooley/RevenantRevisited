@@ -103,7 +103,7 @@ only).
 
 | # | Kata | Retail | Port | Status |
 |---|---|---|---|---|
-| W1 | scenarios: the whole tick over a small world, hundreds of ticks -- the keys, UpdateMove, PulseObjects, MoveObjects, the frame count and game time, NextFrameObjects, and all they reach (Pulse, UpdateAction, AI, the senses, BeginFighting, the attacks, hits, Damage, Block, Move, SetState, the imagery's state queries), every tick compared ([forensics/SCENARIO_KATA.md](forensics/SCENARIO_KATA.md)) | `0x490bd0` order: `0x47de30` `0x4580f0` `0x458390` `0x47c37d` `0x457ef0` | `TPlayScreen::UpdateMove`, `TMapPane::PulseObjects` / `MoveObjects` / `NextFrameObjects`, `TPlayScreen::AdvanceGameFrame` | [x] 16/16 (`combat-scenario`): arena A1b (4 seeds, and 900 ticks to Locke's death), A1, A3 (block), A4 (sword, three buttons; club), A6 (the orbit, four directions), A7 (two Araknids); ~6,000 ticks; BeginFighting, the armed player's damage type and PulseObjects' killed player found |
+| W1 | scenarios: the whole tick over a small world, hundreds of ticks -- the keys, UpdateMove, PulseObjects, MoveObjects, the frame count and game time, NextFrameObjects, and all they reach (Pulse, UpdateAction, AI, the senses, BeginFighting, the attacks, hits, Damage, Block, Move, SetState, the imagery's state queries), every tick compared ([forensics/SCENARIO_KATA.md](forensics/SCENARIO_KATA.md)) | `0x490bd0` order: `0x47de30` `0x4580f0` `0x458390` `0x47c37d` `0x457ef0` | `TPlayScreen::UpdateMove`, `TMapPane::PulseObjects` / `MoveObjects` / `NextFrameObjects`, `TPlayScreen::AdvanceGameFrame` | [x] 18/18 (`combat-scenario`): arena A1b (4 seeds, and 900 ticks to Locke's death), A1, A3 (block), A4 (sword, three buttons; club), A6 (the orbit, four directions), A7 (two Araknids), A8 (the combat key); ~6,100 ticks; found BeginFighting, EndFighting and the combat key 1998's, the armed player's damage type, PulseObjects' killed player (§5.16) |
 
 ### D — data
 
@@ -403,6 +403,14 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
       bludgeoning (the Araknid's bludgeon resistance of 20 doesn't apply).
       Ported (`TWeapon::DamageType`, GetDamageType virtual).
     - **PulseObjects keeps a killed player** pulsing (`0x45815b`). Ported.
+    - **The combat key turns auto-combat off** on the way out (Command
+      case 1, `0x47d066`: the switch `+0xe8`, back on only when a look
+      finds no one) and on on the way in; in the bow root it starts a
+      fight rather than ending one. **EndFighting `0x4d3fd0`** was 1998's:
+      retail refuses when dead or in an interactive attack or impact,
+      walks in the class's walk root ("torch" with a light), marks the walk
+      block a transition when there is one into it, frees a refused block
+      and keeps a non-turner's move angle. Ported.
 
 ## 6. Layouts used by the fixtures
 

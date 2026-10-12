@@ -5447,29 +5447,47 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
     return true;
 }
 
+// REVSYNC: TCharacter::EndFighting @ 0x004d3fd0 -- out of the combat or bow
+// root into the walk root (slot 0x30c: the player's "torch" with a light in
+// hand). Done already outside them; refused when dead, in an interactive
+// attack or impact (unless charflags 0x80000), or with no walk root. A step
+// stops first. Through a transition the walk takes priority and is marked
+// a transition (0x004d4164); the root as doing lets go of its priority. A
+// refused block is freed. The move angle follows the facing again unless
+// it doesn't turn (charflags 4), and the characters seen are marked fought.
 bool TCharacter::EndFighting()
 {
     if (!IsFighting())
         return true;
-
-    if (FindState("walk") < 0)      // Avoid trying to set walk state in the future
+    if (Health() <= 0)
+        return false;
+    if (!(charflags & kCharFlagInteractive) &&
+        ((doing->attack && (doing->attack->flags & CA_INTERACTIVE)) ||
+         (doing->impact && (doing->impact->flags & CAI_INTERACTIVE))))
         return false;
 
-    if (IsMoving())
+    const char* walkroot = GetWalkRoot();
+    if (FindState(walkroot) < 0)      // Avoid trying to set walk state in the future
+        return false;
+
+    if (doing && (doing->action == ACTION_MOVE || doing->action == ACTION_COMBATMOVE ||
+                  doing->action == ACTION_BOWMOVE))
         Stop();
 
-    TActionBlock* ab = new TActionBlock("walk");
-    ab->priority = (FindTransitionState(doing->name, ab->name) >= 0);
-        // Priority if has transition only, otherwise it will go immediately
-        // to correct state without possibility of being interrupted
+    auto* ab = new TActionBlock(walkroot, ACTION_ANIMATE);
+    const bool transition = FindTransitionState(doing->name, ab->name) >= 0;
+    ab->priority = transition;
+    ab->transition = transition;
     if (doing == root)
         doing->priority = false; // Allow him to override a BeginCombat() action
-    SetDesired(ab);
+    if (!SetDesired(ab))
+        delete ab;
 
   // Make sure moving angle equals face (it doesn't during a combat move)
-    SetMoveAngle(GetFace());
+    if (!(charflags & kCharFlagNoTurn))
+        SetMoveAngle(GetFace());
 
-  // Clear autocombat fields for all currently visible characters
+  // Every character seen is now one fought: auto-combat leaves them be.
     SetHasSeenAutoCombat(false);
 
     return true;

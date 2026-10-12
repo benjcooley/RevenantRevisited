@@ -66,18 +66,18 @@ resets, the multiplayer and HUD bookkeeping; then:
 - `+0x6d4` → `0x47f3a0`; `0x65a298` (a level reset request) → the map
   pane's reload (`0x458ff0`, `0x44e460`, ...).
 - **TScreen::Pulse `0x48fda0`**: in a network game only, the player's
-  idle bit (state bit 1, value 2) after 0x78 screen frames without input
-  (`0x48fdaf`: `[0x66829c]` gates it); single player never sets it here.
-  Then the top pane's Pulse → **TMapPane::Pulse `0x454390`**:
+  idle state (player state value 2) after 0x78 screen frames without
+  input (`0x48fdaf`: `[0x66829c]` gates it); single player never sets it
+  here. Then the top pane's Pulse → **TMapPane::Pulse `0x454390`**:
   - the level change `0x45b080`, `0x45f1e0` (when `+0x8f8`), `0x4537b0`;
   - **PulseObjects `0x4580f0`**: unless `NoPulseObjs` (`0x6680d4`), every
     object of the pulse set (iterator `0x44cf80` with flags `0xa0`, objset
     4): one with OF_KILL (`0x1000`) whose slot `0x3c` answers true (all 52
     object vtables in the image hold `0x477930`, `return 1`) and that
-    isn't a player (`0x45815b`)
-    is taken out of the map (`0x451840`); every other one Pulses (slot
-    `0x110`: TCharacter `0x4c1bb0`, TPlayer `0x518aa0`), in a structured
-    exception frame that deletes an object that faults;
+    isn't a player (`0x45815b`) is taken out of the map (`0x451840`);
+    every other one Pulses (slot `0x110`: TCharacter `0x4c1bb0`, TPlayer
+    `0x518aa0`), in a structured exception frame that deletes an object
+    that faults;
   - **MoveObjects `0x458390`**: unless `NoPulseObjs`, every object of the
     moving set (objset 1): Move (slot `0x114`), its bits to `+0xbc`; then
     every one: SetObjectMotion (slot `0x118`);
@@ -122,8 +122,9 @@ TPlayScreen::Pulse (playscreen.cpp) → the game mode's Tick → UpdateMove
 camera and the sector window after); then AdvanceGameFrame (the frame
 count, game time, time of day: 0x47c2c0's); then NextFrameObjects. The
 same order. Not in the port's tick: object Animate (the port's animators
-pose at render rate; nothing in Animate moves an object or draws a random
-number).
+pose at render rate). It moves nothing; whether a controller retail's
+Animate runs ever draws a random number (the particle code round
+`0x402842` does) is open (§6).
 
 ## 3. The kata (`combat-scenario`)
 
@@ -135,9 +136,11 @@ the melee fixture's world through `retailab_melee.h`). Cases:
 
 ### 3.1 One tick, both sides
 
-1. The case's inputs for the tick: held controls (the control map's
-   state and changed masks), an attack key (ButtonAttack(n) on the player,
-   as Command does).
+1. The case's inputs for the tick, in this order: held controls (the
+   control map's state and changed masks); a command key (retail's
+   TPlayScreen::Command `0x47cf40` as original, the port's
+   `TPlayScreen::Command`; so far the combat key, case 1); an attack key
+   (ButtonAttack(n) on the player, as Command's cases 0x21..0x2f do).
 2. UpdateMove, while the player has control (PlayScreen `+0x5e0`).
 3. PulseObjects, MoveObjects -- retail's own loops `0x4580f0` / `0x458390`
    (their map iterator `0x44cf80` answered with the case's characters in
@@ -162,8 +165,9 @@ tick; a difference names its tick.
 Everything the tick reaches, on both sides: Pulse (TCharacter, TPlayer),
 UpdateAction and the resolvers, AI and the attack choice
 (IsValidAttack, the searches, DoAttack), FindCharacters with Hearing,
-Sight, CanSeeCharacter, IsEnemy, IsValidTarget and the memory,
-BeginFighting, SetFighting, Go, Stop, Leap, SideStep, ResolveAttack,
+Sight, CanSeeCharacter, IsEnemy, IsValidTarget and the memory, the
+combat key (Command), BeginFighting, EndFighting, SetFighting, Go, Stop,
+Leap, SideStep, ResolveAttack,
 ResolveHit, Damage and CalculateDamage, KnockBack, Block, the impact /
 block / dead resolvers, the recovery and auto-combat, Move, MoveStep,
 FindClearPath, CharBlocking and GetWalkHeight(Radius), SetState,
@@ -271,7 +275,27 @@ was changed where it was wrong.
    pulsing. The port took out any. Now retail's (found reading the loop
    for this kata; no case reaches it: Locke's corpse never fades in single
    player before the death screen).
-4. The rest of the tick matched as the earlier katas left it: the
+4. **The combat key (Command case 1, `0x47d066`) and EndFighting
+   (`0x4d3fd0`).** Read for the A8 cases, which press the key. In the
+   combat root the key ends the fight and turns the player's auto-combat
+   switch (`+0xe8`) off -- so his auto-combat doesn't take him straight
+   back in; the switch comes back on only when a look finds no one
+   (Pulse `0x4c25d5`) -- and anywhere else, the bow root included, it
+   starts a fight (BeginFighting(0, COMBAT)) and turns the switch on. The
+   port's key ended or began combat and left the switch alone, and in the
+   bow root it ended the fight. EndFighting, read whole: done at once
+   outside the combat and bow roots; refused when dead, or in an
+   interactive attack (`0x2000000`) or impact (`0x80`) unless charflags
+   `0x80000`, or without the walk root's state (slot `0x30c`: the player's
+   "torch" with a light in hand); a step stops; the walk block takes
+   priority **and is marked a transition** when there is a transition
+   into it (`0x4d4164`; UpdateAction's root rule reads that mark); the
+   root as doing lets go of its priority; a refused block is freed; the
+   move angle follows the facing unless charflags 4; the characters seen
+   are marked fought. The port's was 1998's (no health or interactive
+   gates, "walk" always, no transition mark, IsMoving, a leak, the move
+   angle always). Both now retail's.
+5. The rest of the tick matched as the earlier katas left it: the
    Araknid's notice on its 32-frame window (tick 9 of A1b), the turn at 8
    a tick, the walk in, the jump, the bite at tick 54, the hits (9, 7,
    ...), Locke's auto-combat on his own 32-frame window (tick 30), the fatigue
@@ -284,16 +308,53 @@ COMBAT_DOJO.md lists it with the others).
 
 | Case | Ticks | What happens | Result |
 |---|---|---|---|
-| `a1b.seed1..4` | 400 | the Araknid finds Locke, walks in, jumps, bites; Locke into combat on his own | match |
-| `a1b.long` | 900 | as A1b to Locke's death, his corpse, the death countdown, the Araknid after | see the ledger |
-| `a1.seed1` | 200 | the Araknid 450 east never notices | match |
+| `a1b.seed1..4` | 400 | the Araknid finds Locke, walks in, jumps, bites, side steps, backs up; Locke into combat on his own; five or so blows | match |
+| `a1b.long` | 900 | as A1b to Locke's death (the death countdown, the death screen), his corpse, the Araknid after | match |
+| `a1.seed1` | 200 | the Araknid 450 east hears him and passes him over (beyond its combat range): nothing happens | match |
 | `a4.button1..3` | 400 | Locke swinging (one button a case) every 30 ticks at an Araknid of 300 health 60 east, which fights back | match |
-| `a3.block` | 300 | Locke holding block, the Araknid coming | match |
-| `a6.hold0..192` | 160 | Locke in combat holding a direction for 100 ticks (round, in, back, away), the Araknid at 120 | see the ledger |
-| `a7.two` | 400 | two Araknids, Locke idle | see the ledger |
+| `a4.club` | 400 | the same with a Club (button 2): swings, turn swings, hits and glances both ways, the Araknid's blocks | match |
+| `a3.block` | 300 | Locke holding block, the Araknid coming, biting at the block | match |
+| `a6.hold0..192` | 160 | Locke in combat holding a direction for 100 ticks (round, in, back, away), the Araknid at 120, then letting go | match |
+| `a7.two` | 400 | two Araknids, Locke idle: both find him, who he fights | match |
+| `a8.key` | 300 | Locke into combat on his own, out with the combat key at 45 (auto-combat off), struck back into it, the key again at 120 | match |
+| `a8.run` | 200 | Locke in his run root presses the combat key (refused), takes the bites | match |
 
-Speed: ~3 s a 400-tick two-character case in the emulator, ~0.1 s in the
-port.
+18 cases, about 6,100 ticks, every one equal on both sides (2026-10-11).
+Speed: a 400-tick two-character case takes ~3 s in the emulator alone, an
+A4 case ~40 s (each swing's attack search runs FindState over Locke's 352
+states for each of his ~90 attacks); the port takes ~0.1 s a case. The
+whole kata: about a minute with `--jobs 8`.
+
+### 5.1 Mutations
+
+Each broke one line of the port, rebuilt, and ran the kata (cases that
+went wrong of 18):
+
+| | Mutation | Caught | First difference |
+|---|---|---|---|
+| M1 | BeginFighting's new root takes the character's move angle (1998) | 7 | A1b tick 30: Locke's root move angle |
+| M2 | the player's damage type ignores the weapon in hand | 1 | A4 club tick 4: the swing's damage |
+| M3 | game time at 30 frames a second (the port's old clock) | 18 | the Araknid's fatigue recovery (A1b tick 66), the recovery stamps |
+| M4 | MoveObjects in one pass (Move, then SetObjectMotion, per object) | 0 | equivalent for characters (§5.2) |
+| M5 | the AI looks for a target every 16 frames, not 32 | 8 | an extra look (FindCharacters' query) in the first ticks |
+| M6 | BeginFighting doesn't refuse the run root | 1 | A8 run tick 5: Locke into combat |
+| M7 | the combat key leaves auto-combat on | 1 | A8 key tick 45: the switch |
+| M8 | EndFighting doesn't mark the walk block a transition | 0 | equivalent here: the transition search in TryCommand / ForceCommand marks it as it plays the transition, and no case leaves the block waiting with the mark unread |
+
+M4 and M8 were kept as retail has them (a reviewer reading the asm finds
+the same code); the kata can't tell them from their mutants.
+
+### 5.2 What the kata doesn't check
+
+- The order of the tick's five steps is the fixture's on both sides
+  (§3.1, cited to retail); the port's own TPlayScreen::Pulse runs the same
+  steps in the same order (§2.4), checked by reading, as the steps are
+  wrapped in the play screen's UI work there.
+- Splitting MoveObjects' two passes (Move for all, then SetObjectMotion
+  for all) into one makes no difference to characters: SetObjectMotion
+  changes nothing another character's Move reads (its position stays;
+  CharBlocking reads health, attack, flags and the state's flags). The
+  kata can't tell them apart; retail's two passes are kept.
 
 ## 6. Open
 
@@ -303,8 +364,10 @@ port.
 - The weapon in hand is a stand-in on the retail side (Type, DamageType,
   a stat by name); armour worn is ACBonus. A case that reaches another of
   the weapon's slots fails loudly ("not modelled").
-- Object Animate isn't run (§2.2). If an animator's Animate ever comes to
-  change the game, it belongs in the tick.
+- Object Animate isn't run (§2.2). It moves nothing; if a controller it
+  runs draws random numbers (the particle code round `0x402842` does), a
+  character with an attached effect would have retail's stream run ahead
+  of the kata's. Neither Locke nor the Araknid attaches one.
 - The animator is a stand-in on both sides, so its Pulse (the state's
   tags: sounds) isn't in the kata. Retail's tag sound name (`0x40af50`)
   draws random(0, 5) for an "IMP" sound when the weapon kind is a sword

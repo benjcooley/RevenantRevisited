@@ -31,8 +31,11 @@ Families:
 - `a1`: the Araknid 450 east, beyond its combat range (COMBATRANGE 214,
   IsValidTarget): it hears him and passes him over; nothing happens.
 - `a4`: Locke in combat 60 from the Araknid, swinging (button 1, 2 or 3)
-  on a fixed beat.
+  on a fixed beat; with a Club too (a bludgeon's misc damage).
 - `a3`: Locke in combat holding block while the Araknid comes for him.
+- `a6`: the orbit: Locke in combat holding one direction, then letting go.
+- `a7`: two Araknids.
+- `a8`: the combat key: out of combat and back; refused in the run root.
 """
 from __future__ import annotations
 
@@ -46,6 +49,7 @@ from targets_move import PURE
 HERE = Path(__file__).resolve().parent
 ANIMATE, COMBAT = 1, 3
 BLOCK_KEY = 0x800                                 # the control map's block bit (UpdateMove 0x47de30)
+COMBAT_ROOTS = ('combat', 'hand', 'cknife', 'cstaff', 'combatrun', 'handrun')   # the player's (TPlayer 0x51b340)
 
 # The arena save ArenaA1b (tools/combatarena/make_arena_slot.py, the combat
 # worktree's build/arena_slots/ArenaA1b; tools/savefmt/revsave.py dump):
@@ -96,7 +100,7 @@ def locke(data, *, root='walk', state='6:walk', frame=30, facing=51, at=LOCKE_AT
     Short Sword (or `wielding`) in hand."""
     s = shipped(data, None)
     states = _states('locke')
-    action = ANIMATE if root == 'walk' else COMBAT
+    action = COMBAT if root in COMBAT_ROOTS else ANIMATE
     c = make_char('Locke', 11, at, facing, chardata(s['chars']['Locke']), typ='Locke', states=states,
                   root=dict(name=root, action=action, obj=target), stats=dict(LOCKE_STATS),
                   classstats=dict(radius=16, value=-1), weapon=dict(type=wielding['type'], damage=wielding['damage']),
@@ -174,6 +178,15 @@ def scenario_cases(data: Path, workdir: Path) -> list[dict]:
     for direction in (0, 2, 4, 6):
         cases.append(scenario(f'a6.hold{direction * 32}', [locke(data, **fighting), araknid(data, east=120, facing=192)],
                               rules, ticks=160, seed=31 + direction, inputs=hold(direction, 2, 102)))
+    # A8: the combat key (TPlayScreen::Command case 1). Locke falls into
+    # combat on his own as the Araknid comes, leaves it with the key at tick
+    # 45 (auto-combat off while it finds someone), takes it up again at 120
+    # (on whoever is ahead); and, standing in his run root, presses it with
+    # no effect (BeginFighting refuses a runner) and takes the bites so.
+    cases.append(scenario('a8.key', [locke(data), araknid(data)], rules, ticks=300, seed=51,
+                          inputs=[dict(tick=45, command='combat'), dict(tick=120, command='combat')]))
+    cases.append(scenario('a8.run', [locke(data, root='run', state='run', frame=0), araknid(data)], rules,
+                          ticks=200, seed=52, inputs=[dict(tick=5, command='combat')]))
     # A7: two Araknids, 150 east and 150 east, 120 north; Locke idle.
     cases.append(scenario('a7.two', [locke(data), araknid(data),
                                      araknid(data, north=120, name='Araknid2', ident=ARAKNID_ID + 0x13, facing=176)],
