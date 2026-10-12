@@ -55,9 +55,29 @@ void WriteSeamsSince(JsonOut& j, size_t first);   // "seams": those from `first`
 // for a direct draw), from its `tape` and then retail's generator from its
 // `seed`, as the retail fixture answers them (SCaseScope installs it).
 void WriteDraws(JsonOut& j);
+size_t DrawCount();
+void WriteDrawsSince(JsonOut& j, size_t first);   // "draws": those from `first` on
 // Forget the draws so far (the tape goes on where it was): a case that sets
 // something up with draws of its own before the call it compares.
 void ClearDraws();
+
+// Draws the port makes setting a case up that the retail side has no part
+// in (equipping through the port's own Equip, say): while one lives, the
+// draws come off the tape as ever, and when it ends the tape, the generator
+// and the record are put back as they were.
+class SUntapedDraws
+{
+  public:
+    SUntapedDraws();
+    ~SUntapedDraws();
+    SUntapedDraws(const SUntapedDraws&) = delete;
+    SUntapedDraws& operator=(const SUntapedDraws&) = delete;
+
+  private:
+    size_t tapeAt = 0;
+    uint32_t seed = 0;
+    size_t draws = 0;
+};
 
 // Action block flags by meaning (the port's bits under retail's names).
 uint32_t FlagBits(const JsonValue& names);
@@ -90,6 +110,10 @@ struct SFixtureState
 // Kata M8: the animation layer runs as the game's own (SetState, the
 // imagery's SetObjectMotion) instead of being answered (set per case).
 inline bool g_realAnimation = false;
+// The scenario kata: the imagery's state queries are the game's own over the
+// header (FindState with its "NN:" frequency variants, the frame counts and
+// flags), unrecorded, as retail's T3DImagery ones run in its fixture.
+inline bool g_realImagery = false;
 
 std::vector<SFixtureState> ReadStates(const JsonValue& list);
 
@@ -150,6 +174,8 @@ class TFixtureImagery : public T3DImagery
     int32_t NumStates() const override
     {
         const int32_t n = TObjectImagery::NumStates();
+        if (g_realImagery)
+            return n;
         JsonOut j;
         j.Begin('{').FieldString("seam", "imagery.NumStates").FieldString("who", who);
         j.Key("args").Begin('[').End(']').Field("result", n).End('}');
@@ -185,6 +211,8 @@ class TFixtureImagery : public T3DImagery
   private:
     int32_t Query(const char* name, int32_t state, int32_t result) const
     {
+        if (g_realImagery)
+            return result;
         JsonOut j;
         j.Begin('{').FieldString("seam", std::string("imagery.") + name).FieldString("who", who);
         j.Key("args").Begin('[').Value(state).End(']').Field("result", result).End('}');
@@ -499,6 +527,8 @@ class TFixtureChar : public Base, public IFixtureChar
 
     int32_t FindState(const char* n, int32_t pcnt = -1) const override
     {
+        if (g_realImagery)
+            return Base::FindState(n, pcnt);
         int32_t index = -1;
         for (size_t i = 0; i < states.size(); ++i)
             if (!strcasecmp(states[i].name.c_str(), n))
@@ -515,6 +545,8 @@ class TFixtureChar : public Base, public IFixtureChar
 
     int32_t FindTransitionState(const char* from, const char* to, int32_t pcnt = -1) const override
     {
+        if (g_realImagery)
+            return Base::FindTransitionState(from, to, pcnt);
         const std::string key = std::string(from) + " to " + to;
         int32_t index = -1;
         for (size_t i = 0; i < states.size(); ++i)
@@ -1008,10 +1040,12 @@ class TFixtureWorld
     // A block the case began with is gone: a new one at its address is new.
     void ForgetBlock(const TActionBlock* ab) const { roles.erase(ab); }
 
-    // Optional extras a target adds to its dumps: fields of each block, and
-    // each character's attack bookkeeping (IFixtureChar::WriteAttackState).
+    // Optional extras a target adds to its dumps: fields of each block, each
+    // character's attack bookkeeping (IFixtureChar::WriteAttackState), and
+    // fields of its own at the end of each character.
     std::function<void(JsonOut&, const TActionBlock&)> blockExtra;
     bool writeAttackState = false;
+    std::function<void(JsonOut&, TCharacter*)> charExtra;
 
     void WriteCharacter(JsonOut& j, const char* key, TCharacter* c) const
     {
@@ -1027,6 +1061,8 @@ class TFixtureWorld
         WriteBlock(j, "desired", fx->Desired(), made);
         if (writeAttackState)
             fx->WriteAttackState(j);
+        if (charExtra)
+            charExtra(j, c);
         j.End('}');
     }
 

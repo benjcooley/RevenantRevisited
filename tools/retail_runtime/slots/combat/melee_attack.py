@@ -59,9 +59,13 @@ Distance, SetDesired / ForceCommand, the TActionBlock ctor, the network
 sends (no session: each returns at its first test).
 
 Seams (guest.py's, and these), recorded in order:
-- FindCharacters `0x4cd690`: the case's `found` (a name, or none).
+- FindCharacters `0x4cd690`: the case's `found` (a name, or none) -- as
+  original with the case's `perception` (the senses, CanSeeCharacter and
+  IsEnemy too, over the map iterator's characters; the line of sight
+  between two characters' eyes clear unless `walls` name the pair).
 - FindClearPath `0x4c39d0`: the case's `blocked`; when blocked, the
-  blocker is the case's `blocker` (a name, or none).
+  blocker is the case's `blocker` (a name, or none) -- as original over
+  the case's `ground` with `seam_path` false.
 - Block `0x4d2e30` (frames): recorded on the character, the case's
   `block_result` (1); the original runs with the case's `seam_block` false.
 - EffectCombatFlash `0x4c8500`: recorded (it spawns an effect).
@@ -72,15 +76,20 @@ Seams (guest.py's, and these), recorded in order:
   `walls` name the pair -- only in a case with waypoints.
 - CanSeeCharacter `0x4cd540` (target, angle): the case's `sees` (1; or
   the names seen), recorded.
+- IsEnemy `0x4c89c0`: an enemy unless the case's `friends` hold the pair,
+  recorded.
+- BeginFighting `0x4d3b90` (target, action): recorded, 1; the original runs
+  with the case's `seam_begin` false.
 - The spell list's Find `0x53f010` and Cast `0x4d5c20`, as one record
   `CastByName` (spell, targets, source, result): a spell in the case's
   `spells` is cast with `cast_result` (1); any other isn't found (result 0).
 - TPlayer WeaponType `0x520810` / WeaponDamage `0x520830`: the player's
   `weapon` {type, damage}.
 - TPlayer SetPlayerState `0x51d680`: recorded, the value stored.
-- The tick's (`pulse`, and the experience calls'): UpdateAction `0x4c3260`
-  (with the case's `seam_update`, by default) and AI `0x4c8b60` (with
-  `seam_ai`) recorded and skipped; the spell list's pulse `0x540750`
+- The tick's (`pulse`, the scenario kata's -- scenario.py --, and the
+  experience calls'): UpdateAction `0x4c3260` (for `pulse`, with the
+  case's `seam_update`, by default) and AI `0x4c8b60` (with `seam_ai`)
+  recorded and skipped; the spell list's pulse `0x540750`
   skipped; the death screen `0x48ea40` recorded; RefreshStats `0x51c660`
   recorded and skipped; the effect type lookup `0x475210` and NewObject
   `0x450e40` (the def recorded, a stand-in made whose SetParams, slot
@@ -173,6 +182,9 @@ O_CLASSREC = 0x48                                # the object's class record
 ATTRIBUTE_NAMES = {34: 'Strn', 35: 'Cons', 36: 'Agil', 37: 'Rflx', 38: 'Mind', 39: 'Luck'}
 NUM_OBJSTATS = 73                                # every player stat id (charstats.h)
 EXP_CALLS = ('kill-exp', 'exp-kill', 'exp-skill', 'exp-stealth', 'add-skill-exp')
+# The calls that run the tick: C6, the scenario kata (scenario.py), C7.
+TICKING_CALLS = ('pulse', 'scenario') + EXP_CALLS
+EYE_HEIGHT = 50                                  # LIGHTINGCHARHEIGHT (CanSeeCharacter's eyes)
 
 # The functions under test, for coverage: [start, end).
 COVERED = {'AnimPrefix': (0x4cdf60, 0x4ce1b0), 'CombatAnimName': (0x4ce1b0, 0x4ce290),
@@ -242,8 +254,8 @@ class MeleeFixture:
         for kind, (address, pop) in EXP.items():
             self._conditional(address, pop, lambda a, c, kind=kind: self._exp(kind, a, c),
                               lambda: self.case.get('seam_exp', True))
-        # The tick's (C6) and the experience calls' (C7).
-        ticking = lambda: self.case.get('call') == 'pulse' or self.case.get('call') in EXP_CALLS
+        # The tick's (C6, the scenario kata's) and the experience calls' (C7).
+        ticking = self._ticking
         b.add(SPELL_LIST_PULSE, 'SpellListPulse', 0, lambda a, c: 0)
         b.add(DEATH_SCREEN, 'DeathScreen', 0, self._death_screen)
         self._conditional(UPDATE_ACTION, 4, self._update_action,
@@ -293,7 +305,13 @@ class MeleeFixture:
     def _obj(self, name):
         return self.world.by_name[name] if name else 0
 
+    def _ticking(self):
+        """The calls that run the character's tick (its seams answered)."""
+        return self.case.get('call') in TICKING_CALLS
+
     def _find_characters(self, args, ecx):
+        if self.case.get('perception'):
+            return Boundaries.ORIGINAL
         found = self._obj(self.case.get('found'))
         query = dict(max=s32(args[1]), range=s32(args[2]), angle=s32(args[3]),
                      anglerange=s32(args[4]), flags=s32(args[5]))
@@ -304,6 +322,8 @@ class MeleeFixture:
         return n
 
     def _find_clear_path(self, args, ecx):
+        if not self.case.get('seam_path', True):
+            return Boundaries.ORIGINAL
         point = list(struct.unpack('<3i', self.vm.uc.mem_read(args[1], 12)))
         blocked = int(bool(self.case.get('blocked', False)))
         blocker = self.case.get('blocker') if blocked else None
@@ -320,6 +340,8 @@ class MeleeFixture:
 
     def _can_see(self, args, ecx):
         """`sees`: yes or no, or the names seen."""
+        if self.case.get('perception'):
+            return Boundaries.ORIGINAL
         sees = self.case.get('sees', True)
         them = self.world._name(args[0])
         seen = int(them in sees) if isinstance(sees, list) else int(bool(sees))
@@ -345,6 +367,8 @@ class MeleeFixture:
 
     def _helper_sight(self, args, ecx):
         if not self.helpers:
+            if self.case.get('perception'):
+                return self._eyes_sight(args)
             return Boundaries.ORIGINAL
         fx, fy, _ = struct.unpack('<3i', self.vm.uc.mem_read(args[0], 12))
         to = struct.unpack('<3i', self.vm.uc.mem_read(args[1], 12))
@@ -354,6 +378,22 @@ class MeleeFixture:
                   if struct.unpack('<3i', self.vm.uc.mem_read(obj + 0x10, 12)) == to), '?')
         clear = int([a, b] not in self.case.get('walls', []))
         self.world.seams.append(dict(seam='LineOfSight', **{'from': a}, to=b, result=clear))
+        return clear
+
+    def _eyes_sight(self, args):
+        """CanSeeCharacter's line of sight between two characters' eyes
+        (LIGHTINGCHARHEIGHT above their positions), as combat_call.py
+        answers it: clear unless the case's `walls` name the pair."""
+        def eyes_of(point):
+            x, y, z = struct.unpack('<3i', self.vm.uc.mem_read(point, 12))
+            for name, obj in self.world.by_name.items():
+                px, py, pz = struct.unpack('<3i', self.vm.uc.mem_read(obj + 0x10, 12))
+                if (px, py, pz + EYE_HEIGHT) == (x, y, z):
+                    return name
+            return '?'
+        line = [eyes_of(args[0]), eyes_of(args[1])]
+        clear = int(line not in self.case.get('walls', []))
+        self.world.seams.append(dict(seam='LineOfSight', **{'from': line[0]}, to=line[1], result=clear))
         return clear
 
     def _make_helpers(self, case):
@@ -410,12 +450,16 @@ class MeleeFixture:
 
     def _is_enemy(self, args, ecx):
         """`friends`: [who, other] pairs where who doesn't count other an enemy."""
+        if self.case.get('perception'):
+            return Boundaries.ORIGINAL
         who, other = self.world._name(ecx), self.world._name(args[0])
         result = 0 if [who, other] in self.case.get('friends', []) else 1
         self.world.seams.append(dict(seam='IsEnemy', who=who, other=other, result=result))
         return result
 
     def _begin_fighting(self, args, ecx):
+        if not self.case.get('seam_begin', True):
+            return Boundaries.ORIGINAL
         self.world.seams.append(dict(seam='BeginFighting', who=self.world._name(ecx),
                                      target=self.world._name(args[0]) if args[0] else None, action=s32(args[1]),
                                      result=1))
@@ -781,11 +825,19 @@ class MeleeFixture:
         return out
 
     # -- a case -------------------------------------------------------------------
-    def run(self, case):
+    def _prepare(self, case):
+        """The world's modes for a case, before its characters are built
+        (a subclass's: scenario.py's imagery and animation layer)."""
+
+    def build(self, case):
+        """The case's world in guest memory: the globals, rules, characters
+        with their data, blocks, attack and AI state, memories and tick
+        state; then the seams so far forgotten."""
         vm, world = self.vm, self.world
         vm.restore()
         world.reset()
         self.case = case
+        self._prepare(case)
         self.records = {}
         self.specs = {c['name']: c for c in case['chars']}
         world.set_globals(case.get('globals', {}))
@@ -813,7 +865,7 @@ class MeleeFixture:
             world.set_memory(obj, spec)
             self._pulse_state(obj, spec)
         self.types, self.made = [], []
-        ticking = case.get('call') == 'pulse' or case.get('call') in EXP_CALLS
+        ticking = self._ticking()
         if ticking:
             self._pulse_world(case)
             # A player's class record, as far as the level-up's
@@ -832,6 +884,11 @@ class MeleeFixture:
                     vm.put_u32(world.by_name[spec['name']] + O_CLASSREC, record)
         world.quiet = bool(case.get('quiet_reads', ticking))
         world.seams.clear()
+
+    def run(self, case):
+        vm, world = self.vm, self.world
+        self.build(case)
+        ticking = self._ticking()
         me = world.by_name[case['self']]
         self._ai_self = me
         kind = case['call']

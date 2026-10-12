@@ -10,7 +10,7 @@
 // object, field 0 of the case line), the same seams answered from it, the
 // same JSON out (schema `combat.melee.v1`).
 
-#include "retailab_fixture.h"
+#include "retailab_melee.h"
 
 #include "effect.h"               // TBloodEffect
 #include "gameflow.h"             // TGameFlow::playerDiedSeam
@@ -374,17 +374,25 @@ class SMeleeScope
         g_answers.cs = &cs;
         g_answers.active = true;
         NoCombatResults = cs["globals"]["nocombatresults"].Bool(false);
-        TCharacter::findCharactersSeam = CaseFound;
-        TCharacter::blockedSeam = CaseBlocked;
+        // With `perception` the characters find, see and judge each other as
+        // the game's own code (kata M9b's; the line of sight is SCaseScope's);
+        // `seam_path` false finds their way as the game's own (over the
+        // case's ground).
+        if (!cs["perception"].Bool())
+        {
+            TCharacter::findCharactersSeam = CaseFound;
+            TCharacter::canSeeSeam = CaseSeesMelee;
+            TCharacter::isEnemySeam = CaseIsEnemy;
+        }
+        if (cs["seam_path"].Bool(true))
+            TCharacter::blockedSeam = CaseBlocked;
         TCharacter::blockSeam = cs["seam_block"].Bool(true) ? CaseBlock : nullptr;
         TCharacter::castSeam = CaseCast;
-        TCharacter::isEnemySeam = CaseIsEnemy;
-        TCharacter::beginFightingSeam = CaseBeginFighting;
+        TCharacter::beginFightingSeam = cs["seam_begin"].Bool(true) ? CaseBeginFighting : nullptr;
         TCharacter::damageSeam = cs["seam_damage"].Bool(true) ? CaseDamage : nullptr;
         TCharacter::effectBurstSeam = CaseEffectBurst;
         TCharacter::effectCombatFlashSeam = CaseCombatFlash;
         TCharacter::waypointsSeam = CaseWaypoints;
-        TCharacter::canSeeSeam = CaseSeesMelee;
         if (!g_helpers.empty())
             TMapPane::lineOfSightSeam = CaseHelperSight;
         Editor = cs["globals"]["editor"].Bool(false);
@@ -725,24 +733,9 @@ std::string MeleeCall(const Case& c, std::string& error)
         if (!LoadGameData(error))
             return {};
         const JsonValue cs = JsonValue::Parse(c.Field(0));
-        TFixtureWorld world(cs);
-        SetBlockFields(world, cs);
-        MakeHelpers(cs);
-        world.writeAttackState = true;
-        world.blockExtra = [&](JsonOut& j, const TActionBlock& ab) { WriteBlockExtra(j, world, cs, ab); };
-        SCaseScope scope(cs, world);
-        SMeleeScope melee(cs, world);
+        Melee::TMeleeWorld melee(cs);
+        TFixtureWorld& world = melee.World();
         const std::string call = cs["call"].Str();
-        const bool ticking = call == "pulse" || call == "kill-exp" || call == "exp-kill" || call == "exp-skill" ||
-                             call == "exp-stealth" || call == "add-skill-exp";
-        SPulseScope pulseScope(cs, ticking);
-        for (const JsonValue& spec : cs["chars"].Items())
-            if (spec.Has("aistate"))
-            {
-                const JsonValue& look = spec["aistate"]["lookat"];
-                world.Fixture(world.Get(spec["name"].Str()))->ReadAIState(spec["aistate"], look.IsNull() ? nullptr
-                                                                         : HelperOrCharacter(world, look.Str()));
-            }
         TCharacter* me = world.Get(cs["self"].Str());
         const JsonValue& a = cs["args"];
 
@@ -882,31 +875,7 @@ std::string MeleeCall(const Case& c, std::string& error)
         for (const JsonValue& spec : cs["chars"].Items())
             world.WriteCharacter(j, spec["name"].Str().c_str(), world.Get(spec["name"].Str()));
         j.End('}');
-        j.Key("ai").Begin('{');
-        for (const JsonValue& spec : cs["chars"].Items())
-        {
-            const IFixtureChar* fx = world.Fixture(world.Get(spec["name"].Str()));
-            j.Key(spec["name"].Str().c_str()).Begin('{');
-            j.Key("lookat");
-            if (const TObjectInstance* look = fx->AILookAt())
-                j.String(HelperName(look));
-            else
-                j.Null();
-            fx->WriteAIState(j);
-            j.End('}');
-        }
-        j.End('}');
-        if (ticking)
-        {
-            j.Key("pulse").Begin('{');
-            for (const JsonValue& spec : cs["chars"].Items())
-                if (spec.Has("pulsestate"))
-                {
-                    j.Key(spec["name"].Str().c_str());
-                    world.Fixture(world.Get(spec["name"].Str()))->WritePulseState(j);
-                }
-            j.End('}');
-        }
+        melee.WriteEnd(j);
         WriteSeams(j);
         WriteDraws(j);
         j.End('}');
@@ -920,6 +889,80 @@ std::string MeleeCall(const Case& c, std::string& error)
 }
 
 }  // namespace
+
+// ---- The world, for the targets that use it -------------------------------------
+
+namespace Melee
+{
+
+// The scopes in the order they go on (and come off in reverse): the case's
+// own seams and globals (SCaseScope), the melee seams and rules, the tick's.
+struct TMeleeWorld::SScopes
+{
+    SScopes(const JsonValue& cs, const TFixtureWorld& world, bool ticking)
+        : scope(cs, world), melee(cs, world), pulse(cs, ticking)
+    {
+    }
+
+    SCaseScope scope;
+    SMeleeScope melee;
+    SPulseScope pulse;
+};
+
+TMeleeWorld::TMeleeWorld(const JsonValue& c) : cs(&c), world(std::make_unique<TFixtureWorld>(c))
+{
+    const std::string call = c["call"].Str();
+    ticking = call == "pulse" || call == "scenario" || call == "kill-exp" || call == "exp-kill" ||
+              call == "exp-skill" || call == "exp-stealth" || call == "add-skill-exp";
+    SetBlockFields(*world, c);
+    MakeHelpers(c);
+    world->writeAttackState = true;
+    world->blockExtra = [this](JsonOut& j, const TActionBlock& ab) { WriteBlockExtra(j, *world, *cs, ab); };
+    scopes = std::make_unique<SScopes>(c, *world, ticking);
+    for (const JsonValue& spec : c["chars"].Items())
+        if (spec.Has("aistate"))
+        {
+            const JsonValue& look = spec["aistate"]["lookat"];
+            world->Fixture(world->Get(spec["name"].Str()))
+                ->ReadAIState(spec["aistate"], look.IsNull() ? nullptr : HelperOrCharacter(*world, look.Str()));
+        }
+}
+
+// The scopes come off before the world goes (they hold seams into it).
+TMeleeWorld::~TMeleeWorld()
+{
+    scopes.reset();
+}
+
+void TMeleeWorld::WriteEnd(JsonOut& j) const
+{
+    j.Key("ai").Begin('{');
+    for (const JsonValue& spec : (*cs)["chars"].Items())
+    {
+        const IFixtureChar* fx = world->Fixture(world->Get(spec["name"].Str()));
+        j.Key(spec["name"].Str().c_str()).Begin('{');
+        j.Key("lookat");
+        if (const TObjectInstance* look = fx->AILookAt())
+            j.String(HelperName(look));
+        else
+            j.Null();
+        fx->WriteAIState(j);
+        j.End('}');
+    }
+    j.End('}');
+    if (!ticking)
+        return;
+    j.Key("pulse").Begin('{');
+    for (const JsonValue& spec : (*cs)["chars"].Items())
+        if (spec.Has("pulsestate"))
+        {
+            j.Key(spec["name"].Str().c_str());
+            world->Fixture(world->Get(spec["name"].Str()))->WritePulseState(j);
+        }
+    j.End('}');
+}
+
+}  // namespace Melee
 
 // Registered with the A/B driver by name (retailab.h).
 static const bool registered = RegisterTarget("melee-attack-choice", MeleeCall) &&

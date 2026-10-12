@@ -325,6 +325,16 @@ class TMapPane : public TPane
       // Advances all animated objects (regardless of whether they are on screen)
       // to the next frame of thier animation.  This allows offscreen objects to move,
       // and animations to show the correct passage of time when off screen.
+    using TickObjectsSeam = std::vector<TObjectInstance*> (*)(int32_t objset);
+    static inline TickObjectsSeam tickObjectsSeam = nullptr;
+      // Retail A/B fixtures only: when set, it gives the objects the three
+      // loops above walk, in their order, in place of the loaded map's (the
+      // scenario kata's world; the retail fixture answers the map iterator
+      // 0x0044cf80 those loops open with the same)
+    using RemoveObjectSeam = void (*)(TObjectInstance* oi);
+    static inline RemoveObjectSeam removeObjectSeam = nullptr;
+      // Retail A/B fixtures only: with tickObjectsSeam, it answers
+      // PulseObjects' removal of a killed object (retail 0x00451840)
     void AnimateBackground();
       // Does background animations
     void AnimateSelectedObjects();
@@ -583,6 +593,12 @@ class TMapPane : public TPane
     
     void PulseFadeAmbient();
         // Called by Pulse() function to update ambient fade values
+    template <typename Visit>
+    void ForEachTickObject(int32_t objset, Visit&& visit);
+        // What the tick's loops walk (PulseObjects, MoveObjects,
+        // NextFrameObjects): every loaded object of the set that isn't in an
+        // inventory, or the fixture's (tickObjectsSeam); visit(object, the
+        // iterator), the iterator null for a fixture's
   
     void BindWindow(TGameMap* map);
         // Borrow the window's sectors from `map` and follow its Unloaded event

@@ -552,6 +552,22 @@ int32_t TPlayer::WeaponDamage()
     return PrimeHand() ? PrimeHand()->GetStat("Damage") : chardata->weapondamage;
 }
 
+// REVSYNC: TPlayer::GetDamageType @ 0x0051b2f0 (slot 0x2d4) -- a weapon in
+// hand whose DamageType isn't -1 deals that, whatever the attack. WEAPON.DEF
+// gives every shipped weapon 0 (DT_MISC), so an armed player's blows are
+// misc damage; bare-handed, the attack's own (DT_HAND).
+int32_t TPlayer::GetDamageType(int32_t weapontype, int32_t attackflags)
+{
+    TObjectInstance* hand = PrimeHand();
+    if (hand && hand->ObjClass() == OBJCLASS_WEAPON)
+    {
+        const int32_t type = static_cast<TWeapon*>(hand)->DamageType();
+        if (type != -1)
+            return type;
+    }
+    return TCharacter::GetDamageType(weapontype, attackflags);
+}
+
 // REVSYNC: TPlayer::AttackModifier @ 0x0051a480
 int32_t TPlayer::AttackModifier()
 {

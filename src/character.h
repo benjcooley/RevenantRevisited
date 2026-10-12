@@ -612,8 +612,9 @@ class TCharacter : public TComplexObject
       // player (his Strength STATLEVEL)
     virtual bool HoldsLight() { return false; }
       // REVSYNC: slot 0x250, 0x004d6de0 -- holding a light source (the player's torch)
-    int32_t GetDamageType(int32_t weapontype, int32_t attackflags);
-      // Returns the DT_XXX damage type flags for the given weapon type and attack flags
+    virtual int32_t GetDamageType(int32_t weapontype, int32_t attackflags);
+      // REVSYNC: slot 0x2d4, 0x004c47d0 -- the DT_XXX damage type of an
+      // attack with these flags and that weapon type (the player's: TPlayer)
     virtual int32_t Transparency();
       // Controls the transparency of character's imagery (character animator).  Things
       // such as invisibility spells, visibility and stealth can affect this value.
@@ -637,8 +638,11 @@ class TCharacter : public TComplexObject
       // Character's don't use the equipment replacement system
     virtual char *GetCombatRoot(TObjectInstance* oi = nullptr) { return "combat"; }
       // Returns combat root given current weapon or weapon type
-    virtual char *GetBowRoot(TObjectInstance* oi = nullptr) { return "bow"; } 
+    virtual char *GetBowRoot(TObjectInstance* oi = nullptr) { return "bow"; }
       // Returns bow root given current bow weapon type
+    virtual const char *GetWalkRoot() { return "walk"; }
+      // REVSYNC: slot 0x30c (0x004d73f0) -- the root it walks in (the
+      // player's carries a torch: TPlayer)
     bool CanSeeCharacter(TCharacter* chr, int32_t angle = -1);
       // Returns true if this character can 'see' the last glimpse of 'chr'
     bool IsMagicResistant() { return (magic_resistance > 0.0f); }

@@ -937,13 +937,7 @@ void TPlayScreen::Update()
 
     // Advance fixed-tick counters. CurrentMode()->Tick() owns gameplay frame
     // advancement; the renderer only samples/interpolates the current pose.
-    // REVSYNC: TPlayScreen::Animate @ 0x0047c2c0 -- the frame count, then
-    // game time in hundredths of a second at 24 frames a second from the
-    // game's whole frame count (GameFrame() * 100 / 24, 0x0047c36b..
-    // 0x0047c3af; the regen, poison and recovery timers read it).
-    ++gameframes;
-    gametime = (int32_t)((int64_t)GameFrame() * 100 / 24);
-    timeofday = TimeOfDayMinutes(gametime);
+    AdvanceGameFrame();
 
     // REVSYNC: screen slot 0x24 (0x004902c0) -> NextFrameObjects 0x00457ef0:
     // animation frames advance last in the tick, after Pulse and Move and
@@ -2119,6 +2113,17 @@ void TPlayScreen::ShowLowerPanes()
 int32_t TPlayScreen::GameFrame() const
 {
     return sessionframes - sessionstart + gameframes;
+}
+
+// REVSYNC: TPlayScreen::Animate @ 0x0047c2c0 -- the frame count, then game
+// time in hundredths of a second at 24 frames a second from the game's
+// whole frame count (GameFrame() * 100 / 24, 0x0047c36b..0x0047c3af; the
+// regen, poison and recovery timers read it), then the time of day.
+void TPlayScreen::AdvanceGameFrame()
+{
+    ++gameframes;
+    gametime = (int32_t)((int64_t)GameFrame() * 100 / 24);
+    timeofday = TimeOfDayMinutes(gametime);
 }
 
 // REVSYNC: TPlayScreen::SetGameTime @ 0x0047e950 -- a game's time (a load's

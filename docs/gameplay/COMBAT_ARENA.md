@@ -129,12 +129,17 @@ sides tick by tick).
 ticks between blows: retail's two runs give hits 7-10, glances 1-4, 8 of 15
 glances, 7 and 9 blows, 66 ticks. A match within what two runs can show.
 
+**A1b in the emulator (kata W1, 2026-10-11).** Retail's own tick over
+A1b's world, run in the emulator against the port's
+([forensics/SCENARIO_KATA.md](forensics/SCENARIO_KATA.md)): they agree
+tick for tick. The Araknid finds Locke at tick 9 (its 32-frame window),
+turns 8 a tick, walks in from tick 16, jumps at 38, bites at 54; Locke
+falls into combat on his own at tick 30 (AutoBeginCombat on). So with
+the option on retail's Locke does fall into combat; the lab's, still in
+his walk stance after ~100 ticks, most likely had it off (the lab's INI
+wasn't read).
+
 Open from A1b:
-- **The opening.** In the port Locke falls into combat at tick 31 and the
-  Araknid walks in from about tick 18; in retail's run 2 Locke was still in
-  his walk stance after ~100 ticks (the lab's INI may have AutoCombat off:
-  its copy wasn't read) and the Araknid started within ~1.2-2.3 s. Needs
-  the emulator.
 - **The port's combat results print raw tags** ("[BASEHIT] Locke [BASEDMG]:12
   [BASEDEF]:10 [BASEOFF]:12") where retail prints "Hit vs. Locke Dmg:7
   Def:10 Off:12": the text lookup for those lines fails.
