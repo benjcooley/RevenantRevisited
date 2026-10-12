@@ -62,3 +62,14 @@ This is a qualified semantic-device appearance reference, not a patch to the
 original software kernel. Original software blankness, hardware initialization,
 coverage/interpolation/target rounding, natural caller/map/audio, period-device
 behavior and exact pixels remain explicit limits. Root approval is separate.
+
+Final qualified pair manifest SHA-256:
+`9efa9b004b8aa981aefbde3c7b8c93737d2a746bf5fbb19acf6704da1ee75768`.
+Actual source binary SHA-256:
+`53f764da05d2f55f61958ddc9875ee63ad0067231f5fe64b98cc13d0aebc2a58`.
+The genuine freshly loaded owner starts at frame−1; in this epoch it sets
+`OF_KILL` at tick20/frame19. Earlier frame0-start probes described tick19.
+Both comparisons use their recorded owner/capture frame convention explicitly.
+A literal original RGB29/22/18 packet against texel0x4208 produces RGB7/6/5
+in this declared8-bit target; the old port's RGB5-reduced carrier produces6/4/4.
+The literal zero-alpha ONE/ONE and per-fragment rounding controls are retained.

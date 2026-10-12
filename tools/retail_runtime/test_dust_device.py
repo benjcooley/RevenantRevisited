@@ -17,6 +17,14 @@ class DustDeviceTests(unittest.TestCase):
   for mode in ('point','linear'):
    raw=raster([p],mode,8,8);self.assertEqual(max(raw),32);self.assertEqual(sum(v!=0 for v in raw),16*3)
    p['texture_hex']=bytes(8).hex();self.assertEqual(set(raster([p],mode,8,8)),{0});p['texture_hex']=struct.pack('<4H',*[0xffff]*4).hex()
+ def test_actual_packet_color_and_additive_target_rounding(self):
+  # Tick8 first original diffuse RGB29/22/18; zero alpha proves ONE ignores it.
+  vertices=b''.join(struct.pack('<3fIII2f',0,0,0,0,0x001d1612,0,.5,.5)for _ in range(4))
+  p=dict(projected=[[0,0,1],[4,0,1],[4,4,1],[0,4,1]],vertices_hex=vertices.hex(),indices=[0,1,2,0,2,3],texture_hex=struct.pack('<4H',*[0x4208]*4).hex(),texture_width=2,texture_height=2)
+  for mode in ('point','linear'):
+   raw=raster([p],mode,8,8);self.assertEqual(tuple(raw[:3]),(7,6,5))
+   doubled=raster([p,p],mode,8,8);self.assertEqual(tuple(doubled[:3]),(14,12,10))
+   old=raster([p],mode,8,8,legacy_color=True);self.assertEqual(tuple(old[:3]),(6,4,4));self.assertNotEqual(raw,old)
  def test_compiled_production_policy(self):
   source=(ROOT/'src/3dimage.cpp').read_text();start=source.index('            const bool retail_rgb5_color =');end=source.index('            // Actual SW LV',start);body=source[start:end]
   names='combat_native might immortalmight fmastery speed static_particles head jhaga lightstrip funnel comet fgeyser dust poison'.split()
