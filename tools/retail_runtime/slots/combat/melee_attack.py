@@ -80,7 +80,8 @@ Seams (guest.py's, and these), recorded in order:
 - FindCharacters `0x4cd690`: the case's `found` (a name, or none) -- as
   original with the case's `perception` (the senses, CanSeeCharacter and
   IsEnemy too, over the map iterator's characters; the line of sight
-  between two characters' eyes clear unless `walls` name the pair).
+  between two characters' eyes clear unless `walls` name the pair, or with
+  a `ground` the original over it, as combat_call.py's).
 - FindClearPath `0x4c39d0`: the case's `blocked`; when blocked, the
   blocker is the case's `blocker` (a name, or none) -- as original over
   the case's `ground` with `seam_path` false.
@@ -469,7 +470,7 @@ class MeleeFixture:
         if self.case.get('real_map'):
             return Boundaries.ORIGINAL          # over the case's `ground`
         if not self.helpers:
-            if self.case.get('perception'):
+            if self.case.get('perception') and 'ground' not in self.case:
                 return self._eyes_sight(args)
             return Boundaries.ORIGINAL
         fx, fy, _ = struct.unpack('<3i', self.vm.uc.mem_read(args[0], 12))

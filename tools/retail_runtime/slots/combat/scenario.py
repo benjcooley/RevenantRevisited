@@ -29,15 +29,14 @@ The three map loops run as original code; the map iterator they open
 (`0x44cf80`, flags 0xa0, objsets 4 / 1 / 5) gives the case's characters in
 case order. Everything they call runs as original -- Pulse, UpdateAction,
 the resolvers, AI, FindCharacters and the senses, IsEnemy, BeginFighting,
-the attack choice, ResolveAttack / ResolveHit, Damage, Block, Move /
+the attack choice, ResolveAttack / ResolveHit, Damage, Block, the line of
+sight over the ground (LineOfSight `0x4533d0`, kata M11's), Move /
 MoveStep / FindClearPath / CharBlocking over the ground, SetState,
 SetObjectMotion, NextFrame, the imagery's state queries (FindState with
 its frequency variants) -- except the melee fixture's seams for what lies
 outside the game's state (sounds, effects, the text bar, the death screen,
 RefreshStats, the spell list's pulse) and these:
 
-- the line of sight between two characters' eyes: clear unless the case's
-  `walls` name the pair (LineOfSight `0x4533d0`, recorded);
 - the map's object removal (`0x451840`, an OF_KILL object PulseObjects
   takes out): recorded, the object left out of the next ticks' loops.
 

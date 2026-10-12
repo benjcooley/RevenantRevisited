@@ -58,9 +58,13 @@ class Boundaries:
 
     def add(self, address, name, pop, handler):
         """`pop`: argument bytes the callee removes (0 for cdecl).
-        handler(args, ecx) -> EAX; `args` are the first stack arguments."""
+        handler(args, ecx) -> EAX; `args` are the first stack arguments.
+        A later add at the same address replaces the handler (one hook per
+        address: a second would run the new handler again on the stack the
+        first had already returned from)."""
+        if address not in self.handlers:
+            self.vm.uc.hook_add(UC_HOOK_CODE, self._enter, begin=address, end=address)
         self.handlers[address] = (name, pop, handler)
-        self.vm.uc.hook_add(UC_HOOK_CODE, self._enter, begin=address, end=address)
 
     def add_stub(self, name, pop, handler):
         """A host function at a fresh address, for synthetic vtable slots."""

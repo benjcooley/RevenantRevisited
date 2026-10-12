@@ -170,7 +170,9 @@ combat key (Command), BeginFighting, EndFighting, SetFighting, Go, Stop,
 Leap, SideStep, ResolveAttack,
 ResolveHit, Damage and CalculateDamage, KnockBack, Block, the impact /
 block / dead resolvers, the recovery and auto-combat, Move, MoveStep,
-FindClearPath, CharBlocking and GetWalkHeight(Radius), SetState,
+FindClearPath, CharBlocking and GetWalkHeight(Radius), the line of sight
+over the floor (LineOfSight `0x4533d0`, kata M11's; a seam answering
+`walls` until the senses merge, the floor being open), SetState,
 ResetState, SetObjectMotion / GetMotion, NextFrame, and **the imagery's
 state queries** (FindState with its "NN:" frequency variants and their
 random(1, 100), FindTransitionState, the frame counts and flags: retail's
@@ -185,7 +187,6 @@ TObjectImagery, over the same table).
 | an OF_KILL object taken out | `0x451840`, recorded | `removeObjectSeam`, recorded | no map |
 | the walk map | the sector lookup `0x499e10`, ReturnWalkmap `0x499720` | `walkGridSeam` | a flat floor, the case's `ground` (z 17) |
 | the characters near a point | iterator `0x44ceb0` / `0x44d080`, recorded | `nearbyCharactersSeam`, recorded | every character of the case |
-| the line of sight between eyes | `0x4533d0`, recorded | `lineOfSightSeam`, recorded | clear (open floor) unless the case's `walls` |
 | SetPos | slot 8 `0x46ed70`, recorded | override, recorded | sectors, walkmaps, redraw |
 | object / type stats | GetObjStat / GetStat / SetObjStat, quiet reads, writes recorded | the fixture character's | the stat system's own kata |
 | the player's MaxHealth / MaxFatigue / MaxMana | `0x520630` / `0x5206d0` / `0x520770` | overrides | the case's (Locke at level 1: 100 / 78 / 105) |
