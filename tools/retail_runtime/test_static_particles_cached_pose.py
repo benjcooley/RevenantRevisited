@@ -28,7 +28,7 @@ struct S3DPoint { int x=0,y=0,z=0; };
 struct V { float x=0,y=0,z=0; };
 struct Pose { std::array<float,16> matrix{}; V origin,position,scale; };
 struct Inputs { V owner_position,object_zero_origin; int owner_face=0,animation_frame=0; bool has_object_zero_origin=false; std::vector<Pose> emitters{1}; };
-struct Controller { Inputs inputs; struct {std::vector<int> emitters{1};} track; };
+struct Controller { Inputs inputs; struct {std::vector<int> emitters{0};} track; };
 struct S3DAnimObj { hmm_vec3 pos{},scl{}; };
 struct Imagery {
  int sampled=-1,expected_state=0;bool head=false,jhaga=false,funnel=false,lightstrip=false,comet=false,fgeyser=false,dust=false,poison=false;
@@ -46,12 +46,15 @@ struct Imagery {
  bool HasRetailSpeedFamilyPartSysProfile(uint32_t){return false;}
  bool HasRetailCameraParticleProfile(uint32_t){return false;}
  bool HasRetailStaticParticleProfile(uint32_t id){return id==0xad92bd38u;}
+ bool GetRetailNullifierEmitterAniKey(int object,int frame,int ps,int pf,hmm_vec3&p,hmm_vec3&r,hmm_vec3&s){assert(object==0&&ps==0&&pf==0);return GetUninterpolatedAniKey(object,0,frame,p,r,s);}
+ bool GetRetailStrikeAniKey(int object,int frame,hmm_vec3&p,hmm_vec3&r,hmm_vec3&s){return GetUninterpolatedAniKey(object,0,frame,p,r,s,true);}
  bool GetUninterpolatedAniKey(int object,int state,int frame,hmm_vec3& p,hmm_vec3& r,hmm_vec3& s,bool inclusive=false){
-  assert(object==1 && state==expected_state && inclusive==(head||jhaga||lightstrip||funnel||comet||fgeyser||dust||poison));sampled=frame;p={float(frame),0,0};r={0,0,0};s={float(frame+1),1,1};return true;
+  assert(object==0 && state==expected_state && inclusive==(head||jhaga||lightstrip||funnel||comet||fgeyser||dust||poison));sampled=frame;p={float(frame),0,0};r={0,0,0};s={float(frame+1),1,1};return true;
  }
 };
-struct TObjectInstance { uint32_t id=0xad92bd38u;int state=0,frame=8;S3DPoint Pos(){return {};};int GetFace(){return 0;}uint32_t ObjId(){return id;}int GetState(){return state;}int GetFrame(){return frame;} };
+struct TObjectInstance { uint32_t id=0xad92bd38u;int state=0,frame=8;S3DPoint Pos(){return {};};int GetFace(){return 0;}uint32_t ObjId(){return id;}int GetState(){return state;}int GetFrame(){return frame;}int GetPrevState(){return 0;}int GetPrevFrame(){return 0;} };
 struct T3DAnimator { Imagery imagery; S3DAnimObj bone;int cached=7;
+ struct Prototype{V value;};Prototype DragonAttackPrototype(){return {{0,0,0}};}
  hmm_vec3 JhagaAttackObjectZeroOrigin(){return {17,0,0};}
  hmm_vec3 HeadFireBallObjectZeroOrigin(){return {23,0,0};}
  Imagery* Get3DImagery(){return &imagery;}int GetFrame(){return cached;}

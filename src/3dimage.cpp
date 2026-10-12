@@ -2464,6 +2464,21 @@ bool T3DImagery::GetRetailStrikeAniKey(int32_t object,int32_t frame,
     return true;
 }
 
+bool T3DImagery::GetRetailNullifierEmitterAniKey(int32_t object, int32_t frame,
+    int32_t previous_state, int32_t previous_frame, hmm_vec3& pos, hmm_vec3& rot, hmm_vec3& scale)
+{
+    if (!HasRetailStaticParticleProfile(0xad92bd38u) || object<0 || object>8 || object==1)
+        return false;
+    // Full original PreRender40e84b publishes the real owner's previous pose.
+    // GetAniKey409950 blends the first five frames, including loop re-entry.
+    // Preserve shared imagery state after sampling the cached animator frame.
+    const int32_t saved_state=prevstate, saved_frame=prevframe;
+    SetPrevState(previous_state,previous_frame);
+    const bool result=GetAniKey(object,0,frame,pos,rot,scale);
+    SetPrevState(saved_state,saved_frame);
+    return result;
+}
+
 bool T3DImagery::GetAniKey(int32_t objnum, int32_t state, int32_t frame,
     hmm_vec3& pos, hmm_vec3& rot, hmm_vec3& scl)
 {
@@ -3599,6 +3614,10 @@ struct T3DAnimator::SPartSysControllers
                 hmm_vec3 rotation{};
                 if (!animator.Get3DImagery()->GetUninterpolatedAniKey(object, owner.GetState(),
                     inputs.animation_frame, emitter_position, rotation, emitter_scale, (head_pose || jhaga_pose || lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose))) continue;
+                if(owner.ObjId()==0xad92bd38u && owner.GetState()==0 &&
+                   !animator.Get3DImagery()->GetRetailNullifierEmitterAniKey(object,
+                       inputs.animation_frame,owner.GetPrevState(),owner.GetPrevFrame(),
+                       emitter_position,rotation,emitter_scale))continue;
                 if(owner.ObjId()==0xad92bd32u && comet_pose &&
                    !animator.Get3DImagery()->GetRetailStrikeAniKey(object,inputs.animation_frame,
                        emitter_position,rotation,emitter_scale))continue;
@@ -4367,6 +4386,10 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             }
             // Component diagnostics retain sampling and prototype bookkeeping.
             if (!submit_geometry) continue;
+            if (inst->ObjId()==0xad92bd38u && std::getenv("REV_NULLIFIER_PACKET_TRACE")) {
+                log_info("[null-packet] tick=%lld frame=%d slot=%zu color=%.9g,%.9g,%.9g,%.9g", static_cast<long long>(TTime::FrameCount()), inst->GetFrame(),slot,item.color_rgba[0],item.color_rgba[1],item.color_rgba[2],item.color_rgba[3]);
+                for (int c=0;c<4;++c) log_info("[null-corner] %.9g,%.9g,%.9g,%.9g,%.9g",item.world_pos[c][0],item.world_pos[c][1],item.world_pos[c][2],item.uv[c][0],item.uv[c][1]);
+            }
             renderer.SubmitFxQuad(item);
             ++submitted;
             ++partsys_controllers->quads;
